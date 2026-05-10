@@ -111,6 +111,29 @@ export default function ThemeBuilderPage() {
         </div>
         <div className="flex items-center gap-2">
           <button
+            onClick={() => {
+              const exportData = {
+                version: '1.0',
+                realmName,
+                exportedAt: new Date().toISOString(),
+                styles,
+                components,
+                assets,
+                settings,
+              };
+              const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+              const url = URL.createObjectURL(blob);
+              const a = document.createElement('a');
+              a.href = url;
+              a.download = `${realmName}-theme-export.json`;
+              a.click();
+              URL.revokeObjectURL(url);
+            }}
+            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          >
+            Export Theme
+          </button>
+          <button
             onClick={() => setActiveSection('canvas')}
             className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
               activeSection === 'canvas'
