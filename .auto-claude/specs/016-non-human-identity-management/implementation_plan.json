@@ -1,0 +1,778 @@
+{
+  "feature": "Non-Human Identity (NHI) Management",
+  "workflow_type": "feature",
+  "workflow_rationale": "Multi-service feature requiring database models, backend APIs, frontend dashboard, and integration with existing auth system. Sequential phases respect dependencies (backend must be complete before frontend integration).",
+  "phases": [
+    {
+      "id": "phase-1-database",
+      "name": "Database Schema",
+      "type": "implementation",
+      "description": "Create Prisma models for Non-Human Identities (devices, AI agents, bots) with their credential types, rotation policies, and audit trail",
+      "depends_on": [],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-1-1",
+          "description": "Add NHI models to schema.prisma (NhiIdentity, NhiCredential, NhiCredentialPolicy, NhiAuditLog, NhiUsageStats)",
+          "service": "backend",
+          "files_to_modify": [
+            "prisma/schema.prisma"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "prisma/schema.prisma (ServiceAccount, ApiKey lines 1217-1255)"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "npx prisma validate",
+            "expected": "Prisma schema is valid"
+          },
+          "status": "completed"
+        },
+        {
+          "id": "subtask-1-2",
+          "description": "Create migration for NHI models",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "prisma/migrations/nhi_identity_models/migration.sql"
+          ],
+          "patterns_from": [
+            "prisma/migrations/"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "npx prisma migrate status",
+            "expected": "No pending migrations"
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-2-backend-core",
+      "name": "Backend Core API",
+      "type": "implementation",
+      "description": "Build NHI service, controller, and DTOs for device registration, AI agent management, and lifecycle operations",
+      "depends_on": [
+        "phase-1-database"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-2-1",
+          "description": "Create NhiService for CRUD operations on NHI entities",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "src/nhi/nhi.service.ts"
+          ],
+          "patterns_from": [
+            "src/service-accounts/service-accounts.service.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "npx tsc --noEmit src/nhi/nhi.service.ts",
+            "expected": "No TypeScript errors"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-2-2",
+          "description": "Create NhiController with REST endpoints for NHI management",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "src/nhi/nhi.controller.ts"
+          ],
+          "patterns_from": [
+            "src/service-accounts/service-accounts.controller.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "npx tsc --noEmit src/nhi/nhi.controller.ts",
+            "expected": "No TypeScript errors"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-2-3",
+          "description": "Create DTOs for NHI operations (create, update, register device, register AI agent)",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "src/nhi/dto/create-nhi.dto.ts",
+            "src/nhi/dto/update-nhi.dto.ts",
+            "src/nhi/dto/register-device.dto.ts",
+            "src/nhi/dto/register-ai-agent.dto.ts"
+          ],
+          "patterns_from": [
+            "src/service-accounts/dto/create-service-account.dto.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "npx tsc --noEmit src/nhi/dto/*.ts",
+            "expected": "No TypeScript errors"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-2-4",
+          "description": "Create NhiModule and register in app.module",
+          "service": "backend",
+          "files_to_modify": [
+            "src/app.module.ts"
+          ],
+          "files_to_create": [
+            "src/nhi/nhi.module.ts"
+          ],
+          "patterns_from": [
+            "src/service-accounts/service-accounts.module.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "npm run build 2>&1 | grep -i nhi",
+            "expected": "Build completes without NHI-related errors"
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-3-certificates-mtls",
+      "name": "Certificate & mTLS Support",
+      "type": "implementation",
+      "description": "Add certificate-based authentication for devices and mTLS support for machine-to-machine communication",
+      "depends_on": [
+        "phase-2-backend-core"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-3-1",
+          "description": "Add NhiCertificate model and certificate management in NhiService",
+          "service": "backend",
+          "files_to_modify": [
+            "src/nhi/nhi.service.ts"
+          ],
+          "files_to_create": [
+            "src/nhi/dto/certificate.dto.ts"
+          ],
+          "patterns_from": [
+            "src/crypto/crypto.service.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "npx tsc --noEmit",
+            "expected": "No TypeScript errors"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-3-2",
+          "description": "Add certificate validation endpoint and mTLS middleware",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "src/nhi/mtls.guard.ts",
+            "src/nhi/certificate-validator.ts"
+          ],
+          "patterns_from": [
+            "src/common/guards/admin-api-key.guard.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "npx tsc --noEmit",
+            "expected": "No TypeScript errors"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-3-3",
+          "description": "Add certificate generation endpoint for device registration",
+          "service": "backend",
+          "files_to_modify": [
+            "src/nhi/nhi.controller.ts"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "src/crypto/crypto.service.ts",
+            "src/nhi/nhi.controller.ts"
+          ],
+          "verification": {
+            "type": "api",
+            "method": "POST",
+            "url": "http://localhost:3000/api/v1/admin/realms/master/nhi/device-certificates",
+            "expected_status": 201
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-4-credential-rotation",
+      "name": "Automated Credential Rotation",
+      "type": "implementation",
+      "description": "Build scheduled tasks for automatic credential rotation based on configurable policies",
+      "depends_on": [
+        "phase-2-backend-core"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-4-1",
+          "description": "Create NhiCredentialPolicy model and management in NhiService",
+          "service": "backend",
+          "files_to_modify": [
+            "src/nhi/nhi.service.ts"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "src/service-accounts/service-accounts.service.ts (rotateApiKey)"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "npx tsc --noEmit",
+            "expected": "No TypeScript errors"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-4-2",
+          "description": "Create NhiRotationScheduler using @nestjs/schedule for credential rotation",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "src/nhi/nhi-rotation.scheduler.ts"
+          ],
+          "patterns_from": [
+            "src/sessions/session-cleanup.scheduler.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "npx tsc --noEmit",
+            "expected": "No TypeScript errors"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-4-3",
+          "description": "Add rotation policy management endpoints",
+          "service": "backend",
+          "files_to_modify": [
+            "src/nhi/nhi.controller.ts"
+          ],
+          "files_to_create": [
+            "src/nhi/dto/rotation-policy.dto.ts"
+          ],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "npm run build",
+            "expected": "Build completes successfully"
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-5-audit-logging",
+      "name": "NHI Audit Logging",
+      "type": "implementation",
+      "description": "Add NHI-specific audit logging separate from user activities with detailed tracking",
+      "depends_on": [
+        "phase-2-backend-core"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-5-1",
+          "description": "Add NhiAuditLog service for recording NHI operations",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "src/nhi/nhi-audit.service.ts"
+          ],
+          "patterns_from": [
+            "src/events/events.service.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "npx tsc --noEmit",
+            "expected": "No TypeScript errors"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-5-2",
+          "description": "Add NHI audit log query endpoints",
+          "service": "backend",
+          "files_to_modify": [
+            "src/nhi/nhi.controller.ts"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "src/events/events.controller.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "npm run build",
+            "expected": "Build completes successfully"
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-6-bulk-registration",
+      "name": "Bulk Device Registration",
+      "type": "implementation",
+      "description": "Add bulk registration endpoint for fleet management with CSV/JSON import",
+      "depends_on": [
+        "phase-3-certificates-mtls"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-6-1",
+          "description": "Add bulk registration endpoint for devices",
+          "service": "backend",
+          "files_to_modify": [
+            "src/nhi/nhi.controller.ts"
+          ],
+          "files_to_create": [
+            "src/nhi/dto/bulk-registration.dto.ts"
+          ],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "npm run build",
+            "expected": "Build completes successfully"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-6-2",
+          "description": "Add bulk certificate generation for device fleet",
+          "service": "backend",
+          "files_to_modify": [
+            "src/nhi/nhi.service.ts"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "api",
+            "method": "POST",
+            "url": "http://localhost:3000/api/v1/admin/realms/master/nhi/devices/bulk-register",
+            "expected_status": 201
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-7-frontend-dashboard",
+      "name": "Frontend NHI Dashboard",
+      "type": "implementation",
+      "description": "Build admin UI pages for NHI management including list, detail, analytics views",
+      "depends_on": [
+        "phase-2-backend-core",
+        "phase-3-certificates-mtls"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-7-1",
+          "description": "Create NHI API client functions in admin-ui",
+          "service": "frontend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "admin-ui/src/api/nhi.ts"
+          ],
+          "patterns_from": [
+            "admin-ui/src/api/clients.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd admin-ui && npm run lint",
+            "expected": "No linting errors"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-7-2",
+          "description": "Create NHI list page component",
+          "service": "frontend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "admin-ui/src/pages/nhi/NhiListPage.tsx"
+          ],
+          "patterns_from": [
+            "admin-ui/src/pages/clients/ClientListPage.tsx"
+          ],
+          "verification": {
+            "type": "browser",
+            "url": "http://localhost:5173/console/realms/master/nhi",
+            "checks": [
+              "Page renders with table",
+              "No console errors"
+            ]
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-7-3",
+          "description": "Create NHI detail page with credential management",
+          "service": "frontend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "admin-ui/src/pages/nhi/NhiDetailPage.tsx"
+          ],
+          "patterns_from": [
+            "admin-ui/src/pages/clients/ClientDetailPage.tsx"
+          ],
+          "verification": {
+            "type": "browser",
+            "url": "http://localhost:5173/console/realms/master/nhi/:id",
+            "checks": [
+              "Page renders detail",
+              "No console errors"
+            ]
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-7-4",
+          "description": "Create NHI analytics dashboard with usage metrics",
+          "service": "frontend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "admin-ui/src/pages/nhi/NhiAnalyticsPage.tsx"
+          ],
+          "patterns_from": [
+            "admin-ui/src/pages/DashboardPage.tsx"
+          ],
+          "verification": {
+            "type": "browser",
+            "url": "http://localhost:5173/console/realms/master/nhi/analytics",
+            "checks": [
+              "Analytics dashboard renders",
+              "Charts visible",
+              "No console errors"
+            ]
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-7-5",
+          "description": "Add NHI routes to App.tsx and Layout navigation",
+          "service": "frontend",
+          "files_to_modify": [
+            "admin-ui/src/App.tsx"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "admin-ui/src/App.tsx (existing routes)"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd admin-ui && npm run build",
+            "expected": "Build completes successfully"
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-8-api-key-enhancement",
+      "name": "API Key Enhancement",
+      "type": "implementation",
+      "description": "Enhance existing API key management with usage quotas and IP restrictions",
+      "depends_on": [
+        "phase-2-backend-core"
+      ],
+      "parallel_safe": true,
+      "subtasks": [
+        {
+          "id": "subtask-8-1",
+          "description": "Add usage quotas and IP restrictions to ApiKey model",
+          "service": "backend",
+          "files_to_modify": [
+            "prisma/schema.prisma"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "prisma/schema.prisma (ApiKey model)"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "npx prisma validate",
+            "expected": "Prisma schema is valid"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-8-2",
+          "description": "Add IP restriction validation to API key guard",
+          "service": "backend",
+          "files_to_modify": [
+            "src/service-accounts/api-key.guard.ts"
+          ],
+          "files_to_create": [],
+          "patterns_from": [
+            "src/service-accounts/api-key.guard.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "npx tsc --noEmit",
+            "expected": "No TypeScript errors"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-8-3",
+          "description": "Add quota tracking and enforcement in service-accounts",
+          "service": "backend",
+          "files_to_modify": [
+            "src/service-accounts/service-accounts.service.ts"
+          ],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "command",
+            "command": "npm run build",
+            "expected": "Build completes successfully"
+          },
+          "status": "pending"
+        }
+      ]
+    },
+    {
+      "id": "phase-9-integration",
+      "name": "Integration & Testing",
+      "type": "integration",
+      "description": "Wire all services together, verify end-to-end flows, and run tests",
+      "depends_on": [
+        "phase-5-audit-logging",
+        "phase-6-bulk-registration",
+        "phase-7-frontend-dashboard",
+        "phase-8-api-key-enhancement"
+      ],
+      "parallel_safe": false,
+      "subtasks": [
+        {
+          "id": "subtask-9-1",
+          "description": "Run backend tests for NHI module",
+          "service": "backend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "src/nhi/nhi.service.spec.ts",
+            "src/nhi/nhi.controller.spec.ts"
+          ],
+          "patterns_from": [
+            "src/service-accounts/service-accounts.service.spec.ts"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "npm test -- src/nhi",
+            "expected": "All tests pass"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-9-2",
+          "description": "Run frontend tests for NHI components",
+          "service": "frontend",
+          "files_to_modify": [],
+          "files_to_create": [
+            "admin-ui/src/pages/nhi/__tests__/NhiListPage.test.tsx"
+          ],
+          "patterns_from": [
+            "admin-ui/src/pages/clients/__tests__/ClientListPage.test.tsx"
+          ],
+          "verification": {
+            "type": "command",
+            "command": "cd admin-ui && npm test -- --run",
+            "expected": "All tests pass"
+          },
+          "status": "pending"
+        },
+        {
+          "id": "subtask-9-3",
+          "description": "End-to-end verification of NHI flows",
+          "all_services": true,
+          "files_to_modify": [],
+          "files_to_create": [],
+          "patterns_from": [],
+          "verification": {
+            "type": "e2e",
+            "steps": [
+              "Register device via API",
+              "Authenticate with certificate",
+              "View device in admin UI",
+              "Rotate credentials",
+              "Verify audit log entry"
+            ]
+          },
+          "status": "pending"
+        }
+      ]
+    }
+  ],
+  "summary": {
+    "total_phases": 9,
+    "total_subtasks": 26,
+    "services_involved": [
+      "backend",
+      "frontend"
+    ],
+    "parallelism": {
+      "max_parallel_phases": 2,
+      "parallel_groups": [
+        {
+          "phases": [
+            "phase-5-audit-logging",
+            "phase-8-api-key-enhancement"
+          ],
+          "reason": "Both depend on phase-2-backend-core, modify different files (NHI audit vs API key enhancement)"
+        },
+        {
+          "phases": [
+            "phase-5-audit-logging",
+            "phase-7-frontend-dashboard"
+          ],
+          "reason": "phase-7 can start once phase-2 is complete; phase-5 only adds audit logging"
+        }
+      ],
+      "recommended_workers": 2,
+      "speedup_estimate": "1.3x faster than sequential due to limited parallelism in this sequential feature"
+    },
+    "startup_command": "source auto-claude/.venv/bin/activate && python auto-claude/run.py --spec 016 --parallel 2"
+  },
+  "verification_strategy": {
+    "risk_level": "high",
+    "skip_validation": false,
+    "test_creation_phase": "post_implementation",
+    "test_types_required": [
+      "unit",
+      "integration",
+      "e2e"
+    ],
+    "security_scanning_required": true,
+    "staging_deployment_required": false,
+    "acceptance_criteria": [
+      "All existing tests pass",
+      "New code has test coverage",
+      "NHI security scan passes (certificate validation, mTLS, credential rotation)",
+      "No security vulnerabilities detected in credential management"
+    ],
+    "verification_steps": [
+      {
+        "name": "Unit Tests (Backend)",
+        "command": "npm test -- src/nhi --coverage",
+        "expected_outcome": "All NHI module tests pass with >80% coverage",
+        "type": "test",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Unit Tests (Frontend)",
+        "command": "cd admin-ui && npm test -- --run --coverage",
+        "expected_outcome": "All NHI component tests pass with >70% coverage",
+        "type": "test",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Security Scan (Secrets)",
+        "command": "python auto-claude/scan_secrets.py --all-files --json",
+        "expected_outcome": "No secrets detected in codebase",
+        "type": "security",
+        "required": true,
+        "blocking": true
+      },
+      {
+        "name": "Security Scan (SAST - Python)",
+        "command": "bandit -r src/nhi/ -f json 2>/dev/null || echo 'bandit not available'",
+        "expected_outcome": "No high severity issues in NHI code",
+        "type": "security",
+        "required": true,
+        "blocking": false
+      },
+      {
+        "name": "TypeScript Compilation",
+        "command": "npx tsc --noEmit",
+        "expected_outcome": "No TypeScript errors",
+        "type": "command",
+        "required": true,
+        "blocking": true
+      }
+    ],
+    "reasoning": "High risk change involves credential management and certificate-based authentication which require thorough testing and security scanning"
+  },
+  "qa_acceptance": {
+    "unit_tests": {
+      "required": true,
+      "commands": [
+        "npm test -- src/nhi",
+        "cd admin-ui && npm test -- --run"
+      ],
+      "minimum_coverage": 80
+    },
+    "integration_tests": {
+      "required": true,
+      "commands": [
+        "npm run test:e2e"
+      ],
+      "services_to_test": [
+        "backend",
+        "admin-ui"
+      ]
+    },
+    "e2e_tests": {
+      "required": true,
+      "commands": [
+        "npx playwright test"
+      ],
+      "flows": [
+        "device-registration",
+        "ai-agent-creation",
+        "credential-rotation",
+        "nhi-dashboard"
+      ]
+    },
+    "browser_verification": {
+      "required": true,
+      "pages": [
+        {
+          "url": "http://localhost:5173/console/realms/master/nhi",
+          "checks": [
+            "NHI list renders",
+            "No console errors"
+          ]
+        },
+        {
+          "url": "http://localhost:5173/console/realms/master/nhi/analytics",
+          "checks": [
+            "Analytics dashboard renders",
+            "No console errors"
+          ]
+        }
+      ]
+    },
+    "database_verification": {
+      "required": true,
+      "checks": [
+        "migrations-exist",
+        "migrations-applied",
+        "schema-valid"
+      ]
+    }
+  },
+  "qa_signoff": null,
+  "status": "in_progress",
+  "planStatus": "in_progress",
+  "xstateState": "backlog",
+  "executionPhase": "coding",
+  "updated_at": "2026-05-10T19:21:12.528Z"
+}
