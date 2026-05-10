@@ -48,6 +48,7 @@ import { CacheModule } from './cache/cache.module.js';
 import { WebAuthnModule } from './webauthn/webauthn.module.js';
 import { AuthorizationModule } from './authorization/authorization.module.js';
 import { CustomAttributesModule } from './custom-attributes/custom-attributes.module.js';
+import { SmsModule } from './sms/sms.module.js';
 import { PluginsModule } from './plugins/plugins.module.js';
 import { AuthFlowModule } from './auth-flow/auth-flow.module.js';
 import { VersioningModule } from './versioning/versioning.module.js';
@@ -79,6 +80,7 @@ import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
     PrismaModule,
     CryptoModule,
     EmailModule,
+    SmsModule,
     VerificationModule,
     PasswordPolicyModule,
     BruteForceModule,
