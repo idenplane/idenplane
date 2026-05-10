@@ -125,6 +125,7 @@
     ],
     "coverageDirectory": "../coverage",
     "testEnvironment": "node",
+    "setupFilesAfterEnv": ["<rootDir>/../test/nhi-setup.ts"],
     "transformIgnorePatterns": [
       "node_modules/(?!jose)"
     ]
