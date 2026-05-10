@@ -1,0 +1,25 @@
+{
+  "active": true,
+  "spec": "002-guided-first-run-setup-wizard",
+  "state": "building",
+  "subtasks": {
+    "completed": 10,
+    "total": 24,
+    "in_progress": 1,
+    "failed": 0
+  },
+  "phase": {
+    "current": "Frontend: Wizard UI Components",
+    "id": null,
+    "total": 13
+  },
+  "workers": {
+    "active": 0,
+    "max": 1
+  },
+  "session": {
+    "number": 12,
+    "started_at": "2026-05-10T05:29:03.127504"
+  },
+  "last_update": "2026-05-10T06:27:57.436019"
+}

@@ -10,6 +10,7 @@ import { createLoggerConfig } from './common/logging/logger.config.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { CryptoModule } from './crypto/crypto.module.js';
 import { RealmsModule } from './realms/realms.module.js';
+import { SetupWizardModule } from './setup-wizard/setup-wizard.module.js';
 import { UsersModule } from './users/users.module.js';
 import { ClientsModule } from './clients/clients.module.js';
 import { RolesModule } from './roles/roles.module.js';
@@ -85,6 +86,7 @@ import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
     MfaModule,
     AdminAuthModule,
     RealmsModule,
+    SetupWizardModule,
     UsersModule,
     ClientsModule,
     RolesModule,

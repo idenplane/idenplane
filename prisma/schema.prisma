@@ -35,6 +35,42 @@ datasource db {
   provider = "postgresql"
 }
 
+// ─── WIZARD STATE ─────────────────────────────────────────
+
+model WizardState {
+  id         String   @id @default(uuid())
+  completed  Boolean  @default(false) @map("completed")
+  skipped    Boolean  @default(false) @map("skipped")
+
+  // Current step (0-based index: 0=admin, 1=realm, 2=smtp, 3=client, 4=sdk, 5=test)
+  currentStep Int     @default(0) @map("current_step")
+
+  // Step 1: Admin account
+  adminUsername    String? @map("admin_username")
+  adminEmail       String? @map("admin_email")
+  adminPasswordHash String? @map("admin_password_hash")
+
+  // Step 2: Realm settings
+  realmName        String? @map("realm_name")
+  realmDisplayName String? @map("realm_display_name")
+
+  // Step 3: SMTP configuration (stored as JSON)
+  smtpConfig       Json?   @map("smtp_config")
+
+  // Step 4: Client application
+  clientId         String? @map("client_id")
+  clientSecret     String? @map("client_secret")
+  redirectUris      String[] @default([]) @map("redirect_uris")
+
+  // Step 5 & 6: Completion status
+  sdkGenerated     Boolean @default(false) @map("sdk_generated")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("wizard_states")
+}
+
 // ─── REALMS ───────────────────────────────────────────────
 
 model Realm {

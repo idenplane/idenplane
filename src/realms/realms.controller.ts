@@ -150,6 +150,17 @@ export class RealmsController {
     });
   }
 
+  @Post(':realmName/smtp/test')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Test SMTP configuration' })
+  @ApiResponse({ status: 200, description: 'SMTP test result' })
+  @ApiResponse({ status: 400, description: 'SMTP not configured' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Realm not found' })
+  async testSmtp(@Param('realmName') realmName: string) {
+    return this.emailService.sendTestEmail(realmName);
+  }
+
   @Post(':realmName/email/test')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Send a test email' })
