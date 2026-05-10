@@ -1,0 +1,552 @@
+---
+id: kubernetes
+title: Kubernetes Deployment
+sidebar_position: 2
+description: Deploy AuthMe on Kubernetes using Helm charts with production-ready configurations.
+---
+
+# Kubernetes Deployment
+
+AuthMe provides a Helm chart for production-grade Kubernetes deployments. This guide covers installation, configuration, and common operational tasks.
+
+---
+
+## Prerequisites
+
+| Requirement | Version |
+|-------------|---------|
+| Kubernetes | 1.24+ |
+| Helm | 3.12+ |
+| kubectl | 1.24+ |
+
+---
+
+## Quick Start
+
+The fastest way to deploy AuthMe on Kubernetes:
+
+```bash
+# Add the AuthMe Helm repository (if published)
+helm repo add authme https://charts.authme.dev
+helm repo update
+
+# Or install from local chart
+helm repo add file://./helm/authme
+
+# Create namespace
+kubectl create namespace authme
+
+# Install with production values
+helm upgrade --install authme ./helm/authme \
+  --namespace authme \
+  --values ./helm/authme/values.production.yaml \
+  --set secrets.ADMIN_API_KEY="$(openssl rand -hex 32)" \
+  --set env.BASE_URL="https://auth.example.com"
+```
+
+---
+
+## Installing from Local Chart
+
+### 1. Prepare Values File
+
+Create a `production-values.yaml` file:
+
+```yaml
+# replica count
+replicaCount: 3
+
+# image
+image:
+  repository: islamawad/authme
+  tag: "latest"
+  pullPolicy: IfNotPresent
+
+# ingress
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+  hosts:
+    - host: auth.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: authme-tls
+      hosts:
+        - auth.example.com
+
+# environment
+env:
+  NODE_ENV: "production"
+  BASE_URL: "https://auth.example.com"
+  SESSION_STORE: "database"
+  THROTTLE_TTL: "60000"
+  THROTTLE_LIMIT: "100"
+
+# secrets — generate strong values at deploy time
+secrets:
+  ADMIN_API_KEY: "REPLACE_WITH_STRONG_SECRET"
+  DATABASE_URL: ""  # auto-constructed when postgresql.enabled is true
+
+# postgresql sub-chart
+postgresql:
+  enabled: true
+  auth:
+    username: authme
+    password: "REPLACE_WITH_STRONG_DB_PASSWORD"
+    database: authme
+  primary:
+    persistence:
+      enabled: true
+      size: 20Gi
+
+# horizontal pod autoscaler
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+# pod disruption budget
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+
+# high availability — spread pods across nodes
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: authme
+          topologyKey: kubernetes.io/hostname
+```
+
+### 2. Generate Secrets
+
+:::warning
+Never commit real secrets to source control. Generate secrets at deploy time:
+:::
+
+```bash
+# Generate admin API key
+ADMIN_API_KEY=$(openssl rand -hex 32)
+
+# Generate database password
+DB_PASSWORD=$(openssl rand -hex 32)
+```
+
+### 3. Install the Chart
+
+```bash
+helm upgrade --install authme ./helm/authme \
+  --namespace authme \
+  --create-namespace \
+  --values ./helm/authme/values.production.yaml \
+  --set secrets.ADMIN_API_KEY="$ADMIN_API_KEY" \
+  --set postgresql.auth.password="$DB_PASSWORD" \
+  --set env.BASE_URL="https://auth.example.com"
+```
+
+---
+
+## Configuration Reference
+
+### Image Settings
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `image.repository` | Container image repository | `islamawad/authme` |
+| `image.tag` | Image tag (defaults to chart appVersion) | `""` |
+| `image.pullPolicy` | Image pull policy | `IfNotPresent` |
+| `imagePullSecrets` | Secrets for private registries | `[]` |
+
+### Service Configuration
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `service.type` | Kubernetes Service type | `ClusterIP` |
+| `service.port` | Service port | `3000` |
+| `service.targetPort` | Container port | Same as `service.port` |
+
+### Ingress Configuration
+
+| Parameter | Description | Default |
+|-----------|-------------|---------|
+| `ingress.enabled` | Enable Ingress | `false` |
+| `ingress.className` | Ingress class (nginx, traefik) | `""` |
+| `ingress.annotations` | Custom annotations | `{}` |
+| `ingress.hosts` | Host configurations | See values.yaml |
+| `ingress.tls` | TLS configurations | `[]` |
+
+Example ingress annotations for cert-manager:
+
+```yaml
+ingress:
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    kubernetes.io/ingress.class: nginx
+```
+
+### Resource Limits
+
+| Parameter | Request | Limit |
+|-----------|---------|-------|
+| CPU | 100m | 500m |
+| Memory | 128Mi | 512Mi |
+
+For production, increase resources:
+
+```yaml
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+```
+
+### Probe Configuration
+
+| Probe | Path | Initial Delay | Period |
+|-------|------|--------------|--------|
+| Startup | `/health` | 10s | 10s |
+| Liveness | `/health` | 15s | 20s |
+| Readiness | `/health/ready` | 10s | 10s |
+
+---
+
+## Database Configuration
+
+### Managed PostgreSQL (Default)
+
+The chart includes a Bitnami PostgreSQL sub-chart:
+
+```yaml
+postgresql:
+  enabled: true
+  auth:
+    username: authme
+    password: "REPLACE_WITH_STRONG_PASSWORD"
+    database: authme
+  primary:
+    persistence:
+      enabled: true
+      size: 20Gi
+```
+
+### External PostgreSQL
+
+To use an external database:
+
+```yaml
+postgresql:
+  enabled: false
+
+secrets:
+  DATABASE_URL: "postgresql://user:pass@host:5432/authme"
+```
+
+### Redis (Optional)
+
+Enable Redis for session caching and improved performance:
+
+```yaml
+redis:
+  enabled: true
+  auth:
+    enabled: true
+    password: "REPLACE_WITH_STRONG_REDIS_PASSWORD"
+
+env:
+  SESSION_STORE: "redis"
+  REDIS_URL: ""  # auto-constructed when redis.enabled is true
+```
+
+---
+
+## High Availability
+
+### Horizontal Pod Autoscaler
+
+Enable HPA for automatic scaling:
+
+```yaml
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+```
+
+### Pod Disruption Budget
+
+Ensure availability during node maintenance:
+
+```yaml
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+```
+
+### Pod Anti-Affinity
+
+Spread pods across nodes:
+
+```yaml
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: authme
+          topologyKey: kubernetes.io/hostname
+```
+
+---
+
+## Security Configuration
+
+### Pod Security Context
+
+```yaml
+podSecurityContext:
+  fsGroup: 1000
+  runAsNonRoot: true
+  runAsUser: 1000
+```
+
+### Container Security Context
+
+```yaml
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 1000
+```
+
+### Network Policies
+
+Add a NetworkPolicy to restrict traffic:
+
+```yaml
+# network-policy.yaml
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: authme-network-policy
+  namespace: authme
+spec:
+  podSelector:
+    matchLabels:
+      app.kubernetes.io/name: authme
+  policyTypes:
+    - Ingress
+    - Egress
+  ingress:
+    - from:
+        - namespaceSelector:
+            matchLabels:
+              name: ingress-nginx
+      ports:
+        - protocol: TCP
+          port: 3000
+  egress:
+    - to:
+        - podSelector:
+            matchLabels:
+              app.kubernetes.io/name: postgresql
+      ports:
+        - protocol: TCP
+          port: 5432
+```
+
+---
+
+## Managing Deployments
+
+### Upgrading
+
+```bash
+# Upgrade to new version
+helm upgrade authme ./helm/authme \
+  --namespace authme \
+  --values ./helm/authme/values.production.yaml
+
+# Upgrade with new values
+helm upgrade authme ./helm/authme \
+  --namespace authme \
+  --set image.tag="1.2.3" \
+  --set secrets.ADMIN_API_KEY="$ADMIN_API_KEY"
+```
+
+### Rolling Back
+
+```bash
+# List release history
+helm history authme --namespace authme
+
+# Roll back to previous revision
+helm rollback authme --namespace authme
+
+# Roll back to specific revision
+helm rollback authme --revision 3 --namespace authme
+```
+
+### Uninstalling
+
+```bash
+# Remove the release (preserves data with PVCs)
+helm uninstall authme --namespace authme
+
+# Remove with PVCs (deletes data!)
+helm uninstall authme --namespace authme
+kubectl delete pvc -n authme -l app.kubernetes.io/name=authme
+```
+
+---
+
+## Monitoring
+
+### Health Endpoints
+
+| Endpoint | Description |
+|----------|-------------|
+| `/health` | Liveness check |
+| `/health/ready` | Readiness check |
+
+### Viewing Logs
+
+```bash
+# Follow pod logs
+kubectl logs -n authme -l app.kubernetes.io/name=authme -f
+
+# View previous container logs
+kubectl logs -n authme -l app.kubernetes.io/name=authme --previous
+```
+
+### Checking Status
+
+```bash
+# Helm release status
+helm status authme --namespace authme
+
+# Pod status
+kubectl get pods -n authme
+
+# Service status
+kubectl get svc -n authme
+
+# Ingress status
+kubectl get ingress -n authme
+```
+
+### Common Commands
+
+```bash
+# Describe deployment
+kubectl describe deployment authme -n authme
+
+# Describe pod
+kubectl describe pod -n authme -l app.kubernetes.io/name=authme
+
+# Execute shell in pod
+kubectl exec -it -n authme deploy/authme -- sh
+
+# Port forward for local access
+kubectl port-forward -n authme svc/authme 3000:3000
+```
+
+---
+
+## Troubleshooting
+
+### Pod Not Starting
+
+1. Check pod status:
+   ```bash
+   kubectl get pods -n authme
+   kubectl describe pod -n authme <pod-name>
+   ```
+
+2. Check container logs:
+   ```bash
+   kubectl logs -n authme <pod-name>
+   ```
+
+3. Verify secrets exist:
+   ```bash
+   kubectl get secret -n authme
+   ```
+
+### ImagePullBackOff
+
+1. Verify image exists:
+   ```bash
+   kubectl describe pod -n authme <pod-name>
+   ```
+
+2. Check image pull secret if using private registry:
+   ```bash
+   kubectl create secret docker-registry regcred \
+     --docker-server=https://index.docker.io/v1/ \
+     --docker-username=<user> \
+     --docker-password=<token> \
+     --docker-email=<email> \
+     --namespace authme
+   ```
+
+### Database Connection Issues
+
+1. Verify PostgreSQL is running:
+   ```bash
+   kubectl get pods -n authme -l app.kubernetes.io/name=postgresql
+   ```
+
+2. Check connection string:
+   ```bash
+   kubectl exec -it -n authme deploy/authme -- sh -c 'echo $DATABASE_URL'
+   ```
+
+3. Test connectivity:
+   ```bash
+   kubectl exec -it -n authme deploy/authme -- nc -zv postgresql 5432
+   ```
+
+---
+
+## Next Steps
+
+<div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
+
+[**Environment Variables**](/docs/configuration/environment-variables)
+Complete list of all configuration options
+
+[**Configuration**](/docs/getting-started/configuration)
+Detailed configuration guide
+
+[**Docker Compose**](/docs/deployment/docker)
+Deploy using Docker Compose
+
+</div>
+
+---
+
+<p align="center">
+  <a href="https://authme.dev">authme.dev</a> ·
+  <a href="https://github.com/Islamawad132/Authme">GitHub</a> ·
+  <a href="https://discord.gg/authme">Discord</a>
+</p>
