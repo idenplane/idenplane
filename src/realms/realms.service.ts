@@ -106,6 +106,15 @@ export class RealmsService {
         termsOfServiceUrl: dto.termsOfServiceUrl,
         registrationApprovalRequired: dto.registrationApprovalRequired,
         allowedEmailDomains: dto.allowedEmailDomains,
+        // SMS MFA configuration
+        smsProvider: dto.smsProvider,
+        smsFrom: dto.smsFrom,
+        otpLength: dto.otpLength,
+        otpExpirySeconds: dto.otpExpirySeconds,
+        smsProviderConfig: dto.smsProviderConfig as unknown as Prisma.InputJsonValue | undefined,
+        smsMaxRequestsPerUser: dto.smsMaxRequestsPerUser,
+        smsRateLimitWindow: dto.smsRateLimitWindow,
+        smsMfaEnabled: dto.smsMfaEnabled,
         signingKeys: {
           create: {
             kid: keyPair.kid,
@@ -249,6 +258,15 @@ export class RealmsService {
       termsOfServiceUrl: dto.termsOfServiceUrl,
       registrationApprovalRequired: dto.registrationApprovalRequired,
       allowedEmailDomains: dto.allowedEmailDomains,
+      // SMS MFA configuration
+      smsProvider: dto.smsProvider,
+      smsFrom: dto.smsFrom,
+      otpLength: dto.otpLength,
+      otpExpirySeconds: dto.otpExpirySeconds,
+      smsProviderConfig: dto.smsProviderConfig as Record<string, unknown> | undefined,
+      smsMaxRequestsPerUser: dto.smsMaxRequestsPerUser,
+      smsRateLimitWindow: dto.smsRateLimitWindow,
+      smsMfaEnabled: dto.smsMfaEnabled,
     };
 
     // Only update password if a real value is provided (not the redacted placeholder)

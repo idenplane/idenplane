@@ -1,3 +1,22 @@
+export type SmsProviderType = 'none' | 'twilio' | 'vonage' | 'aws-sns' | 'webhook';
+
+export interface SmsProviderConfig {
+  // Twilio
+  twilioAccountSid?: string;
+  twilioAuthToken?: string;
+  // Vonage
+  vonageApiKey?: string;
+  vonageApiSecret?: string;
+  // AWS SNS
+  awsAccessKeyId?: string;
+  awsSecretAccessKey?: string;
+  awsRegion?: string;
+  // Webhook
+  webhookUrl?: string;
+  webhookHeaders?: string;
+  webhookTimeout?: number;
+}
+
 export interface Realm {
   id: string;
   name: string;
@@ -29,6 +48,15 @@ export interface Realm {
   registrationAllowed: boolean;
   // MFA
   mfaRequired: boolean;
+  // SMS MFA
+  smsMfaEnabled?: boolean;
+  smsProvider?: SmsProviderType;
+  smsFrom?: string;
+  smsProviderConfig?: SmsProviderConfig;
+  otpLength?: number;
+  otpExpirySeconds?: number;
+  smsMaxRequestsPerUser?: number;
+  smsRateLimitWindow?: number;
   // Offline tokens
   offlineTokenLifespan: number;
   // Events

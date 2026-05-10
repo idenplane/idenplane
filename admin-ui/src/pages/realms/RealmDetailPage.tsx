@@ -12,6 +12,8 @@ import { getRealmSessions } from '../../api/sessions';
 import { getIdentityProviders } from '../../api/identityProviders';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import PasswordInput from '../../components/PasswordInput';
+import RealmSmsMfaTab from './RealmSmsMfaTab';
+import type { SmsProviderType, SmsProviderConfig } from '../../types';
 
 function formatDuration(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -25,7 +27,7 @@ export default function RealmDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showDelete, setShowDelete] = useState(false);
-  const [activeTab, setActiveTab] = useState<'general' | 'tokens' | 'email' | 'security' | 'events' | 'theme'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'tokens' | 'email' | 'security' | 'events' | 'theme' | 'sms'>('general');
   const [testEmailTo, setTestEmailTo] = useState('');
 
   const { data: realm, isLoading } = useQuery({
@@ -119,6 +121,15 @@ export default function RealmDetailPage() {
     loginTheme: 'authme',
     accountTheme: 'authme',
     emailTheme: 'authme',
+    // SMS MFA
+    smsMfaEnabled: false,
+    smsProvider: 'none' as SmsProviderType,
+    smsFrom: '',
+    smsProviderConfig: {} as SmsProviderConfig,
+    otpLength: 6,
+    otpExpirySeconds: 300,
+    smsMaxRequestsPerUser: 3,
+    smsRateLimitWindow: 900,
   });
 
   useEffect(() => {
@@ -161,6 +172,15 @@ export default function RealmDetailPage() {
         loginTheme: realm.loginTheme ?? 'authme',
         accountTheme: realm.accountTheme ?? 'authme',
         emailTheme: realm.emailTheme ?? 'authme',
+        // SMS MFA
+        smsMfaEnabled: realm.smsMfaEnabled ?? false,
+        smsProvider: realm.smsProvider ?? 'none',
+        smsFrom: realm.smsFrom ?? '',
+        smsProviderConfig: realm.smsProviderConfig ?? {},
+        otpLength: realm.otpLength ?? 6,
+        otpExpirySeconds: realm.otpExpirySeconds ?? 300,
+        smsMaxRequestsPerUser: realm.smsMaxRequestsPerUser ?? 3,
+        smsRateLimitWindow: realm.smsRateLimitWindow ?? 900,
       });
     }
   }, [realm]);
@@ -220,6 +240,7 @@ export default function RealmDetailPage() {
     { key: 'security' as const, label: 'Security' },
     { key: 'events' as const, label: 'Events' },
     { key: 'theme' as const, label: 'Theme' },
+    { key: 'sms' as const, label: 'SMS MFA' },
   ];
 
   const quickLinks = [
@@ -1092,6 +1113,24 @@ export default function RealmDetailPage() {
             </button>
           </div>
         </form>
+      )}
+
+      {/* SMS MFA Tab */}
+      {activeTab === 'sms' && (
+        <RealmSmsMfaTab
+          form={{
+            smsMfaEnabled: form.smsMfaEnabled,
+            smsProvider: form.smsProvider,
+            smsFrom: form.smsFrom,
+            smsProviderConfig: form.smsProviderConfig,
+            otpLength: form.otpLength,
+            otpExpirySeconds: form.otpExpirySeconds,
+            smsMaxRequestsPerUser: form.smsMaxRequestsPerUser,
+            smsRateLimitWindow: form.smsRateLimitWindow,
+          }}
+          onChange={(updates) => setForm({ ...form, ...updates })}
+          isConfigured={form.smsProvider !== 'none' && !!form.smsFrom}
+        />
       )}
 
       <ConfirmDialog
