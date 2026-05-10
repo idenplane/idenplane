@@ -211,3 +211,101 @@ export interface UserFederation {
   createdAt: string;
   updatedAt: string;
 }
+
+// ── NHI Types ────────────────────────────────────────────────────────────────
+
+export type NhiIdentityType = 'IOT_DEVICE' | 'AI_AGENT' | 'BOT' | 'MACHINE_TO_MACHINE';
+export type NhiLifecycleStatus = 'PROVISIONING' | 'ACTIVE' | 'SUSPENDED' | 'DECOMMISSIONED';
+export type NhiCredentialType = 'API_KEY' | 'CERTIFICATE' | 'JWT_BEARER';
+
+export interface NhiIdentity {
+  id: string;
+  realmId: string;
+  identityType: NhiIdentityType;
+  name: string;
+  description: string | null;
+  enabled: boolean;
+  lifecycleStatus: NhiLifecycleStatus;
+  suspendedAt: string | null;
+  decommissionedAt: string | null;
+  certificateSubject: string | null;
+  certificateFingerprint: string | null;
+  certificateNotBefore: string | null;
+  certificateNotAfter: string | null;
+  agentPurpose: string | null;
+  permissionScopes: string[];
+  metadata: Record<string, unknown>;
+  tags: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NhiCredential {
+  id: string;
+  nhiIdentityId: string;
+  credentialType: NhiCredentialType;
+  name: string;
+  keyPrefix: string | null;
+  expiresAt: string | null;
+  rotatedAt: string | null;
+  rotationRequired: boolean;
+  enabled: boolean;
+  revoked: boolean;
+  revokedAt: string | null;
+  lastUsedAt: string | null;
+  requestCount: number;
+  allowedIpRanges: string[];
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NhiCredentialPolicy {
+  id: string;
+  realmId: string;
+  name: string;
+  description: string | null;
+  enabled: boolean;
+  priority: number;
+  credentialType: NhiCredentialType;
+  rotationIntervalDays: number;
+  rotationBeforeDays: number;
+  autoRotate: boolean;
+  maxCredentialAgeDays: number;
+  maxRequestsPerDay: number | null;
+  maxRequestsPerMonth: number | null;
+  rateLimitPerMinute: number | null;
+  requireCertificate: boolean;
+  requireIpRestriction: boolean;
+  requireAuditLogging: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NhiUsageStats {
+  id: string;
+  nhiIdentityId: string;
+  totalRequests: number;
+  successfulRequests: number;
+  failedRequests: number;
+  lastActiveAt: string | null;
+  lastSuccessfulAt: string | null;
+  lastFailedAt: string | null;
+  oldestCredentialAgeDays: number | null;
+  newestCredentialAgeDays: number | null;
+  credentialsExpiringSoon: number;
+  updatedAt: string;
+}
+
+export interface NhiAuditLog {
+  id: string;
+  realmId: string;
+  nhiIdentityId: string;
+  action: string;
+  credentialId: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  success: boolean;
+  errorCode: string | null;
+  details: Record<string, unknown> | null;
+  createdAt: string;
+}
