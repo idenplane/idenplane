@@ -33,6 +33,8 @@ import LoginEventsPage from './pages/events/LoginEventsPage';
 import AdminEventsPage from './pages/events/AdminEventsPage';
 import AuthFlowListPage from './pages/auth-flows/AuthFlowListPage';
 import AuthFlowEditorPage from './pages/auth-flows/AuthFlowEditorPage';
+import UpgradeStatusPage from './pages/upgrade/UpgradeStatusPage';
+import MigrationHistoryPage from './pages/upgrade/MigrationHistoryPage';
 import NotFoundPage from './pages/NotFoundPage';
 import { hasCredentials } from './api/client';
 
@@ -84,6 +86,8 @@ export default function App() {
           <Route path="/console/realms/:name/saml-providers/:id" element={<SamlSpDetailPage />} />
           <Route path="/console/realms/:name/auth-flows" element={<AuthFlowListPage />} />
           <Route path="/console/realms/:name/auth-flows/:flowId" element={<AuthFlowEditorPage />} />
+          <Route path="/console/upgrade" element={<UpgradeStatusPage />} />
+          <Route path="/console/upgrade/history" element={<MigrationHistoryPage />} />
           {/* Catch-all for unknown /console/... paths — rendered inside the Layout shell */}
           <Route path="*" element={<NotFoundPage />} />
         </Route>
