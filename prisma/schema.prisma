@@ -191,6 +191,8 @@ model User {
 
   federationLink String? @map("federation_link")
 
+  phoneNumber String? @map("phone_number")
+
   passwordChangedAt DateTime? @map("password_changed_at")
   lockedUntil       DateTime? @map("locked_until")
 
@@ -539,6 +541,7 @@ model UserCredential {
   userId    String  @map("user_id")
   type      String  @default("totp")
   secretKey String  @map("secret_key")
+  phoneNumber String? @map("phone_number")
   algorithm String  @default("SHA1")
   digits    Int     @default(6)
   period    Int     @default(30)
