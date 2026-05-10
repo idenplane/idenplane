@@ -1,0 +1,702 @@
+---
+id: bare-metal
+title: Bare Metal Deployment
+sidebar_position: 3
+description: Deploy AuthMe on bare metal or dedicated servers with systemd and reverse proxy configuration.
+---
+
+# Bare Metal Deployment
+
+This guide covers deploying AuthMe directly on bare metal or dedicated servers without containerization. It includes systemd service setup, database installation, reverse proxy configuration, and production hardening.
+
+---
+
+## Prerequisites
+
+| Requirement | Version |
+|-------------|---------|
+| Node.js | 22+ |
+| PostgreSQL | 16+ (or MySQL 8, SQLite for dev) |
+| System memory | 512 MB minimum |
+| Disk space | 2 GB minimum |
+| User privileges | sudo/root for service installation |
+
+:::note
+AuthMe runs in approximately 150 MB RAM, making it suitable for small VPS instances or dedicated servers.
+:::
+
+---
+
+## Quick Start
+
+```bash
+# Clone the repository
+git clone https://github.com/Islamawad132/Authme.git
+cd Authme
+
+# Run the setup script (installs dependencies, builds, sets up database)
+curl -sSL https://raw.githubusercontent.com/Islamawad132/Authme/main/scripts/setup-bare-metal.sh | bash
+```
+
+---
+
+## Installing from Source
+
+### 1. Install Node.js
+
+For production, use Node.js 22 LTS:
+
+```bash
+# Using NodeSource repository (Ubuntu/Debian)
+curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+sudo apt-get install -y nodejs
+
+# Verify installation
+node --version  # Should be v22.x.x
+npm --version
+```
+
+For other distributions, see the [official Node.js installation guide](https://nodejs.org/en/download/package-manager).
+
+### 2. Install PostgreSQL
+
+```bash
+# Ubuntu/Debian
+sudo apt-get update
+sudo apt-get install -y postgresql postgresql-client
+
+# Start PostgreSQL
+sudo systemctl start postgresql
+sudo systemctl enable postgresql
+
+# Create database and user
+sudo -u postgres psql << 'EOF'
+CREATE USER authme WITH PASSWORD 'your_secure_password';
+CREATE DATABASE authme OWNER authme;
+GRANT ALL PRIVILEGES ON DATABASE authme TO authme;
+EOF
+```
+
+For other distributions, see the [PostgreSQL installation guide](https://www.postgresql.org/docs/latest/installation.html).
+
+### 3. Install Redis (Optional)
+
+Redis is optional but recommended for session caching and improved performance:
+
+```bash
+# Ubuntu/Debian
+sudo apt-get install -y redis-server
+
+# Start Redis
+sudo systemctl start redis-server
+sudo systemctl enable redis-server
+```
+
+---
+
+## Building AuthMe
+
+### 1. Clone and Install Dependencies
+
+```bash
+git clone https://github.com/Islamawad132/Authme.git
+cd Authme
+
+# Install backend dependencies
+npm install
+
+# Install Admin UI dependencies
+cd admin-ui && npm install && cd ..
+```
+
+### 2. Configure Environment
+
+```bash
+# Copy the example environment file
+cp .env.example .env
+
+# Edit with your production settings
+nano .env
+```
+
+Required environment variables for production:
+
+```bash
+# Database (required)
+DATABASE_URL=postgresql://authme:your_secure_password@localhost:5432/authme
+
+# Server
+PORT=3000
+NODE_ENV=production
+BASE_URL=https://auth.yourdomain.com
+
+# Security (required in production)
+ADMIN_API_KEY=your-secure-api-key-here   # Generate with: openssl rand -hex 32
+WEBHOOK_SECRET_KEY=your-webhook-secret   # Generate with: openssl rand -hex 32
+WEBHOOK_ENCRYPTION_SALT=your-salt        # Generate with: openssl rand -hex 16
+
+# Redis (optional)
+REDIS_URL=redis://localhost:6379
+SESSION_STORE=redis
+```
+
+:::warning
+Always generate secure secrets for production. Never use default or placeholder values:
+
+```bash
+# Generate secure secrets
+openssl rand -hex 32  # For ADMIN_API_KEY
+openssl rand -hex 32  # For WEBHOOK_SECRET_KEY
+openssl rand -hex 16  # For WEBHOOK_ENCRYPTION_SALT
+```
+:::
+
+### 3. Set Up Database
+
+```bash
+# Generate Prisma client
+npm run prisma:generate
+
+# Run migrations
+npm run prisma:migrate
+
+# Seed with sample data (optional)
+npm run prisma:seed
+```
+
+### 4. Build the Application
+
+```bash
+# Build Admin UI
+cd admin-ui && npm run build && cd ..
+
+# Build NestJS backend
+npm run build
+```
+
+---
+
+## Systemd Service Setup
+
+### 1. Create the Service File
+
+Create `/etc/systemd/system/authme.service`:
+
+```ini
+[Unit]
+Description=AuthMe Identity Server
+Documentation=https://authme.dev/docs
+After=network.target postgresql.service redis.service
+Wants=postgresql.service redis.service
+
+[Service]
+Type=simple
+User=authme
+Group=authme
+WorkingDirectory=/opt/authme
+Environment=NODE_ENV=production
+EnvironmentFile=/opt/authme/.env
+ExecStart=/usr/bin/node dist/src/main.js
+Restart=on-failure
+RestartSec=10s
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=authme
+
+# Security: Run as non-root user
+User=authme
+Group=authme
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectSystem=strict
+ProtectHome=true
+ReadWritePaths=/opt/authme /var/log/authme
+
+# Health check
+HealthCheckInterval=30s
+HealthCheckSymbol=:http://localhost:3000/health/live
+
+[Install]
+WantedBy=multi-user.target
+```
+
+### 2. Create the AuthMe User
+
+```bash
+# Create system user (no login shell)
+sudo useradd --system --home /opt/authme --shell /usr/sbin/nologin authme
+
+# Create directories
+sudo mkdir -p /opt/authme /var/log/authme
+sudo chown -R authme:authme /opt/authme /var/log/authme
+```
+
+### 3. Copy Build Files
+
+```bash
+# Copy the built application
+sudo cp -r . /opt/authme/
+sudo chown -R authme:authme /opt/authme
+
+# Copy environment file
+sudo cp .env /opt/authme/.env
+sudo chmod 600 /opt/authme/.env
+sudo chown authme:authme /opt/authme/.env
+```
+
+### 4. Enable and Start the Service
+
+```bash
+# Reload systemd
+sudo systemctl daemon-reload
+
+# Enable service to start on boot
+sudo systemctl enable authme
+
+# Start the service
+sudo systemctl start authme
+
+# Check status
+sudo systemctl status authme
+```
+
+### 5. Managing the Service
+
+```bash
+# View logs
+sudo journalctl -u authme -f
+
+# Restart after config changes
+sudo systemctl restart authme
+
+# Stop the service
+sudo systemctl stop authme
+
+# View recent logs
+sudo journalctl -u authme --since "1 hour ago"
+```
+
+---
+
+## Reverse Proxy Configuration
+
+### Nginx
+
+Install Nginx:
+
+```bash
+sudo apt-get install -y nginx
+```
+
+Create `/etc/nginx/sites-available/authme`:
+
+```nginx
+upstream authme_backend {
+    server 127.0.0.1:3000;
+    keepalive 32;
+}
+
+server {
+    listen 80;
+    server_name auth.yourdomain.com;
+    return 301 https://$server_name$request_uri;
+}
+
+server {
+    listen 443 ssl http2;
+    server_name auth.yourdomain.com;
+
+    # SSL configuration
+    ssl_certificate /etc/letsencrypt/live/auth.yourdomain.com/fullchain.pem;
+    ssl_certificate_key /etc/letsencrypt/live/auth.yourdomain.com/privkey.pem;
+    ssl_session_timeout 1d;
+    ssl_session_cache shared:SSL:50m;
+    ssl_session_tickets off;
+
+    # Modern TLS configuration
+    ssl_protocols TLSv1.2 TLSv1.3;
+    ssl_ciphers ECDHE-ECDSA-AES128-GCM-SHA256:ECDHE-RSA-AES128-GCM-SHA256:ECDHE-ECDSA-AES256-GCM-SHA384:ECDHE-RSA-AES256-GCM-SHA384;
+    ssl_prefer_server_ciphers off;
+
+    # HSTS
+    add_header Strict-Transport-Security "max-age=63072000" always;
+
+    # Security headers
+    add_header X-Frame-Options "SAMEORIGIN" always;
+    add_header X-Content-Type-Options "nosniff" always;
+    add_header X-XSS-Protection "1; mode=block" always;
+    add_header Referrer-Policy "strict-origin-when-cross-origin" always;
+
+    # Proxy configuration
+    location / {
+        proxy_pass http://authme_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Upgrade $http_upgrade;
+        proxy_set_header Connection 'upgrade';
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        proxy_cache_bypass $http_upgrade;
+        proxy_buffering off;
+    }
+
+    # Large file support for SAML metadata
+    location /realms {
+        proxy_pass http://authme_backend;
+        proxy_http_version 1.1;
+        proxy_set_header Host $host;
+        proxy_set_header X-Real-IP $remote_addr;
+        proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        proxy_set_header X-Forwarded-Proto $scheme;
+        client_max_body_size 10M;
+    }
+}
+```
+
+Enable the site:
+
+```bash
+sudo ln -s /etc/nginx/sites-available/authme /etc/nginx/sites-enabled/
+sudo nginx -t
+sudo systemctl reload nginx
+```
+
+For SSL with Let's Encrypt:
+
+```bash
+sudo apt-get install -y certbot python3-certbot-nginx
+sudo certbot --nginx -d auth.yourdomain.com
+```
+
+### Caddy
+
+Create `/etc/caddyfile`:
+
+```caddy
+auth.yourdomain.com {
+    reverse_proxy localhost:3000
+
+    # Modern TLS (managed automatically)
+    tls {
+        dns cloudflare {env.CLOUDFLARE_API_TOKEN}
+    }
+
+    # Security headers
+    header {
+        X-Frame-Options "SAMEORIGIN"
+        X-Content-Type-Options "nosniff"
+        X-XSS-Protection "1; mode=block"
+        Referrer-Policy "strict-origin-when-cross-origin"
+        -Server
+    }
+
+    # Logging
+    log {
+        output file /var/log/caddy/authme.log
+    }
+}
+```
+
+Enable and start Caddy:
+
+```bash
+sudo systemctl enable --now caddy
+```
+
+---
+
+## Database Backups
+
+### Automated Backups with Cron
+
+Create `/etc/cron.d/authme-backup`:
+
+```
+# AuthMe database backup - daily at 2 AM
+0 2 * * * postgres pg_dump -U authme authme | gzip > /var/backups/authme/authme_$(date +\%Y\%m\%d).sql.gz
+```
+
+### Backup Script
+
+Create `/opt/authme/backup.sh`:
+
+```bash
+#!/bin/bash
+set -e
+
+BACKUP_DIR="/var/backups/authme"
+DATABASE_URL="postgresql://authme:your_password@localhost:5432/authme"
+RETENTION_DAYS=30
+
+# Create backup directory
+mkdir -p "$BACKUP_DIR"
+
+# Create timestamped backup
+TIMESTAMP=$(date +%Y%m%d_%H%M%S)
+FILENAME="authme_${TIMESTAMP}.sql.gz"
+
+pg_dump "$DATABASE_URL" | gzip > "$BACKUP_DIR/$FILENAME"
+
+# Remove old backups
+find "$BACKUP_DIR" -name "authme_*.sql.gz" -mtime +$RETENTION_DAYS -delete
+
+# Log completion
+echo "[$(date)] Backup completed: $FILENAME"
+```
+
+```bash
+chmod +x /opt/authme/backup.sh
+```
+
+---
+
+## Firewall Configuration
+
+### UFW (Ubuntu)
+
+```bash
+# Allow SSH (before enabling firewall!)
+sudo ufw allow 22/tcp
+
+# Allow HTTP/HTTPS
+sudo ufw allow 80/tcp
+sudo ufw allow 443/tcp
+
+# Enable firewall
+sudo ufw enable
+
+# Check status
+sudo ufw status
+```
+
+### firewalld (CentOS/RHEL)
+
+```bash
+sudo firewall-cmd --permanent --add-service=http
+sudo firewall-cmd --permanent --add-service=https
+sudo firewall-cmd --reload
+```
+
+---
+
+## Monitoring
+
+### Health Checks
+
+AuthMe provides health check endpoints:
+
+| Endpoint | Description |
+|----------|-------------|
+| `http://localhost:3000/health/live` | Liveness check |
+| `http://localhost:3000/health/ready` | Readiness check (includes database) |
+| `http://localhost:3000/metrics` | Prometheus metrics |
+
+### Prometheus Metrics
+
+Configure Prometheus to scrape AuthMe metrics:
+
+```yaml
+# /etc/prometheus/prometheus.yml
+scrape_configs:
+  - job_name: 'authme'
+    static_configs:
+      - targets: ['localhost:3000']
+    metrics_path: '/metrics'
+```
+
+### Logrotate Configuration
+
+Create `/etc/logrotate.d/authme`:
+
+```
+/var/log/authme/*.log {
+    daily
+    rotate 14
+    compress
+    delaycompress
+    notifempty
+    create 0640 authme authme
+    sharedscripts
+    postrotate
+        systemctl reload authme > /dev/null 2>&1 || true
+    endscript
+}
+```
+
+---
+
+## Updating AuthMe
+
+### 1. Stop the Service
+
+```bash
+sudo systemctl stop authme
+```
+
+### 2. Pull Latest Code
+
+```bash
+cd /opt/authme
+sudo -u authme git pull origin main
+```
+
+### 3. Rebuild
+
+```bash
+# Install dependencies
+sudo -u authme npm install
+
+# Build Admin UI
+sudo -u authme bash -c "cd admin-ui && npm install && npm run build"
+
+# Build backend
+sudo -u authme npm run build
+```
+
+### 4. Run Migrations
+
+```bash
+sudo -u authme npm run prisma:migrate deploy
+```
+
+### 5. Start the Service
+
+```bash
+sudo systemctl start authme
+sudo systemctl status authme
+```
+
+---
+
+## Security Hardening
+
+### File Permissions
+
+```bash
+# Set correct ownership
+sudo chown -R authme:authme /opt/authme
+
+# Remove group/other permissions
+sudo chmod -R o-rwx /opt/authme
+sudo chmod 600 /opt/authme/.env
+```
+
+### Fail2Ban
+
+Install Fail2Ban to protect against brute force attacks:
+
+```bash
+sudo apt-get install -y fail2ban
+```
+
+Create `/etc/fail2ban/jail.local`:
+
+```ini
+[authme-api]
+enabled = true
+port = 80,443,3000
+http-bind-host = 127.0.0.1
+filter = authme-api
+logpath = /var/log/authme/*.log
+maxretry = 10
+findtime = 600
+bantime = 3600
+action = iptables-multiport
+```
+
+Create `/etc/fail2ban/filter.d/authme-api.conf`:
+
+```ini
+[Definition]
+failregex = ^\[.*\] ERROR.*Client authentication failed for user: <HOST>
+ignoreregex =
+```
+
+```bash
+sudo systemctl enable fail2ban
+sudo systemctl start fail2ban
+```
+
+---
+
+## Troubleshooting
+
+### Service Won't Start
+
+1. Check logs:
+   ```bash
+   sudo journalctl -u authme -n 100
+   ```
+
+2. Verify environment variables:
+   ```bash
+   sudo -u authme cat /opt/authme/.env
+   ```
+
+3. Test database connection:
+   ```bash
+   sudo -u authme psql $DATABASE_URL -c "SELECT 1"
+   ```
+
+### Database Connection Issues
+
+1. Verify PostgreSQL is running:
+   ```bash
+   sudo systemctl status postgresql
+   ```
+
+2. Check connection:
+   ```bash
+   psql -U authme -h localhost -d authme -c "SELECT 1"
+   ```
+
+3. Review connection string in `.env`
+
+### High Memory Usage
+
+1. Check process memory:
+   ```bash
+   ps aux | grep authme
+   top -p $(pgrep -f authme)
+   ```
+
+2. Enable Redis for caching to reduce memory:
+   ```bash
+   # In .env
+   REDIS_URL=redis://localhost:6379
+   SESSION_STORE=redis
+   ```
+
+3. Restart after changes:
+   ```bash
+   sudo systemctl restart authme
+   ```
+
+---
+
+## Next Steps
+
+<div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
+
+[**Environment Variables**](/docs/configuration/environment-variables)
+Complete list of all configuration options
+
+[**Configuration**](/docs/getting-started/configuration)
+Detailed configuration guide
+
+[**Docker Compose**](/docs/deployment/docker)
+Deploy using Docker Compose
+
+[**Kubernetes**](/docs/deployment/kubernetes)
+Deploy on Kubernetes
+
+</div>
+
+---
+
+<p align="center">
+  <a href="https://authme.dev">authme.dev</a> ·
+  <a href="https://github.com/Islamawad132/Authme">GitHub</a> ·
+  <a href="https://discord.gg/authme">Discord</a>
+</p>

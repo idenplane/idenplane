@@ -1,0 +1,726 @@
+---
+id: nextjs-sdk
+title: Next.js SDK
+description: Integrate AuthMe authentication into your Next.js application using the official SDK with support for App Router, Pages Router, middleware, and Server Components
+---
+
+# Next.js SDK
+
+The AuthMe Next.js SDK provides seamless integration with Next.js applications, supporting both the App Router and Pages Router, route protection via middleware, and server-side authentication in Server Components and Route Handlers.
+
+## Installation
+
+```bash
+npm install @authme/nextjs authme-sdk
+```
+
+---
+
+## Quick Start
+
+### 1. Wrap Your App with AuthProvider
+
+```tsx
+// app/layout.tsx
+'use client';
+import { AuthProvider } from '@authme/nextjs';
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html>
+      <body>
+        <AuthProvider
+          serverUrl="http://localhost:3000"
+          realm="my-realm"
+          clientId="my-app"
+          redirectUri="http://localhost:3000/callback"
+        >
+          {children}
+        </AuthProvider>
+      </body>
+    </html>
+  );
+}
+```
+
+### 2. Use Auth State in Client Components
+
+```tsx
+'use client';
+import { useAuth } from '@authme/nextjs';
+
+export function NavBar() {
+  const { isAuthenticated, user, login, logout, isLoading } = useAuth();
+
+  if (isLoading) return <span>Loading...</span>;
+  if (!isAuthenticated) return <button onClick={() => login()}>Sign In</button>;
+  return (
+    <div>
+      <span>{user?.name}</span>
+      <button onClick={logout}>Sign Out</button>
+    </div>
+  );
+}
+```
+
+### 3. Protect Routes with Middleware
+
+```typescript
+// middleware.ts
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { createAuthMiddleware } from '@authme/nextjs/middleware';
+
+const authMiddleware = createAuthMiddleware({
+  serverUrl: 'http://localhost:3000',
+  realm: 'my-realm',
+  clientId: 'my-app',
+  protectedPaths: ['/dashboard', '/api/protected'],
+  loginPath: '/login',
+});
+
+export default function middleware(request: NextRequest) {
+  return authMiddleware(request as never, NextResponse as never);
+}
+
+export const config = {
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+};
+```
+
+### 4. Server Components
+
+```tsx
+// app/dashboard/page.tsx
+import { cookies } from 'next/headers';
+import { getServerUser } from '@authme/nextjs/server';
+import { redirect } from 'next/navigation';
+
+export default async function DashboardPage() {
+  const cookieStore = cookies();
+  const user = await getServerUser(cookieStore, {
+    serverUrl: 'http://localhost:3000',
+    realm: 'my-realm',
+  });
+
+  if (!user) redirect('/login');
+
+  return <h1>Hello, {user.name}!</h1>;
+}
+```
+
+---
+
+## AuthProvider
+
+The `AuthProvider` wraps your Next.js application and provides authentication state to all child components.
+
+### Props
+
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `serverUrl` | `string` | Yes* | AuthMe server URL |
+| `realm` | `string` | Yes* | Realm name |
+| `clientId` | `string` | Yes* | OAuth2 client ID |
+| `redirectUri` | `string` | Yes* | Redirect URI after login |
+| `client` | `AuthmeClient` | Yes* | Pre-built client instance |
+| `scope` | `string[]` | No | OAuth2 scopes (default: `['openid', 'profile', 'email']`) |
+| `autoHandleCallback` | `boolean` | No | Auto-handle callback when URL has `?code=` (default: `true`) |
+| `onReady` | `(authenticated: boolean) => void` | No | Called when initialization completes |
+| `onLogin` | `(tokens: TokenResponse) => void` | No | Called on successful login |
+| `onLogout` | `() => void` | No | Called on logout |
+| `onError` | `(error: Error) => void` | No | Called on authentication error |
+| `onTokenRefresh` | `(tokens: TokenResponse) => void` | No | Called after token refresh |
+
+*Either a `client` prop or all of `serverUrl`, `realm`, `clientId`, and `redirectUri` are required.
+
+### With Inline Config
+
+```tsx
+// app/layout.tsx
+'use client';
+import { AuthProvider } from '@authme/nextjs';
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html>
+      <body>
+        <AuthProvider
+          serverUrl="http://localhost:3000"
+          realm="my-realm"
+          clientId="my-app"
+          redirectUri="http://localhost:3000/callback"
+          scope={['openid', 'profile', 'email', 'custom:scope']}
+          onReady={(authed) => console.log('Ready! Authenticated:', authed)}
+          onLogin={(tokens) => {
+            console.log('Access token:', tokens.access_token);
+          }}
+        >
+          {children}
+        </AuthProvider>
+      </body>
+    </html>
+  );
+}
+```
+
+### With Pre-built Client
+
+For more control over the client configuration:
+
+```tsx
+// app/providers.tsx
+'use client';
+import { AuthmeClient } from 'authme-sdk';
+import { AuthProvider } from '@authme/nextjs';
+
+const client = new AuthmeClient({
+  url: 'http://localhost:3000',
+  realm: 'my-realm',
+  clientId: 'my-app',
+  redirectUri: 'http://localhost:3000/callback',
+  refreshStrategy: 'rotation',
+  storage: 'sessionStorage',
+  refreshBuffer: 30,
+  autoRefresh: true,
+});
+
+export function AuthProviders({ children }: { children: React.ReactNode }) {
+  return (
+    <AuthProvider client={client}>
+      {children}
+    </AuthProvider>
+  );
+}
+```
+
+```tsx
+// app/layout.tsx
+import { AuthProviders } from './providers';
+
+export default function RootLayout({ children }: { children: React.ReactNode }) {
+  return (
+    <html>
+      <body>
+        <AuthProviders>{children}</AuthProviders>
+      </body>
+    </html>
+  );
+}
+```
+
+---
+
+## useAuth Hook
+
+The `useAuth` hook provides access to authentication state and actions in client components:
+
+```tsx
+const {
+  client,           // The AuthmeClient instance
+  isAuthenticated,  // boolean - whether user is authenticated
+  isLoading,        // boolean - whether auth state is loading
+  user,             // UserInfo | null - current user info
+  login,            // (options?) => Promise<void> - initiate login
+  logout,           // () => Promise<void> - sign out
+  getToken,         // () => string | null - get current access token
+} = useAuth();
+```
+
+### Example: Navigation Component
+
+```tsx
+'use client';
+import { useAuth } from '@authme/nextjs';
+
+export function Navigation() {
+  const { isAuthenticated, user, login, logout, isLoading } = useAuth();
+
+  if (isLoading) {
+    return <nav className="nav-loading">Loading...</nav>;
+  }
+
+  return (
+    <nav>
+      <a href="/">Home</a>
+      <a href="/dashboard">Dashboard</a>
+
+      {isAuthenticated ? (
+        <>
+          <span className="user-name">{user?.name}</span>
+          <button onClick={() => logout()}>Sign Out</button>
+        </>
+      ) : (
+        <button onClick={() => login()}>Sign In</button>
+      )}
+    </nav>
+  );
+}
+```
+
+### Example: Login with Custom Options
+
+```tsx
+'use client';
+import { useAuth } from '@authme/nextjs';
+
+export function SignInButton() {
+  const { login, isLoading } = useAuth();
+
+  const handleLogin = async () => {
+    try {
+      await login({ scope: ['openid', 'profile', 'email', 'custom:scope'] });
+    } catch (error) {
+      console.error('Login failed:', error);
+    }
+  };
+
+  return (
+    <button onClick={handleLogin} disabled={isLoading}>
+      {isLoading ? 'Signing in...' : 'Sign In'}
+    </button>
+  );
+}
+```
+
+### Example: Accessing the Token
+
+```tsx
+'use client';
+import { useAuth } from '@authme/nextjs';
+
+export function TokenDisplay() {
+  const { getToken, isAuthenticated } = useAuth();
+
+  if (!isAuthenticated) return null;
+
+  const token = getToken();
+
+  return (
+    <div>
+      <p>Your access token:</p>
+      <code>{token?.substring(0, 20)}...</code>
+    </div>
+  );
+}
+```
+
+---
+
+## Middleware (Route Protection)
+
+Protect your routes at the edge with the `createAuthMiddleware` function:
+
+### Basic Middleware Setup
+
+```typescript
+// middleware.ts
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { createAuthMiddleware } from '@authme/nextjs/middleware';
+
+const authMiddleware = createAuthMiddleware({
+  serverUrl: 'http://localhost:3000',
+  realm: 'my-realm',
+  clientId: 'my-app',
+  protectedPaths: ['/dashboard', '/profile', '/settings'],
+  loginPath: '/login',
+});
+
+export default function middleware(request: NextRequest) {
+  return authMiddleware(request as never, NextResponse as never);
+}
+
+export const config = {
+  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
+};
+```
+
+### Middleware Configuration Options
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `serverUrl` | `string` | Yes | AuthMe server URL |
+| `realm` | `string` | Yes | Realm name |
+| `clientId` | `string` | Yes | OAuth2 client ID |
+| `protectedPaths` | `string[]` | Yes | Routes that require authentication |
+| `loginPath` | `string` | No | Redirect path for unauthenticated users (default: `/`) |
+| `excludedPaths` | `string[]` | No | Routes to skip auth check |
+| `publicPaths` | `string[]` | No | Alias for `excludedPaths` |
+
+### Multiple Protected Path Patterns
+
+```typescript
+// middleware.ts
+import { NextResponse } from 'next/server';
+import type { NextRequest } from 'next/server';
+import { createAuthMiddleware } from '@authme/nextjs/middleware';
+
+const authMiddleware = createAuthMiddleware({
+  serverUrl: 'http://localhost:3000',
+  realm: 'my-realm',
+  clientId: 'my-app',
+  protectedPaths: [
+    '/dashboard',
+    '/settings',
+    '/admin/*',
+    '/api/protected/*',
+  ],
+  excludedPaths: [
+    '/api/health',
+    '/public/*',
+  ],
+  loginPath: '/login',
+});
+
+export default function middleware(request: NextRequest) {
+  return authMiddleware(request as never, NextResponse as never);
+}
+
+export const config = {
+  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/health).*)'],
+};
+```
+
+---
+
+## Server Components
+
+Access authentication state in Server Components using the `getServerUser` function:
+
+### Basic Server Component Auth
+
+```tsx
+// app/dashboard/page.tsx
+import { cookies } from 'next/headers';
+import { getServerUser } from '@authme/nextjs/server';
+import { redirect } from 'next/navigation';
+
+export default async function DashboardPage() {
+  const cookieStore = cookies();
+  const user = await getServerUser(cookieStore, {
+    serverUrl: 'http://localhost:3000',
+    realm: 'my-realm',
+  });
+
+  if (!user) {
+    redirect('/login');
+  }
+
+  return (
+    <div>
+      <h1>Welcome back, {user.name}!</h1>
+      <p>Email: {user.email}</p>
+    </div>
+  );
+}
+```
+
+### Server Component with Session
+
+```tsx
+// app/profile/page.tsx
+import { cookies } from 'next/headers';
+import { getServerAuth } from '@authme/nextjs/server';
+
+export default async function ProfilePage() {
+  const cookieStore = cookies();
+  const session = await getServerAuth(cookieStore, {
+    serverUrl: 'http://localhost:3000',
+    realm: 'my-realm',
+  });
+
+  if (!session) {
+    return <div>Please sign in to view your profile.</div>;
+  }
+
+  return (
+    <div>
+      <h1>Profile</h1>
+      <div className="profile-card">
+        <img src={session.user.picture} alt={session.user.name} />
+        <h2>{session.user.name}</h2>
+        <p>{session.user.email}</p>
+        <span>User ID: {session.user.sub}</span>
+      </div>
+    </div>
+  );
+}
+```
+
+### Server Component with Role Checking
+
+```tsx
+// app/admin/page.tsx
+import { cookies } from 'next/headers';
+import { getServerUser } from '@authme/nextjs/server';
+import { redirect } from 'next/navigation';
+
+export default async function AdminPage() {
+  const cookieStore = cookies();
+  const user = await getServerUser(cookieStore, {
+    serverUrl: 'http://localhost:3000',
+    realm: 'my-realm',
+  });
+
+  if (!user) {
+    redirect('/login');
+  }
+
+  const hasAdminRole = user.roles?.includes('admin');
+
+  if (!hasAdminRole) {
+    return (
+      <div>
+        <h1>Access Denied</h1>
+        <p>You need admin privileges to access this page.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div>
+      <h1>Admin Panel</h1>
+      {/* Admin-only content */}
+    </div>
+  );
+}
+```
+
+---
+
+## API Routes (Pages Router)
+
+Protect Pages Router API routes with the `withAuth` helper:
+
+```typescript
+// pages/api/profile.ts
+import { withAuth } from '@authme/nextjs/api';
+import type { NextApiRequest, NextApiResponse } from 'next';
+
+export default withAuth(
+  { serverUrl: 'http://localhost:3000', realm: 'my-realm' },
+  (req: NextApiRequest, res: NextApiResponse) => {
+    // req.authUser contains the authenticated user
+    res.json({
+      user: req.authUser,
+      message: 'This is protected data',
+    });
+  },
+);
+```
+
+### Accessing User in API Route
+
+```typescript
+// pages/api/user-info.ts
+import { withAuth } from '@authme/nextjs/api';
+import type { NextApiRequest, NextApiResponse } from 'next';
+
+export default withAuth(
+  { serverUrl: 'http://localhost:3000', realm: 'my-realm' },
+  (req: NextApiRequest, res: NextApiResponse) => {
+    const user = req.authUser;
+
+    res.json({
+      id: user.sub,
+      name: user.name,
+      email: user.email,
+      roles: user.roles || [],
+    });
+  },
+);
+```
+
+---
+
+## Route Handlers (App Router)
+
+Protect App Router Route Handlers with the `withAuthHandler` helper:
+
+```typescript
+// app/api/profile/route.ts
+import { withAuthHandler } from '@authme/nextjs/api';
+
+export const GET = withAuthHandler(
+  { serverUrl: 'http://localhost:3000', realm: 'my-realm' },
+  (_req, user) => {
+    return Response.json({
+      user: {
+        id: user.sub,
+        name: user.name,
+        email: user.email,
+      },
+    });
+  },
+);
+```
+
+### Multiple HTTP Methods
+
+```typescript
+// app/api/profile/route.ts
+import { withAuthHandler } from '@authme/nextjs/api';
+
+export const GET = withAuthHandler(
+  { serverUrl: 'http://localhost:3000', realm: 'my-realm' },
+  (_req, user) => {
+    return Response.json({ user });
+  },
+);
+
+export const PUT = withAuthHandler(
+  { serverUrl: 'http://localhost:3000', realm: 'my-realm' },
+  async (req, user) => {
+    const body = await req.json();
+    // Update user profile logic here
+    return Response.json({ success: true });
+  },
+);
+
+export const DELETE = withAuthHandler(
+  { serverUrl: 'http://localhost:3000', realm: 'my-realm' },
+  (_req, user) => {
+    // Delete user account logic here
+    return Response.json({ success: true, message: 'Account deleted' });
+  },
+);
+```
+
+### Protected API Route with Error Handling
+
+```typescript
+// app/api/data/route.ts
+import { withAuthHandler } from '@authme/nextjs/api';
+
+export async function GET(req: Request) {
+  try {
+    const handler = withAuthHandler(
+      { serverUrl: 'http://localhost:3000', realm: 'my-realm' },
+      (_request, user) => {
+        // Fetch protected data
+        return Response.json({
+          data: 'sensitive data',
+          timestamp: new Date().toISOString(),
+        });
+      },
+    );
+
+    return handler(req as never);
+  } catch (error) {
+    return Response.json(
+      { error: 'Internal server error' },
+      { status: 500 },
+    );
+  }
+}
+```
+
+---
+
+## API Reference
+
+### `@authme/nextjs` (default export)
+
+Re-exports from `authme-sdk/react`:
+
+| Export | Description |
+|--------|-------------|
+| `AuthProvider` / `AuthmeProvider` | Context provider for client components |
+| `useAuth()` | Authentication state and actions hook |
+| `useUser()` | Current user info hook |
+| `usePermissions()` | Role and permission helpers hook |
+| `ProtectedRoute` | Render-gate component for route protection |
+| `AuthmeClient` | Raw client class |
+
+### `@authme/nextjs/middleware`
+
+| Export | Description |
+|--------|-------------|
+| `createAuthMiddleware(config)` | Creates Next.js Edge middleware function |
+
+**Middleware Config Type:**
+
+```typescript
+interface AuthMiddlewareConfig {
+  serverUrl: string;
+  realm: string;
+  clientId: string;
+  protectedPaths: string[];
+  loginPath?: string;
+  excludedPaths?: string[];
+  publicPaths?: string[];
+}
+```
+
+### `@authme/nextjs/server`
+
+| Export | Description |
+|--------|-------------|
+| `getServerAuth(cookies, config?)` | Returns `AuthSession | null` |
+| `getServerUser(cookies, config?)` | Returns `User | null` |
+
+### `@authme/nextjs/api`
+
+| Export | Description |
+|--------|-------------|
+| `withAuth(config, handler)` | Pages Router API handler wrapper |
+| `withAuthHandler(config, handler)` | App Router Route Handler wrapper |
+
+---
+
+## TypeScript Support
+
+All exports are fully typed:
+
+```tsx
+import type {
+  AuthmeClient,
+  AuthmeConfig,
+  TokenResponse,
+  UserInfo,
+  AuthSession,
+} from 'authme-sdk';
+
+// Server functions
+import { getServerUser, getServerAuth } from '@authme/nextjs/server';
+import type { User } from 'authme-sdk';
+
+// Middleware
+import { createAuthMiddleware } from '@authme/nextjs/middleware';
+import type { AuthMiddlewareConfig } from '@authme/nextjs/middleware';
+
+// API helpers
+import { withAuth, withAuthHandler } from '@authme/nextjs/api';
+
+// Client hooks
+import { useAuth, useUser, usePermissions } from '@authme/nextjs';
+```
+
+---
+
+## Next Steps
+
+<div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
+
+[**Quickstart**](/docs/quickstart)
+Set up AuthMe and create your first authenticated Next.js app
+
+[**React SDK**](/docs/guides/sdks/react)
+React-specific hooks and components
+
+[**Configuration**](/docs/getting-started/configuration)
+Learn about all configuration options
+
+[**API Reference**](/docs/api)
+Complete REST API documentation
+
+</div>
+
+---
+
+<p align="center">
+  <a href="https://authme.dev">authme.dev</a> &middot;
+  <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
+  <a href="https://discord.gg/authme">Discord</a>
+</p>

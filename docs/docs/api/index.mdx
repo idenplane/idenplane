@@ -1,0 +1,180 @@
+---
+id: index
+title: API Reference
+sidebar_label: Overview
+description: Complete REST API documentation for AuthMe with OpenAPI/Swagger support
+---
+
+# API Reference
+
+AuthMe provides a comprehensive REST API for managing authentication, users, clients, and realms. The API follows REST conventions and uses JSON for request and response bodies.
+
+## Base URL
+
+```
+Production: https://api.authme.dev
+Local:      http://localhost:3000
+```
+
+## API Versions
+
+| Version | Status | Description |
+|---------|--------|-------------|
+| `v1` | **Current** | Latest stable API version |
+
+## Swagger/OpenAPI
+
+Interactive API documentation is available via Swagger UI. This provides a visual interface to explore and test all API endpoints.
+
+<div class="swagger-container">
+  <div style={{textAlign: 'center', padding: '2rem', backgroundColor: '#f8f9fa', borderRadius: '8px', marginBottom: '1rem'}}>
+    <h3 style={{marginBottom: '0.5rem'}}>Swagger UI</h3>
+    <p style={{marginBottom: '1rem', color: '#666'}}>Interactive API documentation and testing</p>
+    <a href="/api/swagger" className="button button--primary button--lg" target="_blank">
+      Open Swagger UI
+    </a>
+  </div>
+</div>
+
+## Authentication
+
+All Admin API endpoints require authentication via an API key. Include your API key in the request header:
+
+```http
+X-API-Key: your-api-key-here
+Authorization: Bearer your-jwt-token
+```
+
+### API Key Authentication
+
+Admin API endpoints are protected by API key authentication:
+
+```bash
+curl -X GET "http://localhost:3000/admin/realms" \
+  -H "X-API-Key: your-api-key-here"
+```
+
+## API Endpoints Overview
+
+### Authentication & OAuth
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/realms/:realmName/protocol/openid-connect/token` | POST | Token endpoint (all OAuth grants) |
+| `/realms/:realmName/protocol/openid-connect/auth` | GET | Authorization endpoint |
+| `/realms/:realmName/protocol/openid-connect/userinfo` | GET | UserInfo endpoint |
+| `/realms/:realmName/protocol/openid-connect/logout` | GET/POST | Logout endpoint |
+
+### Realms
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/admin/realms` | GET | List all realms |
+| `/admin/realms` | POST | Create a new realm |
+| `/admin/realms/:realmName` | GET | Get realm details |
+| `/admin/realms/:realmName` | PUT | Update a realm |
+| `/admin/realms/:realmName` | DELETE | Delete a realm |
+| `/admin/realms/:realmName/export` | GET | Export realm configuration |
+| `/admin/realms/import` | POST | Import realm configuration |
+
+### Users
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/admin/realms/:realmName/users` | GET | List users in a realm |
+| `/admin/realms/:realmName/users` | POST | Create a user |
+| `/admin/realms/:realmName/users/:userId` | GET | Get user by ID |
+| `/admin/realms/:realmName/users/:userId` | PUT | Update a user |
+| `/admin/realms/:realmName/users/:userId` | PATCH | Partial update a user |
+| `/admin/realms/:realmName/users/:userId` | DELETE | Delete a user |
+| `/admin/realms/:realmName/users/:userId/reset-password` | PUT | Set user password |
+| `/admin/realms/:realmName/users/:userId/send-verification-email` | POST | Send verification email |
+| `/admin/realms/:realmName/users/:userId/offline-sessions` | GET | List offline sessions |
+
+### Clients
+
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/admin/realms/:realmName/clients` | GET | List clients |
+| `/admin/realms/:realmName/clients` | POST | Create a client |
+| `/admin/realms/:realmName/clients/:clientId` | GET | Get client by ID |
+| `/admin/realms/:realmName/clients/:clientId` | PUT | Update a client |
+| `/admin/realms/:realmName/clients/:clientId` | PATCH | Partial update a client |
+| `/admin/realms/:realmName/clients/:clientId` | DELETE | Delete a client |
+| `/admin/realms/:realmName/clients/:clientId/regenerate-secret` | POST | Regenerate client secret |
+
+## HTTP Status Codes
+
+| Code | Description |
+|------|-------------|
+| `200` | Success |
+| `201` | Created |
+| `204` | No Content (successful delete) |
+| `400` | Bad Request (invalid parameters) |
+| `401` | Unauthorized (missing or invalid credentials) |
+| `403` | Forbidden (insufficient permissions) |
+| `404` | Not Found |
+| `429` | Too Many Requests (rate limited) |
+| `500` | Internal Server Error |
+
+## Rate Limiting
+
+API endpoints are rate-limited to prevent abuse. Limits vary by endpoint:
+
+- **Token endpoint**: 20 requests per minute per IP
+- **Admin API**: 100 requests per minute per API key
+- **User operations**: 50 requests per minute per user
+
+Rate limit information is included in response headers:
+
+```http
+X-RateLimit-Limit: 100
+X-RateLimit-Remaining: 95
+X-RateLimit-Reset: 1620000000
+```
+
+## Error Response Format
+
+All errors follow a consistent format:
+
+```json
+{
+  "statusCode": 400,
+  "message": "Invalid request parameters",
+  "error": "Bad Request",
+  "details": {
+    "field": "email",
+    "reason": "Invalid email format"
+  }
+}
+```
+
+## Pagination
+
+List endpoints support pagination via query parameters:
+
+```bash
+GET /admin/realms/master/users?page=1&limit=20
+```
+
+Response includes pagination metadata:
+
+```json
+{
+  "data": [...],
+  "meta": {
+    "page": 1,
+    "limit": 20,
+    "total": 150,
+    "totalPages": 8
+  }
+}
+```
+
+## Next Steps
+
+- [Authentication API](/docs/api/authentication) - OAuth token endpoints and grants
+- [OAuth Endpoints](/docs/api/oauth) - Authorization, UserInfo, and logout
+- [Users API](/docs/api/users) - User management endpoints
+- [Clients API](/docs/api/clients) - Client application management
+- [Realms API](/docs/api/realms) - Realm administration

@@ -1,0 +1,2987 @@
+openapi: 3.0.3
+info:
+  title: AuthMe - Open Source Identity and Access Management
+  description: |
+    AuthMe is an open-source authentication and authorization server implementing
+    the OAuth 2.0 and OpenID Connect protocols.
+
+    ## Authentication
+
+    This API supports two authentication mechanisms:
+    1. **Admin API Key**: Include `x-admin-api-key: YOUR_KEY` header
+    2. **Bearer Token**: Include `Authorization: Bearer TOKEN` header (for user-facing endpoints)
+
+    ## Versioning
+
+    API endpoints are versioned using URI versioning (`/api/v1/` prefix).
+
+    ## Rate Limiting
+
+    Some endpoints are rate-limited. See specific endpoint documentation for details.
+  version: 1.0.0
+  contact:
+    name: AuthMe Project
+    url: https://authme.dev
+    email: support@authme.dev
+  license:
+    name: Apache 2.0
+    url: https://www.apache.org/licenses/LICENSE-2.0.html
+
+servers:
+  - url: http://localhost:3000/api/v1
+    description: Local development server
+
+security:
+  - admin-api-key: []
+  - bearerAuth: []
+
+tags:
+  - name: Realms
+    description: Realm management operations
+  - name: Users
+    description: User management within realms
+  - name: Clients
+    description: OAuth client management
+  - name: Groups
+    description: Group management and membership
+  - name: Roles
+    description: Role management and assignments
+  - name: OAuth
+    description: OAuth 2.0 / OpenID Connect endpoints
+  - name: Tokens
+    description: Token operations (introspection, revocation)
+  - name: Health
+    description: Health check endpoints
+
+paths:
+  # ── Realms ──────────────────────────────────────────────────────────────────
+  /admin/realms:
+    get:
+      tags:
+        - Realms
+      summary: List all realms
+      description: Returns a list of all configured realms.
+      operationId: listRealms
+      responses:
+        '200':
+          description: List of realms
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Realm'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+    post:
+      tags:
+        - Realms
+      summary: Create a new realm
+      description: Creates a new realm with the specified configuration.
+      operationId: createRealm
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRealmRequest'
+      responses:
+        '201':
+          description: Realm created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Realm'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  /admin/realms/themes:
+    get:
+      tags:
+        - Realms
+      summary: List available themes
+      description: Returns a list of available theme presets.
+      operationId: listThemes
+      responses:
+        '200':
+          description: List of available themes
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  type: string
+
+  /admin/realms/{realmName}:
+    get:
+      tags:
+        - Realms
+      summary: Get realm by name
+      description: Returns the configuration of a specific realm.
+      operationId: getRealm
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Realm details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Realm'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - Realms
+      summary: Update a realm
+      description: Updates the configuration of a realm (full replacement).
+      operationId: updateRealm
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRealmRequest'
+      responses:
+        '200':
+          description: Realm updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Realm'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags:
+        - Realms
+      summary: Partially update a realm
+      description: Updates specific fields of a realm (partial update).
+      operationId: patchRealm
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRealmRequest'
+      responses:
+        '200':
+          description: Realm updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Realm'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Realms
+      summary: Delete a realm
+      description: Permanently deletes a realm and all associated data.
+      operationId: deleteRealm
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Realm deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/realms/{realmName}/export:
+    get:
+      tags:
+        - Realms
+      summary: Export a realm
+      description: Exports a realm configuration as JSON. Can optionally include users and secrets.
+      operationId: exportRealm
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: includeUsers
+          in: query
+          description: Include user data in export
+          schema:
+            type: boolean
+            default: false
+        - name: includeSecrets
+          in: query
+          description: Include secrets (passwords, keys) in export
+          schema:
+            type: boolean
+            default: false
+      responses:
+        '200':
+          description: Realm export data
+          content:
+            application/json:
+              schema:
+                type: object
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/realms/{realmName}/email/test:
+    post:
+      tags:
+        - Realms
+      summary: Send test email
+      description: Sends a test email to verify SMTP configuration.
+      operationId: sendTestEmail
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - to
+              properties:
+                to:
+                  type: string
+                  format: email
+                  description: Recipient email address
+      responses:
+        '200':
+          description: Test email sent successfully
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Test email sent successfully
+        '400':
+          description: Missing recipient or SMTP not configured
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/realms/import:
+    post:
+      tags:
+        - Realms
+      summary: Import a realm
+      description: Imports a realm from JSON configuration.
+      operationId: importRealm
+      parameters:
+        - name: overwrite
+          in: query
+          description: Overwrite existing realm if it exists
+          schema:
+            type: boolean
+            default: false
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+      responses:
+        '201':
+          description: Realm imported successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Realm'
+        '400':
+          description: Invalid import data
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '403':
+          $ref: '#/components/responses/Forbidden'
+
+  # ── Users ────────────────────────────────────────────────────────────────────
+  /admin/realms/{realmName}/users:
+    get:
+      tags:
+        - Users
+      summary: List users in a realm
+      description: Returns a paginated list of users with optional filtering.
+      operationId: listUsers
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          description: Page number (1-based)
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: limit
+          in: query
+          description: Number of items per page
+          schema:
+            type: integer
+            minimum: 1
+            default: 20
+        - name: search
+          in: query
+          description: Free-text search across username, email, firstName, lastName
+          schema:
+            type: string
+        - name: username
+          in: query
+          description: Filter by username (contains, case-insensitive)
+          schema:
+            type: string
+        - name: email
+          in: query
+          description: Filter by email (contains, case-insensitive)
+          schema:
+            type: string
+        - name: firstName
+          in: query
+          description: Filter by first name
+          schema:
+            type: string
+        - name: lastName
+          in: query
+          description: Filter by last name
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of users
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - Users
+      summary: Create a user
+      description: Creates a new user in the specified realm.
+      operationId: createUser
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateUserRequest'
+      responses:
+        '201':
+          description: User created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/realms/{realmName}/users/{userId}:
+    get:
+      tags:
+        - Users
+      summary: Get user by ID
+      description: Returns the details of a specific user.
+      operationId: getUser
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - Users
+      summary: Update a user
+      description: Updates a user's information (full replacement).
+      operationId: updateUser
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: User updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags:
+        - Users
+      summary: Partially update a user
+      description: Updates specific fields of a user (partial update).
+      operationId: patchUser
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateUserRequest'
+      responses:
+        '200':
+          description: User updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Users
+      summary: Delete a user
+      description: Permanently deletes a user.
+      operationId: deleteUser
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: User deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/realms/{realmName}/users/{userId}/reset-password:
+    put:
+      tags:
+        - Users
+      summary: Set user password
+      description: Sets or resets a user's password.
+      operationId: setUserPassword
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - password
+              properties:
+                password:
+                  type: string
+                  minLength: 1
+      responses:
+        '204':
+          description: Password updated successfully
+        '400':
+          description: Invalid password
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/realms/{realmName}/users/{userId}/send-verification-email:
+    post:
+      tags:
+        - Users
+      summary: Send verification email
+      description: Sends or resends an email verification link to the user.
+      operationId: sendVerificationEmail
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Verification email sent
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  message:
+                    type: string
+                    example: Verification email sent
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/realms/{realmName}/users/{userId}/offline-sessions:
+    get:
+      tags:
+        - Users
+      summary: List offline sessions
+      description: Returns a list of offline sessions for the user.
+      operationId: listOfflineSessions
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of offline sessions
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/OfflineSession'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/realms/{realmName}/users/{userId}/offline-sessions/{tokenId}:
+    delete:
+      tags:
+        - Users
+      summary: Revoke offline session
+      description: Revokes a specific offline session.
+      operationId: revokeOfflineSession
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: tokenId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Offline session revoked
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Clients ─────────────────────────────────────────────────────────────────
+  /admin/realms/{realmName}/clients:
+    get:
+      tags:
+        - Clients
+      summary: List clients in a realm
+      description: Returns a list of all OAuth clients.
+      operationId: listClients
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of clients
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Client'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - Clients
+      summary: Create a client
+      description: Creates a new OAuth client in the realm.
+      operationId: createClient
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateClientRequest'
+      responses:
+        '201':
+          description: Client created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Client'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/realms/{realmName}/clients/{clientId}:
+    get:
+      tags:
+        - Clients
+      summary: Get client by ID
+      description: Returns the details of a specific client.
+      operationId: getClient
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Client details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Client'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - Clients
+      summary: Update a client
+      description: Updates a client's configuration (full replacement).
+      operationId: updateClient
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateClientRequest'
+      responses:
+        '200':
+          description: Client updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Client'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    patch:
+      tags:
+        - Clients
+      summary: Partially update a client
+      description: Updates specific fields of a client (partial update).
+      operationId: patchClient
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateClientRequest'
+      responses:
+        '200':
+          description: Client updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Client'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Clients
+      summary: Delete a client
+      description: Permanently deletes a client.
+      operationId: deleteClient
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Client deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/realms/{realmName}/clients/{clientId}/regenerate-secret:
+    post:
+      tags:
+        - Clients
+      summary: Regenerate client secret
+      description: Regenerates the client secret for confidential clients.
+      operationId: regenerateClientSecret
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Client secret regenerated
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  clientSecret:
+                    type: string
+                    description: The new client secret (only shown once)
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/realms/{realmName}/clients/{clientId}/service-account-user:
+    get:
+      tags:
+        - Clients
+      summary: Get service account
+      description: Returns the service account user associated with this client.
+      operationId: getServiceAccount
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Service account user details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Client or service account not found
+
+  # ── Groups ───────────────────────────────────────────────────────────────────
+  /admin/realms/{realmName}/groups:
+    get:
+      tags:
+        - Groups
+      summary: List all groups
+      description: Returns a list of all groups in the realm.
+      operationId: listGroups
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of groups
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Group'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - Groups
+      summary: Create a group
+      description: Creates a new group in the realm.
+      operationId: createGroup
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateGroupRequest'
+      responses:
+        '201':
+          description: Group created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Group'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/realms/{realmName}/groups/{groupId}:
+    get:
+      tags:
+        - Groups
+      summary: Get group by ID
+      description: Returns the details of a specific group.
+      operationId: getGroup
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Group details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Group'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - Groups
+      summary: Update a group
+      description: Updates a group's information (full replacement).
+      operationId: updateGroup
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateGroupRequest'
+      responses:
+        '200':
+          description: Group updated successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Group'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    delete:
+      tags:
+        - Groups
+      summary: Delete a group
+      description: Permanently deletes a group.
+      operationId: deleteGroup
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Group deleted successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/realms/{realmName}/groups/{groupId}/members:
+    get:
+      tags:
+        - Groups
+      summary: List group members
+      description: Returns a list of users who are members of this group.
+      operationId: listGroupMembers
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of group members
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/User'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/realms/{realmName}/groups/{groupId}/role-mappings:
+    get:
+      tags:
+        - Groups
+      summary: Get group role mappings
+      description: Returns the roles assigned to this group.
+      operationId: getGroupRoleMappings
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Group role mappings
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/RoleMappings'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags:
+        - Groups
+      summary: Assign roles to group
+      description: Assigns realm or client roles to the group.
+      operationId: assignGroupRoles
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - roleNames
+              properties:
+                roleNames:
+                  type: array
+                  items:
+                    type: string
+                  description: List of role names to assign
+      responses:
+        '201':
+          description: Roles assigned successfully
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Group or role not found
+
+    delete:
+      tags:
+        - Groups
+      summary: Remove roles from group
+      description: Removes roles from the group.
+      operationId: removeGroupRoles
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required:
+                - roleNames
+              properties:
+                roleNames:
+                  type: array
+                  items:
+                    type: string
+                  description: List of role names to remove
+      responses:
+        '204':
+          description: Roles removed successfully
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: Group or role not found
+
+  /admin/realms/{realmName}/users/{userId}/groups/{groupId}:
+    post:
+      tags:
+        - Groups
+      summary: Add user to group (POST)
+      description: Adds a user to a group.
+      operationId: addUserToGroupPost
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User added to group
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: User or group not found
+
+    put:
+      tags:
+        - Groups
+      summary: Add user to group (PUT)
+      description: Adds a user to a group (alternative method).
+      operationId: addUserToGroupPut
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: User added to group
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: User or group not found
+
+    delete:
+      tags:
+        - Groups
+      summary: Remove user from group
+      description: Removes a user from a group.
+      operationId: removeUserFromGroup
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: groupId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: User removed from group
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: User or group not found
+
+  /admin/realms/{realmName}/users/{userId}/groups:
+    get:
+      tags:
+        - Groups
+      summary: List user's groups
+      description: Returns a list of groups that the user belongs to.
+      operationId: listUserGroups
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of user's groups
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Group'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  # ── Roles ────────────────────────────────────────────────────────────────────
+  /admin/realms/{realmName}/roles:
+    get:
+      tags:
+        - Roles
+      summary: List realm roles
+      description: Returns a list of all realm-level roles.
+      operationId: listRealmRoles
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of realm roles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Role'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+    post:
+      tags:
+        - Roles
+      summary: Create realm role
+      description: Creates a new realm-level role.
+      operationId: createRealmRole
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoleRequest'
+      responses:
+        '201':
+          description: Realm role created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+
+  /admin/realms/{realmName}/roles/{roleName}:
+    get:
+      tags:
+        - Roles
+      summary: Get realm role by name
+      description: Returns the details of a specific realm role.
+      operationId: getRealmRole
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: roleName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Realm role details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    put:
+      tags:
+        - Roles
+      summary: Update realm role (full replace)
+      description: Updates a realm role (full replacement).
+      operationId: updateRealmRole
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: roleName
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRoleRequest'
+      responses:
+        '200':
+          description: Realm role updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Role name conflict
+
+    patch:
+      tags:
+        - Roles
+      summary: Partially update realm role
+      description: Updates specific fields of a realm role (partial update).
+      operationId: patchRealmRole
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: roleName
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/UpdateRoleRequest'
+      responses:
+        '200':
+          description: Realm role updated
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+        '409':
+          description: Role name conflict
+
+    delete:
+      tags:
+        - Roles
+      summary: Delete realm role
+      description: Permanently deletes a realm role.
+      operationId: deleteRealmRole
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: roleName
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '204':
+          description: Realm role deleted
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/realms/{realmName}/clients/{clientId}/roles:
+    get:
+      tags:
+        - Roles
+      summary: List client roles
+      description: Returns a list of roles for a specific client.
+      operationId: listClientRoles
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of client roles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Role'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags:
+        - Roles
+      summary: Create client role
+      description: Creates a new role for a specific client.
+      operationId: createClientRole
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CreateRoleRequest'
+      responses:
+        '201':
+          description: Client role created
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Role'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+  /admin/realms/{realmName}/users/{userId}/role-mappings/realm:
+    get:
+      tags:
+        - Roles
+      summary: List user's realm roles
+      description: Returns the realm roles assigned to a user.
+      operationId: getUserRealmRoles
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of user's realm roles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Role'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags:
+        - Roles
+      summary: Assign realm roles to user
+      description: Assigns realm-level roles to a user.
+      operationId: assignUserRealmRoles
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignRolesRequest'
+      responses:
+        '200':
+          description: Realm roles assigned
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: User or role not found
+
+    delete:
+      tags:
+        - Roles
+      summary: Remove realm roles from user
+      description: Removes realm roles from a user.
+      operationId: removeUserRealmRoles
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignRolesRequest'
+      responses:
+        '204':
+          description: Realm roles removed
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: User or role not found
+
+  /admin/realms/{realmName}/users/{userId}/role-mappings/clients/{clientId}:
+    get:
+      tags:
+        - Roles
+      summary: List user's client roles
+      description: Returns the client roles assigned to a user for a specific client.
+      operationId: getUserClientRoles
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: List of user's client roles
+          content:
+            application/json:
+              schema:
+                type: array
+                items:
+                  $ref: '#/components/schemas/Role'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          $ref: '#/components/responses/NotFound'
+
+    post:
+      tags:
+        - Roles
+      summary: Assign client roles to user
+      description: Assigns client-specific roles to a user.
+      operationId: assignUserClientRoles
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignRolesRequest'
+      responses:
+        '200':
+          description: Client roles assigned
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: User, client, or role not found
+
+    delete:
+      tags:
+        - Roles
+      summary: Remove client roles from user
+      description: Removes client roles from a user.
+      operationId: removeUserClientRoles
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: userId
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: clientId
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/AssignRolesRequest'
+      responses:
+        '204':
+          description: Client roles removed
+        '401':
+          $ref: '#/components/responses/Unauthorized'
+        '404':
+          description: User, client, or role not found
+
+  # ── OAuth / Token Endpoints ───────────────────────────────────────────────────
+  /realms/{realmName}/protocol/openid-connect/auth:
+    get:
+      tags:
+        - OAuth
+      summary: Authorization endpoint (code flow)
+      description: |
+        OAuth 2.0 Authorization Endpoint. Initiates the authentication flow.
+        If the user has an active session, they may be redirected directly to the redirect_uri.
+        Supports PKCE (code_challenge and code_challenge_method parameters).
+      operationId: authorize
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: client_id
+          in: query
+          required: true
+          schema:
+            type: string
+          description: OAuth client ID
+        - name: redirect_uri
+          in: query
+          required: true
+          schema:
+            type: string
+          description: OAuth redirect URI
+        - name: response_type
+          in: query
+          required: true
+          schema:
+            type: string
+            enum:
+              - code
+          description: OAuth response type
+        - name: scope
+          in: query
+          schema:
+            type: string
+            default: openid
+          description: OAuth scopes (space-separated, must include 'openid')
+        - name: state
+          in: query
+          schema:
+            type: string
+          description: CSRF state parameter
+        - name: nonce
+          in: query
+          schema:
+            type: string
+          description: Nonce for ID token
+        - name: code_challenge
+          in: query
+          schema:
+            type: string
+          description: PKCE code challenge
+        - name: code_challenge_method
+          in: query
+          schema:
+            type: string
+            enum:
+              - S256
+              - plain
+          description: PKCE code challenge method
+        - name: prompt
+          in: query
+          schema:
+            type: string
+            enum:
+              - none
+              - login
+              - consent
+              - select_account
+          description: OIDC prompt parameter
+        - name: acr_values
+          in: query
+          schema:
+            type: string
+          description: Requested Authentication Context Class Reference values
+        - name: login_hint
+          in: query
+          schema:
+            type: string
+          description: Pre-fill the username field
+      responses:
+        '302':
+          description: Redirect to login page or redirect_uri with authorization code
+        '400':
+          description: Invalid request - missing or invalid OAuth parameters
+
+  /realms/{realmName}/protocol/openid-connect/token:
+    post:
+      tags:
+        - OAuth
+      summary: Token endpoint
+      description: |
+        OAuth 2.0 Token Endpoint. Exchanges authorization codes for tokens,
+        performs refresh token operations, and handles client credentials grants.
+      operationId: token
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - grant_type
+              properties:
+                grant_type:
+                  type: string
+                  enum:
+                    - authorization_code
+                    - refresh_token
+                    - client_credentials
+                    - password
+                code:
+                  type: string
+                  description: Authorization code (for authorization_code grant)
+                redirect_uri:
+                  type: string
+                  description: Redirect URI (for authorization_code grant)
+                code_verifier:
+                  type: string
+                  description: PKCE code verifier (for authorization_code grant)
+                refresh_token:
+                  type: string
+                  description: Refresh token (for refresh_token grant)
+                client_id:
+                  type: string
+                  description: OAuth client ID
+                client_secret:
+                  type: string
+                  description: OAuth client secret (for confidential clients)
+                username:
+                  type: string
+                  description: Resource owner username (for password grant)
+                password:
+                  type: string
+                  description: Resource owner password (for password grant)
+                scope:
+                  type: string
+                  description: OAuth scopes
+      responses:
+        '200':
+          description: Token response
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenResponse'
+        '400':
+          description: Invalid grant or request
+        '401':
+          description: invalid_client - client authentication failed
+
+  /realms/{realmName}/protocol/openid-connect/token/introspect:
+    post:
+      tags:
+        - Tokens
+      summary: Token introspection (RFC 7662)
+      description: |
+        Introspects an access or refresh token to determine if it is active.
+        Requires client authentication (client_id/client_secret or Basic auth).
+      operationId: introspectToken
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - token
+              properties:
+                token:
+                  type: string
+                  description: The token to introspect
+                client_id:
+                  type: string
+                  description: OAuth client ID
+                client_secret:
+                  type: string
+                  description: OAuth client secret
+      responses:
+        '200':
+          description: Token introspection result (active true/false)
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/TokenIntrospectionResponse'
+        '400':
+          description: Bad request - missing token parameter
+        '401':
+          description: invalid_client - client authentication failed
+
+  /realms/{realmName}/protocol/openid-connect/revoke:
+    post:
+      tags:
+        - Tokens
+      summary: Token revocation (RFC 7009)
+      description: Revokes an access or refresh token.
+      operationId: revokeToken
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        required: true
+        content:
+          application/x-www-form-urlencoded:
+            schema:
+              type: object
+              required:
+                - token
+              properties:
+                token:
+                  type: string
+                  description: The token to revoke
+                token_type_hint:
+                  type: string
+                  enum:
+                    - access_token
+                    - refresh_token
+                  description: Hint about the type of the token
+                client_id:
+                  type: string
+                  description: OAuth client ID
+                client_secret:
+                  type: string
+                  description: OAuth client secret
+      responses:
+        '200':
+          description: Token successfully revoked (or was already invalid)
+        '400':
+          description: Bad request - missing token parameter
+        '401':
+          description: invalid_client - client authentication failed
+
+  /realms/{realmName}/protocol/openid-connect/logout:
+    get:
+      tags:
+        - OAuth
+      summary: RP-Initiated Logout (GET)
+      description: |
+        OIDC Front-Channel Logout Endpoint. Implements RP-initiated logout as per spec.
+        Ends the user session and optionally redirects to post_logout_redirect_uri.
+      operationId: logoutGet
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+        - name: id_token_hint
+          in: query
+          schema:
+            type: string
+          description: ID token for logout validation
+        - name: post_logout_redirect_uri
+          in: query
+          schema:
+            type: string
+          description: URI to redirect after logout
+        - name: state
+          in: query
+          schema:
+            type: string
+          description: State parameter to pass through
+      responses:
+        '204':
+          description: Session ended; no post_logout_redirect_uri provided
+        '302':
+          description: Redirect to post_logout_redirect_uri after session teardown
+        '400':
+          description: post_logout_redirect_uri does not match any registered URI
+
+    post:
+      tags:
+        - OAuth
+      summary: End session / logout (POST)
+      description: Ends the user session using a refresh token.
+      operationId: logoutPost
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+      requestBody:
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                refresh_token:
+                  type: string
+                  description: The refresh token to invalidate
+      responses:
+        '204':
+          description: Session ended successfully
+        '400':
+          description: invalid_grant - refresh token not found or already revoked
+
+  /realms/{realmName}/protocol/openid-connect/userinfo:
+    get:
+      tags:
+        - OAuth
+      summary: Get user info
+      description: Returns the claims from the access token (OIDC UserInfo endpoint).
+      operationId: getUserInfo
+      parameters:
+        - name: realmName
+          in: path
+          required: true
+          schema:
+            type: string
+      security:
+        - bearerAuth: []
+      responses:
+        '200':
+          description: User claims from the access token
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/UserInfo'
+        '401':
+          description: invalid_token - missing or invalid Bearer token
+
+  # ── Health ────────────────────────────────────────────────────────────────────
+  /health:
+    get:
+      tags:
+        - Health
+      summary: Health check
+      description: Returns the health status of the server.
+      operationId: healthCheck
+      security: []
+      responses:
+        '200':
+          description: Server is healthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ok
+                  timestamp:
+                    type: string
+                    format: date-time
+        '503':
+          description: Server is unhealthy
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: error
+
+  /health/ready:
+    get:
+      tags:
+        - Health
+      summary: Readiness check
+      description: Returns whether the server is ready to accept traffic.
+      operationId: readinessCheck
+      security: []
+      responses:
+        '200':
+          description: Server is ready
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: ready
+        '503':
+          description: Server is not ready
+
+  /health/live:
+    get:
+      tags:
+        - Health
+      summary: Liveness check
+      description: Returns whether the server is alive.
+      operationId: livenessCheck
+      security: []
+      responses:
+        '200':
+          description: Server is alive
+          content:
+            application/json:
+              schema:
+                type: object
+                properties:
+                  status:
+                    type: string
+                    example: alive
+
+components:
+  securitySchemes:
+    admin-api-key:
+      type: apiKey
+      name: x-admin-api-key
+      in: header
+      description: Admin API key for administrative endpoints
+
+    bearerAuth:
+      type: http
+      scheme: bearer
+      bearerFormat: JWT
+      description: JWT access token for user-facing endpoints
+
+  schemas:
+    # ── Realm ──────────────────────────────────────────────────────────────────
+    Realm:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        name:
+          type: string
+          example: my-app
+        displayName:
+          type: string
+          example: My Application
+        enabled:
+          type: boolean
+          default: true
+        accessTokenLifespan:
+          type: integer
+          description: Access token lifetime in seconds
+          default: 300
+        refreshTokenLifespan:
+          type: integer
+          description: Refresh token lifetime in seconds
+          default: 1800
+        registrationAllowed:
+          type: boolean
+          default: true
+        requireEmailVerification:
+          type: boolean
+          default: false
+        mfaRequired:
+          type: boolean
+          default: false
+        bruteForceEnabled:
+          type: boolean
+          default: false
+        passwordMinLength:
+          type: integer
+          default: 8
+        passwordRequireUppercase:
+          type: boolean
+          default: false
+        passwordRequireLowercase:
+          type: boolean
+          default: false
+        passwordRequireDigits:
+          type: boolean
+          default: false
+        passwordRequireSpecialChars:
+          type: boolean
+          default: false
+        themeName:
+          type: string
+          default: authme
+        defaultLocale:
+          type: string
+          default: en
+        supportedLocales:
+          type: array
+          items:
+            type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateRealmRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          pattern: '^[a-z0-9][a-z0-9-]*[a-z0-9]$'
+          description: Unique realm identifier (lowercase slug)
+          example: my-app
+        displayName:
+          type: string
+          example: My Application
+        enabled:
+          type: boolean
+          default: true
+        accessTokenLifespan:
+          type: integer
+          minimum: 60
+          default: 300
+        refreshTokenLifespan:
+          type: integer
+          minimum: 60
+          default: 1800
+        smtpHost:
+          type: string
+        smtpPort:
+          type: integer
+          default: 587
+        smtpUser:
+          type: string
+        smtpPassword:
+          type: string
+        smtpFrom:
+          type: string
+        smtpSecure:
+          type: boolean
+          default: false
+        passwordMinLength:
+          type: integer
+          minimum: 1
+          default: 8
+        passwordRequireUppercase:
+          type: boolean
+          default: false
+        passwordRequireLowercase:
+          type: boolean
+          default: false
+        passwordRequireDigits:
+          type: boolean
+          default: false
+        passwordRequireSpecialChars:
+          type: boolean
+          default: false
+        bruteForceEnabled:
+          type: boolean
+          default: false
+        maxLoginFailures:
+          type: integer
+          minimum: 1
+          default: 5
+        registrationAllowed:
+          type: boolean
+          default: true
+        requireEmailVerification:
+          type: boolean
+          default: false
+        mfaRequired:
+          type: boolean
+          default: false
+        offlineTokenLifespan:
+          type: integer
+          minimum: 60
+          default: 2592000
+        eventsEnabled:
+          type: boolean
+          default: false
+        adminEventsEnabled:
+          type: boolean
+          default: false
+        themeName:
+          type: string
+          default: authme
+        webAuthnEnabled:
+          type: boolean
+          default: false
+        adaptiveAuthEnabled:
+          type: boolean
+          default: false
+
+    UpdateRealmRequest:
+      type: object
+      properties:
+        displayName:
+          type: string
+        enabled:
+          type: boolean
+        accessTokenLifespan:
+          type: integer
+        refreshTokenLifespan:
+          type: integer
+        smtpHost:
+          type: string
+        smtpPort:
+          type: integer
+        smtpUser:
+          type: string
+        smtpPassword:
+          type: string
+        smtpFrom:
+          type: string
+        smtpSecure:
+          type: boolean
+        passwordMinLength:
+          type: integer
+        passwordRequireUppercase:
+          type: boolean
+        passwordRequireLowercase:
+          type: boolean
+        passwordRequireDigits:
+          type: boolean
+        passwordRequireSpecialChars:
+          type: boolean
+        bruteForceEnabled:
+          type: boolean
+        maxLoginFailures:
+          type: integer
+        registrationAllowed:
+          type: boolean
+        requireEmailVerification:
+          type: boolean
+        mfaRequired:
+          type: boolean
+        offlineTokenLifespan:
+          type: integer
+        eventsEnabled:
+          type: boolean
+        adminEventsEnabled:
+          type: boolean
+        themeName:
+          type: string
+
+    # ── User ────────────────────────────────────────────────────────────────────
+    User:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        realmId:
+          type: string
+          format: uuid
+        username:
+          type: string
+        email:
+          type: string
+        emailVerified:
+          type: boolean
+        firstName:
+          type: string
+        lastName:
+          type: string
+        enabled:
+          type: boolean
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+        lastLogin:
+          type: string
+          format: date-time
+        attributes:
+          type: object
+          additionalProperties: true
+
+    CreateUserRequest:
+      type: object
+      required:
+        - username
+      properties:
+        username:
+          type: string
+          minLength: 1
+        email:
+          type: string
+          format: email
+        firstName:
+          type: string
+        lastName:
+          type: string
+        enabled:
+          type: boolean
+          default: true
+        emailVerified:
+          type: boolean
+          default: false
+        password:
+          type: string
+        attributes:
+          type: object
+          additionalProperties: true
+
+    UpdateUserRequest:
+      type: object
+      properties:
+        email:
+          type: string
+          format: email
+        firstName:
+          type: string
+        lastName:
+          type: string
+        enabled:
+          type: boolean
+        emailVerified:
+          type: boolean
+        attributes:
+          type: object
+          additionalProperties: true
+
+    # ── Client ──────────────────────────────────────────────────────────────────
+    Client:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        realmId:
+          type: string
+          format: uuid
+        clientId:
+          type: string
+          description: OAuth client ID (unique within realm)
+        name:
+          type: string
+        description:
+          type: string
+        enabled:
+          type: boolean
+        clientType:
+          type: string
+          enum:
+            - PUBLIC
+            - CONFIDENTIAL
+          description: Client type (PUBLIC or CONFIDENTIAL)
+        publicClient:
+          type: boolean
+        consentRequired:
+          type: boolean
+        standardFlowEnabled:
+          type: boolean
+        implicitFlowEnabled:
+          type: boolean
+        directAccessGrantsEnabled:
+          type: boolean
+        serviceAccountsEnabled:
+          type: boolean
+        redirectUris:
+          type: array
+          items:
+            type: string
+        webOrigins:
+          type: array
+          items:
+            type: string
+        scopes:
+          type: array
+          items:
+            type: string
+        requiredAcr:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateClientRequest:
+      type: object
+      required:
+        - clientId
+      properties:
+        clientId:
+          type: string
+        name:
+          type: string
+        description:
+          type: string
+        enabled:
+          type: boolean
+          default: true
+        clientType:
+          type: string
+          enum:
+            - PUBLIC
+            - CONFIDENTIAL
+          default: PUBLIC
+        consentRequired:
+          type: boolean
+          default: false
+        standardFlowEnabled:
+          type: boolean
+          default: true
+        implicitFlowEnabled:
+          type: boolean
+          default: false
+        directAccessGrantsEnabled:
+          type: boolean
+          default: false
+        serviceAccountsEnabled:
+          type: boolean
+          default: false
+        redirectUris:
+          type: array
+          items:
+            type: string
+          description: Allowed redirect URIs
+        webOrigins:
+          type: array
+          items:
+            type: string
+          description: Allowed CORS origins
+        scopes:
+          type: array
+          items:
+            type: string
+          description: Assigned scope names
+
+    UpdateClientRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+        enabled:
+          type: boolean
+        consentRequired:
+          type: boolean
+        standardFlowEnabled:
+          type: boolean
+        implicitFlowEnabled:
+          type: boolean
+        directAccessGrantsEnabled:
+          type: boolean
+        serviceAccountsEnabled:
+          type: boolean
+        redirectUris:
+          type: array
+          items:
+            type: string
+        webOrigins:
+          type: array
+          items:
+            type: string
+        scopes:
+          type: array
+          items:
+            type: string
+
+    # ── Group ───────────────────────────────────────────────────────────────────
+    Group:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        realmId:
+          type: string
+          format: uuid
+        name:
+          type: string
+        path:
+          type: string
+        attributes:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateGroupRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+        path:
+          type: string
+        attributes:
+          type: object
+          additionalProperties: true
+
+    UpdateGroupRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        path:
+          type: string
+        attributes:
+          type: object
+          additionalProperties: true
+
+    # ── Role ────────────────────────────────────────────────────────────────────
+    Role:
+      type: object
+      properties:
+        id:
+          type: string
+          format: uuid
+        realmId:
+          type: string
+          format: uuid
+        clientId:
+          type: string
+          format: uuid
+          description: Client ID if this is a client role (null for realm roles)
+        name:
+          type: string
+        description:
+          type: string
+        composite:
+          type: boolean
+        attributes:
+          type: object
+          additionalProperties: true
+        createdAt:
+          type: string
+          format: date-time
+        updatedAt:
+          type: string
+          format: date-time
+
+    CreateRoleRequest:
+      type: object
+      required:
+        - name
+      properties:
+        name:
+          type: string
+          minLength: 1
+        description:
+          type: string
+
+    UpdateRoleRequest:
+      type: object
+      properties:
+        name:
+          type: string
+        description:
+          type: string
+
+    AssignRolesRequest:
+      type: object
+      required:
+        - roleNames
+      properties:
+        roleNames:
+          type: array
+          items:
+            type: string
+          description: List of role names to assign
+
+    RoleMappings:
+      type: object
+      properties:
+        realmRoles:
+          type: array
+          items:
+            $ref: '#/components/schemas/Role'
+        clientRoles:
+          type: object
+          additionalProperties:
+            type: array
+            items:
+              $ref: '#/components/schemas/Role'
+
+    # ── Token ───────────────────────────────────────────────────────────────────
+    TokenResponse:
+      type: object
+      properties:
+        access_token:
+          type: string
+          description: JWT access token
+        token_type:
+          type: string
+          example: Bearer
+        expires_in:
+          type: integer
+          description: Token lifetime in seconds
+        refresh_token:
+          type: string
+          description: Refresh token for obtaining new access tokens
+        id_token:
+          type: string
+          description: OIDC ID token (when openid scope is requested)
+        scope:
+          type: string
+          description: Space-separated list of granted scopes
+        session_state:
+          type: string
+          description: OIDC session state value
+
+    TokenIntrospectionResponse:
+      type: object
+      properties:
+        active:
+          type: boolean
+          description: Whether the token is active
+        scope:
+          type: string
+          description: Space-separated list of token scopes
+        client_id:
+          type: string
+          description: Client that was issued the token
+        username:
+          type: string
+          description: Resource owner username (if token type is access_token)
+        token_type:
+          type: string
+          description: Token type hint
+        exp:
+          type: integer
+          description: Token expiration time (Unix timestamp)
+        iat:
+          type: integer
+          description: Token issued-at time (Unix timestamp)
+        sub:
+          type: string
+          description: Subject (user) identifier
+        iss:
+          type: string
+          description: Issuer identifier
+        aud:
+          oneOf:
+            - type: string
+            - type: array
+              items:
+                type: string
+          description: Audience(s) the token was issued for
+
+    OfflineSession:
+      type: object
+      properties:
+        id:
+          type: string
+        userId:
+          type: string
+        clientId:
+          type: string
+        createdAt:
+          type: string
+          format: date-time
+        lastRefresh:
+          type: string
+          format: date-time
+        ipAddress:
+          type: string
+        userAgent:
+          type: string
+
+    # ── User Info ───────────────────────────────────────────────────────────────
+    UserInfo:
+      type: object
+      properties:
+        sub:
+          type: string
+          description: Subject identifier (user ID)
+        name:
+          type: string
+        given_name:
+          type: string
+        family_name:
+          type: string
+        preferred_username:
+          type: string
+        email:
+          type: string
+        email_verified:
+          type: boolean
+        picture:
+          type: string
+          format: uri
+
+  responses:
+    Unauthorized:
+      description: Unauthorized - Missing or invalid authentication
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              statusCode:
+                type: integer
+                example: 401
+              message:
+                type: string
+                example: Unauthorized
+
+    Forbidden:
+      description: Forbidden - Insufficient permissions
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              statusCode:
+                type: integer
+                example: 403
+              message:
+                type: string
+                example: Forbidden
+
+    NotFound:
+      description: Not Found - Resource does not exist
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              statusCode:
+                type: integer
+                example: 404
+              message:
+                type: string
+                example: Not Found
+
+    BadRequest:
+      description: Bad Request - Invalid request parameters
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              statusCode:
+                type: integer
+                example: 400
+              message:
+                type: string
+                example: Bad Request
+              error:
+                type: string

@@ -1,0 +1,518 @@
+---
+id: keycloak
+title: Migrate from Keycloak
+sidebar_position: 1
+description: Complete guide to migrating from Keycloak to AuthMe
+---
+
+# Migrate from Keycloak
+
+This guide covers migrating users, clients, and realm configuration from Keycloak to AuthMe. The migration is performed using Keycloak's realm export JSON format.
+
+---
+
+## Prerequisites
+
+Before starting the migration:
+
+- [AuthMe installed](/docs/getting-started/installation) and running
+- Admin API key configured
+- Keycloak realm export JSON file
+- Sufficient database storage for migrated data
+
+:::note Large Export Files
+For exports with more than 5,000 users, split the export into smaller batches. See [Handling Large Exports](#handling-large-exports) for details.
+:::
+
+---
+
+## Exporting from Keycloak
+
+### Step 1: Generate Realm Export
+
+In Keycloak Admin Console:
+
+1. Navigate to your realm
+2. Go to **Realm Settings** > **Action** > **Partial export**
+3. Check **Export clients** and **Export groups and roles**
+4. Click **Export**
+
+Or use the Admin CLI:
+
+```bash
+${KEYCLOAK_HOME}/bin/kc.sh export \
+  --realm=your-realm \
+  --users=realm_file \
+  --dir=/tmp/exports \
+  --file=your-realm-export.json
+```
+
+### Step 2: Review Export Contents
+
+The exported JSON contains:
+
+| Section | Description |
+|---------|-------------|
+| `users` | User accounts with credentials |
+| `clients` | OAuth 2.0 client applications |
+| `roles` | Realm and client roles |
+| `groups` | User groups with role mappings |
+| `identityProviders` | Social/enterprise identity providers |
+| `clientScopes` | OAuth client scopes |
+
+:::warning Sensitive Data
+Exported password hashes depend on Keycloak's password hashing algorithm. See [Password Migration](#password-migration) for details.
+:::
+
+---
+
+## Importing to AuthMe
+
+### Basic Import
+
+Import the entire realm export:
+
+```bash
+curl -X POST "http://localhost:3000/admin/migration/keycloak" \
+  -H "X-API-Key: ${ADMIN_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d @your-realm-export.json
+```
+
+### Specify Target Realm
+
+By default, the import creates a realm with the same name as the source. To override:
+
+```bash
+curl -X POST "http://localhost:3000/admin/migration/keycloak" \
+  -H "X-API-Key: ${ADMIN_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "data": '"$(cat your-realm-export.json)"',
+    "targetRealm": "new-realm-name"
+  }'
+```
+
+### Dry Run Mode
+
+Test the migration without making changes:
+
+```bash
+curl -X POST "http://localhost:3000/admin/migration/keycloak" \
+  -H "X-API-Key: ${ADMIN_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "data": '"$(cat your-realm-export.json)"',
+    "dryRun": true
+  }'
+```
+
+A dry run returns the same report as a real migration but doesn't modify any data.
+
+---
+
+## Migration Report
+
+The migration returns a detailed report:
+
+```json
+{
+  "success": true,
+  "summary": {
+    "users": { "imported": 450, "skipped": 12 },
+    "clients": { "imported": 8, "skipped": 2 },
+    "roles": { "imported": 25, "skipped": 5 },
+    "groups": { "imported": 10, "skipped": 0 }
+  },
+  "details": {
+    "skippedUsers": [
+      { "username": "test@example.com", "reason": "email_conflict" },
+      { "username": "admin@example.com", "reason": "already_exists" }
+    ],
+    "skippedClients": [
+      { "clientId": "account", "reason": "builtin_client" }
+    ]
+  },
+  "warnings": [
+    "Unsupported password hash algorithm: password-sha1 for user test@example.com"
+  ]
+}
+```
+
+### Response Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | boolean | Overall migration success |
+| `summary.users.imported` | number | Users successfully imported |
+| `summary.users.skipped` | number | Users skipped due to conflicts |
+| `details.skippedUsers[].reason` | string | Reason for skip (see below) |
+
+### Skip Reasons
+
+| Reason | Description | Resolution |
+|--------|-------------|------------|
+| `email_conflict` | User email already exists in target realm | Delete existing user or change email |
+| `already_exists` | Username already exists | Delete existing user |
+| `invalid_data` | User data missing required fields | Fix export data |
+| `unsupported` | Feature not supported by AuthMe | Review and migrate manually |
+
+---
+
+## Password Migration
+
+### Supported Algorithms
+
+AuthMe recognizes and preserves password hashes for these algorithms:
+
+| Algorithm | Migration Status |
+|-----------|-----------------|
+| bcrypt | Preserved |
+| pbkdf2-sha256 | Preserved |
+| pbkdf2-sha512 | Preserved |
+| argon2 | Preserved |
+
+### Unsupported Algorithms
+
+Users with passwords using unsupported algorithms will be imported **without** a password hash. These users must complete a password reset:
+
+```bash
+# After migration, trigger password reset for affected users
+curl -X POST "http://localhost:3000/admin/realms/my-realm/users/${USER_ID}/execute-actions-email" \
+  -H "X-API-Key: ${ADMIN_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '["VERIFY_ACTION", "UPDATE_PASSWORD"]'
+```
+
+### Check Password Hash Support
+
+The migration report includes warnings for users with unsupported password hashes:
+
+```json
+{
+  "warnings": [
+    "Unsupported password hash algorithm: password-sha1 for user legacy@example.com",
+    "Unsupported password hash algorithm: scrypt for user olduser@example.com"
+  ]
+}
+```
+
+:::tip Password Reset Strategy
+Consider using AuthMe's bulk email feature to notify affected users before triggering password resets.
+:::
+
+---
+
+## Client Migration
+
+### Imported Client Properties
+
+| Property | Mapping |
+|----------|---------|
+| `clientId` | Client ID |
+| `name` | Client name |
+| `description` | Client description |
+| `redirectUris` | Valid redirect URIs |
+| `webOrigins` | Web origins |
+| `publicClient` | Public client flag |
+| `standardFlowEnabled` | Authorization code flow |
+| `implicitFlowEnabled` | Implicit flow |
+| `directAccessGrantsEnabled` | Direct access grants |
+
+### Built-in Clients
+
+Keycloak's built-in clients (account, admin-cli, broker) are skipped:
+
+```json
+{
+  "details": {
+    "skippedClients": [
+      { "clientId": "account", "reason": "builtin_client" },
+      { "clientId": "admin-cli", "reason": "builtin_client" }
+    ]
+  }
+}
+```
+
+### Regenerate Client Secrets
+
+After migration, regenerate secrets for confidential clients:
+
+```bash
+curl -X POST "http://localhost:3000/admin/realms/my-realm/clients/${CLIENT_ID}/regenerate-secret" \
+  -H "X-API-Key: ${ADMIN_API_KEY}"
+```
+
+**Response:**
+
+```json
+{
+  "value": "new-client-secret-here",
+  "type": "secret"
+}
+```
+
+---
+
+## Role Migration
+
+### Role Types
+
+| Keycloak Role | AuthMe Equivalent |
+|---------------|-------------------|
+| Realm roles | Realm roles |
+| Client roles | Client-scoped roles |
+| Composite roles | Role compositions |
+
+### Default Roles
+
+Keycloak default roles are mapped to AuthMe realm roles:
+
+| Keycloak | AuthMe |
+|----------|--------|
+| `uma_authorization` | Not migrated |
+| `offline_access` | Supported |
+
+### Role Hierarchy
+
+Composite roles (roles containing other roles) are preserved:
+
+```json
+{
+  "name": "manager",
+  "composite": true,
+  "composites": [
+    "user-view",
+    "user-edit",
+    "team-view"
+  ]
+}
+```
+
+---
+
+## Group Migration
+
+Groups are imported with their role mappings:
+
+```json
+{
+  "name": "Engineering",
+  "path": "/Engineering",
+  "subGroups": [],
+  "realmRoles": ["developer"],
+  "clientRoles": {
+    "my-client": ["read", "write"]
+  }
+}
+```
+
+### Group Hierarchy
+
+Nested groups are preserved in the same structure:
+
+```
+/Engineering
+  /Backend
+  /Frontend
+/Product
+  /Design
+```
+
+---
+
+## Handling Large Exports
+
+### Batch Processing
+
+For exports with more than 5,000 users:
+
+1. Split the export into multiple JSON files
+2. Import each batch separately
+3. Use the same `targetRealm` for consistent migration
+
+### Splitting Users
+
+```bash
+# Get total user count
+USER_COUNT=$(jq '.users | length' export.json)
+
+# Split into batches of 2000
+jq '[.users[] | select(.username | contains("batch1"))]' export.json > batch1.json
+jq '[.users[] | select(.username | contains("batch2"))]' export.json > batch2.json
+```
+
+### Sequential Import
+
+```bash
+# Import batch 1
+curl -X POST "http://localhost:3000/admin/migration/keycloak" \
+  -H "X-API-Key: ${ADMIN_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d "{\"data\": $(cat batch1.json), \"targetRealm\": \"my-realm\"}"
+
+# Import batch 2
+curl -X POST "http://localhost:3000/admin/migration/keycloak" \
+  -H "X-API-Key: ${ADMIN_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d "{\"data\": $(cat batch2.json), \"targetRealm\": \"my-realm\"}"
+```
+
+:::warning Import Order
+Import clients, roles, and groups **before** importing users when splitting the export. This ensures dependencies are resolved correctly.
+:::
+
+---
+
+## Post-Migration Steps
+
+### 1. Verify User Count
+
+```bash
+curl -X GET "http://localhost:3000/admin/realms/my-realm/users?limit=1" \
+  -H "X-API-Key: ${ADMIN_API_KEY}"
+```
+
+### 2. Test Authentication
+
+Create a test script to verify migrated users can authenticate:
+
+```typescript
+async function testMigration(realm: string, testUsers: string[]) {
+  const results: { user: string; success: boolean }[] = [];
+
+  for (const username of testUsers) {
+    try {
+      const response = await fetch(
+        `http://localhost:3000/realms/${realm}/protocol/openid-connect/token`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            username,
+            password: 'temp-password-change-required', // Users with preserved passwords use their old password
+            grant_type: 'password',
+            client_id: 'admin-cli',
+          }),
+        }
+      );
+
+      results.push({ user: username, success: response.ok });
+    } catch {
+      results.push({ user: username, success: false });
+    }
+  }
+
+  return results;
+}
+```
+
+### 3. Update Client Configurations
+
+Update applications to use AuthMe endpoints:
+
+| Keycloak Endpoint | AuthMe Endpoint |
+|-------------------|----------------|
+| `.../auth/realms/{realm}` | `.../realms/{realm}` |
+| `.../auth/admin/realms/{realm}` | `.../admin/realms/{realm}` |
+
+### 4. Migrate Identity Providers
+
+Social and enterprise identity providers require manual reconfiguration. See [Identity Provider Configuration](/docs/guides/authentication#identity-providers) for supported providers.
+
+### 5. Notify Users
+
+Send communications to users about the migration:
+
+- Migration completion date
+- Password reset requirements (if applicable)
+- New login URL
+- Support contacts
+
+---
+
+## Troubleshooting
+
+### Import Fails with 400 Error
+
+**Cause:** Invalid or malformed export JSON.
+
+**Solution:** Validate the JSON structure:
+
+```bash
+jq . your-realm-export.json > /dev/null && echo "Valid JSON"
+```
+
+### Users Not Migrating
+
+**Cause:** User conflicts with existing data.
+
+**Solution:** Check the migration report for skip reasons and resolve conflicts.
+
+### Passwords Not Preserved
+
+**Cause:** Unsupported password hash algorithm.
+
+**Solution:** Users must complete password reset. See [Password Migration](#password-migration).
+
+### Missing Roles or Groups
+
+**Cause:** Dependencies not imported before users.
+
+**Solution:** Import in order: clients → roles → groups → users.
+
+---
+
+## API Reference
+
+### POST /admin/migration/keycloak
+
+Import realm from Keycloak export.
+
+**Request:**
+
+```json
+{
+  "data": { /* Keycloak realm export JSON */ },
+  "dryRun": false,
+  "targetRealm": "my-realm"
+}
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `data` | object | Yes | Keycloak realm export JSON |
+| `dryRun` | boolean | No | Test migration without changes (default: false) |
+| `targetRealm` | string | No | Override target realm name |
+
+**Response:** Migration report with counts of imported/skipped entities.
+
+---
+
+## Next Steps
+
+<div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
+
+[**Authentication Guide**](/docs/guides/authentication)
+Learn about OAuth 2.0 and OIDC authentication flows
+
+[**Authorization Guide**](/docs/guides/authorization)
+Understand RBAC and access control policies
+
+[**API Reference**](/docs/api)
+Complete REST API documentation with examples
+
+[**React SDK**](/docs/guides/sdks/react)
+Integrate AuthMe into your React application
+
+</div>
+
+---
+
+<p align="center">
+  <a href="https://authme.dev">authme.dev</a> &middot;
+  <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
+  <a href="https://discord.gg/authme">Discord</a>
+</p>

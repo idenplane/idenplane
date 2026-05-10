@@ -1,0 +1,25 @@
+{
+  "active": true,
+  "spec": "001-documentation-site-authme-dev",
+  "state": "building",
+  "subtasks": {
+    "completed": 22,
+    "total": 27,
+    "in_progress": 1,
+    "failed": 0
+  },
+  "phase": {
+    "current": "Migration Guides",
+    "id": null,
+    "total": 2
+  },
+  "workers": {
+    "active": 0,
+    "max": 1
+  },
+  "session": {
+    "number": 25,
+    "started_at": "2026-05-10T03:53:10.267472"
+  },
+  "last_update": "2026-05-10T06:33:17.391527"
+}

@@ -1,0 +1,530 @@
+---
+id: angular-sdk
+title: Angular SDK
+description: Integrate AuthMe authentication into your Angular application using the official SDK with module, service, guards, and HTTP interceptors
+---
+
+# Angular SDK
+
+The AuthMe Angular SDK provides Angular-specific bindings for the authme-sdk, including an injectable `AuthService`, a route guard (`AuthGuard`), an HTTP interceptor (`AuthInterceptor` / `authInterceptor`), and an `NgModule` entry point (`AuthmeModule`).
+
+## Installation
+
+```bash
+npm install @authme/angular authme-sdk rxjs
+```
+
+---
+
+## Quick Start
+
+### 1. Import `AuthmeModule.forRoot()`
+
+```typescript
+// app.module.ts
+import { NgModule } from '@angular/core';
+import { HttpClientModule } from '@angular/common/http';
+import { AuthmeModule } from '@authme/angular';
+
+@NgModule({
+  imports: [
+    HttpClientModule,
+    AuthmeModule.forRoot({
+      url: 'http://localhost:3000',
+      realm: 'my-realm',
+      clientId: 'my-app',
+      redirectUri: 'http://localhost:4200/callback',
+    }),
+  ],
+  bootstrap: [AppComponent],
+})
+export class AppModule {}
+```
+
+### 2. Inject `AuthService`
+
+```typescript
+import { Component } from '@angular/core';
+import { AuthService } from '@authme/angular';
+
+@Component({
+  selector: 'app-nav',
+  template: `
+    <ng-container *ngIf="auth.isLoading$ | async; else content">
+      <span>Loading...</span>
+    </ng-container>
+    <ng-template #content>
+      <button *ngIf="!(auth.isAuthenticated$ | async)" (click)="auth.login()">
+        Sign In
+      </button>
+      <div *ngIf="auth.isAuthenticated$ | async">
+        <span>{{ (auth.user$ | async)?.name }}</span>
+        <button (click)="auth.logout()">Sign Out</button>
+      </div>
+    </ng-template>
+  `,
+})
+export class NavComponent {
+  constructor(public auth: AuthService) {}
+}
+```
+
+### 3. Protect Routes with `AuthGuard`
+
+```typescript
+// app.routes.ts
+import { Routes } from '@angular/router';
+import { AuthGuard } from '@authme/angular';
+
+export const routes: Routes = [
+  { path: '', component: HomeComponent },
+  {
+    path: 'dashboard',
+    component: DashboardComponent,
+    canActivate: [AuthGuard],
+  },
+  {
+    path: 'admin',
+    component: AdminComponent,
+    canActivate: [AuthGuard],
+    data: { roles: ['admin'] },
+  },
+];
+```
+
+### 4. Automatically Attach Bearer Tokens (HTTP Interceptor)
+
+The HTTP interceptor is registered automatically when you use `AuthmeModule.forRoot()`.
+
+For standalone / functional interceptor style (Angular 15+):
+
+```typescript
+// app.config.ts
+import { ApplicationConfig } from '@angular/core';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
+import { authInterceptor } from '@authme/angular';
+
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideHttpClient(withInterceptors([authInterceptor])),
+  ],
+};
+```
+
+---
+
+## AuthmeModule
+
+The `AuthmeModule.forRoot()` method registers all providers including `AuthService`, `AuthGuard`, and `AuthInterceptor`.
+
+### Configuration
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `url` | `string` | Yes | AuthMe server URL |
+| `realm` | `string` | Yes | Realm name |
+| `clientId` | `string` | Yes | OAuth2 client ID |
+| `redirectUri` | `string` | Yes | Redirect URI after login |
+| `scope` | `string[]` | No | OAuth2 scopes (default: `['openid', 'profile', 'email']`) |
+| `storage` | `string` | No | Storage type: `'sessionStorage'` \| `'localStorage'` \| `'memory'` (default: `'sessionStorage'`) |
+| `autoRefresh` | `boolean` | No | Enable automatic token refresh (default: `true`) |
+| `refreshBuffer` | `number` | No | Seconds before expiry to trigger refresh (default: `30`) |
+
+### Module Configuration Example
+
+```typescript
+// app.module.ts
+import { NgModule } from '@angular/core';
+import { AuthmeModule } from '@authme/angular';
+
+@NgModule({
+  imports: [
+    AuthmeModule.forRoot({
+      url: 'http://localhost:3000',
+      realm: 'my-realm',
+      clientId: 'my-app',
+      redirectUri: 'http://localhost:4200/callback',
+      scope: ['openid', 'profile', 'email', 'custom:scope'],
+      storage: 'sessionStorage',
+      autoRefresh: true,
+      refreshBuffer: 30,
+    }),
+  ],
+})
+export class AppModule {}
+```
+
+---
+
+## AuthService
+
+The `AuthService` is an injectable service that provides reactive authentication state and methods.
+
+### Reactive Observables
+
+| Member | Type | Description |
+|--------|------|-------------|
+| `isAuthenticated$` | `Observable<boolean>` | Reactive auth state |
+| `isLoading$` | `Observable<boolean>` | True while initializing |
+| `user$` | `Observable<UserInfo \| null>` | Current user info |
+
+### Synchronous Getters
+
+| Member | Type | Description |
+|--------|------|-------------|
+| `isAuthenticated` | `boolean` | Synchronous auth state getter |
+| `user` | `UserInfo \| null` | Synchronous user getter |
+| `getToken()` | `string \| null` | Current access token |
+
+### Methods
+
+| Method | Return Type | Description |
+|--------|-------------|-------------|
+| `login(opts?)` | `Promise<void>` | Redirect to login flow |
+| `logout()` | `Promise<void>` | Log out and clear tokens |
+| `hasRole(role)` | `boolean` | Check if user has a realm role |
+| `hasPermission(perm)` | `boolean` | Check if user has a permission |
+| `getRoles()` | `string[]` | Get all realm roles |
+
+### AuthService Example with Async Pipe
+
+```typescript
+import { Component, OnInit } from '@angular/core';
+import { CommonModule } from '@angular/common';
+import { AuthService } from '@authme/angular';
+
+@Component({
+  selector: 'app-user-profile',
+  standalone: true,
+  imports: [CommonModule],
+  template: `
+    <ng-container *ngIf="auth.isLoading$ | async">
+      <p>Loading...</p>
+    </ng-container>
+
+    <ng-container *ngIf="auth.isAuthenticated$ | async; else loggedOut">
+      <div class="profile">
+        <h2>{{ auth.user?.name }}</h2>
+        <p>{{ auth.user?.email }}</p>
+        <p>Roles: {{ auth.getRoles().join(', ') }}</p>
+
+        <button (click)="auth.logout()">Sign Out</button>
+      </div>
+    </ng-container>
+
+    <ng-template #loggedOut>
+      <div>
+        <p>You are not signed in.</p>
+        <button (click)="auth.login()">Sign In</button>
+      </div>
+    </ng-template>
+  `,
+})
+export class UserProfileComponent {
+  constructor(public auth: AuthService) {}
+}
+```
+
+### AuthService Example with Role Checking
+
+```typescript
+import { Component } from '@angular/core';
+import { AuthService } from '@authme/angular';
+
+@Component({
+  selector: 'app-admin-panel',
+  template: `
+    <div *ngIf="auth.hasRole('admin')">
+      <h2>Admin Panel</h2>
+      <p>Welcome, administrator!</p>
+    </div>
+
+    <div *ngIf="auth.hasPermission('read:reports')">
+      <h3>Reports</h3>
+      <button>View Reports</button>
+    </div>
+
+    <div *ngIf="!auth.hasRole('admin')">
+      <p>Access denied. You need admin privileges.</p>
+    </div>
+  `,
+})
+export class AdminPanelComponent {
+  constructor(public auth: AuthService) {}
+}
+```
+
+### Manual Token Access
+
+```typescript
+import { Component } from '@angular/core';
+import { AuthService } from '@authme/angular';
+
+@Component({
+  selector: 'app-token-display',
+  template: `
+    <div *ngIf="auth.isAuthenticated">
+      <p>Access Token:</p>
+      <code>{{ auth.getToken()?.substring(0, 20) }}...</code>
+    </div>
+  `,
+})
+export class TokenDisplayComponent {
+  constructor(public auth: AuthService) {}
+}
+```
+
+---
+
+## AuthGuard
+
+The `AuthGuard` is a route guard implementing `CanActivate` that protects routes requiring authentication.
+
+### Usage with Roles
+
+```typescript
+// app.routes.ts
+import { Routes } from '@angular/router';
+import { AuthGuard } from '@authme/angular';
+
+export const routes: Routes = [
+  { path: '', component: HomeComponent },
+  {
+    path: 'dashboard',
+    component: DashboardComponent,
+    canActivate: [AuthGuard],
+  },
+  {
+    path: 'admin',
+    component: AdminComponent,
+    canActivate: [AuthGuard],
+    data: { roles: ['admin'] },
+  },
+  {
+    path: 'moderator',
+    component: ModeratorComponent,
+    canActivate: [AuthGuard],
+    data: { roles: ['moderator', 'content-editor'] },
+  },
+];
+```
+
+### AuthGuard Configuration
+
+The guard reads configuration from `route.data`:
+
+| Data Key | Type | Description |
+|----------|------|-------------|
+| `roles` | `string[]` | Required roles (user must have all) |
+| `loginPath` | `string` | Redirect path for unauthenticated users (default: `/`) |
+| `forbiddenPath` | `string` | Redirect path when authenticated but lacks roles |
+
+### Custom Guard Configuration
+
+```typescript
+export const routes: Routes = [
+  {
+    path: 'admin',
+    component: AdminComponent,
+    canActivate: [AuthGuard],
+    data: {
+      roles: ['admin'],
+      loginPath: '/login',
+      forbiddenPath: '/access-denied',
+    },
+  },
+];
+```
+
+---
+
+## HTTP Interceptor
+
+The HTTP interceptor automatically attaches `Authorization: Bearer <token>` headers to outgoing requests.
+
+### Class-based Interceptor (NgModule style)
+
+The interceptor is registered automatically with `AuthmeModule.forRoot()`.
+
+For manual registration:
+
+```typescript
+// app.module.ts
+import { NgModule } from '@angular/core';
+import { AuthmeModule, AuthInterceptor } from '@authme/angular';
+import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
+
+@NgModule({
+  imports: [
+    HttpClientModule,
+    AuthmeModule.forRoot({
+      url: 'http://localhost:3000',
+      realm: 'my-realm',
+      clientId: 'my-app',
+      redirectUri: 'http://localhost:4200/callback',
+    }),
+  ],
+  providers: [
+    {
+      provide: HTTP_INTERCEPTORS,
+      useClass: AuthInterceptor,
+      multi: true,
+    },
+  ],
+})
+export class AppModule {}
+```
+
+### Functional Interceptor (Standalone style)
+
+```typescript
+// app.config.ts
+import { ApplicationConfig } from '@angular/core';
+import { provideHttpClient, withInterceptors } from '@angular/common/http';
+import { authInterceptor } from '@authme/angular';
+
+export const appConfig: ApplicationConfig = {
+  providers: [
+    provideHttpClient(withInterceptors([authInterceptor])),
+  ],
+};
+```
+
+### Example: Making Authenticated Requests
+
+```typescript
+import { Component, OnInit } from '@angular/core';
+import { HttpClient } from '@angular/common/http';
+import { AuthService } from '@authme/angular';
+import { catchError, of } from 'rxjs';
+
+@Component({
+  selector: 'app-data-fetch',
+  template: `
+    <div *ngIf="data">
+      <h3>Protected Data</h3>
+      <pre>{{ data | json }}</pre>
+    </div>
+    <div *ngIf="error">
+      <p>Error: {{ error }}</p>
+    </div>
+  `,
+})
+export class DataFetchComponent implements OnInit {
+  data: any = null;
+  error: string | null = null;
+
+  constructor(
+    private http: HttpClient,
+    private auth: AuthService,
+  ) {}
+
+  ngOnInit(): void {
+    // Token is automatically attached by the interceptor
+    this.http.get('/api/protected-data')
+      .pipe(
+        catchError((err) => {
+          this.error = err.message;
+          return of(null);
+        }),
+      )
+      .subscribe((data) => {
+        this.data = data;
+      });
+  }
+}
+```
+
+---
+
+## UserInfo Interface
+
+The `UserInfo` object contains the authenticated user's information:
+
+```typescript
+interface UserInfo {
+  sub: string;           // User ID
+  name?: string;          // Display name
+  email?: string;        // Email address
+  emailVerified?: boolean; // Email verification status
+  picture?: string;       // Avatar URL
+  roles?: string[];       // Assigned roles
+  permissions?: string[];  // Direct permissions
+  [key: string]: any;     // Any custom claims
+}
+```
+
+### Accessing User Info
+
+```typescript
+import { Component } from '@angular/core';
+import { AuthService } from '@authme/angular';
+
+@Component({
+  selector: 'app-user-card',
+  template: `
+    <div class="user-card">
+      <img
+        *ngIf="auth.user?.picture"
+        [src]="auth.user?.picture"
+        alt="Profile picture"
+      />
+      <h2>{{ auth.user?.name || 'User' }}</h2>
+      <p>{{ auth.user?.email }}</p>
+      <span *ngIf="auth.user?.emailVerified">Email verified</span>
+      <span *ngIf="!auth.user?.emailVerified">Email not verified</span>
+    </div>
+  `,
+})
+export class UserCardComponent {
+  constructor(public auth: AuthService) {}
+}
+```
+
+---
+
+## TypeScript Support
+
+The SDK is written in TypeScript and provides full type definitions:
+
+```typescript
+import { AuthService, AuthmeModule, AuthGuard, authInterceptor } from '@authme/angular';
+import type { AuthmeConfig, UserInfo, TokenResponse } from 'authme-sdk';
+
+// AuthService is fully typed
+constructor(public auth: AuthService) {
+  // auth.isAuthenticated$: Observable<boolean>
+  // auth.isLoading$: Observable<boolean>
+  // auth.user$: Observable<UserInfo | null>
+  // auth.isAuthenticated: boolean
+  // auth.user: UserInfo | null
+}
+```
+
+---
+
+## Next Steps
+
+<div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
+
+[**Quickstart**](/docs/quickstart)
+Set up AuthMe and create your first authenticated app
+
+[**Configuration**](/docs/getting-started/configuration)
+Learn about all configuration options
+
+[**API Reference**](/docs/api)
+Complete REST API documentation
+
+[**JavaScript SDK**](/docs/guides/sdks/vanilla)
+Core SDK for non-framework applications
+
+</div>
+
+---
+
+<p align="center">
+  <a href="https://authme.dev">authme.dev</a> &middot;
+  <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
+  <a href="https://discord.gg/authme">Discord</a>
+</p>

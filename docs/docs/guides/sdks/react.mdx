@@ -1,0 +1,612 @@
+---
+id: react-sdk
+title: React SDK
+description: Integrate AuthMe authentication into your React application using the official SDK
+---
+
+# React SDK
+
+The AuthMe React SDK provides React-specific bindings for the authme-sdk, including `AuthProvider`, `useAuth`, `useUser`, `usePermissions` hooks, and a `ProtectedRoute` component for declarative authentication.
+
+## Installation
+
+```bash
+npm install authme-sdk
+```
+
+---
+
+## Quick Start
+
+### Basic Setup
+
+```tsx
+import { AuthProvider, useAuth, useUser, usePermissions } from 'authme-sdk/react';
+
+function App() {
+  return (
+    <AuthProvider
+      serverUrl="http://localhost:3000"
+      realm="my-realm"
+      clientId="my-app"
+      redirectUri="http://localhost:5173/callback"
+      onLogin={(tokens) => console.log('Logged in!', tokens)}
+      onLogout={() => console.log('Logged out!')}
+      onError={(err) => console.error('Auth error:', err)}
+    >
+      <Main />
+    </AuthProvider>
+  );
+}
+
+function Main() {
+  const { isAuthenticated, isLoading, login, logout, getToken } = useAuth();
+  const user = useUser();
+  const { hasRole, hasPermission, roles } = usePermissions();
+
+  if (isLoading) {
+    return <div>Loading authentication...</div>;
+  }
+
+  if (!isAuthenticated) {
+    return (
+      <button onClick={() => login()}>
+        Sign In with AuthMe
+      </button>
+    );
+  }
+
+  return (
+    <div>
+      <h1>Welcome, {user?.name}!</h1>
+      <p>Email: {user?.email}</p>
+      <p>Your roles: {roles.join(', ')}</p>
+
+      {hasRole('admin') && (
+        <p>You have admin privileges.</p>
+      )}
+
+      {hasPermission('read:reports') && (
+        <p>You can access reports.</p>
+      )}
+
+      <button onClick={() => logout()}>
+        Sign Out
+      </button>
+    </div>
+  );
+}
+```
+
+---
+
+## AuthProvider
+
+The `AuthProvider` is the root component that initializes authentication and provides auth state to all child components.
+
+### Props
+
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `serverUrl` | `string` | Yes* | AuthMe server URL |
+| `realm` | `string` | Yes* | Realm name |
+| `clientId` | `string` | Yes* | OAuth2 client ID |
+| `redirectUri` | `string` | Yes* | Redirect URI after login |
+| `client` | `AuthmeClient` | Yes* | Pre-built client instance |
+| `scope` | `string[]` | No | OAuth2 scopes (default: `['openid', 'profile', 'email']`) |
+| `autoHandleCallback` | `boolean` | No | Auto-handle callback when URL has `?code=` (default: `true`) |
+| `onReady` | `(authenticated: boolean) => void` | No | Called when initialization completes |
+| `onLogin` | `(tokens: TokenResponse) => void` | No | Called on successful login |
+| `onLogout` | `() => void` | No | Called on logout |
+| `onError` | `(error: Error) => void` | No | Called on authentication error |
+| `onTokenRefresh` | `(tokens: TokenResponse) => void` | No | Called after token refresh |
+
+*Either a `client` prop or all of `serverUrl`, `realm`, `clientId`, and `redirectUri` are required.
+
+### With Inline Config
+
+```tsx
+<AuthProvider
+  serverUrl="http://localhost:3000"
+  realm="my-realm"
+  clientId="my-app"
+  redirectUri="http://localhost:5173/callback"
+  scope={['openid', 'profile', 'email', 'custom:scope']}
+  onReady={(authed) => console.log('Ready! Authenticated:', authed)}
+  onLogin={(tokens) => {
+    console.log('Access token:', tokens.access_token);
+  }}
+>
+  <App />
+</AuthProvider>
+```
+
+### With Pre-built Client
+
+For more control over the client configuration:
+
+```tsx
+import { AuthmeClient } from 'authme-sdk';
+import { AuthProvider } from 'authme-sdk/react';
+
+const client = new AuthmeClient({
+  url: 'http://localhost:3000',
+  realm: 'my-realm',
+  clientId: 'my-app',
+  redirectUri: 'http://localhost:5173/callback',
+  refreshStrategy: 'rotation', // 'rotation' | 'silent' | 'eager'
+  storage: 'sessionStorage',   // 'sessionStorage' | 'localStorage' | 'memory'
+  refreshBuffer: 30,          // seconds before expiry to trigger refresh
+  autoRefresh: true,          // enable automatic refresh
+});
+
+function App() {
+  return (
+    <AuthProvider client={client}>
+      <Main />
+    </AuthProvider>
+  );
+}
+```
+
+---
+
+## useAuth Hook
+
+The `useAuth` hook provides access to authentication state and actions:
+
+```tsx
+const {
+  client,        // The AuthmeClient instance
+  isAuthenticated, // boolean - whether user is authenticated
+  isLoading,     // boolean - whether auth state is loading
+  user,          // UserInfo | null - current user info
+  login,         // (options?) => Promise<void> - initiate login
+  logout,        // () => Promise<void> - sign out
+  getToken,      // () => string | null - get current access token
+} = useAuth();
+```
+
+### Example: Login Options
+
+```tsx
+function LoginButton() {
+  const { login } = useAuth();
+
+  const handleLogin = async () => {
+    try {
+      await login({ scope: ['openid', 'profile', 'email', 'custom:scope'] });
+    } catch (error) {
+      console.error('Login failed:', error);
+    }
+  };
+
+  return <button onClick={handleLogin}>Sign In</button>;
+}
+```
+
+### Example: Accessing the Token
+
+```tsx
+function TokenDisplay() {
+  const { getToken, isAuthenticated } = useAuth();
+
+  if (!isAuthenticated) return null;
+
+  return (
+    <div>
+      <p>Your access token:</p>
+      <code>{getToken()?.substring(0, 20)}...</code>
+    </div>
+  );
+}
+```
+
+---
+
+## useUser Hook
+
+The `useUser` hook returns the current user's information from the ID token claims:
+
+```tsx
+const user = useUser();
+// Returns: UserInfo | null
+
+interface UserInfo {
+  sub: string;       // User ID
+  name?: string;     // Display name
+  email?: string;    // Email address
+  emailVerified?: boolean;
+  picture?: string;   // Avatar URL
+  roles?: string[];  // Assigned roles
+  permissions?: string[]; // Direct permissions
+  [key: string]: any; // Any custom claims
+}
+```
+
+### Example: User Profile Card
+
+```tsx
+function UserProfile() {
+  const user = useUser();
+
+  if (!user) {
+    return <div>Not signed in</div>;
+  }
+
+  return (
+    <div className="profile-card">
+      {user.picture && (
+        <img src={user.picture} alt={user.name} />
+      )}
+      <h2>{user.name || 'User'}</h2>
+      <p>{user.email}</p>
+      {user.emailVerified ? (
+        <span>Email verified</span>
+      ) : (
+        <span>Email not verified</span>
+      )}
+    </div>
+  );
+}
+```
+
+---
+
+## usePermissions Hook
+
+The `usePermissions` hook provides role and permission checking:
+
+```tsx
+const {
+  roles,           // string[] - all assigned roles
+  permissions,     // string[] - all direct permissions
+  hasRole,         // (role: string) => boolean
+  hasPermission,   // (permission: string) => boolean
+  hasAnyRole,      // (roles: string[]) => boolean
+  hasAllRoles,     // (roles: string[]) => boolean
+} = usePermissions();
+```
+
+### Example: Role-Based UI
+
+```tsx
+function Dashboard() {
+  const { hasRole, hasPermission, roles, permissions } = usePermissions();
+
+  return (
+    <div>
+      <h1>Dashboard</h1>
+
+      {/* Admin-only section */}
+      {hasRole('admin') && (
+        <section>
+          <h2>Admin Panel</h2>
+          <a href="/admin">Go to Admin</a>
+        </section>
+      )}
+
+      {/* Content with multiple role check */}
+      {hasAnyRole(['editor', 'admin']) && (
+        <section>
+          <h2>Content Editor</h2>
+          <button>Edit Content</button>
+        </section>
+      )}
+
+      {/* Permission-based access */}
+      {hasPermission('read:reports') && (
+        <section>
+          <h2>Reports</h2>
+          <button>View Reports</button>
+        </section>
+      )}
+
+      {/* Fallback for unauthorized */}
+      {!hasRole('admin') && (
+        <p>You don't have admin access.</p>
+      )}
+    </div>
+  );
+}
+```
+
+### Example: Multi-Role Check
+
+```tsx
+function ModeratorTools() {
+  const { hasAllRoles } = usePermissions();
+
+  const canAccessModeration = hasAllRoles(['moderator', 'content-editor']);
+
+  if (!canAccessModeration) {
+    return <div>You need both moderator and content-editor roles.</div>;
+  }
+
+  return (
+    <div>
+      <h2>Moderation Tools</h2>
+      {/* Moderation UI */}
+    </div>
+  );
+}
+```
+
+---
+
+## ProtectedRoute Component
+
+The `ProtectedRoute` component guards routes that require authentication or specific roles:
+
+```tsx
+import { AuthProvider, ProtectedRoute } from 'authme-sdk/react';
+import { useNavigate } from 'react-router-dom';
+
+function AdminPage() {
+  const navigate = useNavigate();
+
+  return (
+    <ProtectedRoute
+      roles={['admin']}
+      fallback={<div>Loading...</div>}
+      onUnauthorized={() => {
+        navigate('/login');
+        return null;
+      }}
+      onForbidden={() => (
+        <div>
+          <h2>Access Denied</h2>
+          <p>You need admin privileges to access this page.</p>
+          <button onClick={() => navigate('/')}>Go Home</button>
+        </div>
+      )}
+    >
+      <AdminDashboard />
+    </ProtectedRoute>
+  );
+}
+```
+
+### ProtectedRoute Props
+
+| Prop | Type | Required | Description |
+|------|------|----------|-------------|
+| `children` | `ReactNode` | Yes | Content to render when authorized |
+| `roles` | `string[]` | No | Required roles (user must have all) |
+| `permissions` | `string[]` | No | Required permissions |
+| `fallback` | `ReactNode` | No | Loading state while checking auth |
+| `onUnauthorized` | `() => ReactNode` | No | Rendered when not authenticated |
+| `onForbidden` | `() => ReactNode` | No | Rendered when authenticated but lacks roles |
+
+### Using with React Router
+
+```tsx
+import { BrowserRouter, Routes, Route } from 'react-router-dom';
+import { AuthProvider, ProtectedRoute } from 'authme-sdk/react';
+
+function App() {
+  return (
+    <AuthProvider
+      serverUrl="http://localhost:3000"
+      realm="my-realm"
+      clientId="my-app"
+      redirectUri="http://localhost:5173/callback"
+    >
+      <BrowserRouter>
+        <Routes>
+          <Route path="/" element={<HomePage />} />
+          <Route path="/login" element={<LoginPage />} />
+
+          <Route
+            path="/dashboard"
+            element={
+              <ProtectedRoute fallback={<Loading />}>
+                <DashboardPage />
+              </ProtectedRoute>
+            }
+          />
+
+          <Route
+            path="/admin"
+            element={
+              <ProtectedRoute
+                roles={['admin']}
+                fallback={<Loading />}
+                onForbidden={() => <AccessDenied />}
+              >
+                <AdminPage />
+              </ProtectedRoute>
+            }
+          />
+        </Routes>
+      </BrowserRouter>
+    </AuthProvider>
+  );
+}
+```
+
+---
+
+## Token Refresh Strategies
+
+Configure how the SDK refreshes tokens via the `refreshStrategy` option:
+
+| Strategy | Description |
+|----------|-------------|
+| `rotation` | *(default)* Uses refresh token grant to get a new access token |
+| `eager` | Like `rotation`, but refreshes proactively at 2× the `refreshBuffer` |
+| `silent` | Uses a hidden iframe with `prompt=none` for silent re-auth |
+
+### Example: Eager Refresh
+
+```tsx
+import { AuthmeClient } from 'authme-sdk';
+import { AuthProvider } from 'authme-sdk/react';
+
+const client = new AuthmeClient({
+  url: 'http://localhost:3000',
+  realm: 'my-realm',
+  clientId: 'my-app',
+  redirectUri: 'http://localhost:5173/callback',
+  refreshStrategy: 'eager',  // refresh 60 seconds before expiry
+  refreshBuffer: 30,         // seconds before expiry to trigger refresh
+  autoRefresh: true,        // enable automatic refresh (default: true)
+});
+
+function App() {
+  return (
+    <AuthProvider client={client}>
+      <App />
+    </AuthProvider>
+  );
+}
+```
+
+### Silent Refresh with iframe
+
+For the `silent` strategy, your app's redirect URI page must post a message back to the parent window:
+
+```tsx
+// In your callback page component
+import { useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
+
+function CallbackPage() {
+  const [searchParams] = useSearchParams();
+
+  useEffect(() => {
+    const code = searchParams.get('code');
+    const state = searchParams.get('state');
+    const error = searchParams.get('error');
+
+    if (window.parent !== window) {
+      window.parent.postMessage(
+        {
+          type: 'authme:silent_callback',
+          code,
+          state,
+          error,
+        },
+        window.location.origin
+      );
+    }
+  }, [searchParams]);
+
+  return <div>Completing sign in...</div>;
+}
+```
+
+---
+
+## Event System
+
+Subscribe to SDK events to react to authentication state changes:
+
+```tsx
+import { useEffect } from 'react';
+import { useAuth } from 'authme-sdk/react';
+
+function AnalyticsTracker() {
+  const { client } = useAuth();
+
+  useEffect(() => {
+    const handleLogin = (tokens: TokenResponse) => {
+      console.log('User logged in:', tokens.access_token);
+      // Track in analytics
+      analytics.identify(tokens.access_token);
+    };
+
+    const handleLogout = () => {
+      console.log('User logged out');
+      // Track in analytics
+      analytics.reset();
+    };
+
+    const handleTokenRefresh = (tokens: TokenResponse) => {
+      console.log('Token refreshed');
+    };
+
+    const handleError = (error: Error) => {
+      console.error('Auth error:', error);
+      // Report to error tracker
+      errorTracker.capture(error);
+    };
+
+    const unsubLogin = client.on('login', handleLogin);
+    const unsubLogout = client.on('logout', handleLogout);
+    const unsubRefresh = client.on('tokenRefresh', handleTokenRefresh);
+    const unsubError = client.on('error', handleError);
+
+    return () => {
+      unsubLogin();
+      unsubLogout();
+      unsubRefresh();
+      unsubError();
+    };
+  }, [client]);
+
+  return null;
+}
+```
+
+### Available Events
+
+| Event | Payload | Description |
+|-------|---------|-------------|
+| `login` | `TokenResponse` | User successfully authenticated |
+| `logout` | - | User logged out |
+| `tokenRefresh` | `TokenResponse` | Access token was refreshed |
+| `tokenRefreshError` | `Error` | Token refresh failed |
+| `error` | `Error` | Any authentication error |
+
+---
+
+## TypeScript Support
+
+The SDK is written in TypeScript and provides full type definitions:
+
+```tsx
+import type {
+  AuthmeClient,
+  AuthmeConfig,
+  TokenResponse,
+  UserInfo,
+  TokenClaims,
+  AuthmeEventMap,
+} from 'authme-sdk';
+
+// All hooks are fully typed
+function MyComponent() {
+  const user = useUser(); // Type: UserInfo | null
+  const { isAuthenticated } = useAuth(); // Fully typed
+  const { hasRole } = usePermissions(); // Fully typed
+}
+```
+
+---
+
+## Next Steps
+
+<div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
+
+[**Quickstart**](/docs/quickstart)
+Set up AuthMe and create your first authenticated app
+
+[**Configuration**](/docs/getting-started/configuration)
+Learn about all configuration options
+
+[**API Reference**](/docs/api)
+Complete REST API documentation
+
+[**JavaScript SDK**](/docs/guides/sdks/vanilla)
+Core SDK for non-React applications
+
+</div>
+
+---
+
+<p align="center">
+  <a href="https://authme.dev">authme.dev</a> &middot;
+  <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
+  <a href="https://discord.gg/authme">Discord</a>
+</p>
