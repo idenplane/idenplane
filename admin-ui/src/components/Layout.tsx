@@ -37,6 +37,7 @@ export default function Layout() {
         { to: `/console/realms/${currentRealm}/groups`, label: 'Groups' },
         { to: `/console/realms/${currentRealm}/client-scopes`, label: 'Client Scopes' },
         { to: `/console/realms/${currentRealm}/consent-categories`, label: 'Consent Categories' },
+        { to: `/console/realms/${currentRealm}/consent-management`, label: 'Consent Management' },
         { to: `/console/realms/${currentRealm}/sessions`, label: 'Sessions' },
         { to: `/console/realms/${currentRealm}/events`, label: 'Events' },
         { to: `/console/realms/${currentRealm}/admin-events`, label: 'Admin Events' },

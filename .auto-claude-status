@@ -3,7 +3,7 @@
   "spec": "009-gdpr-consent-management-ui",
   "state": "building",
   "subtasks": {
-    "completed": 17,
+    "completed": 20,
     "total": 30,
     "in_progress": 1,
     "failed": 0
@@ -18,8 +18,8 @@
     "max": 1
   },
   "session": {
-    "number": 20,
+    "number": 23,
     "started_at": "2026-05-10T14:17:39.923622"
   },
-  "last_update": "2026-05-10T16:39:20.997410"
+  "last_update": "2026-05-10T17:10:28.934415"
 }
