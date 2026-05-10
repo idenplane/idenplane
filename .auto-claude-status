@@ -1,0 +1,25 @@
+{
+  "active": true,
+  "spec": "006-performance-benchmark-suite-comparison",
+  "state": "planning",
+  "subtasks": {
+    "completed": 0,
+    "total": 0,
+    "in_progress": 1,
+    "failed": 0
+  },
+  "phase": {
+    "current": "Benchmark Infrastructure Setup",
+    "id": null,
+    "total": 3
+  },
+  "workers": {
+    "active": 0,
+    "max": 1
+  },
+  "session": {
+    "number": 2,
+    "started_at": "2026-05-10T08:57:43.996260"
+  },
+  "last_update": "2026-05-10T09:03:56.808961"
+}

@@ -1,0 +1,80 @@
+services:
+  # k6 load generator
+  k6:
+    image: grafana/k6:latest
+    container_name: authme-benchmark-runner
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      - TARGET_URL=http://app:3000
+      - ADMIN_API_KEY=${ADMIN_API_KEY:-change-me-in-production}
+      - VUS=${VUS:-50}
+      - DURATION=${DURATION:-60s}
+      - RAMP_UP=${RAMP_UP:-10s}
+    volumes:
+      - ./k6:/src/k6
+      - k6-results:/src/k6/results
+    command: >
+      run --config /src/k6/config.js
+      --out json=/src/k6/results/summary.json
+      /src/k6/scripts/auth-flows.js
+    networks:
+      - benchmarks
+
+  # Authme application instance for benchmarking
+  app:
+    image: islamawad/authme:latest
+    container_name: authme-benchmark-target
+    ports:
+      - "3001:3000"
+    environment:
+      DATABASE_URL: postgresql://authme:authme@db:5432/authme
+      PORT: "3000"
+      NODE_ENV: production
+      ADMIN_API_KEY: ${ADMIN_API_KEY:-change-me-in-production}
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      THROTTLE_TTL: ${THROTTLE_TTL:-60000}
+      THROTTLE_LIMIT: ${THROTTLE_LIMIT:-100}
+      BASE_URL: ${BASE_URL:-http://localhost:3001}
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+    networks:
+      - benchmarks
+
+  # Database for benchmark target
+  db:
+    image: postgres:16-alpine
+    container_name: authme-benchmark-db
+    environment:
+      POSTGRES_USER: authme
+      POSTGRES_PASSWORD: authme
+      POSTGRES_DB: authme
+    ports:
+      - "5433:5432"
+    volumes:
+      - pgdata-bench:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authme"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - benchmarks
+
+networks:
+  benchmarks:
+    driver: bridge
+
+volumes:
+  pgdata-bench:
+  k6-results:
