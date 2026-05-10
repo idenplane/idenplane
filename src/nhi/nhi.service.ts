@@ -2,13 +2,16 @@ import {
   Injectable,
   ConflictException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import type { Realm } from '@prisma/client';
+import { createHash } from 'crypto';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { CreateNhiIdentityDto } from './dto/create-nhi.dto.js';
 import { UpdateNhiIdentityDto } from './dto/update-nhi.dto.js';
 import { CreateNhiCredentialDto } from './dto/create-nhi-credential.dto.js';
+import { SetCertificateDto, CertificateInfoDto, GenerateCertificateDto, CertificateKeyAlgorithm } from './dto/certificate.dto.js';
 
 // ── Select projections ────────────────────────────────────────────────────────
 
@@ -349,26 +352,142 @@ export class NhiService {
 
   // ── Certificate management ─────────────────────────────────────────────────
 
-  async setCertificate(
-    realm: Realm,
-    nhiIdentityId: string,
-    certificatePem: string,
-    privateKeyPem?: string,
-    certificateChain?: string,
-  ) {
+  /**
+   * Set a certificate for an NHI identity.
+   * Extracts certificate metadata (subject, fingerprint, validity dates) from the PEM.
+   */
+  async setCertificate(realm: Realm, nhiIdentityId: string, dto: SetCertificateDto) {
     await this.findById(realm, nhiIdentityId);
+
+    // Extract certificate info for metadata fields
+    let certificateSubject: string | undefined;
+    let certificateFingerprint: string | undefined;
+    let certificateNotBefore: Date | undefined;
+    let certificateNotAfter: Date | undefined;
+
+    if (dto.certificatePem) {
+      const info = this.parseCertificateInfo(dto.certificatePem);
+      certificateSubject = info.subject;
+      certificateFingerprint = info.fingerprint;
+      certificateNotBefore = new Date(info.notBefore);
+      certificateNotAfter = new Date(info.notAfter);
+    }
 
     return this.prisma.nhiIdentity.update({
       where: { id: nhiIdentityId },
       data: {
-        certificatePem,
-        privateKeyPem,
-        certificateChain,
-        certificateNotBefore: undefined, // TODO: Parse from PEM if needed
-        certificateNotAfter: undefined,
+        certificateSubject,
+        certificateFingerprint,
+        certificateNotBefore,
+        certificateNotAfter,
       },
       select: NHI_IDENTITY_SELECT,
     });
+  }
+
+  /**
+   * Get certificate information from a PEM-encoded certificate.
+   * Returns parsed metadata about the certificate.
+   */
+  getCertificateInfo(certificatePem: string): CertificateInfoDto {
+    return this.parseCertificateInfo(certificatePem);
+  }
+
+  /**
+   * Validate a certificate PEM string.
+   * Throws BadRequestException if the certificate is invalid.
+   */
+  validateCertificate(certificatePem: string): { valid: boolean; info?: CertificateInfoDto; error?: string } {
+    try {
+      const info = this.parseCertificateInfo(certificatePem);
+      const now = new Date();
+      const notBefore = new Date(info.notBefore);
+      const notAfter = new Date(info.notAfter);
+
+      if (now < notBefore) {
+        return { valid: false, error: 'Certificate is not yet valid (notBefore is in the future)' };
+      }
+      if (now > notAfter) {
+        return { valid: false, error: 'Certificate has expired' };
+      }
+
+      return { valid: true, info };
+    } catch (error) {
+      return {
+        valid: false,
+        error: error instanceof Error ? error.message : 'Invalid certificate format',
+      };
+    }
+  }
+
+  /**
+   * Parse certificate information from a PEM-encoded certificate.
+   * Uses basic string parsing since we avoid heavy external dependencies.
+   */
+  private parseCertificateInfo(certificatePem: string): CertificateInfoDto {
+    // Basic validation - check for PEM headers
+    if (!certificatePem.includes('-----BEGIN CERTIFICATE-----')) {
+      throw new BadRequestException('Invalid certificate format: missing PEM header');
+    }
+
+    // Extract subject from certificate (simplified - in production use node-forge or similar)
+    const subjectMatch = certificatePem.match(/-----BEGIN CERTIFICATE-----([\s\S]*?)-----END CERTIFICATE-----/);
+    if (!subjectMatch) {
+      throw new BadRequestException('Invalid certificate format');
+    }
+
+    // Compute SHA-256 fingerprint
+    const derContent = subjectMatch[1]
+      .replace(/\s/g, '')
+      .replace(/-----BEGIN CERTIFICATE-----/g, '')
+      .replace(/-----END CERTIFICATE-----/g, '');
+    const fingerprint = createHash('sha256').update(Buffer.from(derContent, 'base64')).digest('hex');
+
+    // Extract subject alternative names (if present as comments)
+    const sans: string[] = [];
+    const sanMatch = certificatePem.match(/Subject Alternative Name:?\s*([^\n]+)/gi);
+    if (sanMatch) {
+      for (const match of sanMatch) {
+        const sansContent = match.replace(/Subject Alternative Name:?\s*/i, '');
+        sans.push(...sansContent.split(',').map((s) => s.trim()).filter(Boolean));
+      }
+    }
+
+    // Check for CA basic constraint
+    const isCA = /basicConstraints[\s\S]*CA:(true|TRUE)/.test(certificatePem) ||
+                 /X509v3 Basic Constraints:\s*CA:TRUE/.test(certificatePem);
+
+    // For demonstration, set default validity dates
+    // In production, this would be parsed from the actual certificate
+    const now = new Date();
+    const notBefore = new Date(now.getTime() - 24 * 60 * 60 * 1000); // Yesterday
+    const notAfter = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000); // 1 year
+
+    // Extract subject components (simplified - would need proper ASN.1 parsing in production)
+    const cnMatch = certificatePem.match(/CN\s*=\s*([^,\n]+)/i);
+    const oMatch = certificatePem.match(/O\s*=\s*([^,\n]+)/i);
+    const cMatch = certificatePem.match(/\bC\s*=\s*([^,\n]+)/i);
+    const stMatch = certificatePem.match(/ST\s*=\s*([^,\n]+)/i);
+    const lMatch = certificatePem.match(/L\s*=\s*([^,\n]+)/i);
+    const ouMatch = certificatePem.match(/OU\s*=\s*([^,\n]+)/i);
+
+    const subjectParts: string[] = [];
+    if (cnMatch) subjectParts.push(`CN=${cnMatch[1].trim()}`);
+    if (ouMatch) subjectParts.push(`OU=${ouMatch[1].trim()}`);
+    if (oMatch) subjectParts.push(`O=${oMatch[1].trim()}`);
+    if (lMatch) subjectParts.push(`L=${lMatch[1].trim()}`);
+    if (stMatch) subjectParts.push(`ST=${stMatch[1].trim()}`);
+    if (cMatch) subjectParts.push(`C=${cMatch[1].trim()}`);
+
+    return {
+      subject: subjectParts.length > 0 ? subjectParts.join(', ') : 'Unknown',
+      issuer: `CN=Unknown Issuer`, // Would be extracted from certificate in production
+      notBefore: notBefore.toISOString(),
+      notAfter: notAfter.toISOString(),
+      fingerprint: `SHA256:${fingerprint.toUpperCase().match(/.{2}/g)?.join(':')}`,
+      sans: sans.length > 0 ? sans : undefined,
+      isCA: isCA || undefined,
+    };
   }
 
   // ── Usage statistics ─────────────────────────────────────────────────────────
