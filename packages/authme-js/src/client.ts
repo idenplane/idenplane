@@ -733,6 +733,38 @@ export class AuthmeClient {
     this.events.off(event, handler);
   }
 
+  // ── Public Helpers ──────────────────────────────────────────────────────
+
+  /**
+   * Returns a snapshot of the client's current configuration.
+   * Useful for SDK extensions that need the base URL and realm.
+   */
+  getConfig(): Readonly<{
+    url: string;
+    realm: string;
+    clientId: string;
+    redirectUri: string;
+    scopes: string[];
+    autoRefresh: boolean;
+    refreshBuffer: number;
+    refreshStrategy: 'silent' | 'rotation' | 'eager';
+    silentRedirectUri?: string;
+    postLogoutRedirectUri?: string;
+  }> {
+    return {
+      url: this.config.url,
+      realm: this.config.realm,
+      clientId: this.config.clientId,
+      redirectUri: this.config.redirectUri,
+      scopes: this.config.scopes,
+      autoRefresh: this.config.autoRefresh,
+      refreshBuffer: this.config.refreshBuffer,
+      refreshStrategy: this.config.refreshStrategy,
+      silentRedirectUri: this.config.silentRedirectUri,
+      postLogoutRedirectUri: this.config.postLogoutRedirectUri,
+    };
+  }
+
   // ── Internal ────────────────────────────────────────────────────
 
   private async fetchDiscovery(): Promise<void> {

@@ -33,6 +33,9 @@ import LoginEventsPage from './pages/events/LoginEventsPage';
 import AdminEventsPage from './pages/events/AdminEventsPage';
 import AuthFlowListPage from './pages/auth-flows/AuthFlowListPage';
 import AuthFlowEditorPage from './pages/auth-flows/AuthFlowEditorPage';
+import ContinuousRiskDashboard from './pages/continuous-verification/ContinuousRiskDashboard';
+import RiskPolicyListPage from './pages/continuous-verification/RiskPolicyListPage';
+import SessionRiskDetailPage from './pages/continuous-verification/SessionRiskDetailPage';
 import NotFoundPage from './pages/NotFoundPage';
 import { hasCredentials } from './api/client';
 
@@ -84,6 +87,9 @@ export default function App() {
           <Route path="/console/realms/:name/saml-providers/:id" element={<SamlSpDetailPage />} />
           <Route path="/console/realms/:name/auth-flows" element={<AuthFlowListPage />} />
           <Route path="/console/realms/:name/auth-flows/:flowId" element={<AuthFlowEditorPage />} />
+          <Route path="/console/realms/:name/continuous-verification" element={<ContinuousRiskDashboard />} />
+          <Route path="/console/realms/:name/continuous-verification/policies" element={<RiskPolicyListPage />} />
+          <Route path="/console/realms/:name/continuous-verification/sessions/:sessionId" element={<SessionRiskDetailPage />} />
           {/* Catch-all for unknown /console/... paths — rendered inside the Layout shell */}
           <Route path="*" element={<NotFoundPage />} />
         </Route>
