@@ -14,6 +14,7 @@ import { CreateNhiCredentialDto } from './dto/create-nhi-credential.dto.js';
 import { SetCertificateDto, CertificateInfoDto, GenerateCertificateDto, CertificateKeyAlgorithm, CertificateFormat } from './dto/certificate.dto.js';
 import { CreateNhiCredentialPolicyDto } from './dto/create-nhi-credential-policy.dto.js';
 import { UpdateNhiCredentialPolicyDto } from './dto/update-nhi-credential-policy.dto.js';
+import { BulkRegistrationDto, BulkRegistrationResponseDto, BulkRegistrationResultItemDto } from './dto/bulk-registration.dto.js';
 
 // ── Select projections ────────────────────────────────────────────────────────
 
@@ -1012,5 +1013,267 @@ export class NhiService {
       lastActiveAt: stats.lastActiveAt,
       credentials,
     };
+  }
+
+  // ── Rotation policy management ───────────────────────────────────────────────
+
+  /**
+   * Get rotation status for all credentials under a specific policy.
+   * Returns detailed status for each credential including days until rotation.
+   */
+  async getPolicyRotationStatus(realm: Realm, policyId: string) {
+    const policy = await this.findPolicyById(realm, policyId);
+
+    const credentials = await this.prisma.nhiCredential.findMany({
+      where: {
+        nhiIdentity: { realmId: realm.id },
+        credentialType: policy.credentialType,
+        revoked: false,
+        enabled: true,
+      },
+      select: {
+        id: true,
+        nhiIdentityId: true,
+        name: true,
+        credentialType: true,
+        createdAt: true,
+        rotationRequired: true,
+      },
+    });
+
+    const now = new Date();
+    const statuses = credentials.map((cred) => {
+      const rotationDate = new Date(cred.createdAt);
+      rotationDate.setDate(
+        rotationDate.getDate() + policy.rotationIntervalDays - policy.rotationBeforeDays,
+      );
+      const daysUntilRotation = Math.ceil(
+        (rotationDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+      );
+
+      const maxAgeDate = new Date(cred.createdAt);
+      maxAgeDate.setDate(maxAgeDate.getDate() + policy.maxCredentialAgeDays);
+      const daysUntilForcedRotation = Math.ceil(
+        (maxAgeDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+      );
+
+      const rotationRequired =
+        cred.rotationRequired ||
+        daysUntilRotation <= 0 ||
+        daysUntilForcedRotation <= 0;
+
+      const reason = cred.rotationRequired
+        ? 'rotation_required_flag'
+        : daysUntilRotation <= 0
+          ? 'policy_threshold'
+          : daysUntilForcedRotation <= 0
+            ? 'max_age_exceeded'
+            : null;
+
+      return {
+        credential: {
+          credentialId: cred.id,
+          nhiIdentityId: cred.nhiIdentityId,
+          name: cred.name,
+          credentialType: cred.credentialType,
+          createdAt: cred.createdAt,
+          reason: reason ?? 'pending',
+          policyId: policy.id,
+          daysUntilRotation: daysUntilRotation > 0 ? daysUntilRotation : undefined,
+        },
+        rotationRequired,
+        applicablePolicy: {
+          id: policy.id,
+          name: policy.name,
+          rotationIntervalDays: policy.rotationIntervalDays,
+          autoRotate: policy.autoRotate,
+        },
+        daysUntilForcedRotation: daysUntilForcedRotation > 0 ? daysUntilForcedRotation : undefined,
+        daysUntilRotationWarning: daysUntilRotation > 0 ? daysUntilRotation : undefined,
+      };
+    });
+
+    return {
+      policyId: policy.id,
+      policyName: policy.name,
+      credentialType: policy.credentialType,
+      totalCredentials: credentials.length,
+      credentialsRequiringRotation: statuses.filter((s) => s.rotationRequired).length,
+      statuses,
+    };
+  }
+
+  /**
+   * Get summary of all credentials requiring rotation in the realm.
+   * Aggregates rotation status across all policies.
+   */
+  async getRotationStatusSummary(realm: Realm) {
+    const policies = await this.prisma.nhiCredentialPolicy.findMany({
+      where: { realmId: realm.id, enabled: true },
+      select: {
+        id: true,
+        name: true,
+        credentialType: true,
+        rotationIntervalDays: true,
+        rotationBeforeDays: true,
+        maxCredentialAgeDays: true,
+        autoRotate: true,
+      },
+    });
+
+    const now = new Date();
+    let totalRequiringRotation = 0;
+    let dueForRotation = 0;
+    let mustRotate = 0;
+    let autoRotateEnabled = 0;
+
+    const policySummaries = await Promise.all(
+      policies.map(async (policy) => {
+        const credentials = await this.prisma.nhiCredential.findMany({
+          where: {
+            nhiIdentity: { realmId: realm.id },
+            credentialType: policy.credentialType,
+            revoked: false,
+            enabled: true,
+          },
+          select: {
+            id: true,
+            createdAt: true,
+            rotationRequired: true,
+          },
+        });
+
+        let requiringRotation = 0;
+        let due = 0;
+        let must = 0;
+
+        for (const cred of credentials) {
+          const rotationDate = new Date(cred.createdAt);
+          rotationDate.setDate(
+            rotationDate.getDate() + policy.rotationIntervalDays - policy.rotationBeforeDays,
+          );
+          const daysUntilRotation = Math.ceil(
+            (rotationDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+          );
+
+          const maxAgeDate = new Date(cred.createdAt);
+          maxAgeDate.setDate(maxAgeDate.getDate() + policy.maxCredentialAgeDays);
+          const daysUntilForcedRotation = Math.ceil(
+            (maxAgeDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
+          );
+
+          const isDue = daysUntilRotation <= 0;
+          const isMust = daysUntilForcedRotation <= 0;
+
+          if (cred.rotationRequired || isDue || isMust) {
+            requiringRotation++;
+          }
+          if (isDue) due++;
+          if (isMust) must++;
+
+          if (policy.autoRotate) autoRotateEnabled++;
+        }
+
+        totalRequiringRotation += requiringRotation;
+        dueForRotation += due;
+        mustRotate += must;
+
+        return {
+          policyId: policy.id,
+          policyName: policy.name,
+          credentialType: policy.credentialType,
+          totalCredentials: credentials.length,
+          credentialsRequiringRotation: requiringRotation,
+          dueForRotation: due,
+          mustRotate: must,
+        };
+      }),
+    );
+
+    return {
+      totalRequiringRotation,
+      dueForRotation,
+      mustRotate,
+      autoRotateEnabled,
+      policies: policySummaries,
+    };
+  }
+
+  // ── Bulk registration ─────────────────────────────────────────────────────────
+
+  /**
+   * Register multiple devices in bulk for fleet management.
+   * Creates NHI identities for each device and returns results with API keys.
+   */
+  async bulkRegistration(
+    realm: Realm,
+    dto: BulkRegistrationDto,
+  ): Promise<BulkRegistrationResponseDto> {
+    const maxItems = dto.maxItems ?? 1000;
+    const devicesToProcess = dto.devices.slice(0, maxItems);
+    const results: BulkRegistrationResultItemDto[] = [];
+
+    for (const device of devicesToProcess) {
+      const result: BulkRegistrationResultItemDto = {
+        name: device.name,
+        id: '',
+        success: false,
+      };
+
+      try {
+        // Check for existing identity
+        const existing = await this.prisma.nhiIdentity.findUnique({
+          where: { realmId_name: { realmId: realm.id, name: device.name } },
+        });
+
+        if (existing) {
+          result.id = existing.id;
+          result.success = false;
+          result.error = 'NHI identity already exists';
+          results.push(result);
+          continue;
+        }
+
+        // Create the NHI identity
+        const identity = await this.prisma.nhiIdentity.create({
+          data: {
+            realmId: realm.id,
+            identityType: 'IOT_DEVICE',
+            name: device.name,
+            description: device.description,
+            enabled: device.enabled ?? true,
+            lifecycleStatus: 'PROVISIONING',
+            permissionScopes: device.permissionScopes ?? [],
+            metadata: device.metadata ?? {},
+            tags: device.tags ?? [],
+          },
+          select: NHI_IDENTITY_SELECT,
+        });
+
+        result.id = identity.id;
+        result.metadata = identity.metadata ?? undefined;
+        result.success = true;
+        results.push(result);
+      } catch (error) {
+        result.success = false;
+        result.error = error instanceof Error ? error.message : 'Unknown error';
+        results.push(result);
+      }
+    }
+
+    const successful = results.filter((r) => r.success).length;
+    const failed = results.filter((r) => !r.success).length;
+    const response: BulkRegistrationResponseDto = {
+      total: dto.devices.length,
+      successful,
+      failed,
+      results,
+    };
+
+    if (failed > 0) {
+      response.warning = `${failed} device(s) failed to register`;
+    }
+
+    return response;
   }
 }

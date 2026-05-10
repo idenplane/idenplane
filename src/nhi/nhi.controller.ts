@@ -6,6 +6,7 @@ import {
   Delete,
   Body,
   Param,
+  Query,
   HttpCode,
   HttpStatus,
   UseGuards,
@@ -13,10 +14,14 @@ import {
 import { ApiTags, ApiOperation, ApiSecurity, ApiResponse } from '@nestjs/swagger';
 import type { Realm } from '@prisma/client';
 import { NhiService } from './nhi.service.js';
+import { NhiAuditService } from './nhi-audit.service.js';
 import { CreateNhiIdentityDto } from './dto/create-nhi.dto.js';
 import { UpdateNhiIdentityDto } from './dto/update-nhi.dto.js';
 import { CreateNhiCredentialDto } from './dto/create-nhi-credential.dto.js';
-import { GenerateCertificateDto } from './dto/certificate.dto.js';
+import { GenerateCertificateDto, SetCertificateDto } from './dto/certificate.dto.js';
+import { CreateNhiCredentialPolicyDto } from './dto/create-nhi-credential-policy.dto.js';
+import { UpdateNhiCredentialPolicyDto } from './dto/update-nhi-credential-policy.dto.js';
+import { BulkRegistrationDto } from './dto/bulk-registration.dto.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 
@@ -25,7 +30,10 @@ import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 @UseGuards(RealmGuard)
 @ApiSecurity('admin-api-key')
 export class NhiController {
-  constructor(private readonly nhiService: NhiService) {}
+  constructor(
+    private readonly nhiService: NhiService,
+    private readonly nhiAuditService: NhiAuditService,
+  ) {}
 
   // ── NHI Identity endpoints ───────────────────────────────────────────────────
 
@@ -168,6 +176,21 @@ export class NhiController {
     return this.nhiService.rotateCredential(realm, id, credentialId);
   }
 
+  // ── Bulk registration ───────────────────────────────────────────────────────
+
+  @Post('devices/bulk-register')
+  @HttpCode(HttpStatus.CREATED)
+  @ApiOperation({ summary: 'Bulk register devices for fleet management' })
+  @ApiResponse({ status: 201, description: 'Bulk registration completed' })
+  @ApiResponse({ status: 400, description: 'Invalid request body' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  bulkRegistration(
+    @CurrentRealm() realm: Realm,
+    @Body() dto: BulkRegistrationDto,
+  ) {
+    return this.nhiService.bulkRegistration(realm, dto);
+  }
+
   // ── Certificate generation ────────────────────────────────────────────────
 
   @Post('device-certificates')
@@ -193,15 +216,9 @@ export class NhiController {
   setCertificate(
     @CurrentRealm() realm: Realm,
     @Param('id') id: string,
-    @Body() body: { certificatePem: string; privateKeyPem?: string; certificateChain?: string },
+    @Body() dto: SetCertificateDto,
   ) {
-    return this.nhiService.setCertificate(
-      realm,
-      id,
-      body.certificatePem,
-      body.privateKeyPem,
-      body.certificateChain,
-    );
+    return this.nhiService.setCertificate(realm, id, dto);
   }
 
   // ── Usage statistics ────────────────────────────────────────────────────────
@@ -213,5 +230,116 @@ export class NhiController {
   @ApiResponse({ status: 404, description: 'NHI identity not found' })
   getUsageStats(@CurrentRealm() realm: Realm, @Param('id') id: string) {
     return this.nhiService.getUsageStats(realm, id);
+  }
+
+  // ── Rotation policy management ─────────────────────────────────────────────
+
+  @Post('credential-policies')
+  @ApiOperation({ summary: 'Create a credential rotation policy' })
+  @ApiResponse({ status: 201, description: 'Credential policy created' })
+  @ApiResponse({ status: 400, description: 'Invalid request body' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 409, description: 'Credential policy already exists' })
+  createPolicy(@CurrentRealm() realm: Realm, @Body() dto: CreateNhiCredentialPolicyDto) {
+    return this.nhiService.createPolicy(realm, dto);
+  }
+
+  @Get('credential-policies')
+  @ApiOperation({ summary: 'List credential rotation policies in a realm' })
+  @ApiResponse({ status: 200, description: 'List of credential policies' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  listPolicies(@CurrentRealm() realm: Realm) {
+    return this.nhiService.listPolicies(realm);
+  }
+
+  @Get('credential-policies/:policyId')
+  @ApiOperation({ summary: 'Get a credential rotation policy by ID' })
+  @ApiResponse({ status: 200, description: 'Credential policy details' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Credential policy not found' })
+  getPolicy(@CurrentRealm() realm: Realm, @Param('policyId') policyId: string) {
+    return this.nhiService.findPolicyById(realm, policyId);
+  }
+
+  @Put('credential-policies/:policyId')
+  @ApiOperation({ summary: 'Update a credential rotation policy' })
+  @ApiResponse({ status: 200, description: 'Credential policy updated' })
+  @ApiResponse({ status: 400, description: 'Invalid request body' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Credential policy not found' })
+  @ApiResponse({ status: 409, description: 'Credential policy name already taken' })
+  updatePolicy(
+    @CurrentRealm() realm: Realm,
+    @Param('policyId') policyId: string,
+    @Body() dto: UpdateNhiCredentialPolicyDto,
+  ) {
+    return this.nhiService.updatePolicy(realm, policyId, dto);
+  }
+
+  @Delete('credential-policies/:policyId')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Delete a credential rotation policy' })
+  @ApiResponse({ status: 204, description: 'Credential policy deleted' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Credential policy not found' })
+  deletePolicy(@CurrentRealm() realm: Realm, @Param('policyId') policyId: string) {
+    return this.nhiService.removePolicy(realm, policyId);
+  }
+
+  @Get('credential-policies/:policyId/rotation-status')
+  @ApiOperation({ summary: 'Get rotation status for all credentials under a policy' })
+  @ApiResponse({ status: 200, description: 'Rotation status for policy credentials' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Credential policy not found' })
+  getPolicyRotationStatus(@CurrentRealm() realm: Realm, @Param('policyId') policyId: string) {
+    return this.nhiService.getPolicyRotationStatus(realm, policyId);
+  }
+
+  @Get('rotation-status')
+  @ApiOperation({ summary: 'Get summary of all credentials requiring rotation in the realm' })
+  @ApiResponse({ status: 200, description: 'Credentials requiring rotation summary' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  getRotationStatusSummary(@CurrentRealm() realm: Realm) {
+    return this.nhiService.getRotationStatusSummary(realm);
+  }
+
+  // ── Audit log endpoints ─────────────────────────────────────────────────────
+
+  @Get('audit-logs')
+  @ApiOperation({ summary: 'Query NHI audit logs' })
+  @ApiResponse({ status: 200, description: 'List of NHI audit logs' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  queryAuditLogs(
+    @CurrentRealm() realm: Realm,
+    @Query('nhiIdentityId') nhiIdentityId?: string,
+    @Query('action') action?: string,
+    @Query('success') success?: string,
+    @Query('dateFrom') dateFrom?: string,
+    @Query('dateTo') dateTo?: string,
+    @Query('first') first?: string,
+    @Query('max') max?: string,
+  ) {
+    return this.nhiAuditService.queryAuditLogs({
+      realmId: realm.id,
+      nhiIdentityId,
+      action,
+      success: success !== undefined ? success === 'true' : undefined,
+      dateFrom: dateFrom ? new Date(dateFrom) : undefined,
+      dateTo: dateTo ? new Date(dateTo) : undefined,
+      first: first ? parseInt(first, 10) : undefined,
+      max: max ? parseInt(max, 10) : undefined,
+    });
+  }
+
+  @Delete('audit-logs')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Clear NHI audit logs' })
+  @ApiResponse({ status: 204, description: 'NHI audit logs cleared' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  clearAuditLogs(
+    @CurrentRealm() realm: Realm,
+    @Query('nhiIdentityId') nhiIdentityId?: string,
+  ) {
+    return this.nhiAuditService.clearAuditLogs(realm.id, nhiIdentityId);
   }
 }
