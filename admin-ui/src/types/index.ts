@@ -211,3 +211,26 @@ export interface UserFederation {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface ConsentCategory {
+  id: string;
+  realmId: string;
+  name: string;
+  description: string | null;
+  required: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface ConsentPolicy {
+  id: string;
+  realmId: string;
+  name: string;
+  version: string;
+  description: string | null;
+  isDefault: boolean;
+  isActive: boolean;
+  consentCategories: ConsentCategory[];
+  createdAt: string;
+  updatedAt: string;
+}
