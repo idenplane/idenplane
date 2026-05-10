@@ -195,6 +195,8 @@ model User {
   recoveryCodes       RecoveryCode[]
   webAuthnCredentials WebAuthnCredential[]
   attributes          UserAttribute[]
+  userConsentHistories UserConsentHistory[]
+  pendingDeletion     PendingDeletion?
 
   @@unique([realmId, username])
   @@unique([realmId, email])
@@ -246,6 +248,7 @@ model Client {
   clientRoles    Role[]
   authCodes      AuthorizationCode[]
   consents       UserConsent[]
+  consentHistories UserConsentHistory[]
   defaultScopes  ClientDefaultScope[]
   optionalScopes ClientOptionalScope[]
 
@@ -415,6 +418,104 @@ model UserConsent {
 
   @@unique([userId, clientId])
   @@map("user_consents")
+}
+
+// ─── CONSENT CATEGORIES ──────────────────────────────────
+
+model ConsentCategory {
+  id                  String  @id @default(uuid()) @db.VarChar(36)
+  realmId             String  @map("realm_id") @db.VarChar(36)
+  realm               Realm   @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  name                String  @db.VarChar(191) // Internal identifier
+  displayName         String  @map("display_name") @db.VarChar(255)
+  description         String? @db.Text
+  key                 String  @map("key") @db.VarChar(191)
+  required            Boolean @default(false)
+  configurableByUser   Boolean @default(true) @map("configurable_by_user")
+  showInAccountPortal Boolean @default(true) @map("show_in_account_portal")
+  order               Int     @default(0)
+  enabled             Boolean @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  policies ConsentPolicy[]
+
+  @@unique([realmId, key])
+  @@index([realmId])
+  @@map("consent_categories")
+}
+
+// ─── CONSENT POLICIES ───────────────────────────────────
+
+model ConsentPolicy {
+  id                 String  @id @default(uuid()) @db.VarChar(36)
+  categoryId         String  @map("category_id") @db.VarChar(36)
+  category           ConsentCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  version            String  @map("version") @db.VarChar(50)
+  policyText         String  @map("policy_text") @db.Text
+  isActive           Boolean @default(false) @map("is_active")
+  requiredForAccess  Boolean @default(true) @map("required_for_access")
+  publishedAt        DateTime? @map("published_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([categoryId])
+  @@index([categoryId, isActive])
+  @@map("consent_policies")
+}
+
+// ─── USER CONSENT HISTORY ─────────────────────────────────
+
+model UserConsentHistory {
+  id             String   @id @default(uuid()) @db.VarChar(36)
+  userId         String   @map("user_id") @db.VarChar(36)
+  clientId       String   @map("client_id") @db.VarChar(36)
+  action         String   @db.VarChar(50) // "granted", "revoked", "updated"
+  // MySQL: stored as JSON array
+  scopes         Json     @map("scopes")
+  policyVersion  String?  @map("policy_version") @db.VarChar(50)
+  ipAddress      String?  @map("ip_address") @db.VarChar(45)
+  userAgent      String?  @map("user_agent") @db.Text
+  // MySQL: native JSON column
+  metadata       Json?    @map("metadata")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, clientId])
+  @@map("user_consent_history")
+}
+
+// ─── PENDING DELETION ─────────────────────────────────────
+
+model PendingDeletion {
+  id                  String    @id @default(uuid()) @db.VarChar(36)
+  userId              String    @map("user_id") @db.VarChar(36)
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  requestedAt         DateTime  @default(now()) @map("requested_at")
+  scheduledAt         DateTime  @map("scheduled_at")
+  gracePeriodDays     Int       @default(14) @map("grace_period_days")
+  status              String    @default("pending") @db.VarChar(50) // "pending", "processing", "completed", "cancelled"
+  // Export status
+  exportStatus        String?   @map("export_status") @db.VarChar(50) // "none", "requested", "generated", "downloaded"
+  exportRequestedAt   DateTime? @map("export_requested_at")
+  exportGeneratedAt   DateTime? @map("export_generated_at")
+  exportUrl           String?   @map("export_url") @db.VarChar(500)
+  // Audit fields
+  cancelledAt         DateTime? @map("cancelled_at")
+  cancelledBy         String?    @map("cancelled_by") @db.VarChar(36)
+  completedAt         DateTime? @map("completed_at")
+  ipAddress           String?   @map("ip_address") @db.VarChar(45)
+  createdAt           DateTime  @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([status])
+  @@index([scheduledAt])
+  @@map("pending_deletions")
 }
 
 // ─── GROUPS ─────────────────────────────────────────────

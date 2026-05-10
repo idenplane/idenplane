@@ -1,0 +1,25 @@
+{
+  "active": true,
+  "spec": "009-gdpr-consent-management-ui",
+  "state": "building",
+  "subtasks": {
+    "completed": 16,
+    "total": 30,
+    "in_progress": 1,
+    "failed": 0
+  },
+  "phase": {
+    "current": "Frontend Admin UI",
+    "id": null,
+    "total": 6
+  },
+  "workers": {
+    "active": 0,
+    "max": 1
+  },
+  "session": {
+    "number": 19,
+    "started_at": "2026-05-10T14:17:39.923622"
+  },
+  "last_update": "2026-05-10T16:30:09.737980"
+}

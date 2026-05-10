@@ -24,6 +24,7 @@ import ClientScopeListPage from './pages/client-scopes/ClientScopeListPage';
 import ClientScopeCreatePage from './pages/client-scopes/ClientScopeCreatePage';
 import ClientScopeDetailPage from './pages/client-scopes/ClientScopeDetailPage';
 import ConsentCategoriesListPage from './pages/consent/ConsentCategoriesListPage';
+import ConsentCategoryDetailPage from './pages/consent/ConsentCategoryDetailPage';
 import FederationListPage from './pages/user-federation/FederationListPage';
 import FederationCreatePage from './pages/user-federation/FederationCreatePage';
 import FederationDetailPage from './pages/user-federation/FederationDetailPage';
@@ -73,6 +74,7 @@ export default function App() {
           <Route path="/console/realms/:name/client-scopes/create" element={<ClientScopeCreatePage />} />
           <Route path="/console/realms/:name/client-scopes/:scopeId" element={<ClientScopeDetailPage />} />
           <Route path="/console/realms/:name/consent-categories" element={<ConsentCategoriesListPage />} />
+          <Route path="/console/realms/:name/consent-categories/:categoryId" element={<ConsentCategoryDetailPage />} />
           <Route path="/console/realms/:name/events" element={<LoginEventsPage />} />
           <Route path="/console/realms/:name/admin-events" element={<AdminEventsPage />} />
           <Route path="/console/realms/:name/user-federation" element={<FederationListPage />} />

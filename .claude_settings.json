@@ -1,0 +1,39 @@
+{
+  "sandbox": {
+    "enabled": true,
+    "autoAllowBashIfSandboxed": true
+  },
+  "permissions": {
+    "defaultMode": "acceptEdits",
+    "allow": [
+      "Read(./**)",
+      "Write(./**)",
+      "Edit(./**)",
+      "Glob(./**)",
+      "Grep(./**)",
+      "Read(/home/islam/projects/Authme/Authme/.auto-claude/worktrees/tasks/009-gdpr-consent-management-ui/**)",
+      "Write(/home/islam/projects/Authme/Authme/.auto-claude/worktrees/tasks/009-gdpr-consent-management-ui/**)",
+      "Edit(/home/islam/projects/Authme/Authme/.auto-claude/worktrees/tasks/009-gdpr-consent-management-ui/**)",
+      "Glob(/home/islam/projects/Authme/Authme/.auto-claude/worktrees/tasks/009-gdpr-consent-management-ui/**)",
+      "Grep(/home/islam/projects/Authme/Authme/.auto-claude/worktrees/tasks/009-gdpr-consent-management-ui/**)",
+      "Read(/home/islam/projects/Authme/Authme/.auto-claude/worktrees/tasks/009-gdpr-consent-management-ui/.auto-claude/specs/009-gdpr-consent-management-ui/**)",
+      "Write(/home/islam/projects/Authme/Authme/.auto-claude/worktrees/tasks/009-gdpr-consent-management-ui/.auto-claude/specs/009-gdpr-consent-management-ui/**)",
+      "Edit(/home/islam/projects/Authme/Authme/.auto-claude/worktrees/tasks/009-gdpr-consent-management-ui/.auto-claude/specs/009-gdpr-consent-management-ui/**)",
+      "Read(/home/islam/projects/Authme/Authme/.auto-claude/**)",
+      "Write(/home/islam/projects/Authme/Authme/.auto-claude/**)",
+      "Edit(/home/islam/projects/Authme/Authme/.auto-claude/**)",
+      "Glob(/home/islam/projects/Authme/Authme/.auto-claude/**)",
+      "Grep(/home/islam/projects/Authme/Authme/.auto-claude/**)",
+      "Bash(*)",
+      "WebFetch(*)",
+      "WebSearch(*)",
+      "mcp__context7__resolve-library-id(*)",
+      "mcp__context7__query-docs(*)",
+      "mcp__graphiti-memory__search_nodes(*)",
+      "mcp__graphiti-memory__search_facts(*)",
+      "mcp__graphiti-memory__add_episode(*)",
+      "mcp__graphiti-memory__get_episodes(*)",
+      "mcp__graphiti-memory__get_entity_edge(*)"
+    ]
+  }
+}

@@ -234,3 +234,37 @@ export interface ConsentPolicy {
   createdAt: string;
   updatedAt: string;
 }
+
+export interface DataExportRequest {
+  id: string;
+  realmId: string;
+  userId: string;
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'FAILED';
+  format: 'JSON' | 'CSV';
+  includeSessions: boolean;
+  includeConsents: boolean;
+  includeProfile: boolean;
+  includeActivityLog: boolean;
+  requestedAt: string;
+  completedAt: string | null;
+  expiresAt: string | null;
+  downloadUrl: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface AccountDeletionRequest {
+  id: string;
+  realmId: string;
+  userId: string;
+  status: 'PENDING' | 'PROCESSING' | 'COMPLETED' | 'CANCELLED' | 'GRACE_PERIOD_ACTIVE';
+  scheduledAt: string;
+  gracePeriodDays: number;
+  gracePeriodEndsAt: string | null;
+  completedAt: string | null;
+  reason: string | null;
+  isUserInitiated: boolean;
+  createdAt: string;
+  updatedAt: string;
+}

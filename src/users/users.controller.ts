@@ -204,4 +204,28 @@ export class UsersController {
   ) {
     return this.usersService.revokeOfflineSession(realm, userId, tokenId);
   }
+
+  @Get(':userId/consents')
+  @ApiOperation({ summary: 'List all consents for a user' })
+  @ApiResponse({ status: 200, description: 'List of user consents' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  getUserConsents(
+    @CurrentRealm() realm: Realm,
+    @Param('userId') userId: string,
+  ) {
+    return this.usersService.getUserConsents(realm, userId);
+  }
+
+  @Get(':userId/consents/history')
+  @ApiOperation({ summary: 'Get consent history for a user' })
+  @ApiResponse({ status: 200, description: 'User consent history' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  getUserConsentHistory(
+    @CurrentRealm() realm: Realm,
+    @Param('userId') userId: string,
+  ) {
+    return this.usersService.getUserConsentHistory(realm, userId);
+  }
 }

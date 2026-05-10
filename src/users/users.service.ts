@@ -290,4 +290,67 @@ export class UsersService {
       data: { revoked: true },
     });
   }
+
+  /**
+   * Get all consents for a user in the realm.
+   */
+  async getUserConsents(realm: Realm, userId: string) {
+    await this.findById(realm, userId);
+    const consents = await this.prisma.userConsent.findMany({
+      where: { userId },
+      include: {
+        client: {
+          select: {
+            id: true,
+            clientId: true,
+            name: true,
+            description: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+    return consents.map((consent) => ({
+      id: consent.id,
+      clientId: consent.clientId,
+      clientName: consent.client?.name ?? consent.client?.clientId ?? 'Unknown',
+      scopes: consent.scopes,
+      createdAt: consent.createdAt,
+      updatedAt: consent.updatedAt,
+    }));
+  }
+
+  /**
+   * Get consent history for a user.
+   */
+  async getUserConsentHistory(realm: Realm, userId: string, options?: { limit?: number; offset?: number }) {
+    await this.findById(realm, userId);
+    const history = await this.prisma.userConsentHistory.findMany({
+      where: { userId },
+      include: {
+        client: {
+          select: {
+            id: true,
+            clientId: true,
+            name: true,
+          },
+        },
+      },
+      orderBy: { createdAt: 'desc' },
+      skip: options?.offset ?? 0,
+      take: options?.limit ?? 50,
+    });
+    return history.map((entry) => ({
+      id: entry.id,
+      clientId: entry.clientId,
+      clientName: entry.client?.name ?? entry.client?.clientId ?? 'Unknown',
+      action: entry.action,
+      scopes: entry.scopes,
+      policyVersion: entry.policyVersion,
+      ipAddress: entry.ipAddress,
+      userAgent: entry.userAgent,
+      metadata: entry.metadata,
+      createdAt: entry.createdAt,
+    }));
+  }
 }

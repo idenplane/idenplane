@@ -13,6 +13,27 @@ export interface ConsentRequest {
   oauthParams: Record<string, string>;
 }
 
+export type ConsentAction = 'granted' | 'revoked' | 'updated';
+
+export interface ConsentContext {
+  ipAddress?: string;
+  userAgent?: string;
+  metadata?: Record<string, unknown>;
+}
+
+export interface ConsentHistoryEntry {
+  id: string;
+  userId: string;
+  clientId: string;
+  action: ConsentAction;
+  scopes: string[];
+  policyVersion: string | null;
+  ipAddress: string | null;
+  userAgent: string | null;
+  metadata: Record<string, unknown> | null;
+  createdAt: Date;
+}
+
 @Injectable()
 export class ConsentService {
   private readonly logger = new Logger(ConsentService.name);
@@ -38,26 +59,6 @@ export class ConsentService {
 
     // Check that every requested scope is covered by the stored consent
     return requestedScopes.every((scope) => consent.scopes.includes(scope));
-  }
-
-  /**
-   * Grant consent: upsert the consent record with the given scopes.
-   */
-  async grantConsent(userId: string, clientId: string, scopes: string[]) {
-    return this.prisma.userConsent.upsert({
-      where: { userId_clientId: { userId, clientId } },
-      create: { userId, clientId, scopes },
-      update: { scopes },
-    });
-  }
-
-  /**
-   * Revoke consent for a user-client pair.
-   */
-  async revokeConsent(userId: string, clientId: string) {
-    await this.prisma.userConsent.deleteMany({
-      where: { userId, clientId },
-    });
   }
 
   /**
@@ -109,5 +110,192 @@ export class ConsentService {
     if (count > 0) {
       this.logger.debug(`Cleaned up ${count} expired consent requests`);
     }
+  }
+
+  /**
+   * Record a consent action in the history table.
+   */
+  private async recordConsentHistory(
+    userId: string,
+    clientId: string,
+    action: ConsentAction,
+    scopes: string[],
+    policyVersion?: string,
+    context?: ConsentContext,
+  ): Promise<void> {
+    try {
+      await this.prisma.userConsentHistory.create({
+        data: {
+          userId,
+          clientId,
+          action,
+          scopes,
+          policyVersion: policyVersion ?? null,
+          ipAddress: context?.ipAddress ?? null,
+          userAgent: context?.userAgent ?? null,
+          metadata: context?.metadata
+            ? (context.metadata as unknown as Prisma.InputJsonValue)
+            : null,
+        },
+      });
+    } catch (err) {
+      this.logger.warn(`Failed to record consent history: ${(err as Error).message}`);
+    }
+  }
+
+  /**
+   * Grant consent with history tracking and versioning support.
+   */
+  async grantConsent(
+    userId: string,
+    clientId: string,
+    scopes: string[],
+    policyVersion?: string,
+    context?: ConsentContext,
+  ) {
+    const existing = await this.prisma.userConsent.findUnique({
+      where: { userId_clientId: { userId, clientId } },
+    });
+
+    const action = existing ? 'updated' : 'granted';
+
+    const result = await this.prisma.userConsent.upsert({
+      where: { userId_clientId: { userId, clientId } },
+      create: { userId, clientId, scopes },
+      update: { scopes },
+    });
+
+    await this.recordConsentHistory(userId, clientId, action, scopes, policyVersion, context);
+
+    return result;
+  }
+
+  /**
+   * Revoke consent for a user-client pair with history tracking.
+   */
+  async revokeConsent(
+    userId: string,
+    clientId: string,
+    context?: ConsentContext,
+  ) {
+    const existing = await this.prisma.userConsent.findUnique({
+      where: { userId_clientId: { userId, clientId } },
+    });
+
+    await this.prisma.userConsent.deleteMany({
+      where: { userId, clientId },
+    });
+
+    if (existing) {
+      await this.recordConsentHistory(
+        userId,
+        clientId,
+        'revoked',
+        existing.scopes,
+        undefined,
+        context,
+      );
+    }
+  }
+
+  /**
+   * Get consent history for a user-client pair.
+   */
+  async getConsentHistory(
+    userId: string,
+    clientId: string,
+    options?: { limit?: number; offset?: number },
+  ): Promise<ConsentHistoryEntry[]> {
+    return this.prisma.userConsentHistory.findMany({
+      where: { userId, clientId },
+      orderBy: { createdAt: 'desc' },
+      skip: options?.offset ?? 0,
+      take: options?.limit ?? 50,
+    }) as Promise<ConsentHistoryEntry[]>;
+  }
+
+  /**
+   * Get the latest policy version for a consent category.
+   */
+  async getLatestPolicyVersion(categoryKey: string): Promise<string | null> {
+    const category = await this.prisma.consentCategory.findFirst({
+      where: { key: categoryKey },
+      include: {
+        policies: {
+          where: { isActive: true },
+          orderBy: { publishedAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    if (!category || category.policies.length === 0) {
+      return null;
+    }
+
+    return category.policies[0].version;
+  }
+
+  /**
+   * Check if a policy version change requires re-consent from the user.
+   * Returns true if any previously-accepted scope has a newer active policy.
+   */
+  async requiresReConsent(
+    userId: string,
+    clientId: string,
+    realmId: string,
+  ): Promise<boolean> {
+    const consent = await this.prisma.userConsent.findUnique({
+      where: { userId_clientId: { userId, clientId } },
+    });
+
+    if (!consent) return false;
+
+    // Get categories for this realm
+    const categories = await this.prisma.consentCategory.findMany({
+      where: { realmId, enabled: true },
+      include: {
+        policies: {
+          where: { isActive: true },
+          orderBy: { publishedAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    if (categories.length === 0) return false;
+
+    // Get the most recent history entry for each category
+    const historyEntries = await this.prisma.userConsentHistory.findMany({
+      where: {
+        userId,
+        clientId,
+        policyVersion: { not: null },
+      },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    // Build a map of category key -> last accepted version
+    const lastAcceptedByCategory = new Map<string, string>();
+    for (const entry of historyEntries) {
+      const metadata = entry.metadata as { categoryKey?: string } | null;
+      if (metadata?.categoryKey && !lastAcceptedByCategory.has(metadata.categoryKey)) {
+        lastAcceptedByCategory.set(metadata.categoryKey, entry.policyVersion!);
+      }
+    }
+
+    // Check if any active policy is newer than what the user accepted
+    for (const category of categories) {
+      if (category.policies.length === 0) continue;
+      const activeVersion = category.policies[0].version;
+      const lastAccepted = lastAcceptedByCategory.get(category.key);
+
+      if (lastAccepted && activeVersion !== lastAccepted) {
+        // Policy has changed since user's last consent
+        return true;
+      }
+    }
+
+    return false;
   }
 }

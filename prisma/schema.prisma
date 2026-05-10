@@ -198,6 +198,7 @@ model User {
   attributes          UserAttribute[]
   loginRiskAssessments LoginRiskAssessment[]
   userLoginProfile    UserLoginProfile?
+  pendingDeletion     PendingDeletion?
 
   @@unique([realmId, username])
   @@unique([realmId, email])
@@ -419,6 +420,102 @@ model UserConsent {
 
   @@unique([userId, clientId])
   @@map("user_consents")
+}
+
+// ─── CONSENT CATEGORIES ──────────────────────────────────
+
+model ConsentCategory {
+  id                  String   @id @default(uuid())
+  realmId             String   @map("realm_id")
+  realm               Realm    @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  name                String   // Internal identifier e.g. "marketing", "analytics", "third_party_sharing"
+  displayName         String  @map("display_name") // Human-readable label
+  description         String? // Detailed description of what this consent covers
+  key                 String   @map("key") // Unique key within realm e.g. "marketing_emails"
+  required            Boolean @default(false) // Whether consent is mandatory for this category
+  configurableByUser  Boolean @default(true) @map("configurable_by_user") // Whether user can toggle this
+  showInAccountPortal Boolean @default(true) @map("show_in_account_portal") // Show in account portal
+  order               Int      @default(0) // Display ordering
+  enabled             Boolean @default(true)
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  policies ConsentPolicy[]
+
+  @@unique([realmId, key])
+  @@index([realmId])
+  @@map("consent_categories")
+}
+
+// ─── CONSENT POLICIES ───────────────────────────────────
+
+model ConsentPolicy {
+  id                 String    @id @default(uuid())
+  categoryId         String    @map("category_id")
+  category           ConsentCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  version            String    @map("version") // e.g. "1.0", "1.1", "2.0"
+  policyText         String    @map("policy_text") // The actual policy/policy document content
+  isActive           Boolean   @default(false) @map("is_active") // Whether this is the current active policy
+  requiredForAccess  Boolean   @default(true) @map("required_for_access") // Must accept to use service
+  publishedAt        DateTime? @map("published_at") // When this version was published
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([categoryId])
+  @@index([categoryId, isActive])
+  @@map("consent_policies")
+}
+
+// ─── USER CONSENT HISTORY ─────────────────────────────────
+
+model UserConsentHistory {
+  id             String   @id @default(uuid())
+  userId         String   @map("user_id")
+  clientId       String   @map("client_id")
+  action         String   // "granted", "revoked", "updated"
+  scopes          String[]
+  policyVersion   String?  @map("policy_version")
+  ipAddress       String?  @map("ip_address")
+  userAgent       String?  @map("user_agent")
+  metadata        Json?    // Additional context (e.g., reason, category details)
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+
+  @@index([userId, createdAt])
+  @@index([userId, clientId])
+  @@map("user_consent_history")
+}
+
+// ─── PENDING DELETION ─────────────────────────────────────
+
+model PendingDeletion {
+  id                  String    @id @default(uuid())
+  userId              String    @map("user_id")
+  user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  requestedAt        DateTime  @default(now()) @map("requested_at")
+  scheduledAt        DateTime  @map("scheduled_at") // When deletion will occur (grace period end)
+  gracePeriodDays    Int       @default(14) @map("grace_period_days")
+  status              String    @default("pending") // "pending", "processing", "completed", "cancelled"
+  // Export status - user can request data export during grace period
+  exportStatus        String?   @map("export_status") // "none", "requested", "generated", "downloaded"
+  exportRequestedAt   DateTime? @map("export_requested_at")
+  exportGeneratedAt   DateTime? @map("export_generated_at")
+  exportUrl           String?   @map("export_url")
+  // Audit fields
+  cancelledAt         DateTime? @map("cancelled_at")
+  cancelledBy         String?   @map("cancelled_by")
+  completedAt        DateTime? @map("completed_at")
+  ipAddress          String?   @map("ip_address")
+  createdAt          DateTime  @default(now()) @map("created_at")
+
+  @@index([userId])
+  @@index([status])
+  @@index([scheduledAt])
+  @@map("pending_deletions")
 }
 
 // ─── GROUPS ─────────────────────────────────────────────

@@ -1,0 +1,31 @@
+{
+  "project_type": "monorepo",
+  "services": {
+    "backend": {
+      "path": ".",
+      "tech_stack": ["typescript", "nestjs", "prisma", "postgresql"],
+      "port": 3000,
+      "dev_command": "npm run start:dev",
+      "test_command": "npm run test",
+      "build_command": "npm run build:server"
+    },
+    "admin-ui": {
+      "path": "admin-ui",
+      "tech_stack": ["typescript", "react", "vite", "tailwind"],
+      "port": 5173,
+      "dev_command": "npm run dev",
+      "test_command": "npm test",
+      "build_command": "npm run build"
+    }
+  },
+  "infrastructure": {
+    "docker": true,
+    "docker_compose": "docker-compose.yml",
+    "database": "postgresql"
+  },
+  "conventions": {
+    "linter": "eslint",
+    "formatter": "prettier",
+    "testing": "vitest"
+  }
+}

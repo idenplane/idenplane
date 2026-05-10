@@ -37,3 +37,6 @@ pgdata
 GEMINI.md
 .github/ISSUE_TEMPLATE/auto-task.md
 *.local.md
+
+# Auto Claude data directory
+.auto-claude/

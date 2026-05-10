@@ -20,6 +20,8 @@ import { PasswordPolicyService } from '../password-policy/password-policy.servic
 import { MfaService } from '../mfa/mfa.service.js';
 import { ThemeRenderService } from '../theme/theme-render.service.js';
 import { WebAuthnService } from '../webauthn/webauthn.service.js';
+import { DataExportService } from './data-export.service.js';
+import { AccountDeletionService } from './account-deletion.service.js';
 
 @ApiExcludeController()
 @Controller('realms/:realmName/account')
@@ -34,6 +36,8 @@ export class AccountController {
     private readonly mfaService: MfaService,
     private readonly themeRender: ThemeRenderService,
     private readonly webAuthnService: WebAuthnService,
+    private readonly dataExportService: DataExportService,
+    private readonly accountDeletionService: AccountDeletionService,
   ) {}
 
   private async getSessionUser(realm: Realm, req: Request) {
@@ -273,5 +277,115 @@ export class AccountController {
     await this.mfaService.disableTotp(user.id);
 
     res.redirect(`/realms/${realm.name}/account?success=${encodeURIComponent('Two-factor authentication has been disabled.')}`);
+  }
+
+  // ─── DATA EXPORT ─────────────────────────────────────────
+
+  @Get('data-export')
+  async getDataExport(
+    @CurrentRealm() realm: Realm,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const user = await this.getSessionUser(realm, req);
+    if (!user) {
+      return res.redirect(`/realms/${realm.name}/login`);
+    }
+
+    try {
+      const exportData = await this.dataExportService.exportUserDataAsJson(user.id);
+      res.setHeader('Content-Type', 'application/json');
+      res.setHeader('Content-Disposition', `attachment; filename="user-data-export-${user.username}-${Date.now()}.json"`);
+      res.send(exportData);
+    } catch (error) {
+      res.redirect(`/realms/${realm.name}/account?error=${encodeURIComponent('Failed to export data. Please try again.')}`);
+    }
+  }
+
+  // ─── ACCOUNT DELETION ──────────────────────────────────
+
+  @Get('delete-account')
+  async showDeleteAccount(
+    @CurrentRealm() realm: Realm,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const user = await this.getSessionUser(realm, req);
+    if (!user) {
+      return res.redirect(`/realms/${realm.name}/login`);
+    }
+
+    const query = req.query as Record<string, string>;
+    const deletionStatus = await this.accountDeletionService.getDeletionStatus(user.id);
+
+    this.themeRender.render(res, realm, 'account', 'delete-account', {
+      pageTitle: 'Delete Account',
+      deletionStatus,
+      error: query['error'] ?? '',
+      success: query['success'] ?? '',
+    }, req);
+  }
+
+  @Post('delete-account')
+  async requestDeleteAccount(
+    @CurrentRealm() realm: Realm,
+    @Body() body: Record<string, string>,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const user = await this.getSessionUser(realm, req);
+    if (!user) {
+      return res.redirect(`/realms/${realm.name}/login`);
+    }
+
+    const currentPassword = body['currentPassword'];
+    if (!currentPassword || !user.passwordHash) {
+      return res.redirect(`/realms/${realm.name}/account/delete-account?error=${encodeURIComponent('Password is required to delete your account.')}`);
+    }
+
+    const valid = await this.crypto.verifyPassword(user.passwordHash, currentPassword);
+    if (!valid) {
+      return res.redirect(`/realms/${realm.name}/account/delete-account?error=${encodeURIComponent('Password is incorrect.')}`);
+    }
+
+    try {
+      const gracePeriodDays = realm.deletionGracePeriodDays ?? 14;
+      await this.accountDeletionService.requestDeletion(user.id, gracePeriodDays);
+      res.redirect(`/realms/${realm.name}/account/delete-account?success=${encodeURIComponent(`Account deletion requested. Your account will be permanently deleted after ${gracePeriodDays} days unless cancelled.`)}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to request account deletion.';
+      res.redirect(`/realms/${realm.name}/account/delete-account?error=${encodeURIComponent(message)}`);
+    }
+  }
+
+  @Post('cancel-delete-account')
+  async cancelDeleteAccount(
+    @CurrentRealm() realm: Realm,
+    @Body() body: Record<string, string>,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const user = await this.getSessionUser(realm, req);
+    if (!user) {
+      return res.redirect(`/realms/${realm.name}/login`);
+    }
+
+    const currentPassword = body['currentPassword'];
+    if (!currentPassword || !user.passwordHash) {
+      return res.redirect(`/realms/${realm.name}/account/delete-account?error=${encodeURIComponent('Password is required to cancel account deletion.')}`);
+    }
+
+    const valid = await this.crypto.verifyPassword(user.passwordHash, currentPassword);
+    if (!valid) {
+      return res.redirect(`/realms/${realm.name}/account/delete-account?error=${encodeURIComponent('Password is incorrect.')}`);
+    }
+
+    try {
+      await this.accountDeletionService.cancelDeletion(user.id);
+      res.redirect(`/realms/${realm.name}/account/delete-account?success=${encodeURIComponent('Account deletion has been cancelled. Your account is safe.')}`);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : 'Failed to cancel account deletion.';
+      res.redirect(`/realms/${realm.name}/account/delete-account?error=${encodeURIComponent(message)}`);
+    }
   }
 }

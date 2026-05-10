@@ -80,6 +80,37 @@ export function createMockPrismaService(): MockPrismaService {
       upsert: jest.fn(),
       deleteMany: jest.fn(),
     },
+    userConsentHistory: {
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+      create: jest.fn(),
+    },
+    consentCategory: {
+      findUnique: jest.fn(),
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+    },
+    consentPolicy: {
+      findMany: jest.fn(),
+      create: jest.fn(),
+    },
+    pendingDeletion: {
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+    },
+    authenticationFlow: {
+      findUnique: jest.fn(),
+      findFirst: jest.fn(),
+      findMany: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+    },
     passwordHistory: {
       findMany: jest.fn(),
       create: jest.fn(),
