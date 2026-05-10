@@ -1273,6 +1273,15 @@ model ApiKey {
   revokedAt        DateTime? @map("revoked_at")
   createdAt        DateTime  @default(now()) @map("created_at")
 
+  // Usage quotas
+  maxRequestsPerDay   Int?  @map("max_requests_per_day")
+  maxRequestsPerMonth Int?  @map("max_requests_per_month")
+  rateLimitPerMinute  Int?  @map("rate_limit_per_minute")
+
+  // IP restrictions
+  requireIpRestriction Boolean  @default(false) @map("require_ip_restriction")
+  allowedIpRanges     String[] @default([]) @map("allowed_ip_ranges")
+
   serviceAccount ServiceAccount @relation(fields: [serviceAccountId], references: [id], onDelete: Cascade)
 
   @@index([serviceAccountId])
