@@ -38,5 +38,11 @@ GEMINI.md
 .github/ISSUE_TEMPLATE/auto-task.md
 *.local.md
 
-# Auto Claude data directory
+# Auto Claude generated files
 .auto-claude/
+.auto-claude-security.json
+.auto-claude-status
+.claude_settings.json
+.worktrees/
+.security-key
+logs/security/
