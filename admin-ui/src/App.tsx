@@ -29,6 +29,9 @@ import FederationDetailPage from './pages/user-federation/FederationDetailPage';
 import SamlSpListPage from './pages/saml/SamlSpListPage';
 import SamlSpCreatePage from './pages/saml/SamlSpCreatePage';
 import SamlSpDetailPage from './pages/saml/SamlSpDetailPage';
+import NhiListPage from './pages/nhi/NhiListPage';
+import NhiDetailPage from './pages/nhi/NhiDetailPage';
+import NhiAnalyticsPage from './pages/nhi/NhiAnalyticsPage';
 import LoginEventsPage from './pages/events/LoginEventsPage';
 import AdminEventsPage from './pages/events/AdminEventsPage';
 import AuthFlowListPage from './pages/auth-flows/AuthFlowListPage';
@@ -84,6 +87,10 @@ export default function App() {
           <Route path="/console/realms/:name/saml-providers/:id" element={<SamlSpDetailPage />} />
           <Route path="/console/realms/:name/auth-flows" element={<AuthFlowListPage />} />
           <Route path="/console/realms/:name/auth-flows/:flowId" element={<AuthFlowEditorPage />} />
+          <Route path="/console/realms/:name/nhi" element={<NhiListPage />} />
+          <Route path="/console/realms/:name/nhi/analytics" element={<NhiAnalyticsPage />} />
+          <Route path="/console/realms/:name/nhi/new" element={<NhiListPage />} />
+          <Route path="/console/realms/:name/nhi/:id" element={<NhiDetailPage />} />
           {/* Catch-all for unknown /console/... paths — rendered inside the Layout shell */}
           <Route path="*" element={<NotFoundPage />} />
         </Route>
