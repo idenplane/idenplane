@@ -1,6 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { SmsProvider } from './providers/sms-provider.interface.js';
+import { TwilioSmsProvider } from './providers/twilio.provider.js';
+import { VonageSmsProvider } from './providers/vonage.provider.js';
+import { AwsSnsProvider } from './providers/aws-sns.provider.js';
+import { WebhookSmsProvider } from './providers/webhook.provider.js';
+import { SmsProviderType } from './dto/sms-config.dto.js';
 
 @Injectable()
 export class SmsService {
@@ -30,9 +35,25 @@ export class SmsService {
       return null;
     }
 
-    // Provider instantiation will be handled when additional providers are implemented
+    const provider = this.createProvider(realm.smsProvider as SmsProviderType);
     this.logger.debug(`SMS provider "${realm.smsProvider}" requested for realm "${realmName}"`);
-    return null;
+    return provider;
+  }
+
+  private createProvider(providerType: SmsProviderType): SmsProvider | null {
+    switch (providerType) {
+      case SmsProviderType.TWILIO:
+        return new TwilioSmsProvider();
+      case SmsProviderType.VONAGE:
+        return new VonageSmsProvider();
+      case SmsProviderType.AWS_SNS:
+        return new AwsSnsProvider();
+      case SmsProviderType.WEBHOOK:
+        return new WebhookSmsProvider();
+      default:
+        this.logger.warn(`Unknown SMS provider type: ${providerType}`);
+        return null;
+    }
   }
 
   async sendSms(
@@ -54,6 +75,19 @@ export class SmsService {
       return;
     }
 
-    this.logger.log(`SMS would be sent to ${to} (realm: ${realmName}, provider: ${realm.smsProvider})`);
+    const provider = this.createProvider(realm.smsProvider as SmsProviderType);
+    if (!provider) {
+      this.logger.error(`Failed to create SMS provider for realm "${realmName}"`);
+      throw new Error(`SMS provider "${realm.smsProvider}" could not be instantiated`);
+    }
+
+    try {
+      await provider.sendSms(to, message);
+      this.logger.log(`SMS sent to ${to} (realm: ${realmName}, provider: ${realm.smsProvider})`);
+    } catch (error) {
+      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(`Failed to send SMS to ${to} (realm: ${realmName}): ${errorMessage}`);
+      throw error;
+    }
   }
 }
