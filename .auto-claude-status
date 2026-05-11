@@ -1,25 +1,25 @@
 {
   "active": true,
-  "spec": "001-documentation-site-authme-dev",
+  "spec": "010-hardcoded-default-credentials-in-docker-compose-ym",
   "state": "building",
   "subtasks": {
-    "completed": 22,
-    "total": 27,
+    "completed": 2,
+    "total": 3,
     "in_progress": 1,
     "failed": 0
   },
   "phase": {
-    "current": "Migration Guides",
+    "current": "Fix hardcoded credentials security issue",
     "id": null,
-    "total": 2
+    "total": 3
   },
   "workers": {
     "active": 0,
     "max": 1
   },
   "session": {
-    "number": 25,
-    "started_at": "2026-05-10T03:53:10.267472"
+    "number": 4,
+    "started_at": "2026-05-11T14:42:58.238259"
   },
-  "last_update": "2026-05-10T06:33:17.391527"
+  "last_update": "2026-05-11T15:16:23.016584"
 }
