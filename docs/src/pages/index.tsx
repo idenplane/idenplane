@@ -182,7 +182,7 @@ export default function Home(): JSX.Element {
             <div className={styles.heroCta}>
               <Link
                 className={clsx('button', styles.ctaPrimary)}
-                to="/docs/quickstart"
+                to="/quickstart"
               >
                 Quick Start
                 <svg
@@ -201,7 +201,7 @@ export default function Home(): JSX.Element {
               </Link>
               <Link
                 className={clsx('button', styles.ctaSecondary)}
-                to="/docs/getting-started/installation"
+                to="/getting-started/installation"
               >
                 View Installation Guide
               </Link>
@@ -239,31 +239,31 @@ export default function Home(): JSX.Element {
                 title="Enterprise Security"
                 description="Multi-factor authentication, brute-force protection, and password policies out of the box."
                 icon={<ShieldIcon />}
-                link="/docs/security/mfa"
+                link="/guides/mfa"
               />
               <Feature
                 title="Modern Protocols"
                 description="Support for OAuth 2.0, OpenID Connect, SAML 2.0, and LDAP for seamless integration."
                 icon={<CodeIcon />}
-                link="/docs/getting-started/configuration"
+                link="/getting-started/configuration"
               />
               <Feature
                 title="Cloud Native"
                 description="Container-ready with Docker and Kubernetes. Deploy anywhere with high availability."
                 icon={<CloudIcon />}
-                link="/docs/deployment/docker"
+                link="/deployment/docker"
               />
               <Feature
                 title="SDKs & Integrations"
                 description="Official SDKs for React, Next.js, Vue, Angular, and native mobile platforms."
                 icon={<PuzzleIcon />}
-                link="/docs/guides/sdks/react"
+                link="/guides/sdks/react-sdk"
               />
               <Feature
                 title="User Management"
                 description="Built-in user federation, identity brokering, and social login providers."
                 icon={<UsersIcon />}
-                link="/docs/getting-started/configuration"
+                link="/getting-started/configuration"
               />
               <Feature
                 title="Blazing Fast"
@@ -279,7 +279,7 @@ export default function Home(): JSX.Element {
           <div className={styles.quickLinksContainer}>
             <h2 className={styles.quickLinksTitle}>Jump right in</h2>
             <div className={styles.quickLinksGrid}>
-              <Link to="/docs/quickstart" className={styles.quickLinkCard}>
+              <Link to="/quickstart" className={styles.quickLinkCard}>
                 <div className={styles.quickLinkIcon}>
                   <svg fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M12 6.042A8.967 8.967 0 006 3.75c-1.052 0-2.062.18-3 .512v14.25A8.987 8.987 0 016 18c2.305 0 4.408.867 6 2.292m0-14.25a8.966 8.966 0 016-2.292c1.052 0 2.062.18 3 .512v14.25A8.987 8.987 0 0018 18a8.967 8.967 0 00-6 2.292m0-14.25v14.25" />
@@ -290,7 +290,7 @@ export default function Home(): JSX.Element {
                   <p>Get up and running in 5 minutes</p>
                 </div>
               </Link>
-              <Link to="/docs/getting-started/installation" className={styles.quickLinkCard}>
+              <Link to="/getting-started/installation" className={styles.quickLinkCard}>
                 <div className={styles.quickLinkIcon}>
                   <svg fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M2.25 6L9 12.75l4.286-4.286a11.948 11.948 0 014.306 6.43l.776 2.898m0 0l3.182-5.511m-3.182 5.51l-3.182 5.511" />
@@ -301,7 +301,7 @@ export default function Home(): JSX.Element {
                   <p>Docker, Kubernetes, or bare metal</p>
                 </div>
               </Link>
-              <Link to="/docs/api" className={styles.quickLinkCard}>
+              <Link to="/api" className={styles.quickLinkCard}>
                 <div className={styles.quickLinkIcon}>
                   <svg fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M17.25 6.75L22.5 12l-5.25 5.25m-10.5 0L1.5 12l5.25-5.25m7.5-3l-4.5 16.5" />
@@ -312,7 +312,7 @@ export default function Home(): JSX.Element {
                   <p>Complete REST API documentation</p>
                 </div>
               </Link>
-              <Link to="/docs/migration/keycloak" className={styles.quickLinkCard}>
+              <Link to="/migration/keycloak" className={styles.quickLinkCard}>
                 <div className={styles.quickLinkIcon}>
                   <svg fill="none" viewBox="0 0 24 24" strokeWidth={1.5} stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" d="M7.5 21L3 16.5m0 0L7.5 12M3 16.5h13.5m0-13.5L21 7.5m0 0L16.5 12M21 7.5H7.5" />

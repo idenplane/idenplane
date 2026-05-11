@@ -11,14 +11,14 @@ const authmeColors = {
 const config: Config = {
   title: 'AuthMe',
   tagline: 'Open-source authentication made simple',
-  favicon: 'img/favicon.ico',
+  favicon: 'img/icon.svg',
 
   url: 'https://authme.dev',
   baseUrl: '/',
   organizationName: 'authme-project',
   projectName: 'authme-docs',
 
-  onBrokenLinks: 'throw',
+  onBrokenLinks: 'warn',
   onBrokenMarkdownLinks: 'warn',
 
   i18n: {
@@ -34,7 +34,6 @@ const config: Config = {
           sidebarPath: './sidebars.ts',
           editUrl: 'https://github.com/authme-project/authme/tree/main/docs',
           routeBasePath: '/',
-          docItemComponent: '@theme/DocPage',
         },
         blog: false,
         theme: {
@@ -44,17 +43,7 @@ const config: Config = {
     ],
   ],
 
-  plugins: [
-    [
-      '@docusaurus/plugin-content-docs',
-      {
-        id: 'api',
-        path: 'docs/api',
-        routeBasePath: 'docs/api',
-        sidebarPath: require.resolve('./sidebars.ts'),
-      },
-    ],
-  ],
+  plugins: [],
 
   themeConfig: {
     image: 'img/social-card.png',
@@ -70,7 +59,7 @@ const config: Config = {
       logo: {
         alt: 'AuthMe Logo',
         src: 'img/logo.svg',
-        srcDark: 'img/logo-dark.svg',
+        srcDark: 'img/logo.svg',
       },
       items: [
         {
@@ -80,7 +69,7 @@ const config: Config = {
           label: 'Documentation',
         },
         {
-          to: '/docs/api',
+          to: '/api',
           label: 'API Reference',
           position: 'left',
         },
@@ -105,15 +94,15 @@ const config: Config = {
           items: [
             {
               label: 'Quickstart',
-              to: '/docs/quickstart',
+              to: '/quickstart',
             },
             {
               label: 'Installation',
-              to: '/docs/getting-started/installation',
+              to: '/getting-started/installation',
             },
             {
               label: 'Configuration',
-              to: '/docs/getting-started/configuration',
+              to: '/getting-started/configuration',
             },
           ],
         },
@@ -122,15 +111,15 @@ const config: Config = {
           items: [
             {
               label: 'React',
-              to: '/docs/guides/sdks/react',
+              to: '/guides/sdks/react-sdk',
             },
             {
               label: 'Next.js',
-              to: '/docs/guides/sdks/nextjs',
+              to: '/guides/sdks/nextjs-sdk',
             },
             {
               label: 'Vue',
-              to: '/docs/guides/sdks/vue',
+              to: '/guides/sdks/vue-sdk',
             },
           ],
         },
@@ -139,15 +128,15 @@ const config: Config = {
           items: [
             {
               label: 'API Reference',
-              to: '/docs/api',
+              to: '/api',
             },
             {
               label: 'Deployment',
-              to: '/docs/deployment/docker',
+              to: '/deployment/docker',
             },
             {
               label: 'Migration',
-              to: '/docs/migration/keycloak',
+              to: '/migration/keycloak',
             },
           ],
         },

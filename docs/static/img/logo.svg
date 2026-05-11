@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 200 50" fill="none">
+  <!-- AuthMe Logo -->
+  <!-- Shield shape representing security/authentication -->
+  <path d="M25 5 L45 5 L45 20 Q45 35 25 45 Q5 35 5 20 L5 5 L25 5" fill="#2563eb" stroke="#1d4ed8" stroke-width="2"/>
+  <!-- Lock icon inside shield -->
+  <rect x="15" y="22" width="20" height="15" rx="2" fill="#ffffff"/>
+  <path d="M18 22 V18 Q18 14 25 14 Q32 14 32 18 V22" stroke="#ffffff" stroke-width="3" fill="none"/>
+  <circle cx="25" cy="29" r="2" fill="#2563eb"/>
+  <!-- AuthMe text -->
+  <text x="55" y="32" font-family="system-ui, -apple-system, sans-serif" font-size="22" font-weight="700" fill="#1a1a2e">AuthMe</text>
+</svg>

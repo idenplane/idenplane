@@ -71,32 +71,32 @@ const sidebars: SidebarsConfig = {
       items: [
         {
           type: 'doc',
-          id: 'guides/sdks/react',
+          id: 'guides/sdks/react-sdk',
           label: 'React',
         },
         {
           type: 'doc',
-          id: 'guides/sdks/nextjs',
+          id: 'guides/sdks/nextjs-sdk',
           label: 'Next.js',
         },
         {
           type: 'doc',
-          id: 'guides/sdks/angular',
+          id: 'guides/sdks/angular-sdk',
           label: 'Angular',
         },
         {
           type: 'doc',
-          id: 'guides/sdks/vue',
+          id: 'guides/sdks/vue-sdk',
           label: 'Vue',
         },
         {
           type: 'doc',
-          id: 'guides/sdks/android',
+          id: 'guides/sdks/android-sdk',
           label: 'Android',
         },
         {
           type: 'doc',
-          id: 'guides/sdks/ios',
+          id: 'guides/sdks/ios-sdk',
           label: 'iOS',
         },
       ],

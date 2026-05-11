@@ -1,7 +1,6 @@
 ---
 id: quickstart
 title: Quickstart
-slug: /docs/quickstart
 description: Get AuthMe up and running in under 30 seconds with Docker Compose.
 ---
 

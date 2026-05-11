@@ -1,0 +1,634 @@
+---
+id: auth0
+title: Migrate from Auth0
+sidebar_position: 2
+description: Complete guide to migrating from Auth0 to AuthMe
+---
+
+# Migrate from Auth0
+
+This guide covers migrating users, clients, roles, and connections from Auth0 to AuthMe. The migration is performed using Auth0's Management API export format.
+
+---
+
+## Prerequisites
+
+Before starting the migration:
+
+- [AuthMe installed](/docs/getting-started/installation) and running
+- Admin API key configured
+- Auth0 Management API export file
+- Sufficient database storage for migrated data
+- Existing realm in AuthMe (target realm is **required**)
+
+:::note Target Realm Required
+Unlike Keycloak migrations, Auth0 migrations **require** a target realm to be specified. Create a realm in AuthMe before importing.
+:::
+
+---
+
+## Exporting from Auth0
+
+### Step 1: Export Data Using Management API
+
+Export the following data from Auth0:
+
+```bash
+# Export users
+curl -s -H "Authorization: Bearer ${AUTH0_TOKEN}" \
+  "https://${AUTH0_DOMAIN}/api/v2/users?fields=user_id,email,email_verified,username,name,given_name,family_name,blocked,password_hash,custom_password_hash,app_metadata,user_metadata&include_totals=true" \
+  -o users.json
+
+# Export clients
+curl -s -H "Authorization: Bearer ${AUTH0_TOKEN}" \
+  "https://${AUTH0_DOMAIN}/api/v2/clients?fields=client_id,name,client_secret,app_type,callbacks,allowed_origins,grant_types,token_endpoint_auth_method,is_first_party" \
+  -o clients.json
+
+# Export roles
+curl -s -H "Authorization: Bearer ${AUTH0_TOKEN}" \
+  "https://${AUTH0_DOMAIN}/api/v2/roles?fields=name,description,permissions" \
+  -o roles.json
+
+# Export connections
+curl -s -H "Authorization: Bearer ${AUTH0_DOMAIN}/api/v2/connections?fields=name,strategy,enabled_clients,options" \
+  -o connections.json
+```
+
+### Step 2: Combine Export Files
+
+Create a combined export file:
+
+```json
+{
+  "users": [ /* contents of users.json */ ],
+  "clients": [ /* contents of clients.json */ ],
+  "roles": [ /* contents of roles.json */ ],
+  "connections": [ /* contents of connections.json */ ]
+}
+```
+
+### Step 3: Review Export Contents
+
+The exported JSON contains:
+
+| Section | Description |
+|---------|-------------|
+| `users` | User accounts with credentials and metadata |
+| `clients` | OAuth 2.0 client applications |
+| `roles` | Roles with permissions |
+| `connections` | Identity provider connections (social/enterprise) |
+
+:::warning Sensitive Data
+Exported password hashes depend on Auth0's password hash configuration. See [Password Migration](#password-migration) for details.
+:::
+
+---
+
+## Importing to AuthMe
+
+### Step 1: Create Target Realm
+
+Create a realm to import data into:
+
+```bash
+curl -X POST "http://localhost:3000/admin/realms" \
+  -H "X-API-Key: ${ADMIN_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "my-realm",
+    "displayName": "My Realm",
+    "enabled": true
+  }'
+```
+
+### Step 2: Basic Import
+
+Import the Auth0 export:
+
+```bash
+curl -X POST "http://localhost:3000/admin/migration/auth0" \
+  -H "X-API-Key: ${ADMIN_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "data": '"$(cat auth0-export.json)"',
+    "targetRealm": "my-realm"
+  }'
+```
+
+### Dry Run Mode
+
+Test the migration without making changes:
+
+```bash
+curl -X POST "http://localhost:3000/admin/migration/auth0" \
+  -H "X-API-Key: ${ADMIN_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "data": '"$(cat auth0-export.json)"',
+    "targetRealm": "my-realm",
+    "dryRun": true
+  }'
+```
+
+A dry run returns the same report as a real migration but doesn't modify any data.
+
+---
+
+## Migration Report
+
+The migration returns a detailed report:
+
+```json
+{
+  "success": true,
+  "summary": {
+    "users": { "created": 450, "skipped": 12, "failed": 2 },
+    "clients": { "created": 8, "skipped": 2, "failed": 0 },
+    "roles": { "created": 25, "skipped": 5, "failed": 0 },
+    "identityProviders": { "created": 5, "skipped": 1, "failed": 0 }
+  },
+  "errors": [
+    { "entity": "user", "name": "unknown@example.com", "error": "No username, email, or user_id" }
+  ],
+  "warnings": [
+    { "entity": "organizations", "message": "3 Auth0 organizations found. Use AuthMe's Organization module to recreate them." },
+    { "entity": "connection", "message": "Database connection 'Username-Password-Connection' skipped — Auth0 DB connections don't map to identity providers" },
+    { "entity": "client", "message": "Client 'my-app' has a wildcard webOrigin '*' — it has been stripped during import." }
+  ]
+}
+```
+
+### Response Fields
+
+| Field | Type | Description |
+|-------|------|-------------|
+| `success` | boolean | Overall migration success |
+| `summary.users.created` | number | Users successfully created |
+| `summary.users.skipped` | number | Users skipped due to conflicts |
+| `summary.users.failed` | number | Users that failed to import |
+| `summary.clients.created` | number | Clients successfully created |
+| `summary.roles.created` | number | Roles successfully created |
+| `summary.identityProviders.created` | number | Identity providers created |
+
+### Error Reasons
+
+| Entity | Error | Resolution |
+|--------|-------|------------|
+| `realm` | Realm does not exist | Create the realm first |
+| `user` | No username, email, or user_id | Fix export data |
+| `client` | (varies) | Check Auth0 export format |
+| `role` | (varies) | Check Auth0 export format |
+
+---
+
+## Password Migration
+
+### Supported Algorithms
+
+AuthMe recognizes and preserves password hashes for:
+
+| Algorithm | Migration Status |
+|-----------|-----------------|
+| bcrypt | Preserved |
+| pbkdf2-sha256 | Preserved |
+| pbkdf2-sha512 | Preserved |
+| argon2 | Preserved |
+
+### How Auth0 Password Hashes Are Exported
+
+Auth0 supports multiple password hash configurations:
+
+```typescript
+// Standard Auth0 export format
+{
+  "password_hash": "bcrypt_hash_here"
+}
+
+// Custom password hash configuration
+{
+  "custom_password_hash": {
+    "algorithm": "bcrypt",
+    "hash": { "value": "hash_value", "encoding": "utf8" },
+    "salt": { "value": "salt_value", "position": "suffix" }
+  }
+}
+```
+
+### Users Without Password Hashes
+
+Users without password hashes (imported from external identity providers) will be imported **without** a password. These users must complete account linking or password reset:
+
+```bash
+# Trigger password reset for users without passwords
+curl -X POST "http://localhost:3000/admin/realms/my-realm/users/${USER_ID}/execute-actions-email" \
+  -H "X-API-Key: ${ADMIN_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '["VERIFY_ACTION", "UPDATE_PASSWORD"]'
+```
+
+:::tip Auth0 Password Hash Configuration
+Configure Auth0 to export passwords with a supported algorithm (bcrypt recommended) before exporting for migration.
+:::
+
+---
+
+## Client Migration
+
+### Imported Client Properties
+
+| Property | Mapping |
+|----------|---------|
+| `client_id` | Client ID |
+| `name` | Client name |
+| `client_secret` | Hashed client secret (if present) |
+| `callbacks` | Redirect URIs |
+| `allowed_origins` | Web origins |
+| `grant_types` | OAuth 2.0 grant types |
+| `token_endpoint_auth_method` | Client type (public/confidential) |
+
+### Grant Type Mapping
+
+| Auth0 Grant | AuthMe Grant |
+|------------|--------------|
+| `authorization_code` | `authorization_code` |
+| `client_credentials` | `client_credentials` |
+| `password` | `password` |
+| `refresh_token` | `refresh_token` |
+| `urn:ietf:params:oauth:grant-type:device_code` | `urn:ietf:params:oauth:grant-type:device_code` |
+
+### Public vs Confidential Clients
+
+Auth0 `token_endpoint_auth_method`:
+
+| Auth0 Method | AuthMe Client Type |
+|-------------|-------------------|
+| `none` | PUBLIC |
+| Other methods | CONFIDENTIAL |
+
+### Wildcard Origins
+
+Wildcard web origins (`*`) are automatically stripped with a warning:
+
+```json
+{
+  "warnings": [
+    { "entity": "client", "message": "Client 'my-app' has a wildcard webOrigin '*' — it has been stripped during import." }
+  ]
+}
+```
+
+### Regenerate Client Secrets
+
+After migration, regenerate secrets for confidential clients:
+
+```bash
+curl -X POST "http://localhost:3000/admin/realms/my-realm/clients/${CLIENT_ID}/regenerate-secret" \
+  -H "X-API-Key: ${ADMIN_API_KEY}"
+```
+
+**Response:**
+
+```json
+{
+  "value": "new-client-secret-here",
+  "type": "secret"
+}
+```
+
+---
+
+## Role Migration
+
+### Imported Role Properties
+
+| Property | Mapping |
+|----------|---------|
+| `name` | Role name |
+| `description` | Role description |
+
+### Permissions
+
+Auth0 role permissions are **not** migrated. These need to be recreated using AuthMe's authorization policies:
+
+```typescript
+// Auth0 permission format
+{
+  "permission_name": "read:users",
+  "resource_server_identifier": "my-api"
+}
+
+// AuthMe equivalent: Create ABAC policy
+{
+  "effect": "ALLOW",
+  "actions": ["users:read"],
+  "resources": ["urn:authme:resource:users:*"]
+}
+```
+
+See [Authorization Guide](/docs/guides/authorization) for policy creation.
+
+---
+
+## Identity Provider Migration
+
+### Connection Strategies
+
+Auth0 connections are migrated as identity providers based on strategy:
+
+| Strategy | AuthMe Provider Type |
+|----------|---------------------|
+| `google-oauth2`, `github`, `facebook`, `microsoft`, `apple`, `linkedin`, `twitter` | OIDC |
+| `oauth2` variants | OIDC |
+| `samlp`, `adfs` | SAML |
+| `auth0` | Skipped (database connections) |
+
+### Database Connections
+
+Auth0 database connections (Username-Password-Authentication) are **not** migrated:
+
+```json
+{
+  "warnings": [
+    { "entity": "connection", "message": "Database connection 'my-db-connection' skipped — Auth0 DB connections don't map to identity providers" }
+  ]
+}
+```
+
+### Imported Provider Properties
+
+| Property | Mapping |
+|----------|---------|
+| `name` | Provider alias and display name |
+| `strategy` | Provider type (OIDC/SAML) |
+| `options.client_id` | Provider client ID |
+| `options.client_secret` | Provider client secret |
+| `options.authorization_endpoint` | Authorization URL |
+| `options.token_endpoint` | Token URL |
+
+---
+
+## Organizations
+
+Auth0 Organizations are **not** automatically migrated:
+
+```json
+{
+  "warnings": [
+    { "entity": "organizations", "message": "3 Auth0 organizations found. Use AuthMe's Organization module to recreate them." }
+  ]
+}
+```
+
+Recreate organizations manually in AuthMe. See [Multi-Tenancy Documentation](/docs/guides/authorization) for organization setup.
+
+---
+
+## Handling Large Exports
+
+### Batch Processing
+
+For exports with more than 5,000 users:
+
+1. Split the export into multiple JSON files by user_id range
+2. Import each batch separately
+3. Use the same `targetRealm` for consistent migration
+
+### Splitting Users
+
+```bash
+# Count users
+USER_COUNT=$(jq '.users | length' export.json)
+
+# Split into batches of 2000
+jq '.users[:2000]' export.json > batch1.json
+jq '.users[2000:4000]' export.json > batch2.json
+jq '.users[4000:]' export.json > batch3.json
+```
+
+### Creating Batched Export Files
+
+```bash
+# Batch 1
+{
+  "users": [contents of batch1.json],
+  "clients": [original clients],
+  "roles": [original roles],
+  "connections": [original connections]
+} > batch1-export.json
+
+# Batch 2 (same structure)
+```
+
+### Sequential Import
+
+```bash
+# Import batch 1
+curl -X POST "http://localhost:3000/admin/migration/auth0" \
+  -H "X-API-Key: ${ADMIN_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d "{\"data\": $(cat batch1-export.json), \"targetRealm\": \"my-realm\"}"
+
+# Import batch 2
+curl -X POST "http://localhost:3000/admin/migration/auth0" \
+  -H "X-API-Key: ${ADMIN_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d "{\"data\": $(cat batch2-export.json), \"targetRealm\": \"my-realm\"}"
+```
+
+---
+
+## Post-Migration Steps
+
+### 1. Verify User Count
+
+```bash
+curl -X GET "http://localhost:3000/admin/realms/my-realm/users?limit=1" \
+  -H "X-API-Key: ${ADMIN_API_KEY}"
+```
+
+### 2. Verify Role Mappings
+
+```bash
+curl -X GET "http://localhost:3000/admin/realms/my-realm/roles" \
+  -H "X-API-Key: ${ADMIN_API_KEY}"
+```
+
+### 3. Test Authentication
+
+Create a test script to verify migrated users can authenticate:
+
+```typescript
+async function testMigration(realm: string, testUsers: { username: string; password: string }[]) {
+  const results: { user: string; success: boolean; error?: string }[] = [];
+
+  for (const { username, password } of testUsers) {
+    try {
+      const response = await fetch(
+        `http://localhost:3000/realms/${realm}/protocol/openid-connect/token`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+          body: new URLSearchParams({
+            username,
+            password,
+            grant_type: 'password',
+            client_id: 'admin-cli',
+          }),
+        }
+      );
+
+      results.push({ user: username, success: response.ok });
+    } catch (error) {
+      results.push({ user: username, success: false, error: String(error) });
+    }
+  }
+
+  return results;
+}
+```
+
+### 4. Update Application Configurations
+
+Update applications to use AuthMe endpoints:
+
+| Auth0 Endpoint | AuthMe Endpoint |
+|-----------------|-----------------|
+| `.../.auth0.com/authorize` | `.../realms/{realm}/protocol/openid-connect/auth` |
+| `.../.auth0.com/oauth/token` | `.../realms/{realm}/protocol/openid-connect/token` |
+| `.../.auth0.com/userinfo` | `.../realms/{realm}/protocol/openid-connect/userinfo` |
+| `.../.auth0.com/logout` | `.../realms/{realm}/protocol/openid-connect/logout` |
+
+### 5. Re-link Social Accounts
+
+Users with social identity links will need to re-link their accounts after migration:
+
+1. Users go to account settings
+2. Click "Link Social Account"
+3. Re-authorize the identity provider
+
+### 6. Recreate Organizations
+
+Auth0 Organizations need to be manually recreated:
+
+1. Create organizations in AuthMe
+2. Assign users to organizations
+3. Configure organization-specific settings
+
+### 7. Notify Users
+
+Send communications to users about the migration:
+
+- Migration completion date
+- Password reset requirements (if applicable)
+- Social account re-linking instructions
+- New login URL
+- Support contacts
+
+---
+
+## Troubleshooting
+
+### Import Fails with "Realm does not exist"
+
+**Cause:** Target realm not created before import.
+
+**Solution:** Create the realm first:
+
+```bash
+curl -X POST "http://localhost:3000/admin/realms" \
+  -H "X-API-Key: ${ADMIN_API_KEY}" \
+  -H "Content-Type: application/json" \
+  -d '{"name": "my-realm", "displayName": "My Realm"}'
+```
+
+### Users Not Migrating
+
+**Cause:** User conflicts with existing data.
+
+**Solution:** Check the migration report for skip reasons and resolve conflicts.
+
+### Passwords Not Preserved
+
+**Cause:** No password hash in Auth0 export.
+
+**Solution:** Configure Auth0 password hash settings, then re-export. Users must complete password reset.
+
+### Identity Providers Not Migrating
+
+**Cause:** Database connections are skipped automatically.
+
+**Solution:** Database connections don't map to identity providers. Social/enterprise connections should migrate. Check the `strategy` field in your export.
+
+### Wildcard Origins Stripped
+
+**Cause:** Wildcard web origins (`*`) are not allowed in AuthMe.
+
+**Solution:** After migration, configure explicit allowed origins for affected clients.
+
+---
+
+## API Reference
+
+### POST /admin/migration/auth0
+
+Import data from Auth0 Management API export.
+
+**Request:**
+
+```json
+{
+  "data": {
+    "users": [/* Auth0 users */],
+    "clients": [/* Auth0 clients */],
+    "roles": [/* Auth0 roles */],
+    "connections": [/* Auth0 connections */]
+  },
+  "dryRun": false,
+  "targetRealm": "my-realm"
+}
+```
+
+**Parameters:**
+
+| Parameter | Type | Required | Description |
+|-----------|------|----------|-------------|
+| `data` | object | Yes | Auth0 Management API export JSON |
+| `dryRun` | boolean | No | Test migration without changes (default: false) |
+| `targetRealm` | string | Yes | Target realm name (required) |
+
+**Response:** Migration report with counts of created/skipped/failed entities.
+
+**Error Responses:**
+
+| Status | Description |
+|--------|-------------|
+| 400 | Bad request — invalid payload or missing targetRealm |
+| 401 | Unauthorized — missing or invalid admin API key |
+
+---
+
+## Next Steps
+
+<div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
+
+[**Authentication Guide**](/docs/guides/authentication)
+Learn about OAuth 2.0 and OIDC authentication flows
+
+[**Authorization Guide**](/docs/guides/authorization)
+Understand RBAC and access control policies
+
+[**API Reference**](/docs/api)
+Complete REST API documentation with examples
+
+[**React SDK**](/docs/guides/sdks/react)
+Integrate AuthMe into your React application
+
+</div>
+
+---
+
+<p align="center">
+  <a href="https://authme.dev">authme.dev</a> &middot;
+  <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
+  <a href="https://discord.gg/authme">Discord</a>
+</p>
