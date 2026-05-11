@@ -33,6 +33,11 @@ import LoginEventsPage from './pages/events/LoginEventsPage';
 import AdminEventsPage from './pages/events/AdminEventsPage';
 import AuthFlowListPage from './pages/auth-flows/AuthFlowListPage';
 import AuthFlowEditorPage from './pages/auth-flows/AuthFlowEditorPage';
+import SetupWizardPage from './pages/setup-wizard/SetupWizardPage';
+import PendingRegistrationsPage from './pages/registration/PendingRegistrationsPage';
+import RegistrationFieldsPage from './pages/registration/RegistrationFieldsPage';
+import PublicRegistrationPage from './pages/registration/PublicRegistrationPage';
+import RegistrationSettingsPage from './pages/registration/RegistrationSettingsPage';
 import NotFoundPage from './pages/NotFoundPage';
 import { hasCredentials } from './api/client';
 
@@ -50,6 +55,7 @@ export default function App() {
     <ErrorBoundary>
     <Routes>
       <Route path="/console/login" element={<LoginPage />} />
+      <Route path="/setup" element={<SetupWizardPage />} />
 
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>
@@ -84,6 +90,9 @@ export default function App() {
           <Route path="/console/realms/:name/saml-providers/:id" element={<SamlSpDetailPage />} />
           <Route path="/console/realms/:name/auth-flows" element={<AuthFlowListPage />} />
           <Route path="/console/realms/:name/auth-flows/:flowId" element={<AuthFlowEditorPage />} />
+          <Route path="/console/registration-approvals" element={<PendingRegistrationsPage />} />
+          <Route path="/console/realms/:name/registration-fields" element={<RegistrationFieldsPage />} />
+          <Route path="/console/realms/:name/registration-settings" element={<RegistrationSettingsPage />} />
           {/* Catch-all for unknown /console/... paths — rendered inside the Layout shell */}
           <Route path="*" element={<NotFoundPage />} />
         </Route>

@@ -22,6 +22,7 @@ import { ThemeService } from '../theme/theme.service.js';
 import { ThemeEmailService } from '../theme/theme-email.service.js';
 import { CreateRealmDto } from './dto/create-realm.dto.js';
 import { UpdateRealmDto } from './dto/update-realm.dto.js';
+import { IsEmail } from 'class-validator';
 import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
 import { AdminRolesGuard } from '../common/guards/admin-roles.guard.js';
 import { RequireAdminRoles } from '../common/decorators/require-admin-roles.decorator.js';
@@ -148,6 +149,17 @@ export class RealmsController {
     return this.importService.importRealm(body, {
       overwrite: overwrite === 'true',
     });
+  }
+
+  @Post(':realmName/smtp/test')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Test SMTP configuration' })
+  @ApiResponse({ status: 200, description: 'SMTP test result' })
+  @ApiResponse({ status: 400, description: 'SMTP not configured' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Realm not found' })
+  async testSmtp(@Param('realmName') realmName: string) {
+    return this.emailService.sendTestEmail(realmName);
   }
 
   @Post(':realmName/email/test')
