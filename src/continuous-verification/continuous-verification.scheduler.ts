@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Interval, Cron } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { ContinuousRiskAssessmentService } from './continuous-risk.service.js';
+import { SessionStepUpTrigger } from './session-step-up-trigger.js';
+import { SessionTerminationService } from './session-termination.service.js';
 
 @Injectable()
 export class ContinuousVerificationScheduler {
@@ -10,6 +12,8 @@ export class ContinuousVerificationScheduler {
   constructor(
     private readonly prisma: PrismaService,
     private readonly continuousRiskService: ContinuousRiskAssessmentService,
+    private readonly stepUpTrigger: SessionStepUpTrigger,
+    private readonly terminationService: SessionTerminationService,
   ) {}
 
   /**
@@ -111,41 +115,17 @@ export class ContinuousVerificationScheduler {
   /**
    * Check for sessions requiring immediate step-up authentication.
    * Runs every minute to catch sessions that crossed risk thresholds.
+   * Delegates to SessionStepUpTrigger for actual step-up enforcement.
    */
   @Interval(60_000) // every minute
   async checkStepUpRequired(): Promise<void> {
-    const now = new Date();
-
-    // Find sessions where step-up is required but not yet expired
-    const stepUpSessions = await this.prisma.sessionRiskProfile.findMany({
-      where: {
-        stepUpRequired: true,
-        terminateSession: false,
-        stepUpExpiresAt: { gte: now },
-      },
-      select: {
-        id: true,
-        sessionId: true,
-        realmId: true,
-        userId: true,
-        stepUpReason: true,
-        stepUpExpiresAt: true,
-      },
-    });
-
-    if (stepUpSessions.length === 0) {
-      return;
-    }
-
-    this.logger.debug(
-      `Found ${stepUpSessions.length} session(s) requiring step-up authentication`,
-    );
-
-    // Log for monitoring/alerting - actual step-up enforcement happens
-    // through the session-step-up-trigger.ts service
-    for (const session of stepUpSessions) {
-      this.logger.log(
-        `Session ${session.sessionId} requires step-up: ${session.stepUpReason ?? 'Risk threshold exceeded'}`,
+    // Delegate to the SessionStepUpTrigger service
+    // which handles step-up record creation and ACR level determination
+    try {
+      await this.stepUpTrigger.checkAndTriggerStepUp();
+    } catch (error) {
+      this.logger.error(
+        `Step-up trigger failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }
@@ -153,38 +133,17 @@ export class ContinuousVerificationScheduler {
   /**
    * Identify and flag sessions for termination due to critical risk.
    * Runs every 2 minutes for timely session termination.
+   * Delegates to SessionTerminationService for actual session revocation.
    */
   @Interval(120_000) // every 2 minutes
   async checkTerminateRequired(): Promise<void> {
-    const now = new Date();
-
-    // Find sessions marked for termination
-    const terminateSessions = await this.prisma.sessionRiskProfile.findMany({
-      where: {
-        terminateSession: true,
-      },
-      select: {
-        id: true,
-        sessionId: true,
-        realmId: true,
-        userId: true,
-        terminationReason: true,
-      },
-    });
-
-    if (terminateSessions.length === 0) {
-      return;
-    }
-
-    this.logger.warn(
-      `Found ${terminateSessions.length} session(s) marked for termination`,
-    );
-
-    // Log termination events - actual termination is performed
-    // through the session-termination.service.ts
-    for (const session of terminateSessions) {
-      this.logger.warn(
-        `Session ${session.sessionId} marked for termination: ${session.terminationReason ?? 'Critical risk detected'}`,
+    // Delegate to the SessionTerminationService
+    // which handles actual session revocation via SessionsService
+    try {
+      await this.terminationService.checkAndTerminateSessions();
+    } catch (error) {
+      this.logger.error(
+        `Session termination check failed: ${error instanceof Error ? error.message : String(error)}`,
       );
     }
   }

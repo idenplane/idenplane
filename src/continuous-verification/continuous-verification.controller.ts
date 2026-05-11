@@ -1,13 +1,15 @@
 import {
   Controller,
   Get,
+  Post,
   Param,
   Query,
+  Body,
   NotFoundException,
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
+import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiBody } from '@nestjs/swagger';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { ContinuousRiskAssessmentService } from './continuous-risk.service.js';
 import { DevicePostureService } from './device-posture.service.js';
@@ -415,6 +417,258 @@ export class ContinuousVerificationController {
           }
         : null,
       recentSamplesCount: biometricSamples.length,
+    };
+  }
+
+  // ── SDK Client Endpoints ──────────────────────────────────────────────────────
+
+  /**
+   * Record device posture data from SDK/client.
+   * This endpoint is called by the client SDK to report device security status.
+   */
+  @Post('device-posture')
+  @ApiOperation({ summary: 'Record device posture from SDK client' })
+  @ApiResponse({ status: 201, description: 'Device posture recorded' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string' },
+        realmId: { type: 'string' },
+        userId: { type: 'string' },
+        deviceFingerprint: { type: 'string' },
+        osType: { type: 'string', nullable: true },
+        osVersion: { type: 'string', nullable: true },
+        osBuild: { type: 'string', nullable: true },
+        securityPatchLevel: { type: 'string', nullable: true },
+        lastUpdateDate: { type: 'string', nullable: true },
+        diskEncrypted: { type: 'boolean', nullable: true },
+        encryptionType: { type: 'string', nullable: true },
+        antivirusEnabled: { type: 'boolean', nullable: true },
+        antivirusName: { type: 'string', nullable: true },
+        firewallEnabled: { type: 'boolean', nullable: true },
+        screenLockEnabled: { type: 'boolean' },
+        lockTimeoutSeconds: { type: 'number', nullable: true },
+        managedDevice: { type: 'boolean' },
+        mdmEnrollmentId: { type: 'string', nullable: true },
+        jailbroken: { type: 'boolean' },
+        deviceTrustTier: { type: 'string' },
+        complianceStatus: { type: 'string', nullable: true },
+        complianceDetails: { type: 'object', nullable: true },
+      },
+    },
+  })
+  async recordDevicePosture(
+    @Param('realm') realmName: string,
+    @Body() body: {
+      sessionId: string;
+      realmId: string;
+      userId: string;
+      deviceFingerprint: string;
+      osType?: string | null;
+      osVersion?: string | null;
+      osBuild?: string | null;
+      securityPatchLevel?: string | null;
+      lastUpdateDate?: string | null;
+      diskEncrypted?: boolean | null;
+      encryptionType?: string | null;
+      antivirusEnabled?: boolean | null;
+      antivirusName?: string | null;
+      firewallEnabled?: boolean | null;
+      screenLockEnabled?: boolean;
+      lockTimeoutSeconds?: number | null;
+      managedDevice?: boolean;
+      mdmEnrollmentId?: string | null;
+      jailbroken?: boolean;
+      deviceTrustTier?: string;
+      complianceStatus?: string | null;
+      complianceDetails?: unknown;
+    },
+  ) {
+    const realm = await this.requireRealm(realmName);
+
+    await this.riskAssessment.recordDevicePosture(
+      body.sessionId,
+      realm.id,
+      body.userId,
+      body.deviceFingerprint,
+      {
+        osType: body.osType,
+        osVersion: body.osVersion,
+        osBuild: body.osBuild,
+        securityPatchLevel: body.securityPatchLevel ? new Date(body.securityPatchLevel) : null,
+        lastUpdateDate: body.lastUpdateDate ? new Date(body.lastUpdateDate) : null,
+        diskEncrypted: body.diskEncrypted,
+        encryptionType: body.encryptionType,
+        antivirusEnabled: body.antivirusEnabled,
+        antivirusName: body.antivirusName,
+        firewallEnabled: body.firewallEnabled,
+        screenLockEnabled: body.screenLockEnabled,
+        lockTimeoutSeconds: body.lockTimeoutSeconds,
+        managedDevice: body.managedDevice,
+        mdmEnrollmentId: body.mdmEnrollmentId,
+        jailbroken: body.jailbroken,
+        deviceTrustTier: body.deviceTrustTier,
+        complianceStatus: body.complianceStatus,
+        complianceDetails: body.complianceDetails,
+      },
+    );
+
+    return {
+      success: true,
+      recordedAt: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Record behavioral biometric samples from SDK/client.
+   */
+  @Post('behavioral/samples')
+  @ApiOperation({ summary: 'Record behavioral biometric samples from SDK client' })
+  @ApiResponse({ status: 201, description: 'Samples recorded' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string' },
+        samples: {
+          type: 'array',
+          items: {
+            type: 'object',
+            properties: {
+              interactionType: { type: 'string', enum: ['typing', 'pointer', 'scroll', 'keystroke'] },
+              burstLength: { type: 'number', nullable: true },
+              latency: { type: 'number', nullable: true },
+              velocity: { type: 'number', nullable: true },
+              variance: { type: 'number', nullable: true },
+              scrollVelocity: { type: 'number', nullable: true },
+              eventCount: { type: 'number', nullable: true },
+              hasErrors: { type: 'boolean' },
+              collectedAt: { type: 'string' },
+            },
+          },
+        },
+      },
+    },
+  })
+  async recordBehavioralSamples(
+    @Param('realm') realmName: string,
+    @Body() body: { sessionId: string; samples: Array<{
+      interactionType: string;
+      burstLength?: number | null;
+      latency?: number | null;
+      velocity?: number | null;
+      variance?: number | null;
+      scrollVelocity?: number | null;
+      eventCount?: number | null;
+      hasErrors?: boolean;
+      collectedAt?: string;
+    }> },
+  ) {
+    const realm = await this.requireRealm(realmName);
+
+    // Get session info to find userId
+    const session = await this.prisma.session.findUnique({
+      where: { id: body.sessionId },
+      select: { userId: true },
+    });
+
+    const userId = session?.userId ?? 'unknown';
+
+    // Record each sample
+    for (const sample of body.samples) {
+      await this.behavioralBiometrics.recordSample(
+        body.sessionId,
+        userId,
+        realm.id,
+        sample.interactionType as 'typing' | 'pointer' | 'scroll' | 'keystroke',
+        {
+          burstLength: sample.burstLength,
+          latency: sample.latency,
+          velocity: sample.velocity,
+          variance: sample.variance,
+          scrollVelocity: sample.scrollVelocity,
+          eventCount: sample.eventCount,
+          hasErrors: sample.hasErrors,
+        },
+        sample.collectedAt ? new Date(sample.collectedAt) : new Date(),
+      );
+    }
+
+    return {
+      success: true,
+      recordedCount: body.samples.length,
+      recordedAt: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Record network context from SDK/client.
+   */
+  @Post('network-context')
+  @ApiOperation({ summary: 'Record network context from SDK client' })
+  @ApiResponse({ status: 201, description: 'Network context recorded' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiBody({
+    schema: {
+      type: 'object',
+      properties: {
+        sessionId: { type: 'string' },
+        ipAddress: { type: 'string', nullable: true },
+        isp: { type: 'string', nullable: true },
+        asn: { type: 'string', nullable: true },
+        vpnDetected: { type: 'boolean' },
+        proxyDetected: { type: 'boolean' },
+        torExitNode: { type: 'boolean' },
+        datacenter: { type: 'boolean' },
+        country: { type: 'string', nullable: true },
+        city: { type: 'string', nullable: true },
+        latitude: { type: 'number', nullable: true },
+        longitude: { type: 'number', nullable: true },
+      },
+    },
+  })
+  async recordNetworkContext(
+    @Param('realm') realmName: string,
+    @Body() body: {
+      sessionId: string;
+      ipAddress?: string | null;
+      isp?: string | null;
+      asn?: string | null;
+      vpnDetected?: boolean;
+      proxyDetected?: boolean;
+      torExitNode?: boolean;
+      datacenter?: boolean;
+      country?: string | null;
+      city?: string | null;
+      latitude?: number | null;
+      longitude?: number | null;
+    },
+  ) {
+    const realm = await this.requireRealm(realmName);
+
+    // Get session info
+    const session = await this.prisma.session.findUnique({
+      where: { id: body.sessionId },
+      select: { userId: true },
+    });
+
+    // Record via network context service
+    if (body.ipAddress) {
+      await this.networkContextService.captureNetworkContext(
+        body.ipAddress,
+        'SDK_REPORT',
+        body.sessionId,
+        realm.id,
+        session?.userId,
+      );
+    }
+
+    return {
+      success: true,
+      recordedAt: new Date().toISOString(),
     };
   }
 
