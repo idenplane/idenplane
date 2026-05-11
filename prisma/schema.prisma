@@ -1233,6 +1233,31 @@ model ServiceAccount {
   @@map("service_accounts")
 }
 
+model UpgradeAuditLog {
+  id                  String    @id
+  fromVersion         String    @map("from_version")
+  toVersion           String    @map("to_version")
+  status              String
+  startedAt           DateTime  @default(now()) @map("started_at")
+  completedAt         DateTime? @map("completed_at")
+  durationMs          Int?      @map("duration_ms")
+  initiatedBy         String?   @map("initiated_by")
+  backupId            String?   @map("backup_id")
+  rollbackFromVersion String?   @map("rollback_from_version")
+  errorMessage        String?   @map("error_message")
+  checksPassed        Json?     @map("checks_passed")
+  checksFailed        Json?     @map("checks_failed")
+  stepsCompleted      Json?     @map("steps_completed")
+  stepsFailed         Json?     @map("steps_failed")
+  metadata            Json?
+
+  @@index([status])
+  @@index([fromVersion])
+  @@index([toVersion])
+  @@index([startedAt])
+  @@map("upgrade_audit_log")
+}
+
 model ApiKey {
   id               String    @id @default(uuid())
   serviceAccountId String    @map("service_account_id")

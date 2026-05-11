@@ -580,8 +580,10 @@ export class UpgradeService {
   ): Promise<{ success: boolean; message: string }> {
     try {
       const stageNames = stages.filter((s) => s.success).map((s) => s.stage);
-      const backupResult = stages.find((s) => s.stage === UpgradeStage.BACKUP && s.success);
-      const backupId = backupResult?.details?.split(': ')[1]?.trim();
+      const backupStage = stages.find((s) => s.stage === UpgradeStage.BACKUP && s.success);
+      // backupStage.message contains "Backup created: {backupPath}" - extract the path
+      const backupIdMatch = backupStage?.message?.match(/Backup created: (.+)/);
+      const backupId = backupIdMatch ? backupIdMatch[1] : null;
 
       await this.prisma.upgradeAuditLog.update({
         where: { id: upgradeId },
@@ -589,6 +591,7 @@ export class UpgradeService {
           status: 'COMPLETED',
           completedAt: new Date(),
           stepsCompleted: stageNames,
+          backupId,
         },
       });
 
