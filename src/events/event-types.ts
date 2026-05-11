@@ -25,6 +25,7 @@ export const OperationType = {
   CREATE: 'CREATE',
   UPDATE: 'UPDATE',
   DELETE: 'DELETE',
+  PATCH: 'PATCH',
 } as const;
 
 export type OperationTypeValue = (typeof OperationType)[keyof typeof OperationType];
@@ -52,6 +53,8 @@ export const ResourceType = {
   AUTH_FLOW: 'AUTH_FLOW',
   PLUGIN: 'PLUGIN',
   MIGRATION: 'MIGRATION',
+  SCIM_TOKEN: 'SCIM_TOKEN',
+  SCIM_ATTRIBUTE_MAPPING: 'SCIM_ATTRIBUTE_MAPPING',
 } as const;
 
 export type ResourceTypeValue = (typeof ResourceType)[keyof typeof ResourceType];
