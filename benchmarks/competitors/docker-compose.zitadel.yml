@@ -1,0 +1,66 @@
+services:
+  # Zitadel for competitor benchmarking
+  zitadel:
+    image: ghcr.io/zitadel/zitadel:latest
+    container_name: zitadel-benchmark-target
+    environment:
+      # Database configuration
+      ZITADEL_DATABASE__POSTGRES__HOST: zitadel-db
+      ZITADEL_DATABASE__POSTGRES__PORT: '5432'
+      ZITADEL_DATABASE__POSTGRES__DATABASE: zitadel
+      ZITADEL_DATABASE__POSTGRES__USER: zitadel
+      ZITADEL_DATABASE__POSTGRES__PASSWORD: zitadel
+      # Initial admin user
+      ZITADEL_FIRSTINSTANCE__ORG__HUMAN__EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ZITADEL_FIRSTINSTANCE__ORG__HUMAN__USERNAME: ${ADMIN_USER:-admin}
+      ZITADEL_FIRSTINSTANCE__ORG__HUMAN__PASSWORD: ${ADMIN_PASSWORD:-admin}
+      ZITADEL_FIRSTINSTANCE__INIT_MACHINES__MACHINE__KEY_PATH: /local/zitadel-machines.json
+      ZITADEL_FIRSTINSTANCE__INIT_MACHINES__MACHINE__KEY_NAME: benchmark-machine
+      # TLS disabled for benchmarking
+      ZITADEL_TLS__PROTOCOL: disabled
+      ZITADEL_EXTERNALSECURE: 'false'
+    ports:
+      - "8080:8080"
+      - "9080:9080"
+    depends_on:
+      zitadel-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/debug/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    restart: unless-stopped
+    networks:
+      - benchmarks
+    volumes:
+      - zitadel-machine-keys:/local
+
+  # Zitadel database
+  zitadel-db:
+    image: postgres:16-alpine
+    container_name: zitadel-benchmark-db
+    environment:
+      POSTGRES_USER: zitadel
+      POSTGRES_PASSWORD: zitadel
+      POSTGRES_DB: zitadel
+    ports:
+      - "5436:5432"
+    volumes:
+      - zitadel-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zitadel"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - benchmarks
+
+networks:
+  benchmarks:
+    driver: bridge
+
+volumes:
+  zitadel-pgdata:
+  zitadel-machine-keys:

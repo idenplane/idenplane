@@ -1,0 +1,61 @@
+services:
+  # Keycloak for competitor benchmarking
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: keycloak-benchmark-target
+    command: start --import-realm
+    environment:
+      KEYCLOAK_ADMIN: ${ADMIN_USER:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      # Database configuration
+      DB_VENDOR: postgres
+      DB_ADDR: keycloak-db
+      DB_PORT: 5432
+      DB_DATABASE: keycloak
+      DB_USER: keycloak
+      DB_PASSWORD: keycloak
+      # Proxy mode for proper headers
+      KC_PROXY: edge
+    ports:
+      - "8080:8080"
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - benchmarks
+    volumes:
+      - ./competitors/keycloak/realms:/opt/keycloak/data/havip/import
+
+  # Keycloak database
+  keycloak-db:
+    image: postgres:16-alpine
+    container_name: keycloak-benchmark-db
+    environment:
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+      POSTGRES_DB: keycloak
+    ports:
+      - "5434:5432"
+    volumes:
+      - keycloak-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - benchmarks
+
+networks:
+  benchmarks:
+    driver: bridge
+
+volumes:
+  keycloak-pgdata:

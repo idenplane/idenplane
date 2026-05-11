@@ -1,0 +1,73 @@
+name: Benchmark
+
+on:
+  release:
+    types: [published]
+
+jobs:
+  benchmark:
+    name: Run Benchmarks & Generate Report
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Docker
+        uses: docker/setup-docker@v4
+
+      - name: Start benchmark stack
+        run: |
+          docker compose -f benchmarks/docker-compose.benchmarks.yml up -d --wait
+
+      - name: Wait for services to be healthy
+        run: |
+          echo "Waiting for services to be healthy..."
+          for service in app db keycloak keycloak-db authentik authentik-db authentik-redis zitadel zitadel-db; do
+            echo "Checking $service..."
+            timeout 180 bash -c 'until docker compose -f benchmarks/docker-compose.benchmarks.yml exec -T $service healthcheck || docker compose -f benchmarks/docker-compose.benchmarks.yml ps $service | grep -q "(healthy)"; do sleep 5; done' || echo "Warning: $service health check timed out"
+          done
+          echo "Services started, continuing with benchmark..."
+
+      - name: Run AuthMe benchmarks
+        run: |
+          docker compose -f benchmarks/docker-compose.benchmarks.yml run --rm k6 run --config /src/k6/config.js /src/k6/authme-login.js
+        continue-on-error: true
+
+      - name: Generate comparison report
+        run: |
+          docker compose -f benchmarks/docker-compose.benchmarks.yml exec -T app python3 /src/scripts/generate-report.py || echo "Report generation skipped"
+        continue-on-error: true
+
+      - name: Upload benchmark results
+        uses: actions/upload-artifact@v4
+        with:
+          name: benchmark-results-${{ github.run_number }}
+          path: |
+            benchmarks/results/*.json
+            benchmarks/results/*.html
+          retention-days: 90
+
+      - name: Upload comparison report
+        uses: actions/upload-artifact@v4
+        with:
+          name: comparison-report-${{ github.run_number }}
+          path: benchmarks/results/comparison-report.html
+          retention-days: 90
+
+      - name: Create summary comment
+        if: github.event_name == 'release'
+        run: |
+          echo "## Benchmark Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Benchmarks completed for release ${{ github.event.release.tag_name }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "Results available as artifacts:" >> $GITHUB_STEP_SUMMARY
+          echo "- benchmark-results-${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "- comparison-report-${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+          echo "See [benchmark methodology](../docs/benchmarks/methodology.md) for details on how these benchmarks were run." >> $GITHUB_STEP_SUMMARY
+
+      - name: Teardown benchmark stack
+        if: always()
+        run: docker compose -f benchmarks/docker-compose.benchmarks.yml down --volumes --remove-orphans

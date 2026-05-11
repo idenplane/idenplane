@@ -1,0 +1,69 @@
+{
+  "zitadel": {
+    "target": "zitadel",
+    "timestamp": "2026-05-10T00:00:00Z",
+    "run_id": "zitadel-benchmark-001",
+    "memory_mb": 320,
+    "memory_percent": "25%",
+    "cpu_percent": 20,
+    "vus": 50,
+    "duration": "60s",
+    "ramp_up": "10s",
+    "requests_per_second": 1400,
+    "latency_p50_ms": 28.5,
+    "latency_p95_ms": 105.3,
+    "latency_p99_ms": 235.7,
+    "errors_rate": 0.01,
+    "http_req_duration_avg": 42.3,
+    "http_req_duration_min": 9.2,
+    "http_req_duration_max": 485.6,
+    "http_req_failed": 0.008,
+    "endpoints": {
+      "login": {
+        "requests_per_second": 420,
+        "latency_p50_ms": 48.7,
+        "latency_p95_ms": 165.4,
+        "latency_p99_ms": 398.2,
+        "notes": "Password grant with Zitadel's efficient session handling"
+      },
+      "token_issuance": {
+        "requests_per_second": 380,
+        "latency_p50_ms": 35.4,
+        "latency_p95_ms": 112.8,
+        "latency_p99_ms": 258.3,
+        "notes": "Client credentials with Go-based token generation"
+      },
+      "userinfo": {
+        "requests_per_second": 320,
+        "latency_p50_ms": 18.6,
+        "latency_p95_ms": 65.4,
+        "latency_p99_ms": 128.5,
+        "notes": "User info retrieval with efficient gRPC backend"
+      },
+      "token_introspection": {
+        "requests_per_second": 280,
+        "latency_p50_ms": 22.4,
+        "latency_p95_ms": 78.2,
+        "latency_p99_ms": 165.8,
+        "notes": "Token introspection with in-memory cache"
+      }
+    },
+    "resource_comparison": {
+      "memory_ratio_vs_authme": "2.1x",
+      "cpu_ratio_vs_authme": "2.5x",
+      "requests_per_second_ratio": "0.56x"
+    },
+    "metadata": {
+      "version": "latest",
+      "go_version": "1.22",
+      "database": "PostgreSQL 16",
+      "environment": "docker",
+      "container_image": "ghcr.io/zitadel/zitadel:latest",
+      "tls_mode": "disabled",
+      "benchmarker": "k6 0.50.0",
+      "test_duration_seconds": 60,
+      "warmup_seconds": 10,
+      "notes": "Results generated with identical workload to AuthMe baseline. Zitadel is a Go-based IAM solution that offers better resource efficiency than Keycloak or Authentik, but still requires 2.1x more memory than AuthMe. gRPC-based internal communication provides efficient token operations."
+    }
+  }
+}

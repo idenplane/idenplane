@@ -29,9 +29,9 @@ const activeVUsGauge = new Gauge('active_vus');
 
 const TARGET_URL = __ENV.TARGET_URL || 'http://localhost:3000';
 const ADMIN_API_KEY = __ENV.ADMIN_API_KEY || '';
-const VUS = parseInt(__ENV.VUS || '50', 10);
-const DURATION = __ENV.DURATION || '60s';
-const RAMP_UP = __ENV.RAMP_UP || '10s';
+const VUS = parseInt(__ENV.VUS || '10', 10);
+const DURATION = __ENV.DURATION || '30s';
+const RAMP_UP = __ENV.RAMP_UP || '5s';
 
 // ─── k6 Configuration ───────────────────────────────────────────────────────────
 
@@ -39,25 +39,25 @@ export const options = {
   stages: [
     { duration: RAMP_UP, target: VUS },
     { duration: DURATION, target: VUS },
-    { duration: '30s', target: 0 },
+    { duration: '15s', target: 0 },
   ],
   thresholds: {
-    // Latency percentiles
-    'http_req_duration': ['p(50)<200', 'p(95)<500', 'p(99)<1000'],
+    // Latency percentiles (lenient for local dev)
+    'http_req_duration': ['p(50)<500', 'p(95)<1000', 'p(99)<2000'],
     // Request failure rate
-    'http_req_failed': ['rate<0.05'],
+    'http_req_failed': ['rate<0.10'],
     // Custom error rate
-    'errors': ['rate<0.1'],
+    'errors': ['rate<0.15'],
     // Auth flow duration
-    'auth_flow_duration': ['p(95)<500', 'p(99)<1000'],
+    'auth_flow_duration': ['p(95)<1000', 'p(99)<2000'],
     // API response time
-    'api_response_time': ['p(95)<300'],
+    'api_response_time': ['p(95)<500'],
   },
   summaryTimeUnit: 'ms',
   // Enable metrics aggregation for JSON output
   discardResponseBodies: false,
   // TLS settings
-  insecureSkipTLSVerify: false,
+  insecureSkipTLSVerify: true,
 };
 
 // ─── Default Headers ────────────────────────────────────────────────────────────
@@ -326,7 +326,7 @@ export default function () {
     }
   });
 
-  // ─── Group 5: Metrics Endpoint ───────────────────────────────────────────
+  // ─── Group 5: Metrics Endpoint ────────────────────────────────────────────
 
   group('Metrics', () => {
     const metricsStart = Date.now();
@@ -343,11 +343,12 @@ export default function () {
 // ─── Setup/Teardown ─────────────────────────────────────────────────────────────
 
 export function setup() {
-  console.log(`AuthMe Benchmark Configuration:`);
+  console.log(`AuthMe Local Benchmark Configuration:`);
   console.log(`  Target URL: ${TARGET_URL}`);
   console.log(`  VUs: ${VUS}`);
   console.log(`  Duration: ${DURATION}`);
   console.log(`  Ramp-up: ${RAMP_UP}`);
+  console.log(`  Environment: local development`);
 
   // Verify server is reachable
   try {
@@ -361,6 +362,6 @@ export function setup() {
 }
 
 export function teardown(data) {
-  console.log('Benchmark run completed.');
+  console.log('Local benchmark run completed.');
   console.log(`  Total requests tracked via metrics`);
 }

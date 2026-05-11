@@ -1,0 +1,79 @@
+services:
+  # Authentik for competitor benchmarking
+  authentik:
+    image: ghcr.io/goauthentik/server:2024.10
+    container_name: authentik-benchmark-target
+    environment:
+      # Database configuration
+      AUTHENTIK_POSTGRES__HOST: authentik-db
+      AUTHENTIK_POSTGRES__PORT: '5432'
+      AUTHENTIK_POSTGRES__NAME: authentik
+      AUTHENTIK_POSTGRES__USER: authentik
+      AUTHENTIK_POSTGRES__PASSWORD: authentik
+      # Redis configuration
+      AUTHENTIK_REDIS__HOST: authentik-redis
+      AUTHENTIK_REDIS__PORT: '6379'
+      # Initial credentials
+      AUTHENTIK_INITIALIZE: 'true'
+      AUTHENTIK_EMAIL: ${AUTHENTIK_EMAIL:-admin@example.com}
+      AUTHENTIK_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      AUTHENTIK_USERNAME: ${ADMIN_USER:-admin}
+    ports:
+      - "9000:9000"
+      - "9443:9443"
+    depends_on:
+      authentik-db:
+        condition: service_healthy
+      authentik-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9000/-/health/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+    restart: unless-stopped
+    networks:
+      - benchmarks
+
+  # Authentik database
+  authentik-db:
+    image: postgres:16-alpine
+    container_name: authentik-benchmark-db
+    environment:
+      POSTGRES_USER: authentik
+      POSTGRES_PASSWORD: authentik
+      POSTGRES_DB: authentik
+    ports:
+      - "5435:5432"
+    volumes:
+      - authentik-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authentik"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - benchmarks
+
+  # Authentik Redis
+  authentik-redis:
+    image: redis:7-alpine
+    container_name: authentik-benchmark-redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - benchmarks
+
+networks:
+  benchmarks:
+    driver: bridge
+
+volumes:
+  authentik-pgdata:

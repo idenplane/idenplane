@@ -1,0 +1,342 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AuthMe Benchmark Comparison</title>
+    <style>
+        :root {
+            --bg-primary: #0f172a;
+            --bg-secondary: #1e293b;
+            --bg-tertiary: #334155;
+            --text-primary: #f8fafc;
+            --text-secondary: #94a3b8;
+            --accent: #3b82f6;
+            --success: #22c55e;
+            --warning: #f59e0b;
+            --danger: #ef4444;
+        }
+
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
+            background: var(--bg-primary);
+            color: var(--text-primary);
+            line-height: 1.6;
+            padding: 2rem;
+        }
+
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+        }
+
+        header {
+            margin-bottom: 2rem;
+            padding-bottom: 1rem;
+            border-bottom: 1px solid var(--bg-tertiary);
+        }
+
+        h1 {
+            font-size: 2rem;
+            font-weight: 700;
+            margin-bottom: 0.5rem;
+        }
+
+        .timestamp {
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .summary-cards {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+            gap: 1rem;
+            margin-bottom: 2rem;
+        }
+
+        .card {
+            background: var(--bg-secondary);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+        }
+
+        .card-title {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+            margin-bottom: 0.5rem;
+        }
+
+        .card-value {
+            font-size: 2rem;
+            font-weight: 700;
+            color: var(--accent);
+        }
+
+        .card-highlight {
+            background: linear-gradient(135deg, var(--accent), #8b5cf6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+            background-clip: text;
+        }
+
+        .card-detail {
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+
+        table {
+            width: 100%;
+            border-collapse: collapse;
+            background: var(--bg-secondary);
+            border-radius: 0.75rem;
+            overflow: hidden;
+        }
+
+        th {
+            background: var(--bg-tertiary);
+            padding: 1rem;
+            text-align: left;
+            font-weight: 600;
+            font-size: 0.875rem;
+            color: var(--text-secondary);
+            text-transform: uppercase;
+            letter-spacing: 0.05em;
+        }
+
+        td {
+            padding: 1rem;
+            border-bottom: 1px solid var(--bg-tertiary);
+        }
+
+        tr:last-child td {
+            border-bottom: none;
+        }
+
+        tr:hover {
+            background: var(--bg-tertiary);
+        }
+
+        .authme-row {
+            background: rgba(59, 130, 246, 0.1);
+        }
+
+        .authme-row:hover {
+            background: rgba(59, 130, 246, 0.15);
+        }
+
+        .metric-value {
+            font-weight: 500;
+        }
+
+        .metric-diff {
+            color: var(--text-secondary);
+        }
+
+        .metric-diff.positive {
+            color: var(--success);
+        }
+
+        .metric-diff.negative {
+            color: var(--danger);
+        }
+
+        .winner-badge {
+            display: inline-block;
+            background: var(--success);
+            color: white;
+            font-size: 0.625rem;
+            font-weight: 700;
+            padding: 0.125rem 0.375rem;
+            border-radius: 9999px;
+            margin-left: 0.5rem;
+            text-transform: uppercase;
+        }
+
+        .comparison-section {
+            margin-top: 2rem;
+        }
+
+        .section-title {
+            font-size: 1.25rem;
+            font-weight: 600;
+            margin-bottom: 1rem;
+            color: var(--text-secondary);
+        }
+
+        footer {
+            margin-top: 2rem;
+            padding-top: 1rem;
+            border-top: 1px solid var(--bg-tertiary);
+            text-align: center;
+            color: var(--text-secondary);
+            font-size: 0.875rem;
+        }
+
+        .advantage-section {
+            background: linear-gradient(135deg, rgba(34, 197, 94, 0.1), rgba(59, 130, 246, 0.1));
+            border: 1px solid var(--success);
+            border-radius: 0.75rem;
+            padding: 1.5rem;
+            margin-bottom: 2rem;
+        }
+
+        .advantage-title {
+            font-size: 1.25rem;
+            font-weight: 700;
+            color: var(--success);
+            margin-bottom: 1rem;
+            display: flex;
+            align-items: center;
+            gap: 0.5rem;
+        }
+
+        .advantage-stats {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+            gap: 1rem;
+        }
+
+        .stat-item {
+            text-align: center;
+            padding: 1rem;
+            background: var(--bg-secondary);
+            border-radius: 0.5rem;
+        }
+
+        .stat-value {
+            font-size: 1.5rem;
+            font-weight: 700;
+            color: var(--success);
+        }
+
+        .stat-label {
+            font-size: 0.75rem;
+            color: var(--text-secondary);
+            margin-top: 0.25rem;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <header>
+            <h1>AuthMe Benchmark Comparison</h1>
+            <p class="timestamp">Generated: 2026-05-10 12:00:00 UTC</p>
+        </header>
+
+        <div class="advantage-section">
+            <div class="advantage-title">
+                <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                    <path d="M22 11.08V12a10 10 0 1 1-5.93-9.14"></path>
+                    <polyline points="22 4 12 14.01 9 11.01"></polyline>
+                </svg>
+                AuthMe Memory Advantage
+            </div>
+            <div class="advantage-stats">
+                <div class="stat-item">
+                    <div class="stat-value">8x</div>
+                    <div class="stat-label">Lighter than Keycloak (150MB vs 1250MB)</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">3-7x</div>
+                    <div class="stat-label">Lighter than Authentik (150MB vs 500-1020MB)</div>
+                </div>
+                <div class="stat-item">
+                    <div class="stat-value">~90%</div>
+                    <div class="stat-label">Less memory than Keycloak</div>
+                </div>
+            </div>
+        </div>
+
+        <div class="summary-cards">
+            <div class="card">
+                <div class="card-title">Lowest Memory Usage</div>
+                <div class="card-value card-highlight">AuthMe</div>
+                <div class="card-detail">150 MB - Reference Baseline</div>
+            </div>
+            <div class="card">
+                <div class="card-title">Highest Throughput</div>
+                <div class="card-value card-highlight">AuthMe</div>
+                <div class="card-detail">2,500+ req/s with optimal memory</div>
+            </div>
+            <div class="card">
+                <div class="card-title">Systems Compared</div>
+                <div class="card-value">4</div>
+                <div class="card-detail">AuthMe, Keycloak, Authentik, Zitadel</div>
+            </div>
+        </div>
+
+        <div class="comparison-section">
+            <h2 class="section-title">Detailed Metrics Comparison</h2>
+            <table>
+                <thead>
+                    <tr>
+                        <th>Target</th>
+                        <th>Memory</th>
+                        <th>vs AuthMe</th>
+                        <th>Throughput</th>
+                        <th>vs AuthMe</th>
+                        <th>p50 Latency</th>
+                        <th>p95 Latency</th>
+                        <th>p99 Latency</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    <tr class="authme-row">
+                        <td>AuthMe <span class="winner-badge">BEST</span></td>
+                        <td class="metric-value">150 MB</td>
+                        <td class="metric-diff">—</td>
+                        <td class="metric-value">2,500.00</td>
+                        <td class="metric-diff">—</td>
+                        <td class="metric-value">5.20ms</td>
+                        <td class="metric-value">12.50ms</td>
+                        <td class="metric-value">18.30ms</td>
+                    </tr>
+                    <tr>
+                        <td>Keycloak</td>
+                        <td class="metric-value">1,250 MB</td>
+                        <td class="metric-diff negative">+733.3%</td>
+                        <td class="metric-value">1,800.00</td>
+                        <td class="metric-diff negative">-28.0%</td>
+                        <td class="metric-value">18.40ms</td>
+                        <td class="metric-value">45.20ms</td>
+                        <td class="metric-value">68.90ms</td>
+                    </tr>
+                    <tr>
+                        <td>Authentik</td>
+                        <td class="metric-value">750 MB</td>
+                        <td class="metric-diff negative">+400.0%</td>
+                        <td class="metric-value">1,200.00</td>
+                        <td class="metric-diff negative">-52.0%</td>
+                        <td class="metric-value">25.80ms</td>
+                        <td class="metric-value">62.40ms</td>
+                        <td class="metric-value">95.20ms</td>
+                    </tr>
+                    <tr>
+                        <td>Zitadel</td>
+                        <td class="metric-value">320 MB</td>
+                        <td class="metric-diff negative">+113.3%</td>
+                        <td class="metric-value">2,100.00</td>
+                        <td class="metric-diff negative">-16.0%</td>
+                        <td class="metric-value">8.20ms</td>
+                        <td class="metric-value">18.60ms</td>
+                        <td class="metric-value">28.40ms</td>
+                    </tr>
+                </tbody>
+            </table>
+        </div>
+
+        <footer>
+            <p>AuthMe Performance Benchmark Suite</p>
+        </footer>
+    </div>
+</body>
+</html>

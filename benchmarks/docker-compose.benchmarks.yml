@@ -18,7 +18,7 @@ services:
     command: >
       run --config /src/k6/config.js
       --out json=/src/k6/results/summary.json
-      /src/k6/scripts/auth-flows.js
+      /src/k6/authme-login.js
     networks:
       - benchmarks
 
@@ -71,6 +71,182 @@ services:
     networks:
       - benchmarks
 
+  # Keycloak for competitor benchmarking
+  keycloak:
+    image: quay.io/keycloak/keycloak:24.0
+    container_name: keycloak-benchmark-target
+    command: start --import-realm
+    environment:
+      KEYCLOAK_ADMIN: ${ADMIN_USER:-admin}
+      KEYCLOAK_ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      DB_VENDOR: postgres
+      DB_ADDR: keycloak-db
+      DB_PORT: 5432
+      DB_DATABASE: keycloak
+      DB_USER: keycloak
+      DB_PASSWORD: keycloak
+      KC_PROXY: edge
+    ports:
+      - "8080:8080"
+    depends_on:
+      keycloak-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/health/ready"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 60s
+    restart: unless-stopped
+    networks:
+      - benchmarks
+    volumes:
+      - ./competitors/keycloak/realms:/opt/keycloak/data/havip/import
+
+  # Keycloak database
+  keycloak-db:
+    image: postgres:16-alpine
+    container_name: keycloak-benchmark-db
+    environment:
+      POSTGRES_USER: keycloak
+      POSTGRES_PASSWORD: keycloak
+      POSTGRES_DB: keycloak
+    ports:
+      - "5434:5432"
+    volumes:
+      - keycloak-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U keycloak"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - benchmarks
+
+  # Authentik for competitor benchmarking
+  authentik:
+    image: ghcr.io/goauthentik/server:2024.10
+    container_name: authentik-benchmark-target
+    environment:
+      AUTHENTIK_POSTGRES__HOST: authentik-db
+      AUTHENTIK_POSTGRES__PORT: '5432'
+      AUTHENTIK_POSTGRES__NAME: authentik
+      AUTHENTIK_POSTGRES__USER: authentik
+      AUTHENTIK_POSTGRES__PASSWORD: authentik
+      AUTHENTIK_REDIS__HOST: authentik-redis
+      AUTHENTIK_REDIS__PORT: '6379'
+      AUTHENTIK_INITIALIZE: 'true'
+      AUTHENTIK_EMAIL: ${AUTHENTIK_EMAIL:-admin@example.com}
+      AUTHENTIK_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      AUTHENTIK_USERNAME: ${ADMIN_USER:-admin}
+    ports:
+      - "9000:9000"
+      - "9443:9443"
+    depends_on:
+      authentik-db:
+        condition: service_healthy
+      authentik-redis:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:9000/-/health/"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 120s
+    restart: unless-stopped
+    networks:
+      - benchmarks
+
+  # Authentik database
+  authentik-db:
+    image: postgres:16-alpine
+    container_name: authentik-benchmark-db
+    environment:
+      POSTGRES_USER: authentik
+      POSTGRES_PASSWORD: authentik
+      POSTGRES_DB: authentik
+    ports:
+      - "5435:5432"
+    volumes:
+      - authentik-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authentik"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - benchmarks
+
+  # Authentik Redis
+  authentik-redis:
+    image: redis:7-alpine
+    container_name: authentik-benchmark-redis
+    command: ["redis-server", "--save", "", "--appendonly", "no"]
+    ports:
+      - "6380:6379"
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - benchmarks
+
+  # Zitadel for competitor benchmarking
+  zitadel:
+    image: ghcr.io/zitadel/zitadel:latest
+    container_name: zitadel-benchmark-target
+    environment:
+      ZITADEL_DATABASE__POSTGRES__HOST: zitadel-db
+      ZITADEL_DATABASE__POSTGRES__PORT: '5432'
+      ZITADEL_DATABASE__POSTGRES__DATABASE: zitadel
+      ZITADEL_DATABASE__POSTGRES__USER: zitadel
+      ZITADEL_DATABASE__POSTGRES__PASSWORD: zitadel
+      ZITADEL_FIRSTINSTANCE__ORG__HUMAN__EMAIL: ${ADMIN_EMAIL:-admin@example.com}
+      ZITADEL_FIRSTINSTANCE__ORG__HUMAN__USERNAME: ${ADMIN_USER:-admin}
+      ZITADEL_FIRSTINSTANCE__ORG__HUMAN__PASSWORD: ${ADMIN_PASSWORD:-admin}
+      ZITADEL_FIRSTINSTANCE__INIT_MACHINES__MACHINE__KEY_PATH: /local/zitadel-machines.json
+      ZITADEL_FIRSTINSTANCE__INIT_MACHINES__MACHINE__KEY_NAME: benchmark-machine
+      ZITADEL_TLS__PROTOCOL: disabled
+      ZITADEL_EXTERNALSECURE: 'false'
+    ports:
+      - "8081:8080"
+      - "9081:9080"
+    depends_on:
+      zitadel-db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/debug/healthz"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 90s
+    restart: unless-stopped
+    networks:
+      - benchmarks
+    volumes:
+      - zitadel-machine-keys:/local
+
+  # Zitadel database
+  zitadel-db:
+    image: postgres:16-alpine
+    container_name: zitadel-benchmark-db
+    environment:
+      POSTGRES_USER: zitadel
+      POSTGRES_PASSWORD: zitadel
+      POSTGRES_DB: zitadel
+    ports:
+      - "5436:5432"
+    volumes:
+      - zitadel-pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U zitadel"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    networks:
+      - benchmarks
+
 networks:
   benchmarks:
     driver: bridge
@@ -78,3 +254,7 @@ networks:
 volumes:
   pgdata-bench:
   k6-results:
+  keycloak-pgdata:
+  authentik-pgdata:
+  zitadel-pgdata:
+  zitadel-machine-keys:

@@ -1,0 +1,2 @@
+# Python dependencies for benchmark report generation
+# Currently using Python standard library only

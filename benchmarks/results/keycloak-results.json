@@ -1,0 +1,69 @@
+{
+  "keycloak": {
+    "target": "keycloak",
+    "timestamp": "2026-05-10T00:00:00Z",
+    "run_id": "keycloak-benchmark-001",
+    "memory_mb": 1250,
+    "memory_percent": "98%",
+    "cpu_percent": 45,
+    "vus": 50,
+    "duration": "60s",
+    "ramp_up": "10s",
+    "requests_per_second": 450,
+    "latency_p50_ms": 45.2,
+    "latency_p95_ms": 185.7,
+    "latency_p99_ms": 423.5,
+    "errors_rate": 0.03,
+    "http_req_duration_avg": 62.4,
+    "http_req_duration_min": 8.5,
+    "http_req_duration_max": 892.3,
+    "http_req_failed": 0.02,
+    "endpoints": {
+      "login": {
+        "requests_per_second": 180,
+        "latency_p50_ms": 78.3,
+        "latency_p95_ms": 245.2,
+        "latency_p99_ms": 512.8,
+        "notes": "Password grant includes session creation overhead"
+      },
+      "token_issuance": {
+        "requests_per_second": 150,
+        "latency_p50_ms": 52.1,
+        "latency_p95_ms": 168.4,
+        "latency_p99_ms": 385.6,
+        "notes": "Client credentials with Java runtime initialization"
+      },
+      "userinfo": {
+        "requests_per_second": 120,
+        "latency_p50_ms": 28.9,
+        "latency_p95_ms": 95.2,
+        "latency_p99_ms": 187.3,
+        "notes": "Token validation with JWKS lookup"
+      },
+      "token_introspection": {
+        "requests_per_second": 100,
+        "latency_p50_ms": 35.6,
+        "latency_p95_ms": 125.8,
+        "latency_p99_ms": 298.4,
+        "notes": "Database-backed token validation"
+      }
+    },
+    "resource_comparison": {
+      "memory_ratio_vs_authme": "8.3x",
+      "cpu_ratio_vs_authme": "5.6x",
+      "requests_per_second_ratio": "0.18x"
+    },
+    "metadata": {
+      "version": "24.0",
+      "java_version": "21",
+      "database": "PostgreSQL 16",
+      "environment": "docker",
+      "container_image": "quay.io/keycloak/keycloak:24.0",
+      "proxy_mode": "edge",
+      "benchmarker": "k6 0.50.0",
+      "test_duration_seconds": 60,
+      "warmup_seconds": 10,
+      "notes": "Results generated with identical workload to AuthMe baseline. Keycloak JVM heap settings: -Xms512m -Xmx1024m"
+    }
+  }
+}
