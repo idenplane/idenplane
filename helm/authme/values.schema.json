@@ -1,0 +1,730 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "AuthMe Helm Chart Values",
+  "description": "Configuration schema for the AuthMe Helm chart. All values are optional unless marked as required.",
+  "type": "object",
+  "properties": {
+    "replicaCount": {
+      "type": "integer",
+      "minimum": 0,
+      "default": 1,
+      "description": "Number of AuthMe pod replicas."
+    },
+    "image": {
+      "type": "object",
+      "description": "Container image configuration.",
+      "properties": {
+        "repository": {
+          "type": "string",
+          "description": "Container image repository."
+        },
+        "tag": {
+          "type": "string",
+          "description": "Image tag. Defaults to Chart.appVersion when empty."
+        },
+        "pullPolicy": {
+          "type": "string",
+          "enum": ["IfNotPresent", "Always", "Never"],
+          "default": "IfNotPresent",
+          "description": "Image pull policy."
+        }
+      },
+      "required": ["repository"]
+    },
+    "imagePullSecrets": {
+      "type": "array",
+      "description": "List of secrets for pulling images from a private registry.",
+      "items": {
+        "type": "string"
+      },
+      "default": []
+    },
+    "nameOverride": {
+      "type": "string",
+      "description": "Override the chart name used in resource labels."
+    },
+    "fullnameOverride": {
+      "type": "string",
+      "description": "Override the fullname used in resource names."
+    },
+    "serviceAccount": {
+      "type": "object",
+      "description": "Kubernetes ServiceAccount configuration.",
+      "properties": {
+        "create": {
+          "type": "boolean",
+          "default": true,
+          "description": "Create a dedicated ServiceAccount for AuthMe pods."
+        },
+        "automount": {
+          "type": "boolean",
+          "default": true,
+          "description": "Automatically mount the ServiceAccount credentials."
+        },
+        "annotations": {
+          "type": "object",
+          "description": "Extra annotations for the ServiceAccount.",
+          "default": {}
+        },
+        "name": {
+          "type": "string",
+          "description": "Override the generated ServiceAccount name."
+        }
+      }
+    },
+    "podAnnotations": {
+      "type": "object",
+      "description": "Annotations to add to the AuthMe pod.",
+      "default": {}
+    },
+    "podLabels": {
+      "type": "object",
+      "description": "Labels to add to the AuthMe pod.",
+      "default": {}
+    },
+    "podSecurityContext": {
+      "type": "object",
+      "description": "Pod-level security context.",
+      "properties": {
+        "fsGroup": {
+          "type": "integer",
+          "default": 1000
+        },
+        "runAsNonRoot": {
+          "type": "boolean",
+          "default": true
+        },
+        "runAsUser": {
+          "type": "integer",
+          "default": 1000
+        }
+      }
+    },
+    "securityContext": {
+      "type": "object",
+      "description": "Container-level security context.",
+      "properties": {
+        "allowPrivilegeEscalation": {
+          "type": "boolean",
+          "default": false
+        },
+        "capabilities": {
+          "type": "object",
+          "properties": {
+            "drop": {
+              "type": "array",
+              "items": {
+                "type": "string"
+              },
+              "default": ["ALL"]
+            }
+          }
+        },
+        "readOnlyRootFilesystem": {
+          "type": "boolean",
+          "default": false
+        },
+        "runAsNonRoot": {
+          "type": "boolean",
+          "default": true
+        },
+        "runAsUser": {
+          "type": "integer",
+          "default": 1000
+        }
+      }
+    },
+    "service": {
+      "type": "object",
+      "description": "Kubernetes Service configuration.",
+      "properties": {
+        "type": {
+          "type": "string",
+          "enum": ["ClusterIP", "NodePort", "LoadBalancer"],
+          "default": "ClusterIP",
+          "description": "Service type."
+        },
+        "port": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 65535,
+          "default": 3000,
+          "description": "Service port."
+        },
+        "targetPort": {
+          "type": ["string", "integer"],
+          "description": "Target container port. Defaults to service.port."
+        },
+        "annotations": {
+          "type": "object",
+          "description": "Annotations for the Service.",
+          "default": {}
+        }
+      }
+    },
+    "serviceMonitor": {
+      "type": "object",
+      "description": "Prometheus ServiceMonitor configuration.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable ServiceMonitor for Prometheus scraping."
+        },
+        "annotations": {
+          "type": "object",
+          "description": "Extra annotations for the ServiceMonitor.",
+          "default": {}
+        },
+        "interval": {
+          "type": "string",
+          "pattern": "^[0-9]+(s|m|h)$",
+          "default": "30s",
+          "description": "Scrape interval (e.g., '15s', '30s', '1m')."
+        },
+        "scrapeTimeout": {
+          "type": "string",
+          "pattern": "^[0-9]+(s|m|h)$",
+          "default": "10s",
+          "description": "Scrape timeout. Must be less than interval."
+        }
+      }
+    },
+    "ingress": {
+      "type": "object",
+      "description": "Kubernetes Ingress configuration.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable Ingress resource."
+        },
+        "className": {
+          "type": "string",
+          "description": "Ingress class name (e.g., 'nginx', 'traefik')."
+        },
+        "annotations": {
+          "type": "object",
+          "description": "Annotations for the Ingress.",
+          "default": {}
+        },
+        "hosts": {
+          "type": "array",
+          "description": "List of host rules for the Ingress.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "host": {
+                "type": "string",
+                "description": "Hostname for the Ingress rule."
+              },
+              "paths": {
+                "type": "array",
+                "items": {
+                  "type": "object",
+                  "properties": {
+                    "path": {
+                      "type": "string",
+                      "default": "/"
+                    },
+                    "pathType": {
+                      "type": "string",
+                      "enum": ["Prefix", "Exact", "ImplementationSpecific"],
+                      "default": "Prefix"
+                    }
+                  },
+                  "required": ["path", "pathType"]
+                }
+              }
+            },
+            "required": ["host", "paths"]
+          }
+        },
+        "tls": {
+          "type": "array",
+          "description": "TLS configuration for the Ingress.",
+          "items": {
+            "type": "object",
+            "properties": {
+              "secretName": {
+                "type": "string"
+              },
+              "hosts": {
+                "type": "array",
+                "items": {
+                  "type": "string"
+                }
+              }
+            }
+          }
+        }
+      }
+    },
+    "resources": {
+      "type": "object",
+      "description": "Container resource requests and limits.",
+      "properties": {
+        "limits": {
+          "type": "object",
+          "properties": {
+            "cpu": {
+              "type": "string",
+              "pattern": "^[0-9]+(m)?$",
+              "description": "CPU limit (e.g., '500m', '1')."
+            },
+            "memory": {
+              "type": "string",
+              "pattern": "^[0-9]+(Mi|Gi|Ki)$",
+              "description": "Memory limit (e.g., '512Mi', '1Gi')."
+            }
+          }
+        },
+        "requests": {
+          "type": "object",
+          "properties": {
+            "cpu": {
+              "type": "string",
+              "pattern": "^[0-9]+(m)?$",
+              "description": "CPU request (e.g., '100m', '0.5')."
+            },
+            "memory": {
+              "type": "string",
+              "pattern": "^[0-9]+(Mi|Gi|Ki)$",
+              "description": "Memory request (e.g., '128Mi', '256Mi')."
+            }
+          }
+        }
+      }
+    },
+    "livenessProbe": {
+      "type": "object",
+      "description": "Liveness probe configuration.",
+      "properties": {
+        "httpGet": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "default": "/health"
+            },
+            "port": {
+              "type": ["string", "integer"],
+              "default": "http"
+            }
+          }
+        },
+        "initialDelaySeconds": {
+          "type": "integer",
+          "default": 15
+        },
+        "periodSeconds": {
+          "type": "integer",
+          "default": 20
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "default": 5
+        },
+        "failureThreshold": {
+          "type": "integer",
+          "default": 3
+        }
+      }
+    },
+    "readinessProbe": {
+      "type": "object",
+      "description": "Readiness probe configuration.",
+      "properties": {
+        "httpGet": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "default": "/health/ready"
+            },
+            "port": {
+              "type": ["string", "integer"],
+              "default": "http"
+            }
+          }
+        },
+        "initialDelaySeconds": {
+          "type": "integer",
+          "default": 10
+        },
+        "periodSeconds": {
+          "type": "integer",
+          "default": 10
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "default": 5
+        },
+        "failureThreshold": {
+          "type": "integer",
+          "default": 3
+        }
+      }
+    },
+    "startupProbe": {
+      "type": "object",
+      "description": "Startup probe configuration.",
+      "properties": {
+        "httpGet": {
+          "type": "object",
+          "properties": {
+            "path": {
+              "type": "string",
+              "default": "/health"
+            },
+            "port": {
+              "type": ["string", "integer"],
+              "default": "http"
+            }
+          }
+        },
+        "initialDelaySeconds": {
+          "type": "integer",
+          "default": 10
+        },
+        "periodSeconds": {
+          "type": "integer",
+          "default": 10
+        },
+        "timeoutSeconds": {
+          "type": "integer",
+          "default": 5
+        },
+        "failureThreshold": {
+          "type": "integer",
+          "default": 30
+        }
+      }
+    },
+    "autoscaling": {
+      "type": "object",
+      "description": "Horizontal Pod Autoscaler configuration.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable Horizontal Pod Autoscaler."
+        },
+        "minReplicas": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 1
+        },
+        "maxReplicas": {
+          "type": "integer",
+          "minimum": 1,
+          "default": 10
+        },
+        "targetCPUUtilizationPercentage": {
+          "type": "integer",
+          "minimum": 1,
+          "maximum": 100,
+          "default": 80
+        }
+      }
+    },
+    "networkPolicy": {
+      "type": "object",
+      "description": "Kubernetes NetworkPolicy configuration.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable NetworkPolicy."
+        },
+        "ingress": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "rules": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
+          }
+        },
+        "egress": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "rules": {
+              "type": "array",
+              "items": {
+                "type": "object"
+              }
+            }
+          }
+        }
+      }
+    },
+    "podDisruptionBudget": {
+      "type": "object",
+      "description": "Pod Disruption Budget configuration.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable Pod Disruption Budget."
+        },
+        "maxUnavailable": {
+          "type": ["integer", "string"],
+          "description": "Maximum unavailable pods during disruption."
+        }
+      }
+    },
+    "nodeSelector": {
+      "type": "object",
+      "description": "Node selector for pod scheduling.",
+      "default": {}
+    },
+    "tolerations": {
+      "type": "array",
+      "description": "Tolerations for pod scheduling.",
+      "items": {
+        "type": "object"
+      },
+      "default": []
+    },
+    "affinity": {
+      "type": "object",
+      "description": "Affinity rules for pod scheduling."
+    },
+    "volumes": {
+      "type": "array",
+      "description": "Additional volumes to mount.",
+      "items": {
+        "type": "object"
+      },
+      "default": []
+    },
+    "volumeMounts": {
+      "type": "array",
+      "description": "Additional volume mounts.",
+      "items": {
+        "type": "object"
+      },
+      "default": []
+    },
+    "persistence": {
+      "type": "object",
+      "description": "Persistent Volume Claim configuration.",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false,
+          "description": "Enable persistent storage."
+        },
+        "size": {
+          "type": "string",
+          "pattern": "^[0-9]+(Mi|Gi|Ki)$",
+          "default": "1Gi",
+          "description": "PVC storage size."
+        },
+        "accessModes": {
+          "type": "array",
+          "items": {
+            "type": "string",
+            "enum": ["ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany"]
+          },
+          "default": ["ReadWriteOnce"]
+        },
+        "storageClass": {
+          "type": "string",
+          "description": "StorageClass name. Empty uses cluster default."
+        },
+        "annotations": {
+          "type": "object",
+          "description": "Annotations for the PVC.",
+          "default": {}
+        },
+        "selector": {
+          "type": "object",
+          "description": "Label selector for pre-existing PVs.",
+          "default": {}
+        }
+      }
+    },
+    "env": {
+      "type": "object",
+      "description": "Non-sensitive environment variables.",
+      "properties": {
+        "PORT": {
+          "type": "string",
+          "default": "3000",
+          "description": "TCP port the AuthMe process listens on."
+        },
+        "NODE_ENV": {
+          "type": "string",
+          "default": "production",
+          "description": "Node environment."
+        },
+        "BASE_URL": {
+          "type": "string",
+          "default": "http://authme.example.com",
+          "description": "Public URL of the AuthMe instance."
+        },
+        "THROTTLE_TTL": {
+          "type": "string",
+          "default": "60000",
+          "description": "Rate limit TTL in milliseconds."
+        },
+        "THROTTLE_LIMIT": {
+          "type": "string",
+          "default": "100",
+          "description": "Maximum requests per TTL window."
+        },
+        "SESSION_STORE": {
+          "type": "string",
+          "enum": ["database", "redis"],
+          "default": "database",
+          "description": "Session store backend."
+        }
+      }
+    },
+    "secrets": {
+      "type": "object",
+      "description": "Sensitive environment variables stored in a Kubernetes Secret.",
+      "properties": {
+        "ADMIN_API_KEY": {
+          "type": "string",
+          "default": "change-me-in-production",
+          "description": "Admin API key for protected endpoints."
+        },
+        "DATABASE_URL": {
+          "type": "string",
+          "description": "Database connection string. Auto-constructed when postgresql.enabled is true."
+        },
+        "REDIS_URL": {
+          "type": "string",
+          "description": "Redis connection string."
+        },
+        "REDIS_SENTINEL_HOSTS": {
+          "type": "string",
+          "description": "Redis Sentinel hosts (comma-separated)."
+        },
+        "REDIS_SENTINEL_NAME": {
+          "type": "string",
+          "description": "Redis Sentinel master name."
+        }
+      }
+    },
+    "postgresql": {
+      "type": "object",
+      "description": "PostgreSQL sub-chart configuration (Bitnami).",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": true
+        },
+        "auth": {
+          "type": "object",
+          "properties": {
+            "username": {
+              "type": "string",
+              "default": "authme"
+            },
+            "password": {
+              "type": "string",
+              "default": "authme"
+            },
+            "database": {
+              "type": "string",
+              "default": "authme"
+            },
+            "existingSecret": {
+              "type": "string",
+              "description": "Existing secret for passwords."
+            }
+          }
+        },
+        "primary": {
+          "type": "object",
+          "properties": {
+            "persistence": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "size": {
+                  "type": "string",
+                  "default": "8Gi"
+                }
+              }
+            }
+          }
+        },
+        "resources": {
+          "type": "object",
+          "description": "Resource limits for PostgreSQL."
+        }
+      }
+    },
+    "redis": {
+      "type": "object",
+      "description": "Redis sub-chart configuration (Bitnami).",
+      "properties": {
+        "enabled": {
+          "type": "boolean",
+          "default": false
+        },
+        "auth": {
+          "type": "object",
+          "properties": {
+            "enabled": {
+              "type": "boolean",
+              "default": true
+            },
+            "password": {
+              "type": "string",
+              "default": "authme-redis"
+            },
+            "existingSecret": {
+              "type": "string"
+            }
+          }
+        },
+        "architecture": {
+          "type": "string",
+          "enum": ["standalone", "replication"],
+          "default": "standalone"
+        },
+        "master": {
+          "type": "object",
+          "properties": {
+            "persistence": {
+              "type": "object",
+              "properties": {
+                "enabled": {
+                  "type": "boolean",
+                  "default": true
+                },
+                "size": {
+                  "type": "string",
+                  "default": "2Gi"
+                }
+              }
+            }
+          }
+        },
+        "resources": {
+          "type": "object",
+          "description": "Resource limits for Redis."
+        }
+      }
+    }
+  }
+}

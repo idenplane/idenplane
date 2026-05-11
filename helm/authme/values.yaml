@@ -124,6 +124,37 @@ autoscaling:
   targetCPUUtilizationPercentage: 80
   # targetMemoryUtilizationPercentage: 80
 
+# ── Network Policy ────────────────────────────────────────────────────────────
+networkPolicy:
+  enabled: false
+  ingress:
+    enabled: true
+    rules:
+      # Allow ingress from ingress controllers / load balancers
+      - ports:
+          - port: 3000
+        from:
+          - podSelector:
+              matchLabels:
+                app.kubernetes.io/component: controller
+  egress:
+    enabled: true
+    rules:
+      # Allow egress to PostgreSQL
+      - ports:
+          - port: 5432
+        to:
+          - podSelector:
+              matchLabels:
+                app.kubernetes.io/name: postgresql
+      # Allow egress to Redis
+      - ports:
+          - port: 6379
+        to:
+          - podSelector:
+              matchLabels:
+                app.kubernetes.io/name: redis
+
 # ── Pod Disruption Budget ─────────────────────────────────────────────────────
 podDisruptionBudget:
   enabled: false
@@ -139,6 +170,24 @@ affinity: {}
 # ── Additional Volumes & Mounts ───────────────────────────────────────────────
 volumes: []
 volumeMounts: []
+
+# ── Persistent Volume Claim (Custom Themes / Storage) ─────────────────────────
+# Enable when you need persistent storage for custom themes, uploads, or
+# application data that must survive pod restarts.
+persistence:
+  enabled: false
+  # PVC storage size (e.g., "1Gi", "10Gi").
+  size: 1Gi
+  # Access modes. Common options: "ReadWriteOnce", "ReadOnlyMany", "ReadWriteMany".
+  accessModes:
+    - ReadWriteOnce
+  # StorageClass name. Leave empty to use the cluster's default StorageClass.
+  storageClass: ""
+  # Annotations to add to the PVC metadata.
+  annotations: {}
+  # Label selector for pre-existing PVs (use either storageClassName or selector,
+  # not both).
+  selector: {}
 
 # ── AuthMe Application Configuration ─────────────────────────────────────────
 env:

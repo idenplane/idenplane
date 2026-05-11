@@ -76,13 +76,22 @@ spec:
             failureThreshold: {{ .Values.readinessProbe.failureThreshold }}
           resources:
             {{- toYaml .Values.resources | nindent 12 }}
-          {{- with .Values.volumeMounts }}
+          {{- if or .Values.volumeMounts .Values.persistence.enabled }}
           volumeMounts:
-            {{- toYaml . | nindent 12 }}
+            {{- toYaml .Values.volumeMounts | nindent 12 }}
+            {{- if .Values.persistence.enabled }}
+            - name: themes-storage
+              mountPath: /app/themes
+            {{- end }}
           {{- end }}
-      {{- with .Values.volumes }}
+      {{- if or .Values.volumes .Values.persistence.enabled }}
       volumes:
-        {{- toYaml . | nindent 8 }}
+        {{- toYaml .Values.volumes | nindent 8 }}
+        {{- if .Values.persistence.enabled }}
+        - name: themes-storage
+          persistentVolumeClaim:
+            claimName: {{ include "authme.fullname" . }}-themes
+        {{- end }}
       {{- end }}
       {{- with .Values.nodeSelector }}
       nodeSelector:
