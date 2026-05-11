@@ -106,6 +106,15 @@ export class RealmsService {
         termsOfServiceUrl: dto.termsOfServiceUrl,
         registrationApprovalRequired: dto.registrationApprovalRequired,
         allowedEmailDomains: dto.allowedEmailDomains,
+        privacyPolicyUrl: dto.privacyPolicyUrl,
+        // CAPTCHA configuration
+        captchaEnabled: dto.captchaEnabled,
+        captchaProvider: dto.captchaProvider,
+        recaptchaSiteKey: dto.recaptchaSiteKey,
+        recaptchaSecretKey: dto.recaptchaSecretKey,
+        hcaptchaSiteKey: dto.hcaptchaSiteKey,
+        hcaptchaSecretKey: dto.hcaptchaSecretKey,
+        captchaScoreThreshold: dto.captchaScoreThreshold,
         signingKeys: {
           create: {
             kid: keyPair.kid,
@@ -249,6 +258,15 @@ export class RealmsService {
       termsOfServiceUrl: dto.termsOfServiceUrl,
       registrationApprovalRequired: dto.registrationApprovalRequired,
       allowedEmailDomains: dto.allowedEmailDomains,
+      privacyPolicyUrl: dto.privacyPolicyUrl,
+      // CAPTCHA configuration
+      captchaEnabled: dto.captchaEnabled,
+      captchaProvider: dto.captchaProvider,
+      recaptchaSiteKey: dto.recaptchaSiteKey,
+      recaptchaSecretKey: dto.recaptchaSecretKey,
+      hcaptchaSiteKey: dto.hcaptchaSiteKey,
+      hcaptchaSecretKey: dto.hcaptchaSecretKey,
+      captchaScoreThreshold: dto.captchaScoreThreshold,
     };
 
     // Only update password if a real value is provided (not the redacted placeholder)

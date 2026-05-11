@@ -69,6 +69,16 @@ model Realm {
   // SQLite: stored as JSON array text e.g. '["example.com","corp.org"]'
   allowedEmailDomains          String  @default("[]") @map("allowed_email_domains")
   termsOfServiceUrl            String? @map("terms_of_service_url")
+  privacyPolicyUrl             String? @map("privacy_policy_url")
+
+  // CAPTCHA configuration
+  captchaEnabled       Boolean @default(false) @map("captcha_enabled")
+  captchaProvider      String? @map("captcha_provider") // 'recaptcha' | 'hcaptcha'
+  recaptchaSiteKey     String? @map("recaptcha_site_key")
+  recaptchaSecretKey   String? @map("recaptcha_secret_key")
+  hcaptchaSiteKey      String? @map("hcaptcha_site_key")
+  hcaptchaSecretKey    String? @map("hcaptcha_secret_key")
+  captchaScoreThreshold Float   @default(0.5) @map("captcha_score_threshold")
 
   // Email verification
   requireEmailVerification Boolean @default(false) @map("require_email_verification")
@@ -153,6 +163,8 @@ model Realm {
   loginRiskAssessments  LoginRiskAssessment[]
   userLoginProfiles     UserLoginProfile[]
   organizations         Organization[]
+  serviceAccounts       ServiceAccount[]
+  registrationFields     RegistrationField[]
 
   @@map("realms")
 }
@@ -1248,4 +1260,29 @@ model ApiKey {
   @@index([serviceAccountId])
   @@index([keyPrefix])
   @@map("api_keys")
+}
+
+// ─── REGISTRATION FIELDS ───────────────────────────────────
+
+model RegistrationField {
+  id          String   @id @default(uuid())
+  realmId     String   @map("realm_id")
+  realm       Realm    @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  name        String   @map("name") // e.g., "company", "department"
+  displayName String   @map("display_name") // e.g., "Company Name"
+  type        String   @default("text") @map("type") // "text" | "email" | "password" | "number" | "select" | "checkbox"
+  required    Boolean  @default(false) @map("required")
+  placeholder String?  @map("placeholder")
+  helpText    String?  @map("help_text")
+  options     String   @default("[]") @map("options") // for select type (SQLite JSON)
+  validationPattern String? @map("validation_pattern")
+  defaultValue String?  @map("default_value")
+  sortOrder   Int      @default(0) @map("sort_order")
+  enabled     Boolean  @default(true) @map("enabled")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@unique([realmId, name])
+  @@index([realmId])
+  @@map("registration_fields")
 }

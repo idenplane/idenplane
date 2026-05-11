@@ -322,4 +322,47 @@ export class CreateRealmDto {
   @IsArray()
   @IsString({ each: true })
   allowedEmailDomains?: string[];
+
+  @ApiPropertyOptional({ description: 'URL to the privacy policy page shown during registration' })
+  @IsOptional()
+  @IsString()
+  privacyPolicyUrl?: string;
+
+  // CAPTCHA configuration
+  @ApiPropertyOptional({ default: false, description: 'Enable CAPTCHA protection for registration' })
+  @IsOptional()
+  @IsBoolean()
+  captchaEnabled?: boolean;
+
+  @ApiPropertyOptional({ enum: ['recaptcha', 'hcaptcha'], description: 'CAPTCHA provider to use' })
+  @IsOptional()
+  @IsString()
+  captchaProvider?: string;
+
+  @ApiPropertyOptional({ description: 'reCAPTCHA site key for v3' })
+  @IsOptional()
+  @IsString()
+  recaptchaSiteKey?: string;
+
+  @ApiPropertyOptional({ description: 'reCAPTCHA secret key for v3 verification' })
+  @IsOptional()
+  @IsString()
+  recaptchaSecretKey?: string;
+
+  @ApiPropertyOptional({ description: 'hCaptcha site key' })
+  @IsOptional()
+  @IsString()
+  hcaptchaSiteKey?: string;
+
+  @ApiPropertyOptional({ description: 'hCaptcha secret key for verification' })
+  @IsOptional()
+  @IsString()
+  hcaptchaSecretKey?: string;
+
+  @ApiPropertyOptional({ default: 0.5, description: 'Minimum score threshold for reCAPTCHA v3 (0-1)' })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  @Min(1)
+  captchaScoreThreshold?: number;
 }
