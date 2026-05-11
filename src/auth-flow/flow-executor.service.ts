@@ -185,6 +185,7 @@ export class FlowExecutorService {
 
       case 'social':
       case 'email_otp':
+      case 'magic_link':
       case 'consent':
         // These step types require external redirects / UI — the executor
         // records them as "pending" and the dedicated controller completes them.

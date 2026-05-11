@@ -35,6 +35,42 @@ datasource db {
   provider = "postgresql"
 }
 
+// ─── WIZARD STATE ─────────────────────────────────────────
+
+model WizardState {
+  id         String   @id @default(uuid())
+  completed  Boolean  @default(false) @map("completed")
+  skipped    Boolean  @default(false) @map("skipped")
+
+  // Current step (0-based index: 0=admin, 1=realm, 2=smtp, 3=client, 4=sdk, 5=test)
+  currentStep Int     @default(0) @map("current_step")
+
+  // Step 1: Admin account
+  adminUsername    String? @map("admin_username")
+  adminEmail       String? @map("admin_email")
+  adminPasswordHash String? @map("admin_password_hash")
+
+  // Step 2: Realm settings
+  realmName        String? @map("realm_name")
+  realmDisplayName String? @map("realm_display_name")
+
+  // Step 3: SMTP configuration (stored as JSON)
+  smtpConfig       Json?   @map("smtp_config")
+
+  // Step 4: Client application
+  clientId         String? @map("client_id")
+  clientSecret     String? @map("client_secret")
+  redirectUris      String[] @default([]) @map("redirect_uris")
+
+  // Step 5 & 6: Completion status
+  sdkGenerated     Boolean @default(false) @map("sdk_generated")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("wizard_states")
+}
+
 // ─── REALMS ───────────────────────────────────────────────
 
 model Realm {
@@ -52,6 +88,14 @@ model Realm {
   smtpPassword String?  @map("smtp_password")
   smtpFrom     String?  @map("smtp_from")
   smtpSecure   Boolean  @default(false) @map("smtp_secure")
+
+  // Magic link / passwordless authentication
+  magicLinkEnabled              Boolean @default(false) @map("magic_link_enabled")
+  magicLinkExpirySeconds        Int     @default(300)   @map("magic_link_expiry_seconds")
+  magicLinkRateLimitPerEmail    Int     @default(5)     @map("magic_link_rate_limit_per_email")
+  magicLinkRateLimitWindowSeconds Int   @default(900)   @map("magic_link_rate_limit_window_seconds")
+  magicLinkEmailSubject         String? @map("magic_link_email_subject")
+  magicLinkEmailTemplate        String? @map("magic_link_email_template")
 
   // Password policies
   passwordMinLength          Int     @default(8)    @map("password_min_length")
@@ -128,6 +172,11 @@ model Realm {
   riskThresholdStepUp  Int     @default(50)    @map("risk_threshold_step_up")
   riskThresholdBlock   Int     @default(80)    @map("risk_threshold_block")
 
+  // SCIM 2.0 Provisioning
+  scimEnabled          Boolean @default(false) @map("scim_enabled")
+  scimUserAutocreate   Boolean @default(true)  @map("scim_user_autocreate")
+  scimGroupSyncEnabled Boolean @default(true)  @map("scim_group_sync_enabled")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -156,6 +205,9 @@ model Realm {
   userLoginProfiles     UserLoginProfile[]
   organizations         Organization[]
   serviceAccounts       ServiceAccount[]
+  magicLinkRequests    MagicLinkRequest[]
+  scimProvisioningTokens ScimProvisioningToken[]
+  scimAttributeMappings ScimAttributeMapping[]
 
   @@map("realms")
 }
@@ -198,6 +250,7 @@ model User {
   attributes          UserAttribute[]
   loginRiskAssessments LoginRiskAssessment[]
   userLoginProfile    UserLoginProfile?
+  magicLinkRequests MagicLinkRequest[]
 
   @@unique([realmId, username])
   @@unique([realmId, email])
@@ -484,6 +537,38 @@ model VerificationToken {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("verification_tokens")
+}
+
+// ─── MAGIC LINK REQUESTS ───────────────────────────────
+
+enum MagicLinkStatus {
+  PENDING
+  COMPLETED
+  EXPIRED
+  CANCELLED
+}
+
+model MagicLinkRequest {
+  id          String   @id @default(uuid())
+  realmId     String   @map("realm_id")
+  userId      String   @map("user_id")
+  email       String   @map("email")
+  tokenHash   String   @unique @map("token_hash")
+  status      MagicLinkStatus @default(PENDING) @map("status")
+  expiresAt   DateTime @map("expires_at")
+  completedAt DateTime? @map("completed_at")
+  ipAddress   String?  @map("ip_address")
+  userAgent   String?  @map("user_agent")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  realm Realm @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([realmId, email, createdAt])
+  @@index([realmId, ipAddress, createdAt])
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("magic_link_requests")
 }
 
 // ─── PASSWORD HISTORY ────────────────────────────────────
@@ -1252,4 +1337,45 @@ model ApiKey {
   @@index([serviceAccountId])
   @@index([keyPrefix])
   @@map("api_keys")
+}
+// ─── SCIM 2.0 PROVISIONING ─────────────────────────────────
+
+model ScimProvisioningToken {
+  id          String    @id @default(uuid())
+  realmId     String    @map("realm_id")
+  realm       Realm     @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  name        String
+  description String?
+  enabled     Boolean   @default(true)
+  scopes      String[]  @default(["urn:scim:schemas:core:1.0:Users", "urn:scim:schemas:core:1.0:Groups"]) @map("scopes")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  expiresAt   DateTime? @map("expires_at")
+  lastUsedAt  DateTime? @map("last_used_at")
+  requestCount Int      @default(0) @map("request_count")
+  revoked     Boolean   @default(false)
+  revokedAt   DateTime? @map("revoked_at")
+
+  // Token storage: store the hash, not the raw token
+  tokenHash   String    @unique @map("token_hash")
+
+  @@index([realmId])
+  @@index([tokenHash])
+  @@map("scim_provisioning_tokens")
+}
+
+model ScimAttributeMapping {
+  id               String   @id @default(uuid())
+  realmId          String   @map("realm_id")
+  realm            Realm    @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  resourceType     String   // "User" | "Group"
+  scimAttribute    String   @map("scim_attribute")
+  authmeAttribute  String   @map("authme_attribute")
+  enabled          Boolean  @default(true)
+  direction        String   @default("inbound") // "inbound" | "outbound" | "bidirectional"
+  createdAt        DateTime @default(now()) @map("created_at")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@unique([realmId, resourceType, scimAttribute])
+  @@index([realmId, resourceType])
+  @@map("scim_attribute_mappings")
 }

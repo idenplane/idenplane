@@ -10,6 +10,7 @@ import { createLoggerConfig } from './common/logging/logger.config.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { CryptoModule } from './crypto/crypto.module.js';
 import { RealmsModule } from './realms/realms.module.js';
+import { SetupWizardModule } from './setup-wizard/setup-wizard.module.js';
 import { UsersModule } from './users/users.module.js';
 import { ClientsModule } from './clients/clients.module.js';
 import { RolesModule } from './roles/roles.module.js';
@@ -57,6 +58,7 @@ import { RiskAssessmentModule } from './risk-assessment/risk-assessment.module.j
 import { MigrationModule } from './migration/migration.module.js';
 import { CorsModule } from './cors/cors.module.js';
 import { ServiceAccountsModule } from './service-accounts/service-accounts.module.js';
+import { MagicLinkModule } from './magic-link/magic-link.module.js';
 import { AdminApiKeyGuard } from './common/guards/admin-api-key.guard.js';
 import { AdminEventInterceptor } from './events/admin-event.interceptor.js';
 import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
@@ -85,6 +87,7 @@ import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
     MfaModule,
     AdminAuthModule,
     RealmsModule,
+    SetupWizardModule,
     UsersModule,
     ClientsModule,
     RolesModule,
@@ -124,6 +127,7 @@ import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
     MigrationModule,
     CorsModule,
     ServiceAccountsModule,
+    MagicLinkModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

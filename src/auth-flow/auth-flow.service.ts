@@ -19,7 +19,7 @@ export interface FlowStepCondition {
 
 export interface FlowStep {
   id: string;
-  type: 'password' | 'totp' | 'webauthn' | 'social' | 'ldap' | 'email_otp' | 'consent';
+  type: 'password' | 'totp' | 'webauthn' | 'social' | 'ldap' | 'email_otp' | 'magic_link' | 'consent';
   required: boolean;
   order: number;
   condition?: FlowStepCondition | null;
