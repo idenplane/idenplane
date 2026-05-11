@@ -108,15 +108,15 @@ function RealmStatsSection({ realmName }: { realmName: string }) {
   const { data: loginEvents, isLoading: eventsLoading } = useQuery<LoginEvent[]>({
     queryKey: ['dashboardLoginEvents', realmName],
     queryFn: () => getLoginEvents(realmName, { max: 20 }),
-    refetchInterval: 30_000,
-    staleTime: 0,
+    refetchInterval: 60_000,
+    staleTime: 60_000,
   });
 
   const { data: adminEvents } = useQuery<AdminEvent[]>({
     queryKey: ['dashboardAdminEvents', realmName],
     queryFn: () => getAdminEvents(realmName, { max: 20 }),
-    refetchInterval: 30_000,
-    staleTime: 0,
+    refetchInterval: 60_000,
+    staleTime: 60_000,
   });
 
   const recentEvents = [
@@ -341,7 +341,8 @@ export default function DashboardPage() {
   const { data: health } = useQuery({
     queryKey: ['health'],
     queryFn: getHealthStatus,
-    refetchInterval: 60_000,
+    refetchInterval: 120_000,
+    staleTime: 60_000,
     // Don't fail the page if health check errors
     retry: false,
   });

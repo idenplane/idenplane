@@ -12,6 +12,7 @@ export default function RealmListPage() {
   const { data: realms, isLoading, error } = useQuery({
     queryKey: ['realms'],
     queryFn: getAllRealms,
+    staleTime: 60_000,
   });
 
   const handleImportFile = async (e: React.ChangeEvent<HTMLInputElement>) => {

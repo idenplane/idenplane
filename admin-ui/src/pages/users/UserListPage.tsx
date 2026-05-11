@@ -14,6 +14,7 @@ export default function UserListPage() {
     queryKey: ['users', name, page],
     queryFn: () => getUsers(name!, page, PAGE_SIZE),
     enabled: !!name,
+    staleTime: 60_000,
     placeholderData: keepPreviousData,
   });
 

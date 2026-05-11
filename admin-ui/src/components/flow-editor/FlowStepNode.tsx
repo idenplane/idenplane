@@ -1,3 +1,4 @@
+import { memo } from 'react';
 import type { FlowStep, StepType } from '../../api/authFlows';
 
 // ─── Step type metadata ──────────────────────────────────────
@@ -64,7 +65,7 @@ interface FlowStepNodeProps {
   canMoveDown?: boolean;
 }
 
-export default function FlowStepNode({
+export default memo(function FlowStepNode({
   step,
   isSelected,
   isPreview = false,
@@ -154,4 +155,4 @@ export default function FlowStepNode({
       </div>
     </div>
   );
-}
+});
