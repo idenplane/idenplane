@@ -10,7 +10,7 @@ export async function getConsentCategories(
   includeDisabled = false,
 ): Promise<ConsentCategory[]> {
   const { data } = await apiClient.get<ConsentCategory[]>(
-    `/realms/${realmName}/consent-categories`,
+    `/admin/realms/${realmName}/consent-categories`,
     { params: { includeDisabled } },
   );
   return data;
@@ -21,7 +21,7 @@ export async function getConsentCategoryById(
   categoryId: string,
 ): Promise<ConsentCategory> {
   const { data } = await apiClient.get<ConsentCategory>(
-    `/realms/${realmName}/consent-categories/${categoryId}`,
+    `/admin/realms/${realmName}/consent-categories/${categoryId}`,
   );
   return data;
 }
@@ -31,7 +31,7 @@ export async function createConsentCategory(
   category: Partial<ConsentCategory>,
 ): Promise<ConsentCategory> {
   const { data } = await apiClient.post<ConsentCategory>(
-    `/realms/${realmName}/consent-categories`,
+    `/admin/realms/${realmName}/consent-categories`,
     category,
   );
   return data;
@@ -43,7 +43,7 @@ export async function updateConsentCategory(
   category: Partial<ConsentCategory>,
 ): Promise<ConsentCategory> {
   const { data } = await apiClient.put<ConsentCategory>(
-    `/realms/${realmName}/consent-categories/${categoryId}`,
+    `/admin/realms/${realmName}/consent-categories/${categoryId}`,
     category,
   );
   return data;
@@ -53,7 +53,7 @@ export async function deleteConsentCategory(
   realmName: string,
   categoryId: string,
 ): Promise<void> {
-  await apiClient.delete(`/realms/${realmName}/consent-categories/${categoryId}`);
+  await apiClient.delete(`/admin/realms/${realmName}/consent-categories/${categoryId}`);
 }
 
 // ---------------------------------------------------------------------------
@@ -166,7 +166,7 @@ export async function getConsentStatistics(
   realmName: string,
 ): Promise<ConsentStatistics> {
   const { data } = await apiClient.get<ConsentStatistics>(
-    `/realms/${realmName}/stats/consents`,
+    `/admin/realms/${realmName}/stats/consents`,
   );
   return data;
 }
@@ -176,7 +176,7 @@ export async function getCategoryStatistics(
   categoryId: string,
 ): Promise<CategoryStatistics> {
   const { data } = await apiClient.get<CategoryStatistics>(
-    `/realms/${realmName}/stats/consents/categories/${categoryId}`,
+    `/admin/realms/${realmName}/stats/consents/categories/${categoryId}`,
   );
   return data;
 }

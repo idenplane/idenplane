@@ -75,6 +75,7 @@ export default function App() {
           <Route path="/console/realms/:name/client-scopes/create" element={<ClientScopeCreatePage />} />
           <Route path="/console/realms/:name/client-scopes/:scopeId" element={<ClientScopeDetailPage />} />
           <Route path="/console/realms/:name/consent-categories" element={<ConsentCategoriesListPage />} />
+          <Route path="/console/realms/:name/consent-categories/new" element={<ConsentCategoryDetailPage />} />
           <Route path="/console/realms/:name/consent-categories/:categoryId" element={<ConsentCategoryDetailPage />} />
           <Route path="/console/realms/:name/consent-statistics" element={<ConsentStatisticsPage />} />
           <Route path="/console/realms/:name/events" element={<LoginEventsPage />} />

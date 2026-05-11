@@ -3,13 +3,17 @@ import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getConsentCategoryById,
+  createConsentCategory,
   updateConsentCategory,
   deleteConsentCategory,
 } from '../../api/consent';
 import ConfirmDialog from '../../components/ConfirmDialog';
 
+const isCreateMode = (categoryId: string | undefined) =>
+  !categoryId || categoryId === 'new';
+
 export default function ConsentCategoryDetailPage() {
-  const { name, categoryId } = useParams<{ name: string; categoryId: string }>();
+  const { name, categoryId } = useParams<{ name: string; categoryId?: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
 
@@ -25,7 +29,7 @@ export default function ConsentCategoryDetailPage() {
   const { data: category, isLoading } = useQuery({
     queryKey: ['consentCategory', name, categoryId],
     queryFn: () => getConsentCategoryById(name!, categoryId!),
-    enabled: !!name && !!categoryId,
+    enabled: !isCreateMode(categoryId) && !!name && !!categoryId,
   });
 
   useEffect(() => {
@@ -37,6 +41,21 @@ export default function ConsentCategoryDetailPage() {
       });
     }
   }, [category]);
+
+  const createMutation = useMutation({
+    mutationFn: (data: { name: string; description: string; required: boolean }) =>
+      createConsentCategory(name!, data),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['consentCategories', name] });
+      setSuccessMessage('Consent category created successfully');
+      setErrorMessage('');
+      setTimeout(() => navigate(`/console/realms/${name}/consent-categories`), 1500);
+    },
+    onError: (error: any) => {
+      setErrorMessage(error.message || 'Failed to create consent category');
+      setSuccessMessage('');
+    },
+  });
 
   const updateMutation = useMutation({
     mutationFn: (data: { name: string; description: string; required: boolean }) =>
@@ -69,14 +88,22 @@ export default function ConsentCategoryDetailPage() {
 
   const handleSubmit = (e: FormEvent) => {
     e.preventDefault();
-    updateMutation.mutate({
-      name: form.name,
-      description: form.description,
-      required: form.required,
-    });
+    if (isCreateMode(categoryId)) {
+      createMutation.mutate({
+        name: form.name,
+        description: form.description,
+        required: form.required,
+      });
+    } else {
+      updateMutation.mutate({
+        name: form.name,
+        description: form.description,
+        required: form.required,
+      });
+    }
   };
 
-  if (isLoading) {
+  if (!isCreateMode(categoryId) && isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="text-gray-500">Loading...</div>
@@ -84,7 +111,7 @@ export default function ConsentCategoryDetailPage() {
     );
   }
 
-  if (!category) {
+  if (!isCreateMode(categoryId) && !category) {
     return (
       <div className="flex items-center justify-center py-12">
         <div className="text-gray-500">Consent category not found</div>
@@ -92,24 +119,29 @@ export default function ConsentCategoryDetailPage() {
     );
   }
 
+  const isEdit = !isCreateMode(categoryId);
+  const pageTitle = isEdit ? category?.name ?? 'Edit Category' : 'Create Consent Category';
+
   return (
     <div className="space-y-6">
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-gray-900">{category.name}</h1>
-          {category.required && (
+          <h1 className="text-2xl font-bold text-gray-900">{pageTitle}</h1>
+          {isEdit && category?.required && (
             <span className="rounded-full bg-orange-100 px-3 py-1 text-xs font-medium text-orange-700">
               Required
             </span>
           )}
         </div>
-        <button
-          onClick={() => setShowDeleteDialog(true)}
-          className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
-        >
-          Delete
-        </button>
+        {isEdit && (
+          <button
+            onClick={() => setShowDeleteDialog(true)}
+            className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+          >
+            Delete
+          </button>
+        )}
       </div>
 
       {/* Success/Error Messages */}
@@ -170,33 +202,41 @@ export default function ConsentCategoryDetailPage() {
           <div>
             <button
               type="submit"
-              disabled={updateMutation.isPending}
+              disabled={updateMutation.isPending || createMutation.isPending}
               className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
             >
-              {updateMutation.isPending ? 'Saving...' : 'Save'}
+              {isEdit
+                ? updateMutation.isPending
+                  ? 'Saving...'
+                  : 'Save'
+                : createMutation.isPending
+                  ? 'Creating...'
+                  : 'Create'}
             </button>
           </div>
         </form>
       </div>
 
-      {/* Metadata */}
-      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="mb-4 text-lg font-semibold text-gray-900">Information</h2>
-        <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
-          <dt className="text-gray-500">ID</dt>
-          <dd className="font-mono text-gray-900">{category.id}</dd>
-          <dt className="text-gray-500">Created</dt>
-          <dd className="text-gray-900">{new Date(category.createdAt).toLocaleString()}</dd>
-          <dt className="text-gray-500">Last Updated</dt>
-          <dd className="text-gray-900">{new Date(category.updatedAt).toLocaleString()}</dd>
-        </dl>
-      </div>
+      {/* Metadata (only in edit mode) */}
+      {isEdit && category && (
+        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+          <h2 className="mb-4 text-lg font-semibold text-gray-900">Information</h2>
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
+            <dt className="text-gray-500">ID</dt>
+            <dd className="font-mono text-gray-900">{category.id}</dd>
+            <dt className="text-gray-500">Created</dt>
+            <dd className="text-gray-900">{new Date(category.createdAt).toLocaleString()}</dd>
+            <dt className="text-gray-500">Last Updated</dt>
+            <dd className="text-gray-900">{new Date(category.updatedAt).toLocaleString()}</dd>
+          </dl>
+        </div>
+      )}
 
       {/* Delete Confirmation Dialog */}
       <ConfirmDialog
         isOpen={showDeleteDialog}
         title="Delete Consent Category"
-        message={`Are you sure you want to delete the consent category "${category.name}"? This action cannot be undone.`}
+        message={`Are you sure you want to delete the consent category "${category?.name}"? This action cannot be undone.`}
         onConfirm={() => deleteMutation.mutate()}
         onCancel={() => setShowDeleteDialog(false)}
       />
