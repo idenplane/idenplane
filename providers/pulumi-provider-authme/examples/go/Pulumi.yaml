@@ -1,0 +1,15 @@
+name: authme-go-examples
+runtime:
+  name: go
+description: |
+  Go examples for AuthMe Pulumi provider.
+  This project contains examples demonstrating how to use the AuthMe provider
+  to manage realms, clients, and other identity resources.
+
+config:
+  authme:apiUrl:
+    value: "https://api.authme.io"
+    description: "AuthMe API URL"
+  authme:realm:
+    value: "default"
+    description: "Default realm for client operations"
