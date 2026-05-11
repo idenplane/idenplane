@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw';
-import { makeRealm, makeUser, makeClient, makeLoginEvent, makeAdminEvent, makeStats, makeAuthFlow } from './data';
+import { makeRealm, makeUser, makeClient, makeLoginEvent, makeAdminEvent, makeStats, makeAuthFlow, makeUpgradeAuditEntry, makePreUpgradeValidationResult, makeUpgradeHealthResult, makeRollbackCapability } from './data';
 
 const BASE = '/admin';
 
@@ -167,5 +167,39 @@ export const handlers = [
       status: 'ok',
       info: { database: { status: 'up' }, memory_heap: { status: 'up' } },
     });
+  }),
+
+  // Upgrade endpoints
+  http.get(`${BASE}/upgrade/status`, () => {
+    return HttpResponse.json(
+      makeUpgradeAuditEntry({
+        status: 'COMPLETED',
+        fromVersion: '1.0.0',
+        toVersion: '1.1.0',
+      }),
+    );
+  }),
+
+  http.get(`${BASE}/upgrade/history`, ({ request }) => {
+    const url = new URL(request.url);
+    const limit = Number(url.searchParams.get('limit') ?? 10);
+    const entries = [
+      makeUpgradeAuditEntry({ id: 'upgrade-1', status: 'COMPLETED' }),
+      makeUpgradeAuditEntry({ id: 'upgrade-2', status: 'COMPLETED', fromVersion: '0.9.0', toVersion: '1.0.0' }),
+      makeUpgradeAuditEntry({ id: 'upgrade-3', status: 'FAILED', toVersion: '1.2.0', errorMessage: 'Database migration failed' }),
+    ];
+    return HttpResponse.json(entries.slice(0, limit));
+  }),
+
+  http.get(`${BASE}/upgrade/pre-validation`, () => {
+    return HttpResponse.json(makePreUpgradeValidationResult());
+  }),
+
+  http.get(`${BASE}/upgrade/health`, () => {
+    return HttpResponse.json(makeUpgradeHealthResult());
+  }),
+
+  http.get(`${BASE}/upgrade/rollback/capability`, () => {
+    return HttpResponse.json(makeRollbackCapability());
   }),
 ];

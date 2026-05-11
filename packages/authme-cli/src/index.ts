@@ -10,6 +10,7 @@ import { registerInitCommand } from './commands/init.js';
 import { registerConfigCommands } from './commands/config.js';
 import { registerCompletionCommand } from './commands/completion.js';
 import { registerUpgradeCommand } from './commands/upgrade.js';
+import { registerUpgradeStatusCommand } from './commands/upgrade-status.js';
 import { registerMigrateCommand } from './commands/migrate.js';
 
 const require = createRequire(import.meta.url);
@@ -32,6 +33,7 @@ registerInitCommand(program);
 registerConfigCommands(program);
 registerCompletionCommand(program);
 registerUpgradeCommand(program);
+registerUpgradeStatusCommand(program);
 registerMigrateCommand(program);
 
 program.parseAsync(process.argv).catch((err) => {

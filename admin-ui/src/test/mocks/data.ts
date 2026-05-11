@@ -2,6 +2,7 @@ import type { Realm, User, Client, Role } from '../../types';
 import type { LoginEvent, AdminEvent } from '../../api/events';
 import type { RealmStats } from '../../api/stats';
 import type { AuthFlow } from '../../api/authFlows';
+import type { UpgradeAuditEntry, PreUpgradeValidationResult, UpgradeHealthResult, RollbackCapability } from '../../api/upgrade';
 
 export function makeRealm(overrides: Partial<Realm> = {}): Realm {
   return {
@@ -160,6 +161,61 @@ export function makeAuthFlow(overrides: Partial<AuthFlow> = {}): AuthFlow {
     ],
     createdAt: '2024-01-01T00:00:00.000Z',
     updatedAt: '2024-01-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+export function makeUpgradeAuditEntry(overrides: Partial<UpgradeAuditEntry> = {}): UpgradeAuditEntry {
+  return {
+    id: 'upgrade-1',
+    fromVersion: '1.0.0',
+    toVersion: '1.1.0',
+    status: 'COMPLETED',
+    startedAt: new Date('2024-01-01T10:00:00.000Z'),
+    completedAt: new Date('2024-01-01T10:05:00.000Z'),
+    backupId: 'backup-123',
+    errorMessage: null,
+    ...overrides,
+  };
+}
+
+export function makePreUpgradeValidationResult(overrides: Partial<PreUpgradeValidationResult> = {}): PreUpgradeValidationResult {
+  return {
+    canProceed: true,
+    checks: [
+      { name: 'Database Connection', status: 'pass', message: 'Database connection successful' },
+      { name: 'Pending Migrations', status: 'pass', message: 'No pending migrations' },
+      { name: 'Disk Space', status: 'pass', message: 'Sufficient disk space available' },
+    ],
+    summary: { passed: 3, warnings: 0, failures: 0 },
+    ...overrides,
+  };
+}
+
+export function makeUpgradeHealthResult(overrides: Partial<UpgradeHealthResult> = {}): UpgradeHealthResult {
+  return {
+    healthy: true,
+    version: '1.1.0',
+    checks: [
+      { name: 'Database Connection', status: 'pass', message: 'Database connection successful' },
+      { name: 'Schema Integrity', status: 'pass', message: 'Schema integrity verified' },
+    ],
+    summary: { passed: 2, warnings: 0, failures: 0 },
+    ...overrides,
+  };
+}
+
+export function makeRollbackCapability(overrides: Partial<RollbackCapability> = {}): RollbackCapability {
+  return {
+    canRollback: true,
+    lastSuccessfulUpgrade: {
+      id: 'upgrade-1',
+      fromVersion: '1.0.0',
+      toVersion: '1.1.0',
+      backupId: 'backup-123',
+      completedAt: new Date('2024-01-01T10:05:00.000Z'),
+    },
+    reason: undefined,
     ...overrides,
   };
 }
