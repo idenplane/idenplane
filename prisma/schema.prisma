@@ -140,6 +140,19 @@ model Realm {
   webAuthnRpName  String?  @map("webauthn_rp_name")
   webAuthnRpId    String?  @map("webauthn_rp_id")
 
+  // SMS provider configuration
+  smsProvider     String   @default("none") @map("sms_provider")
+  smsProviderConfig Json?  @default("{}")  @map("sms_provider_config")
+  smsFrom         String?  @map("sms_from")
+
+  // OTP settings
+  otpLength        Int     @default(6)  @map("otp_length")
+  otpExpirySeconds Int     @default(300) @map("otp_expiry_seconds")
+
+  // SMS rate limiting
+  smsMaxRequestsPerUser Int @default(3)  @map("sms_max_requests_per_user")
+  smsRateLimitWindow    Int @default(900) @map("sms_rate_limit_window")
+
   // Offline tokens
   offlineTokenLifespan Int @default(2592000) @map("offline_token_lifespan")
 
@@ -206,6 +219,8 @@ model Realm {
   samlServiceProviders SamlServiceProvider[]
   webhooks           Webhook[]
   webAuthnCredentials WebAuthnCredential[]
+  smsDeliveryLogs     SmsDeliveryLog[]
+  otpAttempts          OtpAttempt[]
   auditLogStreams       AuditLogStream[]
   impersonationSessions ImpersonationSession[]
   policies              Policy[]
@@ -238,6 +253,8 @@ model User {
   passwordAlgorithm String  @default("argon2") @map("password_algorithm")
 
   federationLink String? @map("federation_link")
+
+  phoneNumber String? @map("phone_number")
 
   passwordChangedAt DateTime? @map("password_changed_at")
   lockedUntil       DateTime? @map("locked_until")
@@ -620,6 +637,7 @@ model UserCredential {
   userId    String  @map("user_id")
   type      String  @default("totp")
   secretKey String  @map("secret_key")
+  phoneNumber String? @map("phone_number")
   algorithm String  @default("SHA1")
   digits    Int     @default(6)
   period    Int     @default(30)
@@ -1327,6 +1345,46 @@ model ServiceAccount {
   @@unique([realmId, name])
   @@index([realmId])
   @@map("service_accounts")
+}
+
+// ─── SMS DELIVERY LOGS ───────────────────────────────────
+
+model SmsDeliveryLog {
+  id                 String   @id @default(uuid())
+  realmId            String   @map("realm_id")
+  realm              Realm    @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  userId             String   @map("user_id")
+  phoneHash          String   @map("phone_hash")
+  provider           String
+  status             String   @default("PENDING") @map("status")
+  providerMessageId  String?  @map("provider_message_id")
+  errorCode          String?
+  errorMessage       String?
+  createdAt          DateTime @default(now()) @map("created_at")
+
+  @@index([realmId, userId, createdAt])
+  @@index([realmId, createdAt])
+  @@map("sms_delivery_logs")
+}
+
+// ─── OTP ATTEMPTS ─────────────────────────────────────────
+
+model OtpAttempt {
+  id              String    @id @default(uuid())
+  realmId         String    @map("realm_id")
+  realm           Realm     @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  userId          String    @map("user_id")
+  phoneHash       String    @map("phone_hash")
+  codeHash        String    @map("code_hash")
+  verified        Boolean   @default(false)
+  failedAttempts  Int       @default(0) @map("failed_attempts")
+  expiresAt       DateTime  @map("expires_at")
+  verifiedAt      DateTime? @map("verified_at")
+  createdAt       DateTime  @default(now()) @map("created_at")
+
+  @@index([realmId, userId, expiresAt])
+  @@index([realmId, phoneHash, expiresAt])
+  @@map("otp_attempts")
 }
 
 model ApiKey {
