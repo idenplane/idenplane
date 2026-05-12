@@ -171,6 +171,36 @@ model Realm {
   @@map("realms")
 }
 
+// ─── WIZARD STATE ─────────────────────────────────────────
+
+model WizardState {
+  id        String  @id @default(uuid())
+  completed Boolean @default(false) @map("completed")
+  skipped   Boolean @default(false) @map("skipped")
+
+  currentStep Int @default(0) @map("current_step")
+
+  adminUsername     String? @map("admin_username")
+  adminEmail        String? @map("admin_email")
+  adminPasswordHash String? @map("admin_password_hash")
+
+  realmName        String? @map("realm_name")
+  realmDisplayName String? @map("realm_display_name")
+
+  smtpConfig String? @map("smtp_config")
+
+  clientId     String?  @map("client_id")
+  clientSecret String?  @map("client_secret")
+  redirectUris String   @default("[]") @map("redirect_uris")
+
+  sdkGenerated Boolean @default(false) @map("sdk_generated")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("wizard_states")
+}
+
 // ─── USERS ────────────────────────────────────────────────
 
 model User {
