@@ -1,4 +1,13 @@
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsEnum } from 'class-validator';
+
+export enum GrantTypeEnum {
+  PASSWORD = 'password',
+  CLIENT_CREDENTIALS = 'client_credentials',
+  REFRESH_TOKEN = 'refresh_token',
+  AUTHORIZATION_CODE = 'authorization_code',
+  DEVICE_CODE = 'urn:ietf:params:oauth:grant-type:device_code',
+}
 
 export class TokenRequestDto {
   @ApiProperty({
@@ -12,7 +21,8 @@ export class TokenRequestDto {
     ],
     example: 'client_credentials',
   })
-  grant_type!: string;
+  @IsEnum(GrantTypeEnum)
+  grant_type!: GrantTypeEnum;
 
   @ApiPropertyOptional({
     description: 'Client identifier',
