@@ -36,7 +36,7 @@ services:
       DATABASE_URL: postgresql://authme:authme@db:5432/authme
       PORT: "3000"
       NODE_ENV: production
-      ADMIN_API_KEY: ${ADMIN_API_KEY}
+      ADMIN_API_KEY: ${ADMIN_API_KEY:?Set ADMIN_API_KEY}
       ADMIN_USER: ${ADMIN_USER}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       THROTTLE_TTL: ${THROTTLE_TTL:-60000}
