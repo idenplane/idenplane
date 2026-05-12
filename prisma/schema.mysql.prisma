@@ -169,6 +169,20 @@ model Realm {
   scimProvisioningTokens ScimProvisioningToken[]
   scimAttributeMappings ScimAttributeMapping[]
   registrationFields    RegistrationField[]
+  magicLinkRequests     MagicLinkRequest[]
+  sessionRiskProfiles   SessionRiskProfile[]
+  devicePostureRecords  DevicePostureRecord[]
+  networkContextRecords NetworkContextRecord[]
+  behavioralBiometricProfiles BehavioralBiometricProfile[]
+  continuousRiskEvents  ContinuousRiskEvent[]
+  continuousRiskPolicies ContinuousRiskPolicy[]
+  smsDeliveryLogs      SmsDeliveryLog[]
+  otpAttempts           OtpAttempt[]
+  nhiIdentities         NhiIdentity[]
+  nhiCredentialPolicies NhiCredentialPolicy[]
+  nhiAuditLogs          NhiAuditLog[]
+  consentCategories     ConsentCategory[]
+  themes                Theme[]
 
   @@map("realms")
 }
@@ -211,6 +225,9 @@ model User {
   attributes          UserAttribute[]
   userConsentHistories UserConsentHistory[]
   pendingDeletion     PendingDeletion?
+  magicLinkRequests   MagicLinkRequest[]
+  sessionRiskProfiles SessionRiskProfile[]
+  behavioralBiometricProfile BehavioralBiometricProfile?
 
   @@unique([realmId, username])
   @@unique([realmId, email])
@@ -222,6 +239,35 @@ model User {
 enum ClientType {
   CONFIDENTIAL
   PUBLIC
+}
+
+enum MagicLinkStatus {
+  PENDING
+  COMPLETED
+  EXPIRED
+  CANCELLED
+}
+
+enum NhiIdentityType {
+  MACHINE_TO_MACHINE
+  IOT_DEVICE
+  SERVICE
+  AI_AGENT
+}
+
+enum NhiLifecycleStatus {
+  PROVISIONING
+  ACTIVE
+  SUSPENDED
+  DECOMMISSIONED
+}
+
+enum NhiCredentialType {
+  API_KEY
+  CERTIFICATE
+  JWT
+  OAUTH
+  MTLS
 }
 
 model Client {
@@ -312,15 +358,19 @@ model UserRole {
 model Session {
   id        String  @id @default(uuid()) @db.VarChar(36)
   userId    String  @map("user_id") @db.VarChar(36)
+  realmId   String  @default("") @map("realm_id") @db.VarChar(36)
+  clientId  String? @map("client_id") @db.VarChar(36)
   ipAddress String? @map("ip_address")
   userAgent String? @map("user_agent") @db.Text
 
   createdAt DateTime @default(now()) @map("created_at")
   expiresAt DateTime @map("expires_at")
 
-  user          User           @relation(fields: [userId], references: [id], onDelete: Cascade)
-  refreshTokens RefreshToken[]
+  user               User                @relation(fields: [userId], references: [id], onDelete: Cascade)
+  refreshTokens      RefreshToken[]
+  sessionRiskProfile SessionRiskProfile?
 
+  @@index([realmId])
   @@map("sessions")
 }
 
@@ -508,25 +558,22 @@ model UserConsentHistory {
 
 model PendingDeletion {
   id                  String    @id @default(uuid()) @db.VarChar(36)
-  userId              String    @map("user_id") @db.VarChar(36)
+  userId              String    @unique @map("user_id") @db.VarChar(36)
   user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   requestedAt         DateTime  @default(now()) @map("requested_at")
   scheduledAt         DateTime  @map("scheduled_at")
   gracePeriodDays     Int       @default(14) @map("grace_period_days")
-  status              String    @default("pending") @db.VarChar(50) // "pending", "processing", "completed", "cancelled"
-  // Export status
-  exportStatus        String?   @map("export_status") @db.VarChar(50) // "none", "requested", "generated", "downloaded"
+  status              String    @default("pending") @db.VarChar(50)
+  exportStatus        String?   @map("export_status") @db.VarChar(50)
   exportRequestedAt   DateTime? @map("export_requested_at")
   exportGeneratedAt   DateTime? @map("export_generated_at")
   exportUrl           String?   @map("export_url") @db.VarChar(500)
-  // Audit fields
   cancelledAt         DateTime? @map("cancelled_at")
   cancelledBy         String?    @map("cancelled_by") @db.VarChar(36)
   completedAt         DateTime? @map("completed_at")
   ipAddress           String?   @map("ip_address") @db.VarChar(45)
   createdAt           DateTime  @default(now()) @map("created_at")
 
-  @@index([userId])
   @@index([status])
   @@index([scheduledAt])
   @@map("pending_deletions")
@@ -1331,6 +1378,7 @@ model RevokedToken {
 model ServiceAccount {
   id          String   @id @default(uuid()) @db.VarChar(36)
   realmId     String   @map("realm_id") @db.VarChar(36)
+  realm       Realm    @relation(fields: [realmId], references: [id], onDelete: Cascade)
   name        String   @db.VarChar(255)
   description String?  @db.Text
   enabled     Boolean  @default(true)
@@ -1388,4 +1436,608 @@ model RegistrationField {
   @@unique([realmId, name])
   @@index([realmId])
   @@map("registration_fields")
+}
+
+// ─── WIZARD STATE ─────────────────────────────────────────
+
+model WizardState {
+  id        String  @id @default(uuid()) @db.VarChar(36)
+  completed Boolean @default(false) @map("completed")
+  skipped   Boolean @default(false) @map("skipped")
+
+  currentStep Int @default(0) @map("current_step")
+
+  adminUsername     String? @map("admin_username")
+  adminEmail        String? @map("admin_email")
+  adminPasswordHash String? @map("admin_password_hash")
+
+  realmName        String? @map("realm_name")
+  realmDisplayName String? @map("realm_display_name")
+
+  smtpConfig Json? @map("smtp_config")
+
+  clientId     String?  @map("client_id")
+  clientSecret String?  @map("client_secret")
+  redirectUris Json    @default("[]") @map("redirect_uris")
+
+  sdkGenerated Boolean @default(false) @map("sdk_generated")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@map("wizard_states")
+}
+
+// ─── MAGIC LINK REQUESTS ───────────────────────────────
+
+model MagicLinkRequest {
+  id          String          @id @default(uuid()) @db.VarChar(36)
+  realmId     String          @map("realm_id") @db.VarChar(36)
+  userId      String          @map("user_id") @db.VarChar(36)
+  email       String          @map("email")
+  tokenHash   String          @unique @map("token_hash") @db.VarChar(191)
+  status      MagicLinkStatus @default(PENDING) @map("status")
+  expiresAt   DateTime        @map("expires_at")
+  completedAt DateTime?       @map("completed_at")
+  ipAddress   String?         @map("ip_address")
+  userAgent   String?         @map("user_agent")
+  createdAt   DateTime        @default(now()) @map("created_at")
+
+  realm Realm @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([realmId, email, createdAt])
+  @@index([realmId, ipAddress, createdAt])
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("magic_link_requests")
+}
+
+// ─── SESSION RISK PROFILES ───────────────────────────────
+
+model SessionRiskProfile {
+  id        String  @id @default(uuid()) @db.VarChar(36)
+  sessionId String  @unique @map("session_id") @db.VarChar(36)
+  realmId   String  @map("realm_id") @db.VarChar(36)
+  userId    String  @map("user_id") @db.VarChar(36)
+  clientId  String? @map("client_id") @db.VarChar(36)
+
+  riskScore  Int    @default(0) @map("risk_score")
+  riskLevel  String @default("LOW") @map("risk_level")
+  trustScore Float  @default(100) @map("trust_score")
+
+  devicePosture     Json? @map("device_posture")
+  networkContext    Json? @map("network_context")
+  behavioralSignals Json? @map("behavioral_signals")
+
+  stepUpRequired  Boolean   @default(false) @map("step_up_required")
+  stepUpReason    String?   @map("step_up_reason")
+  stepUpExpiresAt DateTime? @map("step_up_expires_at")
+
+  terminateSession  Boolean @default(false) @map("terminate_session")
+  terminationReason String? @map("termination_reason")
+
+  lastEvaluatedAt  DateTime? @map("last_evaluated_at")
+  nextEvaluationAt DateTime? @map("next_evaluation_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
+  realm   Realm   @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([realmId])
+  @@index([realmId, riskLevel])
+  @@index([userId])
+  @@index([nextEvaluationAt])
+  @@map("session_risk_profiles")
+}
+
+// ─── DEVICE POSTURE RECORDS ───────────────────────────────
+
+model DevicePostureRecord {
+  id                String @id @default(uuid()) @db.VarChar(36)
+  sessionId         String @map("session_id") @db.VarChar(36)
+  realmId           String @map("realm_id") @db.VarChar(36)
+  realm             Realm  @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  userId            String @map("user_id") @db.VarChar(36)
+  deviceFingerprint String @map("device_fingerprint") @db.VarChar(191)
+
+  osType    String? @map("os_type")
+  osVersion String? @map("os_version")
+  osBuild   String? @map("os_build")
+
+  securityPatchLevel String?   @map("security_patch_level")
+  lastUpdateDate     DateTime? @map("last_update_date")
+
+  diskEncrypted  Boolean? @map("disk_encrypted")
+  encryptionType String?  @map("encryption_type")
+
+  antivirusEnabled Boolean? @map("antivirus_enabled")
+  antivirusName    String?  @map("antivirus_name")
+  firewallEnabled  Boolean? @map("firewall_enabled")
+
+  screenLockEnabled  Boolean @default(false) @map("screen_lock_enabled")
+  lockTimeoutSeconds Int?    @map("lock_timeout_seconds")
+
+  managedDevice   Boolean @default(false) @map("managed_device")
+  mdmEnrollmentId String? @map("mdm_enrollment_id")
+
+  jailbroken Boolean @default(false)
+
+  deviceTrustTier String @default("UNKNOWN") @map("device_trust_tier")
+
+  complianceStatus  String? @map("compliance_status")
+  complianceDetails Json?   @map("compliance_details")
+
+  reportedAt DateTime @default(now()) @map("reported_at")
+
+  @@index([sessionId])
+  @@index([userId])
+  @@index([deviceFingerprint])
+  @@index([realmId, deviceTrustTier])
+  @@map("device_posture_records")
+}
+
+// ─── NETWORK CONTEXT RECORDS ─────────────────────────────
+
+model NetworkContextRecord {
+  id        String @id @default(uuid()) @db.VarChar(36)
+  sessionId String @map("session_id") @db.VarChar(36)
+  realmId   String @map("realm_id") @db.VarChar(36)
+  realm     Realm  @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  userId    String @map("user_id") @db.VarChar(36)
+
+  ipAddress    String  @map("ip_address")
+  ipVersion    Int?    @map("ip_version")
+  geoCountry   String? @map("geo_country")
+  geoCity      String? @map("geo_city")
+  geoLatitude  Float?  @map("geo_latitude")
+  geoLongitude Float?  @map("geo_longitude")
+  asn          String? @map("asn")
+  isp          String? @map("isp")
+
+  networkType String? @map("network_type")
+  ispCategory String? @map("isp_category")
+
+  isVpn   Boolean @default(false) @map("is_vpn")
+  isProxy Boolean @default(false) @map("is_proxy")
+  isTor   Boolean @default(false) @map("is_tor")
+
+  connectionType String? @map("connection_type")
+  mtu            Int?    @map("mtu")
+
+  ipReputationScore String  @default("UNKNOWN") @map("ip_reputation")
+  geoVelocity       String? @map("geo_velocity")
+  isDatacenter      Boolean @default(false) @map("is_datacenter")
+
+  geoChanged       Boolean @default(false) @map("geo_changed")
+  geoChangeDetails Json?   @map("geo_change_details")
+
+  capturedAt DateTime @default(now()) @map("captured_at")
+
+  @@index([sessionId])
+  @@index([userId])
+  @@index([ipAddress])
+  @@index([capturedAt])
+  @@map("network_context_records")
+}
+
+// ─── BEHAVIORAL BIOMETRICS ────────────────────────────────
+
+model BehavioralBiometricProfile {
+  id      String @id @default(uuid()) @db.VarChar(36)
+  userId  String @unique @map("user_id") @db.VarChar(36)
+  realmId String @map("realm_id") @db.VarChar(36)
+
+  avgTypingSpeed Float @default(0) @map("avg_typing_speed")
+  typingVariance Float @default(0) @map("typing_variance")
+  avgBurstLength Float @default(0) @map("avg_burst_length")
+
+  avgPointerSpeed   Float @default(0) @map("avg_pointer_speed")
+  pointerSmoothness Float @default(0) @map("pointer_smoothness")
+  avgScrollSpeed    Float @default(0) @map("avg_scroll_speed")
+
+  avgSessionDuration   Float @default(0) @map("avg_session_duration")
+  interactionFrequency Float @default(0) @map("interaction_frequency")
+
+  modelConfidence  Float @default(0) @map("model_confidence")
+  anomalyThreshold Float @default(2.5) @map("anomaly_threshold")
+  sampleCount      Int   @default(0) @map("sample_count")
+
+  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  realm Realm @relation(fields: [realmId], references: [id], onDelete: Cascade)
+
+  @@index([realmId])
+  @@map("behavioral_biometric_profiles")
+}
+
+model BehavioralSample {
+  id        String @id @default(uuid()) @db.VarChar(36)
+  userId    String @map("user_id") @db.VarChar(36)
+  sessionId String @map("session_id") @db.VarChar(36)
+
+  interactionType String @map("interaction_type")
+
+  keystrokeDurations Json? @map("keystroke_durations")
+  burstLength        Int?  @map("burst_length")
+
+  velocity        Float? @map("velocity")
+  acceleration    Float? @map("acceleration")
+  trajectoryAngle Float? @map("trajectory_angle")
+  curvature       Float? @map("curvature")
+
+  pageUrl        String? @map("page_url")
+  focusedElement String? @map("focused_element")
+
+  anomalyScore Float   @default(0) @map("anomaly_score")
+  isAnomalous  Boolean @default(false) @map("is_anomalous")
+
+  collectedAt DateTime @default(now()) @map("collected_at")
+
+  @@index([userId, collectedAt])
+  @@index([sessionId])
+  @@index([userId, interactionType])
+  @@map("behavioral_samples")
+}
+
+// ─── CONTINUOUS RISK EVENTS ──────────────────────────────
+
+model ContinuousRiskEvent {
+  id        String  @id @default(uuid()) @db.VarChar(36)
+  sessionId String  @map("session_id") @db.VarChar(36)
+  realmId   String  @map("realm_id") @db.VarChar(36)
+  realm     Realm   @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  userId    String  @map("user_id") @db.VarChar(36)
+  clientId  String? @map("client_id") @db.VarChar(36)
+
+  evaluationType String  @map("evaluation_type")
+  triggerReason  String? @map("trigger_reason")
+
+  riskScoreBefore  Int    @map("risk_score_before")
+  riskScoreAfter   Int    @map("risk_score_after")
+  riskLevelBefore  String @map("risk_level_before")
+  riskLevelAfter   String @map("risk_level_after")
+  trustScoreBefore Float  @map("trust_score_before")
+  trustScoreAfter  Float  @map("trust_score_after")
+
+  signals           Json  @map("signals")
+  policyEvaluations Json? @map("policy_evaluations")
+
+  action       String  @map("action")
+  actionReason String? @map("action_reason")
+
+  stepUpSessionId String? @map("step_up_session_id")
+
+  evaluatedAt DateTime @default(now()) @map("evaluated_at")
+
+  @@index([sessionId])
+  @@index([userId])
+  @@index([evaluatedAt])
+  @@index([realmId, action])
+  @@map("continuous_risk_events")
+}
+
+// ─── CONTINUOUS RISK POLICIES ─────────────────────────────
+
+model ContinuousRiskPolicy {
+  id       String  @id @default(uuid()) @db.VarChar(36)
+  realmId  String  @map("realm_id") @db.VarChar(36)
+  clientId String? @map("client_id") @db.VarChar(36)
+  realm    Realm   @relation(fields: [realmId], references: [id], onDelete: Cascade)
+
+  name        String
+  description String?
+  enabled     Boolean @default(true)
+  priority    Int     @default(0)
+
+  conditions Json @map("conditions")
+
+  action     String @default("NO_ACTION") @map("action")
+  actionData Json?  @map("action_data")
+
+  riskScoreContribution Int @default(0) @map("risk_score_contribution")
+
+  cooldownSeconds Int @default(300) @map("cooldown_seconds")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@unique([realmId, clientId, name])
+  @@index([realmId, priority])
+  @@index([realmId, enabled])
+  @@map("continuous_risk_policies")
+}
+
+// ─── SMS DELIVERY LOG ─────────────────────────────────────
+
+model SmsDeliveryLog {
+  id                String   @id @default(uuid()) @db.VarChar(36)
+  realmId           String   @map("realm_id") @db.VarChar(36)
+  realm             Realm    @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  userId            String   @map("user_id") @db.VarChar(36)
+  phoneHash         String   @map("phone_hash")
+  provider          String
+  status            String   @default("PENDING") @map("status")
+  providerMessageId String?  @map("provider_message_id")
+  errorCode         String?
+  errorMessage      String?
+  createdAt         DateTime @default(now()) @map("created_at")
+
+  @@index([realmId, userId, createdAt])
+  @@index([realmId, createdAt])
+  @@map("sms_delivery_logs")
+}
+
+// ─── OTP ATTEMPTS ─────────────────────────────────────────
+
+model OtpAttempt {
+  id             String    @id @default(uuid()) @db.VarChar(36)
+  realmId        String    @map("realm_id") @db.VarChar(36)
+  realm          Realm     @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  userId         String    @map("user_id") @db.VarChar(36)
+  phoneHash      String    @map("phone_hash")
+  codeHash       String    @map("code_hash")
+  verified       Boolean   @default(false)
+  failedAttempts Int       @default(0) @map("failed_attempts")
+  expiresAt      DateTime  @map("expires_at")
+  verifiedAt     DateTime? @map("verified_at")
+  createdAt      DateTime  @default(now()) @map("created_at")
+
+  @@index([realmId, userId, expiresAt])
+  @@index([realmId, phoneHash, expiresAt])
+  @@map("otp_attempts")
+}
+
+// ─── SCIM 2.0 PROVISIONING ─────────────────────────────────
+
+model ScimProvisioningToken {
+  id           String    @id @default(uuid()) @db.VarChar(36)
+  realmId      String    @map("realm_id") @db.VarChar(36)
+  realm        Realm     @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  name         String
+  description  String?
+  enabled      Boolean   @default(true)
+  scopes       Json      @default("[\"urn:scim:schemas:core:1.0:Users\", \"urn:scim:schemas:core:1.0:Groups\"]") @map("scopes")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  expiresAt    DateTime? @map("expires_at")
+  lastUsedAt   DateTime? @map("last_used_at")
+  requestCount Int       @default(0) @map("request_count")
+  revoked      Boolean   @default(false)
+  revokedAt    DateTime? @map("revoked_at")
+
+  tokenHash String @unique @map("token_hash") @db.VarChar(191)
+
+  @@index([realmId])
+  @@index([tokenHash])
+  @@map("scim_provisioning_tokens")
+}
+
+model ScimAttributeMapping {
+  id              String   @id @default(uuid()) @db.VarChar(36)
+  realmId         String   @map("realm_id") @db.VarChar(36)
+  realm           Realm    @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  resourceType    String
+  scimAttribute   String   @map("scim_attribute")
+  authmeAttribute String   @map("authme_attribute")
+  enabled         Boolean  @default(true)
+  direction       String   @default("inbound")
+  createdAt       DateTime @default(now()) @map("created_at")
+  updatedAt       DateTime @updatedAt @map("updated_at")
+
+  @@unique([realmId, resourceType, scimAttribute])
+  @@index([realmId, resourceType])
+  @@map("scim_attribute_mappings")
+}
+
+// ─── NHI (Non-Human Identities) ───────────────────────────
+
+model NhiIdentity {
+  id                     String             @id @default(uuid()) @db.VarChar(36)
+  realmId                String             @map("realm_id") @db.VarChar(36)
+  identityType           NhiIdentityType    @default(MACHINE_TO_MACHINE) @map("identity_type")
+  name                   String
+  description            String?
+  enabled                Boolean            @default(true)
+  lifecycleStatus        NhiLifecycleStatus @default(PROVISIONING) @map("lifecycle_status")
+  suspendedAt            DateTime?          @map("suspended_at")
+  decommissionedAt       DateTime?          @map("decommissioned_at")
+  certificateSubject     String?            @map("certificate_subject")
+  certificateFingerprint String?            @map("certificate_fingerprint")
+  certificateNotBefore   DateTime?          @map("certificate_not_before")
+  certificateNotAfter    DateTime?          @map("certificate_not_after")
+  agentPurpose           String?            @map("agent_purpose")
+  permissionScopes       Json               @default("[]") @map("permission_scopes")
+  metadata               Json               @default("{}") @map("metadata")
+  tags                   Json               @default("[]") @map("tags")
+  createdAt              DateTime           @default(now()) @map("created_at")
+  updatedAt              DateTime           @updatedAt @map("updated_at")
+
+  realm       Realm           @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  credentials NhiCredential[]
+  usageStats  NhiUsageStats?
+
+  @@unique([realmId, name])
+  @@index([realmId])
+  @@index([lifecycleStatus])
+  @@map("nhi_identities")
+}
+
+model NhiCredential {
+  id                  String            @id @default(uuid()) @db.VarChar(36)
+  nhiIdentityId       String            @map("nhi_identity_id") @db.VarChar(36)
+  credentialType      NhiCredentialType @default(API_KEY) @map("credential_type")
+  name                String
+  keyPrefix           String?           @map("key_prefix")
+  keyHash             String?           @map("key_hash")
+  certificatePem      String?           @map("certificate_pem")
+  certificateChain    String?           @map("certificate_chain")
+  privateKeyPem       String?           @map("private_key_pem")
+  jwtSigningAlgorithm String?           @map("jwt_signing_algorithm")
+  jwtIssuer           String?           @map("jwt_issuer")
+  jwtAudience         String?           @map("jwt_audience")
+  expiresAt           DateTime?         @map("expires_at")
+  rotatedAt           DateTime?         @map("rotated_at")
+  rotationRequired    Boolean           @default(false) @map("rotation_required")
+  enabled             Boolean           @default(true)
+  revoked             Boolean           @default(false)
+  revokedAt           DateTime?         @map("revoked_at")
+  lastUsedAt          DateTime?         @map("last_used_at")
+  requestCount        Int               @default(0) @map("request_count")
+  allowedIpRanges     Json              @default("[]") @map("allowed_ip_ranges")
+  createdAt           DateTime          @default(now()) @map("created_at")
+  updatedAt           DateTime          @updatedAt @map("updated_at")
+
+  nhiIdentity NhiIdentity @relation(fields: [nhiIdentityId], references: [id], onDelete: Cascade)
+
+  @@unique([nhiIdentityId, name])
+  @@index([nhiIdentityId])
+  @@index([keyPrefix])
+  @@index([expiresAt])
+  @@map("nhi_credentials")
+}
+
+model NhiCredentialPolicy {
+  id                   String            @id @default(uuid()) @db.VarChar(36)
+  realmId              String            @map("realm_id") @db.VarChar(36)
+  name                 String
+  description          String?
+  enabled              Boolean           @default(true)
+  priority             Int               @default(0)
+  credentialType       NhiCredentialType @default(API_KEY) @map("credential_type")
+  rotationIntervalDays Int               @default(90) @map("rotation_interval_days")
+  rotationBeforeDays   Int               @default(7) @map("rotation_before_days")
+  autoRotate           Boolean           @default(false) @map("auto_rotate")
+  maxCredentialAgeDays Int               @default(365) @map("max_credential_age_days")
+  maxRequestsPerDay    Int?              @map("max_requests_per_day")
+  maxRequestsPerMonth  Int?              @map("max_requests_per_month")
+  rateLimitPerMinute   Int?              @map("rate_limit_per_minute")
+  requireCertificate   Boolean           @default(false) @map("require_certificate")
+  requireIpRestriction Boolean           @default(false) @map("require_ip_restriction")
+  requireAuditLogging  Boolean           @default(true) @map("require_audit_logging")
+  createdAt            DateTime          @default(now()) @map("created_at")
+  updatedAt            DateTime          @updatedAt @map("updated_at")
+
+  realm Realm @relation(fields: [realmId], references: [id], onDelete: Cascade)
+
+  @@unique([realmId, name])
+  @@index([realmId])
+  @@index([realmId, priority])
+  @@map("nhi_credential_policies")
+}
+
+model NhiAuditLog {
+  id            String   @id @default(uuid()) @db.VarChar(36)
+  realmId       String   @map("realm_id") @db.VarChar(36)
+  nhiIdentityId String   @map("nhi_identity_id") @db.VarChar(36)
+  action        String
+  credentialId  String?  @map("credential_id") @db.VarChar(36)
+  ipAddress     String?  @map("ip_address")
+  userAgent     String?  @map("user_agent")
+  success       Boolean  @default(true)
+  errorCode     String?  @map("error_code")
+  details       Json?
+  createdAt     DateTime @default(now()) @map("created_at")
+
+  realm Realm @relation(fields: [realmId], references: [id], onDelete: Cascade)
+
+  @@index([realmId])
+  @@index([nhiIdentityId])
+  @@index([action])
+  @@index([createdAt])
+  @@map("nhi_audit_logs")
+}
+
+model NhiUsageStats {
+  id            String    @id @default(uuid()) @db.VarChar(36)
+  nhiIdentityId String    @unique @map("nhi_identity_id") @db.VarChar(36)
+  totalRequests Int       @default(0) @map("total_requests")
+  lastActiveAt  DateTime? @map("last_active_at")
+  successCount  Int       @default(0) @map("success_count")
+  errorCount    Int       @default(0) @map("error_count")
+  createdAt     DateTime  @default(now()) @map("created_at")
+  updatedAt     DateTime  @updatedAt @map("updated_at")
+
+  nhiIdentity NhiIdentity @relation(fields: [nhiIdentityId], references: [id], onDelete: Cascade)
+
+  @@map("nhi_usage_stats")
+}
+
+// ─── THEME BUILDER ─────────────────────────────────────────
+
+model Theme {
+  id          String    @id @default(uuid()) @db.VarChar(36)
+  realmId     String    @map("realm_id") @db.VarChar(36)
+  name        String
+  displayName String?   @map("display_name")
+  description String?
+  themeType   String    @default("login") @map("theme_type")
+  version     Int       @default(1)
+  published   Boolean   @default(false)
+  publishedAt DateTime? @map("published_at")
+  styles      Json      @default("{}")
+  components  Json      @default("[]")
+  assets      Json      @default("{}")
+  settings    Json      @default("{}")
+  createdBy   String?   @map("created_by")
+  updatedBy   String?   @map("updated_by")
+  createdAt   DateTime  @default(now()) @map("created_at")
+  updatedAt   DateTime  @updatedAt @map("updated_at")
+
+  realm    Realm          @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  versions ThemeVersion[]
+
+  @@unique([realmId, name])
+  @@index([realmId])
+  @@map("themes")
+}
+
+model ThemeVersion {
+  id         String   @id @default(uuid()) @db.VarChar(36)
+  themeId    String   @map("theme_id") @db.VarChar(36)
+  version    Int
+  changes    String?
+  checksum   String
+  styles     Json     @default("{}")
+  components Json     @default("[]")
+  assets     Json     @default("{}")
+  settings   Json     @default("{}")
+  createdBy  String?  @map("created_by")
+  createdAt  DateTime @default(now()) @map("created_at")
+
+  theme Theme @relation(fields: [themeId], references: [id], onDelete: Cascade)
+
+  @@unique([themeId, version])
+  @@index([themeId])
+  @@map("theme_versions")
+}
+
+// ─── UPGRADE AUDIT ─────────────────────────────────────────
+
+model UpgradeAuditLog {
+  id                String    @id @default(uuid()) @db.VarChar(36)
+  fromVersion       String    @map("from_version")
+  toVersion         String    @map("to_version")
+  status            String
+  startedAt         DateTime  @default(now()) @map("started_at")
+  completedAt       DateTime? @map("completed_at")
+  initiatedBy       String    @map("initiated_by")
+  backupId          String?   @map("backup_id")
+  backupPath        String?   @map("backup_path")
+  backupSize        String?   @map("backup_size")
+  ipAddress         String?   @map("ip_address")
+  dryRun            Boolean   @default(false) @map("dry_run")
+  rollbackTriggered Boolean   @default(false) @map("rollback_triggered")
+  details           Json?
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([startedAt])
+  @@index([fromVersion, toVersion])
+  @@map("upgrade_audit_log")
 }
