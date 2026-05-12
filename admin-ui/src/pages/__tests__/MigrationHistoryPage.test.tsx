@@ -1,5 +1,6 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, act } from '@testing-library/react';
+import { fireEvent } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../test/mocks/server';
 import { render } from '../../test/utils';
@@ -67,7 +68,7 @@ describe('MigrationHistoryPage', () => {
     renderMigrationHistoryPage();
     await waitFor(() => {
       const viewDetailsButton = screen.getAllByRole('button', { name: /view details/i })[0];
-      viewDetailsButton.click();
+      act(() => { viewDetailsButton.click(); });
     });
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /migration details/i })).toBeInTheDocument();
@@ -78,13 +79,13 @@ describe('MigrationHistoryPage', () => {
     renderMigrationHistoryPage();
     await waitFor(() => {
       const viewDetailsButton = screen.getAllByRole('button', { name: /view details/i })[0];
-      viewDetailsButton.click();
+      act(() => { viewDetailsButton.click(); });
     });
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /migration details/i })).toBeInTheDocument();
     });
     const closeButton = screen.getByTestId('modal-close-button');
-    closeButton.click();
+    act(() => { closeButton.click(); });
     await waitFor(() => {
       expect(screen.queryByRole('heading', { name: /migration details/i })).not.toBeInTheDocument();
     });
@@ -166,12 +167,12 @@ describe('MigrationHistoryPage', () => {
       expect(screen.getByText(/page 1 of 2/i)).toBeInTheDocument();
     });
     const nextButton = screen.getByRole('button', { name: /next/i });
-    nextButton.click();
+    act(() => { nextButton.click(); });
     await waitFor(() => {
       expect(screen.getByText(/page 2 of 2/i)).toBeInTheDocument();
     });
     const prevButton = screen.getByRole('button', { name: /previous/i });
-    prevButton.click();
+    act(() => { prevButton.click(); });
     await waitFor(() => {
       expect(screen.getByText(/page 1 of 2/i)).toBeInTheDocument();
     });
@@ -196,7 +197,7 @@ describe('MigrationHistoryPage', () => {
     );
     renderMigrationHistoryPage();
     const viewDetailsButton = await screen.findByRole('button', { name: /view details/i });
-    viewDetailsButton.click();
+    act(() => { viewDetailsButton.click(); });
     await waitFor(() => {
       expect(screen.getByText('Database migration failed due to schema conflict')).toBeInTheDocument();
     });

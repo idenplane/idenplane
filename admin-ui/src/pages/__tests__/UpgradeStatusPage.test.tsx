@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeAll, afterAll } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, act } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../test/mocks/server';
 import { render } from '../../test/utils';
@@ -130,7 +130,7 @@ describe('UpgradeStatusPage', () => {
 
     renderUpgradeStatusPage();
     const runChecksButton = await screen.findByRole('button', { name: /run checks/i });
-    runChecksButton.click();
+    act(() => { runChecksButton.click(); });
 
     await waitFor(() => {
       expect(preValidationSpy).toHaveBeenCalled();
