@@ -300,6 +300,7 @@ model User {
 
   @@unique([realmId, username])
   @@unique([realmId, email])
+  @@index([realmId])
   @@map("users")
 }
 
