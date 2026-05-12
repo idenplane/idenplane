@@ -20,11 +20,19 @@ export class HealthController {
     private readonly redis: RedisHealthIndicator,
   ) {}
 
-  @Get()
+  @Get('live')
   @HealthCheck()
   @ApiOperation({ summary: 'Liveness check' })
   @ApiResponse({ status: 200, description: 'Service is alive' })
   liveness() {
+    return this.health.check([]);
+  }
+
+  @Get()
+  @HealthCheck()
+  @ApiOperation({ summary: 'Liveness check (alias)' })
+  @ApiResponse({ status: 200, description: 'Service is alive' })
+  livenessAlias() {
     return this.health.check([]);
   }
 

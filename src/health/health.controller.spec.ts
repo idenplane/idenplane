@@ -37,6 +37,30 @@ describe('HealthController', () => {
     });
   });
 
+  describe('liveness', () => {
+    it('should call health.check with an empty indicators array and return the result', async () => {
+      const expected = { status: 'ok', details: {} };
+      healthCheckService.check.mockResolvedValue(expected);
+
+      const result = await controller.liveness();
+
+      expect(healthCheckService.check).toHaveBeenCalledWith([]);
+      expect(result).toEqual(expected);
+    });
+  });
+
+  describe('livenessAlias', () => {
+    it('should call health.check with an empty indicators array and return the result', async () => {
+      const expected = { status: 'ok', details: {} };
+      healthCheckService.check.mockResolvedValue(expected);
+
+      const result = await controller.livenessAlias();
+
+      expect(healthCheckService.check).toHaveBeenCalledWith([]);
+      expect(result).toEqual(expected);
+    });
+  });
+
   describe('readiness', () => {
     it('should call health.check with database and memory indicators', async () => {
       const dbResult = { database: { status: 'up' } };
