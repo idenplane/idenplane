@@ -93,6 +93,95 @@ export class BruteForceService {
     });
   }
 
+  async resetTotpFailures(realmId: string, userId: string): Promise<void> {
+    await this.prisma.totpFailureTracking.deleteMany({
+      where: { userId },
+    });
+  }
+
+  async recordTotpFailure(
+    realm: Realm,
+    userId: string,
+    ipAddress?: string | null,
+  ): Promise<void> {
+    if (!realm.bruteForceEnabled) return;
+
+    await this.prisma.totpFailureTracking.create({
+      data: { userId, ipAddress: ipAddress ?? null },
+    });
+
+    const maxFailures = Math.max(realm.maxLoginFailures, 1);
+    const resetTime = Math.max(realm.failureResetTime, 1);
+    const windowStart = new Date(Date.now() - resetTime * 1000);
+
+    const failureCount = await this.prisma.totpFailureTracking.count({
+      where: {
+        userId,
+        failedAt: { gte: windowStart },
+      },
+    });
+
+    this.logger.debug(
+      `TOTP brute force: user=${userId} failures=${failureCount}/${maxFailures} window=${resetTime}s`,
+    );
+
+    if (failureCount >= maxFailures) {
+      const lockedUntil = new Date(Date.now() + realm.lockoutDuration * 1000);
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { lockedUntil },
+      });
+      this.logger.warn(
+        `User ${userId} in realm ${realm.id} locked due to TOTP brute-force attempts`,
+      );
+    }
+  }
+
+  async checkTotpRateLimit(
+    realm: Realm,
+    userId: string,
+  ): Promise<{ blocked: boolean; remainingAttempts: number; retryAfterSeconds?: number }> {
+    if (!realm.bruteForceEnabled) {
+      return { blocked: false, remainingAttempts: -1 };
+    }
+
+    const maxFailures = Math.max(realm.maxLoginFailures, 1);
+    const resetTime = Math.max(realm.failureResetTime, 1);
+    const windowStart = new Date(Date.now() - resetTime * 1000);
+
+    const failureCount = await this.prisma.totpFailureTracking.count({
+      where: {
+        userId,
+        failedAt: { gte: windowStart },
+      },
+    });
+
+    if (failureCount >= maxFailures) {
+      const oldestFailure = await this.prisma.totpFailureTracking.findFirst({
+        where: { userId, failedAt: { gte: windowStart } },
+        orderBy: { failedAt: 'asc' },
+        select: { failedAt: true },
+      });
+
+      let retryAfterSeconds: number | undefined;
+      if (oldestFailure) {
+        const retryAfterMs = oldestFailure.failedAt.getTime() + resetTime * 1000 - Date.now();
+        retryAfterSeconds = Math.max(1, Math.ceil(retryAfterMs / 1000));
+      }
+
+      return {
+        blocked: true,
+        remainingAttempts: 0,
+        retryAfterSeconds,
+      };
+    }
+
+    return {
+      blocked: false,
+      remainingAttempts: maxFailures - failureCount,
+    };
+  }
+
   async unlockUser(realmId: string, userId: string): Promise<void> {
     // Verify the user exists and belongs to the specified realm before unlocking.
     // Without this check, a caller with access to realm A could unlock (or
@@ -135,13 +224,19 @@ export class BruteForceService {
 
   @Interval(300_000) // every 5 minutes
   async cleanupOldFailures(): Promise<void> {
-    // Delete login failures older than 24 hours
     const cutoff = new Date(Date.now() - 24 * 60 * 60 * 1000);
-    const { count } = await this.prisma.loginFailure.deleteMany({
+    const { count: loginCount } = await this.prisma.loginFailure.deleteMany({
       where: { failedAt: { lt: cutoff } },
     });
-    if (count > 0) {
-      this.logger.debug(`Cleaned up ${count} old login failure records`);
+    if (loginCount > 0) {
+      this.logger.debug(`Cleaned up ${loginCount} old login failure records`);
+    }
+
+    const { count: totpCount } = await this.prisma.totpFailureTracking.deleteMany({
+      where: { failedAt: { lt: cutoff } },
+    });
+    if (totpCount > 0) {
+      this.logger.debug(`Cleaned up ${totpCount} old TOTP failure records`);
     }
   }
 }

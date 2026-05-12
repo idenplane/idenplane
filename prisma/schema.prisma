@@ -285,7 +285,8 @@ model User {
   loginFailures              LoginFailure[]
   userCredentials            UserCredential[]
   recoveryCodes              RecoveryCode[]
-  usedTotpCodes             UsedTotpCode[]
+  usedTotpCodes              UsedTotpCode[]
+  totpFailureTracking        TotpFailureTracking[]
   webAuthnCredentials        WebAuthnCredential[]
   attributes                 UserAttribute[]
   loginRiskAssessments       LoginRiskAssessment[]
@@ -698,6 +699,21 @@ model UsedTotpCode {
   @@index([userId])
   @@index([expiresAt])
   @@map("used_totp_codes")
+}
+
+// ─── TOTP FAILURE TRACKING (brute-force protection) ───────
+
+model TotpFailureTracking {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  ipAddress String?  @map("ip_address")
+  failedAt  DateTime @default(now()) @map("failed_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, failedAt])
+  @@index([ipAddress, failedAt])
+  @@map("totp_failure_tracking")
 }
 
 // ─── WEBAUTHN / FIDO2 ────────────────────────────────────

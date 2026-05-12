@@ -28,6 +28,7 @@ import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
+import { BruteForceService } from '../brute-force/brute-force.service.js';
 
 @ApiTags('Step-Up Authentication')
 @Controller('realms/:realmName/step-up')
@@ -43,6 +44,7 @@ export class StepUpController {
     private readonly loginService: LoginService,
     private readonly crypto: CryptoService,
     private readonly webAuthnService: WebAuthnService,
+    private readonly bruteForceService: BruteForceService,
   ) {}
 
   /**
@@ -285,6 +287,18 @@ export class StepUpController {
         throw new UnauthorizedException('Invalid or expired MFA token');
       }
 
+      // Check TOTP rate limit before processing
+      const rateLimitCheck = await this.bruteForceService.checkTotpRateLimit(
+        realm,
+        challenge.userId,
+      );
+      if (rateLimitCheck.blocked) {
+        this.logger.warn(
+          `TOTP rate limit exceeded for user ${challenge.userId} in realm ${realm.id}`,
+        );
+        throw new UnauthorizedException('Too many failed attempts. Please try again later.');
+      }
+
       const verified = await this.mfaService.verifyTotp(challenge.userId, otp);
       if (!verified) {
         const recoveryVerified = await this.mfaService.verifyRecoveryCode(
@@ -292,12 +306,20 @@ export class StepUpController {
           otp,
         );
         if (!recoveryVerified) {
+          await this.bruteForceService.recordTotpFailure(
+            realm,
+            challenge.userId,
+            resolveClientIp(req),
+          );
           throw new UnauthorizedException('Invalid OTP code');
         }
       }
 
       // Consume the MFA challenge
       await this.mfaService.consumeMfaChallenge(mfa_token);
+
+      // Reset TOTP failure tracking on successful verification
+      await this.bruteForceService.resetTotpFailures(realm.id, challenge.userId);
 
       // Record the step-up
       await this.stepUpService.recordStepUp(

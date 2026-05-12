@@ -39,6 +39,7 @@ import { EventsService } from '../events/events.service.js';
 import { LoginEventType } from '../events/event-types.js';
 import { CustomAttributesService } from '../custom-attributes/custom-attributes.service.js';
 import { RiskAssessmentService } from '../risk-assessment/risk-assessment.service.js';
+import { BruteForceService } from '../brute-force/brute-force.service.js';
 import { CsrfService } from '../common/csrf/csrf.service.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 import {
@@ -79,6 +80,7 @@ export class LoginController {
     private readonly eventsService: EventsService,
     private readonly customAttributesService: CustomAttributesService,
     private readonly csrfService: CsrfService,
+    private readonly bruteForceService: BruteForceService,
     @Optional() private readonly riskAssessmentService?: RiskAssessmentService,
   ) {}
 
@@ -538,6 +540,20 @@ export class LoginController {
       );
     }
 
+    // Check TOTP rate limit before processing
+    const rateLimitCheck = await this.bruteForceService.checkTotpRateLimit(
+      realm,
+      challenge.userId,
+    );
+    if (rateLimitCheck.blocked) {
+      this.logger.warn(
+        `TOTP rate limit exceeded for user ${challenge.userId} in realm ${realm.id}`,
+      );
+      return res.redirect(
+        `/realms/${realm.name}/totp?error=${encodeURIComponent('Too many failed attempts. Please try again later.')}`,
+      );
+    }
+
     const code = body.code;
     const recoveryCode = body.recoveryCode;
 
@@ -552,6 +568,11 @@ export class LoginController {
     }
 
     if (!verified) {
+      await this.bruteForceService.recordTotpFailure(
+        realm,
+        challenge.userId,
+        resolveClientIp(req),
+      );
       this.eventsService.recordLoginEvent({
         realmId: realm.id,
         type: LoginEventType.MFA_VERIFY_ERROR,
@@ -559,15 +580,25 @@ export class LoginController {
         ipAddress: resolveClientIp(req),
         error: 'Invalid MFA code',
       });
-      // Same challenge token is reused — attempt counter was already incremented
+      const remainingCheck = await this.bruteForceService.checkTotpRateLimit(
+        realm,
+        challenge.userId,
+      );
+      const errorMsg =
+        remainingCheck.blocked || remainingCheck.remainingAttempts <= 2
+          ? 'Too many failed attempts. Please try again later.'
+          : 'Invalid code. Please try again.';
       return res.redirect(
-        `/realms/${realm.name}/totp?error=${encodeURIComponent('Invalid code. Please try again.')}`,
+        `/realms/${realm.name}/totp?error=${encodeURIComponent(errorMsg)}`,
       );
     }
 
     // MFA verified — consume the challenge and clear the cookie
     await this.mfaService.consumeMfaChallenge(challengeToken);
     res.clearCookie('AUTHME_MFA_CHALLENGE', { path: `/realms/${realm.name}` });
+
+    // Reset TOTP failure tracking on successful verification
+    await this.bruteForceService.resetTotpFailures(realm.id, challenge.userId);
 
     // MFA verified — complete login
     const user = await this.loginService.findUserById(challenge.userId);
