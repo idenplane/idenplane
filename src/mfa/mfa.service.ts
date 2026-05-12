@@ -23,10 +23,6 @@ const TOTP_USED_CODE_TTL_SECONDS = 90;
 export class MfaService {
   private readonly logger = new Logger(MfaService.name);
 
-  /**
-   * In-memory fallback store for used TOTP codes when Redis is unavailable.
-   * Key: `totp:used:{userId}:{code}`, Value: expiry timestamp (ms).
-   */
   private readonly usedTotpCodes = new Map<string, number>();
 
   constructor(
@@ -35,29 +31,67 @@ export class MfaService {
     @Optional() private readonly redis?: RedisService,
   ) {}
 
-  /** Mark a TOTP code as used, preventing replay within the window. */
   private async markTotpCodeUsed(userId: string, code: string): Promise<void> {
     const key = `totp:used:${userId}:${code}`;
-    if (this.redis?.isAvailable()) {
-      await this.redis.set(key, '1', TOTP_USED_CODE_TTL_SECONDS);
-    } else {
-      this.usedTotpCodes.set(key, Date.now() + TOTP_USED_CODE_TTL_SECONDS * 1000);
+    const codeHash = this.crypto.sha256(code);
+    const expiresAt = new Date(Date.now() + TOTP_USED_CODE_TTL_SECONDS * 1000);
+
+    try {
+      await this.prisma.usedTotpCode.create({
+        data: { userId, codeHash, expiresAt },
+      });
+    } catch (err) {
+      this.logger.warn(`Failed to persist used TOTP code to DB: ${(err as Error).message}`);
     }
+
+    if (this.redis?.isAvailable()) {
+      try {
+        await this.redis.set(key, '1', TOTP_USED_CODE_TTL_SECONDS);
+        return;
+      } catch (err) {
+        this.logger.warn(`Failed to store used TOTP code in Redis: ${(err as Error).message}`);
+      }
+    }
+
+    this.usedTotpCodes.set(key, expiresAt.getTime());
   }
 
-  /** Returns true if the TOTP code was already used within the replay window. */
   private async isTotpCodeUsed(userId: string, code: string): Promise<boolean> {
     const key = `totp:used:${userId}:${code}`;
+    const codeHash = this.crypto.sha256(code);
+
     if (this.redis?.isAvailable()) {
-      return this.redis.exists(key);
+      try {
+        if (await this.redis.exists(key)) return true;
+      } catch {
+        // Fall through to other checks
+      }
     }
-    const expiry = this.usedTotpCodes.get(key);
-    if (expiry === undefined) return false;
-    if (Date.now() > expiry) {
-      this.usedTotpCodes.delete(key);
-      return false;
+
+    const memExpiry = this.usedTotpCodes.get(key);
+    if (memExpiry !== undefined) {
+      if (Date.now() > memExpiry) {
+        this.usedTotpCodes.delete(key);
+        return false;
+      }
+      return true;
     }
-    return true;
+
+    try {
+      const record = await this.prisma.usedTotpCode.findFirst({
+        where: { userId, codeHash, expiresAt: { gt: new Date() } },
+      });
+      if (record) {
+        if (this.redis?.isAvailable()) {
+          await this.redis.set(key, '1', TOTP_USED_CODE_TTL_SECONDS).catch(() => {});
+        }
+        return true;
+      }
+    } catch (err) {
+      this.logger.warn(`Failed to check DB for used TOTP code: ${(err as Error).message}`);
+    }
+
+    return false;
   }
 
   async setupTotp(userId: string, realmName: string, username: string) {
@@ -306,6 +340,13 @@ export class MfaService {
     });
     if (count > 0) {
       this.logger.debug(`Cleaned up ${count} expired MFA challenges`);
+    }
+
+    const { count: totpCount } = await this.prisma.usedTotpCode.deleteMany({
+      where: { expiresAt: { lt: new Date() } },
+    });
+    if (totpCount > 0) {
+      this.logger.debug(`Cleaned up ${totpCount} expired used TOTP codes`);
     }
   }
 }

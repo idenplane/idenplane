@@ -204,6 +204,7 @@ model User {
   loginFailures       LoginFailure[]
   userCredentials     UserCredential[]
   recoveryCodes       RecoveryCode[]
+  usedTotpCodes       UsedTotpCode[]
   webAuthnCredentials WebAuthnCredential[]
   attributes          UserAttribute[]
   userConsentHistories UserConsentHistory[]
@@ -655,6 +656,21 @@ model RecoveryCode {
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@map("recovery_codes")
+}
+
+model UsedTotpCode {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  codeHash  String   @map("code_hash")
+  expiresAt DateTime @map("expires_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("used_totp_codes")
 }
 
 // ─── WEBAUTHN / FIDO2 ────────────────────────────────────
