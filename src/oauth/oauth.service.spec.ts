@@ -235,11 +235,12 @@ describe('OAuthService', () => {
       expect(result).toEqual(publicClient);
     });
 
-    it('should allow confidential client without code_challenge', async () => {
+    it('should throw BadRequestException when confidential client omits code_challenge', async () => {
       prisma.client.findUnique.mockResolvedValue(mockClient);
 
-      const result = await service.validateAuthRequest(mockRealm, validParams);
-      expect(result).toBe(mockClient);
+      await expect(
+        service.validateAuthRequest(mockRealm, validParams),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

@@ -73,10 +73,10 @@ export class OAuthService {
       throw new BadRequestException('Only S256 code_challenge_method is supported');
     }
 
-    // PKCE is required for public clients (OAuth 2.1 / RFC 7636)
-    if (client.clientType === 'PUBLIC' && !params.code_challenge) {
+    // PKCE is required for all client types (OAuth 2.1 / RFC 7636)
+    if (!params.code_challenge) {
       throw new BadRequestException(
-        'PKCE (code_challenge) is required for public clients',
+        'PKCE (code_challenge) is required for all client types',
       );
     }
 
