@@ -73,7 +73,7 @@ describe('ClientListPage', () => {
   it('shows an error state when the API fails', async () => {
     server.use(
       http.get('/admin/realms/:name/clients', () =>
-        HttpResponse.json({ message: 'error' }, { status: 500 }),
+        HttpResponse.json({ message: 'Failed to load clients' }, { status: 500 }),
       ),
     );
     renderClientList();
