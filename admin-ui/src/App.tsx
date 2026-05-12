@@ -39,7 +39,6 @@ import AuthFlowEditorPage from './pages/auth-flows/AuthFlowEditorPage';
 import SetupWizardPage from './pages/setup-wizard/SetupWizardPage';
 import PendingRegistrationsPage from './pages/registration/PendingRegistrationsPage';
 import RegistrationFieldsPage from './pages/registration/RegistrationFieldsPage';
-import PublicRegistrationPage from './pages/registration/PublicRegistrationPage';
 import RegistrationSettingsPage from './pages/registration/RegistrationSettingsPage';
 import NotFoundPage from './pages/NotFoundPage';
 import { hasCredentials } from './api/client';

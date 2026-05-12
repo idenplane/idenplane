@@ -57,7 +57,7 @@ export default function ThemeCanvas({
       label: definition?.label ?? type,
       order: components.length,
       visible: true,
-      props: definition?.defaultProps ?? {},
+      props: (definition?.defaultProps ?? {}) as Record<string, unknown>,
     };
     updateComponents([...sorted, newComponent]);
   }
@@ -76,10 +76,6 @@ export default function ThemeCanvas({
     if (target < 0 || target >= next.length) return;
     [next[index], next[target]] = [next[target], next[index]];
     updateComponents(next);
-  }
-
-  function handleComponentChange(updated: ThemeComponent) {
-    updateComponents(sorted.map((c) => (c.id === updated.id ? updated : c)));
   }
 
   // ── Drag-and-drop (palette → canvas) ─────────────────────

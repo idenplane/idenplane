@@ -17,7 +17,7 @@ interface RegistrationField {
 export default function PublicRegistrationPage() {
   const { realm: realmName } = useParams<{ realm: string }>();
   const [realm, setRealm] = useState<any>(null);
-  const [fields, setFields] = useState<RegistrationField[]>([]);
+  const [fields, setFields] = useState<Partial<RegistrationField>[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
@@ -208,8 +208,8 @@ export default function PublicRegistrationPage() {
                 </label>
                 {field.type === 'select' && field.options ? (
                   <select
-                    value={customAttributes[field.name] || ''}
-                    onChange={(e) => setCustomAttributes({ ...customAttributes, [field.name]: e.target.value })}
+                    value={customAttributes[field.name ?? ''] || ''}
+                    onChange={(e) => setCustomAttributes({ ...customAttributes, [field.name!]: e.target.value })}
                     required={field.required}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                   >
@@ -221,18 +221,18 @@ export default function PublicRegistrationPage() {
                 ) : field.type === 'checkbox' ? (
                   <input
                     type="checkbox"
-                    checked={customAttributes[field.name] === 'true'}
-                    onChange={(e) => setCustomAttributes({ ...customAttributes, [field.name]: e.target.checked.toString() })}
+                    checked={customAttributes[field.name ?? ''] === 'true'}
+                    onChange={(e) => setCustomAttributes({ ...customAttributes, [field.name!]: e.target.checked.toString() })}
                     className="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
                   />
                 ) : (
                   <input
                     type={field.type === 'email' ? 'email' : field.type === 'number' ? 'number' : 'text'}
-                    value={customAttributes[field.name] || ''}
-                    onChange={(e) => setCustomAttributes({ ...customAttributes, [field.name]: e.target.value })}
+                    value={customAttributes[field.name ?? ''] || ''}
+                    onChange={(e) => setCustomAttributes({ ...customAttributes, [field.name!]: e.target.value })}
                     required={field.required}
                     placeholder={field.placeholder}
-                    pattern={field.type === 'text' ? field.name : undefined}
+                    pattern={field.type === 'text' ? field.name ?? undefined : undefined}
                     className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
                   />
                 )}

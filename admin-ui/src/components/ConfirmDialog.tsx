@@ -1,41 +1,51 @@
 import { useEffect, useRef } from 'react';
 
 interface ConfirmDialogProps {
-  isOpen: boolean;
+  isOpen?: boolean;
+  open?: boolean;
   title: string;
-  message: string;
+  message: React.ReactNode;
   onConfirm: () => void;
-  onCancel: () => void;
+  onCancel?: () => void;
+  onClose?: () => void;
+  confirmText?: string;
+  confirmDisabled?: boolean;
 }
 
 export default function ConfirmDialog({
   isOpen,
+  open,
   title,
   message,
   onConfirm,
   onCancel,
+  onClose,
+  confirmText,
+  confirmDisabled,
 }: ConfirmDialogProps) {
   const cancelRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
+  const isDialogOpen = isOpen ?? open ?? false;
+  const handleClose = onClose ?? onCancel ?? (() => {});
 
   // Move focus into the dialog when it opens; restore focus when it closes.
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isDialogOpen) return;
     const previouslyFocused = document.activeElement as HTMLElement | null;
     cancelRef.current?.focus();
 
     return () => {
       previouslyFocused?.focus();
     };
-  }, [isOpen]);
+  }, [isDialogOpen]);
 
   // Trap focus inside the dialog while it is open.
   useEffect(() => {
-    if (!isOpen) return;
+    if (!isDialogOpen) return;
 
     function handleKeyDown(e: KeyboardEvent) {
       if (e.key === 'Escape') {
-        onCancel();
+        handleClose();
         return;
       }
       if (e.key !== 'Tab') return;
@@ -69,9 +79,9 @@ export default function ConfirmDialog({
 
     document.addEventListener('keydown', handleKeyDown);
     return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [isOpen, onCancel]);
+  }, [isDialogOpen, handleClose]);
 
-  if (!isOpen) return null;
+  if (!isDialogOpen) return null;
 
   const titleId = 'confirm-dialog-title';
   const descId = 'confirm-dialog-desc';
@@ -81,7 +91,7 @@ export default function ConfirmDialog({
       {/* Backdrop */}
       <div
         className="fixed inset-0 bg-black/50"
-        onClick={onCancel}
+        onClick={handleClose}
         aria-hidden="true"
       />
       {/* Dialog panel */}
@@ -98,16 +108,17 @@ export default function ConfirmDialog({
         <div className="mt-6 flex justify-end gap-3">
           <button
             ref={cancelRef}
-            onClick={onCancel}
+            onClick={handleClose}
             className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             Cancel
           </button>
           <button
             onClick={onConfirm}
-            className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700"
+            disabled={confirmDisabled}
+            className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
           >
-            Confirm
+            {confirmText ?? 'Confirm'}
           </button>
         </div>
       </div>

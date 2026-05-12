@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { getUpgradeHistory, type UpgradeAuditEntry } from '../api/upgrade';
+import { getUpgradeHistory, type UpgradeAuditEntry } from '../../api/upgrade';
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 

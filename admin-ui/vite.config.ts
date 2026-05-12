@@ -12,16 +12,12 @@ export default defineConfig({
         target: 'http://localhost:3000',
         changeOrigin: true,
         secure: false,
-        logLevel: 'warn',
-        // Rewrite /admin prefix so backend receives clean path
         rewrite: (path) => path.replace(/^\/admin/, ''),
       },
-      // Health checks bypass /admin - direct to backend
       '/health': {
         target: 'http://localhost:3000',
         changeOrigin: true,
         secure: false,
-        logLevel: 'warn',
       },
     },
   },

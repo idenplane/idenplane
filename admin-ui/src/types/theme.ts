@@ -368,7 +368,7 @@ export interface ComponentDefinition {
   label: string;
   icon: string;
   description: string;
-  defaultProps: ComponentProps;
+  defaultProps: Partial<ComponentProps>;
   allowedProps: string[];
   styles?: ComponentStyleDefinition[];
 }
