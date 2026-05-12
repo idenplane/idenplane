@@ -70,7 +70,8 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "twilio": "^6.0.2",
-    "xml-crypto": "^6.1.2"
+    "xml-crypto": "^6.1.2",
+    "xmldom": "^0.6.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.5",

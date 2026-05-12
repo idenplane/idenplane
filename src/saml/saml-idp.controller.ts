@@ -92,7 +92,7 @@ export class SamlIdpController {
       throw new BadRequestException('Missing SAMLRequest parameter');
     }
 
-    // Parse and validate the AuthnRequest
+    // Parse the AuthnRequest to extract issuer
     const parsed = await this.samlIdpService.validateAuthnRequest(samlRequest);
 
     // Look up the SP by issuer (entityId)
@@ -101,6 +101,11 @@ export class SamlIdpController {
       throw new BadRequestException(
         `Unknown or disabled SAML service provider: ${parsed.issuer}`,
       );
+    }
+
+    // Validate signature using SP's certificate if one is registered
+    if (sp.certificate) {
+      await this.samlIdpService.validateSignature(samlRequest, sp.certificate);
     }
 
     // Validate the ACS URL supplied in the AuthnRequest against the SP's
