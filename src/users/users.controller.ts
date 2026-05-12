@@ -27,6 +27,9 @@ import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import { SetPasswordDto } from './dto/set-password.dto.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
+import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
+import { AdminRolesGuard } from '../common/guards/admin-roles.guard.js';
+import { RequireAdminRoles } from '../common/decorators/require-admin-roles.decorator.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 
 class ListUsersQueryDto {
@@ -70,12 +73,13 @@ class ListUsersQueryDto {
 
 @ApiTags('Users')
 @Controller('admin/realms/:realmName/users')
-@UseGuards(RealmGuard)
+@UseGuards(RealmGuard, AdminApiKeyGuard, AdminRolesGuard)
 @ApiSecurity('admin-api-key')
 export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
+  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({ summary: 'Create a user in a realm' })
   @ApiResponse({ status: 201, description: 'User created successfully' })
   @ApiResponse({ status: 400, description: 'Invalid request body' })
@@ -85,6 +89,7 @@ export class UsersController {
   }
 
   @Get()
+  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({ summary: 'List users in a realm' })
   @ApiResponse({ status: 200, description: 'List of users' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -129,6 +134,7 @@ export class UsersController {
   }
 
   @Get(':userId')
+  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({ summary: 'Get a user by ID' })
   @ApiResponse({ status: 200, description: 'User details' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -138,6 +144,7 @@ export class UsersController {
   }
 
   @Put(':userId')
+  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({ summary: 'Update a user' })
   @ApiResponse({ status: 200, description: 'User updated successfully' })
   @ApiResponse({ status: 400, description: 'Invalid request body' })
@@ -152,6 +159,7 @@ export class UsersController {
   }
 
   @Patch(':userId')
+  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({ summary: 'Partially update a user' })
   @ApiResponse({ status: 200, description: 'User updated successfully' })
   @ApiResponse({ status: 400, description: 'Invalid request body' })
@@ -166,6 +174,7 @@ export class UsersController {
   }
 
   @Delete(':userId')
+  @RequireAdminRoles(['super-admin'])
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a user' })
   @ApiResponse({ status: 204, description: 'User deleted successfully' })
@@ -176,6 +185,7 @@ export class UsersController {
   }
 
   @Put(':userId/reset-password')
+  @RequireAdminRoles(['super-admin', 'admin'])
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Set a user password' })
   @ApiResponse({ status: 204, description: 'Password updated successfully' })
@@ -191,6 +201,7 @@ export class UsersController {
   }
 
   @Post(':userId/send-verification-email')
+  @RequireAdminRoles(['super-admin', 'admin'])
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Send or resend verification email to a user' })
   @ApiResponse({ status: 200, description: 'Verification email sent' })
@@ -208,6 +219,7 @@ export class UsersController {
   }
 
   @Get(':userId/offline-sessions')
+  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({ summary: 'List offline sessions for a user' })
   @ApiResponse({ status: 200, description: 'List of offline sessions' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -220,6 +232,7 @@ export class UsersController {
   }
 
   @Delete(':userId/offline-sessions/:tokenId')
+  @RequireAdminRoles(['super-admin', 'admin'])
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Revoke an offline session' })
   @ApiResponse({ status: 204, description: 'Offline session revoked' })
@@ -234,6 +247,7 @@ export class UsersController {
   }
 
   @Get(':userId/consents')
+  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({ summary: 'List all consents for a user' })
   @ApiResponse({ status: 200, description: 'List of user consents' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -246,6 +260,7 @@ export class UsersController {
   }
 
   @Get(':userId/consents/history')
+  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({ summary: 'Get consent history for a user' })
   @ApiResponse({ status: 200, description: 'User consent history' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
