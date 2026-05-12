@@ -1,11 +1,11 @@
-# @authme/angular
+# authme-angular
 
 Angular SDK for [AuthMe](https://github.com/Islamawad132/Authme) — an injectable `AuthService`, a route guard, an HTTP interceptor, and an `NgModule` entry point.
 
 ## Installation
 
 ```bash
-npm install @authme/angular authme-sdk rxjs
+npm install authme-angular authme-sdk rxjs
 ```
 
 ## Quick Start
@@ -16,7 +16,7 @@ npm install @authme/angular authme-sdk rxjs
 // app.module.ts
 import { NgModule } from '@angular/core';
 import { HttpClientModule } from '@angular/common/http';
-import { AuthmeModule } from '@authme/angular';
+import { AuthmeModule } from 'authme-angular';
 
 @NgModule({
   imports: [
@@ -37,7 +37,7 @@ export class AppModule {}
 
 ```typescript
 import { Component } from '@angular/core';
-import { AuthService } from '@authme/angular';
+import { AuthService } from 'authme-angular';
 
 @Component({
   selector: 'app-nav',
@@ -66,7 +66,7 @@ export class NavComponent {
 ```typescript
 // app.routes.ts
 import { Routes } from '@angular/router';
-import { AuthGuard } from '@authme/angular';
+import { AuthGuard } from 'authme-angular';
 
 export const routes: Routes = [
   { path: '', component: HomeComponent },
@@ -93,7 +93,7 @@ For standalone / functional interceptor style (Angular 15+):
 ```typescript
 // app.config.ts
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
-import { authInterceptor } from '@authme/angular';
+import { authInterceptor } from 'authme-angular';
 
 export const appConfig = {
   providers: [
