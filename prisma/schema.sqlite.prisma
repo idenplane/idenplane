@@ -203,6 +203,7 @@ model WizardState {
 
   clientId     String?  @map("client_id")
   clientSecret String?  @map("client_secret")
+  // SQLite: String[] → String (JSON array text) due to SQLite limitations
   redirectUris String   @default("[]") @map("redirect_uris")
 
   sdkGenerated Boolean @default(false) @map("sdk_generated")
