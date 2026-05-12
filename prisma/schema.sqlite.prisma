@@ -163,6 +163,7 @@ model Realm {
   loginRiskAssessments  LoginRiskAssessment[]
   userLoginProfiles     UserLoginProfile[]
   organizations         Organization[]
+  consentCategories     ConsentCategory[]
   serviceAccounts       ServiceAccount[]
   registrationFields     RegistrationField[]
 
@@ -437,7 +438,7 @@ model ConsentCategory {
   realm               Realm   @relation(fields: [realmId], references: [id], onDelete: Cascade)
   name                String  // Internal identifier
   displayName         String  @map("display_name")
-  description         String? @db.Text
+  description String?
   key                 String  @map("key")
   required            Boolean @default(false)
   configurableByUser  Boolean @default(true) @map("configurable_by_user")
@@ -503,7 +504,7 @@ model UserConsentHistory {
 
 model PendingDeletion {
   id                  String    @id @default(uuid())
-  userId              String    @map("user_id")
+  userId              String    @unique @map("user_id")
   user                User      @relation(fields: [userId], references: [id], onDelete: Cascade)
   requestedAt         DateTime  @default(now()) @map("requested_at")
   scheduledAt         DateTime  @map("scheduled_at")
@@ -1347,6 +1348,7 @@ model RateLimitEntry {
 model ServiceAccount {
   id          String   @id @default(uuid())
   realmId     String   @map("realm_id")
+  realm       Realm    @relation(fields: [realmId], references: [id], onDelete: Cascade)
   name        String
   description String?
   enabled     Boolean  @default(true)
