@@ -90,64 +90,55 @@ describe('LivePreview', () => {
     expect(screen.getByTitle('Mobile view')).toHaveClass('bg-indigo-100');
   });
 
-  it('dispatches viewport-change event when desktop button clicked', () => {
+  it('calls onViewportChange callback when desktop button clicked', () => {
+    const onViewportChange = vi.fn();
     render(
       <LivePreview
         styles={DEFAULT_THEME_STYLES}
         components={DEFAULT_THEME_COMPONENTS}
         assets={DEFAULT_THEME_ASSETS}
         settings={DEFAULT_THEME_SETTINGS}
+        onViewportChange={onViewportChange}
       />,
     );
 
-    const dispatchEventSpy = vi.spyOn(window, 'dispatchEvent');
     fireEvent.click(screen.getByTitle('Desktop view'));
 
-    expect(dispatchEventSpy).toHaveBeenCalled();
-    const event = dispatchEventSpy.mock.calls[dispatchEventSpy.mock.calls.length - 1][0] as CustomEvent;
-    expect(event.detail).toBe('desktop');
-
-    dispatchEventSpy.mockRestore();
+    expect(onViewportChange).toHaveBeenCalledWith('desktop');
   });
 
-  it('dispatches viewport-change event when tablet button clicked', () => {
+  it('calls onViewportChange callback when tablet button clicked', () => {
+    const onViewportChange = vi.fn();
     render(
       <LivePreview
         styles={DEFAULT_THEME_STYLES}
         components={DEFAULT_THEME_COMPONENTS}
         assets={DEFAULT_THEME_ASSETS}
         settings={DEFAULT_THEME_SETTINGS}
+        onViewportChange={onViewportChange}
       />,
     );
 
-    const dispatchEventSpy = vi.spyOn(window, 'dispatchEvent');
     fireEvent.click(screen.getByTitle('Tablet view'));
 
-    expect(dispatchEventSpy).toHaveBeenCalled();
-    const event = dispatchEventSpy.mock.calls[dispatchEventSpy.mock.calls.length - 1][0] as CustomEvent;
-    expect(event.detail).toBe('tablet');
-
-    dispatchEventSpy.mockRestore();
+    expect(onViewportChange).toHaveBeenCalledWith('tablet');
   });
 
-  it('dispatches viewport-change event when mobile button clicked', () => {
+  it('calls onViewportChange callback when mobile button clicked', () => {
+    const onViewportChange = vi.fn();
     render(
       <LivePreview
         styles={DEFAULT_THEME_STYLES}
         components={DEFAULT_THEME_COMPONENTS}
         assets={DEFAULT_THEME_ASSETS}
         settings={DEFAULT_THEME_SETTINGS}
+        onViewportChange={onViewportChange}
       />,
     );
 
-    const dispatchEventSpy = vi.spyOn(window, 'dispatchEvent');
     fireEvent.click(screen.getByTitle('Mobile view'));
 
-    expect(dispatchEventSpy).toHaveBeenCalled();
-    const event = dispatchEventSpy.mock.calls[dispatchEventSpy.mock.calls.length - 1][0] as CustomEvent;
-    expect(event.detail).toBe('mobile');
-
-    dispatchEventSpy.mockRestore();
+    expect(onViewportChange).toHaveBeenCalledWith('mobile');
   });
 
   it('renders iframe with sandbox attribute', () => {
@@ -257,9 +248,14 @@ describe('LivePreview', () => {
       />,
     );
 
-    // The current implementation uses CustomEvent instead of callback
-    // This test verifies the component renders with the callback prop
-    expect(screen.getByTitle('Theme Preview')).toBeInTheDocument();
+    fireEvent.click(screen.getByTitle('Desktop view'));
+    expect(onViewportChange).toHaveBeenCalledWith('desktop');
+
+    fireEvent.click(screen.getByTitle('Tablet view'));
+    expect(onViewportChange).toHaveBeenCalledWith('tablet');
+
+    fireEvent.click(screen.getByTitle('Mobile view'));
+    expect(onViewportChange).toHaveBeenCalledWith('mobile');
   });
 
   it('applies correct styling classes to container', () => {
