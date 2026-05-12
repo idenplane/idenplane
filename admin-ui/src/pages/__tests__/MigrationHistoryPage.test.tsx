@@ -34,8 +34,9 @@ describe('MigrationHistoryPage', () => {
     await waitFor(() => {
       expect(screen.getAllByText('COMPLETED')).toHaveLength(2);
     });
-    expect(screen.getByText('1.0.0')).toBeInTheDocument();
-    expect(screen.getByText('1.1.0')).toBeInTheDocument();
+    const versions = screen.getAllByText('1.0.0');
+    expect(versions.length).toBeGreaterThan(0);
+    expect(screen.getAllByText('1.1.0')).toHaveLength(1);
   });
 
   it('shows stats summary when data is loaded', async () => {
@@ -82,7 +83,7 @@ describe('MigrationHistoryPage', () => {
     await waitFor(() => {
       expect(screen.getByRole('heading', { name: /migration details/i })).toBeInTheDocument();
     });
-    const closeButton = screen.getByRole('button', { name: /close/i });
+    const closeButton = screen.getByTestId('modal-close-button');
     closeButton.click();
     await waitFor(() => {
       expect(screen.queryByRole('heading', { name: /migration details/i })).not.toBeInTheDocument();

@@ -166,6 +166,7 @@ function DetailModal({
           <h2 className="text-lg font-semibold text-gray-900">Migration Details</h2>
           <button
             onClick={onClose}
+            data-testid="modal-close-icon-button"
             className="text-gray-400 hover:text-gray-600"
             aria-label="Close"
           >
@@ -219,6 +220,7 @@ function DetailModal({
         <div className="flex justify-end border-t border-gray-200 px-6 py-4">
           <button
             onClick={onClose}
+            data-testid="modal-close-button"
             className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             Close
