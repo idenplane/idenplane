@@ -516,6 +516,7 @@ describe('AuthmeClient', () => {
         if (url.includes('/token')) {
           return Promise.resolve({
             ok: false,
+            status: 400,
             json: () => Promise.resolve({ error: 'invalid_grant' }),
           });
         }
