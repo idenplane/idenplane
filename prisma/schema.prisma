@@ -430,6 +430,7 @@ model RefreshToken {
 
   session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
+  @@index([sessionId])
   @@map("refresh_tokens")
 }
 
@@ -453,6 +454,7 @@ model AuthorizationCode {
 
   client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
 
+  @@index([clientId])
   @@map("authorization_codes")
 }
 
@@ -635,6 +637,7 @@ model PasswordHistory {
   user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
   realm Realm @relation(fields: [realmId], references: [id], onDelete: Cascade)
 
+  @@index([userId])
   @@map("password_histories")
 }
 
