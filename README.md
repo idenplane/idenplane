@@ -528,18 +528,21 @@ GET  /admin/metrics    # Requires x-admin-api-key header
 
 ```
 Authme/
-├── src/                           # NestJS backend (62 modules)
+├── src/                           # NestJS backend (71 modules)
 │   ├── auth/                      # Core OAuth 2.0 authentication
 │   ├── oauth/                     # OAuth 2.0 protocol logic
+│   ├── nhi/                       # National Health Index integration
 │   ├── saml/                      # SAML 2.0 IdP & SP
 │   ├── tokens/                    # JWT issuance, validation & revocation
 │   ├── mfa/                       # TOTP multi-factor auth
 │   ├── webauthn/                  # WebAuthn / FIDO2 passwordless
 │   ├── login/                     # Login flow orchestration
+│   ├── magic-link/                # Magic link authentication
 │   ├── auth-flow/                 # Custom authentication flow engine
 │   ├── step-up/                   # Step-up authentication (ACR levels)
 │   ├── risk-assessment/           # Adaptive auth & risk scoring
 │   ├── consent/                   # OAuth consent flow
+│   ├── continuous-verification/   # Risk-based step-up
 │   ├── users/                     # User management
 │   ├── clients/                   # OAuth2 client management
 │   ├── realms/                    # Multi-tenant configuration
@@ -548,6 +551,8 @@ Authme/
 │   ├── groups/                    # Hierarchical groups
 │   ├── authorization/             # Policy-based access control (ABAC)
 │   ├── sessions/                  # Session management
+│   ├── scim/                      # SCIM 2.0 server
+│   ├── setup-wizard/              # First-time setup wizard
 │   ├── service-accounts/          # Service accounts & API keys
 │   ├── custom-attributes/         # Custom user attributes
 │   ├── broker/                    # External IdP brokering
@@ -558,7 +563,9 @@ Authme/
 │   ├── plugins/                   # Plugin system
 │   ├── events/                    # Audit logging
 │   ├── stats/                     # Analytics & statistics
+│   ├── sms/                       # SMS OTP provider
 │   ├── metrics/                   # Prometheus metrics
+│   ├── graphql/                   # GraphQL API
 │   ├── health/                    # Health checks
 │   ├── email/                     # SMTP email service
 │   ├── verification/              # Email verification
@@ -574,10 +581,12 @@ Authme/
 │   ├── versioning/                # API versioning (v1)
 │   ├── migration/                 # Auth0 & Keycloak importers
 │   ├── rate-limit/                # Request throttling
+│   ├── registration/              # User registration flow
 │   ├── cors/                      # CORS origin management
 │   ├── cache/                     # Cache abstraction layer
 │   ├── redis/                     # Redis integration
 │   ├── database/                  # Database provider abstraction
+│   ├── upgrade/                  # Database upgrade system
 │   ├── theme/                     # Handlebars template rendering
 │   └── common/                    # Shared guards, filters, decorators
 ├── admin-ui/                      # React admin console (React 19 + Tailwind 4)
