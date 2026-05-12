@@ -355,6 +355,8 @@ model UserRole {
 model Session {
   id        String  @id @default(uuid())
   userId    String  @map("user_id")
+  realmId   String  @default("") @map("realm_id")
+  clientId  String? @map("client_id")
   ipAddress String? @map("ip_address")
   userAgent String? @map("user_agent")
 
@@ -365,6 +367,7 @@ model Session {
   refreshTokens RefreshToken[]
   riskProfile   SessionRiskProfile?
 
+  @@index([realmId])
   @@map("sessions")
 }
 
