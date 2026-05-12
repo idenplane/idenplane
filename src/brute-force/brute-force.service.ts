@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  Optional,
+} from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { EmailService } from '../email/email.service.js';
@@ -147,7 +152,11 @@ export class BruteForceService {
   async checkTotpRateLimit(
     realm: Realm,
     userId: string,
-  ): Promise<{ blocked: boolean; remainingAttempts: number; retryAfterSeconds?: number }> {
+  ): Promise<{
+    blocked: boolean;
+    remainingAttempts: number;
+    retryAfterSeconds?: number;
+  }> {
     if (!realm.bruteForceEnabled) {
       return { blocked: false, remainingAttempts: -1 };
     }
@@ -172,7 +181,8 @@ export class BruteForceService {
 
       let retryAfterSeconds: number | undefined;
       if (oldestFailure) {
-        const retryAfterMs = oldestFailure.failedAt.getTime() + resetTime * 1000 - Date.now();
+        const retryAfterMs =
+          oldestFailure.failedAt.getTime() + resetTime * 1000 - Date.now();
         retryAfterSeconds = Math.max(1, Math.ceil(retryAfterMs / 1000));
       }
 
@@ -219,9 +229,7 @@ export class BruteForceService {
       await this.emailService.sendEmail(
         realm.name,
         user.email,
-        permanent
-          ? 'Account Permanently Locked'
-          : 'Account Temporarily Locked',
+        permanent ? 'Account Permanently Locked' : 'Account Temporarily Locked',
         html,
       );
     } catch (err) {
@@ -281,9 +289,10 @@ export class BruteForceService {
       this.logger.debug(`Cleaned up ${loginCount} old login failure records`);
     }
 
-    const { count: totpCount } = await this.prisma.totpFailureTracking.deleteMany({
-      where: { failedAt: { lt: cutoff } },
-    });
+    const { count: totpCount } =
+      await this.prisma.totpFailureTracking.deleteMany({
+        where: { failedAt: { lt: cutoff } },
+      });
     if (totpCount > 0) {
       this.logger.debug(`Cleaned up ${totpCount} old TOTP failure records`);
     }
