@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getGroups } from '../../api/groups';
 import type { Group } from '../../types';
+import { getErrorMessage } from '../../utils/getErrorMessage';
 
 function buildTree(groups: Group[]): (Group & { depth: number })[] {
   const map = new Map<string, Group>();
@@ -35,13 +36,21 @@ function buildTree(groups: Group[]): (Group & { depth: number })[] {
 export default function GroupListPage() {
   const { name } = useParams<{ name: string }>();
 
-  const { data: groups, isLoading } = useQuery({
+  const { data: groups, isLoading, error } = useQuery({
     queryKey: ['groups', name],
     queryFn: () => getGroups(name!),
     enabled: !!name,
   });
 
   const tree = groups ? buildTree(groups) : [];
+
+  if (error) {
+    return (
+      <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
+        {getErrorMessage(error, 'Failed to load groups.')}
+      </div>
+    );
+  }
 
   return (
     <div className="space-y-6">
