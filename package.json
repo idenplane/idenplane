@@ -73,8 +73,8 @@
     "xml-crypto": "^6.1.2"
   },
   "devDependencies": {
-    "@eslint/eslintrc": "^3.2.0",
-    "@eslint/js": "^9.18.0",
+    "@eslint/eslintrc": "^3.3.5",
+    "@eslint/js": "^9.39.0",
     "@nestjs/cli": "^11.0.16",
     "@nestjs/schematics": "^11.0.0",
     "@nestjs/testing": "^11.0.1",
@@ -105,7 +105,6 @@
     "hono": "^4.12.7",
     "@hono/node-server": "^1.19.10",
     "effect": "^3.21.0",
-    "ajv": "^8.18.0",
     "lodash": "^4.17.23"
   },
   "prisma": {
