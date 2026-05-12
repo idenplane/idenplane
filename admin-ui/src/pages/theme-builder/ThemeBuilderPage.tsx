@@ -71,7 +71,7 @@ export default function ThemeBuilderPage() {
   const [lastSaved, setLastSaved] = useState<Date | null>(null);
   const [saveError, setSaveError] = useState<string | null>(null);
   const [hasUnsavedChanges, setHasUnsavedChanges] = useState(false);
-  const autoSaveTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const autoSaveTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Refs to track latest values for use in effect
   const themeStateRef = useRef({ styles, components, assets, settings });
@@ -243,10 +243,6 @@ export default function ThemeBuilderPage() {
     setAssets(updated);
   }, []);
 
-  const handleSettingsChange = useCallback((updated: Partial<ThemeSettings>) => {
-    setSettings((prev) => ({ ...prev, ...updated }));
-  }, []);
-
   const handleApplyTemplate = useCallback((template: {
     styles: ThemeStyles;
     components: ThemeComponent[];
@@ -256,13 +252,13 @@ export default function ThemeBuilderPage() {
     setStyles(template.styles);
     setComponents(template.components);
     if (template.assets.logoUrl !== undefined) {
-      setAssets((prev) => ({ ...prev, logoUrl: template.assets.logoUrl }));
+      setAssets((prev) => ({ ...prev, logoUrl: template.assets.logoUrl ?? null }));
     }
     if (template.assets.backgroundImageUrl !== undefined) {
-      setAssets((prev) => ({ ...prev, backgroundImageUrl: template.assets.backgroundImageUrl }));
+      setAssets((prev) => ({ ...prev, backgroundImageUrl: template.assets.backgroundImageUrl ?? null }));
     }
     if (template.assets.faviconUrl !== undefined) {
-      setAssets((prev) => ({ ...prev, faviconUrl: template.assets.faviconUrl }));
+      setAssets((prev) => ({ ...prev, faviconUrl: template.assets.faviconUrl ?? null }));
     }
     setSettings((prev) => ({ ...prev, ...template.settings }));
   }, []);

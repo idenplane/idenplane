@@ -23,12 +23,12 @@ export default function MagicLinkSettingsForm({ realm }: MagicLinkSettingsFormPr
   useEffect(() => {
     if (realm) {
       setForm({
-        enabled: (realm as Record<string, unknown>).magicLinkEnabled as boolean ?? false,
-        expirySeconds: (realm as Record<string, unknown>).magicLinkExpirySeconds as number ?? 300,
-        rateLimitPerEmail: (realm as Record<string, unknown>).magicLinkRateLimitPerEmail as number ?? 3,
-        rateLimitWindowSeconds: (realm as Record<string, unknown>).magicLinkRateLimitWindowSeconds as number ?? 900,
-        emailSubject: (realm as Record<string, unknown>).magicLinkEmailSubject as string | null ?? null,
-        emailTemplate: (realm as Record<string, unknown>).magicLinkEmailTemplate as string | null ?? null,
+        enabled: realm.magicLinkEnabled ?? false,
+        expirySeconds: realm.magicLinkExpirySeconds ?? 300,
+        rateLimitPerEmail: realm.magicLinkRateLimitPerEmail ?? 3,
+        rateLimitWindowSeconds: realm.magicLinkRateLimitWindowSeconds ?? 900,
+        emailSubject: realm.magicLinkEmailSubject ?? null,
+        emailTemplate: realm.magicLinkEmailTemplate ?? null,
       });
     }
   }, [realm]);

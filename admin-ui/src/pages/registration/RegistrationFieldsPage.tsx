@@ -71,13 +71,13 @@ export default function RegistrationFieldsPage() {
   });
 
   const updateMutation = useMutation({
-    mutationFn: () => {
-      if (!editingField) return Promise.resolve();
+    mutationFn: async () => {
+      if (!editingField) return;
       const payload = {
         ...form,
         options: form.options ? form.options.split(',').map(s => s.trim()) : [],
       };
-      return updateRegistrationField(name!, editingField.id, payload);
+      await updateRegistrationField(name!, editingField.id, payload);
     },
     onSuccess: () => {
       setEditingField(null);

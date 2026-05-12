@@ -50,7 +50,6 @@ function StatusBadge({ status }: { status: string }) {
 function CheckRow({ name, status, message }: { name: string; status: string; message: string }) {
   const isPass = status === 'pass';
   const isWarn = status === 'warn';
-  const isFail = status === 'fail';
 
   const bgClass = isPass
     ? 'bg-green-50 border-green-100'
@@ -222,7 +221,6 @@ function ValidationSection() {
 
 function RollbackSection({ onRollbackSuccess }: { onRollbackSuccess: () => void }) {
   const queryClient = useQueryClient();
-  const navigate = useNavigate();
 
   const { data: rollbackCap, isLoading } = useQuery<RollbackCapability>({
     queryKey: ['rollbackCapability'],
@@ -307,7 +305,6 @@ function RollbackSection({ onRollbackSuccess }: { onRollbackSuccess: () => void 
 
 export default function UpgradeStatusPage() {
   const navigate = useNavigate();
-  const queryClient = useQueryClient();
 
   const { data: currentStatus, isLoading: statusLoading } = useQuery<UpgradeAuditEntry | null>({
     queryKey: ['upgradeStatus'],

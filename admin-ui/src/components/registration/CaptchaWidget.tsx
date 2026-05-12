@@ -26,19 +26,22 @@ declare global {
 
 export default function CaptchaWidget({ provider, siteKey }: CaptchaWidgetProps) {
   const containerRef = useRef<HTMLDivElement>(null);
-  const widgetIdRef = useRef<string | undefined>();
+  const widgetIdRef = useRef<string | undefined>(undefined);
 
   useEffect(() => {
     if (!siteKey) return;
 
     if (provider === 'recaptcha' && window.grecaptcha) {
-      window.grecaptcha.ready(() => {
-        window.grecaptcha.execute(siteKey, { action: 'register' }).then((token) => {
+      const grecaptcha = window.grecaptcha;
+      grecaptcha.ready(() => {
+        grecaptcha.execute(siteKey, { action: 'register' }).then((token) => {
           (window as any).__captchaToken = token;
         }).catch(console.error);
       });
     } else if (provider === 'hcaptcha' && window.hcaptcha && containerRef.current) {
-      widgetIdRef.current = window.hcaptcha.render(containerRef.current, {
+      const containerId = `hcaptcha-${Date.now()}`;
+      containerRef.current.id = containerId;
+      widgetIdRef.current = window.hcaptcha.render(containerId, {
         sitekey: siteKey,
         callback: (token: string) => {
           (window as any).__captchaToken = token;

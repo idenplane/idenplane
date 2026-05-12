@@ -16,7 +16,7 @@ interface LivePreviewProps {
 }
 
 // Debounce helper for avoiding excessive re-renders
-function useDebounce<T extends (...args: unknown[]) => void>(callback: T, delay: number): T {
+function useDebounce<T extends (...args: any[]) => void>(callback: T, delay: number): T {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const callbackRef = useRef(callback);
 
@@ -24,7 +24,7 @@ function useDebounce<T extends (...args: unknown[]) => void>(callback: T, delay:
   callbackRef.current = callback;
 
   return useCallback(
-    ((...args: unknown[]) => {
+    ((...args: any[]) => {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
@@ -500,7 +500,7 @@ function generatePreviewHtml(
           level?: number;
           alignment?: string;
         };
-        const Tag = `h${headingProps.level || 2}` as keyof JSX.IntrinsicElements;
+        const Tag = `h${headingProps.level || 2}` as string;
         componentsHtml += `
           <${Tag} style="text-align: ${headingProps.alignment || 'center'};">${headingProps.content || ''}</${Tag}>
         `;
@@ -547,6 +547,7 @@ export default function LivePreview({
   assets,
   settings,
   viewportSize = 'desktop',
+  onViewportChange,
 }: LivePreviewProps) {
   const iframeRef = useRef<HTMLIFrameElement>(null);
 

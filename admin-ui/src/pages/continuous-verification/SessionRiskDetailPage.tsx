@@ -19,10 +19,6 @@ function formatDate(date: string) {
   return new Date(date).toLocaleString();
 }
 
-function formatNumber(n: number) {
-  return n.toFixed(1);
-}
-
 // ─── Risk Level Badge ─────────────────────────────────────────────────────────
 
 function RiskLevelBadge({ level }: { level: string }) {

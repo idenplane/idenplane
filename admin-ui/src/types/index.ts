@@ -30,7 +30,6 @@ export interface Realm {
   smtpPassword: string | null;
   smtpFrom: string | null;
   smtpSecure: boolean;
-  // Password policies
   passwordMinLength: number;
   passwordRequireUppercase: boolean;
   passwordRequireLowercase: boolean;
@@ -38,17 +37,25 @@ export interface Realm {
   passwordRequireSpecialChars: boolean;
   passwordHistoryCount: number;
   passwordMaxAgeDays: number;
-  // Brute force
   bruteForceEnabled: boolean;
   maxLoginFailures: number;
   lockoutDuration: number;
   failureResetTime: number;
   permanentLockoutAfter: number;
-  // Registration
   registrationAllowed: boolean;
-  // MFA
+  registrationApprovalRequired: boolean;
+  requireEmailVerification: boolean;
+  allowedEmailDomains: string[];
+  termsOfServiceUrl: string;
+  privacyPolicyUrl: string;
+  captchaEnabled: boolean;
+  captchaProvider: string;
+  recaptchaSiteKey: string;
+  recaptchaSecretKey: string;
+  hcaptchaSiteKey: string;
+  hcaptchaSecretKey: string;
+  captchaScoreThreshold: number;
   mfaRequired: boolean;
-  // SMS MFA
   smsMfaEnabled?: boolean;
   smsProvider?: SmsProviderType;
   smsFrom?: string;
@@ -57,18 +64,21 @@ export interface Realm {
   otpExpirySeconds?: number;
   smsMaxRequestsPerUser?: number;
   smsRateLimitWindow?: number;
-  // Offline tokens
   offlineTokenLifespan: number;
-  // Events
   eventsEnabled: boolean;
   eventsExpiration: number;
   adminEventsEnabled: boolean;
-  // Theming
   themeName: string;
   theme: RealmTheme | null;
   loginTheme: string;
   accountTheme: string;
   emailTheme: string;
+  magicLinkEnabled: boolean;
+  magicLinkExpirySeconds: number;
+  magicLinkRateLimitPerEmail: number;
+  magicLinkRateLimitWindowSeconds: number;
+  magicLinkEmailSubject: string | null;
+  magicLinkEmailTemplate: string | null;
   createdAt: string;
   updatedAt: string;
 }
@@ -247,4 +257,93 @@ export interface MagicLinkSettings {
   rateLimitWindowSeconds: number;
   emailSubject: string | null;
   emailTemplate: string | null;
+}
+
+export type NhiIdentityType = 'IOT_DEVICE' | 'AI_AGENT' | 'BOT' | 'MACHINE_TO_MACHINE';
+export type NhiLifecycleStatus = 'PROVISIONING' | 'ACTIVE' | 'SUSPENDED' | 'DECOMMISSIONED';
+export type NhiCredentialType = 'API_KEY' | 'CERTIFICATE' | 'JWT_BEARER';
+
+export interface NhiIdentity {
+  id: string;
+  realmId: string;
+  name: string;
+  description: string | null;
+  identityType: NhiIdentityType;
+  lifecycleStatus: NhiLifecycleStatus;
+  enabled: boolean;
+  permissionScopes: string[];
+  tags: string[];
+  agentPurpose: string | null;
+  certificateFingerprint: string | null;
+  certificateSubject: string | null;
+  certificateNotBefore: string | null;
+  certificateNotAfter: string | null;
+  suspendedAt: string | null;
+  decommissionedAt: string | null;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NhiCredential {
+  id: string;
+  name: string;
+  credentialType: NhiCredentialType;
+  keyPrefix: string | null;
+  expiresAt: string | null;
+  revoked: boolean;
+  enabled: boolean;
+  rotationRequired: boolean;
+}
+
+export interface NhiCredentialPolicy {
+  id: string;
+  name: string;
+  description: string | null;
+  enabled: boolean;
+  priority: number;
+  credentialType: NhiCredentialType;
+  rotationIntervalDays: number;
+  rotationBeforeDays: number;
+  autoRotate: boolean;
+  maxCredentialAgeDays: number;
+  maxRequestsPerDay: number;
+  maxRequestsPerMonth: number;
+  rateLimitPerMinute: number;
+  requireCertificate: boolean;
+  requireIpRestriction: boolean;
+  requireAuditLogging: boolean;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface NhiUsageStats {
+  identityId: string;
+  totalRequests: number;
+  successfulRequests: number;
+  failedRequests: number;
+  lastUsedAt: string | null;
+  averageRequestsPerDay: number;
+  peakRequestsPerDay: number;
+}
+
+export interface NhiAuditLog {
+  id: string;
+  nhiIdentityId: string;
+  action: string;
+  success: boolean;
+  ipAddress: string | null;
+  userAgent: string | null;
+  errorMessage: string | null;
+  createdAt: string;
+}
+
+export interface ConsentCategory {
+  id: string;
+  name: string;
+  description: string | null;
+  required: boolean;
+  enabled: boolean;
+  policyVersion: string | null;
+  createdAt: string;
+  updatedAt: string;
 }
