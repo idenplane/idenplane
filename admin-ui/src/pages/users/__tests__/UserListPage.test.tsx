@@ -76,7 +76,7 @@ describe('UserListPage', () => {
       ),
     );
     renderUserList();
-    expect(await screen.findByText(/failed to load users/i)).toBeInTheDocument();
+    expect(await screen.findByText(/error/i)).toBeInTheDocument();
   });
 
   it('does not render pagination when only one page exists', async () => {
