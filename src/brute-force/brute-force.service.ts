@@ -1,13 +1,17 @@
-import { Injectable, Logger, NotFoundException } from '@nestjs/common';
+import { Injectable, Logger, NotFoundException, Optional } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { EmailService } from '../email/email.service.js';
 import type { Realm, User } from '@prisma/client';
 
 @Injectable()
 export class BruteForceService {
   private readonly logger = new Logger(BruteForceService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    @Optional() private readonly emailService?: EmailService,
+  ) {}
 
   checkLocked(
     realm: Realm,
@@ -71,6 +75,7 @@ export class BruteForceService {
             `User ${userId} in realm ${realm.id} permanently locked after ${lockoutCount} lockout cycles. ` +
               `Admin action required to unlock via POST /admin/realms/:realm/users/:userId/unlock`,
           );
+          await this.sendLockoutNotification(realm, userId, true);
           return;
         }
       }
@@ -80,6 +85,7 @@ export class BruteForceService {
         where: { id: userId },
         data: { lockedUntil },
       });
+      await this.sendLockoutNotification(realm, userId, false);
     }
   }
 
@@ -134,6 +140,7 @@ export class BruteForceService {
       this.logger.warn(
         `User ${userId} in realm ${realm.id} locked due to TOTP brute-force attempts`,
       );
+      await this.sendLockoutNotification(realm, userId, false);
     }
   }
 
@@ -180,6 +187,48 @@ export class BruteForceService {
       blocked: false,
       remainingAttempts: maxFailures - failureCount,
     };
+  }
+
+  private async sendLockoutNotification(
+    realm: Realm,
+    userId: string,
+    permanent: boolean,
+  ): Promise<void> {
+    if (!this.emailService) return;
+
+    const user = await this.prisma.user.findUnique({
+      where: { id: userId },
+      select: { email: true, username: true },
+    });
+
+    if (!user?.email) return;
+
+    const html = permanent
+      ? `
+        <h2>Account Permanently Locked</h2>
+        <p>Your account <strong>${user.username}</strong> in realm <strong>${realm.name}</strong> has been permanently locked due to multiple failed login attempts.</p>
+        <p>Please contact your administrator to regain access to your account.</p>
+      `
+      : `
+        <h2>Account Temporarily Locked</h2>
+        <p>Your account <strong>${user.username}</strong> in realm <strong>${realm.name}</strong> has been temporarily locked due to multiple failed login attempts.</p>
+        <p>The lockout will automatically expire after the configured duration. If you did not attempt to log in, please contact your administrator.</p>
+      `;
+
+    try {
+      await this.emailService.sendEmail(
+        realm.name,
+        user.email,
+        permanent
+          ? 'Account Permanently Locked'
+          : 'Account Temporarily Locked',
+        html,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Failed to send lockout notification email to ${user.email}: ${(err as Error).message}`,
+      );
+    }
   }
 
   async unlockUser(realmId: string, userId: string): Promise<void> {
