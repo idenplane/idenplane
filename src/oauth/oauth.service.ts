@@ -22,6 +22,14 @@ export interface AuthorizeParams {
   nonce?: string;
   /** Space-separated list of requested ACR values (highest preference first). */
   acr_values?: string;
+  /**
+   * OIDC prompt parameter.
+   * - none: return error if user is not authenticated
+   * - login: force re-authentication
+   * - consent: show consent screen
+   * - select_account: show account selection
+   */
+  prompt?: string;
 }
 
 @Injectable()

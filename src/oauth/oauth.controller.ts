@@ -59,6 +59,16 @@ export class OAuthController {
         sessionCookie,
       );
       if (user) {
+        const prompt = query['prompt'];
+
+        if (prompt === 'none') {
+          return this.handlePromptNone(res, client.redirectUris[0]!, query['state']);
+        }
+
+        if (prompt === 'login') {
+          return this.handlePromptLogin(res, realm.name, query);
+        }
+
         // ── Step-up ACR check ────────────────────────────────────────────────
         //
         // Determine the highest required ACR from two sources:
@@ -193,5 +203,52 @@ export class OAuthController {
   private async getLoginSessionByToken(sessionToken: string) {
     const tokenHash = this.crypto.sha256(sessionToken);
     return this.prisma.loginSession.findUnique({ where: { tokenHash } });
+  }
+
+  private redirectWithError(
+    res: Response,
+    redirectUri: string,
+    error: string,
+    errorDescription: string,
+    state?: string,
+  ): void {
+    const url = new URL(redirectUri);
+    url.searchParams.set('error', error);
+    url.searchParams.set('error_description', errorDescription);
+    if (state) {
+      url.searchParams.set('state', state);
+    }
+    res.redirect(302, url.toString());
+  }
+
+  private handlePromptNone(res: Response, redirectUri: string, state?: string): void {
+    this.redirectWithError(
+      res,
+      redirectUri,
+      'login_required',
+      'User is not authenticated',
+      state,
+    );
+  }
+
+  private handlePromptLogin(res: Response, realm: string, query: Record<string, string>): void {
+    const loginParams = new URLSearchParams();
+    const allowlist = new Set([
+      'client_id',
+      'redirect_uri',
+      'response_type',
+      'scope',
+      'state',
+      'nonce',
+      'code_challenge',
+      'code_challenge_method',
+      'prompt',
+      'acr_values',
+      'login_hint',
+    ]);
+    for (const [key, value] of Object.entries(query)) {
+      if (value && allowlist.has(key)) loginParams.set(key, value);
+    }
+    res.redirect(302, `/realms/${realm}/login?${loginParams.toString()}`);
   }
 }
