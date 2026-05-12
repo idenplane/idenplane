@@ -161,6 +161,26 @@ export const handlers = [
     return new HttpResponse(null, { status: 204 });
   }),
 
+  // Roles
+  http.get(`${BASE}/realms/:name/roles`, () => {
+    return HttpResponse.json([
+      { id: 'role-1', realmId: 'realm-1', clientId: null, name: 'admin', description: 'Administrator role', createdAt: '2024-01-01T00:00:00.000Z', updatedAt: '2024-01-01T00:00:00.000Z' },
+      { id: 'role-2', realmId: 'realm-1', clientId: null, name: 'user', description: 'User role', createdAt: '2024-01-01T00:00:00.000Z', updatedAt: '2024-01-01T00:00:00.000Z' },
+    ]);
+  }),
+
+  http.post(`${BASE}/realms/:name/roles`, async ({ request }) => {
+    const body = await request.json() as { name: string; description?: string };
+    return HttpResponse.json(
+      { id: 'new-role-1', realmId: 'realm-1', clientId: null, ...body, createdAt: new Date().toISOString(), updatedAt: new Date().toISOString() },
+      { status: 201 },
+    );
+  }),
+
+  http.delete(`${BASE}/realms/:name/roles/:roleName`, () => {
+    return new HttpResponse(null, { status: 204 });
+  }),
+
   // Health
   http.get('/health/ready', () => {
     return HttpResponse.json({

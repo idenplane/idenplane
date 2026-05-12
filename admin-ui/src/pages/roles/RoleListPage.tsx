@@ -139,6 +139,13 @@ export default function RoleListPage() {
         </form>
       )}
 
+      {/* Delete error display */}
+      {deleteMutation.isError && (
+        <div className="mb-6 rounded-md bg-red-50 p-3 text-sm text-red-700">
+          {getErrorMessage(deleteMutation.error, 'Failed to delete role.')}
+        </div>
+      )}
+
       {/* Role table */}
       <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
         <table className="min-w-full divide-y divide-gray-200">
