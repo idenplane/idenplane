@@ -4,6 +4,7 @@ import {
   Logger,
   HttpException,
   HttpStatus,
+  OnModuleDestroy,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
@@ -12,14 +13,10 @@ import { RateLimitService } from '../rate-limit/rate-limit.service.js';
 import { BruteForceService } from '../brute-force/brute-force.service.js';
 
 @Injectable()
-export class AdminAuthService {
+export class AdminAuthService implements OnModuleDestroy {
   private readonly logger = new Logger(AdminAuthService.name);
-  /**
-   * Maps a raw admin token string to its expiry unix timestamp (seconds).
-   * Using a Map instead of a Set lets us evict only truly expired entries
-   * rather than clearing the entire collection when it grows large.
-   */
   private readonly revokedTokens = new Map<string, number>();
+  private cleanupInterval: ReturnType<typeof setInterval> | undefined;
 
   constructor(
     private readonly prisma: PrismaService,
@@ -27,7 +24,35 @@ export class AdminAuthService {
     private readonly jwkService: JwkService,
     private readonly rateLimitService: RateLimitService,
     private readonly bruteForceService: BruteForceService,
-  ) {}
+  ) {
+    this.cleanupInterval = setInterval(() => this.cleanup(), 60_000);
+  }
+
+  onModuleDestroy() {
+    if (this.cleanupInterval) clearInterval(this.cleanupInterval);
+  }
+
+  private async cleanup(): Promise<void> {
+    const now = Math.floor(Date.now() / 1000);
+    for (const [jti, exp] of this.revokedTokens) {
+      if (exp < now) this.revokedTokens.delete(jti);
+    }
+
+    try {
+      const { count } = await this.prisma.adminRevokedToken.deleteMany({
+        where: { expiresAt: { lt: new Date() } },
+      });
+      if (count > 0) {
+        this.logger.debug(
+          `Cleaned up ${count} expired admin revoked tokens from database`,
+        );
+      }
+    } catch (err) {
+      this.logger.warn(
+        `Failed to clean expired tokens from DB: ${(err as Error).message}`,
+      );
+    }
+  }
 
   async login(
     username: string,
@@ -147,34 +172,42 @@ export class AdminAuthService {
     };
   }
 
-  revokeToken(token: string, expiresInSeconds = 3600): void {
+  async revokeToken(token: string, expiresInSeconds = 3600): Promise<void> {
+    const jti = await this.extractJti(token);
+    if (!jti) return;
+
     const expiresAt = Math.floor(Date.now() / 1000) + expiresInSeconds;
-    this.revokedTokens.set(token, expiresAt);
-    // Evict only expired entries to prevent unbounded growth.
-    // Never clear the whole map — that would make revoked tokens valid again.
-    this.evictExpiredRevokedTokens();
+    this.revokedTokens.set(jti, expiresAt);
+
+    try {
+      await this.prisma.adminRevokedToken.upsert({
+        where: { jti },
+        create: { jti, expiresAt: new Date(expiresAt * 1000) },
+        update: {},
+      });
+    } catch (err) {
+      this.logger.warn(
+        `Failed to persist revoked admin token to DB: ${(err as Error).message}`,
+      );
+    }
   }
 
-  private evictExpiredRevokedTokens(): void {
-    const now = Math.floor(Date.now() / 1000);
-    for (const [token, expiresAt] of this.revokedTokens) {
-      if (expiresAt <= now) {
-        this.revokedTokens.delete(token);
-      }
+  private async extractJti(token: string): Promise<string | null> {
+    try {
+      const parts = token.split('.');
+      if (parts.length !== 3) return null;
+      const payload = JSON.parse(
+        Buffer.from(parts[1], 'base64url').toString('utf-8'),
+      );
+      return payload['jti'] ?? null;
+    } catch {
+      return null;
     }
   }
 
   async validateAdminToken(
     token: string,
   ): Promise<{ userId: string; roles: string[] }> {
-    const revokedExpiry = this.revokedTokens.get(token);
-    if (
-      revokedExpiry !== undefined &&
-      revokedExpiry > Math.floor(Date.now() / 1000)
-    ) {
-      throw new UnauthorizedException('Token has been revoked');
-    }
-
     const masterRealm = await this.prisma.realm.findUnique({
       where: { name: 'master' },
     });
@@ -192,25 +225,55 @@ export class AdminAuthService {
       throw new UnauthorizedException('No signing key found');
     }
 
+    let payload: Record<string, unknown>;
     try {
-      const payload = await this.jwkService.verifyJwt(
+      payload = await this.jwkService.verifyJwt(
         token,
         signingKey.publicKey,
       );
-
-      if (payload['typ'] !== 'admin') {
-        throw new UnauthorizedException('Not an admin token');
-      }
-
-      const realmAccess = payload['realm_access'] as
-        | { roles?: string[] }
-        | undefined;
-      const roles = realmAccess?.roles ?? [];
-
-      return { userId: payload.sub as string, roles };
     } catch {
       throw new UnauthorizedException('Invalid admin token');
     }
+
+    if (payload['typ'] !== 'admin') {
+      throw new UnauthorizedException('Not an admin token');
+    }
+
+    const jti = payload['jti'] as string | undefined;
+    if (jti) {
+      const revokedExpiry = this.revokedTokens.get(jti);
+      if (
+        revokedExpiry !== undefined &&
+        revokedExpiry > Math.floor(Date.now() / 1000)
+      ) {
+        throw new UnauthorizedException('Token has been revoked');
+      }
+
+      try {
+        const record = await this.prisma.adminRevokedToken.findUnique({
+          where: { jti },
+        });
+        if (record) {
+          const now = Math.floor(Date.now() / 1000);
+          const expiresAtSec = Math.floor(record.expiresAt.getTime() / 1000);
+          if (expiresAtSec > now) {
+            throw new UnauthorizedException('Token has been revoked');
+          }
+        }
+      } catch (err) {
+        if (err instanceof UnauthorizedException) throw err;
+        this.logger.warn(
+          `Failed to check DB for revoked admin token: ${(err as Error).message}`,
+        );
+      }
+    }
+
+    const realmAccess = payload['realm_access'] as
+      | { roles?: string[] }
+      | undefined;
+    const roles = realmAccess?.roles ?? [];
+
+    return { userId: payload.sub as string, roles };
   }
 
   hasRole(roles: string[], required: string): boolean {
