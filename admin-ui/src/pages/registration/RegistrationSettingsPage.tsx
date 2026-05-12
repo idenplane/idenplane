@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getRealmByName, updateRealm } from '../../api/realms';
@@ -29,8 +29,7 @@ export default function RegistrationSettingsPage() {
     captchaScoreThreshold: 0.5,
   });
 
-  // Update form when realm loads
-  useState(() => {
+  useEffect(() => {
     if (realm) {
       setForm({
         registrationAllowed: realm.registrationAllowed ?? true,
@@ -48,7 +47,7 @@ export default function RegistrationSettingsPage() {
         captchaScoreThreshold: realm.captchaScoreThreshold ?? 0.5,
       });
     }
-  });
+  }, [realm]);
 
   const mutation = useMutation({
     mutationFn: (data: typeof form) => updateRealm(name!, data),
