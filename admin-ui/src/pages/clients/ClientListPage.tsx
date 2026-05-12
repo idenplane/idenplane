@@ -1,6 +1,7 @@
 import { useQuery } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import { getClients } from '../../api/clients';
+import { getErrorMessage } from '../../utils/getErrorMessage';
 
 export default function ClientListPage() {
   const { name } = useParams<{ name: string }>();
@@ -23,7 +24,7 @@ export default function ClientListPage() {
   if (error) {
     return (
       <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
-        Failed to load clients.
+        {getErrorMessage(error, 'Failed to load clients.')}
       </div>
     );
   }

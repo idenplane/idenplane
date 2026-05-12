@@ -3,6 +3,7 @@ import { useNavigate } from 'react-router-dom';
 import { getAllRealms } from '../api/realms';
 import { getLoginEvents, getAdminEvents, type LoginEvent, type AdminEvent } from '../api/events';
 import { getRealmStats, getHealthStatus, type RealmStats } from '../api/stats';
+import { getErrorMessage } from '../utils/getErrorMessage';
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 
@@ -338,12 +339,11 @@ export default function DashboardPage() {
     queryFn: getAllRealms,
   });
 
-  const { data: health } = useQuery({
+  const { data: health, error: healthError } = useQuery({
     queryKey: ['health'],
     queryFn: getHealthStatus,
     refetchInterval: 120_000,
     staleTime: 60_000,
-    // Don't fail the page if health check errors
     retry: false,
   });
 
@@ -373,7 +373,11 @@ export default function DashboardPage() {
         {/* System health */}
         <div className="flex items-center gap-2 rounded-lg border border-gray-200 bg-white px-4 py-2 shadow-sm">
           <span className="text-sm font-medium text-gray-700">System</span>
-          {health ? (
+          {healthError ? (
+            <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2.5 py-0.5 text-xs font-medium text-red-600">
+              {getErrorMessage(healthError, 'Health check failed')}
+            </span>
+          ) : health ? (
             <HealthBadge status={health.status} />
           ) : (
             <span className="inline-flex items-center gap-1 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-500">
