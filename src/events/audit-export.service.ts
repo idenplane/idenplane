@@ -21,9 +21,9 @@ export interface ExportAdminEventsParams {
   format: 'json' | 'csv';
   dateFrom?: Date;
   dateTo?: Date;
-  eventType?: string;   // maps to operationType
-  userId?: string;      // maps to adminUserId
-  clientId?: string;    // not applicable but accepted for API consistency
+  eventType?: string; // maps to operationType
+  userId?: string; // maps to adminUserId
+  clientId?: string; // not applicable but accepted for API consistency
   ipAddress?: string;
   offset: number;
   limit: number;
@@ -35,7 +35,12 @@ function escapeCsvField(value: unknown): string {
   if (value === null || value === undefined) return '';
   const str = typeof value === 'object' ? JSON.stringify(value) : String(value);
   // Wrap in quotes if it contains a comma, quote, or newline
-  if (str.includes(',') || str.includes('"') || str.includes('\n') || str.includes('\r')) {
+  if (
+    str.includes(',') ||
+    str.includes('"') ||
+    str.includes('\n') ||
+    str.includes('\r')
+  ) {
     return `"${str.replace(/"/g, '""')}"`;
   }
   return str;
@@ -74,7 +79,10 @@ const ADMIN_EVENT_CSV_HEADERS = [
 export class AuditExportService {
   constructor(private readonly prisma: PrismaService) {}
 
-  async exportLoginEvents(params: ExportLoginEventsParams, res: Response): Promise<void> {
+  async exportLoginEvents(
+    params: ExportLoginEventsParams,
+    res: Response,
+  ): Promise<void> {
     const where: Record<string, unknown> = { realmId: params.realmId };
     if (params.eventType) where['type'] = params.eventType;
     if (params.userId) where['userId'] = params.userId;
@@ -88,7 +96,7 @@ export class AuditExportService {
     }
 
     const events = await this.prisma.loginEvent.findMany({
-      where: where as Prisma.LoginEventWhereInput,
+      where: where,
       orderBy: { createdAt: 'desc' },
       skip: params.offset,
       take: params.limit,
@@ -97,7 +105,10 @@ export class AuditExportService {
     if (params.format === 'csv') {
       const filename = `login-events-${params.realmId}-${Date.now()}.csv`;
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${filename}"`,
+      );
 
       res.write(LOGIN_EVENT_CSV_HEADERS.join(',') + '\n');
       for (const evt of events) {
@@ -120,12 +131,18 @@ export class AuditExportService {
     } else {
       const filename = `login-events-${params.realmId}-${Date.now()}.json`;
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${filename}"`,
+      );
       res.json(events);
     }
   }
 
-  async exportAdminEvents(params: ExportAdminEventsParams, res: Response): Promise<void> {
+  async exportAdminEvents(
+    params: ExportAdminEventsParams,
+    res: Response,
+  ): Promise<void> {
     const where: Record<string, unknown> = { realmId: params.realmId };
     if (params.eventType) where['operationType'] = params.eventType;
     if (params.userId) where['adminUserId'] = params.userId;
@@ -138,7 +155,7 @@ export class AuditExportService {
     }
 
     const events = await this.prisma.adminEvent.findMany({
-      where: where as Prisma.AdminEventWhereInput,
+      where: where,
       orderBy: { createdAt: 'desc' },
       skip: params.offset,
       take: params.limit,
@@ -147,7 +164,10 @@ export class AuditExportService {
     if (params.format === 'csv') {
       const filename = `admin-events-${params.realmId}-${Date.now()}.csv`;
       res.setHeader('Content-Type', 'text/csv; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${filename}"`,
+      );
 
       res.write(ADMIN_EVENT_CSV_HEADERS.join(',') + '\n');
       for (const evt of events) {
@@ -169,7 +189,10 @@ export class AuditExportService {
     } else {
       const filename = `admin-events-${params.realmId}-${Date.now()}.json`;
       res.setHeader('Content-Type', 'application/json; charset=utf-8');
-      res.setHeader('Content-Disposition', `attachment; filename="${filename}"`);
+      res.setHeader(
+        'Content-Disposition',
+        `attachment; filename="${filename}"`,
+      );
       res.json(events);
     }
   }

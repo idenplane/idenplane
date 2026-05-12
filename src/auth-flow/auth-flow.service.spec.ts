@@ -1,6 +1,15 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { NotFoundException, ConflictException, BadRequestException } from '@nestjs/common';
-import { AuthFlowService, FlowStep, FlowStepCondition, DEFAULT_FLOWS } from './auth-flow.service.js';
+import {
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+} from '@nestjs/common';
+import {
+  AuthFlowService,
+  FlowStep,
+  FlowStepCondition,
+  DEFAULT_FLOWS,
+} from './auth-flow.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
 // ─── Helpers ───────────────────────────────────────────────
@@ -70,48 +79,100 @@ describe('AuthFlowService', () => {
 
   describe('evaluateCondition', () => {
     it('eq — returns true when field equals value', () => {
-      const cond: FlowStepCondition = { field: 'user.role', operator: 'eq', value: 'admin' };
-      expect(service.evaluateCondition(cond, { user: { role: 'admin' } })).toBe(true);
+      const cond: FlowStepCondition = {
+        field: 'user.role',
+        operator: 'eq',
+        value: 'admin',
+      };
+      expect(service.evaluateCondition(cond, { user: { role: 'admin' } })).toBe(
+        true,
+      );
     });
 
     it('eq — returns false when field does not match', () => {
-      const cond: FlowStepCondition = { field: 'user.role', operator: 'eq', value: 'admin' };
-      expect(service.evaluateCondition(cond, { user: { role: 'user' } })).toBe(false);
+      const cond: FlowStepCondition = {
+        field: 'user.role',
+        operator: 'eq',
+        value: 'admin',
+      };
+      expect(service.evaluateCondition(cond, { user: { role: 'user' } })).toBe(
+        false,
+      );
     });
 
     it('neq — returns true when field differs from value', () => {
-      const cond: FlowStepCondition = { field: 'user.role', operator: 'neq', value: 'admin' };
-      expect(service.evaluateCondition(cond, { user: { role: 'user' } })).toBe(true);
+      const cond: FlowStepCondition = {
+        field: 'user.role',
+        operator: 'neq',
+        value: 'admin',
+      };
+      expect(service.evaluateCondition(cond, { user: { role: 'user' } })).toBe(
+        true,
+      );
     });
 
     it('in — returns true when scalar field is in value array', () => {
-      const cond: FlowStepCondition = { field: 'user.group', operator: 'in', value: ['admins', 'staff'] };
-      expect(service.evaluateCondition(cond, { user: { group: 'admins' } })).toBe(true);
+      const cond: FlowStepCondition = {
+        field: 'user.group',
+        operator: 'in',
+        value: ['admins', 'staff'],
+      };
+      expect(
+        service.evaluateCondition(cond, { user: { group: 'admins' } }),
+      ).toBe(true);
     });
 
     it('in — returns false when scalar field is not in value array', () => {
-      const cond: FlowStepCondition = { field: 'user.group', operator: 'in', value: ['admins', 'staff'] };
-      expect(service.evaluateCondition(cond, { user: { group: 'guests' } })).toBe(false);
+      const cond: FlowStepCondition = {
+        field: 'user.group',
+        operator: 'in',
+        value: ['admins', 'staff'],
+      };
+      expect(
+        service.evaluateCondition(cond, { user: { group: 'guests' } }),
+      ).toBe(false);
     });
 
     it('in — returns true when field is an array with an overlapping value', () => {
-      const cond: FlowStepCondition = { field: 'user.groups', operator: 'in', value: ['admins'] };
-      expect(service.evaluateCondition(cond, { user: { groups: ['admins', 'staff'] } })).toBe(true);
+      const cond: FlowStepCondition = {
+        field: 'user.groups',
+        operator: 'in',
+        value: ['admins'],
+      };
+      expect(
+        service.evaluateCondition(cond, {
+          user: { groups: ['admins', 'staff'] },
+        }),
+      ).toBe(true);
     });
 
     it('not_in — returns true when value is absent from array', () => {
-      const cond: FlowStepCondition = { field: 'user.group', operator: 'not_in', value: ['admins'] };
-      expect(service.evaluateCondition(cond, { user: { group: 'guests' } })).toBe(true);
+      const cond: FlowStepCondition = {
+        field: 'user.group',
+        operator: 'not_in',
+        value: ['admins'],
+      };
+      expect(
+        service.evaluateCondition(cond, { user: { group: 'guests' } }),
+      ).toBe(true);
     });
 
     it('not_in — returns false when value is present in array', () => {
-      const cond: FlowStepCondition = { field: 'user.group', operator: 'not_in', value: ['admins'] };
-      expect(service.evaluateCondition(cond, { user: { group: 'admins' } })).toBe(false);
+      const cond: FlowStepCondition = {
+        field: 'user.group',
+        operator: 'not_in',
+        value: ['admins'],
+      };
+      expect(
+        service.evaluateCondition(cond, { user: { group: 'admins' } }),
+      ).toBe(false);
     });
 
     it('exists — returns true when field is present', () => {
       const cond: FlowStepCondition = { field: 'user.mfa', operator: 'exists' };
-      expect(service.evaluateCondition(cond, { user: { mfa: true } })).toBe(true);
+      expect(service.evaluateCondition(cond, { user: { mfa: true } })).toBe(
+        true,
+      );
     });
 
     it('exists — returns false when field is undefined', () => {
@@ -120,13 +181,21 @@ describe('AuthFlowService', () => {
     });
 
     it('not_exists — returns true when field is absent', () => {
-      const cond: FlowStepCondition = { field: 'user.mfa', operator: 'not_exists' };
+      const cond: FlowStepCondition = {
+        field: 'user.mfa',
+        operator: 'not_exists',
+      };
       expect(service.evaluateCondition(cond, { user: {} })).toBe(true);
     });
 
     it('not_exists — returns false when field is present', () => {
-      const cond: FlowStepCondition = { field: 'user.mfa', operator: 'not_exists' };
-      expect(service.evaluateCondition(cond, { user: { mfa: false } })).toBe(false);
+      const cond: FlowStepCondition = {
+        field: 'user.mfa',
+        operator: 'not_exists',
+      };
+      expect(service.evaluateCondition(cond, { user: { mfa: false } })).toBe(
+        false,
+      );
     });
 
     it('unknown operator — returns false', () => {
@@ -135,9 +204,15 @@ describe('AuthFlowService', () => {
     });
 
     it('resolves nested dot-path fields', () => {
-      const cond: FlowStepCondition = { field: 'user.profile.country', operator: 'eq', value: 'EG' };
+      const cond: FlowStepCondition = {
+        field: 'user.profile.country',
+        operator: 'eq',
+        value: 'EG',
+      };
       expect(
-        service.evaluateCondition(cond, { user: { profile: { country: 'EG' } } }),
+        service.evaluateCondition(cond, {
+          user: { profile: { country: 'EG' } },
+        }),
       ).toBe(true);
     });
   });
@@ -150,7 +225,9 @@ describe('AuthFlowService', () => {
         makeStep({ id: 'step-1', order: 1 }),
         makeStep({ id: 'step-2', type: 'totp', order: 2 }),
       ];
-      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(makeFlow(steps));
+      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(
+        makeFlow(steps),
+      );
 
       const next = await service.getNextStep('flow-id', null, {});
       expect(next?.id).toBe('step-1');
@@ -161,7 +238,9 @@ describe('AuthFlowService', () => {
         makeStep({ id: 'step-1', order: 1 }),
         makeStep({ id: 'step-2', type: 'totp', order: 2 }),
       ];
-      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(makeFlow(steps));
+      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(
+        makeFlow(steps),
+      );
 
       const next = await service.getNextStep('flow-id', 'step-1', {});
       expect(next?.id).toBe('step-2');
@@ -169,7 +248,9 @@ describe('AuthFlowService', () => {
 
     it('returns null after the last step', async () => {
       const steps: FlowStep[] = [makeStep({ id: 'step-1', order: 1 })];
-      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(makeFlow(steps));
+      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(
+        makeFlow(steps),
+      );
 
       const next = await service.getNextStep('flow-id', 'step-1', {});
       expect(next).toBeNull();
@@ -187,10 +268,14 @@ describe('AuthFlowService', () => {
         }),
         makeStep({ id: 'step-3', type: 'consent', order: 3 }),
       ];
-      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(makeFlow(steps));
+      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(
+        makeFlow(steps),
+      );
 
       // mfaEnabled is false → skip totp, return step-3
-      const next = await service.getNextStep('flow-id', 'step-1', { user: { mfaEnabled: false } });
+      const next = await service.getNextStep('flow-id', 'step-1', {
+        user: { mfaEnabled: false },
+      });
       expect(next?.id).toBe('step-3');
     });
 
@@ -205,22 +290,28 @@ describe('AuthFlowService', () => {
           condition: { field: 'user.mfaEnabled', operator: 'eq', value: true },
         }),
       ];
-      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(makeFlow(steps));
+      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(
+        makeFlow(steps),
+      );
 
-      const next = await service.getNextStep('flow-id', 'step-1', { user: { mfaEnabled: false } });
+      const next = await service.getNextStep('flow-id', 'step-1', {
+        user: { mfaEnabled: false },
+      });
       expect(next?.id).toBe('step-totp');
     });
 
     it('throws NotFoundException for unknown flow', async () => {
       mockPrisma.authenticationFlow.findUnique.mockResolvedValue(null);
-      await expect(service.getNextStep('no-flow', null, {})).rejects.toThrow(NotFoundException);
+      await expect(service.getNextStep('no-flow', null, {})).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('throws BadRequestException for unknown currentStepId', async () => {
       mockPrisma.authenticationFlow.findUnique.mockResolvedValue(makeFlow());
-      await expect(service.getNextStep('flow-id', 'ghost-step', {})).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.getNextStep('flow-id', 'ghost-step', {}),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('respects step ordering by order field (not insertion order)', async () => {
@@ -229,7 +320,9 @@ describe('AuthFlowService', () => {
         makeStep({ id: 'step-2', type: 'totp', order: 2 }),
         makeStep({ id: 'step-1', order: 1 }),
       ];
-      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(makeFlow(steps));
+      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(
+        makeFlow(steps),
+      );
 
       const first = await service.getNextStep('flow-id', null, {});
       expect(first?.id).toBe('step-1');
@@ -254,8 +347,12 @@ describe('AuthFlowService', () => {
           condition: { field: 'user.group', operator: 'eq', value: 'admin' },
         }),
       ];
-      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(makeFlow(steps));
-      const result = await service.executeStep('flow-id', 'step-1', { user: { group: 'user' } });
+      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(
+        makeFlow(steps),
+      );
+      const result = await service.executeStep('flow-id', 'step-1', {
+        user: { group: 'user' },
+      });
       expect(result.conditionMet).toBe(false);
       expect(result.skipped).toBe(true);
     });
@@ -268,15 +365,21 @@ describe('AuthFlowService', () => {
           condition: { field: 'user.group', operator: 'eq', value: 'admin' },
         }),
       ];
-      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(makeFlow(steps));
-      const result = await service.executeStep('flow-id', 'step-1', { user: { group: 'user' } });
+      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(
+        makeFlow(steps),
+      );
+      const result = await service.executeStep('flow-id', 'step-1', {
+        user: { group: 'user' },
+      });
       expect(result.conditionMet).toBe(false);
       expect(result.skipped).toBe(false);
     });
 
     it('throws NotFoundException for unknown step', async () => {
       mockPrisma.authenticationFlow.findUnique.mockResolvedValue(makeFlow());
-      await expect(service.executeStep('flow-id', 'ghost', {})).rejects.toThrow(NotFoundException);
+      await expect(service.executeStep('flow-id', 'ghost', {})).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -288,7 +391,11 @@ describe('AuthFlowService', () => {
       mockPrisma.authenticationFlow.updateMany.mockResolvedValue({ count: 0 });
       mockPrisma.authenticationFlow.create.mockResolvedValue(makeFlow());
 
-      const dto = { name: 'Simple Login', steps: [makeStep()], isDefault: false };
+      const dto = {
+        name: 'Simple Login',
+        steps: [makeStep()],
+        isDefault: false,
+      };
       const result = await service.create('realm-id', dto);
       expect(result).toBeDefined();
       expect(mockPrisma.authenticationFlow.create).toHaveBeenCalled();
@@ -297,14 +404,16 @@ describe('AuthFlowService', () => {
     it('throws ConflictException when name already exists', async () => {
       mockPrisma.authenticationFlow.findUnique.mockResolvedValue(makeFlow());
       const dto = { name: 'Simple Login', steps: [makeStep()] };
-      await expect(service.create('realm-id', dto)).rejects.toThrow(ConflictException);
+      await expect(service.create('realm-id', dto)).rejects.toThrow(
+        ConflictException,
+      );
     });
 
     it('throws BadRequestException for empty steps array', async () => {
       mockPrisma.authenticationFlow.findUnique.mockResolvedValue(null);
-      await expect(service.create('realm-id', { name: 'X', steps: [] })).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.create('realm-id', { name: 'X', steps: [] }),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('throws BadRequestException for duplicate step IDs', async () => {
@@ -313,16 +422,23 @@ describe('AuthFlowService', () => {
         name: 'X',
         steps: [makeStep({ id: 'dup' }), makeStep({ id: 'dup', order: 2 })],
       };
-      await expect(service.create('realm-id', dto)).rejects.toThrow(BadRequestException);
+      await expect(service.create('realm-id', dto)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('throws BadRequestException for duplicate step orders', async () => {
       mockPrisma.authenticationFlow.findUnique.mockResolvedValue(null);
       const dto = {
         name: 'X',
-        steps: [makeStep({ id: 's1', order: 1 }), makeStep({ id: 's2', order: 1 })],
+        steps: [
+          makeStep({ id: 's1', order: 1 }),
+          makeStep({ id: 's2', order: 1 }),
+        ],
       };
-      await expect(service.create('realm-id', dto)).rejects.toThrow(BadRequestException);
+      await expect(service.create('realm-id', dto)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('throws BadRequestException for unknown fallbackStepId reference', async () => {
@@ -331,7 +447,9 @@ describe('AuthFlowService', () => {
         name: 'X',
         steps: [makeStep({ id: 's1', fallbackStepId: 'ghost' })],
       };
-      await expect(service.create('realm-id', dto)).rejects.toThrow(BadRequestException);
+      await expect(service.create('realm-id', dto)).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('clears existing default flag when isDefault=true', async () => {
@@ -339,9 +457,15 @@ describe('AuthFlowService', () => {
       mockPrisma.authenticationFlow.updateMany.mockResolvedValue({ count: 1 });
       mockPrisma.authenticationFlow.create.mockResolvedValue(makeFlow());
 
-      await service.create('realm-id', { name: 'New Default', steps: [makeStep()], isDefault: true });
+      await service.create('realm-id', {
+        name: 'New Default',
+        steps: [makeStep()],
+        isDefault: true,
+      });
       expect(mockPrisma.authenticationFlow.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: expect.objectContaining({ isDefault: true }) }),
+        expect.objectContaining({
+          where: expect.objectContaining({ isDefault: true }),
+        }),
       );
     });
   });
@@ -367,17 +491,17 @@ describe('AuthFlowService', () => {
 
     it('throws NotFoundException when client does not exist', async () => {
       mockPrisma.client.findFirst.mockResolvedValue(null);
-      await expect(service.getFlowForClient('bad-client', 'realm-id')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.getFlowForClient('bad-client', 'realm-id'),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('throws NotFoundException when no flows exist for realm', async () => {
       mockPrisma.client.findFirst.mockResolvedValue({ authFlowId: null });
       mockPrisma.authenticationFlow.findFirst.mockResolvedValue(null);
-      await expect(service.getFlowForClient('client-id', 'realm-id')).rejects.toThrow(
-        NotFoundException,
-      );
+      await expect(
+        service.getFlowForClient('client-id', 'realm-id'),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 

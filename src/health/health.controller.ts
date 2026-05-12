@@ -40,7 +40,10 @@ export class HealthController {
   @HealthCheck()
   @ApiOperation({ summary: 'Readiness check (database + memory + redis)' })
   @ApiResponse({ status: 200, description: 'All dependencies healthy' })
-  @ApiResponse({ status: 503, description: 'One or more dependencies unhealthy' })
+  @ApiResponse({
+    status: 503,
+    description: 'One or more dependencies unhealthy',
+  })
   readiness() {
     return this.health.check([
       () => this.db.isHealthy('database'),

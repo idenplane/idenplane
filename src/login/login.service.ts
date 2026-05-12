@@ -34,11 +34,15 @@ export class LoginService {
 
       const lockStatus = this.bruteForceService.checkLocked(realm, user);
       if (lockStatus.locked) {
-        throw new UnauthorizedException('Account is temporarily locked. Please try again later.');
+        throw new UnauthorizedException(
+          'Account is temporarily locked. Please try again later.',
+        );
       }
 
       const result = await this.federationService.authenticateViaFederation(
-        realm.id, username, password,
+        realm.id,
+        username,
+        password,
       );
 
       if (result.authenticated) {
@@ -54,15 +58,24 @@ export class LoginService {
     if (user && user.enabled && user.passwordHash) {
       const lockStatus = this.bruteForceService.checkLocked(realm, user);
       if (lockStatus.locked) {
-        throw new UnauthorizedException('Account is temporarily locked. Please try again later.');
+        throw new UnauthorizedException(
+          'Account is temporarily locked. Please try again later.',
+        );
       }
 
       let valid = await this.crypto.verifyPassword(user.passwordHash, password);
 
       // If Argon2 fails, try migrated password format
-      if (!valid && user.passwordAlgorithm && user.passwordAlgorithm !== 'argon2' && this.passwordMigration) {
+      if (
+        !valid &&
+        user.passwordAlgorithm &&
+        user.passwordAlgorithm !== 'argon2' &&
+        this.passwordMigration
+      ) {
         valid = await this.passwordMigration.verifyMigratedPassword(
-          password, user.passwordHash, user.passwordAlgorithm,
+          password,
+          user.passwordHash,
+          user.passwordAlgorithm,
         );
         if (valid) {
           // Upgrade hash to Argon2 on successful migrated login
@@ -82,7 +95,9 @@ export class LoginService {
     // User not found locally — try LDAP federation (import on first login)
     if (!user && this.federationService) {
       const result = await this.federationService.authenticateViaFederation(
-        realm.id, username, password,
+        realm.id,
+        username,
+        password,
       );
 
       if (result.authenticated && result.userId) {
@@ -131,7 +146,10 @@ export class LoginService {
 
       // FIFO eviction: delete the oldest sessions until we are below the limit
       if (activeSessions.length >= maxSessions) {
-        const toDelete = activeSessions.slice(0, activeSessions.length - maxSessions + 1);
+        const toDelete = activeSessions.slice(
+          0,
+          activeSessions.length - maxSessions + 1,
+        );
         await this.prisma.loginSession.deleteMany({
           where: { id: { in: toDelete.map((s) => s.id) } },
         });
@@ -166,7 +184,11 @@ export class LoginService {
       include: { user: true },
     });
 
-    if (!session || session.realmId !== realm.id || session.expiresAt < new Date()) {
+    if (
+      !session ||
+      session.realmId !== realm.id ||
+      session.expiresAt < new Date()
+    ) {
       return null;
     }
 
@@ -181,7 +203,10 @@ export class LoginService {
     return this.prisma.user.findUnique({ where: { id: userId } });
   }
 
-  async findUserByUsername(realm: Realm, username: string): Promise<User | null> {
+  async findUserByUsername(
+    realm: Realm,
+    username: string,
+  ): Promise<User | null> {
     return this.prisma.user.findUnique({
       where: { realmId_username: { realmId: realm.id, username } },
     });

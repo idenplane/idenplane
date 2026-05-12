@@ -54,15 +54,27 @@ export class AdminSeedService implements OnApplicationBootstrap {
 
     // Create admin roles
     const superAdmin = await this.prisma.role.create({
-      data: { realmId: masterRealm.id, name: 'super-admin', description: 'Full access to all realms and settings' },
+      data: {
+        realmId: masterRealm.id,
+        name: 'super-admin',
+        description: 'Full access to all realms and settings',
+      },
     });
 
     await this.prisma.role.create({
-      data: { realmId: masterRealm.id, name: 'realm-admin', description: 'Manage specific realms' },
+      data: {
+        realmId: masterRealm.id,
+        name: 'realm-admin',
+        description: 'Manage specific realms',
+      },
     });
 
     await this.prisma.role.create({
-      data: { realmId: masterRealm.id, name: 'view-only', description: 'Read-only access' },
+      data: {
+        realmId: masterRealm.id,
+        name: 'view-only',
+        description: 'Read-only access',
+      },
     });
 
     // Create initial admin user

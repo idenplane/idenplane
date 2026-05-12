@@ -32,7 +32,9 @@ describe('EmailService', () => {
 
   describe('isConfigured', () => {
     it('should return true when smtpHost is set', async () => {
-      prisma.realm.findUnique.mockResolvedValue({ smtpHost: 'smtp.example.com' });
+      prisma.realm.findUnique.mockResolvedValue({
+        smtpHost: 'smtp.example.com',
+      });
 
       const result = await service.isConfigured('my-realm');
 

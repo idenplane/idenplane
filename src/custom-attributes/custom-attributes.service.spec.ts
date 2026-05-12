@@ -1,5 +1,9 @@
 import { Test, TestingModule } from '@nestjs/testing';
-import { BadRequestException, ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { CustomAttributesService } from './custom-attributes.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
@@ -47,11 +51,15 @@ describe('CustomAttributesService', () => {
 
   describe('createAttribute', () => {
     it('should create a text attribute successfully', async () => {
-      const dto = { name: 'phone_number', displayName: 'Phone Number', type: 'text' };
+      const dto = {
+        name: 'phone_number',
+        displayName: 'Phone Number',
+        type: 'text',
+      };
       const created = { id: 'attr-1', ...dto, realmId: 'realm-1' };
       mockPrisma.customAttribute.create.mockResolvedValue(created);
 
-      const result = await service.createAttribute(mockRealm, dto as any);
+      const result = await service.createAttribute(mockRealm, dto);
 
       expect(result).toEqual(created);
       expect(mockPrisma.customAttribute.create).toHaveBeenCalledWith({
@@ -65,36 +73,59 @@ describe('CustomAttributesService', () => {
     });
 
     it('should throw BadRequestException for select type without options', async () => {
-      const dto = { name: 'department', displayName: 'Department', type: 'select' };
+      const dto = {
+        name: 'department',
+        displayName: 'Department',
+        type: 'select',
+      };
 
-      await expect(service.createAttribute(mockRealm, dto as any))
-        .rejects.toThrow(BadRequestException);
+      await expect(
+        service.createAttribute(mockRealm, dto as any),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should throw BadRequestException for multi-select type without options', async () => {
       const dto = { name: 'tags', displayName: 'Tags', type: 'multi-select' };
 
-      await expect(service.createAttribute(mockRealm, dto as any))
-        .rejects.toThrow(BadRequestException);
+      await expect(
+        service.createAttribute(mockRealm, dto as any),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should allow select type with options', async () => {
-      const dto = { name: 'department', displayName: 'Department', type: 'select', options: ['Engineering', 'Marketing'] };
-      mockPrisma.customAttribute.create.mockResolvedValue({ id: 'attr-1', ...dto });
+      const dto = {
+        name: 'department',
+        displayName: 'Department',
+        type: 'select',
+        options: ['Engineering', 'Marketing'],
+      };
+      mockPrisma.customAttribute.create.mockResolvedValue({
+        id: 'attr-1',
+        ...dto,
+      });
 
-      await expect(service.createAttribute(mockRealm, dto as any)).resolves.toBeDefined();
+      await expect(
+        service.createAttribute(mockRealm, dto as any),
+      ).resolves.toBeDefined();
     });
 
     it('should throw ConflictException on duplicate name', async () => {
       const { Prisma } = jest.requireActual('@prisma/client');
-      const error = new Prisma.PrismaClientKnownRequestError('Unique constraint failed', {
-        code: 'P2002',
-        clientVersion: '5.0.0',
-      });
+      const error = new Prisma.PrismaClientKnownRequestError(
+        'Unique constraint failed',
+        {
+          code: 'P2002',
+          clientVersion: '5.0.0',
+        },
+      );
       mockPrisma.customAttribute.create.mockRejectedValue(error);
 
       await expect(
-        service.createAttribute(mockRealm, { name: 'phone', displayName: 'Phone', type: 'text' } as any),
+        service.createAttribute(mockRealm, {
+          name: 'phone',
+          displayName: 'Phone',
+          type: 'text',
+        } as any),
       ).rejects.toThrow(ConflictException);
     });
   });
@@ -129,8 +160,9 @@ describe('CustomAttributesService', () => {
     it('should throw NotFoundException when not found', async () => {
       mockPrisma.customAttribute.findFirst.mockResolvedValue(null);
 
-      await expect(service.findAttributeById(mockRealm, 'non-existent'))
-        .rejects.toThrow(NotFoundException);
+      await expect(
+        service.findAttributeById(mockRealm, 'non-existent'),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
@@ -142,7 +174,9 @@ describe('CustomAttributesService', () => {
 
       await service.removeAttribute(mockRealm, 'attr-1');
 
-      expect(mockPrisma.customAttribute.delete).toHaveBeenCalledWith({ where: { id: 'attr-1' } });
+      expect(mockPrisma.customAttribute.delete).toHaveBeenCalledWith({
+        where: { id: 'attr-1' },
+      });
     });
   });
 
@@ -150,12 +184,20 @@ describe('CustomAttributesService', () => {
 
   describe('getUserAttributes', () => {
     it('should return formatted user attributes', async () => {
-      mockPrisma.user.findFirst.mockResolvedValue({ id: 'user-1', realmId: 'realm-1' });
+      mockPrisma.user.findFirst.mockResolvedValue({
+        id: 'user-1',
+        realmId: 'realm-1',
+      });
       mockPrisma.userAttribute.findMany.mockResolvedValue([
         {
           attributeId: 'attr-1',
           value: '+1234567890',
-          attribute: { name: 'phone', displayName: 'Phone', type: 'text', sortOrder: 0 },
+          attribute: {
+            name: 'phone',
+            displayName: 'Phone',
+            type: 'text',
+            sortOrder: 0,
+          },
         },
       ]);
 
@@ -175,27 +217,48 @@ describe('CustomAttributesService', () => {
     it('should throw NotFoundException when user is not in realm', async () => {
       mockPrisma.user.findFirst.mockResolvedValue(null);
 
-      await expect(service.getUserAttributes(mockRealm, 'user-999'))
-        .rejects.toThrow(NotFoundException);
+      await expect(
+        service.getUserAttributes(mockRealm, 'user-999'),
+      ).rejects.toThrow(NotFoundException);
     });
   });
 
   describe('setUserAttributes', () => {
     it('should reject unknown attribute names', async () => {
-      mockPrisma.user.findFirst.mockResolvedValue({ id: 'user-1', realmId: 'realm-1' });
+      mockPrisma.user.findFirst.mockResolvedValue({
+        id: 'user-1',
+        realmId: 'realm-1',
+      });
       mockPrisma.customAttribute.findMany.mockResolvedValue([
-        { id: 'attr-1', name: 'phone', displayName: 'Phone', type: 'text', required: false },
+        {
+          id: 'attr-1',
+          name: 'phone',
+          displayName: 'Phone',
+          type: 'text',
+          required: false,
+        },
       ]);
 
       await expect(
-        service.setUserAttributes(mockRealm, 'user-1', { unknown_attr: 'value' }),
+        service.setUserAttributes(mockRealm, 'user-1', {
+          unknown_attr: 'value',
+        }),
       ).rejects.toThrow(BadRequestException);
     });
 
     it('should reject invalid number values', async () => {
-      mockPrisma.user.findFirst.mockResolvedValue({ id: 'user-1', realmId: 'realm-1' });
+      mockPrisma.user.findFirst.mockResolvedValue({
+        id: 'user-1',
+        realmId: 'realm-1',
+      });
       mockPrisma.customAttribute.findMany.mockResolvedValue([
-        { id: 'attr-1', name: 'age', displayName: 'Age', type: 'number', required: false },
+        {
+          id: 'attr-1',
+          name: 'age',
+          displayName: 'Age',
+          type: 'number',
+          required: false,
+        },
       ]);
 
       await expect(
@@ -204,7 +267,10 @@ describe('CustomAttributesService', () => {
     });
 
     it('should reject invalid select values', async () => {
-      mockPrisma.user.findFirst.mockResolvedValue({ id: 'user-1', realmId: 'realm-1' });
+      mockPrisma.user.findFirst.mockResolvedValue({
+        id: 'user-1',
+        realmId: 'realm-1',
+      });
       mockPrisma.customAttribute.findMany.mockResolvedValue([
         {
           id: 'attr-1',
@@ -217,25 +283,44 @@ describe('CustomAttributesService', () => {
       ]);
 
       await expect(
-        service.setUserAttributes(mockRealm, 'user-1', { department: 'Finance' }),
+        service.setUserAttributes(mockRealm, 'user-1', {
+          department: 'Finance',
+        }),
       ).rejects.toThrow(BadRequestException);
     });
 
     it('should upsert valid attributes', async () => {
-      mockPrisma.user.findFirst.mockResolvedValue({ id: 'user-1', realmId: 'realm-1' });
+      mockPrisma.user.findFirst.mockResolvedValue({
+        id: 'user-1',
+        realmId: 'realm-1',
+      });
       mockPrisma.customAttribute.findMany.mockResolvedValue([
-        { id: 'attr-1', name: 'phone', displayName: 'Phone', type: 'text', required: false, options: null },
+        {
+          id: 'attr-1',
+          name: 'phone',
+          displayName: 'Phone',
+          type: 'text',
+          required: false,
+          options: null,
+        },
       ]);
       mockPrisma.$transaction.mockResolvedValue([]);
       mockPrisma.userAttribute.findMany.mockResolvedValue([
         {
           attributeId: 'attr-1',
           value: '+1234567890',
-          attribute: { name: 'phone', displayName: 'Phone', type: 'text', sortOrder: 0 },
+          attribute: {
+            name: 'phone',
+            displayName: 'Phone',
+            type: 'text',
+            sortOrder: 0,
+          },
         },
       ]);
 
-      const result = await service.setUserAttributes(mockRealm, 'user-1', { phone: '+1234567890' });
+      const result = await service.setUserAttributes(mockRealm, 'user-1', {
+        phone: '+1234567890',
+      });
 
       expect(mockPrisma.$transaction).toHaveBeenCalled();
       expect(result).toBeDefined();
@@ -247,7 +332,14 @@ describe('CustomAttributesService', () => {
   describe('validateAndSaveRegistrationAttributes', () => {
     it('should throw BadRequestException for missing required field', async () => {
       mockPrisma.customAttribute.findMany.mockResolvedValue([
-        { id: 'attr-1', name: 'company', displayName: 'Company', type: 'text', required: true, options: null },
+        {
+          id: 'attr-1',
+          name: 'company',
+          displayName: 'Company',
+          type: 'text',
+          required: true,
+          options: null,
+        },
       ]);
 
       await expect(
@@ -257,7 +349,14 @@ describe('CustomAttributesService', () => {
 
     it('should save attribute values for non-empty fields', async () => {
       mockPrisma.customAttribute.findMany.mockResolvedValue([
-        { id: 'attr-1', name: 'company', displayName: 'Company', type: 'text', required: true, options: null },
+        {
+          id: 'attr-1',
+          name: 'company',
+          displayName: 'Company',
+          type: 'text',
+          required: true,
+          options: null,
+        },
       ]);
       mockPrisma.$transaction.mockResolvedValue([]);
 
@@ -270,7 +369,14 @@ describe('CustomAttributesService', () => {
 
     it('should skip optional attributes with empty values', async () => {
       mockPrisma.customAttribute.findMany.mockResolvedValue([
-        { id: 'attr-1', name: 'company', displayName: 'Company', type: 'text', required: false, options: null },
+        {
+          id: 'attr-1',
+          name: 'company',
+          displayName: 'Company',
+          type: 'text',
+          required: false,
+          options: null,
+        },
       ]);
 
       await service.validateAndSaveRegistrationAttributes(mockRealm, 'user-1', {

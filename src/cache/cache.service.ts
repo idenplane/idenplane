@@ -21,7 +21,11 @@ export class CacheService {
 
   // ─── Realm ───────────────────────────────────────────────────────────────
 
-  async cacheRealmConfig(realmId: string, config: object, ttl = 300): Promise<void> {
+  async cacheRealmConfig(
+    realmId: string,
+    config: object,
+    ttl = 300,
+  ): Promise<void> {
     if (!this.redis.isAvailable()) return;
     await this.redis.set(KEY.realm(realmId), JSON.stringify(config), ttl);
   }
@@ -30,7 +34,11 @@ export class CacheService {
     return this.getJson<T>(KEY.realm(realmId), 'realm_config');
   }
 
-  async cacheRealmByName(name: string, config: object, ttl = 300): Promise<void> {
+  async cacheRealmByName(
+    name: string,
+    config: object,
+    ttl = 300,
+  ): Promise<void> {
     if (!this.redis.isAvailable()) return;
     await this.redis.set(KEY.realmByName(name), JSON.stringify(config), ttl);
   }
@@ -39,7 +47,10 @@ export class CacheService {
     return this.getJson<T>(KEY.realmByName(name), 'realm_by_name');
   }
 
-  async invalidateRealmCache(realmId: string, realmName?: string): Promise<void> {
+  async invalidateRealmCache(
+    realmId: string,
+    realmName?: string,
+  ): Promise<void> {
     if (!this.redis.isAvailable()) return;
     await Promise.all([
       this.redis.del(KEY.realm(realmId)),
@@ -51,12 +62,18 @@ export class CacheService {
 
   // ─── Client ──────────────────────────────────────────────────────────────
 
-  async cacheClientConfig(clientId: string, config: object, ttl = 300): Promise<void> {
+  async cacheClientConfig(
+    clientId: string,
+    config: object,
+    ttl = 300,
+  ): Promise<void> {
     if (!this.redis.isAvailable()) return;
     await this.redis.set(KEY.client(clientId), JSON.stringify(config), ttl);
   }
 
-  async getCachedClientConfig<T = unknown>(clientId: string): Promise<T | null> {
+  async getCachedClientConfig<T = unknown>(
+    clientId: string,
+  ): Promise<T | null> {
     return this.getJson<T>(KEY.client(clientId), 'client_config');
   }
 
@@ -106,20 +123,28 @@ export class CacheService {
 
   // ─── Internal helpers ────────────────────────────────────────────────────
 
-  private async getJson<T>(key: string, metricLabel: string): Promise<T | null> {
+  private async getJson<T>(
+    key: string,
+    metricLabel: string,
+  ): Promise<T | null> {
     if (!this.redis.isAvailable()) return null;
 
     const raw = await this.redis.get(key);
     const hit = raw !== null;
 
-    this.metrics.cacheOperationsTotal.inc({ operation: hit ? 'hit' : 'miss', cache: metricLabel });
+    this.metrics.cacheOperationsTotal.inc({
+      operation: hit ? 'hit' : 'miss',
+      cache: metricLabel,
+    });
 
     if (!hit) return null;
 
     try {
       return JSON.parse(raw) as T;
     } catch (err) {
-      this.logger.warn(`Failed to parse cached value for key ${key}: ${(err as Error).message}`);
+      this.logger.warn(
+        `Failed to parse cached value for key ${key}: ${(err as Error).message}`,
+      );
       return null;
     }
   }

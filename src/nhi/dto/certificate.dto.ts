@@ -35,7 +35,9 @@ export class SetCertificateDto {
   @IsString()
   privateKeyPem?: string;
 
-  @ApiPropertyOptional({ description: 'PEM-encoded certificate chain (intermediate + root CA)' })
+  @ApiPropertyOptional({
+    description: 'PEM-encoded certificate chain (intermediate + root CA)',
+  })
   @IsOptional()
   @IsString()
   certificateChain?: string;
@@ -47,7 +49,10 @@ export class GenerateCertificateDto {
   @IsNotEmpty()
   name!: string;
 
-  @ApiPropertyOptional({ example: 'My Device', description: 'Subject Common Name (CN)' })
+  @ApiPropertyOptional({
+    example: 'My Device',
+    description: 'Subject Common Name (CN)',
+  })
   @IsOptional()
   @IsString()
   subjectCommonName?: string;
@@ -62,17 +67,26 @@ export class GenerateCertificateDto {
   @IsString()
   subjectState?: string;
 
-  @ApiPropertyOptional({ example: 'San Francisco', description: 'Subject Locality' })
+  @ApiPropertyOptional({
+    example: 'San Francisco',
+    description: 'Subject Locality',
+  })
   @IsOptional()
   @IsString()
   subjectLocality?: string;
 
-  @ApiPropertyOptional({ example: 'ACME Corp', description: 'Subject Organization' })
+  @ApiPropertyOptional({
+    example: 'ACME Corp',
+    description: 'Subject Organization',
+  })
   @IsOptional()
   @IsString()
   subjectOrganization?: string;
 
-  @ApiPropertyOptional({ example: 'Engineering', description: 'Subject Organizational Unit' })
+  @ApiPropertyOptional({
+    example: 'Engineering',
+    description: 'Subject Organizational Unit',
+  })
   @IsOptional()
   @IsString()
   subjectOrganizationalUnit?: string;
@@ -82,18 +96,27 @@ export class GenerateCertificateDto {
   @IsEnum(CertificateKeyAlgorithm)
   keyAlgorithm?: CertificateKeyAlgorithm;
 
-  @ApiPropertyOptional({ example: 365, description: 'Certificate validity in days' })
+  @ApiPropertyOptional({
+    example: 365,
+    description: 'Certificate validity in days',
+  })
   @IsOptional()
   @IsInt()
   @IsPositive()
   validityDays?: number;
 
-  @ApiPropertyOptional({ example: 'DNS:device.internal,IP:192.168.1.100', description: 'Subject Alternative Names' })
+  @ApiPropertyOptional({
+    example: 'DNS:device.internal,IP:192.168.1.100',
+    description: 'Subject Alternative Names',
+  })
   @IsOptional()
   @IsString()
   subjectAlternativeNames?: string;
 
-  @ApiPropertyOptional({ example: true, description: 'Include CA basic constraints' })
+  @ApiPropertyOptional({
+    example: true,
+    description: 'Include CA basic constraints',
+  })
   @IsOptional()
   @IsBoolean()
   isCertificateAuthority?: boolean;
@@ -108,7 +131,10 @@ export class GenerateCertificateDto {
   @IsBoolean()
   enabled?: boolean;
 
-  @ApiPropertyOptional({ example: '2027-05-10T00:00:00.000Z', description: 'Custom expiration date' })
+  @ApiPropertyOptional({
+    example: '2027-05-10T00:00:00.000Z',
+    description: 'Custom expiration date',
+  })
   @IsOptional()
   @IsDateString()
   expiresAt?: string;

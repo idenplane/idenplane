@@ -48,7 +48,10 @@ describe('SessionsController', () => {
 
       const result = controller.getUserSessions(realm, 'user-1');
 
-      expect(mockSessionsService.getUserSessions).toHaveBeenCalledWith(realm, 'user-1');
+      expect(mockSessionsService.getUserSessions).toHaveBeenCalledWith(
+        realm,
+        'user-1',
+      );
       expect(result).toEqual(expected);
     });
   });
@@ -59,7 +62,10 @@ describe('SessionsController', () => {
 
       const result = controller.revokeSession('session-1', 'sso');
 
-      expect(mockSessionsService.revokeSession).toHaveBeenCalledWith('session-1', 'sso');
+      expect(mockSessionsService.revokeSession).toHaveBeenCalledWith(
+        'session-1',
+        'sso',
+      );
       expect(result).toBeUndefined();
     });
 
@@ -68,7 +74,10 @@ describe('SessionsController', () => {
 
       controller.revokeSession('session-1', 'oauth');
 
-      expect(mockSessionsService.revokeSession).toHaveBeenCalledWith('session-1', 'oauth');
+      expect(mockSessionsService.revokeSession).toHaveBeenCalledWith(
+        'session-1',
+        'oauth',
+      );
     });
   });
 
@@ -78,7 +87,10 @@ describe('SessionsController', () => {
 
       const result = controller.revokeAllUserSessions(realm, 'user-1');
 
-      expect(mockSessionsService.revokeAllUserSessions).toHaveBeenCalledWith(realm, 'user-1');
+      expect(mockSessionsService.revokeAllUserSessions).toHaveBeenCalledWith(
+        realm,
+        'user-1',
+      );
       expect(result).toBeUndefined();
     });
   });

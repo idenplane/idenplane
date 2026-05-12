@@ -139,7 +139,9 @@ export class ConsentStatisticsService {
         where: {
           user: { realmId: realm.id },
           status: 'pending',
-          scheduledAt: { lte: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000) },
+          scheduledAt: {
+            lte: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+          },
         },
       }),
     ]);
@@ -183,17 +185,19 @@ export class ConsentStatisticsService {
     for (const category of categories) {
       // Count users who have granted consent covering this category
       // This requires checking the metadata or scopes in history
-      const historyWithCategory = await this.prisma.userConsentHistory.findMany({
-        where: {
-          user: { realmId },
-          action: 'granted',
-          metadata: {
-            path: ['categoryKey'],
-            equals: category.key,
+      const historyWithCategory = await this.prisma.userConsentHistory.findMany(
+        {
+          where: {
+            user: { realmId },
+            action: 'granted',
+            metadata: {
+              path: ['categoryKey'],
+              equals: category.key,
+            },
           },
+          distinct: ['userId'],
         },
-        distinct: ['userId'],
-      });
+      );
 
       // For now, count active consents and determine required vs optional
       const isRequired = category.required;

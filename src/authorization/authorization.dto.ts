@@ -26,7 +26,9 @@ export class CreatePolicyDto {
   @MinLength(2)
   name!: string;
 
-  @ApiPropertyOptional({ example: 'Allows admin-role users to read report resources' })
+  @ApiPropertyOptional({
+    example: 'Allows admin-role users to read report resources',
+  })
   @IsOptional()
   @IsString()
   description?: string;
@@ -82,7 +84,9 @@ export class CreatePolicyDto {
 
   @ApiPropertyOptional({
     description: 'Conditions on the environment (IP, time, etc.)',
-    example: [{ field: 'environment.ip', operator: 'ipInRange', value: '10.0.0.0/8' }],
+    example: [
+      { field: 'environment.ip', operator: 'ipInRange', value: '10.0.0.0/8' },
+    ],
   })
   @IsOptional()
   @IsArray()
@@ -100,7 +104,8 @@ export class CreatePolicyDto {
   logic?: 'AND' | 'OR';
 
   @ApiPropertyOptional({
-    description: 'Scope this policy to a specific client ID (clientId string, not DB id)',
+    description:
+      'Scope this policy to a specific client ID (clientId string, not DB id)',
   })
   @IsOptional()
   @IsString()
@@ -246,7 +251,10 @@ export class EvaluatePolicyDto {
   @Type(() => EvaluationEnvironmentDto)
   environment?: EvaluationEnvironmentDto;
 
-  @ApiPropertyOptional({ example: 'my-frontend', description: 'Scope evaluation to a specific client' })
+  @ApiPropertyOptional({
+    example: 'my-frontend',
+    description: 'Scope evaluation to a specific client',
+  })
   @IsOptional()
   @IsString()
   clientId?: string;

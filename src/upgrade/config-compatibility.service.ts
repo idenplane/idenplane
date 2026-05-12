@@ -109,8 +109,12 @@ export class ConfigCompatibilityService {
    * @param targetVersion The version to upgrade to
    * @returns Compatibility result with any issues found
    */
-  async checkCompatibility(targetVersion: string): Promise<ConfigCompatibilityResult> {
-    this.logger.log(`Checking configuration compatibility for version ${targetVersion}`);
+  async checkCompatibility(
+    targetVersion: string,
+  ): Promise<ConfigCompatibilityResult> {
+    this.logger.log(
+      `Checking configuration compatibility for version ${targetVersion}`,
+    );
 
     const issues: ConfigCompatibilityIssue[] = [];
 
@@ -153,7 +157,9 @@ export class ConfigCompatibilityService {
   /**
    * Check that all required environment variables are present.
    */
-  private checkRequiredEnvVars(schema: VersionSchema): ConfigCompatibilityIssue[] {
+  private checkRequiredEnvVars(
+    schema: VersionSchema,
+  ): ConfigCompatibilityIssue[] {
     const issues: ConfigCompatibilityIssue[] = [];
 
     for (const varName of schema.requiredEnvVars) {
@@ -173,7 +179,9 @@ export class ConfigCompatibilityService {
   /**
    * Check for deprecated environment variables that may cause issues.
    */
-  private checkDeprecatedEnvVars(schema: VersionSchema): ConfigCompatibilityIssue[] {
+  private checkDeprecatedEnvVars(
+    schema: VersionSchema,
+  ): ConfigCompatibilityIssue[] {
     const issues: ConfigCompatibilityIssue[] = [];
 
     for (const varName of schema.deprecatedEnvVars) {
@@ -194,7 +202,9 @@ export class ConfigCompatibilityService {
   /**
    * Check for configuration that references removed features.
    */
-  private async checkRemovedFeatures(schema: VersionSchema): Promise<ConfigCompatibilityIssue[]> {
+  private async checkRemovedFeatures(
+    schema: VersionSchema,
+  ): Promise<ConfigCompatibilityIssue[]> {
     const issues: ConfigCompatibilityIssue[] = [];
 
     if (schema.removedFeatures.length === 0) {
@@ -236,7 +246,9 @@ export class ConfigCompatibilityService {
   /**
    * Check database configuration compatibility.
    */
-  private async checkDatabaseCompatibility(targetVersion: string): Promise<ConfigCompatibilityIssue[]> {
+  private async checkDatabaseCompatibility(
+    targetVersion: string,
+  ): Promise<ConfigCompatibilityIssue[]> {
     const issues: ConfigCompatibilityIssue[] = [];
 
     try {
@@ -247,7 +259,10 @@ export class ConfigCompatibilityService {
 
       if (result.length > 0) {
         const dbVersion = result[0].version;
-        const isCompatible = this.isDatabaseVersionCompatible(dbVersion, targetVersion);
+        const isCompatible = this.isDatabaseVersionCompatible(
+          dbVersion,
+          targetVersion,
+        );
 
         if (!isCompatible) {
           issues.push({
@@ -260,7 +275,9 @@ export class ConfigCompatibilityService {
       }
 
       // Check for required extensions
-      const extensions = await this.prisma.$queryRaw<Array<{ extname: string }>>`
+      const extensions = await this.prisma.$queryRaw<
+        Array<{ extname: string }>
+      >`
         SELECT extname FROM pg_extension WHERE extname IN ('uuid-ossp', 'pgcrypto')
       `;
 
@@ -285,7 +302,10 @@ export class ConfigCompatibilityService {
   /**
    * Check if database version is compatible with target version.
    */
-  private isDatabaseVersionCompatible(dbVersion: string, targetVersion: string): boolean {
+  private isDatabaseVersionCompatible(
+    dbVersion: string,
+    targetVersion: string,
+  ): boolean {
     // Parse database version string
     const pgMatch = dbVersion.match(/PostgreSQL (\d+)\.(\d+)/);
     if (!pgMatch) {
@@ -314,15 +334,17 @@ export class ConfigCompatibilityService {
       return bMajor - aMajor || bMinor - aMinor || bPatch - aPatch;
     });
 
-    return VERSION_SCHEMAS[versions[0]] ?? {
-      version: 'unknown',
-      minConfigVersion: '2.0.0',
-      requiredEnvVars: ['DATABASE_URL'],
-      optionalEnvVars: [],
-      deprecatedEnvVars: [],
-      removedFeatures: [],
-      breakingChanges: [],
-    };
+    return (
+      VERSION_SCHEMAS[versions[0]] ?? {
+        version: 'unknown',
+        minConfigVersion: '2.0.0',
+        requiredEnvVars: ['DATABASE_URL'],
+        optionalEnvVars: [],
+        deprecatedEnvVars: [],
+        removedFeatures: [],
+        breakingChanges: [],
+      }
+    );
   }
 
   /**
@@ -369,7 +391,10 @@ export class ConfigCompatibilityService {
     },
   ): ConfigCompatibilityIssue | null {
     // Check required
-    if (rules.required && (value === undefined || value === null || value === '')) {
+    if (
+      rules.required &&
+      (value === undefined || value === null || value === '')
+    ) {
       return {
         type: 'error',
         path,
@@ -396,7 +421,11 @@ export class ConfigCompatibilityService {
     }
 
     // Check pattern
-    if (rules.pattern && typeof value === 'string' && !rules.pattern.test(value)) {
+    if (
+      rules.pattern &&
+      typeof value === 'string' &&
+      !rules.pattern.test(value)
+    ) {
       return {
         type: 'error',
         path,

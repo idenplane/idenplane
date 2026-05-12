@@ -62,7 +62,12 @@ export class ScimBulkService {
    */
   private async processOperation(
     realmId: string,
-    operation: { method: string; path: string; data?: unknown; bulkId?: string },
+    operation: {
+      method: string;
+      path: string;
+      data?: unknown;
+      bulkId?: string;
+    },
   ): Promise<ScimBulkResponseOperation> {
     const { method, path, data, bulkId } = operation;
 
@@ -77,13 +82,35 @@ export class ScimBulkService {
 
     switch (method) {
       case 'POST':
-        return this.handlePost(realmId, resourceType, data as any, bulkId || '');
+        return this.handlePost(
+          realmId,
+          resourceType,
+          data as any,
+          bulkId || '',
+        );
       case 'PUT':
-        return this.handlePut(realmId, resourceType, resourceId, data as any, bulkId || '');
+        return this.handlePut(
+          realmId,
+          resourceType,
+          resourceId,
+          data as any,
+          bulkId || '',
+        );
       case 'PATCH':
-        return this.handlePatch(realmId, resourceType, resourceId, data as any, bulkId || '');
+        return this.handlePatch(
+          realmId,
+          resourceType,
+          resourceId,
+          data as any,
+          bulkId || '',
+        );
       case 'DELETE':
-        return this.handleDelete(realmId, resourceType, resourceId, bulkId || '');
+        return this.handleDelete(
+          realmId,
+          resourceType,
+          resourceId,
+          bulkId || '',
+        );
       default:
         throw new BadRequestException(`Unsupported method: ${method}`);
     }
@@ -129,10 +156,18 @@ export class ScimBulkService {
     let location: string;
 
     if (resourceType === 'Users') {
-      const user = await this.usersService.update(realmId, resourceId, data as ScimUser);
+      const user = await this.usersService.update(
+        realmId,
+        resourceId,
+        data as ScimUser,
+      );
       location = `/scim/v2/Users/${user.id}`;
     } else {
-      const group = await this.groupsService.update(realmId, resourceId, data as ScimGroup);
+      const group = await this.groupsService.update(
+        realmId,
+        resourceId,
+        data as ScimGroup,
+      );
       location = `/scim/v2/Groups/${group.id}`;
     }
 
@@ -157,10 +192,18 @@ export class ScimBulkService {
     let location: string;
 
     if (resourceType === 'Users') {
-      const user = await this.usersService.patch(realmId, resourceId, data.operations);
+      const user = await this.usersService.patch(
+        realmId,
+        resourceId,
+        data.operations,
+      );
       location = `/scim/v2/Users/${user.id}`;
     } else {
-      const group = await this.groupsService.patch(realmId, resourceId, data.operations);
+      const group = await this.groupsService.patch(
+        realmId,
+        resourceId,
+        data.operations,
+      );
       location = `/scim/v2/Groups/${group.id}`;
     }
 

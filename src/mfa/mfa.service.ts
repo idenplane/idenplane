@@ -41,7 +41,9 @@ export class MfaService {
         data: { userId, codeHash, expiresAt },
       });
     } catch (err) {
-      this.logger.warn(`Failed to persist used TOTP code to DB: ${(err as Error).message}`);
+      this.logger.warn(
+        `Failed to persist used TOTP code to DB: ${(err as Error).message}`,
+      );
     }
 
     if (this.redis?.isAvailable()) {
@@ -49,7 +51,9 @@ export class MfaService {
         await this.redis.set(key, '1', TOTP_USED_CODE_TTL_SECONDS);
         return;
       } catch (err) {
-        this.logger.warn(`Failed to store used TOTP code in Redis: ${(err as Error).message}`);
+        this.logger.warn(
+          `Failed to store used TOTP code in Redis: ${(err as Error).message}`,
+        );
       }
     }
 
@@ -83,12 +87,16 @@ export class MfaService {
       });
       if (record) {
         if (this.redis?.isAvailable()) {
-          await this.redis.set(key, '1', TOTP_USED_CODE_TTL_SECONDS).catch(() => {});
+          await this.redis
+            .set(key, '1', TOTP_USED_CODE_TTL_SECONDS)
+            .catch(() => {});
         }
         return true;
       }
     } catch (err) {
-      this.logger.warn(`Failed to check DB for used TOTP code: ${(err as Error).message}`);
+      this.logger.warn(
+        `Failed to check DB for used TOTP code: ${(err as Error).message}`,
+      );
     }
 
     return false;
@@ -133,7 +141,10 @@ export class MfaService {
     };
   }
 
-  async verifyAndActivateTotp(userId: string, code: string): Promise<string[] | null> {
+  async verifyAndActivateTotp(
+    userId: string,
+    code: string,
+  ): Promise<string[] | null> {
     const credential = await this.prisma.userCredential.findUnique({
       where: { userId_type: { userId, type: 'totp' } },
     });
@@ -168,7 +179,9 @@ export class MfaService {
 
     // Replay-attack prevention: reject codes already used within the window.
     if (await this.isTotpCodeUsed(userId, code)) {
-      this.logger.warn(`Replay attack detected: TOTP code reuse for user ${userId}`);
+      this.logger.warn(
+        `Replay attack detected: TOTP code reuse for user ${userId}`,
+      );
       return false;
     }
 
@@ -225,7 +238,9 @@ export class MfaService {
   }
 
   async disableTotp(userId: string): Promise<void> {
-    await this.prisma.userCredential.deleteMany({ where: { userId, type: 'totp' } });
+    await this.prisma.userCredential.deleteMany({
+      where: { userId, type: 'totp' },
+    });
     await this.prisma.recoveryCode.deleteMany({ where: { userId } });
   }
 
@@ -251,7 +266,12 @@ export class MfaService {
     const token = this.crypto.generateSecret(32);
     const tokenHash = this.crypto.sha256(token);
 
-    const challengeData: MfaChallengeData = { userId, realmId, oauthParams, attempts: 0 };
+    const challengeData: MfaChallengeData = {
+      userId,
+      realmId,
+      oauthParams,
+      attempts: 0,
+    };
     await this.prisma.pendingAction.create({
       data: {
         tokenHash,
@@ -264,9 +284,11 @@ export class MfaService {
     return token;
   }
 
-  async validateMfaChallenge(
-    challengeToken: string,
-  ): Promise<{ userId: string; realmId: string; oauthParams?: Record<string, string> } | null> {
+  async validateMfaChallenge(challengeToken: string): Promise<{
+    userId: string;
+    realmId: string;
+    oauthParams?: Record<string, string>;
+  } | null> {
     const tokenHash = this.crypto.sha256(challengeToken);
 
     const action = await this.prisma.pendingAction.findUnique({
@@ -283,16 +305,22 @@ export class MfaService {
     await this.prisma.pendingAction.delete({ where: { id: action.id } });
 
     const data = action.data as unknown as MfaChallengeData;
-    return { userId: data.userId, realmId: data.realmId, oauthParams: data.oauthParams };
+    return {
+      userId: data.userId,
+      realmId: data.realmId,
+      oauthParams: data.oauthParams,
+    };
   }
 
   /**
    * Validates the challenge without consuming it, increments attempt counter.
    * Returns null if challenge is invalid, expired, or max attempts exceeded.
    */
-  async validateMfaChallengeWithAttemptCheck(
-    challengeToken: string,
-  ): Promise<{ userId: string; realmId: string; oauthParams?: Record<string, string> } | null> {
+  async validateMfaChallengeWithAttemptCheck(challengeToken: string): Promise<{
+    userId: string;
+    realmId: string;
+    oauthParams?: Record<string, string>;
+  } | null> {
     const tokenHash = this.crypto.sha256(challengeToken);
 
     const action = await this.prisma.pendingAction.findUnique({
@@ -311,7 +339,9 @@ export class MfaService {
     if (attempts > MfaService.MAX_MFA_ATTEMPTS) {
       // Too many attempts — delete challenge and force re-authentication
       await this.prisma.pendingAction.delete({ where: { id: action.id } });
-      this.logger.warn(`MFA challenge exceeded max attempts for user ${data.userId}`);
+      this.logger.warn(
+        `MFA challenge exceeded max attempts for user ${data.userId}`,
+      );
       return null;
     }
 
@@ -322,7 +352,11 @@ export class MfaService {
       data: { data: updatedData as unknown as Prisma.InputJsonValue },
     });
 
-    return { userId: data.userId, realmId: data.realmId, oauthParams: data.oauthParams };
+    return {
+      userId: data.userId,
+      realmId: data.realmId,
+      oauthParams: data.oauthParams,
+    };
   }
 
   /**
@@ -330,7 +364,9 @@ export class MfaService {
    */
   async consumeMfaChallenge(challengeToken: string): Promise<void> {
     const tokenHash = this.crypto.sha256(challengeToken);
-    await this.prisma.pendingAction.delete({ where: { tokenHash } }).catch(() => {});
+    await this.prisma.pendingAction
+      .delete({ where: { tokenHash } })
+      .catch(() => {});
   }
 
   @Interval(60_000)

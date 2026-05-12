@@ -11,7 +11,12 @@ import {
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiSecurity, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiSecurity,
+  ApiResponse,
+} from '@nestjs/swagger';
 import type { Realm } from '@prisma/client';
 import { ClientsService } from './clients.service.js';
 import { CreateClientDto } from './dto/create-client.dto.js';
@@ -48,10 +53,7 @@ export class ClientsController {
   @ApiResponse({ status: 200, description: 'Client details' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Client not found' })
-  findOne(
-    @CurrentRealm() realm: Realm,
-    @Param('clientId') clientId: string,
-  ) {
+  findOne(@CurrentRealm() realm: Realm, @Param('clientId') clientId: string) {
     return this.clientsService.findByClientId(realm, clientId);
   }
 
@@ -89,10 +91,7 @@ export class ClientsController {
   @ApiResponse({ status: 204, description: 'Client deleted successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Client not found' })
-  remove(
-    @CurrentRealm() realm: Realm,
-    @Param('clientId') clientId: string,
-  ) {
+  remove(@CurrentRealm() realm: Realm, @Param('clientId') clientId: string) {
     return this.clientsService.remove(realm, clientId);
   }
 
@@ -113,7 +112,10 @@ export class ClientsController {
   @ApiOperation({ summary: 'Get service account user for a client' })
   @ApiResponse({ status: 200, description: 'Service account user details' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 404, description: 'Client or service account not found' })
+  @ApiResponse({
+    status: 404,
+    description: 'Client or service account not found',
+  })
   getServiceAccount(
     @CurrentRealm() realm: Realm,
     @Param('clientId') clientId: string,

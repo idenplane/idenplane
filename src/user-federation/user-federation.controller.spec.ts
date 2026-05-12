@@ -56,7 +56,7 @@ describe('UserFederationController', () => {
     it('should call service.update', () => {
       const dto = { name: 'Updated LDAP' };
       service.update.mockResolvedValue({});
-      controller.update('test-realm', 'fed-1', dto as any);
+      controller.update('test-realm', 'fed-1', dto);
       expect(service.update).toHaveBeenCalledWith('test-realm', 'fed-1', dto);
     });
   });
@@ -73,7 +73,10 @@ describe('UserFederationController', () => {
     it('should call service.testConnection', () => {
       service.testConnection.mockResolvedValue({ success: true });
       controller.testConnection('test-realm', 'fed-1');
-      expect(service.testConnection).toHaveBeenCalledWith('test-realm', 'fed-1');
+      expect(service.testConnection).toHaveBeenCalledWith(
+        'test-realm',
+        'fed-1',
+      );
     });
   });
 

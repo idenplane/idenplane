@@ -75,7 +75,9 @@ export class DatabaseBackupService {
       // Build pg_dump command
       const pgDumpCmd = this.buildPgDumpCommand(dbName, backupPath);
 
-      this.logger.debug(`Executing: ${pgDumpCmd.replace(/--password=\S+/g, '--password=******')}`);
+      this.logger.debug(
+        `Executing: ${pgDumpCmd.replace(/--password=\S+/g, '--password=******')}`,
+      );
 
       // Execute pg_dump
       execSync(pgDumpCmd, {
@@ -101,7 +103,9 @@ export class DatabaseBackupService {
       const duration = Date.now() - startTime;
       const errorMessage = err instanceof Error ? err.message : String(err);
 
-      this.logger.error(`Database backup failed after ${duration}ms: ${errorMessage}`);
+      this.logger.error(
+        `Database backup failed after ${duration}ms: ${errorMessage}`,
+      );
 
       return {
         success: false,
@@ -140,7 +144,9 @@ export class DatabaseBackupService {
       // Build pg_restore or psql command based on file extension
       const restoreCmd = this.buildRestoreCommand(backupPath, dbName);
 
-      this.logger.debug(`Executing: ${restoreCmd.replace(/--password=\S+/g, '--password=******')}`);
+      this.logger.debug(
+        `Executing: ${restoreCmd.replace(/--password=\S+/g, '--password=******')}`,
+      );
 
       // Execute restore command
       execSync(restoreCmd, {
@@ -150,7 +156,9 @@ export class DatabaseBackupService {
 
       const duration = Date.now() - startTime;
 
-      this.logger.log(`Database restore completed successfully in ${(duration / 1000).toFixed(1)}s`);
+      this.logger.log(
+        `Database restore completed successfully in ${(duration / 1000).toFixed(1)}s`,
+      );
 
       return {
         success: true,
@@ -162,7 +170,9 @@ export class DatabaseBackupService {
       const duration = Date.now() - startTime;
       const errorMessage = err instanceof Error ? err.message : String(err);
 
-      this.logger.error(`Database restore failed after ${duration}ms: ${errorMessage}`);
+      this.logger.error(
+        `Database restore failed after ${duration}ms: ${errorMessage}`,
+      );
 
       return {
         success: false,
@@ -202,7 +212,9 @@ export class DatabaseBackupService {
           filename: file,
           size: this.formatFileSize(stats.size),
           created: stats.birthtime,
-          age: Math.floor((now.getTime() - stats.birthtime.getTime()) / (1000 * 60 * 60 * 24)),
+          age: Math.floor(
+            (now.getTime() - stats.birthtime.getTime()) / (1000 * 60 * 60 * 24),
+          ),
         });
       }
 
@@ -227,7 +239,9 @@ export class DatabaseBackupService {
     let deletedCount = 0;
 
     // Sort by creation date, newest first
-    const sortedBackups = [...backups].sort((a, b) => b.created.getTime() - a.created.getTime());
+    const sortedBackups = [...backups].sort(
+      (a, b) => b.created.getTime() - a.created.getTime(),
+    );
 
     for (let i = 0; i < sortedBackups.length; i++) {
       const backup = sortedBackups[i];
@@ -300,7 +314,8 @@ export class DatabaseBackupService {
       `-d ${databaseName}`,
       '-Fc', // Custom format for compression
       '-Z 6', // Compression level 6
-      '-f', outputPath,
+      '-f',
+      outputPath,
     ];
 
     if (password) {
@@ -313,7 +328,10 @@ export class DatabaseBackupService {
   /**
    * Build pg_restore command for restoring from backup.
    */
-  private buildRestoreCommand(backupPath: string, databaseName: string): string {
+  private buildRestoreCommand(
+    backupPath: string,
+    databaseName: string,
+  ): string {
     const env = process.env;
     const host = env.PGHOST || 'localhost';
     const port = env.PGPORT || '5432';

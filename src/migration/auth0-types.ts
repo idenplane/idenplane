@@ -39,7 +39,10 @@ export interface Auth0Connection {
 export interface Auth0Role {
   name: string;
   description?: string;
-  permissions?: Array<{ permission_name: string; resource_server_identifier: string }>;
+  permissions?: Array<{
+    permission_name: string;
+    resource_server_identifier: string;
+  }>;
 }
 
 export interface Auth0Organization {

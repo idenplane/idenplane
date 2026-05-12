@@ -164,9 +164,9 @@ describe('OrganizationsService', () => {
     it('should throw NotFoundException when organization does not exist', async () => {
       prisma.organization.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.findOne(mockRealm, 'nonexistent'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.findOne(mockRealm, 'nonexistent')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -304,9 +304,14 @@ describe('OrganizationsService', () => {
       const updated = { ...mockMember, role: 'admin' };
       prisma.organizationMember.update.mockResolvedValue(updated);
 
-      const result = await service.updateMemberRole(mockRealm, 'acme-corp', 'user-1', {
-        role: 'admin',
-      });
+      const result = await service.updateMemberRole(
+        mockRealm,
+        'acme-corp',
+        'user-1',
+        {
+          role: 'admin',
+        },
+      );
 
       expect(result).toEqual(updated);
       expect(prisma.organizationMember.update).toHaveBeenCalledWith({
@@ -320,7 +325,9 @@ describe('OrganizationsService', () => {
       prisma.organizationMember.findUnique.mockResolvedValue(null);
 
       await expect(
-        service.updateMemberRole(mockRealm, 'acme-corp', 'ghost', { role: 'admin' }),
+        service.updateMemberRole(mockRealm, 'acme-corp', 'ghost', {
+          role: 'admin',
+        }),
       ).rejects.toThrow(NotFoundException);
     });
   });
@@ -372,8 +379,8 @@ describe('OrganizationsService', () => {
           role: 'member',
         }),
       });
-      const callArg = (prisma.organizationInvitation.create as jest.Mock).mock
-        .calls[0][0].data;
+      const callArg =
+        prisma.organizationInvitation.create.mock.calls[0][0].data;
       expect(typeof callArg.token).toBe('string');
       expect(callArg.token.length).toBeGreaterThan(0);
       expect(callArg.expiresAt).toBeInstanceOf(Date);
@@ -388,8 +395,8 @@ describe('OrganizationsService', () => {
         email: 'BOB@ACME.COM',
       });
 
-      const callArg = (prisma.organizationInvitation.create as jest.Mock).mock
-        .calls[0][0].data;
+      const callArg =
+        prisma.organizationInvitation.create.mock.calls[0][0].data;
       expect(callArg.email).toBe('bob@acme.com');
     });
   });
@@ -399,7 +406,9 @@ describe('OrganizationsService', () => {
   describe('acceptInvitation', () => {
     it('should accept a valid invitation and add member', async () => {
       prisma.organization.findUnique.mockResolvedValue(mockOrg);
-      prisma.organizationInvitation.findUnique.mockResolvedValue(mockInvitation);
+      prisma.organizationInvitation.findUnique.mockResolvedValue(
+        mockInvitation,
+      );
       prisma.user.findFirst.mockResolvedValue(mockUser);
       prisma.$transaction.mockImplementation(async (ops: any[]) => {
         return Promise.all(ops.map((op) => op));
@@ -482,7 +491,9 @@ describe('OrganizationsService', () => {
 
     it('should throw ForbiddenException when no user exists for the invited email', async () => {
       prisma.organization.findUnique.mockResolvedValue(mockOrg);
-      prisma.organizationInvitation.findUnique.mockResolvedValue(mockInvitation);
+      prisma.organizationInvitation.findUnique.mockResolvedValue(
+        mockInvitation,
+      );
       prisma.user.findFirst.mockResolvedValue(null);
 
       await expect(
@@ -500,7 +511,10 @@ describe('OrganizationsService', () => {
 
   describe('generateDomainVerificationToken', () => {
     it('should generate a consistent, prefixed token', () => {
-      const token = service.generateDomainVerificationToken('org-1', 'acme.com');
+      const token = service.generateDomainVerificationToken(
+        'org-1',
+        'acme.com',
+      );
       expect(token.startsWith('authme-domain-verification=')).toBe(true);
     });
 
@@ -640,7 +654,11 @@ describe('OrganizationsService', () => {
     });
 
     it('should do nothing when email has no domain part', async () => {
-      await service.autoAssignUserByEmailDomain('realm-1', 'user-1', 'no-at-sign');
+      await service.autoAssignUserByEmailDomain(
+        'realm-1',
+        'user-1',
+        'no-at-sign',
+      );
       expect(prisma.organization.findMany).not.toHaveBeenCalled();
     });
 

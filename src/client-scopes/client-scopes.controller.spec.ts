@@ -64,7 +64,7 @@ describe('ClientScopesController', () => {
     it('should call service.create', () => {
       const dto = { name: 'custom-scope' };
       service.create.mockResolvedValue({});
-      controller.create(realm, dto as any);
+      controller.create(realm, dto);
       expect(service.create).toHaveBeenCalledWith(realm, dto);
     });
   });
@@ -73,7 +73,7 @@ describe('ClientScopesController', () => {
     it('should call service.update', () => {
       const dto = { description: 'updated' };
       service.update.mockResolvedValue({});
-      controller.update(realm, 'scope-1', dto as any);
+      controller.update(realm, 'scope-1', dto);
       expect(service.update).toHaveBeenCalledWith(realm, 'scope-1', dto);
     });
   });
@@ -90,7 +90,10 @@ describe('ClientScopesController', () => {
 
   describe('addMapper', () => {
     it('should call service.addMapper', () => {
-      const body = { name: 'sub', mapperType: 'oidc-usermodel-attribute-mapper' };
+      const body = {
+        name: 'sub',
+        mapperType: 'oidc-usermodel-attribute-mapper',
+      };
       service.addMapper.mockResolvedValue({});
       controller.addMapper(realm, 'scope-1', body);
       expect(service.addMapper).toHaveBeenCalledWith(realm, 'scope-1', body);
@@ -102,7 +105,12 @@ describe('ClientScopesController', () => {
       const body = { name: 'updated' };
       service.updateMapper.mockResolvedValue({});
       controller.updateMapper(realm, 'scope-1', 'mapper-1', body);
-      expect(service.updateMapper).toHaveBeenCalledWith(realm, 'scope-1', 'mapper-1', body);
+      expect(service.updateMapper).toHaveBeenCalledWith(
+        realm,
+        'scope-1',
+        'mapper-1',
+        body,
+      );
     });
   });
 
@@ -110,7 +118,11 @@ describe('ClientScopesController', () => {
     it('should call service.removeMapper', () => {
       service.removeMapper.mockResolvedValue({});
       controller.removeMapper(realm, 'scope-1', 'mapper-1');
-      expect(service.removeMapper).toHaveBeenCalledWith(realm, 'scope-1', 'mapper-1');
+      expect(service.removeMapper).toHaveBeenCalledWith(
+        realm,
+        'scope-1',
+        'mapper-1',
+      );
     });
   });
 
@@ -127,8 +139,14 @@ describe('ClientScopesController', () => {
   describe('assignDefaultScope', () => {
     it('should call service.assignDefaultScope', () => {
       service.assignDefaultScope.mockResolvedValue({});
-      controller.assignDefaultScope(realm, 'client-1', { clientScopeId: 'scope-1' } as any);
-      expect(service.assignDefaultScope).toHaveBeenCalledWith(realm, 'client-1', 'scope-1');
+      controller.assignDefaultScope(realm, 'client-1', {
+        clientScopeId: 'scope-1',
+      });
+      expect(service.assignDefaultScope).toHaveBeenCalledWith(
+        realm,
+        'client-1',
+        'scope-1',
+      );
     });
   });
 
@@ -136,7 +154,11 @@ describe('ClientScopesController', () => {
     it('should call service.removeDefaultScope', () => {
       service.removeDefaultScope.mockResolvedValue({});
       controller.removeDefaultScope(realm, 'client-1', 'scope-1');
-      expect(service.removeDefaultScope).toHaveBeenCalledWith(realm, 'client-1', 'scope-1');
+      expect(service.removeDefaultScope).toHaveBeenCalledWith(
+        realm,
+        'client-1',
+        'scope-1',
+      );
     });
   });
 
@@ -151,8 +173,14 @@ describe('ClientScopesController', () => {
   describe('assignOptionalScope', () => {
     it('should call service.assignOptionalScope', () => {
       service.assignOptionalScope.mockResolvedValue({});
-      controller.assignOptionalScope(realm, 'client-1', { clientScopeId: 'scope-1' } as any);
-      expect(service.assignOptionalScope).toHaveBeenCalledWith(realm, 'client-1', 'scope-1');
+      controller.assignOptionalScope(realm, 'client-1', {
+        clientScopeId: 'scope-1',
+      });
+      expect(service.assignOptionalScope).toHaveBeenCalledWith(
+        realm,
+        'client-1',
+        'scope-1',
+      );
     });
   });
 
@@ -160,7 +188,11 @@ describe('ClientScopesController', () => {
     it('should call service.removeOptionalScope', () => {
       service.removeOptionalScope.mockResolvedValue({});
       controller.removeOptionalScope(realm, 'client-1', 'scope-1');
-      expect(service.removeOptionalScope).toHaveBeenCalledWith(realm, 'client-1', 'scope-1');
+      expect(service.removeOptionalScope).toHaveBeenCalledWith(
+        realm,
+        'client-1',
+        'scope-1',
+      );
     });
   });
 });

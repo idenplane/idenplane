@@ -57,8 +57,14 @@ export class WebAuthnController {
 
   @Post('webauthn/register/options')
   @HttpCode(HttpStatus.OK)
-  @ApiResponse({ status: 200, description: 'WebAuthn registration options (challenge, rp, user)' })
-  @ApiResponse({ status: 400, description: 'User must be signed in to register a passkey' })
+  @ApiResponse({
+    status: 200,
+    description: 'WebAuthn registration options (challenge, rp, user)',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'User must be signed in to register a passkey',
+  })
   async startRegistration(
     @CurrentRealm() realm: Realm,
     @Body() body: StartRegistrationDto,
@@ -66,7 +72,9 @@ export class WebAuthnController {
   ) {
     const user = await this.getSessionUser(realm, req);
     if (!user) {
-      throw new BadRequestException('You must be signed in to register a passkey');
+      throw new BadRequestException(
+        'You must be signed in to register a passkey',
+      );
     }
 
     return this.webAuthnService.generateRegistrationOptions(user, realm);
@@ -74,8 +82,14 @@ export class WebAuthnController {
 
   @Post('webauthn/register/verify')
   @HttpCode(HttpStatus.OK)
-  @ApiResponse({ status: 200, description: 'Credential registered; returns credential metadata' })
-  @ApiResponse({ status: 400, description: 'User must be signed in, or attestation verification failed' })
+  @ApiResponse({
+    status: 200,
+    description: 'Credential registered; returns credential metadata',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'User must be signed in, or attestation verification failed',
+  })
   async completeRegistration(
     @CurrentRealm() realm: Realm,
     @Body() body: VerifyRegistrationDto,
@@ -83,7 +97,9 @@ export class WebAuthnController {
   ) {
     const user = await this.getSessionUser(realm, req);
     if (!user) {
-      throw new BadRequestException('You must be signed in to register a passkey');
+      throw new BadRequestException(
+        'You must be signed in to register a passkey',
+      );
     }
 
     const credential = await this.webAuthnService.verifyRegistration(
@@ -106,7 +122,11 @@ export class WebAuthnController {
 
   @Post('webauthn/authenticate/options')
   @HttpCode(HttpStatus.OK)
-  @ApiResponse({ status: 200, description: 'WebAuthn authentication options (challenge, allowCredentials)' })
+  @ApiResponse({
+    status: 200,
+    description:
+      'WebAuthn authentication options (challenge, allowCredentials)',
+  })
   @ApiResponse({ status: 400, description: 'Bad request — realm not found' })
   async startAuthentication(
     @CurrentRealm() realm: Realm,
@@ -116,7 +136,10 @@ export class WebAuthnController {
     // Look up userId if username given (for autofill / non-resident-key flow)
     let userId: string | undefined;
     if (body.username) {
-      const user = await this.loginService.findUserByUsername(realm, body.username);
+      const user = await this.loginService.findUserByUsername(
+        realm,
+        body.username,
+      );
       userId = user?.id;
     }
 
@@ -125,9 +148,18 @@ export class WebAuthnController {
 
   @Post('webauthn/authenticate/verify')
   @HttpCode(HttpStatus.OK)
-  @ApiResponse({ status: 200, description: 'Authentication verified; returns redirectUrl' })
-  @ApiResponse({ status: 400, description: 'Assertion verification failed or invalid credential' })
-  @ApiResponse({ status: 401, description: 'Credential not found or does not belong to any user' })
+  @ApiResponse({
+    status: 200,
+    description: 'Authentication verified; returns redirectUrl',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Assertion verification failed or invalid credential',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Credential not found or does not belong to any user',
+  })
   async completeAuthentication(
     @CurrentRealm() realm: Realm,
     @Body() body: VerifyAuthenticationDto,
@@ -142,7 +174,16 @@ export class WebAuthnController {
     // Build OAuth params from request body
     const oauthParams: Record<string, string> = {};
     const bodyAsRecord = body as unknown as Record<string, unknown>;
-    for (const key of ['response_type', 'client_id', 'redirect_uri', 'scope', 'state', 'nonce', 'code_challenge', 'code_challenge_method']) {
+    for (const key of [
+      'response_type',
+      'client_id',
+      'redirect_uri',
+      'scope',
+      'state',
+      'nonce',
+      'code_challenge',
+      'code_challenge_method',
+    ]) {
       const val = bodyAsRecord[key];
       if (typeof val === 'string' && val) oauthParams[key] = val;
     }
@@ -169,11 +210,20 @@ export class WebAuthnController {
     }
 
     try {
-      const client = await this.oauthService.validateAuthRequest(realm, oauthParams as unknown as AuthorizeParams);
+      const client = await this.oauthService.validateAuthRequest(
+        realm,
+        oauthParams as unknown as AuthorizeParams,
+      );
 
       if (client.requireConsent) {
-        const scopes = (oauthParams['scope'] ?? 'openid').split(' ').filter(Boolean);
-        const hasConsent = await this.consentService.hasConsent(user.id, client.id, scopes);
+        const scopes = (oauthParams['scope'] ?? 'openid')
+          .split(' ')
+          .filter(Boolean);
+        const hasConsent = await this.consentService.hasConsent(
+          user.id,
+          client.id,
+          scopes,
+        );
 
         if (!hasConsent) {
           const reqId = await this.consentService.storeConsentRequest({
@@ -184,23 +234,37 @@ export class WebAuthnController {
             scopes,
             oauthParams,
           });
-          return res.json({ redirectUrl: `/realms/${realm.name}/consent?req=${reqId}` });
+          return res.json({
+            redirectUrl: `/realms/${realm.name}/consent?req=${reqId}`,
+          });
         }
       }
 
-      const result = await this.oauthService.authorizeWithUser(realm, user, oauthParams as unknown as AuthorizeParams);
+      const result = await this.oauthService.authorizeWithUser(
+        realm,
+        user,
+        oauthParams as unknown as AuthorizeParams,
+      );
       return res.json({ redirectUrl: result.redirectUrl });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
-      return res.json({ redirectUrl: `/realms/${realm.name}/login?error=${encodeURIComponent(message)}` });
+      return res.json({
+        redirectUrl: `/realms/${realm.name}/login?error=${encodeURIComponent(message)}`,
+      });
     }
   }
 
   // ─── Account — Credential Management ──────────────────────────
 
   @Get('account/webauthn/credentials')
-  @ApiResponse({ status: 200, description: 'List of registered passkeys for the current user' })
-  @ApiResponse({ status: 302, description: 'Redirect to login when no active session exists' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of registered passkeys for the current user',
+  })
+  @ApiResponse({
+    status: 302,
+    description: 'Redirect to login when no active session exists',
+  })
   async listCredentials(
     @CurrentRealm() realm: Realm,
     @Req() req: Request,
@@ -228,7 +292,10 @@ export class WebAuthnController {
   @Delete('account/webauthn/credentials/:credentialId')
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiResponse({ status: 204, description: 'Credential removed successfully' })
-  @ApiResponse({ status: 400, description: 'User must be signed in to remove a passkey' })
+  @ApiResponse({
+    status: 400,
+    description: 'User must be signed in to remove a passkey',
+  })
   @ApiResponse({ status: 404, description: 'Credential not found' })
   async removeCredential(
     @CurrentRealm() realm: Realm,
@@ -237,9 +304,15 @@ export class WebAuthnController {
   ) {
     const user = await this.getSessionUser(realm, req);
     if (!user) {
-      throw new BadRequestException('You must be signed in to remove a passkey');
+      throw new BadRequestException(
+        'You must be signed in to remove a passkey',
+      );
     }
 
-    await this.webAuthnService.removeCredential(user.id, realm.id, credentialId);
+    await this.webAuthnService.removeCredential(
+      user.id,
+      realm.id,
+      credentialId,
+    );
   }
 }

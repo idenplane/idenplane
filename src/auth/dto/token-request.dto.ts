@@ -77,7 +77,8 @@ export class TokenRequestDto {
   totp?: string;
 
   @ApiPropertyOptional({
-    description: 'MFA token (when MFA is required, returned from initial auth attempt)',
+    description:
+      'MFA token (when MFA is required, returned from initial auth attempt)',
   })
   mfa_token?: string;
 }

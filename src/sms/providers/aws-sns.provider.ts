@@ -39,7 +39,11 @@ export class AwsSnsProvider implements SmsProvider {
     return kSigning;
   }
 
-  private hmacSha256(key: string | Buffer, data: string, encoding: 'utf8' | 'hex'): Buffer {
+  private hmacSha256(
+    key: string | Buffer,
+    data: string,
+    encoding: 'utf8' | 'hex',
+  ): Buffer {
     const crypto = require('crypto') as typeof import('crypto');
     return crypto.createHmac('sha256', key).update(data, encoding).digest();
   }
@@ -69,16 +73,21 @@ export class AwsSnsProvider implements SmsProvider {
     const host = `sns.${this.region}.amazonaws.com`;
     const endpoint = `https://${host}/`;
 
-    const payloadHash = this.sha256(`Action=${action}&Message=${encodeURIComponent(message)}&PhoneNumber=${encodeURIComponent(phoneNumber)}&Version=2010-03-31`);
+    const payloadHash = this.sha256(
+      `Action=${action}&Message=${encodeURIComponent(message)}&PhoneNumber=${encodeURIComponent(phoneNumber)}&Version=2010-03-31`,
+    );
 
     const headers = {
-      'host': host,
+      host: host,
       'x-amz-date': amzDate,
       'x-amz-target': `AmazonSNSv20100331.${action}`,
     };
 
     const sortedHeaders = Object.keys(headers).sort();
-    const canonicalHeaders = sortedHeaders.map(k => `${k}:${headers[k as keyof typeof headers]}`).join('\n') + '\n';
+    const canonicalHeaders =
+      sortedHeaders
+        .map((k) => `${k}:${headers[k as keyof typeof headers]}`)
+        .join('\n') + '\n';
     const signedHeaders = sortedHeaders.join(';');
 
     const canonicalRequest = [
@@ -101,7 +110,10 @@ export class AwsSnsProvider implements SmsProvider {
 
     const signingKey = this.getSignatureKey(dateStamp, this.region!, 'sns');
     const crypto = require('crypto') as typeof import('crypto');
-    const signature = crypto.createHmac('sha256', signingKey).update(stringToSign, 'utf8').digest('hex');
+    const signature = crypto
+      .createHmac('sha256', signingKey)
+      .update(stringToSign, 'utf8')
+      .digest('hex');
 
     const authHeader = `${algorithm} Credential=${this.accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
 
@@ -114,7 +126,9 @@ export class AwsSnsProvider implements SmsProvider {
     }
 
     if (!this.fromNumber) {
-      throw new Error('AWS SNS from number not configured - set AWS_SNS_FROM_NUMBER');
+      throw new Error(
+        'AWS SNS from number not configured - set AWS_SNS_FROM_NUMBER',
+      );
     }
 
     try {
@@ -138,15 +152,14 @@ export class AwsSnsProvider implements SmsProvider {
 
       const headers: Record<string, string> = {
         'content-type': 'application/x-www-form-urlencoded',
-        'host': host,
+        host: host,
         'x-amz-date': amzDate,
         'x-amz-target': 'AmazonSNSv20100331.Publish',
       };
 
       const sortedHeaderKeys = Object.keys(headers).sort();
-      const canonicalHeaders = sortedHeaderKeys
-        .map(k => `${k}:${headers[k]}`)
-        .join('\n') + '\n';
+      const canonicalHeaders =
+        sortedHeaderKeys.map((k) => `${k}:${headers[k]}`).join('\n') + '\n';
       const signedHeaders = sortedHeaderKeys.join(';');
 
       const canonicalRequest = [
@@ -169,11 +182,13 @@ export class AwsSnsProvider implements SmsProvider {
 
       const signingKey = this.getSignatureKey(dateStamp, this.region, 'sns');
       const crypto = require('crypto') as typeof import('crypto');
-      const signature = crypto.createHmac('sha256', signingKey)
+      const signature = crypto
+        .createHmac('sha256', signingKey)
         .update(stringToSign, 'utf8')
         .digest('hex');
 
-      headers['authorization'] = `${algorithm} Credential=${this.accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
+      headers['authorization'] =
+        `${algorithm} Credential=${this.accessKeyId}/${credentialScope}, SignedHeaders=${signedHeaders}, Signature=${signature}`;
 
       const response = await fetch(`https://${host}/`, {
         method: 'POST',
@@ -191,8 +206,11 @@ export class AwsSnsProvider implements SmsProvider {
             };
           };
         };
-        const errorMessage = parsed?.ErrorResponse?.Error?.Message ?? responseText;
-        throw new Error(`AWS SNS API error: ${response.status} - ${errorMessage}`);
+        const errorMessage =
+          parsed?.ErrorResponse?.Error?.Message ?? responseText;
+        throw new Error(
+          `AWS SNS API error: ${response.status} - ${errorMessage}`,
+        );
       }
 
       const resultText = await response.text();
@@ -208,7 +226,9 @@ export class AwsSnsProvider implements SmsProvider {
       };
 
       if (result?.PublishResponse?.PublishResult?.MessageId) {
-        this.logger.log(`SMS sent to ${to}, MessageId: ${result.PublishResponse.PublishResult.MessageId}`);
+        this.logger.log(
+          `SMS sent to ${to}, MessageId: ${result.PublishResponse.PublishResult.MessageId}`,
+        );
       } else {
         this.logger.log(`SMS sent to ${to}`);
       }
@@ -216,7 +236,8 @@ export class AwsSnsProvider implements SmsProvider {
       if (error instanceof Error && error.message.startsWith('AWS SNS')) {
         throw error;
       }
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Failed to send SMS to ${to}: ${errorMessage}`);
       throw new Error(`AWS SNS SMS failed: ${errorMessage}`);
     }

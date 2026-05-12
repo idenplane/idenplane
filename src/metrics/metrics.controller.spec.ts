@@ -9,7 +9,11 @@ describe('MetricsController', () => {
   beforeEach(() => {
     metricsService = {
       registry: {
-        metrics: jest.fn().mockResolvedValue('# HELP http_requests_total\nhttp_requests_total 42'),
+        metrics: jest
+          .fn()
+          .mockResolvedValue(
+            '# HELP http_requests_total\nhttp_requests_total 42',
+          ),
       },
     };
     controller = new MetricsController(metricsService as any);

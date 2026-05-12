@@ -20,7 +20,10 @@ export class CreateNhiCredentialPolicyDto {
   @IsOptional()
   description?: string;
 
-  @ApiPropertyOptional({ description: 'Whether the policy is enabled', default: true })
+  @ApiPropertyOptional({
+    description: 'Whether the policy is enabled',
+    default: true,
+  })
   @IsBoolean()
   @IsOptional()
   enabled?: boolean;

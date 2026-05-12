@@ -1,7 +1,4 @@
-import {
-  ConflictException,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { UsersService } from './users.service.js';
 import {
   createMockPrismaService,
@@ -12,7 +9,12 @@ import type { Realm } from '@prisma/client';
 describe('UsersService', () => {
   let service: UsersService;
   let prisma: MockPrismaService;
-  let cryptoService: { hashPassword: jest.Mock; verifyPassword: jest.Mock; generateSecret: jest.Mock; sha256: jest.Mock };
+  let cryptoService: {
+    hashPassword: jest.Mock;
+    verifyPassword: jest.Mock;
+    generateSecret: jest.Mock;
+    sha256: jest.Mock;
+  };
   let verificationService: { createToken: jest.Mock; validateToken: jest.Mock };
   let emailService: { isConfigured: jest.Mock; sendEmail: jest.Mock };
   let configService: { get: jest.Mock };
@@ -144,7 +146,10 @@ describe('UsersService', () => {
         .mockResolvedValueOnce(mockUser);
 
       await expect(
-        service.create(mockRealm, { username: 'newuser', email: 'test@example.com' }),
+        service.create(mockRealm, {
+          username: 'newuser',
+          email: 'test@example.com',
+        }),
       ).rejects.toThrow(ConflictException);
     });
   });
@@ -196,9 +201,9 @@ describe('UsersService', () => {
     it('should throw NotFoundException when user does not exist', async () => {
       prisma.user.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.findById(mockRealm, 'nonexistent'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.findById(mockRealm, 'nonexistent')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -250,9 +255,9 @@ describe('UsersService', () => {
     it('should throw NotFoundException when user does not exist', async () => {
       prisma.user.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.remove(mockRealm, 'nonexistent'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.remove(mockRealm, 'nonexistent')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -267,7 +272,10 @@ describe('UsersService', () => {
       expect(cryptoService.hashPassword).toHaveBeenCalledWith('newpassword');
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: 'user-1' },
-        data: { passwordHash: 'new-hashed-password', passwordChangedAt: expect.any(Date) },
+        data: {
+          passwordHash: 'new-hashed-password',
+          passwordChangedAt: expect.any(Date),
+        },
       });
     });
 

@@ -17,7 +17,10 @@ import type {
   EventListenerPlugin,
   TokenEnrichmentPlugin,
 } from './plugin.interface.js';
-import { isEventListenerPlugin, isTokenEnrichmentPlugin } from './plugin.interface.js';
+import {
+  isEventListenerPlugin,
+  isTokenEnrichmentPlugin,
+} from './plugin.interface.js';
 
 export interface PluginSummary {
   name: string;
@@ -66,7 +69,9 @@ export class PluginManagerService implements OnModuleInit {
       await this.installOrSync(plugin, sourcePath);
     }
 
-    this.logger.log(`Plugin system initialised. ${this.registry.size} plugin(s) registered.`);
+    this.logger.log(
+      `Plugin system initialised. ${this.registry.size} plugin(s) registered.`,
+    );
   }
 
   /**
@@ -87,7 +92,10 @@ export class PluginManagerService implements OnModuleInit {
    * @param sourcePath Absolute path to the plugin's resolved entry file — used
    *   for integrity verification.
    */
-  private async installOrSync(plugin: AuthMePlugin, sourcePath: string): Promise<void> {
+  private async installOrSync(
+    plugin: AuthMePlugin,
+    sourcePath: string,
+  ): Promise<void> {
     try {
       const currentHash = this.computeFileHash(sourcePath);
 
@@ -111,15 +119,17 @@ export class PluginManagerService implements OnModuleInit {
 
         const context = this.buildContext(plugin, null);
         await this.invokeLifecycle(plugin, 'onInstall', context);
-        this.logger.log(`Installed new plugin '${plugin.name}' (hash: ${currentHash ?? 'unavailable'}).`);
+        this.logger.log(
+          `Installed new plugin '${plugin.name}' (hash: ${currentHash ?? 'unavailable'}).`,
+        );
       } else {
         // Already known — verify file integrity against the stored hash.
         if (record.fileHash && currentHash && record.fileHash !== currentHash) {
           this.logger.warn(
             `Integrity check failed for plugin '${plugin.name}': ` +
-            `stored hash ${record.fileHash} does not match current file hash ${currentHash}. ` +
-            `The plugin file may have been modified after installation. ` +
-            `If this is expected (e.g. a manual update), re-install the plugin to update the baseline.`,
+              `stored hash ${record.fileHash} does not match current file hash ${currentHash}. ` +
+              `The plugin file may have been modified after installation. ` +
+              `If this is expected (e.g. a manual update), re-install the plugin to update the baseline.`,
           );
         } else if (!record.fileHash && currentHash) {
           // No stored hash yet (plugin was recorded before this feature existed) — store it now.
@@ -142,7 +152,10 @@ export class PluginManagerService implements OnModuleInit {
       this.registry.register(plugin, record.enabled);
 
       if (record.enabled) {
-        const context = this.buildContext(plugin, record.config as Record<string, any> | null);
+        const context = this.buildContext(
+          plugin,
+          record.config as Record<string, any> | null,
+        );
         await this.invokeLifecycle(plugin, 'onEnable', context);
       }
     } catch (err) {
@@ -193,9 +206,12 @@ export class PluginManagerService implements OnModuleInit {
   }
 
   async enablePlugin(name: string): Promise<PluginSummary> {
-    const record = await this.prisma.installedPlugin.findUnique({ where: { name } });
+    const record = await this.prisma.installedPlugin.findUnique({
+      where: { name },
+    });
     if (!record) throw new NotFoundException(`Plugin '${name}' not found`);
-    if (record.enabled) throw new ConflictException(`Plugin '${name}' is already enabled`);
+    if (record.enabled)
+      throw new ConflictException(`Plugin '${name}' is already enabled`);
 
     await this.prisma.installedPlugin.update({
       where: { name },
@@ -205,7 +221,10 @@ export class PluginManagerService implements OnModuleInit {
     const entry = this.registry.get(name);
     if (entry) {
       this.registry.setEnabled(name, true);
-      const context = this.buildContext(entry.plugin, record.config as Record<string, any> | null);
+      const context = this.buildContext(
+        entry.plugin,
+        record.config as Record<string, any> | null,
+      );
       await this.invokeLifecycle(entry.plugin, 'onEnable', context);
     }
 
@@ -214,9 +233,12 @@ export class PluginManagerService implements OnModuleInit {
   }
 
   async disablePlugin(name: string): Promise<PluginSummary> {
-    const record = await this.prisma.installedPlugin.findUnique({ where: { name } });
+    const record = await this.prisma.installedPlugin.findUnique({
+      where: { name },
+    });
     if (!record) throw new NotFoundException(`Plugin '${name}' not found`);
-    if (!record.enabled) throw new ConflictException(`Plugin '${name}' is already disabled`);
+    if (!record.enabled)
+      throw new ConflictException(`Plugin '${name}' is already disabled`);
 
     await this.prisma.installedPlugin.update({
       where: { name },
@@ -226,7 +248,10 @@ export class PluginManagerService implements OnModuleInit {
     const entry = this.registry.get(name);
     if (entry) {
       this.registry.setEnabled(name, false);
-      const context = this.buildContext(entry.plugin, record.config as Record<string, any> | null);
+      const context = this.buildContext(
+        entry.plugin,
+        record.config as Record<string, any> | null,
+      );
       await this.invokeLifecycle(entry.plugin, 'onDisable', context);
     }
 
@@ -235,12 +260,17 @@ export class PluginManagerService implements OnModuleInit {
   }
 
   async uninstallPlugin(name: string): Promise<void> {
-    const record = await this.prisma.installedPlugin.findUnique({ where: { name } });
+    const record = await this.prisma.installedPlugin.findUnique({
+      where: { name },
+    });
     if (!record) throw new NotFoundException(`Plugin '${name}' not found`);
 
     const entry = this.registry.get(name);
     if (entry) {
-      const context = this.buildContext(entry.plugin, record.config as Record<string, any> | null);
+      const context = this.buildContext(
+        entry.plugin,
+        record.config as Record<string, any> | null,
+      );
       await this.invokeLifecycle(entry.plugin, 'onUninstall', context);
       this.registry.unregister(name);
     }
@@ -265,7 +295,8 @@ export class PluginManagerService implements OnModuleInit {
     error?: string;
     details?: Record<string, unknown>;
   }): Promise<void> {
-    const listeners = this.registry.getEnabledByType<EventListenerPlugin>('event-listener');
+    const listeners =
+      this.registry.getEnabledByType<EventListenerPlugin>('event-listener');
 
     for (const listener of listeners) {
       if (
@@ -296,7 +327,8 @@ export class PluginManagerService implements OnModuleInit {
     user: any,
     realm: string,
   ): Promise<Record<string, unknown>> {
-    const enrichers = this.registry.getEnabledByType<TokenEnrichmentPlugin>('token-enrichment');
+    const enrichers =
+      this.registry.getEnabledByType<TokenEnrichmentPlugin>('token-enrichment');
 
     let result = { ...tokenPayload };
 

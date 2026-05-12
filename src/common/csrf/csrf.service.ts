@@ -36,7 +36,10 @@ export class CsrfService {
    *
    * Uses a constant-time comparison to prevent timing-based attacks.
    */
-  validate(bodyToken: string | undefined, cookieToken: string | undefined): boolean {
+  validate(
+    bodyToken: string | undefined,
+    cookieToken: string | undefined,
+  ): boolean {
     if (!bodyToken || !cookieToken) return false;
     if (bodyToken.length !== cookieToken.length) return false;
 

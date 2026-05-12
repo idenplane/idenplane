@@ -1,5 +1,10 @@
 import { Controller, Get, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiSecurity } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiSecurity,
+} from '@nestjs/swagger';
 import type { Realm } from '@prisma/client';
 import { StatsService } from './stats.service.js';
 import { ConsentStatisticsService } from '../consent/consent-stats.service.js';

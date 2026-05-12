@@ -13,8 +13,8 @@
 
 export interface ContinuousRiskSignal {
   name: string;
-  score: number;       // contribution 0-100
-  weight: number;      // relative weight for final aggregation
+  score: number; // contribution 0-100
+  weight: number; // relative weight for final aggregation
   reason: string;
   triggered: boolean;
 }
@@ -50,14 +50,14 @@ export interface NetworkContextData {
 }
 
 export interface BehavioralBiometricData {
-  typingSpeed: number | null;          // chars per minute
+  typingSpeed: number | null; // chars per minute
   mouseMovementAvgSpeed: number | null; // pixels per second
   mouseMovementVariance: number | null;
   scrollSpeedAvg: number | null;
-  clickFrequency: number | null;        // clicks per minute
-  errorRateTyping: number | null;      // 0-1
-  sessionDuration: number | null;       // minutes
-  idleTimeAvg: number | null;           // seconds
+  clickFrequency: number | null; // clicks per minute
+  errorRateTyping: number | null; // 0-1
+  sessionDuration: number | null; // minutes
+  idleTimeAvg: number | null; // seconds
 }
 
 export interface BaselineProfile {
@@ -80,7 +80,11 @@ export interface BaselineProfile {
 export function evaluateDevicePosture(
   posture: DevicePostureData,
   requireMDM: boolean = false,
-  securityPolicies: { minDaysSinceScan: number; requireEncryption: boolean; requireLockScreen: boolean } = {
+  securityPolicies: {
+    minDaysSinceScan: number;
+    requireEncryption: boolean;
+    requireLockScreen: boolean;
+  } = {
     minDaysSinceScan: 7,
     requireEncryption: true,
     requireLockScreen: true,
@@ -202,10 +206,14 @@ export function evaluateNetworkContext(
   },
 ): ContinuousRiskSignal {
   let score = 0;
-  let reasonParts: string[] = [];
+  const reasonParts: string[] = [];
 
   // Blocked ASN
-  if (policies.blockedASNs && context.asn && policies.blockedASNs.includes(context.asn)) {
+  if (
+    policies.blockedASNs &&
+    context.asn &&
+    policies.blockedASNs.includes(context.asn)
+  ) {
     score += 30;
     reasonParts.push('Blocked ASN detected');
   }
@@ -241,7 +249,11 @@ export function evaluateNetworkContext(
   }
 
   // VPN in restricted country scenario
-  if (context.vpnDetected && !policies.allowVPNAcrossCountries && context.country) {
+  if (
+    context.vpnDetected &&
+    !policies.allowVPNAcrossCountries &&
+    context.country
+  ) {
     score += 15;
     reasonParts.push('VPN detected in restricted context');
   }
@@ -315,31 +327,41 @@ export function evaluateBehavioralBiometrics(
   }
 
   let score = 0;
-  let reasonParts: string[] = [];
+  const reasonParts: string[] = [];
 
   // Typing speed deviation
   if (current.typingSpeed !== null && baseline.avgTypingSpeed > 0) {
-    const deviation = Math.abs(current.typingSpeed - baseline.avgTypingSpeed) / baseline.avgTypingSpeed;
+    const deviation =
+      Math.abs(current.typingSpeed - baseline.avgTypingSpeed) /
+      baseline.avgTypingSpeed;
     if (deviation > sensitivity) {
       const deviationPercent = Math.round(deviation * 100);
       score += Math.min(25, deviation * 20);
-      reasonParts.push(`Typing speed deviation: ${deviationPercent}% from baseline`);
+      reasonParts.push(
+        `Typing speed deviation: ${deviationPercent}% from baseline`,
+      );
     }
   }
 
   // Mouse movement speed deviation
   if (current.mouseMovementAvgSpeed !== null && baseline.avgMouseSpeed > 0) {
-    const deviation = Math.abs(current.mouseMovementAvgSpeed - baseline.avgMouseSpeed) / baseline.avgMouseSpeed;
+    const deviation =
+      Math.abs(current.mouseMovementAvgSpeed - baseline.avgMouseSpeed) /
+      baseline.avgMouseSpeed;
     if (deviation > sensitivity) {
       const deviationPercent = Math.round(deviation * 100);
       score += Math.min(20, deviation * 15);
-      reasonParts.push(`Mouse speed deviation: ${deviationPercent}% from baseline`);
+      reasonParts.push(
+        `Mouse speed deviation: ${deviationPercent}% from baseline`,
+      );
     }
   }
 
   // Mouse movement variance deviation (indicates different motor control)
   if (current.mouseMovementVariance !== null && baseline.avgMouseVariance > 0) {
-    const deviation = Math.abs(current.mouseMovementVariance - baseline.avgMouseVariance) / baseline.avgMouseVariance;
+    const deviation =
+      Math.abs(current.mouseMovementVariance - baseline.avgMouseVariance) /
+      baseline.avgMouseVariance;
     if (deviation > sensitivity) {
       score += 15;
       reasonParts.push('Mouse movement pattern variance anomaly');
@@ -348,7 +370,9 @@ export function evaluateBehavioralBiometrics(
 
   // Click frequency deviation
   if (current.clickFrequency !== null && baseline.avgClickFrequency > 0) {
-    const deviation = Math.abs(current.clickFrequency - baseline.avgClickFrequency) / baseline.avgClickFrequency;
+    const deviation =
+      Math.abs(current.clickFrequency - baseline.avgClickFrequency) /
+      baseline.avgClickFrequency;
     if (deviation > sensitivity) {
       score += 10;
       reasonParts.push('Click frequency deviation from baseline');
@@ -379,7 +403,9 @@ export function evaluateBehavioralBiometrics(
 
   // Idle time deviation
   if (current.idleTimeAvg !== null && baseline.avgIdleTime > 0) {
-    const deviation = Math.abs(current.idleTimeAvg - baseline.avgIdleTime) / baseline.avgIdleTime;
+    const deviation =
+      Math.abs(current.idleTimeAvg - baseline.avgIdleTime) /
+      baseline.avgIdleTime;
     if (deviation > sensitivity * 1.5) {
       score += 10;
       reasonParts.push('Idle time pattern deviation');
@@ -396,7 +422,9 @@ export function evaluateBehavioralBiometrics(
       name: 'behavioral_biometrics',
       score: Math.min(100, Math.round(score)),
       weight: 1.25,
-      reason: reasonParts.slice(0, 3).join('; ') || 'Behavioral pattern anomaly detected',
+      reason:
+        reasonParts.slice(0, 3).join('; ') ||
+        'Behavioral pattern anomaly detected',
       triggered: true,
     };
   }
@@ -415,7 +443,9 @@ export function evaluateBehavioralBiometrics(
 /**
  * Aggregates weighted continuous risk signals into a single 0-100 risk score.
  */
-export function aggregateContinuousSignals(signals: ContinuousRiskSignal[]): number {
+export function aggregateContinuousSignals(
+  signals: ContinuousRiskSignal[],
+): number {
   if (signals.length === 0) return 0;
 
   const totalWeight = signals.reduce((acc, s) => acc + s.weight, 0);
@@ -428,12 +458,16 @@ export function aggregateContinuousSignals(signals: ContinuousRiskSignal[]): num
  * Determines the action based on continuous risk score and thresholds.
  */
 export interface ContinuousRiskThresholds {
-  alertThreshold: number;       // Score to generate alert
-  stepUpThreshold: number;      // Score to trigger step-up
-  blockThreshold: number;       // Score to block/terminate session
+  alertThreshold: number; // Score to generate alert
+  stepUpThreshold: number; // Score to trigger step-up
+  blockThreshold: number; // Score to block/terminate session
 }
 
-export type ContinuousRiskAction = 'MONITOR' | 'ALERT' | 'STEP_UP' | 'TERMINATE';
+export type ContinuousRiskAction =
+  | 'MONITOR'
+  | 'ALERT'
+  | 'STEP_UP'
+  | 'TERMINATE';
 
 export function determineContinuousAction(
   score: number,

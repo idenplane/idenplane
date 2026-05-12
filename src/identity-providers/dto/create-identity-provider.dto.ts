@@ -1,10 +1,18 @@
-import { IsString, IsOptional, IsBoolean, IsUrl, Matches } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsUrl,
+  Matches,
+} from 'class-validator';
 import { ApiProperty } from '@nestjs/swagger';
 
 export class CreateIdentityProviderDto {
   @ApiProperty()
   @IsString()
-  @Matches(/^[a-z0-9-]+$/, { message: 'alias must be lowercase alphanumeric with hyphens' })
+  @Matches(/^[a-z0-9-]+$/, {
+    message: 'alias must be lowercase alphanumeric with hyphens',
+  })
   alias!: string;
 
   @ApiProperty({ required: false })

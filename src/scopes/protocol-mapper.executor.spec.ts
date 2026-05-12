@@ -1,4 +1,7 @@
-import { ProtocolMapperExecutor, type MapperContext } from './protocol-mapper.executor.js';
+import {
+  ProtocolMapperExecutor,
+  type MapperContext,
+} from './protocol-mapper.executor.js';
 import type { ProtocolMapper } from '@prisma/client';
 
 describe('ProtocolMapperExecutor', () => {
@@ -543,7 +546,7 @@ describe('ProtocolMapperExecutor', () => {
         {
           id: 'mapper-24',
           clientScopeId: 'scope-1',
-        protocol: 'openid-connect',
+          protocol: 'openid-connect',
           mapperType: 'oidc-usermodel-attribute-mapper',
           name: 'username-mapper',
           config: {
@@ -556,7 +559,7 @@ describe('ProtocolMapperExecutor', () => {
         {
           id: 'mapper-25',
           clientScopeId: 'scope-1',
-        protocol: 'openid-connect',
+          protocol: 'openid-connect',
           mapperType: 'oidc-hardcoded-claim-mapper',
           name: 'hardcoded-mapper',
           config: {
@@ -569,7 +572,7 @@ describe('ProtocolMapperExecutor', () => {
         {
           id: 'mapper-26',
           clientScopeId: 'scope-1',
-        protocol: 'openid-connect',
+          protocol: 'openid-connect',
           mapperType: 'oidc-full-name-mapper',
           name: 'full-name-mapper',
           config: {},
@@ -593,7 +596,7 @@ describe('ProtocolMapperExecutor', () => {
         {
           id: 'mapper-27',
           clientScopeId: 'scope-1',
-        protocol: 'openid-connect',
+          protocol: 'openid-connect',
           mapperType: 'oidc-usermodel-attribute-mapper',
           name: 'email-mapper',
           config: {

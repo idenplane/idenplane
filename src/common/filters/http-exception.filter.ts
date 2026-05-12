@@ -52,7 +52,7 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     response.status(status).json({
       statusCode: status,
-      ...(typeof message === 'string' ? { message } : (message as object)),
+      ...(typeof message === 'string' ? { message } : message),
       timestamp: new Date().toISOString(),
     });
   }

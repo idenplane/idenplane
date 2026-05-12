@@ -6,7 +6,11 @@ import { PasswordMigrationService } from './password-migration.service.js';
 
 @Module({
   controllers: [MigrationController],
-  providers: [KeycloakImporterService, Auth0ImporterService, PasswordMigrationService],
+  providers: [
+    KeycloakImporterService,
+    Auth0ImporterService,
+    PasswordMigrationService,
+  ],
   exports: [PasswordMigrationService],
 })
 export class MigrationModule {}

@@ -2,7 +2,18 @@ import { Injectable } from '@nestjs/common';
 import type { Request } from 'express';
 
 /** Languages supported by the i18n system. */
-export const SUPPORTED_LOCALES = ['en', 'es', 'fr', 'de', 'pt', 'zh', 'ja', 'ko', 'ar', 'ru'] as const;
+export const SUPPORTED_LOCALES = [
+  'en',
+  'es',
+  'fr',
+  'de',
+  'pt',
+  'zh',
+  'ja',
+  'ko',
+  'ar',
+  'ru',
+] as const;
 export type SupportedLocale = (typeof SUPPORTED_LOCALES)[number];
 
 /** RTL (right-to-left) locales. */

@@ -5,7 +5,7 @@
 
 // SCIM Resource Types
 export const SCIM_RESOURCE_TYPES = ['User', 'Group'] as const;
-export type ScimResourceTypeName = typeof SCIM_RESOURCE_TYPES[number];
+export type ScimResourceTypeName = (typeof SCIM_RESOURCE_TYPES)[number];
 
 // SCIM Content Type
 export const SCIM_CONTENT_TYPE = 'application/scim+json';
@@ -22,11 +22,21 @@ export const SCIM_SCHEMAS = {
 
 // SCIM Operations for PATCH
 export const SCIM_OPERATIONS = ['add', 'replace', 'remove'] as const;
-export type ScimOperation = typeof SCIM_OPERATIONS[number];
+export type ScimOperation = (typeof SCIM_OPERATIONS)[number];
 
 // SCIM Path filter operator
-export const SCIM_FILTER_OPERATORS = ['eq', 'ne', 'co', 'sw', 'ew', 'gt', 'gt', 'lt', 'le'] as const;
-export type ScimFilterOperator = typeof SCIM_FILTER_OPERATORS[number];
+export const SCIM_FILTER_OPERATORS = [
+  'eq',
+  'ne',
+  'co',
+  'sw',
+  'ew',
+  'gt',
+  'gt',
+  'lt',
+  'le',
+] as const;
+export type ScimFilterOperator = (typeof SCIM_FILTER_OPERATORS)[number];
 
 /**
  * Base SCIM Resource with common attributes

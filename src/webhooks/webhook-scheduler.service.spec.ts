@@ -39,10 +39,17 @@ describe('WebhookSchedulerService', () => {
   };
 
   // Lazily constructed so that crypto is available first
-  let mockWebhook: { id: string; realmId: string; url: string; secret: string; enabled: boolean; eventTypes: string[] };
+  let mockWebhook: {
+    id: string;
+    realmId: string;
+    url: string;
+    secret: string;
+    enabled: boolean;
+    eventTypes: string[];
+  };
 
   beforeEach(() => {
-    prisma = createMockPrismaService() as any;
+    prisma = createMockPrismaService();
     crypto = new CryptoService();
     service = new WebhookSchedulerService(prisma as any, crypto);
     // Build a webhook record whose secret is properly encrypted
@@ -225,11 +232,16 @@ describe('WebhookSchedulerService', () => {
       await service.processQueue();
 
       const [, fetchOptions] = mockFetch.mock.calls[0] as [string, RequestInit];
-      const sig = (fetchOptions.headers as Record<string, string>)['X-Webhook-Signature'];
+      const sig = (fetchOptions.headers as Record<string, string>)[
+        'X-Webhook-Signature'
+      ];
       expect(sig).toMatch(/^sha256=[a-f0-9]{64}$/);
 
       // The signature should differ from one computed with the ciphertext directly
-      const wrongSig = service.signPayload(mockWebhook.secret, JSON.stringify(pendingEvent.payload));
+      const wrongSig = service.signPayload(
+        mockWebhook.secret,
+        JSON.stringify(pendingEvent.payload),
+      );
       expect(sig).not.toBe(wrongSig);
     });
   });
@@ -238,7 +250,10 @@ describe('WebhookSchedulerService', () => {
 
   describe('signPayload', () => {
     it('should produce a sha256= prefixed HMAC signature', () => {
-      const sig = service.signPayload('my-secret', '{"eventType":"user.login"}');
+      const sig = service.signPayload(
+        'my-secret',
+        '{"eventType":"user.login"}',
+      );
       expect(sig).toMatch(/^sha256=[a-f0-9]{64}$/);
     });
 

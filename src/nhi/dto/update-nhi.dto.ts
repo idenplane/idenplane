@@ -1,4 +1,11 @@
-import { IsString, IsOptional, IsEnum, IsBoolean, IsArray, IsObject } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsEnum,
+  IsBoolean,
+  IsArray,
+  IsObject,
+} from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { NhiIdentityType, NhiLifecycleStatus } from '@prisma/client';
 

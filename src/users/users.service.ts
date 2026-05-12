@@ -48,10 +48,14 @@ export class UsersService {
 
   async create(realm: Realm, dto: CreateUserDto) {
     const existing = await this.prisma.user.findUnique({
-      where: { realmId_username: { realmId: realm.id, username: dto.username } },
+      where: {
+        realmId_username: { realmId: realm.id, username: dto.username },
+      },
     });
     if (existing) {
-      throw new ConflictException(`User '${dto.username}' already exists in realm '${realm.name}'`);
+      throw new ConflictException(
+        `User '${dto.username}' already exists in realm '${realm.name}'`,
+      );
     }
 
     if (dto.email) {
@@ -66,7 +70,10 @@ export class UsersService {
     let passwordHash: string | undefined;
     if (dto.password) {
       // Validate password against realm policy
-      const validation = this.passwordPolicyService.validate(realm, dto.password);
+      const validation = this.passwordPolicyService.validate(
+        realm,
+        dto.password,
+      );
       if (!validation.valid) {
         throw new BadRequestException(validation.errors.join('. '));
       }
@@ -90,12 +97,17 @@ export class UsersService {
         select: USER_SELECT,
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
         const target = (error.meta?.target as string[]) ?? [];
         if (target.includes('email')) {
           throw new ConflictException(`Email '${dto.email}' is already in use`);
         }
-        throw new ConflictException(`User '${dto.username}' already exists in realm '${realm.name}'`);
+        throw new ConflictException(
+          `User '${dto.username}' already exists in realm '${realm.name}'`,
+        );
       }
       throw error;
     }
@@ -103,7 +115,10 @@ export class UsersService {
     // Record password history
     if (passwordHash && realm.passwordHistoryCount > 0) {
       await this.passwordPolicyService.recordHistory(
-        user.id, realm.id, passwordHash, realm.passwordHistoryCount,
+        user.id,
+        realm.id,
+        passwordHash,
+        realm.passwordHistoryCount,
       );
     }
 
@@ -121,12 +136,21 @@ export class UsersService {
     const configured = await this.emailService.isConfigured(realm.name);
     if (!configured) return;
 
-    const rawToken = await this.verificationService.createToken(userId, 'email_verification', 86400);
-    const baseUrl = this.config.get<string>('BASE_URL', 'http://localhost:3000');
+    const rawToken = await this.verificationService.createToken(
+      userId,
+      'email_verification',
+      86400,
+    );
+    const baseUrl = this.config.get<string>(
+      'BASE_URL',
+      'http://localhost:3000',
+    );
     const verifyUrl = `${baseUrl}/realms/${realm.name}/verify-email?token=${rawToken}`;
 
     const subject = this.themeEmail.getSubject(realm, 'verifyEmailSubject');
-    const html = this.themeEmail.renderEmail(realm, 'verify-email', { verifyUrl });
+    const html = this.themeEmail.renderEmail(realm, 'verify-email', {
+      verifyUrl,
+    });
     await this.emailService.sendEmail(realm.name, email, subject, html);
   }
 
@@ -147,10 +171,20 @@ export class UsersService {
     // Build field-level filter conditions. Each provided param narrows the
     // result set with a case-insensitive contains match.
     const fieldFilters: Prisma.UserWhereInput[] = [];
-    if (username) fieldFilters.push({ username: { contains: username, mode: 'insensitive' } });
-    if (email) fieldFilters.push({ email: { contains: email, mode: 'insensitive' } });
-    if (firstName) fieldFilters.push({ firstName: { contains: firstName, mode: 'insensitive' } });
-    if (lastName) fieldFilters.push({ lastName: { contains: lastName, mode: 'insensitive' } });
+    if (username)
+      fieldFilters.push({
+        username: { contains: username, mode: 'insensitive' },
+      });
+    if (email)
+      fieldFilters.push({ email: { contains: email, mode: 'insensitive' } });
+    if (firstName)
+      fieldFilters.push({
+        firstName: { contains: firstName, mode: 'insensitive' },
+      });
+    if (lastName)
+      fieldFilters.push({
+        lastName: { contains: lastName, mode: 'insensitive' },
+      });
 
     // `search` performs an OR across all text fields so a caller can supply a
     // single term and match any of them.
@@ -237,10 +271,15 @@ export class UsersService {
     // Check password history
     if (realm.passwordHistoryCount > 0) {
       const inHistory = await this.passwordPolicyService.checkHistory(
-        userId, realm.id, password, realm.passwordHistoryCount,
+        userId,
+        realm.id,
+        password,
+        realm.passwordHistoryCount,
       );
       if (inHistory) {
-        throw new BadRequestException('Password was used recently. Choose a different password.');
+        throw new BadRequestException(
+          'Password was used recently. Choose a different password.',
+        );
       }
     }
 
@@ -255,7 +294,10 @@ export class UsersService {
 
     // Record password history
     await this.passwordPolicyService.recordHistory(
-      userId, realm.id, passwordHash, realm.passwordHistoryCount,
+      userId,
+      realm.id,
+      passwordHash,
+      realm.passwordHistoryCount,
     );
   }
 
@@ -263,7 +305,9 @@ export class UsersService {
     await this.findById(realm, userId);
     const tokens = await this.prisma.refreshToken.findMany({
       where: { session: { userId }, isOffline: true, revoked: false },
-      include: { session: { select: { id: true, userId: true, createdAt: true } } },
+      include: {
+        session: { select: { id: true, userId: true, createdAt: true } },
+      },
       orderBy: { createdAt: 'desc' },
     });
     return tokens
@@ -323,7 +367,11 @@ export class UsersService {
   /**
    * Get consent history for a user.
    */
-  async getUserConsentHistory(realm: Realm, userId: string, options?: { limit?: number; offset?: number }) {
+  async getUserConsentHistory(
+    realm: Realm,
+    userId: string,
+    options?: { limit?: number; offset?: number },
+  ) {
     await this.findById(realm, userId);
     const history = await this.prisma.userConsentHistory.findMany({
       where: { userId },

@@ -1,6 +1,9 @@
 import { NotFoundException, BadRequestException } from '@nestjs/common';
 import { DeviceService } from './device.service.js';
-import { createMockPrismaService, type MockPrismaService } from '../prisma/prisma.mock.js';
+import {
+  createMockPrismaService,
+  type MockPrismaService,
+} from '../prisma/prisma.mock.js';
 import type { Realm } from '@prisma/client';
 
 describe('DeviceService', () => {
@@ -46,7 +49,9 @@ describe('DeviceService', () => {
       );
 
       expect(prisma.client.findUnique).toHaveBeenCalledWith({
-        where: { realmId_clientId: { realmId: 'realm-1', clientId: 'test-client' } },
+        where: {
+          realmId_clientId: { realmId: 'realm-1', clientId: 'test-client' },
+        },
       });
       expect(prisma.deviceCode.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
@@ -63,7 +68,9 @@ describe('DeviceService', () => {
         device_code: expect.any(String),
         user_code: expect.any(String),
         verification_uri: expect.stringContaining('/realms/test-realm/device'),
-        verification_uri_complete: expect.stringContaining('/realms/test-realm/device?user_code='),
+        verification_uri_complete: expect.stringContaining(
+          '/realms/test-realm/device?user_code=',
+        ),
         expires_in: 600,
         interval: 5,
       });
@@ -271,12 +278,12 @@ describe('DeviceService', () => {
 
       prisma.deviceCode.findUnique.mockResolvedValue(mockDeviceCode as any);
 
-      await expect(
-        service.denyDevice(mockRealm, 'ABCD-EFGH'),
-      ).rejects.toThrow(NotFoundException);
-      await expect(
-        service.denyDevice(mockRealm, 'ABCD-EFGH'),
-      ).rejects.toThrow('Invalid user code');
+      await expect(service.denyDevice(mockRealm, 'ABCD-EFGH')).rejects.toThrow(
+        NotFoundException,
+      );
+      await expect(service.denyDevice(mockRealm, 'ABCD-EFGH')).rejects.toThrow(
+        'Invalid user code',
+      );
     });
   });
 });

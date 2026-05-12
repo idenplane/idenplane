@@ -43,7 +43,10 @@ describe('RateLimitService', () => {
 
   beforeEach(() => {
     prisma = createMockPrismaService();
-    service = new RateLimitService(prisma as any, createMockRedisService() as any);
+    service = new RateLimitService(
+      prisma as any,
+      createMockRedisService() as any,
+    );
   });
 
   // ─── checkClientLimit ───────────────────────────────────────

@@ -40,7 +40,9 @@ export class LdapClientWrapper {
       url: this.config.connectionUrl,
       timeout: this.config.connectionTimeout,
       connectTimeout: this.config.connectionTimeout,
-      tlsOptions: this.config.startTls ? { rejectUnauthorized: false } : undefined,
+      tlsOptions: this.config.startTls
+        ? { rejectUnauthorized: false }
+        : undefined,
     });
   }
 
@@ -73,7 +75,7 @@ export class LdapClientWrapper {
         return false;
       }
 
-      const userDn = result.searchEntries[0]['dn'] as string;
+      const userDn = result.searchEntries[0]['dn'];
       await client.unbind();
 
       // Now try to bind as the user
@@ -128,7 +130,7 @@ export class LdapClientWrapper {
       });
 
       await client.unbind();
-      return result.searchEntries.map(e => this.mapEntry(e));
+      return result.searchEntries.map((e) => this.mapEntry(e));
     } catch {
       return [];
     }
@@ -161,6 +163,9 @@ export class LdapClientWrapper {
   }
 
   private escapeLdap(s: string): string {
-    return s.replace(/[\\*()\0/]/g, c => '\\' + c.charCodeAt(0).toString(16).padStart(2, '0'));
+    return s.replace(
+      /[\\*()\0/]/g,
+      (c) => '\\' + c.charCodeAt(0).toString(16).padStart(2, '0'),
+    );
   }
 }

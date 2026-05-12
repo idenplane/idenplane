@@ -51,7 +51,8 @@ export class GraphQLAuthGuard implements CanActivate {
     const providedApiKey = request.headers?.['x-admin-api-key'];
     if (expectedKey && typeof providedApiKey === 'string') {
       const ip = resolveClientIp(request);
-      const rateLimitResult = await this.rateLimitService.checkAdminApiKeyLimit(ip);
+      const rateLimitResult =
+        await this.rateLimitService.checkAdminApiKeyLimit(ip);
       const headers = this.rateLimitService.computeHeaders(rateLimitResult);
       for (const [name, value] of Object.entries(headers)) {
         request.res?.setHeader(name, value);
@@ -75,7 +76,10 @@ export class GraphQLAuthGuard implements CanActivate {
           .update(providedApiKey)
           .digest('hex')
           .slice(0, 12);
-        request.adminUser = { userId: `api-key:${keyFingerprint}`, roles: ['super-admin'] };
+        request.adminUser = {
+          userId: `api-key:${keyFingerprint}`,
+          roles: ['super-admin'],
+        };
         return true;
       }
     }

@@ -1,5 +1,8 @@
 import { Global, Module } from '@nestjs/common';
-import { BruteForceController, BruteForceAttackDetectionController } from './brute-force.controller.js';
+import {
+  BruteForceController,
+  BruteForceAttackDetectionController,
+} from './brute-force.controller.js';
 import { BruteForceService } from './brute-force.service.js';
 
 @Global()

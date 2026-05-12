@@ -35,9 +35,9 @@ describe('detectProvider', () => {
 
   describe('MySQL', () => {
     it('detects mysql:// scheme', () => {
-      expect(
-        detectProvider('mysql://user:pass@localhost:3306/authme'),
-      ).toBe(DatabaseProvider.MYSQL);
+      expect(detectProvider('mysql://user:pass@localhost:3306/authme')).toBe(
+        DatabaseProvider.MYSQL,
+      );
     });
 
     it('is case-insensitive for the scheme', () => {
@@ -73,15 +73,11 @@ describe('detectProvider', () => {
 
   describe('error handling', () => {
     it('throws when DATABASE_URL is empty', () => {
-      expect(() => detectProvider('')).toThrow(
-        'DATABASE_URL is not set',
-      );
+      expect(() => detectProvider('')).toThrow('DATABASE_URL is not set');
     });
 
     it('throws when DATABASE_URL is whitespace only', () => {
-      expect(() => detectProvider('   ')).toThrow(
-        'DATABASE_URL is not set',
-      );
+      expect(() => detectProvider('   ')).toThrow('DATABASE_URL is not set');
     });
 
     it('throws for an unrecognised scheme', () => {

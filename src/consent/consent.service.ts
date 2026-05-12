@@ -139,7 +139,9 @@ export class ConsentService {
         },
       });
     } catch (err) {
-      this.logger.warn(`Failed to record consent history: ${(err as Error).message}`);
+      this.logger.warn(
+        `Failed to record consent history: ${(err as Error).message}`,
+      );
     }
   }
 
@@ -165,7 +167,14 @@ export class ConsentService {
       update: { scopes },
     });
 
-    await this.recordConsentHistory(userId, clientId, action, scopes, policyVersion, context);
+    await this.recordConsentHistory(
+      userId,
+      clientId,
+      action,
+      scopes,
+      policyVersion,
+      context,
+    );
 
     return result;
   }
@@ -279,7 +288,10 @@ export class ConsentService {
     const lastAcceptedByCategory = new Map<string, string>();
     for (const entry of historyEntries) {
       const metadata = entry.metadata as { categoryKey?: string } | null;
-      if (metadata?.categoryKey && !lastAcceptedByCategory.has(metadata.categoryKey)) {
+      if (
+        metadata?.categoryKey &&
+        !lastAcceptedByCategory.has(metadata.categoryKey)
+      ) {
         lastAcceptedByCategory.set(metadata.categoryKey, entry.policyVersion!);
       }
     }

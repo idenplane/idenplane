@@ -7,7 +7,9 @@ export class SetPasswordDto {
   @MinLength(8)
   password!: string;
 
-  @ApiPropertyOptional({ description: 'If true, the user must change the password on next login' })
+  @ApiPropertyOptional({
+    description: 'If true, the user must change the password on next login',
+  })
   @IsOptional()
   @IsBoolean()
   temporary?: boolean;

@@ -82,7 +82,9 @@ describe('evaluateGeoAnomaly', () => {
   });
 
   it('returns 0 for null location', () => {
-    const signal = evaluateGeoAnomaly(null, { lastLocations: ['Cairo, Egypt'] });
+    const signal = evaluateGeoAnomaly(null, {
+      lastLocations: ['Cairo, Egypt'],
+    });
     expect(signal.score).toBe(0);
   });
 });
@@ -104,7 +106,12 @@ describe('evaluateImpossibleTravel', () => {
     const prev = new Date('2024-01-01T10:00:00Z');
     const curr = new Date('2024-01-01T11:00:00Z');
     const cairoSlightlyDifferent: [number, number] = [30.05, 31.24];
-    const signal = evaluateImpossibleTravel(cairo, prev, cairoSlightlyDifferent, curr);
+    const signal = evaluateImpossibleTravel(
+      cairo,
+      prev,
+      cairoSlightlyDifferent,
+      curr,
+    );
     expect(signal.score).toBe(0);
     expect(signal.triggered).toBe(false);
   });
@@ -138,7 +145,9 @@ describe('evaluateImpossibleTravel', () => {
 
 describe('evaluateTimeAnomaly', () => {
   it('returns 0 when not enough history', () => {
-    const signal = evaluateTimeAnomaly(3, { loginTimes: new Array(24).fill(0) });
+    const signal = evaluateTimeAnomaly(3, {
+      loginTimes: new Array(24).fill(0),
+    });
     expect(signal.score).toBe(0);
     expect(signal.triggered).toBe(false);
   });

@@ -93,11 +93,15 @@ export class DevicePostureService {
     const postureData = this.buildDevicePostureData(latestRecord);
 
     // Evaluate device posture signals
-    const signal = evaluateDevicePosture(postureData, postureConfig.requireMDM, {
-      minDaysSinceScan: postureConfig.maxDaysSinceSecurityScan,
-      requireEncryption: postureConfig.requireEncryption,
-      requireLockScreen: postureConfig.requireLockScreen,
-    });
+    const signal = evaluateDevicePosture(
+      postureData,
+      postureConfig.requireMDM,
+      {
+        minDaysSinceScan: postureConfig.maxDaysSinceSecurityScan,
+        requireEncryption: postureConfig.requireEncryption,
+        requireLockScreen: postureConfig.requireLockScreen,
+      },
+    );
 
     // Determine compliance failures and warnings
     const failures = this.determineComplianceFailures(
@@ -126,12 +130,15 @@ export class DevicePostureService {
         where: { id: latestRecord.id },
         data: {
           deviceTrustTier: deviceTrustTier.tier,
-          complianceStatus: failures.length === 0 ? 'COMPLIANT' : 'NON_COMPLIANT',
+          complianceStatus:
+            failures.length === 0 ? 'COMPLIANT' : 'NON_COMPLIANT',
         },
       });
     }
 
-    const compliant = failures.filter((f) => f.severity === 'CRITICAL' || f.severity === 'HIGH').length === 0;
+    const compliant =
+      failures.filter((f) => f.severity === 'CRITICAL' || f.severity === 'HIGH')
+        .length === 0;
 
     this.logger.debug(
       `Device posture evaluation sessionId=${sessionId} compliant=${compliant} tier=${deviceTrustTier.tier}`,
@@ -148,7 +155,9 @@ export class DevicePostureService {
   /**
    * Gets a summary of device posture for a session.
    */
-  async getDevicePostureSummary(sessionId: string): Promise<DevicePostureSummary | null> {
+  async getDevicePostureSummary(
+    sessionId: string,
+  ): Promise<DevicePostureSummary | null> {
     const latestRecord = await this.prisma.devicePostureRecord.findFirst({
       where: { sessionId },
       orderBy: { reportedAt: 'desc' },
@@ -232,11 +241,12 @@ export class DevicePostureService {
       where: { userId },
     });
 
-    const currentDevices = profile?.knownDevices as Array<{
-      fingerprint: string;
-      trusted: boolean;
-      firstSeen: string;
-    }> ?? [];
+    const currentDevices =
+      (profile?.knownDevices as Array<{
+        fingerprint: string;
+        trusted: boolean;
+        firstSeen: string;
+      }>) ?? [];
 
     const existingIndex = currentDevices.findIndex(
       (d) => d.fingerprint === deviceFingerprint,
@@ -257,10 +267,10 @@ export class DevicePostureService {
       create: {
         userId,
         realmId,
-        knownDevices: currentDevices as Prisma.InputJsonValue,
+        knownDevices: currentDevices,
       },
       update: {
-        knownDevices: currentDevices as Prisma.InputJsonValue,
+        knownDevices: currentDevices,
       },
     });
 
@@ -347,7 +357,9 @@ export class DevicePostureService {
   @Interval(86400_000) // every 24 hours
   async cleanupStalePostureRecords(): Promise<void> {
     const retentionDays = 30;
-    const cutoffDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+    const cutoffDate = new Date(
+      Date.now() - retentionDays * 24 * 60 * 60 * 1000,
+    );
 
     const result = await this.prisma.devicePostureRecord.deleteMany({
       where: {
@@ -413,8 +425,10 @@ export class DevicePostureService {
       MDMEnrolled: record.managedDevice ?? false,
       lastSecurityScan: patchDate ?? null,
       complianceStatus:
-        (record.complianceStatus as 'COMPLIANT' | 'NON_COMPLIANT' | 'UNKNOWN') ??
-        'UNKNOWN',
+        (record.complianceStatus as
+          | 'COMPLIANT'
+          | 'NON_COMPLIANT'
+          | 'UNKNOWN') ?? 'UNKNOWN',
     };
   }
 
@@ -493,7 +507,8 @@ export class DevicePostureService {
     // Medium: security scan outdated
     if (posture.lastSecurityScan) {
       const daysSinceScan = Math.floor(
-        (Date.now() - posture.lastSecurityScan.getTime()) / (1000 * 60 * 60 * 24),
+        (Date.now() - posture.lastSecurityScan.getTime()) /
+          (1000 * 60 * 60 * 24),
       );
       if (daysSinceScan > config.maxDaysSinceSecurityScan) {
         failures.push({
@@ -611,7 +626,8 @@ export class DevicePostureService {
     }
     if (posture.lastSecurityScan) {
       const daysSinceScan = Math.floor(
-        (Date.now() - posture.lastSecurityScan.getTime()) / (1000 * 60 * 60 * 24),
+        (Date.now() - posture.lastSecurityScan.getTime()) /
+          (1000 * 60 * 60 * 24),
       );
       if (daysSinceScan <= 7) {
         factors.push('recent_security_scan');

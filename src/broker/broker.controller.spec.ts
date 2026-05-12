@@ -20,7 +20,8 @@ describe('BrokerController', () => {
 
   describe('login', () => {
     it('should initiate login and redirect to external provider', async () => {
-      const redirectUrl = 'https://accounts.google.com/auth?client_id=gid&state=abc';
+      const redirectUrl =
+        'https://accounts.google.com/auth?client_id=gid&state=abc';
       brokerService.initiateLogin.mockResolvedValue(redirectUrl);
 
       const res = { redirect: jest.fn() };
@@ -43,13 +44,17 @@ describe('BrokerController', () => {
         res as any,
       );
 
-      expect(brokerService.initiateLogin).toHaveBeenCalledWith(realm, 'google', {
-        client_id: 'my-app',
-        redirect_uri: 'http://localhost/callback',
-        scope: 'openid',
-        state: 'abc',
-        nonce: 'xyz',
-      });
+      expect(brokerService.initiateLogin).toHaveBeenCalledWith(
+        realm,
+        'google',
+        {
+          client_id: 'my-app',
+          redirect_uri: 'http://localhost/callback',
+          scope: 'openid',
+          state: 'abc',
+          nonce: 'xyz',
+        },
+      );
       expect(res.redirect).toHaveBeenCalledWith(302, redirectUrl);
     });
   });
@@ -62,10 +67,19 @@ describe('BrokerController', () => {
 
       const res = { redirect: jest.fn() };
 
-      await controller.callback(realm, 'google', 'ext-code', 'state-123', res as any);
+      await controller.callback(
+        realm,
+        'google',
+        'ext-code',
+        'state-123',
+        res as any,
+      );
 
       expect(brokerService.handleCallback).toHaveBeenCalledWith(
-        realm, 'google', 'ext-code', 'state-123',
+        realm,
+        'google',
+        'ext-code',
+        'state-123',
       );
       expect(res.redirect).toHaveBeenCalledWith(
         302,

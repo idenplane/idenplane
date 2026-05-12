@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import { RedisService } from '../redis/redis.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
@@ -40,7 +45,9 @@ export class TokenBlacklistService implements OnModuleInit, OnModuleDestroy {
         update: {},
       });
     } catch (err) {
-      this.logger.warn(`Failed to persist revoked token to DB: ${(err as Error).message}`);
+      this.logger.warn(
+        `Failed to persist revoked token to DB: ${(err as Error).message}`,
+      );
     }
 
     // 2. Store in Redis for fast cross-instance lookup
@@ -49,7 +56,9 @@ export class TokenBlacklistService implements OnModuleInit, OnModuleDestroy {
         await this.redis.set(`${BLACKLIST_PREFIX}${jti}`, '1', ttl);
         return;
       } catch (err) {
-        this.logger.warn(`Failed to blacklist token in Redis: ${(err as Error).message}`);
+        this.logger.warn(
+          `Failed to blacklist token in Redis: ${(err as Error).message}`,
+        );
       }
     }
 
@@ -73,17 +82,25 @@ export class TokenBlacklistService implements OnModuleInit, OnModuleDestroy {
 
     // 3. Check database as last resort
     try {
-      const record = await this.prisma.revokedToken.findUnique({ where: { jti } });
+      const record = await this.prisma.revokedToken.findUnique({
+        where: { jti },
+      });
       if (record) {
         // Re-populate Redis/memory if found in DB
-        const ttl = Math.floor(record.expiresAt.getTime() / 1000) - Math.floor(Date.now() / 1000);
+        const ttl =
+          Math.floor(record.expiresAt.getTime() / 1000) -
+          Math.floor(Date.now() / 1000);
         if (ttl > 0 && this.redis.isAvailable()) {
-          await this.redis.set(`${BLACKLIST_PREFIX}${jti}`, '1', ttl).catch(() => {});
+          await this.redis
+            .set(`${BLACKLIST_PREFIX}${jti}`, '1', ttl)
+            .catch(() => {});
         }
         return true;
       }
     } catch (err) {
-      this.logger.warn(`Failed to check DB for revoked token: ${(err as Error).message}`);
+      this.logger.warn(
+        `Failed to check DB for revoked token: ${(err as Error).message}`,
+      );
     }
 
     return false;
@@ -97,16 +114,24 @@ export class TokenBlacklistService implements OnModuleInit, OnModuleDestroy {
         where: { expiresAt: { gt: now } },
       });
       for (const token of tokens) {
-        const ttl = Math.floor(token.expiresAt.getTime() / 1000) - Math.floor(now.getTime() / 1000);
+        const ttl =
+          Math.floor(token.expiresAt.getTime() / 1000) -
+          Math.floor(now.getTime() / 1000);
         if (ttl > 0) {
-          await this.redis.set(`${BLACKLIST_PREFIX}${token.jti}`, '1', ttl).catch(() => {});
+          await this.redis
+            .set(`${BLACKLIST_PREFIX}${token.jti}`, '1', ttl)
+            .catch(() => {});
         }
       }
       if (tokens.length > 0) {
-        this.logger.log(`Rehydrated ${tokens.length} revoked tokens from database into Redis`);
+        this.logger.log(
+          `Rehydrated ${tokens.length} revoked tokens from database into Redis`,
+        );
       }
     } catch (err) {
-      this.logger.warn(`Failed to rehydrate blacklist from DB: ${(err as Error).message}`);
+      this.logger.warn(
+        `Failed to rehydrate blacklist from DB: ${(err as Error).message}`,
+      );
     }
   }
 
@@ -123,10 +148,14 @@ export class TokenBlacklistService implements OnModuleInit, OnModuleDestroy {
         where: { expiresAt: { lt: new Date() } },
       });
       if (count > 0) {
-        this.logger.debug(`Cleaned up ${count} expired revoked tokens from database`);
+        this.logger.debug(
+          `Cleaned up ${count} expired revoked tokens from database`,
+        );
       }
     } catch (err) {
-      this.logger.warn(`Failed to clean expired tokens from DB: ${(err as Error).message}`);
+      this.logger.warn(
+        `Failed to clean expired tokens from DB: ${(err as Error).message}`,
+      );
     }
   }
 }

@@ -11,7 +11,12 @@ import {
   UseGuards,
   Patch,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiSecurity, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiSecurity,
+  ApiResponse,
+} from '@nestjs/swagger';
 import type { Realm } from '@prisma/client';
 import { RiskPolicyService } from './risk-policy.service.js';
 import type {
@@ -34,16 +39,31 @@ export class RiskPolicyController {
   @ApiOperation({ summary: 'Create a continuous risk policy in a realm' })
   @ApiResponse({ status: 201, description: 'Policy created' })
   @ApiResponse({ status: 400, description: 'Bad request — invalid DTO' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
-  @ApiResponse({ status: 409, description: 'Conflict — policy with same name already exists' })
-  create(@CurrentRealm() realm: Realm, @Body() dto: CreateContinuousRiskPolicyDto) {
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Conflict — policy with same name already exists',
+  })
+  create(
+    @CurrentRealm() realm: Realm,
+    @Body() dto: CreateContinuousRiskPolicyDto,
+  ) {
     return this.riskPolicyService.createPolicy(realm, dto);
   }
 
   @Get()
   @ApiOperation({ summary: 'List all continuous risk policies in a realm' })
-  @ApiResponse({ status: 200, description: 'Array of continuous risk policies' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
+  @ApiResponse({
+    status: 200,
+    description: 'Array of continuous risk policies',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
   findAll(@CurrentRealm() realm: Realm) {
     return this.riskPolicyService.findAllPolicies(realm);
   }
@@ -51,7 +71,10 @@ export class RiskPolicyController {
   @Get(':id')
   @ApiOperation({ summary: 'Get a single continuous risk policy by ID' })
   @ApiResponse({ status: 200, description: 'Continuous risk policy details' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
   @ApiResponse({ status: 404, description: 'Policy not found' })
   findOne(@CurrentRealm() realm: Realm, @Param('id') id: string) {
     return this.riskPolicyService.findPolicyById(realm, id);
@@ -61,7 +84,10 @@ export class RiskPolicyController {
   @ApiOperation({ summary: 'Update a continuous risk policy' })
   @ApiResponse({ status: 200, description: 'Policy updated' })
   @ApiResponse({ status: 400, description: 'Bad request — invalid DTO' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
   @ApiResponse({ status: 404, description: 'Policy not found' })
   update(
     @CurrentRealm() realm: Realm,
@@ -75,7 +101,10 @@ export class RiskPolicyController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a continuous risk policy' })
   @ApiResponse({ status: 204, description: 'Policy deleted' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
   @ApiResponse({ status: 404, description: 'Policy not found' })
   remove(@CurrentRealm() realm: Realm, @Param('id') id: string) {
     return this.riskPolicyService.deletePolicy(realm, id);
@@ -88,8 +117,14 @@ export class RiskPolicyController {
     summary: 'Enable or disable a continuous risk policy',
     description: 'Toggles the enabled state of the specified policy.',
   })
-  @ApiResponse({ status: 200, description: 'Policy updated with new enabled state' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
+  @ApiResponse({
+    status: 200,
+    description: 'Policy updated with new enabled state',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
   @ApiResponse({ status: 404, description: 'Policy not found' })
   toggle(
     @CurrentRealm() realm: Realm,
@@ -105,7 +140,10 @@ export class RiskPolicyController {
     description: 'Updates the priority value of the specified policy.',
   })
   @ApiResponse({ status: 200, description: 'Policy updated with new priority' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
   @ApiResponse({ status: 404, description: 'Policy not found' })
   reorder(
     @CurrentRealm() realm: Realm,

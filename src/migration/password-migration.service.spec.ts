@@ -33,20 +33,32 @@ describe('PasswordMigrationService', () => {
   describe('verifyMigratedPassword', () => {
     it('should delegate argon2 to CryptoService', async () => {
       (cryptoService.verifyPassword as jest.Mock).mockResolvedValue(true);
-      const result = await service.verifyMigratedPassword('pass', 'hash', 'argon2');
+      const result = await service.verifyMigratedPassword(
+        'pass',
+        'hash',
+        'argon2',
+      );
       expect(result).toBe(true);
       expect(cryptoService.verifyPassword).toHaveBeenCalledWith('hash', 'pass');
     });
 
     it('should verify bcrypt hashes', async () => {
       const hash = bcryptjs.hashSync('mypassword', 10);
-      const result = await service.verifyMigratedPassword('mypassword', hash, 'bcrypt');
+      const result = await service.verifyMigratedPassword(
+        'mypassword',
+        hash,
+        'bcrypt',
+      );
       expect(result).toBe(true);
     });
 
     it('should reject wrong bcrypt password', async () => {
       const hash = bcryptjs.hashSync('correct', 10);
-      const result = await service.verifyMigratedPassword('wrong', hash, 'bcrypt');
+      const result = await service.verifyMigratedPassword(
+        'wrong',
+        hash,
+        'bcrypt',
+      );
       expect(result).toBe(false);
     });
 
@@ -55,7 +67,11 @@ describe('PasswordMigrationService', () => {
       const iterations = 27500;
       const derived = pbkdf2Sync('mypassword', salt, iterations, 32, 'sha256');
       const storedHash = `${iterations}$${salt.toString('base64')}$${derived.toString('base64')}`;
-      const result = await service.verifyMigratedPassword('mypassword', storedHash, 'pbkdf2-sha256');
+      const result = await service.verifyMigratedPassword(
+        'mypassword',
+        storedHash,
+        'pbkdf2-sha256',
+      );
       expect(result).toBe(true);
     });
 
@@ -63,12 +79,20 @@ describe('PasswordMigrationService', () => {
       const salt = randomBytes(16);
       const derived = pbkdf2Sync('correct', salt, 27500, 32, 'sha256');
       const storedHash = `27500$${salt.toString('base64')}$${derived.toString('base64')}`;
-      const result = await service.verifyMigratedPassword('wrong', storedHash, 'pbkdf2-sha256');
+      const result = await service.verifyMigratedPassword(
+        'wrong',
+        storedHash,
+        'pbkdf2-sha256',
+      );
       expect(result).toBe(false);
     });
 
     it('should return false for unknown algorithm', async () => {
-      const result = await service.verifyMigratedPassword('pass', 'hash', 'unknown');
+      const result = await service.verifyMigratedPassword(
+        'pass',
+        'hash',
+        'unknown',
+      );
       expect(result).toBe(false);
     });
   });
@@ -80,7 +104,10 @@ describe('PasswordMigrationService', () => {
       expect(cryptoService.hashPassword).toHaveBeenCalledWith('mypassword');
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: 'user-1' },
-        data: { passwordHash: '$argon2id$new-hash', passwordAlgorithm: 'argon2' },
+        data: {
+          passwordHash: '$argon2id$new-hash',
+          passwordAlgorithm: 'argon2',
+        },
       });
     });
   });

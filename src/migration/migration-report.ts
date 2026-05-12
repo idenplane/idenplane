@@ -33,8 +33,15 @@ export interface MigrationReport {
   warnings: MigrationWarning[];
 }
 
-export function createEmptyReport(source: 'keycloak' | 'auth0', dryRun: boolean): MigrationReport {
-  const zero = (): MigrationEntityStats => ({ created: 0, skipped: 0, failed: 0 });
+export function createEmptyReport(
+  source: 'keycloak' | 'auth0',
+  dryRun: boolean,
+): MigrationReport {
+  const zero = (): MigrationEntityStats => ({
+    created: 0,
+    skipped: 0,
+    failed: 0,
+  });
   return {
     source,
     dryRun,

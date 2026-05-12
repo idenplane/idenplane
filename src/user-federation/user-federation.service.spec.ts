@@ -126,7 +126,10 @@ describe('UserFederationService', () => {
 
       prisma.realm.findUnique.mockResolvedValue(mockRealm);
       prisma.userFederation.findUnique.mockResolvedValue(null);
-      prisma.userFederation.create.mockResolvedValue({ ...mockFederation, ...fullDto });
+      prisma.userFederation.create.mockResolvedValue({
+        ...mockFederation,
+        ...fullDto,
+      });
 
       await service.create('test-realm', fullDto);
 
@@ -219,9 +222,9 @@ describe('UserFederationService', () => {
     it('should throw NotFoundException when realm name does not match', async () => {
       prisma.userFederation.findUnique.mockResolvedValue(mockFederation);
 
-      await expect(
-        service.findById('other-realm', 'fed-1'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.findById('other-realm', 'fed-1')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -350,9 +353,28 @@ describe('UserFederationService', () => {
       prisma.userFederation.findUnique.mockResolvedValue(mockFederation);
 
       const ldapUsers = [
-        { dn: 'uid=alice', uid: 'alice', uuid: 'u1', email: 'alice@test.com', firstName: 'Alice', lastName: 'A' },
-        { dn: 'uid=bob', uid: 'bob', uuid: 'u2', email: null, firstName: 'Bob', lastName: 'B' },
-        { dn: 'uid=charlie', uid: 'charlie', uuid: 'u3', email: 'charlie@test.com' },
+        {
+          dn: 'uid=alice',
+          uid: 'alice',
+          uuid: 'u1',
+          email: 'alice@test.com',
+          firstName: 'Alice',
+          lastName: 'A',
+        },
+        {
+          dn: 'uid=bob',
+          uid: 'bob',
+          uuid: 'u2',
+          email: null,
+          firstName: 'Bob',
+          lastName: 'B',
+        },
+        {
+          dn: 'uid=charlie',
+          uid: 'charlie',
+          uuid: 'u3',
+          email: 'charlie@test.com',
+        },
       ];
 
       MockLdapClientWrapper.mockImplementationOnce(() => ({
@@ -404,9 +426,9 @@ describe('UserFederationService', () => {
         testConnection: jest.fn(),
         authenticate: jest.fn(),
         searchUser: jest.fn(),
-        searchAllUsers: jest.fn().mockResolvedValue([
-          { dn: 'uid=alice', uid: 'alice', uuid: 'u1' },
-        ]),
+        searchAllUsers: jest
+          .fn()
+          .mockResolvedValue([{ dn: 'uid=alice', uid: 'alice', uuid: 'u1' }]),
       }));
 
       prisma.user.findUnique.mockResolvedValue(null);
@@ -578,7 +600,12 @@ describe('UserFederationService', () => {
     });
 
     it('should try next federation when first one fails LDAP auth', async () => {
-      const fed2 = { ...mockFederation, id: 'fed-2', name: 'backup-ldap', priority: 1 };
+      const fed2 = {
+        ...mockFederation,
+        id: 'fed-2',
+        name: 'backup-ldap',
+        priority: 1,
+      };
       prisma.userFederation.findMany.mockResolvedValue([mockFederation, fed2]);
 
       // First federation: LDAP auth fails

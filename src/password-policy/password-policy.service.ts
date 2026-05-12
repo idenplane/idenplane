@@ -19,7 +19,9 @@ export class PasswordPolicyService {
     const errors: string[] = [];
 
     if (password.length < realm.passwordMinLength) {
-      errors.push(`Password must be at least ${realm.passwordMinLength} characters`);
+      errors.push(
+        `Password must be at least ${realm.passwordMinLength} characters`,
+      );
     }
 
     if (realm.passwordRequireUppercase && !/[A-Z]/.test(password)) {
@@ -56,7 +58,10 @@ export class PasswordPolicyService {
     });
 
     for (const entry of history) {
-      const match = await this.crypto.verifyPassword(entry.passwordHash, password);
+      const match = await this.crypto.verifyPassword(
+        entry.passwordHash,
+        password,
+      );
       if (match) return true;
     }
 

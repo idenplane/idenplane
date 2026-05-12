@@ -12,10 +12,16 @@ import { GroupsService } from '../../groups/groups.service.js';
 import { OrganizationsService } from '../../organizations/organizations.service.js';
 import { GraphQLAuthGuard } from '../guards/graphql-auth.guard.js';
 import { CreateUserInput, UpdateUserInput } from '../inputs/user.input.js';
-import { CreateClientInput, UpdateClientInput } from '../inputs/client.input.js';
+import {
+  CreateClientInput,
+  UpdateClientInput,
+} from '../inputs/client.input.js';
 import { CreateRoleInput, UpdateRoleInput } from '../inputs/role.input.js';
 import { CreateGroupInput, UpdateGroupInput } from '../inputs/group.input.js';
-import { CreateOrganizationInput, UpdateOrganizationInput } from '../inputs/organization.input.js';
+import {
+  CreateOrganizationInput,
+  UpdateOrganizationInput,
+} from '../inputs/organization.input.js';
 
 @Resolver()
 @UseGuards(GraphQLAuthGuard)
@@ -41,7 +47,7 @@ export class MutationResolver {
       lastName: input.lastName,
       enabled: input.enabled,
     };
-    return this.usersService.create(realm, dto) as Promise<User>;
+    return this.usersService.create(realm, dto);
   }
 
   @Mutation(() => User)
@@ -58,7 +64,7 @@ export class MutationResolver {
       enabled: input.enabled,
       emailVerified: input.emailVerified,
     };
-    return this.usersService.update(realm, userId, dto) as Promise<User>;
+    return this.usersService.update(realm, userId, dto);
   }
 
   @Mutation(() => Boolean)
@@ -79,7 +85,7 @@ export class MutationResolver {
   ): Promise<User> {
     const realm = { id: realmId, name: '' } as any;
     await this.usersService.setPassword(realm, userId, password);
-    return this.usersService.findById(realm, userId) as Promise<User>;
+    return this.usersService.findById(realm, userId);
   }
 
   // ─── Client Mutations ──────────────────────────────────────
@@ -100,7 +106,7 @@ export class MutationResolver {
       backchannelLogoutUri: input.backchannelLogoutUri,
       backchannelLogoutSessionRequired: input.backchannelLogoutSessionRequired,
     };
-    return this.clientsService.create(realm, dto) as Promise<Client>;
+    return this.clientsService.create(realm, dto);
   }
 
   @Mutation(() => Client)
@@ -122,7 +128,7 @@ export class MutationResolver {
       backchannelLogoutUri: input.backchannelLogoutUri,
       backchannelLogoutSessionRequired: input.backchannelLogoutSessionRequired,
     };
-    return this.clientsService.update(realm, clientId, dto) as Promise<Client>;
+    return this.clientsService.update(realm, clientId, dto);
   }
 
   @Mutation(() => Boolean)
@@ -140,7 +146,11 @@ export class MutationResolver {
   @Mutation(() => Role)
   async createRole(@Args('input') input: CreateRoleInput): Promise<Role> {
     const realm = { id: input.realmId, name: '' } as any;
-    return this.rolesService.createRealmRole(realm, input.name, input.description) as Promise<Role>;
+    return this.rolesService.createRealmRole(
+      realm,
+      input.name,
+      input.description,
+    );
   }
 
   @Mutation(() => Role)
@@ -153,7 +163,7 @@ export class MutationResolver {
     return this.rolesService.updateRealmRole(realm, name, {
       name: input.name,
       description: input.description,
-    }) as Promise<Role>;
+    });
   }
 
   @Mutation(() => Boolean)
@@ -173,8 +183,12 @@ export class MutationResolver {
     @Args('roleNames', { type: () => [String] }) roleNames: string[],
   ): Promise<Role[]> {
     const realm = { id: realmId, name: '' } as any;
-    const result = await this.rolesService.assignRealmRoles(realm, userId, roleNames);
-    return this.rolesService.getUserRealmRoles(realm, userId) as Promise<Role[]>;
+    const result = await this.rolesService.assignRealmRoles(
+      realm,
+      userId,
+      roleNames,
+    );
+    return this.rolesService.getUserRealmRoles(realm, userId);
   }
 
   @Mutation(() => [Role])
@@ -185,7 +199,7 @@ export class MutationResolver {
   ): Promise<Role[]> {
     const realm = { id: realmId, name: '' } as any;
     await this.rolesService.removeUserRealmRoles(realm, userId, roleNames);
-    return this.rolesService.getUserRealmRoles(realm, userId) as Promise<Role[]>;
+    return this.rolesService.getUserRealmRoles(realm, userId);
   }
 
   // ─── Group Mutations ────────────────────────────────────────
@@ -198,7 +212,7 @@ export class MutationResolver {
       description: input.description,
       parentId: input.parentId,
     };
-    return this.groupsService.create(realm, dto) as Promise<Group>;
+    return this.groupsService.create(realm, dto);
   }
 
   @Mutation(() => Group)
@@ -213,7 +227,7 @@ export class MutationResolver {
       description: input.description,
       parentId: input.parentId,
     };
-    return this.groupsService.update(realm, groupId, dto) as Promise<Group>;
+    return this.groupsService.update(realm, groupId, dto);
   }
 
   @Mutation(() => Boolean)
@@ -234,7 +248,7 @@ export class MutationResolver {
   ): Promise<Group> {
     const realm = { id: realmId, name: '' } as any;
     await this.groupsService.addUserToGroup(realm, userId, groupId);
-    return this.groupsService.findById(realm, groupId) as Promise<Group>;
+    return this.groupsService.findById(realm, groupId);
   }
 
   @Mutation(() => Boolean)
@@ -251,7 +265,9 @@ export class MutationResolver {
   // ─── Organization Mutations ────────────────────────────────
 
   @Mutation(() => Organization)
-  async createOrganization(@Args('input') input: CreateOrganizationInput): Promise<Organization> {
+  async createOrganization(
+    @Args('input') input: CreateOrganizationInput,
+  ): Promise<Organization> {
     const realm = { id: input.realmId, name: '' } as any;
     const dto = {
       name: input.name,
@@ -263,7 +279,7 @@ export class MutationResolver {
       primaryColor: input.primaryColor,
       requireMfa: input.requireMfa,
     };
-    return this.organizationsService.create(realm, dto) as Promise<Organization>;
+    return this.organizationsService.create(realm, dto);
   }
 
   @Mutation(() => Organization)
@@ -282,7 +298,7 @@ export class MutationResolver {
       primaryColor: input.primaryColor,
       requireMfa: input.requireMfa,
     };
-    return this.organizationsService.update(realm, slug, dto) as Promise<Organization>;
+    return this.organizationsService.update(realm, slug, dto);
   }
 
   @Mutation(() => Boolean)
@@ -304,6 +320,6 @@ export class MutationResolver {
   ): Promise<Organization> {
     const realm = { id: realmId, name: '' } as any;
     await this.organizationsService.addMember(realm, slug, { userId, role });
-    return this.organizationsService.findOne(realm, slug) as Promise<Organization>;
+    return this.organizationsService.findOne(realm, slug);
   }
 }

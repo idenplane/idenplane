@@ -123,7 +123,9 @@ export class GroupsService {
   async addUserToGroup(realm: Realm, userId: string, groupId: string) {
     const [user, group] = await Promise.all([
       this.prisma.user.findFirst({ where: { id: userId, realmId: realm.id } }),
-      this.prisma.group.findFirst({ where: { id: groupId, realmId: realm.id } }),
+      this.prisma.group.findFirst({
+        where: { id: groupId, realmId: realm.id },
+      }),
     ]);
     if (!user) throw new NotFoundException('User not found');
     if (!group) throw new NotFoundException('Group not found');
@@ -197,7 +199,11 @@ export class GroupsService {
     return { assigned: foundNames };
   }
 
-  async removeRolesFromGroup(realm: Realm, groupId: string, roleNames: string[]) {
+  async removeRolesFromGroup(
+    realm: Realm,
+    groupId: string,
+    roleNames: string[],
+  ) {
     const roles = await this.prisma.role.findMany({
       where: { realmId: realm.id, clientId: null, name: { in: roleNames } },
     });
@@ -220,11 +226,20 @@ export class GroupsService {
     });
 
     // Collect roles from all groups and their ancestors
-    const allRoles: Array<{ id: string; name: string; clientId: string | null; client?: { clientId: string } | null }> = [];
+    const allRoles: Array<{
+      id: string;
+      name: string;
+      clientId: string | null;
+      client?: { clientId: string } | null;
+    }> = [];
     const visitedGroupIds = new Set<string>();
 
     for (const membership of memberships) {
-      await this.collectGroupRoles(membership.groupId, allRoles, visitedGroupIds);
+      await this.collectGroupRoles(
+        membership.groupId,
+        allRoles,
+        visitedGroupIds,
+      );
     }
 
     return allRoles;
@@ -232,7 +247,12 @@ export class GroupsService {
 
   private async collectGroupRoles(
     groupId: string,
-    allRoles: Array<{ id: string; name: string; clientId: string | null; client?: { clientId: string } | null }>,
+    allRoles: Array<{
+      id: string;
+      name: string;
+      clientId: string | null;
+      client?: { clientId: string } | null;
+    }>,
     visited: Set<string>,
   ) {
     if (visited.has(groupId)) return;

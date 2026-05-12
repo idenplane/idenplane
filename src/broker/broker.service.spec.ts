@@ -1,9 +1,6 @@
 jest.mock('../crypto/jwk.service.js', () => ({ JwkService: jest.fn() }));
 
-import {
-  BadRequestException,
-  UnauthorizedException,
-} from '@nestjs/common';
+import { BadRequestException, UnauthorizedException } from '@nestjs/common';
 import { BrokerService } from './broker.service.js';
 import {
   createMockPrismaService,
@@ -192,7 +189,10 @@ describe('BrokerService', () => {
 
     it('should throw BadRequestException when client is disabled', async () => {
       idpService.findByAlias.mockResolvedValue(mockIdp);
-      prisma.client.findUnique.mockResolvedValue({ ...mockClient, enabled: false });
+      prisma.client.findUnique.mockResolvedValue({
+        ...mockClient,
+        enabled: false,
+      });
 
       await expect(
         service.initiateLogin(mockRealm, 'google', params),
@@ -300,7 +300,10 @@ describe('BrokerService', () => {
     it('should sync user profile when syncUserProfile is enabled', async () => {
       prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
       jwkService.verifyJwt.mockResolvedValue(brokerState);
-      idpService.findByAlias.mockResolvedValue({ ...mockIdp, syncUserProfile: true });
+      idpService.findByAlias.mockResolvedValue({
+        ...mockIdp,
+        syncUserProfile: true,
+      });
       setupFetchMocks();
 
       prisma.federatedIdentity.findUnique.mockResolvedValue({
@@ -313,7 +316,12 @@ describe('BrokerService', () => {
       prisma.client.findUnique.mockResolvedValue(mockClient);
       prisma.authorizationCode.create.mockResolvedValue({});
 
-      await service.handleCallback(mockRealm, 'google', 'auth-code', 'state-jwt');
+      await service.handleCallback(
+        mockRealm,
+        'google',
+        'auth-code',
+        'state-jwt',
+      );
 
       expect(prisma.user.update).toHaveBeenCalledWith({
         where: { id: 'user-1' },
@@ -367,7 +375,10 @@ describe('BrokerService', () => {
     it('should link existing user by email when trustEmail is true', async () => {
       prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
       jwkService.verifyJwt.mockResolvedValue(brokerState);
-      idpService.findByAlias.mockResolvedValue({ ...mockIdp, trustEmail: true });
+      idpService.findByAlias.mockResolvedValue({
+        ...mockIdp,
+        trustEmail: true,
+      });
       setupFetchMocks();
 
       prisma.federatedIdentity.findUnique.mockResolvedValue(null);
@@ -556,7 +567,12 @@ describe('BrokerService', () => {
       prisma.client.findUnique.mockResolvedValue(mockClient);
       prisma.authorizationCode.create.mockResolvedValue({});
 
-      await service.handleCallback(mockRealm, 'google', 'auth-code', 'state-jwt');
+      await service.handleCallback(
+        mockRealm,
+        'google',
+        'auth-code',
+        'state-jwt',
+      );
 
       expect(prisma.user.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
@@ -591,7 +607,12 @@ describe('BrokerService', () => {
       prisma.client.findUnique.mockResolvedValue(mockClient);
       prisma.authorizationCode.create.mockResolvedValue({});
 
-      await service.handleCallback(mockRealm, 'google', 'auth-code', 'state-jwt');
+      await service.handleCallback(
+        mockRealm,
+        'google',
+        'auth-code',
+        'state-jwt',
+      );
 
       expect(prisma.user.create).toHaveBeenCalledWith({
         data: expect.objectContaining({

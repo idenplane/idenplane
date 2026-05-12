@@ -57,7 +57,13 @@ describe('AuditStreamsService', () => {
     });
 
     it('should create a syslog stream with defaults', async () => {
-      const syslogStream = { ...baseStream, streamType: 'syslog', url: null, syslogHost: 'syslog.corp.com', syslogPort: 514 };
+      const syslogStream = {
+        ...baseStream,
+        streamType: 'syslog',
+        url: null,
+        syslogHost: 'syslog.corp.com',
+        syslogPort: 514,
+      };
       prisma.auditLogStream.create.mockResolvedValue(syslogStream);
 
       await service.create(realm, {
@@ -125,7 +131,9 @@ describe('AuditStreamsService', () => {
       const updated = { ...baseStream, enabled: false };
       prisma.auditLogStream.update.mockResolvedValue(updated);
 
-      const result = await service.update(realm, 'stream-1', { enabled: false });
+      const result = await service.update(realm, 'stream-1', {
+        enabled: false,
+      });
 
       expect(prisma.auditLogStream.update).toHaveBeenCalledWith({
         where: { id: 'stream-1' },
@@ -201,7 +209,9 @@ describe('AuditStreamsService', () => {
         'https://logs.example.com',
         expect.objectContaining({
           method: 'POST',
-          headers: expect.objectContaining({ 'Content-Type': 'application/json' }),
+          headers: expect.objectContaining({
+            'Content-Type': 'application/json',
+          }),
         }),
       );
 

@@ -90,7 +90,12 @@ describe('RealmExportService', () => {
     protocol: 'openid-connect',
     builtIn: true,
     protocolMappers: [
-      { name: 'sub', protocol: 'openid-connect', mapperType: 'oidc-usermodel-attribute-mapper', config: {} },
+      {
+        name: 'sub',
+        protocol: 'openid-connect',
+        mapperType: 'oidc-usermodel-attribute-mapper',
+        config: {},
+      },
     ],
   };
 
@@ -123,8 +128,12 @@ describe('RealmExportService', () => {
     it('should throw NotFoundException when realm does not exist', async () => {
       prisma.realm.findUnique.mockResolvedValue(null);
 
-      await expect(service.exportRealm('nonexistent')).rejects.toThrow(NotFoundException);
-      await expect(service.exportRealm('nonexistent')).rejects.toThrow("Realm 'nonexistent' not found");
+      await expect(service.exportRealm('nonexistent')).rejects.toThrow(
+        NotFoundException,
+      );
+      await expect(service.exportRealm('nonexistent')).rejects.toThrow(
+        "Realm 'nonexistent' not found",
+      );
     });
 
     it('should export realm with all entities', async () => {
@@ -159,7 +168,7 @@ describe('RealmExportService', () => {
       expect(roles[1].clientId).toBe('my-app'); // mapped to natural key
 
       // Groups
-      expect((result['groups'] as any[])).toHaveLength(1);
+      expect(result['groups'] as any[]).toHaveLength(1);
 
       // Client scopes
       const scopes = result['clientScopes'] as any[];
@@ -167,7 +176,7 @@ describe('RealmExportService', () => {
       expect(scopes[0].protocolMappers).toHaveLength(1);
 
       // IDPs
-      expect((result['identityProviders'] as any[])).toHaveLength(1);
+      expect(result['identityProviders'] as any[]).toHaveLength(1);
 
       // Scope assignments
       const assignments = result['clientScopeAssignments'] as any[];
@@ -204,7 +213,9 @@ describe('RealmExportService', () => {
       prisma.clientDefaultScope.findMany.mockResolvedValue([]);
       prisma.clientOptionalScope.findMany.mockResolvedValue([]);
 
-      const result = await service.exportRealm('test-realm', { includeSecrets: true });
+      const result = await service.exportRealm('test-realm', {
+        includeSecrets: true,
+      });
 
       const clients = result['clients'] as any[];
       expect(clients[0].clientSecret).toBe('secret-value');
@@ -235,7 +246,9 @@ describe('RealmExportService', () => {
         },
       ]);
 
-      const result = await service.exportRealm('test-realm', { includeUsers: true });
+      const result = await service.exportRealm('test-realm', {
+        includeUsers: true,
+      });
 
       const users = result['users'] as any[];
       expect(users).toHaveLength(1);
@@ -261,8 +274,20 @@ describe('RealmExportService', () => {
     });
 
     it('should handle groups with parent references', async () => {
-      const parentGroup = { id: 'g1', name: 'parent', description: null, parentId: null, realmId: 'realm-1' };
-      const childGroup = { id: 'g2', name: 'child', description: null, parentId: 'g1', realmId: 'realm-1' };
+      const parentGroup = {
+        id: 'g1',
+        name: 'parent',
+        description: null,
+        parentId: null,
+        realmId: 'realm-1',
+      };
+      const childGroup = {
+        id: 'g2',
+        name: 'child',
+        description: null,
+        parentId: 'g1',
+        realmId: 'realm-1',
+      };
 
       prisma.realm.findUnique.mockResolvedValue(mockRealm);
       prisma.client.findMany.mockResolvedValue([]);

@@ -28,7 +28,10 @@ export class PluginLoaderService {
    * Failures in individual plugins are isolated and logged; other plugins
    * continue loading.
    */
-  async discoverAll(pluginsRootDir?: string, nodeModulesDir?: string): Promise<DiscoveredPlugin[]> {
+  async discoverAll(
+    pluginsRootDir?: string,
+    nodeModulesDir?: string,
+  ): Promise<DiscoveredPlugin[]> {
     const discovered: DiscoveredPlugin[] = [];
 
     const fromDir = await this.discoverFromDirectory(pluginsRootDir);
@@ -45,11 +48,15 @@ export class PluginLoaderService {
    * treated as a plugin package. The directory must contain an `index.js` (or
    * `index.ts` when running with ts-node) file.
    */
-  async discoverFromDirectory(pluginsRootDir?: string): Promise<DiscoveredPlugin[]> {
+  async discoverFromDirectory(
+    pluginsRootDir?: string,
+  ): Promise<DiscoveredPlugin[]> {
     const rootDir = pluginsRootDir ?? resolve(process.cwd(), 'plugins');
 
     if (!existsSync(rootDir)) {
-      this.logger.debug(`Plugins directory '${rootDir}' does not exist; skipping.`);
+      this.logger.debug(
+        `Plugins directory '${rootDir}' does not exist; skipping.`,
+      );
       return [];
     }
 
@@ -61,7 +68,9 @@ export class PluginLoaderService {
         .filter((d) => d.isDirectory())
         .map((d) => d.name);
     } catch (err) {
-      this.logger.warn(`Failed to read plugins directory '${rootDir}': ${(err as Error).message}`);
+      this.logger.warn(
+        `Failed to read plugins directory '${rootDir}': ${(err as Error).message}`,
+      );
       return [];
     }
 
@@ -94,7 +103,9 @@ export class PluginLoaderService {
         .filter((d) => d.isDirectory() && d.name.startsWith('authme-plugin-'))
         .map((d) => d.name);
     } catch (err) {
-      this.logger.warn(`Failed to read node_modules for npm plugins: ${(err as Error).message}`);
+      this.logger.warn(
+        `Failed to read node_modules for npm plugins: ${(err as Error).message}`,
+      );
       return [];
     }
 
@@ -137,8 +148,8 @@ export class PluginLoaderService {
           if (manifestHash && fileHash && manifestHash !== fileHash) {
             this.logger.error(
               `Plugin integrity check FAILED for '${candidate}' — ` +
-              `expected hash ${manifestHash}, got ${fileHash}. ` +
-              `Plugin will NOT be loaded. Update the manifest if this change is intentional.`,
+                `expected hash ${manifestHash}, got ${fileHash}. ` +
+                `Plugin will NOT be loaded. Update the manifest if this change is intentional.`,
             );
             return null;
           }
@@ -147,8 +158,8 @@ export class PluginLoaderService {
             if (process.env.NODE_ENV === 'production') {
               this.logger.error(
                 `Plugin '${candidate}' rejected — no manifest hash found. ` +
-                `In production, all plugins must have integrity verification. ` +
-                `Generate a manifest with: authme plugins hash`,
+                  `In production, all plugins must have integrity verification. ` +
+                  `Generate a manifest with: authme plugins hash`,
               );
               return null;
             }
@@ -164,7 +175,9 @@ export class PluginLoaderService {
       }
 
       if (!loaded) {
-        this.logger.debug(`No index file found in plugin directory '${pluginPath}'; skipping.`);
+        this.logger.debug(
+          `No index file found in plugin directory '${pluginPath}'; skipping.`,
+        );
         return null;
       }
 
@@ -185,7 +198,9 @@ export class PluginLoaderService {
         return null;
       }
 
-      this.logger.log(`Discovered plugin '${pluginExport.name}' v${pluginExport.version} from ${source} (${resolvedPath})`);
+      this.logger.log(
+        `Discovered plugin '${pluginExport.name}' v${pluginExport.version} from ${source} (${resolvedPath})`,
+      );
 
       return { plugin: pluginExport, source, sourcePath: resolvedPath };
     } catch (err) {
@@ -208,8 +223,13 @@ export class PluginLoaderService {
     if (typeof p['version'] !== 'string' || !p['version']) return false;
     if (typeof p['type'] !== 'string' || !p['type']) return false;
 
-    const validTypes = ['auth-provider', 'event-listener', 'token-enrichment', 'theme'];
-    if (!validTypes.includes(p['type'] as string)) return false;
+    const validTypes = [
+      'auth-provider',
+      'event-listener',
+      'token-enrichment',
+      'theme',
+    ];
+    if (!validTypes.includes(p['type'])) return false;
 
     return true;
   }
@@ -285,9 +305,7 @@ export class PluginLoaderService {
     const nmDir = resolve(process.cwd(), 'node_modules');
     let packageName: string | undefined;
     if (absoluteFilePath.startsWith(nmDir + '/')) {
-      packageName = absoluteFilePath
-        .slice(nmDir.length + 1)
-        .split('/')[0];
+      packageName = absoluteFilePath.slice(nmDir.length + 1).split('/')[0];
     }
     return lookupInManifest(npmManifest, packageName ? [packageName] : []);
   }

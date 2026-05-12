@@ -12,7 +12,13 @@ import {
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-const ATTRIBUTE_TYPES = ['text', 'number', 'boolean', 'select', 'multi-select'] as const;
+const ATTRIBUTE_TYPES = [
+  'text',
+  'number',
+  'boolean',
+  'select',
+  'multi-select',
+] as const;
 const NO_HTML = /^[^<>]*$/;
 const NO_HTML_MSG = 'must not contain HTML tags or angle brackets';
 
@@ -20,7 +26,10 @@ export class CreateCustomAttributeDto {
   @ApiProperty({ example: 'phone_number' })
   @IsString()
   @MinLength(1)
-  @Matches(/^[a-z][a-z0-9_]*$/, { message: 'name must start with a lowercase letter and contain only lowercase letters, digits, and underscores' })
+  @Matches(/^[a-z][a-z0-9_]*$/, {
+    message:
+      'name must start with a lowercase letter and contain only lowercase letters, digits, and underscores',
+  })
   name!: string;
 
   @ApiProperty({ example: 'Phone Number' })
@@ -59,7 +68,10 @@ export class CreateCustomAttributeDto {
   @IsString({ each: true })
   options?: string[];
 
-  @ApiPropertyOptional({ example: 'phone_number', description: 'OIDC claim name to map this attribute to' })
+  @ApiPropertyOptional({
+    example: 'phone_number',
+    description: 'OIDC claim name to map this attribute to',
+  })
   @IsOptional()
   @IsString()
   @Matches(NO_HTML, { message: `mapToOidcClaim ${NO_HTML_MSG}` })

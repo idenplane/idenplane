@@ -41,7 +41,7 @@ describe('UsersController', () => {
       const expected = { id: 'u1', ...dto };
       usersService.create.mockReturnValue(expected);
 
-      const result = controller.create(realm, dto as any);
+      const result = controller.create(realm, dto);
 
       expect(usersService.create).toHaveBeenCalledWith(realm, dto);
       expect(result).toEqual(expected);
@@ -55,9 +55,14 @@ describe('UsersController', () => {
       const expected = [{ id: 'u1' }, { id: 'u2' }];
       usersService.findAll.mockReturnValue(expected);
 
-      const result = controller.findAll(realm, pagination as any, searchParams);
+      const result = controller.findAll(realm, pagination, searchParams);
 
-      expect(usersService.findAll).toHaveBeenCalledWith(realm, 0, 10, expect.any(Object));
+      expect(usersService.findAll).toHaveBeenCalledWith(
+        realm,
+        0,
+        10,
+        expect.any(Object),
+      );
       expect(result).toEqual(expected);
     });
   });
@@ -80,7 +85,7 @@ describe('UsersController', () => {
       const expected = { id: 'u1', ...dto };
       usersService.update.mockReturnValue(expected);
 
-      const result = controller.update(realm, 'u1', dto as any);
+      const result = controller.update(realm, 'u1', dto);
 
       expect(usersService.update).toHaveBeenCalledWith(realm, 'u1', dto);
       expect(result).toEqual(expected);
@@ -103,7 +108,7 @@ describe('UsersController', () => {
       const dto = { password: 'newP@ss123' };
       usersService.setPassword.mockReturnValue(undefined);
 
-      const result = controller.resetPassword(realm, 'u1', dto as any);
+      const result = controller.resetPassword(realm, 'u1', dto);
 
       expect(usersService.setPassword).toHaveBeenCalledWith(
         realm,
@@ -160,10 +165,7 @@ describe('UsersController', () => {
 
       const result = controller.getOfflineSessions(realm, 'u1');
 
-      expect(usersService.getOfflineSessions).toHaveBeenCalledWith(
-        realm,
-        'u1',
-      );
+      expect(usersService.getOfflineSessions).toHaveBeenCalledWith(realm, 'u1');
       expect(result).toEqual(expected);
     });
   });

@@ -1,8 +1,4 @@
-import {
-  Injectable,
-  Logger,
-  NotFoundException,
-} from '@nestjs/common';
+import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import { createHmac } from 'crypto';
 import type { Realm } from '@prisma/client';
 import { Prisma } from '@prisma/client';
@@ -44,7 +40,7 @@ export class WebhooksService {
    * The type will be present after `prisma generate` runs following the
    * 20260324960000_add_webhook_event_queue migration.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   private get db(): any {
     return this.prisma;
   }
@@ -141,7 +137,8 @@ export class WebhooksService {
       return {
         ...updated,
         secret: dto.secret,
-        secretWarning: 'Store this secret securely. It will not be shown again.',
+        secretWarning:
+          'Store this secret securely. It will not be shown again.',
       };
     }
 
@@ -173,9 +170,13 @@ export class WebhooksService {
     // Fire-and-forget: do not await deliverWebhook.  The full retry sequence
     // can take up to ~101 s; awaiting it inline would hang the HTTP response.
     // The delivery record can be inspected via the delivery-logs endpoint.
-    void this.deliverWebhook(rawWebhook, 'webhook.test', testPayload).catch((err) => {
-      this.logger.warn(`Test webhook delivery failed for ${rawWebhook.url}: ${(err as Error).message}`);
-    });
+    void this.deliverWebhook(rawWebhook, 'webhook.test', testPayload).catch(
+      (err) => {
+        this.logger.warn(
+          `Test webhook delivery failed for ${rawWebhook.url}: ${(err as Error).message}`,
+        );
+      },
+    );
     return { status: 'queued', message: 'Test delivery initiated' };
   }
 
@@ -226,7 +227,7 @@ export class WebhooksService {
       // Log but do not throw — a failed enqueue must never crash the caller.
       this.logger.error(
         `Failed to enqueue webhook event for realm=${options.realmId} ` +
-        `type=${options.eventType}: ${(err as Error).message}`,
+          `type=${options.eventType}: ${(err as Error).message}`,
       );
     }
   }

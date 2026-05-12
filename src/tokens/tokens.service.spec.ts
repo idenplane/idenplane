@@ -18,7 +18,12 @@ import type { Realm } from '@prisma/client';
 describe('TokensService', () => {
   let service: TokensService;
   let prisma: MockPrismaService;
-  let cryptoService: { sha256: jest.Mock; hashPassword: jest.Mock; verifyPassword: jest.Mock; generateSecret: jest.Mock };
+  let cryptoService: {
+    sha256: jest.Mock;
+    hashPassword: jest.Mock;
+    verifyPassword: jest.Mock;
+    generateSecret: jest.Mock;
+  };
   let jwkService: { verifyJwt: jest.Mock; signJwt: jest.Mock };
   let scopesService: {
     parseAndValidate: jest.Mock;
@@ -93,7 +98,11 @@ describe('TokensService', () => {
   describe('introspect', () => {
     it('should return active=true with claims for a valid token', async () => {
       prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
-      prisma.user.findUnique.mockResolvedValue({ id: 'user-1', username: 'testuser', enabled: true });
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-1',
+        username: 'testuser',
+        enabled: true,
+      });
       jwkService.verifyJwt.mockResolvedValue({
         sub: 'user-1',
         iss: 'https://authme/realm-1',
@@ -138,9 +147,7 @@ describe('TokensService', () => {
 
     it('should return active=false when verification throws (revoked/tampered)', async () => {
       prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
-      jwkService.verifyJwt.mockRejectedValue(
-        new Error('Invalid signature'),
-      );
+      jwkService.verifyJwt.mockRejectedValue(new Error('Invalid signature'));
 
       const result = await service.introspect(mockRealm, 'tampered-token');
 
@@ -281,26 +288,24 @@ describe('TokensService', () => {
 
       await service.userinfo(mockRealm, 'token-no-scopes');
 
-      expect(scopesService.getClaimsForScopes).toHaveBeenCalledWith([
-        'openid',
-      ]);
+      expect(scopesService.getClaimsForScopes).toHaveBeenCalledWith(['openid']);
     });
 
     it('should throw UnauthorizedException when no signing key exists', async () => {
       prisma.realmSigningKey.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.userinfo(mockRealm, 'some-token'),
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(service.userinfo(mockRealm, 'some-token')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
     it('should throw UnauthorizedException for an invalid access token', async () => {
       prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
       jwkService.verifyJwt.mockRejectedValue(new Error('Invalid token'));
 
-      await expect(
-        service.userinfo(mockRealm, 'bad-token'),
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(service.userinfo(mockRealm, 'bad-token')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
 
     it('should throw UnauthorizedException when user is not found', async () => {
@@ -308,9 +313,9 @@ describe('TokensService', () => {
       jwkService.verifyJwt.mockResolvedValue({ sub: 'deleted-user' });
       prisma.user.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.userinfo(mockRealm, 'valid-token'),
-      ).rejects.toThrow(UnauthorizedException);
+      await expect(service.userinfo(mockRealm, 'valid-token')).rejects.toThrow(
+        UnauthorizedException,
+      );
     });
   });
 

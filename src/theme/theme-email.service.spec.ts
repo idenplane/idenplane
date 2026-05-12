@@ -5,7 +5,9 @@ jest.mock('fs', () => ({
 }));
 
 import { readFileSync } from 'fs';
-const mockedReadFileSync = readFileSync as jest.MockedFunction<typeof readFileSync>;
+const mockedReadFileSync = readFileSync as jest.MockedFunction<
+  typeof readFileSync
+>;
 
 describe('ThemeEmailService', () => {
   let service: ThemeEmailService;
@@ -35,7 +37,9 @@ describe('ThemeEmailService', () => {
       }),
     };
     templateService = {
-      resolve: jest.fn().mockReturnValue('/app/themes/authme/email/templates/verify-email.hbs'),
+      resolve: jest
+        .fn()
+        .mockReturnValue('/app/themes/authme/email/templates/verify-email.hbs'),
     };
     messageService = {
       getMessages: jest.fn().mockReturnValue({
@@ -61,15 +65,28 @@ describe('ThemeEmailService', () => {
         url: 'https://example.com/verify',
       });
 
-      expect(themeService.getRealmThemeName).toHaveBeenCalledWith(mockRealm, 'email');
-      expect(templateService.resolve).toHaveBeenCalledWith('authme', 'email', 'verify-email');
-      expect(messageService.getMessages).toHaveBeenCalledWith('authme', 'email', 'en');
+      expect(themeService.getRealmThemeName).toHaveBeenCalledWith(
+        mockRealm,
+        'email',
+      );
+      expect(templateService.resolve).toHaveBeenCalledWith(
+        'authme',
+        'email',
+        'verify-email',
+      );
+      expect(messageService.getMessages).toHaveBeenCalledWith(
+        'authme',
+        'email',
+        'en',
+      );
       expect(result).toContain('testuser');
       expect(result).toContain('https://example.com/verify');
     });
 
     it('should include realm name in template data', () => {
-      mockedReadFileSync.mockReturnValue('Realm: {{realmName}}, Display: {{realmDisplayName}}');
+      mockedReadFileSync.mockReturnValue(
+        'Realm: {{realmName}}, Display: {{realmDisplayName}}',
+      );
 
       // Clear template cache by creating new instance
       service = new ThemeEmailService(

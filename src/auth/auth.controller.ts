@@ -10,7 +10,13 @@ import {
   HttpStatus,
   BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiConsumes, ApiBody, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiConsumes,
+  ApiBody,
+  ApiResponse,
+} from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import type { Realm } from '@prisma/client';
@@ -19,7 +25,10 @@ import { TokenRequestDto } from './dto/token-request.dto.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
-import { RateLimitGuard, RateLimitByIp } from '../rate-limit/rate-limit.guard.js';
+import {
+  RateLimitGuard,
+  RateLimitByIp,
+} from '../rate-limit/rate-limit.guard.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 
 @ApiTags('Authentication')
@@ -31,10 +40,19 @@ export class AuthController {
 
   @Post('token')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Token endpoint (password, client_credentials, refresh_token, authorization_code)' })
+  @ApiOperation({
+    summary:
+      'Token endpoint (password, client_credentials, refresh_token, authorization_code)',
+  })
   @ApiResponse({ status: 200, description: 'Token issued successfully' })
-  @ApiResponse({ status: 400, description: 'Invalid request or unsupported grant type' })
-  @ApiResponse({ status: 401, description: 'Invalid client credentials or user credentials' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid request or unsupported grant type',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Invalid client credentials or user credentials',
+  })
   @ApiConsumes('application/x-www-form-urlencoded', 'application/json')
   @ApiBody({ type: TokenRequestDto })
   @SkipThrottle()
@@ -50,10 +68,7 @@ export class AuthController {
     res.set('Pragma', 'no-cache');
 
     if (body['grant_type'] === 'password') {
-      res.set(
-        'Deprecation',
-        'true',
-      );
+      res.set('Deprecation', 'true');
       res.set(
         'Warning',
         '299 - "The OAuth 2.0 password grant is deprecated by OAuth 2.1 and will be removed in a future release. Migrate to authorization_code with PKCE."',

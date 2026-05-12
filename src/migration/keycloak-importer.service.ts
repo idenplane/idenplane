@@ -1,7 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
-import type { KeycloakRealmExport, KeycloakUser, KeycloakClient, KeycloakGroup } from './keycloak-types.js';
+import type {
+  KeycloakRealmExport,
+  KeycloakUser,
+  KeycloakClient,
+  KeycloakGroup,
+} from './keycloak-types.js';
 import { createEmptyReport, type MigrationReport } from './migration-report.js';
 import type { Prisma } from '@prisma/client';
 
@@ -33,12 +38,17 @@ export class KeycloakImporterService {
     const exportRealmName =
       typeof data.realm === 'string'
         ? data.realm
-        : (data.realm as any)?.realm ?? String(data.realm);
+        : ((data.realm as any)?.realm ?? String(data.realm));
     const realmName = options.targetRealm ?? exportRealmName;
 
     if (options.dryRun) {
       // Dry-run: simulate without writing — no transaction needed.
-      const realmId = await this.importRealmEntity(data, realmName, report, true);
+      const realmId = await this.importRealmEntity(
+        data,
+        realmName,
+        report,
+        true,
+      );
       if (!realmId) {
         report.completedAt = new Date();
         return report;
@@ -54,14 +64,29 @@ export class KeycloakImporterService {
       // failure causes a full rollback, preventing partial/corrupt data.
       try {
         await this.prisma.$transaction(async (tx) => {
-          const realmId = await this.importRealmEntity(data, realmName, report, false, tx);
+          const realmId = await this.importRealmEntity(
+            data,
+            realmName,
+            report,
+            false,
+            tx,
+          );
           if (!realmId) {
             // A fatal realm-level error was already recorded; abort the transaction.
-            throw new Error(`Failed to create realm '${realmName}' — rolling back`);
+            throw new Error(
+              `Failed to create realm '${realmName}' — rolling back`,
+            );
           }
 
           await this.importRoles(data, realmId, report, false, tx);
-          await this.importGroups(data.groups ?? [], realmId, null, report, false, tx);
+          await this.importGroups(
+            data.groups ?? [],
+            realmId,
+            null,
+            report,
+            false,
+            tx,
+          );
           await this.importClientScopes(data, realmId, report, false, tx);
           await this.importClients(data, realmId, report, false, tx);
           await this.importUsers(data, realmId, report, false, tx);
@@ -70,9 +95,15 @@ export class KeycloakImporterService {
       } catch (error: any) {
         // If the error was injected by us to trigger a rollback it is already
         // recorded in report.errors.  For any other unexpected error, add it.
-        const alreadyRecorded = report.errors.some(e => e.error === error.message);
+        const alreadyRecorded = report.errors.some(
+          (e) => e.error === error.message,
+        );
         if (!alreadyRecorded) {
-          report.errors.push({ entity: 'realm', name: realmName, error: error.message });
+          report.errors.push({
+            entity: 'realm',
+            name: realmName,
+            error: error.message,
+          });
         }
       }
     }
@@ -90,10 +121,15 @@ export class KeycloakImporterService {
   ): Promise<string | null> {
     const db = tx ?? this.prisma;
     try {
-      const existing = await db.realm.findUnique({ where: { name: realmName } });
+      const existing = await db.realm.findUnique({
+        where: { name: realmName },
+      });
       if (existing) {
         report.summary.realms.skipped++;
-        report.warnings.push({ entity: 'realm', message: `Realm '${realmName}' already exists, using existing` });
+        report.warnings.push({
+          entity: 'realm',
+          message: `Realm '${realmName}' already exists, using existing`,
+        });
         return existing.id;
       }
 
@@ -129,7 +165,11 @@ export class KeycloakImporterService {
       return realm.id;
     } catch (error: any) {
       report.summary.realms.failed++;
-      report.errors.push({ entity: 'realm', name: realmName, error: error.message });
+      report.errors.push({
+        entity: 'realm',
+        name: realmName,
+        error: error.message,
+      });
       return null;
     }
   }
@@ -146,8 +186,14 @@ export class KeycloakImporterService {
       const sourceRealmName =
         typeof data.realm === 'string'
           ? data.realm
-          : (data.realm as any)?.realm ?? String(data.realm);
-      if (['offline_access', 'uma_authorization', 'default-roles-' + sourceRealmName].includes(role.name)) {
+          : ((data.realm as any)?.realm ?? String(data.realm));
+      if (
+        [
+          'offline_access',
+          'uma_authorization',
+          'default-roles-' + sourceRealmName,
+        ].includes(role.name)
+      ) {
         continue; // Skip Keycloak built-in roles
       }
       try {
@@ -166,7 +212,11 @@ export class KeycloakImporterService {
         report.summary.roles.created++;
       } catch (error: any) {
         report.summary.roles.failed++;
-        report.errors.push({ entity: 'role', name: role.name, error: error.message });
+        report.errors.push({
+          entity: 'role',
+          name: role.name,
+          error: error.message,
+        });
       }
     }
   }
@@ -188,7 +238,14 @@ export class KeycloakImporterService {
         if (existing) {
           report.summary.groups.skipped++;
           if (group.subGroups?.length) {
-            await this.importGroups(group.subGroups, realmId, existing.id, report, dryRun, tx);
+            await this.importGroups(
+              group.subGroups,
+              realmId,
+              existing.id,
+              report,
+              dryRun,
+              tx,
+            );
           }
           continue;
         }
@@ -201,11 +258,22 @@ export class KeycloakImporterService {
         }
         report.summary.groups.created++;
         if (group.subGroups?.length) {
-          await this.importGroups(group.subGroups, realmId, dryRun ? null : groupId, report, dryRun, tx);
+          await this.importGroups(
+            group.subGroups,
+            realmId,
+            dryRun ? null : groupId,
+            report,
+            dryRun,
+            tx,
+          );
         }
       } catch (error: any) {
         report.summary.groups.failed++;
-        report.errors.push({ entity: 'group', name: group.name, error: error.message });
+        report.errors.push({
+          entity: 'group',
+          name: group.name,
+          error: error.message,
+        });
       }
     }
   }
@@ -240,7 +308,11 @@ export class KeycloakImporterService {
         report.summary.scopes.created++;
       } catch (error: any) {
         report.summary.scopes.failed++;
-        report.errors.push({ entity: 'scope', name: scope.name, error: error.message });
+        report.errors.push({
+          entity: 'scope',
+          name: scope.name,
+          error: error.message,
+        });
       }
     }
   }
@@ -265,7 +337,9 @@ export class KeycloakImporterService {
         }
         if (!dryRun) {
           const grantTypes = this.mapKeycloakGrantTypes(client);
-          const secretHash = client.secret ? await this.crypto.hashPassword(client.secret) : null;
+          const secretHash = client.secret
+            ? await this.crypto.hashPassword(client.secret)
+            : null;
           await db.client.create({
             data: {
               realmId,
@@ -294,7 +368,11 @@ export class KeycloakImporterService {
         report.summary.clients.created++;
       } catch (error: any) {
         report.summary.clients.failed++;
-        report.errors.push({ entity: 'client', name: client.clientId, error: error.message });
+        report.errors.push({
+          entity: 'client',
+          name: client.clientId,
+          error: error.message,
+        });
       }
     }
   }
@@ -317,8 +395,15 @@ export class KeycloakImporterService {
           continue;
         }
 
-        const { hash: rawHash, algorithm, needsHashing } = this.extractKeycloakPassword(user);
-        const hash = (needsHashing && rawHash) ? await this.crypto.hashPassword(rawHash) : rawHash;
+        const {
+          hash: rawHash,
+          algorithm,
+          needsHashing,
+        } = this.extractKeycloakPassword(user);
+        const hash =
+          needsHashing && rawHash
+            ? await this.crypto.hashPassword(rawHash)
+            : rawHash;
 
         if (!dryRun) {
           const created = await db.user.create({
@@ -342,9 +427,11 @@ export class KeycloakImporterService {
                 where: { realmId, name: roleName, clientId: null },
               });
               if (role) {
-                await db.userRole.create({
-                  data: { userId: created.id, roleId: role.id },
-                }).catch(() => {}); // Ignore duplicate
+                await db.userRole
+                  .create({
+                    data: { userId: created.id, roleId: role.id },
+                  })
+                  .catch(() => {}); // Ignore duplicate
               }
             }
           }
@@ -352,13 +439,21 @@ export class KeycloakImporterService {
         report.summary.users.created++;
       } catch (error: any) {
         report.summary.users.failed++;
-        report.errors.push({ entity: 'user', name: user.username, error: error.message });
+        report.errors.push({
+          entity: 'user',
+          name: user.username,
+          error: error.message,
+        });
       }
     }
   }
 
-  private extractKeycloakPassword(user: KeycloakUser): { hash: string | null; algorithm: string; needsHashing?: boolean } {
-    const passwordCred = user.credentials?.find(c => c.type === 'password');
+  private extractKeycloakPassword(user: KeycloakUser): {
+    hash: string | null;
+    algorithm: string;
+    needsHashing?: boolean;
+  } {
+    const passwordCred = user.credentials?.find((c) => c.type === 'password');
     if (!passwordCred) return { hash: null, algorithm: 'argon2' };
 
     if (passwordCred.hashedSaltedValue && passwordCred.salt) {
@@ -370,7 +465,11 @@ export class KeycloakImporterService {
 
     if (passwordCred.value) {
       // Plain text password (rare) — hash it with Argon2
-      return { hash: passwordCred.value, algorithm: 'argon2', needsHashing: true };
+      return {
+        hash: passwordCred.value,
+        algorithm: 'argon2',
+        needsHashing: true,
+      };
     }
 
     return { hash: null, algorithm: 'argon2' };
@@ -415,7 +514,11 @@ export class KeycloakImporterService {
         report.summary.identityProviders.created++;
       } catch (error: any) {
         report.summary.identityProviders.failed++;
-        report.errors.push({ entity: 'identity_provider', name: idp.alias, error: error.message });
+        report.errors.push({
+          entity: 'identity_provider',
+          name: idp.alias,
+          error: error.message,
+        });
       }
     }
   }
@@ -431,21 +534,25 @@ export class KeycloakImporterService {
 
   private mapKeycloakProviderType(providerId: string): string {
     const map: Record<string, string> = {
-      'oidc': 'OIDC',
+      oidc: 'OIDC',
       'keycloak-oidc': 'OIDC',
-      'google': 'OIDC',
-      'github': 'OIDC',
-      'facebook': 'OIDC',
-      'microsoft': 'OIDC',
-      'saml': 'SAML',
+      google: 'OIDC',
+      github: 'OIDC',
+      facebook: 'OIDC',
+      microsoft: 'OIDC',
+      saml: 'SAML',
     };
     return map[providerId] ?? 'OIDC';
   }
 
   private isKeycloakBuiltinClient(clientId: string): boolean {
     return [
-      'account', 'account-console', 'admin-cli', 'broker',
-      'realm-management', 'security-admin-console',
+      'account',
+      'account-console',
+      'admin-cli',
+      'broker',
+      'realm-management',
+      'security-admin-console',
     ].includes(clientId);
   }
 }

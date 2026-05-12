@@ -24,13 +24,15 @@ export class UserResolver {
       realm,
       skip,
       take,
-      filter ? {
-        search: filter.search,
-        username: filter.username,
-        email: filter.email,
-        firstName: filter.firstName,
-        lastName: filter.lastName,
-      } : undefined,
+      filter
+        ? {
+            search: filter.search,
+            username: filter.username,
+            email: filter.email,
+            firstName: filter.firstName,
+            lastName: filter.lastName,
+          }
+        : undefined,
     );
     return {
       items: result.users,

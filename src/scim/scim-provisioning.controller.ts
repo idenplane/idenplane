@@ -16,7 +16,12 @@ import {
   Logger,
   NotFoundException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiSecurity, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiSecurity,
+  ApiResponse,
+} from '@nestjs/swagger';
 import type { Realm } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { ScimTokensService } from './scim-tokens.service.js';
@@ -42,7 +47,10 @@ export class ScimProvisioningController {
 
   @Post('tokens')
   @ApiOperation({ summary: 'Create a new SCIM provisioning token' })
-  @ApiResponse({ status: 201, description: 'Token created (plain token shown once)' })
+  @ApiResponse({
+    status: 201,
+    description: 'Token created (plain token shown once)',
+  })
   @ApiResponse({ status: 409, description: 'Token name already exists' })
   async createToken(
     @CurrentRealm() realm: Realm,
@@ -64,7 +72,10 @@ export class ScimProvisioningController {
   @ApiOperation({ summary: 'Get a specific SCIM token' })
   @ApiResponse({ status: 200, description: 'Token details' })
   @ApiResponse({ status: 404, description: 'Token not found' })
-  async getToken(@CurrentRealm() realm: Realm, @Param('tokenId') tokenId: string) {
+  async getToken(
+    @CurrentRealm() realm: Realm,
+    @Param('tokenId') tokenId: string,
+  ) {
     return this.scimTokensService.getTokenById(realm.id, tokenId);
   }
 
@@ -72,7 +83,10 @@ export class ScimProvisioningController {
   @ApiOperation({ summary: 'Delete a SCIM token' })
   @ApiResponse({ status: 204, description: 'Token deleted' })
   @ApiResponse({ status: 404, description: 'Token not found' })
-  async deleteToken(@CurrentRealm() realm: Realm, @Param('tokenId') tokenId: string) {
+  async deleteToken(
+    @CurrentRealm() realm: Realm,
+    @Param('tokenId') tokenId: string,
+  ) {
     await this.scimTokensService.deleteToken(realm.id, tokenId);
     this.logger.log(`Deleted SCIM token ${tokenId} from realm ${realm.name}`);
   }
@@ -81,7 +95,10 @@ export class ScimProvisioningController {
   @ApiOperation({ summary: 'Revoke a SCIM token' })
   @ApiResponse({ status: 200, description: 'Token revoked' })
   @ApiResponse({ status: 404, description: 'Token not found' })
-  async revokeToken(@CurrentRealm() realm: Realm, @Param('tokenId') tokenId: string) {
+  async revokeToken(
+    @CurrentRealm() realm: Realm,
+    @Param('tokenId') tokenId: string,
+  ) {
     await this.scimTokensService.revokeToken(realm.id, tokenId);
     this.logger.log(`Revoked SCIM token ${tokenId} in realm ${realm.name}`);
   }
@@ -90,7 +107,10 @@ export class ScimProvisioningController {
   @ApiOperation({ summary: 'Enable a SCIM token' })
   @ApiResponse({ status: 200, description: 'Token enabled' })
   @ApiResponse({ status: 404, description: 'Token not found' })
-  async enableToken(@CurrentRealm() realm: Realm, @Param('tokenId') tokenId: string) {
+  async enableToken(
+    @CurrentRealm() realm: Realm,
+    @Param('tokenId') tokenId: string,
+  ) {
     await this.scimTokensService.setTokenEnabled(realm.id, tokenId, true);
   }
 
@@ -98,7 +118,10 @@ export class ScimProvisioningController {
   @ApiOperation({ summary: 'Disable a SCIM token' })
   @ApiResponse({ status: 200, description: 'Token disabled' })
   @ApiResponse({ status: 404, description: 'Token not found' })
-  async disableToken(@CurrentRealm() realm: Realm, @Param('tokenId') tokenId: string) {
+  async disableToken(
+    @CurrentRealm() realm: Realm,
+    @Param('tokenId') tokenId: string,
+  ) {
     await this.scimTokensService.setTokenEnabled(realm.id, tokenId, false);
   }
 
@@ -121,7 +144,13 @@ export class ScimProvisioningController {
   @ApiResponse({ status: 201, description: 'Mapping created' })
   async createAttributeMapping(
     @CurrentRealm() realm: Realm,
-    @Body() dto: { resourceType: string; scimAttribute: string; authmeAttribute: string; direction?: string },
+    @Body()
+    dto: {
+      resourceType: string;
+      scimAttribute: string;
+      authmeAttribute: string;
+      direction?: string;
+    },
   ) {
     return this.prisma.scimAttributeMapping.create({
       data: {
@@ -137,7 +166,10 @@ export class ScimProvisioningController {
   @Delete('attribute-mappings/:mappingId')
   @ApiOperation({ summary: 'Delete a SCIM attribute mapping' })
   @ApiResponse({ status: 204, description: 'Mapping deleted' })
-  async deleteAttributeMapping(@CurrentRealm() realm: Realm, @Param('mappingId') mappingId: string) {
+  async deleteAttributeMapping(
+    @CurrentRealm() realm: Realm,
+    @Param('mappingId') mappingId: string,
+  ) {
     await this.prisma.scimAttributeMapping.delete({
       where: { id: mappingId },
     });
@@ -152,7 +184,9 @@ export class ScimProvisioningController {
   @ApiResponse({ status: 200, description: 'SCIM configuration status' })
   async getStatus(@CurrentRealm() realm: Realm) {
     const [tokenCount, userCount, groupCount] = await Promise.all([
-      this.prisma.scimProvisioningToken.count({ where: { realmId: realm.id, revoked: false } }),
+      this.prisma.scimProvisioningToken.count({
+        where: { realmId: realm.id, revoked: false },
+      }),
       this.prisma.user.count({ where: { realmId: realm.id } }),
       this.prisma.group.count({ where: { realmId: realm.id } }),
     ]);

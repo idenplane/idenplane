@@ -89,7 +89,10 @@ describe('GlobalExceptionFilter', () => {
     });
 
     it('should expose HttpException message for 5xx in non-production', () => {
-      const exception = new HttpException('Service unavailable detail', HttpStatus.SERVICE_UNAVAILABLE);
+      const exception = new HttpException(
+        'Service unavailable detail',
+        HttpStatus.SERVICE_UNAVAILABLE,
+      );
 
       filter.catch(exception, mockHost);
 

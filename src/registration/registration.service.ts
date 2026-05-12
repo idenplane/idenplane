@@ -14,7 +14,11 @@ import { EmailService } from '../email/email.service.js';
 import { PasswordPolicyService } from '../password-policy/password-policy.service.js';
 import { WebhooksService } from '../webhooks/webhooks.service.js';
 import { CaptchaService, CaptchaProvider } from './captcha.service.js';
-import { RegisterDto, ApproveRegistrationDto, RejectRegistrationDto } from './dto/register.dto.js';
+import {
+  RegisterDto,
+  ApproveRegistrationDto,
+  RejectRegistrationDto,
+} from './dto/register.dto.js';
 import type { Realm } from '@prisma/client';
 
 export interface PendingRegistration {
@@ -46,34 +50,65 @@ export class RegistrationService {
   /**
    * Register a new user
    */
-  async register(realm: Realm, dto: RegisterDto, captchaProvider?: CaptchaProvider): Promise<{ userId: string; requiresApproval: boolean; emailSent: boolean }> {
+  async register(
+    realm: Realm,
+    dto: RegisterDto,
+    captchaProvider?: CaptchaProvider,
+  ): Promise<{
+    userId: string;
+    requiresApproval: boolean;
+    emailSent: boolean;
+  }> {
     // Validate CAPTCHA if enabled
-    if (captchaProvider && captchaProvider !== CaptchaProvider.NONE && dto.captchaToken) {
-      const captchaResult = await this.captchaService.verify(dto.captchaToken, captchaProvider, 'register');
+    if (
+      captchaProvider &&
+      captchaProvider !== CaptchaProvider.NONE &&
+      dto.captchaToken
+    ) {
+      const captchaResult = await this.captchaService.verify(
+        dto.captchaToken,
+        captchaProvider,
+        'register',
+      );
       if (!captchaResult.success) {
-        throw new BadRequestException(`CAPTCHA verification failed: ${captchaResult.errorCodes?.join(', ')}`);
+        throw new BadRequestException(
+          `CAPTCHA verification failed: ${captchaResult.errorCodes?.join(', ')}`,
+        );
       }
     }
 
     // Check if registration is allowed
     if (!realm.registrationAllowed) {
-      throw new ForbiddenException('Self-registration is disabled for this realm');
+      throw new ForbiddenException(
+        'Self-registration is disabled for this realm',
+      );
     }
 
     // Validate email domain if restrictions are configured
     if (realm.allowedEmailDomains && realm.allowedEmailDomains.length > 0) {
       const emailDomain = dto.email.split('@')[1]?.toLowerCase();
-      if (!emailDomain || !realm.allowedEmailDomains.map(d => d.toLowerCase()).includes(emailDomain)) {
-        throw new BadRequestException(`Email domain '${emailDomain}' is not allowed for self-registration`);
+      if (
+        !emailDomain ||
+        !realm.allowedEmailDomains
+          .map((d) => d.toLowerCase())
+          .includes(emailDomain)
+      ) {
+        throw new BadRequestException(
+          `Email domain '${emailDomain}' is not allowed for self-registration`,
+        );
       }
     }
 
     // Check if username already exists
     const existingUsername = await this.prisma.user.findUnique({
-      where: { realmId_username: { realmId: realm.id, username: dto.username } },
+      where: {
+        realmId_username: { realmId: realm.id, username: dto.username },
+      },
     });
     if (existingUsername) {
-      throw new ConflictException(`Username '${dto.username}' is already taken`);
+      throw new ConflictException(
+        `Username '${dto.username}' is already taken`,
+      );
     }
 
     // Check if email already exists
@@ -96,10 +131,15 @@ export class RegistrationService {
     const passwordHash = await this.crypto.hashPassword(dto.password);
     if (realm.passwordHistoryCount > 0) {
       const inHistory = await this.passwordPolicyService.checkHistory(
-        dto.username, realm.id, dto.password, realm.passwordHistoryCount,
+        dto.username,
+        realm.id,
+        dto.password,
+        realm.passwordHistoryCount,
       );
       if (inHistory) {
-        throw new BadRequestException('Password was used recently. Choose a different password.');
+        throw new BadRequestException(
+          'Password was used recently. Choose a different password.',
+        );
       }
     }
 
@@ -128,14 +168,19 @@ export class RegistrationService {
         where: { realmId: realm.id, name: { in: attributeNames } },
         select: { id: true, name: true },
       });
-      const attributeIdByName = new Map(customAttributes.map((a) => [a.name, a.id]));
+      const attributeIdByName = new Map(
+        customAttributes.map((a) => [a.name, a.id]),
+      );
       const rows = Object.entries(dto.attributes)
         .map(([name, value]) => {
           const attributeId = attributeIdByName.get(name);
           if (!attributeId) return null;
           return { userId: user.id, attributeId, value };
         })
-        .filter((r): r is { userId: string; attributeId: string; value: string } => r !== null);
+        .filter(
+          (r): r is { userId: string; attributeId: string; value: string } =>
+            r !== null,
+        );
       if (rows.length > 0) {
         await this.prisma.userAttribute.createMany({ data: rows });
       }
@@ -144,7 +189,10 @@ export class RegistrationService {
     // Record password history
     if (realm.passwordHistoryCount > 0) {
       await this.passwordPolicyService.recordHistory(
-        user.id, realm.id, passwordHash, realm.passwordHistoryCount,
+        user.id,
+        realm.id,
+        passwordHash,
+        realm.passwordHistoryCount,
       );
     }
 
@@ -172,7 +220,9 @@ export class RegistrationService {
         },
       });
 
-      this.logger.log(`Registration pending approval: ${user.username} (realm: ${realm.name})`);
+      this.logger.log(
+        `Registration pending approval: ${user.username} (realm: ${realm.name})`,
+      );
     } else {
       // Normal registration - dispatch webhook
       await this.webhooksService.dispatchEvent({
@@ -202,15 +252,28 @@ export class RegistrationService {
   /**
    * Send email verification to a user
    */
-  async sendVerificationEmail(realm: Realm, userId: string, email: string): Promise<void> {
+  async sendVerificationEmail(
+    realm: Realm,
+    userId: string,
+    email: string,
+  ): Promise<void> {
     const configured = await this.emailService.isConfigured(realm.name);
     if (!configured) {
-      this.logger.warn(`SMTP not configured for realm "${realm.name}", skipping verification email`);
+      this.logger.warn(
+        `SMTP not configured for realm "${realm.name}", skipping verification email`,
+      );
       return;
     }
 
-    const rawToken = await this.verificationService.createToken(userId, 'email_verification', 86400);
-    const baseUrl = this.config.get<string>('BASE_URL', 'http://localhost:3000');
+    const rawToken = await this.verificationService.createToken(
+      userId,
+      'email_verification',
+      86400,
+    );
+    const baseUrl = this.config.get<string>(
+      'BASE_URL',
+      'http://localhost:3000',
+    );
     const verifyUrl = `${baseUrl}/realms/${realm.name}/verify-email?token=${rawToken}`;
 
     const subject = `${realm.displayName || realm.name} - Verify your email`;
@@ -223,13 +286,19 @@ export class RegistrationService {
     `;
 
     await this.emailService.sendEmail(realm.name, email, subject, html);
-    this.logger.log(`Verification email sent to ${email} (realm: ${realm.name})`);
+    this.logger.log(
+      `Verification email sent to ${email} (realm: ${realm.name})`,
+    );
   }
 
   /**
    * Send welcome email after successful registration
    */
-  async sendWelcomeEmail(realm: Realm, email: string, username: string): Promise<void> {
+  async sendWelcomeEmail(
+    realm: Realm,
+    email: string,
+    username: string,
+  ): Promise<void> {
     const configured = await this.emailService.isConfigured(realm.name);
     if (!configured) return;
 
@@ -246,8 +315,14 @@ export class RegistrationService {
   /**
    * Verify email with token
    */
-  async verifyEmail(realm: Realm, token: string): Promise<{ success: boolean; userId?: string }> {
-    const result = await this.verificationService.validateToken(token, 'email_verification');
+  async verifyEmail(
+    realm: Realm,
+    token: string,
+  ): Promise<{ success: boolean; userId?: string }> {
+    const result = await this.verificationService.validateToken(
+      token,
+      'email_verification',
+    );
     if (!result) {
       return { success: false };
     }
@@ -293,7 +368,10 @@ export class RegistrationService {
   /**
    * Resend verification email
    */
-  async resendVerificationEmail(realm: Realm, email: string): Promise<{ sent: boolean }> {
+  async resendVerificationEmail(
+    realm: Realm,
+    email: string,
+  ): Promise<{ sent: boolean }> {
     const user = await this.prisma.user.findFirst({
       where: { realmId: realm.id, email },
     });
@@ -314,7 +392,11 @@ export class RegistrationService {
   /**
    * Get pending registrations for admin
    */
-  async getPendingRegistrations(realm: Realm, skip = 0, take = 20): Promise<{ users: PendingRegistration[]; total: number }> {
+  async getPendingRegistrations(
+    realm: Realm,
+    skip = 0,
+    take = 20,
+  ): Promise<{ users: PendingRegistration[]; total: number }> {
     const [users, total] = await Promise.all([
       this.prisma.user.findMany({
         where: {
@@ -352,10 +434,13 @@ export class RegistrationService {
         });
         return {
           ...user,
-          attributes: attributes.reduce((acc, attr) => {
-            acc[attr.attribute.name] = attr.value;
-            return acc;
-          }, {} as Record<string, string>),
+          attributes: attributes.reduce(
+            (acc, attr) => {
+              acc[attr.attribute.name] = attr.value;
+              return acc;
+            },
+            {} as Record<string, string>,
+          ),
         };
       }),
     );
@@ -366,7 +451,11 @@ export class RegistrationService {
   /**
    * Approve a pending registration
    */
-  async approveRegistration(realm: Realm, userId: string, dto: ApproveRegistrationDto): Promise<{ success: boolean; note?: string }> {
+  async approveRegistration(
+    realm: Realm,
+    userId: string,
+    dto: ApproveRegistrationDto,
+  ): Promise<{ success: boolean; note?: string }> {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, realmId: realm.id, enabled: false },
     });
@@ -405,7 +494,9 @@ export class RegistrationService {
       },
     });
 
-    this.logger.log(`Registration approved for ${user.username} (realm: ${realm.name})`);
+    this.logger.log(
+      `Registration approved for ${user.username} (realm: ${realm.name})`,
+    );
 
     return { success: true, note: dto.note };
   }
@@ -413,7 +504,11 @@ export class RegistrationService {
   /**
    * Reject a pending registration
    */
-  async rejectRegistration(realm: Realm, userId: string, dto: RejectRegistrationDto): Promise<{ success: boolean }> {
+  async rejectRegistration(
+    realm: Realm,
+    userId: string,
+    dto: RejectRegistrationDto,
+  ): Promise<{ success: boolean }> {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, realmId: realm.id, enabled: false },
     });
@@ -440,7 +535,9 @@ export class RegistrationService {
       },
     });
 
-    this.logger.log(`Registration rejected for ${user.username} (realm: ${realm.name})`);
+    this.logger.log(
+      `Registration rejected for ${user.username} (realm: ${realm.name})`,
+    );
 
     return { success: true };
   }
@@ -480,7 +577,11 @@ export class RegistrationService {
     });
   }
 
-  async updateRegistrationField(realm: Realm, fieldId: string, dto: any): Promise<any> {
+  async updateRegistrationField(
+    realm: Realm,
+    fieldId: string,
+    dto: any,
+  ): Promise<any> {
     const existing = await this.prisma.registrationField.findFirst({
       where: { id: fieldId, realmId: realm.id },
     });

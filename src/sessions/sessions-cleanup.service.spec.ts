@@ -22,10 +22,16 @@ describe('SessionsCleanupService', () => {
   describe('cleanupExpiredSessions', () => {
     it('should delete expired records across all session-related tables', async () => {
       prisma.session.deleteMany.mockResolvedValue({ count: 3 });
-      (prisma.loginSession.deleteMany as jest.Mock).mockResolvedValue({ count: 2 });
+      prisma.loginSession.deleteMany.mockResolvedValue({
+        count: 2,
+      });
       prisma.refreshToken.deleteMany.mockResolvedValue({ count: 5 });
-      (prisma.authorizationCode.deleteMany as jest.Mock).mockResolvedValue({ count: 1 });
-      (prisma.impersonationSession.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
+      prisma.authorizationCode.deleteMany.mockResolvedValue({
+        count: 1,
+      });
+      prisma.impersonationSession.deleteMany.mockResolvedValue({
+        count: 0,
+      });
 
       const before = new Date();
       await service.cleanupExpiredSessions();
@@ -35,9 +41,13 @@ describe('SessionsCleanupService', () => {
       expect(prisma.session.deleteMany).toHaveBeenCalledWith({
         where: { expiresAt: { lt: expect.any(Date) } },
       });
-      const oauthCall = (prisma.session.deleteMany as jest.Mock).mock.calls[0][0];
-      expect(oauthCall.where.expiresAt.lt.getTime()).toBeGreaterThanOrEqual(before.getTime());
-      expect(oauthCall.where.expiresAt.lt.getTime()).toBeLessThanOrEqual(after.getTime());
+      const oauthCall = prisma.session.deleteMany.mock.calls[0][0];
+      expect(oauthCall.where.expiresAt.lt.getTime()).toBeGreaterThanOrEqual(
+        before.getTime(),
+      );
+      expect(oauthCall.where.expiresAt.lt.getTime()).toBeLessThanOrEqual(
+        after.getTime(),
+      );
 
       expect(prisma.loginSession.deleteMany).toHaveBeenCalledWith({
         where: { expiresAt: { lt: expect.any(Date) } },
@@ -58,10 +68,16 @@ describe('SessionsCleanupService', () => {
 
     it('should not throw when all tables return zero deleted rows', async () => {
       prisma.session.deleteMany.mockResolvedValue({ count: 0 });
-      (prisma.loginSession.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
+      prisma.loginSession.deleteMany.mockResolvedValue({
+        count: 0,
+      });
       prisma.refreshToken.deleteMany.mockResolvedValue({ count: 0 });
-      (prisma.authorizationCode.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
-      (prisma.impersonationSession.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
+      prisma.authorizationCode.deleteMany.mockResolvedValue({
+        count: 0,
+      });
+      prisma.impersonationSession.deleteMany.mockResolvedValue({
+        count: 0,
+      });
 
       await expect(service.cleanupExpiredSessions()).resolves.toBeUndefined();
     });
@@ -71,19 +87,26 @@ describe('SessionsCleanupService', () => {
       jest.spyOn(Date, 'now').mockReturnValue(fixedNow);
 
       prisma.session.deleteMany.mockResolvedValue({ count: 1 });
-      (prisma.loginSession.deleteMany as jest.Mock).mockResolvedValue({ count: 1 });
+      prisma.loginSession.deleteMany.mockResolvedValue({
+        count: 1,
+      });
       prisma.refreshToken.deleteMany.mockResolvedValue({ count: 1 });
-      (prisma.authorizationCode.deleteMany as jest.Mock).mockResolvedValue({ count: 1 });
-      (prisma.impersonationSession.deleteMany as jest.Mock).mockResolvedValue({ count: 1 });
+      prisma.authorizationCode.deleteMany.mockResolvedValue({
+        count: 1,
+      });
+      prisma.impersonationSession.deleteMany.mockResolvedValue({
+        count: 1,
+      });
 
       await service.cleanupExpiredSessions();
 
       const timestamps = [
-        (prisma.session.deleteMany as jest.Mock).mock.calls[0][0].where.expiresAt.lt,
-        (prisma.loginSession.deleteMany as jest.Mock).mock.calls[0][0].where.expiresAt.lt,
-        (prisma.refreshToken.deleteMany as jest.Mock).mock.calls[0][0].where.expiresAt.lt,
-        (prisma.authorizationCode.deleteMany as jest.Mock).mock.calls[0][0].where.expiresAt.lt,
-        (prisma.impersonationSession.deleteMany as jest.Mock).mock.calls[0][0].where.expiresAt.lt,
+        prisma.session.deleteMany.mock.calls[0][0].where.expiresAt.lt,
+        prisma.loginSession.deleteMany.mock.calls[0][0].where.expiresAt.lt,
+        prisma.refreshToken.deleteMany.mock.calls[0][0].where.expiresAt.lt,
+        prisma.authorizationCode.deleteMany.mock.calls[0][0].where.expiresAt.lt,
+        prisma.impersonationSession.deleteMany.mock.calls[0][0].where.expiresAt
+          .lt,
       ];
 
       // All five calls must use the exact same Date instance / value

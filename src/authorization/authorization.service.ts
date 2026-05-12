@@ -38,7 +38,9 @@ export class AuthorizationService {
       where: { realmId: realm.id, name: dto.name },
     });
     if (existing) {
-      throw new ConflictException(`Policy '${dto.name}' already exists in this realm`);
+      throw new ConflictException(
+        `Policy '${dto.name}' already exists in this realm`,
+      );
     }
 
     const policy = await this.prisma.policy.create({
@@ -51,10 +53,10 @@ export class AuthorizationService {
         priority: dto.priority ?? 0,
         logic: dto.logic ?? 'AND',
         clientId: dto.clientId ?? null,
-        subjectConditions: dto.subjectConditions as object | undefined,
-        resourceConditions: dto.resourceConditions as object | undefined,
-        actionConditions: dto.actionConditions as object | undefined,
-        environmentConditions: dto.environmentConditions as object | undefined,
+        subjectConditions: dto.subjectConditions,
+        resourceConditions: dto.resourceConditions,
+        actionConditions: dto.actionConditions,
+        environmentConditions: dto.environmentConditions,
       },
     });
 
@@ -92,10 +94,10 @@ export class AuthorizationService {
         priority: dto.priority,
         logic: dto.logic,
         clientId: dto.clientId,
-        subjectConditions: dto.subjectConditions as object | undefined,
-        resourceConditions: dto.resourceConditions as object | undefined,
-        actionConditions: dto.actionConditions as object | undefined,
-        environmentConditions: dto.environmentConditions as object | undefined,
+        subjectConditions: dto.subjectConditions,
+        resourceConditions: dto.resourceConditions,
+        actionConditions: dto.actionConditions,
+        environmentConditions: dto.environmentConditions,
       },
     });
 
@@ -144,7 +146,7 @@ export class AuthorizationService {
     const elapsed = Date.now() - start;
     this.logger.debug(
       `Policy evaluation for realm "${realm.name}" took ${elapsed}ms — ` +
-      `decision: ${result.decision}, policies evaluated: ${result.evaluatedCount}`,
+        `decision: ${result.decision}, policies evaluated: ${result.evaluatedCount}`,
     );
 
     return result;
@@ -158,7 +160,11 @@ export class AuthorizationService {
     realm: Realm,
     id: string,
     dto: TestPolicyDto,
-  ): Promise<{ matched: boolean; effect: 'ALLOW' | 'DENY'; detail: PolicyMatchDetail }> {
+  ): Promise<{
+    matched: boolean;
+    effect: 'ALLOW' | 'DENY';
+    detail: PolicyMatchDetail;
+  }> {
     const policy = await this.findPolicyById(realm, id);
 
     const request: PolicyEvaluationRequest = {
@@ -168,7 +174,7 @@ export class AuthorizationService {
       environment: dto.environment,
     };
 
-    const detail = evaluatePolicy(policy as unknown as RawPolicy, request);
+    const detail = evaluatePolicy(policy, request);
 
     return {
       matched: detail.matched,
@@ -193,9 +199,9 @@ export class AuthorizationService {
       orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
     });
 
-    await this.cache.cacheRealmConfig(cacheKey, policies as unknown as object, POLICY_CACHE_TTL);
+    await this.cache.cacheRealmConfig(cacheKey, policies, POLICY_CACHE_TTL);
 
-    return policies as unknown as RawPolicy[];
+    return policies;
   }
 
   private async invalidatePolicyCache(realmId: string): Promise<void> {

@@ -11,16 +11,26 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { JwkService } from '../crypto/jwk.service.js';
 import { ScopesService } from '../scopes/scopes.service.js';
-import { ProtocolMapperExecutor, type MapperContext } from '../scopes/protocol-mapper.executor.js';
+import {
+  ProtocolMapperExecutor,
+  type MapperContext,
+} from '../scopes/protocol-mapper.executor.js';
 import { BruteForceService } from '../brute-force/brute-force.service.js';
 import { PasswordPolicyService } from '../password-policy/password-policy.service.js';
 import { MfaService } from '../mfa/mfa.service.js';
 import { EventsService } from '../events/events.service.js';
 import { MetricsService } from '../metrics/metrics.service.js';
 import { LoginEventType } from '../events/event-types.js';
-import { resolveUserClaims, type UserClaimSource } from '../scopes/claims.resolver.js';
+import {
+  resolveUserClaims,
+  type UserClaimSource,
+} from '../scopes/claims.resolver.js';
 import { CustomAttributesService } from '../custom-attributes/custom-attributes.service.js';
-import { StepUpService, ACR_PASSWORD, ACR_MFA } from '../step-up/step-up.service.js';
+import {
+  StepUpService,
+  ACR_PASSWORD,
+  ACR_MFA,
+} from '../step-up/step-up.service.js';
 import type { PluginManagerService } from '../plugins/plugin-manager.service.js';
 import type { Realm } from '@prisma/client';
 import type { JWTPayload } from 'jose';
@@ -110,14 +120,26 @@ export class AuthService {
     // Brute force check
     const lockStatus = this.bruteForceService.checkLocked(realm, user);
     if (lockStatus.locked) {
-      throw new UnauthorizedException('Account is temporarily locked. Please try again later.');
+      throw new UnauthorizedException(
+        'Account is temporarily locked. Please try again later.',
+      );
     }
 
     const valid = await this.crypto.verifyPassword(user.passwordHash, password);
     if (!valid) {
       await this.bruteForceService.recordFailure(realm, user.id, ip);
-      this.eventsService.recordLoginEvent({ realmId: realm.id, type: LoginEventType.LOGIN_ERROR, userId: user.id, clientId: client_id, ipAddress: ip, error: 'Invalid credentials' });
-      this.metricsService.authLoginTotal.inc({ realm: realm.name, status: 'failure' });
+      this.eventsService.recordLoginEvent({
+        realmId: realm.id,
+        type: LoginEventType.LOGIN_ERROR,
+        userId: user.id,
+        clientId: client_id,
+        ipAddress: ip,
+        error: 'Invalid credentials',
+      });
+      this.metricsService.authLoginTotal.inc({
+        realm: realm.name,
+        status: 'failure',
+      });
       throw new UnauthorizedException('Invalid credentials');
     }
 
@@ -126,7 +148,9 @@ export class AuthService {
 
     // Check password expiry
     if (this.passwordPolicyService.isExpired(user, realm)) {
-      throw new BadRequestException('Password has expired. Please change your password.');
+      throw new BadRequestException(
+        'Password has expired. Please change your password.',
+      );
     }
 
     // Check MFA
@@ -134,11 +158,15 @@ export class AuthService {
     const mfaEnabled = await this.mfaService.isMfaEnabled(user.id);
 
     if (mfaRequired && mfaEnabled) {
-      const mfaToken = await this.mfaService.createMfaChallenge(user.id, realm.id);
+      const mfaToken = await this.mfaService.createMfaChallenge(
+        user.id,
+        realm.id,
+      );
       throw new HttpException(
         {
           error: 'mfa_required',
-          error_description: 'MFA verification is required to complete authentication',
+          error_description:
+            'MFA verification is required to complete authentication',
           mfa_token: mfaToken,
         },
         HttpStatus.UNAUTHORIZED,
@@ -146,7 +174,9 @@ export class AuthService {
     }
 
     if (mfaRequired && !mfaEnabled) {
-      throw new BadRequestException('MFA setup required. Please set up two-factor authentication.');
+      throw new BadRequestException(
+        'MFA setup required. Please set up two-factor authentication.',
+      );
     }
 
     await this.enforceSessionLimit(realm, user.id);
@@ -160,11 +190,34 @@ export class AuthService {
       },
     });
 
-    this.eventsService.recordLoginEvent({ realmId: realm.id, type: LoginEventType.LOGIN, userId: user.id, sessionId: session.id, clientId: client_id, ipAddress: ip });
-    this.metricsService.authLoginTotal.inc({ realm: realm.name, status: 'success' });
-    this.metricsService.authTokenIssuedTotal.inc({ realm: realm.name, grant_type: 'password' });
+    this.eventsService.recordLoginEvent({
+      realmId: realm.id,
+      type: LoginEventType.LOGIN,
+      userId: user.id,
+      sessionId: session.id,
+      clientId: client_id,
+      ipAddress: ip,
+    });
+    this.metricsService.authLoginTotal.inc({
+      realm: realm.name,
+      status: 'success',
+    });
+    this.metricsService.authTokenIssuedTotal.inc({
+      realm: realm.name,
+      grant_type: 'password',
+    });
 
-    return this.issueTokens(realm, user, client_id, session.id, scope, undefined, new Date(), ACR_PASSWORD, ['pwd']);
+    return this.issueTokens(
+      realm,
+      user,
+      client_id,
+      session.id,
+      scope,
+      undefined,
+      new Date(),
+      ACR_PASSWORD,
+      ['pwd'],
+    );
   }
 
   private async handleMfaOtpGrant(
@@ -181,16 +234,24 @@ export class AuthService {
     // also permitted by passing undefined (skipping the grant-type allowlist check)
     // because the user has already authenticated via the password grant and is
     // simply completing the second factor here.
-    await this.validateClient(realm, client_id, client_secret, 'urn:ietf:params:oauth:grant-type:mfa-otp');
+    await this.validateClient(
+      realm,
+      client_id,
+      client_secret,
+      'urn:ietf:params:oauth:grant-type:mfa-otp',
+    );
 
     if (!mfa_token || !otp) {
       throw new BadRequestException('mfa_token and otp are required');
     }
 
     // Validate with attempt tracking (does not consume the challenge)
-    const challenge = await this.mfaService.validateMfaChallengeWithAttemptCheck(mfa_token);
+    const challenge =
+      await this.mfaService.validateMfaChallengeWithAttemptCheck(mfa_token);
     if (!challenge) {
-      throw new UnauthorizedException('Invalid or expired MFA token, or too many failed attempts');
+      throw new UnauthorizedException(
+        'Invalid or expired MFA token, or too many failed attempts',
+      );
     }
 
     // Ensure the challenge was issued for this realm (prevents cross-realm token reuse)
@@ -198,15 +259,26 @@ export class AuthService {
       this.logger.warn(
         `MFA cross-realm token use attempt: challenge realm ${challenge.realmId} used against realm ${realm.id}`,
       );
-      throw new UnauthorizedException('Invalid or expired MFA token, or too many failed attempts');
+      throw new UnauthorizedException(
+        'Invalid or expired MFA token, or too many failed attempts',
+      );
     }
 
     const verified = await this.mfaService.verifyTotp(challenge.userId, otp);
     if (!verified) {
       // Try as recovery code
-      const recoveryVerified = await this.mfaService.verifyRecoveryCode(challenge.userId, otp);
+      const recoveryVerified = await this.mfaService.verifyRecoveryCode(
+        challenge.userId,
+        otp,
+      );
       if (!recoveryVerified) {
-        this.eventsService.recordLoginEvent({ realmId: realm.id, type: LoginEventType.MFA_VERIFY_ERROR, userId: challenge.userId, ipAddress: ip, error: 'Invalid OTP code' });
+        this.eventsService.recordLoginEvent({
+          realmId: realm.id,
+          type: LoginEventType.MFA_VERIFY_ERROR,
+          userId: challenge.userId,
+          ipAddress: ip,
+          error: 'Invalid OTP code',
+        });
         throw new UnauthorizedException('Invalid OTP code');
       }
     }
@@ -232,10 +304,30 @@ export class AuthService {
       },
     });
 
-    this.eventsService.recordLoginEvent({ realmId: realm.id, type: LoginEventType.MFA_VERIFY, userId: user.id, sessionId: session.id, clientId: client_id, ipAddress: ip });
-    this.metricsService.authTokenIssuedTotal.inc({ realm: realm.name, grant_type: 'mfa_otp' });
+    this.eventsService.recordLoginEvent({
+      realmId: realm.id,
+      type: LoginEventType.MFA_VERIFY,
+      userId: user.id,
+      sessionId: session.id,
+      clientId: client_id,
+      ipAddress: ip,
+    });
+    this.metricsService.authTokenIssuedTotal.inc({
+      realm: realm.name,
+      grant_type: 'mfa_otp',
+    });
 
-    return this.issueTokens(realm, user, client_id, session.id, scope, undefined, new Date(), ACR_MFA, ['pwd', 'otp']);
+    return this.issueTokens(
+      realm,
+      user,
+      client_id,
+      session.id,
+      scope,
+      undefined,
+      new Date(),
+      ACR_MFA,
+      ['pwd', 'otp'],
+    );
   }
 
   private async handleClientCredentialsGrant(
@@ -287,7 +379,15 @@ export class AuthService {
           });
         }
 
-        return this.issueTokens(realm, user, client_id, session.id, scope, undefined, new Date());
+        return this.issueTokens(
+          realm,
+          user,
+          client_id,
+          session.id,
+          scope,
+          undefined,
+          new Date(),
+        );
       }
     }
 
@@ -308,8 +408,16 @@ export class AuthService {
       realm.accessTokenLifespan,
     );
 
-    this.eventsService.recordLoginEvent({ realmId: realm.id, type: LoginEventType.CLIENT_LOGIN, clientId: client_id, ipAddress: ip });
-    this.metricsService.authTokenIssuedTotal.inc({ realm: realm.name, grant_type: 'client_credentials' });
+    this.eventsService.recordLoginEvent({
+      realmId: realm.id,
+      type: LoginEventType.CLIENT_LOGIN,
+      clientId: client_id,
+      ipAddress: ip,
+    });
+    this.metricsService.authTokenIssuedTotal.inc({
+      realm: realm.name,
+      grant_type: 'client_credentials',
+    });
 
     return {
       access_token: accessToken,
@@ -354,7 +462,13 @@ export class AuthService {
           data: { revoked: true },
         });
       }
-      this.eventsService.recordLoginEvent({ realmId: realm.id, type: LoginEventType.TOKEN_REFRESH_ERROR, clientId: client_id, ipAddress: ip, error: 'Invalid or expired refresh token' });
+      this.eventsService.recordLoginEvent({
+        realmId: realm.id,
+        type: LoginEventType.TOKEN_REFRESH_ERROR,
+        clientId: client_id,
+        ipAddress: ip,
+        error: 'Invalid or expired refresh token',
+      });
       throw new UnauthorizedException('Invalid or expired refresh token');
     }
 
@@ -365,14 +479,16 @@ export class AuthService {
     if (!storedToken.clientId) {
       this.logger.warn(
         `Refresh token ${storedToken.id} has no clientId (legacy). ` +
-        `Rejecting to prevent cross-client token reuse. User must re-authenticate.`,
+          `Rejecting to prevent cross-client token reuse. User must re-authenticate.`,
       );
       throw new UnauthorizedException(
         'This refresh token predates client binding. Please log in again.',
       );
     }
     if (storedToken.clientId !== client_id) {
-      throw new UnauthorizedException('Refresh token was not issued to this client');
+      throw new UnauthorizedException(
+        'Refresh token was not issued to this client',
+      );
     }
 
     // Rotate: revoke old token
@@ -383,8 +499,18 @@ export class AuthService {
 
     const user = storedToken.session.user;
 
-    this.eventsService.recordLoginEvent({ realmId: realm.id, type: LoginEventType.TOKEN_REFRESH, userId: user.id, sessionId: storedToken.sessionId, clientId: client_id, ipAddress: ip });
-    this.metricsService.authTokenIssuedTotal.inc({ realm: realm.name, grant_type: 'refresh_token' });
+    this.eventsService.recordLoginEvent({
+      realmId: realm.id,
+      type: LoginEventType.TOKEN_REFRESH,
+      userId: user.id,
+      sessionId: storedToken.sessionId,
+      clientId: client_id,
+      ipAddress: ip,
+    });
+    this.metricsService.authTokenIssuedTotal.inc({
+      realm: realm.name,
+      grant_type: 'refresh_token',
+    });
 
     return this.issueTokens(
       realm,
@@ -421,7 +547,9 @@ export class AuthService {
     // when: (a) the code does not exist, (b) it was already used by a
     // concurrent request, or (c) it has already expired.  All three cases are
     // treated identically — the caller receives an "invalid or expired" error.
-    let authCode: Awaited<ReturnType<typeof this.prisma.authorizationCode.update>>;
+    let authCode: Awaited<
+      ReturnType<typeof this.prisma.authorizationCode.update>
+    >;
     try {
       authCode = await this.prisma.authorizationCode.update({
         where: {
@@ -437,7 +565,9 @@ export class AuthService {
         err !== null &&
         (err as { code?: string }).code === 'P2025';
       if (isPrismaNotFound) {
-        throw new UnauthorizedException('Invalid or expired authorization code');
+        throw new UnauthorizedException(
+          'Invalid or expired authorization code',
+        );
       }
       throw err;
     }
@@ -465,8 +595,7 @@ export class AuthService {
       const computedChallenge = Buffer.from(
         this.crypto.sha256(code_verifier),
         'hex',
-      )
-        .toString('base64url');
+      ).toString('base64url');
 
       if (computedChallenge !== authCode.codeChallenge) {
         throw new UnauthorizedException('Invalid code_verifier');
@@ -491,8 +620,18 @@ export class AuthService {
       },
     });
 
-    this.eventsService.recordLoginEvent({ realmId: realm.id, type: LoginEventType.CODE_TO_TOKEN, userId: user.id, sessionId: session.id, clientId: client_id, ipAddress: ip });
-    this.metricsService.authTokenIssuedTotal.inc({ realm: realm.name, grant_type: 'authorization_code' });
+    this.eventsService.recordLoginEvent({
+      realmId: realm.id,
+      type: LoginEventType.CODE_TO_TOKEN,
+      userId: user.id,
+      sessionId: session.id,
+      clientId: client_id,
+      ipAddress: ip,
+    });
+    this.metricsService.authTokenIssuedTotal.inc({
+      realm: realm.name,
+      grant_type: 'authorization_code',
+    });
 
     // Resolve ACR from the auth code's stored acr_values (set at authorization time)
     const storedAcrValues = authCode.acrValues;
@@ -526,7 +665,12 @@ export class AuthService {
       throw new BadRequestException('device_code is required');
     }
 
-    await this.validateClient(realm, client_id, client_secret, 'urn:ietf:params:oauth:grant-type:device_code');
+    await this.validateClient(
+      realm,
+      client_id,
+      client_secret,
+      'urn:ietf:params:oauth:grant-type:device_code',
+    );
 
     const deviceCode = await this.prisma.deviceCode.findUnique({
       where: { deviceCode: device_code },
@@ -607,8 +751,18 @@ export class AuthService {
       },
     });
 
-    this.eventsService.recordLoginEvent({ realmId: realm.id, type: LoginEventType.DEVICE_CODE_TO_TOKEN, userId: user.id, sessionId: session.id, clientId: client_id, ipAddress: ip });
-    this.metricsService.authTokenIssuedTotal.inc({ realm: realm.name, grant_type: 'device_code' });
+    this.eventsService.recordLoginEvent({
+      realmId: realm.id,
+      type: LoginEventType.DEVICE_CODE_TO_TOKEN,
+      userId: user.id,
+      sessionId: session.id,
+      clientId: client_id,
+      ipAddress: ip,
+    });
+    this.metricsService.authTokenIssuedTotal.inc({
+      realm: realm.name,
+      grant_type: 'device_code',
+    });
 
     return this.issueTokens(
       realm,
@@ -650,7 +804,9 @@ export class AuthService {
         client.grantTypes.includes(DEVICE_URN) ||
         client.grantTypes.includes('device_code');
 
-      const allowed = isDeviceGrant ? clientAllowsDevice : client.grantTypes.includes(grantType);
+      const allowed = isDeviceGrant
+        ? clientAllowsDevice
+        : client.grantTypes.includes(grantType);
       if (!allowed) {
         throw new BadRequestException(
           `Grant type '${grantType}' not allowed for this client`,
@@ -697,8 +853,10 @@ export class AuthService {
     const validatedScope = this.scopesService.toString(effectiveScopes);
 
     // Resolve scope-filtered user claims
-    const allowedClaims = this.scopesService.getClaimsForScopes(effectiveScopes);
-    const customAttrClaims = await this.customAttributesService.getOidcClaimsForUser(user.id);
+    const allowedClaims =
+      this.scopesService.getClaimsForScopes(effectiveScopes);
+    const customAttrClaims =
+      await this.customAttributesService.getOidcClaimsForUser(user.id);
     const userClaims = resolveUserClaims(user, allowedClaims, customAttrClaims);
 
     // Build role claims (direct user roles + group-inherited roles)
@@ -739,7 +897,10 @@ export class AuthService {
     // Try to apply protocol mappers from DB scopes
     let mapperClaims: Record<string, unknown> = {};
     try {
-      const mappers = await this.scopesService.getScopeMappers(effectiveScopes, realm.id);
+      const mappers = await this.scopesService.getScopeMappers(
+        effectiveScopes,
+        realm.id,
+      );
       if (mappers.length > 0) {
         const mapperContext: MapperContext = {
           userId: user.id,
@@ -751,7 +912,11 @@ export class AuthService {
           realmRoles,
           resourceAccess,
         };
-        mapperClaims = this.protocolMapperExecutor.executeMappers(mappers, mapperContext, {});
+        mapperClaims = this.protocolMapperExecutor.executeMappers(
+          mappers,
+          mapperContext,
+          {},
+        );
       }
     } catch {
       // If mappers fail, fall back to standard claims
@@ -785,7 +950,7 @@ export class AuthService {
       : accessTokenPayload;
 
     const accessToken = await this.jwkService.signJwt(
-      enrichedPayload as unknown as JWTPayload,
+      enrichedPayload,
       signingKey.privateKey,
       signingKey.kid,
       realm.accessTokenLifespan,
@@ -856,8 +1021,13 @@ export class AuthService {
     code?: string;
   }): Promise<string> {
     const allowedClaims = this.scopesService.getClaimsForScopes(params.scopes);
-    const customAttrClaims = await this.customAttributesService.getOidcClaimsForUser(params.user.id);
-    const userClaims = resolveUserClaims(params.user, allowedClaims, customAttrClaims);
+    const customAttrClaims =
+      await this.customAttributesService.getOidcClaimsForUser(params.user.id);
+    const userClaims = resolveUserClaims(
+      params.user,
+      allowedClaims,
+      customAttrClaims,
+    );
 
     // Resolve the ACR claim:
     //  - Use explicitly provided acr (from step-up flow) if available
@@ -877,7 +1047,9 @@ export class AuthService {
         : Math.floor(Date.now() / 1000),
       acr: resolvedAcr,
       ...(params.amr && params.amr.length > 0 ? { amr: params.amr } : {}),
-      ...(params.code ? { c_hash: this.jwkService.computeChash(params.code) } : {}),
+      ...(params.code
+        ? { c_hash: this.jwkService.computeChash(params.code) }
+        : {}),
       ...userClaims,
     };
 
@@ -917,7 +1089,12 @@ export class AuthService {
 
     if (memberships.length === 0) return [];
 
-    type RoleWithClient = { id: string; name: string; clientId: string | null; client: { clientId: string } | null };
+    type RoleWithClient = {
+      id: string;
+      name: string;
+      clientId: string | null;
+      client: { clientId: string } | null;
+    };
     const allRoles: RoleWithClient[] = [];
     const visited = new Set<string>();
 
@@ -957,8 +1134,12 @@ export class AuthService {
    *
    * A `maxSessionsPerUser` value of 0 means "unlimited" — no eviction occurs.
    */
-  private async enforceSessionLimit(realm: Realm, userId: string): Promise<void> {
-    const maxSessions = (realm as Realm & { maxSessionsPerUser?: number }).maxSessionsPerUser;
+  private async enforceSessionLimit(
+    realm: Realm,
+    userId: string,
+  ): Promise<void> {
+    const maxSessions = (realm as Realm & { maxSessionsPerUser?: number })
+      .maxSessionsPerUser;
     if (!maxSessions || maxSessions <= 0) return;
 
     const activeSessions = await this.prisma.session.findMany({
@@ -972,7 +1153,10 @@ export class AuthService {
     });
 
     if (activeSessions.length >= maxSessions) {
-      const toEvict = activeSessions.slice(0, activeSessions.length - maxSessions + 1);
+      const toEvict = activeSessions.slice(
+        0,
+        activeSessions.length - maxSessions + 1,
+      );
       const evictIds = toEvict.map((s) => s.id);
 
       // Revoke all refresh tokens for the evicted sessions before deleting them

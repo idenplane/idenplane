@@ -63,7 +63,7 @@ describe('PasswordPolicyService', () => {
     });
 
     it('should reject a password shorter than minimum length', () => {
-      const realm = { ...baseRealm, passwordMinLength: 10 } as Realm;
+      const realm = { ...baseRealm, passwordMinLength: 10 };
 
       const result = service.validate(realm, 'short');
 
@@ -74,7 +74,7 @@ describe('PasswordPolicyService', () => {
     });
 
     it('should accept a password that exactly meets minimum length', () => {
-      const realm = { ...baseRealm, passwordMinLength: 5 } as Realm;
+      const realm = { ...baseRealm, passwordMinLength: 5 };
 
       const result = service.validate(realm, 'abcde');
 
@@ -198,7 +198,7 @@ describe('PasswordPolicyService', () => {
     });
 
     it('should pass when no policy constraints are enabled', () => {
-      const realm = { ...baseRealm, passwordMinLength: 0 } as Realm;
+      const realm = { ...baseRealm, passwordMinLength: 0 };
 
       const result = service.validate(realm, '');
 
@@ -235,8 +235,18 @@ describe('PasswordPolicyService', () => {
 
     it('should return true when password matches a history entry', async () => {
       prisma.passwordHistory.findMany.mockResolvedValue([
-        { id: 'h1', passwordHash: 'hash1', userId: 'user-1', realmId: 'realm-1' },
-        { id: 'h2', passwordHash: 'hash2', userId: 'user-1', realmId: 'realm-1' },
+        {
+          id: 'h1',
+          passwordHash: 'hash1',
+          userId: 'user-1',
+          realmId: 'realm-1',
+        },
+        {
+          id: 'h2',
+          passwordHash: 'hash2',
+          userId: 'user-1',
+          realmId: 'realm-1',
+        },
       ]);
       crypto.verifyPassword
         .mockResolvedValueOnce(false)
@@ -257,7 +267,12 @@ describe('PasswordPolicyService', () => {
 
     it('should return false when password does not match any history entry', async () => {
       prisma.passwordHistory.findMany.mockResolvedValue([
-        { id: 'h1', passwordHash: 'hash1', userId: 'user-1', realmId: 'realm-1' },
+        {
+          id: 'h1',
+          passwordHash: 'hash1',
+          userId: 'user-1',
+          realmId: 'realm-1',
+        },
       ]);
       crypto.verifyPassword.mockResolvedValue(false);
 
@@ -359,7 +374,7 @@ describe('PasswordPolicyService', () => {
 
   describe('isExpired', () => {
     it('should return false when maxAgeDays <= 0', () => {
-      const realm = { ...baseRealm, passwordMaxAgeDays: 0 } as Realm;
+      const realm = { ...baseRealm, passwordMaxAgeDays: 0 };
 
       const result = service.isExpired(baseUser, realm);
 
@@ -367,7 +382,7 @@ describe('PasswordPolicyService', () => {
     });
 
     it('should return false when maxAgeDays is negative', () => {
-      const realm = { ...baseRealm, passwordMaxAgeDays: -1 } as Realm;
+      const realm = { ...baseRealm, passwordMaxAgeDays: -1 };
 
       const result = service.isExpired(baseUser, realm);
 
@@ -375,7 +390,7 @@ describe('PasswordPolicyService', () => {
     });
 
     it('should return true when passwordChangedAt is null', () => {
-      const realm = { ...baseRealm, passwordMaxAgeDays: 90 } as Realm;
+      const realm = { ...baseRealm, passwordMaxAgeDays: 90 };
       const user = { ...baseUser, passwordChangedAt: null } as User;
 
       const result = service.isExpired(user, realm);
@@ -384,11 +399,9 @@ describe('PasswordPolicyService', () => {
     });
 
     it('should return true when password is older than max age', () => {
-      const realm = { ...baseRealm, passwordMaxAgeDays: 30 } as Realm;
+      const realm = { ...baseRealm, passwordMaxAgeDays: 30 };
       // Set passwordChangedAt to 31 days ago
-      const thirtyOneDaysAgo = new Date(
-        Date.now() - 31 * 24 * 60 * 60 * 1000,
-      );
+      const thirtyOneDaysAgo = new Date(Date.now() - 31 * 24 * 60 * 60 * 1000);
       const user = {
         ...baseUser,
         passwordChangedAt: thirtyOneDaysAgo,
@@ -400,7 +413,7 @@ describe('PasswordPolicyService', () => {
     });
 
     it('should return false when password is within max age', () => {
-      const realm = { ...baseRealm, passwordMaxAgeDays: 30 } as Realm;
+      const realm = { ...baseRealm, passwordMaxAgeDays: 30 };
       // Set passwordChangedAt to 10 days ago
       const tenDaysAgo = new Date(Date.now() - 10 * 24 * 60 * 60 * 1000);
       const user = { ...baseUser, passwordChangedAt: tenDaysAgo } as User;
@@ -411,7 +424,7 @@ describe('PasswordPolicyService', () => {
     });
 
     it('should return false when password was just changed', () => {
-      const realm = { ...baseRealm, passwordMaxAgeDays: 1 } as Realm;
+      const realm = { ...baseRealm, passwordMaxAgeDays: 1 };
       const user = {
         ...baseUser,
         passwordChangedAt: new Date(),

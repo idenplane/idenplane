@@ -25,7 +25,12 @@ function createMockAdminAuthService() {
 
 function createMockRateLimitService() {
   return {
-    checkAdminApiKeyLimit: jest.fn().mockResolvedValue({ allowed: true, limit: 15, remaining: 14, resetAt: 0 }),
+    checkAdminApiKeyLimit: jest.fn().mockResolvedValue({
+      allowed: true,
+      limit: 15,
+      remaining: 14,
+      resetAt: 0,
+    }),
     computeHeaders: jest.fn().mockReturnValue({}),
   };
 }
@@ -59,7 +64,10 @@ describe('AdminApiKeyGuard', () => {
 
   it('should allow non-admin paths without any auth', async () => {
     reflector.getAllAndOverride.mockReturnValue(false);
-    const ctx = createMockExecutionContext({}, '/realms/test/protocol/openid-connect/token');
+    const ctx = createMockExecutionContext(
+      {},
+      '/realms/test/protocol/openid-connect/token',
+    );
 
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
   });
@@ -94,18 +102,25 @@ describe('AdminApiKeyGuard', () => {
 
   it('should allow admin routes when a valid Bearer token is provided', async () => {
     reflector.getAllAndOverride.mockReturnValue(false);
-    adminAuthService.validateAdminToken.mockResolvedValue({ userId: 'admin-1', roles: ['super-admin'] });
+    adminAuthService.validateAdminToken.mockResolvedValue({
+      userId: 'admin-1',
+      roles: ['super-admin'],
+    });
     const ctx = createMockExecutionContext({
       authorization: 'Bearer valid-jwt-token',
     });
 
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
-    expect(adminAuthService.validateAdminToken).toHaveBeenCalledWith('valid-jwt-token');
+    expect(adminAuthService.validateAdminToken).toHaveBeenCalledWith(
+      'valid-jwt-token',
+    );
   });
 
   it('should fall back to API key when Bearer token is invalid', async () => {
     reflector.getAllAndOverride.mockReturnValue(false);
-    adminAuthService.validateAdminToken.mockRejectedValue(new Error('Invalid token'));
+    adminAuthService.validateAdminToken.mockRejectedValue(
+      new Error('Invalid token'),
+    );
     configService.get.mockReturnValue('my-key');
     const ctx = createMockExecutionContext({
       authorization: 'Bearer bad-token',

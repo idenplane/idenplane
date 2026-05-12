@@ -8,7 +8,13 @@ import {
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiResponse,
+} from '@nestjs/swagger';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { SessionRiskEvaluator } from './session-risk-evaluator.js';
 
@@ -25,11 +31,18 @@ export class SessionRiskController {
 
   @Get()
   @ApiOperation({ summary: 'List session risk profiles for a realm' })
-  @ApiResponse({ status: 200, description: 'Paginated list of session risk profiles' })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated list of session risk profiles',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
   @ApiQuery({ name: 'userId', required: false })
-  @ApiQuery({ name: 'riskLevel', required: false, enum: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] })
+  @ApiQuery({
+    name: 'riskLevel',
+    required: false,
+    enum: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'],
+  })
   @ApiQuery({ name: 'stepUpRequired', required: false })
   @ApiQuery({ name: 'first', required: false })
   @ApiQuery({ name: 'max', required: false })
@@ -67,35 +80,49 @@ export class SessionRiskController {
 
   @Get('dashboard')
   @ApiOperation({ summary: 'Session risk distribution and trends' })
-  @ApiResponse({ status: 200, description: 'Session risk dashboard data for the last 30 days' })
+  @ApiResponse({
+    status: 200,
+    description: 'Session risk dashboard data for the last 30 days',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
   async getDashboard(@Param('realm') realmName: string) {
     const realm = await this.requireRealm(realmName);
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // last 30 days
 
-    const [allRecentEvents, stepUpRequiredSessions, terminatedSessions, activeProfiles, profilesByLevel] =
-      await Promise.all([
-        this.prisma.continuousRiskEvent.findMany({
-          where: { realmId: realm.id, evaluatedAt: { gte: since } },
-          select: { riskScoreAfter: true, riskLevelAfter: true, action: true, trustScoreAfter: true, evaluatedAt: true },
-          orderBy: { evaluatedAt: 'asc' },
-        }),
-        this.prisma.sessionRiskProfile.count({
-          where: { realmId: realm.id, stepUpRequired: true },
-        }),
-        this.prisma.sessionRiskProfile.count({
-          where: { realmId: realm.id, terminateSession: true },
-        }),
-        this.prisma.sessionRiskProfile.count({
-          where: { realmId: realm.id },
-        }),
-        this.prisma.sessionRiskProfile.groupBy({
-          by: ['riskLevel'],
-          where: { realmId: realm.id },
-          _count: { id: true },
-        }),
-      ]);
+    const [
+      allRecentEvents,
+      stepUpRequiredSessions,
+      terminatedSessions,
+      activeProfiles,
+      profilesByLevel,
+    ] = await Promise.all([
+      this.prisma.continuousRiskEvent.findMany({
+        where: { realmId: realm.id, evaluatedAt: { gte: since } },
+        select: {
+          riskScoreAfter: true,
+          riskLevelAfter: true,
+          action: true,
+          trustScoreAfter: true,
+          evaluatedAt: true,
+        },
+        orderBy: { evaluatedAt: 'asc' },
+      }),
+      this.prisma.sessionRiskProfile.count({
+        where: { realmId: realm.id, stepUpRequired: true },
+      }),
+      this.prisma.sessionRiskProfile.count({
+        where: { realmId: realm.id, terminateSession: true },
+      }),
+      this.prisma.sessionRiskProfile.count({
+        where: { realmId: realm.id },
+      }),
+      this.prisma.sessionRiskProfile.groupBy({
+        by: ['riskLevel'],
+        where: { realmId: realm.id },
+        _count: { id: true },
+      }),
+    ]);
 
     // Score distribution buckets
     const distribution = { LOW: 0, MEDIUM: 0, HIGH: 0, CRITICAL: 0 };
@@ -107,7 +134,10 @@ export class SessionRiskController {
     }
 
     // Daily trend (last 30 days)
-    const dailyMap = new Map<string, { total: number; stepUp: number; terminate: number }>();
+    const dailyMap = new Map<
+      string,
+      { total: number; stepUp: number; terminate: number }
+    >();
     for (const e of allRecentEvents) {
       const day = e.evaluatedAt.toISOString().slice(0, 10);
       const entry = dailyMap.get(day) ?? { total: 0, stepUp: 0, terminate: 0 };
@@ -123,12 +153,18 @@ export class SessionRiskController {
 
     const avgRiskScore =
       allRecentEvents.length > 0
-        ? Math.round(allRecentEvents.reduce((a, r) => a + r.riskScoreAfter, 0) / allRecentEvents.length)
+        ? Math.round(
+            allRecentEvents.reduce((a, r) => a + r.riskScoreAfter, 0) /
+              allRecentEvents.length,
+          )
         : 0;
 
     const avgTrustScore =
       allRecentEvents.length > 0
-        ? Math.round(allRecentEvents.reduce((a, r) => a + r.trustScoreAfter, 0) / allRecentEvents.length)
+        ? Math.round(
+            allRecentEvents.reduce((a, r) => a + r.trustScoreAfter, 0) /
+              allRecentEvents.length,
+          )
         : 100;
 
     return {
@@ -147,7 +183,9 @@ export class SessionRiskController {
   // ── Single session profile ─────────────────────────────────────────────────
 
   @Get(':sessionId')
-  @ApiOperation({ summary: 'Get a single session risk profile with event history' })
+  @ApiOperation({
+    summary: 'Get a single session risk profile with event history',
+  })
   @ApiResponse({ status: 200, description: 'Session risk profile details' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
@@ -162,7 +200,9 @@ export class SessionRiskController {
     });
 
     if (!profile) {
-      throw new NotFoundException(`Session risk profile for session '${sessionId}' not found`);
+      throw new NotFoundException(
+        `Session risk profile for session '${sessionId}' not found`,
+      );
     }
 
     // Fetch recent events for this session
@@ -178,7 +218,9 @@ export class SessionRiskController {
   // ── Trigger re-evaluation ──────────────────────────────────────────────────
 
   @Post(':sessionId/evaluate')
-  @ApiOperation({ summary: 'Trigger immediate risk re-evaluation for a session' })
+  @ApiOperation({
+    summary: 'Trigger immediate risk re-evaluation for a session',
+  })
   @ApiResponse({ status: 200, description: 'Risk re-evaluation result' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Session not found' })
@@ -194,7 +236,9 @@ export class SessionRiskController {
     });
 
     if (!profile) {
-      throw new NotFoundException(`Session risk profile for session '${sessionId}' not found`);
+      throw new NotFoundException(
+        `Session risk profile for session '${sessionId}' not found`,
+      );
     }
 
     const result = await this.sessionRiskEvaluator.evaluateSessionNow(

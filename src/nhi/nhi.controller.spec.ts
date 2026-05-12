@@ -101,10 +101,7 @@ describe('NhiController', () => {
       queryAuditLogs: jest.fn(),
       clearAuditLogs: jest.fn(),
     };
-    controller = new NhiController(
-      nhiService as any,
-      nhiAuditService as any,
-    );
+    controller = new NhiController(nhiService as any, nhiAuditService as any);
   });
 
   // ── Identity endpoints ───────────────────────────────────────────────────
@@ -152,7 +149,11 @@ describe('NhiController', () => {
       const result = await controller.update(mockRealm, 'nhi-uuid-1', dto);
 
       expect(result).toEqual(updated);
-      expect(nhiService.update).toHaveBeenCalledWith(mockRealm, 'nhi-uuid-1', dto);
+      expect(nhiService.update).toHaveBeenCalledWith(
+        mockRealm,
+        'nhi-uuid-1',
+        dto,
+      );
     });
   });
 
@@ -188,19 +189,28 @@ describe('NhiController', () => {
       const result = await controller.reactivate(mockRealm, 'nhi-uuid-1');
 
       expect(result).toEqual(reactivated);
-      expect(nhiService.reactivate).toHaveBeenCalledWith(mockRealm, 'nhi-uuid-1');
+      expect(nhiService.reactivate).toHaveBeenCalledWith(
+        mockRealm,
+        'nhi-uuid-1',
+      );
     });
   });
 
   describe('decommission', () => {
     it('should delegate to nhiService.decommission with realm and id', async () => {
-      const decommissioned = { ...mockIdentity, lifecycleStatus: 'DECOMMISSIONED' };
+      const decommissioned = {
+        ...mockIdentity,
+        lifecycleStatus: 'DECOMMISSIONED',
+      };
       nhiService.decommission.mockResolvedValue(decommissioned);
 
       const result = await controller.decommission(mockRealm, 'nhi-uuid-1');
 
       expect(result).toEqual(decommissioned);
-      expect(nhiService.decommission).toHaveBeenCalledWith(mockRealm, 'nhi-uuid-1');
+      expect(nhiService.decommission).toHaveBeenCalledWith(
+        mockRealm,
+        'nhi-uuid-1',
+      );
     });
   });
 
@@ -208,14 +218,26 @@ describe('NhiController', () => {
 
   describe('createCredential', () => {
     it('should delegate to nhiService.createCredential with realm, id, and dto', async () => {
-      const credential = { id: 'cred-uuid-1', name: 'test-cred', credentialType: 'API_KEY' };
+      const credential = {
+        id: 'cred-uuid-1',
+        name: 'test-cred',
+        credentialType: 'API_KEY',
+      };
       nhiService.createCredential.mockResolvedValue(credential);
 
       const dto = { credentialType: 'API_KEY', name: 'test-cred' };
-      const result = await controller.createCredential(mockRealm, 'nhi-uuid-1', dto);
+      const result = await controller.createCredential(
+        mockRealm,
+        'nhi-uuid-1',
+        dto,
+      );
 
       expect(result).toEqual(credential);
-      expect(nhiService.createCredential).toHaveBeenCalledWith(mockRealm, 'nhi-uuid-1', dto);
+      expect(nhiService.createCredential).toHaveBeenCalledWith(
+        mockRealm,
+        'nhi-uuid-1',
+        dto,
+      );
     });
   });
 
@@ -230,18 +252,31 @@ describe('NhiController', () => {
       const result = await controller.listCredentials(mockRealm, 'nhi-uuid-1');
 
       expect(result).toEqual(credentials);
-      expect(nhiService.listCredentials).toHaveBeenCalledWith(mockRealm, 'nhi-uuid-1');
+      expect(nhiService.listCredentials).toHaveBeenCalledWith(
+        mockRealm,
+        'nhi-uuid-1',
+      );
     });
   });
 
   describe('revokeCredential', () => {
     it('should delegate to nhiService.revokeCredential with realm, id, and credentialId', async () => {
-      nhiService.revokeCredential.mockResolvedValue({ message: 'Credential revoked successfully' });
+      nhiService.revokeCredential.mockResolvedValue({
+        message: 'Credential revoked successfully',
+      });
 
-      const result = await controller.revokeCredential(mockRealm, 'nhi-uuid-1', 'cred-uuid-1');
+      const result = await controller.revokeCredential(
+        mockRealm,
+        'nhi-uuid-1',
+        'cred-uuid-1',
+      );
 
       expect(result).toEqual({ message: 'Credential revoked successfully' });
-      expect(nhiService.revokeCredential).toHaveBeenCalledWith(mockRealm, 'nhi-uuid-1', 'cred-uuid-1');
+      expect(nhiService.revokeCredential).toHaveBeenCalledWith(
+        mockRealm,
+        'nhi-uuid-1',
+        'cred-uuid-1',
+      );
     });
   });
 
@@ -253,10 +288,18 @@ describe('NhiController', () => {
       };
       nhiService.rotateCredential.mockResolvedValue(rotated);
 
-      const result = await controller.rotateCredential(mockRealm, 'nhi-uuid-1', 'cred-uuid-1');
+      const result = await controller.rotateCredential(
+        mockRealm,
+        'nhi-uuid-1',
+        'cred-uuid-1',
+      );
 
       expect(result).toEqual(rotated);
-      expect(nhiService.rotateCredential).toHaveBeenCalledWith(mockRealm, 'nhi-uuid-1', 'cred-uuid-1');
+      expect(nhiService.rotateCredential).toHaveBeenCalledWith(
+        mockRealm,
+        'nhi-uuid-1',
+        'cred-uuid-1',
+      );
     });
   });
 
@@ -276,10 +319,7 @@ describe('NhiController', () => {
       nhiService.bulkRegistration.mockResolvedValue(response);
 
       const dto = {
-        devices: [
-          { name: 'device-1' },
-          { name: 'device-2' },
-        ],
+        devices: [{ name: 'device-1' }, { name: 'device-2' }],
       };
       const result = await controller.bulkRegistration(mockRealm, dto);
 
@@ -293,8 +333,10 @@ describe('NhiController', () => {
   describe('generateDeviceCertificate', () => {
     it('should delegate to nhiService.generateDeviceCertificate with realm and dto', async () => {
       const cert = {
-        certificatePem: '-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----',
-        privateKeyPem: '-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----',
+        certificatePem:
+          '-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----',
+        privateKeyPem:
+          '-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----',
         info: {
           subject: 'CN=device-1',
           issuer: 'CN=authme',
@@ -309,7 +351,10 @@ describe('NhiController', () => {
       const result = await controller.generateDeviceCertificate(mockRealm, dto);
 
       expect(result).toEqual(cert);
-      expect(nhiService.generateDeviceCertificate).toHaveBeenCalledWith(mockRealm, dto);
+      expect(nhiService.generateDeviceCertificate).toHaveBeenCalledWith(
+        mockRealm,
+        dto,
+      );
     });
   });
 
@@ -322,11 +367,22 @@ describe('NhiController', () => {
       };
       nhiService.setCertificate.mockResolvedValue(withCert);
 
-      const dto = { certificatePem: '-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----' };
-      const result = await controller.setCertificate(mockRealm, 'nhi-uuid-1', dto);
+      const dto = {
+        certificatePem:
+          '-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----',
+      };
+      const result = await controller.setCertificate(
+        mockRealm,
+        'nhi-uuid-1',
+        dto,
+      );
 
       expect(result).toEqual(withCert);
-      expect(nhiService.setCertificate).toHaveBeenCalledWith(mockRealm, 'nhi-uuid-1', dto);
+      expect(nhiService.setCertificate).toHaveBeenCalledWith(
+        mockRealm,
+        'nhi-uuid-1',
+        dto,
+      );
     });
   });
 
@@ -345,7 +401,10 @@ describe('NhiController', () => {
       const result = await controller.getUsageStats(mockRealm, 'nhi-uuid-1');
 
       expect(result).toEqual(stats);
-      expect(nhiService.getUsageStats).toHaveBeenCalledWith(mockRealm, 'nhi-uuid-1');
+      expect(nhiService.getUsageStats).toHaveBeenCalledWith(
+        mockRealm,
+        'nhi-uuid-1',
+      );
     });
   });
 
@@ -391,7 +450,10 @@ describe('NhiController', () => {
       const result = await controller.getPolicy(mockRealm, 'policy-uuid-1');
 
       expect(result).toEqual(policy);
-      expect(nhiService.findPolicyById).toHaveBeenCalledWith(mockRealm, 'policy-uuid-1');
+      expect(nhiService.findPolicyById).toHaveBeenCalledWith(
+        mockRealm,
+        'policy-uuid-1',
+      );
     });
   });
 
@@ -401,10 +463,18 @@ describe('NhiController', () => {
       nhiService.updatePolicy.mockResolvedValue(updated);
 
       const dto = { name: 'updated-policy' };
-      const result = await controller.updatePolicy(mockRealm, 'policy-uuid-1', dto);
+      const result = await controller.updatePolicy(
+        mockRealm,
+        'policy-uuid-1',
+        dto,
+      );
 
       expect(result).toEqual(updated);
-      expect(nhiService.updatePolicy).toHaveBeenCalledWith(mockRealm, 'policy-uuid-1', dto);
+      expect(nhiService.updatePolicy).toHaveBeenCalledWith(
+        mockRealm,
+        'policy-uuid-1',
+        dto,
+      );
     });
   });
 
@@ -414,7 +484,10 @@ describe('NhiController', () => {
 
       await controller.deletePolicy(mockRealm, 'policy-uuid-1');
 
-      expect(nhiService.removePolicy).toHaveBeenCalledWith(mockRealm, 'policy-uuid-1');
+      expect(nhiService.removePolicy).toHaveBeenCalledWith(
+        mockRealm,
+        'policy-uuid-1',
+      );
     });
   });
 
@@ -428,10 +501,16 @@ describe('NhiController', () => {
       };
       nhiService.getPolicyRotationStatus.mockResolvedValue(status);
 
-      const result = await controller.getPolicyRotationStatus(mockRealm, 'policy-uuid-1');
+      const result = await controller.getPolicyRotationStatus(
+        mockRealm,
+        'policy-uuid-1',
+      );
 
       expect(result).toEqual(status);
-      expect(nhiService.getPolicyRotationStatus).toHaveBeenCalledWith(mockRealm, 'policy-uuid-1');
+      expect(nhiService.getPolicyRotationStatus).toHaveBeenCalledWith(
+        mockRealm,
+        'policy-uuid-1',
+      );
     });
   });
 
@@ -448,7 +527,9 @@ describe('NhiController', () => {
       const result = await controller.getRotationStatusSummary(mockRealm);
 
       expect(result).toEqual(summary);
-      expect(nhiService.getRotationStatusSummary).toHaveBeenCalledWith(mockRealm);
+      expect(nhiService.getRotationStatusSummary).toHaveBeenCalledWith(
+        mockRealm,
+      );
     });
   });
 
@@ -510,7 +591,10 @@ describe('NhiController', () => {
 
       await controller.clearAuditLogs(mockRealm, 'nhi-uuid-1');
 
-      expect(nhiAuditService.clearAuditLogs).toHaveBeenCalledWith('realm-1', 'nhi-uuid-1');
+      expect(nhiAuditService.clearAuditLogs).toHaveBeenCalledWith(
+        'realm-1',
+        'nhi-uuid-1',
+      );
     });
 
     it('should pass undefined when nhiIdentityId is not provided', async () => {
@@ -518,7 +602,10 @@ describe('NhiController', () => {
 
       await controller.clearAuditLogs(mockRealm);
 
-      expect(nhiAuditService.clearAuditLogs).toHaveBeenCalledWith('realm-1', undefined);
+      expect(nhiAuditService.clearAuditLogs).toHaveBeenCalledWith(
+        'realm-1',
+        undefined,
+      );
     });
   });
 });

@@ -29,7 +29,10 @@ describe('resolveUserClaims with custom attribute OIDC claims', () => {
 
   it('should include custom attribute claims even when not in allowed scope set', () => {
     const allowed = new Set(['preferred_username']);
-    const customClaims = { phone_number: '+1234567890', department: 'Engineering' };
+    const customClaims = {
+      phone_number: '+1234567890',
+      department: 'Engineering',
+    };
 
     const claims = resolveUserClaims(baseUser, allowed, customClaims);
 
@@ -69,7 +72,10 @@ describe('resolveUserClaims with custom attribute OIDC claims', () => {
 // ─── Email domain validation logic ────────────────────────────────────────────
 
 describe('Email domain validation', () => {
-  function isEmailDomainAllowed(email: string, allowedDomains: string[]): boolean {
+  function isEmailDomainAllowed(
+    email: string,
+    allowedDomains: string[],
+  ): boolean {
     if (allowedDomains.length === 0) return true;
     const domain = email.split('@')[1]?.toLowerCase() ?? '';
     return allowedDomains.map((d) => d.toLowerCase()).includes(domain);
@@ -81,18 +87,28 @@ describe('Email domain validation', () => {
   });
 
   it('should allow email when domain matches an entry', () => {
-    expect(isEmailDomainAllowed('user@company.com', ['company.com', 'partner.org'])).toBe(true);
-    expect(isEmailDomainAllowed('user@partner.org', ['company.com', 'partner.org'])).toBe(true);
+    expect(
+      isEmailDomainAllowed('user@company.com', ['company.com', 'partner.org']),
+    ).toBe(true);
+    expect(
+      isEmailDomainAllowed('user@partner.org', ['company.com', 'partner.org']),
+    ).toBe(true);
   });
 
   it('should reject email when domain is not in the allowed list', () => {
     expect(isEmailDomainAllowed('user@gmail.com', ['company.com'])).toBe(false);
-    expect(isEmailDomainAllowed('user@other.com', ['company.com', 'partner.org'])).toBe(false);
+    expect(
+      isEmailDomainAllowed('user@other.com', ['company.com', 'partner.org']),
+    ).toBe(false);
   });
 
   it('should be case-insensitive', () => {
-    expect(isEmailDomainAllowed('user@COMPANY.COM', ['company.com'])).toBe(true);
-    expect(isEmailDomainAllowed('user@company.com', ['COMPANY.COM'])).toBe(true);
+    expect(isEmailDomainAllowed('user@COMPANY.COM', ['company.com'])).toBe(
+      true,
+    );
+    expect(isEmailDomainAllowed('user@company.com', ['COMPANY.COM'])).toBe(
+      true,
+    );
   });
 
   it('should handle malformed emails gracefully', () => {
@@ -109,7 +125,10 @@ describe('Terms of service validation', () => {
   ): { valid: boolean; error?: string } {
     if (!termsOfServiceUrl) return { valid: true };
     if (!termsAccepted) {
-      return { valid: false, error: 'You must accept the terms of service to register.' };
+      return {
+        valid: false,
+        error: 'You must accept the terms of service to register.',
+      };
     }
     return { valid: true };
   }
@@ -126,7 +145,9 @@ describe('Terms of service validation', () => {
   });
 
   it('should pass when ToS URL is configured and accepted', () => {
-    expect(requiresTermsAcceptance('https://example.com/tos', true).valid).toBe(true);
+    expect(requiresTermsAcceptance('https://example.com/tos', true).valid).toBe(
+      true,
+    );
   });
 });
 

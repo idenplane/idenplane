@@ -50,7 +50,9 @@ describe('PreUpgradeValidatorService', () => {
       });
 
       // Mock database size query
-      mockPrisma.$queryRaw.mockResolvedValue([{ pg_size_pretty: '100 MB', size_bytes: BigInt(104857600) }]);
+      mockPrisma.$queryRaw.mockResolvedValue([
+        { pg_size_pretty: '100 MB', size_bytes: BigInt(104857600) },
+      ]);
 
       const result = await validatorService.validate('2.1.0');
 
@@ -74,13 +76,19 @@ describe('PreUpgradeValidatorService', () => {
         return '';
       });
 
-      mockPrisma.$queryRaw.mockResolvedValue([{ pg_size_pretty: '100 MB', size_bytes: BigInt(104857600) }]);
+      mockPrisma.$queryRaw.mockResolvedValue([
+        { pg_size_pretty: '100 MB', size_bytes: BigInt(104857600) },
+      ]);
 
       const result = await validatorService.validate('2.1.0');
 
       expect(result.canProceed).toBe(false);
       expect(result.summary.failures).toBeGreaterThan(0);
-      expect(result.checks.some((c) => c.name === 'database_connection' && c.status === 'fail')).toBe(true);
+      expect(
+        result.checks.some(
+          (c) => c.name === 'database_connection' && c.status === 'fail',
+        ),
+      ).toBe(true);
     });
   });
 
@@ -193,7 +201,9 @@ migration-3   [x] Applied
 
   describe('checkDatabaseSize', () => {
     it('should return pass for small database (<10GB)', async () => {
-      mockPrisma.$queryRaw.mockResolvedValue([{ pg_size_pretty: '500 MB', size_bytes: BigInt(524288000) }]);
+      mockPrisma.$queryRaw.mockResolvedValue([
+        { pg_size_pretty: '500 MB', size_bytes: BigInt(524288000) },
+      ]);
 
       const check = await (validatorService as any).checkDatabaseSize();
 
@@ -202,7 +212,9 @@ migration-3   [x] Applied
     });
 
     it('should return warn for large database (10-50GB)', async () => {
-      mockPrisma.$queryRaw.mockResolvedValue([{ pg_size_pretty: '15 GB', size_bytes: BigInt(16106127360) }]);
+      mockPrisma.$queryRaw.mockResolvedValue([
+        { pg_size_pretty: '15 GB', size_bytes: BigInt(16106127360) },
+      ]);
 
       const check = await (validatorService as any).checkDatabaseSize();
 
@@ -211,7 +223,9 @@ migration-3   [x] Applied
     });
 
     it('should return fail for very large database (>50GB)', async () => {
-      mockPrisma.$queryRaw.mockResolvedValue([{ pg_size_pretty: '60 GB', size_bytes: BigInt(64424509440) }]);
+      mockPrisma.$queryRaw.mockResolvedValue([
+        { pg_size_pretty: '60 GB', size_bytes: BigInt(64424509440) },
+      ]);
 
       const check = await (validatorService as any).checkDatabaseSize();
 
@@ -255,7 +269,9 @@ migration-3   [x] Applied
     it('should return pass when no long-running transactions', async () => {
       mockPrisma.$queryRaw.mockResolvedValue([]);
 
-      const check = await (validatorService as any).checkLongRunningTransactions();
+      const check = await (
+        validatorService as any
+      ).checkLongRunningTransactions();
 
       expect(check.name).toBe('long_running_transactions');
       expect(check.status).toBe('pass');
@@ -268,7 +284,9 @@ migration-3   [x] Applied
         { pid: 5678, duration_seconds: 60, state: 'active' },
       ]);
 
-      const check = await (validatorService as any).checkLongRunningTransactions();
+      const check = await (
+        validatorService as any
+      ).checkLongRunningTransactions();
 
       expect(check.name).toBe('long_running_transactions');
       expect(check.status).toBe('warn');

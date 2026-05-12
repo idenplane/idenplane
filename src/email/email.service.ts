@@ -16,7 +16,9 @@ export class EmailService {
     return !!realm?.smtpHost;
   }
 
-  async sendTestEmail(realmName: string): Promise<{ success: boolean; error?: string }> {
+  async sendTestEmail(
+    realmName: string,
+  ): Promise<{ success: boolean; error?: string }> {
     const realm = await this.prisma.realm.findUnique({
       where: { name: realmName },
       select: {
@@ -54,7 +56,9 @@ export class EmailService {
       return { success: true };
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : 'Unknown error';
-      this.logger.error(`Failed to send test email for realm "${realmName}": ${errorMessage}`);
+      this.logger.error(
+        `Failed to send test email for realm "${realmName}": ${errorMessage}`,
+      );
       return { success: false, error: errorMessage };
     }
   }
@@ -78,7 +82,9 @@ export class EmailService {
     });
 
     if (!realm?.smtpHost) {
-      this.logger.warn(`SMTP not configured for realm "${realmName}", skipping email to ${to}`);
+      this.logger.warn(
+        `SMTP not configured for realm "${realmName}", skipping email to ${to}`,
+      );
       return;
     }
 
@@ -98,6 +104,8 @@ export class EmailService {
       html,
     });
 
-    this.logger.log(`Email sent to ${to} (realm: ${realmName}, subject: ${subject})`);
+    this.logger.log(
+      `Email sent to ${to} (realm: ${realmName}, subject: ${subject})`,
+    );
   }
 }

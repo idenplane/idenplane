@@ -15,7 +15,10 @@ import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { MagicLinkService } from './magic-link.service.js';
-import { MagicLinkRequestDto, MagicLinkVerifyDto } from './dto/magic-link-request.dto.js';
+import {
+  MagicLinkRequestDto,
+  MagicLinkVerifyDto,
+} from './dto/magic-link-request.dto.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
@@ -37,7 +40,10 @@ export class MagicLinkController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Request a magic link email' })
   @ApiResponse({ status: 200, description: 'Magic link request processed' })
-  @ApiResponse({ status: 400, description: 'Invalid request or rate limit exceeded' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid request or rate limit exceeded',
+  })
   @RateLimitByIp()
   async requestMagicLink(
     @CurrentRealm() realm: Realm,
@@ -59,8 +65,16 @@ export class MagicLinkController {
   @Get('magic-link/verify')
   @ApiOperation({ summary: 'Verify a magic link token' })
   @ApiResponse({ status: 200, description: 'Token is valid' })
-  @ApiResponse({ status: 400, description: 'Invalid, expired, or already used token' })
-  @ApiQuery({ name: 'token', required: true, type: String, description: 'The magic link token' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid, expired, or already used token',
+  })
+  @ApiQuery({
+    name: 'token',
+    required: true,
+    type: String,
+    description: 'The magic link token',
+  })
   async verifyMagicLink(@Query() dto: MagicLinkVerifyDto) {
     if (!dto.token) {
       throw new BadRequestException('Token is required');

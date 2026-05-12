@@ -1,4 +1,9 @@
-import { Injectable, Logger, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { JwkService } from '../crypto/jwk.service.js';
@@ -48,12 +53,36 @@ export interface SaveClientDto {
 }
 
 const WIZARD_STEPS = [
-  { name: 'Admin Account', description: 'Create your admin account', required: true },
-  { name: 'Realm Settings', description: 'Configure your master realm', required: true },
-  { name: 'SMTP Configuration', description: 'Set up email notifications (optional)', required: false },
-  { name: 'Client Application', description: 'Create your first client application', required: true },
-  { name: 'SDK Integration', description: 'View integration code', required: false },
-  { name: 'Test Authentication', description: 'Verify your setup works', required: false },
+  {
+    name: 'Admin Account',
+    description: 'Create your admin account',
+    required: true,
+  },
+  {
+    name: 'Realm Settings',
+    description: 'Configure your master realm',
+    required: true,
+  },
+  {
+    name: 'SMTP Configuration',
+    description: 'Set up email notifications (optional)',
+    required: false,
+  },
+  {
+    name: 'Client Application',
+    description: 'Create your first client application',
+    required: true,
+  },
+  {
+    name: 'SDK Integration',
+    description: 'View integration code',
+    required: false,
+  },
+  {
+    name: 'Test Authentication',
+    description: 'Verify your setup works',
+    required: false,
+  },
 ] as const;
 
 @Injectable()
@@ -87,7 +116,8 @@ export class SetupWizardService {
     const wizardState = await this.getWizardState();
     const realmCount = await this.prisma.realm.count();
 
-    const isFirstRun = realmCount === 0 && !wizardState.completed && !wizardState.skipped;
+    const isFirstRun =
+      realmCount === 0 && !wizardState.completed && !wizardState.skipped;
 
     const steps: WizardStepInfo[] = WIZARD_STEPS.map((step, index) => ({
       index,
@@ -204,7 +234,9 @@ export class SetupWizardService {
 
     // Validate realm exists
     if (!state.realmName) {
-      throw new BadRequestException('Realm must be created before adding a client');
+      throw new BadRequestException(
+        'Realm must be created before adding a client',
+      );
     }
 
     const realm = await this.prisma.realm.findUnique({
@@ -212,16 +244,22 @@ export class SetupWizardService {
     });
 
     if (!realm) {
-      throw new BadRequestException('Realm not found. Please complete Step 2 first.');
+      throw new BadRequestException(
+        'Realm not found. Please complete Step 2 first.',
+      );
     }
 
     // Check if client already exists
     const existingClient = await this.prisma.client.findUnique({
-      where: { realmId_clientId: { realmId: realm.id, clientId: dto.clientId } },
+      where: {
+        realmId_clientId: { realmId: realm.id, clientId: dto.clientId },
+      },
     });
 
     if (existingClient) {
-      throw new BadRequestException(`Client '${dto.clientId}' already exists in realm '${realm.name}'`);
+      throw new BadRequestException(
+        `Client '${dto.clientId}' already exists in realm '${realm.name}'`,
+      );
     }
 
     // Generate client secret
@@ -273,11 +311,15 @@ export class SetupWizardService {
 
     // Validate all required steps are completed
     if (!state.adminUsername || !state.adminPasswordHash) {
-      throw new BadRequestException('Admin account must be created before completing the wizard');
+      throw new BadRequestException(
+        'Admin account must be created before completing the wizard',
+      );
     }
 
     if (!state.realmName) {
-      throw new BadRequestException('Realm must be created before completing the wizard');
+      throw new BadRequestException(
+        'Realm must be created before completing the wizard',
+      );
     }
 
     // Create master realm with signing key
@@ -286,19 +328,25 @@ export class SetupWizardService {
     // Build SMTP data if config exists
     const smtpData = state.smtpConfig
       ? {
-          smtpHost: (state.smtpConfig as Record<string, unknown>).host as string,
-          smtpPort: (state.smtpConfig as Record<string, unknown>).port as number,
-          smtpUser: (state.smtpConfig as Record<string, unknown>).user as string,
-          smtpPassword: (state.smtpConfig as Record<string, unknown>).password as string,
-          smtpFrom: (state.smtpConfig as Record<string, unknown>).from as string,
-          smtpSecure: (state.smtpConfig as Record<string, unknown>).secure as boolean,
+          smtpHost: (state.smtpConfig as Record<string, unknown>)
+            .host as string,
+          smtpPort: (state.smtpConfig as Record<string, unknown>)
+            .port as number,
+          smtpUser: (state.smtpConfig as Record<string, unknown>)
+            .user as string,
+          smtpPassword: (state.smtpConfig as Record<string, unknown>)
+            .password as string,
+          smtpFrom: (state.smtpConfig as Record<string, unknown>)
+            .from as string,
+          smtpSecure: (state.smtpConfig as Record<string, unknown>)
+            .secure as boolean,
         }
       : {};
 
     // Create realm
     const realm = await this.prisma.realm.create({
       data: {
-        name: state.realmName!,
+        name: state.realmName,
         displayName: state.realmDisplayName || state.realmName,
         enabled: true,
         ...smtpData,
@@ -323,11 +371,19 @@ export class SetupWizardService {
     });
 
     await this.prisma.role.create({
-      data: { realmId: realm.id, name: 'realm-admin', description: 'Manage specific realms' },
+      data: {
+        realmId: realm.id,
+        name: 'realm-admin',
+        description: 'Manage specific realms',
+      },
     });
 
     await this.prisma.role.create({
-      data: { realmId: realm.id, name: 'view-only', description: 'Read-only access' },
+      data: {
+        realmId: realm.id,
+        name: 'view-only',
+        description: 'Read-only access',
+      },
     });
 
     // Create admin user
@@ -359,7 +415,9 @@ export class SetupWizardService {
       },
     });
 
-    this.logger.log(`Wizard completed. Realm '${realm.name}' created with admin user '${state.adminUsername}'`);
+    this.logger.log(
+      `Wizard completed. Realm '${realm.name}' created with admin user '${state.adminUsername}'`,
+    );
 
     return {
       success: true,
@@ -445,7 +503,9 @@ export class SetupWizardService {
       try {
         const url = new URL(uri);
         if (!['http:', 'https:'].includes(url.protocol)) {
-          throw new BadRequestException(`Redirect URI must use http or https protocol: ${uri}`);
+          throw new BadRequestException(
+            `Redirect URI must use http or https protocol: ${uri}`,
+          );
         }
       } catch {
         throw new BadRequestException(`Invalid redirect URI format: ${uri}`);

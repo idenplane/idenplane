@@ -1,4 +1,15 @@
-import { IsString, IsOptional, IsBoolean, IsInt, IsArray, IsEmail, IsObject, MinLength, Min, Matches } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsInt,
+  IsArray,
+  IsEmail,
+  IsObject,
+  MinLength,
+  Min,
+  Matches,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 /**
@@ -51,7 +62,9 @@ export class WizardStateDto {
   @IsString()
   clientId?: string;
 
-  @ApiPropertyOptional({ description: 'Client secret (only available during wizard)' })
+  @ApiPropertyOptional({
+    description: 'Client secret (only available during wizard)',
+  })
   @IsOptional()
   @IsString()
   clientSecret?: string;
@@ -188,7 +201,8 @@ export class SaveRealmSettingsDto {
   @IsString()
   @MinLength(2)
   @Matches(/^[a-z][a-z0-9-]*$/, {
-    message: 'Realm name must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens',
+    message:
+      'Realm name must start with a lowercase letter and contain only lowercase letters, numbers, and hyphens',
   })
   name!: string;
 

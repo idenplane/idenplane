@@ -19,7 +19,8 @@ export const LoginEventType = {
   IMPERSONATION_END: 'IMPERSONATION_END',
 } as const;
 
-export type LoginEventTypeValue = (typeof LoginEventType)[keyof typeof LoginEventType];
+export type LoginEventTypeValue =
+  (typeof LoginEventType)[keyof typeof LoginEventType];
 
 export const OperationType = {
   CREATE: 'CREATE',
@@ -28,7 +29,8 @@ export const OperationType = {
   PATCH: 'PATCH',
 } as const;
 
-export type OperationTypeValue = (typeof OperationType)[keyof typeof OperationType];
+export type OperationTypeValue =
+  (typeof OperationType)[keyof typeof OperationType];
 
 export const ResourceType = {
   USER: 'USER',
@@ -57,4 +59,5 @@ export const ResourceType = {
   SCIM_ATTRIBUTE_MAPPING: 'SCIM_ATTRIBUTE_MAPPING',
 } as const;
 
-export type ResourceTypeValue = (typeof ResourceType)[keyof typeof ResourceType];
+export type ResourceTypeValue =
+  (typeof ResourceType)[keyof typeof ResourceType];

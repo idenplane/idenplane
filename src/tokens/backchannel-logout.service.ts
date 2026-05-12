@@ -12,11 +12,7 @@ export class BackchannelLogoutService {
     private readonly jwkService: JwkService,
   ) {}
 
-  sendLogoutTokens(
-    realm: Realm,
-    userId: string,
-    sessionId: string,
-  ): void {
+  sendLogoutTokens(realm: Realm, userId: string, sessionId: string): void {
     // Intentionally fire-and-forget: building and sending logout tokens to all
     // registered relying parties must not block the caller's token operation.
     // Each per-client promise already handles its own errors, so the

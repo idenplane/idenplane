@@ -29,7 +29,9 @@ export class WebhookSmsProvider implements SmsProvider {
       try {
         this.headers = JSON.parse(headersConfig) as WebhookHeader[];
       } catch {
-        this.logger.warn('Invalid SMS_WEBHOOK_HEADERS JSON - using defaults only');
+        this.logger.warn(
+          'Invalid SMS_WEBHOOK_HEADERS JSON - using defaults only',
+        );
         this.headers = [];
       }
     }
@@ -43,7 +45,9 @@ export class WebhookSmsProvider implements SmsProvider {
     }
 
     if (this.webhookUrl) {
-      this.logger.log(`Webhook SMS provider initialized with URL: ${this.webhookUrl}`);
+      this.logger.log(
+        `Webhook SMS provider initialized with URL: ${this.webhookUrl}`,
+      );
     } else {
       this.logger.warn('Webhook URL not configured - set SMS_WEBHOOK_URL');
     }
@@ -51,7 +55,9 @@ export class WebhookSmsProvider implements SmsProvider {
 
   async sendSms(to: string, message: string): Promise<void> {
     if (!this.webhookUrl) {
-      throw new Error('Webhook SMS provider not configured - SMS_WEBHOOK_URL is required');
+      throw new Error(
+        'Webhook SMS provider not configured - SMS_WEBHOOK_URL is required',
+      );
     }
 
     const requestHeaders: Record<string, string> = {};
@@ -92,7 +98,9 @@ export class WebhookSmsProvider implements SmsProvider {
 
       if (error instanceof Error) {
         if (error.name === 'AbortError') {
-          throw new Error(`Webhook SMS failed: Request timeout after ${this.timeoutMs}ms`);
+          throw new Error(
+            `Webhook SMS failed: Request timeout after ${this.timeoutMs}ms`,
+          );
         }
         if (error.message.startsWith('Webhook')) {
           throw error;

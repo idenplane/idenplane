@@ -1,4 +1,9 @@
-import { Injectable, Logger, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { EmailService } from '../email/email.service.js';
@@ -46,7 +51,9 @@ export class MagicLinkService {
     }
 
     if (!realm.magicLinkEnabled) {
-      throw new BadRequestException('Magic link authentication is not enabled for this realm');
+      throw new BadRequestException(
+        'Magic link authentication is not enabled for this realm',
+      );
     }
 
     // 2. Find user by email in this realm
@@ -57,14 +64,27 @@ export class MagicLinkService {
 
     if (!user) {
       // Don't reveal whether the email exists - still return success to prevent email enumeration
-      this.logger.log(`Magic link requested for unknown email ${email} in realm ${realm.name}`);
-      return { success: true, message: 'If the email is registered, a magic link will be sent' };
+      this.logger.log(
+        `Magic link requested for unknown email ${email} in realm ${realm.name}`,
+      );
+      return {
+        success: true,
+        message: 'If the email is registered, a magic link will be sent',
+      };
     }
 
     // 3. Check rate limit per email
-    const rateLimitOk = await this.checkRateLimit(realmId, email, ipAddress, realm.magicLinkRateLimitPerEmail, realm.magicLinkRateLimitWindowSeconds);
+    const rateLimitOk = await this.checkRateLimit(
+      realmId,
+      email,
+      ipAddress,
+      realm.magicLinkRateLimitPerEmail,
+      realm.magicLinkRateLimitWindowSeconds,
+    );
     if (!rateLimitOk) {
-      throw new BadRequestException('Too many magic link requests. Please try again later.');
+      throw new BadRequestException(
+        'Too many magic link requests. Please try again later.',
+      );
     }
 
     // 4. Cancel any existing pending magic link requests for this user
@@ -75,7 +95,9 @@ export class MagicLinkService {
     const tokenHash = this.crypto.sha256(rawToken);
 
     // 6. Calculate expiry
-    const expiresAt = new Date(Date.now() + (realm.magicLinkExpirySeconds ?? 300) * 1000);
+    const expiresAt = new Date(
+      Date.now() + (realm.magicLinkExpirySeconds ?? 300) * 1000,
+    );
 
     // 7. Store the magic link request
     await this.prisma.magicLinkRequest.create({
@@ -103,24 +125,37 @@ export class MagicLinkService {
       realm.name,
       user.email!,
       emailSubject,
-      this.buildMagicLinkEmailHtml(realm, magicLinkFullUrl, realm.magicLinkEmailTemplate),
+      this.buildMagicLinkEmailHtml(
+        realm,
+        magicLinkFullUrl,
+        realm.magicLinkEmailTemplate,
+      ),
     );
 
     this.logger.log(`Magic link sent to ${user.email} for realm ${realm.name}`);
 
-    return { success: true, message: 'If the email is registered, a magic link will be sent' };
+    return {
+      success: true,
+      message: 'If the email is registered, a magic link will be sent',
+    };
   }
 
   /**
    * Validate a magic link token and mark it as completed.
    * Returns the userId if valid.
    */
-  async validateMagicLink(rawToken: string): Promise<{ userId: string; email: string }> {
+  async validateMagicLink(
+    rawToken: string,
+  ): Promise<{ userId: string; email: string }> {
     const tokenHash = this.crypto.sha256(rawToken);
 
     const request = await this.prisma.magicLinkRequest.findUnique({
       where: { tokenHash },
-      include: { user: { select: { id: true, email: true, realmId: true, enabled: true } } },
+      include: {
+        user: {
+          select: { id: true, email: true, realmId: true, enabled: true },
+        },
+      },
     });
 
     if (!request) {
@@ -128,7 +163,9 @@ export class MagicLinkService {
     }
 
     if (request.status !== MagicLinkStatus.PENDING) {
-      throw new BadRequestException(`Magic link has already been ${request.status.toLowerCase()}`);
+      throw new BadRequestException(
+        `Magic link has already been ${request.status.toLowerCase()}`,
+      );
     }
 
     if (request.expiresAt < new Date()) {
@@ -201,7 +238,9 @@ export class MagicLinkService {
     });
 
     if (emailCount >= (limitPerEmail ?? 5)) {
-      this.logger.warn(`Rate limit exceeded for email ${email} in realm ${realmId}`);
+      this.logger.warn(
+        `Rate limit exceeded for email ${email} in realm ${realmId}`,
+      );
       return false;
     }
 
@@ -217,7 +256,9 @@ export class MagicLinkService {
 
       // IP limit is 10x the email limit
       if (ipCount >= (limitPerEmail ?? 5) * 10) {
-        this.logger.warn(`Rate limit exceeded for IP ${ipAddress} in realm ${realmId}`);
+        this.logger.warn(
+          `Rate limit exceeded for IP ${ipAddress} in realm ${realmId}`,
+        );
         return false;
       }
     }

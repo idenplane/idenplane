@@ -60,7 +60,7 @@ describe('IdentityProvidersController', () => {
       const dto = { displayName: 'Updated Google' };
       idpService.update.mockResolvedValue({});
 
-      controller.update(realm, 'google', dto as any);
+      controller.update(realm, 'google', dto);
 
       expect(idpService.update).toHaveBeenCalledWith(realm, 'google', dto);
     });

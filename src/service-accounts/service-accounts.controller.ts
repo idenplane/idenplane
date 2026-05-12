@@ -10,7 +10,12 @@ import {
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiSecurity, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiSecurity,
+  ApiResponse,
+} from '@nestjs/swagger';
 import type { Realm } from '@prisma/client';
 import { ServiceAccountsService } from './service-accounts.service.js';
 import { CreateServiceAccountDto } from './dto/create-service-account.dto.js';
@@ -24,7 +29,9 @@ import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 @UseGuards(RealmGuard)
 @ApiSecurity('admin-api-key')
 export class ServiceAccountsController {
-  constructor(private readonly serviceAccountsService: ServiceAccountsService) {}
+  constructor(
+    private readonly serviceAccountsService: ServiceAccountsService,
+  ) {}
 
   // ── Service Account endpoints ──────────────────────────────────────────────
 
@@ -108,7 +115,10 @@ export class ServiceAccountsController {
   @ApiOperation({ summary: 'Revoke an API key' })
   @ApiResponse({ status: 200, description: 'API key revoked' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 404, description: 'Service account or API key not found' })
+  @ApiResponse({
+    status: 404,
+    description: 'Service account or API key not found',
+  })
   revokeApiKey(
     @CurrentRealm() realm: Realm,
     @Param('id') id: string,
@@ -119,10 +129,16 @@ export class ServiceAccountsController {
 
   @Post(':id/api-keys/:keyId/rotate')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Rotate an API key (creates new key, keeps old active for grace period)' })
+  @ApiOperation({
+    summary:
+      'Rotate an API key (creates new key, keeps old active for grace period)',
+  })
   @ApiResponse({ status: 200, description: 'API key rotated' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 404, description: 'Service account or API key not found' })
+  @ApiResponse({
+    status: 404,
+    description: 'Service account or API key not found',
+  })
   rotateApiKey(
     @CurrentRealm() realm: Realm,
     @Param('id') id: string,

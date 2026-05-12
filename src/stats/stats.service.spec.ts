@@ -28,18 +28,27 @@ describe('StatsService', () => {
   describe('getRealmStats', () => {
     it('should return aggregated stats from prisma queries', async () => {
       // groupBy is called 3 times (24h, 7d, 30d active users)
-      (prisma.loginEvent.groupBy as jest.Mock)
+      prisma.loginEvent.groupBy
         .mockResolvedValueOnce([{ userId: 'u1' }, { userId: 'u2' }]) // 24h → 2
-        .mockResolvedValueOnce([{ userId: 'u1' }, { userId: 'u2' }, { userId: 'u3' }]) // 7d → 3
-        .mockResolvedValueOnce([{ userId: 'u1' }, { userId: 'u2' }, { userId: 'u3' }, { userId: 'u4' }]); // 30d → 4
+        .mockResolvedValueOnce([
+          { userId: 'u1' },
+          { userId: 'u2' },
+          { userId: 'u3' },
+        ]) // 7d → 3
+        .mockResolvedValueOnce([
+          { userId: 'u1' },
+          { userId: 'u2' },
+          { userId: 'u3' },
+          { userId: 'u4' },
+        ]); // 30d → 4
 
       // count is called for successCount, failureCount, oauthSessions, ssoSessions
-      (prisma.loginEvent.count as jest.Mock)
+      prisma.loginEvent.count
         .mockResolvedValueOnce(50) // successCount
-        .mockResolvedValueOnce(5);  // failureCount
+        .mockResolvedValueOnce(5); // failureCount
 
-      (prisma.session.count as jest.Mock).mockResolvedValue(10);
-      (prisma.loginSession.count as jest.Mock).mockResolvedValue(3);
+      prisma.session.count.mockResolvedValue(10);
+      prisma.loginSession.count.mockResolvedValue(3);
 
       const stats = await service.getRealmStats(mockRealm);
 
@@ -54,31 +63,31 @@ describe('StatsService', () => {
     });
 
     it('should use correct realmId filter for all queries', async () => {
-      (prisma.loginEvent.groupBy as jest.Mock).mockResolvedValue([]);
-      (prisma.loginEvent.count as jest.Mock).mockResolvedValue(0);
-      (prisma.session.count as jest.Mock).mockResolvedValue(0);
-      (prisma.loginSession.count as jest.Mock).mockResolvedValue(0);
+      prisma.loginEvent.groupBy.mockResolvedValue([]);
+      prisma.loginEvent.count.mockResolvedValue(0);
+      prisma.session.count.mockResolvedValue(0);
+      prisma.loginSession.count.mockResolvedValue(0);
 
       await service.getRealmStats(mockRealm);
 
       // All groupBy calls should use realmId
-      const groupByCalls = (prisma.loginEvent.groupBy as jest.Mock).mock.calls;
+      const groupByCalls = prisma.loginEvent.groupBy.mock.calls;
       for (const call of groupByCalls) {
         expect(call[0].where.realmId).toBe('realm-1');
       }
 
       // Count calls should use realmId
-      const countCalls = (prisma.loginEvent.count as jest.Mock).mock.calls;
+      const countCalls = prisma.loginEvent.count.mock.calls;
       for (const call of countCalls) {
         expect(call[0].where.realmId).toBe('realm-1');
       }
     });
 
     it('should return zeros when there is no activity', async () => {
-      (prisma.loginEvent.groupBy as jest.Mock).mockResolvedValue([]);
-      (prisma.loginEvent.count as jest.Mock).mockResolvedValue(0);
-      (prisma.session.count as jest.Mock).mockResolvedValue(0);
-      (prisma.loginSession.count as jest.Mock).mockResolvedValue(0);
+      prisma.loginEvent.groupBy.mockResolvedValue([]);
+      prisma.loginEvent.count.mockResolvedValue(0);
+      prisma.session.count.mockResolvedValue(0);
+      prisma.loginSession.count.mockResolvedValue(0);
 
       const stats = await service.getRealmStats(mockRealm);
 
@@ -93,10 +102,10 @@ describe('StatsService', () => {
     });
 
     it('should combine oauth and sso session counts for activeSessionCount', async () => {
-      (prisma.loginEvent.groupBy as jest.Mock).mockResolvedValue([]);
-      (prisma.loginEvent.count as jest.Mock).mockResolvedValue(0);
-      (prisma.session.count as jest.Mock).mockResolvedValue(7);
-      (prisma.loginSession.count as jest.Mock).mockResolvedValue(4);
+      prisma.loginEvent.groupBy.mockResolvedValue([]);
+      prisma.loginEvent.count.mockResolvedValue(0);
+      prisma.session.count.mockResolvedValue(7);
+      prisma.loginSession.count.mockResolvedValue(4);
 
       const stats = await service.getRealmStats(mockRealm);
 
@@ -104,10 +113,10 @@ describe('StatsService', () => {
     });
 
     it('should filter active sessions using expiresAt > now', async () => {
-      (prisma.loginEvent.groupBy as jest.Mock).mockResolvedValue([]);
-      (prisma.loginEvent.count as jest.Mock).mockResolvedValue(0);
-      (prisma.session.count as jest.Mock).mockResolvedValue(0);
-      (prisma.loginSession.count as jest.Mock).mockResolvedValue(0);
+      prisma.loginEvent.groupBy.mockResolvedValue([]);
+      prisma.loginEvent.count.mockResolvedValue(0);
+      prisma.session.count.mockResolvedValue(0);
+      prisma.loginSession.count.mockResolvedValue(0);
 
       await service.getRealmStats(mockRealm);
 

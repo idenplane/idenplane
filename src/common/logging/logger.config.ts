@@ -3,14 +3,18 @@ import { randomUUID } from 'crypto';
 
 export function createLoggerConfig(): Params {
   const isProduction = process.env['NODE_ENV'] === 'production';
-  const logLevel = process.env['LOG_LEVEL'] ?? (isProduction ? 'info' : 'debug');
+  const logLevel =
+    process.env['LOG_LEVEL'] ?? (isProduction ? 'info' : 'debug');
 
   return {
     pinoHttp: {
       level: logLevel,
       transport: isProduction
         ? undefined
-        : { target: 'pino-pretty', options: { colorize: true, singleLine: true } },
+        : {
+            target: 'pino-pretty',
+            options: { colorize: true, singleLine: true },
+          },
       redact: {
         paths: [
           'req.headers.authorization',
@@ -24,8 +28,7 @@ export function createLoggerConfig(): Params {
         ],
         censor: '[REDACTED]',
       },
-      genReqId: (req: any) =>
-        req.headers['x-request-id'] ?? randomUUID(),
+      genReqId: (req: any) => req.headers['x-request-id'] ?? randomUUID(),
       serializers: {
         req: (req: any) => ({
           id: req.id,
@@ -37,7 +40,9 @@ export function createLoggerConfig(): Params {
         }),
       },
       autoLogging: {
-        ignore: (req: any) => req.url?.startsWith('/health') || req.url?.startsWith('/admin/metrics'),
+        ignore: (req: any) =>
+          req.url?.startsWith('/health') ||
+          req.url?.startsWith('/admin/metrics'),
       },
     },
   };

@@ -57,7 +57,7 @@ describe('WebhooksService', () => {
   };
 
   beforeEach(() => {
-    prisma = createMockPrismaService() as any;
+    prisma = createMockPrismaService();
     crypto = new CryptoService();
     service = new WebhooksService(prisma as any, crypto);
     jest.clearAllMocks();
@@ -387,9 +387,7 @@ describe('WebhooksService', () => {
         .mockRejectedValueOnce(new Error('Connection refused'));
 
       // Replace sleep to avoid waiting
-      jest
-        .spyOn(service as any, 'sleep')
-        .mockResolvedValue(undefined);
+      jest.spyOn(service as any, 'sleep').mockResolvedValue(undefined);
 
       await (service as any).deliverWebhook(webhookRecord, 'user.login', {});
 
@@ -411,9 +409,7 @@ describe('WebhooksService', () => {
           text: async () => 'OK',
         });
 
-      jest
-        .spyOn(service as any, 'sleep')
-        .mockResolvedValue(undefined);
+      jest.spyOn(service as any, 'sleep').mockResolvedValue(undefined);
 
       await (service as any).deliverWebhook(webhookRecord, 'user.login', {});
 
@@ -432,9 +428,7 @@ describe('WebhooksService', () => {
         text: async () => 'Internal Server Error',
       });
 
-      jest
-        .spyOn(service as any, 'sleep')
-        .mockResolvedValue(undefined);
+      jest.spyOn(service as any, 'sleep').mockResolvedValue(undefined);
 
       await (service as any).deliverWebhook(webhookRecord, 'user.login', {});
 
@@ -455,22 +449,20 @@ describe('WebhooksService', () => {
         text: async () => 'OK',
       });
 
-      jest
-        .spyOn(service as any, 'sleep')
-        .mockResolvedValue(undefined);
+      jest.spyOn(service as any, 'sleep').mockResolvedValue(undefined);
 
-      await (service as any).deliverWebhook(
-        webhookRecord,
-        'user.login',
-        { userId: 'u1' },
-      );
+      await (service as any).deliverWebhook(webhookRecord, 'user.login', {
+        userId: 'u1',
+      });
 
       expect(mockFetch).toHaveBeenCalledWith(
         webhookRecord.url,
         expect.objectContaining({
           method: 'POST',
           headers: expect.objectContaining({
-            'X-Webhook-Signature': expect.stringMatching(/^sha256=[a-f0-9]{64}$/),
+            'X-Webhook-Signature': expect.stringMatching(
+              /^sha256=[a-f0-9]{64}$/,
+            ),
           }),
         }),
       );
@@ -485,7 +477,11 @@ describe('WebhooksService', () => {
       jest.spyOn(service as any, 'sleep').mockResolvedValue(undefined);
 
       const payload = { userId: 'u1' };
-      await (service as any).deliverWebhook(webhookRecord, 'user.login', payload);
+      await (service as any).deliverWebhook(
+        webhookRecord,
+        'user.login',
+        payload,
+      );
 
       // Reconstruct what the signature should be using the plaintext secret
       const body = JSON.stringify({
@@ -496,7 +492,9 @@ describe('WebhooksService', () => {
       // signature format and that it differs from one computed with the
       // raw ciphertext (which would be wrong).
       const [, fetchOptions] = mockFetch.mock.calls[0] as [string, RequestInit];
-      const actualSig = (fetchOptions.headers as Record<string, string>)['X-Webhook-Signature'];
+      const actualSig = (fetchOptions.headers as Record<string, string>)[
+        'X-Webhook-Signature'
+      ];
 
       const wrongSig = service.signPayload(webhookRecord.secret, body);
       expect(actualSig).not.toBe(wrongSig);

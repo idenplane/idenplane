@@ -37,8 +37,8 @@ describe('ThemeTemplateService', () => {
     it('should fall back to parent theme if child has no template', () => {
       themeService.getInheritanceChain.mockReturnValue(['dark', 'authme']);
       mockedExistsSync
-        .mockReturnValueOnce(false)  // dark doesn't have it
-        .mockReturnValueOnce(true);  // authme does
+        .mockReturnValueOnce(false) // dark doesn't have it
+        .mockReturnValueOnce(true); // authme does
 
       const result = service.resolve('dark', 'login', 'login');
 

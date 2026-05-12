@@ -120,7 +120,9 @@ export class OrganizationsService {
       },
     });
     if (existing) {
-      throw new ConflictException('User is already a member of this organization');
+      throw new ConflictException(
+        'User is already a member of this organization',
+      );
     }
 
     return this.prisma.organizationMember.create({
@@ -202,7 +204,12 @@ export class OrganizationsService {
     return { token: rawToken, expiresAt };
   }
 
-  async acceptInvitation(realm: Realm, slug: string, token: string, userId: string) {
+  async acceptInvitation(
+    realm: Realm,
+    slug: string,
+    token: string,
+    userId: string,
+  ) {
     const org = await this.findOne(realm, slug);
 
     const tokenHash = createHash('sha256').update(token).digest('hex');
@@ -300,7 +307,10 @@ export class OrganizationsService {
    * The value is deterministic per (organizationId, domain) so calling this
    * endpoint multiple times always returns the same token.
    */
-  generateDomainVerificationToken(organizationId: string, domain: string): string {
+  generateDomainVerificationToken(
+    organizationId: string,
+    domain: string,
+  ): string {
     const hash = createHash('sha256')
       .update(`${organizationId}:${domain}`)
       .digest('hex')
@@ -308,7 +318,11 @@ export class OrganizationsService {
     return `${DNS_TXT_PREFIX}${hash}`;
   }
 
-  async initiateDomainVerification(realm: Realm, slug: string, dto: VerifyDomainDto) {
+  async initiateDomainVerification(
+    realm: Realm,
+    slug: string,
+    dto: VerifyDomainDto,
+  ) {
     const org = await this.findOne(realm, slug);
     const domain = dto.domain.toLowerCase();
     const txtValue = this.generateDomainVerificationToken(org.id, domain);
@@ -317,8 +331,7 @@ export class OrganizationsService {
       domain,
       txtRecord: `_authme-challenge.${domain}`,
       txtValue,
-      message:
-        `Add the following DNS TXT record to your domain, then call the verify endpoint.`,
+      message: `Add the following DNS TXT record to your domain, then call the verify endpoint.`,
     };
   }
 
@@ -366,7 +379,11 @@ export class OrganizationsService {
    * realm whose verified domains contain the user's email domain and auto-adds
    * the user as a member.
    */
-  async autoAssignUserByEmailDomain(realmId: string, userId: string, email: string) {
+  async autoAssignUserByEmailDomain(
+    realmId: string,
+    userId: string,
+    email: string,
+  ) {
     const emailDomain = email.split('@')[1]?.toLowerCase();
     if (!emailDomain) return;
 
@@ -441,13 +458,18 @@ export class OrganizationsService {
       data: {
         name: dto.name,
         enabled: dto.enabled,
-        config: dto.config !== undefined ? (dto.config as unknown as Prisma.InputJsonValue) : undefined,
+        config:
+          dto.config !== undefined
+            ? (dto.config as unknown as Prisma.InputJsonValue)
+            : undefined,
       },
     });
   }
 
   async deleteSsoConnection(realm: Realm, slug: string, connectionId: string) {
     const conn = await this.getSsoConnection(realm, slug, connectionId);
-    return this.prisma.organizationSsoConnection.delete({ where: { id: conn.id } });
+    return this.prisma.organizationSsoConnection.delete({
+      where: { id: conn.id },
+    });
   }
 }

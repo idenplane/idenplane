@@ -48,13 +48,18 @@ export class ScimTokensService {
    * Create a new SCIM provisioning token
    * Returns the plain token which should be shown only once
    */
-  async createToken(realmId: string, dto: CreateScimTokenDto): Promise<ScimTokenResponse> {
+  async createToken(
+    realmId: string,
+    dto: CreateScimTokenDto,
+  ): Promise<ScimTokenResponse> {
     // Check for existing token with same name
     const existing = await this.prisma.scimProvisioningToken.findFirst({
       where: { realmId, name: dto.name },
     });
     if (existing) {
-      throw new ConflictException(`Token with name '${dto.name}' already exists`);
+      throw new ConflictException(
+        `Token with name '${dto.name}' already exists`,
+      );
     }
 
     // Generate a secure random token
@@ -66,7 +71,10 @@ export class ScimTokensService {
         realmId,
         name: dto.name,
         description: dto.description,
-        scopes: dto.scopes || ['urn:scim:schemas:core:1.0:Users', 'urn:scim:schemas:core:1.0:Groups'],
+        scopes: dto.scopes || [
+          'urn:scim:schemas:core:1.0:Users',
+          'urn:scim:schemas:core:1.0:Groups',
+        ],
         expiresAt: dto.expiresAt,
         tokenHash,
         enabled: true,
@@ -93,13 +101,15 @@ export class ScimTokensService {
   /**
    * Get all SCIM tokens for a realm (without plain tokens)
    */
-  async getTokens(realmId: string): Promise<Omit<ScimTokenResponse, 'token'>[]> {
+  async getTokens(
+    realmId: string,
+  ): Promise<Omit<ScimTokenResponse, 'token'>[]> {
     const tokens = await this.prisma.scimProvisioningToken.findMany({
       where: { realmId },
       orderBy: { createdAt: 'desc' },
     });
 
-    return tokens.map(t => ({
+    return tokens.map((t) => ({
       id: t.id,
       name: t.name,
       description: t.description,
@@ -116,7 +126,10 @@ export class ScimTokensService {
   /**
    * Get a specific token by ID
    */
-  async getTokenById(realmId: string, tokenId: string): Promise<Omit<ScimTokenResponse, 'token'>> {
+  async getTokenById(
+    realmId: string,
+    tokenId: string,
+  ): Promise<Omit<ScimTokenResponse, 'token'>> {
     const token = await this.prisma.scimProvisioningToken.findFirst({
       where: { id: tokenId, realmId },
     });
@@ -174,7 +187,11 @@ export class ScimTokensService {
   /**
    * Enable or disable a SCIM token
    */
-  async setTokenEnabled(realmId: string, tokenId: string, enabled: boolean): Promise<void> {
+  async setTokenEnabled(
+    realmId: string,
+    tokenId: string,
+    enabled: boolean,
+  ): Promise<void> {
     const token = await this.prisma.scimProvisioningToken.findFirst({
       where: { id: tokenId, realmId },
     });
@@ -197,13 +214,18 @@ export class ScimTokensService {
       representation: { enabled },
     });
 
-    this.logger.log(`SCIM: ${enabled ? 'Enabled' : 'Disabled'} token ${tokenId} in realm ${realmId}`);
+    this.logger.log(
+      `SCIM: ${enabled ? 'Enabled' : 'Disabled'} token ${tokenId} in realm ${realmId}`,
+    );
   }
 
   /**
    * Validate a raw token and return the associated token record
    */
-  async validateToken(realmId: string, plainToken: string): Promise<import('@prisma/client').ScimProvisioningToken | null> {
+  async validateToken(
+    realmId: string,
+    plainToken: string,
+  ): Promise<import('@prisma/client').ScimProvisioningToken | null> {
     const tokenHash = createHash('sha256').update(plainToken).digest('hex');
 
     const token = await this.prisma.scimProvisioningToken.findUnique({
@@ -263,7 +285,8 @@ export class ScimTokensService {
    * Uses crypto.randomBytes for secure generation
    */
   private generateToken(): string {
-    const chars = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~';
+    const chars =
+      'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~';
     const length = 32;
     const buffer = randomBytes(length);
     let token = '';

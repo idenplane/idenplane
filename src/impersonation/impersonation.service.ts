@@ -8,7 +8,11 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { JwkService } from '../crypto/jwk.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { EventsService } from '../events/events.service.js';
-import { LoginEventType, OperationType, ResourceType } from '../events/event-types.js';
+import {
+  LoginEventType,
+  OperationType,
+  ResourceType,
+} from '../events/event-types.js';
 import type { Realm } from '@prisma/client';
 import type { JWTPayload } from 'jose';
 
@@ -37,7 +41,9 @@ export class ImpersonationService {
   ): Promise<ImpersonationTokenResponse> {
     // Check impersonation is enabled for this realm
     if (!realm.impersonationEnabled) {
-      throw new ForbiddenException('Impersonation is not enabled for this realm');
+      throw new ForbiddenException(
+        'Impersonation is not enabled for this realm',
+      );
     }
 
     // Validate target user exists and belongs to this realm
@@ -195,9 +201,11 @@ export class ImpersonationService {
     });
 
     // Delete the OAuth session (invalidates the access token scope)
-    await this.prisma.session.delete({ where: { id: impSession.sessionId } }).catch(() => {
-      // Session may already have been cleaned up — safe to ignore
-    });
+    await this.prisma.session
+      .delete({ where: { id: impSession.sessionId } })
+      .catch(() => {
+        // Session may already have been cleaned up — safe to ignore
+      });
 
     // Mark the impersonation session as ended
     await this.prisma.impersonationSession.update({

@@ -9,7 +9,12 @@ import {
   UseGuards,
   UnauthorizedException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiSecurity } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiSecurity,
+} from '@nestjs/swagger';
 import type { Request } from 'express';
 import type { Realm } from '@prisma/client';
 import { ImpersonationService } from './impersonation.service.js';
@@ -19,7 +24,9 @@ import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 
 function getAdminUserId(req: Request): string {
-  const adminUser = (req as Request & { adminUser?: { userId?: string } })['adminUser'];
+  const adminUser = (req as Request & { adminUser?: { userId?: string } })[
+    'adminUser'
+  ];
   if (!adminUser?.userId) {
     throw new UnauthorizedException('Admin identity could not be determined');
   }

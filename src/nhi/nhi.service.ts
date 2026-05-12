@@ -6,16 +6,32 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import type { Realm, NhiCredentialType } from '@prisma/client';
-import { createHash, randomBytes, generateKeyPairSync, createSign } from 'crypto';
+import {
+  createHash,
+  randomBytes,
+  generateKeyPairSync,
+  createSign,
+} from 'crypto';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { CreateNhiIdentityDto } from './dto/create-nhi.dto.js';
 import { UpdateNhiIdentityDto } from './dto/update-nhi.dto.js';
 import { CreateNhiCredentialDto } from './dto/create-nhi-credential.dto.js';
-import { SetCertificateDto, CertificateInfoDto, GenerateCertificateDto, CertificateKeyAlgorithm, CertificateFormat } from './dto/certificate.dto.js';
+import {
+  SetCertificateDto,
+  CertificateInfoDto,
+  GenerateCertificateDto,
+  CertificateKeyAlgorithm,
+  CertificateFormat,
+} from './dto/certificate.dto.js';
 import { CreateNhiCredentialPolicyDto } from './dto/create-nhi-credential-policy.dto.js';
 import { UpdateNhiCredentialPolicyDto } from './dto/update-nhi-credential-policy.dto.js';
-import { BulkRegistrationDto, BulkRegistrationResponseDto, BulkRegistrationResultItemDto, BulkDeviceItemDto } from './dto/bulk-registration.dto.js';
+import {
+  BulkRegistrationDto,
+  BulkRegistrationResponseDto,
+  BulkRegistrationResultItemDto,
+  BulkDeviceItemDto,
+} from './dto/bulk-registration.dto.js';
 
 // ── Select projections ────────────────────────────────────────────────────────
 
@@ -172,8 +188,10 @@ export class NhiService {
         metadata: dto.metadata as Prisma.InputJsonValue | undefined,
         tags: dto.tags,
         // Lifecycle management
-        suspendedAt: dto.lifecycleStatus === 'SUSPENDED' ? new Date() : undefined,
-        decommissionedAt: dto.lifecycleStatus === 'DECOMMISSIONED' ? new Date() : undefined,
+        suspendedAt:
+          dto.lifecycleStatus === 'SUSPENDED' ? new Date() : undefined,
+        decommissionedAt:
+          dto.lifecycleStatus === 'DECOMMISSIONED' ? new Date() : undefined,
       },
       select: NHI_IDENTITY_SELECT,
     });
@@ -198,7 +216,9 @@ export class NhiService {
   async reactivate(realm: Realm, id: string) {
     const identity = await this.findById(realm, id);
     if (identity.lifecycleStatus !== 'SUSPENDED') {
-      throw new ConflictException('Only suspended identities can be reactivated');
+      throw new ConflictException(
+        'Only suspended identities can be reactivated',
+      );
     }
     return this.prisma.nhiIdentity.update({
       where: { id },
@@ -216,7 +236,11 @@ export class NhiService {
     });
     return this.prisma.nhiIdentity.update({
       where: { id },
-      data: { lifecycleStatus: 'DECOMMISSIONED', decommissionedAt: new Date(), enabled: false },
+      data: {
+        lifecycleStatus: 'DECOMMISSIONED',
+        decommissionedAt: new Date(),
+        enabled: false,
+      },
       select: NHI_IDENTITY_SELECT,
     });
   }
@@ -281,7 +305,11 @@ export class NhiService {
     });
   }
 
-  async findCredentialById(realm: Realm, nhiIdentityId: string, credentialId: string) {
+  async findCredentialById(
+    realm: Realm,
+    nhiIdentityId: string,
+    credentialId: string,
+  ) {
     await this.findById(realm, nhiIdentityId);
     const credential = await this.prisma.nhiCredential.findFirst({
       where: { id: credentialId, nhiIdentityId },
@@ -343,7 +371,9 @@ export class NhiService {
       data: {
         nhiIdentityId,
         credentialType: 'API_KEY',
-        name: oldCredential.name ? `${oldCredential.name} (rotated)` : 'rotated credential',
+        name: oldCredential.name
+          ? `${oldCredential.name} (rotated)`
+          : 'rotated credential',
         keyPrefix: newPrefix,
         keyHash: newHash,
         expiresAt: oldCredential.expiresAt,
@@ -487,7 +517,10 @@ export class NhiService {
       where: {
         realmId: realm.id,
         enabled: true,
-        credentialType: identity.identityType === 'MACHINE_TO_MACHINE' ? 'API_KEY' : 'CERTIFICATE',
+        credentialType:
+          identity.identityType === 'MACHINE_TO_MACHINE'
+            ? 'API_KEY'
+            : 'CERTIFICATE',
       },
       select: NHI_CREDENTIAL_POLICY_SELECT,
       orderBy: { priority: 'asc' },
@@ -529,7 +562,11 @@ export class NhiService {
     // Check age-based rotation
     const createdAt = credential.createdAt;
     const rotationDate = new Date(createdAt);
-    rotationDate.setDate(rotationDate.getDate() + policy.rotationIntervalDays - policy.rotationBeforeDays);
+    rotationDate.setDate(
+      rotationDate.getDate() +
+        policy.rotationIntervalDays -
+        policy.rotationBeforeDays,
+    );
 
     if (new Date() >= rotationDate) {
       return true;
@@ -604,7 +641,9 @@ export class NhiService {
         // Check age-based rotation
         const rotationDate = new Date(credential.createdAt);
         rotationDate.setDate(
-          rotationDate.getDate() + policy.rotationIntervalDays - policy.rotationBeforeDays,
+          rotationDate.getDate() +
+            policy.rotationIntervalDays -
+            policy.rotationBeforeDays,
         );
 
         if (new Date() >= rotationDate) {
@@ -627,7 +666,11 @@ export class NhiService {
    * Set a certificate for an NHI identity.
    * Extracts certificate metadata (subject, fingerprint, validity dates) from the PEM.
    */
-  async setCertificate(realm: Realm, nhiIdentityId: string, dto: SetCertificateDto) {
+  async setCertificate(
+    realm: Realm,
+    nhiIdentityId: string,
+    dto: SetCertificateDto,
+  ) {
     await this.findById(realm, nhiIdentityId);
 
     // Extract certificate info for metadata fields
@@ -668,7 +711,11 @@ export class NhiService {
    * Validate a certificate PEM string.
    * Throws BadRequestException if the certificate is invalid.
    */
-  validateCertificate(certificatePem: string): { valid: boolean; info?: CertificateInfoDto; error?: string } {
+  validateCertificate(certificatePem: string): {
+    valid: boolean;
+    info?: CertificateInfoDto;
+    error?: string;
+  } {
     try {
       const info = this.parseCertificateInfo(certificatePem);
       const now = new Date();
@@ -676,7 +723,10 @@ export class NhiService {
       const notAfter = new Date(info.notAfter);
 
       if (now < notBefore) {
-        return { valid: false, error: 'Certificate is not yet valid (notBefore is in the future)' };
+        return {
+          valid: false,
+          error: 'Certificate is not yet valid (notBefore is in the future)',
+        };
       }
       if (now > notAfter) {
         return { valid: false, error: 'Certificate has expired' };
@@ -686,7 +736,8 @@ export class NhiService {
     } catch (error) {
       return {
         valid: false,
-        error: error instanceof Error ? error.message : 'Invalid certificate format',
+        error:
+          error instanceof Error ? error.message : 'Invalid certificate format',
       };
     }
   }
@@ -711,12 +762,15 @@ export class NhiService {
     // Build subject DN
     const subjectParts: string[] = [];
     if (dto.subjectCommonName) subjectParts.push(`CN=${dto.subjectCommonName}`);
-    if (dto.subjectOrganizationalUnit) subjectParts.push(`OU=${dto.subjectOrganizationalUnit}`);
-    if (dto.subjectOrganization) subjectParts.push(`O=${dto.subjectOrganization}`);
+    if (dto.subjectOrganizationalUnit)
+      subjectParts.push(`OU=${dto.subjectOrganizationalUnit}`);
+    if (dto.subjectOrganization)
+      subjectParts.push(`O=${dto.subjectOrganization}`);
     if (dto.subjectLocality) subjectParts.push(`L=${dto.subjectLocality}`);
     if (dto.subjectState) subjectParts.push(`ST=${dto.subjectState}`);
     if (dto.subjectCountry) subjectParts.push(`C=${dto.subjectCountry}`);
-    const subject = subjectParts.join(', ') || `CN=device-${randomBytes(4).toString('hex')}`;
+    const subject =
+      subjectParts.join(', ') || `CN=device-${randomBytes(4).toString('hex')}`;
 
     // Generate key pair based on algorithm
     let keyPair: { publicKeyPem: string; privateKeyPem: string };
@@ -728,7 +782,10 @@ export class NhiService {
         publicKeyEncoding: { type: 'spki', format: 'pem' },
         privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
       });
-      keyPair = { publicKeyPem: kp.publicKey as string, privateKeyPem: kp.privateKey as string };
+      keyPair = {
+        publicKeyPem: kp.publicKey,
+        privateKeyPem: kp.privateKey,
+      };
       signingAlgorithm = 'SHA256withRSA';
     } else if (keyAlgorithm === CertificateKeyAlgorithm.RSA_4096) {
       const kp = generateKeyPairSync('rsa', {
@@ -736,7 +793,10 @@ export class NhiService {
         publicKeyEncoding: { type: 'spki', format: 'pem' },
         privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
       });
-      keyPair = { publicKeyPem: kp.publicKey as string, privateKeyPem: kp.privateKey as string };
+      keyPair = {
+        publicKeyPem: kp.publicKey,
+        privateKeyPem: kp.privateKey,
+      };
       signingAlgorithm = 'SHA256withRSA';
     } else if (keyAlgorithm === CertificateKeyAlgorithm.ECDSA_P384) {
       const kp = generateKeyPairSync('ec', {
@@ -744,7 +804,10 @@ export class NhiService {
         publicKeyEncoding: { type: 'spki', format: 'pem' },
         privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
       });
-      keyPair = { publicKeyPem: kp.publicKey as string, privateKeyPem: kp.privateKey as string };
+      keyPair = {
+        publicKeyPem: kp.publicKey,
+        privateKeyPem: kp.privateKey,
+      };
       signingAlgorithm = 'SHA384withECDSA';
     } else {
       // Default: ECDSA_P256
@@ -753,7 +816,10 @@ export class NhiService {
         publicKeyEncoding: { type: 'spki', format: 'pem' },
         privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
       });
-      keyPair = { publicKeyPem: kp.publicKey as string, privateKeyPem: kp.privateKey as string };
+      keyPair = {
+        publicKeyPem: kp.publicKey,
+        privateKeyPem: kp.privateKey,
+      };
       signingAlgorithm = 'SHA256withECDSA';
     }
 
@@ -810,7 +876,9 @@ export class NhiService {
 
     // Build the TBSCertificate (To-Be-Signed) components
     const version = 'v3';
-    const signatureAlgorithm = options.signingAlgorithm.includes('RSA') ? 'sha256WithRSAEncryption' : 'ecdsa-with-SHA256';
+    const signatureAlgorithm = options.signingAlgorithm.includes('RSA')
+      ? 'sha256WithRSAEncryption'
+      : 'ecdsa-with-SHA256';
 
     // Format dates in ASN.1 format
     const formatDate = (d: Date) => {
@@ -912,11 +980,15 @@ export class NhiService {
   private parseCertificateInfo(certificatePem: string): CertificateInfoDto {
     // Basic validation - check for PEM headers
     if (!certificatePem.includes('-----BEGIN CERTIFICATE-----')) {
-      throw new BadRequestException('Invalid certificate format: missing PEM header');
+      throw new BadRequestException(
+        'Invalid certificate format: missing PEM header',
+      );
     }
 
     // Extract subject from certificate (simplified - in production use node-forge or similar)
-    const subjectMatch = certificatePem.match(/-----BEGIN CERTIFICATE-----([\s\S]*?)-----END CERTIFICATE-----/);
+    const subjectMatch = certificatePem.match(
+      /-----BEGIN CERTIFICATE-----([\s\S]*?)-----END CERTIFICATE-----/,
+    );
     if (!subjectMatch) {
       throw new BadRequestException('Invalid certificate format');
     }
@@ -926,21 +998,31 @@ export class NhiService {
       .replace(/\s/g, '')
       .replace(/-----BEGIN CERTIFICATE-----/g, '')
       .replace(/-----END CERTIFICATE-----/g, '');
-    const fingerprint = createHash('sha256').update(Buffer.from(derContent, 'base64')).digest('hex');
+    const fingerprint = createHash('sha256')
+      .update(Buffer.from(derContent, 'base64'))
+      .digest('hex');
 
     // Extract subject alternative names (if present as comments)
     const sans: string[] = [];
-    const sanMatch = certificatePem.match(/Subject Alternative Name:?\s*([^\n]+)/gi);
+    const sanMatch = certificatePem.match(
+      /Subject Alternative Name:?\s*([^\n]+)/gi,
+    );
     if (sanMatch) {
       for (const match of sanMatch) {
         const sansContent = match.replace(/Subject Alternative Name:?\s*/i, '');
-        sans.push(...sansContent.split(',').map((s) => s.trim()).filter(Boolean));
+        sans.push(
+          ...sansContent
+            .split(',')
+            .map((s) => s.trim())
+            .filter(Boolean),
+        );
       }
     }
 
     // Check for CA basic constraint
-    const isCA = /basicConstraints[\s\S]*CA:(true|TRUE)/.test(certificatePem) ||
-                 /X509v3 Basic Constraints:\s*CA:TRUE/.test(certificatePem);
+    const isCA =
+      /basicConstraints[\s\S]*CA:(true|TRUE)/.test(certificatePem) ||
+      /X509v3 Basic Constraints:\s*CA:TRUE/.test(certificatePem);
 
     // For demonstration, set default validity dates
     // In production, this would be parsed from the actual certificate
@@ -1006,7 +1088,10 @@ export class NhiService {
       orderBy: { createdAt: 'asc' },
     });
 
-    const totalRequests = credentials.reduce((sum, c) => sum + c.requestCount, 0);
+    const totalRequests = credentials.reduce(
+      (sum, c) => sum + c.requestCount,
+      0,
+    );
 
     return {
       nhiIdentityId,
@@ -1046,7 +1131,9 @@ export class NhiService {
     const statuses = credentials.map((cred) => {
       const rotationDate = new Date(cred.createdAt);
       rotationDate.setDate(
-        rotationDate.getDate() + policy.rotationIntervalDays - policy.rotationBeforeDays,
+        rotationDate.getDate() +
+          policy.rotationIntervalDays -
+          policy.rotationBeforeDays,
       );
       const daysUntilRotation = Math.ceil(
         (rotationDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
@@ -1080,7 +1167,8 @@ export class NhiService {
           createdAt: cred.createdAt,
           reason: reason ?? 'pending',
           policyId: policy.id,
-          daysUntilRotation: daysUntilRotation > 0 ? daysUntilRotation : undefined,
+          daysUntilRotation:
+            daysUntilRotation > 0 ? daysUntilRotation : undefined,
         },
         rotationRequired,
         applicablePolicy: {
@@ -1089,8 +1177,10 @@ export class NhiService {
           rotationIntervalDays: policy.rotationIntervalDays,
           autoRotate: policy.autoRotate,
         },
-        daysUntilForcedRotation: daysUntilForcedRotation > 0 ? daysUntilForcedRotation : undefined,
-        daysUntilRotationWarning: daysUntilRotation > 0 ? daysUntilRotation : undefined,
+        daysUntilForcedRotation:
+          daysUntilForcedRotation > 0 ? daysUntilForcedRotation : undefined,
+        daysUntilRotationWarning:
+          daysUntilRotation > 0 ? daysUntilRotation : undefined,
       };
     });
 
@@ -1099,7 +1189,8 @@ export class NhiService {
       policyName: policy.name,
       credentialType: policy.credentialType,
       totalCredentials: credentials.length,
-      credentialsRequiringRotation: statuses.filter((s) => s.rotationRequired).length,
+      credentialsRequiringRotation: statuses.filter((s) => s.rotationRequired)
+        .length,
       statuses,
     };
   }
@@ -1151,14 +1242,18 @@ export class NhiService {
         for (const cred of credentials) {
           const rotationDate = new Date(cred.createdAt);
           rotationDate.setDate(
-            rotationDate.getDate() + policy.rotationIntervalDays - policy.rotationBeforeDays,
+            rotationDate.getDate() +
+              policy.rotationIntervalDays -
+              policy.rotationBeforeDays,
           );
           const daysUntilRotation = Math.ceil(
             (rotationDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
           );
 
           const maxAgeDate = new Date(cred.createdAt);
-          maxAgeDate.setDate(maxAgeDate.getDate() + policy.maxCredentialAgeDays);
+          maxAgeDate.setDate(
+            maxAgeDate.getDate() + policy.maxCredentialAgeDays,
+          );
           const daysUntilForcedRotation = Math.ceil(
             (maxAgeDate.getTime() - now.getTime()) / (1000 * 60 * 60 * 24),
           );
@@ -1252,12 +1347,16 @@ export class NhiService {
         });
 
         result.id = identity.id;
-        result.metadata = (identity.metadata ?? undefined) as Record<string, unknown> | undefined;
+        result.metadata = (identity.metadata ?? undefined) as
+          | Record<string, unknown>
+          | undefined;
         result.success = true;
 
         // Generate certificate if requested
         if (device.generateCertificate) {
-          const keyAlgorithm = this.parseKeyAlgorithm(device.certificateKeyAlgorithm);
+          const keyAlgorithm = this.parseKeyAlgorithm(
+            device.certificateKeyAlgorithm,
+          );
           const validityDays = device.certificateValidityDays ?? 365;
 
           const certDto: GenerateCertificateDto = {
@@ -1268,7 +1367,10 @@ export class NhiService {
             validityDays: validityDays,
           };
 
-          const certResult = await this.generateDeviceCertificate(realm, certDto);
+          const certResult = await this.generateDeviceCertificate(
+            realm,
+            certDto,
+          );
           result.certificatePem = certResult.certificatePem;
           result.privateKeyPem = certResult.privateKeyPem;
           result.certificateInfo = {

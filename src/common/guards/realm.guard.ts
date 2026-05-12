@@ -14,8 +14,7 @@ export class RealmGuard implements CanActivate {
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
-    const rawName =
-      request.params['realmName'] ?? request.params['realm'];
+    const rawName = request.params['realmName'] ?? request.params['realm'];
 
     if (!rawName) return true;
 

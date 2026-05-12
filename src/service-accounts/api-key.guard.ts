@@ -30,7 +30,9 @@ import { ServiceAccountsService } from './service-accounts.service.js';
  */
 @Injectable()
 export class ApiKeyGuard implements CanActivate {
-  constructor(private readonly serviceAccountsService: ServiceAccountsService) {}
+  constructor(
+    private readonly serviceAccountsService: ServiceAccountsService,
+  ) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<Request>();
@@ -43,7 +45,10 @@ export class ApiKeyGuard implements CanActivate {
     }
 
     const keyPrefix = plainKey.slice(0, 8);
-    const apiKey = await this.serviceAccountsService.validateApiKey(keyPrefix, plainKey);
+    const apiKey = await this.serviceAccountsService.validateApiKey(
+      keyPrefix,
+      plainKey,
+    );
 
     // Validate IP restriction if configured
     if (apiKey.requireIpRestriction && apiKey.allowedIpRanges?.length > 0) {
@@ -67,8 +72,14 @@ export class ApiKeyGuard implements CanActivate {
       );
 
       if (rateLimitResult?.exceeded) {
-        response.setHeader('Retry-After', rateLimitResult.retryAfterSeconds ?? 60);
-        response.setHeader('X-RateLimit-Limit', apiKey.rateLimitPerMinute.toString());
+        response.setHeader(
+          'Retry-After',
+          rateLimitResult.retryAfterSeconds ?? 60,
+        );
+        response.setHeader(
+          'X-RateLimit-Limit',
+          apiKey.rateLimitPerMinute.toString(),
+        );
         response.setHeader('X-RateLimit-Remaining', '0');
         throw new HttpException(
           {
@@ -83,13 +94,17 @@ export class ApiKeyGuard implements CanActivate {
 
     // Check daily quota if configured
     if (apiKey.maxRequestsPerDay != null && apiKey.maxRequestsPerDay > 0) {
-      const dailyResult = await this.serviceAccountsService.checkAndIncrementDailyQuota(
-        apiKey.id,
-        apiKey.maxRequestsPerDay,
-      );
+      const dailyResult =
+        await this.serviceAccountsService.checkAndIncrementDailyQuota(
+          apiKey.id,
+          apiKey.maxRequestsPerDay,
+        );
 
       if (dailyResult?.exceeded) {
-        response.setHeader('X-RateLimit-Limit', apiKey.maxRequestsPerDay.toString());
+        response.setHeader(
+          'X-RateLimit-Limit',
+          apiKey.maxRequestsPerDay.toString(),
+        );
         response.setHeader('X-RateLimit-Remaining', '0');
         response.setHeader('X-RateLimit-Reset', 'daily');
         throw new HttpException(
@@ -108,7 +123,10 @@ export class ApiKeyGuard implements CanActivate {
       const quotaResult = await this.serviceAccountsService.checkQuotas(apiKey);
 
       if (quotaResult?.exceeded) {
-        response.setHeader('X-RateLimit-Limit', apiKey.maxRequestsPerMonth.toString());
+        response.setHeader(
+          'X-RateLimit-Limit',
+          apiKey.maxRequestsPerMonth.toString(),
+        );
         response.setHeader('X-RateLimit-Remaining', '0');
         response.setHeader('X-RateLimit-Reset', 'monthly');
         throw new HttpException(

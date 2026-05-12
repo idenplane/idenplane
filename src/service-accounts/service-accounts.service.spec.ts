@@ -140,9 +140,9 @@ describe('ServiceAccountsService', () => {
     it('should throw NotFoundException when not found', async () => {
       prisma.serviceAccount.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.findById(mockRealm, 'nonexistent'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.findById(mockRealm, 'nonexistent')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -208,7 +208,9 @@ describe('ServiceAccountsService', () => {
   describe('createApiKey', () => {
     it('should generate a key, store only its hash, and return the plain key once', async () => {
       prisma.serviceAccount.findFirst.mockResolvedValue(mockServiceAccount);
-      cryptoService.generateSecret.mockReturnValue('abcd1234ef567890abcd1234ef567890abcd1234ef567890abcd1234ef567890');
+      cryptoService.generateSecret.mockReturnValue(
+        'abcd1234ef567890abcd1234ef567890abcd1234ef567890abcd1234ef567890',
+      );
       cryptoService.hashPassword.mockResolvedValue('$argon2id$v=19$...');
       prisma.apiKey.create.mockResolvedValue({
         ...mockApiKey,
@@ -220,7 +222,9 @@ describe('ServiceAccountsService', () => {
         scopes: ['read:users'],
       });
 
-      expect(result.plainKey).toBe('abcd1234ef567890abcd1234ef567890abcd1234ef567890abcd1234ef567890');
+      expect(result.plainKey).toBe(
+        'abcd1234ef567890abcd1234ef567890abcd1234ef567890abcd1234ef567890',
+      );
       expect(result.keyWarning).toBeDefined();
       expect(cryptoService.generateSecret).toHaveBeenCalledWith(32);
       expect(cryptoService.hashPassword).toHaveBeenCalledWith(
@@ -247,9 +251,14 @@ describe('ServiceAccountsService', () => {
 
     it('should set expiresAt when provided', async () => {
       prisma.serviceAccount.findFirst.mockResolvedValue(mockServiceAccount);
-      cryptoService.generateSecret.mockReturnValue('abcd1234ef567890abcd1234ef567890abcd1234ef567890abcd1234ef567890');
+      cryptoService.generateSecret.mockReturnValue(
+        'abcd1234ef567890abcd1234ef567890abcd1234ef567890abcd1234ef567890',
+      );
       cryptoService.hashPassword.mockResolvedValue('hash');
-      prisma.apiKey.create.mockResolvedValue({ ...mockApiKey, expiresAt: new Date('2027-01-01') });
+      prisma.apiKey.create.mockResolvedValue({
+        ...mockApiKey,
+        expiresAt: new Date('2027-01-01'),
+      });
 
       const result = await service.createApiKey(mockRealm, 'sa-uuid-1', {
         expiresAt: '2027-01-01T00:00:00.000Z',
@@ -272,7 +281,10 @@ describe('ServiceAccountsService', () => {
       cryptoService.verifyPassword.mockResolvedValue(true);
       prisma.apiKey.update.mockResolvedValue({});
 
-      const result = await service.validateApiKey('abcd1234', 'abcd1234ef567890...');
+      const result = await service.validateApiKey(
+        'abcd1234',
+        'abcd1234ef567890...',
+      );
 
       expect(result).toEqual(mockApiKey);
       expect(cryptoService.verifyPassword).toHaveBeenCalledWith(
@@ -333,20 +345,34 @@ describe('ServiceAccountsService', () => {
       prisma.apiKey.findFirst.mockResolvedValue(mockApiKey);
       prisma.apiKey.update.mockResolvedValue({ ...mockApiKey, revoked: true });
 
-      const result = await service.revokeApiKey(mockRealm, 'sa-uuid-1', 'key-uuid-1');
+      const result = await service.revokeApiKey(
+        mockRealm,
+        'sa-uuid-1',
+        'key-uuid-1',
+      );
 
       expect(result.message).toMatch(/revoked successfully/i);
       expect(prisma.apiKey.update).toHaveBeenCalledWith({
         where: { id: 'key-uuid-1' },
-        data: expect.objectContaining({ revoked: true, revokedAt: expect.any(Date) }),
+        data: expect.objectContaining({
+          revoked: true,
+          revokedAt: expect.any(Date),
+        }),
       });
     });
 
     it('should return a message when key is already revoked', async () => {
       prisma.serviceAccount.findFirst.mockResolvedValue(mockServiceAccount);
-      prisma.apiKey.findFirst.mockResolvedValue({ ...mockApiKey, revoked: true });
+      prisma.apiKey.findFirst.mockResolvedValue({
+        ...mockApiKey,
+        revoked: true,
+      });
 
-      const result = await service.revokeApiKey(mockRealm, 'sa-uuid-1', 'key-uuid-1');
+      const result = await service.revokeApiKey(
+        mockRealm,
+        'sa-uuid-1',
+        'key-uuid-1',
+      );
 
       expect(result.message).toMatch(/already revoked/i);
       expect(prisma.apiKey.update).not.toHaveBeenCalled();
@@ -366,7 +392,9 @@ describe('ServiceAccountsService', () => {
     it('should create a new key and schedule the old key for expiry', async () => {
       prisma.serviceAccount.findFirst.mockResolvedValue(mockServiceAccount);
       prisma.apiKey.findFirst.mockResolvedValue(mockApiKey);
-      cryptoService.generateSecret.mockReturnValue('newkey1234567890newkey1234567890newkey1234567890newkey1234567890');
+      cryptoService.generateSecret.mockReturnValue(
+        'newkey1234567890newkey1234567890newkey1234567890newkey1234567890',
+      );
       cryptoService.hashPassword.mockResolvedValue('$argon2id$newhash');
       const newKeyRecord = {
         ...mockApiKey,
@@ -377,9 +405,15 @@ describe('ServiceAccountsService', () => {
       prisma.apiKey.create.mockResolvedValue(newKeyRecord);
       prisma.apiKey.update.mockResolvedValue({});
 
-      const result = await service.rotateApiKey(mockRealm, 'sa-uuid-1', 'key-uuid-1');
+      const result = await service.rotateApiKey(
+        mockRealm,
+        'sa-uuid-1',
+        'key-uuid-1',
+      );
 
-      expect(result.newKey.plainKey).toBe('newkey1234567890newkey1234567890newkey1234567890newkey1234567890');
+      expect(result.newKey.plainKey).toBe(
+        'newkey1234567890newkey1234567890newkey1234567890newkey1234567890',
+      );
       expect(result.newKey.keyWarning).toBeDefined();
       expect(result.oldKeyId).toBe('key-uuid-1');
       expect(result.gracePeriodEndsAt).toBeInstanceOf(Date);

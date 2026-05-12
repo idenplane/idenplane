@@ -18,9 +18,9 @@ describe('EventsCleanupService', () => {
       const realms = [
         {
           id: 'realm-1',
-          eventsExpiration: 604800,      // 7 days (legacy)
-          loginEventRetentionDays: 10,   // 10 days — takes priority
-          adminEventRetentionDays: 30,   // 30 days — takes priority
+          eventsExpiration: 604800, // 7 days (legacy)
+          loginEventRetentionDays: 10, // 10 days — takes priority
+          adminEventRetentionDays: 30, // 30 days — takes priority
         },
       ];
 
@@ -60,8 +60,8 @@ describe('EventsCleanupService', () => {
       const realms = [
         {
           id: 'realm-2',
-          eventsExpiration: 86400,       // 1 day
-          loginEventRetentionDays: 0,    // 0 = use legacy expiration
+          eventsExpiration: 86400, // 1 day
+          loginEventRetentionDays: 0, // 0 = use legacy expiration
           adminEventRetentionDays: 0,
         },
       ];

@@ -20,12 +20,22 @@ export class ThemeTemplateService {
    * @returns Absolute path to the .hbs file
    * @throws Error if template not found in any theme in the chain
    */
-  resolve(themeName: string, themeType: ThemeType, templateName: string): string {
+  resolve(
+    themeName: string,
+    themeType: ThemeType,
+    templateName: string,
+  ): string {
     const chain = this.themeService.getInheritanceChain(themeName);
     const themesDir = this.themeService.getThemesDir();
 
     for (const theme of chain) {
-      const candidatePath = join(themesDir, theme, themeType, 'templates', templateName + '.hbs');
+      const candidatePath = join(
+        themesDir,
+        theme,
+        themeType,
+        'templates',
+        templateName + '.hbs',
+      );
       if (existsSync(candidatePath)) {
         return candidatePath;
       }
@@ -41,14 +51,18 @@ export class ThemeTemplateService {
 
     throw new Error(
       `Template not found: ${templateName} for theme ${themeName}/${themeType}. ` +
-      `Searched chain: [${chain.join(' → ')}]`,
+        `Searched chain: [${chain.join(' → ')}]`,
     );
   }
 
   /**
    * Checks whether a template exists in the inheritance chain.
    */
-  exists(themeName: string, themeType: ThemeType, templateName: string): boolean {
+  exists(
+    themeName: string,
+    themeType: ThemeType,
+    templateName: string,
+  ): boolean {
     try {
       this.resolve(themeName, themeType, templateName);
       return true;

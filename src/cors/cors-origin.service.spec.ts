@@ -5,9 +5,9 @@ import { CacheService } from '../cache/cache.service.js';
 
 const makeMockPrisma = (webOriginsList: string[][] = []) => ({
   client: {
-    findMany: jest.fn().mockResolvedValue(
-      webOriginsList.map((webOrigins) => ({ webOrigins })),
-    ),
+    findMany: jest
+      .fn()
+      .mockResolvedValue(webOriginsList.map((webOrigins) => ({ webOrigins }))),
   },
 });
 
@@ -43,10 +43,14 @@ describe('CorsOriginService', () => {
   // ─── Cache miss → DB load ─────────────────────────────────────────────
 
   describe('when Redis has no cached value', () => {
-    beforeEach(() => build([['https://app.example.com', 'https://admin.example.com']]));
+    beforeEach(() =>
+      build([['https://app.example.com', 'https://admin.example.com']]),
+    );
 
     it('loads origins from the database on first call', async () => {
-      expect(await service.isOriginAllowed('https://app.example.com')).toBe(true);
+      expect(await service.isOriginAllowed('https://app.example.com')).toBe(
+        true,
+      );
       expect(prisma.client.findMany).toHaveBeenCalledTimes(1);
     });
 
@@ -57,7 +61,10 @@ describe('CorsOriginService', () => {
     it('persists the loaded origins to Redis', async () => {
       await service.isOriginAllowed('https://app.example.com');
       expect(cache.cacheCorsOrigins).toHaveBeenCalledWith(
-        expect.arrayContaining(['https://app.example.com', 'https://admin.example.com']),
+        expect.arrayContaining([
+          'https://app.example.com',
+          'https://admin.example.com',
+        ]),
       );
     });
   });
@@ -68,7 +75,9 @@ describe('CorsOriginService', () => {
     beforeEach(() => build([], ['https://cached.example.com']));
 
     it('uses the cached value without hitting the database', async () => {
-      expect(await service.isOriginAllowed('https://cached.example.com')).toBe(true);
+      expect(await service.isOriginAllowed('https://cached.example.com')).toBe(
+        true,
+      );
       expect(prisma.client.findMany).not.toHaveBeenCalled();
     });
 
@@ -103,7 +112,9 @@ describe('CorsOriginService', () => {
     beforeEach(() => build([['*']]));
 
     it('does NOT allow any origin when the only webOrigin stored is "*"', async () => {
-      expect(await service.isOriginAllowed('https://anything.example.com')).toBe(false);
+      expect(
+        await service.isOriginAllowed('https://anything.example.com'),
+      ).toBe(false);
     });
 
     it('does NOT allow the literal "*" origin string', async () => {
@@ -115,7 +126,9 @@ describe('CorsOriginService', () => {
     beforeEach(() => build([['*', 'https://app.example.com']]));
 
     it('allows the concrete origin', async () => {
-      expect(await service.isOriginAllowed('https://app.example.com')).toBe(true);
+      expect(await service.isOriginAllowed('https://app.example.com')).toBe(
+        true,
+      );
     });
 
     it('does NOT allow an arbitrary origin just because "*" is present', async () => {
@@ -152,7 +165,9 @@ describe('CorsOriginService', () => {
     });
 
     it('returns false for any origin (deny-safe) without throwing', async () => {
-      expect(await service.isOriginAllowed('https://app.example.com')).toBe(false);
+      expect(await service.isOriginAllowed('https://app.example.com')).toBe(
+        false,
+      );
     });
   });
 });

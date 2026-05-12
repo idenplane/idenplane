@@ -10,7 +10,12 @@ import {
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiSecurity } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiSecurity,
+} from '@nestjs/swagger';
 import type { Realm } from '@prisma/client';
 import { OrganizationsService } from './organizations.service.js';
 import { CreateOrganizationDto } from './dto/create-organization.dto.js';
@@ -171,7 +176,12 @@ export class OrganizationsController {
     @Param('token') token: string,
     @Body('userId') userId: string,
   ) {
-    return this.organizationsService.acceptInvitation(realm, slug, token, userId);
+    return this.organizationsService.acceptInvitation(
+      realm,
+      slug,
+      token,
+      userId,
+    );
   }
 
   // ─── Domain Verification ─────────────────────────────────
@@ -189,7 +199,11 @@ export class OrganizationsController {
     @Param('slug') slug: string,
     @Body() dto: VerifyDomainDto,
   ) {
-    return this.organizationsService.initiateDomainVerification(realm, slug, dto);
+    return this.organizationsService.initiateDomainVerification(
+      realm,
+      slug,
+      dto,
+    );
   }
 
   @Post(':slug/verify-domain')
@@ -213,7 +227,10 @@ export class OrganizationsController {
   @ApiResponse({ status: 200, description: 'List of SSO connections' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
-  listSsoConnections(@CurrentRealm() realm: Realm, @Param('slug') slug: string) {
+  listSsoConnections(
+    @CurrentRealm() realm: Realm,
+    @Param('slug') slug: string,
+  ) {
     return this.organizationsService.listSsoConnections(realm, slug);
   }
 
@@ -241,7 +258,11 @@ export class OrganizationsController {
     @Param('slug') slug: string,
     @Param('connectionId') connectionId: string,
   ) {
-    return this.organizationsService.getSsoConnection(realm, slug, connectionId);
+    return this.organizationsService.getSsoConnection(
+      realm,
+      slug,
+      connectionId,
+    );
   }
 
   @Put(':slug/sso-connections/:connectionId')

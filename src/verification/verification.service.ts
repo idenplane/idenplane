@@ -67,7 +67,9 @@ export class VerificationService {
     if (!record || record.type !== type || record.expiresAt < new Date()) {
       // Clean up expired token if found
       if (record) {
-        await this.prisma.verificationToken.delete({ where: { id: record.id } });
+        await this.prisma.verificationToken.delete({
+          where: { id: record.id },
+        });
       }
       return null;
     }

@@ -69,7 +69,7 @@ describe('SamlSpAdminController', () => {
     it('should call samlIdpService.updateSp', () => {
       const dto = { name: 'Updated SP' };
       samlIdpService.updateSp.mockResolvedValue({});
-      controller.update(realm, 'sp-1', dto as any);
+      controller.update(realm, 'sp-1', dto);
       expect(samlIdpService.updateSp).toHaveBeenCalledWith(realm, 'sp-1', dto);
     });
   });

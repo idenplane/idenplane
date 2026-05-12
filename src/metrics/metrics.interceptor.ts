@@ -21,7 +21,12 @@ export class MetricsInterceptor implements NestInterceptor {
       tap({
         next: () => {
           const response = context.switchToHttp().getResponse<Response>();
-          this.recordMetrics(request.method, normalizedPath, response.statusCode, startTime);
+          this.recordMetrics(
+            request.method,
+            normalizedPath,
+            response.statusCode,
+            startTime,
+          );
         },
         error: (err: any) => {
           const status = err.status ?? err.getStatus?.() ?? 500;
@@ -31,7 +36,12 @@ export class MetricsInterceptor implements NestInterceptor {
     );
   }
 
-  private recordMetrics(method: string, path: string, status: number, startTime: bigint): void {
+  private recordMetrics(
+    method: string,
+    path: string,
+    status: number,
+    startTime: bigint,
+  ): void {
     const durationSeconds = Number(process.hrtime.bigint() - startTime) / 1e9;
 
     this.metricsService.httpRequestsTotal.inc({

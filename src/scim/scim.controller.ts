@@ -23,7 +23,13 @@ import {
   Logger,
   BadRequestException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiSecurity, ApiResponse, ApiExcludeEndpoint } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiSecurity,
+  ApiResponse,
+  ApiExcludeEndpoint,
+} from '@nestjs/swagger';
 import type { Request } from 'express';
 import { ScimAuthGuard } from './guards/scim-auth.guard.js';
 import { ScimServiceProviderConfigService } from './service-provider-config.service.js';
@@ -43,7 +49,11 @@ import type {
 import { ALL_SCHEMAS, ALL_RESOURCE_TYPES } from './schemas/scim.schemas.js';
 
 interface ScimRequest extends Request {
-  scimRealm?: { id: string; scimUserAutocreate?: boolean; scimGroupSyncEnabled?: boolean };
+  scimRealm?: {
+    id: string;
+    scimUserAutocreate?: boolean;
+    scimGroupSyncEnabled?: boolean;
+  };
 }
 
 @ApiTags('SCIM 2.0')
@@ -106,7 +116,9 @@ export class ScimController {
   getResourceTypeById(@Param('resourceTypeId') resourceTypeId: string) {
     const rt = this.configService.getResourceTypeByName(resourceTypeId);
     if (!rt) {
-      throw new BadRequestException(`Resource type '${resourceTypeId}' not found`);
+      throw new BadRequestException(
+        `Resource type '${resourceTypeId}' not found`,
+      );
     }
     return rt;
   }

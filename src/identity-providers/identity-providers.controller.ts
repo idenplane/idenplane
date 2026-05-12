@@ -10,7 +10,12 @@ import {
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiSecurity } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiSecurity,
+} from '@nestjs/swagger';
 import type { Realm } from '@prisma/client';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
@@ -30,10 +35,7 @@ export class IdentityProvidersController {
   @ApiResponse({ status: 201, description: 'Created' })
   @ApiResponse({ status: 400, description: 'Invalid input' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  create(
-    @CurrentRealm() realm: Realm,
-    @Body() dto: CreateIdentityProviderDto,
-  ) {
+  create(@CurrentRealm() realm: Realm, @Body() dto: CreateIdentityProviderDto) {
     return this.idpService.create(realm, dto);
   }
 
@@ -50,10 +52,7 @@ export class IdentityProvidersController {
   @ApiResponse({ status: 200, description: 'Identity provider details' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
-  findByAlias(
-    @CurrentRealm() realm: Realm,
-    @Param('alias') alias: string,
-  ) {
+  findByAlias(@CurrentRealm() realm: Realm, @Param('alias') alias: string) {
     return this.idpService.findByAlias(realm, alias);
   }
 
@@ -76,10 +75,7 @@ export class IdentityProvidersController {
   @ApiResponse({ status: 204, description: 'Deleted' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
-  remove(
-    @CurrentRealm() realm: Realm,
-    @Param('alias') alias: string,
-  ) {
+  remove(@CurrentRealm() realm: Realm, @Param('alias') alias: string) {
     return this.idpService.remove(realm, alias);
   }
 }

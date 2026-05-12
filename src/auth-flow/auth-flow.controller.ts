@@ -66,8 +66,14 @@ export class AuthFlowController {
   @ApiParam({ name: 'realm', description: 'Realm name or ID' })
   @ApiResponse({ status: 201, description: 'Flow created' })
   @ApiResponse({ status: 400, description: 'Bad request — invalid DTO' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
-  @ApiResponse({ status: 409, description: 'Flow with that name already exists' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'Flow with that name already exists',
+  })
   async create(
     @Param('realm') realmParam: string,
     @Body() dto: CreateAuthFlowDto,
@@ -82,7 +88,10 @@ export class AuthFlowController {
   @ApiOperation({ summary: 'List all authentication flows for a realm' })
   @ApiParam({ name: 'realm', description: 'Realm name or ID' })
   @ApiResponse({ status: 200, description: 'Array of authentication flows' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
   async findAll(@Param('realm') realmParam: string) {
     const realmId = await this.resolveRealmId(realmParam);
     return this.authFlowService.findAll(realmId);
@@ -95,12 +104,12 @@ export class AuthFlowController {
   @ApiParam({ name: 'realm', description: 'Realm name or ID' })
   @ApiParam({ name: 'id', description: 'Flow ID' })
   @ApiResponse({ status: 200, description: 'Authentication flow details' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
   @ApiResponse({ status: 404, description: 'Flow not found' })
-  async findOne(
-    @Param('realm') realmParam: string,
-    @Param('id') id: string,
-  ) {
+  async findOne(@Param('realm') realmParam: string, @Param('id') id: string) {
     const realmId = await this.resolveRealmId(realmParam);
     return this.authFlowService.findOne(realmId, id);
   }
@@ -113,7 +122,10 @@ export class AuthFlowController {
   @ApiParam({ name: 'id', description: 'Flow ID' })
   @ApiResponse({ status: 200, description: 'Authentication flow updated' })
   @ApiResponse({ status: 400, description: 'Bad request — invalid DTO' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
   @ApiResponse({ status: 404, description: 'Flow not found' })
   async update(
     @Param('realm') realmParam: string,
@@ -133,10 +145,7 @@ export class AuthFlowController {
   @ApiParam({ name: 'id', description: 'Flow ID' })
   @ApiResponse({ status: 204, description: 'Deleted' })
   @ApiResponse({ status: 404, description: 'Flow not found' })
-  async remove(
-    @Param('realm') realmParam: string,
-    @Param('id') id: string,
-  ) {
+  async remove(@Param('realm') realmParam: string, @Param('id') id: string) {
     const realmId = await this.resolveRealmId(realmParam);
     await this.authFlowService.remove(realmId, id);
   }
@@ -144,13 +153,18 @@ export class AuthFlowController {
   // ── Assign flow to client ────────────────────────────────
 
   @Put(':id/assign-client/:clientId')
-  @ApiOperation({ summary: 'Assign an authentication flow to a specific client' })
+  @ApiOperation({
+    summary: 'Assign an authentication flow to a specific client',
+  })
   @ApiParam({ name: 'realm', description: 'Realm name or ID' })
   @ApiParam({ name: 'id', description: 'Flow ID' })
   @ApiParam({ name: 'clientId', description: 'Client ID (primary key)' })
   @ApiResponse({ status: 200, description: 'Flow assigned to client' })
   @ApiResponse({ status: 400, description: 'Bad request — invalid DTO' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
   @ApiResponse({ status: 404, description: 'Client or flow not found' })
   assignToClient(
     @Param('id') _flowId: string,
@@ -168,10 +182,15 @@ export class AuthFlowController {
 
   @Post('seed-defaults')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Seed the three built-in default flows for this realm' })
+  @ApiOperation({
+    summary: 'Seed the three built-in default flows for this realm',
+  })
   @ApiParam({ name: 'realm', description: 'Realm name or ID' })
   @ApiResponse({ status: 204, description: 'Default flows seeded' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
   async seedDefaults(@Param('realm') realmParam: string) {
     const realmId = await this.resolveRealmId(realmParam);
     await this.authFlowService.seedDefaultFlows(realmId);

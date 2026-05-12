@@ -21,7 +21,9 @@ export class VonageSmsProvider implements SmsProvider {
     if (this.apiKey && this.apiSecret) {
       this.logger.log('Vonage SMS provider initialized');
     } else {
-      this.logger.warn('Vonage credentials not configured - set VONAGE_API_KEY and VONAGE_API_SECRET');
+      this.logger.warn(
+        'Vonage credentials not configured - set VONAGE_API_KEY and VONAGE_API_SECRET',
+      );
     }
   }
 
@@ -31,7 +33,9 @@ export class VonageSmsProvider implements SmsProvider {
     }
 
     if (!this.fromNumber) {
-      throw new Error('Vonage phone number not configured - set VONAGE_PHONE_NUMBER');
+      throw new Error(
+        'Vonage phone number not configured - set VONAGE_PHONE_NUMBER',
+      );
     }
 
     try {
@@ -54,11 +58,15 @@ export class VonageSmsProvider implements SmsProvider {
         throw new Error(`Vonage API error: ${response.status} ${errorBody}`);
       }
 
-      const result = await response.json() as { messages: Array<{ status: string; 'error-text'?: string }> };
+      const result = (await response.json()) as {
+        messages: Array<{ status: string; 'error-text'?: string }>;
+      };
 
-      const failedMessage = result.messages.find(msg => msg.status !== '0');
+      const failedMessage = result.messages.find((msg) => msg.status !== '0');
       if (failedMessage) {
-        throw new Error(`Vonage SMS failed: ${failedMessage['error-text'] ?? 'Unknown error'}`);
+        throw new Error(
+          `Vonage SMS failed: ${failedMessage['error-text'] ?? 'Unknown error'}`,
+        );
       }
 
       this.logger.log(`SMS sent to ${to}`);
@@ -66,13 +74,18 @@ export class VonageSmsProvider implements SmsProvider {
       if (error instanceof Error && error.message.startsWith('Vonage')) {
         throw error;
       }
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Failed to send SMS to ${to}: ${errorMessage}`);
       throw new Error(`Vonage SMS failed: ${errorMessage}`);
     }
   }
 
   isConfigured(): boolean {
-    return this.apiKey !== null && this.apiSecret !== null && this.fromNumber !== null;
+    return (
+      this.apiKey !== null &&
+      this.apiSecret !== null &&
+      this.fromNumber !== null
+    );
   }
 }

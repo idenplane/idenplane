@@ -16,13 +16,13 @@ export interface BehavioralSampleInput {
   userId: string;
   interactionType: 'typing' | 'pointer' | 'scroll' | 'keystroke';
   timestamp: Date;
-  duration?: number;          // ms
-  burstLength?: number;      // characters/keystrokes in burst
-  velocity?: number;         // pixels/second
-  acceleration?: number;     // px/s²
-  idleTime?: number;         // ms between interactions
-  errorCount?: number;       // backspaces/deletes in burst
-  accuracy?: number;         // 0-1 ratio correct keystrokes
+  duration?: number; // ms
+  burstLength?: number; // characters/keystrokes in burst
+  velocity?: number; // pixels/second
+  acceleration?: number; // px/s²
+  idleTime?: number; // ms between interactions
+  errorCount?: number; // backspaces/deletes in burst
+  accuracy?: number; // 0-1 ratio correct keystrokes
   cursorPositionDelta?: number;
   scrollAmount?: number;
 }
@@ -132,10 +132,18 @@ export class BehavioralBiometricsService {
     const currentProfile = this.computeCurrentProfile(sessionSamples);
 
     // Evaluate against baseline
-    const riskSignal = evaluateBehavioralBiometrics(currentProfile, baselineProfile, sensitivity);
+    const riskSignal = evaluateBehavioralBiometrics(
+      currentProfile,
+      baselineProfile,
+      sensitivity,
+    );
 
     // Determine anomaly reasons
-    const anomalyReasons = this.extractAnomalyReasons(riskSignal, currentProfile, baselineProfile);
+    const anomalyReasons = this.extractAnomalyReasons(
+      riskSignal,
+      currentProfile,
+      baselineProfile,
+    );
 
     return {
       sessionId,
@@ -183,9 +191,10 @@ export class BehavioralBiometricsService {
     const newBaseline = this.computeBaseline(samples);
 
     // Get current profile for comparison
-    const existingProfile = await this.prisma.behavioralBiometricProfile.findUnique({
-      where: { userId },
-    });
+    const existingProfile =
+      await this.prisma.behavioralBiometricProfile.findUnique({
+        where: { userId },
+      });
 
     // Determine if there's a significant change
     const significantChange = existingProfile
@@ -323,7 +332,9 @@ export class BehavioralBiometricsService {
    * Cleans up old samples to prevent database bloat.
    */
   async cleanupOldSamples(retentionDays: number = 90): Promise<number> {
-    const cutoffDate = new Date(Date.now() - retentionDays * 24 * 60 * 60 * 1000);
+    const cutoffDate = new Date(
+      Date.now() - retentionDays * 24 * 60 * 60 * 1000,
+    );
 
     const result = await this.prisma.behavioralSample.deleteMany({
       where: {
@@ -342,16 +353,18 @@ export class BehavioralBiometricsService {
 
   // ── Private helpers ────────────────────────────────────────────────────────
 
-  private computeCurrentProfile(samples: {
-    interactionType: string;
-    duration?: number | null;
-    burstLength?: number | null;
-    velocity?: number | null;
-    idleTime?: number | null;
-    errorCount?: number | null;
-    accuracy?: number | null;
-    collectedAt: Date;
-  }[]): BehavioralBiometricData {
+  private computeCurrentProfile(
+    samples: {
+      interactionType: string;
+      duration?: number | null;
+      burstLength?: number | null;
+      velocity?: number | null;
+      idleTime?: number | null;
+      errorCount?: number | null;
+      accuracy?: number | null;
+      collectedAt: Date;
+    }[],
+  ): BehavioralBiometricData {
     if (samples.length === 0) {
       return {
         typingSpeed: null,
@@ -367,9 +380,12 @@ export class BehavioralBiometricsService {
 
     // Separate by interaction type
     const typingSamples = samples.filter(
-      (s) => s.interactionType === 'typing' || s.interactionType === 'keystroke',
+      (s) =>
+        s.interactionType === 'typing' || s.interactionType === 'keystroke',
     );
-    const pointerSamples = samples.filter((s) => s.interactionType === 'pointer');
+    const pointerSamples = samples.filter(
+      (s) => s.interactionType === 'pointer',
+    );
     const scrollSamples = samples.filter((s) => s.interactionType === 'scroll');
 
     // Compute typing metrics
@@ -420,7 +436,8 @@ export class BehavioralBiometricsService {
         // Compute variance
         const mean = mouseSpeed;
         const squaredDiffs = speeds.map((v) => Math.pow(v - mean, 2));
-        mouseVariance = squaredDiffs.reduce((acc, v) => acc + v, 0) / speeds.length;
+        mouseVariance =
+          squaredDiffs.reduce((acc, v) => acc + v, 0) / speeds.length;
       }
     }
 
@@ -449,16 +466,18 @@ export class BehavioralBiometricsService {
     const idleTimes = samples
       .map((s) => s.idleTime)
       .filter((v): v is number => v !== null && v !== undefined);
-    const idleTimeAvg = idleTimes.length > 0
-      ? idleTimes.reduce((acc, v) => acc + v, 0) / idleTimes.length
-      : null;
+    const idleTimeAvg =
+      idleTimes.length > 0
+        ? idleTimes.reduce((acc, v) => acc + v, 0) / idleTimes.length
+        : null;
 
     // Compute click frequency (interactions per minute)
     let clickFrequency: number | null = null;
     if (samples.length > 1) {
       const firstSample = samples[samples.length - 1];
       const lastSample = samples[0];
-      const durationMs = lastSample.collectedAt.getTime() - firstSample.collectedAt.getTime();
+      const durationMs =
+        lastSample.collectedAt.getTime() - firstSample.collectedAt.getTime();
 
       if (durationMs > 0) {
         clickFrequency = (samples.length / durationMs) * 60_000; // per minute
@@ -470,7 +489,9 @@ export class BehavioralBiometricsService {
     if (samples.length >= 2) {
       const firstSample = samples[samples.length - 1];
       const lastSample = samples[0];
-      sessionDuration = (lastSample.collectedAt.getTime() - firstSample.collectedAt.getTime()) / 60_000; // minutes
+      sessionDuration =
+        (lastSample.collectedAt.getTime() - firstSample.collectedAt.getTime()) /
+        60_000; // minutes
     }
 
     return {
@@ -485,16 +506,18 @@ export class BehavioralBiometricsService {
     };
   }
 
-  private computeBaseline(samples: {
-    interactionType: string;
-    duration?: number | null;
-    burstLength?: number | null;
-    velocity?: number | null;
-    idleTime?: number | null;
-    errorCount?: number | null;
-    accuracy?: number | null;
-    collectedAt: Date;
-  }[]): BaselineProfile {
+  private computeBaseline(
+    samples: {
+      interactionType: string;
+      duration?: number | null;
+      burstLength?: number | null;
+      velocity?: number | null;
+      idleTime?: number | null;
+      errorCount?: number | null;
+      accuracy?: number | null;
+      collectedAt: Date;
+    }[],
+  ): BaselineProfile {
     const current = this.computeCurrentProfile(samples);
 
     return {
@@ -532,7 +555,7 @@ export class BehavioralBiometricsService {
     // Check if typing speed changed by more than 30%
     const typingThreshold = existing.avgTypingSpeed * 0.3;
     const typingDiff = Math.abs(
-      (newBaseline.avgTypingSpeed / 60) - existing.avgTypingSpeed,
+      newBaseline.avgTypingSpeed / 60 - existing.avgTypingSpeed,
     );
 
     if (typingDiff > typingThreshold) {
@@ -541,7 +564,9 @@ export class BehavioralBiometricsService {
 
     // Check if pointer speed changed by more than 30%
     const pointerThreshold = existing.avgPointerSpeed * 0.3;
-    const pointerDiff = Math.abs(newBaseline.avgMouseSpeed - existing.avgPointerSpeed);
+    const pointerDiff = Math.abs(
+      newBaseline.avgMouseSpeed - existing.avgPointerSpeed,
+    );
 
     if (pointerDiff > pointerThreshold) {
       return true;
@@ -564,20 +589,24 @@ export class BehavioralBiometricsService {
     const parts: string[] = [];
 
     const typingDiff = Math.abs(
-      (newBaseline.avgTypingSpeed / 60) - existing.avgTypingSpeed,
+      newBaseline.avgTypingSpeed / 60 - existing.avgTypingSpeed,
     );
     if (typingDiff > 0) {
-      const direction = newBaseline.avgTypingSpeed > existing.avgTypingSpeed * 60
-        ? 'increased'
-        : 'decreased';
+      const direction =
+        newBaseline.avgTypingSpeed > existing.avgTypingSpeed * 60
+          ? 'increased'
+          : 'decreased';
       parts.push(`Typing speed ${direction}`);
     }
 
-    const pointerDiff = Math.abs(newBaseline.avgMouseSpeed - existing.avgPointerSpeed);
+    const pointerDiff = Math.abs(
+      newBaseline.avgMouseSpeed - existing.avgPointerSpeed,
+    );
     if (pointerDiff > 0) {
-      const direction = newBaseline.avgMouseSpeed > existing.avgPointerSpeed
-        ? 'increased'
-        : 'decreased';
+      const direction =
+        newBaseline.avgMouseSpeed > existing.avgPointerSpeed
+          ? 'increased'
+          : 'decreased';
       parts.push(`Pointer speed ${direction}`);
     }
 
@@ -602,8 +631,8 @@ export class BehavioralBiometricsService {
       signal.reason.includes('typing')
     ) {
       const deviation = Math.round(
-        Math.abs(current.typingSpeed - baseline.avgTypingSpeed) /
-          baseline.avgTypingSpeed *
+        (Math.abs(current.typingSpeed - baseline.avgTypingSpeed) /
+          baseline.avgTypingSpeed) *
           100,
       );
       reasons.push(`Typing speed deviates by ${deviation}% from baseline`);
@@ -616,11 +645,13 @@ export class BehavioralBiometricsService {
       signal.reason.includes('Mouse')
     ) {
       const deviation = Math.round(
-        Math.abs(current.mouseMovementAvgSpeed - baseline.avgMouseSpeed) /
-          baseline.avgMouseSpeed *
+        (Math.abs(current.mouseMovementAvgSpeed - baseline.avgMouseSpeed) /
+          baseline.avgMouseSpeed) *
           100,
       );
-      reasons.push(`Mouse movement speed deviates by ${deviation}% from baseline`);
+      reasons.push(
+        `Mouse movement speed deviates by ${deviation}% from baseline`,
+      );
     }
 
     // Error rate

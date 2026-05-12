@@ -88,7 +88,12 @@ describe('VerificationService', () => {
       prisma.verificationToken.deleteMany.mockResolvedValue({ count: 0 });
       prisma.verificationToken.create.mockResolvedValue({});
 
-      await service.createTokenWithHash('user-1', 'EMAIL_VERIFY', 3600, 'pre-hashed-xyz');
+      await service.createTokenWithHash(
+        'user-1',
+        'EMAIL_VERIFY',
+        3600,
+        'pre-hashed-xyz',
+      );
 
       expect(prisma.verificationToken.deleteMany).toHaveBeenCalledWith({
         where: { userId: 'user-1', type: 'EMAIL_VERIFY' },
@@ -102,7 +107,12 @@ describe('VerificationService', () => {
       const now = Date.now();
       jest.spyOn(Date, 'now').mockReturnValue(now);
 
-      await service.createTokenWithHash('user-1', 'EMAIL_VERIFY', 1800, 'pre-hashed-xyz');
+      await service.createTokenWithHash(
+        'user-1',
+        'EMAIL_VERIFY',
+        1800,
+        'pre-hashed-xyz',
+      );
 
       expect(mockCrypto.generateSecret).not.toHaveBeenCalled();
       expect(prisma.verificationToken.create).toHaveBeenCalledWith({
@@ -121,7 +131,12 @@ describe('VerificationService', () => {
       prisma.verificationToken.deleteMany.mockResolvedValue({ count: 0 });
       prisma.verificationToken.create.mockResolvedValue({});
 
-      const result = await service.createTokenWithHash('user-1', 'EMAIL_VERIFY', 3600, 'hash');
+      const result = await service.createTokenWithHash(
+        'user-1',
+        'EMAIL_VERIFY',
+        3600,
+        'hash',
+      );
 
       expect(result).toBeUndefined();
     });
@@ -144,7 +159,10 @@ describe('VerificationService', () => {
     it('should return null when token is not found', async () => {
       prisma.verificationToken.findUnique.mockResolvedValue(null);
 
-      const result = await service.validateToken('unknown-token', 'EMAIL_VERIFY');
+      const result = await service.validateToken(
+        'unknown-token',
+        'EMAIL_VERIFY',
+      );
 
       expect(result).toBeNull();
     });
@@ -167,7 +185,10 @@ describe('VerificationService', () => {
       });
       prisma.verificationToken.delete.mockResolvedValue({});
 
-      const result = await service.validateToken('raw-token-abc', 'EMAIL_VERIFY');
+      const result = await service.validateToken(
+        'raw-token-abc',
+        'EMAIL_VERIFY',
+      );
 
       expect(result).toBeNull();
       expect(prisma.verificationToken.delete).toHaveBeenCalledWith({
@@ -185,7 +206,10 @@ describe('VerificationService', () => {
       });
       prisma.verificationToken.delete.mockResolvedValue({});
 
-      const result = await service.validateToken('raw-token-abc', 'EMAIL_VERIFY');
+      const result = await service.validateToken(
+        'raw-token-abc',
+        'EMAIL_VERIFY',
+      );
 
       expect(result).toBeNull();
       expect(prisma.verificationToken.delete).toHaveBeenCalledWith({
@@ -203,7 +227,10 @@ describe('VerificationService', () => {
       });
       prisma.verificationToken.delete.mockResolvedValue({});
 
-      const result = await service.validateToken('raw-token-abc', 'EMAIL_VERIFY');
+      const result = await service.validateToken(
+        'raw-token-abc',
+        'EMAIL_VERIFY',
+      );
 
       expect(result).toEqual({ userId: 'user-42' });
       expect(prisma.verificationToken.delete).toHaveBeenCalledWith({
@@ -239,7 +266,10 @@ describe('VerificationService', () => {
       });
       prisma.verificationToken.delete.mockResolvedValue({});
 
-      const result = await service.validateToken('raw-token-abc', 'EMAIL_VERIFY');
+      const result = await service.validateToken(
+        'raw-token-abc',
+        'EMAIL_VERIFY',
+      );
 
       expect(result).toBeNull();
       expect(prisma.verificationToken.delete).toHaveBeenCalledWith({

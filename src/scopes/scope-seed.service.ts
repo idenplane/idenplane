@@ -20,7 +20,10 @@ const DEFAULT_SCOPES = [
       {
         name: 'username',
         mapperType: 'oidc-usermodel-attribute-mapper',
-        config: { 'user.attribute': 'username', 'claim.name': 'preferred_username' },
+        config: {
+          'user.attribute': 'username',
+          'claim.name': 'preferred_username',
+        },
       },
       {
         name: 'full name',
@@ -51,7 +54,10 @@ const DEFAULT_SCOPES = [
       {
         name: 'email verified',
         mapperType: 'oidc-usermodel-attribute-mapper',
-        config: { 'user.attribute': 'emailVerified', 'claim.name': 'email_verified' },
+        config: {
+          'user.attribute': 'emailVerified',
+          'claim.name': 'email_verified',
+        },
       },
     ],
   },

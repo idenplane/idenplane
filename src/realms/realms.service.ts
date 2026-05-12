@@ -84,7 +84,10 @@ export class RealmsService {
         maxSessionsPerUser: dto.maxSessionsPerUser,
         // Theming
         themeName: dto.themeName,
-        theme: dto.theme !== undefined ? dto.theme as unknown as Prisma.InputJsonValue : undefined,
+        theme:
+          dto.theme !== undefined
+            ? (dto.theme as unknown as Prisma.InputJsonValue)
+            : undefined,
         loginTheme: dto.loginTheme,
         accountTheme: dto.accountTheme,
         emailTheme: dto.emailTheme,
@@ -190,9 +193,16 @@ export class RealmsService {
     const existing = await this.findByNameRaw(name);
 
     // Validate theme names against available themes
-    const themeFields = [dto.loginTheme, dto.accountTheme, dto.emailTheme, dto.themeName].filter(Boolean);
+    const themeFields = [
+      dto.loginTheme,
+      dto.accountTheme,
+      dto.emailTheme,
+      dto.themeName,
+    ].filter(Boolean);
     if (themeFields.length > 0) {
-      const availableNames = this.themeService.getAvailableThemes().map(t => t.name);
+      const availableNames = this.themeService
+        .getAvailableThemes()
+        .map((t) => t.name);
       for (const themeName of themeFields) {
         if (!availableNames.includes(themeName!)) {
           throw new BadRequestException(
@@ -243,7 +253,7 @@ export class RealmsService {
       maxSessionsPerUser: dto.maxSessionsPerUser,
       // Theming
       themeName: dto.themeName,
-      theme: dto.theme as Record<string, unknown> | undefined,
+      theme: dto.theme,
       loginTheme: dto.loginTheme,
       accountTheme: dto.accountTheme,
       emailTheme: dto.emailTheme,

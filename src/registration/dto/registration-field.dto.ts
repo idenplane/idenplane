@@ -1,15 +1,36 @@
-import { IsString, IsOptional, IsBoolean, IsInt, IsIn, IsArray, Min } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsInt,
+  IsIn,
+  IsArray,
+  Min,
+} from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
-const FIELD_TYPES = ['text', 'email', 'password', 'number', 'select', 'checkbox'] as const;
+const FIELD_TYPES = [
+  'text',
+  'email',
+  'password',
+  'number',
+  'select',
+  'checkbox',
+] as const;
 
 export class CreateRegistrationFieldDto {
-  @ApiProperty({ example: 'company_name', description: 'Field name (unique per realm)' })
+  @ApiProperty({
+    example: 'company_name',
+    description: 'Field name (unique per realm)',
+  })
   @IsString()
   name!: string;
 
-  @ApiProperty({ example: 'Company Name', description: 'Display label for the field' })
+  @ApiProperty({
+    example: 'Company Name',
+    description: 'Display label for the field',
+  })
   @IsString()
   displayName!: string;
 
@@ -18,12 +39,17 @@ export class CreateRegistrationFieldDto {
   @IsIn(FIELD_TYPES)
   type?: string;
 
-  @ApiPropertyOptional({ default: false, description: 'Whether the field is required during registration' })
+  @ApiPropertyOptional({
+    default: false,
+    description: 'Whether the field is required during registration',
+  })
   @IsOptional()
   @IsBoolean()
   required?: boolean;
 
-  @ApiPropertyOptional({ description: 'Placeholder text shown in the input field' })
+  @ApiPropertyOptional({
+    description: 'Placeholder text shown in the input field',
+  })
   @IsOptional()
   @IsString()
   placeholder?: string;
@@ -33,7 +59,10 @@ export class CreateRegistrationFieldDto {
   @IsString()
   helpText?: string;
 
-  @ApiPropertyOptional({ description: 'Options for select-type fields', type: [String] })
+  @ApiPropertyOptional({
+    description: 'Options for select-type fields',
+    type: [String],
+  })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
@@ -56,7 +85,10 @@ export class CreateRegistrationFieldDto {
   @Min(0)
   sortOrder?: number;
 
-  @ApiPropertyOptional({ default: true, description: 'Whether this field is enabled' })
+  @ApiPropertyOptional({
+    default: true,
+    description: 'Whether this field is enabled',
+  })
   @IsOptional()
   @IsBoolean()
   enabled?: boolean;

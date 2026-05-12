@@ -11,7 +11,13 @@ import {
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiSecurity, ApiResponse, ApiParam } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiSecurity,
+  ApiResponse,
+  ApiParam,
+} from '@nestjs/swagger';
 import { ThemeService } from './theme.service.js';
 import { ThemePreviewService } from './theme-preview.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -37,7 +43,9 @@ export class ThemeController {
   ) {}
 
   private async getRealmId(realmName: string): Promise<string> {
-    const realm = await this.prisma.realm.findUnique({ where: { name: realmName } });
+    const realm = await this.prisma.realm.findUnique({
+      where: { name: realmName },
+    });
     if (!realm) {
       throw { statusCode: 404, message: `Realm '${realmName}' not found` };
     }
@@ -86,7 +94,10 @@ export class ThemeController {
   @ApiResponse({ status: 404, description: 'Theme not found' })
   @ApiParam({ name: 'realmName', description: 'Realm name' })
   @ApiParam({ name: 'themeId', description: 'Theme ID' })
-  async findOne(@Param('realmName') realmName: string, @Param('themeId') themeId: string) {
+  async findOne(
+    @Param('realmName') realmName: string,
+    @Param('themeId') themeId: string,
+  ) {
     await this.getRealmId(realmName); // Verify realm exists
     const theme = await this.themeService.findById(themeId);
     if (!theme) {
@@ -120,11 +131,17 @@ export class ThemeController {
   @ApiOperation({ summary: 'Delete a theme' })
   @ApiResponse({ status: 204, description: 'Theme deleted successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - requires super-admin role' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - requires super-admin role',
+  })
   @ApiResponse({ status: 404, description: 'Theme not found' })
   @ApiParam({ name: 'realmName', description: 'Realm name' })
   @ApiParam({ name: 'themeId', description: 'Theme ID' })
-  async remove(@Param('realmName') realmName: string, @Param('themeId') themeId: string) {
+  async remove(
+    @Param('realmName') realmName: string,
+    @Param('themeId') themeId: string,
+  ) {
     await this.getRealmId(realmName); // Verify realm exists
     await this.themeService.deleteTheme(themeId);
   }
@@ -139,7 +156,10 @@ export class ThemeController {
   @ApiResponse({ status: 404, description: 'Theme not found' })
   @ApiParam({ name: 'realmName', description: 'Realm name' })
   @ApiParam({ name: 'themeId', description: 'Theme ID' })
-  async publish(@Param('realmName') realmName: string, @Param('themeId') themeId: string) {
+  async publish(
+    @Param('realmName') realmName: string,
+    @Param('themeId') themeId: string,
+  ) {
     await this.getRealmId(realmName); // Verify realm exists
     return this.themeService.publishTheme(themeId);
   }
@@ -151,7 +171,10 @@ export class ThemeController {
   @ApiResponse({ status: 404, description: 'Theme not found' })
   @ApiParam({ name: 'realmName', description: 'Realm name' })
   @ApiParam({ name: 'themeId', description: 'Theme ID' })
-  async getVersions(@Param('realmName') realmName: string, @Param('themeId') themeId: string) {
+  async getVersions(
+    @Param('realmName') realmName: string,
+    @Param('themeId') themeId: string,
+  ) {
     await this.getRealmId(realmName); // Verify realm exists
     return this.themeService.getVersionHistory(themeId);
   }
@@ -178,7 +201,9 @@ export class ThemeController {
 
   @Post('preview')
   @HttpCode(HttpStatus.OK)
-  @ApiOperation({ summary: 'Render theme preview HTML (for live preview in Theme Builder)' })
+  @ApiOperation({
+    summary: 'Render theme preview HTML (for live preview in Theme Builder)',
+  })
   @ApiResponse({ status: 200, description: 'Rendered preview HTML' })
   @ApiResponse({ status: 400, description: 'Invalid request body' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -212,6 +237,10 @@ export class ThemeController {
     @Body() dto: UploadThemeAssetDto,
   ) {
     await this.getRealmId(realmName); // Verify realm exists
-    return this.uploadService.uploadMultipleAssets(realmName, dto.files, dto.themeId);
+    return this.uploadService.uploadMultipleAssets(
+      realmName,
+      dto.files,
+      dto.themeId,
+    );
   }
 }

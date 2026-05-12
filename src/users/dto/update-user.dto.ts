@@ -1,4 +1,10 @@
-import { IsString, IsOptional, IsBoolean, IsEmail, Matches } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsEmail,
+  Matches,
+} from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 const NO_HTML = /^[^<>]*$/;

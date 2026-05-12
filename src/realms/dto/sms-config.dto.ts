@@ -1,4 +1,12 @@
-import { IsString, IsOptional, IsBoolean, IsInt, IsObject, Min, Max } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsInt,
+  IsObject,
+  Min,
+  Max,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class SmsProviderConfigDto {
@@ -11,7 +19,9 @@ export class SmsProviderConfigDto {
   @IsString()
   smsProvider?: string;
 
-  @ApiPropertyOptional({ description: 'Sender name or phone number for SMS OTP' })
+  @ApiPropertyOptional({
+    description: 'Sender name or phone number for SMS OTP',
+  })
   @IsOptional()
   @IsString()
   smsFrom?: string;
@@ -23,30 +33,46 @@ export class SmsProviderConfigDto {
   @Max(8)
   otpLength?: number;
 
-  @ApiPropertyOptional({ description: 'OTP code expiry time in seconds', default: 300 })
+  @ApiPropertyOptional({
+    description: 'OTP code expiry time in seconds',
+    default: 300,
+  })
   @IsOptional()
   @IsInt()
   @Min(60)
   otpExpirySeconds?: number;
 
-  @ApiPropertyOptional({ description: 'Provider-specific configuration (JSON)', type: Object })
+  @ApiPropertyOptional({
+    description: 'Provider-specific configuration (JSON)',
+    type: Object,
+  })
   @IsOptional()
   @IsObject()
   smsProviderConfig?: Record<string, unknown>;
 
-  @ApiPropertyOptional({ description: 'Maximum SMS OTP requests per user within the rate limit window', default: 3 })
+  @ApiPropertyOptional({
+    description:
+      'Maximum SMS OTP requests per user within the rate limit window',
+    default: 3,
+  })
   @IsOptional()
   @IsInt()
   @Min(1)
   smsMaxRequestsPerUser?: number;
 
-  @ApiPropertyOptional({ description: 'Rate limit window in seconds (default: 15 minutes)', default: 900 })
+  @ApiPropertyOptional({
+    description: 'Rate limit window in seconds (default: 15 minutes)',
+    default: 900,
+  })
   @IsOptional()
   @IsInt()
   @Min(60)
   smsRateLimitWindow?: number;
 
-  @ApiPropertyOptional({ description: 'Enable SMS OTP for multi-factor authentication', default: false })
+  @ApiPropertyOptional({
+    description: 'Enable SMS OTP for multi-factor authentication',
+    default: false,
+  })
   @IsOptional()
   @IsBoolean()
   smsMfaEnabled?: boolean;
@@ -61,7 +87,9 @@ export class UpdateSmsConfigDto {
   @IsString()
   smsProvider?: string;
 
-  @ApiPropertyOptional({ description: 'Sender name or phone number for SMS OTP' })
+  @ApiPropertyOptional({
+    description: 'Sender name or phone number for SMS OTP',
+  })
   @IsOptional()
   @IsString()
   smsFrom?: string;
@@ -79,12 +107,18 @@ export class UpdateSmsConfigDto {
   @Min(60)
   otpExpirySeconds?: number;
 
-  @ApiPropertyOptional({ description: 'Provider-specific configuration (JSON)', type: Object })
+  @ApiPropertyOptional({
+    description: 'Provider-specific configuration (JSON)',
+    type: Object,
+  })
   @IsOptional()
   @IsObject()
   smsProviderConfig?: Record<string, unknown>;
 
-  @ApiPropertyOptional({ description: 'Maximum SMS OTP requests per user within the rate limit window' })
+  @ApiPropertyOptional({
+    description:
+      'Maximum SMS OTP requests per user within the rate limit window',
+  })
   @IsOptional()
   @IsInt()
   @Min(1)
@@ -96,7 +130,9 @@ export class UpdateSmsConfigDto {
   @Min(60)
   smsRateLimitWindow?: number;
 
-  @ApiPropertyOptional({ description: 'Enable SMS OTP for multi-factor authentication' })
+  @ApiPropertyOptional({
+    description: 'Enable SMS OTP for multi-factor authentication',
+  })
   @IsOptional()
   @IsBoolean()
   smsMfaEnabled?: boolean;

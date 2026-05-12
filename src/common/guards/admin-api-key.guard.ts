@@ -41,7 +41,9 @@ export class AdminApiKeyGuard implements CanActivate {
       return true;
     }
 
-    type AdminRequest = Request & { adminUser?: { userId: string; roles: string[] } };
+    type AdminRequest = Request & {
+      adminUser?: { userId: string; roles: string[] };
+    };
     const adminReq = request as AdminRequest;
 
     // Try Bearer token (admin JWT) first
@@ -62,7 +64,8 @@ export class AdminApiKeyGuard implements CanActivate {
     const providedApiKey = request.headers['x-admin-api-key'];
     if (expectedKey && typeof providedApiKey === 'string') {
       const ip = resolveClientIp(request);
-      const rateLimitResult = await this.rateLimitService.checkAdminApiKeyLimit(ip);
+      const rateLimitResult =
+        await this.rateLimitService.checkAdminApiKeyLimit(ip);
       const headers = this.rateLimitService.computeHeaders(rateLimitResult);
       for (const [name, value] of Object.entries(headers)) {
         response.setHeader(name, value);
@@ -86,7 +89,10 @@ export class AdminApiKeyGuard implements CanActivate {
           .update(providedApiKey)
           .digest('hex')
           .slice(0, 12);
-        adminReq.adminUser = { userId: `api-key:${keyFingerprint}`, roles: ['super-admin'] };
+        adminReq.adminUser = {
+          userId: `api-key:${keyFingerprint}`,
+          roles: ['super-admin'],
+        };
         return true;
       }
     }

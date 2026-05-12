@@ -1,13 +1,26 @@
-import { IsString, IsOptional, IsBoolean, IsObject, IsArray, MinLength, IsIn } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsObject,
+  IsArray,
+  MinLength,
+  IsIn,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class RegisterAiAgentDto {
-  @ApiProperty({ example: 'data-analysis-agent', description: 'Unique name for the AI agent' })
+  @ApiProperty({
+    example: 'data-analysis-agent',
+    description: 'Unique name for the AI agent',
+  })
   @IsString()
   @MinLength(2)
   name!: string;
 
-  @ApiPropertyOptional({ example: 'AI agent for automated data analysis and reporting' })
+  @ApiPropertyOptional({
+    example: 'AI agent for automated data analysis and reporting',
+  })
   @IsOptional()
   @IsString()
   description?: string;
@@ -20,7 +33,10 @@ export class RegisterAiAgentDto {
   @IsString()
   agentPurpose?: string;
 
-  @ApiPropertyOptional({ enum: ['ACTIVE', 'PROVISIONING'], default: 'PROVISIONING' })
+  @ApiPropertyOptional({
+    enum: ['ACTIVE', 'PROVISIONING'],
+    default: 'PROVISIONING',
+  })
   @IsOptional()
   @IsIn(['ACTIVE', 'PROVISIONING'])
   lifecycleStatus?: 'ACTIVE' | 'PROVISIONING';

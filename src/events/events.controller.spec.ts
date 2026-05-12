@@ -140,7 +140,9 @@ describe('EventsController', () => {
 
       const result = controller.clearLoginEvents(realm);
 
-      expect(mockEventsService.clearLoginEvents).toHaveBeenCalledWith('realm-1');
+      expect(mockEventsService.clearLoginEvents).toHaveBeenCalledWith(
+        'realm-1',
+      );
       expect(result).toBeUndefined();
     });
   });
@@ -252,7 +254,7 @@ describe('EventsController', () => {
     it('createStream should delegate to auditStreamsService.create', () => {
       const dto = { name: 'S', streamType: 'http' as const };
       mockAuditStreamsService.create.mockReturnValue({});
-      controller.createStream(realm, dto as any);
+      controller.createStream(realm, dto);
       expect(mockAuditStreamsService.create).toHaveBeenCalledWith(realm, dto);
     });
 
@@ -265,20 +267,30 @@ describe('EventsController', () => {
     it('getStream should delegate to auditStreamsService.findOne', () => {
       mockAuditStreamsService.findOne.mockReturnValue({});
       controller.getStream(realm, 'stream-1');
-      expect(mockAuditStreamsService.findOne).toHaveBeenCalledWith(realm, 'stream-1');
+      expect(mockAuditStreamsService.findOne).toHaveBeenCalledWith(
+        realm,
+        'stream-1',
+      );
     });
 
     it('updateStream should delegate to auditStreamsService.update', () => {
       const dto = { enabled: false };
       mockAuditStreamsService.update.mockReturnValue({});
-      controller.updateStream(realm, 'stream-1', dto as any);
-      expect(mockAuditStreamsService.update).toHaveBeenCalledWith(realm, 'stream-1', dto);
+      controller.updateStream(realm, 'stream-1', dto);
+      expect(mockAuditStreamsService.update).toHaveBeenCalledWith(
+        realm,
+        'stream-1',
+        dto,
+      );
     });
 
     it('removeStream should delegate to auditStreamsService.remove', () => {
       mockAuditStreamsService.remove.mockReturnValue(undefined);
       controller.removeStream(realm, 'stream-1');
-      expect(mockAuditStreamsService.remove).toHaveBeenCalledWith(realm, 'stream-1');
+      expect(mockAuditStreamsService.remove).toHaveBeenCalledWith(
+        realm,
+        'stream-1',
+      );
     });
   });
 });

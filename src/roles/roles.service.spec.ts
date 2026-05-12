@@ -1,7 +1,4 @@
-import {
-  ConflictException,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { RolesService } from './roles.service.js';
 import {
   createMockPrismaService,
@@ -69,7 +66,10 @@ describe('RolesService', () => {
 
     it('should create a realm role without a description', async () => {
       prisma.role.findFirst.mockResolvedValue(null);
-      prisma.role.create.mockResolvedValue({ ...mockRole, description: undefined });
+      prisma.role.create.mockResolvedValue({
+        ...mockRole,
+        description: undefined,
+      });
 
       await service.createRealmRole(mockRealm, 'viewer');
 
@@ -85,9 +85,9 @@ describe('RolesService', () => {
     it('should throw ConflictException when role already exists', async () => {
       prisma.role.findFirst.mockResolvedValue(mockRole);
 
-      await expect(
-        service.createRealmRole(mockRealm, 'admin'),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.createRealmRole(mockRealm, 'admin')).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 
@@ -237,9 +237,7 @@ describe('RolesService', () => {
 
     it('should throw NotFoundException when some roles do not exist', async () => {
       prisma.user.findFirst.mockResolvedValue({ id: 'user-1' });
-      prisma.role.findMany.mockResolvedValue([
-        { id: 'role-1', name: 'admin' },
-      ]);
+      prisma.role.findMany.mockResolvedValue([{ id: 'role-1', name: 'admin' }]);
 
       await expect(
         service.assignRealmRoles(mockRealm, 'user-1', ['admin', 'missing']),
@@ -282,9 +280,7 @@ describe('RolesService', () => {
 
     it('should remove roles from a user', async () => {
       prisma.user.findFirst.mockResolvedValue(mockUser);
-      prisma.role.findMany.mockResolvedValue([
-        { id: 'role-1', name: 'admin' },
-      ]);
+      prisma.role.findMany.mockResolvedValue([{ id: 'role-1', name: 'admin' }]);
       prisma.userRole.deleteMany.mockResolvedValue({ count: 1 });
 
       const result = await service.removeUserRealmRoles(mockRealm, 'user-1', [
@@ -331,7 +327,10 @@ describe('RolesService', () => {
 
   describe('assignClientRoles', () => {
     it('should assign client roles to a user', async () => {
-      prisma.user.findFirst.mockResolvedValue({ id: 'user-1', realmId: 'realm-1' });
+      prisma.user.findFirst.mockResolvedValue({
+        id: 'user-1',
+        realmId: 'realm-1',
+      });
       prisma.client.findUnique.mockResolvedValue(mockClient);
       prisma.role.findMany.mockResolvedValue([
         { id: 'crole-1', name: 'editor' },
@@ -366,7 +365,10 @@ describe('RolesService', () => {
   describe('getUserClientRoles', () => {
     it('should return the user client roles', async () => {
       prisma.client.findUnique.mockResolvedValue(mockClient);
-      prisma.user.findFirst.mockResolvedValue({ id: 'user-1', realmId: 'realm-1' });
+      prisma.user.findFirst.mockResolvedValue({
+        id: 'user-1',
+        realmId: 'realm-1',
+      });
       const roles = [{ id: 'crole-1', name: 'editor' }];
       prisma.role.findMany.mockResolvedValue(roles);
 

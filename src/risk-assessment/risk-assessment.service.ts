@@ -61,7 +61,10 @@ export class RiskAssessmentService {
     loginEventId?: string,
   ): Promise<RiskAssessmentResult> {
     // Fetch (or lazily create) the user profile
-    const profile = await this.getOrCreateProfile(context.userId, context.realmId);
+    const profile = await this.getOrCreateProfile(
+      context.userId,
+      context.realmId,
+    );
 
     // Fetch realm thresholds
     const realm = await this.prisma.realm.findUnique({
@@ -90,16 +93,30 @@ export class RiskAssessmentService {
     const lastLogin = await this.getLastSuccessfulLoginCoords(context.userId);
 
     // Count recent failed attempts
-    const recentFailures = await this.countRecentFailures(context.userId, context.realmId);
+    const recentFailures = await this.countRecentFailures(
+      context.userId,
+      context.realmId,
+    );
 
     // Count logins in last 24 h
-    const recentLoginCount = await this.countRecentLogins(context.userId, context.realmId);
+    const recentLoginCount = await this.countRecentLogins(
+      context.userId,
+      context.realmId,
+    );
 
     // ── Evaluate each signal ─────────────────────────────────────────────────
-    const knownIps: string[] = Array.isArray(profile.knownIps) ? (profile.knownIps as string[]) : [];
-    const knownDevices: string[] = Array.isArray(profile.knownDevices) ? (profile.knownDevices as string[]) : [];
-    const loginTimes: number[] = Array.isArray(profile.loginTimes) ? (profile.loginTimes as number[]) : new Array(24).fill(0);
-    const lastLocations: string[] = Array.isArray(profile.lastLocations) ? (profile.lastLocations as string[]) : [];
+    const knownIps: string[] = Array.isArray(profile.knownIps)
+      ? (profile.knownIps as string[])
+      : [];
+    const knownDevices: string[] = Array.isArray(profile.knownDevices)
+      ? (profile.knownDevices as string[])
+      : [];
+    const loginTimes: number[] = Array.isArray(profile.loginTimes)
+      ? (profile.loginTimes as number[])
+      : new Array(24).fill(0);
+    const lastLocations: string[] = Array.isArray(profile.lastLocations)
+      ? (profile.lastLocations as string[])
+      : [];
 
     const signals: RiskSignal[] = [
       evaluateIpReputation(context.ipAddress, { knownIps }),
@@ -156,12 +173,18 @@ export class RiskAssessmentService {
   ): Promise<void> {
     const profile = await this.getOrCreateProfile(userId, realmId);
 
-    const knownIps: string[] = Array.isArray(profile.knownIps) ? (profile.knownIps as string[]) : [];
-    const knownDevices: string[] = Array.isArray(profile.knownDevices) ? (profile.knownDevices as string[]) : [];
+    const knownIps: string[] = Array.isArray(profile.knownIps)
+      ? (profile.knownIps as string[])
+      : [];
+    const knownDevices: string[] = Array.isArray(profile.knownDevices)
+      ? (profile.knownDevices as string[])
+      : [];
     const loginTimes: number[] = Array.isArray(profile.loginTimes)
       ? (profile.loginTimes as number[])
       : new Array(24).fill(0);
-    const lastLocations: string[] = Array.isArray(profile.lastLocations) ? (profile.lastLocations as string[]) : [];
+    const lastLocations: string[] = Array.isArray(profile.lastLocations)
+      ? (profile.lastLocations as string[])
+      : [];
 
     // Add IP (capped at 20 unique entries)
     if (context.ipAddress && !knownIps.includes(context.ipAddress)) {
@@ -180,7 +203,8 @@ export class RiskAssessmentService {
 
     // Increment hour-of-day counter
     const hour = context.timestamp.getUTCHours();
-    const updatedTimes = loginTimes.length === 24 ? [...loginTimes] : new Array(24).fill(0);
+    const updatedTimes =
+      loginTimes.length === 24 ? [...loginTimes] : new Array(24).fill(0);
     updatedTimes[hour] = (updatedTimes[hour] ?? 0) + 1;
 
     // Add geo location (capped at 10)
@@ -198,10 +222,10 @@ export class RiskAssessmentService {
     await this.prisma.userLoginProfile.update({
       where: { userId },
       data: {
-        knownIps: knownIps as Prisma.InputJsonValue,
-        knownDevices: knownDevices as Prisma.InputJsonValue,
+        knownIps: knownIps,
+        knownDevices: knownDevices,
         loginTimes: updatedTimes as Prisma.InputJsonValue,
-        lastLocations: lastLocations as Prisma.InputJsonValue,
+        lastLocations: lastLocations,
         avgLoginFrequency: newAvg,
       },
     });
@@ -290,14 +314,20 @@ export class RiskAssessmentService {
     return { coords: [coords.lat, coords.lon], timestamp: last.createdAt };
   }
 
-  private async countRecentFailures(userId: string, realmId: string): Promise<number> {
+  private async countRecentFailures(
+    userId: string,
+    realmId: string,
+  ): Promise<number> {
     const windowStart = new Date(Date.now() - 60 * 60 * 1000); // last 1 hour
     return this.prisma.loginFailure.count({
       where: { userId, realmId, failedAt: { gte: windowStart } },
     });
   }
 
-  private async countRecentLogins(userId: string, realmId: string): Promise<number> {
+  private async countRecentLogins(
+    userId: string,
+    realmId: string,
+  ): Promise<number> {
     const windowStart = new Date(Date.now() - 24 * 60 * 60 * 1000); // last 24 h
     return this.prisma.loginRiskAssessment.count({
       where: { userId, realmId, createdAt: { gte: windowStart } },

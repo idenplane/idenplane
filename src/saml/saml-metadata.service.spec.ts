@@ -72,9 +72,7 @@ describe('SamlMetadataService', () => {
 
       const xml = await service.generateMetadata(mockRealm, baseUrl);
 
-      expect(xml).toContain(
-        '<ds:X509Certificate></ds:X509Certificate>',
-      );
+      expect(xml).toContain('<ds:X509Certificate></ds:X509Certificate>');
     });
 
     it('should contain correct NameIDFormat entries', async () => {
@@ -98,9 +96,7 @@ describe('SamlMetadataService', () => {
 
       const xml = await service.generateMetadata(mockRealm, baseUrl);
 
-      expect(xml).toContain(
-        `entityID="${baseUrl}/realms/${mockRealm.name}"`,
-      );
+      expect(xml).toContain(`entityID="${baseUrl}/realms/${mockRealm.name}"`);
     });
 
     it('should set SSO Location to ${baseUrl}/realms/${realm.name}/protocol/saml', async () => {

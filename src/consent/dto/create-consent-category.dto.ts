@@ -2,7 +2,10 @@ import { IsString, IsOptional, IsBoolean, IsInt, Min } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateConsentCategoryDto {
-  @ApiProperty({ example: 'marketing_emails', description: 'Unique key within the realm' })
+  @ApiProperty({
+    example: 'marketing_emails',
+    description: 'Unique key within the realm',
+  })
   @IsString()
   key!: string;
 
@@ -10,17 +13,25 @@ export class CreateConsentCategoryDto {
   @IsString()
   displayName!: string;
 
-  @ApiPropertyOptional({ example: 'Receive marketing communications and newsletters' })
+  @ApiPropertyOptional({
+    example: 'Receive marketing communications and newsletters',
+  })
   @IsOptional()
   @IsString()
   description?: string;
 
-  @ApiPropertyOptional({ default: false, description: 'Whether consent is mandatory' })
+  @ApiPropertyOptional({
+    default: false,
+    description: 'Whether consent is mandatory',
+  })
   @IsOptional()
   @IsBoolean()
   required?: boolean;
 
-  @ApiPropertyOptional({ default: true, description: 'Whether user can toggle this consent' })
+  @ApiPropertyOptional({
+    default: true,
+    description: 'Whether user can toggle this consent',
+  })
   @IsOptional()
   @IsBoolean()
   configurableByUser?: boolean;

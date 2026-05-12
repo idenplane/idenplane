@@ -94,7 +94,10 @@ export class SessionTerminationService {
    * @param sessionId - The session to terminate
    * @param reason - Optional reason for termination
    */
-  async terminateSessionById(sessionId: string, reason?: string): Promise<void> {
+  async terminateSessionById(
+    sessionId: string,
+    reason?: string,
+  ): Promise<void> {
     const profile = await this.prisma.sessionRiskProfile.findUnique({
       where: { sessionId },
       include: {
@@ -116,7 +119,9 @@ export class SessionTerminationService {
     });
 
     if (!profile) {
-      throw new Error(`Session risk profile not found for session: ${sessionId}`);
+      throw new Error(
+        `Session risk profile not found for session: ${sessionId}`,
+      );
     }
 
     await this.terminateSession(profile, new Date(), reason);
@@ -147,14 +152,15 @@ export class SessionTerminationService {
       return;
     }
 
-    const terminationReason = overrideReason ?? profile.terminationReason ?? 'Critical risk detected';
+    const terminationReason =
+      overrideReason ?? profile.terminationReason ?? 'Critical risk detected';
 
     // Revoke the session via SessionsService
     try {
       await this.sessionsService.revokeSession(profile.sessionId, 'oauth');
       this.logger.log(
         `Session ${profile.sessionId} revoked due to critical risk ` +
-        `(user: ${session.user?.username ?? 'unknown'}, risk: ${profile.riskScore}, level: ${profile.riskLevel})`,
+          `(user: ${session.user?.username ?? 'unknown'}, risk: ${profile.riskScore}, level: ${profile.riskLevel})`,
       );
     } catch (error) {
       // If the session doesn't exist in the oauth table, try login session
@@ -191,8 +197,16 @@ export class SessionTerminationService {
         triggerReason: terminationReason,
         riskScoreBefore: profile.riskScore,
         riskScoreAfter: profile.riskScore,
-        riskLevelBefore: profile.riskLevel as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
-        riskLevelAfter: profile.riskLevel as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
+        riskLevelBefore: profile.riskLevel as
+          | 'LOW'
+          | 'MEDIUM'
+          | 'HIGH'
+          | 'CRITICAL',
+        riskLevelAfter: profile.riskLevel as
+          | 'LOW'
+          | 'MEDIUM'
+          | 'HIGH'
+          | 'CRITICAL',
         trustScoreBefore: 0,
         trustScoreAfter: 0,
         signals: [],

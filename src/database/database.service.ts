@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleInit, OnModuleDestroy } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  OnModuleDestroy,
+} from '@nestjs/common';
 import { PrismaClient } from '@prisma/client';
 import { DatabaseProvider, detectProvider } from './database-provider.js';
 
@@ -32,8 +37,9 @@ export class DatabaseService
     if (provider === DatabaseProvider.POSTGRESQL) {
       // Lazy-import the pg adapter so that the package only needs to be
       // installed when actually running against PostgreSQL.
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
-      const { PrismaPg } = require('@prisma/adapter-pg') as typeof import('@prisma/adapter-pg');
+
+      const { PrismaPg } =
+        require('@prisma/adapter-pg') as typeof import('@prisma/adapter-pg');
       const adapter = new PrismaPg({ connectionString: url });
       super({ adapter });
     } else {

@@ -43,13 +43,15 @@ export class RealmExportService {
     const clientDefaultScopes = await this.prisma.clientDefaultScope.findMany({
       where: { client: { realmId: realm.id } },
     });
-    const clientOptionalScopes = await this.prisma.clientOptionalScope.findMany({
-      where: { client: { realmId: realm.id } },
-    });
+    const clientOptionalScopes = await this.prisma.clientOptionalScope.findMany(
+      {
+        where: { client: { realmId: realm.id } },
+      },
+    );
 
     // Map IDs to natural keys for portability
-    const clientMap = new Map(clients.map(c => [c.id, c.clientId]));
-    const scopeMap = new Map(clientScopes.map(s => [s.id, s.name]));
+    const clientMap = new Map(clients.map((c) => [c.id, c.clientId]));
+    const scopeMap = new Map(clientScopes.map((s) => [s.id, s.name]));
 
     const exportData: Record<string, unknown> = {
       version: 1,
@@ -83,7 +85,7 @@ export class RealmExportService {
         adminEventsEnabled: realm.adminEventsEnabled,
         theme: realm.theme,
       },
-      clients: clients.map(c => ({
+      clients: clients.map((c) => ({
         clientId: c.clientId,
         clientType: c.clientType,
         clientSecret: options.includeSecrets ? c.clientSecret : undefined,
@@ -97,31 +99,31 @@ export class RealmExportService {
         backchannelLogoutUri: c.backchannelLogoutUri,
         backchannelLogoutSessionRequired: c.backchannelLogoutSessionRequired,
       })),
-      roles: roles.map(r => ({
+      roles: roles.map((r) => ({
         name: r.name,
         description: r.description,
-        clientId: r.clientId ? clientMap.get(r.clientId) ?? null : null,
+        clientId: r.clientId ? (clientMap.get(r.clientId) ?? null) : null,
       })),
-      groups: groups.map(g => ({
+      groups: groups.map((g) => ({
         name: g.name,
         description: g.description,
         parentName: g.parentId
-          ? groups.find(p => p.id === g.parentId)?.name ?? null
+          ? (groups.find((p) => p.id === g.parentId)?.name ?? null)
           : null,
       })),
-      clientScopes: clientScopes.map(s => ({
+      clientScopes: clientScopes.map((s) => ({
         name: s.name,
         description: s.description,
         protocol: s.protocol,
         builtIn: s.builtIn,
-        protocolMappers: s.protocolMappers.map(m => ({
+        protocolMappers: s.protocolMappers.map((m) => ({
           name: m.name,
           protocol: m.protocol,
           mapperType: m.mapperType,
           config: m.config,
         })),
       })),
-      identityProviders: identityProviders.map(idp => ({
+      identityProviders: identityProviders.map((idp) => ({
         alias: idp.alias,
         displayName: idp.displayName,
         enabled: idp.enabled,
@@ -138,15 +140,15 @@ export class RealmExportService {
         linkOnly: idp.linkOnly,
         syncUserProfile: idp.syncUserProfile,
       })),
-      clientScopeAssignments: clients.map(c => ({
+      clientScopeAssignments: clients.map((c) => ({
         clientId: c.clientId,
         defaultScopes: clientDefaultScopes
-          .filter(ds => ds.clientId === c.id)
-          .map(ds => scopeMap.get(ds.clientScopeId))
+          .filter((ds) => ds.clientId === c.id)
+          .map((ds) => scopeMap.get(ds.clientScopeId))
           .filter(Boolean),
         optionalScopes: clientOptionalScopes
-          .filter(os => os.clientId === c.id)
-          .map(os => scopeMap.get(os.clientScopeId))
+          .filter((os) => os.clientId === c.id)
+          .map((os) => scopeMap.get(os.clientScopeId))
           .filter(Boolean),
       })),
     };
@@ -160,18 +162,20 @@ export class RealmExportService {
         },
       });
 
-      exportData['users'] = users.map(u => ({
+      exportData['users'] = users.map((u) => ({
         username: u.username,
         email: u.email,
         emailVerified: u.emailVerified,
         firstName: u.firstName,
         lastName: u.lastName,
         enabled: u.enabled,
-        roles: u.userRoles.map(ur => ({
+        roles: u.userRoles.map((ur) => ({
           name: ur.role.name,
-          clientId: ur.role.clientId ? clientMap.get(ur.role.clientId) ?? null : null,
+          clientId: ur.role.clientId
+            ? (clientMap.get(ur.role.clientId) ?? null)
+            : null,
         })),
-        groups: u.userGroups.map(ug => ug.group.name),
+        groups: u.userGroups.map((ug) => ug.group.name),
       }));
     }
 

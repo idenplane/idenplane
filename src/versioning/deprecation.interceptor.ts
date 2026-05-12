@@ -48,12 +48,12 @@ export class DeprecationInterceptor implements NestInterceptor {
         if (response.headersSent) {
           return;
         }
-        response.setHeader('Deprecation', DeprecationInterceptor.DEPRECATION_DATE);
-        response.setHeader('Sunset', DeprecationInterceptor.SUNSET_DATE);
         response.setHeader(
-          'Link',
-          `</api/v1${path}>; rel="successor-version"`,
+          'Deprecation',
+          DeprecationInterceptor.DEPRECATION_DATE,
         );
+        response.setHeader('Sunset', DeprecationInterceptor.SUNSET_DATE);
+        response.setHeader('Link', `</api/v1${path}>; rel="successor-version"`);
       }),
     );
   }

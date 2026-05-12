@@ -1,4 +1,10 @@
-import { Injectable, UnauthorizedException, Logger, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  Injectable,
+  UnauthorizedException,
+  Logger,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { JwkService } from '../crypto/jwk.service.js';
@@ -23,7 +29,11 @@ export class AdminAuthService {
     private readonly bruteForceService: BruteForceService,
   ) {}
 
-  async login(username: string, password: string, ip: string = 'unknown'): Promise<{
+  async login(
+    username: string,
+    password: string,
+    ip: string = 'unknown',
+  ): Promise<{
     access_token: string;
     token_type: string;
     expires_in: number;
@@ -65,7 +75,8 @@ export class AdminAuthService {
     // ── Brute-force lockout check ─────────────────────────────────────────────
     const lockStatus = this.bruteForceService.checkLocked(masterRealm, user);
     if (lockStatus.locked) {
-      const lockedUntil = lockStatus.lockedUntil?.toISOString() ?? 'indefinitely';
+      const lockedUntil =
+        lockStatus.lockedUntil?.toISOString() ?? 'indefinitely';
       throw new HttpException(
         {
           statusCode: HttpStatus.TOO_MANY_REQUESTS,
@@ -93,7 +104,11 @@ export class AdminAuthService {
     const roles = userRoles.map((ur) => ur.role.name);
 
     // Must have at least one admin role
-    if (!roles.some((r) => ['super-admin', 'realm-admin', 'view-only'].includes(r))) {
+    if (
+      !roles.some((r) =>
+        ['super-admin', 'realm-admin', 'view-only'].includes(r),
+      )
+    ) {
       throw new UnauthorizedException('User does not have admin access');
     }
 
@@ -153,7 +168,10 @@ export class AdminAuthService {
     token: string,
   ): Promise<{ userId: string; roles: string[] }> {
     const revokedExpiry = this.revokedTokens.get(token);
-    if (revokedExpiry !== undefined && revokedExpiry > Math.floor(Date.now() / 1000)) {
+    if (
+      revokedExpiry !== undefined &&
+      revokedExpiry > Math.floor(Date.now() / 1000)
+    ) {
       throw new UnauthorizedException('Token has been revoked');
     }
 
@@ -175,13 +193,18 @@ export class AdminAuthService {
     }
 
     try {
-      const payload = await this.jwkService.verifyJwt(token, signingKey.publicKey);
+      const payload = await this.jwkService.verifyJwt(
+        token,
+        signingKey.publicKey,
+      );
 
       if (payload['typ'] !== 'admin') {
         throw new UnauthorizedException('Not an admin token');
       }
 
-      const realmAccess = payload['realm_access'] as { roles?: string[] } | undefined;
+      const realmAccess = payload['realm_access'] as
+        | { roles?: string[] }
+        | undefined;
       const roles = realmAccess?.roles ?? [];
 
       return { userId: payload.sub as string, roles };

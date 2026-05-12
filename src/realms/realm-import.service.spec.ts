@@ -19,7 +19,8 @@ describe('RealmImportService', () => {
   const keyPair = {
     kid: 'kid-1',
     publicKeyPem: '-----BEGIN PUBLIC KEY-----\nfake\n-----END PUBLIC KEY-----',
-    privateKeyPem: '-----BEGIN PRIVATE KEY-----\nfake\n-----END PRIVATE KEY-----',
+    privateKeyPem:
+      '-----BEGIN PRIVATE KEY-----\nfake\n-----END PRIVATE KEY-----',
   };
 
   const validPayload = {
@@ -54,7 +55,11 @@ describe('RealmImportService', () => {
         protocol: 'openid-connect',
         builtIn: true,
         protocolMappers: [
-          { name: 'sub', mapperType: 'oidc-usermodel-attribute-mapper', config: {} },
+          {
+            name: 'sub',
+            mapperType: 'oidc-usermodel-attribute-mapper',
+            config: {},
+          },
         ],
       },
     ],
@@ -86,13 +91,22 @@ describe('RealmImportService', () => {
   beforeEach(() => {
     prisma = createMockPrismaService();
     jwkService = { generateRsaKeyPair: jest.fn().mockResolvedValue(keyPair) };
-    scopeSeedService = { seedDefaultScopes: jest.fn().mockResolvedValue(undefined) };
+    scopeSeedService = {
+      seedDefaultScopes: jest.fn().mockResolvedValue(undefined),
+    };
 
-    service = new RealmImportService(prisma as any, jwkService as any, scopeSeedService as any);
+    service = new RealmImportService(
+      prisma as any,
+      jwkService as any,
+      scopeSeedService as any,
+    );
 
     // Default mock return values
     prisma.realm.findUnique.mockResolvedValue(null);
-    prisma.realm.create.mockResolvedValue({ id: 'new-realm-id', name: 'imported-realm' });
+    prisma.realm.create.mockResolvedValue({
+      id: 'new-realm-id',
+      name: 'imported-realm',
+    });
     prisma.clientScope.create.mockResolvedValue({ id: 'scope-db-1' });
     prisma.protocolMapper.create.mockResolvedValue({});
     prisma.client.create.mockResolvedValue({ id: 'client-db-1' });
@@ -112,9 +126,9 @@ describe('RealmImportService', () => {
 
   describe('importRealm', () => {
     it('should throw if payload is missing version', async () => {
-      await expect(service.importRealm({ realm: { name: 'test' } })).rejects.toThrow(
-        BadRequestException,
-      );
+      await expect(
+        service.importRealm({ realm: { name: 'test' } }),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should throw if payload is missing realm', async () => {
@@ -130,7 +144,10 @@ describe('RealmImportService', () => {
     });
 
     it('should throw ConflictException if realm exists without overwrite', async () => {
-      prisma.realm.findUnique.mockResolvedValue({ id: 'existing', name: 'imported-realm' });
+      prisma.realm.findUnique.mockResolvedValue({
+        id: 'existing',
+        name: 'imported-realm',
+      });
 
       await expect(service.importRealm(validPayload)).rejects.toThrow(
         ConflictException,
@@ -138,12 +155,17 @@ describe('RealmImportService', () => {
     });
 
     it('should delete existing realm when overwrite is true', async () => {
-      prisma.realm.findUnique.mockResolvedValue({ id: 'existing', name: 'imported-realm' });
+      prisma.realm.findUnique.mockResolvedValue({
+        id: 'existing',
+        name: 'imported-realm',
+      });
       prisma.realm.delete.mockResolvedValue({});
 
       await service.importRealm(validPayload, { overwrite: true });
 
-      expect(prisma.realm.delete).toHaveBeenCalledWith({ where: { name: 'imported-realm' } });
+      expect(prisma.realm.delete).toHaveBeenCalledWith({
+        where: { name: 'imported-realm' },
+      });
       expect(prisma.realm.create).toHaveBeenCalled();
     });
 
@@ -189,7 +211,9 @@ describe('RealmImportService', () => {
 
       await service.importRealm(payloadNoScopes);
 
-      expect(scopeSeedService.seedDefaultScopes).toHaveBeenCalledWith('new-realm-id');
+      expect(scopeSeedService.seedDefaultScopes).toHaveBeenCalledWith(
+        'new-realm-id',
+      );
     });
 
     it('should not seed default scopes if scopes are provided', async () => {
@@ -229,7 +253,10 @@ describe('RealmImportService', () => {
       // Second pass: groups with parents
       expect(prisma.group.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ name: 'backend', parentId: 'group-db-1' }),
+          data: expect.objectContaining({
+            name: 'backend',
+            parentId: 'group-db-1',
+          }),
         }),
       );
     });

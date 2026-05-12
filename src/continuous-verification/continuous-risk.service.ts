@@ -71,7 +71,11 @@ export class ContinuousRiskAssessmentService {
     triggerReason?: string,
   ): Promise<ContinuousRiskAssessmentResult> {
     // Fetch session risk profile
-    const profile = await this.getOrCreateProfile(context.sessionId, context.realmId, context.userId);
+    const profile = await this.getOrCreateProfile(
+      context.sessionId,
+      context.realmId,
+      context.userId,
+    );
 
     // Fetch realm thresholds
     const realm = await this.prisma.realm.findUnique({
@@ -98,11 +102,19 @@ export class ContinuousRiskAssessmentService {
     const networkData = await this.buildNetworkContextData(context.ipAddress);
 
     // Behavioral biometrics baseline and current data
-    const biometricProfile = await this.getBehavioralBaseline(context.userId, context.realmId);
-    const currentBiometricData = await this.getCurrentBehavioralData(context.sessionId);
+    const biometricProfile = await this.getBehavioralBaseline(
+      context.userId,
+      context.realmId,
+    );
+    const currentBiometricData = await this.getCurrentBehavioralData(
+      context.sessionId,
+    );
 
     // Policy policies for this realm/client
-    const policies = await this.getActivePolicies(context.realmId, context.clientId);
+    const policies = await this.getActivePolicies(
+      context.realmId,
+      context.clientId,
+    );
 
     // ── Evaluate each continuous signal ──────────────────────────────────────
 
@@ -126,7 +138,11 @@ export class ContinuousRiskAssessmentService {
       0.7,
     );
 
-    const signals: ContinuousRiskSignal[] = [deviceSignal, networkSignal, behavioralSignal];
+    const signals: ContinuousRiskSignal[] = [
+      deviceSignal,
+      networkSignal,
+      behavioralSignal,
+    ];
 
     const riskScore = aggregateContinuousSignals(signals);
     const riskLevel = this.scoreToRiskLevel(riskScore);
@@ -166,14 +182,17 @@ export class ContinuousRiskAssessmentService {
       trustScore,
       devicePosture: postureData as unknown as Prisma.InputJsonValue,
       networkContext: networkData as unknown as Prisma.InputJsonValue,
-      behavioralSignals: currentBiometricData as unknown as Prisma.InputJsonValue,
+      behavioralSignals:
+        currentBiometricData as unknown as Prisma.InputJsonValue,
       stepUpRequired: action === 'STEP_UP',
       stepUpReason: action === 'STEP_UP' ? 'Risk threshold exceeded' : null,
-      stepUpExpiresAt: action === 'STEP_UP'
-        ? new Date(Date.now() + 15 * 60 * 1000) // 15 min
-        : null,
+      stepUpExpiresAt:
+        action === 'STEP_UP'
+          ? new Date(Date.now() + 15 * 60 * 1000) // 15 min
+          : null,
       terminateSession: action === 'TERMINATE',
-      terminationReason: action === 'TERMINATE' ? 'Critical risk threshold exceeded' : null,
+      terminationReason:
+        action === 'TERMINATE' ? 'Critical risk threshold exceeded' : null,
       lastEvaluatedAt: context.timestamp,
       nextEvaluationAt: this.calculateNextEvaluation(action, finalRiskLevel),
     });
@@ -269,7 +288,8 @@ export class ContinuousRiskAssessmentService {
         jailbroken: posture.jailbroken ?? false,
         deviceTrustTier: posture.deviceTrustTier ?? 'UNKNOWN',
         complianceStatus: posture.complianceStatus ?? null,
-        complianceDetails: (posture.complianceDetails as Prisma.InputJsonValue) ?? null,
+        complianceDetails:
+          (posture.complianceDetails as Prisma.InputJsonValue) ?? null,
       },
     });
 
@@ -381,11 +401,17 @@ export class ContinuousRiskAssessmentService {
       customFirmware: false,
       MDMEnrolled: record.managedDevice ?? false,
       lastSecurityScan: patchDate ?? null,
-      complianceStatus: (record.complianceStatus as 'COMPLIANT' | 'NON_COMPLIANT' | 'UNKNOWN') ?? 'UNKNOWN',
+      complianceStatus:
+        (record.complianceStatus as
+          | 'COMPLIANT'
+          | 'NON_COMPLIANT'
+          | 'UNKNOWN') ?? 'UNKNOWN',
     };
   }
 
-  private async buildNetworkContextData(ipAddress: string | null | undefined): Promise<NetworkContextData> {
+  private async buildNetworkContextData(
+    ipAddress: string | null | undefined,
+  ): Promise<NetworkContextData> {
     if (!ipAddress) {
       return {
         ipAddress: null,
@@ -417,14 +443,17 @@ export class ContinuousRiskAssessmentService {
       torExitNode: false,
       datacenter: false,
       asnReputation: 'NEUTRAL',
-      country: location ? location.split(', ').pop() ?? null : null,
-      city: location ? location.split(', ')[0] ?? null : null,
+      country: location ? (location.split(', ').pop() ?? null) : null,
+      city: location ? (location.split(', ')[0] ?? null) : null,
       latitude: coords?.lat ?? null,
       longitude: coords?.lon ?? null,
     };
   }
 
-  private async getBehavioralBaseline(userId: string, realmId: string): Promise<BaselineProfile> {
+  private async getBehavioralBaseline(
+    userId: string,
+    realmId: string,
+  ): Promise<BaselineProfile> {
     const profile = await this.prisma.behavioralBiometricProfile.findUnique({
       where: { userId },
     });
@@ -455,7 +484,9 @@ export class ContinuousRiskAssessmentService {
     };
   }
 
-  private async getCurrentBehavioralData(sessionId: string): Promise<BehavioralBiometricData> {
+  private async getCurrentBehavioralData(
+    sessionId: string,
+  ): Promise<BehavioralBiometricData> {
     const samples = await this.prisma.behavioralSample.findMany({
       where: { sessionId },
       orderBy: { collectedAt: 'desc' },
@@ -477,16 +508,21 @@ export class ContinuousRiskAssessmentService {
 
     // Aggregate samples into current behavioral data
     const typingSamples = samples.filter((s) => s.interactionType === 'typing');
-    const pointerSamples = samples.filter((s) => s.interactionType === 'pointer');
+    const pointerSamples = samples.filter(
+      (s) => s.interactionType === 'pointer',
+    );
 
     const avgTypingSpeed =
       typingSamples.length > 0
-        ? typingSamples.reduce((acc, s) => acc + (s.burstLength ?? 0), 0) / typingSamples.length / 60
+        ? typingSamples.reduce((acc, s) => acc + (s.burstLength ?? 0), 0) /
+          typingSamples.length /
+          60
         : null;
 
     const avgPointerSpeed =
       pointerSamples.length > 0
-        ? pointerSamples.reduce((acc, s) => acc + (s.velocity ?? 0), 0) / pointerSamples.length
+        ? pointerSamples.reduce((acc, s) => acc + (s.velocity ?? 0), 0) /
+          pointerSamples.length
         : null;
 
     return {
@@ -547,7 +583,12 @@ export class ContinuousRiskAssessmentService {
       }
 
       // Simple condition evaluation (supports "all" and "any" operators)
-      const fired = this.evaluateCondition(policy.conditions, signalMap, currentScore, context);
+      const fired = this.evaluateCondition(
+        policy.conditions,
+        signalMap,
+        currentScore,
+        context,
+      );
 
       results.push({
         policyId: policy.id,
@@ -590,16 +631,19 @@ export class ContinuousRiskAssessmentService {
     if (cond.signal && typeof cond.signal === 'string') {
       // Basic signal name matching
       const signalName = cond.signal;
-      const signalMatch = signalName === 'device_posture'
-        || signalName === 'network_context'
-        || signalName === 'behavioral_biometrics';
+      const signalMatch =
+        signalName === 'device_posture' ||
+        signalName === 'network_context' ||
+        signalName === 'behavioral_biometrics';
       return signalMatch;
     }
 
     return false;
   }
 
-  private scoreToRiskLevel(score: number): 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' {
+  private scoreToRiskLevel(
+    score: number,
+  ): 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' {
     if (score >= 80) return 'CRITICAL';
     if (score >= 60) return 'HIGH';
     if (score >= 30) return 'MEDIUM';
@@ -613,7 +657,8 @@ export class ContinuousRiskAssessmentService {
     now: Date,
   ): number {
     // Decay based on time elapsed
-    const hoursSinceLastEval = (now.getTime() - lastEvaluatedAt.getTime()) / (1000 * 60 * 60);
+    const hoursSinceLastEval =
+      (now.getTime() - lastEvaluatedAt.getTime()) / (1000 * 60 * 60);
 
     // Base decay rate: 5% per hour
     const decay = Math.min(hoursSinceLastEval * 0.05, 0.5);
@@ -653,10 +698,14 @@ export class ContinuousRiskAssessmentService {
 
   private actionToDbAction(action: ContinuousRiskAction): string {
     switch (action) {
-      case 'MONITOR': return 'NO_ACTION';
-      case 'ALERT': return 'NOTIFY';
-      case 'STEP_UP': return 'STEP_UP_REQUIRED';
-      case 'TERMINATE': return 'TERMINATE_SESSION';
+      case 'MONITOR':
+        return 'NO_ACTION';
+      case 'ALERT':
+        return 'NOTIFY';
+      case 'STEP_UP':
+        return 'STEP_UP_REQUIRED';
+      case 'TERMINATE':
+        return 'TERMINATE_SESSION';
     }
   }
 }

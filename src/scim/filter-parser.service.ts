@@ -29,7 +29,9 @@ export function parseScimFilter(filter: string): FilterParseResult {
 
   // Match filter pattern: attribute operator value
   // Operators: eq, ne, co (contains), sw (starts with), ew (ends with), gt, ge, lt, le
-  const operatorMatch = trimmed.match(/^([\w.]+)\s+(eq|ne|co|sw|ew|gt|ge|lt|le)\s+(.+)$/i);
+  const operatorMatch = trimmed.match(
+    /^([\w.]+)\s+(eq|ne|co|sw|ew|gt|ge|lt|le)\s+(.+)$/i,
+  );
 
   if (!operatorMatch) {
     throw new BadRequestException(`Invalid filter syntax: ${trimmed}`);
@@ -59,7 +61,10 @@ function parseFilterValue(raw: string): string | boolean | number {
   }
 
   // Quoted string
-  if ((raw.startsWith('"') && raw.endsWith('"')) || (raw.startsWith("'") && raw.endsWith("'"))) {
+  if (
+    (raw.startsWith('"') && raw.endsWith('"')) ||
+    (raw.startsWith("'") && raw.endsWith("'"))
+  ) {
     return raw.slice(1, -1);
   }
 
@@ -79,14 +84,14 @@ export function scimFilterToPrismaWhereUser(
 
   // Map SCIM attributes to database fields
   const attrToField: Record<string, string> = {
-    'userName': 'username',
+    userName: 'username',
     'name.givenName': 'firstName',
     'name.familyName': 'lastName',
-    'displayName': 'displayName',
+    displayName: 'displayName',
     'emails.value': 'email',
-    'active': 'enabled',
-    'title': 'title',
-    'externalId': 'federationLink',
+    active: 'enabled',
+    title: 'title',
+    externalId: 'federationLink',
   };
 
   const field = attrToField[attribute] || attribute;
@@ -138,7 +143,9 @@ export function scimFilterToPrismaWhereGroup(
       case 'ew':
         return { realmId, name: { endsWith: String(value) } };
       default:
-        throw new BadRequestException(`Unsupported operator for displayName: ${operator}`);
+        throw new BadRequestException(
+          `Unsupported operator for displayName: ${operator}`,
+        );
     }
   }
 
@@ -147,7 +154,9 @@ export function scimFilterToPrismaWhereGroup(
       case 'eq':
         return { realmId, id: value };
       default:
-        throw new BadRequestException(`Unsupported operator for externalId: ${operator}`);
+        throw new BadRequestException(
+          `Unsupported operator for externalId: ${operator}`,
+        );
     }
   }
 
@@ -171,7 +180,10 @@ export class ScimFilterParserService {
     try {
       return scimFilterToPrismaWhereUser(filter, realmId);
     } catch (error) {
-      this.logger.warn(`Failed to convert filter to Prisma where: ${filter}`, error);
+      this.logger.warn(
+        `Failed to convert filter to Prisma where: ${filter}`,
+        error,
+      );
       throw error;
     }
   }
@@ -180,7 +192,10 @@ export class ScimFilterParserService {
     try {
       return scimFilterToPrismaWhereGroup(filter, realmId);
     } catch (error) {
-      this.logger.warn(`Failed to convert filter to Prisma where: ${filter}`, error);
+      this.logger.warn(
+        `Failed to convert filter to Prisma where: ${filter}`,
+        error,
+      );
       throw error;
     }
   }

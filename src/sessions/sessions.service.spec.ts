@@ -49,7 +49,7 @@ describe('SessionsService', () => {
       };
 
       prisma.session.findMany.mockResolvedValue([oauthSession]);
-      (prisma.loginSession.findMany as jest.Mock).mockResolvedValue([ssoSession]);
+      prisma.loginSession.findMany.mockResolvedValue([ssoSession]);
 
       const result = await service.getRealmSessions(mockRealm);
 
@@ -59,7 +59,11 @@ describe('SessionsService', () => {
         expect.objectContaining({ id: 'sso-1', type: 'sso', username: 'bob' }),
       );
       expect(result[1]).toEqual(
-        expect.objectContaining({ id: 'oauth-1', type: 'oauth', username: 'alice' }),
+        expect.objectContaining({
+          id: 'oauth-1',
+          type: 'oauth',
+          username: 'alice',
+        }),
       );
 
       expect(prisma.session.findMany).toHaveBeenCalledWith({
@@ -83,7 +87,7 @@ describe('SessionsService', () => {
 
     it('should return empty array when no sessions exist', async () => {
       prisma.session.findMany.mockResolvedValue([]);
-      (prisma.loginSession.findMany as jest.Mock).mockResolvedValue([]);
+      prisma.loginSession.findMany.mockResolvedValue([]);
 
       const result = await service.getRealmSessions(mockRealm);
 
@@ -116,7 +120,7 @@ describe('SessionsService', () => {
       };
 
       prisma.session.findMany.mockResolvedValue([oauthSession]);
-      (prisma.loginSession.findMany as jest.Mock).mockResolvedValue([ssoSession]);
+      prisma.loginSession.findMany.mockResolvedValue([ssoSession]);
 
       const result = await service.getUserSessions(mockRealm, 'user-1');
 
@@ -147,7 +151,7 @@ describe('SessionsService', () => {
 
     it('should return empty array when user has no sessions', async () => {
       prisma.session.findMany.mockResolvedValue([]);
-      (prisma.loginSession.findMany as jest.Mock).mockResolvedValue([]);
+      prisma.loginSession.findMany.mockResolvedValue([]);
 
       const result = await service.getUserSessions(mockRealm, 'user-1');
 
@@ -196,7 +200,9 @@ describe('SessionsService', () => {
       ]);
       prisma.refreshToken.updateMany.mockResolvedValue({ count: 2 });
       prisma.session.deleteMany.mockResolvedValue({ count: 2 });
-      (prisma.loginSession.deleteMany as jest.Mock).mockResolvedValue({ count: 1 });
+      prisma.loginSession.deleteMany.mockResolvedValue({
+        count: 1,
+      });
 
       await service.revokeAllUserSessions(mockRealm, 'user-1');
 
@@ -223,7 +229,9 @@ describe('SessionsService', () => {
 
     it('should handle case with no existing sessions', async () => {
       prisma.session.findMany.mockResolvedValue([]);
-      (prisma.loginSession.deleteMany as jest.Mock).mockResolvedValue({ count: 0 });
+      prisma.loginSession.deleteMany.mockResolvedValue({
+        count: 0,
+      });
 
       await service.revokeAllUserSessions(mockRealm, 'user-1');
 

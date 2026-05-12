@@ -1,6 +1,17 @@
-import { Injectable, Logger, OnModuleInit, UnprocessableEntityException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleInit,
+  UnprocessableEntityException,
+} from '@nestjs/common';
 import * as argon2 from 'argon2';
-import { randomBytes, createHash, createCipheriv, createDecipheriv, scryptSync } from 'crypto';
+import {
+  randomBytes,
+  createHash,
+  createCipheriv,
+  createDecipheriv,
+  scryptSync,
+} from 'crypto';
 
 /** Maximum password length accepted by hashPassword / verifyPassword.
  *  Argon2 has no built-in length limit; feeding it a multi-megabyte string
@@ -11,8 +22,8 @@ const MAX_PASSWORD_LENGTH = 1024;
 
 // Algorithm constants for AES-256-GCM symmetric encryption.
 const ALGORITHM = 'aes-256-gcm';
-const IV_BYTES = 12;   // 96-bit IV recommended for GCM
-const TAG_BYTES = 16;  // 128-bit authentication tag
+const IV_BYTES = 12; // 96-bit IV recommended for GCM
+const TAG_BYTES = 16; // 128-bit authentication tag
 
 /** Default/placeholder values that must never be used in production. */
 const DEFAULT_WEBHOOK_SECRET_KEY = 'dev-webhook-secret-key-replace-me';
@@ -34,8 +45,9 @@ export class CryptoService implements OnModuleInit {
     // scrypt: N=2^14, r=8, p=1 → 32-byte key
     // Salt is read from WEBHOOK_ENCRYPTION_SALT so operators can rotate it;
     // falls back to the original hardcoded value for backwards compatibility.
-    const salt = process.env['WEBHOOK_ENCRYPTION_SALT'] ?? DEFAULT_WEBHOOK_ENCRYPTION_SALT;
-    return scryptSync(raw, salt, 32) as Buffer;
+    const salt =
+      process.env['WEBHOOK_ENCRYPTION_SALT'] ?? DEFAULT_WEBHOOK_ENCRYPTION_SALT;
+    return scryptSync(raw, salt, 32);
   })();
 
   onModuleInit(): void {
@@ -52,8 +64,8 @@ export class CryptoService implements OnModuleInit {
         this.logger.error(`SECURITY: ${msg}`);
         console.error(
           '\n\nFATAL: WEBHOOK_SECRET_KEY is not configured.\n' +
-          'Set WEBHOOK_SECRET_KEY=<random> in your environment before starting the server.\n' +
-          'Generate one with:  openssl rand -hex 32\n\n',
+            'Set WEBHOOK_SECRET_KEY=<random> in your environment before starting the server.\n' +
+            'Generate one with:  openssl rand -hex 32\n\n',
         );
         process.exit(1);
       } else {
@@ -69,8 +81,8 @@ export class CryptoService implements OnModuleInit {
         this.logger.error(`SECURITY: ${saltMsg}`);
         console.error(
           '\n\nFATAL: WEBHOOK_ENCRYPTION_SALT is not configured.\n' +
-          'Set WEBHOOK_ENCRYPTION_SALT=<random> in your environment before starting the server.\n' +
-          'Generate one with:  openssl rand -hex 16\n\n',
+            'Set WEBHOOK_ENCRYPTION_SALT=<random> in your environment before starting the server.\n' +
+            'Generate one with:  openssl rand -hex 16\n\n',
         );
         process.exit(1);
       } else {

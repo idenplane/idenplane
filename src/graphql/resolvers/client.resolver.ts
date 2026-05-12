@@ -13,7 +13,7 @@ export class ClientResolver {
 
   private getRealmId(context: any): string | null {
     const req = context.req as Request;
-    return req.headers['x-realm-id'] as string || null;
+    return (req.headers['x-realm-id'] as string) || null;
   }
 
   @Query(() => [Client])

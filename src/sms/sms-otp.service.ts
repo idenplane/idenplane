@@ -81,19 +81,28 @@ export class SmsOtpService {
    * In-memory fallback store for rate limiting when Redis is unavailable.
    * Key: `ratelimit:{realmId}:{userId}`, Value: { count: number, windowStart: number }.
    */
-  private readonly rateLimitStore = new Map<string, { count: number; windowStart: number }>();
+  private readonly rateLimitStore = new Map<
+    string,
+    { count: number; windowStart: number }
+  >();
 
   /**
    * In-memory fallback store for OTP verification lockouts when Redis is unavailable.
    * Key: `otplockout:{realmId}:{userId}`, Value: { lockExpiresAt: number }.
    */
-  private readonly otpLockoutStore = new Map<string, { lockExpiresAt: number }>();
+  private readonly otpLockoutStore = new Map<
+    string,
+    { lockExpiresAt: number }
+  >();
 
   /**
    * In-memory store for verification attempt counts (when DB is unavailable for read).
    * Key: `otpattempts:{realmId}:{userId}`, Value: { count: number, windowStart: number }.
    */
-  private readonly verificationAttemptsStore = new Map<string, { count: number; windowStart: number }>();
+  private readonly verificationAttemptsStore = new Map<
+    string,
+    { count: number; windowStart: number }
+  >();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -163,7 +172,7 @@ export class SmsOtpService {
 
     if (this.redis?.isAvailable()) {
       const count = await this.redis.get(key);
-      const remaining = Math.max(0, maxRequests - (parseInt(count ?? '0', 10)));
+      const remaining = Math.max(0, maxRequests - parseInt(count ?? '0', 10));
       // TTL from Redis would give exact reset time, approximate here
       const resetAt = new Date(Date.now() + windowSeconds * 1000);
       return { remaining, resetAt };
@@ -225,7 +234,10 @@ export class SmsOtpService {
 
     return {
       locked: false,
-      remainingAttempts: Math.max(0, MAX_VERIFICATION_ATTEMPTS - otpAttempt.failedAttempts),
+      remainingAttempts: Math.max(
+        0,
+        MAX_VERIFICATION_ATTEMPTS - otpAttempt.failedAttempts,
+      ),
     };
   }
 
@@ -233,7 +245,10 @@ export class SmsOtpService {
    * Check if a user is currently locked out from OTP verification.
    * Uses Redis for lockout state, falls back to in-memory tracking.
    */
-  async isOtpLockedOut(realmId: string, userId: string): Promise<{ locked: boolean; lockedUntil?: Date }> {
+  async isOtpLockedOut(
+    realmId: string,
+    userId: string,
+  ): Promise<{ locked: boolean; lockedUntil?: Date }> {
     const key = `sms:otplockout:${realmId}:${userId}`;
 
     if (this.redis?.isAvailable()) {
@@ -271,7 +286,11 @@ export class SmsOtpService {
    * @param userId - The user ID
    * @param lockoutSeconds - Duration of the lockout in seconds
    */
-  async lockOtpVerification(realmId: string, userId: string, lockoutSeconds: number): Promise<void> {
+  async lockOtpVerification(
+    realmId: string,
+    userId: string,
+    lockoutSeconds: number,
+  ): Promise<void> {
     const key = `sms:otplockout:${realmId}:${userId}`;
     const lockedUntil = new Date(Date.now() + lockoutSeconds * 1000);
 
@@ -281,7 +300,9 @@ export class SmsOtpService {
       this.otpLockoutStore.set(key, { lockExpiresAt: lockedUntil.getTime() });
     }
 
-    this.logger.debug(`OTP verification locked for user ${userId} in realm ${realmId} until ${lockedUntil.toISOString()}`);
+    this.logger.debug(
+      `OTP verification locked for user ${userId} in realm ${realmId} until ${lockedUntil.toISOString()}`,
+    );
   }
 
   /**
@@ -297,7 +318,9 @@ export class SmsOtpService {
       this.otpLockoutStore.delete(key);
     }
 
-    this.logger.debug(`OTP verification unlocked for user ${userId} in realm ${realmId}`);
+    this.logger.debug(
+      `OTP verification unlocked for user ${userId} in realm ${realmId}`,
+    );
   }
 
   /**
@@ -349,7 +372,10 @@ export class SmsOtpService {
     }
 
     if (!realm.smsProvider || realm.smsProvider === 'none') {
-      return { smsSent: false, errorMessage: 'SMS provider not configured for realm' };
+      return {
+        smsSent: false,
+        errorMessage: 'SMS provider not configured for realm',
+      };
     }
 
     const otpLength = realm.otpLength || DEFAULT_OTP_LENGTH;
@@ -359,8 +385,14 @@ export class SmsOtpService {
 
     // Check rate limit
     if (await this.isRateLimited(realmId, userId, maxRequests, windowSeconds)) {
-      this.logger.warn(`SMS rate limit exceeded for user ${userId} in realm ${realmId}`);
-      return { smsSent: false, errorMessage: 'Rate limit exceeded. Please wait before requesting another code.' };
+      this.logger.warn(
+        `SMS rate limit exceeded for user ${userId} in realm ${realmId}`,
+      );
+      return {
+        smsSent: false,
+        errorMessage:
+          'Rate limit exceeded. Please wait before requesting another code.',
+      };
     }
 
     // Generate OTP code
@@ -551,9 +583,10 @@ export class SmsOtpService {
         success: false,
         locked: false,
         remainingAttempts: remaining,
-        error: remaining > 0
-          ? `Invalid code. ${remaining} attempt(s) remaining.`
-          : 'Invalid code. Too many failed attempts.',
+        error:
+          remaining > 0
+            ? `Invalid code. ${remaining} attempt(s) remaining.`
+            : 'Invalid code. Too many failed attempts.',
       };
     }
 
@@ -593,7 +626,10 @@ export class SmsOtpService {
   /**
    * Get the phone hash for a user's verified phone number.
    */
-  async getVerifiedPhoneHash(realmId: string, userId: string): Promise<string | null> {
+  async getVerifiedPhoneHash(
+    realmId: string,
+    userId: string,
+  ): Promise<string | null> {
     const attempt = await this.prisma.otpAttempt.findFirst({
       where: {
         realmId,
@@ -692,15 +728,17 @@ export class SmsOtpService {
     realmId: string,
     userId: string,
     limit = 50,
-  ): Promise<Array<{
-    id: string;
-    status: string;
-    provider: string;
-    providerMessageId: string | null;
-    errorCode: string | null;
-    errorMessage: string | null;
-    createdAt: Date;
-  }>> {
+  ): Promise<
+    Array<{
+      id: string;
+      status: string;
+      provider: string;
+      providerMessageId: string | null;
+      errorCode: string | null;
+      errorMessage: string | null;
+      createdAt: Date;
+    }>
+  > {
     const logs = await this.prisma.smsDeliveryLog.findMany({
       where: { realmId, userId },
       select: {
@@ -745,7 +783,9 @@ export class SmsOtpService {
       },
     });
 
-    this.logger.debug(`Updated delivery log ${deliveryLogId} status to ${status}`);
+    this.logger.debug(
+      `Updated delivery log ${deliveryLogId} status to ${status}`,
+    );
   }
 
   /**
@@ -779,16 +819,17 @@ export class SmsOtpService {
 
     const counts = {
       total: logs.length,
-      pending: logs.filter(l => l.status === 'PENDING').length,
-      sent: logs.filter(l => l.status === 'SENT').length,
-      delivered: logs.filter(l => l.status === 'DELIVERED').length,
-      failed: logs.filter(l => l.status === 'FAILED').length,
+      pending: logs.filter((l) => l.status === 'PENDING').length,
+      sent: logs.filter((l) => l.status === 'SENT').length,
+      delivered: logs.filter((l) => l.status === 'DELIVERED').length,
+      failed: logs.filter((l) => l.status === 'FAILED').length,
       successRate: 0,
     };
 
     // Calculate success rate (SENT + DELIVERED / total)
     const successful = counts.sent + counts.delivered;
-    counts.successRate = counts.total > 0 ? Math.round((successful / counts.total) * 100) : 0;
+    counts.successRate =
+      counts.total > 0 ? Math.round((successful / counts.total) * 100) : 0;
 
     return counts;
   }

@@ -31,7 +31,11 @@ export class WizardRequiredGuard implements CanActivate {
     // Check if wizard is required (no realms exist and wizard not completed/skipped)
     const wizardStatus = await this.wizardService.getWizardStatus();
 
-    if (wizardStatus.isFirstRun && !wizardStatus.wizardCompleted && !wizardStatus.wizardSkipped) {
+    if (
+      wizardStatus.isFirstRun &&
+      !wizardStatus.wizardCompleted &&
+      !wizardStatus.wizardSkipped
+    ) {
       throw new ForbiddenException({
         statusCode: 403,
         error: 'Forbidden',

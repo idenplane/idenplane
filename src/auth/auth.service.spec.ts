@@ -829,7 +829,10 @@ describe('AuthService', () => {
       // Code should be atomically marked as used via a compound-where update
       expect(prisma.authorizationCode.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: expect.objectContaining({ code: 'valid-auth-code', used: false }),
+          where: expect.objectContaining({
+            code: 'valid-auth-code',
+            used: false,
+          }),
           data: { used: true },
         }),
       );
@@ -915,7 +918,10 @@ describe('AuthService', () => {
 
     it('should throw BadRequestException when redirect_uri does not match', async () => {
       setupValidClient();
-      prisma.authorizationCode.update.mockResolvedValue({ ...authCode, used: true });
+      prisma.authorizationCode.update.mockResolvedValue({
+        ...authCode,
+        used: true,
+      });
 
       await expect(
         service.handleTokenRequest(realm, {
@@ -959,7 +965,10 @@ describe('AuthService', () => {
       it('should throw BadRequestException when code has PKCE but code_verifier is missing', async () => {
         setupValidClient();
         // update succeeds (code exists, not used, not expired) and returns the pkce code
-        prisma.authorizationCode.update.mockResolvedValue({ ...pkceAuthCode, used: true });
+        prisma.authorizationCode.update.mockResolvedValue({
+          ...pkceAuthCode,
+          used: true,
+        });
 
         await expect(
           service.handleTokenRequest(realm, {
@@ -975,7 +984,10 @@ describe('AuthService', () => {
       it('should throw UnauthorizedException when code_verifier does not match', async () => {
         setupValidClient();
         // update succeeds and returns the pkce code
-        prisma.authorizationCode.update.mockResolvedValue({ ...pkceAuthCode, used: true });
+        prisma.authorizationCode.update.mockResolvedValue({
+          ...pkceAuthCode,
+          used: true,
+        });
         // sha256 returns a hex string; the base64url of its buffer will not match the stored challenge
         crypto.sha256.mockReturnValue('aabbccdd');
 
@@ -1100,13 +1112,16 @@ describe('AuthService', () => {
       // The update must bump the interval by 5
       expect(prisma.deviceCode.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ interval: 10, lastPolledAt: expect.any(Date) }),
+          data: expect.objectContaining({
+            interval: 10,
+            lastPolledAt: expect.any(Date),
+          }),
         }),
       );
     });
 
     it('should not throw slow_down when polled after the full interval has elapsed', async () => {
-      setupForTokenIssuance(deviceClient as any);
+      setupForTokenIssuance(deviceClient);
       const dc = makeDeviceCode({
         // 6 seconds ago — safely past the 5 s interval
         lastPolledAt: new Date(Date.now() - 6_000),
@@ -1126,7 +1141,7 @@ describe('AuthService', () => {
     });
 
     it('should not throw slow_down on the very first poll (no lastPolledAt)', async () => {
-      setupForTokenIssuance(deviceClient as any);
+      setupForTokenIssuance(deviceClient);
       const dc = makeDeviceCode({ lastPolledAt: null });
       prisma.deviceCode.findUnique.mockResolvedValue(dc as any);
       prisma.deviceCode.update.mockResolvedValue({} as any);
@@ -1143,7 +1158,7 @@ describe('AuthService', () => {
     });
 
     it('should record the poll timestamp on a normal (non-slow) poll', async () => {
-      setupForTokenIssuance(deviceClient as any);
+      setupForTokenIssuance(deviceClient);
       const dc = makeDeviceCode({ lastPolledAt: null });
       prisma.deviceCode.findUnique.mockResolvedValue(dc as any);
       prisma.deviceCode.update.mockResolvedValue({} as any);
@@ -1349,9 +1364,7 @@ describe('AuthService', () => {
       });
 
       expect(result.scope).toBe('openid');
-      expect(scopesService.getClaimsForScopes).toHaveBeenCalledWith([
-        'openid',
-      ]);
+      expect(scopesService.getClaimsForScopes).toHaveBeenCalledWith(['openid']);
     });
 
     it('should throw when no active signing key exists', async () => {

@@ -1,7 +1,10 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { evaluateNetworkContext } from './continuous-risk-signals.js';
-import type { NetworkContextData, ContinuousRiskSignal } from './continuous-risk-signals.js';
+import type {
+  NetworkContextData,
+  ContinuousRiskSignal,
+} from './continuous-risk-signals.js';
 
 export interface NetworkContextRecord {
   id: string;
@@ -122,9 +125,10 @@ export class NetworkContextService {
           },
         });
         // Re-fetch to return updated record
-        const updated = await this.prisma.networkContextRecord.findUniqueOrThrow({
-          where: { id: record.id },
-        });
+        const updated =
+          await this.prisma.networkContextRecord.findUniqueOrThrow({
+            where: { id: record.id },
+          });
         return this.mapPrismaRecord(updated);
       }
     }
@@ -183,7 +187,9 @@ export class NetworkContextService {
   /**
    * Returns the most recent network context for a session.
    */
-  async getLastNetworkContext(sessionId: string): Promise<NetworkContextRecord | null> {
+  async getLastNetworkContext(
+    sessionId: string,
+  ): Promise<NetworkContextRecord | null> {
     const record = await this.prisma.networkContextRecord.findFirst({
       where: { sessionId },
       orderBy: { capturedAt: 'desc' },
@@ -194,7 +200,9 @@ export class NetworkContextService {
   /**
    * Returns the network context history for a session.
    */
-  async getNetworkContextHistory(sessionId: string): Promise<NetworkContextRecord[]> {
+  async getNetworkContextHistory(
+    sessionId: string,
+  ): Promise<NetworkContextRecord[]> {
     const records = await this.prisma.networkContextRecord.findMany({
       where: { sessionId },
       orderBy: { capturedAt: 'desc' },
@@ -222,11 +230,18 @@ export class NetworkContextService {
   /**
    * Detects geolocation change between two network context records.
    */
-  detectGeoChange(current: NetworkContextRecord, previous: NetworkContextRecord): boolean {
+  detectGeoChange(
+    current: NetworkContextRecord,
+    previous: NetworkContextRecord,
+  ): boolean {
     if (!current.geoCountry || !previous.geoCountry) return false;
     if (current.geoCountry !== previous.geoCountry) return true;
     // City-level change within same country
-    if (current.geoCity && previous.geoCity && current.geoCity !== previous.geoCity) {
+    if (
+      current.geoCity &&
+      previous.geoCity &&
+      current.geoCity !== previous.geoCity
+    ) {
       const distanceKm = this.haversineDistance(
         current.geoLatitude ?? 0,
         current.geoLongitude ?? 0,
@@ -274,7 +289,9 @@ export class NetworkContextService {
    * Builds a NetworkContextData payload from the latest session context,
    * suitable for passing into risk signal evaluation.
    */
-  async buildNetworkContextData(sessionId: string): Promise<NetworkContextData | null> {
+  async buildNetworkContextData(
+    sessionId: string,
+  ): Promise<NetworkContextData | null> {
     const record = await this.getLastNetworkContext(sessionId);
     if (!record) return null;
 
@@ -352,7 +369,9 @@ export class NetworkContextService {
       this.cacheIp(ip, result);
       return result;
     } catch (err) {
-      this.logger.debug(`IP lookup failed for ${ip}: ${(err as Error).message}`);
+      this.logger.debug(
+        `IP lookup failed for ${ip}: ${(err as Error).message}`,
+      );
       const result = this.unknownResult(ip);
       this.cacheIp(ip, result);
       return result;
@@ -399,11 +418,16 @@ export class NetworkContextService {
   private inferIspCategory(data: IpApiResponse): string | null {
     if (!data.isp) return null;
     const isp = data.isp.toLowerCase();
-    if (isp.includes('university') || isp.includes('college') || isp.includes('school')) {
+    if (
+      isp.includes('university') ||
+      isp.includes('college') ||
+      isp.includes('school')
+    ) {
       return 'EDUCATIONAL';
     }
     if (isp.includes('government') || isp.includes('gov')) return 'GOVERNMENT';
-    if (isp.includes('enterprise') || isp.includes('business')) return 'ENTERPRISE';
+    if (isp.includes('enterprise') || isp.includes('business'))
+      return 'ENTERPRISE';
     return 'ISP';
   }
 
@@ -413,7 +437,9 @@ export class NetworkContextService {
     return 'GOOD';
   }
 
-  private parseReputation(value: string): 'TRUSTED' | 'NEUTRAL' | 'SUSPICIOUS' | 'BLOCKED' {
+  private parseReputation(
+    value: string,
+  ): 'TRUSTED' | 'NEUTRAL' | 'SUSPICIOUS' | 'BLOCKED' {
     const upper = value.toUpperCase();
     if (upper === 'GOOD' || upper === 'TRUSTED') return 'TRUSTED';
     if (upper === 'BAD') return 'BLOCKED';

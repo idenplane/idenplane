@@ -28,7 +28,10 @@ export class PasswordMigrationService {
     }
   }
 
-  private async verifyBcrypt(plaintext: string, hash: string): Promise<boolean> {
+  private async verifyBcrypt(
+    plaintext: string,
+    hash: string,
+  ): Promise<boolean> {
     return bcryptjs.compare(plaintext, hash);
   }
 
@@ -42,7 +45,13 @@ export class PasswordMigrationService {
         const iterations = parseInt(parts[0], 10);
         const salt = Buffer.from(parts[1], 'base64');
         const hash = Buffer.from(parts[2], 'base64');
-        const derived = pbkdf2Sync(plaintext, salt, iterations, hash.length, 'sha256');
+        const derived = pbkdf2Sync(
+          plaintext,
+          salt,
+          iterations,
+          hash.length,
+          'sha256',
+        );
         return derived.equals(hash);
       }
 
@@ -51,7 +60,13 @@ export class PasswordMigrationService {
       if (colonParts.length === 2) {
         const salt = Buffer.from(colonParts[0], 'base64');
         const hash = Buffer.from(colonParts[1], 'base64');
-        const derived = pbkdf2Sync(plaintext, salt, 27500, hash.length, 'sha256');
+        const derived = pbkdf2Sync(
+          plaintext,
+          salt,
+          27500,
+          hash.length,
+          'sha256',
+        );
         return derived.equals(hash);
       }
 

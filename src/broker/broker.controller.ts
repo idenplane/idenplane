@@ -1,11 +1,4 @@
-import {
-  Controller,
-  Get,
-  Param,
-  Query,
-  Res,
-  UseGuards,
-} from '@nestjs/common';
+import { Controller, Get, Param, Query, Res, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import type { Response } from 'express';
 import type { Realm } from '@prisma/client';
@@ -23,8 +16,15 @@ export class BrokerController {
 
   @Get(':alias/login')
   @ApiOperation({ summary: 'Initiate social login with an external provider' })
-  @ApiResponse({ status: 302, description: 'Redirect to external identity provider authorization endpoint' })
-  @ApiResponse({ status: 400, description: 'Unknown provider alias or missing required OAuth parameters' })
+  @ApiResponse({
+    status: 302,
+    description:
+      'Redirect to external identity provider authorization endpoint',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Unknown provider alias or missing required OAuth parameters',
+  })
   async login(
     @CurrentRealm() realm: Realm,
     @Param('alias') alias: string,
@@ -48,8 +48,16 @@ export class BrokerController {
 
   @Get(':alias/callback')
   @ApiOperation({ summary: 'Handle callback from external identity provider' })
-  @ApiResponse({ status: 302, description: 'Redirect to client redirect_uri with authorization code after successful federation' })
-  @ApiResponse({ status: 400, description: 'Invalid state, missing code, or provider token exchange failed' })
+  @ApiResponse({
+    status: 302,
+    description:
+      'Redirect to client redirect_uri with authorization code after successful federation',
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Invalid state, missing code, or provider token exchange failed',
+  })
   async callback(
     @CurrentRealm() realm: Realm,
     @Param('alias') alias: string,
@@ -57,7 +65,12 @@ export class BrokerController {
     @Query('state') state: string,
     @Res() res: Response,
   ) {
-    const result = await this.brokerService.handleCallback(realm, alias, code, state);
+    const result = await this.brokerService.handleCallback(
+      realm,
+      alias,
+      code,
+      state,
+    );
     res.redirect(302, result.redirectUrl);
   }
 }

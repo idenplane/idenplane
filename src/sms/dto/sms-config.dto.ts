@@ -1,4 +1,14 @@
-import { IsString, IsOptional, IsBoolean, IsInt, IsEnum, Min, Max, ValidateNested, IsObject } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsInt,
+  IsEnum,
+  Min,
+  Max,
+  ValidateNested,
+  IsObject,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
 
@@ -87,12 +97,18 @@ export class WebhookSmsConfigDto {
   @IsString()
   url?: string;
 
-  @ApiPropertyOptional({ description: 'Custom headers as JSON array', example: '[{"name":"X-API-Key","value":"secret"}]' })
+  @ApiPropertyOptional({
+    description: 'Custom headers as JSON array',
+    example: '[{"name":"X-API-Key","value":"secret"}]',
+  })
   @IsOptional()
   @IsString()
   headers?: string;
 
-  @ApiPropertyOptional({ description: 'Request timeout in milliseconds', default: 30000 })
+  @ApiPropertyOptional({
+    description: 'Request timeout in milliseconds',
+    default: 30000,
+  })
   @IsOptional()
   @IsInt()
   @Min(1000)
@@ -105,28 +121,40 @@ export class WebhookSmsConfigDto {
  * Each provider type has its own config section.
  */
 export class SmsProviderConfigDto {
-  @ApiPropertyOptional({ description: 'Twilio configuration', type: TwilioSmsConfigDto })
+  @ApiPropertyOptional({
+    description: 'Twilio configuration',
+    type: TwilioSmsConfigDto,
+  })
   @IsOptional()
   @IsObject()
   @ValidateNested()
   @Type(() => TwilioSmsConfigDto)
   twilio?: TwilioSmsConfigDto;
 
-  @ApiPropertyOptional({ description: 'Vonage configuration', type: VonageSmsConfigDto })
+  @ApiPropertyOptional({
+    description: 'Vonage configuration',
+    type: VonageSmsConfigDto,
+  })
   @IsOptional()
   @IsObject()
   @ValidateNested()
   @Type(() => VonageSmsConfigDto)
   vonage?: VonageSmsConfigDto;
 
-  @ApiPropertyOptional({ description: 'AWS SNS configuration', type: AwsSnsConfigDto })
+  @ApiPropertyOptional({
+    description: 'AWS SNS configuration',
+    type: AwsSnsConfigDto,
+  })
   @IsOptional()
   @IsObject()
   @ValidateNested()
   @Type(() => AwsSnsConfigDto)
   awsSns?: AwsSnsConfigDto;
 
-  @ApiPropertyOptional({ description: 'Webhook configuration', type: WebhookSmsConfigDto })
+  @ApiPropertyOptional({
+    description: 'Webhook configuration',
+    type: WebhookSmsConfigDto,
+  })
   @IsOptional()
   @IsObject()
   @ValidateNested()
@@ -187,7 +215,8 @@ export class SmsConfigDto {
   smsProviderConfig?: SmsProviderConfigDto;
 
   @ApiPropertyOptional({
-    description: 'Maximum SMS OTP requests per user within the rate limit window',
+    description:
+      'Maximum SMS OTP requests per user within the rate limit window',
     default: 3,
   })
   @IsOptional()

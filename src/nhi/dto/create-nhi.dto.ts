@@ -1,9 +1,20 @@
-import { IsString, IsOptional, IsEnum, IsBoolean, IsArray, IsObject, MinLength } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsEnum,
+  IsBoolean,
+  IsArray,
+  IsObject,
+  MinLength,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import { NhiIdentityType, NhiLifecycleStatus } from '@prisma/client';
 
 export class CreateNhiIdentityDto {
-  @ApiProperty({ example: 'device-sensor-001', description: 'Unique name for the NHI identity' })
+  @ApiProperty({
+    example: 'device-sensor-001',
+    description: 'Unique name for the NHI identity',
+  })
   @IsString()
   @MinLength(2)
   name!: string;
@@ -39,7 +50,9 @@ export class CreateNhiIdentityDto {
   @IsString({ each: true })
   permissionScopes?: string[];
 
-  @ApiPropertyOptional({ example: { location: 'warehouse-a', model: 'sensor-v2' } })
+  @ApiPropertyOptional({
+    example: { location: 'warehouse-a', model: 'sensor-v2' },
+  })
   @IsOptional()
   @IsObject()
   metadata?: Record<string, unknown>;

@@ -25,9 +25,17 @@ export class ThemeEmailService {
    * @param data - Template data (URLs, user info, etc.)
    * @returns Rendered HTML string
    */
-  renderEmail(realm: Realm, templateName: string, data: Record<string, any>): string {
+  renderEmail(
+    realm: Realm,
+    templateName: string,
+    data: Record<string, any>,
+  ): string {
     const themeName = this.themeService.getRealmThemeName(realm, 'email');
-    const templatePath = this.templateService.resolve(themeName, 'email', templateName);
+    const templatePath = this.templateService.resolve(
+      themeName,
+      'email',
+      templateName,
+    );
     const messages = this.messageService.getMessages(themeName, 'email', 'en');
     const colors = this.themeService.resolveColors(themeName, realm);
 
@@ -51,7 +59,9 @@ export class ThemeEmailService {
     return messages[messageKey] ?? messageKey;
   }
 
-  private getCompiledTemplate(templatePath: string): HandlebarsTemplateDelegate {
+  private getCompiledTemplate(
+    templatePath: string,
+  ): HandlebarsTemplateDelegate {
     let compiled = this.compiledTemplates.get(templatePath);
     if (!compiled) {
       const source = readFileSync(templatePath, 'utf-8');
@@ -67,18 +77,23 @@ export class ThemeEmailService {
   private registerHelpers(): void {
     if (this.helpersRegistered) return;
     Handlebars.registerHelper('msg', function (key: string, options: any) {
-      const messages: Record<string, string> = options?.data?.root?._messages ?? {};
+      const messages: Record<string, string> =
+        options?.data?.root?._messages ?? {};
       return messages[key] ?? key;
     });
-    Handlebars.registerHelper('msgArgs', function (key: string, ...args: any[]) {
-      const options = args.pop();
-      const messages: Record<string, string> = options?.data?.root?._messages ?? {};
-      let text = messages[key] ?? key;
-      for (let i = 0; i < args.length; i++) {
-        text = text.replace(`{${i}}`, String(args[i] ?? ''));
-      }
-      return text;
-    });
+    Handlebars.registerHelper(
+      'msgArgs',
+      function (key: string, ...args: any[]) {
+        const options = args.pop();
+        const messages: Record<string, string> =
+          options?.data?.root?._messages ?? {};
+        let text = messages[key] ?? key;
+        for (let i = 0; i < args.length; i++) {
+          text = text.replace(`{${i}}`, String(args[i] ?? ''));
+        }
+        return text;
+      },
+    );
     this.helpersRegistered = true;
   }
 }

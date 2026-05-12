@@ -37,7 +37,7 @@ describe('ClientsController', () => {
       const expected = { id: 'c1', ...dto };
       clientsService.create.mockReturnValue(expected);
 
-      const result = controller.create(realm, dto as any);
+      const result = controller.create(realm, dto);
 
       expect(clientsService.create).toHaveBeenCalledWith(realm, dto);
       expect(result).toEqual(expected);
@@ -77,13 +77,9 @@ describe('ClientsController', () => {
       const expected = { id: 'c1', clientId: 'my-app', ...dto };
       clientsService.update.mockReturnValue(expected);
 
-      const result = controller.update(realm, 'my-app', dto as any);
+      const result = controller.update(realm, 'my-app', dto);
 
-      expect(clientsService.update).toHaveBeenCalledWith(
-        realm,
-        'my-app',
-        dto,
-      );
+      expect(clientsService.update).toHaveBeenCalledWith(realm, 'my-app', dto);
       expect(result).toEqual(expected);
     });
   });

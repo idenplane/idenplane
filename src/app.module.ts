@@ -70,10 +70,12 @@ import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
   imports: [
     ConfigModule.forRoot({ isGlobal: true }),
     LoggerModule.forRoot(createLoggerConfig()),
-    ThrottlerModule.forRoot([{
-      ttl: parseInt(process.env['THROTTLE_TTL'] ?? '60000', 10),
-      limit: parseInt(process.env['THROTTLE_LIMIT'] ?? '100', 10),
-    }]),
+    ThrottlerModule.forRoot([
+      {
+        ttl: parseInt(process.env['THROTTLE_TTL'] ?? '60000', 10),
+        limit: parseInt(process.env['THROTTLE_LIMIT'] ?? '100', 10),
+      },
+    ]),
     ScheduleModule.forRoot(),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, 'admin-ui'),

@@ -37,7 +37,9 @@ jest.mock('class-validator', () => {
 jest.mock('class-transformer', () => ({
   plainToClass: jest.fn().mockImplementation((cls, obj) => obj),
   ClassSerializerInterceptor: class {
-    intercept() { return { handle: () => ({ subscribe: () => ({}) }) }; }
+    intercept() {
+      return { handle: () => ({ subscribe: () => ({}) }) };
+    }
   },
   Transform: () => () => {},
 }));
@@ -54,27 +56,31 @@ jest.mock('@nestjs/swagger', () => ({
 
 // Mock specific NHI enums in @prisma/client
 // These are imported by DTOs but may not exist in test environment
-jest.mock('@prisma/client', () => {
-  const actual = jest.requireActual('@prisma/client');
-  return {
-    ...actual,
-    NhiIdentityType: {
-      IOT_DEVICE: 'IOT_DEVICE',
-      AI_AGENT: 'AI_AGENT',
-      BOT: 'BOT',
-      MACHINE_TO_MACHINE: 'MACHINE_TO_MACHINE',
-    },
-    NhiLifecycleStatus: {
-      PROVISIONING: 'PROVISIONING',
-      ACTIVE: 'ACTIVE',
-      SUSPENDED: 'SUSPENDED',
-      DECOMMISSIONED: 'DECOMMISSIONED',
-    },
-    NhiCredentialType: {
-      API_KEY: 'API_KEY',
-      CERTIFICATE: 'CERTIFICATE',
-      JWT_BEARER: 'JWT_BEARER',
-      MTLS: 'MTLS',
-    },
-  };
-}, { virtual: true });
+jest.mock(
+  '@prisma/client',
+  () => {
+    const actual = jest.requireActual('@prisma/client');
+    return {
+      ...actual,
+      NhiIdentityType: {
+        IOT_DEVICE: 'IOT_DEVICE',
+        AI_AGENT: 'AI_AGENT',
+        BOT: 'BOT',
+        MACHINE_TO_MACHINE: 'MACHINE_TO_MACHINE',
+      },
+      NhiLifecycleStatus: {
+        PROVISIONING: 'PROVISIONING',
+        ACTIVE: 'ACTIVE',
+        SUSPENDED: 'SUSPENDED',
+        DECOMMISSIONED: 'DECOMMISSIONED',
+      },
+      NhiCredentialType: {
+        API_KEY: 'API_KEY',
+        CERTIFICATE: 'CERTIFICATE',
+        JWT_BEARER: 'JWT_BEARER',
+        MTLS: 'MTLS',
+      },
+    };
+  },
+  { virtual: true },
+);

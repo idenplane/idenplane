@@ -51,7 +51,7 @@ describe('GroupsController', () => {
       const expected = { id: 'group-1', name: 'developers' };
       mockGroupsService.create.mockReturnValue(expected);
 
-      const result = controller.create(realm, dto as any);
+      const result = controller.create(realm, dto);
 
       expect(mockGroupsService.create).toHaveBeenCalledWith(realm, dto);
       expect(result).toEqual(expected);
@@ -88,9 +88,13 @@ describe('GroupsController', () => {
       const expected = { id: 'group-1', name: 'senior-developers' };
       mockGroupsService.update.mockReturnValue(expected);
 
-      const result = controller.update(realm, 'group-1', dto as any);
+      const result = controller.update(realm, 'group-1', dto);
 
-      expect(mockGroupsService.update).toHaveBeenCalledWith(realm, 'group-1', dto);
+      expect(mockGroupsService.update).toHaveBeenCalledWith(
+        realm,
+        'group-1',
+        dto,
+      );
       expect(result).toEqual(expected);
     });
   });
@@ -113,7 +117,10 @@ describe('GroupsController', () => {
 
       const result = controller.getMembers(realm, 'group-1');
 
-      expect(mockGroupsService.getMembers).toHaveBeenCalledWith(realm, 'group-1');
+      expect(mockGroupsService.getMembers).toHaveBeenCalledWith(
+        realm,
+        'group-1',
+      );
       expect(result).toEqual(expected);
     });
   });
@@ -124,7 +131,11 @@ describe('GroupsController', () => {
 
       const result = controller.addUserToGroupPut(realm, 'user-1', 'group-1');
 
-      expect(mockGroupsService.addUserToGroup).toHaveBeenCalledWith(realm, 'user-1', 'group-1');
+      expect(mockGroupsService.addUserToGroup).toHaveBeenCalledWith(
+        realm,
+        'user-1',
+        'group-1',
+      );
       expect(result).toBeUndefined();
     });
   });
@@ -135,7 +146,11 @@ describe('GroupsController', () => {
 
       const result = controller.removeUserFromGroup(realm, 'user-1', 'group-1');
 
-      expect(mockGroupsService.removeUserFromGroup).toHaveBeenCalledWith(realm, 'user-1', 'group-1');
+      expect(mockGroupsService.removeUserFromGroup).toHaveBeenCalledWith(
+        realm,
+        'user-1',
+        'group-1',
+      );
       expect(result).toBeUndefined();
     });
   });
@@ -147,7 +162,10 @@ describe('GroupsController', () => {
 
       const result = controller.getUserGroups(realm, 'user-1');
 
-      expect(mockGroupsService.getUserGroups).toHaveBeenCalledWith(realm, 'user-1');
+      expect(mockGroupsService.getUserGroups).toHaveBeenCalledWith(
+        realm,
+        'user-1',
+      );
       expect(result).toEqual(expected);
     });
   });
@@ -159,7 +177,10 @@ describe('GroupsController', () => {
 
       const result = controller.getGroupRoles(realm, 'group-1');
 
-      expect(mockGroupsService.getGroupRoles).toHaveBeenCalledWith(realm, 'group-1');
+      expect(mockGroupsService.getGroupRoles).toHaveBeenCalledWith(
+        realm,
+        'group-1',
+      );
       expect(result).toEqual(expected);
     });
   });
@@ -171,7 +192,11 @@ describe('GroupsController', () => {
 
       const result = controller.assignRoles(realm, 'group-1', body);
 
-      expect(mockGroupsService.assignRolesToGroup).toHaveBeenCalledWith(realm, 'group-1', ['admin', 'editor']);
+      expect(mockGroupsService.assignRolesToGroup).toHaveBeenCalledWith(
+        realm,
+        'group-1',
+        ['admin', 'editor'],
+      );
       expect(result).toBeUndefined();
     });
   });
@@ -183,7 +208,11 @@ describe('GroupsController', () => {
 
       const result = controller.removeRoles(realm, 'group-1', body);
 
-      expect(mockGroupsService.removeRolesFromGroup).toHaveBeenCalledWith(realm, 'group-1', ['editor']);
+      expect(mockGroupsService.removeRolesFromGroup).toHaveBeenCalledWith(
+        realm,
+        'group-1',
+        ['editor'],
+      );
       expect(result).toBeUndefined();
     });
   });

@@ -49,9 +49,13 @@ describe('RolesController', () => {
       const expected = { id: 'role-1', name: 'admin' };
       mockRolesService.createRealmRole.mockReturnValue(expected);
 
-      const result = controller.createRealmRole(realm, dto as any);
+      const result = controller.createRealmRole(realm, dto);
 
-      expect(mockRolesService.createRealmRole).toHaveBeenCalledWith(realm, 'admin', 'Administrator role');
+      expect(mockRolesService.createRealmRole).toHaveBeenCalledWith(
+        realm,
+        'admin',
+        'Administrator role',
+      );
       expect(result).toEqual(expected);
     });
   });
@@ -74,7 +78,10 @@ describe('RolesController', () => {
 
       const result = controller.deleteRealmRole(realm, 'admin');
 
-      expect(mockRolesService.deleteRealmRole).toHaveBeenCalledWith(realm, 'admin');
+      expect(mockRolesService.deleteRealmRole).toHaveBeenCalledWith(
+        realm,
+        'admin',
+      );
       expect(result).toBeUndefined();
     });
   });
@@ -85,9 +92,14 @@ describe('RolesController', () => {
       const expected = { id: 'role-2', name: 'editor' };
       mockRolesService.createClientRole.mockReturnValue(expected);
 
-      const result = controller.createClientRole(realm, 'client-1', dto as any);
+      const result = controller.createClientRole(realm, 'client-1', dto);
 
-      expect(mockRolesService.createClientRole).toHaveBeenCalledWith(realm, 'client-1', 'editor', 'Editor role');
+      expect(mockRolesService.createClientRole).toHaveBeenCalledWith(
+        realm,
+        'client-1',
+        'editor',
+        'Editor role',
+      );
       expect(result).toEqual(expected);
     });
   });
@@ -99,7 +111,10 @@ describe('RolesController', () => {
 
       const result = controller.findClientRoles(realm, 'client-1');
 
-      expect(mockRolesService.findClientRoles).toHaveBeenCalledWith(realm, 'client-1');
+      expect(mockRolesService.findClientRoles).toHaveBeenCalledWith(
+        realm,
+        'client-1',
+      );
       expect(result).toEqual(expected);
     });
   });
@@ -109,9 +124,13 @@ describe('RolesController', () => {
       const dto = { roleNames: ['admin', 'editor'] };
       mockRolesService.assignRealmRoles.mockReturnValue(undefined);
 
-      const result = controller.assignRealmRoles(realm, 'user-1', dto as any);
+      const result = controller.assignRealmRoles(realm, 'user-1', dto);
 
-      expect(mockRolesService.assignRealmRoles).toHaveBeenCalledWith(realm, 'user-1', ['admin', 'editor']);
+      expect(mockRolesService.assignRealmRoles).toHaveBeenCalledWith(
+        realm,
+        'user-1',
+        ['admin', 'editor'],
+      );
       expect(result).toBeUndefined();
     });
   });
@@ -123,7 +142,10 @@ describe('RolesController', () => {
 
       const result = controller.getUserRealmRoles(realm, 'user-1');
 
-      expect(mockRolesService.getUserRealmRoles).toHaveBeenCalledWith(realm, 'user-1');
+      expect(mockRolesService.getUserRealmRoles).toHaveBeenCalledWith(
+        realm,
+        'user-1',
+      );
       expect(result).toEqual(expected);
     });
   });
@@ -133,9 +155,13 @@ describe('RolesController', () => {
       const dto = { roleNames: ['admin'] };
       mockRolesService.removeUserRealmRoles.mockReturnValue(undefined);
 
-      const result = controller.removeUserRealmRoles(realm, 'user-1', dto as any);
+      const result = controller.removeUserRealmRoles(realm, 'user-1', dto);
 
-      expect(mockRolesService.removeUserRealmRoles).toHaveBeenCalledWith(realm, 'user-1', ['admin']);
+      expect(mockRolesService.removeUserRealmRoles).toHaveBeenCalledWith(
+        realm,
+        'user-1',
+        ['admin'],
+      );
       expect(result).toBeUndefined();
     });
   });
@@ -145,9 +171,19 @@ describe('RolesController', () => {
       const dto = { roleNames: ['editor', 'viewer'] };
       mockRolesService.assignClientRoles.mockReturnValue(undefined);
 
-      const result = controller.assignClientRoles(realm, 'user-1', 'client-1', dto as any);
+      const result = controller.assignClientRoles(
+        realm,
+        'user-1',
+        'client-1',
+        dto,
+      );
 
-      expect(mockRolesService.assignClientRoles).toHaveBeenCalledWith(realm, 'user-1', 'client-1', ['editor', 'viewer']);
+      expect(mockRolesService.assignClientRoles).toHaveBeenCalledWith(
+        realm,
+        'user-1',
+        'client-1',
+        ['editor', 'viewer'],
+      );
       expect(result).toBeUndefined();
     });
   });
@@ -159,7 +195,11 @@ describe('RolesController', () => {
 
       const result = controller.getUserClientRoles(realm, 'user-1', 'client-1');
 
-      expect(mockRolesService.getUserClientRoles).toHaveBeenCalledWith(realm, 'user-1', 'client-1');
+      expect(mockRolesService.getUserClientRoles).toHaveBeenCalledWith(
+        realm,
+        'user-1',
+        'client-1',
+      );
       expect(result).toEqual(expected);
     });
   });
@@ -169,9 +209,19 @@ describe('RolesController', () => {
       const dto = { roleNames: ['editor'] };
       mockRolesService.removeUserClientRoles.mockReturnValue(undefined);
 
-      const result = controller.removeUserClientRoles(realm, 'user-1', 'client-1', dto as any);
+      const result = controller.removeUserClientRoles(
+        realm,
+        'user-1',
+        'client-1',
+        dto,
+      );
 
-      expect(mockRolesService.removeUserClientRoles).toHaveBeenCalledWith(realm, 'user-1', 'client-1', ['editor']);
+      expect(mockRolesService.removeUserClientRoles).toHaveBeenCalledWith(
+        realm,
+        'user-1',
+        'client-1',
+        ['editor'],
+      );
       expect(result).toBeUndefined();
     });
   });

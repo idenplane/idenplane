@@ -29,10 +29,10 @@ export class RateLimitInterceptor implements NestInterceptor {
   ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
-    const type = this.reflector.getAllAndOverride<RateLimitType>(RATE_LIMIT_TYPE_KEY, [
-      context.getHandler(),
-      context.getClass(),
-    ]);
+    const type = this.reflector.getAllAndOverride<RateLimitType>(
+      RATE_LIMIT_TYPE_KEY,
+      [context.getHandler(), context.getClass()],
+    );
 
     if (type) {
       const request = context.switchToHttp().getRequest<Request>();

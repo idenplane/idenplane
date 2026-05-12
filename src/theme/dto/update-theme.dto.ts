@@ -12,7 +12,10 @@ export class UpdateThemeDto {
   @IsString()
   description?: string;
 
-  @ApiPropertyOptional({ example: 'login', description: 'Type: login, account, email, or full' })
+  @ApiPropertyOptional({
+    example: 'login',
+    description: 'Type: login, account, email, or full',
+  })
   @IsOptional()
   @IsString()
   themeType?: string;

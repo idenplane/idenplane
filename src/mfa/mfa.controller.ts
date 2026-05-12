@@ -10,7 +10,12 @@ import {
   UnauthorizedException,
   Req,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiSecurity } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiSecurity,
+} from '@nestjs/swagger';
 import type { Request } from 'express';
 import type { Realm } from '@prisma/client';
 import { MfaService } from './mfa.service.js';
@@ -42,7 +47,9 @@ export class MfaController {
   private async assertUserInRealm(userId: string, realm: Realm): Promise<void> {
     const user = await this.prisma.user.findUnique({ where: { id: userId } });
     if (!user || user.realmId !== realm.id) {
-      throw new NotFoundException(`User '${userId}' not found in realm '${realm.name}'`);
+      throw new NotFoundException(
+        `User '${userId}' not found in realm '${realm.name}'`,
+      );
     }
   }
 
@@ -76,7 +83,10 @@ export class MfaController {
     await this.mfaService.disableTotp(userId);
   }
 
-  private async requireAdminMfaStepUp(realm: Realm, req: Request): Promise<void> {
+  private async requireAdminMfaStepUp(
+    realm: Realm,
+    req: Request,
+  ): Promise<void> {
     const adminUser = (req as any).adminUser;
     if (!adminUser?.userId) {
       throw new UnauthorizedException('Admin identity could not be determined');
@@ -95,7 +105,10 @@ export class MfaController {
       );
     }
 
-    const adminUserFromSession = await this.loginService.validateLoginSession(realm, sessionToken);
+    const adminUserFromSession = await this.loginService.validateLoginSession(
+      realm,
+      sessionToken,
+    );
     if (!adminUserFromSession) {
       throw new UnauthorizedException('Invalid or expired session');
     }

@@ -86,7 +86,9 @@ export class WebAuthnService {
       rpID: rpId,
       userID: Buffer.from(user.id),
       userName: user.username,
-      userDisplayName: [user.firstName, user.lastName].filter(Boolean).join(' ') || user.username,
+      userDisplayName:
+        [user.firstName, user.lastName].filter(Boolean).join(' ') ||
+        user.username,
       attestationType: 'none',
       excludeCredentials: existingCredentials.map((cred) => ({
         id: cred.credentialId,
@@ -99,7 +101,12 @@ export class WebAuthnService {
     });
 
     // Store challenge in PendingAction for later verification
-    await this.storeWebAuthnChallenge(user.id, realm.id, 'registration', options.challenge);
+    await this.storeWebAuthnChallenge(
+      user.id,
+      realm.id,
+      'registration',
+      options.challenge,
+    );
 
     return options;
   }
@@ -115,10 +122,16 @@ export class WebAuthnService {
     }
 
     const rpId = this.getRpId(realm);
-    const expectedChallenge = await this.consumeWebAuthnChallenge(user.id, realm.id, 'registration');
+    const expectedChallenge = await this.consumeWebAuthnChallenge(
+      user.id,
+      realm.id,
+      'registration',
+    );
 
     if (!expectedChallenge) {
-      throw new BadRequestException('Registration challenge expired or not found. Please try again.');
+      throw new BadRequestException(
+        'Registration challenge expired or not found. Please try again.',
+      );
     }
 
     let verification;
@@ -131,15 +144,20 @@ export class WebAuthnService {
         requireUserVerification: false,
       });
     } catch (err: any) {
-      this.logger.warn(`WebAuthn registration verification failed: ${err.message}`);
-      throw new BadRequestException('Registration verification failed: ' + err.message);
+      this.logger.warn(
+        `WebAuthn registration verification failed: ${err.message}`,
+      );
+      throw new BadRequestException(
+        'Registration verification failed: ' + err.message,
+      );
     }
 
     if (!verification.verified || !verification.registrationInfo) {
       throw new BadRequestException('Registration verification failed');
     }
 
-    const { credential, credentialDeviceType, credentialBackedUp } = verification.registrationInfo;
+    const { credential, credentialDeviceType, credentialBackedUp } =
+      verification.registrationInfo;
 
     // Check for duplicate credential
     const existing = await this.prisma.webAuthnCredential.findUnique({
@@ -156,14 +174,16 @@ export class WebAuthnService {
         credentialId: credential.id,
         publicKey: Buffer.from(credential.publicKey),
         counter: credential.counter,
-        transports: (credential.transports ?? []) as string[],
+        transports: credential.transports ?? [],
         deviceType: credentialDeviceType,
         backedUp: credentialBackedUp,
         friendlyName: friendlyName ?? null,
       },
     });
 
-    this.logger.log(`WebAuthn credential registered for user ${user.id} in realm ${realm.id}`);
+    this.logger.log(
+      `WebAuthn credential registered for user ${user.id} in realm ${realm.id}`,
+    );
     return stored;
   }
 
@@ -179,7 +199,9 @@ export class WebAuthnService {
 
     const rpId = this.getRpId(realm);
 
-    let allowCredentials: { id: string; transports: AuthenticatorTransportFuture[] }[] | undefined;
+    let allowCredentials:
+      | { id: string; transports: AuthenticatorTransportFuture[] }[]
+      | undefined;
     if (userId) {
       const user = await this.prisma.user.findFirst({
         where: { id: userId, realmId: realm.id },
@@ -206,7 +228,12 @@ export class WebAuthnService {
 
     // Store challenge — keyed by realm for usernameless flow, or by user for user-specific
     const challengeKey = userId ?? `realm:${realm.id}`;
-    await this.storeWebAuthnChallenge(challengeKey, realm.id, 'authentication', options.challenge);
+    await this.storeWebAuthnChallenge(
+      challengeKey,
+      realm.id,
+      'authentication',
+      options.challenge,
+    );
 
     return options;
   }
@@ -251,7 +278,9 @@ export class WebAuthnService {
     }
 
     if (!expectedChallenge) {
-      throw new BadRequestException('Authentication challenge expired or not found. Please try again.');
+      throw new BadRequestException(
+        'Authentication challenge expired or not found. Please try again.',
+      );
     }
 
     let verification;
@@ -270,8 +299,12 @@ export class WebAuthnService {
         requireUserVerification: false,
       });
     } catch (err: any) {
-      this.logger.warn(`WebAuthn authentication verification failed: ${err.message}`);
-      throw new BadRequestException('Authentication verification failed: ' + err.message);
+      this.logger.warn(
+        `WebAuthn authentication verification failed: ${err.message}`,
+      );
+      throw new BadRequestException(
+        'Authentication verification failed: ' + err.message,
+      );
     }
 
     if (!verification.verified) {
@@ -299,7 +332,11 @@ export class WebAuthnService {
     });
   }
 
-  async removeCredential(userId: string, realmId: string, credentialId: string): Promise<void> {
+  async removeCredential(
+    userId: string,
+    realmId: string,
+    credentialId: string,
+  ): Promise<void> {
     const credential = await this.prisma.webAuthnCredential.findFirst({
       where: { id: credentialId, userId, realmId },
     });
@@ -308,8 +345,12 @@ export class WebAuthnService {
       throw new NotFoundException('Credential not found');
     }
 
-    await this.prisma.webAuthnCredential.delete({ where: { id: credentialId } });
-    this.logger.log(`WebAuthn credential ${credentialId} removed for user ${userId}`);
+    await this.prisma.webAuthnCredential.delete({
+      where: { id: credentialId },
+    });
+    this.logger.log(
+      `WebAuthn credential ${credentialId} removed for user ${userId}`,
+    );
   }
 
   async hasCredentials(userId: string, realmId: string): Promise<boolean> {
@@ -339,7 +380,7 @@ export class WebAuthnService {
       data: {
         tokenHash,
         type: actionType,
-        data: { key, realmId, challenge } as unknown as Prisma.InputJsonValue,
+        data: { key, realmId, challenge },
         expiresAt: new Date(Date.now() + 5 * 60 * 1000), // 5-minute TTL
       },
     });

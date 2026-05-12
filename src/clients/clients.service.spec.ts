@@ -1,7 +1,4 @@
-import {
-  ConflictException,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { ClientsService } from './clients.service.js';
 import {
   createMockPrismaService,
@@ -85,8 +82,12 @@ describe('ClientsService', () => {
       sha256: jest.fn(),
     };
     scopeSeedService = {
-      getDefaultScopeNames: jest.fn().mockReturnValue(['openid', 'profile', 'email', 'roles']),
-      getOptionalScopeNames: jest.fn().mockReturnValue(['web-origins', 'offline_access']),
+      getDefaultScopeNames: jest
+        .fn()
+        .mockReturnValue(['openid', 'profile', 'email', 'roles']),
+      getOptionalScopeNames: jest
+        .fn()
+        .mockReturnValue(['web-origins', 'offline_access']),
       seedDefaultScopes: jest.fn().mockResolvedValue(undefined),
     };
     cacheService = createMockCacheService();
@@ -100,12 +101,22 @@ describe('ClientsService', () => {
       { id: 'scope-5', name: 'web-origins', realmId: 'realm-1' },
       { id: 'scope-6', name: 'offline_access', realmId: 'realm-1' },
     ]);
-    (prisma.clientDefaultScope as any).createMany = jest.fn().mockResolvedValue({ count: 4 });
-    (prisma.clientOptionalScope as any).createMany = jest.fn().mockResolvedValue({ count: 2 });
+    (prisma.clientDefaultScope as any).createMany = jest
+      .fn()
+      .mockResolvedValue({ count: 4 });
+    (prisma.clientOptionalScope as any).createMany = jest
+      .fn()
+      .mockResolvedValue({ count: 2 });
     prisma.user.create.mockResolvedValue({ id: 'sa-user-1' });
     prisma.clientDefaultScope.create.mockResolvedValue({});
     prisma.clientOptionalScope.create.mockResolvedValue({});
-    service = new ClientsService(prisma as any, cryptoService as any, scopeSeedService as any, cacheService as any, corsOriginService as any);
+    service = new ClientsService(
+      prisma as any,
+      cryptoService as any,
+      scopeSeedService as any,
+      cacheService as any,
+      corsOriginService as any,
+    );
   });
 
   describe('create', () => {
@@ -234,7 +245,9 @@ describe('ClientsService', () => {
 
       await service.findByClientId(mockRealm, 'my-app');
 
-      const callArgs = prisma.client.findUnique.mock.calls[0][0] as { select: Record<string, unknown> };
+      const callArgs = prisma.client.findUnique.mock.calls[0][0] as {
+        select: Record<string, unknown>;
+      };
       expect(callArgs.select).not.toHaveProperty('clientSecret');
     });
 
@@ -304,9 +317,9 @@ describe('ClientsService', () => {
     it('should throw NotFoundException when client does not exist', async () => {
       prisma.client.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.remove(mockRealm, 'nonexistent'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.remove(mockRealm, 'nonexistent')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 

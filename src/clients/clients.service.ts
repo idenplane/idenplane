@@ -58,9 +58,8 @@ export class ClientsService {
 
     // Resolve clientType: explicit field takes precedence, then the publicClient
     // convenience alias, then the default of CONFIDENTIAL.
-    const clientType = (
-      dto.clientType ?? (dto.publicClient === true ? 'PUBLIC' : 'CONFIDENTIAL')
-    ) as ClientType;
+    const clientType =
+      dto.clientType ?? (dto.publicClient === true ? 'PUBLIC' : 'CONFIDENTIAL');
     let rawSecret: string | undefined;
     let secretHash: string | undefined;
 
@@ -73,7 +72,10 @@ export class ClientsService {
 
     // Create service account user if client_credentials grant is enabled
     let serviceAccountUserId: string | undefined;
-    if (grantTypes.includes('client_credentials') && clientType === 'CONFIDENTIAL') {
+    if (
+      grantTypes.includes('client_credentials') &&
+      clientType === 'CONFIDENTIAL'
+    ) {
       const saUsername = `service-account-${dto.clientId}`;
       const saUser = await this.prisma.user.create({
         data: {
@@ -135,8 +137,12 @@ export class ClientsService {
 
   async findByClientId(realm: Realm, clientId: string) {
     const cacheKey = `${realm.id}:${clientId}`;
-    const cached = await this.cache.getCachedClientConfig<typeof CLIENT_SELECT>(cacheKey);
-    if (cached) return cached as unknown as Prisma.ClientGetPayload<{ select: typeof CLIENT_SELECT }>;
+    const cached =
+      await this.cache.getCachedClientConfig<typeof CLIENT_SELECT>(cacheKey);
+    if (cached)
+      return cached as unknown as Prisma.ClientGetPayload<{
+        select: typeof CLIENT_SELECT;
+      }>;
 
     let client = await this.prisma.client.findUnique({
       where: {
@@ -146,11 +152,17 @@ export class ClientsService {
     });
 
     // Fallback: if the identifier looks like a UUID, try the primary key (id column)
-    if (!client && /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(clientId)) {
-      client = await this.prisma.client.findUnique({
-        where: { id: clientId },
-        select: CLIENT_SELECT,
-      }) ?? null;
+    if (
+      !client &&
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(
+        clientId,
+      )
+    ) {
+      client =
+        (await this.prisma.client.findUnique({
+          where: { id: clientId },
+          select: CLIENT_SELECT,
+        })) ?? null;
       // Ensure the found client belongs to this realm
       if (client && client.realmId !== realm.id) {
         client = null;
@@ -179,7 +191,7 @@ export class ClientsService {
       data: {
         name: dto.name,
         description: dto.description,
-        clientType: dto.clientType as ClientType | undefined,
+        clientType: dto.clientType,
         enabled: dto.enabled,
         redirectUris: dto.redirectUris,
         webOrigins: dto.webOrigins,
@@ -207,9 +219,13 @@ export class ClientsService {
 
     // Delete service account user if it exists
     if (client.serviceAccountUserId) {
-      await this.prisma.user.delete({
-        where: { id: client.serviceAccountUserId },
-      }).catch(() => { /* user may already be deleted */ });
+      await this.prisma.user
+        .delete({
+          where: { id: client.serviceAccountUserId },
+        })
+        .catch(() => {
+          /* user may already be deleted */
+        });
     }
 
     await this.prisma.client.delete({

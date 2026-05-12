@@ -1,4 +1,9 @@
-import { Injectable, NotFoundException, type OnModuleInit, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  type OnModuleInit,
+  Logger,
+} from '@nestjs/common';
 import type { Prisma, Realm } from '@prisma/client';
 import { join } from 'path';
 import { readdir, readFile } from 'fs/promises';
@@ -13,9 +18,15 @@ import type {
 
 function darkenHex(hex: string, percent: number): string {
   const num = parseInt(hex.replace('#', ''), 16);
-  const r = Math.max(0, ((num >> 16) & 0xff) - Math.round(255 * percent / 100));
-  const g = Math.max(0, ((num >> 8) & 0xff) - Math.round(255 * percent / 100));
-  const b = Math.max(0, (num & 0xff) - Math.round(255 * percent / 100));
+  const r = Math.max(
+    0,
+    ((num >> 16) & 0xff) - Math.round((255 * percent) / 100),
+  );
+  const g = Math.max(
+    0,
+    ((num >> 8) & 0xff) - Math.round((255 * percent) / 100),
+  );
+  const b = Math.max(0, (num & 0xff) - Math.round((255 * percent) / 100));
   return `#${((r << 16) | (g << 8) | b).toString(16).padStart(6, '0')}`;
 }
 
@@ -74,7 +85,9 @@ export class ThemeService implements OnModuleInit {
 
       this.logger.log(`Loaded ${this.themes.size} theme(s)`);
     } catch {
-      this.logger.warn(`Themes directory not found at ${this.themesDir}, using defaults`);
+      this.logger.warn(
+        `Themes directory not found at ${this.themesDir}, using defaults`,
+      );
     }
   }
 
@@ -83,12 +96,14 @@ export class ThemeService implements OnModuleInit {
   }
 
   getAvailableThemes(): ThemeInfo[] {
-    return Array.from(this.themes.values()).map(({ name, displayName, description, colors }) => ({
-      name,
-      displayName,
-      description,
-      colors,
-    }));
+    return Array.from(this.themes.values()).map(
+      ({ name, displayName, description, colors }) => ({
+        name,
+        displayName,
+        description,
+        colors,
+      }),
+    );
   }
 
   /**
@@ -151,12 +166,18 @@ export class ThemeService implements OnModuleInit {
 
     return {
       primaryColor,
-      primaryHoverColor: getString('primaryHoverColor', darkenHex(primaryColor, 15)),
+      primaryHoverColor: getString(
+        'primaryHoverColor',
+        darkenHex(primaryColor, 15),
+      ),
       backgroundColor: getString('backgroundColor', baseColors.backgroundColor),
       cardColor: getString('cardColor', baseColors.cardColor),
       textColor: getString('textColor', baseColors.textColor),
       labelColor: getString('labelColor', baseColors.labelColor),
-      inputBorderColor: getString('inputBorderColor', baseColors.inputBorderColor),
+      inputBorderColor: getString(
+        'inputBorderColor',
+        baseColors.inputBorderColor,
+      ),
       inputBgColor: getString('inputBgColor', baseColors.inputBgColor),
       mutedColor: getString('mutedColor', baseColors.mutedColor),
       logoUrl: getString('logoUrl', ''),
@@ -198,9 +219,16 @@ export class ThemeService implements OnModuleInit {
 
   async createTheme(
     realmId: string,
-    dto: { name: string; displayName?: string; description?: string; themeType?: string;
-           styles?: Record<string, unknown>; components?: unknown[]; assets?: Record<string, unknown>;
-           settings?: Record<string, unknown> },
+    dto: {
+      name: string;
+      displayName?: string;
+      description?: string;
+      themeType?: string;
+      styles?: Record<string, unknown>;
+      components?: unknown[];
+      assets?: Record<string, unknown>;
+      settings?: Record<string, unknown>;
+    },
   ) {
     return this.prisma.theme.create({
       data: {
@@ -230,11 +258,19 @@ export class ThemeService implements OnModuleInit {
 
   async updateTheme(
     themeId: string,
-    dto: { displayName?: string; description?: string; themeType?: string;
-           styles?: Record<string, unknown>; components?: unknown[]; assets?: Record<string, unknown>;
-           settings?: Record<string, unknown> },
+    dto: {
+      displayName?: string;
+      description?: string;
+      themeType?: string;
+      styles?: Record<string, unknown>;
+      components?: unknown[];
+      assets?: Record<string, unknown>;
+      settings?: Record<string, unknown>;
+    },
   ) {
-    const theme = await this.prisma.theme.findUnique({ where: { id: themeId } });
+    const theme = await this.prisma.theme.findUnique({
+      where: { id: themeId },
+    });
     if (!theme) {
       throw new NotFoundException(`Theme with ID '${themeId}' not found`);
     }
@@ -244,10 +280,14 @@ export class ThemeService implements OnModuleInit {
     if (dto.displayName !== undefined) data.displayName = dto.displayName;
     if (dto.description !== undefined) data.description = dto.description;
     if (dto.themeType !== undefined) data.themeType = dto.themeType;
-    if (dto.styles !== undefined) data.styles = dto.styles as Prisma.InputJsonValue;
-    if (dto.components !== undefined) data.components = dto.components as unknown as Prisma.InputJsonValue;
-    if (dto.assets !== undefined) data.assets = dto.assets as Prisma.InputJsonValue;
-    if (dto.settings !== undefined) data.settings = dto.settings as Prisma.InputJsonValue;
+    if (dto.styles !== undefined)
+      data.styles = dto.styles as Prisma.InputJsonValue;
+    if (dto.components !== undefined)
+      data.components = dto.components as unknown as Prisma.InputJsonValue;
+    if (dto.assets !== undefined)
+      data.assets = dto.assets as Prisma.InputJsonValue;
+    if (dto.settings !== undefined)
+      data.settings = dto.settings as Prisma.InputJsonValue;
     return this.prisma.theme.update({ where: { id: themeId }, data });
   }
 
@@ -274,9 +314,13 @@ export class ThemeService implements OnModuleInit {
       where: { themeId_version: { themeId, version } },
     });
     if (!themeVersion) {
-      throw new NotFoundException(`Version ${version} not found for theme '${themeId}'`);
+      throw new NotFoundException(
+        `Version ${version} not found for theme '${themeId}'`,
+      );
     }
-    const currentTheme = await this.prisma.theme.findUnique({ where: { id: themeId } });
+    const currentTheme = await this.prisma.theme.findUnique({
+      where: { id: themeId },
+    });
     if (!currentTheme) {
       throw new NotFoundException(`Theme with ID '${themeId}' not found`);
     }

@@ -1,7 +1,4 @@
-import {
-  ConflictException,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { GroupsService } from './groups.service.js';
 import {
   createMockPrismaService,
@@ -79,7 +76,7 @@ describe('GroupsService', () => {
     it('should create a group with a valid parentId', async () => {
       const parentGroup = { ...mockGroup, id: 'parent-1', name: 'engineering' };
       prisma.group.findFirst
-        .mockResolvedValueOnce(null)       // duplicate check
+        .mockResolvedValueOnce(null) // duplicate check
         .mockResolvedValueOnce(parentGroup); // parent lookup
       prisma.group.create.mockResolvedValue({
         ...mockGroup,
@@ -96,7 +93,7 @@ describe('GroupsService', () => {
 
     it('should throw NotFoundException when parentId does not exist', async () => {
       prisma.group.findFirst
-        .mockResolvedValueOnce(null)  // no duplicate
+        .mockResolvedValueOnce(null) // no duplicate
         .mockResolvedValueOnce(null); // parent not found
 
       await expect(
@@ -111,7 +108,12 @@ describe('GroupsService', () => {
     it('should return all groups with userGroups count', async () => {
       const groups = [
         { ...mockGroup, _count: { userGroups: 3 } },
-        { ...mockGroup, id: 'group-2', name: 'admins', _count: { userGroups: 1 } },
+        {
+          ...mockGroup,
+          id: 'group-2',
+          name: 'admins',
+          _count: { userGroups: 1 },
+        },
       ];
       prisma.group.findMany.mockResolvedValue(groups);
 
@@ -160,9 +162,9 @@ describe('GroupsService', () => {
     it('should throw NotFoundException when group does not exist', async () => {
       prisma.group.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.findById(mockRealm, 'nonexistent'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.findById(mockRealm, 'nonexistent')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -223,9 +225,9 @@ describe('GroupsService', () => {
     it('should throw NotFoundException when group does not exist', async () => {
       prisma.group.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.delete(mockRealm, 'nonexistent'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.delete(mockRealm, 'nonexistent')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -363,11 +365,10 @@ describe('GroupsService', () => {
       ]);
       prisma.groupRole.createMany.mockResolvedValue({ count: 2 });
 
-      const result = await service.assignRolesToGroup(
-        mockRealm,
-        'group-1',
-        ['admin', 'viewer'],
-      );
+      const result = await service.assignRolesToGroup(mockRealm, 'group-1', [
+        'admin',
+        'viewer',
+      ]);
 
       expect(result).toEqual({ assigned: ['admin', 'viewer'] });
       expect(prisma.groupRole.createMany).toHaveBeenCalledWith({
@@ -389,9 +390,7 @@ describe('GroupsService', () => {
 
     it('should throw NotFoundException when some roles are missing', async () => {
       prisma.group.findFirst.mockResolvedValue(mockGroup);
-      prisma.role.findMany.mockResolvedValue([
-        { id: 'role-1', name: 'admin' },
-      ]);
+      prisma.role.findMany.mockResolvedValue([{ id: 'role-1', name: 'admin' }]);
 
       await expect(
         service.assignRolesToGroup(mockRealm, 'group-1', ['admin', 'missing']),
@@ -403,9 +402,7 @@ describe('GroupsService', () => {
 
   describe('removeRolesFromGroup', () => {
     it('should remove roles from a group', async () => {
-      prisma.role.findMany.mockResolvedValue([
-        { id: 'role-1', name: 'admin' },
-      ]);
+      prisma.role.findMany.mockResolvedValue([{ id: 'role-1', name: 'admin' }]);
       prisma.groupRole.deleteMany.mockResolvedValue({ count: 1 });
 
       await service.removeRolesFromGroup(mockRealm, 'group-1', ['admin']);

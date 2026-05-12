@@ -1,5 +1,10 @@
 import { Controller, Post, Body, HttpCode, UseGuards } from '@nestjs/common';
-import { ApiSecurity, ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiSecurity,
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+} from '@nestjs/swagger';
 import { IsBoolean, IsObject, IsOptional, IsString } from 'class-validator';
 import { KeycloakImporterService } from './keycloak-importer.service.js';
 import { Auth0ImporterService } from './auth0-importer.service.js';
@@ -64,22 +69,45 @@ export class MigrationController {
   @Post('keycloak')
   @HttpCode(200)
   @ApiOperation({ summary: 'Import from Keycloak realm export JSON' })
-  @ApiResponse({ status: 200, description: 'Migration report with counts of imported/skipped entities' })
-  @ApiResponse({ status: 400, description: 'Bad request — invalid payload or missing targetRealm' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
-  async importKeycloak(@Body() dto: KeycloakImportDto): Promise<MigrationReport> {
-    return this.keycloakImporter.importRealm(dto.data as unknown as KeycloakRealmExport, {
-      dryRun: dto.dryRun ?? false,
-      targetRealm: dto.targetRealm,
-    });
+  @ApiResponse({
+    status: 200,
+    description: 'Migration report with counts of imported/skipped entities',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad request — invalid payload or missing targetRealm',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
+  async importKeycloak(
+    @Body() dto: KeycloakImportDto,
+  ): Promise<MigrationReport> {
+    return this.keycloakImporter.importRealm(
+      dto.data as unknown as KeycloakRealmExport,
+      {
+        dryRun: dto.dryRun ?? false,
+        targetRealm: dto.targetRealm,
+      },
+    );
   }
 
   @Post('auth0')
   @HttpCode(200)
   @ApiOperation({ summary: 'Import from Auth0 Management API export' })
-  @ApiResponse({ status: 200, description: 'Migration report with counts of imported/skipped entities' })
-  @ApiResponse({ status: 400, description: 'Bad request — invalid payload or missing targetRealm' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
+  @ApiResponse({
+    status: 200,
+    description: 'Migration report with counts of imported/skipped entities',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad request — invalid payload or missing targetRealm',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
   async importAuth0(@Body() dto: Auth0ImportDto): Promise<MigrationReport> {
     return this.auth0Importer.importData(dto.data, {
       dryRun: dto.dryRun ?? false,

@@ -34,7 +34,11 @@ describe('AuthController', () => {
 
   describe('token', () => {
     it('should call authService.handleTokenRequest with correct arguments', () => {
-      const body = { grant_type: 'password', username: 'user', password: 'pass' };
+      const body = {
+        grant_type: 'password',
+        username: 'user',
+        password: 'pass',
+      };
 
       controller.token(realm, body, req as any, res as any);
 
@@ -56,12 +60,17 @@ describe('AuthController', () => {
     });
 
     it('should pass the exact body object without modification', () => {
-      const body = { grant_type: 'client_credentials', client_id: 'my-client', client_secret: 's3cret' };
+      const body = {
+        grant_type: 'client_credentials',
+        client_id: 'my-client',
+        client_secret: 's3cret',
+      };
 
       controller.token(realm, body, req as any, res as any);
 
       expect(mockAuthService.handleTokenRequest).toHaveBeenCalledTimes(1);
-      const [passedRealm, passedBody] = mockAuthService.handleTokenRequest.mock.calls[0];
+      const [passedRealm, passedBody] =
+        mockAuthService.handleTokenRequest.mock.calls[0];
       expect(passedRealm).toBe(realm);
       expect(passedBody).toBe(body);
     });

@@ -19,9 +19,9 @@ export type ConditionOperator =
   | 'ipInRange';
 
 export interface Condition {
-  field: string;          // dot-notation path into the context, e.g. "subject.roles"
+  field: string; // dot-notation path into the context, e.g. "subject.roles"
   operator: ConditionOperator;
-  value: unknown;         // compared value (string | number | string[])
+  value: unknown; // compared value (string | number | string[])
 }
 
 export type ConditionGroup = Condition | Condition[];
@@ -32,9 +32,9 @@ export interface RawPolicy {
   id: string;
   name: string;
   enabled: boolean;
-  effect: string;         // "ALLOW" | "DENY"
+  effect: string; // "ALLOW" | "DENY"
   priority: number;
-  logic: string;          // "AND" | "OR"
+  logic: string; // "AND" | "OR"
   clientId: string | null;
   subjectConditions: unknown;
   resourceConditions: unknown;
@@ -99,7 +99,10 @@ export interface PolicyEvaluationResult {
  *   get({ subject: { roles: ['admin'] } }, 'subject.roles') => ['admin']
  *   get({ action: 'read' }, 'action') => 'read'
  */
-function resolveField(context: Record<string, unknown>, field: string): unknown {
+function resolveField(
+  context: Record<string, unknown>,
+  field: string,
+): unknown {
   const parts = field.split('.');
   let current: unknown = context;
   for (const part of parts) {
@@ -126,7 +129,7 @@ function ipInCidr(ip: string, cidr: string): boolean {
     if (parts.length !== 4 || parts.some((p) => isNaN(p) || p < 0 || p > 255)) {
       return null;
     }
-    return (parts[0]! << 24) | (parts[1]! << 16) | (parts[2]! << 8) | parts[3]!;
+    return (parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3];
   };
 
   const ipInt = ipToInt(ip);
@@ -134,7 +137,7 @@ function ipInCidr(ip: string, cidr: string): boolean {
   if (ipInt === null || rangeInt === null) return false;
 
   const mask = bits === 0 ? 0 : (~0 << (32 - bits)) >>> 0;
-  return (ipInt >>> 0 & mask) === (rangeInt >>> 0 & mask);
+  return ((ipInt >>> 0) & mask) === ((rangeInt >>> 0) & mask);
 }
 
 // ─── Core condition evaluation ────────────────────────────────────────────────
@@ -177,8 +180,8 @@ export function evaluateCondition(
         typeof actual === 'string'
           ? actual.includes(String(expected))
           : Array.isArray(actual)
-          ? actual.includes(expected)
-          : false;
+            ? actual.includes(expected)
+            : false;
       return {
         passed,
         reason: passed
@@ -189,7 +192,10 @@ export function evaluateCondition(
 
     case 'in': {
       if (!Array.isArray(expected)) {
-        return { passed: false, reason: `operator "in" requires an array value` };
+        return {
+          passed: false,
+          reason: `operator "in" requires an array value`,
+        };
       }
       const passed = expected.includes(actual);
       return {
@@ -202,7 +208,10 @@ export function evaluateCondition(
 
     case 'notIn': {
       if (!Array.isArray(expected)) {
-        return { passed: false, reason: `operator "notIn" requires an array value` };
+        return {
+          passed: false,
+          reason: `operator "notIn" requires an array value`,
+        };
       }
       const passed = !expected.includes(actual);
       return {
@@ -217,7 +226,10 @@ export function evaluateCondition(
       const numActual = Number(actual);
       const numExpected = Number(expected);
       if (isNaN(numActual) || isNaN(numExpected)) {
-        return { passed: false, reason: `"${condition.field}" or value is not numeric` };
+        return {
+          passed: false,
+          reason: `"${condition.field}" or value is not numeric`,
+        };
       }
       const passed = numActual > numExpected;
       return {
@@ -232,7 +244,10 @@ export function evaluateCondition(
       const numActual = Number(actual);
       const numExpected = Number(expected);
       if (isNaN(numActual) || isNaN(numExpected)) {
-        return { passed: false, reason: `"${condition.field}" or value is not numeric` };
+        return {
+          passed: false,
+          reason: `"${condition.field}" or value is not numeric`,
+        };
       }
       const passed = numActual < numExpected;
       return {
@@ -245,7 +260,10 @@ export function evaluateCondition(
 
     case 'matches': {
       if (typeof actual !== 'string') {
-        return { passed: false, reason: `"${condition.field}" is not a string` };
+        return {
+          passed: false,
+          reason: `"${condition.field}" is not a string`,
+        };
       }
       let regex: RegExp;
       try {
@@ -264,7 +282,10 @@ export function evaluateCondition(
 
     case 'ipInRange': {
       if (typeof actual !== 'string') {
-        return { passed: false, reason: `"${condition.field}" is not a string IP` };
+        return {
+          passed: false,
+          reason: `"${condition.field}" is not a string IP`,
+        };
       }
       const cidr = String(expected);
       const passed = ipInCidr(actual, cidr);
@@ -277,7 +298,10 @@ export function evaluateCondition(
     }
 
     default:
-      return { passed: false, reason: `unknown operator "${(condition as Condition).operator}"` };
+      return {
+        passed: false,
+        reason: `unknown operator "${condition.operator}"`,
+      };
   }
 }
 
@@ -341,12 +365,12 @@ export function evaluatePolicy(
   req: PolicyEvaluationRequest,
 ): PolicyMatchDetail {
   const context = buildContext(req);
-  const logic = (policy.logic === 'OR' ? 'OR' : 'AND') as 'AND' | 'OR';
+  const logic = policy.logic === 'OR' ? 'OR' : 'AND';
 
   const conditionTypes = [
-    { type: 'subject',     raw: policy.subjectConditions },
-    { type: 'resource',    raw: policy.resourceConditions },
-    { type: 'action',      raw: policy.actionConditions },
+    { type: 'subject', raw: policy.subjectConditions },
+    { type: 'resource', raw: policy.resourceConditions },
+    { type: 'action', raw: policy.actionConditions },
     { type: 'environment', raw: policy.environmentConditions },
   ];
 
@@ -360,7 +384,11 @@ export function evaluatePolicy(
     const { passed, results } = evaluateConditions(conditions, context, logic);
 
     for (const r of results) {
-      conditionResults.push({ conditionType: type, passed: r.passed, reason: r.reason });
+      conditionResults.push({
+        conditionType: type,
+        passed: r.passed,
+        reason: r.reason,
+      });
     }
 
     // Between category groups we always use AND — ALL categories must pass

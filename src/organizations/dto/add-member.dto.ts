@@ -6,7 +6,10 @@ export class AddMemberDto {
   @IsString()
   userId!: string;
 
-  @ApiPropertyOptional({ enum: ['owner', 'admin', 'member'], default: 'member' })
+  @ApiPropertyOptional({
+    enum: ['owner', 'admin', 'member'],
+    default: 'member',
+  })
   @IsOptional()
   @IsString()
   @IsIn(['owner', 'admin', 'member'])

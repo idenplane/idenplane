@@ -13,7 +13,12 @@ import {
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiSecurity, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiSecurity,
+  ApiResponse,
+} from '@nestjs/swagger';
 import { RealmsService } from './realms.service.js';
 import { RealmExportService } from './realm-export.service.js';
 import { RealmImportService } from './realm-import.service.js';
@@ -47,7 +52,10 @@ export class RealmsController {
   @ApiResponse({ status: 201, description: 'Realm created successfully' })
   @ApiResponse({ status: 400, description: 'Invalid request body' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - requires super-admin role' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - requires super-admin role',
+  })
   create(@Body() dto: CreateRealmDto) {
     return this.realmsService.create(dto);
   }
@@ -83,12 +91,12 @@ export class RealmsController {
   @ApiResponse({ status: 200, description: 'Realm updated successfully' })
   @ApiResponse({ status: 400, description: 'Invalid request body' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - requires super-admin role' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - requires super-admin role',
+  })
   @ApiResponse({ status: 404, description: 'Realm not found' })
-  update(
-    @Param('realmName') realmName: string,
-    @Body() dto: UpdateRealmDto,
-  ) {
+  update(@Param('realmName') realmName: string, @Body() dto: UpdateRealmDto) {
     return this.realmsService.update(realmName, dto);
   }
 
@@ -98,7 +106,10 @@ export class RealmsController {
   @ApiResponse({ status: 200, description: 'Realm updated successfully' })
   @ApiResponse({ status: 400, description: 'Invalid request body' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - requires super-admin role' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - requires super-admin role',
+  })
   @ApiResponse({ status: 404, description: 'Realm not found' })
   partialUpdate(
     @Param('realmName') realmName: string,
@@ -113,7 +124,10 @@ export class RealmsController {
   @ApiOperation({ summary: 'Delete a realm' })
   @ApiResponse({ status: 204, description: 'Realm deleted successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - requires super-admin role' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - requires super-admin role',
+  })
   @ApiResponse({ status: 404, description: 'Realm not found' })
   remove(@Param('realmName') realmName: string) {
     return this.realmsService.remove(realmName);
@@ -141,7 +155,10 @@ export class RealmsController {
   @ApiResponse({ status: 201, description: 'Realm imported successfully' })
   @ApiResponse({ status: 400, description: 'Invalid import data' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 403, description: 'Forbidden - requires super-admin role' })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden - requires super-admin role',
+  })
   importRealm(
     @Body() body: Record<string, unknown>,
     @Query('overwrite') overwrite?: string,
@@ -166,7 +183,10 @@ export class RealmsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Send a test email' })
   @ApiResponse({ status: 200, description: 'Test email sent successfully' })
-  @ApiResponse({ status: 400, description: 'Missing recipient or SMTP not configured' })
+  @ApiResponse({
+    status: 400,
+    description: 'Missing recipient or SMTP not configured',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Realm not found' })
   async sendTestEmail(

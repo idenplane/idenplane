@@ -9,7 +9,11 @@ import {
   ALL_SCHEMAS,
   ALL_RESOURCE_TYPES,
 } from './schemas/scim.schemas.js';
-import type { ScimServiceProviderConfig, ScimSchema, ScimResourceType } from './types/scim.types.js';
+import type {
+  ScimServiceProviderConfig,
+  ScimSchema,
+  ScimResourceType,
+} from './types/scim.types.js';
 
 @Injectable()
 export class ScimServiceProviderConfigService {
@@ -31,7 +35,7 @@ export class ScimServiceProviderConfigService {
    * Get a specific schema by ID
    */
   getSchemaById(schemaId: string): ScimSchema | undefined {
-    return ALL_SCHEMAS.find(s => s.id === schemaId);
+    return ALL_SCHEMAS.find((s) => s.id === schemaId);
   }
 
   /**
@@ -45,6 +49,6 @@ export class ScimServiceProviderConfigService {
    * Get a specific resource type by name
    */
   getResourceTypeByName(name: string): ScimResourceType | undefined {
-    return ALL_RESOURCE_TYPES.find(rt => rt.name === name);
+    return ALL_RESOURCE_TYPES.find((rt) => rt.name === name);
   }
 }

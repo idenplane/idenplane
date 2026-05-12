@@ -34,7 +34,7 @@ export class CreateWebhookDto {
    */
   @ApiPropertyOptional({
     example: ['user.login', 'user.created'],
-    description: "Alias for eventTypes. Used when eventTypes is not provided.",
+    description: 'Alias for eventTypes. Used when eventTypes is not provided.',
   })
   @IsOptional()
   @IsArray()

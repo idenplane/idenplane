@@ -49,7 +49,10 @@ export class ExportEventsQueryDto {
   @Min(0)
   offset: number = 0;
 
-  @ApiPropertyOptional({ description: 'Maximum number of records to return', default: 1000 })
+  @ApiPropertyOptional({
+    description: 'Maximum number of records to return',
+    default: 1000,
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()

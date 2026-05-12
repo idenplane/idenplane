@@ -1,6 +1,13 @@
 import { WebAuthnService } from './webauthn.service.js';
-import { createMockPrismaService, type MockPrismaService } from '../prisma/prisma.mock.js';
-import { ForbiddenException, BadRequestException, NotFoundException } from '@nestjs/common';
+import {
+  createMockPrismaService,
+  type MockPrismaService,
+} from '../prisma/prisma.mock.js';
+import {
+  ForbiddenException,
+  BadRequestException,
+  NotFoundException,
+} from '@nestjs/common';
 
 // ── Module-level mocks ────────────────────────────────────────────────
 
@@ -86,8 +93,9 @@ describe('WebAuthnService', () => {
     it('should throw ForbiddenException when WebAuthn is disabled', async () => {
       const realm = makeRealm({ webAuthnEnabled: false });
 
-      await expect(service.generateRegistrationOptions(makeUser(), realm))
-        .rejects.toThrow(ForbiddenException);
+      await expect(
+        service.generateRegistrationOptions(makeUser(), realm),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('should call generateRegistrationOptions with correct rpId and rpName', async () => {
@@ -96,10 +104,18 @@ describe('WebAuthnService', () => {
       prisma.pendingAction.deleteMany.mockResolvedValue({ count: 0 });
       prisma.pendingAction.create.mockResolvedValue({} as any);
 
-      const mockOptions = { challenge: 'mock-challenge', user: { id: 'user-1' } };
-      (simpleWebAuthn.generateRegistrationOptions as jest.Mock).mockResolvedValue(mockOptions);
+      const mockOptions = {
+        challenge: 'mock-challenge',
+        user: { id: 'user-1' },
+      };
+      (
+        simpleWebAuthn.generateRegistrationOptions as jest.Mock
+      ).mockResolvedValue(mockOptions);
 
-      const result = await service.generateRegistrationOptions(makeUser(), realm);
+      const result = await service.generateRegistrationOptions(
+        makeUser(),
+        realm,
+      );
 
       expect(simpleWebAuthn.generateRegistrationOptions).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -118,15 +134,15 @@ describe('WebAuthnService', () => {
       prisma.pendingAction.create.mockResolvedValue({} as any);
 
       const mockOptions = { challenge: 'mock-challenge' };
-      (simpleWebAuthn.generateRegistrationOptions as jest.Mock).mockResolvedValue(mockOptions);
+      (
+        simpleWebAuthn.generateRegistrationOptions as jest.Mock
+      ).mockResolvedValue(mockOptions);
 
       await service.generateRegistrationOptions(makeUser(), realm);
 
       expect(simpleWebAuthn.generateRegistrationOptions).toHaveBeenCalledWith(
         expect.objectContaining({
-          excludeCredentials: [
-            expect.objectContaining({ id: 'credId123' }),
-          ],
+          excludeCredentials: [expect.objectContaining({ id: 'credId123' })],
         }),
       );
     });
@@ -138,7 +154,9 @@ describe('WebAuthnService', () => {
       prisma.pendingAction.create.mockResolvedValue({} as any);
 
       const mockOptions = { challenge: 'challenge-abc' };
-      (simpleWebAuthn.generateRegistrationOptions as jest.Mock).mockResolvedValue(mockOptions);
+      (
+        simpleWebAuthn.generateRegistrationOptions as jest.Mock
+      ).mockResolvedValue(mockOptions);
 
       await service.generateRegistrationOptions(makeUser(), realm);
 
@@ -153,13 +171,19 @@ describe('WebAuthnService', () => {
     });
 
     it('should use realm name as rpName when webAuthnRpName is null', async () => {
-      const realm = makeRealm({ webAuthnRpName: null, displayName: null, name: 'my-realm' });
+      const realm = makeRealm({
+        webAuthnRpName: null,
+        displayName: null,
+        name: 'my-realm',
+      });
       prisma.webAuthnCredential.findMany.mockResolvedValue([]);
       prisma.pendingAction.deleteMany.mockResolvedValue({ count: 0 });
       prisma.pendingAction.create.mockResolvedValue({} as any);
 
       const mockOptions = { challenge: 'c' };
-      (simpleWebAuthn.generateRegistrationOptions as jest.Mock).mockResolvedValue(mockOptions);
+      (
+        simpleWebAuthn.generateRegistrationOptions as jest.Mock
+      ).mockResolvedValue(mockOptions);
 
       await service.generateRegistrationOptions(makeUser(), realm);
 
@@ -179,8 +203,9 @@ describe('WebAuthnService', () => {
     it('should throw ForbiddenException when WebAuthn is disabled', async () => {
       const realm = makeRealm({ webAuthnEnabled: false });
 
-      await expect(service.verifyRegistration(makeUser(), realm, mockResponse))
-        .rejects.toThrow(ForbiddenException);
+      await expect(
+        service.verifyRegistration(makeUser(), realm, mockResponse),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('should throw BadRequestException when challenge not found', async () => {
@@ -188,8 +213,9 @@ describe('WebAuthnService', () => {
       // pendingAction not found
       prisma.pendingAction.findUnique.mockResolvedValue(null);
 
-      await expect(service.verifyRegistration(makeUser(), realm, mockResponse))
-        .rejects.toThrow(BadRequestException);
+      await expect(
+        service.verifyRegistration(makeUser(), realm, mockResponse),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should throw BadRequestException when verification fails', async () => {
@@ -204,13 +230,16 @@ describe('WebAuthnService', () => {
       } as any);
       prisma.pendingAction.delete.mockResolvedValue({} as any);
 
-      (simpleWebAuthn.verifyRegistrationResponse as jest.Mock).mockResolvedValue({
+      (
+        simpleWebAuthn.verifyRegistrationResponse as jest.Mock
+      ).mockResolvedValue({
         verified: false,
         registrationInfo: null,
       });
 
-      await expect(service.verifyRegistration(makeUser(), realm, mockResponse))
-        .rejects.toThrow(BadRequestException);
+      await expect(
+        service.verifyRegistration(makeUser(), realm, mockResponse),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should store credential and return it on success', async () => {
@@ -224,9 +253,13 @@ describe('WebAuthnService', () => {
       } as any);
       prisma.pendingAction.delete.mockResolvedValue({} as any);
       prisma.webAuthnCredential.findUnique.mockResolvedValue(null); // no duplicate
-      prisma.webAuthnCredential.create.mockResolvedValue(makeCredential() as any);
+      prisma.webAuthnCredential.create.mockResolvedValue(
+        makeCredential() as any,
+      );
 
-      (simpleWebAuthn.verifyRegistrationResponse as jest.Mock).mockResolvedValue({
+      (
+        simpleWebAuthn.verifyRegistrationResponse as jest.Mock
+      ).mockResolvedValue({
         verified: true,
         registrationInfo: {
           credential: {
@@ -240,7 +273,12 @@ describe('WebAuthnService', () => {
         },
       });
 
-      const result = await service.verifyRegistration(makeUser(), realm, mockResponse, 'My Phone');
+      const result = await service.verifyRegistration(
+        makeUser(),
+        realm,
+        mockResponse,
+        'My Phone',
+      );
 
       expect(prisma.webAuthnCredential.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -266,7 +304,9 @@ describe('WebAuthnService', () => {
       } as any);
       prisma.pendingAction.delete.mockResolvedValue({} as any);
 
-      (simpleWebAuthn.verifyRegistrationResponse as jest.Mock).mockResolvedValue({
+      (
+        simpleWebAuthn.verifyRegistrationResponse as jest.Mock
+      ).mockResolvedValue({
         verified: true,
         registrationInfo: {
           credential: {
@@ -281,10 +321,13 @@ describe('WebAuthnService', () => {
       });
 
       // Duplicate credential
-      prisma.webAuthnCredential.findUnique.mockResolvedValue(makeCredential() as any);
+      prisma.webAuthnCredential.findUnique.mockResolvedValue(
+        makeCredential() as any,
+      );
 
-      await expect(service.verifyRegistration(makeUser(), realm, mockResponse))
-        .rejects.toThrow(BadRequestException);
+      await expect(
+        service.verifyRegistration(makeUser(), realm, mockResponse),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -296,14 +339,17 @@ describe('WebAuthnService', () => {
     it('should throw ForbiddenException when WebAuthn is disabled', async () => {
       const realm = makeRealm({ webAuthnEnabled: false });
 
-      await expect(service.generateAuthenticationOptions(realm))
-        .rejects.toThrow(ForbiddenException);
+      await expect(
+        service.generateAuthenticationOptions(realm),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('should generate options without allowCredentials for usernameless flow', async () => {
       const realm = makeRealm();
       const mockOptions = { challenge: 'auth-challenge' };
-      (simpleWebAuthn.generateAuthenticationOptions as jest.Mock).mockResolvedValue(mockOptions);
+      (
+        simpleWebAuthn.generateAuthenticationOptions as jest.Mock
+      ).mockResolvedValue(mockOptions);
 
       prisma.pendingAction.deleteMany.mockResolvedValue({ count: 0 });
       prisma.pendingAction.create.mockResolvedValue({} as any);
@@ -322,11 +368,16 @@ describe('WebAuthnService', () => {
       prisma.webAuthnCredential.findMany.mockResolvedValue([cred]);
 
       const mockOptions = { challenge: 'auth-challenge' };
-      (simpleWebAuthn.generateAuthenticationOptions as jest.Mock).mockResolvedValue(mockOptions);
+      (
+        simpleWebAuthn.generateAuthenticationOptions as jest.Mock
+      ).mockResolvedValue(mockOptions);
 
       prisma.pendingAction.deleteMany.mockResolvedValue({ count: 0 });
       prisma.pendingAction.create.mockResolvedValue({} as any);
-      prisma.user.findFirst.mockResolvedValue({ id: 'user-1', realmId: 'realm-1' });
+      prisma.user.findFirst.mockResolvedValue({
+        id: 'user-1',
+        realmId: 'realm-1',
+      });
 
       await service.generateAuthenticationOptions(realm, 'user-1');
 
@@ -339,7 +390,9 @@ describe('WebAuthnService', () => {
 
     it('should store challenge in PendingAction with realm key for usernameless flow', async () => {
       const realm = makeRealm();
-      (simpleWebAuthn.generateAuthenticationOptions as jest.Mock).mockResolvedValue({ challenge: 'ch' });
+      (
+        simpleWebAuthn.generateAuthenticationOptions as jest.Mock
+      ).mockResolvedValue({ challenge: 'ch' });
 
       prisma.pendingAction.deleteMany.mockResolvedValue({ count: 0 });
       prisma.pendingAction.create.mockResolvedValue({} as any);
@@ -350,7 +403,10 @@ describe('WebAuthnService', () => {
         expect.objectContaining({
           data: expect.objectContaining({
             type: 'webauthn_authentication_challenge',
-            data: expect.objectContaining({ challenge: 'ch', key: 'realm:realm-1' }),
+            data: expect.objectContaining({
+              challenge: 'ch',
+              key: 'realm:realm-1',
+            }),
           }),
         }),
       );
@@ -367,16 +423,18 @@ describe('WebAuthnService', () => {
     it('should throw ForbiddenException when WebAuthn is disabled', async () => {
       const realm = makeRealm({ webAuthnEnabled: false });
 
-      await expect(service.verifyAuthentication(realm, mockResponse))
-        .rejects.toThrow(ForbiddenException);
+      await expect(
+        service.verifyAuthentication(realm, mockResponse),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('should throw NotFoundException when credential is not found', async () => {
       const realm = makeRealm();
       prisma.webAuthnCredential.findUnique.mockResolvedValue(null);
 
-      await expect(service.verifyAuthentication(realm, mockResponse))
-        .rejects.toThrow(NotFoundException);
+      await expect(
+        service.verifyAuthentication(realm, mockResponse),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('should throw ForbiddenException when credential belongs to different realm', async () => {
@@ -385,18 +443,22 @@ describe('WebAuthnService', () => {
         makeCredential({ realmId: 'other-realm' }) as any,
       );
 
-      await expect(service.verifyAuthentication(realm, mockResponse))
-        .rejects.toThrow(ForbiddenException);
+      await expect(
+        service.verifyAuthentication(realm, mockResponse),
+      ).rejects.toThrow(ForbiddenException);
     });
 
     it('should throw BadRequestException when no challenge found', async () => {
       const realm = makeRealm();
-      prisma.webAuthnCredential.findUnique.mockResolvedValue(makeCredential() as any);
+      prisma.webAuthnCredential.findUnique.mockResolvedValue(
+        makeCredential() as any,
+      );
       // No pending action found
       prisma.pendingAction.findUnique.mockResolvedValue(null);
 
-      await expect(service.verifyAuthentication(realm, mockResponse))
-        .rejects.toThrow(BadRequestException);
+      await expect(
+        service.verifyAuthentication(realm, mockResponse),
+      ).rejects.toThrow(BadRequestException);
     });
 
     it('should verify assertion and update counter on success', async () => {
@@ -415,7 +477,9 @@ describe('WebAuthnService', () => {
       prisma.pendingAction.delete.mockResolvedValue({} as any);
       prisma.webAuthnCredential.update.mockResolvedValue(cred as any);
 
-      (simpleWebAuthn.verifyAuthenticationResponse as jest.Mock).mockResolvedValue({
+      (
+        simpleWebAuthn.verifyAuthenticationResponse as jest.Mock
+      ).mockResolvedValue({
         verified: true,
         authenticationInfo: { newCounter: 6 },
       });
@@ -446,13 +510,16 @@ describe('WebAuthnService', () => {
       } as any);
       prisma.pendingAction.delete.mockResolvedValue({} as any);
 
-      (simpleWebAuthn.verifyAuthenticationResponse as jest.Mock).mockResolvedValue({
+      (
+        simpleWebAuthn.verifyAuthenticationResponse as jest.Mock
+      ).mockResolvedValue({
         verified: false,
         authenticationInfo: {},
       });
 
-      await expect(service.verifyAuthentication(realm, mockResponse))
-        .rejects.toThrow(BadRequestException);
+      await expect(
+        service.verifyAuthentication(realm, mockResponse),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -491,22 +558,25 @@ describe('WebAuthnService', () => {
     it('should throw NotFoundException when credential does not exist', async () => {
       prisma.webAuthnCredential.findFirst.mockResolvedValue(null);
 
-      await expect(service.removeCredential('user-1', 'realm-1', 'cred-db-1'))
-        .rejects.toThrow(NotFoundException);
+      await expect(
+        service.removeCredential('user-1', 'realm-1', 'cred-db-1'),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('should throw NotFoundException when credential belongs to different user', async () => {
       prisma.webAuthnCredential.findFirst.mockResolvedValue(null);
 
-      await expect(service.removeCredential('user-1', 'realm-1', 'cred-db-1'))
-        .rejects.toThrow(NotFoundException);
+      await expect(
+        service.removeCredential('user-1', 'realm-1', 'cred-db-1'),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('should throw NotFoundException when credential belongs to different realm', async () => {
       prisma.webAuthnCredential.findFirst.mockResolvedValue(null);
 
-      await expect(service.removeCredential('user-1', 'wrong-realm', 'cred-db-1'))
-        .rejects.toThrow(NotFoundException);
+      await expect(
+        service.removeCredential('user-1', 'wrong-realm', 'cred-db-1'),
+      ).rejects.toThrow(NotFoundException);
     });
 
     it('should delete the credential when it belongs to the user and realm', async () => {
@@ -567,15 +637,18 @@ describe('WebAuthnService', () => {
 
       // Both user-specific and realm-wide lookups return null
       // (second call also returns null because pendingAction.findUnique is called twice)
-      prisma.pendingAction.findUnique.mockResolvedValueOnce({
-        id: 'action-1',
-        type: 'webauthn_authentication_challenge',
-        data: { challenge: 'old-challenge' } as any,
-        expiresAt: new Date(Date.now() - 60_000),
-      } as any).mockResolvedValueOnce(null);
+      prisma.pendingAction.findUnique
+        .mockResolvedValueOnce({
+          id: 'action-1',
+          type: 'webauthn_authentication_challenge',
+          data: { challenge: 'old-challenge' } as any,
+          expiresAt: new Date(Date.now() - 60_000),
+        } as any)
+        .mockResolvedValueOnce(null);
 
-      await expect(service.verifyAuthentication(realm, { id: 'credId123' } as any))
-        .rejects.toThrow(BadRequestException);
+      await expect(
+        service.verifyAuthentication(realm, { id: 'credId123' } as any),
+      ).rejects.toThrow(BadRequestException);
 
       expect(prisma.pendingAction.delete).toHaveBeenCalled();
     });

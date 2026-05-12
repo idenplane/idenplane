@@ -184,9 +184,9 @@ describe('NhiService', () => {
     it('should throw NotFoundException when not found', async () => {
       prisma.nhiIdentity.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.findById(mockRealm, 'nonexistent'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.findById(mockRealm, 'nonexistent')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -251,7 +251,11 @@ describe('NhiService', () => {
   describe('suspend', () => {
     it('should suspend an NHI identity', async () => {
       prisma.nhiIdentity.findFirst.mockResolvedValue(mockIdentity);
-      const suspended = { ...mockIdentity, lifecycleStatus: 'SUSPENDED', suspendedAt: new Date() };
+      const suspended = {
+        ...mockIdentity,
+        lifecycleStatus: 'SUSPENDED',
+        suspendedAt: new Date(),
+      };
       prisma.nhiIdentity.update.mockResolvedValue(suspended);
 
       const result = await service.suspend(mockRealm, 'nhi-uuid-1');
@@ -260,7 +264,10 @@ describe('NhiService', () => {
       expect(prisma.nhiIdentity.update).toHaveBeenCalledWith(
         expect.objectContaining({
           where: { id: 'nhi-uuid-1' },
-          data: expect.objectContaining({ lifecycleStatus: 'SUSPENDED', suspendedAt: expect.any(Date) }),
+          data: expect.objectContaining({
+            lifecycleStatus: 'SUSPENDED',
+            suspendedAt: expect.any(Date),
+          }),
         }),
       );
     });
@@ -276,9 +283,17 @@ describe('NhiService', () => {
 
   describe('reactivate', () => {
     it('should reactivate a suspended NHI identity', async () => {
-      const suspendedIdentity = { ...mockIdentity, lifecycleStatus: 'SUSPENDED', suspendedAt: new Date() };
+      const suspendedIdentity = {
+        ...mockIdentity,
+        lifecycleStatus: 'SUSPENDED',
+        suspendedAt: new Date(),
+      };
       prisma.nhiIdentity.findFirst.mockResolvedValue(suspendedIdentity);
-      const reactivated = { ...mockIdentity, lifecycleStatus: 'ACTIVE', suspendedAt: null };
+      const reactivated = {
+        ...mockIdentity,
+        lifecycleStatus: 'ACTIVE',
+        suspendedAt: null,
+      };
       prisma.nhiIdentity.update.mockResolvedValue(reactivated);
 
       const result = await service.reactivate(mockRealm, 'nhi-uuid-1');
@@ -289,9 +304,9 @@ describe('NhiService', () => {
     it('should throw ConflictException when identity is not suspended', async () => {
       prisma.nhiIdentity.findFirst.mockResolvedValue(mockIdentity);
 
-      await expect(
-        service.reactivate(mockRealm, 'nhi-uuid-1'),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.reactivate(mockRealm, 'nhi-uuid-1')).rejects.toThrow(
+        ConflictException,
+      );
     });
 
     it('should throw NotFoundException when identity does not exist', async () => {
@@ -339,7 +354,9 @@ describe('NhiService', () => {
   describe('createCredential', () => {
     it('should create an API_KEY credential and return the plain key once', async () => {
       prisma.nhiIdentity.findFirst.mockResolvedValue(mockIdentity);
-      cryptoService.generateSecret.mockReturnValue('abcd1234ef567890abcd1234ef567890abcd1234ef567890abcd1234ef567890');
+      cryptoService.generateSecret.mockReturnValue(
+        'abcd1234ef567890abcd1234ef567890abcd1234ef567890abcd1234ef567890',
+      );
       cryptoService.hashPassword.mockResolvedValue('$argon2id$v=19$...');
       prisma.nhiCredential.create.mockResolvedValue({
         ...mockCredential,
@@ -352,7 +369,9 @@ describe('NhiService', () => {
         name: 'test-credential',
       });
 
-      expect(result.plainKey).toBe('abcd1234ef567890abcd1234ef567890abcd1234ef567890abcd1234ef567890');
+      expect(result.plainKey).toBe(
+        'abcd1234ef567890abcd1234ef567890abcd1234ef567890abcd1234ef567890',
+      );
       expect(result.keyWarning).toBeDefined();
       expect(cryptoService.generateSecret).toHaveBeenCalledWith(32);
       expect(cryptoService.hashPassword).toHaveBeenCalled();
@@ -372,14 +391,16 @@ describe('NhiService', () => {
       const certCredential = {
         ...mockCredential,
         credentialType: 'CERTIFICATE',
-        certificatePem: '-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----',
+        certificatePem:
+          '-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----',
       };
       prisma.nhiCredential.create.mockResolvedValue(certCredential);
 
       const result = await service.createCredential(mockRealm, 'nhi-uuid-1', {
         credentialType: 'CERTIFICATE',
         name: 'cert-credential',
-        certificatePem: '-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----',
+        certificatePem:
+          '-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----',
       });
 
       expect(result.credentialType).toBe('CERTIFICATE');
@@ -422,12 +443,24 @@ describe('NhiService', () => {
     it('should revoke an active credential', async () => {
       prisma.nhiIdentity.findFirst.mockResolvedValue(mockIdentity);
       // findCredentialById uses findFirst with select
-      prisma.nhiCredential.findFirst.mockResolvedValueOnce({ ...mockCredential });
+      prisma.nhiCredential.findFirst.mockResolvedValueOnce({
+        ...mockCredential,
+      });
       // revokeCredential does a second findFirst without select to check status
-      prisma.nhiCredential.findFirst.mockResolvedValueOnce({ ...mockCredential, revoked: false });
-      prisma.nhiCredential.update.mockResolvedValue({ ...mockCredential, revoked: true });
+      prisma.nhiCredential.findFirst.mockResolvedValueOnce({
+        ...mockCredential,
+        revoked: false,
+      });
+      prisma.nhiCredential.update.mockResolvedValue({
+        ...mockCredential,
+        revoked: true,
+      });
 
-      const result = await service.revokeCredential(mockRealm, 'nhi-uuid-1', 'cred-uuid-1');
+      const result = await service.revokeCredential(
+        mockRealm,
+        'nhi-uuid-1',
+        'cred-uuid-1',
+      );
 
       expect(result.message).toMatch(/revoked successfully/i);
       expect(prisma.nhiCredential.update).toHaveBeenCalledWith({
@@ -438,9 +471,16 @@ describe('NhiService', () => {
 
     it('should return a message when credential is already revoked', async () => {
       prisma.nhiIdentity.findFirst.mockResolvedValue(mockIdentity);
-      prisma.nhiCredential.findFirst.mockResolvedValue({ ...mockCredential, revoked: true });
+      prisma.nhiCredential.findFirst.mockResolvedValue({
+        ...mockCredential,
+        revoked: true,
+      });
 
-      const result = await service.revokeCredential(mockRealm, 'nhi-uuid-1', 'cred-uuid-1');
+      const result = await service.revokeCredential(
+        mockRealm,
+        'nhi-uuid-1',
+        'cred-uuid-1',
+      );
 
       expect(result.message).toMatch(/already revoked/i);
       expect(prisma.nhiCredential.update).not.toHaveBeenCalled();
@@ -459,7 +499,9 @@ describe('NhiService', () => {
     it('should rotate an API_KEY credential', async () => {
       prisma.nhiIdentity.findFirst.mockResolvedValue(mockIdentity);
       prisma.nhiCredential.findFirst.mockResolvedValue(mockCredential);
-      cryptoService.generateSecret.mockReturnValue('newkey1234567890newkey1234567890newkey1234567890newkey1234567890');
+      cryptoService.generateSecret.mockReturnValue(
+        'newkey1234567890newkey1234567890newkey1234567890newkey1234567890',
+      );
       cryptoService.hashPassword.mockResolvedValue('$argon2id$newhash');
       const newCredential = {
         ...mockCredential,
@@ -470,16 +512,25 @@ describe('NhiService', () => {
       prisma.nhiCredential.create.mockResolvedValue(newCredential);
       prisma.nhiCredential.update.mockResolvedValue({});
 
-      const result = await service.rotateCredential(mockRealm, 'nhi-uuid-1', 'cred-uuid-1');
+      const result = await service.rotateCredential(
+        mockRealm,
+        'nhi-uuid-1',
+        'cred-uuid-1',
+      );
 
-      expect(result.newCredential.plainKey).toBe('newkey1234567890newkey1234567890newkey1234567890newkey1234567890');
+      expect(result.newCredential.plainKey).toBe(
+        'newkey1234567890newkey1234567890newkey1234567890newkey1234567890',
+      );
       expect(result.oldCredentialId).toBe('cred-uuid-1');
       expect(prisma.nhiCredential.update).toHaveBeenCalledTimes(2);
     });
 
     it('should throw ConflictException when credential is not an API_KEY', async () => {
       prisma.nhiIdentity.findFirst.mockResolvedValue(mockIdentity);
-      const certCredential = { ...mockCredential, credentialType: 'CERTIFICATE' };
+      const certCredential = {
+        ...mockCredential,
+        credentialType: 'CERTIFICATE',
+      };
       prisma.nhiCredential.findFirst.mockResolvedValue(certCredential);
 
       await expect(
@@ -583,7 +634,9 @@ describe('NhiService', () => {
       });
 
       await expect(
-        service.updatePolicy(mockRealm, 'policy-uuid-1', { name: 'taken-name' }),
+        service.updatePolicy(mockRealm, 'policy-uuid-1', {
+          name: 'taken-name',
+        }),
       ).rejects.toThrow(ConflictException);
     });
 

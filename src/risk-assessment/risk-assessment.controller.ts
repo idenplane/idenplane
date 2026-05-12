@@ -7,7 +7,13 @@ import {
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiResponse,
+} from '@nestjs/swagger';
 import { PrismaService } from '../prisma/prisma.service.js';
 
 @ApiTags('Risk Assessments')
@@ -20,12 +26,23 @@ export class RiskAssessmentController {
 
   @Get()
   @ApiOperation({ summary: 'List recent risk assessments for a realm' })
-  @ApiResponse({ status: 200, description: 'Paginated list of risk assessments' })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated list of risk assessments',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
   @ApiQuery({ name: 'userId', required: false })
-  @ApiQuery({ name: 'riskLevel', required: false, enum: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] })
-  @ApiQuery({ name: 'action', required: false, enum: ['ALLOW', 'STEP_UP', 'BLOCK'] })
+  @ApiQuery({
+    name: 'riskLevel',
+    required: false,
+    enum: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'],
+  })
+  @ApiQuery({
+    name: 'action',
+    required: false,
+    enum: ['ALLOW', 'STEP_UP', 'BLOCK'],
+  })
   @ApiQuery({ name: 'first', required: false })
   @ApiQuery({ name: 'max', required: false })
   async listAssessments(
@@ -60,7 +77,10 @@ export class RiskAssessmentController {
 
   @Get('dashboard')
   @ApiOperation({ summary: 'Risk score distribution and anomaly trends' })
-  @ApiResponse({ status: 200, description: 'Risk dashboard data for the last 30 days' })
+  @ApiResponse({
+    status: 200,
+    description: 'Risk dashboard data for the last 30 days',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
   async getDashboard(@Param('realm') realmName: string) {
@@ -70,14 +90,27 @@ export class RiskAssessmentController {
     const [allRecent, blockedSessions, stepUpSessions] = await Promise.all([
       this.prisma.loginRiskAssessment.findMany({
         where: { realmId: realm.id, createdAt: { gte: since } },
-        select: { riskScore: true, riskLevel: true, action: true, createdAt: true },
+        select: {
+          riskScore: true,
+          riskLevel: true,
+          action: true,
+          createdAt: true,
+        },
         orderBy: { createdAt: 'asc' },
       }),
       this.prisma.loginRiskAssessment.count({
-        where: { realmId: realm.id, action: 'BLOCK', createdAt: { gte: since } },
+        where: {
+          realmId: realm.id,
+          action: 'BLOCK',
+          createdAt: { gte: since },
+        },
       }),
       this.prisma.loginRiskAssessment.count({
-        where: { realmId: realm.id, action: 'STEP_UP', createdAt: { gte: since } },
+        where: {
+          realmId: realm.id,
+          action: 'STEP_UP',
+          createdAt: { gte: since },
+        },
       }),
     ]);
 
@@ -88,7 +121,10 @@ export class RiskAssessmentController {
     }
 
     // Daily trend (last 30 days)
-    const dailyMap = new Map<string, { total: number; blocked: number; stepUp: number }>();
+    const dailyMap = new Map<
+      string,
+      { total: number; blocked: number; stepUp: number }
+    >();
     for (const r of allRecent) {
       const day = r.createdAt.toISOString().slice(0, 10);
       const entry = dailyMap.get(day) ?? { total: 0, blocked: 0, stepUp: 0 };
@@ -104,7 +140,9 @@ export class RiskAssessmentController {
 
     const avgRiskScore =
       allRecent.length > 0
-        ? Math.round(allRecent.reduce((a, r) => a + r.riskScore, 0) / allRecent.length)
+        ? Math.round(
+            allRecent.reduce((a, r) => a + r.riskScore, 0) / allRecent.length,
+          )
         : 0;
 
     return {
@@ -121,7 +159,9 @@ export class RiskAssessmentController {
   // ── Single assessment ──────────────────────────────────────────────────────
 
   @Get(':id')
-  @ApiOperation({ summary: 'Get a single risk assessment with signal breakdown' })
+  @ApiOperation({
+    summary: 'Get a single risk assessment with signal breakdown',
+  })
   @ApiResponse({ status: 200, description: 'Risk assessment details' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })

@@ -1,16 +1,25 @@
 import { MfaService } from './mfa.service.js';
-import { createMockPrismaService, type MockPrismaService } from '../prisma/prisma.mock.js';
+import {
+  createMockPrismaService,
+  type MockPrismaService,
+} from '../prisma/prisma.mock.js';
 import type { Realm } from '@prisma/client';
 
 // ── Module-level mocks ────────────────────────────────────────────────
 jest.mock('otpauth', () => {
   const mockSecretInstance = { base32: 'MOCKED_BASE32_SECRET' };
   return {
-    Secret: Object.assign(jest.fn(() => mockSecretInstance), {
-      fromBase32: jest.fn(() => mockSecretInstance),
-    }),
+    Secret: Object.assign(
+      jest.fn(() => mockSecretInstance),
+      {
+        fromBase32: jest.fn(() => mockSecretInstance),
+      },
+    ),
     TOTP: jest.fn(() => ({
-      toString: jest.fn(() => 'otpauth://totp/AuthMe%20(test-realm):user1?secret=MOCKED_BASE32_SECRET&issuer=AuthMe'),
+      toString: jest.fn(
+        () =>
+          'otpauth://totp/AuthMe%20(test-realm):user1?secret=MOCKED_BASE32_SECRET&issuer=AuthMe',
+      ),
       validate: jest.fn(() => 0), // default: valid token (delta = 0)
     })),
   };
@@ -157,7 +166,9 @@ describe('MfaService', () => {
     });
 
     it('should return null when TOTP code is invalid', async () => {
-      prisma.userCredential.findUnique.mockResolvedValue(unverifiedCredential as any);
+      prisma.userCredential.findUnique.mockResolvedValue(
+        unverifiedCredential as any,
+      );
 
       // Make validate return null (invalid token)
       (OTPAuth.TOTP as jest.Mock).mockImplementationOnce(() => ({
@@ -172,7 +183,9 @@ describe('MfaService', () => {
     });
 
     it('should mark credential as verified and return recovery codes when code is valid', async () => {
-      prisma.userCredential.findUnique.mockResolvedValue(unverifiedCredential as any);
+      prisma.userCredential.findUnique.mockResolvedValue(
+        unverifiedCredential as any,
+      );
       prisma.userCredential.update.mockResolvedValue({} as any);
       (prisma.recoveryCode as any).deleteMany.mockResolvedValue({} as any);
       (prisma.recoveryCode as any).create.mockResolvedValue({} as any);
@@ -194,7 +207,9 @@ describe('MfaService', () => {
     });
 
     it('should generate recovery codes after successful activation', async () => {
-      prisma.userCredential.findUnique.mockResolvedValue(unverifiedCredential as any);
+      prisma.userCredential.findUnique.mockResolvedValue(
+        unverifiedCredential as any,
+      );
       prisma.userCredential.update.mockResolvedValue({} as any);
       (prisma.recoveryCode as any).deleteMany.mockResolvedValue({} as any);
       (prisma.recoveryCode as any).create.mockResolvedValue({} as any);
@@ -259,7 +274,9 @@ describe('MfaService', () => {
     });
 
     it('should return false when TOTP code is invalid', async () => {
-      prisma.userCredential.findUnique.mockResolvedValue(verifiedCredential as any);
+      prisma.userCredential.findUnique.mockResolvedValue(
+        verifiedCredential as any,
+      );
 
       (OTPAuth.TOTP as jest.Mock).mockImplementationOnce(() => ({
         toString: jest.fn(),
@@ -272,7 +289,9 @@ describe('MfaService', () => {
     });
 
     it('should return true when TOTP code is valid', async () => {
-      prisma.userCredential.findUnique.mockResolvedValue(verifiedCredential as any);
+      prisma.userCredential.findUnique.mockResolvedValue(
+        verifiedCredential as any,
+      );
 
       (OTPAuth.TOTP as jest.Mock).mockImplementationOnce(() => ({
         toString: jest.fn(),
@@ -285,7 +304,9 @@ describe('MfaService', () => {
     });
 
     it('should validate with window of 1', async () => {
-      prisma.userCredential.findUnique.mockResolvedValue(verifiedCredential as any);
+      prisma.userCredential.findUnique.mockResolvedValue(
+        verifiedCredential as any,
+      );
 
       const mockValidate = jest.fn(() => 1);
       (OTPAuth.TOTP as jest.Mock).mockImplementationOnce(() => ({
@@ -299,7 +320,9 @@ describe('MfaService', () => {
     });
 
     it('should reconstruct TOTP from stored credential fields', async () => {
-      prisma.userCredential.findUnique.mockResolvedValue(verifiedCredential as any);
+      prisma.userCredential.findUnique.mockResolvedValue(
+        verifiedCredential as any,
+      );
 
       (OTPAuth.TOTP as jest.Mock).mockImplementationOnce(() => ({
         toString: jest.fn(),
@@ -308,7 +331,9 @@ describe('MfaService', () => {
 
       await service.verifyTotp('user-1', '123456');
 
-      expect(OTPAuth.Secret.fromBase32).toHaveBeenCalledWith('MOCKED_BASE32_SECRET');
+      expect(OTPAuth.Secret.fromBase32).toHaveBeenCalledWith(
+        'MOCKED_BASE32_SECRET',
+      );
       expect(OTPAuth.TOTP).toHaveBeenCalledWith(
         expect.objectContaining({
           algorithm: 'SHA1',
@@ -354,7 +379,12 @@ describe('MfaService', () => {
     });
 
     it('should mark the recovery code as used and return true', async () => {
-      const mockCode = { id: 'rc-1', userId: 'user-1', codeHash: 'hashed_abcd1234', used: false };
+      const mockCode = {
+        id: 'rc-1',
+        userId: 'user-1',
+        codeHash: 'hashed_abcd1234',
+        used: false,
+      };
       (prisma.recoveryCode as any).findFirst.mockResolvedValue(mockCode as any);
       prisma.recoveryCode.update.mockResolvedValue({} as any);
 
@@ -585,7 +615,12 @@ describe('MfaService', () => {
 
       expect(prisma.pendingAction.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          data: { userId: 'user-1', realmId: 'realm-1', oauthParams, attempts: 0 },
+          data: {
+            userId: 'user-1',
+            realmId: 'realm-1',
+            oauthParams,
+            attempts: 0,
+          },
         }),
       });
     });
@@ -626,7 +661,12 @@ describe('MfaService', () => {
 
       expect(prisma.pendingAction.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
-          data: { userId: 'user-1', realmId: 'realm-1', oauthParams: undefined, attempts: 0 },
+          data: {
+            userId: 'user-1',
+            realmId: 'realm-1',
+            oauthParams: undefined,
+            attempts: 0,
+          },
         }),
       });
     });
@@ -737,7 +777,8 @@ describe('MfaService', () => {
     it('should return null when no action is found', async () => {
       prisma.pendingAction.findUnique.mockResolvedValue(null);
 
-      const result = await service.validateMfaChallengeWithAttemptCheck('some-token');
+      const result =
+        await service.validateMfaChallengeWithAttemptCheck('some-token');
 
       expect(result).toBeNull();
     });
@@ -751,10 +792,13 @@ describe('MfaService', () => {
       } as any);
       prisma.pendingAction.delete.mockResolvedValue({} as any);
 
-      const result = await service.validateMfaChallengeWithAttemptCheck('some-token');
+      const result =
+        await service.validateMfaChallengeWithAttemptCheck('some-token');
 
       expect(result).toBeNull();
-      expect(prisma.pendingAction.delete).toHaveBeenCalledWith({ where: { id: 'action-1' } });
+      expect(prisma.pendingAction.delete).toHaveBeenCalledWith({
+        where: { id: 'action-1' },
+      });
     });
 
     it('should increment attempt counter and return challenge data', async () => {
@@ -766,7 +810,8 @@ describe('MfaService', () => {
       } as any);
       prisma.pendingAction.update.mockResolvedValue({} as any);
 
-      const result = await service.validateMfaChallengeWithAttemptCheck('some-token');
+      const result =
+        await service.validateMfaChallengeWithAttemptCheck('some-token');
 
       expect(result).toEqual({
         userId: 'user-1',
@@ -788,10 +833,13 @@ describe('MfaService', () => {
       } as any);
       prisma.pendingAction.delete.mockResolvedValue({} as any);
 
-      const result = await service.validateMfaChallengeWithAttemptCheck('some-token');
+      const result =
+        await service.validateMfaChallengeWithAttemptCheck('some-token');
 
       expect(result).toBeNull();
-      expect(prisma.pendingAction.delete).toHaveBeenCalledWith({ where: { id: 'action-1' } });
+      expect(prisma.pendingAction.delete).toHaveBeenCalledWith({
+        where: { id: 'action-1' },
+      });
     });
 
     it('should allow up to 5 attempts (attempt 5 succeeds, 6 fails)', async () => {
@@ -804,7 +852,8 @@ describe('MfaService', () => {
       } as any);
       prisma.pendingAction.update.mockResolvedValue({} as any);
 
-      const result = await service.validateMfaChallengeWithAttemptCheck('some-token');
+      const result =
+        await service.validateMfaChallengeWithAttemptCheck('some-token');
 
       expect(result).not.toBeNull();
     });
@@ -827,7 +876,9 @@ describe('MfaService', () => {
     it('should not throw when action does not exist', async () => {
       prisma.pendingAction.delete.mockRejectedValue(new Error('Not found'));
 
-      await expect(service.consumeMfaChallenge('nonexistent')).resolves.toBeUndefined();
+      await expect(
+        service.consumeMfaChallenge('nonexistent'),
+      ).resolves.toBeUndefined();
     });
   });
 

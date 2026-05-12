@@ -44,11 +44,14 @@ export class TokensService {
         return { active: false };
       }
 
-      const payload = await this.jwkService.verifyJwt(token, signingKey.publicKey);
+      const payload = await this.jwkService.verifyJwt(
+        token,
+        signingKey.publicKey,
+      );
 
       // Check token blacklist
-      const jti = payload['jti'] as string | undefined;
-      if (jti && await this.blacklist.isBlacklisted(jti)) {
+      const jti = payload['jti'];
+      if (jti && (await this.blacklist.isBlacklisted(jti))) {
         return { active: false };
       }
 
@@ -57,7 +60,9 @@ export class TokensService {
       // is absent so that service-account tokens do not introspect as inactive.
       const sid = payload['sid'] as string | undefined;
       if (sid) {
-        const session = await this.prisma.session.findUnique({ where: { id: sid } });
+        const session = await this.prisma.session.findUnique({
+          where: { id: sid },
+        });
         if (!session) {
           return { active: false };
         }
@@ -67,15 +72,15 @@ export class TokensService {
       // username in the response.  RFC 7662 §2.2 recommends including
       // `username` when the resource server needs it, and many clients rely
       // on it being present even when the claim is not embedded in the JWT.
-      const sub = payload.sub as string | undefined;
+      const sub = payload.sub;
       let username: string | undefined;
-      let active = true;
+      const active = true;
       if (sub) {
         const user = await this.prisma.user.findUnique({
           where: { id: sub },
           select: { username: true, enabled: true },
         });
-if (!user) {
+        if (!user) {
           // User was deleted after token was issued
           return { active: false };
         }
@@ -147,7 +152,10 @@ if (!user) {
           orderBy: { createdAt: 'desc' },
         });
         if (signingKey) {
-          const payload = await this.jwkService.verifyJwt(token, signingKey.publicKey);
+          const payload = await this.jwkService.verifyJwt(
+            token,
+            signingKey.publicKey,
+          );
           const p = payload as Record<string, unknown>;
           const azp = p['azp'] as string | undefined;
           const aud = p['aud'];
@@ -197,9 +205,12 @@ if (!user) {
           orderBy: { createdAt: 'desc' },
         });
         if (signingKey) {
-          const payload = await this.jwkService.verifyJwt(token, signingKey.publicKey);
-          const jti = payload['jti'] as string | undefined;
-          const exp = payload.exp as number | undefined;
+          const payload = await this.jwkService.verifyJwt(
+            token,
+            signingKey.publicKey,
+          );
+          const jti = payload['jti'];
+          const exp = payload.exp;
           if (jti && exp) {
             await this.blacklist.blacklistToken(jti, exp);
           }
@@ -226,7 +237,12 @@ if (!user) {
       throw new UnauthorizedException('Invalid refresh token');
     }
 
-    await this.endSession(realm, storedToken.sessionId, storedToken.session.userId, ip);
+    await this.endSession(
+      realm,
+      storedToken.sessionId,
+      storedToken.session.userId,
+      ip,
+    );
   }
 
   async logoutByIdToken(realm: Realm, ip?: string, idTokenHint?: string) {
@@ -243,9 +259,16 @@ if (!user) {
 
       if (!signingKey) return;
 
-      const payload = await this.jwkService.verifyJwt(idTokenHint, signingKey.publicKey);
-      const sid = (payload as Record<string, unknown>)['sid'] as string | undefined;
-      const sub = (payload as Record<string, unknown>)['sub'] as string | undefined;
+      const payload = await this.jwkService.verifyJwt(
+        idTokenHint,
+        signingKey.publicKey,
+      );
+      const sid = (payload as Record<string, unknown>)['sid'] as
+        | string
+        | undefined;
+      const sub = (payload as Record<string, unknown>)['sub'] as
+        | string
+        | undefined;
 
       if (sid) {
         await this.endSession(realm, sid, sub, ip);
@@ -255,13 +278,17 @@ if (!user) {
           select: { id: true },
         });
         await Promise.all(
-          sessions.map((session) => this.endSession(realm, session.id, sub, ip)),
+          sessions.map((session) =>
+            this.endSession(realm, session.id, sub, ip),
+          ),
         );
       }
     } catch (err) {
       // Invalid or expired id_token — best-effort logout, don't throw
       // Log for debugging purposes
-      this.logger.warn(`logoutByIdToken failed: ${(err as Error)?.message ?? 'Unknown error'}`);
+      this.logger.warn(
+        `logoutByIdToken failed: ${(err as Error)?.message ?? 'Unknown error'}`,
+      );
     }
   }
 
@@ -295,12 +322,17 @@ if (!user) {
         orderBy: { createdAt: 'desc' },
       });
       if (signingKey) {
-        const payload = await this.jwkService.verifyJwt(idTokenHint, signingKey.publicKey);
+        const payload = await this.jwkService.verifyJwt(
+          idTokenHint,
+          signingKey.publicKey,
+        );
         const p = payload as Record<string, unknown>;
         // azp (authorized party) is the canonical client identifier in OIDC id_tokens
         clientId =
           (p['azp'] as string | undefined) ??
-          (Array.isArray(p['aud']) ? (p['aud'] as string[])[0] : (p['aud'] as string | undefined));
+          (Array.isArray(p['aud'])
+            ? (p['aud'] as string[])[0]
+            : (p['aud'] as string | undefined));
       }
     } catch {
       // Token may be expired — fall through; clientId stays undefined
@@ -326,7 +358,12 @@ if (!user) {
     }
   }
 
-  private async endSession(realm: Realm, sessionId: string, userId?: string | null, ip?: string) {
+  private async endSession(
+    realm: Realm,
+    sessionId: string,
+    userId?: string | null,
+    ip?: string,
+  ) {
     // Revoke all non-offline refresh tokens in this session
     await this.prisma.refreshToken.updateMany({
       where: { sessionId, isOffline: false },
@@ -348,11 +385,13 @@ if (!user) {
     });
 
     // Delete the session
-    await this.prisma.session.delete({
-      where: { id: sessionId },
-    }).catch(() => {
-      // Session may already be deleted
-    });
+    await this.prisma.session
+      .delete({
+        where: { id: sessionId },
+      })
+      .catch(() => {
+        // Session may already be deleted
+      });
   }
 
   async userinfo(realm: Realm, accessToken: string) {
@@ -367,21 +406,26 @@ if (!user) {
 
     let payload;
     try {
-      payload = await this.jwkService.verifyJwt(accessToken, signingKey.publicKey);
+      payload = await this.jwkService.verifyJwt(
+        accessToken,
+        signingKey.publicKey,
+      );
     } catch {
       throw new UnauthorizedException('Invalid access token');
     }
 
     // Check blacklist
-    const jti = payload['jti'] as string | undefined;
-    if (jti && await this.blacklist.isBlacklisted(jti)) {
+    const jti = payload['jti'];
+    if (jti && (await this.blacklist.isBlacklisted(jti))) {
       throw new UnauthorizedException('Token has been revoked');
     }
 
     // Check session validity (logout revokes sessions)
     const sid = payload['sid'] as string | undefined;
     if (sid) {
-      const session = await this.prisma.session.findUnique({ where: { id: sid } });
+      const session = await this.prisma.session.findUnique({
+        where: { id: sid },
+      });
       if (!session) {
         throw new UnauthorizedException('Session has been revoked');
       }
@@ -406,8 +450,10 @@ if (!user) {
     const scopeString = payload['scope'] as string | undefined;
     const scopes = this.scopesService.parseAndValidate(scopeString);
     const effectiveScopes = scopes.length > 0 ? scopes : ['openid'];
-    const allowedClaims = this.scopesService.getClaimsForScopes(effectiveScopes);
-    const customAttrClaims = await this.customAttributesService.getOidcClaimsForUser(user.id);
+    const allowedClaims =
+      this.scopesService.getClaimsForScopes(effectiveScopes);
+    const customAttrClaims =
+      await this.customAttributesService.getOidcClaimsForUser(user.id);
 
     return resolveUserClaims(user, allowedClaims, customAttrClaims);
   }
@@ -422,12 +468,20 @@ if (!user) {
       throw new UnauthorizedException('No signing key');
     }
 
-    const payload = await this.jwkService.verifyJwt(logoutToken, signingKey.publicKey);
+    const payload = await this.jwkService.verifyJwt(
+      logoutToken,
+      signingKey.publicKey,
+    );
     const p = payload as Record<string, unknown>;
 
     const events = p['events'] as Record<string, unknown> | undefined;
-    if (!events || !events['http://schemas.openid.net/event/backchannel-logout']) {
-      throw new BadRequestException('Invalid logout token: missing backchannel-logout event');
+    if (
+      !events ||
+      !events['http://schemas.openid.net/event/backchannel-logout']
+    ) {
+      throw new BadRequestException(
+        'Invalid logout token: missing backchannel-logout event',
+      );
     }
 
     const sub = p['sub'] as string | undefined;
@@ -445,7 +499,9 @@ if (!user) {
         select: { id: true },
       });
       await Promise.all(
-        sessions.map((session) => this.endSession(realm, session.id, sub, undefined)),
+        sessions.map((session) =>
+          this.endSession(realm, session.id, sub, undefined),
+        ),
       );
     }
   }

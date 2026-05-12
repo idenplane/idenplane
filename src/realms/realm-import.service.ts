@@ -100,18 +100,27 @@ export class RealmImportService {
     private readonly scopeSeedService: ScopeSeedService,
   ) {}
 
-  async importRealm(payload: Record<string, unknown>, options: ImportOptions = {}) {
+  async importRealm(
+    payload: Record<string, unknown>,
+    options: ImportOptions = {},
+  ) {
     if (!payload['version'] || !payload['realm']) {
-      throw new BadRequestException('Invalid import format: missing version or realm');
+      throw new BadRequestException(
+        'Invalid import format: missing version or realm',
+      );
     }
 
     const realmData = payload['realm'] as Record<string, unknown>;
     const realmName = realmData['name'] as string;
     if (!realmName) {
-      throw new BadRequestException('Invalid import format: realm name is required');
+      throw new BadRequestException(
+        'Invalid import format: realm name is required',
+      );
     }
 
-    const existing = await this.prisma.realm.findUnique({ where: { name: realmName } });
+    const existing = await this.prisma.realm.findUnique({
+      where: { name: realmName },
+    });
     if (existing && !options.overwrite) {
       throw new ConflictException(
         `Realm '${realmName}' already exists. Use overwrite option to replace it.`,
@@ -131,30 +140,40 @@ export class RealmImportService {
         name: realmName,
         displayName: (realmData['displayName'] as string) ?? null,
         enabled: (realmData['enabled'] as boolean) ?? true,
-        accessTokenLifespan: (realmData['accessTokenLifespan'] as number) ?? 300,
-        refreshTokenLifespan: (realmData['refreshTokenLifespan'] as number) ?? 1800,
-        offlineTokenLifespan: (realmData['offlineTokenLifespan'] as number) ?? 2592000,
+        accessTokenLifespan:
+          (realmData['accessTokenLifespan'] as number) ?? 300,
+        refreshTokenLifespan:
+          (realmData['refreshTokenLifespan'] as number) ?? 1800,
+        offlineTokenLifespan:
+          (realmData['offlineTokenLifespan'] as number) ?? 2592000,
         smtpHost: (realmData['smtpHost'] as string) ?? null,
         smtpPort: (realmData['smtpPort'] as number) ?? 587,
         smtpUser: (realmData['smtpUser'] as string) ?? null,
         smtpFrom: (realmData['smtpFrom'] as string) ?? null,
         smtpSecure: (realmData['smtpSecure'] as boolean) ?? false,
         passwordMinLength: (realmData['passwordMinLength'] as number) ?? 8,
-        passwordRequireUppercase: (realmData['passwordRequireUppercase'] as boolean) ?? false,
-        passwordRequireLowercase: (realmData['passwordRequireLowercase'] as boolean) ?? false,
-        passwordRequireDigits: (realmData['passwordRequireDigits'] as boolean) ?? false,
-        passwordRequireSpecialChars: (realmData['passwordRequireSpecialChars'] as boolean) ?? false,
-        passwordHistoryCount: (realmData['passwordHistoryCount'] as number) ?? 0,
+        passwordRequireUppercase:
+          (realmData['passwordRequireUppercase'] as boolean) ?? false,
+        passwordRequireLowercase:
+          (realmData['passwordRequireLowercase'] as boolean) ?? false,
+        passwordRequireDigits:
+          (realmData['passwordRequireDigits'] as boolean) ?? false,
+        passwordRequireSpecialChars:
+          (realmData['passwordRequireSpecialChars'] as boolean) ?? false,
+        passwordHistoryCount:
+          (realmData['passwordHistoryCount'] as number) ?? 0,
         passwordMaxAgeDays: (realmData['passwordMaxAgeDays'] as number) ?? 0,
         bruteForceEnabled: (realmData['bruteForceEnabled'] as boolean) ?? false,
         maxLoginFailures: (realmData['maxLoginFailures'] as number) ?? 5,
         lockoutDuration: (realmData['lockoutDuration'] as number) ?? 900,
         failureResetTime: (realmData['failureResetTime'] as number) ?? 600,
-        permanentLockoutAfter: (realmData['permanentLockoutAfter'] as number) ?? 0,
+        permanentLockoutAfter:
+          (realmData['permanentLockoutAfter'] as number) ?? 0,
         mfaRequired: (realmData['mfaRequired'] as boolean) ?? false,
         eventsEnabled: (realmData['eventsEnabled'] as boolean) ?? false,
         eventsExpiration: (realmData['eventsExpiration'] as number) ?? 604800,
-        adminEventsEnabled: (realmData['adminEventsEnabled'] as boolean) ?? false,
+        adminEventsEnabled:
+          (realmData['adminEventsEnabled'] as boolean) ?? false,
         theme: (realmData['theme'] as Prisma.InputJsonValue) ?? {},
         signingKeys: {
           create: {
@@ -234,7 +253,8 @@ export class RealmImportService {
           }),
           grantTypes: c.grantTypes ?? ['authorization_code'],
           backchannelLogoutUri: c.backchannelLogoutUri ?? null,
-          backchannelLogoutSessionRequired: c.backchannelLogoutSessionRequired ?? true,
+          backchannelLogoutSessionRequired:
+            c.backchannelLogoutSessionRequired ?? true,
         },
       });
       clientIdMap.set(c.clientId, client.id);
@@ -243,7 +263,9 @@ export class RealmImportService {
     // Now create roles
     const roleIdMap = new Map<string, string>(); // "roleName|clientId" → db id
     for (const r of roles) {
-      const dbClientId = r.clientId ? clientIdMap.get(r.clientId) ?? null : null;
+      const dbClientId = r.clientId
+        ? (clientIdMap.get(r.clientId) ?? null)
+        : null;
       const role = await this.prisma.role.create({
         data: {
           realmId: realm.id,
@@ -313,12 +335,13 @@ export class RealmImportService {
     }
 
     // 6. Client scope assignments
-    const assignments = (payload['clientScopeAssignments'] ?? []) as ImportedScopeAssignment[];
+    const assignments = (payload['clientScopeAssignments'] ??
+      []) as ImportedScopeAssignment[];
     for (const a of assignments) {
       const dbClientId = clientIdMap.get(a.clientId);
       if (!dbClientId) continue;
 
-      for (const scopeName of (a.defaultScopes ?? [])) {
+      for (const scopeName of a.defaultScopes ?? []) {
         const scopeId = scopeIdMap.get(scopeName);
         if (scopeId) {
           await this.prisma.clientDefaultScope.create({
@@ -327,7 +350,7 @@ export class RealmImportService {
         }
       }
 
-      for (const scopeName of (a.optionalScopes ?? [])) {
+      for (const scopeName of a.optionalScopes ?? []) {
         const scopeId = scopeIdMap.get(scopeName);
         if (scopeId) {
           await this.prisma.clientOptionalScope.create({

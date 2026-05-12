@@ -9,7 +9,10 @@ export class BruteForceService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  checkLocked(realm: Realm, user: User): { locked: boolean; lockedUntil?: Date } {
+  checkLocked(
+    realm: Realm,
+    user: User,
+  ): { locked: boolean; lockedUntil?: Date } {
     if (!realm.bruteForceEnabled) return { locked: false };
     if (!user.lockedUntil) return { locked: false };
 
@@ -20,7 +23,11 @@ export class BruteForceService {
     return { locked: false };
   }
 
-  async recordFailure(realm: Realm, userId: string, ipAddress?: string | null): Promise<void> {
+  async recordFailure(
+    realm: Realm,
+    userId: string,
+    ipAddress?: string | null,
+  ): Promise<void> {
     if (!realm.bruteForceEnabled) return;
 
     await this.prisma.loginFailure.create({
@@ -62,7 +69,7 @@ export class BruteForceService {
           });
           this.logger.warn(
             `User ${userId} in realm ${realm.id} permanently locked after ${lockoutCount} lockout cycles. ` +
-            `Admin action required to unlock via POST /admin/realms/:realm/users/:userId/unlock`,
+              `Admin action required to unlock via POST /admin/realms/:realm/users/:userId/unlock`,
           );
           return;
         }

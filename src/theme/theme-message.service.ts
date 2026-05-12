@@ -28,7 +28,11 @@ export class ThemeMessageService implements OnModuleInit {
    * Gets merged messages for a given theme, type, and locale.
    * Walks the inheritance chain base-first so child messages override parent.
    */
-  getMessages(themeName: string, themeType: ThemeType, locale: string): Record<string, string> {
+  getMessages(
+    themeName: string,
+    themeType: ThemeType,
+    locale: string,
+  ): Record<string, string> {
     const cacheKey = `${themeName}:${themeType}:${locale}`;
     const cached = this.cache.get(cacheKey);
     if (cached) return cached;
@@ -39,7 +43,13 @@ export class ThemeMessageService implements OnModuleInit {
 
     // Walk chain in reverse (base first) so child overrides parent
     for (const theme of [...chain].reverse()) {
-      const filePath = join(themesDir, theme, themeType, 'messages', `messages_${locale}.properties`);
+      const filePath = join(
+        themesDir,
+        theme,
+        themeType,
+        'messages',
+        `messages_${locale}.properties`,
+      );
       if (existsSync(filePath)) {
         const parsed = this.parseProperties(filePath);
         Object.assign(merged, parsed);
@@ -67,7 +77,8 @@ export class ThemeMessageService implements OnModuleInit {
     for (const line of content.split('\n')) {
       const trimmed = line.trim();
       // Skip empty lines and comments
-      if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('!')) continue;
+      if (!trimmed || trimmed.startsWith('#') || trimmed.startsWith('!'))
+        continue;
 
       const eqIndex = trimmed.indexOf('=');
       if (eqIndex > 0) {
@@ -82,13 +93,19 @@ export class ThemeMessageService implements OnModuleInit {
 
   private decodeEscapes(s: string): string {
     return s.replace(/\\(u[0-9a-fA-F]{4}|.)/g, (_, esc: string) => {
-      if (esc[0] === 'u') return String.fromCharCode(parseInt(esc.slice(1), 16));
+      if (esc[0] === 'u')
+        return String.fromCharCode(parseInt(esc.slice(1), 16));
       switch (esc) {
-        case 'n': return '\n';
-        case 't': return '\t';
-        case 'r': return '\r';
-        case '\\': return '\\';
-        default: return esc;
+        case 'n':
+          return '\n';
+        case 't':
+          return '\t';
+        case 'r':
+          return '\r';
+        case '\\':
+          return '\\';
+        default:
+          return esc;
       }
     });
   }

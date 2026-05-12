@@ -7,7 +7,8 @@ import hbs from 'hbs';
 export function registerHandlebarsHelpers(): void {
   // {{msg "loginTitle"}} — simple message lookup
   hbs.registerHelper('msg', function (key: string, options: any) {
-    const messages: Record<string, string> = options?.data?.root?._messages ?? {};
+    const messages: Record<string, string> =
+      options?.data?.root?._messages ?? {};
     return messages[key] ?? key;
   });
 
@@ -15,7 +16,8 @@ export function registerHandlebarsHelpers(): void {
   // Supports {0}, {1}, ... placeholders in the message string
   hbs.registerHelper('msgArgs', function (key: string, ...args: any[]) {
     const options = args.pop(); // Handlebars passes options as last arg
-    const messages: Record<string, string> = options?.data?.root?._messages ?? {};
+    const messages: Record<string, string> =
+      options?.data?.root?._messages ?? {};
     let text = messages[key] ?? key;
 
     for (let i = 0; i < args.length; i++) {
@@ -26,10 +28,13 @@ export function registerHandlebarsHelpers(): void {
   });
 
   // {{#if_eq a b}}...{{else}}...{{/if_eq}} — equality block helper
-  hbs.registerHelper('if_eq', function (this: unknown, a: unknown, b: unknown, options: any) {
-    if (a === b) {
-      return options.fn(this);
-    }
-    return options.inverse(this);
-  });
+  hbs.registerHelper(
+    'if_eq',
+    function (this: unknown, a: unknown, b: unknown, options: any) {
+      if (a === b) {
+        return options.fn(this);
+      }
+      return options.inverse(this);
+    },
+  );
 }

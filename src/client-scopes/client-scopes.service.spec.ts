@@ -1,7 +1,4 @@
-import {
-  ConflictException,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { ClientScopesService } from './client-scopes.service.js';
 import {
   createMockPrismaService,
@@ -99,9 +96,9 @@ describe('ClientScopesService', () => {
     it('should throw NotFoundException when scope does not exist', async () => {
       prisma.clientScope.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.findById(mockRealm, 'nonexistent'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.findById(mockRealm, 'nonexistent')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -204,17 +201,17 @@ describe('ClientScopesService', () => {
       const builtInScope = { ...mockScope, builtIn: true };
       prisma.clientScope.findFirst.mockResolvedValue(builtInScope);
 
-      await expect(
-        service.remove(mockRealm, 'scope-1'),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.remove(mockRealm, 'scope-1')).rejects.toThrow(
+        ConflictException,
+      );
     });
 
     it('should throw NotFoundException when scope does not exist', async () => {
       prisma.clientScope.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.remove(mockRealm, 'nonexistent'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.remove(mockRealm, 'nonexistent')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -316,7 +313,11 @@ describe('ClientScopesService', () => {
     it('should return default scopes for a client', async () => {
       prisma.client.findUnique.mockResolvedValue(mockClient);
       const defaults = [
-        { clientId: 'client-uuid-1', clientScopeId: 'scope-1', clientScope: mockScope },
+        {
+          clientId: 'client-uuid-1',
+          clientScopeId: 'scope-1',
+          clientScope: mockScope,
+        },
       ];
       prisma.clientDefaultScope.findMany.mockResolvedValue(defaults);
 
@@ -344,7 +345,10 @@ describe('ClientScopesService', () => {
     it('should assign a default scope to a client', async () => {
       prisma.client.findUnique.mockResolvedValue(mockClient);
       prisma.clientScope.findFirst.mockResolvedValue(mockScope);
-      const assignment = { clientId: 'client-uuid-1', clientScopeId: 'scope-1' };
+      const assignment = {
+        clientId: 'client-uuid-1',
+        clientScopeId: 'scope-1',
+      };
       prisma.clientDefaultScope.create.mockResolvedValue(assignment);
 
       const result = await service.assignDefaultScope(
@@ -406,7 +410,11 @@ describe('ClientScopesService', () => {
     it('should return optional scopes for a client', async () => {
       prisma.client.findUnique.mockResolvedValue(mockClient);
       const optionals = [
-        { clientId: 'client-uuid-1', clientScopeId: 'scope-1', clientScope: mockScope },
+        {
+          clientId: 'client-uuid-1',
+          clientScopeId: 'scope-1',
+          clientScope: mockScope,
+        },
       ];
       prisma.clientOptionalScope.findMany.mockResolvedValue(optionals);
 
@@ -434,7 +442,10 @@ describe('ClientScopesService', () => {
     it('should assign an optional scope to a client', async () => {
       prisma.client.findUnique.mockResolvedValue(mockClient);
       prisma.clientScope.findFirst.mockResolvedValue(mockScope);
-      const assignment = { clientId: 'client-uuid-1', clientScopeId: 'scope-1' };
+      const assignment = {
+        clientId: 'client-uuid-1',
+        clientScopeId: 'scope-1',
+      };
       prisma.clientOptionalScope.create.mockResolvedValue(assignment);
 
       const result = await service.assignOptionalScope(

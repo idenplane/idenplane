@@ -38,7 +38,10 @@ describe('BruteForceController', () => {
 
       await controller.unlockUser(realm, 'user-1');
 
-      expect(bruteForceService.unlockUser).toHaveBeenCalledWith('realm-1', 'user-1');
+      expect(bruteForceService.unlockUser).toHaveBeenCalledWith(
+        'realm-1',
+        'user-1',
+      );
     });
   });
 });

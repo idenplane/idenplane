@@ -16,16 +16,24 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 // ─── Step Condition ────────────────────────────────────────
 
 export class FlowStepConditionDto {
-  @ApiProperty({ example: 'user.group', description: 'Context field to evaluate' })
+  @ApiProperty({
+    example: 'user.group',
+    description: 'Context field to evaluate',
+  })
   @IsString()
   field!: string;
 
-  @ApiProperty({ example: 'in', enum: ['eq', 'neq', 'in', 'not_in', 'exists', 'not_exists'] })
+  @ApiProperty({
+    example: 'in',
+    enum: ['eq', 'neq', 'in', 'not_in', 'exists', 'not_exists'],
+  })
   @IsString()
   @IsIn(['eq', 'neq', 'in', 'not_in', 'exists', 'not_exists'])
   operator!: string;
 
-  @ApiPropertyOptional({ description: 'Value to compare against (scalar or array)' })
+  @ApiPropertyOptional({
+    description: 'Value to compare against (scalar or array)',
+  })
   @IsOptional()
   value?: unknown;
 }
@@ -33,35 +41,63 @@ export class FlowStepConditionDto {
 // ─── Flow Step ─────────────────────────────────────────────
 
 export class FlowStepDto {
-  @ApiProperty({ example: 'step-1', description: 'Unique step identifier within the flow' })
+  @ApiProperty({
+    example: 'step-1',
+    description: 'Unique step identifier within the flow',
+  })
   @IsString()
   @MaxLength(100)
   id!: string;
 
   @ApiProperty({
     example: 'password',
-    enum: ['password', 'totp', 'webauthn', 'social', 'ldap', 'email_otp', 'consent'],
+    enum: [
+      'password',
+      'totp',
+      'webauthn',
+      'social',
+      'ldap',
+      'email_otp',
+      'consent',
+    ],
   })
   @IsString()
-  @IsIn(['password', 'totp', 'webauthn', 'social', 'ldap', 'email_otp', 'consent'])
+  @IsIn([
+    'password',
+    'totp',
+    'webauthn',
+    'social',
+    'ldap',
+    'email_otp',
+    'consent',
+  ])
   type!: string;
 
   @ApiProperty({ example: true, description: 'Whether this step is required' })
   @IsBoolean()
   required!: boolean;
 
-  @ApiProperty({ example: 1, description: 'Execution order (lower runs first)' })
+  @ApiProperty({
+    example: 1,
+    description: 'Execution order (lower runs first)',
+  })
   @IsInt()
   @Min(1)
   order!: number;
 
-  @ApiPropertyOptional({ type: FlowStepConditionDto, description: 'Optional condition to skip/apply this step' })
+  @ApiPropertyOptional({
+    type: FlowStepConditionDto,
+    description: 'Optional condition to skip/apply this step',
+  })
   @IsOptional()
   @ValidateNested()
   @Type(() => FlowStepConditionDto)
   condition?: FlowStepConditionDto | null;
 
-  @ApiPropertyOptional({ example: 'step-2', description: 'Step to redirect to on failure' })
+  @ApiPropertyOptional({
+    example: 'step-2',
+    description: 'Step to redirect to on failure',
+  })
   @IsOptional()
   @IsString()
   fallbackStepId?: string | null;
@@ -75,7 +111,10 @@ export class FlowStepDto {
 // ─── Create Flow ───────────────────────────────────────────
 
 export class CreateAuthFlowDto {
-  @ApiProperty({ example: 'MFA Required', description: 'Unique name within the realm' })
+  @ApiProperty({
+    example: 'MFA Required',
+    description: 'Unique name within the realm',
+  })
   @IsString()
   @MaxLength(100)
   name!: string;
@@ -86,12 +125,18 @@ export class CreateAuthFlowDto {
   @MaxLength(500)
   description?: string;
 
-  @ApiPropertyOptional({ example: false, description: 'Mark as realm default flow' })
+  @ApiPropertyOptional({
+    example: false,
+    description: 'Mark as realm default flow',
+  })
   @IsOptional()
   @IsBoolean()
   isDefault?: boolean;
 
-  @ApiProperty({ type: [FlowStepDto], description: 'Ordered list of authentication steps' })
+  @ApiProperty({
+    type: [FlowStepDto],
+    description: 'Ordered list of authentication steps',
+  })
   @IsArray()
   @ValidateNested({ each: true })
   @Type(() => FlowStepDto)
@@ -129,7 +174,9 @@ export class UpdateAuthFlowDto {
 // ─── Assign Flow to Client ─────────────────────────────────
 
 export class AssignFlowToClientDto {
-  @ApiPropertyOptional({ description: 'Auth flow ID to assign. Null clears the assignment.' })
+  @ApiPropertyOptional({
+    description: 'Auth flow ID to assign. Null clears the assignment.',
+  })
   @IsOptional()
   @IsString()
   authFlowId?: string | null;
@@ -142,7 +189,9 @@ export class ExecuteStepDto {
   @IsString()
   stepId!: string;
 
-  @ApiProperty({ description: 'Execution context (user data, credentials, etc.)' })
+  @ApiProperty({
+    description: 'Execution context (user data, credentials, etc.)',
+  })
   @IsObject()
   context!: Record<string, unknown>;
 }

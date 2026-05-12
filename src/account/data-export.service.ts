@@ -165,26 +165,26 @@ export class DataExportService {
         createdAt: user.createdAt.toISOString(),
         updatedAt: user.updatedAt.toISOString(),
       },
-      roles: user.userRoles.map(ur => ({
+      roles: user.userRoles.map((ur) => ({
         name: ur.role.name,
         clientId: ur.role.clientId ?? null,
       })),
-      groups: user.userGroups.map(ug => ug.group.name),
-      consents: user.consents.map(c => ({
+      groups: user.userGroups.map((ug) => ug.group.name),
+      consents: user.consents.map((c) => ({
         clientId: c.client.clientId,
         clientName: c.client.name,
         scopes: c.scopes,
         createdAt: c.createdAt.toISOString(),
         updatedAt: c.updatedAt.toISOString(),
       })),
-      consentHistory: consentHistory.map(ch => ({
+      consentHistory: consentHistory.map((ch) => ({
         clientId: ch.clientId,
         action: ch.action,
         scopes: ch.scopes,
         policyVersion: ch.policyVersion,
         timestamp: ch.createdAt.toISOString(),
       })),
-      federatedIdentities: user.federatedIdentities.map(fi => ({
+      federatedIdentities: user.federatedIdentities.map((fi) => ({
         providerAlias: fi.identityProvider.alias,
         providerDisplayName: fi.identityProvider.displayName,
         externalUserId: fi.externalUserId,
@@ -192,40 +192,44 @@ export class DataExportService {
         externalEmail: fi.externalEmail,
         linkedAt: fi.createdAt.toISOString(),
       })),
-      sessions: user.sessions.map(s => ({
+      sessions: user.sessions.map((s) => ({
         id: s.id,
         ipAddress: s.ipAddress,
         userAgent: s.userAgent,
         createdAt: s.createdAt.toISOString(),
         expiresAt: s.expiresAt.toISOString(),
       })),
-      loginEvents: loginEvents.map(e => ({
+      loginEvents: loginEvents.map((e) => ({
         type: e.type,
         clientId: e.clientId,
         ipAddress: e.ipAddress,
         error: e.error,
         timestamp: e.createdAt.toISOString(),
       })),
-      customAttributes: user.attributes.map(ua => ({
+      customAttributes: user.attributes.map((ua) => ({
         name: ua.attribute.name,
         displayName: ua.attribute.displayName,
         value: ua.value,
       })),
       mfaCredentials: this.buildMfaCredentials(user),
-      deletionRequest: user.pendingDeletion ? {
-        requestedAt: user.pendingDeletion.requestedAt.toISOString(),
-        scheduledAt: user.pendingDeletion.scheduledAt.toISOString(),
-        gracePeriodDays: user.pendingDeletion.gracePeriodDays,
-        status: user.pendingDeletion.status,
-        exportStatus: user.pendingDeletion.exportStatus,
-      } : null,
-      riskProfile: user.userLoginProfile ? {
-        avgLoginFrequency: user.userLoginProfile.avgLoginFrequency,
-        knownDevices: user.userLoginProfile.knownDevices as string[],
-        knownIps: user.userLoginProfile.knownIps as string[],
-        lastLocations: user.userLoginProfile.lastLocations as string[],
-      } : null,
-      organizationMemberships: orgMembers.map(m => ({
+      deletionRequest: user.pendingDeletion
+        ? {
+            requestedAt: user.pendingDeletion.requestedAt.toISOString(),
+            scheduledAt: user.pendingDeletion.scheduledAt.toISOString(),
+            gracePeriodDays: user.pendingDeletion.gracePeriodDays,
+            status: user.pendingDeletion.status,
+            exportStatus: user.pendingDeletion.exportStatus,
+          }
+        : null,
+      riskProfile: user.userLoginProfile
+        ? {
+            avgLoginFrequency: user.userLoginProfile.avgLoginFrequency,
+            knownDevices: user.userLoginProfile.knownDevices as string[],
+            knownIps: user.userLoginProfile.knownIps as string[],
+            lastLocations: user.userLoginProfile.lastLocations as string[],
+          }
+        : null,
+      organizationMemberships: orgMembers.map((m) => ({
         organizationName: m.organization.name,
         organizationDisplayName: m.organization.displayName,
         role: m.role,
@@ -253,15 +257,17 @@ export class DataExportService {
     }>;
     recoveryCodes: Array<{ id: string }>;
   }) {
-    const totpCredential = user.userCredentials.find(c => c.type === 'totp');
+    const totpCredential = user.userCredentials.find((c) => c.type === 'totp');
 
     return {
-      totp: totpCredential ? {
-        enabled: true,
-        verified: totpCredential.verified,
-        createdAt: totpCredential.createdAt.toISOString(),
-      } : null,
-      webAuthn: user.webAuthnCredentials.map(c => ({
+      totp: totpCredential
+        ? {
+            enabled: true,
+            verified: totpCredential.verified,
+            createdAt: totpCredential.createdAt.toISOString(),
+          }
+        : null,
+      webAuthn: user.webAuthnCredentials.map((c) => ({
         credentialId: c.credentialId,
         deviceType: c.deviceType,
         backedUp: c.backedUp,

@@ -6,7 +6,10 @@ import {
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';
 import type { Request } from 'express';
-import { REQUIRED_ADMIN_ROLES_KEY, AdminRolesOptions } from '../decorators/require-admin-roles.decorator.js';
+import {
+  REQUIRED_ADMIN_ROLES_KEY,
+  AdminRolesOptions,
+} from '../decorators/require-admin-roles.decorator.js';
 import { AdminAuthService } from '../../admin-auth/admin-auth.service.js';
 
 @Injectable()
@@ -36,14 +39,18 @@ export class AdminRolesGuard implements CanActivate {
     const { roles, requireAll } = options;
 
     if (requireAll) {
-      const hasAllRoles = roles.every((role) => this.adminAuthService.hasRole(adminUser.roles, role));
+      const hasAllRoles = roles.every((role) =>
+        this.adminAuthService.hasRole(adminUser.roles, role),
+      );
       if (!hasAllRoles) {
         throw new ForbiddenException(
           `Insufficient permissions. Required roles: ${roles.join(', ')}`,
         );
       }
     } else {
-      const hasAnyRole = roles.some((role) => this.adminAuthService.hasRole(adminUser.roles, role));
+      const hasAnyRole = roles.some((role) =>
+        this.adminAuthService.hasRole(adminUser.roles, role),
+      );
       if (!hasAnyRole) {
         throw new ForbiddenException(
           `Insufficient permissions. Required at least one of: ${roles.join(', ')}`,

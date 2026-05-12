@@ -9,7 +9,14 @@ import {
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
-import { ApiTags, ApiBearerAuth, ApiOperation, ApiQuery, ApiResponse, ApiBody } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiBearerAuth,
+  ApiOperation,
+  ApiQuery,
+  ApiResponse,
+  ApiBody,
+} from '@nestjs/swagger';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { ContinuousRiskAssessmentService } from './continuous-risk.service.js';
 import { DevicePostureService } from './device-posture.service.js';
@@ -32,13 +39,24 @@ export class ContinuousVerificationController {
 
   @Get('events')
   @ApiOperation({ summary: 'List recent continuous risk events for a realm' })
-  @ApiResponse({ status: 200, description: 'Paginated list of continuous risk events' })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated list of continuous risk events',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
   @ApiQuery({ name: 'userId', required: false })
   @ApiQuery({ name: 'sessionId', required: false })
-  @ApiQuery({ name: 'action', required: false, enum: ['NO_ACTION', 'NOTIFY', 'STEP_UP_REQUIRED', 'TERMINATE_SESSION'] })
-  @ApiQuery({ name: 'riskLevel', required: false, enum: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] })
+  @ApiQuery({
+    name: 'action',
+    required: false,
+    enum: ['NO_ACTION', 'NOTIFY', 'STEP_UP_REQUIRED', 'TERMINATE_SESSION'],
+  })
+  @ApiQuery({
+    name: 'riskLevel',
+    required: false,
+    enum: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'],
+  })
   @ApiQuery({ name: 'first', required: false })
   @ApiQuery({ name: 'max', required: false })
   async listRiskEvents(
@@ -74,7 +92,9 @@ export class ContinuousVerificationController {
   // ── Dashboard ─────────────────────────────────────────────────────────────
 
   @Get('dashboard')
-  @ApiOperation({ summary: 'Continuous risk distribution and trends across active sessions' })
+  @ApiOperation({
+    summary: 'Continuous risk distribution and trends across active sessions',
+  })
   @ApiResponse({ status: 200, description: 'Continuous risk dashboard data' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
@@ -82,42 +102,47 @@ export class ContinuousVerificationController {
     const realm = await this.requireRealm(realmName);
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // last 30 days
 
-    const [allRecentEvents, stepUpEvents, terminateEvents, activeProfiles, profilesByLevel] =
-      await Promise.all([
-        this.prisma.continuousRiskEvent.findMany({
-          where: { realmId: realm.id, evaluatedAt: { gte: since } },
-          select: {
-            riskScoreAfter: true,
-            riskLevelAfter: true,
-            action: true,
-            trustScoreAfter: true,
-            evaluatedAt: true,
-          },
-          orderBy: { evaluatedAt: 'asc' },
-        }),
-        this.prisma.continuousRiskEvent.count({
-          where: {
-            realmId: realm.id,
-            action: 'STEP_UP_REQUIRED',
-            evaluatedAt: { gte: since },
-          },
-        }),
-        this.prisma.continuousRiskEvent.count({
-          where: {
-            realmId: realm.id,
-            action: 'TERMINATE_SESSION',
-            evaluatedAt: { gte: since },
-          },
-        }),
-        this.prisma.sessionRiskProfile.count({
-          where: { realmId: realm.id },
-        }),
-        this.prisma.sessionRiskProfile.groupBy({
-          by: ['riskLevel'],
-          where: { realmId: realm.id },
-          _count: { id: true },
-        }),
-      ]);
+    const [
+      allRecentEvents,
+      stepUpEvents,
+      terminateEvents,
+      activeProfiles,
+      profilesByLevel,
+    ] = await Promise.all([
+      this.prisma.continuousRiskEvent.findMany({
+        where: { realmId: realm.id, evaluatedAt: { gte: since } },
+        select: {
+          riskScoreAfter: true,
+          riskLevelAfter: true,
+          action: true,
+          trustScoreAfter: true,
+          evaluatedAt: true,
+        },
+        orderBy: { evaluatedAt: 'asc' },
+      }),
+      this.prisma.continuousRiskEvent.count({
+        where: {
+          realmId: realm.id,
+          action: 'STEP_UP_REQUIRED',
+          evaluatedAt: { gte: since },
+        },
+      }),
+      this.prisma.continuousRiskEvent.count({
+        where: {
+          realmId: realm.id,
+          action: 'TERMINATE_SESSION',
+          evaluatedAt: { gte: since },
+        },
+      }),
+      this.prisma.sessionRiskProfile.count({
+        where: { realmId: realm.id },
+      }),
+      this.prisma.sessionRiskProfile.groupBy({
+        by: ['riskLevel'],
+        where: { realmId: realm.id },
+        _count: { id: true },
+      }),
+    ]);
 
     // Score distribution buckets
     const distribution = { LOW: 0, MEDIUM: 0, HIGH: 0, CRITICAL: 0 };
@@ -129,7 +154,10 @@ export class ContinuousVerificationController {
     }
 
     // Daily trend (last 30 days)
-    const dailyMap = new Map<string, { total: number; stepUp: number; terminate: number }>();
+    const dailyMap = new Map<
+      string,
+      { total: number; stepUp: number; terminate: number }
+    >();
     for (const e of allRecentEvents) {
       const day = e.evaluatedAt.toISOString().slice(0, 10);
       const entry = dailyMap.get(day) ?? { total: 0, stepUp: 0, terminate: 0 };
@@ -175,7 +203,9 @@ export class ContinuousVerificationController {
   // ── Single Risk Event ─────────────────────────────────────────────────────
 
   @Get('events/:id')
-  @ApiOperation({ summary: 'Get a single continuous risk event with signal breakdown' })
+  @ApiOperation({
+    summary: 'Get a single continuous risk event with signal breakdown',
+  })
   @ApiResponse({ status: 200, description: 'Risk event details' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
@@ -200,11 +230,18 @@ export class ContinuousVerificationController {
 
   @Get('session-profiles')
   @ApiOperation({ summary: 'List session risk profiles for a realm' })
-  @ApiResponse({ status: 200, description: 'Paginated list of session risk profiles' })
+  @ApiResponse({
+    status: 200,
+    description: 'Paginated list of session risk profiles',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
   @ApiQuery({ name: 'userId', required: false })
-  @ApiQuery({ name: 'riskLevel', required: false, enum: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'] })
+  @ApiQuery({
+    name: 'riskLevel',
+    required: false,
+    enum: ['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'],
+  })
   @ApiQuery({ name: 'stepUpRequired', required: false })
   @ApiQuery({ name: 'first', required: false })
   @ApiQuery({ name: 'max', required: false })
@@ -239,7 +276,9 @@ export class ContinuousVerificationController {
   }
 
   @Get('session-profiles/:sessionId')
-  @ApiOperation({ summary: 'Get session risk profile with full signal details' })
+  @ApiOperation({
+    summary: 'Get session risk profile with full signal details',
+  })
   @ApiResponse({ status: 200, description: 'Session risk profile details' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
@@ -254,7 +293,9 @@ export class ContinuousVerificationController {
     });
 
     if (!profile) {
-      throw new NotFoundException(`Session risk profile for session '${sessionId}' not found`);
+      throw new NotFoundException(
+        `Session risk profile for session '${sessionId}' not found`,
+      );
     }
 
     // Fetch recent events for this session
@@ -271,7 +312,10 @@ export class ContinuousVerificationController {
 
   @Get('device-posture/:sessionId')
   @ApiOperation({ summary: 'Get device posture records for a session' })
-  @ApiResponse({ status: 200, description: 'Device posture history for session' })
+  @ApiResponse({
+    status: 200,
+    description: 'Device posture history for session',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
   async getDevicePosture(
@@ -287,7 +331,9 @@ export class ContinuousVerificationController {
     });
 
     if (postureRecords.length === 0) {
-      throw new NotFoundException(`No device posture records for session '${sessionId}'`);
+      throw new NotFoundException(
+        `No device posture records for session '${sessionId}'`,
+      );
     }
 
     return postureRecords;
@@ -297,7 +343,10 @@ export class ContinuousVerificationController {
 
   @Get('network-context/:sessionId')
   @ApiOperation({ summary: 'Get network context records for a session' })
-  @ApiResponse({ status: 200, description: 'Network context history for session' })
+  @ApiResponse({
+    status: 200,
+    description: 'Network context history for session',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
   async getNetworkContext(
@@ -313,7 +362,9 @@ export class ContinuousVerificationController {
     });
 
     if (networkRecords.length === 0) {
-      throw new NotFoundException(`No network context records for session '${sessionId}'`);
+      throw new NotFoundException(
+        `No network context records for session '${sessionId}'`,
+      );
     }
 
     return networkRecords;
@@ -322,8 +373,13 @@ export class ContinuousVerificationController {
   // ── Behavioral Biometrics ──────────────────────────────────────────────────
 
   @Get('behavioral/:userId')
-  @ApiOperation({ summary: 'Get behavioral biometrics profile and recent samples for a user' })
-  @ApiResponse({ status: 200, description: 'Behavioral biometrics data for user' })
+  @ApiOperation({
+    summary: 'Get behavioral biometrics profile and recent samples for a user',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Behavioral biometrics data for user',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
   async getBehavioralBiometrics(
@@ -337,7 +393,9 @@ export class ContinuousVerificationController {
     });
 
     if (!profile) {
-      throw new NotFoundException(`Behavioral biometrics profile for user '${userId}' not found`);
+      throw new NotFoundException(
+        `Behavioral biometrics profile for user '${userId}' not found`,
+      );
     }
 
     const recentSamples = await this.prisma.behavioralSample.findMany({
@@ -353,7 +411,10 @@ export class ContinuousVerificationController {
 
   @Get('user/:userId/summary')
   @ApiOperation({ summary: 'Get continuous verification summary for a user' })
-  @ApiResponse({ status: 200, description: 'User continuous verification summary' })
+  @ApiResponse({
+    status: 200,
+    description: 'User continuous verification summary',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
   async getUserRiskSummary(
@@ -363,36 +424,38 @@ export class ContinuousVerificationController {
     const realm = await this.requireRealm(realmName);
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
-    const [sessionProfiles, behavioralProfile, recentEvents, biometricSamples] = await Promise.all([
-      this.prisma.sessionRiskProfile.findMany({
-        where: { realmId: realm.id, userId },
-      }),
-      this.prisma.behavioralBiometricProfile.findUnique({
-        where: { userId },
-      }),
-      this.prisma.continuousRiskEvent.findMany({
-        where: { realmId: realm.id, userId, evaluatedAt: { gte: since } },
-        select: {
-          riskScoreAfter: true,
-          riskLevelAfter: true,
-          action: true,
-          trustScoreAfter: true,
-          evaluatedAt: true,
-        },
-        orderBy: { evaluatedAt: 'desc' },
-        take: 100,
-      }),
-      this.prisma.behavioralSample.findMany({
-        where: { userId },
-        orderBy: { collectedAt: 'desc' },
-        take: 10,
-      }),
-    ]);
+    const [sessionProfiles, behavioralProfile, recentEvents, biometricSamples] =
+      await Promise.all([
+        this.prisma.sessionRiskProfile.findMany({
+          where: { realmId: realm.id, userId },
+        }),
+        this.prisma.behavioralBiometricProfile.findUnique({
+          where: { userId },
+        }),
+        this.prisma.continuousRiskEvent.findMany({
+          where: { realmId: realm.id, userId, evaluatedAt: { gte: since } },
+          select: {
+            riskScoreAfter: true,
+            riskLevelAfter: true,
+            action: true,
+            trustScoreAfter: true,
+            evaluatedAt: true,
+          },
+          orderBy: { evaluatedAt: 'desc' },
+          take: 100,
+        }),
+        this.prisma.behavioralSample.findMany({
+          where: { userId },
+          orderBy: { collectedAt: 'desc' },
+          take: 10,
+        }),
+      ]);
 
     const avgRiskScore =
       recentEvents.length > 0
         ? Math.round(
-            recentEvents.reduce((a, r) => a + r.riskScoreAfter, 0) / recentEvents.length,
+            recentEvents.reduce((a, r) => a + r.riskScoreAfter, 0) /
+              recentEvents.length,
           )
         : 0;
 
@@ -400,7 +463,9 @@ export class ContinuousVerificationController {
       (p) => p.riskLevel === 'HIGH' || p.riskLevel === 'CRITICAL',
     ).length;
 
-    const activeStepUps = sessionProfiles.filter((p) => p.stepUpRequired).length;
+    const activeStepUps = sessionProfiles.filter(
+      (p) => p.stepUpRequired,
+    ).length;
 
     return {
       userId,
@@ -461,7 +526,8 @@ export class ContinuousVerificationController {
   })
   async recordDevicePosture(
     @Param('realm') realmName: string,
-    @Body() body: {
+    @Body()
+    body: {
       sessionId: string;
       realmId: string;
       userId: string;
@@ -498,7 +564,9 @@ export class ContinuousVerificationController {
         osVersion: body.osVersion,
         osBuild: body.osBuild,
         securityPatchLevel: body.securityPatchLevel ?? null,
-        lastUpdateDate: body.lastUpdateDate ? new Date(body.lastUpdateDate) : null,
+        lastUpdateDate: body.lastUpdateDate
+          ? new Date(body.lastUpdateDate)
+          : null,
         diskEncrypted: body.diskEncrypted,
         encryptionType: body.encryptionType,
         antivirusEnabled: body.antivirusEnabled,
@@ -525,7 +593,9 @@ export class ContinuousVerificationController {
    * Record behavioral biometric samples from SDK/client.
    */
   @Post('behavioral/samples')
-  @ApiOperation({ summary: 'Record behavioral biometric samples from SDK client' })
+  @ApiOperation({
+    summary: 'Record behavioral biometric samples from SDK client',
+  })
   @ApiResponse({ status: 201, description: 'Samples recorded' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiBody({
@@ -538,7 +608,10 @@ export class ContinuousVerificationController {
           items: {
             type: 'object',
             properties: {
-              interactionType: { type: 'string', enum: ['typing', 'pointer', 'scroll', 'keystroke'] },
+              interactionType: {
+                type: 'string',
+                enum: ['typing', 'pointer', 'scroll', 'keystroke'],
+              },
               burstLength: { type: 'number', nullable: true },
               latency: { type: 'number', nullable: true },
               velocity: { type: 'number', nullable: true },
@@ -555,17 +628,21 @@ export class ContinuousVerificationController {
   })
   async recordBehavioralSamples(
     @Param('realm') realmName: string,
-    @Body() body: { sessionId: string; samples: Array<{
-      interactionType: string;
-      burstLength?: number | null;
-      latency?: number | null;
-      velocity?: number | null;
-      variance?: number | null;
-      scrollVelocity?: number | null;
-      eventCount?: number | null;
-      hasErrors?: boolean;
-      collectedAt?: string;
-    }> },
+    @Body()
+    body: {
+      sessionId: string;
+      samples: Array<{
+        interactionType: string;
+        burstLength?: number | null;
+        latency?: number | null;
+        velocity?: number | null;
+        variance?: number | null;
+        scrollVelocity?: number | null;
+        eventCount?: number | null;
+        hasErrors?: boolean;
+        collectedAt?: string;
+      }>;
+    },
   ) {
     const realm = await this.requireRealm(realmName);
 
@@ -583,8 +660,14 @@ export class ContinuousVerificationController {
         sessionId: body.sessionId,
         userId,
         realmId: realm.id,
-        interactionType: sample.interactionType as 'typing' | 'pointer' | 'scroll' | 'keystroke',
-        timestamp: sample.collectedAt ? new Date(sample.collectedAt) : new Date(),
+        interactionType: sample.interactionType as
+          | 'typing'
+          | 'pointer'
+          | 'scroll'
+          | 'keystroke',
+        timestamp: sample.collectedAt
+          ? new Date(sample.collectedAt)
+          : new Date(),
         duration: sample.latency ?? undefined,
         burstLength: sample.burstLength ?? undefined,
         velocity: sample.velocity ?? undefined,
@@ -628,7 +711,8 @@ export class ContinuousVerificationController {
   })
   async recordNetworkContext(
     @Param('realm') realmName: string,
-    @Body() body: {
+    @Body()
+    body: {
       sessionId: string;
       ipAddress?: string | null;
       isp?: string | null;

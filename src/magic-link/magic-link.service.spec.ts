@@ -84,7 +84,9 @@ describe('MagicLinkService', () => {
       );
 
       expect(result.success).toBe(false);
-      expect(result.message).toBe('Magic link authentication is not enabled for this realm');
+      expect(result.message).toBe(
+        'Magic link authentication is not enabled for this realm',
+      );
       expect(mockEmail.sendEmail).not.toHaveBeenCalled();
     });
 
@@ -267,10 +269,7 @@ describe('MagicLinkService', () => {
       const now = Date.now();
       jest.spyOn(Date, 'now').mockReturnValue(now);
 
-      await service.requestMagicLink(
-        'test@example.com',
-        mockRealm.id,
-      );
+      await service.requestMagicLink('test@example.com', mockRealm.id);
 
       expect(prisma.magicLinkRequest.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -302,10 +301,7 @@ describe('MagicLinkService', () => {
       const now = Date.now();
       jest.spyOn(Date, 'now').mockReturnValue(now);
 
-      await service.requestMagicLink(
-        'test@example.com',
-        mockRealm.id,
-      );
+      await service.requestMagicLink('test@example.com', mockRealm.id);
 
       expect(prisma.magicLinkRequest.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -372,7 +368,10 @@ describe('MagicLinkService', () => {
         expiresAt: new Date(Date.now() + 60_000),
       });
 
-      const result = await service.validateMagicLink('raw-magic-link-token', 'wrong-realm');
+      const result = await service.validateMagicLink(
+        'raw-magic-link-token',
+        'wrong-realm',
+      );
 
       expect(result.valid).toBe(false);
       expect(result.error).toBe('Invalid realm');

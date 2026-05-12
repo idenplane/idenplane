@@ -1,9 +1,6 @@
 jest.mock('../crypto/jwk.service.js', () => ({ JwkService: jest.fn() }));
 
-import {
-  ConflictException,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 import { IdentityProvidersService } from './identity-providers.service.js';
 import {
   createMockPrismaService,
@@ -132,9 +129,9 @@ describe('IdentityProvidersService', () => {
     it('should throw ConflictException when alias already exists in realm', async () => {
       prisma.identityProvider.findUnique.mockResolvedValue(mockIdp);
 
-      await expect(
-        service.create(mockRealm, createDto),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.create(mockRealm, createDto)).rejects.toThrow(
+        ConflictException,
+      );
 
       expect(prisma.identityProvider.create).not.toHaveBeenCalled();
     });
@@ -234,9 +231,9 @@ describe('IdentityProvidersService', () => {
     it('should throw NotFoundException when identity provider does not exist', async () => {
       prisma.identityProvider.findUnique.mockResolvedValue(null);
 
-      await expect(
-        service.remove(mockRealm, 'nonexistent'),
-      ).rejects.toThrow(NotFoundException);
+      await expect(service.remove(mockRealm, 'nonexistent')).rejects.toThrow(
+        NotFoundException,
+      );
 
       expect(prisma.identityProvider.delete).not.toHaveBeenCalled();
     });

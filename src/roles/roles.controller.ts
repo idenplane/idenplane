@@ -11,7 +11,12 @@ import {
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiSecurity, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiSecurity,
+  ApiResponse,
+} from '@nestjs/swagger';
 import type { Realm } from '@prisma/client';
 import { RolesService } from './roles.service.js';
 import { CreateRoleDto } from './dto/create-role.dto.js';
@@ -34,10 +39,7 @@ export class RolesController {
   @ApiResponse({ status: 201, description: 'Realm role created' })
   @ApiResponse({ status: 400, description: 'Invalid request body' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  createRealmRole(
-    @CurrentRealm() realm: Realm,
-    @Body() dto: CreateRoleDto,
-  ) {
+  createRealmRole(@CurrentRealm() realm: Realm, @Body() dto: CreateRoleDto) {
     return this.rolesService.createRealmRole(realm, dto.name, dto.description);
   }
 
@@ -175,11 +177,7 @@ export class RolesController {
     @Param('userId') userId: string,
     @Body() dto: AssignRolesDto,
   ) {
-    return this.rolesService.removeUserRealmRoles(
-      realm,
-      userId,
-      dto.roleNames,
-    );
+    return this.rolesService.removeUserRealmRoles(realm, userId, dto.roleNames);
   }
 
   // ─── User Client Role Assignment ────────────────────────

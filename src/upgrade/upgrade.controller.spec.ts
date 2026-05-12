@@ -1,9 +1,27 @@
 import { UpgradeController } from './upgrade.controller.js';
-import { UpgradeService, UpgradeResult, UpgradeState } from './upgrade.service.js';
-import { RollbackService, RollbackCapability, RollbackResult, UpgradeAuditEntry } from './rollback.service.js';
-import { PreUpgradeValidatorService, PreUpgradeValidationResult } from './pre-upgrade-validator.service.js';
-import { ConfigCompatibilityService, ConfigCompatibilityResult } from './config-compatibility.service.js';
-import { UpgradeHealthService, UpgradeHealthResult } from './upgrade-health.service.js';
+import {
+  UpgradeService,
+  UpgradeResult,
+  UpgradeState,
+} from './upgrade.service.js';
+import {
+  RollbackService,
+  RollbackCapability,
+  RollbackResult,
+  UpgradeAuditEntry,
+} from './rollback.service.js';
+import {
+  PreUpgradeValidatorService,
+  PreUpgradeValidationResult,
+} from './pre-upgrade-validator.service.js';
+import {
+  ConfigCompatibilityService,
+  ConfigCompatibilityResult,
+} from './config-compatibility.service.js';
+import {
+  UpgradeHealthService,
+  UpgradeHealthResult,
+} from './upgrade-health.service.js';
 
 describe('UpgradeController', () => {
   let controller: UpgradeController;
@@ -170,7 +188,9 @@ describe('UpgradeController', () => {
 
       const result = await controller.getUpgradeState('upg-123');
 
-      expect(mockUpgradeService.getUpgradeState).toHaveBeenCalledWith('upg-123');
+      expect(mockUpgradeService.getUpgradeState).toHaveBeenCalledWith(
+        'upg-123',
+      );
       expect(result).toEqual(mockState);
     });
 
@@ -196,7 +216,9 @@ describe('UpgradeController', () => {
         },
       };
 
-      mockRollbackService.checkRollbackCapability.mockResolvedValue(mockCapability);
+      mockRollbackService.checkRollbackCapability.mockResolvedValue(
+        mockCapability,
+      );
 
       const result = await controller.checkRollbackCapability();
 
@@ -210,7 +232,9 @@ describe('UpgradeController', () => {
         reason: 'No successful upgrade with a backup found',
       };
 
-      mockRollbackService.checkRollbackCapability.mockResolvedValue(mockCapability);
+      mockRollbackService.checkRollbackCapability.mockResolvedValue(
+        mockCapability,
+      );
 
       const result = await controller.checkRollbackCapability();
 
@@ -234,7 +258,9 @@ describe('UpgradeController', () => {
 
       const result = await controller.executeRollback({ upgradeId: 'upg-123' });
 
-      expect(mockRollbackService.executeRollback).toHaveBeenCalledWith('upg-123');
+      expect(mockRollbackService.executeRollback).toHaveBeenCalledWith(
+        'upg-123',
+      );
       expect(result).toEqual(mockResult);
     });
 
@@ -252,7 +278,9 @@ describe('UpgradeController', () => {
 
       const result = await controller.executeRollback({});
 
-      expect(mockRollbackService.executeRollback).toHaveBeenCalledWith(undefined);
+      expect(mockRollbackService.executeRollback).toHaveBeenCalledWith(
+        undefined,
+      );
       expect(result).toEqual(mockResult);
     });
 
@@ -277,8 +305,16 @@ describe('UpgradeController', () => {
       const mockResult: PreUpgradeValidationResult = {
         canProceed: true,
         checks: [
-          { name: 'database_connection', status: 'pass', message: 'Database connection is healthy' },
-          { name: 'disk_space', status: 'pass', message: 'Sufficient disk space' },
+          {
+            name: 'database_connection',
+            status: 'pass',
+            message: 'Database connection is healthy',
+          },
+          {
+            name: 'disk_space',
+            status: 'pass',
+            message: 'Sufficient disk space',
+          },
         ],
         summary: { passed: 6, warnings: 0, failures: 0 },
       };
@@ -296,7 +332,11 @@ describe('UpgradeController', () => {
       const mockResult: PreUpgradeValidationResult = {
         canProceed: false,
         checks: [
-          { name: 'database_connection', status: 'fail', message: 'Cannot connect to database' },
+          {
+            name: 'database_connection',
+            status: 'fail',
+            message: 'Cannot connect to database',
+          },
         ],
         summary: { passed: 5, warnings: 0, failures: 1 },
       };
@@ -316,8 +356,16 @@ describe('UpgradeController', () => {
         healthy: true,
         version: '2.1.0',
         checks: [
-          { name: 'database_connection', status: 'pass', message: 'Database connection healthy' },
-          { name: 'migrations_applied', status: 'pass', message: 'All migrations applied' },
+          {
+            name: 'database_connection',
+            status: 'pass',
+            message: 'Database connection healthy',
+          },
+          {
+            name: 'migrations_applied',
+            status: 'pass',
+            message: 'All migrations applied',
+          },
         ],
         summary: { passed: 7, warnings: 0, failures: 0 },
       };
@@ -336,7 +384,11 @@ describe('UpgradeController', () => {
         healthy: false,
         version: '2.1.0',
         checks: [
-          { name: 'database_connection', status: 'fail', message: 'Cannot connect' },
+          {
+            name: 'database_connection',
+            status: 'fail',
+            message: 'Cannot connect',
+          },
         ],
         summary: { passed: 6, warnings: 0, failures: 1 },
       };
@@ -364,7 +416,9 @@ describe('UpgradeController', () => {
 
       const result = await controller.checkConfigCompatibility('2.1.0');
 
-      expect(mockConfigCompatibility.checkCompatibility).toHaveBeenCalledWith('2.1.0');
+      expect(mockConfigCompatibility.checkCompatibility).toHaveBeenCalledWith(
+        '2.1.0',
+      );
       expect(result).toEqual(mockResult);
       expect(result.compatible).toBe(true);
     });
@@ -383,7 +437,9 @@ describe('UpgradeController', () => {
       const result = await controller.checkConfigCompatibility();
 
       expect(mockUpgradeService.getCurrentVersion).toHaveBeenCalled();
-      expect(mockConfigCompatibility.checkCompatibility).toHaveBeenCalledWith('2.0.0');
+      expect(mockConfigCompatibility.checkCompatibility).toHaveBeenCalledWith(
+        '2.0.0',
+      );
       expect(result.compatible).toBe(true);
     });
 

@@ -58,7 +58,7 @@ export class WebhookSchedulerService {
    * following the 20260324960000_add_webhook_event_queue migration.
    * The cast keeps the compiler happy in the interim.
    */
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+
   private get db(): any {
     return this.prisma;
   }
@@ -94,14 +94,16 @@ export class WebhookSchedulerService {
     this.logger.debug(`Processing ${events.length} queued webhook event(s)`);
 
     await Promise.allSettled(
-      (events as Array<{
-        id: string;
-        realmId: string;
-        eventType: string;
-        payload: unknown;
-        attempts: number;
-        maxAttempts: number;
-      }>).map((event) => this.processEvent(event)),
+      (
+        events as Array<{
+          id: string;
+          realmId: string;
+          eventType: string;
+          payload: unknown;
+          attempts: number;
+          maxAttempts: number;
+        }>
+      ).map((event) => this.processEvent(event)),
     );
   }
 
@@ -145,13 +147,12 @@ export class WebhookSchedulerService {
     );
 
     const anyFailure = results.some((r) => r.status === 'rejected');
-    const firstError =
-      anyFailure
-        ? results
-            .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
-            .map((r) => String((r.reason as Error)?.message ?? r.reason))
-            .join('; ')
-        : null;
+    const firstError = anyFailure
+      ? results
+          .filter((r): r is PromiseRejectedResult => r.status === 'rejected')
+          .map((r) => String((r.reason as Error)?.message ?? r.reason))
+          .join('; ')
+      : null;
 
     if (!anyFailure) {
       await this.db.webhookEvent.update({
@@ -168,7 +169,9 @@ export class WebhookSchedulerService {
     // At least one delivery failed.  Schedule a retry or give up.
     const retriesLeft = (event.maxAttempts ?? MAX_ATTEMPTS) - newAttemptCount;
     if (retriesLeft > 0 && newAttemptCount < RETRY_DELAYS_MS.length) {
-      const delayMs = RETRY_DELAYS_MS[newAttemptCount] ?? RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1];
+      const delayMs =
+        RETRY_DELAYS_MS[newAttemptCount] ??
+        RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1];
       const nextRetry = new Date(Date.now() + delayMs);
       await this.db.webhookEvent.update({
         where: { id: event.id },
@@ -182,7 +185,7 @@ export class WebhookSchedulerService {
       });
       this.logger.warn(
         `Webhook event ${event.id} (${event.eventType}) failed on attempt ${newAttemptCount}; ` +
-        `next retry at ${nextRetry.toISOString()}`,
+          `next retry at ${nextRetry.toISOString()}`,
       );
     } else {
       // All attempts exhausted — terminal failure.

@@ -36,8 +36,15 @@ export class SamlIdpController {
   // ─── SSO ENDPOINT (HTTP-Redirect binding) ──────────────
 
   @Get()
-  @ApiResponse({ status: 302, description: 'Redirect to login page, or auto-POST SAMLResponse when already authenticated' })
-  @ApiResponse({ status: 400, description: 'Missing SAMLRequest, unknown SP, or invalid ACS URL' })
+  @ApiResponse({
+    status: 302,
+    description:
+      'Redirect to login page, or auto-POST SAMLResponse when already authenticated',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Missing SAMLRequest, unknown SP, or invalid ACS URL',
+  })
   async ssoRedirect(
     @CurrentRealm() realm: Realm,
     @Query('SAMLRequest') samlRequest: string,
@@ -51,8 +58,15 @@ export class SamlIdpController {
   // ─── SSO ENDPOINT (HTTP-POST binding) ──────────────────
 
   @Post()
-  @ApiResponse({ status: 302, description: 'Redirect to login page, or auto-POST SAMLResponse when already authenticated' })
-  @ApiResponse({ status: 400, description: 'Missing SAMLRequest, unknown SP, or invalid ACS URL' })
+  @ApiResponse({
+    status: 302,
+    description:
+      'Redirect to login page, or auto-POST SAMLResponse when already authenticated',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Missing SAMLRequest, unknown SP, or invalid ACS URL',
+  })
   async ssoPost(
     @CurrentRealm() realm: Realm,
     @Body('SAMLRequest') samlRequest: string,
@@ -66,12 +80,12 @@ export class SamlIdpController {
   // ─── IDP METADATA ─────────────────────────────────────
 
   @Get('descriptor')
-  @ApiResponse({ status: 200, description: 'IdP SAML metadata XML (EntityDescriptor)' })
+  @ApiResponse({
+    status: 200,
+    description: 'IdP SAML metadata XML (EntityDescriptor)',
+  })
   @ApiResponse({ status: 400, description: 'Realm not found' })
-  async metadata(
-    @CurrentRealm() realm: Realm,
-    @Res() res: Response,
-  ) {
+  async metadata(@CurrentRealm() realm: Realm, @Res() res: Response) {
     const baseUrl = process.env['BASE_URL'] ?? 'http://localhost:3000';
     const xml = await this.samlMetadataService.generateMetadata(realm, baseUrl);
 
@@ -96,7 +110,10 @@ export class SamlIdpController {
     const parsed = await this.samlIdpService.validateAuthnRequest(samlRequest);
 
     // Look up the SP by issuer (entityId)
-    const sp = await this.samlIdpService.findSpByEntityId(realm.id, parsed.issuer);
+    const sp = await this.samlIdpService.findSpByEntityId(
+      realm.id,
+      parsed.issuer,
+    );
     if (!sp || !sp.enabled) {
       throw new BadRequestException(
         `Unknown or disabled SAML service provider: ${parsed.issuer}`,
@@ -117,7 +134,7 @@ export class SamlIdpController {
     if (parsed.acsUrl !== null) {
       const allowedAcsUrls: string[] = [sp.acsUrl];
       if (Array.isArray((sp as any).validRedirectUris)) {
-        allowedAcsUrls.push(...(sp as any).validRedirectUris as string[]);
+        allowedAcsUrls.push(...((sp as any).validRedirectUris as string[]));
       }
       if (!allowedAcsUrls.includes(parsed.acsUrl)) {
         throw new BadRequestException(
@@ -135,21 +152,36 @@ export class SamlIdpController {
       spId: sp.id,
     });
 
-    res.cookie('AUTHME_SAML_REQUEST', Buffer.from(samlSessionData).toString('base64'), {
-      httpOnly: true,
-      secure: process.env['NODE_ENV'] === 'production',
-      sameSite: 'lax',
-      maxAge: 10 * 60 * 1000, // 10 minutes
-      path: `/realms/${realm.name}`,
-    });
+    res.cookie(
+      'AUTHME_SAML_REQUEST',
+      Buffer.from(samlSessionData).toString('base64'),
+      {
+        httpOnly: true,
+        secure: process.env['NODE_ENV'] === 'production',
+        sameSite: 'lax',
+        maxAge: 10 * 60 * 1000, // 10 minutes
+        path: `/realms/${realm.name}`,
+      },
+    );
 
     // Check if the user already has an active login session
     const sessionToken = req.cookies?.['AUTHME_SESSION'];
     if (sessionToken) {
-      const user = await this.loginService.validateLoginSession(realm, sessionToken);
+      const user = await this.loginService.validateLoginSession(
+        realm,
+        sessionToken,
+      );
       if (user) {
         // User is already logged in - produce SAML response directly
-        return this.completeSamlLogin(realm, sp, user, parsed.id, parsed.acsUrl ?? sp.acsUrl, relayState ?? '', res);
+        return this.completeSamlLogin(
+          realm,
+          sp,
+          user,
+          parsed.id,
+          parsed.acsUrl ?? sp.acsUrl,
+          relayState ?? '',
+          res,
+        );
       }
     }
 

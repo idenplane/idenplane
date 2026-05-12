@@ -15,9 +15,7 @@ describe('SystemVersionController', () => {
     migrationCheck = makeMigrationCheckService(status);
     const module: TestingModule = await Test.createTestingModule({
       controllers: [SystemVersionController],
-      providers: [
-        { provide: MigrationCheckService, useValue: migrationCheck },
-      ],
+      providers: [{ provide: MigrationCheckService, useValue: migrationCheck }],
     }).compile();
 
     controller = module.get<SystemVersionController>(SystemVersionController);

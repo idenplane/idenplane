@@ -69,8 +69,13 @@ export class OAuthService {
       );
     }
 
-    if (params.code_challenge_method && params.code_challenge_method !== 'S256') {
-      throw new BadRequestException('Only S256 code_challenge_method is supported');
+    if (
+      params.code_challenge_method &&
+      params.code_challenge_method !== 'S256'
+    ) {
+      throw new BadRequestException(
+        'Only S256 code_challenge_method is supported',
+      );
     }
 
     // PKCE is required for all client types (OAuth 2.1 / RFC 7636)
@@ -101,9 +106,10 @@ export class OAuthService {
       realm.id,
       requestedScopes,
     );
-    const effectiveScope = effectiveScopes.length > 0
-      ? this.scopesService.toString(effectiveScopes)
-      : params.scope;
+    const effectiveScope =
+      effectiveScopes.length > 0
+        ? this.scopesService.toString(effectiveScopes)
+        : params.scope;
 
     const code = randomBytes(32).toString('hex');
 

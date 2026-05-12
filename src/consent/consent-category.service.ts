@@ -119,8 +119,12 @@ export class ConsentCategoryService {
         ...(dto.displayName !== undefined && { displayName: dto.displayName }),
         ...(dto.description !== undefined && { description: dto.description }),
         ...(dto.required !== undefined && { required: dto.required }),
-        ...(dto.configurableByUser !== undefined && { configurableByUser: dto.configurableByUser }),
-        ...(dto.showInAccountPortal !== undefined && { showInAccountPortal: dto.showInAccountPortal }),
+        ...(dto.configurableByUser !== undefined && {
+          configurableByUser: dto.configurableByUser,
+        }),
+        ...(dto.showInAccountPortal !== undefined && {
+          showInAccountPortal: dto.showInAccountPortal,
+        }),
         ...(dto.order !== undefined && { order: dto.order }),
         ...(dto.enabled !== undefined && { enabled: dto.enabled }),
       },

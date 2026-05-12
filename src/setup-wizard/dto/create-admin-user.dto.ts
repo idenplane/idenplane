@@ -1,28 +1,44 @@
-import { IsString, IsEmail, IsOptional, MinLength, Matches } from 'class-validator';
+import {
+  IsString,
+  IsEmail,
+  IsOptional,
+  MinLength,
+  Matches,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 /**
  * DTO for creating a new admin user
  */
 export class CreateAdminUserDto {
-  @ApiProperty({ example: 'admin', description: 'Admin username (must be at least 3 characters)' })
+  @ApiProperty({
+    example: 'admin',
+    description: 'Admin username (must be at least 3 characters)',
+  })
   @IsString()
   @MinLength(3, { message: 'Username must be at least 3 characters' })
   username!: string;
 
-  @ApiProperty({ example: 'admin@example.com', description: 'Admin email address' })
+  @ApiProperty({
+    example: 'admin@example.com',
+    description: 'Admin email address',
+  })
   @IsEmail({}, { message: 'Valid email address is required' })
   email!: string;
 
   @ApiProperty({
     example: 'Password123!',
-    description: 'Admin password (must be at least 8 characters with uppercase, lowercase, and digit)',
+    description:
+      'Admin password (must be at least 8 characters with uppercase, lowercase, and digit)',
   })
   @IsString()
   @MinLength(8, { message: 'Password must be at least 8 characters' })
   password!: string;
 
-  @ApiPropertyOptional({ example: 'John Doe', description: 'Optional first name' })
+  @ApiPropertyOptional({
+    example: 'John Doe',
+    description: 'Optional first name',
+  })
   @IsOptional()
   @IsString()
   firstName?: string;
@@ -32,7 +48,10 @@ export class CreateAdminUserDto {
   @IsString()
   lastName?: string;
 
-  @ApiPropertyOptional({ example: true, description: 'Whether the admin user is enabled' })
+  @ApiPropertyOptional({
+    example: true,
+    description: 'Whether the admin user is enabled',
+  })
   @IsOptional()
   isEnabled?: boolean;
 }
@@ -41,12 +60,18 @@ export class CreateAdminUserDto {
  * DTO for updating an admin user
  */
 export class UpdateAdminUserDto {
-  @ApiPropertyOptional({ example: 'admin@example.com', description: 'Updated email address' })
+  @ApiPropertyOptional({
+    example: 'admin@example.com',
+    description: 'Updated email address',
+  })
   @IsOptional()
   @IsEmail({}, { message: 'Valid email address is required' })
   email?: string;
 
-  @ApiPropertyOptional({ example: 'NewPassword123!', description: 'Updated password' })
+  @ApiPropertyOptional({
+    example: 'NewPassword123!',
+    description: 'Updated password',
+  })
   @IsOptional()
   @IsString()
   @MinLength(8, { message: 'Password must be at least 8 characters' })
@@ -62,7 +87,10 @@ export class UpdateAdminUserDto {
   @IsString()
   lastName?: string;
 
-  @ApiPropertyOptional({ example: true, description: 'Whether the admin user is enabled' })
+  @ApiPropertyOptional({
+    example: true,
+    description: 'Whether the admin user is enabled',
+  })
   @IsOptional()
   isEnabled?: boolean;
 }

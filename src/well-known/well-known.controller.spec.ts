@@ -41,7 +41,11 @@ describe('WellKnownController', () => {
     };
     mockCacheService = createMockCacheService();
 
-    controller = new WellKnownController(prisma as any, mockJwkService as any, mockCacheService as any);
+    controller = new WellKnownController(
+      prisma as any,
+      mockJwkService as any,
+      mockCacheService as any,
+    );
     process.env['BASE_URL'] = 'https://auth.example.com';
   });
 
@@ -65,7 +69,9 @@ describe('WellKnownController', () => {
       expect(result.authorization_endpoint).toBe(`${protocolUrl}/auth`);
       expect(result.userinfo_endpoint).toBe(`${protocolUrl}/userinfo`);
       expect(result.jwks_uri).toBe(`${protocolUrl}/certs`);
-      expect(result.introspection_endpoint).toBe(`${protocolUrl}/token/introspect`);
+      expect(result.introspection_endpoint).toBe(
+        `${protocolUrl}/token/introspect`,
+      );
       expect(result.revocation_endpoint).toBe(`${protocolUrl}/revoke`);
       expect(result.end_session_endpoint).toBe(`${protocolUrl}/logout`);
     });
@@ -89,15 +95,26 @@ describe('WellKnownController', () => {
       prisma.realmSigningKey.findMany.mockResolvedValue(signingKeys);
       mockJwkService.publicKeyToJwk
         .mockResolvedValueOnce({ kty: 'RSA', kid: 'kid-1', n: 'n1', e: 'AQAB' })
-        .mockResolvedValueOnce({ kty: 'RSA', kid: 'kid-2', n: 'n2', e: 'AQAB' });
+        .mockResolvedValueOnce({
+          kty: 'RSA',
+          kid: 'kid-2',
+          n: 'n2',
+          e: 'AQAB',
+        });
 
       const result = await controller.certs(realm);
 
       expect(prisma.realmSigningKey.findMany).toHaveBeenCalledWith({
         where: { realmId: 'realm-1', active: true },
       });
-      expect(mockJwkService.publicKeyToJwk).toHaveBeenCalledWith('pk-1', 'kid-1');
-      expect(mockJwkService.publicKeyToJwk).toHaveBeenCalledWith('pk-2', 'kid-2');
+      expect(mockJwkService.publicKeyToJwk).toHaveBeenCalledWith(
+        'pk-1',
+        'kid-1',
+      );
+      expect(mockJwkService.publicKeyToJwk).toHaveBeenCalledWith(
+        'pk-2',
+        'kid-2',
+      );
       expect(result).toEqual({
         keys: [
           { kty: 'RSA', kid: 'kid-1', n: 'n1', e: 'AQAB' },

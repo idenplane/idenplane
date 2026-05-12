@@ -45,7 +45,13 @@ export class BrokerService {
   async initiateLogin(
     realm: Realm,
     alias: string,
-    params: { client_id: string; redirect_uri: string; scope?: string; state?: string; nonce?: string },
+    params: {
+      client_id: string;
+      redirect_uri: string;
+      scope?: string;
+      state?: string;
+      nonce?: string;
+    },
   ): Promise<string> {
     if (!params.client_id) {
       throw new BadRequestException('client_id is required');
@@ -61,7 +67,9 @@ export class BrokerService {
 
     // Validate the Authme client
     const client = await this.prisma.client.findUnique({
-      where: { realmId_clientId: { realmId: realm.id, clientId: params.client_id } },
+      where: {
+        realmId_clientId: { realmId: realm.id, clientId: params.client_id },
+      },
     });
     if (!client || !client.enabled) {
       throw new BadRequestException('Invalid client_id');
@@ -84,7 +92,7 @@ export class BrokerService {
     };
 
     const stateJwt = await this.jwkService.signJwt(
-      { ...brokerState, typ: 'broker_state' } as Record<string, unknown>,
+      { ...brokerState, typ: 'broker_state' },
       signingKey.privateKey,
       signingKey.kid,
       600, // 10 minutes
@@ -118,7 +126,10 @@ export class BrokerService {
     const signingKey = await this.getActiveSigningKey(realm.id);
     let brokerState: BrokerState;
     try {
-      const payload = await this.jwkService.verifyJwt(stateJwt, signingKey.publicKey);
+      const payload = await this.jwkService.verifyJwt(
+        stateJwt,
+        signingKey.publicKey,
+      );
       brokerState = payload as unknown as BrokerState;
     } catch {
       throw new UnauthorizedException('Invalid or expired broker state');
@@ -137,14 +148,19 @@ export class BrokerService {
     const tokenResponse = await this.exchangeCode(idp, code, callbackUrl);
 
     // Fetch user info from external provider
-    const externalUser = await this.fetchExternalUserInfo(idp, tokenResponse.access_token);
+    const externalUser = await this.fetchExternalUserInfo(
+      idp,
+      tokenResponse.access_token,
+    );
 
     // Link or create local user
     const user = await this.linkOrCreateUser(realm, idp, externalUser);
 
     // Issue Authme authorization code
     const client = await this.prisma.client.findUnique({
-      where: { realmId_clientId: { realmId: realm.id, clientId: brokerState.clientId } },
+      where: {
+        realmId_clientId: { realmId: realm.id, clientId: brokerState.clientId },
+      },
     });
     if (!client) {
       throw new BadRequestException('Client not found');
@@ -195,7 +211,9 @@ export class BrokerService {
     });
 
     if (!response.ok) {
-      throw new UnauthorizedException('Failed to exchange code with external provider');
+      throw new UnauthorizedException(
+        'Failed to exchange code with external provider',
+      );
     }
 
     return response.json();
@@ -212,19 +230,27 @@ export class BrokerService {
     });
 
     if (!response.ok) {
-      throw new UnauthorizedException('Failed to fetch user info from external provider');
+      throw new UnauthorizedException(
+        'Failed to fetch user info from external provider',
+      );
     }
 
-    const data = await response.json() as Record<string, unknown>;
+    const data = (await response.json()) as Record<string, unknown>;
 
     return {
       sub: (data['sub'] ?? data['id'] ?? '').toString(),
       email: data['email'] as string | undefined,
       emailVerified: data['email_verified'] as boolean | undefined,
       name: data['name'] as string | undefined,
-      givenName: (data['given_name'] ?? data['first_name']) as string | undefined,
-      familyName: (data['family_name'] ?? data['last_name']) as string | undefined,
-      preferredUsername: (data['preferred_username'] ?? data['login']) as string | undefined,
+      givenName: (data['given_name'] ?? data['first_name']) as
+        | string
+        | undefined,
+      familyName: (data['family_name'] ?? data['last_name']) as
+        | string
+        | undefined,
+      preferredUsername: (data['preferred_username'] ?? data['login']) as
+        | string
+        | undefined,
     };
   }
 
@@ -287,9 +313,10 @@ export class BrokerService {
       );
     }
 
-    const username = external.preferredUsername
-      ?? external.email?.split('@')[0]
-      ?? `${idp.alias}-${external.sub}`;
+    const username =
+      external.preferredUsername ??
+      external.email?.split('@')[0] ??
+      `${idp.alias}-${external.sub}`;
 
     const user = await this.prisma.user.create({
       data: {

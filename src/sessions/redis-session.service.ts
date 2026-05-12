@@ -63,7 +63,10 @@ export class RedisSessionService {
     if (!this.isActive()) return;
 
     const expiresAt = new Date(session.expiresAt);
-    const ttl = Math.max(1, Math.floor((expiresAt.getTime() - Date.now()) / 1000));
+    const ttl = Math.max(
+      1,
+      Math.floor((expiresAt.getTime() - Date.now()) / 1000),
+    );
 
     // Persist the session payload as a JSON string with TTL.
     await this.redis.set(SESSION_KEY(session.id), JSON.stringify(session), ttl);
@@ -102,7 +105,9 @@ export class RedisSessionService {
       }
       return data;
     } catch (err) {
-      this.logger.warn(`Failed to parse session ${sessionId}: ${(err as Error).message}`);
+      this.logger.warn(
+        `Failed to parse session ${sessionId}: ${(err as Error).message}`,
+      );
       return null;
     }
   }
@@ -112,7 +117,10 @@ export class RedisSessionService {
     await this.redis.del(SESSION_KEY(sessionId));
   }
 
-  async getUserSessions(realmId: string, userId: string): Promise<RedisSessionData[]> {
+  async getUserSessions(
+    realmId: string,
+    userId: string,
+  ): Promise<RedisSessionData[]> {
     if (!this.isActive()) return [];
 
     // SMEMBERS is a single atomic read — no race possible.

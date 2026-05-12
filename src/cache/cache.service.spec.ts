@@ -108,7 +108,9 @@ describe('CacheService', () => {
 
     it('getCachedRealmByName returns parsed object on hit', async () => {
       redis.get.mockResolvedValue(JSON.stringify({ id: 'r1' }));
-      expect(await service.getCachedRealmByName('master')).toEqual({ id: 'r1' });
+      expect(await service.getCachedRealmByName('master')).toEqual({
+        id: 'r1',
+      });
     });
   });
 
@@ -131,7 +133,9 @@ describe('CacheService', () => {
 
     it('getCachedClientConfig returns parsed on hit', async () => {
       redis.get.mockResolvedValue(JSON.stringify({ clientId: 'myapp' }));
-      expect(await service.getCachedClientConfig('c1')).toEqual({ clientId: 'myapp' });
+      expect(await service.getCachedClientConfig('c1')).toEqual({
+        clientId: 'myapp',
+      });
     });
 
     it('invalidateClientCache deletes key', async () => {
@@ -146,7 +150,11 @@ describe('CacheService', () => {
     it('cacheJWKS stores with 600s TTL', async () => {
       const jwks = { keys: [] };
       await service.cacheJWKS('r1', jwks);
-      expect(redis.set).toHaveBeenCalledWith('realm:jwks:r1', JSON.stringify(jwks), 600);
+      expect(redis.set).toHaveBeenCalledWith(
+        'realm:jwks:r1',
+        JSON.stringify(jwks),
+        600,
+      );
     });
 
     it('getCachedJWKS returns null on miss', async () => {
@@ -156,7 +164,9 @@ describe('CacheService', () => {
 
     it('getCachedJWKS returns parsed on hit', async () => {
       redis.get.mockResolvedValue(JSON.stringify({ keys: [{ kid: 'k1' }] }));
-      expect(await service.getCachedJWKS('r1')).toEqual({ keys: [{ kid: 'k1' }] });
+      expect(await service.getCachedJWKS('r1')).toEqual({
+        keys: [{ kid: 'k1' }],
+      });
     });
   });
 

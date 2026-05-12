@@ -8,4 +8,7 @@ export interface AdminRolesOptions {
 }
 
 export const RequireAdminRoles = (roles: string[], requireAll = false) =>
-  SetMetadata(REQUIRED_ADMIN_ROLES_KEY, { roles, requireAll } as AdminRolesOptions);
+  SetMetadata(REQUIRED_ADMIN_ROLES_KEY, {
+    roles,
+    requireAll,
+  });

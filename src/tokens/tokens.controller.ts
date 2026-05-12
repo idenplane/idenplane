@@ -24,7 +24,10 @@ import { Public } from '../common/decorators/public.decorator.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
-import { RateLimitGuard, RateLimitByIp } from '../rate-limit/rate-limit.guard.js';
+import {
+  RateLimitGuard,
+  RateLimitByIp,
+} from '../rate-limit/rate-limit.guard.js';
 
 @ApiTags('Tokens')
 @Controller('realms/:realmName/protocol/openid-connect')
@@ -42,22 +45,38 @@ export class TokensController {
   @Post('token/introspect')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Token introspection (RFC 7662)' })
-  @ApiResponse({ status: 200, description: 'Token introspection result (active true/false)' })
-  @ApiResponse({ status: 400, description: 'Bad request — missing token parameter' })
-  @ApiResponse({ status: 401, description: 'invalid_client — client authentication failed' })
+  @ApiResponse({
+    status: 200,
+    description: 'Token introspection result (active true/false)',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad request — missing token parameter',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'invalid_client — client authentication failed',
+  })
   async introspect(
     @CurrentRealm() realm: Realm,
     @Body() body: { token: string; client_id?: string; client_secret?: string },
     @Req() req: Request,
   ) {
-    const callerClientId = await this.authenticateClient(realm, body.client_id, body.client_secret, req);
+    const callerClientId = await this.authenticateClient(
+      realm,
+      body.client_id,
+      body.client_secret,
+      req,
+    );
     const result = await this.tokensService.introspect(realm, body.token);
 
     // If the token is active, verify it was issued to the calling client.
     // The azp (authorized party) claim is the canonical audience for OIDC
     // tokens; fall back to aud when azp is absent (plain OAuth2 access tokens).
     if (result.active) {
-      const tokenAzp = (result as Record<string, unknown>)['azp'] as string | undefined;
+      const tokenAzp = (result as Record<string, unknown>)['azp'] as
+        | string
+        | undefined;
       const tokenAud = (result as Record<string, unknown>)['aud'];
       const audiences: string[] = tokenAzp
         ? [tokenAzp]
@@ -80,19 +99,48 @@ export class TokensController {
   @Post('revoke')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Token revocation (RFC 7009)' })
-  @ApiResponse({ status: 200, description: 'Token successfully revoked (or was already invalid)' })
-  @ApiResponse({ status: 400, description: 'Bad request — missing token parameter' })
-  @ApiResponse({ status: 401, description: 'invalid_client — client authentication failed' })
+  @ApiResponse({
+    status: 200,
+    description: 'Token successfully revoked (or was already invalid)',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad request — missing token parameter',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'invalid_client — client authentication failed',
+  })
   async revoke(
     @CurrentRealm() realm: Realm,
-    @Body() body: { token: string; token_type_hint?: string; client_id?: string; client_secret?: string },
+    @Body()
+    body: {
+      token: string;
+      token_type_hint?: string;
+      client_id?: string;
+      client_secret?: string;
+    },
     @Req() req: Request,
   ) {
-    if (!body.token || typeof body.token !== 'string' || body.token.trim() === '') {
+    if (
+      !body.token ||
+      typeof body.token !== 'string' ||
+      body.token.trim() === ''
+    ) {
       throw new BadRequestException('token is required');
     }
-    const callerClientId = await this.authenticateClient(realm, body.client_id, body.client_secret, req);
-    await this.tokensService.assertTokenBelongsToClient(realm, body.token, callerClientId, body.token_type_hint);
+    const callerClientId = await this.authenticateClient(
+      realm,
+      body.client_id,
+      body.client_secret,
+      req,
+    );
+    await this.tokensService.assertTokenBelongsToClient(
+      realm,
+      body.token,
+      callerClientId,
+      body.token_type_hint,
+    );
     return this.tokensService.revoke(realm, body.token, body.token_type_hint);
   }
 
@@ -132,7 +180,8 @@ export class TokensController {
     if (!cId) {
       throw new UnauthorizedException({
         error: 'invalid_client',
-        error_description: 'Client authentication is required. Provide client_id/client_secret or use HTTP Basic.',
+        error_description:
+          'Client authentication is required. Provide client_id/client_secret or use HTTP Basic.',
       });
     }
 
@@ -152,7 +201,8 @@ export class TokensController {
       if (!cSecret) {
         throw new UnauthorizedException({
           error: 'invalid_client',
-          error_description: 'client_secret is required for confidential clients.',
+          error_description:
+            'client_secret is required for confidential clients.',
         });
       }
       if (!client.clientSecret) {
@@ -161,7 +211,10 @@ export class TokensController {
           error_description: 'Client has no secret configured.',
         });
       }
-      const valid = await this.crypto.verifyPassword(client.clientSecret, cSecret);
+      const valid = await this.crypto.verifyPassword(
+        client.clientSecret,
+        cSecret,
+      );
       if (!valid) {
         throw new UnauthorizedException({
           error: 'invalid_client',
@@ -177,24 +230,41 @@ export class TokensController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'End session / logout (POST)' })
   @ApiResponse({ status: 204, description: 'Session ended successfully' })
-  @ApiResponse({ status: 400, description: 'invalid_grant — refresh token not found or already revoked' })
+  @ApiResponse({
+    status: 400,
+    description: 'invalid_grant — refresh token not found or already revoked',
+  })
   logout(
     @CurrentRealm() realm: Realm,
     @Body() body: { refresh_token?: string } = {},
     @Req() req: Request,
   ) {
-    return this.tokensService.logout(realm, resolveClientIp(req), body?.refresh_token);
+    return this.tokensService.logout(
+      realm,
+      resolveClientIp(req),
+      body?.refresh_token,
+    );
   }
 
   @Get('logout')
   @ApiOperation({ summary: 'RP-Initiated Logout (GET, OIDC spec)' })
-  @ApiResponse({ status: 204, description: 'Session ended; no post_logout_redirect_uri provided' })
-  @ApiResponse({ status: 302, description: 'Redirect to post_logout_redirect_uri after session teardown' })
-  @ApiResponse({ status: 400, description: 'post_logout_redirect_uri does not match any registered URI' })
+  @ApiResponse({
+    status: 204,
+    description: 'Session ended; no post_logout_redirect_uri provided',
+  })
+  @ApiResponse({
+    status: 302,
+    description: 'Redirect to post_logout_redirect_uri after session teardown',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'post_logout_redirect_uri does not match any registered URI',
+  })
   async logoutGet(
     @CurrentRealm() realm: Realm,
     @Query('id_token_hint') idTokenHint: string | undefined,
-    @Query('post_logout_redirect_uri') postLogoutRedirectUri: string | undefined,
+    @Query('post_logout_redirect_uri')
+    postLogoutRedirectUri: string | undefined,
     @Query('state') state: string | undefined,
     @Req() req: Request,
     @Res() res: Response,
@@ -210,7 +280,11 @@ export class TokensController {
       );
     }
 
-    await this.tokensService.logoutByIdToken(realm, resolveClientIp(req), idTokenHint);
+    await this.tokensService.logoutByIdToken(
+      realm,
+      resolveClientIp(req),
+      idTokenHint,
+    );
 
     if (postLogoutRedirectUri) {
       const redirectUrl = new URL(postLogoutRedirectUri);
@@ -225,8 +299,14 @@ export class TokensController {
 
   @Get('userinfo')
   @ApiOperation({ summary: 'Get user info from access token' })
-  @ApiResponse({ status: 200, description: 'User claims from the access token' })
-  @ApiResponse({ status: 401, description: 'invalid_token — missing or invalid Bearer token' })
+  @ApiResponse({
+    status: 200,
+    description: 'User claims from the access token',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'invalid_token — missing or invalid Bearer token',
+  })
   userinfo(@CurrentRealm() realm: Realm, @Req() req: Request) {
     const authHeader = req.headers['authorization'];
     if (!authHeader?.startsWith('Bearer ')) {
@@ -242,7 +322,10 @@ export class TokensController {
   @Post('logout/backchannel')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Backchannel logout (RFC 7009bis)' })
-  @ApiResponse({ status: 200, description: 'Logout token processed successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'Logout token processed successfully',
+  })
   @ApiResponse({ status: 400, description: 'Invalid logout token' })
   @ApiResponse({ status: 401, description: 'No signing key available' })
   async backchannelLogout(

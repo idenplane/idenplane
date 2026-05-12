@@ -1,8 +1,18 @@
-import { IsString, IsOptional, IsBoolean, IsObject, IsArray, MinLength } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsObject,
+  IsArray,
+  MinLength,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class RegisterDeviceDto {
-  @ApiProperty({ example: 'warehouse-sensor-001', description: 'Unique name/identifier for the device' })
+  @ApiProperty({
+    example: 'warehouse-sensor-001',
+    description: 'Unique name/identifier for the device',
+  })
   @IsString()
   @MinLength(2)
   name!: string;
@@ -17,7 +27,9 @@ export class RegisterDeviceDto {
   @IsBoolean()
   enabled?: boolean;
 
-  @ApiPropertyOptional({ example: { firmwareVersion: '2.1.0', hardwareModel: 'SensorV3' } })
+  @ApiPropertyOptional({
+    example: { firmwareVersion: '2.1.0', hardwareModel: 'SensorV3' },
+  })
   @IsOptional()
   @IsObject()
   metadata?: Record<string, unknown>;

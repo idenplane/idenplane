@@ -97,7 +97,7 @@ describe('SamlIdpService', () => {
     validRedirectUris: [],
     createdAt: new Date(),
     updatedAt: new Date(),
-  } as SamlServiceProvider;
+  };
 
   const mockSigningKey = {
     id: 'key-1',
@@ -324,11 +324,7 @@ describe('SamlIdpService', () => {
       });
 
       const sp = { ...mockSp, signAssertions: true, signResponses: false };
-      const result = await service.createSamlResponse(
-        mockRealm,
-        sp as SamlServiceProvider,
-        mockUser,
-      );
+      const result = await service.createSamlResponse(mockRealm, sp, mockUser);
 
       const xml = Buffer.from(result, 'base64').toString('utf-8');
       expect(xml).toContain('Signature');
@@ -343,11 +339,7 @@ describe('SamlIdpService', () => {
       });
 
       const sp = { ...mockSp, signAssertions: false, signResponses: true };
-      const result = await service.createSamlResponse(
-        mockRealm,
-        sp as SamlServiceProvider,
-        mockUser,
-      );
+      const result = await service.createSamlResponse(mockRealm, sp, mockUser);
 
       const xml = Buffer.from(result, 'base64').toString('utf-8');
       expect(xml).toContain('Signature');
@@ -363,14 +355,9 @@ describe('SamlIdpService', () => {
 
       const sp = {
         ...mockSp,
-        nameIdFormat:
-          'urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress',
+        nameIdFormat: 'urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress',
       };
-      const result = await service.createSamlResponse(
-        mockRealm,
-        sp as SamlServiceProvider,
-        mockUser,
-      );
+      const result = await service.createSamlResponse(mockRealm, sp, mockUser);
 
       const xml = Buffer.from(result, 'base64').toString('utf-8');
       expect(xml).toContain(`>${mockUser.email}</saml:NameID>`);
@@ -385,14 +372,9 @@ describe('SamlIdpService', () => {
 
       const sp = {
         ...mockSp,
-        nameIdFormat:
-          'urn:oasis:names:tc:SAML:2.0:nameid-format:persistent',
+        nameIdFormat: 'urn:oasis:names:tc:SAML:2.0:nameid-format:persistent',
       };
-      const result = await service.createSamlResponse(
-        mockRealm,
-        sp as SamlServiceProvider,
-        mockUser,
-      );
+      const result = await service.createSamlResponse(mockRealm, sp, mockUser);
 
       const xml = Buffer.from(result, 'base64').toString('utf-8');
       expect(xml).toContain(`>${mockUser.id}</saml:NameID>`);
@@ -472,8 +454,7 @@ describe('SamlIdpService', () => {
         acsUrl: 'https://sp.example.com/acs',
         sloUrl: null,
         certificate: null,
-        nameIdFormat:
-          'urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress',
+        nameIdFormat: 'urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress',
         signAssertions: false,
         signResponses: false,
         validRedirectUris: [],
@@ -587,9 +568,7 @@ describe('SamlIdpService', () => {
     it('should throw BadRequestException when SP is not found', async () => {
       prisma.samlServiceProvider.findFirst.mockResolvedValue(null);
 
-      await expect(
-        service.deleteSp(mockRealm, 'nonexistent'),
-      ).rejects.toThrow(
+      await expect(service.deleteSp(mockRealm, 'nonexistent')).rejects.toThrow(
         new BadRequestException('SAML service provider not found'),
       );
     });

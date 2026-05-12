@@ -11,8 +11,8 @@
 
 export interface RiskSignal {
   name: string;
-  score: number;       // contribution 0-100
-  weight: number;      // relative weight for final aggregation
+  score: number; // contribution 0-100
+  weight: number; // relative weight for final aggregation
   reason: string;
   triggered: boolean;
 }
@@ -75,7 +75,8 @@ export function evaluateGeoAnomaly(
     (l) => l.split(',').pop()?.trim().toLowerCase() ?? '',
   );
 
-  const triggered = currentCountry.length > 0 && !knownCountries.includes(currentCountry);
+  const triggered =
+    currentCountry.length > 0 && !knownCountries.includes(currentCountry);
   return {
     name: 'geo_anomaly',
     score: triggered ? 30 : 0,
@@ -124,7 +125,8 @@ export function evaluateImpossibleTravel(
 
   const distanceKm = haversineDistance(previousLatLon, currentLatLon);
   const elapsedHours =
-    (currentTimestamp.getTime() - previousTimestamp.getTime()) / (1000 * 60 * 60);
+    (currentTimestamp.getTime() - previousTimestamp.getTime()) /
+    (1000 * 60 * 60);
 
   if (elapsedHours <= 0) {
     return {
@@ -199,7 +201,8 @@ export function evaluateDeviceAnomaly(
   fingerprint: string | null | undefined,
   profile: Pick<UserLoginProfile, 'knownDevices'>,
 ): RiskSignal {
-  const triggered = !!fingerprint && !profile.knownDevices.includes(fingerprint);
+  const triggered =
+    !!fingerprint && !profile.knownDevices.includes(fingerprint);
   return {
     name: 'device_anomaly',
     score: triggered ? 20 : 0,

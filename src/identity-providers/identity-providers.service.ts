@@ -17,7 +17,9 @@ export class IdentityProvidersService {
       where: { realmId_alias: { realmId: realm.id, alias: dto.alias } },
     });
     if (existing) {
-      throw new ConflictException(`Identity provider '${dto.alias}' already exists`);
+      throw new ConflictException(
+        `Identity provider '${dto.alias}' already exists`,
+      );
     }
 
     return this.prisma.identityProvider.create({

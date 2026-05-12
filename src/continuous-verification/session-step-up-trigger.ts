@@ -1,7 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { StepUpService, ACR_MFA, ACR_WEBAUTHN } from '../step-up/step-up.service.js';
+import {
+  StepUpService,
+  ACR_MFA,
+  ACR_WEBAUTHN,
+} from '../step-up/step-up.service.js';
 
 /**
  * SessionStepUpTrigger
@@ -88,7 +92,10 @@ export class SessionStepUpTrigger {
    * @param sessionId - The session requiring step-up
    * @param reason - Optional reason for the step-up
    */
-  async triggerStepUpForSession(sessionId: string, reason?: string): Promise<void> {
+  async triggerStepUpForSession(
+    sessionId: string,
+    reason?: string,
+  ): Promise<void> {
     const profile = await this.prisma.sessionRiskProfile.findUnique({
       where: { sessionId },
       include: {
@@ -104,7 +111,9 @@ export class SessionStepUpTrigger {
     });
 
     if (!profile) {
-      throw new Error(`Session risk profile not found for session: ${sessionId}`);
+      throw new Error(
+        `Session risk profile not found for session: ${sessionId}`,
+      );
     }
 
     await this.triggerStepUp(profile, new Date(), reason);
@@ -187,8 +196,11 @@ export class SessionStepUpTrigger {
 
       // If the client doesn't have a required ACR set, or if our required ACR
       // is higher, update it
-      const currentAcrStrength = this.stepUpService.getAcrStrength(client?.requiredAcr ?? '');
-      const requiredAcrStrength = this.stepUpService.getAcrStrength(requiredAcr);
+      const currentAcrStrength = this.stepUpService.getAcrStrength(
+        client?.requiredAcr ?? '',
+      );
+      const requiredAcrStrength =
+        this.stepUpService.getAcrStrength(requiredAcr);
 
       if (requiredAcrStrength > currentAcrStrength) {
         await this.prisma.client.update({
@@ -206,11 +218,20 @@ export class SessionStepUpTrigger {
         userId: session.userId,
         clientId: session.clientId,
         evaluationType: 'EVENT_DRIVEN',
-        triggerReason: overrideReason ?? profile.stepUpReason ?? 'Risk threshold exceeded',
+        triggerReason:
+          overrideReason ?? profile.stepUpReason ?? 'Risk threshold exceeded',
         riskScoreBefore: profile.riskScore,
         riskScoreAfter: profile.riskScore,
-        riskLevelBefore: profile.riskLevel as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
-        riskLevelAfter: profile.riskLevel as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
+        riskLevelBefore: profile.riskLevel as
+          | 'LOW'
+          | 'MEDIUM'
+          | 'HIGH'
+          | 'CRITICAL',
+        riskLevelAfter: profile.riskLevel as
+          | 'LOW'
+          | 'MEDIUM'
+          | 'HIGH'
+          | 'CRITICAL',
         trustScoreBefore: 100,
         trustScoreAfter: 100,
         signals: [],
@@ -224,7 +245,7 @@ export class SessionStepUpTrigger {
     // Emit a step-up event for real-time notification (could use EventEmitter2)
     this.logger.log(
       `Step-up authentication required for session ${profile.sessionId} ` +
-      `(user: ${session.user?.username ?? 'unknown'}, risk: ${profile.riskScore}, level: ${profile.riskLevel})`,
+        `(user: ${session.user?.username ?? 'unknown'}, risk: ${profile.riskScore}, level: ${profile.riskLevel})`,
     );
 
     // TODO: Emit event for WebSocket/push notification to client application

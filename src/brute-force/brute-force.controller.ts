@@ -7,7 +7,12 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiSecurity } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiSecurity,
+} from '@nestjs/swagger';
 import type { Realm } from '@prisma/client';
 import { BruteForceService } from './brute-force.service.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
@@ -39,7 +44,10 @@ export class BruteForceController {
   @ApiResponse({ status: 200, description: 'User unlocked' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
-  async unlockUser(@CurrentRealm() realm: Realm, @Param('userId') userId: string) {
+  async unlockUser(
+    @CurrentRealm() realm: Realm,
+    @Param('userId') userId: string,
+  ) {
     await this.bruteForceService.unlockUser(realm.id, userId);
     return { message: 'User unlocked' };
   }
@@ -75,7 +83,10 @@ export class BruteForceAttackDetectionController {
   @ApiResponse({ status: 200, description: 'User unlocked' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
-  async unlockUser(@CurrentRealm() realm: Realm, @Param('userId') userId: string) {
+  async unlockUser(
+    @CurrentRealm() realm: Realm,
+    @Param('userId') userId: string,
+  ) {
     await this.bruteForceService.unlockUser(realm.id, userId);
     return { message: 'User unlocked' };
   }

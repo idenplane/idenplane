@@ -66,9 +66,7 @@ export class MtlsGuard implements CanActivate {
     '/api/v1/device',
   ];
 
-  constructor(
-    private readonly reflector: Reflector,
-  ) {}
+  constructor(private readonly reflector: Reflector) {}
 
   /**
    * Check if the request can proceed based on mTLS validation.
@@ -91,8 +89,11 @@ export class MtlsGuard implements CanActivate {
 
     // Check if this route requires mTLS
     const protectedRoutes = this.defaultProtectedRoutes;
-    const requiresMtls = protectedRoutes.some((route) =>
-      path === route || path.startsWith(`${route}/`) || path.startsWith(`${route}-`),
+    const requiresMtls = protectedRoutes.some(
+      (route) =>
+        path === route ||
+        path.startsWith(`${route}/`) ||
+        path.startsWith(`${route}-`),
     );
 
     if (!requiresMtls) {
@@ -115,8 +116,14 @@ export class MtlsGuard implements CanActivate {
 
     // Set certificate info headers for downstream services
     if (validationResult.certificateInfo) {
-      response.setHeader('X-Client-Certificate-Fingerprint', validationResult.certificateInfo.fingerprint);
-      response.setHeader('X-Client-Certificate-Subject', validationResult.certificateInfo.subject);
+      response.setHeader(
+        'X-Client-Certificate-Fingerprint',
+        validationResult.certificateInfo.fingerprint,
+      );
+      response.setHeader(
+        'X-Client-Certificate-Subject',
+        validationResult.certificateInfo.subject,
+      );
     }
 
     return true;
@@ -140,16 +147,23 @@ export class MtlsGuard implements CanActivate {
   }> {
     // Extract certificate from headers
     const certHeader = request.headers['x-client-certificate'] as string;
-    const fingerprintHeader = request.headers['x-client-certificate-fingerprint'] as string;
+    const fingerprintHeader = request.headers[
+      'x-client-certificate-fingerprint'
+    ] as string;
 
     // Try to get certificate from base64 header first
     if (certHeader) {
       try {
-        const certificatePem = Buffer.from(certHeader, 'base64').toString('utf8');
-        const validationResult = CertificateValidator.validateFull(certificatePem, {
-          allowExpired: true,
-          allowNotYetValid: false,
-        });
+        const certificatePem = Buffer.from(certHeader, 'base64').toString(
+          'utf8',
+        );
+        const validationResult = CertificateValidator.validateFull(
+          certificatePem,
+          {
+            allowExpired: true,
+            allowNotYetValid: false,
+          },
+        );
 
         if (!validationResult.valid) {
           return { valid: false, error: validationResult.error };
@@ -190,7 +204,8 @@ export class MtlsGuard implements CanActivate {
 
     return {
       valid: false,
-      error: 'No client certificate provided. mTLS authentication requires a valid client certificate.',
+      error:
+        'No client certificate provided. mTLS authentication requires a valid client certificate.',
     };
   }
 
@@ -215,9 +230,7 @@ export class MtlsGuard implements CanActivate {
 export class NhiCertificateGuard implements CanActivate {
   private readonly logger = new Logger(NhiCertificateGuard.name);
 
-  constructor(
-    private readonly reflector: Reflector,
-  ) {}
+  constructor(private readonly reflector: Reflector) {}
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
     const request = context.switchToHttp().getRequest<NhiCertificateRequest>();
@@ -244,7 +257,9 @@ export class NhiCertificateGuard implements CanActivate {
 
     // Validate certificate from headers
     const certHeader = request.headers['x-client-certificate'] as string;
-    const fingerprintHeader = request.headers['x-client-certificate-fingerprint'] as string;
+    const fingerprintHeader = request.headers[
+      'x-client-certificate-fingerprint'
+    ] as string;
 
     if (!certHeader && !fingerprintHeader) {
       throw new UnauthorizedException('Certificate authentication required');
@@ -253,14 +268,19 @@ export class NhiCertificateGuard implements CanActivate {
     // Parse and validate the certificate
     if (certHeader) {
       try {
-        const certificatePem = Buffer.from(certHeader, 'base64').toString('utf8');
+        const certificatePem = Buffer.from(certHeader, 'base64').toString(
+          'utf8',
+        );
         const clientIp = resolveClientIp(request);
 
-        const validationResult = CertificateValidator.validateFull(certificatePem, {
-          allowExpired: false,
-          allowNotYetValid: false,
-          clientIp,
-        });
+        const validationResult = CertificateValidator.validateFull(
+          certificatePem,
+          {
+            allowExpired: false,
+            allowNotYetValid: false,
+            clientIp,
+          },
+        );
 
         if (!validationResult.valid) {
           throw new UnauthorizedException(validationResult.error);
@@ -275,7 +295,10 @@ export class NhiCertificateGuard implements CanActivate {
         };
 
         // Set response headers with certificate fingerprint for traceability
-        response.setHeader('X-Client-Certificate-Fingerprint', validationResult.info!.fingerprint);
+        response.setHeader(
+          'X-Client-Certificate-Fingerprint',
+          validationResult.info!.fingerprint,
+        );
 
         return true;
       } catch (error) {

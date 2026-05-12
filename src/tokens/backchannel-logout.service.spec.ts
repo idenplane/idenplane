@@ -11,7 +11,8 @@ import {
 import type { Realm } from '@prisma/client';
 
 /** Drain the microtask / promise queue so fire-and-forget work completes. */
-const flushPromises = () => new Promise<void>((resolve) => setImmediate(resolve));
+const flushPromises = () =>
+  new Promise<void>((resolve) => setImmediate(resolve));
 
 describe('BackchannelLogoutService', () => {
   let service: BackchannelLogoutService;
@@ -36,7 +37,10 @@ describe('BackchannelLogoutService', () => {
   beforeEach(() => {
     prisma = createMockPrismaService();
     mockJwkService = { signJwt: jest.fn().mockResolvedValue('mock.jwt.token') };
-    service = new BackchannelLogoutService(prisma as any, mockJwkService as any);
+    service = new BackchannelLogoutService(
+      prisma as any,
+      mockJwkService as any,
+    );
 
     // Save original fetch and replace with mock
     originalFetch = global.fetch;
@@ -210,7 +214,9 @@ describe('BackchannelLogoutService', () => {
       (global.fetch as jest.Mock).mockRejectedValue(new Error('Network error'));
 
       // sendLogoutTokens is fire-and-forget (void); errors must not propagate
-      expect(() => service.sendLogoutTokens(mockRealm, 'user-1', 'session-1')).not.toThrow();
+      expect(() =>
+        service.sendLogoutTokens(mockRealm, 'user-1', 'session-1'),
+      ).not.toThrow();
       await flushPromises(); // confirm the background work also swallows the error
     });
 
@@ -229,7 +235,9 @@ describe('BackchannelLogoutService', () => {
       (global.fetch as jest.Mock).mockResolvedValue({ ok: false, status: 500 });
 
       // sendLogoutTokens is fire-and-forget (void); non-ok responses must not propagate
-      expect(() => service.sendLogoutTokens(mockRealm, 'user-1', 'session-1')).not.toThrow();
+      expect(() =>
+        service.sendLogoutTokens(mockRealm, 'user-1', 'session-1'),
+      ).not.toThrow();
       await flushPromises(); // confirm the background work also swallows the warning
     });
   });

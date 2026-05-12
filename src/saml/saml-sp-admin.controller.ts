@@ -11,7 +11,12 @@ import {
   UseGuards,
   NotFoundException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiSecurity, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiSecurity,
+  ApiResponse,
+} from '@nestjs/swagger';
 import type { Realm } from '@prisma/client';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
@@ -28,17 +33,32 @@ export class SamlSpAdminController {
 
   @Post()
   @ApiOperation({ summary: 'Register a SAML service provider' })
-  @ApiResponse({ status: 201, description: 'SAML service provider registered successfully' })
-  @ApiResponse({ status: 400, description: 'Bad request — invalid DTO or duplicate entityId' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
+  @ApiResponse({
+    status: 201,
+    description: 'SAML service provider registered successfully',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad request — invalid DTO or duplicate entityId',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
   create(@CurrentRealm() realm: Realm, @Body() dto: CreateSamlSpDto) {
     return this.samlIdpService.createSp(realm, dto);
   }
 
   @Get()
   @ApiOperation({ summary: 'List SAML service providers' })
-  @ApiResponse({ status: 200, description: 'Array of SAML service providers in the realm' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
+  @ApiResponse({
+    status: 200,
+    description: 'Array of SAML service providers in the realm',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
   findAll(@CurrentRealm() realm: Realm) {
     return this.samlIdpService.findAllSps(realm);
   }
@@ -46,7 +66,10 @@ export class SamlSpAdminController {
   @Get(':id')
   @ApiOperation({ summary: 'Get a SAML service provider by ID' })
   @ApiResponse({ status: 200, description: 'SAML service provider details' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
   @ApiResponse({ status: 404, description: 'SAML service provider not found' })
   async findOne(@CurrentRealm() realm: Realm, @Param('id') id: string) {
     const sp = await this.samlIdpService.findSpById(realm, id);
@@ -58,9 +81,15 @@ export class SamlSpAdminController {
 
   @Put(':id')
   @ApiOperation({ summary: 'Update a SAML service provider' })
-  @ApiResponse({ status: 200, description: 'SAML service provider updated successfully' })
+  @ApiResponse({
+    status: 200,
+    description: 'SAML service provider updated successfully',
+  })
   @ApiResponse({ status: 400, description: 'Bad request — invalid DTO' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
   @ApiResponse({ status: 404, description: 'SAML service provider not found' })
   update(
     @CurrentRealm() realm: Realm,
@@ -74,7 +103,10 @@ export class SamlSpAdminController {
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Delete a SAML service provider' })
   @ApiResponse({ status: 204, description: 'SAML service provider deleted' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
   @ApiResponse({ status: 404, description: 'SAML service provider not found' })
   remove(@CurrentRealm() realm: Realm, @Param('id') id: string) {
     return this.samlIdpService.deleteSp(realm, id);

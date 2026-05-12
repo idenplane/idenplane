@@ -28,20 +28,24 @@ describe('ThemeService', () => {
         { name: 'readme.txt', isDirectory: () => false } as any,
       ]);
       mockedReadFile
-        .mockResolvedValueOnce(JSON.stringify({
-          name: 'authme',
-          displayName: 'AuthMe Default',
-          description: 'Default theme',
-          colors: { primaryColor: '#2563eb' },
-          types: { login: { css: ['login.css'] } },
-        }))
-        .mockResolvedValueOnce(JSON.stringify({
-          name: 'dark',
-          displayName: 'Dark',
-          parent: 'authme',
-          colors: { primaryColor: '#1e40af' },
-          types: { login: { css: ['dark.css'] } },
-        }));
+        .mockResolvedValueOnce(
+          JSON.stringify({
+            name: 'authme',
+            displayName: 'AuthMe Default',
+            description: 'Default theme',
+            colors: { primaryColor: '#2563eb' },
+            types: { login: { css: ['login.css'] } },
+          }),
+        )
+        .mockResolvedValueOnce(
+          JSON.stringify({
+            name: 'dark',
+            displayName: 'Dark',
+            parent: 'authme',
+            colors: { primaryColor: '#1e40af' },
+            types: { login: { css: ['dark.css'] } },
+          }),
+        );
 
       await service.onModuleInit();
 
@@ -73,11 +77,13 @@ describe('ThemeService', () => {
       mockedReaddir.mockResolvedValue([
         { name: 'minimal', isDirectory: () => true } as any,
       ]);
-      mockedReadFile.mockResolvedValue(JSON.stringify({
-        name: 'minimal',
-        displayName: 'Minimal',
-        colors: { primaryColor: '#000' },
-      }));
+      mockedReadFile.mockResolvedValue(
+        JSON.stringify({
+          name: 'minimal',
+          displayName: 'Minimal',
+          colors: { primaryColor: '#000' },
+        }),
+      );
 
       await service.onModuleInit();
 
@@ -98,12 +104,14 @@ describe('ThemeService', () => {
       mockedReaddir.mockResolvedValue([
         { name: 'authme', isDirectory: () => true } as any,
       ]);
-      mockedReadFile.mockResolvedValue(JSON.stringify({
-        name: 'authme',
-        displayName: 'AuthMe',
-        description: 'Default',
-        colors: { primaryColor: '#2563eb' },
-      }));
+      mockedReadFile.mockResolvedValue(
+        JSON.stringify({
+          name: 'authme',
+          displayName: 'AuthMe',
+          description: 'Default',
+          colors: { primaryColor: '#2563eb' },
+        }),
+      );
 
       await service.onModuleInit();
 
@@ -126,15 +134,29 @@ describe('ThemeService', () => {
         { name: 'grandchild', isDirectory: () => true } as any,
       ]);
       mockedReadFile
-        .mockResolvedValueOnce(JSON.stringify({
-          name: 'base', displayName: 'Base', colors: {},
-        }))
-        .mockResolvedValueOnce(JSON.stringify({
-          name: 'child', displayName: 'Child', parent: 'base', colors: {},
-        }))
-        .mockResolvedValueOnce(JSON.stringify({
-          name: 'grandchild', displayName: 'Grandchild', parent: 'child', colors: {},
-        }));
+        .mockResolvedValueOnce(
+          JSON.stringify({
+            name: 'base',
+            displayName: 'Base',
+            colors: {},
+          }),
+        )
+        .mockResolvedValueOnce(
+          JSON.stringify({
+            name: 'child',
+            displayName: 'Child',
+            parent: 'base',
+            colors: {},
+          }),
+        )
+        .mockResolvedValueOnce(
+          JSON.stringify({
+            name: 'grandchild',
+            displayName: 'Grandchild',
+            parent: 'child',
+            colors: {},
+          }),
+        );
 
       await service.onModuleInit();
     });
@@ -148,7 +170,11 @@ describe('ThemeService', () => {
     });
 
     it('should return full chain for deeply nested theme', () => {
-      expect(service.getInheritanceChain('grandchild')).toEqual(['grandchild', 'child', 'base']);
+      expect(service.getInheritanceChain('grandchild')).toEqual([
+        'grandchild',
+        'child',
+        'base',
+      ]);
     });
 
     it('should return single element for unknown theme', () => {
@@ -162,8 +188,22 @@ describe('ThemeService', () => {
         { name: 'b', isDirectory: () => true } as any,
       ]);
       mockedReadFile
-        .mockResolvedValueOnce(JSON.stringify({ name: 'a', displayName: 'A', parent: 'b', colors: {} }))
-        .mockResolvedValueOnce(JSON.stringify({ name: 'b', displayName: 'B', parent: 'a', colors: {} }));
+        .mockResolvedValueOnce(
+          JSON.stringify({
+            name: 'a',
+            displayName: 'A',
+            parent: 'b',
+            colors: {},
+          }),
+        )
+        .mockResolvedValueOnce(
+          JSON.stringify({
+            name: 'b',
+            displayName: 'B',
+            parent: 'a',
+            colors: {},
+          }),
+        );
 
       const circularService = new ThemeService();
       await circularService.onModuleInit();
@@ -180,14 +220,23 @@ describe('ThemeService', () => {
         { name: 'child', isDirectory: () => true } as any,
       ]);
       mockedReadFile
-        .mockResolvedValueOnce(JSON.stringify({
-          name: 'base', displayName: 'Base', colors: {},
-          types: { login: { css: ['base.css'] } },
-        }))
-        .mockResolvedValueOnce(JSON.stringify({
-          name: 'child', displayName: 'Child', parent: 'base', colors: {},
-          types: { login: { css: ['child.css'] } },
-        }));
+        .mockResolvedValueOnce(
+          JSON.stringify({
+            name: 'base',
+            displayName: 'Base',
+            colors: {},
+            types: { login: { css: ['base.css'] } },
+          }),
+        )
+        .mockResolvedValueOnce(
+          JSON.stringify({
+            name: 'child',
+            displayName: 'Child',
+            parent: 'base',
+            colors: {},
+            types: { login: { css: ['child.css'] } },
+          }),
+        );
 
       await service.onModuleInit();
     });
@@ -217,20 +266,22 @@ describe('ThemeService', () => {
       mockedReaddir.mockResolvedValue([
         { name: 'authme', isDirectory: () => true } as any,
       ]);
-      mockedReadFile.mockResolvedValue(JSON.stringify({
-        name: 'authme',
-        displayName: 'AuthMe',
-        colors: {
-          primaryColor: '#2563eb',
-          backgroundColor: '#f0f2f5',
-          cardColor: '#ffffff',
-          textColor: '#1a1a2e',
-          labelColor: '#374151',
-          inputBorderColor: '#d1d5db',
-          inputBgColor: '#ffffff',
-          mutedColor: '#6b7280',
-        },
-      }));
+      mockedReadFile.mockResolvedValue(
+        JSON.stringify({
+          name: 'authme',
+          displayName: 'AuthMe',
+          colors: {
+            primaryColor: '#2563eb',
+            backgroundColor: '#f0f2f5',
+            cardColor: '#ffffff',
+            textColor: '#1a1a2e',
+            labelColor: '#374151',
+            inputBorderColor: '#d1d5db',
+            inputBgColor: '#ffffff',
+            mutedColor: '#6b7280',
+          },
+        }),
+      );
 
       await service.onModuleInit();
     });
@@ -291,12 +342,23 @@ describe('ThemeService', () => {
       mockedReaddir.mockResolvedValue([
         { name: 'authme', isDirectory: () => true } as any,
       ]);
-      mockedReadFile.mockResolvedValue(JSON.stringify({
-        name: 'authme',
-        displayName: 'AuthMe',
-        colors: { primaryColor: '#2563eb', backgroundColor: '#f0f2f5', cardColor: '#fff', textColor: '#1a1a2e', labelColor: '#374151', inputBorderColor: '#d1d5db', inputBgColor: '#fff', mutedColor: '#6b7280' },
-        types: { login: { css: ['styles.css'] } },
-      }));
+      mockedReadFile.mockResolvedValue(
+        JSON.stringify({
+          name: 'authme',
+          displayName: 'AuthMe',
+          colors: {
+            primaryColor: '#2563eb',
+            backgroundColor: '#f0f2f5',
+            cardColor: '#fff',
+            textColor: '#1a1a2e',
+            labelColor: '#374151',
+            inputBorderColor: '#d1d5db',
+            inputBgColor: '#fff',
+            mutedColor: '#6b7280',
+          },
+          types: { login: { css: ['styles.css'] } },
+        }),
+      );
 
       await service.onModuleInit();
     });
@@ -311,7 +373,9 @@ describe('ThemeService', () => {
       const resolved = service.resolveTheme(realm);
 
       expect(resolved.primaryColor).toBeDefined();
-      expect(resolved.themeCssFiles).toContain('/themes/authme/login/resources/styles.css');
+      expect(resolved.themeCssFiles).toContain(
+        '/themes/authme/login/resources/styles.css',
+      );
     });
 
     it('should fall back to themeName if loginTheme is not set', () => {

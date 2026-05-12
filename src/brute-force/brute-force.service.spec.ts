@@ -22,7 +22,7 @@ describe('BruteForceService', () => {
   const disabledRealm: Realm = {
     ...mockRealm,
     bruteForceEnabled: false,
-  } as Realm;
+  };
 
   const mockUser: User = {
     id: 'user-1',
@@ -141,7 +141,7 @@ describe('BruteForceService', () => {
       const realmWithPermanent: Realm = {
         ...mockRealm,
         permanentLockoutAfter: 2,
-      } as Realm;
+      };
 
       prisma.loginFailure.create.mockResolvedValue({});
       // First count: recent failures >= maxLoginFailures
@@ -185,7 +185,10 @@ describe('BruteForceService', () => {
 
   describe('unlockUser', () => {
     it('should set lockedUntil to null and re-enable the account', async () => {
-      prisma.user.findFirst.mockResolvedValue({ id: 'user-1', realmId: 'realm-1' });
+      prisma.user.findFirst.mockResolvedValue({
+        id: 'user-1',
+        realmId: 'realm-1',
+      });
       prisma.user.update.mockResolvedValue({});
       prisma.loginFailure.deleteMany.mockResolvedValue({ count: 0 });
 
@@ -200,8 +203,9 @@ describe('BruteForceService', () => {
     it('should throw NotFoundException for user in wrong realm', async () => {
       prisma.user.findFirst.mockResolvedValue(null);
 
-      await expect(service.unlockUser('realm-1', 'user-from-other-realm'))
-        .rejects.toThrow('User not found');
+      await expect(
+        service.unlockUser('realm-1', 'user-from-other-realm'),
+      ).rejects.toThrow('User not found');
     });
   });
 
@@ -210,7 +214,12 @@ describe('BruteForceService', () => {
   describe('getLockedUsers', () => {
     it('should query users with lockedUntil in the future', async () => {
       const lockedUsers = [
-        { id: 'user-1', username: 'alice', email: 'alice@test.com', lockedUntil: new Date() },
+        {
+          id: 'user-1',
+          username: 'alice',
+          email: 'alice@test.com',
+          lockedUntil: new Date(),
+        },
       ];
       prisma.user.findMany.mockResolvedValue(lockedUsers);
 

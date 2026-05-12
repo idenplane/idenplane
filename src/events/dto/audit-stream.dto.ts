@@ -14,7 +14,10 @@ import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateAuditStreamDto {
-  @ApiProperty({ example: 'My Syslog Stream', description: 'Human-readable name for the stream' })
+  @ApiProperty({
+    example: 'My Syslog Stream',
+    description: 'Human-readable name for the stream',
+  })
   @IsString()
   name!: string;
 
@@ -65,7 +68,10 @@ export class CreateAuditStreamDto {
   @IsIn(['udp', 'tcp'])
   syslogProtocol?: 'udp' | 'tcp';
 
-  @ApiPropertyOptional({ description: 'Syslog facility code (0–23)', default: 16 })
+  @ApiPropertyOptional({
+    description: 'Syslog facility code (0–23)',
+    default: 16,
+  })
   @IsOptional()
   @Type(() => Number)
   @IsInt()

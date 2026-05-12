@@ -35,9 +35,10 @@ export class SessionsCleanupService {
     });
 
     // Delete expired impersonation sessions.
-    const impersonationResult = await this.prisma.impersonationSession.deleteMany({
-      where: { expiresAt: { lt: now } },
-    });
+    const impersonationResult =
+      await this.prisma.impersonationSession.deleteMany({
+        where: { expiresAt: { lt: now } },
+      });
 
     const total =
       oauthResult.count +
@@ -49,10 +50,10 @@ export class SessionsCleanupService {
     if (total > 0) {
       this.logger.debug(
         `Session cleanup removed ${oauthResult.count} OAuth session(s), ` +
-        `${ssoResult.count} SSO session(s), ` +
-        `${refreshResult.count} refresh token(s), ` +
-        `${authCodeResult.count} authorization code(s), ` +
-        `${impersonationResult.count} impersonation session(s)`,
+          `${ssoResult.count} SSO session(s), ` +
+          `${refreshResult.count} refresh token(s), ` +
+          `${authCodeResult.count} authorization code(s), ` +
+          `${impersonationResult.count} impersonation session(s)`,
       );
     }
   }

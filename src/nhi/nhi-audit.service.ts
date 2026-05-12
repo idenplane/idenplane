@@ -59,11 +59,16 @@ export class NhiAuditService {
           userAgent: params.userAgent,
           success: params.success ?? true,
           errorCode: params.errorCode,
-          details: params.details !== undefined ? params.details as unknown as Prisma.InputJsonValue : undefined,
+          details:
+            params.details !== undefined
+              ? (params.details as unknown as Prisma.InputJsonValue)
+              : undefined,
         },
       });
     } catch (err) {
-      this.logger.warn(`Failed to record NHI audit log: ${(err as Error).message}`);
+      this.logger.warn(
+        `Failed to record NHI audit log: ${(err as Error).message}`,
+      );
     }
   }
 
@@ -80,7 +85,7 @@ export class NhiAuditService {
     }
 
     return this.prisma.nhiAuditLog.findMany({
-      where: where as Prisma.NhiAuditLogWhereInput,
+      where: where,
       orderBy: { createdAt: 'desc' },
       skip: params.first ?? 0,
       take: params.max ?? 100,

@@ -43,7 +43,9 @@ export class SamlIdpService {
       }
 
       if (xml.length > MAX_XML_SIZE) {
-        throw new BadRequestException('SAMLRequest exceeds maximum allowed size');
+        throw new BadRequestException(
+          'SAMLRequest exceeds maximum allowed size',
+        );
       }
 
       const parser = new XMLParser({
@@ -55,16 +57,17 @@ export class SamlIdpService {
       const doc = parser.parse(xml);
       const authnRequest = doc['AuthnRequest'];
       if (!authnRequest) {
-        throw new BadRequestException('Invalid AuthnRequest: root element not found');
+        throw new BadRequestException(
+          'Invalid AuthnRequest: root element not found',
+        );
       }
 
       const id = authnRequest['@_ID'] ?? randomUUID();
       const issuer =
         typeof authnRequest['Issuer'] === 'string'
           ? authnRequest['Issuer']
-          : authnRequest['Issuer']?.['#text'] ?? '';
-      const acsUrl =
-        authnRequest['@_AssertionConsumerServiceURL'] ?? null;
+          : (authnRequest['Issuer']?.['#text'] ?? '');
+      const acsUrl = authnRequest['@_AssertionConsumerServiceURL'] ?? null;
       const nameIdPolicy = authnRequest['NameIDPolicy']?.['@_Format'] ?? null;
 
       if (!issuer) {
@@ -79,7 +82,10 @@ export class SamlIdpService {
     }
   }
 
-  async validateSignature(samlRequest: string, certificate: string): Promise<void> {
+  async validateSignature(
+    samlRequest: string,
+    certificate: string,
+  ): Promise<void> {
     const decoded = Buffer.from(samlRequest, 'base64');
 
     let xml: string;
@@ -90,7 +96,7 @@ export class SamlIdpService {
       xml = decoded.toString('utf-8');
     }
 
-    const { DOMParser } = require('@xmldom/xmldom') as any;
+    const { DOMParser } = require('@xmldom/xmldom');
     const doc = new DOMParser().parseFromString(xml, 'text/xml');
     const signatures = doc.getElementsByTagName('Signature');
     if (!signatures || signatures.length === 0) {
@@ -103,7 +109,10 @@ export class SamlIdpService {
     try {
       valid = sig.checkSignature(xml);
     } catch (err) {
-      this.logger.error('Signature validation threw error', (err as Error).stack);
+      this.logger.error(
+        'Signature validation threw error',
+        (err as Error).stack,
+      );
       throw new BadRequestException('AuthnRequest signature validation failed');
     }
     if (!valid) {
@@ -170,7 +179,11 @@ export class SamlIdpService {
     // Sign the assertion if configured
     let signedAssertion = assertion;
     if (sp.signAssertions) {
-      signedAssertion = this.signXml(assertion, signingKey.privateKey, assertionId);
+      signedAssertion = this.signXml(
+        assertion,
+        signingKey.privateKey,
+        assertionId,
+      );
     }
 
     const response = `<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" Destination="${this.escapeXml(sp.acsUrl)}" ID="${responseId}"${inResponseTo ? ` InResponseTo="${this.escapeXml(inResponseTo)}"` : ''} IssueInstant="${now.toISOString()}" Version="2.0">

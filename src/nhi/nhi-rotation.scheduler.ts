@@ -135,7 +135,9 @@ export class NhiRotationScheduler {
             credentialId: cred.id,
             nhiIdentityId: cred.nhiIdentityId,
             policyId: policy.id,
-            reason: cred.rotationRequired ? 'rotation_required_flag' : 'policy_threshold',
+            reason: cred.rotationRequired
+              ? 'rotation_required_flag'
+              : 'policy_threshold',
           });
         }
       }
@@ -158,7 +160,9 @@ export class NhiRotationScheduler {
     // Age-based threshold
     const rotationDate = new Date(credential.createdAt);
     rotationDate.setDate(
-      rotationDate.getDate() + policy.rotationIntervalDays - policy.rotationBeforeDays,
+      rotationDate.getDate() +
+        policy.rotationIntervalDays -
+        policy.rotationBeforeDays,
     );
 
     return new Date() >= rotationDate;
@@ -218,7 +222,9 @@ export class NhiRotationScheduler {
       data: {
         nhiIdentityId: oldCredential.nhiIdentityId,
         credentialType: 'API_KEY',
-        name: oldCredential.name ? `${oldCredential.name} (rotated)` : 'rotated credential',
+        name: oldCredential.name
+          ? `${oldCredential.name} (rotated)`
+          : 'rotated credential',
         keyPrefix: newPrefix,
         keyHash: newHash,
         expiresAt: oldCredential.expiresAt,

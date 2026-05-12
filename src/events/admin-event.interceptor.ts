@@ -13,7 +13,10 @@ import type { OperationTypeValue, ResourceTypeValue } from './event-types.js';
 const RESOURCE_TYPE_MAP: Array<{ pattern: RegExp; type: ResourceTypeValue }> = [
   // More-specific patterns must come before broader ones to avoid mis-classification.
   // e.g. /saml-service-providers before /service-accounts, /client-scopes before /clients
-  { pattern: /\/saml-service-providers/, type: ResourceType.SAML_SERVICE_PROVIDER },
+  {
+    pattern: /\/saml-service-providers/,
+    type: ResourceType.SAML_SERVICE_PROVIDER,
+  },
   { pattern: /\/service-accounts/, type: ResourceType.SERVICE_ACCOUNT },
   { pattern: /\/client-scopes/, type: ResourceType.SCOPE },
   { pattern: /\/identity-providers/, type: ResourceType.IDP },
@@ -52,11 +55,15 @@ export class AdminEventInterceptor implements NestInterceptor {
     const request = context.switchToHttp().getRequest<Request>();
     const method = request.method;
 
-    if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method)) return next.handle();
+    if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method))
+      return next.handle();
     if (!request.path.startsWith('/admin/')) return next.handle();
 
     // Skip events API and auth endpoints
-    if (request.path.includes('/events') || request.path.includes('/admin-events')) {
+    if (
+      request.path.includes('/events') ||
+      request.path.includes('/admin-events')
+    ) {
       return next.handle();
     }
     if (request.path.includes('/admin/auth/')) return next.handle();
@@ -77,7 +84,8 @@ export class AdminEventInterceptor implements NestInterceptor {
     const resourceType = this.resolveResourceType(request.path);
     if (!resourceType) return next.handle();
 
-    const representation = method !== 'DELETE' ? this.redactBody(request.body) : undefined;
+    const representation =
+      method !== 'DELETE' ? this.redactBody(request.body) : undefined;
 
     return next.handle().pipe(
       tap(() => {
@@ -103,8 +111,17 @@ export class AdminEventInterceptor implements NestInterceptor {
 
   private redactBody(body: unknown): Record<string, unknown> | undefined {
     if (!body || typeof body !== 'object') return undefined;
-    const redacted: Record<string, unknown> = { ...(body as Record<string, unknown>) };
-    const sensitiveKeys = ['password', 'clientSecret', 'smtpPassword', 'client_secret', 'currentPassword', 'newPassword'];
+    const redacted: Record<string, unknown> = {
+      ...(body as Record<string, unknown>),
+    };
+    const sensitiveKeys = [
+      'password',
+      'clientSecret',
+      'smtpPassword',
+      'client_secret',
+      'currentPassword',
+      'newPassword',
+    ];
     for (const key of sensitiveKeys) {
       if (key in redacted) redacted[key] = '[REDACTED]';
     }

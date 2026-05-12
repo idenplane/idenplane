@@ -63,7 +63,9 @@ export class SessionRiskEvaluator {
    * Evaluates risk for a single session and persists the result.
    * This is the main entry point for session risk evaluation jobs.
    */
-  async evaluateSession(job: SessionEvaluationJob): Promise<SessionRiskEvaluationResult> {
+  async evaluateSession(
+    job: SessionEvaluationJob,
+  ): Promise<SessionRiskEvaluationResult> {
     const now = new Date();
 
     this.logger.debug(
@@ -71,18 +73,33 @@ export class SessionRiskEvaluator {
     );
 
     // Fetch or create session risk profile
-    const profile = await this.getOrCreateProfile(job.sessionId, job.realmId, job.userId);
+    const profile = await this.getOrCreateProfile(
+      job.sessionId,
+      job.realmId,
+      job.userId,
+    );
 
     // Get realm thresholds
     const realmThresholds = await this.getRealmThresholds(job.realmId);
 
     // Gather all signal data
-    const [devicePosture, networkContext, biometricData, travelCheck] = await Promise.all([
-      this.gatherDevicePostureData(job.sessionId, job.realmId, job.userId, job.deviceFingerprint ?? null),
-      this.gatherNetworkContextData(job.sessionId, job.realmId, job.userId, job.ipAddress),
-      this.gatherBiometricData(job.sessionId, job.userId, job.realmId),
-      this.performImpossibleTravelCheck(job.userId, job.ipAddress, now),
-    ]);
+    const [devicePosture, networkContext, biometricData, travelCheck] =
+      await Promise.all([
+        this.gatherDevicePostureData(
+          job.sessionId,
+          job.realmId,
+          job.userId,
+          job.deviceFingerprint ?? null,
+        ),
+        this.gatherNetworkContextData(
+          job.sessionId,
+          job.realmId,
+          job.userId,
+          job.ipAddress,
+        ),
+        this.gatherBiometricData(job.sessionId, job.userId, job.realmId),
+        this.performImpossibleTravelCheck(job.userId, job.ipAddress, now),
+      ]);
 
     // Evaluate each signal
     const signals = this.evaluateAllSignals(
@@ -105,7 +122,10 @@ export class SessionRiskEvaluator {
       riskScore,
     );
 
-    const finalScore = Math.min(100, riskScore + policyAdjustment.scoreContribution);
+    const finalScore = Math.min(
+      100,
+      riskScore + policyAdjustment.scoreContribution,
+    );
     const finalRiskLevel = this.scoreToRiskLevel(finalScore);
     const finalAction = determineContinuousAction(finalScore, realmThresholds);
 
@@ -147,7 +167,10 @@ export class SessionRiskEvaluator {
       networkRisk: networkContext.isRisky,
       behavioralAnomaly: biometricData.isAnomalous,
       evaluatedAt: now,
-      nextEvaluationAt: this.calculateNextEvaluation(finalAction, finalRiskLevel),
+      nextEvaluationAt: this.calculateNextEvaluation(
+        finalAction,
+        finalRiskLevel,
+      ),
     };
   }
 
@@ -164,7 +187,9 @@ export class SessionRiskEvaluator {
     let evaluated = 0;
     let errors = 0;
 
-    this.logger.debug(`Starting batch session evaluation for ${sessionIds.length} session(s)`);
+    this.logger.debug(
+      `Starting batch session evaluation for ${sessionIds.length} session(s)`,
+    );
 
     for (const sessionId of sessionIds) {
       try {
@@ -219,7 +244,10 @@ export class SessionRiskEvaluator {
    * Immediately evaluates a session and returns the result.
    * Use this for event-driven evaluation (e.g., after login).
    */
-  async evaluateSessionNow(sessionId: string, reason?: string): Promise<SessionRiskEvaluationResult> {
+  async evaluateSessionNow(
+    sessionId: string,
+    reason?: string,
+  ): Promise<SessionRiskEvaluationResult> {
     const session = await this.prisma.session.findUnique({
       where: { id: sessionId },
       select: {
@@ -305,14 +333,19 @@ export class SessionRiskEvaluator {
     });
 
     const isTrusted = deviceFingerprint
-      ? await this.devicePostureService.isDeviceTrusted(realmId, userId, deviceFingerprint)
+      ? await this.devicePostureService.isDeviceTrusted(
+          realmId,
+          userId,
+          deviceFingerprint,
+        )
       : false;
 
     return {
       record: latestRecord,
       isTrusted,
       nonCompliant: latestRecord
-        ? latestRecord.complianceStatus === 'NON_COMPLIANT' || latestRecord.jailbroken
+        ? latestRecord.complianceStatus === 'NON_COMPLIANT' ||
+          latestRecord.jailbroken
         : false,
     };
   }
@@ -350,10 +383,19 @@ export class SessionRiskEvaluator {
     };
   }
 
-  private async gatherBiometricData(sessionId: string, userId: string, realmId: string) {
-    const summary = await this.biometricsService.getBehavioralSummary(sessionId, userId, realmId);
+  private async gatherBiometricData(
+    sessionId: string,
+    userId: string,
+    realmId: string,
+  ) {
+    const summary = await this.biometricsService.getBehavioralSummary(
+      sessionId,
+      userId,
+      realmId,
+    );
 
-    const isAnomalous = summary !== null &&
+    const isAnomalous =
+      summary !== null &&
       summary.sampleCount >= 5 &&
       summary.riskSignal.triggered &&
       summary.riskSignal.score >= 30;
@@ -418,8 +460,12 @@ export class SessionRiskEvaluator {
 
     if (!lastAssessment?.ipAddress) return null;
 
-    const coords = await this.travelService.lookupCoords(lastAssessment.ipAddress);
-    const location = await this.travelService.lookupLocation(lastAssessment.ipAddress);
+    const coords = await this.travelService.lookupCoords(
+      lastAssessment.ipAddress,
+    );
+    const location = await this.travelService.lookupLocation(
+      lastAssessment.ipAddress,
+    );
 
     if (!coords) return null;
 
@@ -432,7 +478,11 @@ export class SessionRiskEvaluator {
   }
 
   private evaluateAllSignals(
-    devicePosture: { record: unknown; isTrusted: boolean; nonCompliant: boolean },
+    devicePosture: {
+      record: unknown;
+      isTrusted: boolean;
+      nonCompliant: boolean;
+    },
     networkContext: { isRisky: boolean; details: unknown },
     biometricData: { isAnomalous: boolean; summary: unknown },
     travelCheck: { isAnomalous: boolean; details: unknown },
@@ -515,7 +565,9 @@ export class SessionRiskEvaluator {
     signals: ContinuousRiskSignal[],
     riskScore: number,
   ) {
-    const policies = await this.policyService.findAllPolicies({ id: realmId } as Realm);
+    const policies = await this.policyService.findAllPolicies({
+      id: realmId,
+    } as Realm);
 
     let scoreContribution = 0;
     const triggeredPolicies: string[] = [];
@@ -568,9 +620,13 @@ export class SessionRiskEvaluator {
         trustScore,
         stepUpRequired: action === 'STEP_UP',
         stepUpReason: action === 'STEP_UP' ? 'Risk threshold exceeded' : null,
-        stepUpExpiresAt: action === 'STEP_UP' ? new Date(now.getTime() + 15 * 60 * 1000) : null,
+        stepUpExpiresAt:
+          action === 'STEP_UP'
+            ? new Date(now.getTime() + 15 * 60 * 1000)
+            : null,
         terminateSession: action === 'TERMINATE',
-        terminationReason: action === 'TERMINATE' ? 'Critical risk detected' : null,
+        terminationReason:
+          action === 'TERMINATE' ? 'Critical risk detected' : null,
         lastEvaluatedAt: now,
         nextEvaluationAt: this.calculateNextEvaluation(action, finalRiskLevel),
       },
@@ -587,7 +643,11 @@ export class SessionRiskEvaluator {
         triggerReason: job.reason ?? null,
         riskScoreBefore: profile.riskScore,
         riskScoreAfter: finalScore,
-        riskLevelBefore: profile.riskLevel as 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
+        riskLevelBefore: profile.riskLevel as
+          | 'LOW'
+          | 'MEDIUM'
+          | 'HIGH'
+          | 'CRITICAL',
         riskLevelAfter: finalRiskLevel,
         trustScoreBefore: profile.trustScore,
         trustScoreAfter: trustScore,
@@ -600,7 +660,9 @@ export class SessionRiskEvaluator {
     });
   }
 
-  private scoreToRiskLevel(score: number): 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' {
+  private scoreToRiskLevel(
+    score: number,
+  ): 'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL' {
     if (score >= 80) return 'CRITICAL';
     if (score >= 60) return 'HIGH';
     if (score >= 30) return 'MEDIUM';
@@ -613,7 +675,8 @@ export class SessionRiskEvaluator {
     lastEvaluatedAt: Date,
     now: Date,
   ): number {
-    const hoursSinceLastEval = (now.getTime() - lastEvaluatedAt.getTime()) / (1000 * 60 * 60);
+    const hoursSinceLastEval =
+      (now.getTime() - lastEvaluatedAt.getTime()) / (1000 * 60 * 60);
     const decay = Math.min(hoursSinceLastEval * 0.05, 0.5);
 
     let riskAdjustment = 0;
@@ -647,15 +710,22 @@ export class SessionRiskEvaluator {
     return new Date(Date.now() + intervalMinutes * 60 * 1000);
   }
 
-  private calculateDistance(lat1: number, lon1: number, lat2: number, lon2: number): number {
+  private calculateDistance(
+    lat1: number,
+    lon1: number,
+    lat2: number,
+    lon2: number,
+  ): number {
     // Haversine formula for calculating distance between two coordinates
     const R = 6371; // Earth's radius in km
     const dLat = this.toRad(lat2 - lat1);
     const dLon = this.toRad(lon2 - lon1);
     const a =
       Math.sin(dLat / 2) * Math.sin(dLat / 2) +
-      Math.cos(this.toRad(lat1)) * Math.cos(this.toRad(lat2)) *
-      Math.sin(dLon / 2) * Math.sin(dLon / 2);
+      Math.cos(this.toRad(lat1)) *
+        Math.cos(this.toRad(lat2)) *
+        Math.sin(dLon / 2) *
+        Math.sin(dLon / 2);
     const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
     return R * c;
   }
@@ -666,10 +736,14 @@ export class SessionRiskEvaluator {
 
   private actionToDbAction(action: ContinuousRiskAction): string {
     switch (action) {
-      case 'MONITOR': return 'NO_ACTION';
-      case 'ALERT': return 'NOTIFY';
-      case 'STEP_UP': return 'STEP_UP_REQUIRED';
-      case 'TERMINATE': return 'TERMINATE_SESSION';
+      case 'MONITOR':
+        return 'NO_ACTION';
+      case 'ALERT':
+        return 'NOTIFY';
+      case 'STEP_UP':
+        return 'STEP_UP_REQUIRED';
+      case 'TERMINATE':
+        return 'TERMINATE_SESSION';
     }
   }
 }

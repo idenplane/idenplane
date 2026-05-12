@@ -1,4 +1,8 @@
-import { ForbiddenException, NotFoundException, BadRequestException } from '@nestjs/common';
+import {
+  ForbiddenException,
+  NotFoundException,
+  BadRequestException,
+} from '@nestjs/common';
 import { ImpersonationService } from './impersonation.service.js';
 import {
   createMockPrismaService,
@@ -14,7 +18,7 @@ const realm = {
   impersonationMaxDuration: 1800,
 } as any;
 
-const realmDisabled = { ...realm, impersonationEnabled: false } as any;
+const realmDisabled = { ...realm, impersonationEnabled: false };
 
 const adminUser = {
   id: 'admin-1',
@@ -67,7 +71,10 @@ describe('ImpersonationService', () => {
   let prisma: MockPrismaService;
   let jwkService: { signJwt: jest.Mock };
   let crypto: { generateSecret: jest.Mock; sha256: jest.Mock };
-  let eventsService: { recordLoginEvent: jest.Mock; recordAdminEvent: jest.Mock };
+  let eventsService: {
+    recordLoginEvent: jest.Mock;
+    recordAdminEvent: jest.Mock;
+  };
 
   beforeEach(() => {
     prisma = createMockPrismaService();
@@ -97,8 +104,8 @@ describe('ImpersonationService', () => {
   describe('startImpersonation', () => {
     beforeEach(() => {
       prisma.user.findUnique
-        .mockResolvedValueOnce(targetUser)  // target user lookup
-        .mockResolvedValueOnce(adminUser);  // admin user lookup
+        .mockResolvedValueOnce(targetUser) // target user lookup
+        .mockResolvedValueOnce(adminUser); // admin user lookup
       prisma.session.create.mockResolvedValue(session);
       (prisma as any).impersonationSession = {
         create: jest.fn().mockResolvedValue(impersonationSession),
@@ -110,7 +117,12 @@ describe('ImpersonationService', () => {
     });
 
     it('returns tokens with impersonation claims on success', async () => {
-      const result = await service.startImpersonation(realm, 'admin-1', 'target-1', '127.0.0.1');
+      const result = await service.startImpersonation(
+        realm,
+        'admin-1',
+        'target-1',
+        '127.0.0.1',
+      );
 
       expect(result).toMatchObject({
         access_token: 'signed-jwt',
@@ -123,7 +135,7 @@ describe('ImpersonationService', () => {
       // Access token payload should carry impersonation claims
       const [payload] = jwkService.signJwt.mock.calls[0];
       expect(payload.impersonated).toBe(true);
-      expect((payload as any).act).toEqual({ sub: 'admin-1' });
+      expect(payload.act).toEqual({ sub: 'admin-1' });
       expect(payload.sub).toBe('target-1');
     });
 
@@ -144,7 +156,10 @@ describe('ImpersonationService', () => {
 
     it('throws NotFoundException when target user belongs to a different realm', async () => {
       prisma.user.findUnique.mockReset();
-      prisma.user.findUnique.mockResolvedValueOnce({ ...targetUser, realmId: 'other-realm' });
+      prisma.user.findUnique.mockResolvedValueOnce({
+        ...targetUser,
+        realmId: 'other-realm',
+      });
 
       await expect(
         service.startImpersonation(realm, 'admin-1', 'target-1'),
@@ -153,7 +168,10 @@ describe('ImpersonationService', () => {
 
     it('throws BadRequestException when target user is disabled', async () => {
       prisma.user.findUnique.mockReset();
-      prisma.user.findUnique.mockResolvedValueOnce({ ...targetUser, enabled: false });
+      prisma.user.findUnique.mockResolvedValueOnce({
+        ...targetUser,
+        enabled: false,
+      });
 
       await expect(
         service.startImpersonation(realm, 'admin-1', 'target-1'),
@@ -163,7 +181,7 @@ describe('ImpersonationService', () => {
     it('throws BadRequestException on self-impersonation', async () => {
       prisma.user.findUnique.mockReset();
       prisma.user.findUnique
-        .mockResolvedValueOnce(adminUser)  // target (same id)
+        .mockResolvedValueOnce(adminUser) // target (same id)
         .mockResolvedValueOnce(adminUser); // admin
 
       await expect(
@@ -175,7 +193,7 @@ describe('ImpersonationService', () => {
       prisma.user.findUnique.mockReset();
       prisma.user.findUnique
         .mockResolvedValueOnce(targetUser) // target exists
-        .mockResolvedValueOnce(null);      // admin not found
+        .mockResolvedValueOnce(null); // admin not found
 
       await expect(
         service.startImpersonation(realm, 'admin-1', 'target-1'),
@@ -183,7 +201,12 @@ describe('ImpersonationService', () => {
     });
 
     it('records IMPERSONATION_START login event', async () => {
-      await service.startImpersonation(realm, 'admin-1', 'target-1', '127.0.0.1');
+      await service.startImpersonation(
+        realm,
+        'admin-1',
+        'target-1',
+        '127.0.0.1',
+      );
 
       expect(eventsService.recordLoginEvent).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -195,7 +218,12 @@ describe('ImpersonationService', () => {
     });
 
     it('records admin event for audit trail', async () => {
-      await service.startImpersonation(realm, 'admin-1', 'target-1', '127.0.0.1');
+      await service.startImpersonation(
+        realm,
+        'admin-1',
+        'target-1',
+        '127.0.0.1',
+      );
 
       expect(eventsService.recordAdminEvent).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -227,7 +255,9 @@ describe('ImpersonationService', () => {
     beforeEach(() => {
       (prisma as any).impersonationSession = {
         findUnique: jest.fn().mockResolvedValue(impersonationSession),
-        update: jest.fn().mockResolvedValue({ ...impersonationSession, active: false }),
+        update: jest
+          .fn()
+          .mockResolvedValue({ ...impersonationSession, active: false }),
         create: jest.fn(),
       };
       prisma.refreshToken.updateMany.mockResolvedValue({ count: 1 });
@@ -235,7 +265,12 @@ describe('ImpersonationService', () => {
     });
 
     it('ends an active impersonation session successfully', async () => {
-      await service.endImpersonation(realm, 'imp-session-1', 'admin-1', '127.0.0.1');
+      await service.endImpersonation(
+        realm,
+        'imp-session-1',
+        'admin-1',
+        '127.0.0.1',
+      );
 
       expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -289,7 +324,12 @@ describe('ImpersonationService', () => {
     });
 
     it('records IMPERSONATION_END login event', async () => {
-      await service.endImpersonation(realm, 'imp-session-1', 'admin-1', '127.0.0.1');
+      await service.endImpersonation(
+        realm,
+        'imp-session-1',
+        'admin-1',
+        '127.0.0.1',
+      );
 
       expect(eventsService.recordLoginEvent).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -301,7 +341,12 @@ describe('ImpersonationService', () => {
     });
 
     it('records admin event on end', async () => {
-      await service.endImpersonation(realm, 'imp-session-1', 'admin-1', '127.0.0.1');
+      await service.endImpersonation(
+        realm,
+        'imp-session-1',
+        'admin-1',
+        '127.0.0.1',
+      );
 
       expect(eventsService.recordAdminEvent).toHaveBeenCalledWith(
         expect.objectContaining({

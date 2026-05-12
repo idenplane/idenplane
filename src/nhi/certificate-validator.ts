@@ -53,7 +53,10 @@ export class CertificateValidator {
       }
 
       if (!certificatePem.includes('-----BEGIN CERTIFICATE-----')) {
-        return { valid: false, error: 'Invalid certificate format: missing PEM header' };
+        return {
+          valid: false,
+          error: 'Invalid certificate format: missing PEM header',
+        };
       }
 
       const info = this.parseCertificateInfo(certificatePem);
@@ -61,7 +64,10 @@ export class CertificateValidator {
     } catch (error) {
       return {
         valid: false,
-        error: error instanceof Error ? error.message : 'Failed to parse certificate',
+        error:
+          error instanceof Error
+            ? error.message
+            : 'Failed to parse certificate',
       };
     }
   }
@@ -85,7 +91,10 @@ export class CertificateValidator {
       if (options.allowNotYetValid) {
         return { valid: true, info };
       }
-      return { valid: false, error: 'Certificate is not yet valid (notBefore is in the future)' };
+      return {
+        valid: false,
+        error: 'Certificate is not yet valid (notBefore is in the future)',
+      };
     }
 
     if (now > notAfter) {
@@ -114,11 +123,20 @@ export class CertificateValidator {
     }
 
     // Normalize fingerprints for comparison
-    const normalizedActual = info.fingerprint.replace(/^SHA256:/i, '').replace(/:/g, '').toLowerCase();
-    const normalizedExpected = expectedFingerprint.replace(/^SHA256:/i, '').replace(/:/g, '').toLowerCase();
+    const normalizedActual = info.fingerprint
+      .replace(/^SHA256:/i, '')
+      .replace(/:/g, '')
+      .toLowerCase();
+    const normalizedExpected = expectedFingerprint
+      .replace(/^SHA256:/i, '')
+      .replace(/:/g, '')
+      .toLowerCase();
 
     if (normalizedActual !== normalizedExpected) {
-      return { valid: false, error: 'Certificate fingerprint does not match expected value' };
+      return {
+        valid: false,
+        error: 'Certificate fingerprint does not match expected value',
+      };
     }
 
     return { valid: true, info };
@@ -140,7 +158,10 @@ export class CertificateValidator {
     }
 
     if (!clientIp) {
-      return { valid: false, error: 'Client IP is required for IP range validation' };
+      return {
+        valid: false,
+        error: 'Client IP is required for IP range validation',
+      };
     }
 
     const isAllowed = allowedIpRanges.some((range) =>
@@ -148,7 +169,10 @@ export class CertificateValidator {
     );
 
     if (!isAllowed) {
-      return { valid: false, error: `Client IP ${clientIp} is not in allowed ranges` };
+      return {
+        valid: false,
+        error: `Client IP ${clientIp} is not in allowed ranges`,
+      };
     }
 
     return { valid: true };
@@ -181,15 +205,25 @@ export class CertificateValidator {
 
     // Step 3: Verify fingerprint if expected
     if (options.expectedFingerprint) {
-      const fingerprintResult = this.verifyFingerprint(info, options.expectedFingerprint);
+      const fingerprintResult = this.verifyFingerprint(
+        info,
+        options.expectedFingerprint,
+      );
       if (!fingerprintResult.valid) {
         return fingerprintResult;
       }
     }
 
     // Step 4: Validate IP range if allowed ranges specified
-    if (options.allowedIpRanges && options.allowedIpRanges.length > 0 && options.clientIp) {
-      const ipResult = this.validateIpRange(options.clientIp, options.allowedIpRanges);
+    if (
+      options.allowedIpRanges &&
+      options.allowedIpRanges.length > 0 &&
+      options.clientIp
+    ) {
+      const ipResult = this.validateIpRange(
+        options.clientIp,
+        options.allowedIpRanges,
+      );
       if (!ipResult.valid) {
         return ipResult;
       }
@@ -202,7 +236,9 @@ export class CertificateValidator {
    * Parse certificate information from PEM string.
    * Note: This is a simplified parser; production use should use node-forge or similar.
    */
-  private static parseCertificateInfo(certificatePem: string): CertificateInfoDto {
+  private static parseCertificateInfo(
+    certificatePem: string,
+  ): CertificateInfoDto {
     // Extract base64 content between PEM markers
     const match = certificatePem.match(
       /-----BEGIN CERTIFICATE-----([\s\S]*?)-----END CERTIFICATE-----/,
@@ -257,7 +293,9 @@ export class CertificateValidator {
 
     // Extract SANs
     const sans: string[] = [];
-    const sanMatch = certificatePem.match(/Subject Alternative Name:?\s*([^\n]+)/gi);
+    const sanMatch = certificatePem.match(
+      /Subject Alternative Name:?\s*([^\n]+)/gi,
+    );
     if (sanMatch) {
       for (const match of sanMatch) {
         const sansContent = match.replace(/Subject Alternative Name:?\s*/i, '');
@@ -277,7 +315,8 @@ export class CertificateValidator {
 
     return {
       subject: subjectParts.length > 0 ? subjectParts.join(', ') : 'Unknown',
-      issuer: issuerParts.length > 0 ? issuerParts.join(', ') : `CN=Unknown Issuer`,
+      issuer:
+        issuerParts.length > 0 ? issuerParts.join(', ') : `CN=Unknown Issuer`,
       notBefore: notBefore.toISOString(),
       notAfter: notAfter.toISOString(),
       fingerprint: formattedFingerprint,

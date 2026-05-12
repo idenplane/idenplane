@@ -16,7 +16,12 @@ export class ThemeVersionService {
   /**
    * Calculate checksum for theme data for integrity verification.
    */
-  private calculateChecksum(styles: object, components: object[], assets: object, settings: object): string {
+  private calculateChecksum(
+    styles: object,
+    components: object[],
+    assets: object,
+    settings: object,
+  ): string {
     const data = JSON.stringify({ styles, components, assets, settings });
     return createHash('sha256').update(data).digest('hex').substring(0, 16);
   }
@@ -72,7 +77,10 @@ export class ThemeVersionService {
   /**
    * Get a specific version of a theme.
    */
-  async getVersion(themeId: string, version: number): Promise<ThemeVersion | null> {
+  async getVersion(
+    themeId: string,
+    version: number,
+  ): Promise<ThemeVersion | null> {
     return this.prisma.themeVersion.findUnique({
       where: { themeId_version: { themeId, version } },
     });
@@ -81,13 +89,19 @@ export class ThemeVersionService {
   /**
    * Restore a theme to a specific version.
    */
-  async restoreVersion(themeId: string, version: number, userId?: string): Promise<Theme> {
+  async restoreVersion(
+    themeId: string,
+    version: number,
+    userId?: string,
+  ): Promise<Theme> {
     const themeVersion = await this.prisma.themeVersion.findUnique({
       where: { themeId_version: { themeId, version } },
     });
 
     if (!themeVersion) {
-      throw new NotFoundException(`Version ${version} not found for theme '${themeId}'`);
+      throw new NotFoundException(
+        `Version ${version} not found for theme '${themeId}'`,
+      );
     }
 
     // Increment the theme's version when restoring
@@ -115,7 +129,11 @@ export class ThemeVersionService {
   /**
    * Compare two versions of a theme and return their differences.
    */
-  async compareVersions(themeId: string, version1: number, version2: number): Promise<{
+  async compareVersions(
+    themeId: string,
+    version1: number,
+    version2: number,
+  ): Promise<{
     version1: ThemeVersion;
     version2: ThemeVersion;
     stylesChanged: boolean;
@@ -133,19 +151,25 @@ export class ThemeVersionService {
     ]);
 
     if (!v1) {
-      throw new NotFoundException(`Version ${version1} not found for theme '${themeId}'`);
+      throw new NotFoundException(
+        `Version ${version1} not found for theme '${themeId}'`,
+      );
     }
     if (!v2) {
-      throw new NotFoundException(`Version ${version2} not found for theme '${themeId}'`);
+      throw new NotFoundException(
+        `Version ${version2} not found for theme '${themeId}'`,
+      );
     }
 
     return {
       version1: v1,
       version2: v2,
       stylesChanged: JSON.stringify(v1.styles) !== JSON.stringify(v2.styles),
-      componentsChanged: JSON.stringify(v1.components) !== JSON.stringify(v2.components),
+      componentsChanged:
+        JSON.stringify(v1.components) !== JSON.stringify(v2.components),
       assetsChanged: JSON.stringify(v1.assets) !== JSON.stringify(v2.assets),
-      settingsChanged: JSON.stringify(v1.settings) !== JSON.stringify(v2.settings),
+      settingsChanged:
+        JSON.stringify(v1.settings) !== JSON.stringify(v2.settings),
     };
   }
 
@@ -163,12 +187,14 @@ export class ThemeVersionService {
       return 0;
     }
 
-    const idsToDelete = versions.map(v => v.id);
+    const idsToDelete = versions.map((v) => v.id);
     await this.prisma.themeVersion.deleteMany({
       where: { id: { in: idsToDelete } },
     });
 
-    this.logger.log(`Pruned ${idsToDelete.length} old versions for theme '${themeId}'`);
+    this.logger.log(
+      `Pruned ${idsToDelete.length} old versions for theme '${themeId}'`,
+    );
     return idsToDelete.length;
   }
 
@@ -181,7 +207,9 @@ export class ThemeVersionService {
     });
 
     if (!themeVersion) {
-      throw new NotFoundException(`Version ${version} not found for theme '${themeId}'`);
+      throw new NotFoundException(
+        `Version ${version} not found for theme '${themeId}'`,
+      );
     }
 
     const expectedChecksum = this.calculateChecksum(

@@ -152,9 +152,10 @@ export class PreUpgradeValidatorService {
       };
     } catch (err: unknown) {
       // Exit code non-zero means there ARE pending migrations
-      const output = err instanceof Error && 'stdout' in err
-        ? String((err as NodeJS.ErrnoException & { stdout?: Buffer }).stdout)
-        : String(err);
+      const output =
+        err instanceof Error && 'stdout' in err
+          ? String((err as NodeJS.ErrnoException & { stdout?: Buffer }).stdout)
+          : String(err);
 
       // Parse pending migrations from output
       const pendingMigrations = this.parsePendingMigrations(output);
@@ -264,16 +265,19 @@ export class PreUpgradeValidatorService {
   private async checkDatabaseSize(): Promise<PreUpgradeCheck> {
     try {
       // Query PostgreSQL for database size
-      const result = await this.prisma.$queryRaw<Array<{ pg_size_pretty: string; size_bytes: bigint }>>`
+      const result = await this.prisma.$queryRaw<
+        Array<{ pg_size_pretty: string; size_bytes: bigint }>
+      >`
         SELECT pg_size_pretty(pg_database_size(current_database())) as "pg_size_pretty",
                pg_database_size(current_database()) as size_bytes
       `;
 
       if (result.length > 0) {
         const row = result[0];
-        const sizeBytes = typeof row.size_bytes === 'bigint'
-          ? Number(row.size_bytes)
-          : Number(row.size_bytes);
+        const sizeBytes =
+          typeof row.size_bytes === 'bigint'
+            ? Number(row.size_bytes)
+            : Number(row.size_bytes);
         const sizeGb = sizeBytes / (1024 * 1024 * 1024);
 
         if (sizeGb > 50) {
@@ -288,7 +292,8 @@ export class PreUpgradeValidatorService {
             name: 'database_size',
             status: 'warn',
             message: `Large database: ${row.pg_size_pretty}`,
-            details: 'Consider scheduling maintenance window for large database upgrades',
+            details:
+              'Consider scheduling maintenance window for large database upgrades',
           };
         } else {
           return {
@@ -325,9 +330,10 @@ export class PreUpgradeValidatorService {
       `;
 
       if (result.length > 0) {
-        const count = typeof result[0].count === 'bigint'
-          ? Number(result[0].count)
-          : Number(result[0].count);
+        const count =
+          typeof result[0].count === 'bigint'
+            ? Number(result[0].count)
+            : Number(result[0].count);
 
         if (count > 100) {
           return {
@@ -366,7 +372,9 @@ export class PreUpgradeValidatorService {
   private async checkLongRunningTransactions(): Promise<PreUpgradeCheck> {
     try {
       // Find transactions running longer than 30 seconds
-      const result = await this.prisma.$queryRaw<Array<{ pid: number; duration_seconds: number; state: string }>>`
+      const result = await this.prisma.$queryRaw<
+        Array<{ pid: number; duration_seconds: number; state: string }>
+      >`
         SELECT pid,
                EXTRACT(EPOCH FROM (now() - state_change))::integer as duration_seconds,
                state

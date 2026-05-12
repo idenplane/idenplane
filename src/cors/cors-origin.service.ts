@@ -101,7 +101,9 @@ export class CorsOriginService {
         try {
           const { origin } = new URL(baseUrl);
           origins.add(origin);
-        } catch { /* invalid BASE_URL — skip */ }
+        } catch {
+          /* invalid BASE_URL — skip */
+        }
       }
       // Also allow localhost origins for development (never in production)
       if (process.env['NODE_ENV'] !== 'production') {

@@ -35,7 +35,9 @@ export class RotationPolicyStatusDto {
   @ApiProperty({ description: 'Whether rotation is required based on policy' })
   rotationRequired!: boolean;
 
-  @ApiPropertyOptional({ description: 'Current policy that applies to this credential' })
+  @ApiPropertyOptional({
+    description: 'Current policy that applies to this credential',
+  })
   applicablePolicy?: {
     id: string;
     name: string;
@@ -54,7 +56,9 @@ export class RotationPolicySummaryDto {
   @ApiProperty({ description: 'Total credentials requiring rotation' })
   totalRequiringRotation!: number;
 
-  @ApiProperty({ description: 'Credentials due for rotation based on policy threshold' })
+  @ApiProperty({
+    description: 'Credentials due for rotation based on policy threshold',
+  })
   dueForRotation!: number;
 
   @ApiProperty({ description: 'Credentials that must rotate due to max age' })

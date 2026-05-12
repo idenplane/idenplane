@@ -21,10 +21,14 @@ export class PluginRegistry {
   /** Register a plugin in the in-memory registry. */
   register(plugin: AuthMePlugin, enabled = true): void {
     if (this.entries.has(plugin.name)) {
-      this.logger.warn(`Plugin '${plugin.name}' is already registered; overwriting.`);
+      this.logger.warn(
+        `Plugin '${plugin.name}' is already registered; overwriting.`,
+      );
     }
     this.entries.set(plugin.name, { plugin, enabled, loadedAt: new Date() });
-    this.logger.debug(`Registered plugin '${plugin.name}' (v${plugin.version})`);
+    this.logger.debug(
+      `Registered plugin '${plugin.name}' (v${plugin.version})`,
+    );
   }
 
   /** Unregister a plugin by name. Returns true if it existed. */

@@ -19,7 +19,15 @@ export interface FlowStepCondition {
 
 export interface FlowStep {
   id: string;
-  type: 'password' | 'totp' | 'webauthn' | 'social' | 'ldap' | 'email_otp' | 'magic_link' | 'consent';
+  type:
+    | 'password'
+    | 'totp'
+    | 'webauthn'
+    | 'social'
+    | 'ldap'
+    | 'email_otp'
+    | 'magic_link'
+    | 'consent';
   required: boolean;
   order: number;
   condition?: FlowStepCondition | null;
@@ -109,7 +117,9 @@ export class AuthFlowService {
       where: { realmId_name: { realmId, name: dto.name } },
     });
     if (existing) {
-      throw new ConflictException(`Authentication flow '${dto.name}' already exists in this realm`);
+      throw new ConflictException(
+        `Authentication flow '${dto.name}' already exists in this realm`,
+      );
     }
 
     if (dto.isDefault) {
@@ -156,7 +166,9 @@ export class AuthFlowService {
         where: { realmId, name: dto.name, NOT: { id } },
       });
       if (existing) {
-        throw new ConflictException(`Authentication flow '${dto.name}' already exists in this realm`);
+        throw new ConflictException(
+          `Authentication flow '${dto.name}' already exists in this realm`,
+        );
       }
     }
 
@@ -170,7 +182,9 @@ export class AuthFlowService {
         ...(dto.name !== undefined && { name: dto.name }),
         ...(dto.description !== undefined && { description: dto.description }),
         ...(dto.isDefault !== undefined && { isDefault: dto.isDefault }),
-        ...(dto.steps !== undefined && { steps: dto.steps as unknown as Prisma.InputJsonValue }),
+        ...(dto.steps !== undefined && {
+          steps: dto.steps as unknown as Prisma.InputJsonValue,
+        }),
       },
     });
   }
@@ -244,7 +258,9 @@ export class AuthFlowService {
     const steps = flow.steps as unknown as FlowStep[];
     const step = steps.find((s) => s.id === stepId);
     if (!step) {
-      throw new NotFoundException(`Step '${stepId}' not found in flow '${flowId}'`);
+      throw new NotFoundException(
+        `Step '${stepId}' not found in flow '${flowId}'`,
+      );
     }
 
     const conditionMet = step.condition
@@ -284,7 +300,9 @@ export class AuthFlowService {
 
     const currentIndex = steps.findIndex((s) => s.id === currentStepId);
     if (currentIndex === -1) {
-      throw new BadRequestException(`Step '${currentStepId}' not found in flow`);
+      throw new BadRequestException(
+        `Step '${currentStepId}' not found in flow`,
+      );
     }
 
     // Look for the next applicable step after the current one
@@ -296,7 +314,10 @@ export class AuthFlowService {
    * Evaluate a condition against the execution context.
    * Returns true when the condition is satisfied.
    */
-  evaluateCondition(condition: FlowStepCondition, context: FlowContext): boolean {
+  evaluateCondition(
+    condition: FlowStepCondition,
+    context: FlowContext,
+  ): boolean {
     const rawValue = this.resolveField(condition.field, context);
 
     switch (condition.operator) {
@@ -315,7 +336,9 @@ export class AuthFlowService {
       case 'in': {
         if (!Array.isArray(condition.value)) return false;
         if (Array.isArray(rawValue)) {
-          return rawValue.some((v) => (condition.value as unknown[]).includes(v));
+          return rawValue.some((v) =>
+            (condition.value as unknown[]).includes(v),
+          );
         }
         return (condition.value as unknown[]).includes(rawValue);
       }
@@ -323,13 +346,17 @@ export class AuthFlowService {
       case 'not_in': {
         if (!Array.isArray(condition.value)) return true;
         if (Array.isArray(rawValue)) {
-          return !rawValue.some((v) => (condition.value as unknown[]).includes(v));
+          return !rawValue.some((v) =>
+            (condition.value as unknown[]).includes(v),
+          );
         }
         return !(condition.value as unknown[]).includes(rawValue);
       }
 
       default:
-        this.logger.warn(`Unknown condition operator: ${(condition as FlowStepCondition & { operator: string }).operator}`);
+        this.logger.warn(
+          `Unknown condition operator: ${(condition as FlowStepCondition & { operator: string }).operator}`,
+        );
         return false;
     }
   }
@@ -374,7 +401,9 @@ export class AuthFlowService {
 
     const orders = steps.map((s) => s.order);
     if (new Set(orders).size !== orders.length) {
-      throw new BadRequestException('Step order values must be unique within a flow');
+      throw new BadRequestException(
+        'Step order values must be unique within a flow',
+      );
     }
 
     // Validate fallbackStepId references
@@ -388,7 +417,10 @@ export class AuthFlowService {
   }
 
   /** Remove the isDefault flag from all flows in the realm, optionally excluding one. */
-  private async clearDefaultFlag(realmId: string, excludeId?: string): Promise<void> {
+  private async clearDefaultFlag(
+    realmId: string,
+    excludeId?: string,
+  ): Promise<void> {
     await this.prisma.authenticationFlow.updateMany({
       where: {
         realmId,
@@ -406,7 +438,11 @@ export class AuthFlowService {
     const parts = field.split('.');
     let current: unknown = context;
     for (const part of parts) {
-      if (current === null || current === undefined || typeof current !== 'object') {
+      if (
+        current === null ||
+        current === undefined ||
+        typeof current !== 'object'
+      ) {
         return undefined;
       }
       current = (current as Record<string, unknown>)[part];
@@ -418,7 +454,10 @@ export class AuthFlowService {
    * Return the first step from a sorted list whose condition is met (or has no
    * condition).  Returns null when no applicable step remains.
    */
-  private firstApplicableStep(steps: FlowStep[], context: FlowContext): FlowStep | null {
+  private firstApplicableStep(
+    steps: FlowStep[],
+    context: FlowContext,
+  ): FlowStep | null {
     for (const step of steps) {
       if (!step.condition) return step;
       if (this.evaluateCondition(step.condition, context)) return step;

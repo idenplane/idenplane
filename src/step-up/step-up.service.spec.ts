@@ -104,8 +104,16 @@ describe('StepUpService', () => {
 
     it('returns the highest ACR level from active records', async () => {
       mockStepUpRecordFindMany.mockResolvedValue([
-        { sessionId: 'session-1', acrLevel: ACR_MFA, expiresAt: futureDate(600) },
-        { sessionId: 'session-1', acrLevel: ACR_PASSWORD, expiresAt: futureDate(600) },
+        {
+          sessionId: 'session-1',
+          acrLevel: ACR_MFA,
+          expiresAt: futureDate(600),
+        },
+        {
+          sessionId: 'session-1',
+          acrLevel: ACR_PASSWORD,
+          expiresAt: futureDate(600),
+        },
       ]);
       const acr = await service.getSessionAcr('session-1');
       expect(acr).toBe(ACR_MFA);
@@ -113,8 +121,16 @@ describe('StepUpService', () => {
 
     it('returns ACR_WEBAUTHN when webauthn record is present', async () => {
       mockStepUpRecordFindMany.mockResolvedValue([
-        { sessionId: 'session-1', acrLevel: ACR_WEBAUTHN, expiresAt: futureDate(600) },
-        { sessionId: 'session-1', acrLevel: ACR_MFA, expiresAt: futureDate(600) },
+        {
+          sessionId: 'session-1',
+          acrLevel: ACR_WEBAUTHN,
+          expiresAt: futureDate(600),
+        },
+        {
+          sessionId: 'session-1',
+          acrLevel: ACR_MFA,
+          expiresAt: futureDate(600),
+        },
       ]);
       const acr = await service.getSessionAcr('session-1');
       expect(acr).toBe(ACR_WEBAUTHN);
@@ -199,7 +215,11 @@ describe('StepUpService', () => {
     it('returns true when session ACR satisfies the required level', async () => {
       // getSessionAcr will return ACR_MFA
       mockStepUpRecordFindMany.mockResolvedValue([
-        { sessionId: 'session-1', acrLevel: ACR_MFA, expiresAt: futureDate(600) },
+        {
+          sessionId: 'session-1',
+          acrLevel: ACR_MFA,
+          expiresAt: futureDate(600),
+        },
       ]);
       const cached = await service.isStepUpCached('session-1', ACR_MFA);
       expect(cached).toBe(true);
@@ -207,7 +227,11 @@ describe('StepUpService', () => {
 
     it('returns true when session ACR is stronger than required', async () => {
       mockStepUpRecordFindMany.mockResolvedValue([
-        { sessionId: 'session-1', acrLevel: ACR_WEBAUTHN, expiresAt: futureDate(600) },
+        {
+          sessionId: 'session-1',
+          acrLevel: ACR_WEBAUTHN,
+          expiresAt: futureDate(600),
+        },
       ]);
       const cached = await service.isStepUpCached('session-1', ACR_MFA);
       expect(cached).toBe(true);

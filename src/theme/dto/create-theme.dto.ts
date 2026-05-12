@@ -1,4 +1,11 @@
-import { IsString, IsOptional, IsBoolean, IsObject, IsInt, Min } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsObject,
+  IsInt,
+  Min,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateThemeDto {
@@ -16,7 +23,10 @@ export class CreateThemeDto {
   @IsString()
   description?: string;
 
-  @ApiPropertyOptional({ example: 'login', description: 'Type: login, account, email, or full' })
+  @ApiPropertyOptional({
+    example: 'login',
+    description: 'Type: login, account, email, or full',
+  })
   @IsOptional()
   @IsString()
   themeType?: string;

@@ -1,4 +1,14 @@
-import { IsString, IsOptional, IsBoolean, IsInt, IsArray, IsObject, Min, MinLength, Matches } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsInt,
+  IsArray,
+  IsObject,
+  Min,
+  MinLength,
+  Matches,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateRealmDto {
@@ -131,36 +141,54 @@ export class CreateRealmDto {
   permanentLockoutAfter?: number;
 
   // Registration
-  @ApiPropertyOptional({ default: true, description: 'Allow self-service user registration' })
+  @ApiPropertyOptional({
+    default: true,
+    description: 'Allow self-service user registration',
+  })
   @IsOptional()
   @IsBoolean()
   registrationAllowed?: boolean;
 
   // Email verification
-  @ApiPropertyOptional({ default: false, description: 'Require email verification before login' })
+  @ApiPropertyOptional({
+    default: false,
+    description: 'Require email verification before login',
+  })
   @IsOptional()
   @IsBoolean()
   requireEmailVerification?: boolean;
 
   // Magic link / passwordless authentication
-  @ApiPropertyOptional({ default: false, description: 'Enable magic link / passwordless email authentication' })
+  @ApiPropertyOptional({
+    default: false,
+    description: 'Enable magic link / passwordless email authentication',
+  })
   @IsOptional()
   @IsBoolean()
   magicLinkEnabled?: boolean;
 
-  @ApiPropertyOptional({ default: 600, description: 'Magic link expiry in seconds (default 10 minutes)' })
+  @ApiPropertyOptional({
+    default: 600,
+    description: 'Magic link expiry in seconds (default 10 minutes)',
+  })
   @IsOptional()
   @IsInt()
   @Min(60)
   magicLinkExpirySeconds?: number;
 
-  @ApiPropertyOptional({ default: 3, description: 'Max magic link requests per email per rate limit window' })
+  @ApiPropertyOptional({
+    default: 3,
+    description: 'Max magic link requests per email per rate limit window',
+  })
   @IsOptional()
   @IsInt()
   @Min(1)
   magicLinkRateLimitPerEmail?: number;
 
-  @ApiPropertyOptional({ default: 900, description: 'Magic link rate limit window in seconds (default 15 minutes)' })
+  @ApiPropertyOptional({
+    default: 900,
+    description: 'Magic link rate limit window in seconds (default 15 minutes)',
+  })
   @IsOptional()
   @IsInt()
   @Min(60)
@@ -171,7 +199,10 @@ export class CreateRealmDto {
   @IsString()
   magicLinkEmailSubject?: string;
 
-  @ApiPropertyOptional({ description: 'Magic link email body template (supports {{link}} and {{email}} placeholders)' })
+  @ApiPropertyOptional({
+    description:
+      'Magic link email body template (supports {{link}} and {{email}} placeholders)',
+  })
   @IsOptional()
   @IsString()
   magicLinkEmailTemplate?: string;
@@ -207,62 +238,92 @@ export class CreateRealmDto {
   adminEventsEnabled?: boolean;
 
   // Rate limiting
-  @ApiPropertyOptional({ default: false, description: 'Enable per-client/user/IP rate limiting' })
+  @ApiPropertyOptional({
+    default: false,
+    description: 'Enable per-client/user/IP rate limiting',
+  })
   @IsOptional()
   @IsBoolean()
   rateLimitEnabled?: boolean;
 
-  @ApiPropertyOptional({ default: 60, description: 'Max token requests per minute per OAuth client' })
+  @ApiPropertyOptional({
+    default: 60,
+    description: 'Max token requests per minute per OAuth client',
+  })
   @IsOptional()
   @IsInt()
   @Min(1)
   clientRateLimitPerMinute?: number;
 
-  @ApiPropertyOptional({ default: 1000, description: 'Max token requests per hour per OAuth client' })
+  @ApiPropertyOptional({
+    default: 1000,
+    description: 'Max token requests per hour per OAuth client',
+  })
   @IsOptional()
   @IsInt()
   @Min(1)
   clientRateLimitPerHour?: number;
 
-  @ApiPropertyOptional({ default: 30, description: 'Max admin API requests per minute per user' })
+  @ApiPropertyOptional({
+    default: 30,
+    description: 'Max admin API requests per minute per user',
+  })
   @IsOptional()
   @IsInt()
   @Min(1)
   userRateLimitPerMinute?: number;
 
-  @ApiPropertyOptional({ default: 500, description: 'Max admin API requests per hour per user' })
+  @ApiPropertyOptional({
+    default: 500,
+    description: 'Max admin API requests per hour per user',
+  })
   @IsOptional()
   @IsInt()
   @Min(1)
   userRateLimitPerHour?: number;
 
-  @ApiPropertyOptional({ default: 20, description: 'Max login requests per minute per IP address' })
+  @ApiPropertyOptional({
+    default: 20,
+    description: 'Max login requests per minute per IP address',
+  })
   @IsOptional()
   @IsInt()
   @Min(1)
   ipRateLimitPerMinute?: number;
 
-  @ApiPropertyOptional({ default: 200, description: 'Max login requests per hour per IP address' })
+  @ApiPropertyOptional({
+    default: 200,
+    description: 'Max login requests per hour per IP address',
+  })
   @IsOptional()
   @IsInt()
   @Min(1)
   ipRateLimitPerHour?: number;
 
   // Session management
-  @ApiPropertyOptional({ default: 10, description: 'Maximum number of concurrent active sessions per user (oldest session is evicted when the limit is reached, 0 = unlimited)' })
+  @ApiPropertyOptional({
+    default: 10,
+    description:
+      'Maximum number of concurrent active sessions per user (oldest session is evicted when the limit is reached, 0 = unlimited)',
+  })
   @IsOptional()
   @IsInt()
   @Min(0)
   maxSessionsPerUser?: number;
 
   // Theming
-  @ApiPropertyOptional({ default: 'authme', description: 'Name of the theme preset to use' })
+  @ApiPropertyOptional({
+    default: 'authme',
+    description: 'Name of the theme preset to use',
+  })
   @IsOptional()
   @IsString()
   @MinLength(1)
   themeName?: string;
 
-  @ApiPropertyOptional({ description: 'Realm theme configuration (color overrides)' })
+  @ApiPropertyOptional({
+    description: 'Realm theme configuration (color overrides)',
+  })
   @IsOptional()
   @IsObject()
   theme?: Record<string, unknown>;
@@ -279,25 +340,37 @@ export class CreateRealmDto {
   @MinLength(1)
   accountTheme?: string;
 
-  @ApiPropertyOptional({ default: 'authme', description: 'Email template theme' })
+  @ApiPropertyOptional({
+    default: 'authme',
+    description: 'Email template theme',
+  })
   @IsOptional()
   @IsString()
   @MinLength(1)
   emailTheme?: string;
 
   // Impersonation
-  @ApiPropertyOptional({ default: false, description: 'Allow admin impersonation of users' })
+  @ApiPropertyOptional({
+    default: false,
+    description: 'Allow admin impersonation of users',
+  })
   @IsOptional()
   @IsBoolean()
   impersonationEnabled?: boolean;
 
-  @ApiPropertyOptional({ default: 3600, description: 'Max duration (seconds) of an impersonation session' })
+  @ApiPropertyOptional({
+    default: 3600,
+    description: 'Max duration (seconds) of an impersonation session',
+  })
   @IsOptional()
   @IsInt()
   impersonationMaxDuration?: number;
 
   // WebAuthn / passkeys
-  @ApiPropertyOptional({ default: false, description: 'Enable WebAuthn / passkey authentication' })
+  @ApiPropertyOptional({
+    default: false,
+    description: 'Enable WebAuthn / passkey authentication',
+  })
   @IsOptional()
   @IsBoolean()
   webAuthnEnabled?: boolean;
@@ -307,68 +380,103 @@ export class CreateRealmDto {
   @IsString()
   webAuthnRpName?: string;
 
-  @ApiPropertyOptional({ description: 'WebAuthn Relying Party ID (origin domain)' })
+  @ApiPropertyOptional({
+    description: 'WebAuthn Relying Party ID (origin domain)',
+  })
   @IsOptional()
   @IsString()
   webAuthnRpId?: string;
 
   // Adaptive authentication
-  @ApiPropertyOptional({ default: false, description: 'Enable AI-powered adaptive / risk-based authentication' })
+  @ApiPropertyOptional({
+    default: false,
+    description: 'Enable AI-powered adaptive / risk-based authentication',
+  })
   @IsOptional()
   @IsBoolean()
   adaptiveAuthEnabled?: boolean;
 
-  @ApiPropertyOptional({ default: 70, description: 'Risk score threshold (0-100) that triggers step-up MFA' })
+  @ApiPropertyOptional({
+    default: 70,
+    description: 'Risk score threshold (0-100) that triggers step-up MFA',
+  })
   @IsOptional()
   @IsInt()
   riskThresholdStepUp?: number;
 
-  @ApiPropertyOptional({ default: 90, description: 'Risk score threshold (0-100) that blocks the login attempt' })
+  @ApiPropertyOptional({
+    default: 90,
+    description: 'Risk score threshold (0-100) that blocks the login attempt',
+  })
   @IsOptional()
   @IsInt()
   riskThresholdBlock?: number;
 
   // Localisation
-  @ApiPropertyOptional({ default: 'en', description: 'Default locale for this realm' })
+  @ApiPropertyOptional({
+    default: 'en',
+    description: 'Default locale for this realm',
+  })
   @IsOptional()
   @IsString()
   defaultLocale?: string;
 
-  @ApiPropertyOptional({ description: 'List of locales supported by this realm', type: [String] })
+  @ApiPropertyOptional({
+    description: 'List of locales supported by this realm',
+    type: [String],
+  })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   supportedLocales?: string[];
 
   // Legal / registration controls
-  @ApiPropertyOptional({ description: 'URL to the terms-of-service page shown during registration' })
+  @ApiPropertyOptional({
+    description: 'URL to the terms-of-service page shown during registration',
+  })
   @IsOptional()
   @IsString()
   termsOfServiceUrl?: string;
 
-  @ApiPropertyOptional({ default: false, description: 'Require admin approval before a self-registered account is activated' })
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      'Require admin approval before a self-registered account is activated',
+  })
   @IsOptional()
   @IsBoolean()
   registrationApprovalRequired?: boolean;
 
-  @ApiPropertyOptional({ description: 'Whitelist of email domains permitted to self-register (empty = all allowed)', type: [String] })
+  @ApiPropertyOptional({
+    description:
+      'Whitelist of email domains permitted to self-register (empty = all allowed)',
+    type: [String],
+  })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   allowedEmailDomains?: string[];
 
-  @ApiPropertyOptional({ description: 'URL to the privacy policy page shown during registration' })
+  @ApiPropertyOptional({
+    description: 'URL to the privacy policy page shown during registration',
+  })
   @IsOptional()
   @IsString()
   privacyPolicyUrl?: string;
 
   // CAPTCHA configuration
-  @ApiPropertyOptional({ default: false, description: 'Enable CAPTCHA protection for registration' })
+  @ApiPropertyOptional({
+    default: false,
+    description: 'Enable CAPTCHA protection for registration',
+  })
   @IsOptional()
   @IsBoolean()
   captchaEnabled?: boolean;
 
-  @ApiPropertyOptional({ enum: ['recaptcha', 'hcaptcha'], description: 'CAPTCHA provider to use' })
+  @ApiPropertyOptional({
+    enum: ['recaptcha', 'hcaptcha'],
+    description: 'CAPTCHA provider to use',
+  })
   @IsOptional()
   @IsString()
   captchaProvider?: string;
@@ -378,7 +486,9 @@ export class CreateRealmDto {
   @IsString()
   recaptchaSiteKey?: string;
 
-  @ApiPropertyOptional({ description: 'reCAPTCHA secret key for v3 verification' })
+  @ApiPropertyOptional({
+    description: 'reCAPTCHA secret key for v3 verification',
+  })
   @IsOptional()
   @IsString()
   recaptchaSecretKey?: string;
@@ -393,7 +503,10 @@ export class CreateRealmDto {
   @IsString()
   hcaptchaSecretKey?: string;
 
-  @ApiPropertyOptional({ default: 0.5, description: 'Minimum score threshold for reCAPTCHA v3 (0-1)' })
+  @ApiPropertyOptional({
+    default: 0.5,
+    description: 'Minimum score threshold for reCAPTCHA v3 (0-1)',
+  })
   @IsOptional()
   @IsInt()
   @Min(0)

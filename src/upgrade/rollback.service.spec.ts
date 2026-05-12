@@ -14,7 +14,11 @@ jest.mock('@prisma/client', () => ({
   PrismaClient: jest.fn(() => mockPrisma),
 }));
 
-import { RollbackService, RollbackResult, RollbackCapability } from './rollback.service.js';
+import {
+  RollbackService,
+  RollbackResult,
+  RollbackCapability,
+} from './rollback.service.js';
 import { DatabaseBackupService } from './database-backup.service.js';
 
 describe('RollbackService', () => {
@@ -78,7 +82,9 @@ describe('RollbackService', () => {
       const capability = await rollbackService.checkRollbackCapability();
 
       expect(capability.canRollback).toBe(false);
-      expect(capability.reason).toBe('No successful upgrade with a backup found');
+      expect(capability.reason).toBe(
+        'No successful upgrade with a backup found',
+      );
     });
 
     it('should return canRollback=false when upgrade has no backup', async () => {
@@ -105,11 +111,15 @@ describe('RollbackService', () => {
       const capability = await rollbackService.checkRollbackCapability();
 
       expect(capability.canRollback).toBe(false);
-      expect(capability.reason).toBe('No successful upgrade with a backup found');
+      expect(capability.reason).toBe(
+        'No successful upgrade with a backup found',
+      );
     });
 
     it('should handle database errors gracefully', async () => {
-      mockPrisma.upgradeAuditLog.findFirst.mockRejectedValue(new Error('Connection failed'));
+      mockPrisma.upgradeAuditLog.findFirst.mockRejectedValue(
+        new Error('Connection failed'),
+      );
 
       const capability = await rollbackService.checkRollbackCapability();
 
@@ -225,7 +235,9 @@ describe('RollbackService', () => {
       const result = await rollbackService.executeRollback('upg-123');
 
       expect(result.success).toBe(false);
-      expect(result.error).toBe('Upgrade does not have an associated backup for rollback');
+      expect(result.error).toBe(
+        'Upgrade does not have an associated backup for rollback',
+      );
     });
 
     it('should return error when backup file not found', async () => {
@@ -481,7 +493,9 @@ describe('RollbackService', () => {
     });
 
     it('should return empty array on database error', async () => {
-      mockPrisma.upgradeAuditLog.findMany.mockRejectedValue(new Error('Database error'));
+      mockPrisma.upgradeAuditLog.findMany.mockRejectedValue(
+        new Error('Database error'),
+      );
 
       const history = await rollbackService.getUpgradeHistory();
 

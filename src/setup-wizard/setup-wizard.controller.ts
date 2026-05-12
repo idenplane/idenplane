@@ -8,10 +8,24 @@ import {
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiSecurity } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiSecurity,
+} from '@nestjs/swagger';
 import { SetupWizardService } from './setup-wizard.service.js';
 import { EmailService } from '../email/email.service.js';
-import { IsString, IsEmail, IsArray, IsOptional, IsBoolean, IsInt, MinLength, Min } from 'class-validator';
+import {
+  IsString,
+  IsEmail,
+  IsArray,
+  IsOptional,
+  IsBoolean,
+  IsInt,
+  MinLength,
+  Min,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 class SaveAdminAccountDto {
@@ -126,7 +140,10 @@ export class SetupWizardController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Save realm settings (Step 2)' })
   @ApiResponse({ status: 200, description: 'Realm settings saved' })
-  @ApiResponse({ status: 400, description: 'Invalid request or realm already exists' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid request or realm already exists',
+  })
   saveRealmSettings(@Body() dto: SaveRealmSettingsDto) {
     return this.wizardService.saveRealmSettings(dto);
   }
@@ -144,20 +161,27 @@ export class SetupWizardController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Test SMTP connection' })
   @ApiResponse({ status: 200, description: 'Test email sent successfully' })
-  @ApiResponse({ status: 400, description: 'SMTP not configured or test failed' })
+  @ApiResponse({
+    status: 400,
+    description: 'SMTP not configured or test failed',
+  })
   async testSmtp(@Body() dto: SmtpTestDto) {
     // Get current wizard state to check SMTP config
     const state = await this.wizardService.getWizardState();
 
     if (!state.smtpConfig) {
-      throw new BadRequestException('SMTP is not configured. Please save SMTP config first.');
+      throw new BadRequestException(
+        'SMTP is not configured. Please save SMTP config first.',
+      );
     }
 
     const smtpConfig = state.smtpConfig as Record<string, unknown>;
     const isConfigured = smtpConfig.host && smtpConfig.port;
 
     if (!isConfigured) {
-      throw new BadRequestException('SMTP is not configured. Please save SMTP config first.');
+      throw new BadRequestException(
+        'SMTP is not configured. Please save SMTP config first.',
+      );
     }
 
     // Note: This endpoint requires the realm to be created first to send test emails
@@ -173,7 +197,10 @@ export class SetupWizardController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Save client application (Step 4)' })
   @ApiResponse({ status: 200, description: 'Client created and saved' })
-  @ApiResponse({ status: 400, description: 'Invalid client configuration or realm not found' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid client configuration or realm not found',
+  })
   saveClient(@Body() dto: SaveClientDto) {
     return this.wizardService.saveClient(dto);
   }
@@ -190,7 +217,10 @@ export class SetupWizardController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Complete the wizard and finalize setup' })
   @ApiResponse({ status: 200, description: 'Wizard completed successfully' })
-  @ApiResponse({ status: 400, description: 'Cannot complete wizard - required steps incomplete' })
+  @ApiResponse({
+    status: 400,
+    description: 'Cannot complete wizard - required steps incomplete',
+  })
   completeWizard() {
     return this.wizardService.completeWizard();
   }

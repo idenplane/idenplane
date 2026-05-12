@@ -19,7 +19,8 @@ describe('AdminSeedService', () => {
   const keyPair = {
     kid: 'kid-1',
     publicKeyPem: '-----BEGIN PUBLIC KEY-----\nfake\n-----END PUBLIC KEY-----',
-    privateKeyPem: '-----BEGIN PRIVATE KEY-----\nfake\n-----END PRIVATE KEY-----',
+    privateKeyPem:
+      '-----BEGIN PRIVATE KEY-----\nfake\n-----END PRIVATE KEY-----',
   };
 
   beforeEach(() => {
@@ -33,7 +34,9 @@ describe('AdminSeedService', () => {
         return defaultValue;
       }),
     };
-    scopeSeedService = { seedDefaultScopes: jest.fn().mockResolvedValue(undefined) };
+    scopeSeedService = {
+      seedDefaultScopes: jest.fn().mockResolvedValue(undefined),
+    };
 
     service = new AdminSeedService(
       prisma as any,
@@ -46,7 +49,10 @@ describe('AdminSeedService', () => {
 
   describe('onApplicationBootstrap', () => {
     it('should skip if master realm already exists', async () => {
-      prisma.realm.findUnique.mockResolvedValue({ id: 'existing', name: 'master' });
+      prisma.realm.findUnique.mockResolvedValue({
+        id: 'existing',
+        name: 'master',
+      });
 
       await service.onApplicationBootstrap();
 
@@ -56,7 +62,10 @@ describe('AdminSeedService', () => {
 
     it('should create master realm, roles, and admin user when not existing', async () => {
       prisma.realm.findUnique.mockResolvedValue(null);
-      prisma.realm.create.mockResolvedValue({ id: 'new-realm', name: 'master' });
+      prisma.realm.create.mockResolvedValue({
+        id: 'new-realm',
+        name: 'master',
+      });
       prisma.role.create
         .mockResolvedValueOnce({ id: 'role-super', name: 'super-admin' })
         .mockResolvedValueOnce({ id: 'role-realm', name: 'realm-admin' })
@@ -72,7 +81,9 @@ describe('AdminSeedService', () => {
       expect(prisma.userRole.create).toHaveBeenCalledWith({
         data: { userId: 'admin-user', roleId: 'role-super' },
       });
-      expect(scopeSeedService.seedDefaultScopes).toHaveBeenCalledWith('new-realm');
+      expect(scopeSeedService.seedDefaultScopes).toHaveBeenCalledWith(
+        'new-realm',
+      );
       expect(crypto.hashPassword).toHaveBeenCalledWith('admin');
     });
 
@@ -84,7 +95,10 @@ describe('AdminSeedService', () => {
       });
 
       prisma.realm.findUnique.mockResolvedValue(null);
-      prisma.realm.create.mockResolvedValue({ id: 'new-realm', name: 'master' });
+      prisma.realm.create.mockResolvedValue({
+        id: 'new-realm',
+        name: 'master',
+      });
       prisma.role.create
         .mockResolvedValueOnce({ id: 'role-1', name: 'super-admin' })
         .mockResolvedValueOnce({ id: 'role-2', name: 'realm-admin' })
@@ -104,7 +118,10 @@ describe('AdminSeedService', () => {
 
     it('should generate RSA key pair for the realm', async () => {
       prisma.realm.findUnique.mockResolvedValue(null);
-      prisma.realm.create.mockResolvedValue({ id: 'new-realm', name: 'master' });
+      prisma.realm.create.mockResolvedValue({
+        id: 'new-realm',
+        name: 'master',
+      });
       prisma.role.create.mockResolvedValue({ id: 'role-1' });
       prisma.user.create.mockResolvedValue({ id: 'admin-user' });
       prisma.userRole.create.mockResolvedValue({});

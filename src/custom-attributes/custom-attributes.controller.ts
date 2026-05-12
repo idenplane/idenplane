@@ -10,7 +10,12 @@ import {
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiSecurity } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiSecurity,
+} from '@nestjs/swagger';
 import type { Realm } from '@prisma/client';
 import { CustomAttributesService } from './custom-attributes.service.js';
 import { CreateCustomAttributeDto } from './dto/create-custom-attribute.dto.js';
@@ -36,8 +41,13 @@ export class CustomAttributesController {
   }
 
   @Get()
-  @ApiOperation({ summary: 'List all custom attribute definitions for a realm' })
-  @ApiResponse({ status: 200, description: 'List of custom attribute definitions' })
+  @ApiOperation({
+    summary: 'List all custom attribute definitions for a realm',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'List of custom attribute definitions',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   findAll(@CurrentRealm() realm: Realm) {
     return this.service.findAllAttributes(realm);
@@ -48,7 +58,10 @@ export class CustomAttributesController {
   @ApiResponse({ status: 200, description: 'Custom attribute definition' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
-  findOne(@CurrentRealm() realm: Realm, @Param('attributeId') attributeId: string) {
+  findOne(
+    @CurrentRealm() realm: Realm,
+    @Param('attributeId') attributeId: string,
+  ) {
     return this.service.findAttributeById(realm, attributeId);
   }
 
@@ -71,7 +84,10 @@ export class CustomAttributesController {
   @ApiResponse({ status: 204, description: 'Deleted' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
-  remove(@CurrentRealm() realm: Realm, @Param('attributeId') attributeId: string) {
+  remove(
+    @CurrentRealm() realm: Realm,
+    @Param('attributeId') attributeId: string,
+  ) {
     return this.service.removeAttribute(realm, attributeId);
   }
 }

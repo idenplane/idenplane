@@ -8,7 +8,9 @@ jest.mock('fs', () => ({
 import { existsSync, readFileSync } from 'fs';
 
 const mockedExistsSync = existsSync as jest.MockedFunction<typeof existsSync>;
-const mockedReadFileSync = readFileSync as jest.MockedFunction<typeof readFileSync>;
+const mockedReadFileSync = readFileSync as jest.MockedFunction<
+  typeof readFileSync
+>;
 
 describe('ThemeMessageService', () => {
   let service: ThemeMessageService;

@@ -96,11 +96,15 @@ export function isAuthProviderPlugin(p: AuthMePlugin): p is AuthProviderPlugin {
   return p.type === 'auth-provider';
 }
 
-export function isEventListenerPlugin(p: AuthMePlugin): p is EventListenerPlugin {
+export function isEventListenerPlugin(
+  p: AuthMePlugin,
+): p is EventListenerPlugin {
   return p.type === 'event-listener';
 }
 
-export function isTokenEnrichmentPlugin(p: AuthMePlugin): p is TokenEnrichmentPlugin {
+export function isTokenEnrichmentPlugin(
+  p: AuthMePlugin,
+): p is TokenEnrichmentPlugin {
   return p.type === 'token-enrichment';
 }
 

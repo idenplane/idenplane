@@ -39,16 +39,23 @@ export class ImpossibleTravelService {
 
     try {
       // ip-api.com free endpoint — no API key required, rate-limited to 45 req/min
-      const response = await fetch(`http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,lat,lon`, {
-        signal: AbortSignal.timeout(3_000),
-      });
+      const response = await fetch(
+        `http://ip-api.com/json/${encodeURIComponent(ip)}?fields=status,lat,lon`,
+        {
+          signal: AbortSignal.timeout(3_000),
+        },
+      );
 
       if (!response.ok) {
         this.cacheCoords(ip, null);
         return null;
       }
 
-      const data = (await response.json()) as { status: string; lat?: number; lon?: number };
+      const data = (await response.json()) as {
+        status: string;
+        lat?: number;
+        lon?: number;
+      };
 
       if (data.status !== 'success' || data.lat == null || data.lon == null) {
         this.cacheCoords(ip, null);
@@ -59,7 +66,9 @@ export class ImpossibleTravelService {
       this.cacheCoords(ip, coords);
       return coords;
     } catch (err) {
-      this.logger.debug(`Geo-IP lookup failed for ${ip}: ${(err as Error).message}`);
+      this.logger.debug(
+        `Geo-IP lookup failed for ${ip}: ${(err as Error).message}`,
+      );
       this.cacheCoords(ip, null);
       return null;
     }

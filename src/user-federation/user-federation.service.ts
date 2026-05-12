@@ -13,13 +13,16 @@ export class UserFederationService {
   constructor(private readonly prisma: PrismaService) {}
 
   async create(realmName: string, dto: CreateUserFederationDto) {
-    const realm = await this.prisma.realm.findUnique({ where: { name: realmName } });
+    const realm = await this.prisma.realm.findUnique({
+      where: { name: realmName },
+    });
     if (!realm) throw new NotFoundException(`Realm '${realmName}' not found`);
 
     const existing = await this.prisma.userFederation.findUnique({
       where: { realmId_name: { realmId: realm.id, name: dto.name } },
     });
-    if (existing) throw new ConflictException(`Federation '${dto.name}' already exists`);
+    if (existing)
+      throw new ConflictException(`Federation '${dto.name}' already exists`);
 
     return this.prisma.userFederation.create({
       data: {
@@ -48,7 +51,9 @@ export class UserFederationService {
   }
 
   async findAll(realmName: string) {
-    const realm = await this.prisma.realm.findUnique({ where: { name: realmName } });
+    const realm = await this.prisma.realm.findUnique({
+      where: { name: realmName },
+    });
     if (!realm) throw new NotFoundException(`Realm '${realmName}' not found`);
 
     return this.prisma.userFederation.findMany({
@@ -123,7 +128,10 @@ export class UserFederationService {
 
       const existing = await this.prisma.user.findUnique({
         where: {
-          realmId_username: { realmId: federation.realmId, username: ldapUser.uid },
+          realmId_username: {
+            realmId: federation.realmId,
+            username: ldapUser.uid,
+          },
         },
       });
 

@@ -55,7 +55,10 @@ export class CreateClientDto {
   @IsString()
   description?: string;
 
-  @ApiPropertyOptional({ enum: ['CONFIDENTIAL', 'PUBLIC'], default: 'CONFIDENTIAL' })
+  @ApiPropertyOptional({
+    enum: ['CONFIDENTIAL', 'PUBLIC'],
+    default: 'CONFIDENTIAL',
+  })
   @IsOptional()
   @IsEnum({ CONFIDENTIAL: 'CONFIDENTIAL', PUBLIC: 'PUBLIC' })
   clientType?: 'CONFIDENTIAL' | 'PUBLIC';
@@ -66,7 +69,8 @@ export class CreateClientDto {
    * Ignored when `clientType` is also provided.
    */
   @ApiPropertyOptional({
-    description: "Shorthand for clientType: 'PUBLIC'. Ignored when clientType is set.",
+    description:
+      "Shorthand for clientType: 'PUBLIC'. Ignored when clientType is set.",
     example: true,
   })
   @IsOptional()
@@ -91,7 +95,9 @@ export class CreateClientDto {
   @IsNoWildcardOrigin()
   webOrigins?: string[];
 
-  @ApiPropertyOptional({ example: ['authorization_code', 'client_credentials'] })
+  @ApiPropertyOptional({
+    example: ['authorization_code', 'client_credentials'],
+  })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })

@@ -15,11 +15,7 @@ export class DeviceService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async initiateDeviceAuth(
-    realm: Realm,
-    clientId: string,
-    scope?: string,
-  ) {
+  async initiateDeviceAuth(realm: Realm, clientId: string, scope?: string) {
     const client = await this.prisma.client.findUnique({
       where: { realmId_clientId: { realmId: realm.id, clientId } },
     });
@@ -29,10 +25,13 @@ export class DeviceService {
     // Accept both the full RFC 8628 URN and the shorthand alias so that clients
     // stored with either value are permitted (issue #503).
     const supportsDeviceFlow =
-      client.grantTypes.includes('urn:ietf:params:oauth:grant-type:device_code') ||
-      client.grantTypes.includes('device_code');
+      client.grantTypes.includes(
+        'urn:ietf:params:oauth:grant-type:device_code',
+      ) || client.grantTypes.includes('device_code');
     if (!supportsDeviceFlow) {
-      throw new BadRequestException('Client does not support device authorization');
+      throw new BadRequestException(
+        'Client does not support device authorization',
+      );
     }
 
     const deviceCode = randomBytes(32).toString('hex');

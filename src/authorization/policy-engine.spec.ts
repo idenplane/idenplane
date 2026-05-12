@@ -26,7 +26,9 @@ function makePolicy(overrides: Partial<RawPolicy> = {}): RawPolicy {
   };
 }
 
-function makeRequest(overrides: Partial<PolicyEvaluationRequest> = {}): PolicyEvaluationRequest {
+function makeRequest(
+  overrides: Partial<PolicyEvaluationRequest> = {},
+): PolicyEvaluationRequest {
   return {
     subject: { userId: 'user-1', roles: ['viewer'], groups: ['engineering'] },
     resource: { type: 'report', id: 'report-1', ownerId: 'user-1' },
@@ -40,7 +42,11 @@ function makeRequest(overrides: Partial<PolicyEvaluationRequest> = {}): PolicyEv
 
 describe('evaluateCondition', () => {
   const ctx = {
-    subject: { userId: 'user-1', roles: ['admin', 'viewer'], attributes: { department: 'engineering' } },
+    subject: {
+      userId: 'user-1',
+      roles: ['admin', 'viewer'],
+      attributes: { department: 'engineering' },
+    },
     resource: { type: 'report', id: 'rep-1', ownerId: 'user-1' },
     action: 'read',
     environment: { ip: '10.0.0.5' },
@@ -48,58 +54,98 @@ describe('evaluateCondition', () => {
 
   describe('equals', () => {
     it('returns passed=true when values match', () => {
-      const c: Condition = { field: 'action', operator: 'equals', value: 'read' };
+      const c: Condition = {
+        field: 'action',
+        operator: 'equals',
+        value: 'read',
+      };
       expect(evaluateCondition(c, ctx).passed).toBe(true);
     });
 
     it('returns passed=false when values differ', () => {
-      const c: Condition = { field: 'action', operator: 'equals', value: 'write' };
+      const c: Condition = {
+        field: 'action',
+        operator: 'equals',
+        value: 'write',
+      };
       expect(evaluateCondition(c, ctx).passed).toBe(false);
     });
   });
 
   describe('notEquals', () => {
     it('passes when values are different', () => {
-      const c: Condition = { field: 'action', operator: 'notEquals', value: 'delete' };
+      const c: Condition = {
+        field: 'action',
+        operator: 'notEquals',
+        value: 'delete',
+      };
       expect(evaluateCondition(c, ctx).passed).toBe(true);
     });
 
     it('fails when values are equal', () => {
-      const c: Condition = { field: 'action', operator: 'notEquals', value: 'read' };
+      const c: Condition = {
+        field: 'action',
+        operator: 'notEquals',
+        value: 'read',
+      };
       expect(evaluateCondition(c, ctx).passed).toBe(false);
     });
   });
 
   describe('contains', () => {
     it('passes when array contains value', () => {
-      const c: Condition = { field: 'subject.roles', operator: 'contains', value: 'admin' };
+      const c: Condition = {
+        field: 'subject.roles',
+        operator: 'contains',
+        value: 'admin',
+      };
       expect(evaluateCondition(c, ctx).passed).toBe(true);
     });
 
     it('fails when array does not contain value', () => {
-      const c: Condition = { field: 'subject.roles', operator: 'contains', value: 'superadmin' };
+      const c: Condition = {
+        field: 'subject.roles',
+        operator: 'contains',
+        value: 'superadmin',
+      };
       expect(evaluateCondition(c, ctx).passed).toBe(false);
     });
 
     it('passes when string contains substring', () => {
-      const c: Condition = { field: 'action', operator: 'contains', value: 'rea' };
+      const c: Condition = {
+        field: 'action',
+        operator: 'contains',
+        value: 'rea',
+      };
       expect(evaluateCondition(c, ctx).passed).toBe(true);
     });
   });
 
   describe('in', () => {
     it('passes when field value is in the list', () => {
-      const c: Condition = { field: 'action', operator: 'in', value: ['read', 'list'] };
+      const c: Condition = {
+        field: 'action',
+        operator: 'in',
+        value: ['read', 'list'],
+      };
       expect(evaluateCondition(c, ctx).passed).toBe(true);
     });
 
     it('fails when field value is not in the list', () => {
-      const c: Condition = { field: 'action', operator: 'in', value: ['write', 'delete'] };
+      const c: Condition = {
+        field: 'action',
+        operator: 'in',
+        value: ['write', 'delete'],
+      };
       expect(evaluateCondition(c, ctx).passed).toBe(false);
     });
 
     it('fails gracefully when value is not an array', () => {
-      const c: Condition = { field: 'action', operator: 'in', value: 'read' as any };
+      const c: Condition = {
+        field: 'action',
+        operator: 'in',
+        value: 'read',
+      };
       const result = evaluateCondition(c, ctx);
       expect(result.passed).toBe(false);
       expect(result.reason).toMatch(/requires an array/);
@@ -108,12 +154,20 @@ describe('evaluateCondition', () => {
 
   describe('notIn', () => {
     it('passes when field value is not in the list', () => {
-      const c: Condition = { field: 'action', operator: 'notIn', value: ['write', 'delete'] };
+      const c: Condition = {
+        field: 'action',
+        operator: 'notIn',
+        value: ['write', 'delete'],
+      };
       expect(evaluateCondition(c, ctx).passed).toBe(true);
     });
 
     it('fails when field value is in the list', () => {
-      const c: Condition = { field: 'action', operator: 'notIn', value: ['read', 'write'] };
+      const c: Condition = {
+        field: 'action',
+        operator: 'notIn',
+        value: ['read', 'write'],
+      };
       expect(evaluateCondition(c, ctx).passed).toBe(false);
     });
   });
@@ -122,17 +176,29 @@ describe('evaluateCondition', () => {
     const numCtx = { level: 5 };
 
     it('passes when actual > expected', () => {
-      const c: Condition = { field: 'level', operator: 'greaterThan', value: 3 };
+      const c: Condition = {
+        field: 'level',
+        operator: 'greaterThan',
+        value: 3,
+      };
       expect(evaluateCondition(c, numCtx).passed).toBe(true);
     });
 
     it('fails when actual <= expected', () => {
-      const c: Condition = { field: 'level', operator: 'greaterThan', value: 5 };
+      const c: Condition = {
+        field: 'level',
+        operator: 'greaterThan',
+        value: 5,
+      };
       expect(evaluateCondition(c, numCtx).passed).toBe(false);
     });
 
     it('fails gracefully on non-numeric field', () => {
-      const c: Condition = { field: 'action', operator: 'greaterThan', value: 3 };
+      const c: Condition = {
+        field: 'action',
+        operator: 'greaterThan',
+        value: 3,
+      };
       const result = evaluateCondition(c, ctx);
       expect(result.passed).toBe(false);
       expect(result.reason).toMatch(/not numeric/);
@@ -155,24 +221,40 @@ describe('evaluateCondition', () => {
 
   describe('matches (regex)', () => {
     it('passes when string matches regex', () => {
-      const c: Condition = { field: 'action', operator: 'matches', value: '^re' };
+      const c: Condition = {
+        field: 'action',
+        operator: 'matches',
+        value: '^re',
+      };
       expect(evaluateCondition(c, ctx).passed).toBe(true);
     });
 
     it('fails when string does not match regex', () => {
-      const c: Condition = { field: 'action', operator: 'matches', value: '^write' };
+      const c: Condition = {
+        field: 'action',
+        operator: 'matches',
+        value: '^write',
+      };
       expect(evaluateCondition(c, ctx).passed).toBe(false);
     });
 
     it('fails gracefully with invalid regex', () => {
-      const c: Condition = { field: 'action', operator: 'matches', value: '[invalid' };
+      const c: Condition = {
+        field: 'action',
+        operator: 'matches',
+        value: '[invalid',
+      };
       const result = evaluateCondition(c, ctx);
       expect(result.passed).toBe(false);
       expect(result.reason).toMatch(/invalid regex/);
     });
 
     it('fails gracefully when field is not a string', () => {
-      const c: Condition = { field: 'subject.roles', operator: 'matches', value: 'admin' };
+      const c: Condition = {
+        field: 'subject.roles',
+        operator: 'matches',
+        value: 'admin',
+      };
       const result = evaluateCondition(c, ctx);
       expect(result.passed).toBe(false);
       expect(result.reason).toMatch(/not a string/);
@@ -181,46 +263,78 @@ describe('evaluateCondition', () => {
 
   describe('ipInRange', () => {
     it('passes when IP is within CIDR', () => {
-      const c: Condition = { field: 'environment.ip', operator: 'ipInRange', value: '10.0.0.0/8' };
+      const c: Condition = {
+        field: 'environment.ip',
+        operator: 'ipInRange',
+        value: '10.0.0.0/8',
+      };
       expect(evaluateCondition(c, ctx).passed).toBe(true);
     });
 
     it('fails when IP is outside CIDR', () => {
-      const c: Condition = { field: 'environment.ip', operator: 'ipInRange', value: '192.168.0.0/24' };
+      const c: Condition = {
+        field: 'environment.ip',
+        operator: 'ipInRange',
+        value: '192.168.0.0/24',
+      };
       expect(evaluateCondition(c, ctx).passed).toBe(false);
     });
 
     it('handles /32 (exact match)', () => {
-      const c: Condition = { field: 'environment.ip', operator: 'ipInRange', value: '10.0.0.5/32' };
+      const c: Condition = {
+        field: 'environment.ip',
+        operator: 'ipInRange',
+        value: '10.0.0.5/32',
+      };
       expect(evaluateCondition(c, ctx).passed).toBe(true);
     });
 
     it('handles /0 (any IP)', () => {
-      const c: Condition = { field: 'environment.ip', operator: 'ipInRange', value: '0.0.0.0/0' };
+      const c: Condition = {
+        field: 'environment.ip',
+        operator: 'ipInRange',
+        value: '0.0.0.0/0',
+      };
       expect(evaluateCondition(c, ctx).passed).toBe(true);
     });
 
     it('fails gracefully when field is not a string', () => {
-      const c: Condition = { field: 'subject.roles', operator: 'ipInRange', value: '10.0.0.0/8' };
+      const c: Condition = {
+        field: 'subject.roles',
+        operator: 'ipInRange',
+        value: '10.0.0.0/8',
+      };
       const result = evaluateCondition(c, ctx);
       expect(result.passed).toBe(false);
       expect(result.reason).toMatch(/not a string IP/);
     });
 
     it('fails on invalid CIDR', () => {
-      const c: Condition = { field: 'environment.ip', operator: 'ipInRange', value: 'not-a-cidr' };
+      const c: Condition = {
+        field: 'environment.ip',
+        operator: 'ipInRange',
+        value: 'not-a-cidr',
+      };
       expect(evaluateCondition(c, ctx).passed).toBe(false);
     });
   });
 
   describe('dot-notation field resolution', () => {
     it('resolves nested field correctly', () => {
-      const c: Condition = { field: 'subject.attributes.department', operator: 'equals', value: 'engineering' };
+      const c: Condition = {
+        field: 'subject.attributes.department',
+        operator: 'equals',
+        value: 'engineering',
+      };
       expect(evaluateCondition(c, ctx).passed).toBe(true);
     });
 
     it('returns false for missing field path', () => {
-      const c: Condition = { field: 'subject.nonexistent.deep', operator: 'equals', value: 'x' };
+      const c: Condition = {
+        field: 'subject.nonexistent.deep',
+        operator: 'equals',
+        value: 'x',
+      };
       expect(evaluateCondition(c, ctx).passed).toBe(false);
     });
   });
@@ -240,7 +354,9 @@ describe('evaluatePolicy', () => {
 
   it('returns matched=false when a condition fails', () => {
     const policy = makePolicy({
-      actionConditions: [{ field: 'action', operator: 'equals', value: 'write' }],
+      actionConditions: [
+        { field: 'action', operator: 'equals', value: 'write' },
+      ],
     });
     const req = makeRequest({ action: 'read' });
     const detail = evaluatePolicy(policy, req);
@@ -251,8 +367,12 @@ describe('evaluatePolicy', () => {
   it('returns matched=true when all conditions pass (AND logic)', () => {
     const policy = makePolicy({
       logic: 'AND',
-      subjectConditions: [{ field: 'subject.roles', operator: 'contains', value: 'admin' }],
-      actionConditions: [{ field: 'action', operator: 'equals', value: 'delete' }],
+      subjectConditions: [
+        { field: 'subject.roles', operator: 'contains', value: 'admin' },
+      ],
+      actionConditions: [
+        { field: 'action', operator: 'equals', value: 'delete' },
+      ],
     });
     const req = makeRequest({
       subject: { roles: ['admin'] },
@@ -265,8 +385,12 @@ describe('evaluatePolicy', () => {
   it('returns matched=false when one category fails (AND between categories)', () => {
     const policy = makePolicy({
       logic: 'AND',
-      subjectConditions: [{ field: 'subject.roles', operator: 'contains', value: 'admin' }],
-      actionConditions: [{ field: 'action', operator: 'equals', value: 'write' }],
+      subjectConditions: [
+        { field: 'subject.roles', operator: 'contains', value: 'admin' },
+      ],
+      actionConditions: [
+        { field: 'action', operator: 'equals', value: 'write' },
+      ],
     });
     const req = makeRequest({
       subject: { roles: ['admin'] },
@@ -355,17 +479,27 @@ describe('evaluatePolicies', () => {
         name: 'deny-blocked-users',
         effect: 'DENY',
         priority: 10,
-        subjectConditions: [{ field: 'subject.userId', operator: 'equals', value: 'user-1' }],
+        subjectConditions: [
+          { field: 'subject.userId', operator: 'equals', value: 'user-1' },
+        ],
       }),
     ];
-    const result = evaluatePolicies(policies, makeRequest({ subject: { userId: 'user-1', roles: [] } }));
+    const result = evaluatePolicies(
+      policies,
+      makeRequest({ subject: { userId: 'user-1', roles: [] } }),
+    );
     expect(result.decision).toBe('DENY');
     expect(result.reason).toContain('deny-blocked-users');
   });
 
   it('skips disabled policies', () => {
     const policies: RawPolicy[] = [
-      makePolicy({ id: 'p1', name: 'disabled-allow', effect: 'ALLOW', enabled: false }),
+      makePolicy({
+        id: 'p1',
+        name: 'disabled-allow',
+        effect: 'ALLOW',
+        enabled: false,
+      }),
     ];
     const result = evaluatePolicies(policies, makeRequest());
     expect(result.decision).toBe('DENY');
@@ -374,7 +508,12 @@ describe('evaluatePolicies', () => {
 
   it('evaluates policies in priority order (higher first)', () => {
     const policies: RawPolicy[] = [
-      makePolicy({ id: 'p-low', name: 'low-priority', effect: 'ALLOW', priority: 0 }),
+      makePolicy({
+        id: 'p-low',
+        name: 'low-priority',
+        effect: 'ALLOW',
+        priority: 0,
+      }),
       makePolicy({
         id: 'p-high',
         name: 'high-priority-deny',
@@ -397,10 +536,15 @@ describe('evaluatePolicies', () => {
         id: 'p1',
         name: 'admin-only',
         effect: 'ALLOW',
-        subjectConditions: [{ field: 'subject.roles', operator: 'contains', value: 'admin' }],
+        subjectConditions: [
+          { field: 'subject.roles', operator: 'contains', value: 'admin' },
+        ],
       }),
     ];
-    const result = evaluatePolicies(policies, makeRequest({ subject: { roles: ['viewer'] } }));
+    const result = evaluatePolicies(
+      policies,
+      makeRequest({ subject: { roles: ['viewer'] } }),
+    );
     expect(result.decision).toBe('DENY');
     expect(result.reason).toMatch(/No matching policy/);
   });
@@ -421,11 +565,13 @@ describe('evaluatePolicies', () => {
         id: 'p1',
         name: 'action-check',
         effect: 'ALLOW',
-        actionConditions: [{ field: 'action', operator: 'equals', value: 'read' }],
+        actionConditions: [
+          { field: 'action', operator: 'equals', value: 'read' },
+        ],
       }),
     ];
     const result = evaluatePolicies(policies, makeRequest({ action: 'read' }));
-    const detail = result.matchedPolicies[0]!;
+    const detail = result.matchedPolicies[0];
     expect(detail.conditionResults).toHaveLength(1);
     expect(detail.conditionResults[0]?.conditionType).toBe('action');
     expect(detail.conditionResults[0]?.passed).toBe(true);
@@ -438,7 +584,11 @@ describe('evaluatePolicies', () => {
         name: 'internal-only',
         effect: 'ALLOW',
         environmentConditions: [
-          { field: 'environment.ip', operator: 'ipInRange', value: '10.0.0.0/8' },
+          {
+            field: 'environment.ip',
+            operator: 'ipInRange',
+            value: '10.0.0.0/8',
+          },
         ],
       }),
     ];
@@ -456,9 +606,15 @@ describe('evaluatePolicies', () => {
         id: 'p1',
         name: 'owner-can-delete',
         effect: 'ALLOW',
-        subjectConditions: [{ field: 'subject.userId', operator: 'equals', value: 'user-1' }],
-        resourceConditions: [{ field: 'resource.ownerId', operator: 'equals', value: 'user-1' }],
-        actionConditions: [{ field: 'action', operator: 'equals', value: 'delete' }],
+        subjectConditions: [
+          { field: 'subject.userId', operator: 'equals', value: 'user-1' },
+        ],
+        resourceConditions: [
+          { field: 'resource.ownerId', operator: 'equals', value: 'user-1' },
+        ],
+        actionConditions: [
+          { field: 'action', operator: 'equals', value: 'delete' },
+        ],
       }),
     ];
 

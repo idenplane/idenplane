@@ -5,7 +5,10 @@ import {
   MockPrismaService,
 } from '../../prisma/prisma.mock.js';
 
-function createMockExecutionContext(params: Record<string, string> = {}, path = '/realms/test') {
+function createMockExecutionContext(
+  params: Record<string, string> = {},
+  path = '/realms/test',
+) {
   const request: Record<string, any> = { params, path };
   return {
     switchToHttp: jest.fn().mockReturnValue({
@@ -115,7 +118,10 @@ describe('RealmGuard', () => {
       enabled: false,
     };
     prisma.realm.findUnique.mockResolvedValue(disabledRealm);
-    const ctx = createMockExecutionContext({ realmName: 'disabled-realm' }, '/realms/disabled-realm/login');
+    const ctx = createMockExecutionContext(
+      { realmName: 'disabled-realm' },
+      '/realms/disabled-realm/login',
+    );
 
     await expect(guard.canActivate(ctx)).rejects.toThrow(ForbiddenException);
     await expect(guard.canActivate(ctx)).rejects.toThrow('Realm is disabled');
@@ -128,7 +134,10 @@ describe('RealmGuard', () => {
       enabled: false,
     };
     prisma.realm.findUnique.mockResolvedValue(disabledRealm);
-    const ctx = createMockExecutionContext({ realmName: 'disabled-realm' }, '/admin/realms/disabled-realm/users');
+    const ctx = createMockExecutionContext(
+      { realmName: 'disabled-realm' },
+      '/admin/realms/disabled-realm/users',
+    );
 
     const result = await guard.canActivate(ctx);
 

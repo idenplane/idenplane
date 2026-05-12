@@ -1,4 +1,10 @@
-import { Injectable, NotFoundException, ConflictException, BadRequestException, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  NotFoundException,
+  ConflictException,
+  BadRequestException,
+  Logger,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 
 export interface DeletionStatus {
@@ -58,13 +64,19 @@ export class AccountDeletionService {
         throw new ConflictException('Account deletion is already pending');
       }
       if (user.pendingDeletion.status === 'processing') {
-        throw new ConflictException('Account deletion is currently being processed');
+        throw new ConflictException(
+          'Account deletion is currently being processed',
+        );
       }
     }
 
     const now = new Date();
-    const scheduledAt = new Date(now.getTime() + gracePeriodDays * 24 * 60 * 60 * 1000);
-    const daysRemaining = Math.ceil((scheduledAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000));
+    const scheduledAt = new Date(
+      now.getTime() + gracePeriodDays * 24 * 60 * 60 * 1000,
+    );
+    const daysRemaining = Math.ceil(
+      (scheduledAt.getTime() - now.getTime()) / (24 * 60 * 60 * 1000),
+    );
 
     const deletion = await this.prisma.pendingDeletion.upsert({
       where: { userId },
@@ -113,7 +125,9 @@ export class AccountDeletionService {
     }
 
     if (deletion.status !== 'pending') {
-      throw new BadRequestException(`Cannot cancel deletion with status '${deletion.status}'`);
+      throw new BadRequestException(
+        `Cannot cancel deletion with status '${deletion.status}'`,
+      );
     }
 
     await this.prisma.pendingDeletion.update({
@@ -156,7 +170,9 @@ export class AccountDeletionService {
   /**
    * Request data export during grace period.
    */
-  async requestDataExport(userId: string): Promise<{ exportStatus: string; exportRequestedAt: Date | null }> {
+  async requestDataExport(
+    userId: string,
+  ): Promise<{ exportStatus: string; exportRequestedAt: Date | null }> {
     const deletion = await this.prisma.pendingDeletion.findUnique({
       where: { userId },
     });
@@ -166,7 +182,9 @@ export class AccountDeletionService {
     }
 
     if (deletion.status !== 'pending') {
-      throw new BadRequestException(`Cannot request export for deletion with status '${deletion.status}'`);
+      throw new BadRequestException(
+        `Cannot request export for deletion with status '${deletion.status}'`,
+      );
     }
 
     const updated = await this.prisma.pendingDeletion.update({
@@ -186,7 +204,10 @@ export class AccountDeletionService {
   /**
    * Get pending deletions for a realm (admin use).
    */
-  async getPendingDeletionsForRealm(realmId: string, options?: { status?: string; limit?: number; offset?: number }): Promise<PendingDeletionInfo[]> {
+  async getPendingDeletionsForRealm(
+    realmId: string,
+    options?: { status?: string; limit?: number; offset?: number },
+  ): Promise<PendingDeletionInfo[]> {
     const where: Record<string, unknown> = {
       user: { realmId },
     };
@@ -211,7 +232,7 @@ export class AccountDeletionService {
       skip: options?.offset ?? 0,
     });
 
-    return deletions.map(d => ({
+    return deletions.map((d) => ({
       id: d.id,
       userId: d.user.id,
       username: d.user.username,
@@ -228,7 +249,9 @@ export class AccountDeletionService {
    * Process scheduled deletions (called by a scheduled job/cron).
    * This deletes users whose grace period has expired.
    */
-  async processScheduledDeletions(batchSize: number = 10): Promise<ProcessDeletionResult> {
+  async processScheduledDeletions(
+    batchSize: number = 10,
+  ): Promise<ProcessDeletionResult> {
     const now = new Date();
     const result: ProcessDeletionResult = { processedCount: 0, errors: [] };
 
@@ -255,7 +278,9 @@ export class AccountDeletionService {
       return result;
     }
 
-    this.logger.log(`Processing ${pendingDeletions.length} scheduled account deletions`);
+    this.logger.log(
+      `Processing ${pendingDeletions.length} scheduled account deletions`,
+    );
 
     for (const deletion of pendingDeletions) {
       try {
@@ -280,19 +305,23 @@ export class AccountDeletionService {
         });
 
         result.processedCount++;
-        this.logger.log(`Successfully deleted user '${deletion.user.username}' (${deletion.userId})`);
+        this.logger.log(
+          `Successfully deleted user '${deletion.user.username}' (${deletion.userId})`,
+        );
       } catch (error) {
         const errorMessage = `Failed to delete user '${deletion.user.username}' (${deletion.userId}): ${(error as Error).message}`;
         result.errors.push(errorMessage);
         this.logger.error(errorMessage);
 
         // Revert status to pending so it can be retried
-        await this.prisma.pendingDeletion.update({
-          where: { id: deletion.id },
-          data: { status: 'pending' },
-        }).catch(() => {
-          // Ignore errors during revert
-        });
+        await this.prisma.pendingDeletion
+          .update({
+            where: { id: deletion.id },
+            data: { status: 'pending' },
+          })
+          .catch(() => {
+            // Ignore errors during revert
+          });
       }
     }
 

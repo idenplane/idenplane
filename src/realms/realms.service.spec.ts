@@ -1,7 +1,4 @@
-import {
-  ConflictException,
-  NotFoundException,
-} from '@nestjs/common';
+import { ConflictException, NotFoundException } from '@nestjs/common';
 
 // Mock JwkService module to avoid importing jose (ESM-only)
 jest.mock('../crypto/jwk.service.js', () => ({
@@ -57,7 +54,8 @@ describe('RealmsService', () => {
   const mockKeyPair = {
     kid: 'kid-1',
     publicKeyPem: '-----BEGIN PUBLIC KEY-----\nfake\n-----END PUBLIC KEY-----',
-    privateKeyPem: '-----BEGIN PRIVATE KEY-----\nfake\n-----END PRIVATE KEY-----',
+    privateKeyPem:
+      '-----BEGIN PRIVATE KEY-----\nfake\n-----END PRIVATE KEY-----',
   };
 
   beforeEach(() => {
@@ -69,8 +67,12 @@ describe('RealmsService', () => {
     themeService = createMockThemeService();
     const scopeSeedService = {
       seedDefaultScopes: jest.fn().mockResolvedValue(undefined),
-      getDefaultScopeNames: jest.fn().mockReturnValue(['openid', 'profile', 'email', 'roles']),
-      getOptionalScopeNames: jest.fn().mockReturnValue(['web-origins', 'offline_access']),
+      getDefaultScopeNames: jest
+        .fn()
+        .mockReturnValue(['openid', 'profile', 'email', 'roles']),
+      getOptionalScopeNames: jest
+        .fn()
+        .mockReturnValue(['web-origins', 'offline_access']),
     };
     service = new RealmsService(
       prisma as any,
@@ -116,15 +118,18 @@ describe('RealmsService', () => {
     it('should throw ConflictException when realm name already exists', async () => {
       prisma.realm.findUnique.mockResolvedValue(mockRealm);
 
-      await expect(
-        service.create({ name: 'test-realm' }),
-      ).rejects.toThrow(ConflictException);
+      await expect(service.create({ name: 'test-realm' })).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 
   describe('findAll', () => {
     it('should return all realms ordered by createdAt', async () => {
-      const realms = [mockRealm, { ...mockRealm, id: 'realm-2', name: 'other' }];
+      const realms = [
+        mockRealm,
+        { ...mockRealm, id: 'realm-2', name: 'other' },
+      ];
       prisma.realm.findMany.mockResolvedValue(realms);
 
       const result = await service.findAll();

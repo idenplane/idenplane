@@ -29,14 +29,21 @@ export class CustomAttributesService {
           required: dto.required ?? false,
           showOnRegistration: dto.showOnRegistration ?? false,
           showOnProfile: dto.showOnProfile ?? true,
-          options: dto.options ? (dto.options as unknown as Prisma.InputJsonValue) : undefined,
+          options: dto.options
+            ? (dto.options as unknown as Prisma.InputJsonValue)
+            : undefined,
           mapToOidcClaim: dto.mapToOidcClaim,
           sortOrder: dto.sortOrder ?? 0,
         },
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
-        throw new ConflictException(`Attribute '${dto.name}' already exists in this realm`);
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
+        throw new ConflictException(
+          `Attribute '${dto.name}' already exists in this realm`,
+        );
       }
       throw error;
     }
@@ -65,11 +72,16 @@ export class CustomAttributesService {
     });
   }
 
-  async updateAttribute(realm: Realm, attributeId: string, dto: UpdateCustomAttributeDto) {
+  async updateAttribute(
+    realm: Realm,
+    attributeId: string,
+    dto: UpdateCustomAttributeDto,
+  ) {
     await this.findAttributeById(realm, attributeId);
 
     if (dto.type || dto.options !== undefined) {
-      const type = dto.type ?? (await this.findAttributeById(realm, attributeId)).type;
+      const type =
+        dto.type ?? (await this.findAttributeById(realm, attributeId)).type;
       this.validateOptionsForType(type, dto.options);
     }
 
@@ -82,15 +94,19 @@ export class CustomAttributesService {
           required: dto.required,
           showOnRegistration: dto.showOnRegistration,
           showOnProfile: dto.showOnProfile,
-          options: dto.options !== undefined
-            ? (dto.options as unknown as Prisma.InputJsonValue)
-            : undefined,
+          options:
+            dto.options !== undefined
+              ? (dto.options as unknown as Prisma.InputJsonValue)
+              : undefined,
           mapToOidcClaim: dto.mapToOidcClaim,
           sortOrder: dto.sortOrder,
         },
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
         throw new ConflictException(`Attribute name conflict`);
       }
       throw error;
@@ -122,7 +138,11 @@ export class CustomAttributesService {
     }));
   }
 
-  async setUserAttributes(realm: Realm, userId: string, attributes: Record<string, string>) {
+  async setUserAttributes(
+    realm: Realm,
+    userId: string,
+    attributes: Record<string, string>,
+  ) {
     await this.assertUserInRealm(realm.id, userId);
 
     const realmAttributes = await this.findAllAttributes(realm);
@@ -131,18 +151,27 @@ export class CustomAttributesService {
     // Validate all provided attribute names belong to this realm
     for (const name of Object.keys(attributes)) {
       if (!attrByName.has(name)) {
-        throw new BadRequestException(`Unknown attribute '${name}' for this realm`);
+        throw new BadRequestException(
+          `Unknown attribute '${name}' for this realm`,
+        );
       }
     }
 
     // Validate required attributes that are being set have a non-empty value
     for (const [name, attr] of attrByName) {
       if (attr.required && name in attributes && !attributes[name]?.trim()) {
-        throw new BadRequestException(`Attribute '${attr.displayName}' is required and cannot be empty`);
+        throw new BadRequestException(
+          `Attribute '${attr.displayName}' is required and cannot be empty`,
+        );
       }
       // Validate type
       if (name in attributes) {
-        this.validateAttributeValue(attr.type, attributes[name], attr.displayName, attr.options as string[] | null);
+        this.validateAttributeValue(
+          attr.type,
+          attributes[name],
+          attr.displayName,
+          attr.options as string[] | null,
+        );
       }
     }
 
@@ -187,7 +216,12 @@ export class CustomAttributesService {
       }
 
       if (value) {
-        this.validateAttributeValue(attr.type, value, attr.displayName, attr.options as string[] | null);
+        this.validateAttributeValue(
+          attr.type,
+          value,
+          attr.displayName,
+          attr.options as string[] | null,
+        );
       }
     }
 
@@ -229,13 +263,20 @@ export class CustomAttributesService {
   // ─── Private helpers ──────────────────────────────────────────────────
 
   private async assertUserInRealm(realmId: string, userId: string) {
-    const user = await this.prisma.user.findFirst({ where: { id: userId, realmId } });
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, realmId },
+    });
     if (!user) throw new NotFoundException('User not found');
   }
 
   private validateOptionsForType(type: string, options?: string[]) {
-    if ((type === 'select' || type === 'multi-select') && (!options || options.length === 0)) {
-      throw new BadRequestException(`Attribute type '${type}' requires at least one option`);
+    if (
+      (type === 'select' || type === 'multi-select') &&
+      (!options || options.length === 0)
+    ) {
+      throw new BadRequestException(
+        `Attribute type '${type}' requires at least one option`,
+      );
     }
   }
 
@@ -252,13 +293,21 @@ export class CustomAttributesService {
         }
         break;
       case 'boolean':
-        if (!['true', 'false', '1', '0', 'yes', 'no'].includes(value.toLowerCase())) {
-          throw new BadRequestException(`'${displayName}' must be a boolean value`);
+        if (
+          !['true', 'false', '1', '0', 'yes', 'no'].includes(
+            value.toLowerCase(),
+          )
+        ) {
+          throw new BadRequestException(
+            `'${displayName}' must be a boolean value`,
+          );
         }
         break;
       case 'select':
         if (options && !options.includes(value)) {
-          throw new BadRequestException(`'${displayName}' must be one of: ${options.join(', ')}`);
+          throw new BadRequestException(
+            `'${displayName}' must be one of: ${options.join(', ')}`,
+          );
         }
         break;
       case 'multi-select':
@@ -266,7 +315,9 @@ export class CustomAttributesService {
           const selected = value.split(',').map((v) => v.trim());
           for (const s of selected) {
             if (!options.includes(s)) {
-              throw new BadRequestException(`'${displayName}' contains invalid option: ${s}`);
+              throw new BadRequestException(
+                `'${displayName}' contains invalid option: ${s}`,
+              );
             }
           }
         }

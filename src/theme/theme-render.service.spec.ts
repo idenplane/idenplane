@@ -27,7 +27,10 @@ describe('ThemeRenderService', () => {
   } as any;
 
   let mockRes: { render: jest.Mock; setHeader: jest.Mock };
-  let mockReq: { query: Record<string, string>; headers: Record<string, string> };
+  let mockReq: {
+    query: Record<string, string>;
+    headers: Record<string, string>;
+  };
 
   beforeEach(() => {
     themeService = {
@@ -37,12 +40,17 @@ describe('ThemeRenderService', () => {
         primaryColor: '#2563eb',
         backgroundColor: '#f0f2f5',
       }),
-      resolveCss: jest.fn().mockReturnValue(['/themes/authme/login/resources/styles.css']),
+      resolveCss: jest
+        .fn()
+        .mockReturnValue(['/themes/authme/login/resources/styles.css']),
     };
     templateService = {
-      resolve: jest.fn()
+      resolve: jest
+        .fn()
         .mockReturnValueOnce('/app/themes/authme/login/templates/login.hbs')
-        .mockReturnValueOnce('/app/themes/authme/login/templates/layouts/main.hbs'),
+        .mockReturnValueOnce(
+          '/app/themes/authme/login/templates/layouts/main.hbs',
+        ),
     };
     messageService = {
       getMessages: jest.fn().mockReturnValue({ loginTitle: 'Sign In' }),
@@ -60,14 +68,21 @@ describe('ThemeRenderService', () => {
     );
 
     mockRes = { render: jest.fn(), setHeader: jest.fn() };
-    mockReq = { query: {}, headers: {} } as any;
+    mockReq = { query: {}, headers: {} };
   });
 
   describe('render', () => {
     it('should call res.render with correct template and data', () => {
-      service.render(mockRes as any, mockRealm, 'login', 'login', {
-        formAction: '/login',
-      }, mockReq as any);
+      service.render(
+        mockRes as any,
+        mockRealm,
+        'login',
+        'login',
+        {
+          formAction: '/login',
+        },
+        mockReq as any,
+      );
 
       expect(mockRes.render).toHaveBeenCalledTimes(1);
 
@@ -80,37 +95,78 @@ describe('ThemeRenderService', () => {
       expect(data.formAction).toBe('/login');
       expect(data.primaryColor).toBe('#2563eb');
       expect(data._messages).toEqual({ loginTitle: 'Sign In' });
-      expect(data.themeCssFiles).toEqual(['/themes/authme/login/resources/styles.css']);
+      expect(data.themeCssFiles).toEqual([
+        '/themes/authme/login/resources/styles.css',
+      ]);
       expect(data.realmName).toBe('test-realm');
       expect(data.realmDisplayName).toBe('Test Realm');
     });
 
     it('should resolve theme name from realm', () => {
-      service.render(mockRes as any, mockRealm, 'login', 'login', {}, mockReq as any);
+      service.render(
+        mockRes as any,
+        mockRealm,
+        'login',
+        'login',
+        {},
+        mockReq as any,
+      );
 
-      expect(themeService.getRealmThemeName).toHaveBeenCalledWith(mockRealm, 'login');
+      expect(themeService.getRealmThemeName).toHaveBeenCalledWith(
+        mockRealm,
+        'login',
+      );
     });
 
     it('should resolve both template and layout', () => {
-      service.render(mockRes as any, mockRealm, 'login', 'login', {}, mockReq as any);
+      service.render(
+        mockRes as any,
+        mockRealm,
+        'login',
+        'login',
+        {},
+        mockReq as any,
+      );
 
       expect(templateService.resolve).toHaveBeenCalledTimes(2);
-      expect(templateService.resolve).toHaveBeenCalledWith('authme', 'login', 'login');
-      expect(templateService.resolve).toHaveBeenCalledWith('authme', 'login', 'layouts/main');
+      expect(templateService.resolve).toHaveBeenCalledWith(
+        'authme',
+        'login',
+        'login',
+      );
+      expect(templateService.resolve).toHaveBeenCalledWith(
+        'authme',
+        'login',
+        'layouts/main',
+      );
     });
 
     it('should include layout as relative path', () => {
-      service.render(mockRes as any, mockRealm, 'login', 'login', {}, mockReq as any);
+      service.render(
+        mockRes as any,
+        mockRealm,
+        'login',
+        'login',
+        {},
+        mockReq as any,
+      );
 
       const [, data] = mockRes.render.mock.calls[0];
       expect(data.layout).toMatch(/layouts[/\\]main\.hbs/);
     });
 
     it('should use data.realmName over realm.name when provided', () => {
-      service.render(mockRes as any, mockRealm, 'login', 'login', {
-        realmName: 'custom-name',
-        realmDisplayName: 'Custom Display',
-      }, mockReq as any);
+      service.render(
+        mockRes as any,
+        mockRealm,
+        'login',
+        'login',
+        {
+          realmName: 'custom-name',
+          realmDisplayName: 'Custom Display',
+        },
+        mockReq as any,
+      );
 
       const [, data] = mockRes.render.mock.calls[0];
       expect(data.realmName).toBe('custom-name');
@@ -118,7 +174,14 @@ describe('ThemeRenderService', () => {
     });
 
     it('should fall back to realm.name when data.realmName is not set', () => {
-      service.render(mockRes as any, mockRealm, 'login', 'login', {}, mockReq as any);
+      service.render(
+        mockRes as any,
+        mockRealm,
+        'login',
+        'login',
+        {},
+        mockReq as any,
+      );
 
       const [, data] = mockRes.render.mock.calls[0];
       expect(data.realmName).toBe('test-realm');
@@ -127,7 +190,14 @@ describe('ThemeRenderService', () => {
     it('should fall back to realm.name when displayName is null', () => {
       const realmNoDisplay = { ...mockRealm, displayName: null };
 
-      service.render(mockRes as any, realmNoDisplay, 'login', 'login', {}, mockReq as any);
+      service.render(
+        mockRes as any,
+        realmNoDisplay,
+        'login',
+        'login',
+        {},
+        mockReq as any,
+      );
 
       const [, data] = mockRes.render.mock.calls[0];
       expect(data.realmDisplayName).toBe('test-realm');
@@ -137,7 +207,14 @@ describe('ThemeRenderService', () => {
       i18nService.detectLocale.mockReturnValue('fr');
       i18nService.isRtl.mockReturnValue(false);
 
-      service.render(mockRes as any, mockRealm, 'login', 'login', {}, mockReq as any);
+      service.render(
+        mockRes as any,
+        mockRealm,
+        'login',
+        'login',
+        {},
+        mockReq as any,
+      );
 
       expect(i18nService.detectLocale).toHaveBeenCalledWith(mockReq);
       const [, data] = mockRes.render.mock.calls[0];
@@ -149,7 +226,14 @@ describe('ThemeRenderService', () => {
       i18nService.detectLocale.mockReturnValue('ar');
       i18nService.isRtl.mockReturnValue(true);
 
-      service.render(mockRes as any, mockRealm, 'login', 'login', {}, mockReq as any);
+      service.render(
+        mockRes as any,
+        mockRealm,
+        'login',
+        'login',
+        {},
+        mockReq as any,
+      );
 
       const [, data] = mockRes.render.mock.calls[0];
       expect(data.locale).toBe('ar');
@@ -158,7 +242,14 @@ describe('ThemeRenderService', () => {
     });
 
     it('should include languageSwitcher array in template data', () => {
-      service.render(mockRes as any, mockRealm, 'login', 'login', {}, mockReq as any);
+      service.render(
+        mockRes as any,
+        mockRealm,
+        'login',
+        'login',
+        {},
+        mockReq as any,
+      );
 
       const [, data] = mockRes.render.mock.calls[0];
       expect(Array.isArray(data.languageSwitcher)).toBe(true);
@@ -171,9 +262,20 @@ describe('ThemeRenderService', () => {
     it('should pass messages with detected locale to messageService', () => {
       i18nService.detectLocale.mockReturnValue('de');
 
-      service.render(mockRes as any, mockRealm, 'login', 'login', {}, mockReq as any);
+      service.render(
+        mockRes as any,
+        mockRealm,
+        'login',
+        'login',
+        {},
+        mockReq as any,
+      );
 
-      expect(messageService.getMessages).toHaveBeenCalledWith('authme', 'login', 'de');
+      expect(messageService.getMessages).toHaveBeenCalledWith(
+        'authme',
+        'login',
+        'de',
+      );
     });
 
     it('should use realm.defaultLocale when no req is provided', () => {
@@ -181,7 +283,11 @@ describe('ThemeRenderService', () => {
 
       service.render(mockRes as any, realmWithLocale, 'login', 'login', {});
 
-      expect(messageService.getMessages).toHaveBeenCalledWith('authme', 'login', 'es');
+      expect(messageService.getMessages).toHaveBeenCalledWith(
+        'authme',
+        'login',
+        'es',
+      );
     });
 
     it('should sanitize customCss before passing it to res.render', () => {
@@ -191,7 +297,14 @@ describe('ThemeRenderService', () => {
         customCss: 'body { color: red; } </style><script>alert(1)</script>',
       });
 
-      service.render(mockRes as any, mockRealm, 'login', 'login', {}, mockReq as any);
+      service.render(
+        mockRes as any,
+        mockRealm,
+        'login',
+        'login',
+        {},
+        mockReq as any,
+      );
 
       const [, data] = mockRes.render.mock.calls[0];
       expect(data.customCss).not.toContain('</style');
@@ -200,7 +313,14 @@ describe('ThemeRenderService', () => {
     });
 
     it('should set a Content-Security-Policy header with a nonce on each render', () => {
-      service.render(mockRes as any, mockRealm, 'login', 'login', {}, mockReq as any);
+      service.render(
+        mockRes as any,
+        mockRealm,
+        'login',
+        'login',
+        {},
+        mockReq as any,
+      );
 
       expect(mockRes.setHeader).toHaveBeenCalledWith(
         'Content-Security-Policy',
@@ -209,7 +329,14 @@ describe('ThemeRenderService', () => {
     });
 
     it('should pass scriptNonce to the template and match the nonce in the CSP header', () => {
-      service.render(mockRes as any, mockRealm, 'login', 'login', {}, mockReq as any);
+      service.render(
+        mockRes as any,
+        mockRealm,
+        'login',
+        'login',
+        {},
+        mockReq as any,
+      );
 
       const [, data] = mockRes.render.mock.calls[0];
       const nonce: string = data.scriptNonce;
@@ -217,19 +344,37 @@ describe('ThemeRenderService', () => {
       expect(typeof nonce).toBe('string');
       expect(nonce.length).toBeGreaterThan(0);
 
-      const [, cspValue] = (mockRes.setHeader as jest.Mock).mock.calls[0];
+      const [, cspValue] = mockRes.setHeader.mock.calls[0];
       expect(cspValue).toContain(`'nonce-${nonce}'`);
     });
 
     it('should generate a unique nonce on each render call', () => {
       templateService.resolve
         .mockReturnValueOnce('/app/themes/authme/login/templates/login.hbs')
-        .mockReturnValueOnce('/app/themes/authme/login/templates/layouts/main.hbs')
+        .mockReturnValueOnce(
+          '/app/themes/authme/login/templates/layouts/main.hbs',
+        )
         .mockReturnValueOnce('/app/themes/authme/login/templates/login.hbs')
-        .mockReturnValueOnce('/app/themes/authme/login/templates/layouts/main.hbs');
+        .mockReturnValueOnce(
+          '/app/themes/authme/login/templates/layouts/main.hbs',
+        );
 
-      service.render(mockRes as any, mockRealm, 'login', 'login', {}, mockReq as any);
-      service.render(mockRes as any, mockRealm, 'login', 'login', {}, mockReq as any);
+      service.render(
+        mockRes as any,
+        mockRealm,
+        'login',
+        'login',
+        {},
+        mockReq as any,
+      );
+      service.render(
+        mockRes as any,
+        mockRealm,
+        'login',
+        'login',
+        {},
+        mockReq as any,
+      );
 
       const nonce1 = mockRes.render.mock.calls[0][1].scriptNonce;
       const nonce2 = mockRes.render.mock.calls[1][1].scriptNonce;
@@ -261,7 +406,9 @@ describe('ThemeRenderService', () => {
     });
 
     it('should strip <script case-insensitively', () => {
-      expect(sanitizeCss('<script>alert(1)</script>')).toBe('>alert(1)</script>');
+      expect(sanitizeCss('<script>alert(1)</script>')).toBe(
+        '>alert(1)</script>',
+      );
       expect(sanitizeCss('<SCRIPT>evil()</SCRIPT>')).toBe('>evil()</SCRIPT>');
     });
 

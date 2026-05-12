@@ -14,7 +14,9 @@ import type {
 
 // ─── Helpers ────────────────────────────────────────────────────────────────
 
-const makeEventListenerPlugin = (name = 'test-listener'): EventListenerPlugin => ({
+const makeEventListenerPlugin = (
+  name = 'test-listener',
+): EventListenerPlugin => ({
   name,
   version: '1.0.0',
   description: 'A test event listener',
@@ -27,7 +29,9 @@ const makeEventListenerPlugin = (name = 'test-listener'): EventListenerPlugin =>
   onUninstall: jest.fn().mockResolvedValue(undefined),
 });
 
-const makeEnrichmentPlugin = (name = 'test-enricher'): TokenEnrichmentPlugin => ({
+const makeEnrichmentPlugin = (
+  name = 'test-enricher',
+): TokenEnrichmentPlugin => ({
   name,
   version: '1.0.0',
   type: 'token-enrichment',
@@ -79,7 +83,9 @@ describe('PluginManagerService', () => {
   describe('onModuleInit', () => {
     it('should call discoverAll and register discovered plugins', async () => {
       const plugin = makeEventListenerPlugin();
-      (loader.discoverAll as jest.Mock).mockResolvedValue([{ plugin, source: 'directory', sourcePath: '/plugins/test' }]);
+      (loader.discoverAll as jest.Mock).mockResolvedValue([
+        { plugin, source: 'directory', sourcePath: '/plugins/test' },
+      ]);
 
       prisma.installedPlugin.findUnique.mockResolvedValue(null);
       prisma.installedPlugin.create.mockResolvedValue(makeDbRecord());
@@ -92,11 +98,17 @@ describe('PluginManagerService', () => {
 
     it('should sync existing plugin state from the database', async () => {
       const plugin = makeEventListenerPlugin();
-      (loader.discoverAll as jest.Mock).mockResolvedValue([{ plugin, source: 'directory', sourcePath: '/plugins/test' }]);
+      (loader.discoverAll as jest.Mock).mockResolvedValue([
+        { plugin, source: 'directory', sourcePath: '/plugins/test' },
+      ]);
 
       // Plugin already in DB, but disabled
-      prisma.installedPlugin.findUnique.mockResolvedValue(makeDbRecord({ enabled: false }));
-      prisma.installedPlugin.update.mockResolvedValue(makeDbRecord({ enabled: false }));
+      prisma.installedPlugin.findUnique.mockResolvedValue(
+        makeDbRecord({ enabled: false }),
+      );
+      prisma.installedPlugin.update.mockResolvedValue(
+        makeDbRecord({ enabled: false }),
+      );
 
       await service.onModuleInit();
 
@@ -105,7 +117,9 @@ describe('PluginManagerService', () => {
 
     it('should persist a new plugin to the database with onInstall lifecycle', async () => {
       const plugin = makeEventListenerPlugin();
-      (loader.discoverAll as jest.Mock).mockResolvedValue([{ plugin, source: 'directory', sourcePath: '/plugins/test' }]);
+      (loader.discoverAll as jest.Mock).mockResolvedValue([
+        { plugin, source: 'directory', sourcePath: '/plugins/test' },
+      ]);
 
       prisma.installedPlugin.findUnique.mockResolvedValue(null);
       prisma.installedPlugin.create.mockResolvedValue(makeDbRecord());
@@ -114,7 +128,10 @@ describe('PluginManagerService', () => {
 
       expect(prisma.installedPlugin.create).toHaveBeenCalledWith(
         expect.objectContaining({
-          data: expect.objectContaining({ name: 'test-listener', type: 'event-listener' }),
+          data: expect.objectContaining({
+            name: 'test-listener',
+            type: 'event-listener',
+          }),
         }),
       );
       expect(plugin.onInstall).toHaveBeenCalled();
@@ -126,14 +143,20 @@ describe('PluginManagerService', () => {
 
       (loader.discoverAll as jest.Mock).mockResolvedValue([
         { plugin: badPlugin, source: 'directory', sourcePath: '/plugins/bad' },
-        { plugin: goodPlugin, source: 'directory', sourcePath: '/plugins/good' },
+        {
+          plugin: goodPlugin,
+          source: 'directory',
+          sourcePath: '/plugins/good',
+        },
       ]);
 
       prisma.installedPlugin.findUnique
         .mockRejectedValueOnce(new Error('DB error'))
         .mockResolvedValueOnce(null);
 
-      prisma.installedPlugin.create.mockResolvedValue(makeDbRecord({ name: 'good-plugin' }));
+      prisma.installedPlugin.create.mockResolvedValue(
+        makeDbRecord({ name: 'good-plugin' }),
+      );
 
       // Should not throw
       await service.onModuleInit();
@@ -171,7 +194,9 @@ describe('PluginManagerService', () => {
     it('should throw NotFoundException for unknown plugin', async () => {
       prisma.installedPlugin.findUnique.mockResolvedValue(null);
 
-      await expect(service.getPlugin('no-such-plugin')).rejects.toThrow(NotFoundException);
+      await expect(service.getPlugin('no-such-plugin')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -184,9 +209,11 @@ describe('PluginManagerService', () => {
 
       prisma.installedPlugin.findUnique
         .mockResolvedValueOnce(makeDbRecord({ enabled: false })) // for enablePlugin call
-        .mockResolvedValueOnce(makeDbRecord({ enabled: true }));  // for final getPlugin
+        .mockResolvedValueOnce(makeDbRecord({ enabled: true })); // for final getPlugin
 
-      prisma.installedPlugin.update.mockResolvedValue(makeDbRecord({ enabled: true }));
+      prisma.installedPlugin.update.mockResolvedValue(
+        makeDbRecord({ enabled: true }),
+      );
 
       const result = await service.enablePlugin('test-listener');
 
@@ -200,12 +227,18 @@ describe('PluginManagerService', () => {
 
     it('should throw NotFoundException for unknown plugin', async () => {
       prisma.installedPlugin.findUnique.mockResolvedValue(null);
-      await expect(service.enablePlugin('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.enablePlugin('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should throw ConflictException when plugin is already enabled', async () => {
-      prisma.installedPlugin.findUnique.mockResolvedValue(makeDbRecord({ enabled: true }));
-      await expect(service.enablePlugin('test-listener')).rejects.toThrow(ConflictException);
+      prisma.installedPlugin.findUnique.mockResolvedValue(
+        makeDbRecord({ enabled: true }),
+      );
+      await expect(service.enablePlugin('test-listener')).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 
@@ -217,10 +250,12 @@ describe('PluginManagerService', () => {
       registry.register(plugin, true);
 
       prisma.installedPlugin.findUnique
-        .mockResolvedValueOnce(makeDbRecord({ enabled: true }))   // for disablePlugin
+        .mockResolvedValueOnce(makeDbRecord({ enabled: true })) // for disablePlugin
         .mockResolvedValueOnce(makeDbRecord({ enabled: false })); // for getPlugin
 
-      prisma.installedPlugin.update.mockResolvedValue(makeDbRecord({ enabled: false }));
+      prisma.installedPlugin.update.mockResolvedValue(
+        makeDbRecord({ enabled: false }),
+      );
 
       await service.disablePlugin('test-listener');
 
@@ -230,12 +265,18 @@ describe('PluginManagerService', () => {
 
     it('should throw NotFoundException for unknown plugin', async () => {
       prisma.installedPlugin.findUnique.mockResolvedValue(null);
-      await expect(service.disablePlugin('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.disablePlugin('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
 
     it('should throw ConflictException when plugin is already disabled', async () => {
-      prisma.installedPlugin.findUnique.mockResolvedValue(makeDbRecord({ enabled: false }));
-      await expect(service.disablePlugin('test-listener')).rejects.toThrow(ConflictException);
+      prisma.installedPlugin.findUnique.mockResolvedValue(
+        makeDbRecord({ enabled: false }),
+      );
+      await expect(service.disablePlugin('test-listener')).rejects.toThrow(
+        ConflictException,
+      );
     });
   });
 
@@ -253,12 +294,16 @@ describe('PluginManagerService', () => {
 
       expect(plugin.onUninstall).toHaveBeenCalled();
       expect(registry.get('test-listener')).toBeUndefined();
-      expect(prisma.installedPlugin.delete).toHaveBeenCalledWith({ where: { name: 'test-listener' } });
+      expect(prisma.installedPlugin.delete).toHaveBeenCalledWith({
+        where: { name: 'test-listener' },
+      });
     });
 
     it('should throw NotFoundException for unknown plugin', async () => {
       prisma.installedPlugin.findUnique.mockResolvedValue(null);
-      await expect(service.uninstallPlugin('missing')).rejects.toThrow(NotFoundException);
+      await expect(service.uninstallPlugin('missing')).rejects.toThrow(
+        NotFoundException,
+      );
     });
   });
 
@@ -307,7 +352,9 @@ describe('PluginManagerService', () => {
     it('should isolate plugin errors and continue', async () => {
       const badPlugin = makeEventListenerPlugin('bad');
       badPlugin.subscribedEvents = ['*'];
-      (badPlugin.onEvent as jest.Mock).mockRejectedValue(new Error('plugin crash'));
+      (badPlugin.onEvent as jest.Mock).mockRejectedValue(
+        new Error('plugin crash'),
+      );
 
       const goodPlugin = makeEventListenerPlugin('good');
       goodPlugin.subscribedEvents = ['*'];
@@ -344,22 +391,34 @@ describe('PluginManagerService', () => {
 
     it('should chain multiple enrichment plugins', async () => {
       const p1 = makeEnrichmentPlugin('enricher-1');
-      (p1.enrichToken as jest.Mock).mockImplementation(async (t: any) => ({ ...t, claim1: 'value1' }));
+      (p1.enrichToken as jest.Mock).mockImplementation(async (t: any) => ({
+        ...t,
+        claim1: 'value1',
+      }));
 
       const p2 = makeEnrichmentPlugin('enricher-2');
-      (p2.enrichToken as jest.Mock).mockImplementation(async (t: any) => ({ ...t, claim2: 'value2' }));
+      (p2.enrichToken as jest.Mock).mockImplementation(async (t: any) => ({
+        ...t,
+        claim2: 'value2',
+      }));
 
       registry.register(p1, true);
       registry.register(p2, true);
 
       const result = await service.enrichToken({ sub: 'user-1' }, {}, 'realm');
 
-      expect(result).toMatchObject({ sub: 'user-1', claim1: 'value1', claim2: 'value2' });
+      expect(result).toMatchObject({
+        sub: 'user-1',
+        claim1: 'value1',
+        claim2: 'value2',
+      });
     });
 
     it('should fall back to previous value when an enrichment plugin throws', async () => {
       const plugin = makeEnrichmentPlugin();
-      (plugin.enrichToken as jest.Mock).mockRejectedValue(new Error('enrichment failed'));
+      (plugin.enrichToken as jest.Mock).mockRejectedValue(
+        new Error('enrichment failed'),
+      );
       registry.register(plugin, true);
 
       const token = { sub: 'user-1' };

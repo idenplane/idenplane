@@ -84,7 +84,12 @@ export class ThemeUploadService {
    */
   async uploadAsset(
     realmName: string,
-    fileData: { data: string; filename: string; mimeType: string; size?: number },
+    fileData: {
+      data: string;
+      filename: string;
+      mimeType: string;
+      size?: number;
+    },
     themeId?: string,
   ): Promise<UploadedAsset> {
     const realm = await this.prisma.realm.findUnique({
@@ -98,7 +103,9 @@ export class ThemeUploadService {
 
     // Validate MIME type
     if (!this.isValidMimeType(fileData.mimeType)) {
-      throw new Error(`Invalid file type: ${fileData.mimeType}. Allowed types: PNG, JPEG, GIF, SVG, WebP`);
+      throw new Error(
+        `Invalid file type: ${fileData.mimeType}. Allowed types: PNG, JPEG, GIF, SVG, WebP`,
+      );
     }
 
     // Validate file size
@@ -143,7 +150,12 @@ export class ThemeUploadService {
    */
   async uploadMultipleAssets(
     realmName: string,
-    files: Array<{ data: string; filename: string; mimeType: string; size?: number }>,
+    files: Array<{
+      data: string;
+      filename: string;
+      mimeType: string;
+      size?: number;
+    }>,
     themeId?: string,
   ): Promise<ThemeAssetUploadResult> {
     const assets: UploadedAsset[] = [];

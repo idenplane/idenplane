@@ -37,7 +37,9 @@ describe('MetricsInterceptor', () => {
             path: '/api/users',
             status: '200',
           });
-          expect(metricsService.httpRequestDuration.observe).toHaveBeenCalledWith(
+          expect(
+            metricsService.httpRequestDuration.observe,
+          ).toHaveBeenCalledWith(
             { method: 'GET', path: '/api/users' },
             expect.any(Number),
           );
@@ -94,7 +96,8 @@ describe('MetricsInterceptor', () => {
     });
 
     it('should normalize UUIDs in path to :id', (done) => {
-      const uuidPath = '/api/users/550e8400-e29b-41d4-a716-446655440000/sessions';
+      const uuidPath =
+        '/api/users/550e8400-e29b-41d4-a716-446655440000/sessions';
       const context = createContext('GET', uuidPath, 200);
       const next = { handle: () => of('result') };
 
@@ -111,7 +114,8 @@ describe('MetricsInterceptor', () => {
     });
 
     it('should normalize multiple UUIDs in path', (done) => {
-      const path = '/api/realms/11111111-2222-3333-4444-555555555555/users/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
+      const path =
+        '/api/realms/11111111-2222-3333-4444-555555555555/users/aaaaaaaa-bbbb-cccc-dddd-eeeeeeeeeeee';
       const context = createContext('DELETE', path, 204);
       const next = { handle: () => of(undefined) };
 
@@ -133,7 +137,8 @@ describe('MetricsInterceptor', () => {
 
       interceptor.intercept(context as any, next).subscribe({
         complete: () => {
-          const duration = metricsService.httpRequestDuration.observe.mock.calls[0][1];
+          const duration =
+            metricsService.httpRequestDuration.observe.mock.calls[0][1];
           expect(duration).toBeGreaterThanOrEqual(0);
           done();
         },

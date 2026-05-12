@@ -46,7 +46,9 @@ describe('JwkService', () => {
       );
 
       const tampered = token.slice(0, -5) + 'xxxxx';
-      await expect(service.verifyJwt(tampered, keyPair.publicKeyPem)).rejects.toThrow();
+      await expect(
+        service.verifyJwt(tampered, keyPair.publicKeyPem),
+      ).rejects.toThrow();
     });
 
     it('should reject a token signed with a different key', async () => {
@@ -60,7 +62,9 @@ describe('JwkService', () => {
         300,
       );
 
-      await expect(service.verifyJwt(token, keyPair2.publicKeyPem)).rejects.toThrow();
+      await expect(
+        service.verifyJwt(token, keyPair2.publicKeyPem),
+      ).rejects.toThrow();
     });
   });
 
@@ -89,7 +93,10 @@ describe('JwkService', () => {
   describe('publicKeyToJwk', () => {
     it('should return a JWK with correct properties', async () => {
       const keyPair = await service.generateRsaKeyPair();
-      const jwk = await service.publicKeyToJwk(keyPair.publicKeyPem, keyPair.kid);
+      const jwk = await service.publicKeyToJwk(
+        keyPair.publicKeyPem,
+        keyPair.kid,
+      );
 
       expect(jwk.kty).toBe('RSA');
       expect(jwk.kid).toBe(keyPair.kid);

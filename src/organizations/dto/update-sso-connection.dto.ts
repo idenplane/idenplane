@@ -19,7 +19,9 @@ export class UpdateSsoConnectionDto {
   @IsBoolean()
   enabled?: boolean;
 
-  @ApiPropertyOptional({ description: 'Provider-specific configuration object' })
+  @ApiPropertyOptional({
+    description: 'Provider-specific configuration object',
+  })
   @IsOptional()
   @IsObject()
   config?: Record<string, unknown>;

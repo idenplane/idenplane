@@ -13,7 +13,13 @@ import {
   BadRequestException,
   ForbiddenException,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiBearerAuth, ApiQuery } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiBearerAuth,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import type { Realm } from '@prisma/client';
 import { RegistrationService } from './registration.service.js';
@@ -21,8 +27,15 @@ import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
 import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
-import { RegisterDto, VerifyEmailDto, ResendVerificationDto } from './dto/register.dto.js';
-import { CreateRegistrationFieldDto, UpdateRegistrationFieldDto } from './dto/registration-field.dto.js';
+import {
+  RegisterDto,
+  VerifyEmailDto,
+  ResendVerificationDto,
+} from './dto/register.dto.js';
+import {
+  CreateRegistrationFieldDto,
+  UpdateRegistrationFieldDto,
+} from './dto/registration-field.dto.js';
 
 @ApiTags('Registration')
 @Controller('realms/:realmName/registration')
@@ -52,7 +65,11 @@ export class RegistrationController {
     }
 
     const provider = captchaProvider as any;
-    const result = await this.registrationService.register(realm, dto, provider);
+    const result = await this.registrationService.register(
+      realm,
+      dto,
+      provider,
+    );
 
     return {
       message: result.requiresApproval
@@ -71,10 +88,7 @@ export class RegistrationController {
   @ApiOperation({ summary: 'Verify email address with token' })
   @ApiResponse({ status: 200, description: 'Email verified successfully' })
   @ApiResponse({ status: 400, description: 'Invalid or expired token' })
-  async verifyEmail(
-    @CurrentRealm() realm: Realm,
-    @Body() dto: VerifyEmailDto,
-  ) {
+  async verifyEmail(@CurrentRealm() realm: Realm, @Body() dto: VerifyEmailDto) {
     const result = await this.registrationService.verifyEmail(realm, dto.token);
 
     if (!result.success) {
@@ -97,11 +111,15 @@ export class RegistrationController {
     @CurrentRealm() realm: Realm,
     @Body() dto: ResendVerificationDto,
   ) {
-    const result = await this.registrationService.resendVerificationEmail(realm, dto.email);
+    const result = await this.registrationService.resendVerificationEmail(
+      realm,
+      dto.email,
+    );
 
     // Always return success to prevent email enumeration
     return {
-      message: 'If that email exists and is unverified, a verification email has been sent.',
+      message:
+        'If that email exists and is unverified, a verification email has been sent.',
     };
   }
 
@@ -111,10 +129,14 @@ export class RegistrationController {
   @Public()
   @SkipThrottle()
   @ApiOperation({ summary: 'Get enabled registration fields for a realm' })
-  @ApiResponse({ status: 200, description: 'List of enabled registration fields' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of enabled registration fields',
+  })
   async getPublicRegistrationFields(@CurrentRealm() realm: Realm) {
-    const fields = await this.registrationService.getEnabledRegistrationFields(realm);
-    return fields.map(f => ({
+    const fields =
+      await this.registrationService.getEnabledRegistrationFields(realm);
+    return fields.map((f) => ({
       name: f.name,
       displayName: f.displayName,
       type: f.type,
@@ -213,7 +235,11 @@ export class RegistrationController {
     @Param('fieldId') fieldId: string,
     @Body() dto: UpdateRegistrationFieldDto,
   ) {
-    return this.registrationService.updateRegistrationField(realm, fieldId, dto);
+    return this.registrationService.updateRegistrationField(
+      realm,
+      fieldId,
+      dto,
+    );
   }
 
   @Delete('admin/fields/:fieldId')

@@ -10,7 +10,12 @@ import {
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiSecurity, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiSecurity,
+  ApiResponse,
+} from '@nestjs/swagger';
 import type { Realm } from '@prisma/client';
 import { GroupsService } from './groups.service.js';
 import { CreateGroupDto } from './dto/create-group.dto.js';
@@ -133,10 +138,7 @@ export class GroupsController {
   @ApiResponse({ status: 200, description: "List of user's groups" })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'User not found' })
-  getUserGroups(
-    @CurrentRealm() realm: Realm,
-    @Param('userId') userId: string,
-  ) {
+  getUserGroups(@CurrentRealm() realm: Realm, @Param('userId') userId: string) {
     return this.groupsService.getUserGroups(realm, userId);
   }
 
@@ -165,7 +167,11 @@ export class GroupsController {
     @Param('groupId') groupId: string,
     @Body() body: { roleNames: string[] },
   ) {
-    return this.groupsService.assignRolesToGroup(realm, groupId, body.roleNames);
+    return this.groupsService.assignRolesToGroup(
+      realm,
+      groupId,
+      body.roleNames,
+    );
   }
 
   @Delete('groups/:groupId/role-mappings')
@@ -179,6 +185,10 @@ export class GroupsController {
     @Param('groupId') groupId: string,
     @Body() body: { roleNames: string[] },
   ) {
-    return this.groupsService.removeRolesFromGroup(realm, groupId, body.roleNames);
+    return this.groupsService.removeRolesFromGroup(
+      realm,
+      groupId,
+      body.roleNames,
+    );
   }
 }

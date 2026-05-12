@@ -2,7 +2,10 @@ import { IsString, IsArray, IsOptional, ValidateNested } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class ThemeAssetFileDto {
-  @ApiProperty({ example: 'base64encodedstring', description: 'Base64 encoded file data' })
+  @ApiProperty({
+    example: 'base64encodedstring',
+    description: 'Base64 encoded file data',
+  })
   @IsString()
   data!: string;
 
@@ -20,7 +23,10 @@ export class ThemeAssetFileDto {
 }
 
 export class UploadThemeAssetDto {
-  @ApiProperty({ type: [ThemeAssetFileDto], description: 'Array of files to upload' })
+  @ApiProperty({
+    type: [ThemeAssetFileDto],
+    description: 'Array of files to upload',
+  })
   @IsArray()
   @ValidateNested({ each: true })
   files!: ThemeAssetFileDto[];

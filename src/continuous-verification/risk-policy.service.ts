@@ -43,9 +43,9 @@ export class RiskPolicyService {
         description: dto.description,
         enabled: dto.enabled ?? true,
         priority: dto.priority ?? 0,
-        conditions: dto.conditions as object,
+        conditions: dto.conditions,
         action: dto.action ?? 'NO_ACTION',
-        actionData: dto.actionData as object | undefined,
+        actionData: dto.actionData,
         riskScoreContribution: dto.riskScoreContribution ?? 0,
         cooldownSeconds: dto.cooldownSeconds ?? 300,
       },
@@ -72,7 +72,11 @@ export class RiskPolicyService {
     return policy;
   }
 
-  async updatePolicy(realm: Realm, id: string, dto: UpdateContinuousRiskPolicyDto) {
+  async updatePolicy(
+    realm: Realm,
+    id: string,
+    dto: UpdateContinuousRiskPolicyDto,
+  ) {
     await this.findPolicyById(realm, id);
 
     const updated = await this.prisma.continuousRiskPolicy.update({
@@ -83,7 +87,7 @@ export class RiskPolicyService {
         enabled: dto.enabled,
         priority: dto.priority,
         clientId: dto.clientId,
-        conditions: dto.conditions as object | undefined,
+        conditions: dto.conditions,
         action: dto.action,
         actionData: dto.actionData as object | undefined,
         riskScoreContribution: dto.riskScoreContribution,
@@ -117,7 +121,11 @@ export class RiskPolicyService {
       orderBy: [{ priority: 'desc' }, { createdAt: 'asc' }],
     });
 
-    await this.cache.cacheRealmConfig(cacheKey, policies as object, RISK_POLICY_CACHE_TTL);
+    await this.cache.cacheRealmConfig(
+      cacheKey,
+      policies,
+      RISK_POLICY_CACHE_TTL,
+    );
 
     return policies;
   }

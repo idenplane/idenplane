@@ -11,7 +11,12 @@ import {
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiSecurity } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiSecurity,
+} from '@nestjs/swagger';
 import type { Realm } from '@prisma/client';
 import { ConsentCategoryService } from './consent-category.service.js';
 import { CreateConsentCategoryDto } from './dto/create-consent-category.dto.js';
@@ -54,11 +59,11 @@ export class ConsentCategoriesController {
   @ApiResponse({ status: 201, description: 'Created' })
   @ApiResponse({ status: 400, description: 'Invalid input' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  @ApiResponse({ status: 409, description: 'Conflict - category already exists' })
-  create(
-    @CurrentRealm() realm: Realm,
-    @Body() dto: CreateConsentCategoryDto,
-  ) {
+  @ApiResponse({
+    status: 409,
+    description: 'Conflict - category already exists',
+  })
+  create(@CurrentRealm() realm: Realm, @Body() dto: CreateConsentCategoryDto) {
     return this.service.create(realm, dto);
   }
 
@@ -81,7 +86,10 @@ export class ConsentCategoriesController {
   @ApiResponse({ status: 204, description: 'Deleted' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
-  remove(@CurrentRealm() realm: Realm, @Param('categoryId') categoryId: string) {
+  remove(
+    @CurrentRealm() realm: Realm,
+    @Param('categoryId') categoryId: string,
+  ) {
     return this.service.delete(realm, categoryId);
   }
 

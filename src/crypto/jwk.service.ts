@@ -50,10 +50,7 @@ export class JwkService {
       .sign(privateKey);
   }
 
-  async verifyJwt(
-    token: string,
-    publicKeyPem: string,
-  ): Promise<JWTPayload> {
+  async verifyJwt(token: string, publicKeyPem: string): Promise<JWTPayload> {
     const publicKey = await importSPKI(publicKeyPem, 'RS256');
     const { payload } = await jwtVerify(token, publicKey);
     return payload;

@@ -8,7 +8,12 @@ import {
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiSecurity, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiSecurity,
+  ApiResponse,
+} from '@nestjs/swagger';
 import type { Realm } from '@prisma/client';
 import { SessionsService } from './sessions.service.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
@@ -31,7 +36,10 @@ export class SessionsController {
 
   @Get('users/:userId/sessions')
   @ApiOperation({ summary: 'List active sessions for a user' })
-  @ApiResponse({ status: 200, description: 'List of active sessions for the user' })
+  @ApiResponse({
+    status: 200,
+    description: 'List of active sessions for the user',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'User not found' })
   getUserSessions(

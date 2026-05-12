@@ -25,7 +25,8 @@ describe('AdminEventInterceptor', () => {
       body: 'body' in overrides ? overrides.body : {},
       ip: overrides.ip ?? '127.0.0.1',
       realm: 'realm' in overrides ? overrides.realm : { id: 'realm-1' },
-      adminUser: 'adminUser' in overrides ? overrides.adminUser : { userId: 'admin-1' },
+      adminUser:
+        'adminUser' in overrides ? overrides.adminUser : { userId: 'admin-1' },
     };
     return {
       switchToHttp: jest.fn().mockReturnValue({
@@ -38,7 +39,10 @@ describe('AdminEventInterceptor', () => {
 
   describe('intercept', () => {
     it('should record admin event for POST /admin/...users', (done) => {
-      const context = createContext({ method: 'POST', path: '/admin/realms/test/users' });
+      const context = createContext({
+        method: 'POST',
+        path: '/admin/realms/test/users',
+      });
 
       interceptor.intercept(context as any, nextHandler).subscribe({
         complete: () => {
@@ -57,7 +61,10 @@ describe('AdminEventInterceptor', () => {
     });
 
     it('should record UPDATE for PUT method', (done) => {
-      const context = createContext({ method: 'PUT', path: '/admin/realms/test/clients/c1' });
+      const context = createContext({
+        method: 'PUT',
+        path: '/admin/realms/test/clients/c1',
+      });
 
       interceptor.intercept(context as any, nextHandler).subscribe({
         complete: () => {
@@ -73,7 +80,10 @@ describe('AdminEventInterceptor', () => {
     });
 
     it('should record UPDATE for PATCH method', (done) => {
-      const context = createContext({ method: 'PATCH', path: '/admin/realms/test/roles/r1' });
+      const context = createContext({
+        method: 'PATCH',
+        path: '/admin/realms/test/roles/r1',
+      });
 
       interceptor.intercept(context as any, nextHandler).subscribe({
         complete: () => {
@@ -144,7 +154,10 @@ describe('AdminEventInterceptor', () => {
     // ─── Skip cases ──────────────────────────────────
 
     it('should skip GET requests', (done) => {
-      const context = createContext({ method: 'GET', path: '/admin/realms/test/users' });
+      const context = createContext({
+        method: 'GET',
+        path: '/admin/realms/test/users',
+      });
 
       interceptor.intercept(context as any, nextHandler).subscribe({
         complete: () => {
@@ -155,7 +168,10 @@ describe('AdminEventInterceptor', () => {
     });
 
     it('should skip non-admin paths', (done) => {
-      const context = createContext({ method: 'POST', path: '/realms/test/login' });
+      const context = createContext({
+        method: 'POST',
+        path: '/realms/test/login',
+      });
 
       interceptor.intercept(context as any, nextHandler).subscribe({
         complete: () => {
@@ -166,7 +182,10 @@ describe('AdminEventInterceptor', () => {
     });
 
     it('should skip events API paths', (done) => {
-      const context = createContext({ method: 'POST', path: '/admin/realms/test/events' });
+      const context = createContext({
+        method: 'POST',
+        path: '/admin/realms/test/events',
+      });
 
       interceptor.intercept(context as any, nextHandler).subscribe({
         complete: () => {
@@ -177,7 +196,10 @@ describe('AdminEventInterceptor', () => {
     });
 
     it('should skip admin-events API paths', (done) => {
-      const context = createContext({ method: 'POST', path: '/admin/realms/test/admin-events' });
+      const context = createContext({
+        method: 'POST',
+        path: '/admin/realms/test/admin-events',
+      });
 
       interceptor.intercept(context as any, nextHandler).subscribe({
         complete: () => {
@@ -188,7 +210,10 @@ describe('AdminEventInterceptor', () => {
     });
 
     it('should skip admin auth paths', (done) => {
-      const context = createContext({ method: 'POST', path: '/admin/auth/login' });
+      const context = createContext({
+        method: 'POST',
+        path: '/admin/auth/login',
+      });
 
       interceptor.intercept(context as any, nextHandler).subscribe({
         complete: () => {

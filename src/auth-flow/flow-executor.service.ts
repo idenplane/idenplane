@@ -1,4 +1,9 @@
-import { Injectable, Logger, BadRequestException, UnauthorizedException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  UnauthorizedException,
+} from '@nestjs/common';
 import type { Realm } from '@prisma/client';
 import { AuthFlowService, FlowStep, FlowContext } from './auth-flow.service.js';
 import { LoginService } from '../login/login.service.js';
@@ -50,7 +55,11 @@ export class FlowExecutorService {
 
   // ── Session helpers ─────────────────────────────────────
 
-  createSession(flowId: string, realmId: string, context: FlowContext = {}): FlowSession {
+  createSession(
+    flowId: string,
+    realmId: string,
+    context: FlowContext = {},
+  ): FlowSession {
     return {
       flowId,
       realmId,
@@ -90,11 +99,12 @@ export class FlowExecutorService {
       throw new BadRequestException('Authentication flow is already complete');
     }
 
-    const { step, conditionMet, skipped } = await this.authFlowService.executeStep(
-      session.flowId,
-      stepId,
-      session.context,
-    );
+    const { step, conditionMet, skipped } =
+      await this.authFlowService.executeStep(
+        session.flowId,
+        stepId,
+        session.context,
+      );
 
     // If the step is being skipped (optional + condition not met), advance
     if (skipped) {
@@ -112,7 +122,10 @@ export class FlowExecutorService {
       // Propagate auth errors (they carry HTTP status codes)
       if (err instanceof UnauthorizedException) throw err;
 
-      this.logger.error(`Step '${stepId}' (${step.type}) threw an unexpected error`, err);
+      this.logger.error(
+        `Step '${stepId}' (${step.type}) threw an unexpected error`,
+        err,
+      );
 
       // Try fallback path if available
       if (step.fallbackStepId) {
@@ -193,7 +206,7 @@ export class FlowExecutorService {
         return { success: true, data: { pending: true, stepType: step.type } };
 
       default:
-        this.logger.warn(`Unknown step type: ${(step as FlowStep).type}`);
+        this.logger.warn(`Unknown step type: ${step.type}`);
         return { success: false };
     }
   }
@@ -206,12 +219,21 @@ export class FlowExecutorService {
     session: FlowSession,
     realm: Parameters<LoginService['validateCredentials']>[0],
   ): Promise<{ success: boolean }> {
-    const { username, password } = credentials as { username?: string; password?: string };
+    const { username, password } = credentials as {
+      username?: string;
+      password?: string;
+    };
     if (!username || !password) {
-      throw new BadRequestException('username and password are required for password step');
+      throw new BadRequestException(
+        'username and password are required for password step',
+      );
     }
 
-    const user = await this.loginService.validateCredentials(realm, username, password);
+    const user = await this.loginService.validateCredentials(
+      realm,
+      username,
+      password,
+    );
     // Store validated user on the session context for subsequent steps
     session.userId = user.id;
     session.context['user'] = {
@@ -228,7 +250,9 @@ export class FlowExecutorService {
     session: FlowSession,
   ): Promise<{ success: boolean }> {
     if (!session.userId) {
-      throw new BadRequestException('Password step must be completed before TOTP');
+      throw new BadRequestException(
+        'Password step must be completed before TOTP',
+      );
     }
     const { code } = credentials as { code?: string };
     if (!code) {
@@ -236,7 +260,10 @@ export class FlowExecutorService {
     }
 
     // First try recovery code, then TOTP
-    const recoveryOk = await this.mfaService.verifyRecoveryCode(session.userId, code);
+    const recoveryOk = await this.mfaService.verifyRecoveryCode(
+      session.userId,
+      code,
+    );
     if (recoveryOk) return { success: true };
 
     const totpOk = await this.mfaService.verifyTotp(session.userId, code);
@@ -250,7 +277,9 @@ export class FlowExecutorService {
     // The WebAuthn assertion is completed by the /webauthn/authenticate endpoint.
     // If the assertion result is already on the context (placed there by that
     // controller), we accept it here.
-    const webauthnVerified = session.context['webauthnVerified'] as boolean | undefined;
+    const webauthnVerified = session.context['webauthnVerified'] as
+      | boolean
+      | undefined;
     const userId = credentials['userId'] as string | undefined;
 
     if (webauthnVerified && userId) {

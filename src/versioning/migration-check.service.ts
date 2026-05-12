@@ -28,7 +28,9 @@ export class MigrationCheckService implements OnModuleInit {
           `${status.pendingCount} pending database migration(s): ` +
           status.pendingMigrations.join(', '),
       );
-      this.logger.warn('Run `npx prisma migrate deploy` to apply pending migrations.');
+      this.logger.warn(
+        'Run `npx prisma migrate deploy` to apply pending migrations.',
+      );
     } else {
       this.logger.log('Database schema is up to date.');
     }
@@ -44,9 +46,10 @@ export class MigrationCheckService implements OnModuleInit {
       return this.parseStatus(output);
     } catch (err: unknown) {
       // execSync throws when exit code != 0 (i.e. when there ARE pending migrations)
-      const output = err instanceof Error && 'stdout' in err
-        ? String((err as NodeJS.ErrnoException & { stdout?: Buffer }).stdout)
-        : String(err);
+      const output =
+        err instanceof Error && 'stdout' in err
+          ? String((err as NodeJS.ErrnoException & { stdout?: Buffer }).stdout)
+          : String(err);
 
       return this.parseStatus(output);
     }

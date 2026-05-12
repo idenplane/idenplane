@@ -1,7 +1,10 @@
 import { Resolver, Query, Args, Int } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { Session } from '../types/session.type.js';
-import { SessionsService, SessionInfo } from '../../sessions/sessions.service.js';
+import {
+  SessionsService,
+  SessionInfo,
+} from '../../sessions/sessions.service.js';
 import { GraphQLAuthGuard } from '../guards/graphql-auth.guard.js';
 import { PaginationInfo } from '../types/pagination.type.js';
 
@@ -29,7 +32,9 @@ export class SessionResolver {
   ): Promise<{ items: Session[]; pagination: PaginationInfo }> {
     const realm = { id: realmId, name: '' } as any;
     const allSessions = await this.sessionsService.getRealmSessions(realm);
-    const items = allSessions.slice(skip, skip + take).map(s => this.toSession(s));
+    const items = allSessions
+      .slice(skip, skip + take)
+      .map((s) => this.toSession(s));
     const total = allSessions.length;
     return {
       items,
@@ -51,6 +56,6 @@ export class SessionResolver {
   ): Promise<Session[]> {
     const realm = { id: realmId, name: '' } as any;
     const sessions = await this.sessionsService.getUserSessions(realm, userId);
-    return sessions.map(s => this.toSession(s));
+    return sessions.map((s) => this.toSession(s));
   }
 }

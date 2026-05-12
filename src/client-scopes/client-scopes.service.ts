@@ -81,13 +81,17 @@ export class ClientScopesService {
     });
   }
 
-  async addMapper(realm: Realm, scopeId: string, data: {
-    name: string;
-    mapperType?: string;
-    protocolMapper?: string;
-    protocol?: string;
-    config?: Record<string, unknown>;
-  }) {
+  async addMapper(
+    realm: Realm,
+    scopeId: string,
+    data: {
+      name: string;
+      mapperType?: string;
+      protocolMapper?: string;
+      protocol?: string;
+      config?: Record<string, unknown>;
+    },
+  ) {
     const resolvedMapperType = data.mapperType ?? data.protocolMapper;
     if (!resolvedMapperType) {
       throw new Error('mapperType (or protocolMapper) is required');
@@ -104,10 +108,15 @@ export class ClientScopesService {
     });
   }
 
-  async updateMapper(realm: Realm, scopeId: string, mapperId: string, data: {
-    name?: string;
-    config?: Record<string, unknown>;
-  }) {
+  async updateMapper(
+    realm: Realm,
+    scopeId: string,
+    mapperId: string,
+    data: {
+      name?: string;
+      config?: Record<string, unknown>;
+    },
+  ) {
     await this.findById(realm, scopeId);
     return this.prisma.protocolMapper.update({
       where: { id: mapperId },
@@ -136,7 +145,11 @@ export class ClientScopesService {
     });
   }
 
-  async assignDefaultScope(realm: Realm, clientId: string, clientScopeId: string) {
+  async assignDefaultScope(
+    realm: Realm,
+    clientId: string,
+    clientScopeId: string,
+  ) {
     const client = await this.prisma.client.findUnique({
       where: { realmId_clientId: { realmId: realm.id, clientId } },
     });
@@ -148,7 +161,11 @@ export class ClientScopesService {
     });
   }
 
-  async removeDefaultScope(realm: Realm, clientId: string, clientScopeId: string) {
+  async removeDefaultScope(
+    realm: Realm,
+    clientId: string,
+    clientScopeId: string,
+  ) {
     const client = await this.prisma.client.findUnique({
       where: { realmId_clientId: { realmId: realm.id, clientId } },
     });
@@ -171,7 +188,11 @@ export class ClientScopesService {
     });
   }
 
-  async assignOptionalScope(realm: Realm, clientId: string, clientScopeId: string) {
+  async assignOptionalScope(
+    realm: Realm,
+    clientId: string,
+    clientScopeId: string,
+  ) {
     const client = await this.prisma.client.findUnique({
       where: { realmId_clientId: { realmId: realm.id, clientId } },
     });
@@ -183,7 +204,11 @@ export class ClientScopesService {
     });
   }
 
-  async removeOptionalScope(realm: Realm, clientId: string, clientScopeId: string) {
+  async removeOptionalScope(
+    realm: Realm,
+    clientId: string,
+    clientScopeId: string,
+  ) {
     const client = await this.prisma.client.findUnique({
       where: { realmId_clientId: { realmId: realm.id, clientId } },
     });

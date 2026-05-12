@@ -10,7 +10,12 @@ import { WebhooksModule } from '../webhooks/webhooks.module.js';
 @Module({
   imports: [forwardRef(() => WebhooksModule)],
   controllers: [EventsController],
-  providers: [EventsService, EventsCleanupService, AuditExportService, AuditStreamsService],
+  providers: [
+    EventsService,
+    EventsCleanupService,
+    AuditExportService,
+    AuditStreamsService,
+  ],
   exports: [EventsService, AuditStreamsService],
 })
 export class EventsModule {}

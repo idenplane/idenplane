@@ -10,7 +10,12 @@ import {
   HttpStatus,
   UseGuards,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiSecurity } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiSecurity,
+} from '@nestjs/swagger';
 import type { Realm } from '@prisma/client';
 import { ClientScopesService } from './client-scopes.service.js';
 import { CreateClientScopeDto } from './dto/create-client-scope.dto.js';
@@ -97,7 +102,14 @@ export class ClientScopesController {
   addMapper(
     @CurrentRealm() realm: Realm,
     @Param('scopeId') scopeId: string,
-    @Body() body: { name: string; mapperType?: string; protocolMapper?: string; protocol?: string; config?: Record<string, unknown> },
+    @Body()
+    body: {
+      name: string;
+      mapperType?: string;
+      protocolMapper?: string;
+      protocol?: string;
+      config?: Record<string, unknown>;
+    },
   ) {
     return this.service.addMapper(realm, scopeId, body);
   }

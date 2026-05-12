@@ -31,7 +31,7 @@ export class ScimAuthGuard implements CanActivate {
 
     // Extract realm from path: /scim/v2/{realmName}/...
     const pathParts = request.path.split('/');
-    const realmNameIndex = pathParts.findIndex(p => p === 'scim') + 2; // Get realm name after /scim/v2
+    const realmNameIndex = pathParts.findIndex((p) => p === 'scim') + 2; // Get realm name after /scim/v2
     const realmName = pathParts[realmNameIndex] || 'master';
 
     // Find realm and check SCIM is enabled
@@ -44,13 +44,17 @@ export class ScimAuthGuard implements CanActivate {
     }
 
     if (!realm.scimEnabled) {
-      throw new UnauthorizedException('SCIM provisioning is not enabled for this realm');
+      throw new UnauthorizedException(
+        'SCIM provisioning is not enabled for this realm',
+      );
     }
 
     // Extract Bearer token
     const authHeader = request.headers['authorization'];
     if (!authHeader || !authHeader.startsWith('Bearer ')) {
-      throw new UnauthorizedException('Missing or invalid Authorization header');
+      throw new UnauthorizedException(
+        'Missing or invalid Authorization header',
+      );
     }
 
     const token = authHeader.slice(7);
@@ -95,7 +99,8 @@ export class ScimAuthGuard implements CanActivate {
     });
 
     // Attach SCIM token info to request for downstream use
-    (request as Request & { scimToken: typeof scimToken }).scimToken = scimToken;
+    (request as Request & { scimToken: typeof scimToken }).scimToken =
+      scimToken;
     (request as Request & { scimRealm: typeof realm }).scimRealm = realm;
 
     return true;

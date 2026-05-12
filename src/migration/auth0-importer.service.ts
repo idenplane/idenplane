@@ -85,7 +85,11 @@ export class Auth0ImporterService {
         report.summary.roles.created++;
       } catch (error: any) {
         report.summary.roles.failed++;
-        report.errors.push({ entity: 'role', name: role.name, error: error.message });
+        report.errors.push({
+          entity: 'role',
+          name: role.name,
+          error: error.message,
+        });
       }
     }
   }
@@ -139,7 +143,11 @@ export class Auth0ImporterService {
         report.summary.clients.created++;
       } catch (error: any) {
         report.summary.clients.failed++;
-        report.errors.push({ entity: 'client', name: client.client_id, error: error.message });
+        report.errors.push({
+          entity: 'client',
+          name: client.client_id,
+          error: error.message,
+        });
       }
     }
   }
@@ -154,7 +162,11 @@ export class Auth0ImporterService {
       const username = user.username ?? user.email ?? user.user_id;
       if (!username) {
         report.summary.users.failed++;
-        report.errors.push({ entity: 'user', name: 'unknown', error: 'No username, email, or user_id' });
+        report.errors.push({
+          entity: 'user',
+          name: 'unknown',
+          error: 'No username, email, or user_id',
+        });
         continue;
       }
       try {
@@ -184,12 +196,19 @@ export class Auth0ImporterService {
         report.summary.users.created++;
       } catch (error: any) {
         report.summary.users.failed++;
-        report.errors.push({ entity: 'user', name: username, error: error.message });
+        report.errors.push({
+          entity: 'user',
+          name: username,
+          error: error.message,
+        });
       }
     }
   }
 
-  private extractAuth0Password(user: Auth0User): { hash: string | null; algorithm: string } {
+  private extractAuth0Password(user: Auth0User): {
+    hash: string | null;
+    algorithm: string;
+  } {
     // Auth0 exports bcrypt hashes in password_hash field
     if (user.password_hash) {
       return { hash: user.password_hash, algorithm: 'bcrypt' };
@@ -248,25 +267,39 @@ export class Auth0ImporterService {
         report.summary.identityProviders.created++;
       } catch (error: any) {
         report.summary.identityProviders.failed++;
-        report.errors.push({ entity: 'identity_provider', name: conn.name, error: error.message });
+        report.errors.push({
+          entity: 'identity_provider',
+          name: conn.name,
+          error: error.message,
+        });
       }
     }
   }
 
   private mapAuth0GrantTypes(grantTypes: string[]): string[] {
     const map: Record<string, string> = {
-      'authorization_code': 'authorization_code',
-      'client_credentials': 'client_credentials',
-      'password': 'password',
-      'refresh_token': 'refresh_token',
-      'urn:ietf:params:oauth:grant-type:device_code': 'urn:ietf:params:oauth:grant-type:device_code',
+      authorization_code: 'authorization_code',
+      client_credentials: 'client_credentials',
+      password: 'password',
+      refresh_token: 'refresh_token',
+      'urn:ietf:params:oauth:grant-type:device_code':
+        'urn:ietf:params:oauth:grant-type:device_code',
     };
-    return grantTypes.map(g => map[g] ?? g).filter(Boolean);
+    return grantTypes.map((g) => map[g] ?? g).filter(Boolean);
   }
 
   private mapAuth0Strategy(strategy: string): string {
-    const oidcStrategies = ['google-oauth2', 'github', 'facebook', 'microsoft', 'apple', 'linkedin', 'twitter'];
-    if (oidcStrategies.includes(strategy) || strategy.startsWith('oauth2')) return 'OIDC';
+    const oidcStrategies = [
+      'google-oauth2',
+      'github',
+      'facebook',
+      'microsoft',
+      'apple',
+      'linkedin',
+      'twitter',
+    ];
+    if (oidcStrategies.includes(strategy) || strategy.startsWith('oauth2'))
+      return 'OIDC';
     if (strategy === 'samlp' || strategy === 'adfs') return 'SAML';
     return 'OIDC';
   }

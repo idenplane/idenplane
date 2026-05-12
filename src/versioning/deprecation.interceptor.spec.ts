@@ -18,7 +18,10 @@ function makeContext(path: string): ExecutionContext {
   } as unknown as ExecutionContext;
 }
 
-function makeHandler(): { handler: CallHandler; response$: ReturnType<typeof of> } {
+function makeHandler(): {
+  handler: CallHandler;
+  response$: ReturnType<typeof of>;
+} {
   const response$ = of({ ok: true });
   const handler: CallHandler = { handle: () => response$ };
   return { handler, response$ };
@@ -47,10 +50,7 @@ describe('DeprecationInterceptor', () => {
       (path) => {
         const ctx = makeContext(path);
         const { handler } = makeHandler();
-        const response = (ctx.switchToHttp().getResponse() as unknown) as {
-          headers: Record<string, string>;
-          setHeader: (k: string, v: string) => void;
-        };
+        const response = ctx.switchToHttp().getResponse();
 
         interceptor.intercept(ctx, handler).subscribe();
 
@@ -74,10 +74,7 @@ describe('DeprecationInterceptor', () => {
       (path) => {
         const ctx = makeContext(path);
         const { handler } = makeHandler();
-        const response = (ctx.switchToHttp().getResponse() as unknown) as {
-          headers: Record<string, string>;
-          setHeader: (k: string, v: string) => void;
-        };
+        const response = ctx.switchToHttp().getResponse();
 
         interceptor.intercept(ctx, handler).subscribe();
 
@@ -97,22 +94,16 @@ describe('DeprecationInterceptor', () => {
       '/console/',
     ];
 
-    it.each(otherPaths)(
-      'does NOT add deprecation headers for %s',
-      (path) => {
-        const ctx = makeContext(path);
-        const { handler } = makeHandler();
-        const response = (ctx.switchToHttp().getResponse() as unknown) as {
-          headers: Record<string, string>;
-          setHeader: (k: string, v: string) => void;
-        };
+    it.each(otherPaths)('does NOT add deprecation headers for %s', (path) => {
+      const ctx = makeContext(path);
+      const { handler } = makeHandler();
+      const response = ctx.switchToHttp().getResponse();
 
-        interceptor.intercept(ctx, handler).subscribe();
+      interceptor.intercept(ctx, handler).subscribe();
 
-        expect(response.headers['Deprecation']).toBeUndefined();
-        expect(response.headers['Sunset']).toBeUndefined();
-      },
-    );
+      expect(response.headers['Deprecation']).toBeUndefined();
+      expect(response.headers['Sunset']).toBeUndefined();
+    });
   });
 
   it('passes the response payload through unchanged', (done) => {

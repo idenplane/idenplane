@@ -1,5 +1,21 @@
-import { Controller, Post, Get, Body, Req, Res, UnauthorizedException, BadRequestException, HttpCode, HttpStatus } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiResponse, ApiSecurity } from '@nestjs/swagger';
+import {
+  Controller,
+  Post,
+  Get,
+  Body,
+  Req,
+  Res,
+  UnauthorizedException,
+  BadRequestException,
+  HttpCode,
+  HttpStatus,
+} from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiSecurity,
+} from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { Public } from '../common/decorators/public.decorator.js';
 import { AdminAuthService } from './admin-auth.service.js';
@@ -32,11 +48,8 @@ export class AdminAuthController {
 
     const ip = resolveClientIp(req);
 
-    const { rateLimitHeaders, ...tokenResponse } = await this.adminAuthService.login(
-      body.username,
-      body.password,
-      ip,
-    );
+    const { rateLimitHeaders, ...tokenResponse } =
+      await this.adminAuthService.login(body.username, body.password, ip);
 
     for (const [name, value] of Object.entries(rateLimitHeaders)) {
       res.setHeader(name, value);
@@ -63,7 +76,9 @@ export class AdminAuthController {
   @ApiResponse({ status: 200, description: 'Current admin user info' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getMe(@Req() req: Request) {
-    const adminUser = (req as Request & { adminUser?: { userId: string; roles: string[] } })['adminUser'];
+    const adminUser = (
+      req as Request & { adminUser?: { userId: string; roles: string[] } }
+    )['adminUser'];
     if (!adminUser) {
       throw new UnauthorizedException('Not authenticated');
     }

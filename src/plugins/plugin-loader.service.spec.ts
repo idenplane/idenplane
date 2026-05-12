@@ -23,26 +23,47 @@ describe('PluginLoaderService', () => {
 
   describe('validatePlugin', () => {
     it('should return true for a valid event-listener plugin shape', () => {
-      const valid = { name: 'my-plugin', version: '1.0.0', type: 'event-listener' };
+      const valid = {
+        name: 'my-plugin',
+        version: '1.0.0',
+        type: 'event-listener',
+      };
       expect(service.validatePlugin(valid)).toBe(true);
     });
 
     it('should return true for all valid types', () => {
-      for (const type of ['auth-provider', 'event-listener', 'token-enrichment', 'theme']) {
-        expect(service.validatePlugin({ name: 'p', version: '1.0.0', type })).toBe(true);
+      for (const type of [
+        'auth-provider',
+        'event-listener',
+        'token-enrichment',
+        'theme',
+      ]) {
+        expect(
+          service.validatePlugin({ name: 'p', version: '1.0.0', type }),
+        ).toBe(true);
       }
     });
 
     it('should return false when name is missing', () => {
-      expect(service.validatePlugin({ version: '1.0.0', type: 'event-listener' })).toBe(false);
+      expect(
+        service.validatePlugin({ version: '1.0.0', type: 'event-listener' }),
+      ).toBe(false);
     });
 
     it('should return false when version is missing', () => {
-      expect(service.validatePlugin({ name: 'p', type: 'event-listener' })).toBe(false);
+      expect(
+        service.validatePlugin({ name: 'p', type: 'event-listener' }),
+      ).toBe(false);
     });
 
     it('should return false when type is invalid', () => {
-      expect(service.validatePlugin({ name: 'p', version: '1.0.0', type: 'unknown-type' })).toBe(false);
+      expect(
+        service.validatePlugin({
+          name: 'p',
+          version: '1.0.0',
+          type: 'unknown-type',
+        }),
+      ).toBe(false);
     });
 
     it('should return false for null', () => {
@@ -90,7 +111,9 @@ describe('PluginLoaderService', () => {
 
     it('should handle readdirSync errors gracefully', async () => {
       mockExistsSync.mockReturnValue(true);
-      mockReaddirSync.mockImplementation(() => { throw new Error('permission denied'); });
+      mockReaddirSync.mockImplementation(() => {
+        throw new Error('permission denied');
+      });
 
       const result = await service.discoverFromDirectory('/plugins');
       expect(result).toEqual([]);
@@ -123,7 +146,9 @@ describe('PluginLoaderService', () => {
 
     it('should handle readdirSync errors for npm directory gracefully', async () => {
       mockExistsSync.mockReturnValue(true);
-      mockReaddirSync.mockImplementation(() => { throw new Error('EACCES'); });
+      mockReaddirSync.mockImplementation(() => {
+        throw new Error('EACCES');
+      });
 
       const result = await service.discoverFromNpm('/node_modules');
       expect(result).toEqual([]);

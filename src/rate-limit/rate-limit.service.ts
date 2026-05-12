@@ -15,7 +15,10 @@ export class RateLimitService {
     private readonly redis: RedisService,
   ) {}
 
-  async checkClientLimit(clientId: string, realmId: string): Promise<RateLimitResult> {
+  async checkClientLimit(
+    clientId: string,
+    realmId: string,
+  ): Promise<RateLimitResult> {
     const realm = await this.prisma.realm.findUnique({
       where: { id: realmId },
       select: {
@@ -36,7 +39,10 @@ export class RateLimitService {
     );
   }
 
-  async checkUserLimit(userId: string, realmId: string): Promise<RateLimitResult> {
+  async checkUserLimit(
+    userId: string,
+    realmId: string,
+  ): Promise<RateLimitResult> {
     const realm = await this.prisma.realm.findUnique({
       where: { id: realmId },
       select: {
@@ -65,13 +71,21 @@ export class RateLimitService {
   async checkAdminIpLimit(ip: string): Promise<RateLimitResult> {
     const ADMIN_LIMIT_PER_MINUTE = 5;
     const ADMIN_LIMIT_PER_HOUR = 50;
-    return this.check(`admin:ip:${ip}`, ADMIN_LIMIT_PER_MINUTE, ADMIN_LIMIT_PER_HOUR);
+    return this.check(
+      `admin:ip:${ip}`,
+      ADMIN_LIMIT_PER_MINUTE,
+      ADMIN_LIMIT_PER_HOUR,
+    );
   }
 
   async checkAdminApiKeyLimit(ip: string): Promise<RateLimitResult> {
     const ADMIN_API_KEY_LIMIT_PER_MINUTE = 15;
     const ADMIN_API_KEY_LIMIT_PER_HOUR = 100;
-    return this.check(`admin:apikey:${ip}`, ADMIN_API_KEY_LIMIT_PER_MINUTE, ADMIN_API_KEY_LIMIT_PER_HOUR);
+    return this.check(
+      `admin:apikey:${ip}`,
+      ADMIN_API_KEY_LIMIT_PER_MINUTE,
+      ADMIN_API_KEY_LIMIT_PER_HOUR,
+    );
   }
 
   async checkIpLimit(ip: string, realmId: string): Promise<RateLimitResult> {
@@ -109,13 +123,19 @@ export class RateLimitService {
     return headers;
   }
 
-  private async check(key: string, limitPerMinute: number, limitPerHour: number): Promise<RateLimitResult> {
+  private async check(
+    key: string,
+    limitPerMinute: number,
+    limitPerHour: number,
+  ): Promise<RateLimitResult> {
     // Use Redis when available for shared state across instances
     if (this.redis.isAvailable()) {
       try {
         return await this.checkWithRedis(key, limitPerMinute, limitPerHour);
       } catch (err) {
-        this.logger.warn(`Redis rate limit check failed, falling back to database: ${(err as Error).message}`);
+        this.logger.warn(
+          `Redis rate limit check failed, falling back to database: ${(err as Error).message}`,
+        );
       }
     }
 
@@ -127,7 +147,11 @@ export class RateLimitService {
    * Redis-based rate limiting using simple INCR + EXPIRE (fixed window).
    * Shared across all instances.
    */
-  private async checkWithRedis(key: string, limitPerMinute: number, limitPerHour: number): Promise<RateLimitResult> {
+  private async checkWithRedis(
+    key: string,
+    limitPerMinute: number,
+    limitPerHour: number,
+  ): Promise<RateLimitResult> {
     const now = Math.floor(Date.now() / 1000);
     const minuteWindow = Math.floor(now / 60);
     const hourWindow = Math.floor(now / 3600);
@@ -190,7 +214,11 @@ export class RateLimitService {
    * Uses a dedicated table with a single upsert to atomically increment counters.
    * Works across all instances without Redis.
    */
-  private async checkWithDatabase(key: string, limitPerMinute: number, limitPerHour: number): Promise<RateLimitResult> {
+  private async checkWithDatabase(
+    key: string,
+    limitPerMinute: number,
+    limitPerHour: number,
+  ): Promise<RateLimitResult> {
     const now = Date.now();
     const minuteWindowMs = 60_000;
     const hourWindowMs = 3_600_000;
@@ -238,8 +266,12 @@ export class RateLimitService {
       hourCount = 1;
     }
 
-    const minuteResetAt = Math.ceil((Math.max(entryMinuteWindowStart, now) + minuteWindowMs) / 1000);
-    const hourResetAt = Math.ceil((Math.max(entryHourWindowStart, now) + hourWindowMs) / 1000);
+    const minuteResetAt = Math.ceil(
+      (Math.max(entryMinuteWindowStart, now) + minuteWindowMs) / 1000,
+    );
+    const hourResetAt = Math.ceil(
+      (Math.max(entryHourWindowStart, now) + hourWindowMs) / 1000,
+    );
 
     if (minuteCount > limitPerMinute) {
       const retryAfter = minuteResetAt - Math.floor(now / 1000);
@@ -284,10 +316,14 @@ export class RateLimitService {
         },
       });
       if (result.count > 0) {
-        this.logger.debug(`Cleaned up ${result.count} expired rate limit DB entries`);
+        this.logger.debug(
+          `Cleaned up ${result.count} expired rate limit DB entries`,
+        );
       }
     } catch (err) {
-      this.logger.warn(`Failed to cleanup expired rate limit entries: ${(err as Error).message}`);
+      this.logger.warn(
+        `Failed to cleanup expired rate limit entries: ${(err as Error).message}`,
+      );
     }
   }
 }

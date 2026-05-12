@@ -28,10 +28,7 @@ export class ContinuousVerificationScheduler {
     const sessionsToEvaluate = await this.prisma.sessionRiskProfile.findMany({
       where: {
         terminateSession: false,
-        OR: [
-          { nextEvaluationAt: { lte: now } },
-          { nextEvaluationAt: null },
-        ],
+        OR: [{ nextEvaluationAt: { lte: now } }, { nextEvaluationAt: null }],
       },
       select: {
         id: true,
@@ -174,15 +171,13 @@ export class ContinuousVerificationScheduler {
     });
 
     const total =
-      riskEventResult.count +
-      sampleResult.count +
-      postureResult.count;
+      riskEventResult.count + sampleResult.count + postureResult.count;
 
     if (total > 0) {
       this.logger.debug(
         `Risk data cleanup removed ${riskEventResult.count} risk event(s), ` +
-        `${sampleResult.count} behavioral sample(s), ` +
-        `${postureResult.count} device posture record(s)`,
+          `${sampleResult.count} behavioral sample(s), ` +
+          `${postureResult.count} device posture record(s)`,
       );
     }
   }
@@ -221,11 +216,15 @@ export class ContinuousVerificationScheduler {
     for (const profile of idleProfiles) {
       try {
         const lastEval = profile.lastEvaluatedAt ?? new Date(0);
-        const hoursSinceLastEval = (now.getTime() - lastEval.getTime()) / (1000 * 60 * 60);
+        const hoursSinceLastEval =
+          (now.getTime() - lastEval.getTime()) / (1000 * 60 * 60);
 
         // Base decay: 5% per hour of inactivity
         const decay = Math.min(hoursSinceLastEval * 0.05, 0.5);
-        const newTrust = Math.max(0, Math.round(profile.trustScore * (1 - decay)));
+        const newTrust = Math.max(
+          0,
+          Math.round(profile.trustScore * (1 - decay)),
+        );
 
         if (newTrust !== profile.trustScore) {
           await this.prisma.sessionRiskProfile.update({

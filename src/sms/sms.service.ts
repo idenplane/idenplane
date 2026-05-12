@@ -36,7 +36,9 @@ export class SmsService {
     }
 
     const provider = this.createProvider(realm.smsProvider as SmsProviderType);
-    this.logger.debug(`SMS provider "${realm.smsProvider}" requested for realm "${realmName}"`);
+    this.logger.debug(
+      `SMS provider "${realm.smsProvider}" requested for realm "${realmName}"`,
+    );
     return provider;
   }
 
@@ -56,11 +58,7 @@ export class SmsService {
     }
   }
 
-  async sendSms(
-    realmName: string,
-    to: string,
-    message: string,
-  ): Promise<void> {
+  async sendSms(realmName: string, to: string, message: string): Promise<void> {
     const realm = await this.prisma.realm.findUnique({
       where: { name: realmName },
       select: {
@@ -71,22 +69,33 @@ export class SmsService {
     });
 
     if (!realm?.smsProvider || realm.smsProvider === 'none') {
-      this.logger.warn(`SMS not configured for realm "${realmName}", skipping SMS to ${to}`);
+      this.logger.warn(
+        `SMS not configured for realm "${realmName}", skipping SMS to ${to}`,
+      );
       return;
     }
 
     const provider = this.createProvider(realm.smsProvider as SmsProviderType);
     if (!provider) {
-      this.logger.error(`Failed to create SMS provider for realm "${realmName}"`);
-      throw new Error(`SMS provider "${realm.smsProvider}" could not be instantiated`);
+      this.logger.error(
+        `Failed to create SMS provider for realm "${realmName}"`,
+      );
+      throw new Error(
+        `SMS provider "${realm.smsProvider}" could not be instantiated`,
+      );
     }
 
     try {
       await provider.sendSms(to, message);
-      this.logger.log(`SMS sent to ${to} (realm: ${realmName}, provider: ${realm.smsProvider})`);
+      this.logger.log(
+        `SMS sent to ${to} (realm: ${realmName}, provider: ${realm.smsProvider})`,
+      );
     } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : 'Unknown error';
-      this.logger.error(`Failed to send SMS to ${to} (realm: ${realmName}): ${errorMessage}`);
+      const errorMessage =
+        error instanceof Error ? error.message : 'Unknown error';
+      this.logger.error(
+        `Failed to send SMS to ${to} (realm: ${realmName}): ${errorMessage}`,
+      );
       throw error;
     }
   }

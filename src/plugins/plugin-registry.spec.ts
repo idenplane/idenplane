@@ -51,7 +51,9 @@ describe('PluginRegistry', () => {
       registry.register(plugin);
       const entry = registry.get('test-plugin');
       expect(entry?.loadedAt).toBeInstanceOf(Date);
-      expect(entry!.loadedAt.getTime()).toBeGreaterThanOrEqual(before.getTime());
+      expect(entry!.loadedAt.getTime()).toBeGreaterThanOrEqual(
+        before.getTime(),
+      );
     });
   });
 
@@ -111,17 +113,30 @@ describe('PluginRegistry', () => {
 
   describe('getEnabledByType', () => {
     it('should return only enabled plugins of the requested type', () => {
-      registry.register(makePlugin({ name: 'listener', type: 'event-listener' }), true);
-      registry.register(makePlugin({ name: 'enricher', type: 'token-enrichment' }), true);
-      registry.register(makePlugin({ name: 'disabled-listener', type: 'event-listener' }), false);
+      registry.register(
+        makePlugin({ name: 'listener', type: 'event-listener' }),
+        true,
+      );
+      registry.register(
+        makePlugin({ name: 'enricher', type: 'token-enrichment' }),
+        true,
+      );
+      registry.register(
+        makePlugin({ name: 'disabled-listener', type: 'event-listener' }),
+        false,
+      );
 
-      const listeners = registry.getEnabledByType<EventListenerPlugin>('event-listener');
+      const listeners =
+        registry.getEnabledByType<EventListenerPlugin>('event-listener');
       expect(listeners).toHaveLength(1);
       expect(listeners[0].name).toBe('listener');
     });
 
     it('should return an empty array when no matching plugins are enabled', () => {
-      registry.register(makePlugin({ name: 'enricher', type: 'token-enrichment' }), true);
+      registry.register(
+        makePlugin({ name: 'enricher', type: 'token-enrichment' }),
+        true,
+      );
       const themes = registry.getEnabledByType('theme');
       expect(themes).toHaveLength(0);
     });

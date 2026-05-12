@@ -95,7 +95,9 @@ async function bootstrap() {
     `http://0.0.0.0:${serverPort}`,
   ]);
   if (process.env['BASE_URL']) {
-    try { sameOrigins.add(new URL(process.env['BASE_URL']).origin); } catch {}
+    try {
+      sameOrigins.add(new URL(process.env['BASE_URL']).origin);
+    } catch {}
   }
 
   app.enableCors({
@@ -118,7 +120,9 @@ async function bootstrap() {
       // Check client webOrigins from the database.
       corsOriginService.isOriginAllowed(origin).then(
         (allowed) => callback(null, allowed ? origin : false),
-        () => { callback(null, false); },
+        () => {
+          callback(null, false);
+        },
       );
     },
     credentials: true,
@@ -173,7 +177,11 @@ async function bootstrap() {
         directives: {
           defaultSrc: ["'self'"],
           scriptSrc: ["'self'"],
-          styleSrc: ["'self'", "'unsafe-inline'", 'https://fonts.googleapis.com'],
+          styleSrc: [
+            "'self'",
+            "'unsafe-inline'",
+            'https://fonts.googleapis.com',
+          ],
           fontSrc: ["'self'", 'https://fonts.gstatic.com'],
           imgSrc: ["'self'", 'data:', 'blob:'],
           connectSrc: ["'self'"],
@@ -198,13 +206,23 @@ async function bootstrap() {
 
   // Block access to template sources, config files, and message bundles
   const expressInstance = app.getHttpAdapter().getInstance();
-  expressInstance.use('/themes', (req: { path: string }, res: { status: (code: number) => { json: (body: object) => void } }, next: () => void) => {
-    if (/\.(hbs|properties)$/.test(req.path) || req.path.includes('theme.json')) {
-      res.status(403).json({ statusCode: 403, message: 'Forbidden' });
-      return;
-    }
-    next();
-  });
+  expressInstance.use(
+    '/themes',
+    (
+      req: { path: string },
+      res: { status: (code: number) => { json: (body: object) => void } },
+      next: () => void,
+    ) => {
+      if (
+        /\.(hbs|properties)$/.test(req.path) ||
+        req.path.includes('theme.json')
+      ) {
+        res.status(403).json({ statusCode: 403, message: 'Forbidden' });
+        return;
+      }
+      next();
+    },
+  );
 
   app.useStaticAssets(join(__dirname, '..', 'themes'), { prefix: '/themes' });
 
@@ -225,7 +243,10 @@ async function bootstrap() {
     .setTitle('AuthMe')
     .setDescription('Open-source Identity and Access Management Server')
     .setVersion('0.1.0')
-    .addApiKey({ type: 'apiKey', name: 'x-admin-api-key', in: 'header' }, 'admin-api-key')
+    .addApiKey(
+      { type: 'apiKey', name: 'x-admin-api-key', in: 'header' },
+      'admin-api-key',
+    )
     .addBearerAuth()
     .build();
 

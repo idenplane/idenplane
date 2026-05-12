@@ -1,4 +1,8 @@
-import { UnauthorizedException, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  UnauthorizedException,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 
 jest.mock('../crypto/jwk.service.js', () => ({
   JwkService: jest.fn(),
@@ -42,17 +46,35 @@ const adminUser = {
 };
 
 /** Allowed rate-limit result (not exhausted). */
-const rlAllowed = { allowed: true, limit: 5, remaining: 4, resetAt: 9999999999 };
+const rlAllowed = {
+  allowed: true,
+  limit: 5,
+  remaining: 4,
+  resetAt: 9999999999,
+};
 /** Denied rate-limit result (exhausted). */
-const rlDenied = { allowed: false, limit: 5, remaining: 0, resetAt: 9999999999, retryAfter: 30 };
+const rlDenied = {
+  allowed: false,
+  limit: 5,
+  remaining: 0,
+  resetAt: 9999999999,
+  retryAfter: 30,
+};
 
 describe('AdminAuthService', () => {
   let service: AdminAuthService;
   let prisma: MockPrismaService;
   let crypto: { hashPassword: jest.Mock; verifyPassword: jest.Mock };
   let jwkService: { signJwt: jest.Mock; verifyJwt: jest.Mock };
-  let rateLimitService: { checkAdminIpLimit: jest.Mock; computeHeaders: jest.Mock };
-  let bruteForceService: { checkLocked: jest.Mock; recordFailure: jest.Mock; resetFailures: jest.Mock };
+  let rateLimitService: {
+    checkAdminIpLimit: jest.Mock;
+    computeHeaders: jest.Mock;
+  };
+  let bruteForceService: {
+    checkLocked: jest.Mock;
+    recordFailure: jest.Mock;
+    resetFailures: jest.Mock;
+  };
 
   beforeEach(() => {
     prisma = createMockPrismaService();
@@ -106,28 +128,41 @@ describe('AdminAuthService', () => {
       expect(result.token_type).toBe('Bearer');
       expect(result.expires_in).toBe(3600);
       expect(result.rateLimitHeaders).toBeDefined();
-      expect(prisma.realm.findUnique).toHaveBeenCalledWith({ where: { name: 'master' } });
-      expect(crypto.verifyPassword).toHaveBeenCalledWith('hashed-password', 'password');
+      expect(prisma.realm.findUnique).toHaveBeenCalledWith({
+        where: { name: 'master' },
+      });
+      expect(crypto.verifyPassword).toHaveBeenCalledWith(
+        'hashed-password',
+        'password',
+      );
     });
 
     it('should pass the caller IP to checkAdminIpLimit', async () => {
       prisma.realm.findUnique.mockResolvedValue(masterRealm);
       prisma.user.findUnique.mockResolvedValue(adminUser);
       crypto.verifyPassword.mockResolvedValue(true);
-      prisma.userRole.findMany.mockResolvedValue([{ role: { name: 'super-admin' } }]);
+      prisma.userRole.findMany.mockResolvedValue([
+        { role: { name: 'super-admin' } },
+      ]);
       prisma.realmSigningKey.findFirst.mockResolvedValue(signingKey);
       jwkService.signJwt.mockResolvedValue('tok');
 
       await service.login('admin', 'password', '203.0.113.10');
 
-      expect(rateLimitService.checkAdminIpLimit).toHaveBeenCalledWith('203.0.113.10');
+      expect(rateLimitService.checkAdminIpLimit).toHaveBeenCalledWith(
+        '203.0.113.10',
+      );
     });
 
     it('should throw 429 when IP rate limit is exceeded', async () => {
       rateLimitService.checkAdminIpLimit.mockResolvedValue(rlDenied);
 
-      await expect(service.login('admin', 'password', '1.2.3.4')).rejects.toThrow(HttpException);
-      await expect(service.login('admin', 'password', '1.2.3.4')).rejects.toMatchObject({
+      await expect(
+        service.login('admin', 'password', '1.2.3.4'),
+      ).rejects.toThrow(HttpException);
+      await expect(
+        service.login('admin', 'password', '1.2.3.4'),
+      ).rejects.toMatchObject({
         status: HttpStatus.TOO_MANY_REQUESTS,
       });
       // Should NOT reach the DB when rate limited
@@ -142,7 +177,9 @@ describe('AdminAuthService', () => {
         lockedUntil: new Date('2099-01-01T00:00:00Z'),
       });
 
-      await expect(service.login('admin', 'password', '1.2.3.4')).rejects.toMatchObject({
+      await expect(
+        service.login('admin', 'password', '1.2.3.4'),
+      ).rejects.toMatchObject({
         status: HttpStatus.TOO_MANY_REQUESTS,
       });
       // Password must NOT be verified when account is locked
@@ -168,51 +205,62 @@ describe('AdminAuthService', () => {
       prisma.realm.findUnique.mockResolvedValue(masterRealm);
       prisma.user.findUnique.mockResolvedValue(adminUser);
       crypto.verifyPassword.mockResolvedValue(true);
-      prisma.userRole.findMany.mockResolvedValue([{ role: { name: 'super-admin' } }]);
+      prisma.userRole.findMany.mockResolvedValue([
+        { role: { name: 'super-admin' } },
+      ]);
       prisma.realmSigningKey.findFirst.mockResolvedValue(signingKey);
       jwkService.signJwt.mockResolvedValue('jwt-token');
 
       await service.login('admin', 'password', '127.0.0.1');
 
-      expect(bruteForceService.resetFailures).toHaveBeenCalledWith('master-id', 'user-1');
+      expect(bruteForceService.resetFailures).toHaveBeenCalledWith(
+        'master-id',
+        'user-1',
+      );
     });
 
     it('should throw if master realm does not exist', async () => {
       prisma.realm.findUnique.mockResolvedValue(null);
 
-      await expect(service.login('admin', 'password', '127.0.0.1')).rejects.toThrow(
-        UnauthorizedException,
-      );
-      await expect(service.login('admin', 'password', '127.0.0.1')).rejects.toThrow(
-        'Admin system not initialized',
-      );
+      await expect(
+        service.login('admin', 'password', '127.0.0.1'),
+      ).rejects.toThrow(UnauthorizedException);
+      await expect(
+        service.login('admin', 'password', '127.0.0.1'),
+      ).rejects.toThrow('Admin system not initialized');
     });
 
     it('should throw if user not found', async () => {
       prisma.realm.findUnique.mockResolvedValue(masterRealm);
       prisma.user.findUnique.mockResolvedValue(null);
 
-      await expect(service.login('unknown', 'password', '127.0.0.1')).rejects.toThrow(
-        UnauthorizedException,
-      );
+      await expect(
+        service.login('unknown', 'password', '127.0.0.1'),
+      ).rejects.toThrow(UnauthorizedException);
     });
 
     it('should throw if user is disabled', async () => {
       prisma.realm.findUnique.mockResolvedValue(masterRealm);
-      prisma.user.findUnique.mockResolvedValue({ ...adminUser, enabled: false });
+      prisma.user.findUnique.mockResolvedValue({
+        ...adminUser,
+        enabled: false,
+      });
 
-      await expect(service.login('admin', 'password', '127.0.0.1')).rejects.toThrow(
-        'Invalid credentials',
-      );
+      await expect(
+        service.login('admin', 'password', '127.0.0.1'),
+      ).rejects.toThrow('Invalid credentials');
     });
 
     it('should throw if user has no password hash', async () => {
       prisma.realm.findUnique.mockResolvedValue(masterRealm);
-      prisma.user.findUnique.mockResolvedValue({ ...adminUser, passwordHash: null });
+      prisma.user.findUnique.mockResolvedValue({
+        ...adminUser,
+        passwordHash: null,
+      });
 
-      await expect(service.login('admin', 'password', '127.0.0.1')).rejects.toThrow(
-        'Invalid credentials',
-      );
+      await expect(
+        service.login('admin', 'password', '127.0.0.1'),
+      ).rejects.toThrow('Invalid credentials');
     });
 
     it('should throw if password is invalid', async () => {
@@ -220,9 +268,9 @@ describe('AdminAuthService', () => {
       prisma.user.findUnique.mockResolvedValue(adminUser);
       crypto.verifyPassword.mockResolvedValue(false);
 
-      await expect(service.login('admin', 'wrong', '127.0.0.1')).rejects.toThrow(
-        'Invalid credentials',
-      );
+      await expect(
+        service.login('admin', 'wrong', '127.0.0.1'),
+      ).rejects.toThrow('Invalid credentials');
     });
 
     it('should throw if user has no admin role', async () => {
@@ -233,9 +281,9 @@ describe('AdminAuthService', () => {
         { role: { name: 'regular-user' } },
       ]);
 
-      await expect(service.login('admin', 'password', '127.0.0.1')).rejects.toThrow(
-        'User does not have admin access',
-      );
+      await expect(
+        service.login('admin', 'password', '127.0.0.1'),
+      ).rejects.toThrow('User does not have admin access');
     });
 
     it('should throw if no signing key found', async () => {
@@ -247,9 +295,9 @@ describe('AdminAuthService', () => {
       ]);
       prisma.realmSigningKey.findFirst.mockResolvedValue(null);
 
-      await expect(service.login('admin', 'password', '127.0.0.1')).rejects.toThrow(
-        'No signing key found for master realm',
-      );
+      await expect(
+        service.login('admin', 'password', '127.0.0.1'),
+      ).rejects.toThrow('No signing key found for master realm');
     });
 
     it('should accept realm-admin role', async () => {
@@ -364,7 +412,9 @@ describe('AdminAuthService', () => {
     });
 
     it('should return true when required role is present', () => {
-      expect(service.hasRole(['realm-admin', 'view-only'], 'realm-admin')).toBe(true);
+      expect(service.hasRole(['realm-admin', 'view-only'], 'realm-admin')).toBe(
+        true,
+      );
     });
 
     it('should return false when required role is not present', () => {

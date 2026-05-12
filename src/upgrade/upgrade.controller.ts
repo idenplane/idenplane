@@ -1,11 +1,44 @@
-import { Controller, Get, Post, Body, Param, Query, UseGuards } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiSecurity, ApiResponse, ApiParam, ApiQuery } from '@nestjs/swagger';
+import {
+  Controller,
+  Get,
+  Post,
+  Body,
+  Param,
+  Query,
+  UseGuards,
+} from '@nestjs/common';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiSecurity,
+  ApiResponse,
+  ApiParam,
+  ApiQuery,
+} from '@nestjs/swagger';
 import { IsBoolean, IsOptional, IsString } from 'class-validator';
-import { UpgradeService, UpgradeResult, UpgradeState } from './upgrade.service.js';
-import { RollbackService, RollbackCapability, RollbackResult, UpgradeAuditEntry } from './rollback.service.js';
-import { PreUpgradeValidatorService, PreUpgradeValidationResult } from './pre-upgrade-validator.service.js';
-import { ConfigCompatibilityService, ConfigCompatibilityResult } from './config-compatibility.service.js';
-import { UpgradeHealthService, UpgradeHealthResult } from './upgrade-health.service.js';
+import {
+  UpgradeService,
+  UpgradeResult,
+  UpgradeState,
+} from './upgrade.service.js';
+import {
+  RollbackService,
+  RollbackCapability,
+  RollbackResult,
+  UpgradeAuditEntry,
+} from './rollback.service.js';
+import {
+  PreUpgradeValidatorService,
+  PreUpgradeValidationResult,
+} from './pre-upgrade-validator.service.js';
+import {
+  ConfigCompatibilityService,
+  ConfigCompatibilityResult,
+} from './config-compatibility.service.js';
+import {
+  UpgradeHealthService,
+  UpgradeHealthResult,
+} from './upgrade-health.service.js';
 import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
 
 class UpgradeRequestDto {
@@ -53,9 +86,18 @@ export class UpgradeController {
    */
   @Post()
   @ApiOperation({ summary: 'Start an upgrade to a target version' })
-  @ApiResponse({ status: 200, description: 'Upgrade result with stage outcomes' })
-  @ApiResponse({ status: 400, description: 'Bad request — invalid target version' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
+  @ApiResponse({
+    status: 200,
+    description: 'Upgrade result with stage outcomes',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad request — invalid target version',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
   @ApiResponse({ status: 409, description: 'Upgrade already in progress' })
   async startUpgrade(@Body() dto: UpgradeRequestDto): Promise<UpgradeResult> {
     return this.upgradeService.upgrade(dto.toVersion, {
@@ -73,7 +115,10 @@ export class UpgradeController {
   @Get('status')
   @ApiOperation({ summary: 'Get the most recent upgrade status' })
   @ApiResponse({ status: 200, description: 'Most recent upgrade audit entry' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
   @ApiResponse({ status: 404, description: 'No upgrade records found' })
   async getUpgradeStatus(): Promise<UpgradeAuditEntry | null> {
     return this.rollbackService.getLatestUpgradeStatus();
@@ -87,7 +132,10 @@ export class UpgradeController {
   @Get('history')
   @ApiOperation({ summary: 'Get upgrade history' })
   @ApiResponse({ status: 200, description: 'Array of upgrade audit entries' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
   async getUpgradeHistory(): Promise<UpgradeAuditEntry[]> {
     return this.rollbackService.getUpgradeHistory();
   }
@@ -101,9 +149,20 @@ export class UpgradeController {
    */
   @Get('audit')
   @ApiOperation({ summary: 'Get upgrade audit entries for CLI' })
-  @ApiQuery({ name: 'limit', required: false, description: 'Maximum number of entries to return', type: Number })
-  @ApiResponse({ status: 200, description: 'Audit entries response with total count' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Maximum number of entries to return',
+    type: Number,
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Audit entries response with total count',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
   async getUpgradeAudit(@Query('limit') limit?: string): Promise<{
     entries: UpgradeAuditEntry[];
     total: number;
@@ -120,12 +179,20 @@ export class UpgradeController {
    * Returns the current state of a specific upgrade operation.
    */
   @Get(':upgradeId')
-  @ApiParam({ name: 'upgradeId', description: 'The unique identifier of the upgrade' })
+  @ApiParam({
+    name: 'upgradeId',
+    description: 'The unique identifier of the upgrade',
+  })
   @ApiOperation({ summary: 'Get upgrade state by ID' })
   @ApiResponse({ status: 200, description: 'Upgrade state with current stage' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
   @ApiResponse({ status: 404, description: 'Upgrade not found' })
-  async getUpgradeState(@Param('upgradeId') upgradeId: string): Promise<UpgradeState | null> {
+  async getUpgradeState(
+    @Param('upgradeId') upgradeId: string,
+  ): Promise<UpgradeState | null> {
     return this.upgradeService.getUpgradeState(upgradeId);
   }
 
@@ -138,7 +205,10 @@ export class UpgradeController {
   @Get('rollback/capability')
   @ApiOperation({ summary: 'Check if rollback is possible' })
   @ApiResponse({ status: 200, description: 'Rollback capability status' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
   async checkRollbackCapability(): Promise<RollbackCapability> {
     return this.rollbackService.checkRollbackCapability();
   }
@@ -152,10 +222,18 @@ export class UpgradeController {
   @Post('rollback')
   @ApiOperation({ summary: 'Execute rollback to previous version' })
   @ApiResponse({ status: 200, description: 'Rollback result with outcome' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
   @ApiResponse({ status: 404, description: 'No upgrade found to roll back' })
-  @ApiResponse({ status: 409, description: 'Rollback not possible — no valid backup' })
-  async executeRollback(@Body() dto: RollbackRequestDto): Promise<RollbackResult> {
+  @ApiResponse({
+    status: 409,
+    description: 'Rollback not possible — no valid backup',
+  })
+  async executeRollback(
+    @Body() dto: RollbackRequestDto,
+  ): Promise<RollbackResult> {
     return this.rollbackService.executeRollback(dto.upgradeId);
   }
 
@@ -167,8 +245,14 @@ export class UpgradeController {
    */
   @Get('pre-validation')
   @ApiOperation({ summary: 'Run pre-upgrade validation checks' })
-  @ApiResponse({ status: 200, description: 'Validation result with pass/warn/fail status for each check' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
+  @ApiResponse({
+    status: 200,
+    description: 'Validation result with pass/warn/fail status for each check',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
   async runPreValidation(): Promise<PreUpgradeValidationResult> {
     return this.preUpgradeValidator.validate();
   }
@@ -181,8 +265,15 @@ export class UpgradeController {
    */
   @Get('health')
   @ApiOperation({ summary: 'Run post-upgrade health checks' })
-  @ApiResponse({ status: 200, description: 'Health check result with pass/warn/fail status for each check' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
+  @ApiResponse({
+    status: 200,
+    description:
+      'Health check result with pass/warn/fail status for each check',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
   async runHealthCheck(): Promise<UpgradeHealthResult> {
     return this.upgradeHealthService.checkHealth();
   }
@@ -196,11 +287,25 @@ export class UpgradeController {
    */
   @Get('config-compatibility')
   @ApiOperation({ summary: 'Check configuration compatibility for a version' })
-  @ApiQuery({ name: 'version', required: false, description: 'Target version to check compatibility for (defaults to current)' })
-  @ApiResponse({ status: 200, description: 'Configuration compatibility result with issues' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
-  async checkConfigCompatibility(@Query('version') version?: string): Promise<ConfigCompatibilityResult> {
-    const targetVersion = version ?? (await this.upgradeService.getCurrentVersion());
+  @ApiQuery({
+    name: 'version',
+    required: false,
+    description:
+      'Target version to check compatibility for (defaults to current)',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Configuration compatibility result with issues',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
+  async checkConfigCompatibility(
+    @Query('version') version?: string,
+  ): Promise<ConfigCompatibilityResult> {
+    const targetVersion =
+      version ?? (await this.upgradeService.getCurrentVersion());
     return this.configCompatibility.checkCompatibility(targetVersion);
   }
 }

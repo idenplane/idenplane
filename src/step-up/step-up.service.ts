@@ -14,7 +14,11 @@ export const ACR_MFA = 'urn:authme:acr:mfa';
 export const ACR_WEBAUTHN = 'urn:authme:acr:webauthn';
 
 /** All supported ACR values, ordered from lowest to highest assurance. */
-export const ACR_VALUES_SUPPORTED = [ACR_PASSWORD, ACR_MFA, ACR_WEBAUTHN] as const;
+export const ACR_VALUES_SUPPORTED = [
+  ACR_PASSWORD,
+  ACR_MFA,
+  ACR_WEBAUTHN,
+] as const;
 
 export type AcrValue = (typeof ACR_VALUES_SUPPORTED)[number];
 
@@ -100,7 +104,10 @@ export class StepUpService {
    * @param clientDbId  The internal UUID of the client (not the OAuth client_id string).
    * @param currentAcr  The ACR level currently held by the session.
    */
-  async requiresStepUp(clientDbId: string, currentAcr: string): Promise<boolean> {
+  async requiresStepUp(
+    clientDbId: string,
+    currentAcr: string,
+  ): Promise<boolean> {
     const requiredAcr = await this.getClientRequiredAcr(clientDbId);
     if (!requiredAcr) return false;
     return !this.satisfiesAcr(currentAcr, requiredAcr);
@@ -124,14 +131,19 @@ export class StepUpService {
         expiresAt: new Date(Date.now() + cacheDuration * 1000),
       },
     });
-    this.logger.debug(`Step-up recorded: session=${sessionId} acr=${acrLevel} ttl=${cacheDuration}s`);
+    this.logger.debug(
+      `Step-up recorded: session=${sessionId} acr=${acrLevel} ttl=${cacheDuration}s`,
+    );
   }
 
   /**
    * Returns true if there is a non-expired step-up record for `sessionId`
    * that satisfies `requiredAcr`.
    */
-  async isStepUpCached(sessionId: string, requiredAcr: string): Promise<boolean> {
+  async isStepUpCached(
+    sessionId: string,
+    requiredAcr: string,
+  ): Promise<boolean> {
     const currentAcr = await this.getSessionAcr(sessionId);
     return this.satisfiesAcr(currentAcr, requiredAcr);
   }

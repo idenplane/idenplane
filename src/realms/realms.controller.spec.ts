@@ -48,7 +48,7 @@ describe('RealmsController', () => {
       const expected = { id: 'r1', ...dto };
       realmsService.create.mockReturnValue(expected);
 
-      const result = controller.create(dto as any);
+      const result = controller.create(dto);
 
       expect(realmsService.create).toHaveBeenCalledWith(dto);
       expect(result).toEqual(expected);
@@ -97,7 +97,7 @@ describe('RealmsController', () => {
       const expected = { id: 'r1', name: 'my-realm', ...dto };
       realmsService.update.mockReturnValue(expected);
 
-      const result = controller.update('my-realm', dto as any);
+      const result = controller.update('my-realm', dto);
 
       expect(realmsService.update).toHaveBeenCalledWith('my-realm', dto);
       expect(result).toEqual(expected);
@@ -191,9 +191,9 @@ describe('RealmsController', () => {
 
   describe('sendTestEmail', () => {
     it('should throw BadRequestException when "to" is missing', async () => {
-      await expect(
-        controller.sendTestEmail('my-realm', ''),
-      ).rejects.toThrow(BadRequestException);
+      await expect(controller.sendTestEmail('my-realm', '')).rejects.toThrow(
+        BadRequestException,
+      );
     });
 
     it('should throw BadRequestException when SMTP is not configured', async () => {

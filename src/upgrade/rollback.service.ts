@@ -147,7 +147,8 @@ export class RollbackService {
       // Find the backup file
       const backups = this.databaseBackupService.listBackups();
       const backup = backups.find(
-        (b) => b.filename.includes(upgrade.backupId!) || b.path === upgrade.backupId,
+        (b) =>
+          b.filename.includes(upgrade.backupId!) || b.path === upgrade.backupId,
       );
 
       if (!backup) {
@@ -169,7 +170,9 @@ export class RollbackService {
 
       // Execute the restore
       this.logger.log(`Restoring database from backup: ${backup.filename}`);
-      const restoreResult = await this.databaseBackupService.restoreBackup(backup.path);
+      const restoreResult = await this.databaseBackupService.restoreBackup(
+        backup.path,
+      );
 
       if (!restoreResult.success) {
         // Record failed rollback attempt
@@ -250,7 +253,8 @@ export class RollbackService {
           completedAt: entry.completedAt,
           backupId: entry.backupId,
           errorMessage: (details.errorMessage as string | null) ?? null,
-          checksPassed: (details.checksPassed as Record<string, unknown> | null) ?? null,
+          checksPassed:
+            (details.checksPassed as Record<string, unknown> | null) ?? null,
         };
       });
     } catch (err) {
@@ -287,7 +291,8 @@ export class RollbackService {
         completedAt: entry.completedAt,
         backupId: entry.backupId,
         errorMessage: (details.errorMessage as string | null) ?? null,
-        checksPassed: (details.checksPassed as Record<string, unknown> | null) ?? null,
+        checksPassed:
+          (details.checksPassed as Record<string, unknown> | null) ?? null,
       };
     } catch (err) {
       const errorMessage = err instanceof Error ? err.message : String(err);
@@ -331,7 +336,7 @@ export class RollbackService {
         details: {
           rollbackFromVersion: originalUpgrade.toVersion,
           errorMessage: error ?? null,
-        } as Prisma.InputJsonValue,
+        },
       },
     });
   }

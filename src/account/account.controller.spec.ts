@@ -167,7 +167,11 @@ describe('AccountController', () => {
     it('should redirect with error if passwords do not match', async () => {
       await controller.changePassword(
         realm,
-        { currentPassword: 'old', newPassword: 'new1', confirmPassword: 'new2' },
+        {
+          currentPassword: 'old',
+          newPassword: 'new1',
+          confirmPassword: 'new2',
+        },
         mockReqWithSession,
         mockRes as any,
       );
@@ -209,12 +213,19 @@ describe('AccountController', () => {
     });
 
     it('should redirect with error if current password is incorrect', async () => {
-      passwordPolicyService.validate.mockReturnValue({ valid: true, errors: [] });
+      passwordPolicyService.validate.mockReturnValue({
+        valid: true,
+        errors: [],
+      });
       crypto.verifyPassword.mockResolvedValue(false);
 
       await controller.changePassword(
         realm,
-        { currentPassword: 'wrong', newPassword: 'newpass', confirmPassword: 'newpass' },
+        {
+          currentPassword: 'wrong',
+          newPassword: 'newpass',
+          confirmPassword: 'newpass',
+        },
         mockReqWithSession,
         mockRes as any,
       );
@@ -225,13 +236,20 @@ describe('AccountController', () => {
     });
 
     it('should redirect with error if password is in history', async () => {
-      passwordPolicyService.validate.mockReturnValue({ valid: true, errors: [] });
+      passwordPolicyService.validate.mockReturnValue({
+        valid: true,
+        errors: [],
+      });
       crypto.verifyPassword.mockResolvedValue(true);
       passwordPolicyService.checkHistory.mockResolvedValue(true);
 
       await controller.changePassword(
         realm,
-        { currentPassword: 'old', newPassword: 'reused', confirmPassword: 'reused' },
+        {
+          currentPassword: 'old',
+          newPassword: 'reused',
+          confirmPassword: 'reused',
+        },
         mockReqWithSession,
         mockRes as any,
       );
@@ -242,7 +260,10 @@ describe('AccountController', () => {
     });
 
     it('should change password successfully', async () => {
-      passwordPolicyService.validate.mockReturnValue({ valid: true, errors: [] });
+      passwordPolicyService.validate.mockReturnValue({
+        valid: true,
+        errors: [],
+      });
       crypto.verifyPassword.mockResolvedValue(true);
       passwordPolicyService.checkHistory.mockResolvedValue(false);
       crypto.hashPassword.mockResolvedValue('new-hash');
@@ -250,7 +271,11 @@ describe('AccountController', () => {
 
       await controller.changePassword(
         realm,
-        { currentPassword: 'old', newPassword: 'newpass', confirmPassword: 'newpass' },
+        {
+          currentPassword: 'old',
+          newPassword: 'newpass',
+          confirmPassword: 'newpass',
+        },
         mockReqWithSession,
         mockRes as any,
       );

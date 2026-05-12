@@ -1,5 +1,10 @@
 import { Controller, Get } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiSecurity, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiSecurity,
+  ApiResponse,
+} from '@nestjs/swagger';
 import { MigrationCheckService } from './migration-check.service.js';
 import { APP_VERSION } from './app-version.js';
 
@@ -22,8 +27,14 @@ export class SystemVersionController {
       'Returns the application version, the schema version derived from the ' +
       'last applied Prisma migration, and the names of any unapplied migrations.',
   })
-  @ApiResponse({ status: 200, description: 'System version, schema version, and pending migration list' })
-  @ApiResponse({ status: 401, description: 'Unauthorized — missing or invalid admin API key' })
+  @ApiResponse({
+    status: 200,
+    description: 'System version, schema version, and pending migration list',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
   async getVersion() {
     const migrationStatus = await this.migrationCheck.getStatus();
 

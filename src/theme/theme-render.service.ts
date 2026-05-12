@@ -24,9 +24,7 @@ export function sanitizeCss(css: string): string {
   // Remove any </style...> sequence (the closing bracket is optional because a
   // browser may still parse a partial tag).
   // Also remove opening <script tags for defence-in-depth.
-  return css
-    .replace(/<\/style/gi, '')
-    .replace(/<script/gi, '');
+  return css.replace(/<\/style/gi, '').replace(/<script/gi, '');
 }
 
 @Injectable()
@@ -58,8 +56,16 @@ export class ThemeRenderService {
     req?: Request,
   ): void {
     const themeName = this.themeService.getRealmThemeName(realm, themeType);
-    const templatePath = this.templateService.resolve(themeName, themeType, templateName);
-    const layoutPath = this.templateService.resolve(themeName, themeType, 'layouts/main');
+    const templatePath = this.templateService.resolve(
+      themeName,
+      themeType,
+      templateName,
+    );
+    const layoutPath = this.templateService.resolve(
+      themeName,
+      themeType,
+      'layouts/main',
+    );
     const colors = this.themeService.resolveColors(themeName, realm);
     const cssFiles = this.themeService.resolveCss(themeName, themeType);
 
@@ -67,7 +73,11 @@ export class ThemeRenderService {
     const locale = req
       ? this.i18n.detectLocale(req)
       : (realm.defaultLocale ?? 'en');
-    const messages = this.messageService.getMessages(themeName, themeType, locale);
+    const messages = this.messageService.getMessages(
+      themeName,
+      themeType,
+      locale,
+    );
     const isRtl = this.i18n.isRtl(locale);
 
     // Convert absolute paths to relative (relative to themes dir) for Express view resolution
@@ -119,7 +129,8 @@ export class ThemeRenderService {
       _messages: messages,
       themeCssFiles: cssFiles,
       realmName: data.realmName ?? realm.name,
-      realmDisplayName: data.realmDisplayName ?? realm.displayName ?? realm.name,
+      realmDisplayName:
+        data.realmDisplayName ?? realm.displayName ?? realm.name,
       // i18n context
       locale,
       isRtl,

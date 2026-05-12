@@ -65,7 +65,7 @@ const federatedUser: User = {
   username: 'ldapuser',
   federationLink: 'federation-1',
   passwordHash: null,
-} as User;
+};
 
 // ---------------------------------------------------------------------------
 // Mock factories
@@ -146,7 +146,9 @@ describe('LoginService', () => {
         await service.validateCredentials(realm, 'testuser', 'pass');
 
         expect(prisma.user.findUnique).toHaveBeenCalledWith({
-          where: { realmId_username: { realmId: realm.id, username: 'testuser' } },
+          where: {
+            realmId_username: { realmId: realm.id, username: 'testuser' },
+          },
         });
       });
 
@@ -154,7 +156,11 @@ describe('LoginService', () => {
         prisma.user.findUnique.mockResolvedValue(dbUser);
         crypto.verifyPassword.mockResolvedValue(true);
 
-        await service.validateCredentials(realm, 'testuser', 'correct-password');
+        await service.validateCredentials(
+          realm,
+          'testuser',
+          'correct-password',
+        );
 
         expect(crypto.verifyPassword).toHaveBeenCalledWith(
           dbUser.passwordHash,
@@ -166,16 +172,27 @@ describe('LoginService', () => {
         prisma.user.findUnique.mockResolvedValue(dbUser);
         crypto.verifyPassword.mockResolvedValue(true);
 
-        await service.validateCredentials(realm, 'testuser', 'correct-password');
+        await service.validateCredentials(
+          realm,
+          'testuser',
+          'correct-password',
+        );
 
-        expect(bruteForce.resetFailures).toHaveBeenCalledWith(realm.id, dbUser.id);
+        expect(bruteForce.resetFailures).toHaveBeenCalledWith(
+          realm.id,
+          dbUser.id,
+        );
       });
 
       it('should check the brute-force lock status before verifying password', async () => {
         prisma.user.findUnique.mockResolvedValue(dbUser);
         crypto.verifyPassword.mockResolvedValue(true);
 
-        await service.validateCredentials(realm, 'testuser', 'correct-password');
+        await service.validateCredentials(
+          realm,
+          'testuser',
+          'correct-password',
+        );
 
         expect(bruteForce.checkLocked).toHaveBeenCalledWith(realm, dbUser);
       });
@@ -191,7 +208,12 @@ describe('LoginService', () => {
         crypto.verifyPassword.mockResolvedValue(false);
 
         await expect(
-          service.validateCredentials(realm, 'testuser', 'wrong-password', '10.0.0.1'),
+          service.validateCredentials(
+            realm,
+            'testuser',
+            'wrong-password',
+            '10.0.0.1',
+          ),
         ).rejects.toThrow(UnauthorizedException);
       });
 
@@ -200,10 +222,19 @@ describe('LoginService', () => {
         crypto.verifyPassword.mockResolvedValue(false);
 
         await expect(
-          service.validateCredentials(realm, 'testuser', 'wrong-password', '10.0.0.1'),
+          service.validateCredentials(
+            realm,
+            'testuser',
+            'wrong-password',
+            '10.0.0.1',
+          ),
         ).rejects.toThrow(UnauthorizedException);
 
-        expect(bruteForce.recordFailure).toHaveBeenCalledWith(realm, dbUser.id, '10.0.0.1');
+        expect(bruteForce.recordFailure).toHaveBeenCalledWith(
+          realm,
+          dbUser.id,
+          '10.0.0.1',
+        );
       });
 
       it('should not reset failures when password is incorrect', async () => {
@@ -321,7 +352,10 @@ describe('LoginService', () => {
 
         await service.validateCredentials(realm, 'ldapuser', 'ldap-password');
 
-        expect(bruteForce.checkLocked).toHaveBeenCalledWith(realm, federatedUser);
+        expect(bruteForce.checkLocked).toHaveBeenCalledWith(
+          realm,
+          federatedUser,
+        );
       });
 
       it('should throw when disabled federated user attempts login', async () => {
@@ -361,7 +395,12 @@ describe('LoginService', () => {
         });
 
         await expect(
-          service.validateCredentials(realm, 'ldapuser', 'bad-password', '10.0.0.5'),
+          service.validateCredentials(
+            realm,
+            'ldapuser',
+            'bad-password',
+            '10.0.0.5',
+          ),
         ).rejects.toThrow(UnauthorizedException);
 
         expect(bruteForce.recordFailure).toHaveBeenCalledWith(
@@ -475,7 +514,11 @@ describe('LoginService', () => {
         prisma.user.findUnique.mockResolvedValue(null);
 
         await expect(
-          serviceNoFed.validateCredentials(realm, 'nonexistent', 'any-password'),
+          serviceNoFed.validateCredentials(
+            realm,
+            'nonexistent',
+            'any-password',
+          ),
         ).rejects.toThrow(UnauthorizedException);
       });
 
@@ -490,7 +533,11 @@ describe('LoginService', () => {
         prisma.user.findUnique.mockResolvedValue(null);
 
         await expect(
-          serviceNoFed.validateCredentials(realm, 'nonexistent', 'any-password'),
+          serviceNoFed.validateCredentials(
+            realm,
+            'nonexistent',
+            'any-password',
+          ),
         ).rejects.toThrow(UnauthorizedException);
 
         expect(federation.authenticateViaFederation).not.toHaveBeenCalled();
@@ -581,7 +628,12 @@ describe('LoginService', () => {
     it('should persist the session with correct data', async () => {
       prisma.loginSession.create.mockResolvedValue({ id: 'session-1' });
 
-      await service.createLoginSession(realm, dbUser, '192.168.1.1', 'Mozilla/5.0');
+      await service.createLoginSession(
+        realm,
+        dbUser,
+        '192.168.1.1',
+        'Mozilla/5.0',
+      );
 
       expect(prisma.loginSession.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
@@ -645,7 +697,10 @@ describe('LoginService', () => {
     it('should return the user for a valid session', async () => {
       prisma.loginSession.findUnique.mockResolvedValue(validSession);
 
-      const result = await service.validateLoginSession(realm, 'raw-session-token');
+      const result = await service.validateLoginSession(
+        realm,
+        'raw-session-token',
+      );
 
       expect(result).toEqual(dbUser);
     });
@@ -665,7 +720,10 @@ describe('LoginService', () => {
     it('should return null when session does not exist', async () => {
       prisma.loginSession.findUnique.mockResolvedValue(null);
 
-      const result = await service.validateLoginSession(realm, 'nonexistent-token');
+      const result = await service.validateLoginSession(
+        realm,
+        'nonexistent-token',
+      );
 
       expect(result).toBeNull();
     });
@@ -676,7 +734,10 @@ describe('LoginService', () => {
         realmId: 'different-realm-id',
       });
 
-      const result = await service.validateLoginSession(realm, 'raw-session-token');
+      const result = await service.validateLoginSession(
+        realm,
+        'raw-session-token',
+      );
 
       expect(result).toBeNull();
     });
@@ -687,7 +748,10 @@ describe('LoginService', () => {
         expiresAt: new Date(Date.now() - 1000), // expired
       });
 
-      const result = await service.validateLoginSession(realm, 'raw-session-token');
+      const result = await service.validateLoginSession(
+        realm,
+        'raw-session-token',
+      );
 
       expect(result).toBeNull();
     });
@@ -698,7 +762,10 @@ describe('LoginService', () => {
         user: { ...dbUser, enabled: false },
       });
 
-      const result = await service.validateLoginSession(realm, 'raw-session-token');
+      const result = await service.validateLoginSession(
+        realm,
+        'raw-session-token',
+      );
 
       expect(result).toBeNull();
     });

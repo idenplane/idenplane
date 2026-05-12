@@ -33,7 +33,9 @@ export class CreateSamlSpDto {
   @IsUrl({ require_tld: false })
   sloUrl?: string;
 
-  @ApiPropertyOptional({ description: 'SP X.509 certificate for request verification' })
+  @ApiPropertyOptional({
+    description: 'SP X.509 certificate for request verification',
+  })
   @IsOptional()
   @IsString()
   certificate?: string;

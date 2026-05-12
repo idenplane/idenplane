@@ -28,7 +28,11 @@ describe('MfaController', () => {
   const mockUser = { id: 'user-1', realmId: 'realm-1', email: 'test@test.com' };
   const mockSessionToken = 'valid-session-token';
   const mockTokenHash = 'hashed-token';
-  const mockLoginSession = { id: 'session-1', userId: 'user-1', realmId: 'realm-1' };
+  const mockLoginSession = {
+    id: 'session-1',
+    userId: 'user-1',
+    realmId: 'realm-1',
+  };
 
   beforeEach(() => {
     mockMfaService = {
@@ -93,9 +97,14 @@ describe('MfaController', () => {
     });
 
     it('should throw NotFoundException for user in different realm', async () => {
-      mockPrisma.user.findUnique.mockResolvedValue({ ...mockUser, realmId: 'other-realm' });
+      mockPrisma.user.findUnique.mockResolvedValue({
+        ...mockUser,
+        realmId: 'other-realm',
+      });
 
-      await expect(controller.getMfaStatus(realm, 'user-1')).rejects.toThrow('not found in realm');
+      await expect(controller.getMfaStatus(realm, 'user-1')).rejects.toThrow(
+        'not found in realm',
+      );
     });
   });
 
@@ -114,11 +123,13 @@ describe('MfaController', () => {
     });
 
     it('should throw UnauthorizedException when no adminUser is present', async () => {
-      const reqWithoutAdmin = { cookies: { AUTHME_SESSION: mockSessionToken } } as any;
+      const reqWithoutAdmin = {
+        cookies: { AUTHME_SESSION: mockSessionToken },
+      } as any;
 
-      await expect(controller.resetMfa(realm, 'user-1', reqWithoutAdmin)).rejects.toThrow(
-        'Admin identity could not be determined',
-      );
+      await expect(
+        controller.resetMfa(realm, 'user-1', reqWithoutAdmin),
+      ).rejects.toThrow('Admin identity could not be determined');
     });
 
     it('should throw UnauthorizedException for API key authentication', async () => {
@@ -127,25 +138,25 @@ describe('MfaController', () => {
         adminUser: { userId: 'api-key:abc123' },
       } as any;
 
-      await expect(controller.resetMfa(realm, 'user-1', reqWithApiKey)).rejects.toThrow(
-        'API key authentication is not permitted',
-      );
+      await expect(
+        controller.resetMfa(realm, 'user-1', reqWithApiKey),
+      ).rejects.toThrow('API key authentication is not permitted');
     });
 
     it('should throw UnauthorizedException when no session token is present', async () => {
       const reqWithoutSession = { adminUser: { userId: 'user-1' } } as any;
 
-      await expect(controller.resetMfa(realm, 'user-1', reqWithoutSession)).rejects.toThrow(
-        'No active session found',
-      );
+      await expect(
+        controller.resetMfa(realm, 'user-1', reqWithoutSession),
+      ).rejects.toThrow('No active session found');
     });
 
     it('should throw UnauthorizedException when session ACR does not satisfy MFA', async () => {
       mockStepUpService.satisfiesAcr.mockReturnValue(false);
 
-      await expect(controller.resetMfa(realm, 'user-1', mockReq)).rejects.toThrow(
-        'MFA step-up is required',
-      );
+      await expect(
+        controller.resetMfa(realm, 'user-1', mockReq),
+      ).rejects.toThrow('MFA step-up is required');
     });
   });
 });

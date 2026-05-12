@@ -1,4 +1,9 @@
-import { Injectable, Logger, OnModuleDestroy, OnModuleInit } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnModuleDestroy,
+  OnModuleInit,
+} from '@nestjs/common';
 import Redis, { type RedisOptions } from 'ioredis';
 
 @Injectable()
@@ -31,7 +36,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
         enableOfflineQueue: false,
         maxRetriesPerRequest: 3,
       };
-      this.logger.log(`Connecting to Redis Sentinel (${sentinels.length} hosts, name: ${sentinelName})`);
+      this.logger.log(
+        `Connecting to Redis Sentinel (${sentinels.length} hosts, name: ${sentinelName})`,
+      );
     } else {
       options = {
         lazyConnect: true,
@@ -39,7 +46,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
         maxRetriesPerRequest: 3,
         retryStrategy: (times: number) => {
           if (times > 10) {
-            this.logger.warn('Redis: max reconnect attempts reached, giving up');
+            this.logger.warn(
+              'Redis: max reconnect attempts reached, giving up',
+            );
             return null;
           }
           const delay = Math.min(times * 100, 3000);
@@ -49,7 +58,9 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
       this.logger.log(`Connecting to Redis at ${redisUrl}`);
     }
 
-    this.client = sentinelHosts ? new Redis(options) : new Redis(redisUrl, options);
+    this.client = sentinelHosts
+      ? new Redis(options)
+      : new Redis(redisUrl, options);
 
     this.client.on('connect', () => {
       this._available = true;

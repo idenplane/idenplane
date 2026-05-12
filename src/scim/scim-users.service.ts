@@ -39,7 +39,9 @@ export class ScimUsersService {
    */
   async create(realmId: string, scimUser: ScimUser): Promise<ScimUser> {
     const username = scimUser.userName;
-    const email = scimUser.emails?.find(e => e.primary)?.value || scimUser.emails?.[0]?.value;
+    const email =
+      scimUser.emails?.find((e) => e.primary)?.value ||
+      scimUser.emails?.[0]?.value;
 
     // Check for existing user
     const existing = await this.prisma.user.findFirst({
@@ -89,7 +91,11 @@ export class ScimUsersService {
    * Get a user by ID (SCIM GET /Users/{id})
    * RFC 7644 Section 3.2
    */
-  async findById(realmId: string, userId: string, attributes?: string[]): Promise<ScimUser> {
+  async findById(
+    realmId: string,
+    userId: string,
+    attributes?: string[],
+  ): Promise<ScimUser> {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, realmId },
       include: {
@@ -120,18 +126,17 @@ export class ScimUsersService {
       excludedAttributes?: string[];
     } = {},
   ): Promise<ScimListResponse<ScimUser>> {
-    const {
-      startIndex = 1,
-      count = 100,
-      filter,
-    } = options;
+    const { startIndex = 1, count = 100, filter } = options;
 
     // Build where clause
     let where: Record<string, unknown> = { realmId };
 
     if (filter) {
       try {
-        where = { ...where, ...this.filterParser.toPrismaWhereUser(filter, realmId) };
+        where = {
+          ...where,
+          ...this.filterParser.toPrismaWhereUser(filter, realmId),
+        };
       } catch {
         // Ignore invalid filter - return empty result
         return this.emptyListResponse(startIndex, count);
@@ -159,7 +164,7 @@ export class ScimUsersService {
       totalResults,
       startIndex,
       itemsPerPage: users.length,
-      Resources: users.map(u => this.toScimUser(u, options.attributes)),
+      Resources: users.map((u) => this.toScimUser(u, options.attributes)),
     };
   }
 
@@ -167,7 +172,11 @@ export class ScimUsersService {
    * Update a user (SCIM PUT /Users/{id})
    * RFC 7644 Section 3.2
    */
-  async update(realmId: string, userId: string, scimUser: ScimUser): Promise<ScimUser> {
+  async update(
+    realmId: string,
+    userId: string,
+    scimUser: ScimUser,
+  ): Promise<ScimUser> {
     const existing = await this.prisma.user.findFirst({
       where: { id: userId, realmId },
     });
@@ -176,7 +185,9 @@ export class ScimUsersService {
       throw new NotFoundException(`User '${userId}' not found`);
     }
 
-    const email = scimUser.emails?.find(e => e.primary)?.value || scimUser.emails?.[0]?.value;
+    const email =
+      scimUser.emails?.find((e) => e.primary)?.value ||
+      scimUser.emails?.[0]?.value;
 
     // Check for conflicts
     if (scimUser.userName !== existing.username) {
@@ -184,7 +195,9 @@ export class ScimUsersService {
         where: { realmId, username: scimUser.userName, NOT: { id: userId } },
       });
       if (usernameExists) {
-        throw new ConflictException(`UserName '${scimUser.userName}' already exists`);
+        throw new ConflictException(
+          `UserName '${scimUser.userName}' already exists`,
+        );
       }
     }
 
@@ -232,7 +245,11 @@ export class ScimUsersService {
    * Patch a user (SCIM PATCH /Users/{id})
    * RFC 7644 Section 3.6
    */
-  async patch(realmId: string, userId: string, operations: ScimPatchOperation[]): Promise<ScimUser> {
+  async patch(
+    realmId: string,
+    userId: string,
+    operations: ScimPatchOperation[],
+  ): Promise<ScimUser> {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, realmId },
       include: {
@@ -255,13 +272,18 @@ export class ScimUsersService {
         case 'add':
         case 'replace':
           if (typeof op.value === 'object' && op.value !== null) {
-            const patchData = this.applyPatchValue(op.value as Record<string, unknown>, patches);
+            const patchData = this.applyPatchValue(
+              op.value as Record<string, unknown>,
+              patches,
+            );
             Object.assign(updateData, patchData);
           }
           break;
         case 'remove':
           // Remove is handled by path
-          this.logger.debug(`SCIM PATCH remove for ${op.path || 'whole resource'}`);
+          this.logger.debug(
+            `SCIM PATCH remove for ${op.path || 'whole resource'}`,
+          );
           break;
       }
     }
@@ -357,7 +379,9 @@ export class ScimUsersService {
         familyName: user.lastName,
         formatted: [user.firstName, user.lastName].filter(Boolean).join(' '),
       },
-      displayName: user.displayName || [user.firstName, user.lastName].filter(Boolean).join(' '),
+      displayName:
+        user.displayName ||
+        [user.firstName, user.lastName].filter(Boolean).join(' '),
       emails: user.email ? [{ value: user.email, primary: true }] : [],
       active: user.enabled,
       title: user.title,
@@ -392,7 +416,10 @@ export class ScimUsersService {
   /**
    * Filter SCIM user to only include specified attributes
    */
-  private filterScimUserAttributes(user: ScimUser, attributes: string[]): ScimUser {
+  private filterScimUserAttributes(
+    user: ScimUser,
+    attributes: string[],
+  ): ScimUser {
     const filtered: ScimUser = {
       schemas: user.schemas,
       id: user.id,
@@ -433,7 +460,10 @@ export class ScimUsersService {
   /**
    * Apply PATCH operation value
    */
-  private applyPatchValue(value: Record<string, unknown>, patches: string[]): Record<string, unknown> {
+  private applyPatchValue(
+    value: Record<string, unknown>,
+    patches: string[],
+  ): Record<string, unknown> {
     const result: Record<string, unknown> = {};
 
     for (const [key, val] of Object.entries(value)) {
@@ -453,7 +483,7 @@ export class ScimUsersService {
           break;
         case 'emails':
           if (Array.isArray(val) && val.length > 0) {
-            const primaryEmail = (val as any[]).find((e: any) => e.primary) || val[0];
+            const primaryEmail = val.find((e: any) => e.primary) || val[0];
             result['email'] = primaryEmail.value;
           }
           break;
@@ -481,7 +511,10 @@ export class ScimUsersService {
   /**
    * Return empty list response
    */
-  private emptyListResponse(startIndex: number, count: number): ScimListResponse<ScimUser> {
+  private emptyListResponse(
+    startIndex: number,
+    count: number,
+  ): ScimListResponse<ScimUser> {
     return {
       schemas: ['urn:scim:schemas:core:1.0:ListResponse'],
       totalResults: 0,

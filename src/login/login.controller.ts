@@ -20,7 +20,10 @@ import type { AuthorizeParams } from '../oauth/oauth.service.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
-import { RateLimitGuard, RateLimitByIp } from '../rate-limit/rate-limit.guard.js';
+import {
+  RateLimitGuard,
+  RateLimitByIp,
+} from '../rate-limit/rate-limit.guard.js';
 import { LoginService } from './login.service.js';
 import { OAuthService } from '../oauth/oauth.service.js';
 import { ConsentService } from '../consent/consent.service.js';
@@ -95,7 +98,9 @@ export class LoginController {
 
   /** Throw `ForbiddenException` when the double-submit CSRF token is invalid. */
   private validateCsrf(realm: Realm, body: object, req: Request): void {
-    const bodyToken = (body as Record<string, unknown>)['_csrf'] as string | undefined;
+    const bodyToken = (body as Record<string, unknown>)['_csrf'] as
+      | string
+      | undefined;
     const cookieToken = req.cookies?.[this.csrfService.cookieName(realm.name)];
     if (!this.csrfService.validate(bodyToken, cookieToken)) {
       throw new ForbiddenException('Invalid or missing CSRF token');
@@ -112,22 +117,29 @@ export class LoginController {
     @Res() res: Response,
   ) {
     const csrfToken = this.setCsrfCookie(realm, res);
-    this.themeRender.render(res, realm, 'login', 'login', {
-      pageTitle: 'Sign In',
-      registrationAllowed: realm.registrationAllowed,
-      webAuthnEnabled: realm.webAuthnEnabled ?? false,
-      client_id: query['client_id'] ?? '',
-      redirect_uri: query['redirect_uri'] ?? '',
-      response_type: query['response_type'] ?? '',
-      scope: query['scope'] ?? '',
-      state: query['state'] ?? '',
-      nonce: query['nonce'] ?? '',
-      code_challenge: query['code_challenge'] ?? '',
-      code_challenge_method: query['code_challenge_method'] ?? '',
-      error: query['error'] ?? '',
-      info: query['info'] ?? '',
-      csrfToken,
-    }, req);
+    this.themeRender.render(
+      res,
+      realm,
+      'login',
+      'login',
+      {
+        pageTitle: 'Sign In',
+        registrationAllowed: realm.registrationAllowed,
+        webAuthnEnabled: realm.webAuthnEnabled ?? false,
+        client_id: query['client_id'] ?? '',
+        redirect_uri: query['redirect_uri'] ?? '',
+        response_type: query['response_type'] ?? '',
+        scope: query['scope'] ?? '',
+        state: query['state'] ?? '',
+        nonce: query['nonce'] ?? '',
+        code_challenge: query['code_challenge'] ?? '',
+        code_challenge_method: query['code_challenge_method'] ?? '',
+        error: query['error'] ?? '',
+        info: query['info'] ?? '',
+        csrfToken,
+      },
+      req,
+    );
   }
 
   @Post('login')
@@ -161,7 +173,8 @@ export class LoginController {
           timestamp: new Date(),
         };
 
-        const assessment = await this.riskAssessmentService.assessRisk(riskContext);
+        const assessment =
+          await this.riskAssessmentService.assessRisk(riskContext);
 
         if (assessment.action === 'BLOCK') {
           // Send email notification if user has an email address
@@ -184,11 +197,25 @@ export class LoginController {
           });
 
           const params = new URLSearchParams();
-          params.set('error', 'Login blocked due to suspicious activity. Check your email for details.');
-          for (const key of ['client_id', 'redirect_uri', 'response_type', 'scope', 'state', 'nonce', 'code_challenge', 'code_challenge_method']) {
-            if (b[key]) params.set(key, b[key] as string);
+          params.set(
+            'error',
+            'Login blocked due to suspicious activity. Check your email for details.',
+          );
+          for (const key of [
+            'client_id',
+            'redirect_uri',
+            'response_type',
+            'scope',
+            'state',
+            'nonce',
+            'code_challenge',
+            'code_challenge_method',
+          ]) {
+            if (b[key]) params.set(key, b[key]);
           }
-          return res.redirect(`/realms/${realm.name}/login?${params.toString()}`);
+          return res.redirect(
+            `/realms/${realm.name}/login?${params.toString()}`,
+          );
         }
 
         if (assessment.action === 'STEP_UP') {
@@ -196,8 +223,17 @@ export class LoginController {
           const mfaAvailable = await this.mfaService.isMfaEnabled(user.id);
           if (mfaAvailable) {
             const oauthParamsForChallenge: Record<string, string> = {};
-            for (const key of ['response_type', 'client_id', 'redirect_uri', 'scope', 'state', 'nonce', 'code_challenge', 'code_challenge_method']) {
-              if (b[key]) oauthParamsForChallenge[key] = b[key] as string;
+            for (const key of [
+              'response_type',
+              'client_id',
+              'redirect_uri',
+              'scope',
+              'state',
+              'nonce',
+              'code_challenge',
+              'code_challenge_method',
+            ]) {
+              if (b[key]) oauthParamsForChallenge[key] = b[key];
             }
             const challengeToken = await this.mfaService.createMfaChallenge(
               user.id,
@@ -231,17 +267,38 @@ export class LoginController {
       // Check email verification requirement
       if (realm.requireEmailVerification && user.email && !user.emailVerified) {
         const params = new URLSearchParams();
-        params.set('error', 'Please verify your email address before signing in. Check your inbox for the verification link.');
-        for (const key of ['client_id', 'redirect_uri', 'response_type', 'scope', 'state', 'nonce', 'code_challenge', 'code_challenge_method']) {
-          if (b[key]) params.set(key, b[key] as string);
+        params.set(
+          'error',
+          'Please verify your email address before signing in. Check your inbox for the verification link.',
+        );
+        for (const key of [
+          'client_id',
+          'redirect_uri',
+          'response_type',
+          'scope',
+          'state',
+          'nonce',
+          'code_challenge',
+          'code_challenge_method',
+        ]) {
+          if (b[key]) params.set(key, b[key]);
         }
         return res.redirect(`/realms/${realm.name}/login?${params.toString()}`);
       }
 
       // Build OAuth params for later use
       const oauthParams: Record<string, string> = {};
-      for (const key of ['response_type', 'client_id', 'redirect_uri', 'scope', 'state', 'nonce', 'code_challenge', 'code_challenge_method']) {
-        if (b[key]) oauthParams[key] = b[key] as string;
+      for (const key of [
+        'response_type',
+        'client_id',
+        'redirect_uri',
+        'scope',
+        'state',
+        'nonce',
+        'code_challenge',
+        'code_challenge_method',
+      ]) {
+        if (b[key]) oauthParams[key] = b[key];
       }
 
       // Check password expiry
@@ -287,7 +344,10 @@ export class LoginController {
         // Realm requires MFA but user hasn't set it up yet
         // Create session first so they can set up TOTP
         const sessionToken = await this.loginService.createLoginSession(
-          realm, user, resolveClientIp(req), req.headers['user-agent'],
+          realm,
+          user,
+          resolveClientIp(req),
+          req.headers['user-agent'],
           req.cookies?.['AUTHME_SESSION'] as string | undefined,
         );
 
@@ -298,13 +358,16 @@ export class LoginController {
           path: `/realms/${realm.name}`,
         });
 
-        return res.redirect(`/realms/${realm.name}/account/totp-setup?info=${encodeURIComponent('Two-factor authentication is required. Please set it up now.')}`);
+        return res.redirect(
+          `/realms/${realm.name}/account/totp-setup?info=${encodeURIComponent('Two-factor authentication is required. Please set it up now.')}`,
+        );
       }
 
       // No MFA needed — proceed to create session
       return await this.completeLogin(realm, user, b, oauthParams, req, res);
     } catch (err: unknown) {
-      const errMessage = err instanceof Error ? err.message : 'Invalid credentials';
+      const errMessage =
+        err instanceof Error ? err.message : 'Invalid credentials';
       this.eventsService.recordLoginEvent({
         realmId: realm.id,
         type: LoginEventType.LOGIN_ERROR,
@@ -315,8 +378,17 @@ export class LoginController {
 
       const params = new URLSearchParams();
       params.set('error', errMessage);
-      for (const key of ['client_id', 'redirect_uri', 'response_type', 'scope', 'state', 'nonce', 'code_challenge', 'code_challenge_method']) {
-        if (b[key]) params.set(key, b[key] as string);
+      for (const key of [
+        'client_id',
+        'redirect_uri',
+        'response_type',
+        'scope',
+        'state',
+        'nonce',
+        'code_challenge',
+        'code_challenge_method',
+      ]) {
+        if (b[key]) params.set(key, b[key]);
       }
       res.redirect(`/realms/${realm.name}/login?${params.toString()}`);
     }
@@ -333,11 +405,17 @@ export class LoginController {
     // Validate OAuth request (including redirect_uri) BEFORE creating session
     let client;
     if (oauthParams['client_id']) {
-      client = await this.oauthService.validateAuthRequest(realm, oauthParams as unknown as AuthorizeParams);
+      client = await this.oauthService.validateAuthRequest(
+        realm,
+        oauthParams as unknown as AuthorizeParams,
+      );
     }
 
     const sessionToken = await this.loginService.createLoginSession(
-      realm, user, resolveClientIp(req), req.headers['user-agent'],
+      realm,
+      user,
+      resolveClientIp(req),
+      req.headers['user-agent'],
       req.cookies?.['AUTHME_SESSION'] as string | undefined,
     );
 
@@ -362,8 +440,14 @@ export class LoginController {
     }
 
     if (client.requireConsent) {
-      const scopes = (oauthParams['scope'] ?? 'openid').split(' ').filter(Boolean);
-      const hasConsent = await this.consentService.hasConsent(user.id, client.id, scopes);
+      const scopes = (oauthParams['scope'] ?? 'openid')
+        .split(' ')
+        .filter(Boolean);
+      const hasConsent = await this.consentService.hasConsent(
+        user.id,
+        client.id,
+        scopes,
+      );
 
       if (!hasConsent) {
         const reqId = await this.consentService.storeConsentRequest({
@@ -378,7 +462,11 @@ export class LoginController {
       }
     }
 
-    const result = await this.oauthService.authorizeWithUser(realm, user, oauthParams as unknown as AuthorizeParams);
+    const result = await this.oauthService.authorizeWithUser(
+      realm,
+      user,
+      oauthParams as unknown as AuthorizeParams,
+    );
     res.redirect(302, result.redirectUrl);
   }
 
@@ -392,11 +480,18 @@ export class LoginController {
     @Res() res: Response,
   ) {
     const csrfToken = this.setCsrfCookie(realm, res);
-    this.themeRender.render(res, realm, 'login', 'totp', {
-      pageTitle: 'Two-Factor Authentication',
-      error: error ?? '',
-      csrfToken,
-    }, req);
+    this.themeRender.render(
+      res,
+      realm,
+      'login',
+      'totp',
+      {
+        pageTitle: 'Two-Factor Authentication',
+        error: error ?? '',
+        csrfToken,
+      },
+      req,
+    );
   }
 
   @Post('totp')
@@ -411,14 +506,23 @@ export class LoginController {
     this.validateCsrf(realm, body, req);
     const challengeToken = req.cookies?.['AUTHME_MFA_CHALLENGE'];
     if (!challengeToken) {
-      return res.redirect(`/realms/${realm.name}/login?error=${encodeURIComponent('MFA session expired. Please login again.')}`);
+      return res.redirect(
+        `/realms/${realm.name}/login?error=${encodeURIComponent('MFA session expired. Please login again.')}`,
+      );
     }
 
     // Validate challenge and track attempt count (does not consume the challenge)
-    const challenge = await this.mfaService.validateMfaChallengeWithAttemptCheck(challengeToken);
+    const challenge =
+      await this.mfaService.validateMfaChallengeWithAttemptCheck(
+        challengeToken,
+      );
     if (!challenge) {
-      res.clearCookie('AUTHME_MFA_CHALLENGE', { path: `/realms/${realm.name}` });
-      return res.redirect(`/realms/${realm.name}/login?error=${encodeURIComponent('MFA session expired or too many failed attempts. Please login again.')}`);
+      res.clearCookie('AUTHME_MFA_CHALLENGE', {
+        path: `/realms/${realm.name}`,
+      });
+      return res.redirect(
+        `/realms/${realm.name}/login?error=${encodeURIComponent('MFA session expired or too many failed attempts. Please login again.')}`,
+      );
     }
 
     // Ensure the challenge was issued for this realm (prevents cross-realm token reuse)
@@ -426,8 +530,12 @@ export class LoginController {
       this.logger.warn(
         `MFA cross-realm token use attempt: challenge realm ${challenge.realmId} used against realm ${realm.id}`,
       );
-      res.clearCookie('AUTHME_MFA_CHALLENGE', { path: `/realms/${realm.name}` });
-      return res.redirect(`/realms/${realm.name}/login?error=${encodeURIComponent('MFA session expired. Please login again.')}`);
+      res.clearCookie('AUTHME_MFA_CHALLENGE', {
+        path: `/realms/${realm.name}`,
+      });
+      return res.redirect(
+        `/realms/${realm.name}/login?error=${encodeURIComponent('MFA session expired. Please login again.')}`,
+      );
     }
 
     const code = body.code;
@@ -437,7 +545,10 @@ export class LoginController {
     if (code) {
       verified = await this.mfaService.verifyTotp(challenge.userId, code);
     } else if (recoveryCode) {
-      verified = await this.mfaService.verifyRecoveryCode(challenge.userId, recoveryCode);
+      verified = await this.mfaService.verifyRecoveryCode(
+        challenge.userId,
+        recoveryCode,
+      );
     }
 
     if (!verified) {
@@ -449,7 +560,9 @@ export class LoginController {
         error: 'Invalid MFA code',
       });
       // Same challenge token is reused — attempt counter was already incremented
-      return res.redirect(`/realms/${realm.name}/totp?error=${encodeURIComponent('Invalid code. Please try again.')}`);
+      return res.redirect(
+        `/realms/${realm.name}/totp?error=${encodeURIComponent('Invalid code. Please try again.')}`,
+      );
     }
 
     // MFA verified — consume the challenge and clear the cookie
@@ -459,10 +572,19 @@ export class LoginController {
     // MFA verified — complete login
     const user = await this.loginService.findUserById(challenge.userId);
     if (!user) {
-      return res.redirect(`/realms/${realm.name}/login?error=${encodeURIComponent('User not found.')}`);
+      return res.redirect(
+        `/realms/${realm.name}/login?error=${encodeURIComponent('User not found.')}`,
+      );
     }
 
-    return await this.completeLogin(realm, user, body as unknown as Record<string, unknown>, challenge.oauthParams ?? {}, req, res);
+    return await this.completeLogin(
+      realm,
+      user,
+      body as unknown as Record<string, unknown>,
+      challenge.oauthParams ?? {},
+      req,
+      res,
+    );
   }
 
   // ─── CHANGE PASSWORD (forced) ─────────────────────────────
@@ -475,21 +597,32 @@ export class LoginController {
     @Res() res: Response,
   ) {
     const policyHints: string[] = [];
-    if (realm.passwordMinLength > 1) policyHints.push(`At least ${realm.passwordMinLength} characters`);
-    if (realm.passwordRequireUppercase) policyHints.push('At least one uppercase letter');
-    if (realm.passwordRequireLowercase) policyHints.push('At least one lowercase letter');
+    if (realm.passwordMinLength > 1)
+      policyHints.push(`At least ${realm.passwordMinLength} characters`);
+    if (realm.passwordRequireUppercase)
+      policyHints.push('At least one uppercase letter');
+    if (realm.passwordRequireLowercase)
+      policyHints.push('At least one lowercase letter');
     if (realm.passwordRequireDigits) policyHints.push('At least one digit');
-    if (realm.passwordRequireSpecialChars) policyHints.push('At least one special character');
+    if (realm.passwordRequireSpecialChars)
+      policyHints.push('At least one special character');
 
     const csrfToken = this.setCsrfCookie(realm, res);
-    this.themeRender.render(res, realm, 'login', 'change-password', {
-      pageTitle: 'Change Password',
-      token: query['token'] ?? '',
-      error: query['error'] ?? '',
-      info: query['info'] ?? '',
-      policyHints: policyHints.length > 0 ? policyHints : null,
-      csrfToken,
-    }, req);
+    this.themeRender.render(
+      res,
+      realm,
+      'login',
+      'change-password',
+      {
+        pageTitle: 'Change Password',
+        token: query['token'] ?? '',
+        error: query['error'] ?? '',
+        info: query['info'] ?? '',
+        policyHints: policyHints.length > 0 ? policyHints : null,
+        csrfToken,
+      },
+      req,
+    );
   }
 
   @Post('change-password')
@@ -510,44 +643,72 @@ export class LoginController {
     const redirectBase = `/realms/${realm.name}/change-password?token=${token ?? ''}`;
 
     if (!token || !currentPassword || !newPassword) {
-      return res.redirect(`${redirectBase}&error=${encodeURIComponent('All fields are required.')}`);
+      return res.redirect(
+        `${redirectBase}&error=${encodeURIComponent('All fields are required.')}`,
+      );
     }
 
     if (newPassword !== confirmPassword) {
-      return res.redirect(`${redirectBase}&error=${encodeURIComponent('New passwords do not match.')}`);
+      return res.redirect(
+        `${redirectBase}&error=${encodeURIComponent('New passwords do not match.')}`,
+      );
     }
 
     // Validate token
     const tokenHash = this.crypto.sha256(token);
-    const record = await this.prisma.verificationToken.findUnique({ where: { tokenHash } });
-    if (!record || record.type !== 'change_password' || record.expiresAt < new Date()) {
-      return res.redirect(`/realms/${realm.name}/login?error=${encodeURIComponent('Change password session expired. Please login again.')}`);
+    const record = await this.prisma.verificationToken.findUnique({
+      where: { tokenHash },
+    });
+    if (
+      !record ||
+      record.type !== 'change_password' ||
+      record.expiresAt < new Date()
+    ) {
+      return res.redirect(
+        `/realms/${realm.name}/login?error=${encodeURIComponent('Change password session expired. Please login again.')}`,
+      );
     }
 
-    const user = await this.prisma.user.findUnique({ where: { id: record.userId } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: record.userId },
+    });
     if (!user || !user.passwordHash) {
-      return res.redirect(`/realms/${realm.name}/login?error=${encodeURIComponent('User not found.')}`);
+      return res.redirect(
+        `/realms/${realm.name}/login?error=${encodeURIComponent('User not found.')}`,
+      );
     }
 
     // Verify current password
-    const valid = await this.crypto.verifyPassword(user.passwordHash, currentPassword);
+    const valid = await this.crypto.verifyPassword(
+      user.passwordHash,
+      currentPassword,
+    );
     if (!valid) {
-      return res.redirect(`${redirectBase}&error=${encodeURIComponent('Current password is incorrect.')}`);
+      return res.redirect(
+        `${redirectBase}&error=${encodeURIComponent('Current password is incorrect.')}`,
+      );
     }
 
     // Validate new password against policy
     const validation = this.passwordPolicyService.validate(realm, newPassword);
     if (!validation.valid) {
-      return res.redirect(`${redirectBase}&error=${encodeURIComponent(validation.errors.join('. '))}`);
+      return res.redirect(
+        `${redirectBase}&error=${encodeURIComponent(validation.errors.join('. '))}`,
+      );
     }
 
     // Check password history
     if (realm.passwordHistoryCount > 0) {
       const inHistory = await this.passwordPolicyService.checkHistory(
-        user.id, realm.id, newPassword, realm.passwordHistoryCount,
+        user.id,
+        realm.id,
+        newPassword,
+        realm.passwordHistoryCount,
       );
       if (inHistory) {
-        return res.redirect(`${redirectBase}&error=${encodeURIComponent('Password was used recently. Choose a different password.')}`);
+        return res.redirect(
+          `${redirectBase}&error=${encodeURIComponent('Password was used recently. Choose a different password.')}`,
+        );
       }
     }
 
@@ -560,13 +721,18 @@ export class LoginController {
 
     // Record history
     await this.passwordPolicyService.recordHistory(
-      user.id, realm.id, passwordHash, realm.passwordHistoryCount,
+      user.id,
+      realm.id,
+      passwordHash,
+      realm.passwordHistoryCount,
     );
 
     // Consume the token
     await this.prisma.verificationToken.delete({ where: { id: record.id } });
 
-    const info = encodeURIComponent('Password changed successfully. You can now sign in.');
+    const info = encodeURIComponent(
+      'Password changed successfully. You can now sign in.',
+    );
     res.redirect(`/realms/${realm.name}/login?info=${info}`);
   }
 
@@ -595,13 +761,20 @@ export class LoginController {
     );
 
     const csrfToken = this.setCsrfCookie(realm, res);
-    this.themeRender.render(res, realm, 'login', 'consent', {
-      pageTitle: 'Grant Access',
-      clientName: consentReq.clientName,
-      scopes: scopeDescriptions,
-      authReqId: newReqId,
-      csrfToken,
-    }, req);
+    this.themeRender.render(
+      res,
+      realm,
+      'login',
+      'consent',
+      {
+        pageTitle: 'Grant Access',
+        clientName: consentReq.clientName,
+        scopes: scopeDescriptions,
+        authReqId: newReqId,
+        csrfToken,
+      },
+      req,
+    );
   }
 
   @Post('consent')
@@ -625,7 +798,10 @@ export class LoginController {
     if (body['action'] === 'deny') {
       const redirectUri = new URL(consentReq.oauthParams['redirect_uri']);
       redirectUri.searchParams.set('error', 'access_denied');
-      redirectUri.searchParams.set('error_description', 'User denied the consent request');
+      redirectUri.searchParams.set(
+        'error_description',
+        'User denied the consent request',
+      );
       if (consentReq.oauthParams['state']) {
         redirectUri.searchParams.set('state', consentReq.oauthParams['state']);
       }
@@ -668,45 +844,55 @@ export class LoginController {
     }
 
     const hints: string[] = [];
-    if (realm.passwordMinLength > 1) hints.push(`at least ${realm.passwordMinLength} characters`);
+    if (realm.passwordMinLength > 1)
+      hints.push(`at least ${realm.passwordMinLength} characters`);
     if (realm.passwordRequireUppercase) hints.push('an uppercase letter');
     if (realm.passwordRequireLowercase) hints.push('a lowercase letter');
     if (realm.passwordRequireDigits) hints.push('a digit');
     if (realm.passwordRequireSpecialChars) hints.push('a special character');
 
-    const customAttributes = await this.customAttributesService.getRegistrationAttributes(realm.id);
+    const customAttributes =
+      await this.customAttributesService.getRegistrationAttributes(realm.id);
 
     const csrfToken = this.setCsrfCookie(realm, res);
-    this.themeRender.render(res, realm, 'login', 'register', {
-      pageTitle: 'Create Account',
-      passwordMinLength: realm.passwordMinLength || 8,
-      passwordHint: hints.length ? `Must contain ${hints.join(', ')}` : '',
-      username: query['username'] ?? '',
-      email: query['email'] ?? '',
-      firstName: query['firstName'] ?? '',
-      lastName: query['lastName'] ?? '',
-      error: query['error'] ?? '',
-      info: query['info'] ?? '',
-      client_id: query['client_id'] ?? '',
-      redirect_uri: query['redirect_uri'] ?? '',
-      response_type: query['response_type'] ?? '',
-      scope: query['scope'] ?? '',
-      state: query['state'] ?? '',
-      nonce: query['nonce'] ?? '',
-      code_challenge: query['code_challenge'] ?? '',
-      code_challenge_method: query['code_challenge_method'] ?? '',
-      customAttributes: customAttributes.map((a) => ({
-        name: a.name,
-        displayName: a.displayName,
-        type: a.type,
-        required: a.required,
-        options: a.options ?? [],
-        value: query[`attr_${a.name}`] ?? '',
-      })),
-      termsOfServiceUrl: realm.termsOfServiceUrl ?? null,
-      registrationApprovalRequired: realm.registrationApprovalRequired ?? false,
-      csrfToken,
-    }, req);
+    this.themeRender.render(
+      res,
+      realm,
+      'login',
+      'register',
+      {
+        pageTitle: 'Create Account',
+        passwordMinLength: realm.passwordMinLength || 8,
+        passwordHint: hints.length ? `Must contain ${hints.join(', ')}` : '',
+        username: query['username'] ?? '',
+        email: query['email'] ?? '',
+        firstName: query['firstName'] ?? '',
+        lastName: query['lastName'] ?? '',
+        error: query['error'] ?? '',
+        info: query['info'] ?? '',
+        client_id: query['client_id'] ?? '',
+        redirect_uri: query['redirect_uri'] ?? '',
+        response_type: query['response_type'] ?? '',
+        scope: query['scope'] ?? '',
+        state: query['state'] ?? '',
+        nonce: query['nonce'] ?? '',
+        code_challenge: query['code_challenge'] ?? '',
+        code_challenge_method: query['code_challenge_method'] ?? '',
+        customAttributes: customAttributes.map((a) => ({
+          name: a.name,
+          displayName: a.displayName,
+          type: a.type,
+          required: a.required,
+          options: a.options ?? [],
+          value: query[`attr_${a.name}`] ?? '',
+        })),
+        termsOfServiceUrl: realm.termsOfServiceUrl ?? null,
+        registrationApprovalRequired:
+          realm.registrationApprovalRequired ?? false,
+        csrfToken,
+      },
+      req,
+    );
   }
 
   @Post('register')
@@ -733,10 +919,19 @@ export class LoginController {
     const confirmPassword = body['confirmPassword'] ?? '';
 
     // Preserve OAuth params through registration redirects
-    const oauthParamNames = ['client_id', 'redirect_uri', 'response_type', 'scope', 'state', 'nonce', 'code_challenge', 'code_challenge_method'];
+    const oauthParamNames = [
+      'client_id',
+      'redirect_uri',
+      'response_type',
+      'scope',
+      'state',
+      'nonce',
+      'code_challenge',
+      'code_challenge_method',
+    ];
     const oauthParams = oauthParamNames
-      .filter(p => body[p])
-      .map(p => `${p}=${encodeURIComponent(body[p])}`)
+      .filter((p) => body[p])
+      .map((p) => `${p}=${encodeURIComponent(body[p])}`)
       .join('&');
     const oauthSuffix = oauthParams ? `&${oauthParams}` : '';
 
@@ -749,7 +944,11 @@ export class LoginController {
     }
 
     const htmlPattern = /[<>]/;
-    if (htmlPattern.test(username) || htmlPattern.test(firstName) || htmlPattern.test(lastName)) {
+    if (
+      htmlPattern.test(username) ||
+      htmlPattern.test(firstName) ||
+      htmlPattern.test(lastName)
+    ) {
       return res.redirect(
         `/realms/${realm.name}/register?error=${encodeURIComponent('Fields must not contain HTML tags or angle brackets.')}${preserveFields}`,
       );
@@ -764,7 +963,9 @@ export class LoginController {
     // Check allowed email domains
     if (realm.allowedEmailDomains.length > 0) {
       const emailDomain = email.split('@')[1]?.toLowerCase() ?? '';
-      const allowed = realm.allowedEmailDomains.map((d: string) => d.toLowerCase());
+      const allowed = realm.allowedEmailDomains.map((d: string) =>
+        d.toLowerCase(),
+      );
       if (!allowed.includes(emailDomain)) {
         return res.redirect(
           `/realms/${realm.name}/register?error=${encodeURIComponent(`Registration is only allowed for email domains: ${allowed.join(', ')}`)}${preserveFields}`,
@@ -800,7 +1001,8 @@ export class LoginController {
     }
 
     // Validate required custom attributes before creating the user
-    const registrationAttributes = await this.customAttributesService.getRegistrationAttributes(realm.id);
+    const registrationAttributes =
+      await this.customAttributesService.getRegistrationAttributes(realm.id);
     for (const attr of registrationAttributes) {
       const value = (body[`attr_${attr.name}`] ?? '').trim();
       if (attr.required && !value) {
@@ -843,7 +1045,10 @@ export class LoginController {
         },
       });
     } catch (error) {
-      if (error instanceof Prisma.PrismaClientKnownRequestError && error.code === 'P2002') {
+      if (
+        error instanceof Prisma.PrismaClientKnownRequestError &&
+        error.code === 'P2002'
+      ) {
         return res.redirect(
           `/realms/${realm.name}/register?error=${encodeURIComponent('An account with that username or email already exists.')}${preserveFields}`,
         );
@@ -854,16 +1059,25 @@ export class LoginController {
     // Record password history
     if (realm.passwordHistoryCount > 0) {
       await this.passwordPolicyService.recordHistory(
-        user.id, realm.id, passwordHash, realm.passwordHistoryCount,
+        user.id,
+        realm.id,
+        passwordHash,
+        realm.passwordHistoryCount,
       );
     }
 
     // Save custom attribute values
     try {
-      await this.customAttributesService.validateAndSaveRegistrationAttributes(realm, user.id, body);
+      await this.customAttributesService.validateAndSaveRegistrationAttributes(
+        realm,
+        user.id,
+        body,
+      );
     } catch {
       // If attribute saving fails, clean up the user and redirect with error
-      await this.prisma.user.delete({ where: { id: user.id } }).catch(() => undefined);
+      await this.prisma.user
+        .delete({ where: { id: user.id } })
+        .catch(() => undefined);
       return res.redirect(
         `/realms/${realm.name}/register?error=${encodeURIComponent('Failed to save custom attribute values. Please try again.')}${preserveFields}`,
       );
@@ -880,14 +1094,30 @@ export class LoginController {
       try {
         const configured = await this.emailService.isConfigured(realm.name);
         if (configured) {
-          const rawToken = await this.verificationService.createToken(user.id, 'email_verification', 86400);
-          const baseUrl = this.config.get<string>('BASE_URL', 'http://localhost:3000');
+          const rawToken = await this.verificationService.createToken(
+            user.id,
+            'email_verification',
+            86400,
+          );
+          const baseUrl = this.config.get<string>(
+            'BASE_URL',
+            'http://localhost:3000',
+          );
           const verifyUrl = `${baseUrl}/realms/${realm.name}/verify-email?token=${rawToken}`;
 
-          const fullRealm = await this.prisma.realm.findUnique({ where: { name: realm.name } });
+          const fullRealm = await this.prisma.realm.findUnique({
+            where: { name: realm.name },
+          });
           if (fullRealm) {
-            const subject = this.themeEmail.getSubject(fullRealm, 'verifyEmailSubject');
-            const html = this.themeEmail.renderEmail(fullRealm, 'verify-email', { verifyUrl });
+            const subject = this.themeEmail.getSubject(
+              fullRealm,
+              'verifyEmailSubject',
+            );
+            const html = this.themeEmail.renderEmail(
+              fullRealm,
+              'verify-email',
+              { verifyUrl },
+            );
             await this.emailService.sendEmail(realm.name, email, subject, html);
           }
         }
@@ -898,9 +1128,11 @@ export class LoginController {
 
     let message: string;
     if (requiresApproval) {
-      message = 'Account created successfully! Your account is pending approval by an administrator.';
+      message =
+        'Account created successfully! Your account is pending approval by an administrator.';
     } else if (realm.requireEmailVerification) {
-      message = 'Account created successfully! Please check your email to verify your account, then sign in.';
+      message =
+        'Account created successfully! Please check your email to verify your account, then sign in.';
     } else {
       message = 'Account created successfully! You can now sign in.';
     }
@@ -918,20 +1150,37 @@ export class LoginController {
     @Res() res: Response,
   ) {
     if (!token) {
-      return this.themeRender.render(res, realm, 'login', 'verify-email', {
-        pageTitle: 'Email Verification',
-        success: false,
-        error: 'Missing verification token.',
-      }, req);
+      return this.themeRender.render(
+        res,
+        realm,
+        'login',
+        'verify-email',
+        {
+          pageTitle: 'Email Verification',
+          success: false,
+          error: 'Missing verification token.',
+        },
+        req,
+      );
     }
 
-    const result = await this.verificationService.validateToken(token, 'email_verification');
+    const result = await this.verificationService.validateToken(
+      token,
+      'email_verification',
+    );
     if (!result) {
-      return this.themeRender.render(res, realm, 'login', 'verify-email', {
-        pageTitle: 'Email Verification',
-        success: false,
-        error: 'This verification link is invalid or has expired.',
-      }, req);
+      return this.themeRender.render(
+        res,
+        realm,
+        'login',
+        'verify-email',
+        {
+          pageTitle: 'Email Verification',
+          success: false,
+          error: 'This verification link is invalid or has expired.',
+        },
+        req,
+      );
     }
 
     await this.prisma.user.update({
@@ -939,10 +1188,17 @@ export class LoginController {
       data: { emailVerified: true },
     });
 
-    this.themeRender.render(res, realm, 'login', 'verify-email', {
-      pageTitle: 'Email Verification',
-      success: true,
-    }, req);
+    this.themeRender.render(
+      res,
+      realm,
+      'login',
+      'verify-email',
+      {
+        pageTitle: 'Email Verification',
+        success: true,
+      },
+      req,
+    );
   }
 
   // ─── FORGOT / RESET PASSWORD ────────────────────────────
@@ -955,12 +1211,19 @@ export class LoginController {
     @Res() res: Response,
   ) {
     const csrfToken = this.setCsrfCookie(realm, res);
-    this.themeRender.render(res, realm, 'login', 'forgot-password', {
-      pageTitle: 'Forgot Password',
-      info: query['info'] ?? '',
-      error: query['error'] ?? '',
-      csrfToken,
-    }, req);
+    this.themeRender.render(
+      res,
+      realm,
+      'login',
+      'forgot-password',
+      {
+        pageTitle: 'Forgot Password',
+        info: query['info'] ?? '',
+        error: query['error'] ?? '',
+        csrfToken,
+      },
+      req,
+    );
   }
 
   @Post('forgot-password')
@@ -992,14 +1255,31 @@ export class LoginController {
               'password_reset',
               3600,
             );
-            const baseUrl = this.config.get<string>('BASE_URL', 'http://localhost:3000');
+            const baseUrl = this.config.get<string>(
+              'BASE_URL',
+              'http://localhost:3000',
+            );
             const resetUrl = `${baseUrl}/realms/${realm.name}/reset-password?token=${rawToken}`;
 
-            const fullRealm = await this.prisma.realm.findUnique({ where: { name: realm.name } });
+            const fullRealm = await this.prisma.realm.findUnique({
+              where: { name: realm.name },
+            });
             if (fullRealm) {
-              const subject = this.themeEmail.getSubject(fullRealm, 'resetPasswordSubject');
-              const html = this.themeEmail.renderEmail(fullRealm, 'reset-password', { resetUrl });
-              await this.emailService.sendEmail(realm.name, email, subject, html);
+              const subject = this.themeEmail.getSubject(
+                fullRealm,
+                'resetPasswordSubject',
+              );
+              const html = this.themeEmail.renderEmail(
+                fullRealm,
+                'reset-password',
+                { resetUrl },
+              );
+              await this.emailService.sendEmail(
+                realm.name,
+                email,
+                subject,
+                html,
+              );
             }
           }
         } catch {
@@ -1008,7 +1288,9 @@ export class LoginController {
       }
     }
 
-    res.redirect(`/realms/${realm.name}/forgot-password?info=${successMessage}`);
+    res.redirect(
+      `/realms/${realm.name}/forgot-password?info=${successMessage}`,
+    );
   }
 
   @Get('reset-password')
@@ -1020,11 +1302,18 @@ export class LoginController {
     @Res() res: Response,
   ) {
     if (!token) {
-      return this.themeRender.render(res, realm, 'login', 'reset-password', {
-        pageTitle: 'Reset Password',
-        error: 'Missing reset token.',
-        token: '',
-      }, req);
+      return this.themeRender.render(
+        res,
+        realm,
+        'login',
+        'reset-password',
+        {
+          pageTitle: 'Reset Password',
+          error: 'Missing reset token.',
+          token: '',
+        },
+        req,
+      );
     }
 
     const tokenHash = this.crypto.sha256(token);
@@ -1032,21 +1321,39 @@ export class LoginController {
       where: { tokenHash },
     });
 
-    if (!record || record.type !== 'password_reset' || record.expiresAt < new Date()) {
-      return this.themeRender.render(res, realm, 'login', 'reset-password', {
-        pageTitle: 'Reset Password',
-        error: 'This reset link is invalid or has expired.',
-        token: '',
-      }, req);
+    if (
+      !record ||
+      record.type !== 'password_reset' ||
+      record.expiresAt < new Date()
+    ) {
+      return this.themeRender.render(
+        res,
+        realm,
+        'login',
+        'reset-password',
+        {
+          pageTitle: 'Reset Password',
+          error: 'This reset link is invalid or has expired.',
+          token: '',
+        },
+        req,
+      );
     }
 
     const csrfToken = this.setCsrfCookie(realm, res);
-    this.themeRender.render(res, realm, 'login', 'reset-password', {
-      pageTitle: 'Reset Password',
-      token,
-      error: error ?? '',
-      csrfToken,
-    }, req);
+    this.themeRender.render(
+      res,
+      realm,
+      'login',
+      'reset-password',
+      {
+        pageTitle: 'Reset Password',
+        token,
+        error: error ?? '',
+        csrfToken,
+      },
+      req,
+    );
   }
 
   @Post('reset-password')
@@ -1083,7 +1390,10 @@ export class LoginController {
       );
     }
 
-    const result = await this.verificationService.validateToken(token, 'password_reset');
+    const result = await this.verificationService.validateToken(
+      token,
+      'password_reset',
+    );
     if (!result) {
       return res.redirect(
         `/realms/${realm.name}/reset-password?error=${encodeURIComponent('This reset link is invalid or has expired.')}`,
@@ -1097,10 +1407,15 @@ export class LoginController {
     });
 
     // Record password history
-    const user = await this.prisma.user.findUnique({ where: { id: result.userId } });
+    const user = await this.prisma.user.findUnique({
+      where: { id: result.userId },
+    });
     if (user) {
       await this.passwordPolicyService.recordHistory(
-        user.id, realm.id, passwordHash, realm.passwordHistoryCount,
+        user.id,
+        realm.id,
+        passwordHash,
+        realm.passwordHistoryCount,
       );
     }
 
@@ -1110,7 +1425,9 @@ export class LoginController {
       userId: result.userId,
     });
 
-    const info = encodeURIComponent('Your password has been reset. You can now sign in.');
+    const info = encodeURIComponent(
+      'Your password has been reset. You can now sign in.',
+    );
     res.redirect(`/realms/${realm.name}/login?info=${info}`);
   }
 }

@@ -1,7 +1,11 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
-import type { LoginEventTypeValue, OperationTypeValue, ResourceTypeValue } from './event-types.js';
+import type {
+  LoginEventTypeValue,
+  OperationTypeValue,
+  ResourceTypeValue,
+} from './event-types.js';
 import type { WebhooksService } from '../webhooks/webhooks.service.js';
 import type { PluginManagerService } from '../plugins/plugin-manager.service.js';
 
@@ -74,11 +78,16 @@ export class EventsService {
           clientId: params.clientId,
           ipAddress: params.ipAddress,
           error: params.error,
-          details: params.details !== undefined ? params.details as unknown as Prisma.InputJsonValue : undefined,
+          details:
+            params.details !== undefined
+              ? (params.details as unknown as Prisma.InputJsonValue)
+              : undefined,
         },
       });
     } catch (err) {
-      this.logger.warn(`Failed to record login event: ${(err as Error).message}`);
+      this.logger.warn(
+        `Failed to record login event: ${(err as Error).message}`,
+      );
     }
 
     // Dispatch webhook event (non-blocking, best-effort)
@@ -123,12 +132,17 @@ export class EventsService {
           operationType: params.operationType,
           resourceType: params.resourceType,
           resourcePath: params.resourcePath,
-          representation: params.representation !== undefined ? params.representation as unknown as Prisma.InputJsonValue : undefined,
+          representation:
+            params.representation !== undefined
+              ? (params.representation as unknown as Prisma.InputJsonValue)
+              : undefined,
           ipAddress: params.ipAddress,
         },
       });
     } catch (err) {
-      this.logger.warn(`Failed to record admin event: ${(err as Error).message}`);
+      this.logger.warn(
+        `Failed to record admin event: ${(err as Error).message}`,
+      );
     }
   }
 
@@ -145,7 +159,7 @@ export class EventsService {
     }
 
     return this.prisma.loginEvent.findMany({
-      where: where as Prisma.LoginEventWhereInput,
+      where: where,
       orderBy: { createdAt: 'desc' },
       skip: params.first ?? 0,
       take: params.max ?? 100,
@@ -164,7 +178,7 @@ export class EventsService {
     }
 
     return this.prisma.adminEvent.findMany({
-      where: where as Prisma.AdminEventWhereInput,
+      where: where,
       orderBy: { createdAt: 'desc' },
       skip: params.first ?? 0,
       take: params.max ?? 100,

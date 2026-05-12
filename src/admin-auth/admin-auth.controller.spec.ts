@@ -1,16 +1,26 @@
-import { UnauthorizedException, HttpException, HttpStatus } from '@nestjs/common';
+import {
+  UnauthorizedException,
+  HttpException,
+  HttpStatus,
+} from '@nestjs/common';
 import { AdminAuthController } from './admin-auth.controller.js';
 import { resetTrustedProxyConfig } from '../common/utils/proxy-ip.util.js';
 
 /** Build a minimal Express-like mock for req / res used by the login handler. */
-function makeReqRes(overrides: Partial<{ ip: string; forwardedFor: string }> = {}) {
+function makeReqRes(
+  overrides: Partial<{ ip: string; forwardedFor: string }> = {},
+) {
   const req: any = {
-    headers: overrides.forwardedFor ? { 'x-forwarded-for': overrides.forwardedFor } : {},
+    headers: overrides.forwardedFor
+      ? { 'x-forwarded-for': overrides.forwardedFor }
+      : {},
     socket: { remoteAddress: overrides.ip ?? '127.0.0.1' },
   };
   const headers: Record<string, string> = {};
   const res: any = {
-    setHeader: (name: string, value: string) => { headers[name] = value; },
+    setHeader: (name: string, value: string) => {
+      headers[name] = value;
+    },
     _headers: headers,
   };
   return { req, res };
@@ -54,9 +64,17 @@ describe('AdminAuthController', () => {
       adminAuthService.login.mockResolvedValue(serviceResponse);
       const { req, res } = makeReqRes({ ip: '10.0.0.1' });
 
-      const result = await controller.login({ username: 'admin', password: 'password' }, req, res);
+      const result = await controller.login(
+        { username: 'admin', password: 'password' },
+        req,
+        res,
+      );
 
-      expect(adminAuthService.login).toHaveBeenCalledWith('admin', 'password', '10.0.0.1');
+      expect(adminAuthService.login).toHaveBeenCalledWith(
+        'admin',
+        'password',
+        '10.0.0.1',
+      );
       // rateLimitHeaders must be forwarded to the response but NOT returned in body
       expect(result).toEqual({
         access_token: 'jwt-token',
@@ -76,12 +94,19 @@ describe('AdminAuthController', () => {
         expires_in: 3600,
         rateLimitHeaders: {},
       });
-      const { req, res } = makeReqRes({ ip: '10.0.0.1', forwardedFor: '203.0.113.5, 10.0.0.1' });
+      const { req, res } = makeReqRes({
+        ip: '10.0.0.1',
+        forwardedFor: '203.0.113.5, 10.0.0.1',
+      });
 
       await controller.login({ username: 'admin', password: 'pass' }, req, res);
 
       // Must use the socket address, not the spoofable header value
-      expect(adminAuthService.login).toHaveBeenCalledWith('admin', 'pass', '10.0.0.1');
+      expect(adminAuthService.login).toHaveBeenCalledWith(
+        'admin',
+        'pass',
+        '10.0.0.1',
+      );
     });
 
     it('should use X-Forwarded-For when the peer is a TRUSTED_PROXIES entry', async () => {
@@ -94,12 +119,19 @@ describe('AdminAuthController', () => {
         expires_in: 3600,
         rateLimitHeaders: {},
       });
-      const { req, res } = makeReqRes({ ip: '10.0.0.1', forwardedFor: '203.0.113.5, 10.0.0.1' });
+      const { req, res } = makeReqRes({
+        ip: '10.0.0.1',
+        forwardedFor: '203.0.113.5, 10.0.0.1',
+      });
 
       await controller.login({ username: 'admin', password: 'pass' }, req, res);
 
       // Peer is trusted — use first value from X-Forwarded-For
-      expect(adminAuthService.login).toHaveBeenCalledWith('admin', 'pass', '203.0.113.5');
+      expect(adminAuthService.login).toHaveBeenCalledWith(
+        'admin',
+        'pass',
+        '203.0.113.5',
+      );
     });
 
     it('should propagate rate-limit errors from service', async () => {
@@ -137,7 +169,9 @@ describe('AdminAuthController', () => {
     it('should throw UnauthorizedException if no admin user on request', async () => {
       const req = {} as any;
 
-      await expect(controller.getMe(req)).rejects.toThrow(UnauthorizedException);
+      await expect(controller.getMe(req)).rejects.toThrow(
+        UnauthorizedException,
+      );
       await expect(controller.getMe(req)).rejects.toThrow('Not authenticated');
     });
   });

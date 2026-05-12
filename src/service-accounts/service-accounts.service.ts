@@ -126,7 +126,11 @@ export class ServiceAccountsService {
 
   // ── API Key management ─────────────────────────────────────────────────────
 
-  async createApiKey(realm: Realm, serviceAccountId: string, dto: CreateApiKeyDto) {
+  async createApiKey(
+    realm: Realm,
+    serviceAccountId: string,
+    dto: CreateApiKeyDto,
+  ) {
     await this.findById(realm, serviceAccountId);
 
     // Generate a cryptographically random key: prefix (8 hex chars) + full key (64 hex chars)
@@ -243,7 +247,10 @@ export class ServiceAccountsService {
       // Skip disabled service accounts
       if (!candidate.serviceAccount.enabled) continue;
 
-      const valid = await this.crypto.verifyPassword(candidate.keyHash, plainKey);
+      const valid = await this.crypto.verifyPassword(
+        candidate.keyHash,
+        plainKey,
+      );
       if (valid) {
         // Update usage statistics (fire-and-forget — don't block the request)
         this.prisma.apiKey
@@ -269,9 +276,18 @@ export class ServiceAccountsService {
    * Check if an API key has exceeded its usage quotas.
    * Returns null if within limits, or an object with quota exceeded details.
    */
-  async checkQuotas(apiKey: { id: string; maxRequestsPerDay: number | null; maxRequestsPerMonth: number | null; rateLimitPerMinute: number | null; requestCount: number }): Promise<{ exceeded: boolean; reason?: string } | null> {
+  async checkQuotas(apiKey: {
+    id: string;
+    maxRequestsPerDay: number | null;
+    maxRequestsPerMonth: number | null;
+    rateLimitPerMinute: number | null;
+    requestCount: number;
+  }): Promise<{ exceeded: boolean; reason?: string } | null> {
     // Check monthly quota if configured
-    if (apiKey.maxRequestsPerMonth != null && apiKey.requestCount >= apiKey.maxRequestsPerMonth) {
+    if (
+      apiKey.maxRequestsPerMonth != null &&
+      apiKey.requestCount >= apiKey.maxRequestsPerMonth
+    ) {
       return {
         exceeded: true,
         reason: `Monthly quota exceeded (${apiKey.requestCount}/${apiKey.maxRequestsPerMonth} requests)`,
@@ -285,7 +301,14 @@ export class ServiceAccountsService {
    * Check rate limit for an API key using Redis.
    * Returns null if within limits, or an object with rate limit exceeded details.
    */
-  async checkRateLimit(apiKeyId: string, rateLimitPerMinute: number): Promise<{ exceeded: boolean; reason?: string; retryAfterSeconds?: number } | null> {
+  async checkRateLimit(
+    apiKeyId: string,
+    rateLimitPerMinute: number,
+  ): Promise<{
+    exceeded: boolean;
+    reason?: string;
+    retryAfterSeconds?: number;
+  } | null> {
     if (rateLimitPerMinute <= 0) {
       return null;
     }
@@ -332,7 +355,10 @@ export class ServiceAccountsService {
    * Increment and check daily quota.
    * Returns null if within limits, or an object with quota exceeded details.
    */
-  async checkAndIncrementDailyQuota(apiKeyId: string, maxRequestsPerDay: number): Promise<{ exceeded: boolean; reason?: string } | null> {
+  async checkAndIncrementDailyQuota(
+    apiKeyId: string,
+    maxRequestsPerDay: number,
+  ): Promise<{ exceeded: boolean; reason?: string } | null> {
     if (maxRequestsPerDay <= 0) {
       return null;
     }
@@ -379,11 +405,13 @@ export class ServiceAccountsService {
     });
 
     const totalRequests = keys.reduce((sum, k) => sum + k.requestCount, 0);
-    const lastUsedAt = keys
-      .filter((k) => k.lastUsedAt !== null)
-      .sort((a, b) =>
-        (b.lastUsedAt as Date).getTime() - (a.lastUsedAt as Date).getTime(),
-      )[0]?.lastUsedAt ?? null;
+    const lastUsedAt =
+      keys
+        .filter((k) => k.lastUsedAt !== null)
+        .sort(
+          (a, b) =>
+            (b.lastUsedAt as Date).getTime() - (a.lastUsedAt as Date).getTime(),
+        )[0]?.lastUsedAt ?? null;
 
     return {
       serviceAccountId,

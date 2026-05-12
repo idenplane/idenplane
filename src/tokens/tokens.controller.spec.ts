@@ -69,17 +69,29 @@ describe('TokensController', () => {
   });
 
   const mockReq = (overrides: Record<string, unknown> = {}) =>
-    ({ ip: '127.0.0.1', headers: {}, socket: { remoteAddress: '127.0.0.1' }, connection: { remoteAddress: '127.0.0.1' }, ...overrides } as any);
+    ({
+      ip: '127.0.0.1',
+      headers: {},
+      socket: { remoteAddress: '127.0.0.1' },
+      connection: { remoteAddress: '127.0.0.1' },
+      ...overrides,
+    }) as any;
 
   describe('introspect', () => {
     it('should authenticate client and call tokensService.introspect', async () => {
       const body = { token: 'some-token', client_id: 'public-app' };
-      mockTokensService.introspect.mockResolvedValue({ active: true, sub: 'user-1' });
+      mockTokensService.introspect.mockResolvedValue({
+        active: true,
+        sub: 'user-1',
+      });
 
       const result = await controller.introspect(realm, body, mockReq());
 
       expect(mockPrisma.client.findUnique).toHaveBeenCalled();
-      expect(mockTokensService.introspect).toHaveBeenCalledWith(realm, 'some-token');
+      expect(mockTokensService.introspect).toHaveBeenCalledWith(
+        realm,
+        'some-token',
+      );
       expect(result).toEqual({ active: true, sub: 'user-1' });
     });
 
@@ -91,17 +103,30 @@ describe('TokensController', () => {
 
     it('should authenticate confidential client with secret', async () => {
       mockPrisma.client.findUnique.mockResolvedValue(confidentialClient);
-      mockTokensService.introspect.mockResolvedValue({ active: true, azp: 'confidential-app' });
-      const body = { token: 'tok', client_id: 'confidential-app', client_secret: 'raw-secret' };
+      mockTokensService.introspect.mockResolvedValue({
+        active: true,
+        azp: 'confidential-app',
+      });
+      const body = {
+        token: 'tok',
+        client_id: 'confidential-app',
+        client_secret: 'raw-secret',
+      };
 
       await controller.introspect(realm, body, mockReq());
 
-      expect(mockCrypto.verifyPassword).toHaveBeenCalledWith('hashed-secret', 'raw-secret');
+      expect(mockCrypto.verifyPassword).toHaveBeenCalledWith(
+        'hashed-secret',
+        'raw-secret',
+      );
       expect(mockTokensService.introspect).toHaveBeenCalled();
     });
 
     it('should support HTTP Basic authentication', async () => {
-      mockTokensService.introspect.mockResolvedValue({ active: true, azp: 'public-app' });
+      mockTokensService.introspect.mockResolvedValue({
+        active: true,
+        azp: 'public-app',
+      });
       const basicAuth = Buffer.from('public-app:').toString('base64');
       const req = mockReq({ headers: { authorization: `Basic ${basicAuth}` } });
 
@@ -113,7 +138,11 @@ describe('TokensController', () => {
 
   describe('revoke', () => {
     it('should authenticate client and call tokensService.revoke', async () => {
-      const body = { token: 'some-token', token_type_hint: 'refresh_token' as const, client_id: 'public-app' };
+      const body = {
+        token: 'some-token',
+        token_type_hint: 'refresh_token' as const,
+        client_id: 'public-app',
+      };
 
       await controller.revoke(realm, body, mockReq());
 
@@ -161,14 +190,18 @@ describe('TokensController', () => {
     it('should throw UnauthorizedException when Authorization header is missing', () => {
       const req = mockReq();
 
-      expect(() => controller.userinfo(realm, req)).toThrow(UnauthorizedException);
+      expect(() => controller.userinfo(realm, req)).toThrow(
+        UnauthorizedException,
+      );
       expect(mockTokensService.userinfo).not.toHaveBeenCalled();
     });
 
     it('should throw UnauthorizedException when Authorization header does not start with Bearer', () => {
       const req = mockReq({ headers: { authorization: 'Basic dXNlcjpwYXNz' } });
 
-      expect(() => controller.userinfo(realm, req)).toThrow(UnauthorizedException);
+      expect(() => controller.userinfo(realm, req)).toThrow(
+        UnauthorizedException,
+      );
       expect(mockTokensService.userinfo).not.toHaveBeenCalled();
     });
   });

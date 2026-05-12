@@ -9,7 +9,9 @@ function makeMockResponse() {
   const chunks: string[] = [];
   return {
     setHeader: jest.fn(),
-    write: jest.fn((chunk: string) => { chunks.push(chunk); }),
+    write: jest.fn((chunk: string) => {
+      chunks.push(chunk);
+    }),
     end: jest.fn(),
     json: jest.fn(),
     _chunks: chunks,
@@ -236,7 +238,10 @@ describe('AuditExportService', () => {
         res as any,
       );
 
-      expect(res.setHeader).toHaveBeenCalledWith('Content-Type', 'text/csv; charset=utf-8');
+      expect(res.setHeader).toHaveBeenCalledWith(
+        'Content-Type',
+        'text/csv; charset=utf-8',
+      );
       expect(res.write).toHaveBeenCalledTimes(2);
       const headerRow: string = (res.write as jest.Mock).mock.calls[0][0];
       expect(headerRow).toContain('adminUserId');

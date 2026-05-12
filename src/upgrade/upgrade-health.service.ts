@@ -165,7 +165,9 @@ export class UpgradeHealthService {
       ];
 
       const existingTables = new Set(tables.map((t) => t.tablename));
-      const missingTables = criticalTables.filter((t) => !existingTables.has(t));
+      const missingTables = criticalTables.filter(
+        (t) => !existingTables.has(t),
+      );
 
       if (missingTables.length > 0) {
         return {
@@ -222,9 +224,10 @@ export class UpgradeHealthService {
         details: output.trim().split('\n').slice(-2).join(' '),
       };
     } catch (err: unknown) {
-      const output = err instanceof Error && 'stdout' in err
-        ? String((err as NodeJS.ErrnoException & { stdout?: Buffer }).stdout)
-        : String(err);
+      const output =
+        err instanceof Error && 'stdout' in err
+          ? String((err as NodeJS.ErrnoException & { stdout?: Buffer }).stdout)
+          : String(err);
 
       const pendingMigrations = this.parsePendingMigrations(output);
 
@@ -442,11 +445,15 @@ export class UpgradeHealthService {
       const issues: string[] = [];
 
       // Check realms have at least one enabled realm
-      const enabledRealms = await this.prisma.$queryRaw<Array<{ count: bigint; enabled: boolean }>>`
+      const enabledRealms = await this.prisma.$queryRaw<
+        Array<{ count: bigint; enabled: boolean }>
+      >`
         SELECT count(*) as count, enabled FROM realm GROUP BY enabled
       `;
 
-      const hasEnabledRealm = enabledRealms.some((r) => r.enabled && Number(r.count) > 0);
+      const hasEnabledRealm = enabledRealms.some(
+        (r) => r.enabled && Number(r.count) > 0,
+      );
       if (!hasEnabledRealm) {
         issues.push('No enabled realms found');
       }

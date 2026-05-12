@@ -1,7 +1,10 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { Realm } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { CreateAuditStreamDto, UpdateAuditStreamDto } from './dto/audit-stream.dto.js';
+import {
+  CreateAuditStreamDto,
+  UpdateAuditStreamDto,
+} from './dto/audit-stream.dto.js';
 import * as dgram from 'node:dgram';
 import * as net from 'node:net';
 
@@ -75,7 +78,11 @@ export class AuditStreamsService {
    * Dispatch an event to all enabled streams for this realm.
    * Non-blocking; errors are logged and swallowed.
    */
-  dispatchToStreams(realmId: string, eventType: string, payload: Record<string, unknown>): void {
+  dispatchToStreams(
+    realmId: string,
+    eventType: string,
+    payload: Record<string, unknown>,
+  ): void {
     setImmediate(() => {
       this.doDispatch(realmId, eventType, payload).catch((err) => {
         this.logger.warn(

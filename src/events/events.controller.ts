@@ -12,7 +12,12 @@ import {
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
-import { ApiTags, ApiOperation, ApiSecurity, ApiResponse } from '@nestjs/swagger';
+import {
+  ApiTags,
+  ApiOperation,
+  ApiSecurity,
+  ApiResponse,
+} from '@nestjs/swagger';
 import type { Realm } from '@prisma/client';
 import type { Response } from 'express';
 import { EventsService } from './events.service.js';
@@ -21,7 +26,10 @@ import { AuditStreamsService } from './audit-streams.service.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { ExportEventsQueryDto } from './dto/export-events.dto.js';
-import { CreateAuditStreamDto, UpdateAuditStreamDto } from './dto/audit-stream.dto.js';
+import {
+  CreateAuditStreamDto,
+  UpdateAuditStreamDto,
+} from './dto/audit-stream.dto.js';
 
 @ApiTags('Events')
 @Controller('admin/realms/:realmName')
