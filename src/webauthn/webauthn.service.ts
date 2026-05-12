@@ -311,11 +311,16 @@ export class WebAuthnService {
       throw new BadRequestException('Authentication verification failed');
     }
 
+    const newCounter = verification.authenticationInfo.newCounter;
+    if (newCounter <= credential.counter) {
+      throw new BadRequestException('Counter rollback detected');
+    }
+
     // Update counter and lastUsedAt
     await this.prisma.webAuthnCredential.update({
       where: { id: credential.id },
       data: {
-        counter: BigInt(verification.authenticationInfo.newCounter),
+        counter: BigInt(newCounter),
         lastUsedAt: new Date(),
       },
     });
