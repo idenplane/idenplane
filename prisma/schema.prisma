@@ -1703,6 +1703,15 @@ model RevokedToken {
   @@map("revoked_tokens")
 }
 
+model AdminRevokedToken {
+  jti       String   @id
+  expiresAt DateTime @map("expires_at")
+  revokedAt DateTime @default(now()) @map("revoked_at")
+
+  @@index([expiresAt])
+  @@map("admin_revoked_tokens")
+}
+
 model ServiceAccount {
   id          String   @id @default(uuid())
   realmId     String   @map("realm_id")
