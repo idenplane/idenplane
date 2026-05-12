@@ -167,6 +167,7 @@ model Realm {
   consentCategories     ConsentCategory[]
   serviceAccounts       ServiceAccount[]
   registrationFields     RegistrationField[]
+  magicLinkRequests     MagicLinkRequest[]
 
   @@map("realms")
 }
@@ -638,6 +639,31 @@ model PasswordHistory {
   realm Realm @relation(fields: [realmId], references: [id], onDelete: Cascade)
 
   @@map("password_histories")
+}
+
+// ─── MAGIC LINK REQUESTS ───────────────────────────────────
+
+model MagicLinkRequest {
+  id          String    @id @default(uuid())
+  realmId     String    @map("realm_id")
+  userId      String    @map("user_id")
+  email       String    @map("email")
+  tokenHash   String    @unique @map("token_hash")
+  status      String    @default("PENDING") @map("status")
+  expiresAt   DateTime  @map("expires_at")
+  completedAt DateTime? @map("completed_at")
+  ipAddress   String?   @map("ip_address")
+  userAgent   String?   @map("user_agent")
+  createdAt   DateTime  @default(now()) @map("created_at")
+
+  realm Realm @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([realmId, email, createdAt])
+  @@index([realmId, ipAddress, createdAt])
+  @@index([userId])
+  @@index([expiresAt])
+  @@map("magic_link_requests")
 }
 
 // ─── LOGIN FAILURES (brute force) ────────────────────────
