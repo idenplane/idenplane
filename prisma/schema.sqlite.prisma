@@ -252,11 +252,11 @@ model User {
   totpFailureTracking TotpFailureTracking[]
   webAuthnCredentials WebAuthnCredential[]
   attributes          UserAttribute[]
-  userConsentHistories UserConsentHistory[]
-  pendingDeletion     PendingDeletion?
+  loginRiskAssessments LoginRiskAssessment[]
+  userLoginProfile    UserLoginProfile?
   magicLinkRequests   MagicLinkRequest[]
   sessionRiskProfiles SessionRiskProfile[]
-  behavioralBiometricProfiles BehavioralBiometricProfile[]
+  behavioralBiometricProfile BehavioralBiometricProfile?
 
   @@unique([realmId, username])
   @@unique([realmId, email])
