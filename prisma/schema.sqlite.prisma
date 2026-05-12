@@ -512,14 +512,13 @@ model ConsentCategory {
 // ─── CONSENT POLICIES ───────────────────────────────────
 
 model ConsentPolicy {
-  id                 String  @id @default(uuid())
-  categoryId         String  @map("category_id")
-  category           ConsentCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
-  version            String  @map("version")
-  policyText         String  @map("policy_text")
-  isActive           Boolean @default(false) @map("is_active")
-  requiredForAccess  Boolean @default(true) @map("required_for_access")
-  publishedAt        DateTime? @map("published_at")
+  id          String    @id @default(uuid())
+  categoryId  String    @map("category_id")
+  category    ConsentCategory @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  version     String    @map("version")
+  content     String?
+  isActive    Boolean   @default(false) @map("is_active")
+  publishedAt DateTime? @map("published_at")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
