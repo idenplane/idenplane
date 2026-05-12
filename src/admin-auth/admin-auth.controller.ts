@@ -6,7 +6,6 @@ import {
   Req,
   Res,
   UnauthorizedException,
-  BadRequestException,
   HttpCode,
   HttpStatus,
 } from '@nestjs/common';
@@ -20,6 +19,7 @@ import type { Request, Response } from 'express';
 import { Public } from '../common/decorators/public.decorator.js';
 import { AdminAuthService } from './admin-auth.service.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
+import { AdminLoginDto } from './dto/login.dto.js';
 
 @ApiTags('Admin Auth')
 @Controller('admin/auth')
@@ -35,17 +35,10 @@ export class AdminAuthController {
   @ApiResponse({ status: 400, description: 'Invalid input' })
   @ApiResponse({ status: 401, description: 'Invalid credentials' })
   async login(
-    @Body() body: { username: string; password: string },
+    @Body() body: AdminLoginDto,
     @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
-    if (!body.username || typeof body.username !== 'string') {
-      throw new BadRequestException('username is required');
-    }
-    if (!body.password || typeof body.password !== 'string') {
-      throw new BadRequestException('password is required');
-    }
-
     const ip = resolveClientIp(req);
 
     const { rateLimitHeaders, ...tokenResponse } =
