@@ -2041,3 +2041,21 @@ model UpgradeAuditLog {
   @@index([fromVersion, toVersion])
   @@map("upgrade_audit_log")
 }
+
+// ─── RATE LIMIT ENTRIES (cluster-safe fallback) ────────────────
+
+model RateLimitEntry {
+  id        String   @id @default(uuid()) @db.VarChar(36)
+  key       String   @unique @map("key") @db.VarChar(255)
+  minuteCount      Int      @default(0) @map("minute_count")
+  minuteWindowStart DateTime @default(now()) @map("minute_window_start")
+  hourCount        Int      @default(0) @map("hour_count")
+  hourWindowStart   DateTime @default(now()) @map("hour_window_start")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([key])
+  @@index([minuteWindowStart])
+  @@index([hourWindowStart])
+  @@map("rate_limit_entries")
+}

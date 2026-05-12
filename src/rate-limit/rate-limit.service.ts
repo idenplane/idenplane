@@ -4,24 +4,11 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { RedisService } from '../redis/redis.service.js';
 import type { RateLimitResult } from './rate-limit.dto.js';
 
-interface RateLimitBucket {
-  count: number;
-  windowStart: number;
-}
-
-interface RateLimitEntry {
-  minute: RateLimitBucket;
-  hour: RateLimitBucket;
-}
-
 const RL_PREFIX = 'rl:';
 
 @Injectable()
 export class RateLimitService {
   private readonly logger = new Logger(RateLimitService.name);
-
-  /** In-memory fallback used only when Redis is unavailable. */
-  private readonly memoryStore = new Map<string, RateLimitEntry>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -128,11 +115,12 @@ export class RateLimitService {
       try {
         return await this.checkWithRedis(key, limitPerMinute, limitPerHour);
       } catch (err) {
-        this.logger.warn(`Redis rate limit check failed, falling back to memory: ${(err as Error).message}`);
+        this.logger.warn(`Redis rate limit check failed, falling back to database: ${(err as Error).message}`);
       }
     }
 
-    return this.checkInMemory(key, limitPerMinute, limitPerHour);
+    // Fallback to database (shared across instances) when Redis is unavailable
+    return this.checkWithDatabase(key, limitPerMinute, limitPerHour);
   }
 
   /**
@@ -198,37 +186,62 @@ export class RateLimitService {
   }
 
   /**
-   * In-memory rate limiting fallback (original implementation).
+   * Database-based rate limiting fallback (cluster-safe).
+   * Uses a dedicated table with a single upsert to atomically increment counters.
+   * Works across all instances without Redis.
    */
-  private checkInMemory(key: string, limitPerMinute: number, limitPerHour: number): RateLimitResult {
+  private async checkWithDatabase(key: string, limitPerMinute: number, limitPerHour: number): Promise<RateLimitResult> {
     const now = Date.now();
     const minuteWindowMs = 60_000;
     const hourWindowMs = 3_600_000;
 
-    let entry = this.memoryStore.get(key);
+    const entry = await this.prisma.rateLimitEntry.upsert({
+      where: { key },
+      create: {
+        key,
+        minuteCount: 1,
+        minuteWindowStart: new Date(now),
+        hourCount: 1,
+        hourWindowStart: new Date(now),
+      },
+      update: {
+        minuteCount: { increment: 1 },
+        hourCount: { increment: 1 },
+      },
+    });
 
-    if (!entry) {
-      entry = {
-        minute: { count: 0, windowStart: now },
-        hour: { count: 0, windowStart: now },
-      };
+    const entryMinuteWindowStart = entry.minuteWindowStart.getTime();
+    const entryHourWindowStart = entry.hourWindowStart.getTime();
+
+    let minuteCount = entry.minuteCount;
+    let hourCount = entry.hourCount;
+
+    if (now - entryMinuteWindowStart >= minuteWindowMs) {
+      await this.prisma.rateLimitEntry.update({
+        where: { key },
+        data: {
+          minuteCount: 1,
+          minuteWindowStart: new Date(now),
+        },
+      });
+      minuteCount = 1;
     }
 
-    if (now - entry.minute.windowStart >= minuteWindowMs) {
-      entry.minute = { count: 0, windowStart: now };
+    if (now - entryHourWindowStart >= hourWindowMs) {
+      await this.prisma.rateLimitEntry.update({
+        where: { key },
+        data: {
+          hourCount: 1,
+          hourWindowStart: new Date(now),
+        },
+      });
+      hourCount = 1;
     }
-    if (now - entry.hour.windowStart >= hourWindowMs) {
-      entry.hour = { count: 0, windowStart: now };
-    }
 
-    entry.minute.count += 1;
-    entry.hour.count += 1;
-    this.memoryStore.set(key, entry);
+    const minuteResetAt = Math.ceil((Math.max(entryMinuteWindowStart, now) + minuteWindowMs) / 1000);
+    const hourResetAt = Math.ceil((Math.max(entryHourWindowStart, now) + hourWindowMs) / 1000);
 
-    const minuteResetAt = Math.ceil((entry.minute.windowStart + minuteWindowMs) / 1000);
-    const hourResetAt = Math.ceil((entry.hour.windowStart + hourWindowMs) / 1000);
-
-    if (entry.minute.count > limitPerMinute) {
+    if (minuteCount > limitPerMinute) {
       const retryAfter = minuteResetAt - Math.floor(now / 1000);
       return {
         allowed: false,
@@ -239,7 +252,7 @@ export class RateLimitService {
       };
     }
 
-    if (entry.hour.count > limitPerHour) {
+    if (hourCount > limitPerHour) {
       const retryAfter = hourResetAt - Math.floor(now / 1000);
       return {
         allowed: false,
@@ -253,29 +266,28 @@ export class RateLimitService {
     return {
       allowed: true,
       limit: limitPerMinute,
-      remaining: limitPerMinute - entry.minute.count,
+      remaining: Math.max(0, limitPerMinute - minuteCount),
       resetAt: minuteResetAt,
     };
   }
 
   @Interval(600_000)
-  cleanupExpiredEntries(): void {
-    const now = Date.now();
-    const hourWindowMs = 3_600_000;
-    let removed = 0;
-
-    for (const [key, entry] of this.memoryStore.entries()) {
-      if (
-        now - entry.minute.windowStart > hourWindowMs &&
-        now - entry.hour.windowStart > hourWindowMs
-      ) {
-        this.memoryStore.delete(key);
-        removed++;
+  async cleanupExpiredDbEntries(): Promise<void> {
+    try {
+      const hourAgo = new Date(Date.now() - 3_600_000);
+      const result = await this.prisma.rateLimitEntry.deleteMany({
+        where: {
+          OR: [
+            { minuteWindowStart: { lt: hourAgo } },
+            { hourWindowStart: { lt: hourAgo } },
+          ],
+        },
+      });
+      if (result.count > 0) {
+        this.logger.debug(`Cleaned up ${result.count} expired rate limit DB entries`);
       }
-    }
-
-    if (removed > 0) {
-      this.logger.debug(`Cleaned up ${removed} expired rate limit entries`);
+    } catch (err) {
+      this.logger.warn(`Failed to cleanup expired rate limit entries: ${(err as Error).message}`);
     }
   }
 }
