@@ -422,7 +422,7 @@ sequenceDiagram
 | Layer | Technology |
 |-------|-----------|
 | **Backend** | NestJS 11, TypeScript 5.7, Node.js 22 |
-| **Database** | PostgreSQL 16 (primary), MySQL 8, SQLite — via Prisma 7 ORM (81 models) |
+| **Database** | PostgreSQL 16 (primary), MySQL 8, SQLite — via Prisma 7 ORM (83 models) |
 | **Admin UI** | React 19, Vite 7, Tailwind CSS 4, React Query |
 | **Auth Pages** | Handlebars SSR with per-realm theming and i18n |
 | **Security** | Argon2id (passwords), JOSE (JWTs), Helmet (headers), AES-256-GCM (webhooks) |
@@ -601,7 +601,7 @@ Authme/
 ├── themes/                        # Login/account page themes
 │   ├── authme/                    # Default theme
 │   └── midnight/                  # Dark theme
-├── prisma/                        # Database schema (81 models) & migrations
+├── prisma/                        # Database schema (83 models) & migrations
 ├── test/                          # E2E tests
 ├── docker-compose.yml             # Production (pulls from Docker Hub)
 ├── docker-compose.dev.yml         # Development (builds from source)
