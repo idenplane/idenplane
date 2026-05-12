@@ -26,8 +26,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    ports:
-      - '3000:3000'
 
   app2:
     build: .
@@ -40,8 +38,6 @@ services:
     depends_on:
       db:
         condition: service_healthy
-    ports:
-      - '3000:3000'
 
   nginx:
     image: nginx:alpine
