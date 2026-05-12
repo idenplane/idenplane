@@ -69,6 +69,7 @@ export class WellKnownController {
       token_endpoint_auth_methods_supported: [
         'client_secret_post',
         'client_secret_basic',
+        'private_key_jwt',
         'none',
       ],
       claims_supported: [
