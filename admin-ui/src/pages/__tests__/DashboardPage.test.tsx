@@ -70,6 +70,19 @@ describe('DashboardPage', () => {
     expect(await screen.findByText('17')).toBeInTheDocument();
   });
 
+  it('shows an error message when stats fail to load', async () => {
+    server.use(
+      http.get('/admin/realms/:name/stats', () =>
+        HttpResponse.json({ message: 'stats unavailable' }, { status: 500 }),
+      ),
+    );
+
+    renderDashboard();
+
+    expect(await screen.findByText(/failed to load stats\. please try again\./i)).toBeInTheDocument();
+    expect(screen.queryByText('Active Users (24h)')).not.toBeInTheDocument();
+  });
+
   it('displays system health status', async () => {
     renderDashboard();
     expect(await screen.findByText('System')).toBeInTheDocument();
