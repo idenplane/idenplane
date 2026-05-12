@@ -1,6 +1,5 @@
 jest.mock('../crypto/jwk.service.js', () => ({ JwkService: jest.fn() }));
 
-import { BadRequestException } from '@nestjs/common';
 import { RealmsController } from './realms.controller.js';
 
 describe('RealmsController', () => {
@@ -190,19 +189,26 @@ describe('RealmsController', () => {
   });
 
   describe('sendTestEmail', () => {
-    it('should throw BadRequestException when "to" is missing', async () => {
-      await expect(controller.sendTestEmail('my-realm', '')).rejects.toThrow(
-        BadRequestException,
-      );
+    it('should return error when "to" is missing', async () => {
+      const result = await controller.sendTestEmail('my-realm', '');
+      expect(result).toEqual({
+        success: false,
+        error: 'Missing "to" email address',
+      });
     });
 
-    it('should throw BadRequestException when SMTP is not configured', async () => {
+    it('should return error when SMTP is not configured', async () => {
       emailService.isConfigured.mockResolvedValue(false);
 
-      await expect(
-        controller.sendTestEmail('my-realm', 'user@example.com'),
-      ).rejects.toThrow(BadRequestException);
+      const result = await controller.sendTestEmail(
+        'my-realm',
+        'user@example.com',
+      );
 
+      expect(result).toEqual({
+        success: false,
+        error: 'SMTP is not configured for this realm',
+      });
       expect(emailService.isConfigured).toHaveBeenCalledWith('my-realm');
     });
 
@@ -236,7 +242,10 @@ describe('RealmsController', () => {
         'Test Email Subject',
         '<h1>Test</h1>',
       );
-      expect(result).toEqual({ message: 'Test email sent successfully' });
+      expect(result).toEqual({
+        success: true,
+        message: 'Test email sent successfully',
+      });
     });
   });
 });

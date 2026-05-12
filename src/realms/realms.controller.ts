@@ -8,7 +8,6 @@ import {
   Body,
   Param,
   Query,
-  BadRequestException,
   HttpCode,
   HttpStatus,
   UseGuards,
@@ -172,7 +171,6 @@ export class RealmsController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Test SMTP configuration' })
   @ApiResponse({ status: 200, description: 'SMTP test result' })
-  @ApiResponse({ status: 400, description: 'SMTP not configured' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Realm not found' })
   async testSmtp(@Param('realmName') realmName: string) {
@@ -182,11 +180,7 @@ export class RealmsController {
   @Post(':realmName/email/test')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Send a test email' })
-  @ApiResponse({ status: 200, description: 'Test email sent successfully' })
-  @ApiResponse({
-    status: 400,
-    description: 'Missing recipient or SMTP not configured',
-  })
+  @ApiResponse({ status: 200, description: 'Test email result' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Realm not found' })
   async sendTestEmail(
@@ -194,16 +188,16 @@ export class RealmsController {
     @Body('to') to: string,
   ) {
     if (!to) {
-      throw new BadRequestException('Missing "to" email address');
+      return { success: false, error: 'Missing "to" email address' };
     }
     const configured = await this.emailService.isConfigured(realmName);
     if (!configured) {
-      throw new BadRequestException('SMTP is not configured for this realm');
+      return { success: false, error: 'SMTP is not configured for this realm' };
     }
     const realm = await this.realmsService.findByName(realmName);
     const subject = this.themeEmail.getSubject(realm, 'testEmailSubject');
     const html = this.themeEmail.renderEmail(realm, 'test-email', {});
     await this.emailService.sendEmail(realmName, to, subject, html);
-    return { message: 'Test email sent successfully' };
+    return { success: true, message: 'Test email sent successfully' };
   }
 }
