@@ -73,11 +73,24 @@ export class ThemeMessageService implements OnModuleInit {
       if (eqIndex > 0) {
         const key = trimmed.substring(0, eqIndex).trim();
         const value = trimmed.substring(eqIndex + 1).trim();
-        result[key] = value;
+        result[key] = this.decodeEscapes(value);
       }
     }
 
     return result;
+  }
+
+  private decodeEscapes(s: string): string {
+    return s.replace(/\\(u[0-9a-fA-F]{4}|.)/g, (_, esc: string) => {
+      if (esc[0] === 'u') return String.fromCharCode(parseInt(esc.slice(1), 16));
+      switch (esc) {
+        case 'n': return '\n';
+        case 't': return '\t';
+        case 'r': return '\r';
+        case '\\': return '\\';
+        default: return esc;
+      }
+    });
   }
 
   /**
