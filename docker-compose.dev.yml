@@ -61,6 +61,9 @@ services:
     build: .
     ports:
       - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
     environment:
       # PostgreSQL (default):
       DATABASE_URL: postgresql://authme:authme@db:5432/authme
