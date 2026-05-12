@@ -48,7 +48,7 @@ RUN npm prune --omit=dev
 
 ENV NODE_ENV=production
 EXPOSE 3000
-HEALTHCHECK --interval=30s --timeout=5s CMD wget -q --spider http://localhost:3000/health || exit 1
+HEALTHCHECK --interval=30s --timeout=5s CMD wget -q --spider http://localhost:3000/health/ready || exit 1
 
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
