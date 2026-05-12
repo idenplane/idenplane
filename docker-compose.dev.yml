@@ -71,8 +71,8 @@ services:
       PORT: "3000"
       NODE_ENV: development
       ADMIN_API_KEY: ${ADMIN_API_KEY:-change-me-in-production}
-      ADMIN_USER: ${ADMIN_USER:-admin}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      ADMIN_USER: ${ADMIN_USER}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       THROTTLE_TTL: ${THROTTLE_TTL:-60000}
       THROTTLE_LIMIT: ${THROTTLE_LIMIT:-100}
       BASE_URL: ${BASE_URL:-http://localhost:3000}
