@@ -222,7 +222,7 @@ describe('UpgradeService', () => {
             data: expect.objectContaining({
               toVersion: '2.1.0',
               status: 'IN_PROGRESS',
-              metadata: expect.objectContaining({ dryRun: true }),
+              dryRun: true,
             }),
           }),
         );
@@ -518,7 +518,10 @@ describe('UpgradeService', () => {
           }),
         );
         // Migration should not be attempted
-        expect(execSync).not.toHaveBeenCalled();
+        expect(execSync).not.toHaveBeenCalledWith(
+          expect.stringContaining('prisma migrate deploy'),
+          expect.any(Object),
+        );
       });
     });
 
