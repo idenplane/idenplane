@@ -26,9 +26,8 @@ describe('UpgradeStatusPage', () => {
   it('displays upgrade status information', async () => {
     renderUpgradeStatusPage();
     await screen.findByText('Current Status');
-    // Status badge should be visible
-    expect(await screen.findByText('COMPLETED')).toBeInTheDocument();
-    // Version info should be visible
+    const completedBadges = await screen.findAllByText('COMPLETED');
+    expect(completedBadges.length).toBeGreaterThanOrEqual(2);
     expect(await screen.findByText('1.0.0')).toBeInTheDocument();
     expect(await screen.findByText('1.1.0')).toBeInTheDocument();
   });
@@ -52,8 +51,8 @@ describe('UpgradeStatusPage', () => {
   it('displays upgrade history entries', async () => {
     renderUpgradeStatusPage();
     await screen.findByText('Upgrade History');
-    // Table should show upgrade entries
-    expect(await screen.findByText('Started')).toBeInTheDocument();
+    const startedHeaders = await screen.findAllByText('Started');
+    expect(startedHeaders.length).toBeGreaterThanOrEqual(2);
   });
 
   it('shows no active upgrade message when status is null', async () => {
@@ -93,7 +92,8 @@ describe('UpgradeStatusPage', () => {
     );
     renderUpgradeStatusPage();
     await screen.findByText('Current Status');
-    expect(await screen.findByText('FAILED')).toBeInTheDocument();
+    const failedBadges = await screen.findAllByText('FAILED');
+    expect(failedBadges.length).toBeGreaterThanOrEqual(1);
     expect(await screen.findByText('Migration failed due to schema conflict')).toBeInTheDocument();
   });
 
