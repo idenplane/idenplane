@@ -510,6 +510,7 @@ export class AuthService {
       new Date(),
       resolvedAcr,
       ['pwd'],
+      authCode.code,
     );
   }
 
@@ -686,6 +687,7 @@ export class AuthService {
     authTime?: Date,
     acr?: string,
     amr?: string[],
+    code?: string,
   ): Promise<TokenResponse> {
     const signingKey = await this.getActiveSigningKey(realm.id);
 
@@ -825,6 +827,7 @@ export class AuthService {
         signingKey,
         acr,
         amr,
+        code,
       });
     }
 
@@ -850,6 +853,7 @@ export class AuthService {
     signingKey: { privateKey: string; kid: string };
     acr?: string;
     amr?: string[];
+    code?: string;
   }): Promise<string> {
     const allowedClaims = this.scopesService.getClaimsForScopes(params.scopes);
     const customAttrClaims = await this.customAttributesService.getOidcClaimsForUser(params.user.id);
@@ -873,6 +877,7 @@ export class AuthService {
         : Math.floor(Date.now() / 1000),
       acr: resolvedAcr,
       ...(params.amr && params.amr.length > 0 ? { amr: params.amr } : {}),
+      ...(params.code ? { c_hash: this.jwkService.computeChash(params.code) } : {}),
       ...userClaims,
     };
 

@@ -80,6 +80,16 @@ export class JwkService {
     return Buffer.from(leftHalf).toString('base64url');
   }
 
+  /**
+   * Compute c_hash per OIDC Core section 3.3.2.11:
+   * SHA-256 hash of the authorization code, take left half, base64url encode.
+   */
+  computeChash(code: string): string {
+    const hash = createHash('sha256').update(code).digest();
+    const leftHalf = hash.subarray(0, hash.length / 2);
+    return Buffer.from(leftHalf).toString('base64url');
+  }
+
   private async exportKeyToPem(
     key: CryptoKey,
     type: 'public' | 'private',
