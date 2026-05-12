@@ -38,7 +38,7 @@ Most identity solutions are either too complex to self-host (Keycloak — 1GB+ R
 - **Modern stack** — TypeScript, NestJS, React, PostgreSQL. No Java, no XML
 - **Lightweight** — runs in ~150 MB RAM vs. Keycloak's 1 GB+
 - **Complete** — OAuth 2.0, OIDC, SAML 2.0, WebAuthn, MFA, LDAP, SSO, Organizations — all built-in
-- **Extensible** — plugin system, custom auth flows, webhooks, and 7 client SDKs
+- **Extensible** — plugin system, custom auth flows, webhooks, and 10 client SDKs
 - **Admin Console** — full-featured React dashboard at `/console`
 
 ---
@@ -59,6 +59,8 @@ Most identity solutions are either too complex to self-host (Keycloak — 1GB+ R
 | **LDAP User Federation** | Sync users from LDAP/Active Directory with on-demand or scheduled sync |
 | **Custom Auth Flows** | Configurable multi-step authentication flows with conditional branching and fallback logic |
 | **Single Sign-On** | Browser-based SSO across all clients in a realm |
+| **SCIM 2.0** | Complete Identity provisioning with Users, Groups, and Service Providers |
+| **GraphQL API** | Full GraphQL API for users, realms, clients, and organizations |
 
 ### Identity Management
 
@@ -183,6 +185,10 @@ AuthMe provides official SDKs for every major platform:
 | [**authme-vue**](packages/authme-vue/) | `npm i authme-vue` | Vue 3 SDK — composables, plugin, router guard |
 | [**authme-android**](packages/authme-android/) | Gradle/Maven | Android SDK — Chrome Custom Tabs, encrypted storage, biometrics |
 | [**authme-ios**](packages/authme-ios/) | Swift Package | iOS SDK — ASWebAuthenticationSession, Keychain, Face ID / Touch ID |
+| [**authme-cli**](packages/authme-cli/) | `npm i -g authme-cli` | CLI tool — manage realms, users, and configurations from terminal |
+| [**authme-python**](packages/authme-python/) | `pip install authme-python` | Python SDK — async client for Python 3.8+ applications |
+| [**authme-go**](packages/authme-go/) | `go get github.com/authme-go/authme` | Go SDK — idiomatic Go client with context support |
+| [**authme-java**](packages/authme-java/) | Maven/Gradle | Java SDK — Java 11+ client with Spring Boot integration |
 
 ### Quick Example (5 Lines to Authenticate)
 
@@ -678,7 +684,7 @@ REDIS_URL=redis://your-redis:6379
 | Organizations (B2B) | Yes | Yes | Yes | Yes |
 | Webhooks | Yes | Yes | Yes | Yes |
 | Admin Console | Yes | Yes | Yes | Yes |
-| Client SDKs | 6 platforms | Java-centric | Yes | Yes |
+| Client SDKs | 10 platforms | Java-centric | Yes | Yes |
 | CLI Tool | Yes | Yes | No | Yes |
 | Custom Auth Flows | Yes | Yes | No | No |
 | Plugin System | Yes | Yes | No | No |
