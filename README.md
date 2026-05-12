@@ -499,16 +499,16 @@ GET  /realms/{realm}/protocol/openid-connect/certs
 GET  /realms/{realm}/protocol/saml/descriptor
 
 # Admin API v1 (requires x-admin-api-key or Bearer token)
-GET/POST       /api/v1/admin/realms
-GET/PUT/DELETE /api/v1/admin/realms/{name}
-GET/POST       /api/v1/admin/realms/{name}/users
-GET/POST       /api/v1/admin/realms/{name}/clients
-GET/POST       /api/v1/admin/realms/{name}/roles
-GET/POST       /api/v1/admin/realms/{name}/groups
-GET/POST       /api/v1/admin/realms/{name}/organizations
+GET/POST       /admin/realms
+GET/PUT/DELETE /admin/realms/{name}
+GET/POST       /admin/realms/{name}/users
+GET/POST       /admin/realms/{name}/clients
+GET/POST       /admin/realms/{name}/roles
+GET/POST       /admin/realms/{name}/groups
+GET/POST       /admin/realms/{name}/organizations
 
 # Webhooks
-GET/POST       /api/v1/admin/realms/{name}/webhooks
+GET/POST       /admin/realms/{name}/webhooks
 
 # Health & Metrics
 GET  /health/live
