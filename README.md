@@ -513,7 +513,7 @@ GET/POST       /admin/realms/{name}/webhooks
 # Health & Metrics
 GET  /health/live
 GET  /health/ready
-GET  /metrics
+GET  /admin/metrics    # Requires x-admin-api-key header
 ```
 
 ---
