@@ -100,7 +100,7 @@ function EventTypeBadge({ type }: { type: string }) {
 function RealmStatsSection({ realmName }: { realmName: string }) {
   const navigate = useNavigate();
 
-  const { data: stats, isLoading: statsLoading } = useQuery<RealmStats>({
+  const { data: stats, error: statsError, isLoading: statsLoading } = useQuery<RealmStats>({
     queryKey: ['realmStats', realmName],
     queryFn: () => getRealmStats(realmName),
     staleTime: 60_000,
@@ -167,6 +167,10 @@ function RealmStatsSection({ realmName }: { realmName: string }) {
             {Array.from({ length: 6 }).map((_, i) => (
               <div key={i} className="h-24 animate-pulse rounded-lg border border-gray-200 bg-gray-100" />
             ))}
+          </div>
+        ) : statsError ? (
+          <div className="rounded-lg border border-red-200 bg-red-50 p-4 text-sm text-red-600">
+            Failed to load stats. Please try again.
           </div>
         ) : (
           <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
