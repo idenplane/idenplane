@@ -62,7 +62,11 @@ export class OAuthController {
         const prompt = query['prompt'];
 
         if (prompt === 'none') {
-          return this.handlePromptNone(res, client.redirectUris[0]!, query['state']);
+          return this.handlePromptNone(
+            res,
+            client.redirectUris[0],
+            query['state'],
+          );
         }
 
         if (prompt === 'login') {
@@ -221,7 +225,11 @@ export class OAuthController {
     res.redirect(302, url.toString());
   }
 
-  private handlePromptNone(res: Response, redirectUri: string, state?: string): void {
+  private handlePromptNone(
+    res: Response,
+    redirectUri: string,
+    state?: string,
+  ): void {
     this.redirectWithError(
       res,
       redirectUri,
@@ -231,7 +239,11 @@ export class OAuthController {
     );
   }
 
-  private handlePromptLogin(res: Response, realm: string, query: Record<string, string>): void {
+  private handlePromptLogin(
+    res: Response,
+    realm: string,
+    query: Record<string, string>,
+  ): void {
     const loginParams = new URLSearchParams();
     const allowlist = new Set([
       'client_id',

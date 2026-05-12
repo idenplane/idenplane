@@ -227,10 +227,7 @@ export class AdminAuthService implements OnModuleDestroy {
 
     let payload: Record<string, unknown>;
     try {
-      payload = await this.jwkService.verifyJwt(
-        token,
-        signingKey.publicKey,
-      );
+      payload = await this.jwkService.verifyJwt(token, signingKey.publicKey);
     } catch {
       throw new UnauthorizedException('Invalid admin token');
     }

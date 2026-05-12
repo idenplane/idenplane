@@ -96,7 +96,9 @@ export class WebAuthnService {
       })),
       authenticatorSelection: {
         residentKey: 'preferred',
-        userVerification: realm.webAuthnUserVerificationRequired ? 'required' : 'preferred',
+        userVerification: realm.webAuthnUserVerificationRequired
+          ? 'required'
+          : 'preferred',
       },
     });
 
@@ -223,7 +225,9 @@ export class WebAuthnService {
     const options = await generateAuthenticationOptions({
       rpID: rpId,
       allowCredentials,
-      userVerification: realm.webAuthnUserVerificationRequired ? 'required' : 'preferred',
+      userVerification: realm.webAuthnUserVerificationRequired
+        ? 'required'
+        : 'preferred',
     });
 
     // Store challenge — keyed by realm for usernameless flow, or by user for user-specific

@@ -12,7 +12,13 @@ import { PrismaService } from '../prisma/prisma.service.js';
 @Global()
 @Module({
   controllers: [BruteForceController, BruteForceAttackDetectionController],
-  providers: [BruteForceService, LoginService, StepUpService, CryptoService, PrismaService],
+  providers: [
+    BruteForceService,
+    LoginService,
+    StepUpService,
+    CryptoService,
+    PrismaService,
+  ],
   exports: [BruteForceService],
 })
 export class BruteForceModule {}

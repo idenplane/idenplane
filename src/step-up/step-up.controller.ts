@@ -296,7 +296,9 @@ export class StepUpController {
         this.logger.warn(
           `TOTP rate limit exceeded for user ${challenge.userId} in realm ${realm.id}`,
         );
-        throw new UnauthorizedException('Too many failed attempts. Please try again later.');
+        throw new UnauthorizedException(
+          'Too many failed attempts. Please try again later.',
+        );
       }
 
       const verified = await this.mfaService.verifyTotp(challenge.userId, otp);
@@ -319,7 +321,10 @@ export class StepUpController {
       await this.mfaService.consumeMfaChallenge(mfa_token);
 
       // Reset TOTP failure tracking on successful verification
-      await this.bruteForceService.resetTotpFailures(realm.id, challenge.userId);
+      await this.bruteForceService.resetTotpFailures(
+        realm.id,
+        challenge.userId,
+      );
 
       // Record the step-up
       await this.stepUpService.recordStepUp(
