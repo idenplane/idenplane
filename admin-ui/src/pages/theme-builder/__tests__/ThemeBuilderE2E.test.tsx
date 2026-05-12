@@ -34,8 +34,8 @@ import {
   DEFAULT_THEME_ASSETS,
   DEFAULT_THEME_SETTINGS,
   COMPONENT_DEFINITIONS,
-} from '../../types/theme';
-import type { ThemeComponent, ThemeStyles, ThemeAssets, ThemeSettings } from '../../types/theme';
+} from '../../../types/theme';
+import type { ThemeComponent, ThemeStyles, ThemeAssets, ThemeSettings } from '../../../types/theme';
 
 // ─── Mock API functions ────────────────────────────────────────────────────────
 
