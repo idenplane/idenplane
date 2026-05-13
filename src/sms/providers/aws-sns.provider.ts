@@ -148,11 +148,12 @@ export class AwsSnsProvider implements SmsProvider {
 
       const body = params.toString();
 
-      // eslint-disable-next-line @typescript-eslint/no-require-imports
+      /* eslint-disable @typescript-eslint/no-require-imports,@typescript-eslint/no-unsafe-call,@typescript-eslint/no-unsafe-member-access,@typescript-eslint/no-unsafe-assignment */
       const payloadHash = require('crypto')
         .createHash('sha256')
         .update(body, 'utf8')
         .digest('hex');
+      /* eslint-enable @typescript-eslint/no-require-imports,@typescript-eslint/no-unsafe-call,@typescript-eslint/no-unsafe-member-access,@typescript-eslint/no-unsafe-assignment */
 
       const headers: Record<string, string> = {
         'content-type': 'application/x-www-form-urlencoded',
