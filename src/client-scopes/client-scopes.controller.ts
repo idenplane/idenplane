@@ -21,12 +21,13 @@ import { ClientScopesService } from './client-scopes.service.js';
 import { CreateClientScopeDto } from './dto/create-client-scope.dto.js';
 import { UpdateClientScopeDto } from './dto/update-client-scope.dto.js';
 import { AssignScopeDto } from './dto/assign-scope.dto.js';
+import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 
 @ApiTags('Client Scopes')
 @Controller('admin/realms/:realmName')
-@UseGuards(RealmGuard)
+@UseGuards(RealmGuard, AdminApiKeyGuard)
 @ApiSecurity('admin-api-key')
 export class ClientScopesController {
   constructor(private readonly service: ClientScopesService) {}

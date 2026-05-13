@@ -21,12 +21,13 @@ import { CustomAttributesService } from './custom-attributes.service.js';
 import { CreateCustomAttributeDto } from './dto/create-custom-attribute.dto.js';
 import { UpdateCustomAttributeDto } from './dto/update-custom-attribute.dto.js';
 import { SetUserAttributesDto } from './dto/set-user-attributes.dto.js';
+import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 
 @ApiTags('Custom Attributes')
 @Controller('admin/realms/:realmName/custom-attributes')
-@UseGuards(RealmGuard)
+@UseGuards(RealmGuard, AdminApiKeyGuard)
 @ApiSecurity('admin-api-key')
 export class CustomAttributesController {
   constructor(private readonly service: CustomAttributesService) {}
@@ -94,7 +95,7 @@ export class CustomAttributesController {
 
 @ApiTags('Custom Attributes')
 @Controller('admin/realms/:realmName/users/:userId/attributes')
-@UseGuards(RealmGuard)
+@UseGuards(RealmGuard, AdminApiKeyGuard)
 @ApiSecurity('admin-api-key')
 export class UserAttributesController {
   constructor(private readonly service: CustomAttributesService) {}

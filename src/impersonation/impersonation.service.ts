@@ -61,18 +61,24 @@ export class ImpersonationService {
 
     // Validate admin user exists.
     // When authenticated via static API key, adminUserId is 'api-key:...' (with fingerprint).
-    // API key auth is already verified by AdminApiKeyGuard, so skip the DB lookup.
-    if (!adminUserId.startsWith('api-key:')) {
-      const adminUser = await this.prisma.user.findUnique({
-        where: { id: adminUserId },
-      });
-      if (!adminUser) {
-        throw new NotFoundException(`Admin user '${adminUserId}' not found`);
-      }
-      // Prevent self-impersonation
-      if (adminUserId === targetUserId) {
-        throw new BadRequestException('Cannot impersonate yourself');
-      }
+    // API key authentication does not provide a verifiable admin user identity,
+    // so we cannot safely perform impersonation - reject API key callers.
+    if (adminUserId.startsWith('api-key:')) {
+      throw new ForbiddenException(
+        'Impersonation is not permitted using API key authentication. Use an admin JWT token instead.',
+      );
+    }
+
+    const adminUser = await this.prisma.user.findUnique({
+      where: { id: adminUserId },
+    });
+    if (!adminUser) {
+      throw new NotFoundException(`Admin user '${adminUserId}' not found`);
+    }
+
+    // Prevent self-impersonation
+    if (adminUserId === targetUserId) {
+      throw new BadRequestException('Cannot impersonate yourself');
     }
 
     const maxDuration = realm.impersonationMaxDuration ?? 1800;

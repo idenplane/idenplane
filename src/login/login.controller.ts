@@ -335,7 +335,7 @@ export class LoginController {
         res.cookie('AUTHME_MFA_CHALLENGE', challengeToken, {
           httpOnly: true,
           secure: process.env['NODE_ENV'] === 'production',
-          sameSite: 'lax',
+          sameSite: 'strict',
           maxAge: 5 * 60 * 1000,
           path: `/realms/${realm.name}`,
         });

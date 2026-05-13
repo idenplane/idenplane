@@ -9,6 +9,7 @@ import {
 import { ConfigCompatibilityService } from './config-compatibility.service.js';
 import { RollbackService } from './rollback.service.js';
 import { UpgradeHealthService } from './upgrade-health.service.js';
+import { PrismaService } from '../prisma/prisma.service.js';
 
 /**
  * Upgrade stage enumeration tracking progress through the upgrade workflow.
@@ -77,17 +78,15 @@ export interface UpgradeState {
 @Injectable()
 export class UpgradeService {
   private readonly logger = new Logger(UpgradeService.name);
-  private readonly prisma: PrismaClient;
 
   constructor(
+    private readonly prisma: PrismaService,
     private readonly preUpgradeValidator: PreUpgradeValidatorService,
     private readonly databaseBackupService: DatabaseBackupService,
     private readonly configCompatibility: ConfigCompatibilityService,
     private readonly rollbackService: RollbackService,
     private readonly upgradeHealthService: UpgradeHealthService,
-  ) {
-    this.prisma = new PrismaClient();
-  }
+  ) {}
 
   /**
    * Execute a complete upgrade to the target version.

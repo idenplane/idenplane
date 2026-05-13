@@ -20,6 +20,7 @@ import type { Request } from 'express';
 import type { Realm } from '@prisma/client';
 import { MfaService } from './mfa.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { StepUpService, ACR_MFA } from '../step-up/step-up.service.js';
@@ -28,7 +29,7 @@ import { CryptoService } from '../crypto/crypto.service.js';
 
 @ApiTags('MFA')
 @Controller('admin/realms/:realmName/users/:userId/mfa')
-@UseGuards(RealmGuard)
+@UseGuards(RealmGuard, AdminApiKeyGuard)
 @ApiSecurity('admin-api-key')
 export class MfaController {
   constructor(

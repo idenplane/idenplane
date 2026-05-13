@@ -26,12 +26,13 @@ import { CreateInvitationDto } from './dto/create-invitation.dto.js';
 import { CreateSsoConnectionDto } from './dto/create-sso-connection.dto.js';
 import { UpdateSsoConnectionDto } from './dto/update-sso-connection.dto.js';
 import { VerifyDomainDto } from './dto/verify-domain.dto.js';
+import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 
 @ApiTags('Organizations')
 @Controller('admin/realms/:realmName/organizations')
-@UseGuards(RealmGuard)
+@UseGuards(RealmGuard, AdminApiKeyGuard)
 @ApiSecurity('admin-api-key')
 export class OrganizationsController {
   constructor(private readonly organizationsService: OrganizationsService) {}

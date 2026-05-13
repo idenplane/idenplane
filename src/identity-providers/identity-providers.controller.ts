@@ -17,6 +17,7 @@ import {
   ApiSecurity,
 } from '@nestjs/swagger';
 import type { Realm } from '@prisma/client';
+import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { IdentityProvidersService } from './identity-providers.service.js';
@@ -26,7 +27,7 @@ import { UpdateIdentityProviderDto } from './dto/update-identity-provider.dto.js
 @ApiTags('Identity Providers')
 @ApiSecurity('admin-api-key')
 @Controller('admin/realms/:realmName/identity-providers')
-@UseGuards(RealmGuard)
+@UseGuards(RealmGuard, AdminApiKeyGuard)
 export class IdentityProvidersController {
   constructor(private readonly idpService: IdentityProvidersService) {}
 

@@ -21,12 +21,13 @@ import type { Realm } from '@prisma/client';
 import { ConsentCategoryService } from './consent-category.service.js';
 import { CreateConsentCategoryDto } from './dto/create-consent-category.dto.js';
 import { UpdateConsentCategoryDto } from './dto/update-consent-category.dto.js';
+import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 
 @ApiTags('Consent Categories')
 @Controller('admin/realms/:realmName')
-@UseGuards(RealmGuard)
+@UseGuards(RealmGuard, AdminApiKeyGuard)
 @ApiSecurity('admin-api-key')
 export class ConsentCategoriesController {
   constructor(private readonly service: ConsentCategoryService) {}

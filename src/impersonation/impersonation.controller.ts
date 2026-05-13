@@ -20,6 +20,7 @@ import type { Realm } from '@prisma/client';
 import { ImpersonationService } from './impersonation.service.js';
 import { EndImpersonationBodyDto } from './dto/end-impersonation.dto.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
+import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 
@@ -35,7 +36,7 @@ function getAdminUserId(req: Request): string {
 
 @ApiTags('Impersonation')
 @Controller('admin/realms/:realmName')
-@UseGuards(RealmGuard)
+@UseGuards(RealmGuard, AdminApiKeyGuard)
 @ApiSecurity('admin-api-key')
 export class ImpersonationController {
   constructor(private readonly impersonationService: ImpersonationService) {}

@@ -8,6 +8,7 @@ import {
   UnauthorizedException,
   HttpCode,
   HttpStatus,
+  UseGuards,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -18,6 +19,7 @@ import {
 import type { Request, Response } from 'express';
 import { Public } from '../common/decorators/public.decorator.js';
 import { AdminAuthService } from './admin-auth.service.js';
+import { RateLimitGuard, RateLimitByIp } from '../rate-limit/rate-limit.guard.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 import { AdminLoginDto } from './dto/login.dto.js';
 
@@ -29,6 +31,7 @@ export class AdminAuthController {
 
   @Post('login')
   @Public()
+  @UseGuards(RateLimitGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Admin login' })
   @ApiResponse({ status: 200, description: 'Login successful, returns token' })
@@ -53,6 +56,7 @@ export class AdminAuthController {
 
   @Post('logout')
   @Public()
+  @UseGuards(RateLimitGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Admin logout – revoke current token' })
   @ApiResponse({ status: 200, description: 'Logged out successfully' })

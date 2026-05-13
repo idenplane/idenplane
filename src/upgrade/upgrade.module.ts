@@ -6,8 +6,10 @@ import { PreUpgradeValidatorService } from './pre-upgrade-validator.service.js';
 import { DatabaseBackupService } from './database-backup.service.js';
 import { ConfigCompatibilityService } from './config-compatibility.service.js';
 import { UpgradeHealthService } from './upgrade-health.service.js';
+import { PrismaModule } from '../prisma/prisma.module.js';
 
 @Module({
+  imports: [PrismaModule],
   controllers: [UpgradeController],
   providers: [
     UpgradeService,
