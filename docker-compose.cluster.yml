@@ -25,6 +25,7 @@ services:
       NODE_ENV: production
       ADMIN_API_KEY: ${ADMIN_API_KEY:?Set ADMIN_API_KEY}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD}
+      ADMIN_USER: ${ADMIN_USER:?Set ADMIN_USER}
     depends_on:
       db:
         condition: service_healthy
@@ -39,6 +40,7 @@ services:
       NODE_ENV: production
       ADMIN_API_KEY: ${ADMIN_API_KEY:?Set ADMIN_API_KEY}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD}
+      ADMIN_USER: ${ADMIN_USER:?Set ADMIN_USER}
     depends_on:
       db:
         condition: service_healthy
