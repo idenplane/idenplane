@@ -269,7 +269,10 @@ export function evaluateCondition(
       try {
         regex = new RegExp(String(expected));
       } catch {
-        return { passed: false, reason: `invalid regex: "${expected}"` };
+        return {
+          passed: false,
+          reason: `invalid regex: "${String(expected)}"`,
+        };
       }
       const passed = regex.test(actual);
       return {
