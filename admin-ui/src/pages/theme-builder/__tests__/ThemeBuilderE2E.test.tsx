@@ -91,13 +91,7 @@ vi.mock('../../api/themes', () => ({
   }),
 }));
 
-// ─── Helper functions ───────────────────────────────────────────────────────────
-
-function createMockFile(name: string, type: string, size: number): File {
-  const file = new File(['mock-content'], name, { type });
-  Object.defineProperty(file, 'size', { value: size });
-  return file;
-}
+// ─── ThemeBuilderPage E2E Tests ─────────────────────────────────────────────
 
 const renderThemeBuilder = () => {
   return render(
@@ -105,8 +99,6 @@ const renderThemeBuilder = () => {
     { routePattern: '/console/realms/:name/theme-builder' }
   );
 };
-
-// ─── ThemeBuilderPage E2E Tests ─────────────────────────────────────────────
 
 describe('ThemeBuilderPage E2E Tests', () => {
   describe('Rendering and Navigation', () => {
