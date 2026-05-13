@@ -386,7 +386,7 @@ export class ContinuousVerificationController {
     @Param('realm') realmName: string,
     @Param('userId') userId: string,
   ) {
-    const realm = await this.requireRealm(realmName);
+    const _realm = await this.requireRealm(realmName);
 
     const profile = await this.prisma.behavioralBiometricProfile.findUnique({
       where: { userId },

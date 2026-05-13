@@ -38,7 +38,7 @@ export class MutationResolver {
 
   @Mutation(() => User)
   async createUser(@Args('input') input: CreateUserInput): Promise<User> {
-    const realm = { id: input.realmId, name: '' } as any;
+    const realm = { id: input.realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
     const dto = {
       username: input.username,
       email: input.email,
@@ -56,7 +56,7 @@ export class MutationResolver {
     @Args('userId') userId: string,
     @Args('input') input: UpdateUserInput,
   ): Promise<User> {
-    const realm = { id: realmId, name: '' } as any;
+    const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
     const dto = {
       email: input.email,
       firstName: input.firstName,
@@ -72,7 +72,7 @@ export class MutationResolver {
     @Args('realmId') realmId: string,
     @Args('userId') userId: string,
   ): Promise<boolean> {
-    const realm = { id: realmId, name: '' } as any;
+    const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
     await this.usersService.remove(realm, userId);
     return true;
   }
@@ -83,7 +83,7 @@ export class MutationResolver {
     @Args('userId') userId: string,
     @Args('password') password: string,
   ): Promise<User> {
-    const realm = { id: realmId, name: '' } as any;
+    const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
     await this.usersService.setPassword(realm, userId, password);
     return this.usersService.findById(realm, userId);
   }
@@ -92,7 +92,7 @@ export class MutationResolver {
 
   @Mutation(() => Client)
   async createClient(@Args('input') input: CreateClientInput): Promise<Client> {
-    const realm = { id: input.realmId, name: '' } as any;
+    const realm = { id: input.realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
     const dto = {
       clientId: input.clientId,
       name: input.name,
@@ -136,7 +136,7 @@ export class MutationResolver {
     @Args('realmId') realmId: string,
     @Args('clientId') clientId: string,
   ): Promise<boolean> {
-    const realm = { id: realmId, name: '' } as any;
+    const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
     await this.clientsService.remove(realm, clientId);
     return true;
   }
@@ -145,7 +145,7 @@ export class MutationResolver {
 
   @Mutation(() => Role)
   async createRole(@Args('input') input: CreateRoleInput): Promise<Role> {
-    const realm = { id: input.realmId, name: '' } as any;
+    const realm = { id: input.realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
     return this.rolesService.createRealmRole(
       realm,
       input.name,
@@ -159,7 +159,7 @@ export class MutationResolver {
     @Args('name') name: string,
     @Args('input') input: UpdateRoleInput,
   ): Promise<Role> {
-    const realm = { id: realmId, name: '' } as any;
+    const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
     return this.rolesService.updateRealmRole(realm, name, {
       name: input.name,
       description: input.description,
@@ -171,7 +171,7 @@ export class MutationResolver {
     @Args('realmId') realmId: string,
     @Args('name') name: string,
   ): Promise<boolean> {
-    const realm = { id: realmId, name: '' } as any;
+    const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
     await this.rolesService.deleteRealmRole(realm, name);
     return true;
   }
@@ -182,7 +182,7 @@ export class MutationResolver {
     @Args('userId') userId: string,
     @Args('roleNames', { type: () => [String] }) roleNames: string[],
   ): Promise<Role[]> {
-    const realm = { id: realmId, name: '' } as any;
+    const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
     const result = await this.rolesService.assignRealmRoles(
       realm,
       userId,
@@ -197,7 +197,7 @@ export class MutationResolver {
     @Args('userId') userId: string,
     @Args('roleNames', { type: () => [String] }) roleNames: string[],
   ): Promise<Role[]> {
-    const realm = { id: realmId, name: '' } as any;
+    const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
     await this.rolesService.removeUserRealmRoles(realm, userId, roleNames);
     return this.rolesService.getUserRealmRoles(realm, userId);
   }
@@ -235,7 +235,7 @@ export class MutationResolver {
     @Args('realmId') realmId: string,
     @Args('groupId') groupId: string,
   ): Promise<boolean> {
-    const realm = { id: realmId, name: '' } as any;
+    const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
     await this.groupsService.delete(realm, groupId);
     return true;
   }
@@ -246,7 +246,7 @@ export class MutationResolver {
     @Args('userId') userId: string,
     @Args('groupId') groupId: string,
   ): Promise<Group> {
-    const realm = { id: realmId, name: '' } as any;
+    const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
     await this.groupsService.addUserToGroup(realm, userId, groupId);
     return this.groupsService.findById(realm, groupId);
   }
@@ -257,7 +257,7 @@ export class MutationResolver {
     @Args('userId') userId: string,
     @Args('groupId') groupId: string,
   ): Promise<boolean> {
-    const realm = { id: realmId, name: '' } as any;
+    const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
     await this.groupsService.removeUserFromGroup(realm, userId, groupId);
     return true;
   }
@@ -288,7 +288,7 @@ export class MutationResolver {
     @Args('slug') slug: string,
     @Args('input') input: UpdateOrganizationInput,
   ): Promise<Organization> {
-    const realm = { id: realmId, name: '' } as any;
+    const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
     const dto = {
       name: input.displayName,
       displayName: input.displayName,
@@ -306,7 +306,7 @@ export class MutationResolver {
     @Args('realmId') realmId: string,
     @Args('slug') slug: string,
   ): Promise<boolean> {
-    const realm = { id: realmId, name: '' } as any;
+    const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
     await this.organizationsService.remove(realm, slug);
     return true;
   }
@@ -318,7 +318,7 @@ export class MutationResolver {
     @Args('userId') userId: string,
     @Args('role', { defaultValue: 'member' }) role: string,
   ): Promise<Organization> {
-    const realm = { id: realmId, name: '' } as any;
+    const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
     await this.organizationsService.addMember(realm, slug, { userId, role });
     return this.organizationsService.findOne(realm, slug);
   }

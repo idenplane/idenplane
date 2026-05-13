@@ -7,7 +7,7 @@ import {
   MinLength,
   registerDecorator,
   ValidationOptions,
-  ValidationArguments,
+  ValidationArguments as _ValidationArguments,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 

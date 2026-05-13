@@ -145,7 +145,7 @@ export class ContinuousRiskAssessmentService {
     ];
 
     const riskScore = aggregateContinuousSignals(signals);
-    const riskLevel = this.scoreToRiskLevel(riskScore);
+    const _riskLevel = this.scoreToRiskLevel(riskScore);
 
     // ── Evaluate policies ─────────────────────────────────────────────────────
 
@@ -452,7 +452,7 @@ export class ContinuousRiskAssessmentService {
 
   private async getBehavioralBaseline(
     userId: string,
-    realmId: string,
+    _realmId: string,
   ): Promise<BaselineProfile> {
     const profile = await this.prisma.behavioralBiometricProfile.findUnique({
       where: { userId },
@@ -548,7 +548,7 @@ export class ContinuousRiskAssessmentService {
     });
   }
 
-  private async evaluatePolicies(
+  private evaluatePolicies(
     context: ContinuousSessionContext,
     signals: ContinuousRiskSignal[],
     currentScore: number,

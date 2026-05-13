@@ -156,6 +156,6 @@ export class CryptoService implements OnModuleInit {
     const encrypted = packed.subarray(IV_BYTES + TAG_BYTES);
     const decipher = createDecipheriv(ALGORITHM, this.encryptionKey, iv);
     decipher.setAuthTag(tag);
-    return decipher.update(encrypted) + decipher.final('utf8');
+    return decipher.update(encrypted).toString('utf8') + decipher.final('utf8');
   }
 }

@@ -1,6 +1,6 @@
 import { Injectable } from '@nestjs/common';
 import { Response } from 'express';
-import { Prisma } from '@prisma/client';
+import { Prisma as _Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 
 export interface ExportLoginEventsParams {
@@ -34,7 +34,7 @@ export interface ExportAdminEventsParams {
 function escapeCsvField(value: unknown): string {
   if (value === null || value === undefined) return '';
   const str = typeof value === 'object' ? JSON.stringify(value) : String(value);
-  // Wrap in quotes if it contains a comma, quote, or newline
+
   if (
     str.includes(',') ||
     str.includes('"') ||

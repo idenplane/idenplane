@@ -382,7 +382,7 @@ export class NetworkContextService {
 
   private cacheIp(ip: string, result: IpLookupResult): void {
     if (this.ipCache.size >= this.maxCacheSize) {
-      const firstKey = this.ipCache.keys().next().value;
+      const firstKey = [...this.ipCache.keys()][0];
       if (firstKey !== undefined) {
         this.ipCache.delete(firstKey);
       }

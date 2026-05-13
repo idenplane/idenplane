@@ -12,6 +12,7 @@ import { GraphQLAuthGuard } from './guards/graphql-auth.guard.js';
       sortSchema: true,
       playground: process.env['NODE_ENV'] !== 'production',
       introspection: true,
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment
       context: ({ req }: { req: any }) => ({ req }),
     }),
     GraphQLSchemaModule,

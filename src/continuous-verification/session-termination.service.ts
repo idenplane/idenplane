@@ -73,11 +73,11 @@ export class SessionTerminationService {
       try {
         await this.terminateSession(profile, now);
         terminatedCount++;
-      } catch (error) {
+      } catch (_error) {
         errorCount++;
         this.logger.error(
-          `Failed to terminate session ${profile.sessionId}: ${error instanceof Error ? error.message : String(error)}`,
-          error instanceof Error ? error.stack : undefined,
+          `Failed to terminate session ${profile.sessionId}: ${_error instanceof Error ? _error.message : String(_error)}`,
+          _error instanceof Error ? _error.stack : undefined,
         );
       }
     }
@@ -166,7 +166,7 @@ export class SessionTerminationService {
         `Session ${profile.sessionId} revoked due to critical risk ` +
           `(user: ${session.user?.username ?? 'unknown'}, risk: ${profile.riskScore}, level: ${profile.riskLevel})`,
       );
-    } catch (error) {
+    } catch {
       // If the session doesn't exist in the oauth table, try login session
       try {
         await this.sessionsService.revokeSession(

@@ -16,7 +16,7 @@ export class GroupResolver {
     @Args('skip', { type: () => Int, defaultValue: 0 }) skip: number,
     @Args('take', { type: () => Int, defaultValue: 10 }) take: number,
   ): Promise<{ items: Group[]; pagination: PaginationInfo }> {
-    const realm = { id: realmId, name: '' } as any;
+    const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
     const items = await this.groupsService.findAll(realm);
     const total = items.length;
     const paginatedItems = items.slice(skip, skip + take);
@@ -39,7 +39,7 @@ export class GroupResolver {
     @Args('groupId') groupId: string,
   ): Promise<Group | null> {
     try {
-      const realm = { id: realmId, name: '' } as any;
+      const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
       return await this.groupsService.findById(realm, groupId);
     } catch {
       return null;
@@ -51,7 +51,7 @@ export class GroupResolver {
     @Args('realmId') realmId: string,
     @Args('userId') userId: string,
   ): Promise<Group[]> {
-    const realm = { id: realmId, name: '' } as any;
+    const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
     return this.groupsService.getUserGroups(realm, userId);
   }
 }

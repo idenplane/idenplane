@@ -100,13 +100,14 @@ export class GraphQLAuthGuard implements CanActivate {
     }
   }
 
-  handleRequest(err: any, user: any) {
+  handleRequest(err: any, user: any): any {
     if (err) {
       throw err;
     }
     if (!user) {
       throw new UnauthorizedException('Invalid or missing admin credentials');
     }
+
     return user;
   }
 }

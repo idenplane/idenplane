@@ -63,17 +63,17 @@ export class AwsSnsProvider implements SmsProvider {
     return this.getSigningKey(date, region, service);
   }
 
-  private async signRequest(
+  private _signRequest(
     action: string,
     phoneNumber: string,
     message: string,
-  ): Promise<string> {
+  ): string {
     const date = new Date();
     const amzDate = date.toISOString().replace(/[:-]|\.\d{3}/g, '');
     const dateStamp = date.toISOString().split('T')[0];
 
     const host = `sns.${this.region}.amazonaws.com`;
-    const endpoint = `https://${host}/`;
+    const _endpoint = `https://${host}/`;
 
     const payloadHash = this.sha256(
       `Action=${action}&Message=${encodeURIComponent(message)}&PhoneNumber=${encodeURIComponent(phoneNumber)}&Version=2010-03-31`,

@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma as _Prisma } from '@prisma/client';
 import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service.js';
 import {
@@ -589,7 +589,7 @@ export class DevicePostureService {
   private calculateTrustTier(
     posture: DevicePostureData,
     failures: DeviceComplianceFailure[],
-    signalScore: number,
+    _signalScore: number,
   ): DeviceTrustTier {
     const factors: string[] = [];
     let score = 100;

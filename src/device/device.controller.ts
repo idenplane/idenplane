@@ -101,7 +101,7 @@ export class DeviceController {
     description: 'HTML page for user to enter/confirm device code',
   })
   @ApiResponse({ status: 400, description: 'Realm not found' })
-  async devicePage(
+  devicePage(
     @CurrentRealm() realm: Realm,
     @Query('user_code') userCode: string,
     @Req() req: Request,
