@@ -112,7 +112,7 @@ export class SessionRiskEvaluator {
     // Aggregate signals into risk score
     const riskScore = aggregateContinuousSignals(signals);
     const riskLevel = this.scoreToRiskLevel(riskScore);
-    const action = determineContinuousAction(riskScore, realmThresholds);
+    const _action = determineContinuousAction(riskScore, realmThresholds);
 
     // Get policy-based adjustments
     const policyAdjustment = await this.evaluatePolicyAdjustments(
@@ -183,7 +183,7 @@ export class SessionRiskEvaluator {
     trigger: 'SCHEDULED' | 'EVENT' | 'MANUAL' = 'SCHEDULED',
     reason?: string,
   ): Promise<{ total: number; evaluated: number; errors: number }> {
-    const now = new Date();
+    const _now = new Date();
     let evaluated = 0;
     let errors = 0;
 
@@ -491,7 +491,7 @@ export class SessionRiskEvaluator {
 
     // Device posture signal
     if (devicePosture.record) {
-      const postureRecord = devicePosture.record as {
+      const _postureRecord = devicePosture.record as {
         jailbroken?: boolean;
         complianceStatus?: string | null;
       };
@@ -563,7 +563,7 @@ export class SessionRiskEvaluator {
     realmId: string,
     clientId: string | null | undefined,
     signals: ContinuousRiskSignal[],
-    riskScore: number,
+    _riskScore: number,
   ) {
     const policies = await this.policyService.findAllPolicies({
       id: realmId,

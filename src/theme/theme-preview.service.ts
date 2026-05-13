@@ -18,7 +18,7 @@ export class ThemePreviewService {
     styles: Record<string, unknown>;
     components?: unknown[];
     assets?: Record<string, unknown>;
-    settings?: Record<string, unknown>;
+    settings?: Record<string, string>;
   }): string {
     const { styles, components = [], assets = {}, settings = {} } = params;
 
