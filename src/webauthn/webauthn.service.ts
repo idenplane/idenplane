@@ -4,9 +4,7 @@ import {
   BadRequestException,
   NotFoundException,
   ForbiddenException,
-  Inject,
   Optional,
-  forwardRef,
 } from '@nestjs/common';
 import {
   generateRegistrationOptions,
@@ -22,7 +20,6 @@ import type {
   AuthenticatorTransportFuture,
 } from '@simplewebauthn/server';
 import type { Realm, User, WebAuthnCredential } from '@prisma/client';
-import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { BruteForceService } from '../brute-force/brute-force.service.js';
@@ -148,12 +145,11 @@ export class WebAuthnService {
         expectedRPID: rpId,
         requireUserVerification: realm.webAuthnUserVerificationRequired,
       });
-    } catch (err: any) {
-      this.logger.warn(
-        `WebAuthn registration verification failed: ${err.message}`,
-      );
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
+      this.logger.warn(`WebAuthn registration verification failed: ${message}`);
       throw new BadRequestException(
-        'Registration verification failed: ' + err.message,
+        'Registration verification failed: ' + message,
       );
     }
 
@@ -305,16 +301,17 @@ export class WebAuthnService {
         },
         requireUserVerification: realm.webAuthnUserVerificationRequired,
       });
-    } catch (err: any) {
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : String(err);
       this.logger.warn(
-        `WebAuthn authentication verification failed: ${err.message}`,
+        `WebAuthn authentication verification failed: ${message}`,
       );
       await this.bruteForceService?.recordWebAuthnFailure(
         realm,
         credential.userId,
       );
       throw new BadRequestException(
-        'Authentication verification failed: ' + err.message,
+        'Authentication verification failed: ' + message,
       );
     }
 
