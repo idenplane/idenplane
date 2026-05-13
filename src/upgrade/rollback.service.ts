@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaClient, Prisma } from '@prisma/client';
+import { PrismaClient } from '@prisma/client';
 import { DatabaseBackupService } from './database-backup.service';
 
 export interface RollbackResult {
@@ -189,12 +189,7 @@ export class RollbackService {
       }
 
       // Record successful rollback
-      const rollbackEntry = await this.recordRollbackAttempt(
-        upgrade,
-        true,
-        undefined,
-        backup.path,
-      );
+      await this.recordRollbackAttempt(upgrade, true, undefined, backup.path);
 
       const duration = Date.now() - startTime;
 
