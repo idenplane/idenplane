@@ -17,6 +17,8 @@ services:
 
   app1:
     build: .
+    ports:
+      - "3001:3000"
     environment:
       DATABASE_URL: postgresql://authme:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/authme
       BASE_URL: http://localhost:8081
@@ -29,6 +31,8 @@ services:
 
   app2:
     build: .
+    ports:
+      - "3002:3000"
     environment:
       DATABASE_URL: postgresql://authme:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/authme
       BASE_URL: http://localhost:8081
