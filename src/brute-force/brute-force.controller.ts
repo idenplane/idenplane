@@ -25,10 +25,15 @@ import { StepUpService, ACR_MFA } from '../step-up/step-up.service.js';
 import { LoginService } from '../login/login.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import {
+  RateLimitGuard,
+  RateLimitByIp,
+} from '../rate-limit/rate-limit.guard.js';
 
 @ApiTags('Brute Force Protection')
 @Controller('admin/realms/:realmName/brute-force')
-@UseGuards(RealmGuard, AdminApiKeyGuard)
+@UseGuards(RealmGuard, AdminApiKeyGuard, RateLimitGuard)
+@RateLimitByIp()
 @ApiSecurity('admin-api-key')
 export class BruteForceController {
   constructor(

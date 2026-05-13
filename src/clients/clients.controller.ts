@@ -24,10 +24,15 @@ import { UpdateClientDto } from './dto/update-client.dto.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
+import {
+  RateLimitGuard,
+  RateLimitByIp,
+} from '../rate-limit/rate-limit.guard.js';
 
 @ApiTags('Clients')
 @Controller('admin/realms/:realmName/clients')
-@UseGuards(RealmGuard, AdminApiKeyGuard)
+@UseGuards(RealmGuard, AdminApiKeyGuard, RateLimitGuard)
+@RateLimitByIp()
 @ApiSecurity('admin-api-key')
 export class ClientsController {
   constructor(private readonly clientsService: ClientsService) {}

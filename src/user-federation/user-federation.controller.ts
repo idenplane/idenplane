@@ -19,10 +19,15 @@ import { CreateUserFederationDto } from './dto/create-user-federation.dto.js';
 import { UpdateUserFederationDto } from './dto/update-user-federation.dto.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
+import {
+  RateLimitGuard,
+  RateLimitByIp,
+} from '../rate-limit/rate-limit.guard.js';
 
 @ApiTags('User Federation')
 @Controller('admin/realms/:realmName/user-federation')
-@UseGuards(RealmGuard, AdminApiKeyGuard)
+@UseGuards(RealmGuard, AdminApiKeyGuard, RateLimitGuard)
+@RateLimitByIp()
 @ApiSecurity('admin-api-key')
 export class UserFederationController {
   constructor(private readonly service: UserFederationService) {}

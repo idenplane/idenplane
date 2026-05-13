@@ -24,10 +24,15 @@ import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { SamlIdpService } from './saml-idp.service.js';
 import { CreateSamlSpDto } from './dto/create-saml-sp.dto.js';
 import { UpdateSamlSpDto } from './dto/update-saml-sp.dto.js';
+import {
+  RateLimitGuard,
+  RateLimitByIp,
+} from '../rate-limit/rate-limit.guard.js';
 
 @ApiTags('SAML Service Providers')
 @Controller('admin/realms/:realmName/saml-service-providers')
-@UseGuards(RealmGuard, AdminApiKeyGuard)
+@UseGuards(RealmGuard, AdminApiKeyGuard, RateLimitGuard)
+@RateLimitByIp()
 @ApiSecurity('admin-api-key')
 export class SamlSpAdminController {
   constructor(private readonly samlIdpService: SamlIdpService) {}
