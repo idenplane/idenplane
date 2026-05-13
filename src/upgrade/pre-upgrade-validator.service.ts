@@ -46,7 +46,7 @@ export class PreUpgradeValidatorService {
    * @param targetVersion The version being upgraded to (optional, for informational purposes)
    * @returns Validation result with pass/warn/fail status for each check
    */
-  async validate(targetVersion?: string): Promise<PreUpgradeValidationResult> {
+  async validate(_targetVersion?: string): Promise<PreUpgradeValidationResult> {
     this.logger.log('Starting pre-upgrade validation checks...');
 
     const checks: PreUpgradeCheck[] = [];
@@ -136,7 +136,7 @@ export class PreUpgradeValidatorService {
   /**
    * Check for pending Prisma migrations.
    */
-  private async checkPendingMigrations(): Promise<PreUpgradeCheck> {
+  private checkPendingMigrations(): Promise<PreUpgradeCheck> {
     try {
       const output = execSync('npx prisma migrate status 2>&1', {
         encoding: 'utf-8',
@@ -200,7 +200,7 @@ export class PreUpgradeValidatorService {
    * Check available disk space for backups.
    * Requires at least 1GB of free space.
    */
-  private async checkDiskSpace(): Promise<PreUpgradeCheck> {
+  private checkDiskSpace(): Promise<PreUpgradeCheck> {
     try {
       const output = execSync('df -k . 2>&1', {
         encoding: 'utf-8',

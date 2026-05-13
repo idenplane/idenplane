@@ -297,7 +297,7 @@ export class FlowExecutorService {
   private async advanceSession(
     session: FlowSession,
     completedStep: FlowStep,
-    // eslint-disable-next-line @typescript-eslint/no-unused-vars
+
     _success: boolean,
   ): Promise<StepResult> {
     session.completedStepIds.push(completedStep.id);

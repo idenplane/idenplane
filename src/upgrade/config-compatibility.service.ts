@@ -415,7 +415,7 @@ export class ConfigCompatibilityService {
           type: 'error',
           path,
           message: `Expected type ${rules.type} but got ${actualType}`,
-          currentValue: String(value),
+          currentValue: value != null ? String(value as object) : null,
         };
       }
     }
