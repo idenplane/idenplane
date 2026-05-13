@@ -215,6 +215,7 @@ export class WebhooksService {
     };
 
     try {
+      // eslint-disable-next-line @typescript-eslint/no-unsafe-call,@typescript-eslint/no-unsafe-member-access -- webhookEvent model pending migration
       await this.db.webhookEvent.create({
         data: {
           realmId: options.realmId,
