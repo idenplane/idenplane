@@ -99,12 +99,11 @@ export class FlowExecutorService {
       throw new BadRequestException('Authentication flow is already complete');
     }
 
-    const { step, conditionMet, skipped } =
-      await this.authFlowService.executeStep(
-        session.flowId,
-        stepId,
-        session.context,
-      );
+    const { step, skipped } = await this.authFlowService.executeStep(
+      session.flowId,
+      stepId,
+      session.context,
+    );
 
     // If the step is being skipped (optional + condition not met), advance
     if (skipped) {
@@ -200,7 +199,6 @@ export class FlowExecutorService {
       case 'email_otp':
       case 'magic_link':
       case 'consent':
-      case 'magic_link':
         // These step types require external redirects / UI — the executor
         // records them as "pending" and the dedicated controller completes them.
         return { success: true, data: { pending: true, stepType: step.type } };

@@ -216,7 +216,10 @@ export class BrokerService {
       );
     }
 
-    return response.json();
+    return (await response.json()) as {
+      access_token: string;
+      id_token?: string;
+    };
   }
 
   private async fetchExternalUserInfo(
@@ -238,7 +241,7 @@ export class BrokerService {
     const data = (await response.json()) as Record<string, unknown>;
 
     return {
-      sub: (data['sub'] ?? data['id'] ?? '').toString(),
+      sub: String(data['sub'] ?? data['id'] ?? ''),
       email: data['email'] as string | undefined,
       emailVerified: data['email_verified'] as boolean | undefined,
       name: data['name'] as string | undefined,

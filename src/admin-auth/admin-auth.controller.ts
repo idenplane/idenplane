@@ -74,7 +74,7 @@ export class AdminAuthController {
   @ApiOperation({ summary: 'Get current admin user info' })
   @ApiResponse({ status: 200, description: 'Current admin user info' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  async getMe(@Req() req: Request) {
+  getMe(@Req() req: Request) {
     const adminUser = (
       req as Request & { adminUser?: { userId: string; roles: string[] } }
     )['adminUser'];

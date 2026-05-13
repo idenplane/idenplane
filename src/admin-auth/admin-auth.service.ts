@@ -202,8 +202,8 @@ export class AdminAuthService implements OnModuleDestroy {
       if (parts.length !== 3) return null;
       const payload = JSON.parse(
         Buffer.from(parts[1], 'base64url').toString('utf-8'),
-      );
-      return (payload as Record<string, unknown>)['jti'] as string | null;
+      ) as Record<string, unknown>;
+      return payload['jti'] as string | null;
     } catch {
       return null;
     }

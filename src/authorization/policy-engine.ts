@@ -160,8 +160,8 @@ export function evaluateCondition(
       return {
         passed,
         reason: passed
-          ? `"${condition.field}" equals "${expected}"`
-          : `"${condition.field}" is "${actual}", expected "${expected}"`,
+          ? `"${condition.field}" equals "${String(expected)}"`
+          : `"${condition.field}" is "${String(actual)}", expected "${String(expected)}"`,
       };
     }
 
@@ -170,8 +170,8 @@ export function evaluateCondition(
       return {
         passed,
         reason: passed
-          ? `"${condition.field}" is not "${expected}"`
-          : `"${condition.field}" equals "${expected}" but should not`,
+          ? `"${condition.field}" is not "${String(expected)}"`
+          : `"${condition.field}" equals "${String(expected)}" but should not`,
       };
     }
 
