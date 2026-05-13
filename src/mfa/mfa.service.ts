@@ -21,6 +21,10 @@ interface MfaChallengeData {
 /** TTL in seconds for a used TOTP code entry — covers the full ±1-step window (3 periods × 30s). */
 const TOTP_USED_CODE_TTL_SECONDS = 90;
 
+/** Rate limiting for MFA challenge creation */
+const MFA_CHALLENGE_RATE_LIMIT_MAX_REQUESTS = 5;
+const MFA_CHALLENGE_RATE_LIMIT_WINDOW_SECONDS = 300;
+
 @Injectable()
 export class MfaService {
   private readonly logger = new Logger(MfaService.name);
@@ -267,6 +271,23 @@ export class MfaService {
     oauthParams?: Record<string, string>,
     clientId?: string,
   ): Promise<string> {
+    const windowStart = new Date(
+      Date.now() - MFA_CHALLENGE_RATE_LIMIT_WINDOW_SECONDS * 1000,
+    );
+    const recentChallenges = await this.prisma.pendingAction.count({
+      where: {
+        type: 'mfa_challenge',
+        data: { path: ['userId'], equals: userId },
+        createdAt: { gte: windowStart },
+      },
+    });
+
+    if (recentChallenges >= MFA_CHALLENGE_RATE_LIMIT_MAX_REQUESTS) {
+      throw new Error(
+        `Rate limit exceeded: too many MFA challenge requests. Please try again later.`,
+      );
+    }
+
     const token = this.crypto.generateSecret(32);
     const tokenHash = this.crypto.sha256(token);
 
