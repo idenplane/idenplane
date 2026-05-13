@@ -57,10 +57,11 @@ export class SessionsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Session not found' })
   revokeSession(
+    @CurrentRealm() realm: Realm,
     @Param('sessionId') sessionId: string,
     @Query('type') type: 'oauth' | 'sso' = 'oauth',
   ) {
-    return this.sessionsService.revokeSession(sessionId, type);
+    return this.sessionsService.revokeSession(realm, sessionId, type);
   }
 
   @Delete('users/:userId/sessions')

@@ -1,4 +1,4 @@
-import { Injectable } from '@nestjs/common';
+import { Injectable, NotFoundException } from '@nestjs/common';
 import type { Realm } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 
@@ -107,15 +107,38 @@ export class SessionsService {
     ].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   }
 
-  async revokeSession(sessionId: string, type: 'oauth' | 'sso'): Promise<void> {
+  async revokeSession(
+    realm: Realm | null,
+    sessionId: string,
+    type: 'oauth' | 'sso',
+  ): Promise<void> {
     if (type === 'oauth') {
-      // Revoke all refresh tokens then delete the session
+      const session = await this.prisma.session.findUnique({
+        where: { id: sessionId },
+        select: { userId: true, user: { select: { realmId: true } } },
+      });
+      if (realm && session && session.user.realmId !== realm.id) {
+        throw new NotFoundException('Session not found');
+      }
+      if (!session) {
+        throw new NotFoundException('Session not found');
+      }
       await this.prisma.refreshToken.updateMany({
         where: { sessionId },
         data: { revoked: true },
       });
       await this.prisma.session.delete({ where: { id: sessionId } });
     } else {
+      const loginSession = await this.prisma.loginSession.findUnique({
+        where: { id: sessionId },
+        select: { realmId: true },
+      });
+      if (realm && loginSession && loginSession.realmId !== realm.id) {
+        throw new NotFoundException('Session not found');
+      }
+      if (!loginSession) {
+        throw new NotFoundException('Session not found');
+      }
       await this.prisma.loginSession.delete({ where: { id: sessionId } });
     }
   }
