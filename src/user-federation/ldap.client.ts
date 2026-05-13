@@ -52,8 +52,9 @@ export class LdapClientWrapper {
       await client.bind(this.config.bindDn, this.config.bindCredential);
       await client.unbind();
       return { success: true };
-    } catch (err: any) {
-      return { success: false, error: err.message ?? 'Connection failed' };
+    } catch (err: unknown) {
+      const message = err instanceof Error ? err.message : 'Connection failed';
+      return { success: false, error: message ?? 'Connection failed' };
     }
   }
 
@@ -149,7 +150,9 @@ export class LdapClientWrapper {
       if (typeof v === 'string') return v;
       if (Array.isArray(v) && v.length > 0) return String(v[0]);
       if (v instanceof Buffer) return v.toString('utf-8');
-      return v ? String(v) : undefined;
+      // eslint-disable-next-line @typescript-eslint/no-base-to-string -- intentional object stringification
+      if (v) return String(v);
+      return undefined;
     };
 
     return {
