@@ -61,6 +61,25 @@ export class CorsOriginService {
     this.logger.debug('In-process CORS origin cache invalidated');
   }
 
+  /**
+   * Returns the locally cached set of allowed origins, or null if the cache
+   * has not been populated yet. This is used for synchronous CORS origin checks.
+   */
+  getCachedOrigins(): Set<string> | null {
+    if (this.localOrigins !== null && Date.now() < this.localCacheExpiry) {
+      return this.localOrigins;
+    }
+    return null;
+  }
+
+  /**
+   * Preload the origin cache asynchronously. Called at startup to ensure
+   * the cache is ready before the first CORS check.
+   */
+  async preloadCache(): Promise<void> {
+    await this.loadFromDatabase();
+  }
+
   // ─── Private helpers ──────────────────────────────────────────────────────
 
   private async getAllowedOrigins(): Promise<Set<string>> {

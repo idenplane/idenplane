@@ -117,13 +117,18 @@ async function bootstrap() {
         return;
       }
 
-      // Check client webOrigins from the database.
-      corsOriginService.isOriginAllowed(origin).then(
-        (allowed) => callback(null, allowed ? origin : false),
-        () => {
-          callback(null, false);
-        },
-      );
+      // Check client webOrigins from the database using synchronous local cache.
+      // The local cache is populated at startup and refreshed every 5 min.
+      // This avoids async callback issues with Express CORS.
+      const allowedOrigins = corsOriginService.getCachedOrigins();
+      if (allowedOrigins !== null) {
+        callback(null, allowedOrigins.has(origin) ? origin : false);
+        return;
+      }
+
+      // Cache should always be populated at this point since we preload at startup.
+      // If somehow it's not, deny for safety.
+      callback(null, false);
     },
     credentials: true,
     methods: ['GET', 'POST', 'PUT', 'DELETE', 'PATCH', 'OPTIONS'],
@@ -252,6 +257,9 @@ async function bootstrap() {
 
   const document = SwaggerModule.createDocument(app, config);
   SwaggerModule.setup('api', app, document);
+
+  // Preload CORS origin cache before accepting requests
+  await corsOriginService.preloadCache();
 
   const port = process.env['PORT'] ?? 3000;
   await app.listen(port);
