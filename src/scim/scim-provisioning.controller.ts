@@ -26,13 +26,18 @@ import type { Realm } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { ScimTokensService } from './scim-tokens.service.js';
 import type { CreateScimTokenDto } from './dto/scim.dto.js';
+import {
+  RateLimitGuard,
+  RateLimitByUser,
+} from '../rate-limit/rate-limit.guard.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 
 @ApiTags('SCIM Provisioning (Admin)')
 @Controller('admin/realms/:realmName/scim')
-@UseGuards(RealmGuard, AdminApiKeyGuard)
+@UseGuards(RateLimitGuard, RealmGuard, AdminApiKeyGuard)
+@RateLimitByUser()
 @ApiSecurity('admin-api-key')
 export class ScimProvisioningController {
   private readonly logger = new Logger(ScimProvisioningController.name);

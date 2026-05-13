@@ -22,13 +22,18 @@ import { RolesService } from './roles.service.js';
 import { CreateRoleDto } from './dto/create-role.dto.js';
 import { UpdateRoleDto } from './dto/update-role.dto.js';
 import { AssignRolesDto } from './dto/assign-role.dto.js';
+import {
+  RateLimitGuard,
+  RateLimitByUser,
+} from '../rate-limit/rate-limit.guard.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 
 @ApiTags('Roles')
 @Controller('admin/realms/:realmName')
-@UseGuards(RealmGuard, AdminApiKeyGuard)
+@UseGuards(RateLimitGuard, RealmGuard, AdminApiKeyGuard)
+@RateLimitByUser()
 @ApiSecurity('admin-api-key')
 export class RolesController {
   constructor(private readonly rolesService: RolesService) {}

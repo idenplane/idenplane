@@ -16,13 +16,18 @@ import {
 } from '@nestjs/swagger';
 import type { Realm } from '@prisma/client';
 import { SessionsService } from './sessions.service.js';
+import {
+  RateLimitGuard,
+  RateLimitByUser,
+} from '../rate-limit/rate-limit.guard.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 
 @ApiTags('Sessions')
 @Controller('admin/realms/:realmName')
-@UseGuards(RealmGuard, AdminApiKeyGuard)
+@UseGuards(RateLimitGuard, RealmGuard, AdminApiKeyGuard)
+@RateLimitByUser()
 @ApiSecurity('admin-api-key')
 export class SessionsController {
   constructor(private readonly sessionsService: SessionsService) {}

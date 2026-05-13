@@ -18,6 +18,10 @@ import {
 import type { Request } from 'express';
 import type { Realm } from '@prisma/client';
 import { BruteForceService } from './brute-force.service.js';
+import {
+  RateLimitGuard,
+  RateLimitByUser,
+} from '../rate-limit/rate-limit.guard.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
@@ -28,7 +32,8 @@ import { PrismaService } from '../prisma/prisma.service.js';
 
 @ApiTags('Brute Force Protection')
 @Controller('admin/realms/:realmName/brute-force')
-@UseGuards(RealmGuard, AdminApiKeyGuard)
+@UseGuards(RateLimitGuard, RealmGuard, AdminApiKeyGuard)
+@RateLimitByUser()
 @ApiSecurity('admin-api-key')
 export class BruteForceController {
   constructor(
@@ -134,7 +139,8 @@ export class BruteForceController {
  */
 @ApiTags('Brute Force Protection')
 @Controller('admin/realms/:realmName/attack-detection/brute-force')
-@UseGuards(RealmGuard)
+@UseGuards(RateLimitGuard, RealmGuard, AdminApiKeyGuard)
+@RateLimitByUser()
 @ApiSecurity('admin-api-key')
 export class BruteForceAttackDetectionController {
   constructor(

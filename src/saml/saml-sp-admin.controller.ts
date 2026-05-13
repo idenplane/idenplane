@@ -18,6 +18,10 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 import type { Realm } from '@prisma/client';
+import {
+  RateLimitGuard,
+  RateLimitByUser,
+} from '../rate-limit/rate-limit.guard.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
@@ -27,7 +31,8 @@ import { UpdateSamlSpDto } from './dto/update-saml-sp.dto.js';
 
 @ApiTags('SAML Service Providers')
 @Controller('admin/realms/:realmName/saml-service-providers')
-@UseGuards(RealmGuard, AdminApiKeyGuard)
+@UseGuards(RateLimitGuard, RealmGuard, AdminApiKeyGuard)
+@RateLimitByUser()
 @ApiSecurity('admin-api-key')
 export class SamlSpAdminController {
   constructor(private readonly samlIdpService: SamlIdpService) {}
