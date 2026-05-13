@@ -90,6 +90,7 @@ export class BruteForceController {
       );
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- express Request.cookies typed as any
     const sessionToken: string | undefined = req.cookies?.AUTHME_SESSION;
     if (!sessionToken) {
       throw new UnauthorizedException(
@@ -189,6 +190,7 @@ export class BruteForceAttackDetectionController {
       );
     }
 
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- express Request.cookies typed as any
     const sessionToken: string | undefined = req.cookies?.AUTHME_SESSION;
     if (!sessionToken) {
       throw new UnauthorizedException(
