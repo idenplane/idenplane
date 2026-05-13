@@ -19,7 +19,7 @@ export class AdminRolesGuard implements CanActivate {
     private readonly adminAuthService: AdminAuthService,
   ) {}
 
-  async canActivate(context: ExecutionContext): Promise<boolean> {
+  canActivate(context: ExecutionContext): boolean {
     const options = this.reflector.get<AdminRolesOptions>(
       REQUIRED_ADMIN_ROLES_KEY,
       context.getHandler(),
@@ -29,8 +29,10 @@ export class AdminRolesGuard implements CanActivate {
       return true;
     }
 
-    const request = context.switchToHttp().getRequest<Request>();
-    const adminUser = (request as any).adminUser;
+    const request = context.switchToHttp().getRequest<
+      Request & { adminUser?: { roles: string[] } }
+    >();
+    const adminUser = request.adminUser;
 
     if (!adminUser?.roles) {
       throw new ForbiddenException('No admin roles found');

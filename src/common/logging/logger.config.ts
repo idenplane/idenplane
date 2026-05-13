@@ -28,19 +28,19 @@ export function createLoggerConfig(): Params {
         ],
         censor: '[REDACTED]',
       },
-      genReqId: (req: any) => req.headers['x-request-id'] ?? randomUUID(),
+      genReqId: (req: Request & { headers?: Record<string, string | undefined> } & { id?: string; method?: string; url?: string }) => req.headers?.['x-request-id'] ?? randomUUID(),
       serializers: {
-        req: (req: any) => ({
+        req: (req: Request & { id?: string; method?: string; url?: string }) => ({
           id: req.id,
           method: req.method,
           url: req.url,
         }),
-        res: (res: any) => ({
+        res: (res: { statusCode?: number }) => ({
           statusCode: res.statusCode,
         }),
       },
       autoLogging: {
-        ignore: (req: any) =>
+        ignore: (req: Request & { url?: string }) =>
           req.url?.startsWith('/health') ||
           req.url?.startsWith('/admin/metrics'),
       },

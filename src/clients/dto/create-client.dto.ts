@@ -22,7 +22,9 @@ function IsNoWildcardOrigin(validationOptions?: ValidationOptions) {
   return function (object: object, propertyName: string) {
     registerDecorator({
       name: 'isNoWildcardOrigin',
-      target: (object as { constructor: Function }).constructor,
+      target: (
+        object as { constructor: new (...args: unknown[]) => typeof object }
+      ).constructor,
       propertyName,
       options: {
         message:
@@ -30,8 +32,8 @@ function IsNoWildcardOrigin(validationOptions?: ValidationOptions) {
         ...validationOptions,
       },
       validator: {
-        validate(value: unknown, _args: ValidationArguments): boolean {
-          if (!Array.isArray(value)) return true; // let @IsArray handle that
+        validate(value: unknown): boolean {
+          if (!Array.isArray(value)) return true;
           return !(value as unknown[]).some((v) => v === '*');
         },
       },

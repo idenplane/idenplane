@@ -78,7 +78,8 @@ export class BruteForceController {
     realm: Realm,
     req: Request,
   ): Promise<void> {
-    const adminUser = (req as any).adminUser;
+    const adminUser = (req as Request & { adminUser?: { userId: string } })
+      .adminUser;
     if (!adminUser?.userId) {
       throw new UnauthorizedException('Admin identity could not be determined');
     }
@@ -176,7 +177,8 @@ export class BruteForceAttackDetectionController {
     realm: Realm,
     req: Request,
   ): Promise<void> {
-    const adminUser = (req as any).adminUser;
+    const adminUser = (req as Request & { adminUser?: { userId: string } })
+      .adminUser;
     if (!adminUser?.userId) {
       throw new UnauthorizedException('Admin identity could not be determined');
     }
