@@ -711,14 +711,6 @@ export class AuthService {
       throw new BadRequestException('authorization_pending');
     }
 
-    if (deviceCode.expiresAt < new Date()) {
-      throw new BadRequestException('expired_token');
-    }
-
-    if (deviceCode.denied) {
-      throw new BadRequestException('access_denied');
-    }
-
     // RFC 8628 §3.5 — enforce minimum polling interval.
     // If the client polls before the required interval has elapsed, increase the
     // interval by 5 seconds and return `slow_down` so the client backs off.
