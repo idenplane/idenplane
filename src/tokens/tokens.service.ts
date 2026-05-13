@@ -376,7 +376,7 @@ export class TokensService {
     }
 
     // Record logout event before deleting session
-    this.eventsService.recordLoginEvent({
+    void this.eventsService.recordLoginEvent({
       realmId: realm.id,
       type: LoginEventType.LOGOUT,
       userId: userId ?? undefined,
