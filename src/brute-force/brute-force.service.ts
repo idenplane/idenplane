@@ -347,7 +347,9 @@ export class BruteForceService {
         where: { failedAt: { lt: cutoff } },
       });
     if (webauthnCount > 0) {
-      this.logger.debug(`Cleaned up ${webauthnCount} old WebAuthn failure records`);
+      this.logger.debug(
+        `Cleaned up ${webauthnCount} old WebAuthn failure records`,
+      );
     }
   }
 }

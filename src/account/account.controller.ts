@@ -45,7 +45,7 @@ export class AccountController {
   ) {}
 
   private async getSessionUser(realm: Realm, req: Request) {
-    const sessionToken = req.cookies?.['AUTHME_SESSION'];
+    const sessionToken = req.cookies?.['AUTHME_SESSION'] as string | undefined;
     if (!sessionToken) return null;
     return this.loginService.validateLoginSession(realm, sessionToken);
   }
@@ -385,7 +385,7 @@ export class AccountController {
         `attachment; filename="user-data-export-${user.username}-${Date.now()}.json"`,
       );
       res.send(exportData);
-    } catch (error) {
+    } catch {
       res.redirect(
         `/realms/${realm.name}/account?error=${encodeURIComponent('Failed to export data. Please try again.')}`,
       );

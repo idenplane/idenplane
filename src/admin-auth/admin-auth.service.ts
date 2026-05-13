@@ -25,7 +25,11 @@ export class AdminAuthService implements OnModuleDestroy {
     private readonly rateLimitService: RateLimitService,
     private readonly bruteForceService: BruteForceService,
   ) {
-    this.cleanupInterval = setInterval(() => this.cleanup(), 60_000);
+    this.cleanupInterval = setInterval(() => {
+      this.cleanup().catch((err: unknown) =>
+        this.logger.warn(`Cleanup failed: ${(err as Error).message}`),
+      );
+    }, 60_000);
   }
 
   onModuleDestroy() {
@@ -173,7 +177,7 @@ export class AdminAuthService implements OnModuleDestroy {
   }
 
   async revokeToken(token: string, expiresInSeconds = 3600): Promise<void> {
-    const jti = await this.extractJti(token);
+    const jti = this.extractJti(token);
     if (!jti) return;
 
     const expiresAt = Math.floor(Date.now() / 1000) + expiresInSeconds;
@@ -192,14 +196,14 @@ export class AdminAuthService implements OnModuleDestroy {
     }
   }
 
-  private async extractJti(token: string): Promise<string | null> {
+  private extractJti(token: string): string | null {
     try {
       const parts = token.split('.');
       if (parts.length !== 3) return null;
       const payload = JSON.parse(
         Buffer.from(parts[1], 'base64url').toString('utf-8'),
       );
-      return payload['jti'] ?? null;
+      return (payload as Record<string, unknown>)['jti'] as string | null;
     } catch {
       return null;
     }

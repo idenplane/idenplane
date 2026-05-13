@@ -98,7 +98,9 @@ async function bootstrap() {
     try {
       sameOrigins.add(new URL(process.env['BASE_URL']).origin);
     } catch (err) {
-      this.logger.warn(`Invalid BASE_URL: ${process.env['BASE_URL']} — skipping origin allowlist`);
+      this.logger.warn(
+        `Invalid BASE_URL: ${process.env['BASE_URL']} — skipping origin allowlist`,
+      );
     }
   }
 

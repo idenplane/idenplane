@@ -6,10 +6,10 @@ import {
   Delete,
   Body,
   Param,
-  Query,
   HttpCode,
   HttpStatus,
   UseGuards,
+  NotFoundException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -47,7 +47,7 @@ export class ThemeController {
       where: { name: realmName },
     });
     if (!realm) {
-      throw { statusCode: 404, message: `Realm '${realmName}' not found` };
+      throw new NotFoundException(`Realm '${realmName}' not found`);
     }
     return realm.id;
   }
