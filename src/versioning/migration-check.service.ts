@@ -36,7 +36,7 @@ export class MigrationCheckService implements OnModuleInit {
     }
   }
 
-  async getStatus(): Promise<MigrationStatus> {
+  getStatus(): Promise<MigrationStatus> {
     try {
       const output = execSync('npx prisma migrate status 2>&1', {
         encoding: 'utf-8',
