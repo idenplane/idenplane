@@ -17,10 +17,13 @@ services:
 
   app1:
     build: .
+    ports:
+      - '3001:3000'
     environment:
       DATABASE_URL: postgresql://authme:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/authme
       BASE_URL: http://localhost:8081
       NODE_ENV: production
+      ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_API_KEY: ${ADMIN_API_KEY:?Set ADMIN_API_KEY}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD}
     depends_on:
@@ -29,10 +32,13 @@ services:
 
   app2:
     build: .
+    ports:
+      - '3002:3000'
     environment:
       DATABASE_URL: postgresql://authme:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/authme
       BASE_URL: http://localhost:8081
       NODE_ENV: production
+      ADMIN_USER: ${ADMIN_USER:-admin}
       ADMIN_API_KEY: ${ADMIN_API_KEY:?Set ADMIN_API_KEY}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD}
     depends_on:
