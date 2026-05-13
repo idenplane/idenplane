@@ -621,6 +621,13 @@ export class AuthService {
       throw new UnauthorizedException('User not found');
     }
 
+    const lockStatus = this.bruteForceService.checkLocked(realm, user);
+    if (lockStatus.locked) {
+      throw new UnauthorizedException(
+        'Account is temporarily locked. Please try again later.',
+      );
+    }
+
     await this.enforceSessionLimit(realm, user.id);
 
     const session = await this.prisma.session.create({
