@@ -99,16 +99,16 @@ function createMockFile(name: string, type: string, size: number): File {
   return file;
 }
 
+const renderThemeBuilder = () => {
+  return render(
+    <ThemeBuilderPage />,
+    { routePattern: '/console/realms/:name/theme-builder' }
+  );
+};
+
 // ─── ThemeBuilderPage E2E Tests ─────────────────────────────────────────────
 
 describe('ThemeBuilderPage E2E Tests', () => {
-  const renderThemeBuilder = () => {
-    return render(
-      <ThemeBuilderPage />,
-      { routePattern: '/console/realms/:name/theme-builder' }
-    );
-  };
-
   describe('Rendering and Navigation', () => {
     it('renders the theme builder page with all main sections', () => {
       renderThemeBuilder();

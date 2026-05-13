@@ -19,10 +19,15 @@ import { SessionsService } from './sessions.service.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
+import {
+  RateLimitGuard,
+  RateLimitByIp,
+} from '../rate-limit/rate-limit.guard.js';
 
 @ApiTags('Sessions')
 @Controller('admin/realms/:realmName')
-@UseGuards(RealmGuard, AdminApiKeyGuard)
+@UseGuards(RealmGuard, AdminApiKeyGuard, RateLimitGuard)
+@RateLimitByIp()
 @ApiSecurity('admin-api-key')
 export class SessionsController {
   constructor(private readonly sessionsService: SessionsService) {}
@@ -57,10 +62,11 @@ export class SessionsController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Session not found' })
   revokeSession(
+    @CurrentRealm() realm: Realm,
     @Param('sessionId') sessionId: string,
     @Query('type') type: 'oauth' | 'sso' = 'oauth',
   ) {
-    return this.sessionsService.revokeSession(sessionId, type);
+    return this.sessionsService.revokeSession(realm, sessionId, type);
   }
 
   @Delete('users/:userId/sessions')

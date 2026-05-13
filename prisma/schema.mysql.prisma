@@ -1390,6 +1390,15 @@ model RevokedToken {
   @@map("revoked_tokens")
 }
 
+model AdminRevokedToken {
+  jti       String   @id @db.VarChar(191)
+  expiresAt DateTime @map("expires_at")
+  revokedAt DateTime @default(now()) @map("revoked_at")
+
+  @@index([expiresAt])
+  @@map("admin_revoked_tokens")
+}
+
 // ─── SERVICE ACCOUNTS ─────────────────────────────────────
 
 model ServiceAccount {
@@ -1976,6 +1985,11 @@ model NhiUsageStats {
   lastActiveAt  DateTime? @map("last_active_at")
   successCount  Int       @default(0) @map("success_count")
   errorCount    Int       @default(0) @map("error_count")
+  lastSuccessfulAt DateTime? @map("last_successful_at")
+  lastFailedAt      DateTime? @map("last_failed_at")
+  oldestCredentialAgeDays Int? @map("oldest_credential_age_days")
+  newestCredentialAgeDays Int? @map("newest_credential_age_days")
+  credentialsExpiringSoon Int @default(0) @map("credentials_expiring_soon")
   createdAt     DateTime  @default(now()) @map("created_at")
   updatedAt     DateTime  @updatedAt @map("updated_at")
 

@@ -157,7 +157,7 @@ export class SessionTerminationService {
 
     // Revoke the session via SessionsService
     try {
-      await this.sessionsService.revokeSession(profile.sessionId, 'oauth');
+      await this.sessionsService.revokeSession(null, profile.sessionId, 'oauth');
       this.logger.log(
         `Session ${profile.sessionId} revoked due to critical risk ` +
           `(user: ${session.user?.username ?? 'unknown'}, risk: ${profile.riskScore}, level: ${profile.riskLevel})`,
@@ -165,7 +165,7 @@ export class SessionTerminationService {
     } catch (error) {
       // If the session doesn't exist in the oauth table, try login session
       try {
-        await this.sessionsService.revokeSession(profile.sessionId, 'sso');
+        await this.sessionsService.revokeSession(null, profile.sessionId, 'sso');
         this.logger.log(
           `Login session ${profile.sessionId} revoked due to critical risk`,
         );

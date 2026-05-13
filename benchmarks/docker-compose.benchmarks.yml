@@ -101,7 +101,7 @@ services:
     networks:
       - benchmarks
     volumes:
-      - ./competitors/keycloak/realms:/opt/keycloak/data/havip/import
+      - ./keycloak/realms:/opt/keycloak/data/havip/import
 
   # Keycloak database
   keycloak-db:

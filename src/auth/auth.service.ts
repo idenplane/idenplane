@@ -689,7 +689,19 @@ export class AuthService {
     });
 
     if (!deviceCode || deviceCode.realmId !== realm.id) {
-      throw new BadRequestException('Invalid device code');
+      throw new BadRequestException('authorization_pending');
+    }
+
+    if (deviceCode.expiresAt < new Date()) {
+      throw new BadRequestException('authorization_pending');
+    }
+
+    if (deviceCode.denied) {
+      throw new BadRequestException('authorization_pending');
+    }
+
+    if (!deviceCode.approved || !deviceCode.userId) {
+      throw new BadRequestException('authorization_pending');
     }
 
     if (deviceCode.expiresAt < new Date()) {

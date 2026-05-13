@@ -52,6 +52,7 @@ export class AdminAuthController {
   }
 
   @Post('logout')
+  @Public()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Admin logout – revoke current token' })
   @ApiResponse({ status: 200, description: 'Logged out successfully' })
@@ -65,6 +66,7 @@ export class AdminAuthController {
   }
 
   @Get('me')
+  @Public()
   @ApiOperation({ summary: 'Get current admin user info' })
   @ApiResponse({ status: 200, description: 'Current admin user info' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })

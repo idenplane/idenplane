@@ -86,10 +86,11 @@ export class OAuthService {
       );
     }
 
-    // PKCE is required for all client types (OAuth 2.1 / RFC 7636)
-    if (!params.code_challenge) {
+    // PKCE is required for PUBLIC clients only (OAuth 2.1 / RFC 7636)
+    // Confidential clients are assumed to have secure storage for client secrets
+    if (client.clientType === 'PUBLIC' && !params.code_challenge) {
       throw new BadRequestException(
-        'PKCE (code_challenge) is required for all client types',
+        'PKCE (code_challenge) is required for public clients',
       );
     }
 

@@ -87,7 +87,8 @@ export class AuthController {
         const msg =
           typeof err.getResponse() === 'string'
             ? err.getResponse()
-            : (err.getResponse() as { message?: string }).message ?? 'invalid_request';
+            : ((err.getResponse() as { message?: string }).message ??
+              'invalid_request');
         res.status(400).json({ error: msg });
         return;
       }

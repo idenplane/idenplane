@@ -241,6 +241,7 @@ model User {
   sessions            Session[]
   loginSessions       LoginSession[]
   consents            UserConsent[]
+  consentHistories    UserConsentHistory[]
   federatedIdentities FederatedIdentity[]
   userGroups          UserGroup[]
   verificationTokens  VerificationToken[]
@@ -254,6 +255,7 @@ model User {
   attributes          UserAttribute[]
   loginRiskAssessments LoginRiskAssessment[]
   userLoginProfile    UserLoginProfile?
+  pendingDeletion     PendingDeletion?
   magicLinkRequests   MagicLinkRequest[]
   sessionRiskProfiles SessionRiskProfile[]
   behavioralBiometricProfile BehavioralBiometricProfile?
@@ -1320,6 +1322,7 @@ model LoginRiskAssessment {
   createdAt         DateTime @default(now()) @map("created_at")
 
   realm Realm @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([userId, createdAt])
   @@index([realmId, createdAt])
@@ -1340,6 +1343,7 @@ model UserLoginProfile {
   updatedAt         DateTime @updatedAt    @map("updated_at")
 
   realm Realm @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
 
   @@index([realmId])
   @@map("user_login_profiles")

@@ -5,6 +5,7 @@ import {
   NotFoundException,
   ForbiddenException,
   Inject,
+  Optional,
   forwardRef,
 } from '@nestjs/common';
 import {
@@ -24,6 +25,7 @@ import type { Realm, User, WebAuthnCredential } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
+import { BruteForceService } from '../brute-force/brute-force.service.js';
 
 export interface WebAuthnRegistrationChallenge {
   options: PublicKeyCredentialCreationOptionsJSON;
@@ -40,6 +42,7 @@ export class WebAuthnService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
+    @Optional() private readonly bruteForceService?: BruteForceService,
   ) {}
 
   // ─── Helpers ──────────────────────────────────────────────────────────
@@ -306,12 +309,20 @@ export class WebAuthnService {
       this.logger.warn(
         `WebAuthn authentication verification failed: ${err.message}`,
       );
+      await this.bruteForceService?.recordWebAuthnFailure(
+        realm,
+        credential.userId,
+      );
       throw new BadRequestException(
         'Authentication verification failed: ' + err.message,
       );
     }
 
     if (!verification.verified) {
+      await this.bruteForceService?.recordWebAuthnFailure(
+        realm,
+        credential.userId,
+      );
       throw new BadRequestException('Authentication verification failed');
     }
 

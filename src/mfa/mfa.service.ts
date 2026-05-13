@@ -6,6 +6,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { RedisService } from '../redis/redis.service.js';
+import { BruteForceService } from '../brute-force/brute-force.service.js';
 import type { Realm } from '@prisma/client';
 
 /** The shape of the JSON object stored in PendingAction.data for MFA challenges. */
@@ -30,6 +31,7 @@ export class MfaService {
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
     @Optional() private readonly redis?: RedisService,
+    @Optional() private readonly bruteForceService?: BruteForceService,
   ) {}
 
   private async markTotpCodeUsed(userId: string, code: string): Promise<void> {

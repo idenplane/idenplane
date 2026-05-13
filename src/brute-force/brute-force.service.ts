@@ -39,59 +39,53 @@ export class BruteForceService {
   ): Promise<void> {
     if (!realm.bruteForceEnabled) return;
 
-    await this.prisma.loginFailure.create({
-      data: { realmId: realm.id, userId, ipAddress: ipAddress ?? null },
-    });
-
-    // Count recent failures within the reset window.
-    // Ensure maxLoginFailures is at least 1 to prevent instant lockout on misconfiguration.
     const maxFailures = Math.max(realm.maxLoginFailures, 1);
-    const resetTime = Math.max(realm.failureResetTime, 1); // min 1 second window
-    const windowStart = new Date(Date.now() - resetTime * 1000);
-    const failureCount = await this.prisma.loginFailure.count({
-      where: {
-        realmId: realm.id,
-        userId,
-        failedAt: { gte: windowStart },
-      },
-    });
+    const resetTime = Math.max(realm.failureResetTime, 1);
+    const lockoutDuration = realm.lockoutDuration;
+    const permanentLockoutAfter = realm.permanentLockoutAfter;
 
-    this.logger.debug(
-      `Brute force: user=${userId} failures=${failureCount}/${maxFailures} window=${resetTime}s`,
-    );
+    await this.prisma.$transaction(async (tx) => {
+      await tx.loginFailure.create({
+        data: { realmId: realm.id, userId, ipAddress: ipAddress ?? null },
+      });
 
-    if (failureCount >= maxFailures) {
-      // Check if permanent lockout is configured
-      if (realm.permanentLockoutAfter > 0) {
-        // Count total lockouts (approximate by counting failure bursts)
-        const totalFailures = await this.prisma.loginFailure.count({
+      const windowStart = new Date(Date.now() - resetTime * 1000);
+      const failureCount = await tx.loginFailure.count({
+        where: {
+          realmId: realm.id,
+          userId,
+          failedAt: { gte: windowStart },
+        },
+      });
+
+      if (failureCount < maxFailures) return;
+
+      if (permanentLockoutAfter > 0) {
+        const totalFailures = await tx.loginFailure.count({
           where: { realmId: realm.id, userId },
         });
         const lockoutCount = Math.floor(totalFailures / maxFailures);
 
-        if (lockoutCount >= realm.permanentLockoutAfter) {
-          // Permanent lock — set far future date but do NOT disable the account.
-          // Disabling prevents admin unlock from working and creates a DoS vector.
-          await this.prisma.user.update({
+        if (lockoutCount >= permanentLockoutAfter) {
+          await tx.user.update({
             where: { id: userId },
             data: { lockedUntil: new Date('2099-12-31T23:59:59Z') },
           });
           this.logger.warn(
-            `User ${userId} in realm ${realm.id} permanently locked after ${lockoutCount} lockout cycles. ` +
-              `Admin action required to unlock via POST /admin/realms/:realm/users/:userId/unlock`,
+            `User ${userId} in realm ${realm.id} permanently locked after ${lockoutCount} lockout cycles`,
           );
           await this.sendLockoutNotification(realm, userId, true);
           return;
         }
       }
 
-      const lockedUntil = new Date(Date.now() + realm.lockoutDuration * 1000);
-      await this.prisma.user.update({
+      const lockedUntil = new Date(Date.now() + lockoutDuration * 1000);
+      await tx.user.update({
         where: { id: userId },
         data: { lockedUntil },
       });
       await this.sendLockoutNotification(realm, userId, false);
-    }
+    });
   }
 
   async resetFailures(realmId: string, userId: string): Promise<void> {
@@ -107,6 +101,51 @@ export class BruteForceService {
   async resetTotpFailures(realmId: string, userId: string): Promise<void> {
     await this.prisma.totpFailureTracking.deleteMany({
       where: { userId },
+    });
+  }
+
+  async recordWebAuthnFailure(
+    realm: Realm,
+    userId: string,
+    ipAddress?: string | null,
+  ): Promise<void> {
+    if (!realm.bruteForceEnabled) return;
+
+    await this.prisma.webAuthnFailureTracking.create({
+      data: { realmId: realm.id, userId, ipAddress: ipAddress ?? null },
+    });
+
+    const maxFailures = Math.max(realm.maxLoginFailures, 1);
+    const resetTime = Math.max(realm.failureResetTime, 1);
+    const windowStart = new Date(Date.now() - resetTime * 1000);
+
+    const failureCount = await this.prisma.webAuthnFailureTracking.count({
+      where: {
+        realmId: realm.id,
+        userId,
+        failedAt: { gte: windowStart },
+      },
+    });
+
+    this.logger.debug(
+      `WebAuthn brute force: user=${userId} failures=${failureCount}/${maxFailures} window=${resetTime}s`,
+    );
+
+    if (failureCount >= maxFailures) {
+      const lockedUntil = new Date(Date.now() + realm.lockoutDuration * 1000);
+      await this.prisma.user.update({
+        where: { id: userId },
+        data: { lockedUntil },
+      });
+      this.logger.warn(
+        `User ${userId} in realm ${realm.id} locked due to WebAuthn brute-force attempts`,
+      );
+    }
+  }
+
+  async resetWebAuthnFailures(realmId: string, userId: string): Promise<void> {
+    await this.prisma.webAuthnFailureTracking.deleteMany({
+      where: { realmId, userId },
     });
   }
 
@@ -295,6 +334,14 @@ export class BruteForceService {
       });
     if (totpCount > 0) {
       this.logger.debug(`Cleaned up ${totpCount} old TOTP failure records`);
+    }
+
+    const { count: webauthnCount } =
+      await this.prisma.webAuthnFailureTracking.deleteMany({
+        where: { failedAt: { lt: cutoff } },
+      });
+    if (webauthnCount > 0) {
+      this.logger.debug(`Cleaned up ${webauthnCount} old WebAuthn failure records`);
     }
   }
 }
