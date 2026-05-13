@@ -1,12 +1,5 @@
-import {
-  IsString,
-  IsOptional,
-  IsBoolean,
-  IsObject,
-  IsInt,
-  Min,
-} from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsString, IsOptional, IsObject } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateThemeDto {
   @ApiProperty({ example: 'my-custom-theme' })

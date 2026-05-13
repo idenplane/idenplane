@@ -1,5 +1,5 @@
-import { IsString, IsOptional, IsBoolean, IsObject } from 'class-validator';
-import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsString, IsOptional, IsObject } from 'class-validator';
+import { ApiPropertyOptional } from '@nestjs/swagger';
 
 export class UpdateThemeDto {
   @ApiPropertyOptional({ example: 'Updated Theme Name' })
