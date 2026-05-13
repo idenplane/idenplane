@@ -37,7 +37,7 @@ export class DatabaseService
     if (provider === DatabaseProvider.POSTGRESQL) {
       // Lazy-import the pg adapter so that the package only needs to be
       // installed when actually running against PostgreSQL.
-
+      // eslint-disable-next-line @typescript-eslint/no-require-imports -- lazy loading pg adapter
       const { PrismaPg } =
         require('@prisma/adapter-pg') as typeof import('@prisma/adapter-pg');
       const adapter = new PrismaPg({ connectionString: url });

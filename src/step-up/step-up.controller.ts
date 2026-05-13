@@ -84,6 +84,7 @@ export class StepUpController {
   ) {
     // Read the session token from the HttpOnly cookie so it is never exposed
     // in URLs (access logs, browser history, Referer headers).
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-member-access -- express Request.cookies typed as any
     const sessionToken: string | undefined = (req as any).cookies
       ?.AUTHME_SESSION;
 
@@ -222,6 +223,7 @@ export class StepUpController {
     // Read the session token from the HttpOnly cookie — never from the request
     // body.  Accepting it in the body would allow it to be transmitted in URLs
     // or plain-text POST bodies, exposing it in server logs and browser history.
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-member-access -- express Request.cookies typed as any
     const session_token: string | undefined = (req as any).cookies
       ?.AUTHME_SESSION;
     const { acr, client_id, mfa_token, otp, password } = body;
@@ -430,9 +432,10 @@ export class StepUpController {
           clientExtensionResults: {},
         });
         verifiedUser = result.user;
-      } catch (err: any) {
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
         throw new UnauthorizedException(
-          'WebAuthn verification failed: ' + err.message,
+          'WebAuthn verification failed: ' + message,
         );
       }
 
