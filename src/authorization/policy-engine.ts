@@ -185,8 +185,8 @@ export function evaluateCondition(
       return {
         passed,
         reason: passed
-          ? `"${condition.field}" contains "${expected}"`
-          : `"${condition.field}" does not contain "${expected}"`,
+          ? `"${condition.field}" contains "${String(expected)}"`
+          : `"${condition.field}" does not contain "${String(expected)}"`,
       };
     }
 
@@ -202,7 +202,7 @@ export function evaluateCondition(
         passed,
         reason: passed
           ? `"${condition.field}" is in [${expected.join(', ')}]`
-          : `"${condition.field}" ("${actual}") is not in [${expected.join(', ')}]`,
+          : `"${condition.field}" ("${String(actual)}") is not in [${expected.join(', ')}]`,
       };
     }
 
@@ -218,7 +218,7 @@ export function evaluateCondition(
         passed,
         reason: passed
           ? `"${condition.field}" is not in [${expected.join(', ')}]`
-          : `"${condition.field}" ("${actual}") is in [${expected.join(', ')}]`,
+          : `"${condition.field}" ("${String(actual)}") is in [${expected.join(', ')}]`,
       };
     }
 
@@ -275,8 +275,8 @@ export function evaluateCondition(
       return {
         passed,
         reason: passed
-          ? `"${condition.field}" matches /${expected}/`
-          : `"${condition.field}" ("${actual}") does not match /${expected}/`,
+          ? `"${condition.field}" matches /${String(expected)}/`
+          : `"${condition.field}" ("${String(actual)}") does not match /${String(expected)}/`,
       };
     }
 
@@ -300,7 +300,7 @@ export function evaluateCondition(
     default:
       return {
         passed: false,
-        reason: `unknown operator "${condition.operator}"`,
+        reason: `unknown operator "${String(condition.operator)}"`,
       };
   }
 }

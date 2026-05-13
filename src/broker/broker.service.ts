@@ -240,20 +240,19 @@ export class BrokerService {
 
     const data = (await response.json()) as Record<string, unknown>;
 
+    const subject = data['sub'] ?? data['id'] ?? '';
+    const givenName = data['given_name'] ?? data['first_name'] ?? '';
+    const familyName = data['family_name'] ?? data['last_name'] ?? '';
+    const preferredUsername = data['preferred_username'] ?? data['login'] ?? '';
+
     return {
-      sub: String(data['sub'] ?? data['id'] ?? ''),
+      sub: String(subject),
       email: data['email'] as string | undefined,
       emailVerified: data['email_verified'] as boolean | undefined,
       name: data['name'] as string | undefined,
-      givenName: (data['given_name'] ?? data['first_name']) as
-        | string
-        | undefined,
-      familyName: (data['family_name'] ?? data['last_name']) as
-        | string
-        | undefined,
-      preferredUsername: (data['preferred_username'] ?? data['login']) as
-        | string
-        | undefined,
+      givenName: String(givenName),
+      familyName: String(familyName),
+      preferredUsername: String(preferredUsername),
     };
   }
 

@@ -203,9 +203,11 @@ export class FlowExecutorService {
         // records them as "pending" and the dedicated controller completes them.
         return { success: true, data: { pending: true, stepType: step.type } };
 
-      default:
-        this.logger.warn(`Unknown step type: ${step.type}`);
+      default: {
+        const stepType = step.type as string;
+        this.logger.warn(`Unknown step type: ${stepType}`);
         return { success: false };
+      }
     }
   }
 
@@ -268,10 +270,10 @@ export class FlowExecutorService {
     return { success: totpOk };
   }
 
-  private async handleWebAuthnStep(
+  private handleWebAuthnStep(
     credentials: Record<string, unknown>,
     session: FlowSession,
-  ): Promise<{ success: boolean; data?: Record<string, unknown> }> {
+  ): { success: boolean; data?: Record<string, unknown> } {
     // The WebAuthn assertion is completed by the /webauthn/authenticate endpoint.
     // If the assertion result is already on the context (placed there by that
     // controller), we accept it here.
@@ -295,6 +297,7 @@ export class FlowExecutorService {
   private async advanceSession(
     session: FlowSession,
     completedStep: FlowStep,
+    // eslint-disable-next-line @typescript-eslint/no-unused-vars
     _success: boolean,
   ): Promise<StepResult> {
     session.completedStepIds.push(completedStep.id);
