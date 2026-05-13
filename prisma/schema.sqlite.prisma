@@ -383,11 +383,16 @@ model RefreshToken {
   revoked   Boolean @default(false)
   isOffline Boolean @default(false) @map("is_offline")
 
+  /// The client that was granted this refresh token (security fix #456).
+  /// Nullable for backwards compatibility with tokens created before this migration.
+  clientId  String? @map("client_id")
+
   createdAt DateTime @default(now()) @map("created_at")
   expiresAt DateTime @map("expires_at")
 
   session Session @relation(fields: [sessionId], references: [id], onDelete: Cascade)
 
+  @@index([sessionId])
   @@map("refresh_tokens")
 }
 
@@ -1863,4 +1868,223 @@ model RegistrationField {
   @@unique([realmId, name])
   @@index([realmId])
   @@map("registration_fields")
+}
+
+// ─── DEVICE POSTURE RECORDS ─────────────────────────────
+
+model DevicePostureRecord {
+  id                String @id @default(uuid())
+  sessionId         String @map("session_id")
+  realmId           String @map("realm_id")
+  userId            String @map("user_id")
+  deviceFingerprint String @map("device_fingerprint")
+
+  osType    String? @map("os_type")
+  osVersion String? @map("os_version")
+  osBuild   String? @map("os_build")
+
+  securityPatchLevel String?   @map("security_patch_level")
+  lastUpdateDate     DateTime? @map("last_update_date")
+
+  diskEncrypted  Boolean? @map("disk_encrypted")
+  encryptionType String?  @map("encryption_type")
+
+  antivirusEnabled Boolean? @map("antivirus_enabled")
+  antivirusName    String?  @map("antivirus_name")
+  firewallEnabled  Boolean? @map("firewall_enabled")
+
+  screenLockEnabled  Boolean @default(false) @map("screen_lock_enabled")
+  lockTimeoutSeconds Int?    @map("lock_timeout_seconds")
+
+  managedDevice   Boolean @default(false) @map("managed_device")
+  mdmEnrollmentId String? @map("mdm_enrollment_id")
+
+  jailbroken Boolean @default(false)
+
+  deviceTrustTier String @default("UNKNOWN") @map("device_trust_tier")
+
+  complianceStatus  String? @map("compliance_status")
+  // SQLite: Json? → String? (JSON-serialised text)
+  complianceDetails String? @map("compliance_details")
+
+  reportedAt DateTime @default(now()) @map("reported_at")
+
+  @@index([sessionId])
+  @@index([realmId])
+  @@index([userId])
+  @@index([deviceFingerprint])
+  @@index([realmId, deviceTrustTier])
+  @@map("device_posture_records")
+}
+
+// ─── NETWORK CONTEXT RECORDS ─────────────────────────────
+
+model NetworkContextRecord {
+  id        String @id @default(uuid())
+  sessionId String @map("session_id")
+  realmId   String @map("realm_id")
+  userId    String @map("user_id")
+
+  ipAddress    String  @map("ip_address")
+  ipVersion    Int?    @map("ip_version")
+  geoCountry   String? @map("geo_country")
+  geoCity      String? @map("geo_city")
+  geoLatitude  Float?  @map("geo_latitude")
+  geoLongitude Float?  @map("geo_longitude")
+  asn          String? @map("asn")
+  isp          String? @map("isp")
+
+  networkType String? @map("network_type")
+  ispCategory String? @map("isp_category")
+
+  isVpn   Boolean @default(false) @map("is_vpn")
+  isProxy Boolean @default(false) @map("is_proxy")
+  isTor   Boolean @default(false) @map("is_tor")
+
+  connectionType String? @map("connection_type")
+  mtu            Int?    @map("mtu")
+
+  ipReputationScore String  @default("UNKNOWN") @map("ip_reputation")
+  geoVelocity       String? @map("geo_velocity")
+  isDatacenter      Boolean @default(false) @map("is_datacenter")
+
+  geoChanged       Boolean @default(false) @map("geo_changed")
+  // SQLite: Json? → String? (JSON-serialised text)
+  geoChangeDetails String? @map("geo_change_details")
+
+  capturedAt DateTime @default(now()) @map("captured_at")
+
+  @@index([sessionId])
+  @@index([realmId])
+  @@index([userId])
+  @@index([ipAddress])
+  @@index([capturedAt])
+  @@map("network_context_records")
+}
+
+// ─── BEHAVIORAL BIOMETRICS ────────────────────────────────
+
+model BehavioralSample {
+  id        String @id @default(uuid())
+  userId    String @map("user_id")
+  sessionId String @map("session_id")
+
+  interactionType String @map("interaction_type")
+
+  // SQLite: Json? → String? (JSON-serialised text)
+  keystrokeDurations String? @map("keystroke_durations")
+  burstLength        Int?  @map("burst_length")
+
+  velocity        Float? @map("velocity")
+  acceleration    Float? @map("acceleration")
+  trajectoryAngle Float? @map("trajectory_angle")
+  curvature       Float? @map("curvature")
+
+  pageUrl        String? @map("page_url")
+  focusedElement String? @map("focused_element")
+
+  anomalyScore Float   @default(0) @map("anomaly_score")
+  isAnomalous  Boolean @default(false) @map("is_anomalous")
+
+  collectedAt DateTime @default(now()) @map("collected_at")
+
+  @@index([userId, collectedAt])
+  @@index([sessionId])
+  @@index([userId, interactionType])
+  @@map("behavioral_samples")
+}
+
+// ─── CONTINUOUS RISK EVENTS ──────────────────────────────
+
+model ContinuousRiskEvent {
+  id        String  @id @default(uuid())
+  sessionId String  @map("session_id")
+  realmId   String  @map("realm_id")
+  userId    String  @map("user_id")
+  clientId  String? @map("client_id")
+
+  evaluationType String  @map("evaluation_type")
+  triggerReason  String? @map("trigger_reason")
+
+  riskScoreBefore  Int    @map("risk_score_before")
+  riskScoreAfter   Int    @map("risk_score_after")
+  riskLevelBefore  String @map("risk_level_before")
+  riskLevelAfter   String @map("risk_level_after")
+  trustScoreBefore Float  @map("trust_score_before")
+  trustScoreAfter  Float  @map("trust_score_after")
+
+  // SQLite: Json → String (JSON-serialised text)
+  signals           String @map("signals")
+  // SQLite: Json? → String? (JSON-serialised text)
+  policyEvaluations String? @map("policy_evaluations")
+
+  action       String  @map("action")
+  actionReason String? @map("action_reason")
+
+  stepUpSessionId String? @map("step_up_session_id")
+
+  evaluatedAt DateTime @default(now()) @map("evaluated_at")
+
+  @@index([sessionId])
+  @@index([realmId])
+  @@index([userId])
+  @@index([evaluatedAt])
+  @@index([realmId, action])
+  @@map("continuous_risk_events")
+}
+
+// ─── ADMIN REVOKED TOKENS ────────────────────────────────
+
+model AdminRevokedToken {
+  jti       String   @id
+  expiresAt DateTime @map("expires_at")
+  revokedAt DateTime @default(now()) @map("revoked_at")
+
+  @@index([expiresAt])
+  @@map("admin_revoked_tokens")
+}
+
+// ─── UPGRADE AUDIT ─────────────────────────────────────────
+
+model UpgradeAuditLog {
+  id                String    @id @default(uuid())
+  fromVersion       String    @map("from_version")
+  toVersion         String    @map("to_version")
+  status            String
+  startedAt         DateTime  @default(now()) @map("started_at")
+  completedAt       DateTime? @map("completed_at")
+  initiatedBy       String    @map("initiated_by")
+  backupId          String?   @map("backup_id")
+  backupPath        String?   @map("backup_path")
+  backupSize        String?   @map("backup_size")
+  ipAddress         String?   @map("ip_address")
+  dryRun            Boolean   @default(false) @map("dry_run")
+  rollbackTriggered Boolean   @default(false) @map("rollback_triggered")
+  // SQLite: Json? → String? (JSON-serialised text)
+  details           String?   @map("details")
+  createdAt         DateTime  @default(now()) @map("created_at")
+  updatedAt         DateTime  @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([startedAt])
+  @@index([fromVersion, toVersion])
+  @@map("upgrade_audit_log")
+}
+
+// ─── RATE LIMIT ENTRIES (cluster-safe fallback) ────────────────
+
+model RateLimitEntry {
+  id        String   @id @default(uuid())
+  key       String   @unique @map("key")
+  minuteCount      Int      @default(0) @map("minute_count")
+  minuteWindowStart DateTime @default(now()) @map("minute_window_start")
+  hourCount        Int      @default(0) @map("hour_count")
+  hourWindowStart   DateTime @default(now()) @map("hour_window_start")
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  @@index([key])
+  @@index([minuteWindowStart])
+  @@index([hourWindowStart])
+  @@map("rate_limit_entries")
 }
