@@ -48,9 +48,14 @@ export class WebAuthnController {
   ) {}
 
   private async getSessionUser(realm: Realm, req: Request) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- express Request.cookies typed as any
     const sessionToken = req.cookies?.['AUTHME_SESSION'];
     if (!sessionToken) return null;
-    return this.loginService.validateLoginSession(realm, sessionToken);
+
+    return this.loginService.validateLoginSession(
+      realm,
+      sessionToken as string,
+    );
   }
 
   // ─── Registration ──────────────────────────────────────────────
@@ -131,7 +136,6 @@ export class WebAuthnController {
   async startAuthentication(
     @CurrentRealm() realm: Realm,
     @Body() body: StartAuthenticationDto,
-    @Req() req: Request,
   ) {
     // Look up userId if username given (for autofill / non-resident-key flow)
     let userId: string | undefined;
