@@ -27,5 +27,5 @@ export class RenderThemePreviewDto {
   })
   @IsOptional()
   @IsObject()
-  settings?: Record<string, unknown>;
+  settings?: Record<string, string>;
 }

@@ -24,7 +24,7 @@ export class ThemePreviewService {
 
     // Extract theme values with fallbacks
     const colors = (styles['colors'] as Record<string, string>) || {};
-    const typography = (styles['typography'] as Record<string, unknown>) || {};
+    const typography = (styles['typography'] as Record<string, string>) || {};
     const spacing = (styles['spacing'] as Record<string, string>) || {};
     const borders = (styles['borders'] as Record<string, string>) || {};
     const shadows = (styles['shadows'] as Record<string, string>) || {};

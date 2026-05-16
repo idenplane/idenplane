@@ -52,6 +52,6 @@ export function createLoggerConfig(): Params {
           req.url?.startsWith('/health') ||
           req.url?.startsWith('/admin/metrics'),
       },
-    },
+    } as any,
   };
 }

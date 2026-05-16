@@ -198,7 +198,7 @@ export class UpgradeHealthService {
   /**
    * Verify that all migrations have been applied.
    */
-  private checkMigrationsApplied(): Promise<UpgradeHealthCheck> {
+  private checkMigrationsApplied(): UpgradeHealthCheck {
     try {
       const output = execSync('npx prisma migrate status 2>&1', {
         encoding: 'utf-8',

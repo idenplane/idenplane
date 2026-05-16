@@ -136,7 +136,7 @@ export class PreUpgradeValidatorService {
   /**
    * Check for pending Prisma migrations.
    */
-  private checkPendingMigrations(): Promise<PreUpgradeCheck> {
+  private checkPendingMigrations(): PreUpgradeCheck {
     try {
       const output = execSync('npx prisma migrate status 2>&1', {
         encoding: 'utf-8',
@@ -200,7 +200,7 @@ export class PreUpgradeValidatorService {
    * Check available disk space for backups.
    * Requires at least 1GB of free space.
    */
-  private checkDiskSpace(): Promise<PreUpgradeCheck> {
+  private checkDiskSpace(): PreUpgradeCheck {
     try {
       const output = execSync('df -k . 2>&1', {
         encoding: 'utf-8',

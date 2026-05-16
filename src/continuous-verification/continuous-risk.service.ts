@@ -561,7 +561,7 @@ export class ContinuousRiskAssessmentService {
       cooldownSeconds: number;
     }[],
     lastEvaluatedAt: Date | null,
-  ): Promise<PolicyEvaluationResult[]> {
+  ): PolicyEvaluationResult[] {
     const results: PolicyEvaluationResult[] = [];
     const signalMap = new Map(signals.map((s) => [s.name, s]));
 

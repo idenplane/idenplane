@@ -328,7 +328,7 @@ export class SmsOtpService {
    * Runs every 15 minutes.
    */
   @Interval(900_000) // every 15 minutes
-  cleanupOtpLockoutStore(): Promise<void> {
+  cleanupOtpLockoutStore(): void {
     const now = Date.now();
 
     for (const [key, entry] of this.otpLockoutStore.entries()) {
@@ -674,7 +674,7 @@ export class SmsOtpService {
    * Runs every 15 minutes.
    */
   @Interval(900_000) // every 15 minutes
-  cleanupRateLimitStore(): Promise<void> {
+  cleanupRateLimitStore(): void {
     const now = Date.now();
     const windowMs = 16 * 60 * 1000; // 16 minutes (slightly longer than max window)
 

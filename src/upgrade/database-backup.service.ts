@@ -54,7 +54,7 @@ export class DatabaseBackupService {
    * @param label Optional label for the backup (e.g., 'pre-upgrade-v2.1.0')
    * @returns BackupResult with success status and backup details
    */
-  createBackup(label?: string): Promise<BackupResult> {
+  createBackup(label?: string): BackupResult {
     const startTime = Date.now();
     const timestamp = new Date();
     const timestampStr = timestamp.toISOString().replace(/[:.]/g, '-');
@@ -121,7 +121,7 @@ export class DatabaseBackupService {
    * @param backupPath Path to the backup file (.sql or .sql.gz)
    * @returns BackupResult with restore status
    */
-  restoreBackup(backupPath: string): Promise<BackupResult> {
+  restoreBackup(backupPath: string): BackupResult {
     const startTime = Date.now();
     const timestamp = new Date();
 

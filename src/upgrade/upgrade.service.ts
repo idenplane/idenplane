@@ -556,7 +556,7 @@ export class UpgradeService {
   /**
    * Run Prisma database migrations.
    */
-  private runDatabaseMigration(
+  private async runDatabaseMigration(
     toVersion: string,
   ): Promise<{ success: boolean; message: string; details?: string }> {
     try {
@@ -757,7 +757,7 @@ export class UpgradeService {
   /**
    * Get the current AuthMe version.
    */
-  getCurrentVersion(): Promise<string> {
+  async getCurrentVersion(): Promise<string> {
     try {
       // Try to read version from package.json
       const output = execSync(
