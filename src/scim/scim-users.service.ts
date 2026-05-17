@@ -513,7 +513,7 @@ export class ScimUsersService {
    */
   private emptyListResponse(
     startIndex: number,
-    count: number,
+    _count: number,
   ): ScimListResponse<ScimUser> {
     return {
       schemas: ['urn:scim:schemas:core:1.0:ListResponse'],
