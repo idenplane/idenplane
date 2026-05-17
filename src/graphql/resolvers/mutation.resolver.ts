@@ -183,7 +183,7 @@ export class MutationResolver {
     @Args('roleNames', { type: () => [String] }) roleNames: string[],
   ): Promise<Role[]> {
     const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
-    const result = await this.rolesService.assignRealmRoles(
+    const _result = await this.rolesService.assignRealmRoles(
       realm,
       userId,
       roleNames,

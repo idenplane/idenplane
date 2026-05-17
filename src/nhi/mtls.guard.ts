@@ -3,7 +3,6 @@ import {
   ExecutionContext,
   Injectable,
   UnauthorizedException,
-  ForbiddenException,
   HttpException,
   Logger,
 } from '@nestjs/common';

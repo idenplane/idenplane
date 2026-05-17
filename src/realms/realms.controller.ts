@@ -26,7 +26,6 @@ import { ThemeService } from '../theme/theme.service.js';
 import { ThemeEmailService } from '../theme/theme-email.service.js';
 import { CreateRealmDto } from './dto/create-realm.dto.js';
 import { UpdateRealmDto } from './dto/update-realm.dto.js';
-import { IsEmail } from 'class-validator';
 import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
 import { AdminRolesGuard } from '../common/guards/admin-roles.guard.js';
 import { RequireAdminRoles } from '../common/decorators/require-admin-roles.decorator.js';

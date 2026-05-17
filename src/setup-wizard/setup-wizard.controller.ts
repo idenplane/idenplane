@@ -164,7 +164,7 @@ export class SetupWizardController {
     status: 400,
     description: 'SMTP not configured or test failed',
   })
-  async testSmtp(@Body() dto: SmtpTestDto) {
+  async testSmtp(@Body() _dto: SmtpTestDto) {
     // Get current wizard state to check SMTP config
     const state = await this.wizardService.getWizardState();
 

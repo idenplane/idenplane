@@ -8,7 +8,6 @@ import {
   NotFoundException,
   ConflictException,
   Logger,
-  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { EventsService } from '../events/events.service.js';
@@ -185,7 +184,7 @@ export class ScimGroupsService {
       }
     }
 
-    const group = await this.prisma.group.update({
+    const _group = await this.prisma.group.update({
       where: { id: groupId },
       data: {
         name: scimGroup.displayName,
@@ -414,7 +413,7 @@ export class ScimGroupsService {
    */
   private emptyListResponse(
     startIndex: number,
-    count: number,
+    _count: number,
   ): ScimListResponse<ScimGroup> {
     return {
       schemas: ['urn:scim:schemas:core:1.0:ListResponse'],
