@@ -5,7 +5,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import type { Realm, NhiCredentialType } from '@prisma/client';
+import type { Realm } from '@prisma/client';
 import {
   createHash,
   randomBytes,
@@ -22,7 +22,6 @@ import {
   CertificateInfoDto,
   GenerateCertificateDto,
   CertificateKeyAlgorithm,
-  CertificateFormat,
 } from './dto/certificate.dto.js';
 import { CreateNhiCredentialPolicyDto } from './dto/create-nhi-credential-policy.dto.js';
 import { UpdateNhiCredentialPolicyDto } from './dto/update-nhi-credential-policy.dto.js';
@@ -30,7 +29,6 @@ import {
   BulkRegistrationDto,
   BulkRegistrationResponseDto,
   BulkRegistrationResultItemDto,
-  BulkDeviceItemDto,
 } from './dto/bulk-registration.dto.js';
 
 // ── Select projections ────────────────────────────────────────────────────────
@@ -872,16 +870,16 @@ export class NhiService {
     isCA: boolean;
   }): string {
     // Create a sign object for signing the certificate data
-    const sign = createSign(options.signingAlgorithm);
+    const _sign = createSign(options.signingAlgorithm);
 
     // Build the TBSCertificate (To-Be-Signed) components
-    const version = 'v3';
-    const signatureAlgorithm = options.signingAlgorithm.includes('RSA')
+    const _version = 'v3';
+    const _signatureAlgorithm = options.signingAlgorithm.includes('RSA')
       ? 'sha256WithRSAEncryption'
       : 'ecdsa-with-SHA256';
 
     // Format dates in ASN.1 format
-    const formatDate = (d: Date) => {
+    const _formatDate = (d: Date) => {
       const pad = (n: number) => String(n).padStart(2, '0');
       const y = d.getUTCFullYear();
       const m = pad(d.getUTCMonth() + 1);
@@ -935,7 +933,7 @@ export class NhiService {
 
     const sign = createSign(options.signingAlgorithm);
     sign.update(certData);
-    const signature = sign.sign(options.privateKeyPem);
+    const _signature = sign.sign(options.privateKeyPem);
 
     // Create a self-signed certificate representation
     // In production, use proper ASN.1 DER encoding with node-forge

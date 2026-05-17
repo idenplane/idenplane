@@ -7,7 +7,6 @@ import {
   Req,
   Res,
   UseGuards,
-  BadRequestException,
   Logger,
 } from '@nestjs/common';
 import { ApiExcludeController, ApiResponse } from '@nestjs/swagger';

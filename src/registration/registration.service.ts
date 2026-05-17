@@ -129,21 +129,6 @@ export class RegistrationService {
 
     // Check password history
     const passwordHash = await this.crypto.hashPassword(dto.password);
-    if (realm.passwordHistoryCount > 0) {
-      const inHistory = await this.passwordPolicyService.checkHistory(
-        dto.username,
-        realm.id,
-        dto.password,
-        realm.passwordHistoryCount,
-      );
-      if (inHistory) {
-        throw new BadRequestException(
-          'Password was used recently. Choose a different password.',
-        );
-      }
-    }
-
-    // Create user (disabled if approval required, otherwise enabled)
     const requiresApproval = realm.registrationApprovalRequired;
     const userEnabled = !requiresApproval;
 

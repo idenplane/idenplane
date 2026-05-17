@@ -1,6 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import { createHmac } from 'crypto';
 
 export enum CaptchaProvider {
   RECAPTCHA = 'recaptcha',

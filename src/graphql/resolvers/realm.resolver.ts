@@ -1,4 +1,4 @@
-import { Resolver, Query, Args, Int, Context } from '@nestjs/graphql';
+import { Resolver, Query, Args, Int } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { Realm } from '../types/realm.type.js';
 import { RealmsService } from '../../realms/realms.service.js';

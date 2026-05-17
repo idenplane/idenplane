@@ -1,7 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
-import type { Auth0Export, Auth0User, Auth0Client } from './auth0-types.js';
+import type { Auth0Export, Auth0User } from './auth0-types.js';
 import { createEmptyReport, type MigrationReport } from './migration-report.js';
 
 export interface Auth0ImportOptions {

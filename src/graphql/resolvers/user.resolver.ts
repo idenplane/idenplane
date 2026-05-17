@@ -1,4 +1,4 @@
-import { Resolver, Query, Args, Int, Context } from '@nestjs/graphql';
+import { Resolver, Query, Args, Int } from '@nestjs/graphql';
 import { UseGuards } from '@nestjs/common';
 import { User } from '../types/user.type.js';
 import { UsersService } from '../../users/users.service.js';

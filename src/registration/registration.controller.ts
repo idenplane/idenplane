@@ -9,9 +9,7 @@ import {
   Query,
   UseGuards,
   HttpCode,
-  HttpStatus,
   BadRequestException,
-  ForbiddenException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -111,7 +109,7 @@ export class RegistrationController {
     @CurrentRealm() realm: Realm,
     @Body() dto: ResendVerificationDto,
   ) {
-    const result = await this.registrationService.resendVerificationEmail(
+    const _result = await this.registrationService.resendVerificationEmail(
       realm,
       dto.email,
     );

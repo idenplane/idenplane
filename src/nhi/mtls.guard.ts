@@ -5,7 +5,6 @@ import {
   UnauthorizedException,
   ForbiddenException,
   HttpException,
-  HttpStatus,
   Logger,
 } from '@nestjs/common';
 import { Reflector } from '@nestjs/core';

@@ -7,7 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { EmailService } from '../email/email.service.js';
-import { MagicLinkRequest, MagicLinkStatus, User, Realm } from '@prisma/client';
+import { MagicLinkStatus } from '@prisma/client';
 
 @Injectable()
 export class MagicLinkService {
@@ -272,7 +272,7 @@ export class MagicLinkService {
     templateName?: string | null,
   ): string {
     const primaryColor = this.extractPrimaryColor(realm.theme);
-    const template = templateName ?? 'magic-link';
+    const _template = templateName ?? 'magic-link';
 
     // Inline HTML template - simple and self-contained
     return `
