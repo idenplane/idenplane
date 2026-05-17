@@ -47,6 +47,7 @@ export class MutationResolver {
       lastName: input.lastName,
       enabled: input.enabled,
     };
+    /* eslint-disable @typescript-eslint/no-unsafe-argument */
     return this.usersService.create(realm, dto);
   }
 
@@ -115,7 +116,7 @@ export class MutationResolver {
     @Args('clientId') clientId: string,
     @Args('input') input: UpdateClientInput,
   ): Promise<Client> {
-    const realm = { id: realmId, name: '' } as any;
+    const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
     const dto = {
       name: input.name,
       description: input.description,
@@ -206,7 +207,7 @@ export class MutationResolver {
 
   @Mutation(() => Group)
   async createGroup(@Args('input') input: CreateGroupInput): Promise<Group> {
-    const realm = { id: input.realmId, name: '' } as any;
+    const realm = { id: input.realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
     const dto = {
       name: input.name,
       description: input.description,
@@ -221,7 +222,7 @@ export class MutationResolver {
     @Args('groupId') groupId: string,
     @Args('input') input: UpdateGroupInput,
   ): Promise<Group> {
-    const realm = { id: realmId, name: '' } as any;
+    const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
     const dto = {
       name: input.name,
       description: input.description,
@@ -268,7 +269,7 @@ export class MutationResolver {
   async createOrganization(
     @Args('input') input: CreateOrganizationInput,
   ): Promise<Organization> {
-    const realm = { id: input.realmId, name: '' } as any;
+    const realm = { id: input.realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
     const dto = {
       name: input.name,
       slug: input.slug,

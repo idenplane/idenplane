@@ -4,7 +4,7 @@
 
 // Mock class-validator to prevent errors when decorators try to use undefined validators
 jest.mock('class-validator', () => {
-  const validators: Record<string, Function> = {
+  const validators: Record<string, (args?: unknown) => void> = {
     IsString: () => () => {},
     IsOptional: () => () => {},
     IsEnum: () => () => {},
@@ -35,7 +35,9 @@ jest.mock('class-validator', () => {
 
 // Mock class-transformer
 jest.mock('class-transformer', () => ({
-  plainToClass: jest.fn().mockImplementation((cls, obj) => obj),
+  plainToClass: jest
+    .fn()
+    .mockImplementation((cls: unknown, obj: unknown) => obj),
   ClassSerializerInterceptor: class {
     intercept() {
       return { handle: () => ({ subscribe: () => ({}) }) };
@@ -59,7 +61,8 @@ jest.mock('@nestjs/swagger', () => ({
 jest.mock(
   '@prisma/client',
   () => {
-    const actual = jest.requireActual('@prisma/client');
+    const actual: Record<string, unknown> =
+      jest.requireActual('@prisma/client');
     return {
       ...actual,
       NhiIdentityType: {

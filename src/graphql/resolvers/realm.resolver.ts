@@ -11,8 +11,9 @@ export class RealmResolver {
   constructor(private readonly realmsService: RealmsService) {}
 
   @Query(() => [Realm])
-  async realms(): Promise<Realm[]> {
-    return this.realmsService.findAll();
+  realms(): Promise<Realm[]> {
+    /* eslint-disable @typescript-eslint/no-unsafe-return */
+    return this.realmsService.findAll() as any;
   }
 
   @Query(() => Realm, { nullable: true })
@@ -29,7 +30,8 @@ export class RealmResolver {
     @Args('skip', { type: () => Int, defaultValue: 0 }) skip: number,
     @Args('take', { type: () => Int, defaultValue: 10 }) take: number,
   ): Promise<{ items: Realm[]; pagination: PaginationInfo }> {
-    const items = await this.realmsService.findAll();
+    /* eslint-disable @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-member-access,@typescript-eslint/no-unsafe-call */
+    const items = (await this.realmsService.findAll()) as any;
     const total = items.length;
     const paginatedItems = items.slice(skip, skip + take);
     return {

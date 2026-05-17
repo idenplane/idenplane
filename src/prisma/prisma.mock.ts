@@ -216,6 +216,20 @@ export function createMockPrismaService(): MockPrismaService {
       update: jest.fn(),
       delete: jest.fn(),
     },
+    rateLimitEntry: {
+      findUnique: jest.fn(),
+      upsert: jest.fn().mockImplementation((args) => {
+        const a = args as { where: { key: string } };
+        return {
+          key: a.where.key,
+          minuteCount: 0,
+          minuteWindowStart: new Date(),
+          hourCount: 0,
+          hourWindowStart: new Date(),
+        };
+      }),
+      deleteMany: jest.fn(),
+    },
     loginEvent: {
       findMany: jest.fn(),
       create: jest.fn(),
@@ -234,6 +248,7 @@ export function createMockPrismaService(): MockPrismaService {
       update: jest.fn(),
       delete: jest.fn(),
       deleteMany: jest.fn(),
+      count: jest.fn(),
     },
     federatedIdentity: {
       findUnique: jest.fn(),
@@ -404,5 +419,6 @@ export function createMockPrismaService(): MockPrismaService {
     $connect: jest.fn(),
     $disconnect: jest.fn(),
     $transaction: jest.fn(),
+    $transactionAsync: jest.fn(),
   } as unknown as MockPrismaService;
 }

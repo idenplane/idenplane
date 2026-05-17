@@ -102,6 +102,7 @@ function createMockJwkService() {
   return {
     signJwt: jest.fn().mockResolvedValue(FAKE_ACCESS_TOKEN),
     computeAtHash: jest.fn().mockReturnValue(FAKE_AT_HASH),
+    computeChash: jest.fn().mockReturnValue('fake-c-hash'),
     generateRsaKeyPair: jest.fn(),
     verifyJwt: jest.fn(),
     publicKeyToJwk: jest.fn(),

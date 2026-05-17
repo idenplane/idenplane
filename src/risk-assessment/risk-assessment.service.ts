@@ -113,7 +113,7 @@ export class RiskAssessmentService {
       : [];
     const loginTimes: number[] = Array.isArray(profile.loginTimes)
       ? (profile.loginTimes as number[])
-      : new Array(24).fill(0);
+      : ([] as number[]);
     const lastLocations: string[] = Array.isArray(profile.lastLocations)
       ? (profile.lastLocations as string[])
       : [];
@@ -181,7 +181,7 @@ export class RiskAssessmentService {
       : [];
     const loginTimes: number[] = Array.isArray(profile.loginTimes)
       ? (profile.loginTimes as number[])
-      : new Array(24).fill(0);
+      : ([] as number[]);
     const lastLocations: string[] = Array.isArray(profile.lastLocations)
       ? (profile.lastLocations as string[])
       : [];
@@ -204,7 +204,7 @@ export class RiskAssessmentService {
     // Increment hour-of-day counter
     const hour = context.timestamp.getUTCHours();
     const updatedTimes =
-      loginTimes.length === 24 ? [...loginTimes] : new Array(24).fill(0);
+      loginTimes.length === 24 ? [...loginTimes] : ([] as number[]);
     updatedTimes[hour] = (updatedTimes[hour] ?? 0) + 1;
 
     // Add geo location (capped at 10)
@@ -224,7 +224,7 @@ export class RiskAssessmentService {
       data: {
         knownIps: knownIps,
         knownDevices: knownDevices,
-        loginTimes: updatedTimes as Prisma.InputJsonValue,
+        loginTimes: updatedTimes,
         lastLocations: lastLocations,
         avgLoginFrequency: newAvg,
       },

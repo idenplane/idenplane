@@ -19,8 +19,35 @@ import type {
   ScimListResponse,
   ScimMeta as _ScimMeta,
   ScimPatchOperation,
+  ScimEmail,
 } from './types/scim.types.js';
 import { DEFAULT_USER_ATTRIBUTE_MAPPING as _DEFAULT_USER_ATTRIBUTE_MAPPING } from './schemas/scim.schemas.js';
+
+/**
+ * Database user with included relations for SCIM conversion
+ */
+interface DbUserWithGroups {
+  id: string;
+  username: string;
+  email: string | null;
+  firstName: string | null;
+  lastName: string | null;
+  displayName?: string | null;
+  enabled: boolean;
+  title?: string | null;
+  preferredLanguage?: string | null;
+  locale?: string | null;
+  timezone?: string | null;
+  federationLink?: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  userGroups?: Array<{
+    group: {
+      id: string;
+      name: string;
+    };
+  }>;
+}
 
 @Injectable()
 export class ScimUsersService {
@@ -369,14 +396,14 @@ export class ScimUsersService {
   /**
    * Convert database user to SCIM User format
    */
-  private toScimUser(user: any, attributes?: string[]): ScimUser {
+  private toScimUser(user: DbUserWithGroups, attributes?: string[]): ScimUser {
     const scimUser: ScimUser = {
       schemas: ['urn:scim:schemas:core:1.0:User'],
       id: user.id,
       userName: user.username,
       name: {
-        givenName: user.firstName,
-        familyName: user.lastName,
+        givenName: user.firstName ?? undefined,
+        familyName: user.lastName ?? undefined,
         formatted: [user.firstName, user.lastName].filter(Boolean).join(' '),
       },
       displayName:
@@ -384,11 +411,11 @@ export class ScimUsersService {
         [user.firstName, user.lastName].filter(Boolean).join(' '),
       emails: user.email ? [{ value: user.email, primary: true }] : [],
       active: user.enabled,
-      title: user.title,
-      preferredLanguage: user.preferredLanguage,
-      locale: user.locale,
-      timezone: user.timezone,
-      externalId: user.federationLink,
+      title: user.title ?? undefined,
+      preferredLanguage: user.preferredLanguage ?? undefined,
+      locale: user.locale ?? undefined,
+      timezone: user.timezone ?? undefined,
+      externalId: user.federationLink ?? undefined,
       meta: {
         resourceType: 'User',
         created: user.createdAt?.toISOString(),
@@ -399,7 +426,7 @@ export class ScimUsersService {
 
     // Add groups if available
     if (user.userGroups && user.userGroups.length > 0) {
-      scimUser.groups = user.userGroups.map((ug: any) => ({
+      scimUser.groups = user.userGroups.map((ug) => ({
         value: ug.group.id,
         display: ug.group.name,
       }));
@@ -440,20 +467,28 @@ export class ScimUsersService {
   /**
    * Get nested value from object using dot notation
    */
-  private getNestedValue(obj: any, path: string): unknown {
-    return path.split('.').reduce((current, key) => current?.[key], obj);
+  private getNestedValue(obj: unknown, path: string): unknown {
+    return path
+      .split('.')
+      .reduce(
+        (current, key) => (current as Record<string, unknown>)?.[key],
+        obj,
+      );
   }
 
   /**
    * Set nested value on object using dot notation
    */
-  private setNestedValue(obj: any, path: string, value: unknown): void {
+  private setNestedValue(obj: unknown, path: string, value: unknown): void {
     const keys = path.split('.');
     const lastKey = keys.pop()!;
-    const target = keys.reduce((current, key) => {
-      if (!current[key]) current[key] = {};
-      return current[key];
-    }, obj);
+    const target = keys.reduce(
+      (current, key) => {
+        if (!current[key]) current[key] = {};
+        return current[key] as Record<string, unknown>;
+      },
+      obj as Record<string, unknown>,
+    );
     target[lastKey] = value;
   }
 
@@ -470,7 +505,7 @@ export class ScimUsersService {
       switch (key) {
         case 'userName':
           result['username'] = val;
-          patches.push(`userName = ${val}`);
+          patches.push(`userName = ${String(val)}`);
           break;
         case 'name.givenName':
           result['firstName'] = val;
@@ -483,7 +518,9 @@ export class ScimUsersService {
           break;
         case 'emails':
           if (Array.isArray(val) && val.length > 0) {
-            const primaryEmail = val.find((e: any) => e.primary) || val[0];
+            const primaryEmail =
+              (val as ScimEmail[]).find((e) => e.primary) ||
+              (val[0] as ScimEmail);
             result['email'] = primaryEmail.value;
           }
           break;

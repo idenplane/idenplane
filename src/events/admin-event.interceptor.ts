@@ -89,7 +89,7 @@ export class AdminEventInterceptor implements NestInterceptor {
 
     return next.handle().pipe(
       tap(() => {
-        this.eventsService.recordAdminEvent({
+        void this.eventsService.recordAdminEvent({
           realmId: realm.id,
           adminUserId: adminUser.userId ?? adminUser.id ?? 'api-key',
           operationType,

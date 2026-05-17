@@ -91,7 +91,7 @@ export class EventsService {
     }
 
     // Dispatch webhook event (non-blocking, best-effort)
-    this.webhooksService?.dispatchEvent({
+    void this.webhooksService?.dispatchEvent({
       realmId: params.realmId,
       eventType: `user.${params.type.toLowerCase()}`,
       payload: {
@@ -105,7 +105,7 @@ export class EventsService {
     });
 
     // Dispatch to event-listener plugins (non-blocking, best-effort)
-    this.pluginManager?.dispatchEvent({
+    void this.pluginManager?.dispatchEvent({
       type: `user.${params.type.toLowerCase()}`,
       realmId: params.realmId,
       userId: params.userId,

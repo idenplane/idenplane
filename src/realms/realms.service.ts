@@ -4,7 +4,7 @@ import {
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
-import { Prisma } from '@prisma/client';
+import { Prisma, type Realm } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { JwkService } from '../crypto/jwk.service.js';
 import { ScopeSeedService } from '../scopes/scope-seed.service.js';
@@ -23,8 +23,8 @@ export class RealmsService {
     private readonly cache: CacheService,
   ) {}
 
-  private redactSmtpPassword(realm: any) {
-    if (realm && realm.smtpPassword) {
+  private redactSmtpPassword(realm: Record<string, unknown> | null) {
+    if (realm && realm['smtpPassword']) {
       return { ...realm, smtpPassword: '••••••' };
     }
     return realm;
@@ -139,7 +139,7 @@ export class RealmsService {
     // Seed default scopes for the new realm
     await this.scopeSeedService.seedDefaultScopes(realm.id);
 
-    return this.redactSmtpPassword(realm);
+    return this.redactSmtpPassword(realm) as Realm;
   }
 
   async findAll() {
@@ -149,10 +149,10 @@ export class RealmsService {
     return realms.map((r) => this.redactSmtpPassword(r));
   }
 
-  async findByName(name: string) {
-    const cached = await this.cache.getCachedRealmByName<any>(name);
+  async findByName(name: string): Promise<Realm> {
+    const cached = await this.cache.getCachedRealmByName<Realm | null>(name);
     if (cached) {
-      return this.redactSmtpPassword(cached);
+      return this.redactSmtpPassword(cached) as Realm;
     }
 
     const realm = await this.prisma.realm.findUnique({
@@ -167,11 +167,11 @@ export class RealmsService {
       this.cache.cacheRealmConfig(realm.id, realm),
     ]);
 
-    return this.redactSmtpPassword(realm);
+    return this.redactSmtpPassword(realm) as Realm;
   }
 
-  async findByNameRaw(name: string) {
-    const cached = await this.cache.getCachedRealmByName<any>(name);
+  async findByNameRaw(name: string): Promise<Realm> {
+    const cached = await this.cache.getCachedRealmByName<Realm | null>(name);
     if (cached) return cached;
 
     const realm = await this.prisma.realm.findUnique({

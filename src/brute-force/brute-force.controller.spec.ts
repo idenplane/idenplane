@@ -36,7 +36,7 @@ describe('BruteForceController', () => {
       bruteForceService.unlockUser.mockResolvedValue(undefined);
       const realm = { id: 'realm-1', name: 'test' } as any;
 
-      await controller.unlockUser(realm, 'user-1');
+      await controller.unlockUser(realm, 'user-1', { adminUser: { userId: 'admin-1' } } as any);
 
       expect(bruteForceService.unlockUser).toHaveBeenCalledWith(
         'realm-1',

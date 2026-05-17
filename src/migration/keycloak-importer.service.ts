@@ -38,7 +38,9 @@ export class KeycloakImporterService {
     const exportRealmName =
       typeof data.realm === 'string'
         ? data.realm
-        : ((data.realm as any)?.realm ?? String(data.realm));
+        : (((data.realm as unknown as Record<string, unknown>)['realm'] as
+            | string
+            | undefined) ?? String(data.realm));
     const realmName = options.targetRealm ?? exportRealmName;
 
     if (options.dryRun) {
@@ -92,17 +94,18 @@ export class KeycloakImporterService {
           await this.importUsers(data, realmId, report, false, tx);
           await this.importIdentityProviders(data, realmId, report, false, tx);
         });
-      } catch (error: any) {
+      } catch (error: unknown) {
+        const err = error as Error;
         // If the error was injected by us to trigger a rollback it is already
         // recorded in report.errors.  For any other unexpected error, add it.
         const alreadyRecorded = report.errors.some(
-          (e) => e.error === error.message,
+          (e) => e.error === err.message,
         );
         if (!alreadyRecorded) {
           report.errors.push({
             entity: 'realm',
             name: realmName,
-            error: error.message,
+            error: err.message,
           });
         }
       }
@@ -163,12 +166,12 @@ export class KeycloakImporterService {
 
       report.summary.realms.created++;
       return realm.id;
-    } catch (error: any) {
+    } catch (error: unknown) {
       report.summary.realms.failed++;
       report.errors.push({
         entity: 'realm',
         name: realmName,
-        error: error.message,
+        error: (error as Error).message,
       });
       return null;
     }
@@ -186,7 +189,9 @@ export class KeycloakImporterService {
       const sourceRealmName =
         typeof data.realm === 'string'
           ? data.realm
-          : ((data.realm as any)?.realm ?? String(data.realm));
+          : (((data.realm as unknown as Record<string, unknown>)['realm'] as
+              | string
+              | undefined) ?? String(data.realm));
       if (
         [
           'offline_access',
@@ -210,12 +215,12 @@ export class KeycloakImporterService {
           });
         }
         report.summary.roles.created++;
-      } catch (error: any) {
+      } catch (error: unknown) {
         report.summary.roles.failed++;
         report.errors.push({
           entity: 'role',
           name: role.name,
-          error: error.message,
+          error: (error as Error).message,
         });
       }
     }
@@ -267,12 +272,12 @@ export class KeycloakImporterService {
             tx,
           );
         }
-      } catch (error: any) {
+      } catch (error: unknown) {
         report.summary.groups.failed++;
         report.errors.push({
           entity: 'group',
           name: group.name,
-          error: error.message,
+          error: (error as Error).message,
         });
       }
     }
@@ -306,12 +311,12 @@ export class KeycloakImporterService {
           });
         }
         report.summary.scopes.created++;
-      } catch (error: any) {
+      } catch (error: unknown) {
         report.summary.scopes.failed++;
         report.errors.push({
           entity: 'scope',
           name: scope.name,
-          error: error.message,
+          error: (error as Error).message,
         });
       }
     }
@@ -366,12 +371,12 @@ export class KeycloakImporterService {
           });
         }
         report.summary.clients.created++;
-      } catch (error: any) {
+      } catch (error: unknown) {
         report.summary.clients.failed++;
         report.errors.push({
           entity: 'client',
           name: client.clientId,
-          error: error.message,
+          error: (error as Error).message,
         });
       }
     }
@@ -437,12 +442,13 @@ export class KeycloakImporterService {
           }
         }
         report.summary.users.created++;
-      } catch (error: any) {
+      } catch (error: unknown) {
         report.summary.users.failed++;
+        const errRecord = error as { message?: string };
         report.errors.push({
           entity: 'user',
           name: user.username,
-          error: error.message,
+          error: errRecord.message ?? String(error),
         });
       }
     }
@@ -512,12 +518,12 @@ export class KeycloakImporterService {
           });
         }
         report.summary.identityProviders.created++;
-      } catch (error: any) {
+      } catch (error: unknown) {
         report.summary.identityProviders.failed++;
         report.errors.push({
           entity: 'identity_provider',
           name: idp.alias,
-          error: error.message,
+          error: (error as Error).message,
         });
       }
     }

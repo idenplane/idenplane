@@ -1,3 +1,4 @@
+import type { Request, Response } from 'express';
 import {
   Injectable,
   UnauthorizedException,
@@ -11,6 +12,11 @@ import { AdminAuthService } from '../../admin-auth/admin-auth.service.js';
 import { RateLimitService } from '../../rate-limit/rate-limit.service.js';
 import { resolveClientIp } from '../../common/utils/proxy-ip.util.js';
 import { createHash, timingSafeEqual } from 'crypto';
+
+type AuthRequest = Request & {
+  adminUser?: { userId: string; roles: string[] };
+  res?: Response;
+};
 
 @Injectable()
 export class GraphQLAuthGuard implements CanActivate {
@@ -87,22 +93,34 @@ export class GraphQLAuthGuard implements CanActivate {
     throw new UnauthorizedException('Invalid or missing admin credentials');
   }
 
-  private getRequest(context: ExecutionContext): any {
+  private getRequest(context: ExecutionContext): AuthRequest | null {
     try {
-      return context.switchToHttp().getRequest();
+      return context.switchToHttp().getRequest<AuthRequest>();
     } catch {
       // Try GraphQL context
       try {
-        return context.getArgs()[0]?.req;
+        const args = context.getArgs();
+        const req = (args[0] as { req?: AuthRequest })?.req;
+        return req ?? null;
       } catch {
         return null;
       }
     }
   }
 
-  handleRequest(err: any, user: any): any {
+  handleRequest(
+    err: unknown,
+    user: { userId: string; roles: string[] } | null,
+  ): { userId: string; roles: string[] } {
     if (err) {
-      throw err;
+      const error =
+        err instanceof Error
+          ? err
+          : new Error(
+              // eslint-disable-next-line @typescript-eslint/no-base-to-string
+              String(err),
+            );
+      throw error;
     }
     if (!user) {
       throw new UnauthorizedException('Invalid or missing admin credentials');

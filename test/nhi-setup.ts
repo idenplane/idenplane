@@ -15,149 +15,106 @@ if (typeof globalThis.Reflect === 'undefined') {
 
 // Mock class-validator
 jest.mock('class-validator', () => {
-  const mockFn = () => () => {};
+  const actual = jest.requireActual('class-validator') as Record<string, unknown>;
+  const mock = () => () => {};
   return {
-    IsString: mockFn,
-    IsOptional: mockFn,
-    IsEnum: mockFn,
-    IsBoolean: mockFn,
-    IsArray: mockFn,
-    IsObject: mockFn,
-    IsInt: mockFn,
-    IsPositive: mockFn,
-    IsNotEmpty: mockFn,
-    IsDateString: mockFn,
-    IsIn: mockFn,
-    IsEmail: mockFn,
-    IsUrl: mockFn,
-    MinLength: mockFn,
-    Min: mockFn,
-    Max: mockFn,
-    IsNumber: mockFn,
-    ValidateNested: mockFn,
-    IsDefined: mockFn,
-    IsEmpty: mockFn,
-    IsNotEmptyObject: mockFn,
-    IsUUID: mockFn,
-    IsISO8601: mockFn,
-    IsMilitaryTime: mockFn,
-    IsHash: mockFn,
+    ...actual,
+    IsString: mock,
+    IsOptional: mock,
+    IsEnum: mock,
+    IsBoolean: mock,
+    IsArray: mock,
+    IsObject: mock,
+    IsInt: mock,
+    IsPositive: mock,
+    IsNotEmpty: mock,
+    IsDateString: mock,
+    IsIn: mock,
+    IsEmail: mock,
+    IsUrl: mock,
+    MinLength: mock,
+    Min: mock,
+    Max: mock,
+    IsNumber: mock,
+    ValidateNested: mock,
+    IsDefined: mock,
+    IsEmpty: mock,
+    IsNotEmptyObject: mock,
+    IsUUID: mock,
+    IsISO8601: mock,
+    IsMilitaryTime: mock,
+    IsHash: mock,
+    Matches: mock,
+    ValidateIf: mock,
+    registerDecorator: jest.fn(),
     validate: jest.fn().mockResolvedValue([]),
     validateSync: jest.fn().mockReturnValue([]),
-    ValidatorOptions: {},
-    ValidationOptions: {},
   };
 });
 
 // Mock class-transformer
-jest.mock('class-transformer', () => ({
-  Type: () => () => {},
-  plainToClass: jest.fn().mockImplementation((cls, obj) => obj),
-  ClassSerializerInterceptor: class {
-    intercept() { return { handle: () => ({ subscribe: () => ({}) }) }; }
-  },
-  Transform: () => () => {},
-}));
+jest.mock('class-transformer', () => {
+  const actual = jest.requireActual('class-transformer') as Record<string, unknown>;
+  return {
+    ...actual,
+    Type: () => () => {},
+    plainToClass: jest.fn().mockImplementation((_cls, obj) => obj),
+    ClassSerializerInterceptor: class {
+      intercept() { return { handle: () => ({ subscribe: () => ({}) }) }; }
+    },
+    Transform: () => () => {},
+  };
+});
 
 // Mock Swagger decorators
 jest.mock('@nestjs/swagger', () => {
-  const mockDecorator = (...args: any[]) => (target: any, key?: string, descriptor?: PropertyDescriptor) => {};
+  const actual = jest.requireActual('@nestjs/swagger') as Record<string, unknown>;
+  const mock = (..._args: unknown[]) => () => {};
   return {
-    ApiTags: mockDecorator,
-    ApiOperation: mockDecorator,
-    ApiResponse: () => mockDecorator,
-    ApiBearerAuth: mockDecorator,
-    ApiSecurity: mockDecorator,
-    ApiProperty: mockDecorator,
-    ApiPropertyOptional: mockDecorator,
+    ...actual,
+    ApiTags: mock,
+    ApiOperation: mock,
+    ApiResponse: () => mock,
+    ApiBearerAuth: mock,
+    ApiSecurity: mock,
+    ApiProperty: mock,
+    ApiPropertyOptional: mock,
+    ApiConsumes: mock,
+    ApiBody: mock,
+    ApiQuery: mock,
+    ApiExcludeController: mock,
+    ApiParam: mock,
+    ApiServiceUnavailableResponse: mock,
+    ApiOkResponse: mock,
+    OmitType: actual.OmitType || (() => class {}),
+    PartialType: actual.PartialType || (() => class {}),
+    PickType: actual.PickType || (() => class {}),
+    ExtendSchema: actual.ExtendSchema || (() => class {}),
+    HealthCheck: mock,
   };
 });
 
-// Mock NestJS common decorators
-jest.mock('@nestjs/common', () => {
-  const mockDecorator = (...args: any[]) => (target: any, key?: string, descriptor?: PropertyDescriptor) => {};
-  return {
-    Controller: mockDecorator,
-    Get: mockDecorator,
-    Post: mockDecorator,
-    Put: mockDecorator,
-    Delete: mockDecorator,
-    Patch: mockDecorator,
-    Options: mockDecorator,
-    Head: mockDecorator,
-    All: mockDecorator,
-    HttpCode: mockDecorator,
-    HttpStatus: mockDecorator,
-    Body: mockDecorator,
-    Query: mockDecorator,
-    Param: mockDecorator,
-    Headers: mockDecorator,
-    Ip: mockDecorator,
-    Req: mockDecorator,
-    Res: mockDecorator,
-    Next: mockDecorator,
-    Session: mockDecorator,
-    Platform: mockDecorator,
-    Render: mockDecorator,
-    RawHeaders: mockDecorator,
-    BodyParser: mockDecorator,
-    Host: mockDecorator,
-    Protocol: mockDecorator,
-    Method: mockDecorator,
-    Url: mockDecorator,
-    Select: mockDecorator,
-    UseGuards: mockDecorator,
-    SetMetadata: mockDecorator,
-    Injectable: mockDecorator,
-    Optional: () => mockDecorator,
-    Inject: () => mockDecorator,
-    Scope: () => mockDecorator,
-    Global: () => mockDecorator,
-    UsePipes: mockDecorator,
-    UseFilters: mockDecorator,
-    UseInterceptors: mockDecorator,
-    UseClass: mockDecorator,
-    UseDecorators: mockDecorator,
-    createParamDecorator: () => mockDecorator,
-    // Also export the classes needed
-    NotFoundException: class NotFoundException extends Error {
-      constructor(message?: string) {
-        super(message || 'Not found');
-        this.name = 'NotFoundException';
-      }
-    },
-    ConflictException: class ConflictException extends Error {
-      constructor(message?: string) {
-        super(message || 'Conflict');
-        this.name = 'ConflictException';
-      }
-    },
-    BadRequestException: class BadRequestException extends Error {
-      constructor(message?: string) {
-        super(message || 'Bad request');
-        this.name = 'BadRequestException';
-      }
-    },
-    UnauthorizedException: class UnauthorizedException extends Error {
-      constructor(message?: string) {
-        super(message || 'Unauthorized');
-        this.name = 'UnauthorizedException';
-      }
-    },
-    ForbiddenException: class ForbiddenException extends Error {
-      constructor(message?: string) {
-        super(message || 'Forbidden');
-        this.name = 'ForbiddenException';
-      }
-    },
-    Logger: class Logger {
-      log() {}
-      error() {}
-      warn() {}
-      debug() {}
-    },
-  };
-});
+// Use real NestJS packages — critical for TestingModule to work
+jest.mock('@nestjs/common', () => jest.requireActual('@nestjs/common'));
+jest.mock('@nestjs/core', () => jest.requireActual('@nestjs/core'));
+
+// Mock optional NestJS modules that aren't needed in tests
+jest.mock('@nestjs/config', () => ({}));
+jest.mock('@nestjs/schedule', () => ({
+  ScheduleModule: class {},
+  Interval: () => () => {},
+  Cron: () => () => {},
+}));
+jest.mock('@nestjs/throttler', () => ({
+  Throttle: () => () => {},
+  ThrottleModule: class {},
+  SkipThrottle: () => () => {},
+  defaultOptions: {},
+  THROTTLE_TTL: 'throttle_ttl',
+  THROTTLE_LIMIT: 'throttle_limit',
+  RateLimitGuard: class {},
+  RateLimitByIp: () => () => {},
+}));
 
 // Mock RealmGuard
 jest.mock('../src/common/guards/realm.guard.js', () => ({
@@ -170,30 +127,53 @@ jest.mock('../src/common/guards/realm.guard.js', () => ({
 
 // Mock CurrentRealm decorator
 jest.mock('../src/common/decorators/current-realm.decorator.js', () => ({
-  CurrentRealm: () => (target: any, key?: string, index?: number) => {},
+  CurrentRealm: () => (target: unknown, key?: string, index?: number) => {},
 }));
 
-// Ensure Prisma client is properly mocked
-jest.mock('@prisma/client', () => ({
-  PrismaClient: class {
-    constructor() {}
-  },
-  NhiIdentityType: {
-    IOT_DEVICE: 'IOT_DEVICE',
-    AI_AGENT: 'AI_AGENT',
-    BOT: 'BOT',
-    MACHINE_TO_MACHINE: 'MACHINE_TO_MACHINE',
-  },
-  NhiLifecycleStatus: {
-    PROVISIONING: 'PROVISIONING',
-    ACTIVE: 'ACTIVE',
-    SUSPENDED: 'SUSPENDED',
-    DECOMMISSIONED: 'DECOMMISSIONED',
-  },
-  NhiCredentialType: {
-    API_KEY: 'API_KEY',
-    CERTIFICATE: 'CERTIFICATE',
-    JWT_BEARER: 'JWT_BEARER',
-    MTLS: 'MTLS',
-  },
-}));
+// Mock @prisma/client — enum values + mock PrismaClient (no DB connection)
+jest.mock('@prisma/client', () => {
+  class MockPrismaClient {
+    constructor() {
+      Object.defineProperties(this, {
+        $connect: { value: jest.fn(), writable: true },
+        $disconnect: { value: jest.fn(), writable: true },
+        $transaction: { value: jest.fn(), writable: true },
+        $transactionAsync: { value: jest.fn(), writable: true },
+        $on: { value: jest.fn(), writable: true },
+        $use: { value: jest.fn(), writable: true },
+      });
+    }
+  }
+  return {
+    PrismaClient: MockPrismaClient,
+    NhiIdentityType: {
+      MACHINE_TO_MACHINE: 'MACHINE_TO_MACHINE',
+      IOT_DEVICE: 'IOT_DEVICE',
+      SERVICE: 'SERVICE',
+      AI_AGENT: 'AI_AGENT',
+    },
+    NhiLifecycleStatus: {
+      PROVISIONING: 'PROVISIONING',
+      ACTIVE: 'ACTIVE',
+      SUSPENDED: 'SUSPENDED',
+      DECOMMISSIONED: 'DECOMMISSIONED',
+    },
+    NhiCredentialType: {
+      API_KEY: 'API_KEY',
+      CERTIFICATE: 'CERTIFICATE',
+      JWT: 'JWT',
+      OAUTH: 'OAUTH',
+      MTLS: 'MTLS',
+    },
+    ClientType: {
+      CONFIDENTIAL: 'CONFIDENTIAL',
+      PUBLIC: 'PUBLIC',
+    },
+    MagicLinkStatus: {
+      PENDING: 'PENDING',
+      COMPLETED: 'COMPLETED',
+      EXPIRED: 'EXPIRED',
+      CANCELLED: 'CANCELLED',
+    },
+  };
+});

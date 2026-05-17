@@ -33,7 +33,10 @@ export interface ExportAdminEventsParams {
 
 function escapeCsvField(value: unknown): string {
   if (value === null || value === undefined) return '';
-  const str = typeof value === 'object' ? JSON.stringify(value) : String(value);
+
+  const str =
+    // eslint-disable-next-line @typescript-eslint/no-base-to-string
+    typeof value === 'object' ? JSON.stringify(value) : value.toString();
 
   if (
     str.includes(',') ||

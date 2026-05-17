@@ -83,12 +83,12 @@ export class Auth0ImporterService {
           });
         }
         report.summary.roles.created++;
-      } catch (error: any) {
+      } catch (error: unknown) {
         report.summary.roles.failed++;
         report.errors.push({
           entity: 'role',
           name: role.name,
-          error: error.message,
+          error: (error as Error).message,
         });
       }
     }
@@ -141,12 +141,12 @@ export class Auth0ImporterService {
           });
         }
         report.summary.clients.created++;
-      } catch (error: any) {
+      } catch (error: unknown) {
         report.summary.clients.failed++;
         report.errors.push({
           entity: 'client',
           name: client.client_id,
-          error: error.message,
+          error: (error as Error).message,
         });
       }
     }
@@ -194,12 +194,12 @@ export class Auth0ImporterService {
           });
         }
         report.summary.users.created++;
-      } catch (error: any) {
+      } catch (error: unknown) {
         report.summary.users.failed++;
         report.errors.push({
           entity: 'user',
           name: username,
-          error: error.message,
+          error: (error as Error).message,
         });
       }
     }
@@ -265,12 +265,12 @@ export class Auth0ImporterService {
           });
         }
         report.summary.identityProviders.created++;
-      } catch (error: any) {
+      } catch (error: unknown) {
         report.summary.identityProviders.failed++;
         report.errors.push({
           entity: 'identity_provider',
           name: conn.name,
-          error: error.message,
+          error: (error as Error).message,
         });
       }
     }

@@ -4,9 +4,12 @@ import { inflate } from 'zlib';
 import { promisify } from 'util';
 import { XMLParser } from 'fast-xml-parser';
 import { SignedXml } from 'xml-crypto';
+import { DOMParser } from '@xmldom/xmldom';
 import type { Realm, SamlServiceProvider, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
+import { CreateSamlSpDto } from './dto/create-saml-sp.dto.js';
+import { UpdateSamlSpDto } from './dto/update-saml-sp.dto.js';
 
 const inflateAsync = promisify(inflate);
 
@@ -54,21 +57,30 @@ export class SamlIdpService {
         removeNSPrefix: true,
       });
 
-      const doc = parser.parse(xml);
-      const authnRequest = doc['AuthnRequest'];
+      const doc = parser.parse(xml) as Record<string, unknown>;
+      const authnRequest = doc['AuthnRequest'] as
+        | Record<string, unknown>
+        | undefined;
       if (!authnRequest) {
         throw new BadRequestException(
           'Invalid AuthnRequest: root element not found',
         );
       }
 
-      const id = authnRequest['@_ID'] ?? randomUUID();
+      const id = (authnRequest['@_ID'] as string | undefined) ?? randomUUID();
       const issuer =
         typeof authnRequest['Issuer'] === 'string'
           ? authnRequest['Issuer']
-          : (authnRequest['Issuer']?.['#text'] ?? '');
-      const acsUrl = authnRequest['@_AssertionConsumerServiceURL'] ?? null;
-      const nameIdPolicy = authnRequest['NameIDPolicy']?.['@_Format'] ?? null;
+          : (((authnRequest['Issuer'] as Record<string, unknown>)?.['#text'] as
+              | string
+              | undefined) ?? '');
+      const acsUrl =
+        (authnRequest['@_AssertionConsumerServiceURL'] as string | undefined) ??
+        null;
+      const nameIdPolicy =
+        ((
+          authnRequest['NameIDPolicy'] as Record<string, unknown> | undefined
+        )?.['@_Format'] as string | undefined) ?? null;
 
       if (!issuer) {
         throw new BadRequestException('AuthnRequest missing Issuer');
@@ -96,9 +108,10 @@ export class SamlIdpService {
       xml = decoded.toString('utf-8');
     }
 
-    const { DOMParser } = require('@xmldom/xmldom');
     const doc = new DOMParser().parseFromString(xml, 'text/xml');
-    const signatures = doc.getElementsByTagName('Signature');
+    const signatures = doc.getElementsByTagName(
+      'Signature',
+    ) as unknown as NodeListOf<Element>;
     if (!signatures || signatures.length === 0) {
       throw new BadRequestException('AuthnRequest is not signed');
     }
@@ -116,10 +129,11 @@ export class SamlIdpService {
       throw new BadRequestException('AuthnRequest signature validation failed');
     }
     if (!valid) {
-      const errors = (sig as any).errors;
+      const sigAny = sig as unknown as { errors?: Array<{ message: string }> };
+      const errors = sigAny.errors;
       if (errors) {
         this.logger.error(
-          `Signature validation errors: ${errors.map((e: any) => e.message).join(', ')}`,
+          `Signature validation errors: ${errors.map((e) => e.message).join(', ')}`,
         );
       }
       throw new BadRequestException('AuthnRequest signature validation failed');
@@ -216,18 +230,20 @@ export class SamlIdpService {
 
   // ─── CRUD (called by admin controller) ─────────────────
 
-  async createSp(realm: Realm, data: any) {
+  async createSp(realm: Realm, data: CreateSamlSpDto) {
     return this.prisma.samlServiceProvider.create({
       data: {
         realmId: realm.id,
         entityId: data.entityId,
         name: data.name,
         acsUrl: data.acsUrl,
-        sloUrl: data.sloUrl,
-        certificate: data.certificate,
-        nameIdFormat: data.nameIdFormat,
-        signAssertions: data.signAssertions,
-        signResponses: data.signResponses,
+        sloUrl: data.sloUrl ?? null,
+        certificate: data.certificate ?? null,
+        nameIdFormat:
+          data.nameIdFormat ??
+          'urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress',
+        signAssertions: data.signAssertions ?? true,
+        signResponses: data.signResponses ?? true,
         validRedirectUris: data.validRedirectUris ?? [],
       },
     });
@@ -246,7 +262,7 @@ export class SamlIdpService {
     });
   }
 
-  async updateSp(realm: Realm, id: string, data: any) {
+  async updateSp(realm: Realm, id: string, data: UpdateSamlSpDto) {
     // Ensure the SP belongs to this realm
     const existing = await this.prisma.samlServiceProvider.findFirst({
       where: { id, realmId: realm.id },
@@ -255,9 +271,25 @@ export class SamlIdpService {
       throw new BadRequestException('SAML service provider not found');
     }
 
+    const updateData: Record<string, unknown> = {};
+    if (data.entityId !== undefined) updateData['entityId'] = data.entityId;
+    if (data.name !== undefined) updateData['name'] = data.name;
+    if (data.acsUrl !== undefined) updateData['acsUrl'] = data.acsUrl;
+    if (data.sloUrl !== undefined) updateData['sloUrl'] = data.sloUrl;
+    if (data.certificate !== undefined)
+      updateData['certificate'] = data.certificate;
+    if (data.nameIdFormat !== undefined)
+      updateData['nameIdFormat'] = data.nameIdFormat;
+    if (data.signAssertions !== undefined)
+      updateData['signAssertions'] = data.signAssertions;
+    if (data.signResponses !== undefined)
+      updateData['signResponses'] = data.signResponses;
+    if (data.validRedirectUris !== undefined)
+      updateData['validRedirectUris'] = data.validRedirectUris;
+
     return this.prisma.samlServiceProvider.update({
       where: { id },
-      data,
+      data: updateData,
     });
   }
 

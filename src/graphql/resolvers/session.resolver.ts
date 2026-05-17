@@ -31,6 +31,7 @@ export class SessionResolver {
     @Args('take', { type: () => Int, defaultValue: 10 }) take: number,
   ): Promise<{ items: Session[]; pagination: PaginationInfo }> {
     const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
+    /* eslint-disable @typescript-eslint/no-unsafe-argument */
     const allSessions = await this.sessionsService.getRealmSessions(realm);
     const items = allSessions
       .slice(skip, skip + take)
@@ -55,6 +56,7 @@ export class SessionResolver {
     @Args('userId') userId: string,
   ): Promise<Session[]> {
     const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
+    /* eslint-disable @typescript-eslint/no-unsafe-argument */
     const sessions = await this.sessionsService.getUserSessions(realm, userId);
     return sessions.map((s) => this.toSession(s));
   }

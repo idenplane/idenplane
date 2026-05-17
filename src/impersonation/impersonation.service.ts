@@ -141,7 +141,7 @@ export class ImpersonationService {
     });
 
     // Audit log — login event visible in user event stream
-    this.eventsService.recordLoginEvent({
+    void this.eventsService.recordLoginEvent({
       realmId: realm.id,
       type: LoginEventType.IMPERSONATION_START,
       userId: targetUserId,
@@ -154,7 +154,7 @@ export class ImpersonationService {
     });
 
     // Admin event for full audit trail
-    this.eventsService.recordAdminEvent({
+    void this.eventsService.recordAdminEvent({
       realmId: realm.id,
       adminUserId,
       operationType: OperationType.CREATE,
@@ -220,7 +220,7 @@ export class ImpersonationService {
     });
 
     // Audit log
-    this.eventsService.recordLoginEvent({
+    void this.eventsService.recordLoginEvent({
       realmId: realm.id,
       type: LoginEventType.IMPERSONATION_END,
       userId: impSession.targetUserId,
@@ -232,7 +232,7 @@ export class ImpersonationService {
       },
     });
 
-    this.eventsService.recordAdminEvent({
+    void this.eventsService.recordAdminEvent({
       realmId: realm.id,
       adminUserId,
       operationType: OperationType.DELETE,

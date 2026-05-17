@@ -128,7 +128,7 @@ export class AuthService {
     const valid = await this.crypto.verifyPassword(user.passwordHash, password);
     if (!valid) {
       await this.bruteForceService.recordFailure(realm, user.id, ip);
-      this.eventsService.recordLoginEvent({
+      void this.eventsService.recordLoginEvent({
         realmId: realm.id,
         type: LoginEventType.LOGIN_ERROR,
         userId: user.id,
@@ -192,7 +192,7 @@ export class AuthService {
       },
     });
 
-    this.eventsService.recordLoginEvent({
+    void this.eventsService.recordLoginEvent({
       realmId: realm.id,
       type: LoginEventType.LOGIN,
       userId: user.id,
@@ -284,7 +284,7 @@ export class AuthService {
         otp,
       );
       if (!recoveryVerified) {
-        this.eventsService.recordLoginEvent({
+        void this.eventsService.recordLoginEvent({
           realmId: realm.id,
           type: LoginEventType.MFA_VERIFY_ERROR,
           userId: challenge.userId,
@@ -316,7 +316,7 @@ export class AuthService {
       },
     });
 
-    this.eventsService.recordLoginEvent({
+    void this.eventsService.recordLoginEvent({
       realmId: realm.id,
       type: LoginEventType.MFA_VERIFY,
       userId: user.id,
@@ -420,7 +420,7 @@ export class AuthService {
       realm.accessTokenLifespan,
     );
 
-    this.eventsService.recordLoginEvent({
+    void this.eventsService.recordLoginEvent({
       realmId: realm.id,
       type: LoginEventType.CLIENT_LOGIN,
       clientId: client_id,
@@ -474,7 +474,7 @@ export class AuthService {
           data: { revoked: true },
         });
       }
-      this.eventsService.recordLoginEvent({
+      void this.eventsService.recordLoginEvent({
         realmId: realm.id,
         type: LoginEventType.TOKEN_REFRESH_ERROR,
         clientId: client_id,
@@ -511,7 +511,7 @@ export class AuthService {
 
     const user = storedToken.session.user;
 
-    this.eventsService.recordLoginEvent({
+    void this.eventsService.recordLoginEvent({
       realmId: realm.id,
       type: LoginEventType.TOKEN_REFRESH,
       userId: user.id,
@@ -639,7 +639,7 @@ export class AuthService {
       },
     });
 
-    this.eventsService.recordLoginEvent({
+    void this.eventsService.recordLoginEvent({
       realmId: realm.id,
       type: LoginEventType.CODE_TO_TOKEN,
       userId: user.id,
@@ -700,11 +700,11 @@ export class AuthService {
     }
 
     if (deviceCode.expiresAt < new Date()) {
-      throw new BadRequestException('authorization_pending');
+      throw new BadRequestException('expired_token');
     }
 
     if (deviceCode.denied) {
-      throw new BadRequestException('authorization_pending');
+      throw new BadRequestException('access_denied');
     }
 
     if (!deviceCode.approved || !deviceCode.userId) {
@@ -774,7 +774,7 @@ export class AuthService {
       },
     });
 
-    this.eventsService.recordLoginEvent({
+    void this.eventsService.recordLoginEvent({
       realmId: realm.id,
       type: LoginEventType.DEVICE_CODE_TO_TOKEN,
       userId: user.id,

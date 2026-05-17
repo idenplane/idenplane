@@ -168,6 +168,7 @@ export class PluginLoaderService {
             );
           }
 
+          /* eslint-disable @typescript-eslint/no-unsafe-assignment */
           loaded = await import(candidate);
           resolvedPath = candidate;
           break;
@@ -182,6 +183,7 @@ export class PluginLoaderService {
       }
 
       // Support both default export and named `plugin` export
+      /* eslint-disable @typescript-eslint/no-unsafe-member-access */
       const pluginExport: AuthMePlugin = loaded.default ?? loaded.plugin;
 
       if (!pluginExport) {

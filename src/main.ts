@@ -98,7 +98,7 @@ async function bootstrap() {
     try {
       sameOrigins.add(new URL(process.env['BASE_URL']).origin);
     } catch {
-      this.logger.warn(
+      console.warn(
         `Invalid BASE_URL: ${process.env['BASE_URL']} — skipping origin allowlist`,
       );
     }
@@ -150,9 +150,13 @@ async function bootstrap() {
   // instead of the old '*' wildcard. This catches all OPTIONS preflight
   // requests that weren't handled by the CORS middleware (disallowed origins).
   const httpAdapter = app.getHttpAdapter();
-  httpAdapter.getInstance().options('{*path}', (_req: any, res: any) => {
-    res.status(204).end();
-  });
+  httpAdapter
+    .getInstance()
+    .options('{*path}', (_req: unknown, res: unknown) => {
+      (res as { status: (code: number) => { end: () => void } })
+        .status(204)
+        .end();
+    });
 
   // ── Reverse-proxy trust configuration ──────────────────────────────────────
   // Configure Express's built-in "trust proxy" setting to match the
@@ -270,4 +274,4 @@ async function bootstrap() {
   console.log(`AuthMe is running on http://localhost:${port}`);
   console.log(`Swagger UI: http://localhost:${port}/api`);
 }
-bootstrap();
+void bootstrap();

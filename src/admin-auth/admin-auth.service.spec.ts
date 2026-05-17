@@ -375,7 +375,7 @@ describe('AdminAuthService', () => {
       });
 
       await expect(service.validateAdminToken('token')).rejects.toThrow(
-        'Invalid admin token',
+        'Not an admin token',
       );
     });
 

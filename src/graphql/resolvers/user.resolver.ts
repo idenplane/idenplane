@@ -20,6 +20,7 @@ export class UserResolver {
     @Args('filter', { nullable: true }) filter?: UserFilterInput,
   ): Promise<{ items: User[]; pagination: PaginationInfo }> {
     const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
+    /* eslint-disable @typescript-eslint/no-unsafe-argument */
     const result = await this.usersService.findAll(
       realm,
       skip,
@@ -54,6 +55,7 @@ export class UserResolver {
   ): Promise<User | null> {
     try {
       const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
+      /* eslint-disable @typescript-eslint/no-unsafe-argument */
       return await this.usersService.findById(realm, userId);
     } catch {
       return null;

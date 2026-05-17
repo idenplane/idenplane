@@ -19,6 +19,10 @@ import {
   ApproveRegistrationDto,
   RejectRegistrationDto,
 } from './dto/register.dto.js';
+import {
+  CreateRegistrationFieldDto,
+  UpdateRegistrationFieldDto,
+} from './dto/registration-field.dto.js';
 import type { Realm } from '@prisma/client';
 
 export interface PendingRegistration {
@@ -72,7 +76,7 @@ export class RegistrationService {
       );
       if (!captchaResult.success) {
         throw new BadRequestException(
-          `CAPTCHA verification failed: ${captchaResult.errorCodes?.join(', ')}`,
+          `CAPTCHA verification failed: ${captchaResult.errorCodes?.join(', ') ?? 'invalid token'}`,
         );
       }
     }
@@ -225,9 +229,13 @@ export class RegistrationService {
 
       // Send welcome email if SMTP configured
       if (user.email) {
-        this.sendWelcomeEmail(realm, user.email, user.username).catch((err) => {
-          this.logger.warn(`Failed to send welcome email: ${err.message}`);
-        });
+        this.sendWelcomeEmail(realm, user.email, user.username).catch(
+          (err: unknown) => {
+            this.logger.warn(
+              `Failed to send welcome email: ${(err as Error).message}`,
+            );
+          },
+        );
       }
     }
 
@@ -529,33 +537,33 @@ export class RegistrationService {
 
   // ─── Registration Fields CRUD ──────────────────────────────────
 
-  async createRegistrationField(realm: Realm, dto: any): Promise<any> {
+  async createRegistrationField(realm: Realm, dto: CreateRegistrationFieldDto) {
     return this.prisma.registrationField.create({
       data: {
         realmId: realm.id,
         name: dto.name,
         displayName: dto.displayName,
-        type: dto.type || 'text',
-        required: dto.required || false,
+        type: dto.type ?? 'text',
+        required: dto.required ?? false,
         placeholder: dto.placeholder,
         helpText: dto.helpText,
-        options: dto.options || [],
+        options: dto.options ?? [],
         validationPattern: dto.validationPattern,
         defaultValue: dto.defaultValue,
-        sortOrder: dto.sortOrder || 0,
-        enabled: dto.enabled !== false,
+        sortOrder: dto.sortOrder ?? 0,
+        enabled: dto.enabled ?? true,
       },
     });
   }
 
-  async getRegistrationFields(realm: Realm): Promise<any[]> {
+  async getRegistrationFields(realm: Realm) {
     return this.prisma.registrationField.findMany({
       where: { realmId: realm.id },
       orderBy: { sortOrder: 'asc' },
     });
   }
 
-  async getEnabledRegistrationFields(realm: Realm): Promise<any[]> {
+  async getEnabledRegistrationFields(realm: Realm) {
     return this.prisma.registrationField.findMany({
       where: { realmId: realm.id, enabled: true },
       orderBy: { sortOrder: 'asc' },
@@ -565,8 +573,8 @@ export class RegistrationService {
   async updateRegistrationField(
     realm: Realm,
     fieldId: string,
-    dto: any,
-  ): Promise<any> {
+    dto: UpdateRegistrationFieldDto,
+  ) {
     const existing = await this.prisma.registrationField.findFirst({
       where: { id: fieldId, realmId: realm.id },
     });

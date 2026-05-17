@@ -18,6 +18,10 @@ import {
 } from '@nestjs/swagger';
 import type { Request } from 'express';
 import type { Realm } from '@prisma/client';
+
+type AdminRequest = Request & {
+  adminUser?: { userId: string; roles: string[] };
+};
 import { MfaService } from './mfa.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
@@ -88,7 +92,7 @@ export class MfaController {
     realm: Realm,
     req: Request,
   ): Promise<void> {
-    const adminUser = (req as any).adminUser;
+    const adminUser = (req as AdminRequest).adminUser;
     if (!adminUser?.userId) {
       throw new UnauthorizedException('Admin identity could not be determined');
     }
@@ -99,7 +103,7 @@ export class MfaController {
       );
     }
 
-    const sessionToken: string | undefined = req.cookies?.AUTHME_SESSION;
+    const sessionToken = req.cookies?.['AUTHME_SESSION'] as string | undefined;
     if (!sessionToken) {
       throw new UnauthorizedException(
         'MFA step-up is required. No active session found. Please log in via the user login flow to establish an MFA-verified session.',

@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiExcludeController, ApiResponse } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
-import type { Realm } from '@prisma/client';
+import type { Realm, SamlServiceProvider, User } from '@prisma/client';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
@@ -133,8 +133,9 @@ export class SamlIdpController {
     // acsUrl or one of its explicitly registered validRedirectUris.
     if (parsed.acsUrl !== null) {
       const allowedAcsUrls: string[] = [sp.acsUrl];
-      if (Array.isArray((sp as any).validRedirectUris)) {
-        allowedAcsUrls.push(...((sp as any).validRedirectUris as string[]));
+      const spWithRedirectUris = sp as { validRedirectUris?: string[] };
+      if (Array.isArray(spWithRedirectUris.validRedirectUris)) {
+        allowedAcsUrls.push(...spWithRedirectUris.validRedirectUris);
       }
       if (!allowedAcsUrls.includes(parsed.acsUrl)) {
         throw new BadRequestException(
@@ -165,7 +166,7 @@ export class SamlIdpController {
     );
 
     // Check if the user already has an active login session
-    const sessionToken = req.cookies?.['AUTHME_SESSION'];
+    const sessionToken = req.cookies?.['AUTHME_SESSION'] as string | undefined;
     if (sessionToken) {
       const user = await this.loginService.validateLoginSession(
         realm,
@@ -196,8 +197,8 @@ export class SamlIdpController {
    */
   private async completeSamlLogin(
     realm: Realm,
-    sp: any,
-    user: any,
+    sp: SamlServiceProvider,
+    user: User,
     inResponseTo: string,
     acsUrl: string,
     relayState: string,

@@ -82,6 +82,7 @@ export class ScimBulkService {
 
     switch (method) {
       case 'POST':
+        /* eslint-disable @typescript-eslint/no-unsafe-argument */
         return this.handlePost(
           realmId,
           resourceType,
@@ -89,6 +90,7 @@ export class ScimBulkService {
           bulkId || '',
         );
       case 'PUT':
+        /* eslint-disable @typescript-eslint/no-unsafe-argument */
         return this.handlePut(
           realmId,
           resourceType,
@@ -97,6 +99,7 @@ export class ScimBulkService {
           bulkId || '',
         );
       case 'PATCH':
+        /* eslint-disable @typescript-eslint/no-unsafe-argument */
         return this.handlePatch(
           realmId,
           resourceType,
@@ -192,6 +195,7 @@ export class ScimBulkService {
     let location: string;
 
     if (resourceType === 'Users') {
+      /* eslint-disable @typescript-eslint/no-unsafe-argument */
       const user = await this.usersService.patch(
         realmId,
         resourceId,
@@ -199,6 +203,7 @@ export class ScimBulkService {
       );
       location = `/scim/v2/Users/${user.id}`;
     } else {
+      /* eslint-disable @typescript-eslint/no-unsafe-argument */
       const group = await this.groupsService.patch(
         realmId,
         resourceId,

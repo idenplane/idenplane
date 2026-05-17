@@ -17,6 +17,7 @@ export class RoleResolver {
     @Args('take', { type: () => Int, defaultValue: 10 }) take: number,
   ): Promise<{ items: Role[]; pagination: PaginationInfo }> {
     const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
+    /* eslint-disable @typescript-eslint/no-unsafe-argument */
     const items = await this.rolesService.findRealmRoles(realm);
     const total = items.length;
     const paginatedItems = items.slice(skip, skip + take);
@@ -40,6 +41,7 @@ export class RoleResolver {
   ): Promise<Role | null> {
     try {
       const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
+      /* eslint-disable @typescript-eslint/no-unsafe-argument */
       return await this.rolesService.findByName(realm, name);
     } catch {
       return null;
@@ -52,6 +54,7 @@ export class RoleResolver {
     @Args('clientId') clientId: string,
   ): Promise<Role[]> {
     const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
+    /* eslint-disable @typescript-eslint/no-unsafe-argument */
     return this.rolesService.findClientRoles(realm, clientId);
   }
 }

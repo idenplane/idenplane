@@ -28,8 +28,12 @@ export class MetricsInterceptor implements NestInterceptor {
             startTime,
           );
         },
-        error: (err: any) => {
-          const status = err.status ?? err.getStatus?.() ?? 500;
+        error: (err: unknown) => {
+          const errRecord = err as {
+            status?: number;
+            getStatus?: () => number;
+          };
+          const status = errRecord.status ?? errRecord.getStatus?.() ?? 500;
           this.recordMetrics(request.method, normalizedPath, status, startTime);
         },
       }),

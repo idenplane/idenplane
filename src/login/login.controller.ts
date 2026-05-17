@@ -103,7 +103,9 @@ export class LoginController {
     const bodyToken = (body as Record<string, unknown>)['_csrf'] as
       | string
       | undefined;
-    const cookieToken = req.cookies?.[this.csrfService.cookieName(realm.name)];
+    const cookieToken = (req.cookies as Record<string, string | undefined>)?.[
+      this.csrfService.cookieName(realm.name)
+    ];
     if (!this.csrfService.validate(bodyToken, cookieToken)) {
       throw new ForbiddenException('Invalid or missing CSRF token');
     }
@@ -190,7 +192,7 @@ export class LoginController {
             );
           }
 
-          this.eventsService.recordLoginEvent({
+          void this.eventsService.recordLoginEvent({
             realmId: realm.id,
             type: LoginEventType.LOGIN_ERROR,
             userId: user.id,
@@ -371,7 +373,7 @@ export class LoginController {
     } catch (err: unknown) {
       const errMessage =
         err instanceof Error ? err.message : 'Invalid credentials';
-      this.eventsService.recordLoginEvent({
+      void this.eventsService.recordLoginEvent({
         realmId: realm.id,
         type: LoginEventType.LOGIN_ERROR,
         clientId: body.client_id,
@@ -430,7 +432,7 @@ export class LoginController {
       path: `/realms/${realm.name}`,
     });
 
-    this.eventsService.recordLoginEvent({
+    void this.eventsService.recordLoginEvent({
       realmId: realm.id,
       type: LoginEventType.LOGIN,
       userId: user.id,
@@ -507,7 +509,9 @@ export class LoginController {
     @Res() res: Response,
   ) {
     this.validateCsrf(realm, body, req);
-    const challengeToken = req.cookies?.['AUTHME_MFA_CHALLENGE'];
+    const challengeToken = (
+      req.cookies as Record<string, string | undefined>
+    )?.['AUTHME_MFA_CHALLENGE'];
     if (!challengeToken) {
       return res.redirect(
         `/realms/${realm.name}/login?error=${encodeURIComponent('MFA session expired. Please login again.')}`,
@@ -574,7 +578,7 @@ export class LoginController {
         challenge.userId,
         resolveClientIp(req),
       );
-      this.eventsService.recordLoginEvent({
+      void this.eventsService.recordLoginEvent({
         realmId: realm.id,
         type: LoginEventType.MFA_VERIFY_ERROR,
         userId: challenge.userId,
@@ -1115,7 +1119,7 @@ export class LoginController {
       );
     }
 
-    this.eventsService.recordLoginEvent({
+    void this.eventsService.recordLoginEvent({
       realmId: realm.id,
       type: LoginEventType.REGISTER,
       userId: user.id,
@@ -1451,7 +1455,7 @@ export class LoginController {
       );
     }
 
-    this.eventsService.recordLoginEvent({
+    void this.eventsService.recordLoginEvent({
       realmId: realm.id,
       type: LoginEventType.PASSWORD_RESET,
       userId: result.userId,

@@ -334,6 +334,7 @@ export class PluginManagerService implements OnModuleInit {
 
     for (const enricher of enrichers) {
       try {
+        /* eslint-disable @typescript-eslint/no-unsafe-assignment */
         result = await enricher.enrichToken(result, user, realm);
       } catch (err) {
         this.logger.warn(

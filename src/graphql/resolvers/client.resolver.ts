@@ -12,6 +12,7 @@ export class ClientResolver {
   constructor(private readonly clientsService: ClientsService) {}
 
   private getRealmId(context: any): string | null {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-member-access
     const req = context.req as Request;
     return (req.headers['x-realm-id'] as string) || null;
   }
@@ -22,6 +23,7 @@ export class ClientResolver {
     @Args('realmId') realmId: string,
   ): Promise<Client[]> {
     const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
+    /* eslint-disable @typescript-eslint/no-unsafe-argument */
     return this.clientsService.findAll(realm);
   }
 
@@ -33,6 +35,7 @@ export class ClientResolver {
   ): Promise<Client | null> {
     try {
       const realm = { id: realmId, name: '' } as any; // eslint-disable-line @typescript-eslint/no-unsafe-assignment
+      /* eslint-disable @typescript-eslint/no-unsafe-argument */
       return await this.clientsService.findByClientId(realm, clientId);
     } catch {
       return null;

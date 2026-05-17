@@ -19,6 +19,23 @@ import type {
   ScimPatchOperation,
 } from './types/scim.types.js';
 
+/**
+ * Database group with included user relations for SCIM conversion
+ */
+interface DbGroupWithUserGroups {
+  id: string;
+  name: string;
+  description: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+  userGroups?: Array<{
+    user: {
+      id: string;
+      username: string;
+    };
+  }>;
+}
+
 @Injectable()
 export class ScimGroupsService {
   private readonly logger = new Logger(ScimGroupsService.name);
@@ -382,7 +399,7 @@ export class ScimGroupsService {
   /**
    * Convert database group to SCIM Group format
    */
-  private toScimGroup(group: any): ScimGroup {
+  private toScimGroup(group: DbGroupWithUserGroups): ScimGroup {
     const scimGroup: ScimGroup = {
       schemas: ['urn:scim:schemas:core:1.0:Group'],
       id: group.id,
@@ -398,7 +415,7 @@ export class ScimGroupsService {
 
     // Add members if available
     if (group.userGroups && group.userGroups.length > 0) {
-      scimGroup.members = group.userGroups.map((ug: any) => ({
+      scimGroup.members = group.userGroups.map((ug) => ({
         value: ug.user.id,
         display: ug.user.username,
         type: 'User',

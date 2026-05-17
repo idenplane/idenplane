@@ -20,6 +20,7 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
+import { CaptchaProvider } from './captcha.service.js';
 import type { Realm } from '@prisma/client';
 import { RegistrationService } from './registration.service.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
@@ -30,6 +31,8 @@ import {
   RegisterDto,
   VerifyEmailDto,
   ResendVerificationDto,
+  ApproveRegistrationDto,
+  RejectRegistrationDto,
 } from './dto/register.dto.js';
 import {
   CreateRegistrationFieldDto,
@@ -63,7 +66,10 @@ export class RegistrationController {
       throw new BadRequestException('You must accept the terms of service');
     }
 
-    const provider = captchaProvider as any;
+    const provider =
+      captchaProvider !== undefined
+        ? (captchaProvider as CaptchaProvider)
+        : undefined;
     const result = await this.registrationService.register(
       realm,
       dto,
@@ -178,7 +184,7 @@ export class RegistrationController {
   async approveRegistration(
     @CurrentRealm() realm: Realm,
     @Param('userId') userId: string,
-    @Body() dto: any,
+    @Body() dto: ApproveRegistrationDto,
   ) {
     return this.registrationService.approveRegistration(realm, userId, dto);
   }
@@ -193,7 +199,7 @@ export class RegistrationController {
   async rejectRegistration(
     @CurrentRealm() realm: Realm,
     @Param('userId') userId: string,
-    @Body() dto: any,
+    @Body() dto: RejectRegistrationDto,
   ) {
     return this.registrationService.rejectRegistration(realm, userId, dto);
   }

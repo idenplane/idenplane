@@ -11,10 +11,10 @@ export function createLoggerConfig(): Params {
       level: logLevel,
       transport: isProduction
         ? undefined
-        : ({
+        : {
             target: 'pino-pretty',
             options: { colorize: true, singleLine: true },
-          } as any),
+          },
       redact: {
         paths: [
           'req.headers.authorization',
@@ -52,6 +52,6 @@ export function createLoggerConfig(): Params {
           req.url?.startsWith('/health') ||
           req.url?.startsWith('/admin/metrics'),
       },
-    } as any,
+    } as unknown as Params['pinoHttp'],
   };
 }
