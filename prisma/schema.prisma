@@ -116,7 +116,7 @@ model Realm {
   // Registration
   registrationAllowed          Boolean  @default(true) @map("registration_allowed")
   registrationApprovalRequired Boolean  @default(false) @map("registration_approval_required")
-  allowedEmailDomains          String[] @map("allowed_email_domains")
+  allowedEmailDomains          String[] @default([]) @map("allowed_email_domains")
   termsOfServiceUrl            String?  @map("terms_of_service_url")
   privacyPolicyUrl             String?  @map("privacy_policy_url")
 
@@ -1036,7 +1036,7 @@ model Webhook {
   url         String
   secret      String
   enabled     Boolean  @default(true)
-  eventTypes  String[] @map("event_types")
+  eventTypes  String[] @default([]) @map("event_types")
   description String?
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -1680,7 +1680,7 @@ model Organization {
   requireMfa Boolean @default(false) @map("require_mfa")
 
   // Domain verification
-  verifiedDomains String[] @map("verified_domains")
+  verifiedDomains String[] @default([]) @map("verified_domains")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
@@ -1817,7 +1817,7 @@ model ApiKey {
   keyPrefix            String    @map("key_prefix")
   keyHash              String    @map("key_hash")
   name                 String?
-  scopes               String[]
+  scopes               String[]  @default([])
   expiresAt            DateTime? @map("expires_at")
   lastUsedAt           DateTime? @map("last_used_at")
   requestCount         Int       @default(0) @map("request_count")
@@ -2135,7 +2135,7 @@ model UserConsentHistory {
   userId        String   @map("user_id")
   clientId      String   @map("client_id")
   action        String // GRANTED | REVOKED | UPDATED
-  scopes        String[]
+  scopes        String[] @default([])
   policyVersion String?  @map("policy_version")
   ipAddress     String?  @map("ip_address")
   userAgent     String?  @map("user_agent")

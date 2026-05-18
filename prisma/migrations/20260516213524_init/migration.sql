@@ -49,9 +49,6 @@ DROP INDEX "user_consent_history_user_id_client_id_idx";
 DROP INDEX "user_consent_history_user_id_created_at_idx";
 
 -- AlterTable
-ALTER TABLE "api_keys" ALTER COLUMN "scopes" DROP DEFAULT;
-
--- AlterTable
 ALTER TABLE "consent_categories" DROP COLUMN "name";
 
 -- AlterTable
@@ -76,9 +73,6 @@ ALTER COLUMN "metadata" SET NOT NULL;
 
 -- AlterTable
 ALTER TABLE "nhi_usage_stats" ADD COLUMN     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP;
-
--- AlterTable
-ALTER TABLE "organizations" ALTER COLUMN "verified_domains" DROP DEFAULT;
 
 -- AlterTable
 ALTER TABLE "pending_deletions" DROP COLUMN "created_at",
@@ -109,8 +103,7 @@ ADD COLUMN     "sms_max_requests_per_user" INTEGER NOT NULL DEFAULT 3,
 ADD COLUMN     "sms_provider" TEXT NOT NULL DEFAULT 'none',
 ADD COLUMN     "sms_provider_config" JSONB DEFAULT '{}',
 ADD COLUMN     "sms_rate_limit_window" INTEGER NOT NULL DEFAULT 900,
-ADD COLUMN     "webauthn_user_verification_required" BOOLEAN NOT NULL DEFAULT false,
-ALTER COLUMN "allowed_email_domains" DROP DEFAULT;
+ADD COLUMN     "webauthn_user_verification_required" BOOLEAN NOT NULL DEFAULT false;
 
 -- AlterTable
 ALTER TABLE "upgrade_audit_log" DROP COLUMN "checks_failed",
@@ -132,9 +125,6 @@ ADD COLUMN     "updated_at" TIMESTAMP(3) NOT NULL,
 ALTER COLUMN "initiated_by" SET NOT NULL;
 
 -- AlterTable
-ALTER TABLE "user_consent_history" ALTER COLUMN "scopes" DROP DEFAULT;
-
--- AlterTable
 ALTER TABLE "user_credentials" ADD COLUMN     "phone_number" TEXT;
 
 -- AlterTable
@@ -143,9 +133,6 @@ ALTER TABLE "users" ADD COLUMN     "phone_number" TEXT;
 -- AlterTable
 ALTER TABLE "webauthn_credentials" DROP COLUMN "backed_up",
 ADD COLUMN     "backedUp" BOOLEAN NOT NULL DEFAULT false;
-
--- AlterTable
-ALTER TABLE "webhooks" ALTER COLUMN "event_types" DROP DEFAULT;
 
 -- AlterTable
 ALTER TABLE "wizard_states" ALTER COLUMN "created_at" SET DATA TYPE TIMESTAMP(3),

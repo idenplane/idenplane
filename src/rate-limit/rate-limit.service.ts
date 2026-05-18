@@ -69,23 +69,26 @@ export class RateLimitService {
    * dedicated key namespace — no realm DB lookup required.
    */
   async checkAdminIpLimit(ip: string): Promise<RateLimitResult> {
-    const ADMIN_LIMIT_PER_MINUTE = 5;
-    const ADMIN_LIMIT_PER_HOUR = 50;
-    return this.check(
-      `admin:ip:${ip}`,
-      ADMIN_LIMIT_PER_MINUTE,
-      ADMIN_LIMIT_PER_HOUR,
-    );
+    // Production defaults preserved (5/min, 50/hour); overridable via env so
+    // test/CI harnesses are not throttled. Non-numeric/absent env => default.
+    const perMinute = this.envInt('ADMIN_IP_RL_PER_MINUTE', 5);
+    const perHour = this.envInt('ADMIN_IP_RL_PER_HOUR', 50);
+    return this.check(`admin:ip:${ip}`, perMinute, perHour);
   }
 
   async checkAdminApiKeyLimit(ip: string): Promise<RateLimitResult> {
-    const ADMIN_API_KEY_LIMIT_PER_MINUTE = 15;
-    const ADMIN_API_KEY_LIMIT_PER_HOUR = 100;
-    return this.check(
-      `admin:apikey:${ip}`,
-      ADMIN_API_KEY_LIMIT_PER_MINUTE,
-      ADMIN_API_KEY_LIMIT_PER_HOUR,
-    );
+    // Production defaults preserved (15/min, 100/hour); overridable via env so
+    // test/CI harnesses are not throttled. Non-numeric/absent env => default.
+    const perMinute = this.envInt('ADMIN_API_KEY_RL_PER_MINUTE', 15);
+    const perHour = this.envInt('ADMIN_API_KEY_RL_PER_HOUR', 100);
+    return this.check(`admin:apikey:${ip}`, perMinute, perHour);
+  }
+
+  private envInt(name: string, fallback: number): number {
+    const raw = process.env[name];
+    if (raw === undefined) return fallback;
+    const parsed = parseInt(raw, 10);
+    return Number.isFinite(parsed) && parsed > 0 ? parsed : fallback;
   }
 
   async checkIpLimit(ip: string, realmId: string): Promise<RateLimitResult> {
