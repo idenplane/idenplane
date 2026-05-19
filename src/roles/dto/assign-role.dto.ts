@@ -35,19 +35,34 @@ export class AssignRolesDto {
    * `dto.roleNames` without modification.
    */
   @Transform(
-    ({ value, obj }: { value: unknown; obj: Record<string, unknown> }) => {
-      // Already set — use it as-is.
-      if (Array.isArray(value) && value.length > 0) return value;
-      // Fall back to the Keycloak-style `roles` field.
-      const roles = obj['roles'];
-      if (Array.isArray(roles)) {
-        return roles.map((r: unknown) =>
-          r && typeof r === 'object' && 'name' in r
-            ? (r as { name: string }).name
-            : r,
+    ({
+      value,
+      obj,
+    }: {
+      value: unknown;
+      obj: Record<string, unknown>;
+    }): string[] => {
+      // Already provided as roleNames — keep only the string entries.
+      if (Array.isArray(value) && value.length > 0) {
+        return (value as unknown[]).filter(
+          (v): v is string => typeof v === 'string',
         );
       }
-      return value ?? [];
+      // Fall back to the Keycloak-style `roles: [{ name }]` field.
+      const roles = obj['roles'];
+      if (Array.isArray(roles)) {
+        return (roles as unknown[])
+          .map((r): string | undefined => {
+            if (typeof r === 'string') return r;
+            if (r && typeof r === 'object' && 'name' in r) {
+              const n = r.name;
+              return typeof n === 'string' ? n : undefined;
+            }
+            return undefined;
+          })
+          .filter((n): n is string => n !== undefined);
+      }
+      return [];
     },
   )
   roleNames!: string[];
