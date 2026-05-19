@@ -24,7 +24,27 @@ const WEBHOOK_SELECT = {
 } as const;
 
 /** Retry delays in milliseconds: 1s, 10s, 60s (used by testWebhook inline delivery) */
-const RETRY_DELAYS_MS = [1_000, 10_000, 60_000];
+// Backoff between webhook delivery retries. Production default is
+// [1s, 10s, 60s]; overridable via WEBHOOK_RETRY_DELAYS_MS (JSON array of
+// milliseconds) so test/CI environments can disable the long retry tail
+// that would otherwise outlive the request lifecycle.
+const RETRY_DELAYS_MS: number[] = (() => {
+  const raw = process.env['WEBHOOK_RETRY_DELAYS_MS'];
+  if (raw !== undefined) {
+    try {
+      const parsed = JSON.parse(raw) as unknown;
+      if (
+        Array.isArray(parsed) &&
+        parsed.every((n) => typeof n === 'number' && n >= 0)
+      ) {
+        return parsed as number[];
+      }
+    } catch {
+      // fall through to default
+    }
+  }
+  return [1_000, 10_000, 60_000];
+})();
 
 @Injectable()
 export class WebhooksService {

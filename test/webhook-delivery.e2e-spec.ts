@@ -38,6 +38,11 @@ describe('Webhook Delivery (e2e)', () => {
     await ctx.prisma.realm
       .delete({ where: { name: REALM_NAME } })
       .catch(() => {});
+    // Webhook deliveries are fire-and-forget (void deliverWebhook(...)).
+    // Let any in-flight outbound attempt settle before the app / Jest
+    // environment is torn down, otherwise its late module access throws
+    // "require after the Jest environment has been torn down" (CI flake).
+    await new Promise<void>((resolve) => setTimeout(resolve, 3000));
     await ctx.cleanup();
   });
 
