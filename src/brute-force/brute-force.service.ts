@@ -71,7 +71,10 @@ export class BruteForceService {
           if (lockoutCount >= permanentLockoutAfter) {
             await tx.user.update({
               where: { id: userId },
-              data: { lockedUntil: new Date('2099-12-31T23:59:59Z') },
+              data: {
+                lockedUntil: new Date('2099-12-31T23:59:59Z'),
+                enabled: false,
+              },
             });
             this.logger.warn(
               `User ${userId} in realm ${realm.id} permanently locked after ${lockoutCount} lockout cycles`,

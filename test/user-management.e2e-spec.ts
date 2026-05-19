@@ -199,10 +199,12 @@ describe('User Management API (e2e)', () => {
           `/admin/realms/${REALM_NAME}/users/${createdUserId}/role-mappings/realm`,
         )
         .send({ roleNames: ['mgmt-role'] }),
-    ).expect(201);
+    ).expect(200);
 
-    expect(Array.isArray(res.body)).toBe(true);
-    expect(res.body.length).toBeGreaterThanOrEqual(1);
+    // Role assignment is an update operation (HTTP 200, not 201) and the
+    // service returns { assigned: string[] } listing the roles applied.
+    expect(Array.isArray(res.body.assigned)).toBe(true);
+    expect(res.body.assigned.length).toBeGreaterThanOrEqual(1);
   });
 
   // ─── 11. GET USER REALM ROLES ─────────────────────────────

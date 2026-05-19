@@ -206,12 +206,24 @@ describe('MFA Flows (e2e)', () => {
   // ─── 5. MFA DISABLE FLOW ───────────────────────────────────────────────
 
   describe('MFA disable flow', () => {
-    it('DELETE .../mfa — should disable TOTP and return 204', async () => {
+    it('DELETE .../mfa — should reject API-key auth (MFA step-up required)', async () => {
+      // Resetting a user's MFA requires an MFA-verified interactive admin
+      // session; static admin API keys are deliberately forbidden for this
+      // account-recovery operation (issue #613 / BUG #3). The harness only
+      // has the API key, so it must be rejected with 401.
       await withKey(
         request(app.getHttpServer()).delete(
           `/admin/realms/${REALM_NAME}/users/${seeded.user.id}/mfa`,
         ),
-      ).expect(204);
+      ).expect(401);
+    });
+
+    it('disables TOTP via the service layer (step-up UI flow not driveable in e2e)', async () => {
+      // Mirror the enrollment tests: the privileged disable is exercised
+      // through the service directly so the post-conditions below can be
+      // verified without an MFA-stepped-up session.
+      const mfaService = app.get(MfaService);
+      await mfaService.disableTotp(seeded.user.id);
     });
 
     it('MFA status should be disabled after deletion', async () => {
@@ -238,13 +250,13 @@ describe('MFA Flows (e2e)', () => {
       expect(codes.length).toBe(0);
     });
 
-    it('DELETE .../mfa — should return 204 even when MFA is already disabled', async () => {
-      // Idempotent: disabling when already disabled must not error
+    it('DELETE .../mfa — still rejects API-key auth when MFA is already disabled', async () => {
+      // The step-up requirement is enforced regardless of MFA state.
       await withKey(
         request(app.getHttpServer()).delete(
           `/admin/realms/${REALM_NAME}/users/${seeded.user.id}/mfa`,
         ),
-      ).expect(204);
+      ).expect(401);
     });
 
     it('password grant should work normally after MFA is disabled', async () => {

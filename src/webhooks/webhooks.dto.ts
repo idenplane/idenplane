@@ -11,7 +11,10 @@ import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateWebhookDto {
   @ApiProperty({ example: 'https://example.com/webhook' })
-  @IsUrl({ require_tld: false }, { message: 'url must be a valid URL' })
+  @IsUrl(
+    { require_tld: false, require_protocol: true },
+    { message: 'url must be a valid URL' },
+  )
   url!: string;
 
   @ApiProperty({ example: 'my-signing-secret', minLength: 8 })
@@ -55,7 +58,10 @@ export class CreateWebhookDto {
 export class UpdateWebhookDto {
   @ApiPropertyOptional({ example: 'https://example.com/webhook' })
   @IsOptional()
-  @IsUrl({ require_tld: false }, { message: 'url must be a valid URL' })
+  @IsUrl(
+    { require_tld: false, require_protocol: true },
+    { message: 'url must be a valid URL' },
+  )
   url?: string;
 
   @ApiPropertyOptional({ example: 'new-signing-secret', minLength: 8 })

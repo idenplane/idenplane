@@ -113,6 +113,14 @@ export class RateLimitService {
   }
 
   computeHeaders(result: RateLimitResult): Record<string, string> {
+    // When rate limiting is disabled the service returns limit=0, remaining=0,
+    // resetAt=0.  Emitting headers with those sentinel values would mislead
+    // clients into believing a limit is in effect.  Return an empty object so
+    // the guard (and any caller) skips header injection entirely.
+    if (result.limit === 0 && result.resetAt === 0) {
+      return {};
+    }
+
     const headers: Record<string, string> = {
       'X-RateLimit-Limit': String(result.limit),
       'X-RateLimit-Remaining': String(Math.max(0, result.remaining)),

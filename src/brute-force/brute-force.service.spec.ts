@@ -176,6 +176,8 @@ describe('BruteForceService', () => {
         where: { id: 'user-1' },
         data: {
           lockedUntil: new Date('2099-12-31T23:59:59Z'),
+          // Permanently locked accounts are also disabled (security hardening).
+          enabled: false,
         },
       });
     });
