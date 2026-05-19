@@ -28,22 +28,32 @@ coverage
 # Docker volumes
 pgdata
 
-# Claude
+# AI / agent tooling
 .claude
-
-# Local workspace / scratch
 .agent/
 .agent-stop
-GEMINI.md
-.github/ISSUE_TEMPLATE/auto-task.md
-*.local.md
-
-# Auto Claude generated files
+.opencode/
 .auto-claude/
 .auto-claude-security.json
 .auto-claude-status
 .claude_settings.json
 .worktrees/
+GEMINI.md
+*.local.md
+.github/ISSUE_TEMPLATE/auto-task.md
+
+# Local scratch scripts / index files
+project_index.json
+check-git.sh
+commit.sh
+verify-ts.sh
+
+# Alternative package manager lockfiles (this project uses npm)
+pnpm-lock.yaml
+yarn.lock
+bun.lockb
+
+# Secrets / generated logs
 .security-key
 logs/security/
 

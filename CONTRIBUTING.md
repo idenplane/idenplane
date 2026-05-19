@@ -242,4 +242,4 @@ Email: security@authme.dev (or follow your organization's responsible disclosure
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the project's proprietary license.
+By contributing, you agree that your contributions will be licensed under the project's AGPL-3.0 license. See the [LICENSE](LICENSE) file for the full text.
