@@ -42,6 +42,8 @@ export interface TokenResponse {
   refresh_token?: string;
   scope?: string;
   id_token?: string;
+  /** OIDC Session Management: the server-side session identifier. */
+  session_state?: string;
 }
 
 @Injectable()
@@ -1025,6 +1027,7 @@ export class AuthService {
       expires_in: realm.accessTokenLifespan,
       refresh_token: rawRefreshToken,
       scope: validatedScope,
+      session_state: sessionId,
       ...(idToken ? { id_token: idToken } : {}),
     };
   }

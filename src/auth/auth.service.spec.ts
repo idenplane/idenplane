@@ -407,14 +407,18 @@ describe('AuthService', () => {
         'jest-agent',
       );
 
-      expect(result).toEqual({
-        access_token: FAKE_ACCESS_TOKEN,
-        token_type: 'Bearer',
-        expires_in: realm.accessTokenLifespan,
-        refresh_token: FAKE_REFRESH_TOKEN_RAW,
-        scope: 'openid',
-        id_token: FAKE_ACCESS_TOKEN, // signJwt mock returns same value for both calls
-      });
+      expect(result).toEqual(
+        expect.objectContaining({
+          access_token: FAKE_ACCESS_TOKEN,
+          token_type: 'Bearer',
+          expires_in: realm.accessTokenLifespan,
+          refresh_token: FAKE_REFRESH_TOKEN_RAW,
+          scope: 'openid',
+          id_token: FAKE_ACCESS_TOKEN, // signJwt mock returns same value for both calls
+        }),
+      );
+      // OIDC Session Management: a session_state is now emitted.
+      expect(result).toHaveProperty('session_state');
 
       // Verify session was created with ip and user agent
       expect(prisma.session.create).toHaveBeenCalledWith(

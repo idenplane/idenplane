@@ -211,11 +211,23 @@ export class UsersController {
     @CurrentRealm() realm: Realm,
     @Param('userId') userId: string,
   ) {
-    const user = await this.usersService.findById(realm, userId);
-    if (user.email) {
-      await this.usersService.sendVerificationEmail(realm, user.id, user.email);
+    // Uniform response regardless of whether the user exists or has an email,
+    // so the endpoint cannot be used to enumerate user IDs / email presence.
+    try {
+      const user = await this.usersService.findById(realm, userId);
+      if (user.email) {
+        await this.usersService.sendVerificationEmail(
+          realm,
+          user.id,
+          user.email,
+        );
+      }
+    } catch {
+      // Swallow not-found (and similar) — do not reveal existence.
     }
-    return { message: 'Verification email sent' };
+    return {
+      message: 'If the account exists, a verification email has been sent.',
+    };
   }
 
   @Get(':userId/offline-sessions')

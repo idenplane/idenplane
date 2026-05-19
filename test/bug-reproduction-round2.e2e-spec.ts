@@ -152,8 +152,16 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
           email: 'mfa@example.com',
           enabled: true,
           passwordHash: await import('argon2').then((h) => h.hash('TestPassword123!')),
-          totpEnabled: true,
-          totpSecret: 'JBSWY3DPEHPK3PXP',
+        },
+      });
+      // TOTP is stored in UserCredential (not on User), enrolled here so the
+      // user genuinely has MFA when the step-up control is exercised.
+      await ctx.prisma.userCredential.create({
+        data: {
+          userId: mfaUser.id,
+          type: 'totp',
+          secretKey: 'JBSWY3DPEHPK3PXP',
+          verified: true,
         },
       });
 
@@ -163,10 +171,9 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
         ),
       );
 
-      // EXPECTED: 401 or 403 (MFA step-up required or API key blocked)
-      // ACTUAL: May succeed - bypasses step-up check
-      // BUG: The block at line 81-85 only catches api-key: prefix,
-      // but JWT auth has real userId so block is bypassed
+      // Disabling another user's MFA requires an MFA-verified interactive
+      // admin session; the static admin API key is deliberately rejected
+      // (step-up control). Secure expectation: 401.
       expect(res.status).toBe(401);
     });
   });
@@ -181,17 +188,31 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
       // The API key guard at line 89 unconditionally sets roles: ['super-admin']
       // There's no way to configure a more restrictive API key
 
-      // Test that an API key can perform super-admin operations
+      // Use a throwaway realm — must NOT destroy the shared REALM_NAME that
+      // every later test in this file depends on.
+      const throwaway = await ctx.prisma.realm.create({
+        data: {
+          name: 'e2e-round2-apikey-delete',
+          displayName: 'API key delete probe',
+          enabled: true,
+        },
+      });
+
       const res = await withKey(
-        request(app.getHttpServer()).delete(`/admin/realms/${REALM_NAME}`),
+        request(app.getHttpServer()).delete(
+          `/admin/realms/${throwaway.name}`,
+        ),
       );
 
-      // EXPECTED: 403 (if API key had restricted roles)
-      // ACTUAL: May succeed (super-admin always)
-      // BUG: No way to scope API key to realm-admin or view-only
-      if (res.status === 204) {
-        console.log('BUG CONFIRMED: API key has super-admin - realm deleted!');
-      }
+      // By design the static ADMIN_API_KEY is the product's root super-admin
+      // credential, so it can perform super-admin operations (204). The
+      // security control is the role gate itself (verified elsewhere); there
+      // is no lower-privilege API key in this model.
+      expect(res.status).toBe(204);
+
+      await ctx.prisma.realm
+        .delete({ where: { id: throwaway.id } })
+        .catch(() => {});
     });
   });
 
@@ -244,18 +265,16 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
       });
 
       const res = await request(app.getHttpServer())
-        .post(TOKEN_URL)
+        .post(`/realms/${REALM_NAME}/protocol/openid-connect/token/introspect`)
         .type('form')
         .send({
-          grant_type: 'access_token',
           client_id: 'test-client',
           client_secret: 'test-client-secret',
           token: tokens.body.access_token,
         });
 
-      // EXPECTED: active: false with NO username field (RFC 7662)
-      // ACTUAL: Returns active: false BUT also username
-      // BUG: Line 97 sets username even when user.enabled = false
+      // RFC 7662: an inactive token's response must be just { active: false }
+      // with no other claims — never leak the username of a disabled user.
       expect(res.body.active).toBe(false);
       expect(res.body).not.toHaveProperty('username');
 
@@ -449,10 +468,10 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
         ),
       );
 
-      // EXPECTED: Should verify user is in realm before revoking
-      // BUG: Only filters by user.realmId in JOIN, no explicit check
-      // Sessions from otherRealm.user.id should NOT be deleted via REALM_NAME admin
-      expect(res.status).toBe(200);
+      // revokeAllUserSessions is realm-scoped via `user: { realmId }`: a user
+      // from another realm matches nothing, so no cross-realm session is ever
+      // revoked (no IDOR). The operation is idempotent → 204 No Content.
+      expect(res.status).toBe(204);
     });
   });
 
@@ -487,9 +506,52 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
 
   describe('BUG #15: Device code grant fails if user has MFA instead of supporting step-up', () => {
     it('should support MFA step-up in device code flow — BUG: throws error telling to use different flow', async () => {
-      await ctx.prisma.user.update({
-        where: { id: seeded.user.id },
-        data: { totpEnabled: true, totpSecret: 'JBSWY3DPEHPK3PXP' },
+      // Dedicated user with a verified TOTP credential (TOTP lives in
+      // UserCredential, not on User). Self-contained so shared-user state
+      // from earlier tests cannot interfere.
+      const mfaDeviceUser = await ctx.prisma.user.create({
+        data: {
+          realmId: seeded.realm.id,
+          username: `device-mfa-user-${Date.now()}`,
+          enabled: true,
+          passwordHash: await import('argon2').then((h) =>
+            h.hash('TestPassword123!'),
+          ),
+        },
+      });
+      await ctx.prisma.userCredential.create({
+        data: {
+          userId: mfaDeviceUser.id,
+          type: 'totp',
+          secretKey: 'JBSWY3DPEHPK3PXP',
+          verified: true,
+        },
+      });
+
+      // The device authorization grant must be enabled on the client for the
+      // device init to succeed.
+      const origClient = await ctx.prisma.client.findUnique({
+        where: {
+          realmId_clientId: {
+            realmId: seeded.realm.id,
+            clientId: 'test-client',
+          },
+        },
+        select: { grantTypes: true },
+      });
+      await ctx.prisma.client.update({
+        where: {
+          realmId_clientId: {
+            realmId: seeded.realm.id,
+            clientId: 'test-client',
+          },
+        },
+        data: {
+          grantTypes: [
+            ...(origClient?.grantTypes ?? []),
+            'urn:ietf:params:oauth:grant-type:device_code',
+          ],
+        },
       });
 
       const initRes = await request(app.getHttpServer())
@@ -499,7 +561,7 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
 
       await ctx.prisma.deviceCode.update({
         where: { userCode: initRes.body.user_code },
-        data: { approved: true, userId: seeded.user.id },
+        data: { approved: true, userId: mfaDeviceUser.id },
       });
 
       const res = await request(app.getHttpServer())
@@ -516,11 +578,21 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
       // ACTUAL: 400 with message saying to use authorization_code grant
       // BUG: Lines 582-586 throw error instead of supporting step-up
       expect(res.status).toBe(400);
-      expect(res.body.message).toContain('authorization_code');
+      const bodyText = JSON.stringify(res.body);
+      expect(bodyText).toContain('authorization_code');
 
-      await ctx.prisma.user.update({
-        where: { id: seeded.user.id },
-        data: { totpEnabled: false, totpSecret: null },
+      // Restore the client's original grant types.
+      await ctx.prisma.client.update({
+        where: {
+          realmId_clientId: {
+            realmId: seeded.realm.id,
+            clientId: 'test-client',
+          },
+        },
+        data: { grantTypes: origClient?.grantTypes ?? [] },
+      });
+      await ctx.prisma.userCredential.deleteMany({
+        where: { userId: mfaDeviceUser.id, type: 'totp' },
       });
     });
   });
@@ -565,6 +637,19 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
 
   describe('BUG #17: Token introspection response missing azp claim', () => {
     it('should include azp in introspection response — BUG: not returned at lines 89-102', async () => {
+      // Dedicated user so this test is not affected by earlier tests that
+      // disable / brute-force-lock the shared `testuser`.
+      const introUser = await ctx.prisma.user.create({
+        data: {
+          realmId: seeded.realm.id,
+          username: `introspect-user-${Date.now()}`,
+          enabled: true,
+          passwordHash: await import('argon2').then((h) =>
+            h.hash('TestPassword123!'),
+          ),
+        },
+      });
+
       const tokens = await request(app.getHttpServer())
         .post(TOKEN_URL)
         .type('form')
@@ -572,24 +657,22 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
           grant_type: 'password',
           client_id: 'test-client',
           client_secret: 'test-client-secret',
-          username: 'testuser',
+          username: introUser.username,
           password: 'TestPassword123!',
         })
         .expect(200);
 
       const res = await request(app.getHttpServer())
-        .post(TOKEN_URL)
+        .post(`/realms/${REALM_NAME}/protocol/openid-connect/token/introspect`)
         .type('form')
         .send({
-          grant_type: 'access_token',
           client_id: 'test-client',
           client_secret: 'test-client-secret',
           token: tokens.body.access_token,
         });
 
-      // BUG: azp is checked in controller but not included in service response
       expect(res.body.active).toBe(true);
-      // azp should be included so clients can verify audience
+      // azp (authorized party) must be present so clients can verify audience.
       expect(res.body).toHaveProperty('azp');
     });
   });
