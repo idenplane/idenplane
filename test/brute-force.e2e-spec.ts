@@ -7,6 +7,7 @@ import {
   type SeededRealm,
   type TestContext,
 } from './setup';
+import { BruteForceService } from '../src/brute-force/brute-force.service.js';
 
 describe('Brute-Force Protection (e2e)', () => {
   let app: INestApplication<App>;
@@ -204,12 +205,20 @@ describe('Brute-Force Protection (e2e)', () => {
       expect(found).toHaveProperty('lockedUntil');
     });
 
-    it('POST /admin/realms/:name/brute-force/users/:userId/unlock — should unlock the user', async () => {
+    it('POST .../brute-force/users/:userId/unlock — should reject API-key auth (MFA step-up required)', async () => {
+      // Unlocking a brute-force-locked account is a sensitive operation that
+      // requires an MFA-verified interactive admin session; static admin API
+      // keys are deliberately forbidden (same step-up control as MFA reset).
       await withKey(
         request(app.getHttpServer()).post(
           `/admin/realms/${REALM_NAME}/brute-force/users/${seeded.user.id}/unlock`,
         ),
-      ).expect(204);
+      ).expect(401);
+    });
+
+    it('unlocks the user via the service layer (step-up UI flow not driveable in e2e)', async () => {
+      const bruteForceService = app.get(BruteForceService);
+      await bruteForceService.unlockUser(seeded.realm.id, seeded.user.id);
     });
 
     it('should allow login after admin unlock', async () => {

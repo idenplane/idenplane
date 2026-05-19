@@ -4,7 +4,7 @@ import { MigrationCheckService } from './migration-check.service.js';
 import type { MigrationStatus } from './migration-check.service.js';
 
 function makeMigrationCheckService(status: MigrationStatus) {
-  return { getStatus: jest.fn().mockResolvedValue(status) };
+  return { getStatus: jest.fn().mockReturnValue(status) };
 }
 
 describe('SystemVersionController', () => {

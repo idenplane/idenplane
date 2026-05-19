@@ -113,7 +113,7 @@ describe('OAuth2 / OIDC Token Flows (e2e)', () => {
         })
         .expect(400);
 
-      expect(res.body).toHaveProperty('message');
+      expect(res.body).toHaveProperty('error');
     });
   });
 
@@ -234,7 +234,7 @@ describe('OAuth2 / OIDC Token Flows (e2e)', () => {
 
   describe('Userinfo Endpoint', () => {
     it('should return user claims when called with a valid Bearer token', async () => {
-      // Obtain a token
+      // Obtain a token with profile and email scopes so userinfo returns those claims
       const tokenRes = await request(app.getHttpServer())
         .post(TOKEN_URL)
         .type('form')
@@ -244,7 +244,7 @@ describe('OAuth2 / OIDC Token Flows (e2e)', () => {
           client_secret: 'test-client-secret',
           username: 'testuser',
           password: 'TestPassword123!',
-          scope: 'openid',
+          scope: 'openid profile email',
         })
         .expect(200);
 
@@ -276,7 +276,7 @@ describe('OAuth2 / OIDC Token Flows (e2e)', () => {
         })
         .expect(400);
 
-      expect(res.body).toHaveProperty('message');
+      expect(res.body).toHaveProperty('error');
     });
   });
 

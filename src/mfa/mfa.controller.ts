@@ -88,6 +88,29 @@ export class MfaController {
     await this.mfaService.disableTotp(userId);
   }
 
+  @Delete('totp')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: 'Reset/disable TOTP MFA for a user' })
+  @ApiResponse({ status: 204, description: 'TOTP MFA disabled' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized – MFA step-up required',
+  })
+  @ApiResponse({ status: 404, description: 'Not found' })
+  async resetTotp(
+    @CurrentRealm() realm: Realm,
+    @Param('userId') userId: string,
+    @Req() req: Request,
+  ) {
+    await this.assertUserInRealm(userId, realm);
+    // Resetting a user's TOTP secret is a high-privilege, sensitive operation:
+    // it bypasses the user's second factor entirely.  The admin must have
+    // completed MFA step-up themselves; static API key auth is explicitly
+    // rejected because the key cannot prove interactive MFA verification.
+    await this.requireAdminMfaStepUp(realm, req);
+    await this.mfaService.disableTotp(userId);
+  }
+
   private async requireAdminMfaStepUp(
     realm: Realm,
     req: Request,

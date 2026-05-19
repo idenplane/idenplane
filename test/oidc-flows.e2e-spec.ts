@@ -267,7 +267,7 @@ describe('OIDC Flows (e2e)', () => {
           client_secret: 'test-client-secret',
           username: 'testuser',
           password: 'TestPassword123!',
-          scope: 'openid',
+          scope: 'openid profile email',
         })
         .expect(200);
 

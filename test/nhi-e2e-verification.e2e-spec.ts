@@ -78,7 +78,7 @@ describe('NHI End-to-End Verification (e2e)', () => {
           .post(`/admin/realms/${REALM_NAME}/nhi`)
           .send({
             name: DEVICE_NAME,
-            type: 'IOT_DEVICE',
+            identityType: 'IOT_DEVICE',
             description: 'Temperature sensor in building A',
             enabled: true,
             agentPurpose: 'Temperature monitoring in Building A, Floor 3',
@@ -89,10 +89,10 @@ describe('NHI End-to-End Verification (e2e)', () => {
 
       expect(res.body).toHaveProperty('id');
       expect(res.body).toHaveProperty('name', DEVICE_NAME);
-      expect(res.body).toHaveProperty('type', 'IOT_DEVICE');
+      expect(res.body).toHaveProperty('identityType', 'IOT_DEVICE');
       expect(res.body).toHaveProperty('description', 'Temperature sensor in building A');
       expect(res.body).toHaveProperty('enabled', true);
-      expect(res.body.status).toBe('PROVISIONING');
+      expect(res.body.lifecycleStatus).toBe('PROVISIONING');
     });
 
     it('GET /admin/realms/:name/nhi — should list the created device', async () => {
@@ -105,8 +105,8 @@ describe('NHI End-to-End Verification (e2e)', () => {
         (nhi: { name: string }) => nhi.name === DEVICE_NAME,
       );
       expect(found).toBeDefined();
-      expect(found.type).toBe('IOT_DEVICE');
-      expect(found.status).toBe('PROVISIONING');
+      expect(found.identityType).toBe('IOT_DEVICE');
+      expect(found.lifecycleStatus).toBe('PROVISIONING');
     });
 
     it('should generate a device certificate', async () => {
@@ -114,8 +114,9 @@ describe('NHI End-to-End Verification (e2e)', () => {
         adminRequest()
           .post(`/admin/realms/${REALM_NAME}/nhi/device-certificates`)
           .send({
-            commonName: `${DEVICE_NAME}.authme.local`,
-            organization: 'AuthMe IoT',
+            name: `${DEVICE_NAME}.authme.local`,
+            subjectCommonName: `${DEVICE_NAME}.authme.local`,
+            subjectOrganization: 'AuthMe IoT',
             validityDays: 365,
             keyAlgorithm: 'ECDSA_P256',
           }),
@@ -147,8 +148,9 @@ describe('NHI End-to-End Verification (e2e)', () => {
         adminRequest()
           .post(`/admin/realms/${REALM_NAME}/nhi/device-certificates`)
           .send({
-            commonName: `${DEVICE_NAME}.authme.local`,
-            organization: 'AuthMe IoT',
+            name: `${DEVICE_NAME}.authme.local`,
+            subjectCommonName: `${DEVICE_NAME}.authme.local`,
+            subjectOrganization: 'AuthMe IoT',
             validityDays: 365,
             keyAlgorithm: 'ECDSA_P256',
           }),
@@ -161,16 +163,15 @@ describe('NHI End-to-End Verification (e2e)', () => {
           .send({
             certificatePem: certRes.body.certificatePem,
           }),
-      ).expect(200);
+      ).expect(201);
 
-      // Verify certificate info is returned
+      // Verify certificate info is returned on the identity
       const detailRes = await withKey(
         adminRequest().get(`/admin/realms/${REALM_NAME}/nhi/${device.id}`),
       ).expect(200);
 
-      expect(detailRes.body).toHaveProperty('certificate');
-      expect(detailRes.body.certificate).toHaveProperty('fingerprint');
-      expect(detailRes.body.certificate).toHaveProperty('subject');
+      expect(detailRes.body).toHaveProperty('certificateFingerprint');
+      expect(detailRes.body).toHaveProperty('certificateSubject');
     });
   });
 
@@ -189,8 +190,8 @@ describe('NHI End-to-End Verification (e2e)', () => {
       expect(device).toBeDefined();
       expect(device).toHaveProperty('id');
       expect(device).toHaveProperty('name');
-      expect(device).toHaveProperty('type');
-      expect(device).toHaveProperty('status');
+      expect(device).toHaveProperty('identityType');
+      expect(device).toHaveProperty('lifecycleStatus');
       expect(device).toHaveProperty('enabled');
       expect(device).toHaveProperty('createdAt');
     });
@@ -210,7 +211,7 @@ describe('NHI End-to-End Verification (e2e)', () => {
 
       expect(detailRes.body).toHaveProperty('id', device.id);
       expect(detailRes.body).toHaveProperty('name', DEVICE_NAME);
-      expect(detailRes.body).toHaveProperty('type', 'IOT_DEVICE');
+      expect(detailRes.body).toHaveProperty('identityType', 'IOT_DEVICE');
       expect(detailRes.body).toHaveProperty('permissionScopes');
       expect(Array.isArray(detailRes.body.permissionScopes)).toBe(true);
       expect(detailRes.body.permissionScopes).toContain('temperature:read');
@@ -225,16 +226,16 @@ describe('NHI End-to-End Verification (e2e)', () => {
         (nhi: { name: string }) => nhi.name === DEVICE_NAME,
       );
 
-      // Update to set status to ACTIVE
+      // Update to set lifecycleStatus to ACTIVE
       const updateRes = await withKey(
         adminRequest()
           .put(`/admin/realms/${REALM_NAME}/nhi/${device.id}`)
           .send({
-            status: 'ACTIVE',
+            lifecycleStatus: 'ACTIVE',
           }),
       ).expect(200);
 
-      expect(updateRes.body).toHaveProperty('status', 'ACTIVE');
+      expect(updateRes.body).toHaveProperty('lifecycleStatus', 'ACTIVE');
     });
   });
 
@@ -255,17 +256,17 @@ describe('NHI End-to-End Verification (e2e)', () => {
           .post(`/admin/realms/${REALM_NAME}/nhi/${device.id}/credentials`)
           .send({
             name: 'device-api-key',
-            type: 'API_KEY',
+            credentialType: 'API_KEY',
             expiresAt: new Date(Date.now() + 90 * 24 * 60 * 60 * 1000).toISOString(), // 90 days
-            requirePeriodicRotation: true,
+            rotationRequired: true,
           }),
       ).expect(201);
 
       expect(credRes.body).toHaveProperty('id');
       expect(credRes.body).toHaveProperty('keyPrefix');
-      expect(credRes.body).toHaveProperty('secretKey');
-      expect(credRes.body.type).toBe('API_KEY');
-      expect(credRes.body.status).toBe('ACTIVE');
+      expect(credRes.body).toHaveProperty('plainKey');
+      expect(credRes.body.credentialType).toBe('API_KEY');
+      expect(credRes.body.revoked).toBe(false);
     });
 
     it('should list credentials for the device', async () => {
@@ -285,7 +286,7 @@ describe('NHI End-to-End Verification (e2e)', () => {
       expect(credsRes.body.length).toBeGreaterThan(0);
 
       const apiKeyCred = credsRes.body.find(
-        (c: { type: string }) => c.type === 'API_KEY',
+        (c: { credentialType: string }) => c.credentialType === 'API_KEY',
       );
       expect(apiKeyCred).toBeDefined();
     });
@@ -305,7 +306,7 @@ describe('NHI End-to-End Verification (e2e)', () => {
       ).expect(200);
 
       const apiKeyCred = credsRes.body.find(
-        (c: { type: string }) => c.type === 'API_KEY',
+        (c: { credentialType: string }) => c.credentialType === 'API_KEY',
       );
 
       // Rotate the credential
@@ -316,7 +317,7 @@ describe('NHI End-to-End Verification (e2e)', () => {
 
       expect(rotateRes.body).toHaveProperty('newCredential');
       expect(rotateRes.body.newCredential).toHaveProperty('id');
-      expect(rotateRes.body.newCredential).toHaveProperty('secretKey');
+      expect(rotateRes.body.newCredential).toHaveProperty('plainKey');
     });
   });
 
@@ -395,7 +396,7 @@ describe('NHI End-to-End Verification (e2e)', () => {
           .post(`/admin/realms/${REALM_NAME}/nhi/${device.id}/suspend`),
       ).expect(200);
 
-      expect(suspendRes.body).toHaveProperty('status', 'SUSPENDED');
+      expect(suspendRes.body).toHaveProperty('lifecycleStatus', 'SUSPENDED');
       expect(suspendRes.body).toHaveProperty('suspendedAt');
     });
 
@@ -413,7 +414,7 @@ describe('NHI End-to-End Verification (e2e)', () => {
           .post(`/admin/realms/${REALM_NAME}/nhi/${device.id}/reactivate`),
       ).expect(200);
 
-      expect(reactivateRes.body).toHaveProperty('status', 'ACTIVE');
+      expect(reactivateRes.body).toHaveProperty('lifecycleStatus', 'ACTIVE');
     });
 
     it('should get usage statistics for an NHI identity', async () => {
@@ -429,8 +430,8 @@ describe('NHI End-to-End Verification (e2e)', () => {
         adminRequest().get(`/admin/realms/${REALM_NAME}/nhi/${device.id}/stats`),
       ).expect(200);
 
-      expect(statsRes.body).toHaveProperty('identityId');
-      expect(statsRes.body).toHaveProperty('totalApiCalls');
+      expect(statsRes.body).toHaveProperty('nhiIdentityId');
+      expect(statsRes.body).toHaveProperty('totalRequests');
     });
   });
 
@@ -447,10 +448,8 @@ describe('NHI End-to-End Verification (e2e)', () => {
             credentialType: 'API_KEY',
             autoRotate: true,
             rotationIntervalDays: 30,
-            maxCredentials: 3,
-            requireRotationOnCompromise: true,
-            notifyOnRotation: true,
-            notifyEmails: ['security@example.com'],
+            maxCredentialAgeDays: 365,
+            requireAuditLogging: true,
             enabled: true,
           }),
       ).expect(201);
@@ -478,8 +477,8 @@ describe('NHI End-to-End Verification (e2e)', () => {
         adminRequest().get(`/admin/realms/${REALM_NAME}/nhi/rotation-status`),
       ).expect(200);
 
-      expect(statusRes.body).toHaveProperty('totalCredentials');
-      expect(statusRes.body).toHaveProperty('credentialsRequiringRotation');
+      expect(statusRes.body).toHaveProperty('totalRequiringRotation');
+      expect(statusRes.body).toHaveProperty('dueForRotation');
     });
   });
 
@@ -494,17 +493,13 @@ describe('NHI End-to-End Verification (e2e)', () => {
             devices: [
               {
                 name: 'sensor-gateway-02',
-                type: 'IOT_DEVICE',
                 description: 'Temperature sensor in building B',
-                agentPurpose: 'Temperature monitoring in Building B',
                 permissionScopes: ['temperature:read'],
                 tags: ['iot', 'temperature', 'building-b'],
               },
               {
                 name: 'ai-assistant-01',
-                type: 'AI_AGENT',
                 description: 'AI assistant for customer support',
-                agentPurpose: 'Customer support automation',
                 permissionScopes: ['chat:read', 'chat:write'],
                 tags: ['ai', 'support'],
               },
@@ -514,8 +509,8 @@ describe('NHI End-to-End Verification (e2e)', () => {
 
       expect(bulkRes.body).toHaveProperty('total');
       expect(bulkRes.body.total).toBe(2);
-      expect(bulkRes.body).toHaveProperty('succeeded');
-      expect(bulkRes.body.succeeded).toBe(2);
+      expect(bulkRes.body).toHaveProperty('successful');
+      expect(bulkRes.body.successful).toBe(2);
       expect(bulkRes.body).toHaveProperty('failed');
       expect(bulkRes.body.failed).toBe(0);
       expect(Array.isArray(bulkRes.body.results)).toBe(true);
@@ -530,7 +525,6 @@ describe('NHI End-to-End Verification (e2e)', () => {
             devices: [
               {
                 name: 'secure-sensor-01',
-                type: 'IOT_DEVICE',
                 description: 'Secure temperature sensor',
                 generateCertificate: true,
                 certificateKeyAlgorithm: 'ECDSA_P256',
@@ -551,7 +545,7 @@ describe('NHI End-to-End Verification (e2e)', () => {
     it('DELETE /admin/realms/:name — should delete the test realm', async () => {
       await withKey(
         adminRequest().delete(`/admin/realms/${REALM_NAME}`),
-      ).expect(200);
+      ).expect(204);
 
       // Verify the realm is gone
       await withKey(

@@ -57,12 +57,13 @@ describe('SessionsController', () => {
   });
 
   describe('revokeSession', () => {
-    it('should call sessionsService.revokeSession with sessionId and type', () => {
+    it('should call sessionsService.revokeSession with realm, sessionId and type', () => {
       mockSessionsService.revokeSession.mockReturnValue(undefined);
 
-      const result = controller.revokeSession('session-1', 'sso');
+      const result = controller.revokeSession(realm, 'session-1', 'sso');
 
       expect(mockSessionsService.revokeSession).toHaveBeenCalledWith(
+        realm,
         'session-1',
         'sso',
       );
@@ -72,9 +73,10 @@ describe('SessionsController', () => {
     it('should default type to oauth when not provided', () => {
       mockSessionsService.revokeSession.mockReturnValue(undefined);
 
-      controller.revokeSession('session-1', 'oauth');
+      controller.revokeSession(realm, 'session-1', 'oauth');
 
       expect(mockSessionsService.revokeSession).toHaveBeenCalledWith(
+        realm,
         'session-1',
         'oauth',
       );

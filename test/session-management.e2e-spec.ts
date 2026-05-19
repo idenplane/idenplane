@@ -154,7 +154,7 @@ describe('Session Management API (e2e)', () => {
         adminRequest().delete(
           `/admin/realms/${REALM_NAME}/users/${seeded.user.id}/sessions`,
         ),
-      ).expect(200);
+      ).expect(204);
     });
 
     it('refresh grant should fail after all sessions are revoked', async () => {

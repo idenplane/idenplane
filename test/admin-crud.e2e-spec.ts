@@ -252,10 +252,11 @@ describe('Admin CRUD API (e2e)', () => {
             `/admin/realms/${REALM_NAME}/users/${user.id}/role-mappings/realm`,
           )
           .send({ roleNames: ['e2e-admin'] }),
-      ).expect(201);
+      ).expect(200);
 
-      expect(Array.isArray(res.body)).toBe(true);
-      expect(res.body.length).toBeGreaterThanOrEqual(1);
+      expect(res.body).toHaveProperty('assigned');
+      expect(Array.isArray(res.body.assigned)).toBe(true);
+      expect(res.body.assigned.length).toBeGreaterThanOrEqual(1);
     });
 
     it('should list the assigned realm roles for the user', async () => {
@@ -286,7 +287,7 @@ describe('Admin CRUD API (e2e)', () => {
     it('DELETE /admin/realms/:name — should delete the realm', async () => {
       await withKey(
         adminRequest().delete(`/admin/realms/${REALM_NAME}`),
-      ).expect(200);
+      ).expect(204);
 
       // Verify it is gone
       await withKey(

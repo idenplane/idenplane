@@ -88,25 +88,10 @@ describe('RollbackService', () => {
     });
 
     it('should return canRollback=false when upgrade has no backup', async () => {
-      const now = new Date();
-      mockPrisma.upgradeAuditLog.findFirst.mockResolvedValue({
-        id: 'upg-123',
-        fromVersion: '2.0.0',
-        toVersion: '2.1.0',
-        status: 'COMPLETED',
-        startedAt: now,
-        completedAt: now,
-        initiatedBy: 'CLI',
-        backupId: null,
-        rollbackFromVersion: null,
-        errorMessage: null,
-        checksPassed: {},
-        checksFailed: {},
-        stepsCompleted: [],
-        stepsFailed: [],
-        durationMs: null,
-        metadata: {},
-      });
+      // The service queries with WHERE backupId IS NOT NULL, so a record with
+      // backupId: null would not be returned by Prisma. Mock returns null to
+      // simulate that no matching record was found.
+      mockPrisma.upgradeAuditLog.findFirst.mockResolvedValue(null);
 
       const capability = await rollbackService.checkRollbackCapability();
 
@@ -167,7 +152,7 @@ describe('RollbackService', () => {
       mockDatabaseBackupService.verifyBackup.mockReturnValue(true);
 
       // Mock backup restore
-      mockDatabaseBackupService.restoreBackup.mockResolvedValue({
+      mockDatabaseBackupService.restoreBackup.mockReturnValue({
         success: true,
         backupPath: '/backups/authme-backup-456.sql.gz',
         duration: 5000,
@@ -340,7 +325,7 @@ describe('RollbackService', () => {
       ]);
 
       mockDatabaseBackupService.verifyBackup.mockReturnValue(true);
-      mockDatabaseBackupService.restoreBackup.mockResolvedValue({
+      mockDatabaseBackupService.restoreBackup.mockReturnValue({
         success: false,
         error: 'pg_restore failed',
         timestamp: new Date(),
@@ -406,7 +391,7 @@ describe('RollbackService', () => {
       ]);
 
       mockDatabaseBackupService.verifyBackup.mockReturnValue(true);
-      mockDatabaseBackupService.restoreBackup.mockResolvedValue({
+      mockDatabaseBackupService.restoreBackup.mockReturnValue({
         success: true,
         backupPath: '/backups/authme-backup-456.sql.gz',
         duration: 5000,

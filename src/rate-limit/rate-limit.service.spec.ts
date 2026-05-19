@@ -12,9 +12,61 @@ const createMockRedisService = () => ({
   del: jest.fn().mockResolvedValue(undefined),
 });
 
+/**
+ * Create a stateful upsert mock that accumulates minuteCount and hourCount
+ * per key (simulating the DB upsert + increment behaviour).
+ */
+function createStatefulUpsertMock() {
+  const store = new Map<
+    string,
+    {
+      minuteCount: number;
+      minuteWindowStart: Date;
+      hourCount: number;
+      hourWindowStart: Date;
+    }
+  >();
+
+  const upsertFn = jest.fn().mockImplementation(
+    (args: {
+      where: { key: string };
+      create: {
+        key: string;
+        minuteCount: number;
+        minuteWindowStart: Date;
+        hourCount: number;
+        hourWindowStart: Date;
+      };
+      update: {
+        minuteCount?: { increment: number };
+        hourCount?: { increment: number };
+      };
+    }) => {
+      const key = args.where.key;
+      if (!store.has(key)) {
+        store.set(key, { ...args.create });
+      } else {
+        const entry = store.get(key)!;
+        if (args.update.minuteCount?.increment !== undefined) {
+          entry.minuteCount += args.update.minuteCount.increment;
+        }
+        if (args.update.hourCount?.increment !== undefined) {
+          entry.hourCount += args.update.hourCount.increment;
+        }
+      }
+      return Promise.resolve({ ...store.get(key)! });
+    },
+  );
+
+  // Expose store for manipulation in tests
+  (upsertFn as any).__store = store;
+  return upsertFn;
+}
+
 describe('RateLimitService', () => {
   let service: RateLimitService;
   let prisma: MockPrismaService;
+  let upsertMock: ReturnType<typeof createStatefulUpsertMock>;
 
   const realmId = 'realm-1';
   const clientId = 'client-1';
@@ -43,6 +95,8 @@ describe('RateLimitService', () => {
 
   beforeEach(() => {
     prisma = createMockPrismaService();
+    upsertMock = createStatefulUpsertMock();
+    prisma.rateLimitEntry.upsert = upsertMock;
     service = new RateLimitService(
       prisma as any,
       createMockRedisService() as any,
@@ -279,32 +333,30 @@ describe('RateLimitService', () => {
     });
   });
 
-  // ─── cleanupExpiredEntries ─────────────────────────────────
+  // ─── cleanupExpiredDbEntries ───────────────────────────────
 
-  describe('cleanupExpiredEntries', () => {
-    it('should not throw when called with an empty store', () => {
-      expect(() => service.cleanupExpiredEntries()).not.toThrow();
+  describe('cleanupExpiredDbEntries', () => {
+    it('should not throw when called with no stale entries', async () => {
+      prisma.rateLimitEntry.deleteMany.mockResolvedValue({ count: 0 });
+
+      await expect(service.cleanupExpiredDbEntries()).resolves.not.toThrow();
     });
 
-    it('should remove entries older than 1 hour', async () => {
-      prisma.realm.findUnique.mockResolvedValue(rateLimitEnabledRealm);
+    it('should delete entries older than 1 hour', async () => {
+      prisma.rateLimitEntry.deleteMany.mockResolvedValue({ count: 5 });
 
-      // Add an entry
-      await service.checkClientLimit(clientId, realmId);
+      await service.cleanupExpiredDbEntries();
 
-      // Access internal store to manipulate timestamps
-      const store = (service as any).memoryStore as Map<string, any>;
-      const key = `client:${realmId}:${clientId}`;
-      const entry = store.get(key)!;
-
-      // Set both windows to 2 hours ago
-      const twoHoursAgo = Date.now() - 2 * 3_600_000;
-      entry.minute.windowStart = twoHoursAgo;
-      entry.hour.windowStart = twoHoursAgo;
-
-      expect(store.size).toBe(1);
-      service.cleanupExpiredEntries();
-      expect(store.size).toBe(0);
+      expect(prisma.rateLimitEntry.deleteMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: expect.objectContaining({
+            OR: expect.arrayContaining([
+              expect.objectContaining({ minuteWindowStart: expect.any(Object) }),
+              expect.objectContaining({ hourWindowStart: expect.any(Object) }),
+            ]),
+          }),
+        }),
+      );
     });
   });
 });

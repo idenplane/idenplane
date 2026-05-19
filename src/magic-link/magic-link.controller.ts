@@ -54,8 +54,8 @@ export class MagicLinkController {
     const userAgent = req.headers['user-agent'];
 
     return this.magicLinkService.requestMagicLink(
-      realm.id,
       dto.email,
+      realm.id,
       ipAddress,
       userAgent,
       dto.magicLinkUrl,

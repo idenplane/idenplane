@@ -240,7 +240,7 @@ describe('OAuth 2.0 Grant Types (e2e)', () => {
         });
 
       expect([400, 401]).toContain(res.status);
-      expect(res.body).toHaveProperty('message');
+      expect(res.body).toHaveProperty('error');
     });
   });
 
@@ -338,7 +338,7 @@ describe('OAuth 2.0 Grant Types (e2e)', () => {
 
       // Expect 400 with authorization_pending
       expect([400]).toContain(pollRes.status);
-      expect(pollRes.body.message).toContain('authorization_pending');
+      expect(pollRes.body.error).toContain('authorization_pending');
     });
 
     it('should issue tokens after the device code is approved', async () => {
@@ -402,7 +402,7 @@ describe('OAuth 2.0 Grant Types (e2e)', () => {
         });
 
       expect(res.status).toBe(400);
-      expect(res.body.message).toContain('access_denied');
+      expect(res.body.error).toContain('access_denied');
     });
   });
 

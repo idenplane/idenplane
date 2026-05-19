@@ -7,6 +7,21 @@ describe('BruteForceController', () => {
     getLockedUsers: jest.Mock;
     unlockUser: jest.Mock;
   };
+  let stepUpService: {
+    getSessionAcr: jest.Mock;
+    satisfiesAcr: jest.Mock;
+  };
+  let loginService: {
+    validateLoginSession: jest.Mock;
+  };
+  let crypto: {
+    sha256: jest.Mock;
+  };
+  let prisma: {
+    loginSession: {
+      findUnique: jest.Mock;
+    };
+  };
 
   const realm = { id: 'realm-1', name: 'test-realm' } as Realm;
 
@@ -15,7 +30,28 @@ describe('BruteForceController', () => {
       getLockedUsers: jest.fn(),
       unlockUser: jest.fn(),
     };
-    controller = new BruteForceController(bruteForceService as any);
+    stepUpService = {
+      getSessionAcr: jest.fn().mockResolvedValue('urn:authme:acr:mfa'),
+      satisfiesAcr: jest.fn().mockReturnValue(true),
+    };
+    loginService = {
+      validateLoginSession: jest.fn().mockResolvedValue({ id: 'admin-1' }),
+    };
+    crypto = {
+      sha256: jest.fn().mockReturnValue('hashed-session-token'),
+    };
+    prisma = {
+      loginSession: {
+        findUnique: jest.fn().mockResolvedValue({ id: 'session-1' }),
+      },
+    };
+    controller = new BruteForceController(
+      bruteForceService as any,
+      stepUpService as any,
+      loginService as any,
+      crypto as any,
+      prisma as any,
+    );
   });
 
   describe('getLockedUsers', () => {
@@ -36,7 +72,13 @@ describe('BruteForceController', () => {
       bruteForceService.unlockUser.mockResolvedValue(undefined);
       const realm = { id: 'realm-1', name: 'test' } as any;
 
-      await controller.unlockUser(realm, 'user-1', { adminUser: { userId: 'admin-1' } } as any);
+      // Provide a request with adminUser (non-api-key) and AUTHME_SESSION cookie
+      const req = {
+        adminUser: { userId: 'admin-1' },
+        cookies: { AUTHME_SESSION: 'valid-session-token' },
+      } as any;
+
+      await controller.unlockUser(realm, 'user-1', req);
 
       expect(bruteForceService.unlockUser).toHaveBeenCalledWith(
         'realm-1',

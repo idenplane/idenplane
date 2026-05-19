@@ -166,13 +166,11 @@ describe('AdminAuthController', () => {
       expect(result).toEqual(adminUser);
     });
 
-    it('should throw UnauthorizedException if no admin user on request', async () => {
+    it('should throw UnauthorizedException if no admin user on request', () => {
       const req = {} as any;
 
-      await expect(controller.getMe(req)).rejects.toThrow(
-        UnauthorizedException,
-      );
-      await expect(controller.getMe(req)).rejects.toThrow('Not authenticated');
+      expect(() => controller.getMe(req)).toThrow(UnauthorizedException);
+      expect(() => controller.getMe(req)).toThrow('Not authenticated');
     });
   });
 });

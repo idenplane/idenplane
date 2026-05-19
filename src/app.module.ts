@@ -62,6 +62,7 @@ import { CorsModule } from './cors/cors.module.js';
 import { ServiceAccountsModule } from './service-accounts/service-accounts.module.js';
 import { RegistrationModule } from './registration/registration.module.js';
 import { ScimModule } from './scim/scim.module.js';
+import { NhiModule } from './nhi/nhi.module.js';
 import { AdminApiKeyGuard } from './common/guards/admin-api-key.guard.js';
 import { AdminEventInterceptor } from './events/admin-event.interceptor.js';
 import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
@@ -136,6 +137,7 @@ import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
     ServiceAccountsModule,
     RegistrationModule,
     ScimModule,
+    NhiModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },

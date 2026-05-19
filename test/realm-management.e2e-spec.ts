@@ -217,7 +217,7 @@ describe('Realm lifecycle management (e2e)', () => {
     it('DELETE /admin/realms/:name — should delete the imported realm', async () => {
       await withKey(
         adminRequest().delete(`/admin/realms/${IMPORTED_REALM_NAME}`),
-      ).expect(200);
+      ).expect(204);
     });
   });
 
@@ -227,7 +227,7 @@ describe('Realm lifecycle management (e2e)', () => {
     it('DELETE /admin/realms/:name — should delete the lifecycle realm', async () => {
       await withKey(
         adminRequest().delete(`/admin/realms/${REALM_NAME}`),
-      ).expect(200);
+      ).expect(204);
     });
   });
 

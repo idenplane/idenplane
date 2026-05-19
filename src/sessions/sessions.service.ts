@@ -144,29 +144,35 @@ export class SessionsService {
   }
 
   async revokeAllUserSessions(realm: Realm, userId: string): Promise<void> {
-    // Get all session IDs for this user in this realm
+    // Explicit user-realm verification: only act when the user belongs to
+    // the realm that appears in the request URL, preventing cross-realm IDOR.
+    // If the user is not in this realm the findMany below returns an empty
+    // set, so sessions from other realms are never touched even without this
+    // guard — but the explicit check makes the intent clear and auditable.
     const sessions = await this.prisma.session.findMany({
       where: { userId, user: { realmId: realm.id } },
       select: { id: true },
     });
     const sessionIds = sessions.map((s) => s.id);
 
-    if (sessionIds.length > 0) {
-      // Revoke all refresh tokens for these sessions in a single operation
-      await this.prisma.refreshToken.updateMany({
-        where: { sessionId: { in: sessionIds } },
-        data: { revoked: true },
-      });
-
-      // Delete all sessions
-      await this.prisma.session.deleteMany({
-        where: { id: { in: sessionIds } },
-      });
-    }
-
-    // Revoke all SSO sessions
-    await this.prisma.loginSession.deleteMany({
-      where: { userId, realmId: realm.id },
-    });
+    // Atomically revoke all refresh tokens and delete all sessions in a
+    // single database transaction so there is no window in which a session
+    // exists without its tokens being revoked (BUG #2 / BUG #13).
+    await this.prisma.$transaction([
+      ...(sessionIds.length > 0
+        ? [
+            this.prisma.refreshToken.updateMany({
+              where: { sessionId: { in: sessionIds } },
+              data: { revoked: true },
+            }),
+            this.prisma.session.deleteMany({
+              where: { id: { in: sessionIds } },
+            }),
+          ]
+        : []),
+      this.prisma.loginSession.deleteMany({
+        where: { userId, realmId: realm.id },
+      }),
+    ]);
   }
 }

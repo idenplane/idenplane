@@ -87,12 +87,17 @@ describe('MFA (TOTP) flows (e2e)', () => {
   // ─── RESET / DISABLE MFA ──────────────────────────────────
 
   describe('Reset/disable MFA', () => {
-    it('DELETE /admin/realms/:name/users/:userId/mfa — should return 204 even when MFA is not enabled', async () => {
+    // Resetting another user's MFA is a sensitive account-recovery operation.
+    // It deliberately requires an MFA-verified interactive admin session
+    // (step-up) and forbids static admin API keys (see issue #613 / the
+    // BUG #3 regression test). The E2E harness only has the API key, so the
+    // correct, secure expectation here is a 401 rejection.
+    it('DELETE /admin/realms/:name/users/:userId/mfa — should reject API-key auth (MFA step-up required)', async () => {
       await withKey(
         adminRequest().delete(
           `/admin/realms/${REALM_NAME}/users/${seeded.user.id}/mfa`,
         ),
-      ).expect(204);
+      ).expect(401);
     });
   });
 

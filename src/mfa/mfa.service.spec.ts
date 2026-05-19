@@ -54,6 +54,11 @@ describe('MfaService', () => {
     (prisma.userCredential as any).deleteMany = jest.fn();
     (prisma.recoveryCode as any).findFirst = jest.fn();
     (prisma.recoveryCode as any).create = jest.fn();
+    (prisma as any).usedTotpCode = {
+      findFirst: jest.fn(),
+      create: jest.fn(),
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    };
 
     crypto = createMockCryptoService();
     service = new MfaService(prisma as any, crypto as any);
@@ -888,6 +893,7 @@ describe('MfaService', () => {
   describe('cleanupExpiredActions', () => {
     it('should delete expired mfa_challenge pending actions', async () => {
       prisma.pendingAction.deleteMany.mockResolvedValue({ count: 3 });
+      (prisma as any).usedTotpCode.deleteMany.mockResolvedValue({ count: 0 });
 
       await service.cleanupExpiredActions();
 
@@ -901,10 +907,12 @@ describe('MfaService', () => {
 
     it('should succeed even when no expired actions exist', async () => {
       prisma.pendingAction.deleteMany.mockResolvedValue({ count: 0 });
+      (prisma as any).usedTotpCode.deleteMany.mockResolvedValue({ count: 0 });
 
       await expect(service.cleanupExpiredActions()).resolves.toBeUndefined();
 
       expect(prisma.pendingAction.deleteMany).toHaveBeenCalledTimes(1);
+      expect((prisma as any).usedTotpCode.deleteMany).toHaveBeenCalledTimes(1);
     });
   });
 });

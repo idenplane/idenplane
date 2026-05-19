@@ -33,6 +33,25 @@ describe('BruteForceService', () => {
 
   beforeEach(() => {
     prisma = createMockPrismaService();
+
+    // Make $transaction call its callback with prisma as the transaction object
+    (prisma.$transaction as jest.Mock).mockImplementation(
+      async (fn: (tx: typeof prisma) => Promise<unknown>) => fn(prisma),
+    );
+
+    // Add missing Prisma model mocks used by BruteForceService
+    (prisma as any).totpFailureTracking = {
+      create: jest.fn().mockResolvedValue({}),
+      count: jest.fn().mockResolvedValue(0),
+      findFirst: jest.fn().mockResolvedValue(null),
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    };
+    (prisma as any).webAuthnFailureTracking = {
+      create: jest.fn().mockResolvedValue({}),
+      count: jest.fn().mockResolvedValue(0),
+      deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
+    };
+
     service = new BruteForceService(prisma as any);
   });
 
@@ -157,6 +176,8 @@ describe('BruteForceService', () => {
         where: { id: 'user-1' },
         data: {
           lockedUntil: new Date('2099-12-31T23:59:59Z'),
+          // Permanently locked accounts are also disabled (security hardening).
+          enabled: false,
         },
       });
     });
@@ -254,6 +275,8 @@ describe('BruteForceService', () => {
   describe('cleanupOldFailures', () => {
     it('should delete failure records older than 24 hours', async () => {
       prisma.loginFailure.deleteMany.mockResolvedValue({ count: 10 });
+      (prisma as any).totpFailureTracking.deleteMany.mockResolvedValue({ count: 0 });
+      (prisma as any).webAuthnFailureTracking.deleteMany.mockResolvedValue({ count: 0 });
 
       await service.cleanupOldFailures();
 
@@ -272,6 +295,8 @@ describe('BruteForceService', () => {
 
     it('should handle zero deleted records gracefully', async () => {
       prisma.loginFailure.deleteMany.mockResolvedValue({ count: 0 });
+      (prisma as any).totpFailureTracking.deleteMany.mockResolvedValue({ count: 0 });
+      (prisma as any).webAuthnFailureTracking.deleteMany.mockResolvedValue({ count: 0 });
 
       await expect(service.cleanupOldFailures()).resolves.toBeUndefined();
     });

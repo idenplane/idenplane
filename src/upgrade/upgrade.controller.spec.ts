@@ -411,7 +411,7 @@ describe('UpgradeController', () => {
         summary: { errors: 0, warnings: 0 },
       };
 
-      mockUpgradeService.getCurrentVersion.mockResolvedValue('2.0.0');
+      mockUpgradeService.getCurrentVersion.mockReturnValue('2.0.0');
       mockConfigCompatibility.checkCompatibility.mockResolvedValue(mockResult);
 
       const result = await controller.checkConfigCompatibility('2.1.0');
@@ -431,7 +431,7 @@ describe('UpgradeController', () => {
         summary: { errors: 0, warnings: 0 },
       };
 
-      mockUpgradeService.getCurrentVersion.mockResolvedValue('2.0.0');
+      mockUpgradeService.getCurrentVersion.mockReturnValue('2.0.0');
       mockConfigCompatibility.checkCompatibility.mockResolvedValue(mockResult);
 
       const result = await controller.checkConfigCompatibility();

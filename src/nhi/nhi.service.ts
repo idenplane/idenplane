@@ -784,7 +784,7 @@ export class NhiService {
         publicKeyPem: kp.publicKey,
         privateKeyPem: kp.privateKey,
       };
-      signingAlgorithm = 'SHA256withRSA';
+      signingAlgorithm = 'SHA256';
     } else if (keyAlgorithm === CertificateKeyAlgorithm.RSA_4096) {
       const kp = generateKeyPairSync('rsa', {
         modulusLength: 4096,
@@ -795,7 +795,7 @@ export class NhiService {
         publicKeyPem: kp.publicKey,
         privateKeyPem: kp.privateKey,
       };
-      signingAlgorithm = 'SHA256withRSA';
+      signingAlgorithm = 'SHA256';
     } else if (keyAlgorithm === CertificateKeyAlgorithm.ECDSA_P384) {
       const kp = generateKeyPairSync('ec', {
         namedCurve: 'secp384r1',
@@ -806,11 +806,11 @@ export class NhiService {
         publicKeyPem: kp.publicKey,
         privateKeyPem: kp.privateKey,
       };
-      signingAlgorithm = 'SHA384withECDSA';
+      signingAlgorithm = 'SHA384';
     } else {
-      // Default: ECDSA_P256
+      // Default: ECDSA_P256 — Node.js uses the OpenSSL alias 'prime256v1'
       const kp = generateKeyPairSync('ec', {
-        namedCurve: 'secp256r1',
+        namedCurve: 'prime256v1',
         publicKeyEncoding: { type: 'spki', format: 'pem' },
         privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
       });
@@ -818,7 +818,7 @@ export class NhiService {
         publicKeyPem: kp.publicKey,
         privateKeyPem: kp.privateKey,
       };
-      signingAlgorithm = 'SHA256withECDSA';
+      signingAlgorithm = 'SHA256';
     }
 
     // Calculate validity dates

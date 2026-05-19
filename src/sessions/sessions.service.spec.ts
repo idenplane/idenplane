@@ -20,6 +20,7 @@ describe('SessionsService', () => {
     // Add methods missing from the default mock
     prisma.loginSession.findMany = jest.fn();
     prisma.loginSession.deleteMany = jest.fn();
+    prisma.session.findUnique = jest.fn();
 
     service = new SessionsService(prisma as any);
   });
@@ -162,11 +163,17 @@ describe('SessionsService', () => {
   // ─── revokeSession ──────────────────────────────────────────
 
   describe('revokeSession', () => {
+    const realm = { id: 'realm-1' } as Realm;
+
     it('should revoke refresh tokens then delete session for oauth type', async () => {
+      prisma.session.findUnique.mockResolvedValue({
+        userId: 'user-1',
+        user: { realmId: 'realm-1' },
+      });
       prisma.refreshToken.updateMany.mockResolvedValue({ count: 2 });
       prisma.session.delete.mockResolvedValue({});
 
-      await service.revokeSession('session-1', 'oauth');
+      await service.revokeSession(realm, 'session-1', 'oauth');
 
       expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
         where: { sessionId: 'session-1' },
@@ -178,14 +185,36 @@ describe('SessionsService', () => {
     });
 
     it('should delete login session for sso type', async () => {
+      prisma.loginSession.findUnique.mockResolvedValue({ realmId: 'realm-1' });
       prisma.loginSession.delete.mockResolvedValue({});
 
-      await service.revokeSession('sso-session-1', 'sso');
+      await service.revokeSession(realm, 'sso-session-1', 'sso');
 
       expect(prisma.loginSession.delete).toHaveBeenCalledWith({
         where: { id: 'sso-session-1' },
       });
       expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
+      expect(prisma.session.delete).not.toHaveBeenCalled();
+    });
+
+    it('should reject revoking a session that belongs to a different realm', async () => {
+      prisma.session.findUnique.mockResolvedValue({
+        userId: 'user-2',
+        user: { realmId: 'other-realm' },
+      });
+
+      await expect(
+        service.revokeSession(realm, 'session-x', 'oauth'),
+      ).rejects.toThrow('Session not found');
+      expect(prisma.session.delete).not.toHaveBeenCalled();
+    });
+
+    it('should throw when the session does not exist', async () => {
+      prisma.session.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.revokeSession(realm, 'missing', 'oauth'),
+      ).rejects.toThrow('Session not found');
       expect(prisma.session.delete).not.toHaveBeenCalled();
     });
   });

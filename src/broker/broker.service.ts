@@ -241,11 +241,17 @@ export class BrokerService {
     const data = (await response.json()) as Record<string, string | undefined>;
 
     const subject = String(data['sub'] ?? data['id'] ?? '');
-    const givenName = String(data['given_name'] ?? data['first_name'] ?? '');
-    const familyName = String(data['family_name'] ?? data['last_name'] ?? '');
-    const preferredUsername = String(
-      data['preferred_username'] ?? data['login'] ?? '',
-    );
+    const rawGivenName = data['given_name'] ?? data['first_name'];
+    const rawFamilyName = data['family_name'] ?? data['last_name'];
+    const rawPreferredUsername = data['preferred_username'] ?? data['login'];
+    const givenName =
+      rawGivenName !== undefined ? String(rawGivenName) : undefined;
+    const familyName =
+      rawFamilyName !== undefined ? String(rawFamilyName) : undefined;
+    const preferredUsername =
+      rawPreferredUsername !== undefined
+        ? String(rawPreferredUsername)
+        : undefined;
 
     return {
       sub: subject,

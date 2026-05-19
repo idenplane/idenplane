@@ -68,6 +68,7 @@ describe('UpgradeService', () => {
     (execSync as jest.Mock).mockReturnValue('2.0.0');
 
     upgradeService = new UpgradeService(
+      mockPrisma as any,
       mockPreUpgradeValidator,
       mockDatabaseBackupService,
       mockConfigCompatibility,
@@ -303,7 +304,7 @@ describe('UpgradeService', () => {
           summary: { passed: 5, warnings: 1, failures: 0 },
         });
 
-        mockDatabaseBackupService.createBackup.mockResolvedValue({
+        mockDatabaseBackupService.createBackup.mockReturnValue({
           success: true,
           backupPath: '/backups/backup.sql.gz',
           backupSize: '10 MB',
@@ -380,7 +381,7 @@ describe('UpgradeService', () => {
           summary: { passed: 6, warnings: 0, failures: 0 },
         });
 
-        mockDatabaseBackupService.createBackup.mockResolvedValue({
+        mockDatabaseBackupService.createBackup.mockReturnValue({
           success: true,
           backupPath: '/backups/pre-upgrade-2.1.0.sql.gz',
           backupSize: '50 MB',
@@ -457,7 +458,7 @@ describe('UpgradeService', () => {
           summary: { passed: 6, warnings: 0, failures: 0 },
         });
 
-        mockDatabaseBackupService.createBackup.mockResolvedValue({
+        mockDatabaseBackupService.createBackup.mockReturnValue({
           success: false,
           error: 'pg_dump not found',
           timestamp: new Date(),
@@ -533,7 +534,7 @@ describe('UpgradeService', () => {
           summary: { passed: 6, warnings: 0, failures: 0 },
         });
 
-        mockDatabaseBackupService.createBackup.mockResolvedValue({
+        mockDatabaseBackupService.createBackup.mockReturnValue({
           success: true,
           backupPath: '/backups/backup.sql.gz',
           backupSize: '50 MB',
@@ -615,7 +616,7 @@ describe('UpgradeService', () => {
           summary: { passed: 6, warnings: 0, failures: 0 },
         });
 
-        mockDatabaseBackupService.createBackup.mockResolvedValue({
+        mockDatabaseBackupService.createBackup.mockReturnValue({
           success: true,
           backupPath: '/backups/backup.sql.gz',
           backupSize: '50 MB',
@@ -708,7 +709,7 @@ describe('UpgradeService', () => {
           summary: { passed: 6, warnings: 0, failures: 0 },
         });
 
-        mockDatabaseBackupService.createBackup.mockResolvedValue({
+        mockDatabaseBackupService.createBackup.mockReturnValue({
           success: false,
           error: 'Backup failed',
           timestamp: new Date(),

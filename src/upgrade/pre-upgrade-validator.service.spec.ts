@@ -128,18 +128,19 @@ describe('PreUpgradeValidatorService', () => {
     });
 
     it('should return warn when pending migrations exist', async () => {
-      (execSync as jest.Mock).mockImplementation(() => {
-        throw new Error('Migration pending');
-      });
-
-      // Mock parsePendingMigrations output
+      // Prisma exits non-zero when there are pending migrations; execSync throws.
+      // The service reads err.stdout to parse which migrations are pending.
       const output = `
 migration-1   [ ] Pending
 migration-2   [ ] Pending
 migration-3   [x] Applied
       `;
 
-      (execSync as jest.Mock).mockReturnValue(output);
+      (execSync as jest.Mock).mockImplementation(() => {
+        const err = new Error('Migration pending') as NodeJS.ErrnoException & { stdout: string };
+        err.stdout = output;
+        throw err;
+      });
 
       const check = await (validatorService as any).checkPendingMigrations();
 
@@ -218,7 +219,7 @@ migration-3   [x] Applied
 
       const check = await (validatorService as any).checkDatabaseSize();
 
-      expect(check.name).tobe('database_size');
+      expect(check.name).toBe('database_size');
       expect(check.status).toBe('warn');
     });
 

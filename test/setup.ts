@@ -19,11 +19,16 @@ import cookieParser from 'cookie-parser';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { GlobalExceptionFilter } from '../src/common/filters/http-exception.filter';
+import { generateKeyPair } from 'jose';
+import { randomUUID } from 'crypto';
+import * as argon2 from 'argon2';
 
 /** Admin API key used across all E2E tests. */
 export const TEST_ADMIN_API_KEY = 'test-admin-key';
 
 export interface SeededRealm {
+  /** Convenience alias for realm.name — used by tests that access otherRealm.name directly. */
+  name: string;
   realm: {
     id: string;
     name: string;
@@ -130,10 +135,6 @@ export async function createTestApp(): Promise<TestContext> {
   const seedTestRealm = async (
     realmName = 'test-realm',
   ): Promise<SeededRealm> => {
-    // Import jose dynamically to generate a real RSA key pair
-    const { generateKeyPair } = await import('jose');
-    const { randomUUID } = await import('crypto');
-
     const { publicKey, privateKey } = await generateKeyPair('RS256', {
       extractable: true,
     });
@@ -157,7 +158,6 @@ export async function createTestApp(): Promise<TestContext> {
     const kid = randomUUID();
 
     // Hash secrets with argon2 before seeding
-    const argon2 = await import('argon2');
     const clientSecretHash = await argon2.hash('test-client-secret');
     const passwordHash = await argon2.hash('TestPassword123!');
 
@@ -213,6 +213,7 @@ export async function createTestApp(): Promise<TestContext> {
     });
 
     return {
+      name: realm.name,
       realm: { id: realm.id, name: realm.name },
       signingKey: {
         id: realm.signingKeys[0].id,

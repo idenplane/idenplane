@@ -4,12 +4,7 @@ module.exports = {
   rootDir: 'src',
   testRegex: '.*\\.spec\\.ts$',
   transform: {
-    '^.+\\.(t|j)s$': ['ts-jest', {
-      tsconfig: {
-        emitDecoratorMetadata: true,
-        experimentalDecorators: true,
-      },
-    }],
+    '^.+\\.(t|j)s$': 'ts-jest',
   },
   moduleNameMapper: {
     '^(\\.{1,2}/.*)\\.js$': '$1',
@@ -17,6 +12,5 @@ module.exports = {
   collectCoverageFrom: ['**/*.(t|j)s'],
   coverageDirectory: '../coverage',
   testEnvironment: 'node',
-  setupFiles: ['<rootDir>/../test/nhi-setup.ts'],
   transformIgnorePatterns: ['node_modules/(?!jose)'],
 };
