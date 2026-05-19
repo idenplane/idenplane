@@ -46,3 +46,6 @@ GEMINI.md
 .worktrees/
 .security-key
 logs/security/
+
+# never commit npm auth tokens
+.npmrc
