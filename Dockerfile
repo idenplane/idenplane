@@ -2,7 +2,10 @@
 FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
-RUN npm ci
+# --ignore-scripts: the root "postinstall" runs `prisma generate`, which needs
+# prisma/schema.prisma + prisma.config.ts (not present in this deps-only stage).
+# The Prisma client is generated explicitly in the build stage instead.
+RUN npm ci --ignore-scripts
 
 # Stage 1b: Admin UI dependencies
 FROM node:22-alpine AS admin-deps
