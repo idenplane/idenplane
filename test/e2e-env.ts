@@ -28,3 +28,11 @@ process.env['ADMIN_IP_RL_PER_MINUTE'] =
   process.env['ADMIN_IP_RL_PER_MINUTE'] ?? '1000000';
 process.env['ADMIN_IP_RL_PER_HOUR'] =
   process.env['ADMIN_IP_RL_PER_HOUR'] ?? '1000000';
+
+// Webhook deliveries are fire-and-forget with a [1s,10s,60s] retry tail in
+// production. In tests the receiver is intentionally unreachable, so that
+// tail would keep running long after the suite (and Jest env) tear down,
+// causing "require after the Jest environment has been torn down". Disable
+// retries for the test run so a failed delivery terminates immediately.
+process.env['WEBHOOK_RETRY_DELAYS_MS'] =
+  process.env['WEBHOOK_RETRY_DELAYS_MS'] ?? '[]';

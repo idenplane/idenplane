@@ -133,7 +133,7 @@ describe('UsersController', () => {
         'u1',
         'alice@example.com',
       );
-      expect(result).toEqual({ message: 'Verification email sent' });
+      expect(result).toEqual({ message: 'If the account exists, a verification email has been sent.' });
     });
 
     it('should return success message even when user has no email (does not send)', async () => {
@@ -144,7 +144,7 @@ describe('UsersController', () => {
 
       expect(usersService.findById).toHaveBeenCalledWith(realm, 'u1');
       expect(usersService.sendVerificationEmail).not.toHaveBeenCalled();
-      expect(result).toEqual({ message: 'Verification email sent' });
+      expect(result).toEqual({ message: 'If the account exists, a verification email has been sent.' });
     });
 
     it('should return success message even when user email is empty string', async () => {
@@ -154,7 +154,7 @@ describe('UsersController', () => {
       const result = await controller.sendVerificationEmail(realm, 'u1');
 
       expect(usersService.sendVerificationEmail).not.toHaveBeenCalled();
-      expect(result).toEqual({ message: 'Verification email sent' });
+      expect(result).toEqual({ message: 'If the account exists, a verification email has been sent.' });
     });
   });
 

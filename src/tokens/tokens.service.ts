@@ -91,6 +91,10 @@ export class TokensService {
         username = user.username;
       }
 
+      // azp (authorized party) identifies the client the token was issued to.
+      // RFC 7662 / OIDC clients rely on it (and client_id) to verify audience.
+      const azp = payload['azp'] as string | undefined;
+
       return {
         active,
         sub: payload.sub,
@@ -99,6 +103,8 @@ export class TokensService {
         exp: payload.exp,
         iat: payload.iat,
         scope: payload['scope'],
+        azp,
+        client_id: azp,
         username,
         preferred_username: payload['preferred_username'],
         email: payload['email'],
