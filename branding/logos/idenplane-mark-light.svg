@@ -1,0 +1,14 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <title>Idenplane mark — light background variant</title>
+  <!-- Light-background variant: no plate, brackets in black on transparent.
+       Use this on white/light surfaces where the dark plate would feel heavy. -->
+
+  <!-- Bracket pair -->
+  <g stroke="#0a0a0a" stroke-width="14" stroke-linecap="square" stroke-linejoin="miter" fill="none">
+    <path d="M 88 72 L 64 72 L 64 184 L 88 184"/>
+    <path d="M 168 72 L 192 72 L 192 184 L 168 184"/>
+  </g>
+
+  <!-- The identity record — accent stroke -->
+  <rect x="100" y="120" width="56" height="16" rx="3" fill="#10b981"/>
+</svg>

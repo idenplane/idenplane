@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 480 96" width="480" height="96">
+  <!-- Concept A: PURE WORDMARK (the Linear / Stripe approach)
+       No icon at all. The brand IS the typography.
+       One unexpected detail: the dot of the "i" is removed entirely,
+       and a single fine horizontal stroke sits above the lowercase
+       baseline — a "plane" cue that reads as a horizon, not as a dot. -->
+
+  <!-- Wordmark, custom-cut. Using ı (dotless i) to remove the natural dot. -->
+  <g font-family="'Inter', 'Söhne', 'Helvetica Neue', sans-serif"
+     font-weight="600"
+     fill="#0a0a0a"
+     letter-spacing="-2.4">
+    <text x="20" y="64" font-size="56">ı</text>
+    <text x="42" y="64" font-size="56">denplane</text>
+  </g>
+
+  <!-- The "plane" horizon — a single thin stroke above the wordmark,
+       aligned with the i-stem. Reads as a horizon line, not a logo. -->
+  <line x1="20" y1="28" x2="44" y2="28"
+        stroke="#0a0a0a" stroke-width="3" stroke-linecap="square"/>
+</svg>

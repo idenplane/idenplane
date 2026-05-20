@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Idenplane — Logo Concepts (Round 2)</title>
+  <style>
+    :root {
+      --bg: #fafafa;
+      --card: #ffffff;
+      --stage-dark: #0a0a0a;
+      --stage-light: #f5f5f4;
+      --border: #e7e5e4;
+      --text: #0a0a0a;
+      --text-muted: #78716c;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 64px 32px 80px;
+      font-family: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+      background: var(--bg);
+      color: var(--text);
+      -webkit-font-smoothing: antialiased;
+    }
+    header {
+      max-width: 1100px;
+      margin: 0 auto 56px;
+    }
+    h1 {
+      font-size: 32px;
+      font-weight: 600;
+      letter-spacing: -0.8px;
+      margin: 0 0 8px;
+    }
+    .sub {
+      font-size: 15px;
+      color: var(--text-muted);
+      margin: 0;
+      max-width: 720px;
+      line-height: 1.55;
+    }
+    .concept {
+      max-width: 1100px;
+      margin: 0 auto 32px;
+      background: var(--card);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      overflow: hidden;
+    }
+    .concept-header {
+      padding: 24px 32px;
+      border-bottom: 1px solid var(--border);
+      display: flex;
+      align-items: baseline;
+      gap: 16px;
+    }
+    .badge {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 12px;
+      font-weight: 600;
+      letter-spacing: 0.5px;
+      background: #0a0a0a;
+      color: white;
+      padding: 4px 8px;
+      border-radius: 4px;
+    }
+    .concept-header h2 {
+      font-size: 22px;
+      font-weight: 600;
+      margin: 0;
+      letter-spacing: -0.4px;
+    }
+    .desc {
+      padding: 20px 32px 28px;
+      color: var(--text-muted);
+      font-size: 14.5px;
+      line-height: 1.6;
+      max-width: 760px;
+    }
+    .stages {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 1px;
+      background: var(--border);
+      border-top: 1px solid var(--border);
+    }
+    .stage {
+      padding: 56px 40px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      justify-content: center;
+      gap: 16px;
+      min-height: 220px;
+    }
+    .stage.light { background: var(--stage-light); }
+    .stage.dark  { background: var(--stage-dark); }
+    .stage img { max-width: 100%; height: auto; }
+    .stage .label {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 11px;
+      letter-spacing: 0.5px;
+      color: var(--text-muted);
+      margin-top: 8px;
+    }
+    .stage.dark .label { color: #71717a; }
+    .stage.dark img { filter: invert(1); }
+    .stage.dark img.no-invert { filter: none; }
+
+    .scale-row {
+      padding: 24px 32px;
+      display: flex;
+      align-items: center;
+      gap: 32px;
+      border-top: 1px solid var(--border);
+      background: #fafafa;
+    }
+    .scale-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+    }
+    .scale-item img { display: block; }
+    .scale-item .lbl {
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      font-size: 11px;
+      color: var(--text-muted);
+    }
+    .footer-note {
+      max-width: 1100px;
+      margin: 64px auto 0;
+      padding: 24px 0;
+      color: var(--text-muted);
+      font-size: 13.5px;
+      text-align: center;
+      line-height: 1.6;
+    }
+    .footer-note code {
+      background: var(--card);
+      border: 1px solid var(--border);
+      padding: 2px 8px;
+      border-radius: 4px;
+      font-family: 'JetBrains Mono', ui-monospace, monospace;
+      color: #0a0a0a;
+    }
+  </style>
+</head>
+<body>
+  <header>
+    <h1>Idenplane — Logo Concepts (Round 2)</h1>
+    <p class="sub">Three fundamentally different directions. Restrained. No gradients, no generic shields. Each one commits to a single strong idea.</p>
+  </header>
+
+  <!-- Concept A -->
+  <section class="concept">
+    <div class="concept-header">
+      <span class="badge">A</span>
+      <h2>Pure Wordmark</h2>
+    </div>
+    <p class="desc">
+      No icon. The brand is the typography. The dot of the "i" is removed and replaced with a single horizontal stroke above the letter — a "plane" cue that reads as a horizon, not as a dot. The Linear / Stripe / Vercel approach: the wordmark IS the logo. Scales to anything, ages well, never looks dated. Strongest enterprise signal of the set.
+    </p>
+    <div class="stages">
+      <div class="stage light">
+        <img src="A-wordmark-pure.svg" alt="A on light" style="max-width: 360px;">
+        <span class="label">light</span>
+      </div>
+      <div class="stage dark">
+        <img src="A-wordmark-pure.svg" alt="A on dark" style="max-width: 360px;">
+        <span class="label">dark · inverted</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Concept B -->
+  <section class="concept">
+    <div class="concept-header">
+      <span class="badge">B</span>
+      <h2>The Slit · Mark + Wordmark</h2>
+    </div>
+    <p class="desc">
+      A single bold geometric mark: a black square with a horizontal slit cut through it. The slit is the "plane" — the layer where identity lives. Inside the slit, a single dot — the identity, sitting on the plane. Reads as a logo at 16px and at 1024px. The Vercel / Resend approach: one shape, one idea, one color.
+    </p>
+    <div class="stages">
+      <div class="stage light">
+        <img src="B-lockup.svg" alt="B lockup light" style="max-width: 380px;" class="no-invert">
+        <span class="label">horizontal lockup</span>
+      </div>
+      <div class="stage dark">
+        <img src="B-negative-mark.svg" alt="B mark dark" style="width: 120px; height: 120px;" class="no-invert">
+        <span class="label">mark only</span>
+      </div>
+    </div>
+    <div class="scale-row">
+      <div class="scale-item">
+        <img src="B-negative-mark.svg" alt="B 16" width="16" height="16">
+        <span class="lbl">16px</span>
+      </div>
+      <div class="scale-item">
+        <img src="B-negative-mark.svg" alt="B 32" width="32" height="32">
+        <span class="lbl">32px favicon</span>
+      </div>
+      <div class="scale-item">
+        <img src="B-negative-mark.svg" alt="B 64" width="64" height="64">
+        <span class="lbl">64px app icon</span>
+      </div>
+    </div>
+  </section>
+
+  <!-- Concept C -->
+  <section class="concept">
+    <div class="concept-header">
+      <span class="badge">C</span>
+      <h2>The Bracket · Developer-Native</h2>
+    </div>
+    <p class="desc">
+      Square brackets <code style="font-family:'JetBrains Mono',monospace;background:#f5f5f4;padding:2px 6px;border-radius:3px;font-size:13px;">[ ]</code> enclosing a green horizontal stroke. The brackets are the platform boundary (the protected space). Inside: a single identity record. Reads instantly to developers — it speaks their language (code). The accent color is the only color in the entire brand, so it gets to do real work.
+    </p>
+    <div class="stages">
+      <div class="stage light">
+        <img src="C-lockup.svg" alt="C lockup light" style="max-width: 380px;" class="no-invert">
+        <span class="label">horizontal lockup</span>
+      </div>
+      <div class="stage dark">
+        <img src="C-bracket.svg" alt="C mark dark" style="width: 120px; height: 120px;" class="no-invert">
+        <span class="label">mark only</span>
+      </div>
+    </div>
+    <div class="scale-row">
+      <div class="scale-item">
+        <img src="C-bracket.svg" alt="C 16" width="16" height="16">
+        <span class="lbl">16px</span>
+      </div>
+      <div class="scale-item">
+        <img src="C-bracket.svg" alt="C 32" width="32" height="32">
+        <span class="lbl">32px favicon</span>
+      </div>
+      <div class="scale-item">
+        <img src="C-bracket.svg" alt="C 64" width="64" height="64">
+        <span class="lbl">64px app icon</span>
+      </div>
+    </div>
+  </section>
+
+  <p class="footer-note">
+    Files in <code>branding/logos/</code>. Pick one with <code>logo A</code> / <code>B</code> / <code>C</code> — we'll polish + ship.<br>
+    Or tell me what's still off and I'll iterate.
+  </p>
+</body>
+</html>

@@ -1,0 +1,17 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+  <!-- Concept B: NEGATIVE-SPACE MARK (the Vercel / Resend approach)
+       A single bold geometric mark. Black square with a horizontal slit
+       cut out of it — the slit is the "plane". Inside the slit, a single
+       white dot — the identity, sitting on the plane.
+       Reads at any size. Black on white, white on black, anywhere. -->
+
+  <!-- The black square — the platform -->
+  <rect x="0" y="0" width="96" height="96" rx="14" fill="#0a0a0a"/>
+
+  <!-- The slit — the plane. Cut horizontally through the square. -->
+  <rect x="16" y="44" width="64" height="8" rx="2" fill="#ffffff"/>
+
+  <!-- The identity dot — sits ON the plane, slightly left of center.
+       This is the "i" of idenplane, abstracted to its essence. -->
+  <circle cx="36" cy="48" r="6" fill="#0a0a0a"/>
+</svg>

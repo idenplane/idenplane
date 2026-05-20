@@ -1,8 +1,10 @@
 <p align="center">
-  <img src="https://idenplane.dev/logo.svg" alt="Idenplane" width="80" />
+  <img src="branding/logos/idenplane-logo.svg" alt="Idenplane" width="420" />
 </p>
 
-<h1 align="center">Idenplane</h1>
+<p align="center">
+  <strong>The identity control plane you own.</strong>
+</p>
 
 <p align="center">
   <strong>Open-Source Identity & Access Management</strong><br />
