@@ -1,9 +1,9 @@
 import Foundation
 import AuthenticationServices
 
-/// Main entry point for the AuthMe iOS SDK.
+/// Main entry point for the Idenplane iOS SDK.
 ///
-/// `AuthMeClient` manages the full OAuth 2.0 PKCE login flow, secure token storage,
+/// `IdenplaneClient` manages the full OAuth 2.0 PKCE login flow, secure token storage,
 /// automatic token refresh, and optional biometric gating.
 ///
 /// ## Quick start
@@ -14,13 +14,13 @@ import AuthenticationServices
 ///     clientId: "my-app",
 ///     redirectUri: "com.example.myapp://callback"
 /// )
-/// let client = AuthMeClient(config: config)
+/// let client = IdenplaneClient(config: config)
 ///
 /// // In your SwiftUI view or view controller:
 /// try await client.login()
 /// ```
 @MainActor
-public final class AuthMeClient: NSObject {
+public final class IdenplaneClient: NSObject {
 
     // MARK: - State
 
@@ -42,7 +42,7 @@ public final class AuthMeClient: NSObject {
 
     // MARK: - Init
 
-    /// Create a new AuthMeClient with the given configuration.
+    /// Create a new IdenplaneClient with the given configuration.
     public init(
         config: AuthConfig,
         urlSession: URLSession = .shared
@@ -98,7 +98,7 @@ public final class AuthMeClient: NSObject {
         storage.authState    = state
 
         guard var components = URLComponents(string: oidc.authorizationEndpoint) else {
-            throw AuthMeError.serverError("Invalid authorization endpoint URL: \(oidc.authorizationEndpoint)")
+            throw IdenplaneError.serverError("Invalid authorization endpoint URL: \(oidc.authorizationEndpoint)")
         }
         components.queryItems = [
             URLQueryItem(name: "response_type",           value: "code"),
@@ -111,11 +111,11 @@ public final class AuthMeClient: NSObject {
         ]
 
         guard let authURL = components.url else {
-            throw AuthMeError.invalidRedirectURI(config.redirectUri)
+            throw IdenplaneError.invalidRedirectURI(config.redirectUri)
         }
 
         guard let callbackScheme = URL(string: config.redirectUri)?.scheme else {
-            throw AuthMeError.invalidRedirectURI(config.redirectUri)
+            throw IdenplaneError.invalidRedirectURI(config.redirectUri)
         }
 
         let callbackURL = try await withCheckedThrowingContinuation {
@@ -128,11 +128,11 @@ public final class AuthMeClient: NSObject {
                 // Release the strong reference now that the callback has fired.
                 self?.authSession = nil
                 if let error {
-                    continuation.resume(throwing: AuthMeError.networkError(error))
+                    continuation.resume(throwing: IdenplaneError.networkError(error))
                 } else if let url {
                     continuation.resume(returning: url)
                 } else {
-                    continuation.resume(throwing: AuthMeError.callbackError("No callback URL received"))
+                    continuation.resume(throwing: IdenplaneError.callbackError("No callback URL received"))
                 }
             }
 
@@ -175,20 +175,20 @@ public final class AuthMeClient: NSObject {
 
         if let error = params["error"] {
             let description = params["error_description"] ?? error
-            throw AuthMeError.callbackError(description)
+            throw IdenplaneError.callbackError(description)
         }
 
         guard let code = params["code"] else {
-            throw AuthMeError.callbackError("Missing authorization code")
+            throw IdenplaneError.callbackError("Missing authorization code")
         }
 
         let returnedState = params["state"]
         guard let storedState = storage.authState, returnedState == storedState else {
-            throw AuthMeError.stateMismatch
+            throw IdenplaneError.stateMismatch
         }
 
         guard let verifier = storage.pkceVerifier else {
-            throw AuthMeError.pkceVerifierMissing
+            throw IdenplaneError.pkceVerifierMissing
         }
 
         let tokens = try await exchangeCode(
@@ -236,7 +236,7 @@ public final class AuthMeClient: NSObject {
     /// Returns the current access token, gated behind a biometric prompt.
     ///
     /// - Parameter reason: The biometric prompt reason string.
-    /// - Throws: `AuthMeError.biometricAuthFailed` if the user cancels or biometrics fail.
+    /// - Throws: `IdenplaneError.biometricAuthFailed` if the user cancels or biometrics fail.
     public func getAccessToken(
         biometricReason: String,
         biometricAuth: BiometricAuth = BiometricAuth()
@@ -252,11 +252,11 @@ public final class AuthMeClient: NSObject {
         let oidc = try await fetchDiscovery()
 
         guard let refreshTokenValue = storage.refreshToken else {
-            throw AuthMeError.noRefreshToken
+            throw IdenplaneError.noRefreshToken
         }
 
         guard let tokenURL = URL(string: oidc.tokenEndpoint) else {
-            throw AuthMeError.serverError("Invalid token endpoint URL: \(oidc.tokenEndpoint)")
+            throw IdenplaneError.serverError("Invalid token endpoint URL: \(oidc.tokenEndpoint)")
         }
         var request = URLRequest(url: tokenURL)
         request.httpMethod = "POST"
@@ -283,7 +283,7 @@ public final class AuthMeClient: NSObject {
                 storage.clear()
             }
             let message = parseError(from: data) ?? "Token refresh failed"
-            throw AuthMeError.serverError(message)
+            throw IdenplaneError.serverError(message)
         }
 
         let tokens = try JSONDecoder().decode(TokenResponse.self, from: data)
@@ -296,13 +296,13 @@ public final class AuthMeClient: NSObject {
     /// Fetch the current user's profile from the userinfo endpoint.
     public func getUserInfo() async throws -> User {
         guard let accessToken = getAccessToken() else {
-            throw AuthMeError.notAuthenticated
+            throw IdenplaneError.notAuthenticated
         }
 
         let oidc = try await fetchDiscovery()
 
         guard let userinfoURL = URL(string: oidc.userinfoEndpoint) else {
-            throw AuthMeError.serverError("Invalid userinfo endpoint URL: \(oidc.userinfoEndpoint)")
+            throw IdenplaneError.serverError("Invalid userinfo endpoint URL: \(oidc.userinfoEndpoint)")
         }
         var request = URLRequest(url: userinfoURL)
         request.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
@@ -310,7 +310,7 @@ public final class AuthMeClient: NSObject {
         let (data, response) = try await urlSession.data(for: request)
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw AuthMeError.serverError("Failed to fetch user info")
+            throw IdenplaneError.serverError("Failed to fetch user info")
         }
 
         return try JSONDecoder().decode(User.self, from: data)
@@ -339,7 +339,7 @@ public final class AuthMeClient: NSObject {
         let (data, response) = try await urlSession.data(from: config.discoveryURL)
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
-            throw AuthMeError.discoveryFailed("Non-200 response from discovery endpoint")
+            throw IdenplaneError.discoveryFailed("Non-200 response from discovery endpoint")
         }
 
         let configuration = try JSONDecoder().decode(OIDCConfiguration.self, from: data)
@@ -356,7 +356,7 @@ public final class AuthMeClient: NSObject {
         tokenEndpoint: String
     ) async throws -> TokenResponse {
         guard let tokenURL = URL(string: tokenEndpoint) else {
-            throw AuthMeError.serverError("Invalid token endpoint URL: \(tokenEndpoint)")
+            throw IdenplaneError.serverError("Invalid token endpoint URL: \(tokenEndpoint)")
         }
         var request = URLRequest(url: tokenURL)
         request.httpMethod = "POST"
@@ -376,7 +376,7 @@ public final class AuthMeClient: NSObject {
 
         guard let httpResponse = response as? HTTPURLResponse, httpResponse.statusCode == 200 else {
             let message = parseError(from: data) ?? "Token exchange failed"
-            throw AuthMeError.serverError(message)
+            throw IdenplaneError.serverError(message)
         }
 
         return try JSONDecoder().decode(TokenResponse.self, from: data)
@@ -406,7 +406,7 @@ public final class AuthMeClient: NSObject {
                 // Log the error so it is at least visible in the console; consumers
                 // who need programmatic handling should observe token expiry via
                 // `isAuthenticated` or wrap `refreshToken()` themselves.
-                print("[AuthMe] Auto-refresh failed: \(error)")
+                print("[Idenplane] Auto-refresh failed: \(error)")
             }
         }
     }
@@ -515,7 +515,7 @@ private final class DefaultPresentationContextProvider: NSObject,
         // configured app, but trap loudly so the root cause is obvious rather
         // than producing a cryptic, silent failure.
         preconditionFailure(
-            "[AuthMe] DefaultPresentationContextProvider: no UIWindow found in any " +
+            "[Idenplane] DefaultPresentationContextProvider: no UIWindow found in any " +
             "connected UIWindowScene. Ensure the app has an active window before " +
             "calling login(), or supply a custom presentationContextProvider."
         )
@@ -526,7 +526,7 @@ private final class DefaultPresentationContextProvider: NSObject,
             return window
         }
         preconditionFailure(
-            "[AuthMe] DefaultPresentationContextProvider: no NSWindow found. " +
+            "[Idenplane] DefaultPresentationContextProvider: no NSWindow found. " +
             "Ensure the app has a visible window before calling login(), " +
             "or supply a custom presentationContextProvider."
         )

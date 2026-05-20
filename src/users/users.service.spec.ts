@@ -69,7 +69,7 @@ describe('UsersService', () => {
       isExpired: jest.fn().mockReturnValue(false),
     };
     const themeEmailService = {
-      getSubject: jest.fn().mockReturnValue('Verify Your Email — AuthMe'),
+      getSubject: jest.fn().mockReturnValue('Verify Your Email — Idenplane'),
       renderEmail: jest.fn().mockReturnValue('<html>verify</html>'),
     };
     const bruteForceService = {

@@ -1,4 +1,4 @@
-// Package client provides HTTP client functionality for AuthMe API communication
+// Package client provides HTTP client functionality for Idenplane API communication
 package client
 
 import (
@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-// Realm represents a realm in the AuthMe API
+// Realm represents a realm in the Idenplane API
 type Realm struct {
 	ID                       string   `json:"id"`
 	Name                     string   `json:"name"`
@@ -236,7 +236,7 @@ type SendTestEmailRequest struct {
 	To string `json:"to"`
 }
 
-// RealmsClient provides methods for interacting with AuthMe realms API
+// RealmsClient provides methods for interacting with Idenplane realms API
 type RealmsClient struct {
 	httpClient *HTTPClient
 }

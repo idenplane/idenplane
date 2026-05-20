@@ -16,7 +16,7 @@ function buildJwt(payload: Record<string, unknown>): string {
   return `${header}.${body}.fake-signature`;
 }
 
-function makeCookies(token: string | null, cookieName = 'authme_access_token') {
+function makeCookies(token: string | null, cookieName = 'idenplane_access_token') {
   return {
     get: (name: string) =>
       name === cookieName && token ? { name, value: token } : undefined,

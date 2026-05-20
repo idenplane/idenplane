@@ -1,14 +1,14 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# AuthMe Helm Chart — Default Values
+# Idenplane Helm Chart — Default Values
 # Override any value with --set key=value or a custom values file.
 # ──────────────────────────────────────────────────────────────────────────────
 
-# Number of AuthMe pod replicas.
+# Number of Idenplane pod replicas.
 replicaCount: 1
 
 # ── Image ─────────────────────────────────────────────────────────────────────
 image:
-  repository: islamawad/authme
+  repository: islamawad/idenplane
   # Overrides the image tag. Defaults to Chart.appVersion when empty.
   tag: ""
   pullPolicy: IfNotPresent
@@ -23,7 +23,7 @@ fullnameOverride: ""
 
 # ── Service Account ───────────────────────────────────────────────────────────
 serviceAccount:
-  # Create a dedicated ServiceAccount for the AuthMe pods.
+  # Create a dedicated ServiceAccount for the Idenplane pods.
   create: true
   # Automatically mount the ServiceAccount API credentials.
   automount: true
@@ -69,14 +69,14 @@ ingress:
     # kubernetes.io/ingress.class: nginx
     # cert-manager.io/cluster-issuer: letsencrypt-prod
   hosts:
-    - host: authme.example.com
+    - host: idenplane.example.com
       paths:
         - path: /
           pathType: Prefix
   tls: []
-  #  - secretName: authme-tls
+  #  - secretName: idenplane-tls
   #    hosts:
-  #      - authme.example.com
+  #      - idenplane.example.com
 
 # ── Resources ─────────────────────────────────────────────────────────────────
 resources:
@@ -189,17 +189,17 @@ persistence:
   # not both).
   selector: {}
 
-# ── AuthMe Application Configuration ─────────────────────────────────────────
+# ── Idenplane Application Configuration ─────────────────────────────────────────
 env:
   # ── Server ────────────────────────────────────────────────────────────────
-  # TCP port the AuthMe process listens on inside the container.
+  # TCP port the Idenplane process listens on inside the container.
   PORT: "3000"
 
   # Node environment. Use "production" in live deployments.
   NODE_ENV: "production"
 
-  # Public URL of the AuthMe instance (used for redirect URIs, emails, etc.).
-  BASE_URL: "http://authme.example.com"
+  # Public URL of the Idenplane instance (used for redirect URIs, emails, etc.).
+  BASE_URL: "http://idenplane.example.com"
 
   # ── Rate Limiting ─────────────────────────────────────────────────────────
   # Time-to-live window for the throttle limiter in milliseconds.
@@ -241,9 +241,9 @@ secrets:
 postgresql:
   enabled: true
   auth:
-    username: authme
-    password: authme
-    database: authme
+    username: idenplane
+    password: idenplane
+    database: idenplane
     # Existing Kubernetes Secret that holds the postgres passwords.
     # When set, the password fields above are ignored.
     existingSecret: ""
@@ -267,7 +267,7 @@ redis:
   enabled: false
   auth:
     enabled: true
-    password: authme-redis
+    password: idenplane-redis
     existingSecret: ""
   architecture: standalone
   master:

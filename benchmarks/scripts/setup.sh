@@ -2,7 +2,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # benchmarks/scripts/setup.sh
 #
-# Sets up the benchmark environment for AuthMe performance testing.
+# Sets up the benchmark environment for Idenplane performance testing.
 #
 # What it does:
 #   1. Validates required environment variables
@@ -15,7 +15,7 @@
 #   ./benchmarks/scripts/setup.sh
 #
 # Environment variables (can be set in benchmarks/.env or exported):
-#   ADMIN_API_KEY   - Admin API key for AuthMe (required)
+#   ADMIN_API_KEY   - Admin API key for Idenplane (required)
 #   VUS             - Number of virtual users (default: 50)
 #   DURATION        - Test duration (default: 60s)
 #   RAMP_UP         - Ramp-up time (default: 10s)
@@ -45,7 +45,7 @@ RAMP_UP="${RAMP_UP:-10s}"
 
 echo ""
 echo "═══════════════════════════════════════════════════════════════════════════"
-echo "  AuthMe Benchmark Setup"
+echo "  Idenplane Benchmark Setup"
 echo "═══════════════════════════════════════════════════════════════════════════"
 echo ""
 
@@ -123,7 +123,7 @@ echo "[5/5] Waiting for services to be healthy..."
 # Wait for database
 echo -n "  Waiting for database..."
 for i in {1..30}; do
-  if docker compose -f "${COMPOSE_FILE}" exec -T db pg_isready -U authme &>/dev/null; then
+  if docker compose -f "${COMPOSE_FILE}" exec -T db pg_isready -U idenplane &>/dev/null; then
     echo " ✓"
     break
   fi
@@ -137,7 +137,7 @@ for i in {1..30}; do
 done
 
 # Wait for app health
-echo -n "  Waiting for AuthMe app..."
+echo -n "  Waiting for Idenplane app..."
 for i in {1..30}; do
   if docker compose -f "${COMPOSE_FILE}" exec -T app wget --no-verbose --tries=1 --spider http://localhost:3000/health &>/dev/null; then
     echo " ✓"
@@ -145,7 +145,7 @@ for i in {1..30}; do
   fi
   if [[ $i -eq 30 ]]; then
     echo ""
-    echo "ERROR: AuthMe app failed to become healthy within 30 attempts" >&2
+    echo "ERROR: Idenplane app failed to become healthy within 30 attempts" >&2
     docker compose -f "${COMPOSE_FILE}" logs app
     exit 1
   fi
@@ -159,7 +159,7 @@ echo "════════════════════════�
 echo ""
 echo "  Benchmark stack is running:"
 echo "    - Database:  localhost:5433 (external), db:5432 (internal)"
-echo "    - AuthMe:    localhost:3001"
+echo "    - Idenplane:    localhost:3001"
 echo "    - K6:        (ready to run)"
 echo ""
 echo "  Next steps:"

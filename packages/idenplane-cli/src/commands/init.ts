@@ -11,7 +11,7 @@ export function registerInitCommand(program: Command): void {
     .command('init')
     .description('Interactive setup: connect, create realm, client, and roles')
     .action(async () => {
-      console.log(chalk.bold('\n  AuthMe Setup Wizard\n'));
+      console.log(chalk.bold('\n  Idenplane Setup Wizard\n'));
 
       // Step 1: Connect to server
       const serverUrl = (await ask('Server URL (e.g. http://localhost:3000): ')).replace(/\/$/, '');
@@ -89,7 +89,7 @@ export function registerInitCommand(program: Command): void {
       console.log(chalk.bold.green('\n  Setup complete!\n'));
       console.log(`  Server:  ${serverUrl}`);
       console.log(`  Realm:   ${realmName}`);
-      console.log(`  Config:  ~/.authme/config.json`);
+      console.log(`  Config:  ~/.idenplane/config.json`);
       console.log();
     });
 }

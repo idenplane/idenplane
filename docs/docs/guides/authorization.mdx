@@ -1,16 +1,16 @@
 ---
 id: authorization
 title: Authorization Guide
-description: Complete guide to Role-Based Access Control (RBAC) and Attribute-Based Access Control (ABAC) policies in AuthMe
+description: Complete guide to Role-Based Access Control (RBAC) and Attribute-Based Access Control (ABAC) policies in Idenplane
 ---
 
 # Authorization Guide
 
-AuthMe provides a flexible authorization system based on Attribute-Based Access Control (ABAC) policies. This guide covers role-based access control (RBAC), policy creation, condition types, and policy evaluation.
+Idenplane provides a flexible authorization system based on Attribute-Based Access Control (ABAC) policies. This guide covers role-based access control (RBAC), policy creation, condition types, and policy evaluation.
 
 ## Overview
 
-AuthMe's authorization system combines RBAC with ABAC for fine-grained access control:
+Idenplane's authorization system combines RBAC with ABAC for fine-grained access control:
 
 | Approach | Description | Use Case |
 |----------|-------------|----------|
@@ -22,7 +22,7 @@ AuthMe's authorization system combines RBAC with ABAC for fine-grained access co
 ```mermaid
 sequenceDiagram
     participant App as Application
-    participant API as AuthMe API
+    participant API as Idenplane API
     participant Policy as Policy Engine
     participant DB as Database
 
@@ -37,7 +37,7 @@ sequenceDiagram
 
 ### DENY-Override Algorithm
 
-AuthMe uses a DENY-override algorithm:
+Idenplane uses a DENY-override algorithm:
 
 1. All enabled policies are sorted by priority (highest first)
 2. Each policy is evaluated against the request
@@ -46,14 +46,14 @@ AuthMe uses a DENY-override algorithm:
 5. If no policy matches → default DENY
 
 :::caution Default Deny
-AuthMe defaults to DENY when no policy matches. This ensures secure access control by default.
+Idenplane defaults to DENY when no policy matches. This ensures secure access control by default.
 :::
 
 ---
 
 ## Roles and Permissions
 
-Roles are the foundation of RBAC in AuthMe. Users can be assigned multiple roles, and roles can have hierarchical relationships.
+Roles are the foundation of RBAC in Idenplane. Users can be assigned multiple roles, and roles can have hierarchical relationships.
 
 ### Role Hierarchy
 
@@ -90,7 +90,7 @@ curl -X POST "http://localhost:3000/admin/realms/my-realm/users/user-123/roles" 
 
 ## ABAC Policies
 
-ABAC policies in AuthMe are defined as JSON documents with conditions on four categories:
+ABAC policies in Idenplane are defined as JSON documents with conditions on four categories:
 
 ### Policy Structure
 
@@ -136,7 +136,7 @@ ABAC policies in AuthMe are defined as JSON documents with conditions on four ca
 
 ## Condition Operators
 
-AuthMe supports the following condition operators:
+Idenplane supports the following condition operators:
 
 ### Comparison Operators
 
@@ -585,7 +585,7 @@ import TabItem from '@theme/TabItem';
 <TabItem value="typescript" label="TypeScript">
 
 ```typescript
-import { AuthmeClient, PolicyEvaluationResult } from 'authme-sdk';
+import { AuthmeClient, PolicyEvaluationResult } from 'idenplane-sdk';
 
 const client = new AuthmeClient({
   url: 'http://localhost:3000',
@@ -635,7 +635,7 @@ async function testPolicy(): Promise<void> {
 <TabItem value="python" label="Python">
 
 ```python
-from authme import AuthmeClient
+from idenplane import AuthmeClient
 
 client = AuthmeClient(
     url='http://localhost:3000',
@@ -669,8 +669,8 @@ async def check_access():
 <TabItem value="kotlin" label="Kotlin">
 
 ```kotlin
-import com.authme.sdk.AuthmeClient
-import com.authme.sdk.authorization.*
+import com.idenplane.sdk.AuthmeClient
+import com.idenplane.sdk.authorization.*
 
 val client = AuthmeClient(
     url = "http://localhost:3000",
@@ -804,14 +804,14 @@ Configure multi-factor authentication
 Complete REST API documentation
 
 [**React SDK**](/docs/guides/sdks/react)
-Integrate AuthMe into your React application
+Integrate Idenplane into your React application
 
 </div>
 
 ---
 
 <p align="center">
-  <a href="https://authme.dev">authme.dev</a> &middot;
+  <a href="https://idenplane.dev">idenplane.dev</a> &middot;
   <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
-  <a href="https://discord.gg/authme">Discord</a>
+  <a href="https://discord.gg/idenplane">Discord</a>
 </p>

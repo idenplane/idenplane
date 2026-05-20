@@ -436,7 +436,7 @@ export class SmsOtpService {
 
     if (this.smsService) {
       try {
-        const message = `Your AuthMe verification code is: ${code}. This code expires in ${Math.floor(expirySeconds / 60)} minutes.`;
+        const message = `Your Idenplane verification code is: ${code}. This code expires in ${Math.floor(expirySeconds / 60)} minutes.`;
         await this.smsService.sendSms(realmName, phoneNumber, message);
         smsSent = true;
 

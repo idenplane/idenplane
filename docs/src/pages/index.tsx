@@ -161,7 +161,7 @@ export default function Home(): JSX.Element {
   return (
     <Layout
       title="Open-source authentication made simple"
-      description="AuthMe is a secure, scalable authentication server with OAuth 2.0, SAML, LDAP support and multi-factor authentication."
+      description="Idenplane is a secure, scalable authentication server with OAuth 2.0, SAML, LDAP support and multi-factor authentication."
     >
       <main>
         {/* Hero Section */}
@@ -231,7 +231,7 @@ export default function Home(): JSX.Element {
             <div className={styles.sectionHeader}>
               <h2 className={styles.sectionTitle}>Everything you need</h2>
               <p className={styles.sectionSubtitle}>
-                From quick setup to enterprise-scale deployments, AuthMe has you covered.
+                From quick setup to enterprise-scale deployments, Idenplane has you covered.
               </p>
             </div>
             <div className={styles.featuresGrid}>

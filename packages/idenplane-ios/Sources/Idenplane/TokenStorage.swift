@@ -4,7 +4,7 @@ import Security
 /// Secure token storage backed by the iOS Keychain.
 ///
 /// Tokens are stored under a service name derived from the realm and client ID,
-/// so multiple AuthMe realms can coexist without key collisions.
+/// so multiple Idenplane realms can coexist without key collisions.
 final class TokenStorage: @unchecked Sendable {
 
     // MARK: - Keys
@@ -12,7 +12,7 @@ final class TokenStorage: @unchecked Sendable {
     private let servicePrefix: String
 
     init(realm: String, clientId: String) {
-        self.servicePrefix = "com.authme.sdk.\(realm).\(clientId)"
+        self.servicePrefix = "com.idenplane.sdk.\(realm).\(clientId)"
     }
 
     // MARK: - Stored Keys

@@ -80,8 +80,8 @@ export default function Layout() {
         aria-label="Sidebar"
       >
         <div className="flex h-16 items-center gap-2 border-b border-gray-700 px-6">
-          <img src="/console/authme-logo.png" alt="AuthMe" className="h-10 w-auto" />
-          <span className="text-sm font-semibold text-white">AuthMe</span>
+          <img src="/console/idenplane-logo.png" alt="Idenplane" className="h-10 w-auto" />
+          <span className="text-sm font-semibold text-white">Idenplane</span>
         </div>
 
         <nav aria-label="Main navigation" className="mt-4 flex-1 space-y-1 overflow-y-auto px-3 pb-4">

@@ -9,7 +9,7 @@ import type { LoginResponse } from '../types.js';
 export function registerAuthCommands(program: Command): void {
   program
     .command('login')
-    .description('Authenticate with an AuthMe server')
+    .description('Authenticate with an Idenplane server')
     .option('--server <url>', 'Server URL')
     .option('--username <username>', 'Admin username')
     .option('--password <password>', 'Admin password')

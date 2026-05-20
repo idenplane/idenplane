@@ -1057,7 +1057,7 @@ export class AuthService {
 
     // Resolve the ACR claim:
     //  - Use explicitly provided acr (from step-up flow) if available
-    //  - Otherwise default to ACR_PASSWORD ("urn:authme:acr:password")
+    //  - Otherwise default to ACR_PASSWORD ("urn:idenplane:acr:password")
     const resolvedAcr = params.acr ?? ACR_PASSWORD;
 
     const idTokenPayload: JWTPayload = {

@@ -1,4 +1,4 @@
-// Package client provides HTTP client functionality for AuthMe API communication
+// Package client provides HTTP client functionality for Idenplane API communication
 package client
 
 import (
@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-// Role represents a role in the AuthMe API
+// Role represents a role in the Idenplane API
 type Role struct {
 	ID          string  `json:"id"`
 	Name        string  `json:"name"`
@@ -44,7 +44,7 @@ type AssignRolesResponse struct {
 	Assigned []string `json:"assigned"`
 }
 
-// RolesClient provides methods for interacting with AuthMe roles API
+// RolesClient provides methods for interacting with Idenplane roles API
 type RolesClient struct {
 	httpClient *HTTPClient
 }

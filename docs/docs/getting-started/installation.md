@@ -2,18 +2,18 @@
 id: installation
 title: Installation
 sidebar_position: 1
-description: Learn how to install AuthMe using Docker, Docker Compose, or from source.
+description: Learn how to install Idenplane using Docker, Docker Compose, or from source.
 ---
 
 # Installation
 
-AuthMe supports multiple installation methods to fit your environment and workflow.
+Idenplane supports multiple installation methods to fit your environment and workflow.
 
 ---
 
 ## Prerequisites
 
-Before installing AuthMe, ensure you have:
+Before installing Idenplane, ensure you have:
 
 | Requirement | Minimum | Recommended |
 |-------------|---------|-------------|
@@ -35,7 +35,7 @@ The fastest way to get started is using our pre-built Docker image from Docker H
 
 ```bash
 # Pull and run with default settings
-docker pull islamawad/authme:latest
+docker pull islamawad/idenplane:latest
 
 # Start with Docker Compose
 curl -o docker-compose.yml https://raw.githubusercontent.com/Islamawad132/Authme/main/docker-compose.yml
@@ -48,7 +48,7 @@ Create a `.env` file for customization:
 
 ```bash
 # Database configuration
-DATABASE_URL=postgresql://authme:authme@localhost:5432/authme
+DATABASE_URL=postgresql://idenplane:idenplane@localhost:5432/idenplane
 
 # Server settings
 PORT=3000
@@ -86,14 +86,14 @@ Create a production-ready `docker-compose.yml`:
 version: '3.8'
 
 services:
-  authme:
-    image: islamawad/authme:latest
-    container_name: authme
+  idenplane:
+    image: islamawad/idenplane:latest
+    container_name: idenplane
     restart: unless-stopped
     ports:
       - "3000:3000"
     environment:
-      - DATABASE_URL=postgresql://authme:authme@db:5432/authme
+      - DATABASE_URL=postgresql://idenplane:idenplane@db:5432/idenplane
       - PORT=3000
       - NODE_ENV=production
       - BASE_URL=http://localhost:3000
@@ -111,16 +111,16 @@ services:
 
   db:
     image: postgres:16-alpine
-    container_name: authme-db
+    container_name: idenplane-db
     restart: unless-stopped
     environment:
-      - POSTGRES_USER=authme
-      - POSTGRES_PASSWORD=authme
-      - POSTGRES_DB=authme
+      - POSTGRES_USER=idenplane
+      - POSTGRES_PASSWORD=idenplane
+      - POSTGRES_DB=idenplane
     volumes:
       - postgres_data:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U authme"]
+      test: ["CMD-SHELL", "pg_isready -U idenplane"]
       interval: 10s
       timeout: 5s
       retries: 5
@@ -214,12 +214,12 @@ npm run admin:dev
 
 ## Database Options
 
-AuthMe supports multiple database providers:
+Idenplane supports multiple database providers:
 
 ### PostgreSQL (Recommended)
 
 ```bash
-DATABASE_URL=postgresql://authme:authme@localhost:5432/authme
+DATABASE_URL=postgresql://idenplane:idenplane@localhost:5432/idenplane
 ```
 
 PostgreSQL is recommended for production deployments.
@@ -230,7 +230,7 @@ PostgreSQL is recommended for production deployments.
 # Before switching, run the conversion script
 ./scripts/use-mysql.sh
 
-DATABASE_URL=mysql://authme:authme@localhost:3306/authme
+DATABASE_URL=mysql://idenplane:idenplane@localhost:3306/idenplane
 ```
 
 Requires MySQL 8+ or MariaDB 10.5+.
@@ -252,7 +252,7 @@ SQLite is intended for development and CI only. It does not support production w
 
 ## Verifying Installation
 
-After starting AuthMe, verify the installation:
+After starting Idenplane, verify the installation:
 
 | Endpoint | Description | Expected Response |
 |----------|-------------|------------------|
@@ -279,7 +279,7 @@ After starting AuthMe, verify the installation:
 Learn about all configuration options and environment variables
 
 [**Quickstart**](/docs/quickstart)
-Get started with AuthMe authentication in your first application
+Get started with Idenplane authentication in your first application
 
 [**Admin Console**](/docs/getting-started/admin-console)
 Configure realms, users, and clients
@@ -289,7 +289,7 @@ Configure realms, users, and clients
 ---
 
 <p align="center">
-  <a href="https://authme.dev">authme.dev</a> &middot;
+  <a href="https://idenplane.dev">idenplane.dev</a> &middot;
   <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
-  <a href="https://discord.gg/authme">Discord</a>
+  <a href="https://discord.gg/idenplane">Discord</a>
 </p>

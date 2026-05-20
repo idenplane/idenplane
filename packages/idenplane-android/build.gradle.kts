@@ -6,7 +6,7 @@ plugins {
 }
 
 android {
-    namespace = "com.authme.sdk"
+    namespace = "com.idenplane.sdk"
     compileSdk = 34
 
     defaultConfig {
@@ -84,12 +84,12 @@ afterEvaluate {
                 from(components["release"])
 
                 groupId    = "com.github.Islamawad132"
-                artifactId = "authme-android"
+                artifactId = "idenplane-android"
                 version    = "1.0.0"
 
                 pom {
-                    name.set("AuthMe Android SDK")
-                    description.set("Android SDK for the AuthMe Identity and Access Management Server")
+                    name.set("Idenplane Android SDK")
+                    description.set("Android SDK for the Idenplane Identity and Access Management Server")
                     url.set("https://github.com/Islamawad132/Authme")
                     licenses {
                         license {

@@ -1,17 +1,17 @@
 ---
 id: angular-sdk
 title: Angular SDK
-description: Integrate AuthMe authentication into your Angular application using the official SDK with module, service, guards, and HTTP interceptors
+description: Integrate Idenplane authentication into your Angular application using the official SDK with module, service, guards, and HTTP interceptors
 ---
 
 # Angular SDK
 
-The AuthMe Angular SDK provides Angular-specific bindings for the authme-sdk, including an injectable `AuthService`, a route guard (`AuthGuard`), an HTTP interceptor (`AuthInterceptor` / `authInterceptor`), and an `NgModule` entry point (`AuthmeModule`).
+The Idenplane Angular SDK provides Angular-specific bindings for the idenplane-sdk, including an injectable `AuthService`, a route guard (`AuthGuard`), an HTTP interceptor (`AuthInterceptor` / `authInterceptor`), and an `NgModule` entry point (`AuthmeModule`).
 
 ## Installation
 
 ```bash
-npm install @authme/angular authme-sdk rxjs
+npm install @idenplane/angular idenplane-sdk rxjs
 ```
 
 ---
@@ -24,7 +24,7 @@ npm install @authme/angular authme-sdk rxjs
 // app.module.ts
 import { NgModule } from '@angular/core';
 import { HttpClientModule } from '@angular/common/http';
-import { AuthmeModule } from '@authme/angular';
+import { AuthmeModule } from '@idenplane/angular';
 
 @NgModule({
   imports: [
@@ -45,7 +45,7 @@ export class AppModule {}
 
 ```typescript
 import { Component } from '@angular/core';
-import { AuthService } from '@authme/angular';
+import { AuthService } from '@idenplane/angular';
 
 @Component({
   selector: 'app-nav',
@@ -74,7 +74,7 @@ export class NavComponent {
 ```typescript
 // app.routes.ts
 import { Routes } from '@angular/router';
-import { AuthGuard } from '@authme/angular';
+import { AuthGuard } from '@idenplane/angular';
 
 export const routes: Routes = [
   { path: '', component: HomeComponent },
@@ -102,7 +102,7 @@ For standalone / functional interceptor style (Angular 15+):
 // app.config.ts
 import { ApplicationConfig } from '@angular/core';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
-import { authInterceptor } from '@authme/angular';
+import { authInterceptor } from '@idenplane/angular';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -121,7 +121,7 @@ The `AuthmeModule.forRoot()` method registers all providers including `AuthServi
 
 | Option | Type | Required | Description |
 |--------|------|----------|-------------|
-| `url` | `string` | Yes | AuthMe server URL |
+| `url` | `string` | Yes | Idenplane server URL |
 | `realm` | `string` | Yes | Realm name |
 | `clientId` | `string` | Yes | OAuth2 client ID |
 | `redirectUri` | `string` | Yes | Redirect URI after login |
@@ -135,7 +135,7 @@ The `AuthmeModule.forRoot()` method registers all providers including `AuthServi
 ```typescript
 // app.module.ts
 import { NgModule } from '@angular/core';
-import { AuthmeModule } from '@authme/angular';
+import { AuthmeModule } from '@idenplane/angular';
 
 @NgModule({
   imports: [
@@ -191,7 +191,7 @@ The `AuthService` is an injectable service that provides reactive authentication
 ```typescript
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { AuthService } from '@authme/angular';
+import { AuthService } from '@idenplane/angular';
 
 @Component({
   selector: 'app-user-profile',
@@ -229,7 +229,7 @@ export class UserProfileComponent {
 
 ```typescript
 import { Component } from '@angular/core';
-import { AuthService } from '@authme/angular';
+import { AuthService } from '@idenplane/angular';
 
 @Component({
   selector: 'app-admin-panel',
@@ -258,7 +258,7 @@ export class AdminPanelComponent {
 
 ```typescript
 import { Component } from '@angular/core';
-import { AuthService } from '@authme/angular';
+import { AuthService } from '@idenplane/angular';
 
 @Component({
   selector: 'app-token-display',
@@ -285,7 +285,7 @@ The `AuthGuard` is a route guard implementing `CanActivate` that protects routes
 ```typescript
 // app.routes.ts
 import { Routes } from '@angular/router';
-import { AuthGuard } from '@authme/angular';
+import { AuthGuard } from '@idenplane/angular';
 
 export const routes: Routes = [
   { path: '', component: HomeComponent },
@@ -351,7 +351,7 @@ For manual registration:
 ```typescript
 // app.module.ts
 import { NgModule } from '@angular/core';
-import { AuthmeModule, AuthInterceptor } from '@authme/angular';
+import { AuthmeModule, AuthInterceptor } from '@idenplane/angular';
 import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
 
 @NgModule({
@@ -381,7 +381,7 @@ export class AppModule {}
 // app.config.ts
 import { ApplicationConfig } from '@angular/core';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
-import { authInterceptor } from '@authme/angular';
+import { authInterceptor } from '@idenplane/angular';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -395,7 +395,7 @@ export const appConfig: ApplicationConfig = {
 ```typescript
 import { Component, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { AuthService } from '@authme/angular';
+import { AuthService } from '@idenplane/angular';
 import { catchError, of } from 'rxjs';
 
 @Component({
@@ -458,7 +458,7 @@ interface UserInfo {
 
 ```typescript
 import { Component } from '@angular/core';
-import { AuthService } from '@authme/angular';
+import { AuthService } from '@idenplane/angular';
 
 @Component({
   selector: 'app-user-card',
@@ -488,8 +488,8 @@ export class UserCardComponent {
 The SDK is written in TypeScript and provides full type definitions:
 
 ```typescript
-import { AuthService, AuthmeModule, AuthGuard, authInterceptor } from '@authme/angular';
-import type { AuthmeConfig, UserInfo, TokenResponse } from 'authme-sdk';
+import { AuthService, AuthmeModule, AuthGuard, authInterceptor } from '@idenplane/angular';
+import type { AuthmeConfig, UserInfo, TokenResponse } from 'idenplane-sdk';
 
 // AuthService is fully typed
 constructor(public auth: AuthService) {
@@ -508,7 +508,7 @@ constructor(public auth: AuthService) {
 <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
 
 [**Quickstart**](/docs/quickstart)
-Set up AuthMe and create your first authenticated app
+Set up Idenplane and create your first authenticated app
 
 [**Configuration**](/docs/getting-started/configuration)
 Learn about all configuration options
@@ -524,7 +524,7 @@ Core SDK for non-framework applications
 ---
 
 <p align="center">
-  <a href="https://authme.dev">authme.dev</a> &middot;
+  <a href="https://idenplane.dev">idenplane.dev</a> &middot;
   <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
-  <a href="https://discord.gg/authme">Discord</a>
+  <a href="https://discord.gg/idenplane">Discord</a>
 </p>

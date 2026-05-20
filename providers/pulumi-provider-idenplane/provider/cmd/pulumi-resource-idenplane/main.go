@@ -1,5 +1,5 @@
-// Pulumi provider for AuthMe - Main entry point
-// cmd/pulumi-resource-authme/main.go
+// Pulumi provider for Idenplane - Main entry point
+// cmd/pulumi-resource-idenplane/main.go
 package main
 
 import (
@@ -14,14 +14,14 @@ import (
 	"github.com/pulumi/pulumi/sdk/v3/go/common/tokens"
 	"github.com/pulumi/pulumi-terraform-bridge/v3/pkg/tfbridge"
 
-	"github.com/authme/pulumi-provider-authme/provider/pkg"
+	"github.com/idenplane/pulumi-provider-idenplane/provider/pkg"
 )
 
 // Version is the version of this provider.
 var Version = "0.1.0"
 
 // ProviderName is the name of the provider.
-const ProviderName = "authme"
+const ProviderName = "idenplane"
 
 func main() {
 	// Parse command line flags
@@ -31,7 +31,7 @@ func main() {
 	flag.Parse()
 
 	if *versionFlag {
-		fmt.Printf("pulumi-resource-authme v%s\n", Version)
+		fmt.Printf("pulumi-resource-idenplane v%s\n", Version)
 		os.Exit(0)
 	}
 
@@ -43,7 +43,7 @@ func main() {
 	// Set up tracing if requested
 	ctx := context.Background()
 	if *traceFlag != "" {
-		if err := cmdutil.InitTracing("pulumi-resource-authme", *traceFlag); err != nil {
+		if err := cmdutil.InitTracing("pulumi-resource-idenplane", *traceFlag); err != nil {
 			fmt.Fprintf(os.Stderr, "Error initializing tracing: %v\n", err)
 			os.Exit(1)
 		}

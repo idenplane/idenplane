@@ -34,7 +34,7 @@ function makeRequest(overrides: {
     },
     cookies: {
       get: (name: string) =>
-        overrides.cookieValue && name === 'authme_access_token'
+        overrides.cookieValue && name === 'idenplane_access_token'
           ? { value: overrides.cookieValue }
           : undefined,
     },

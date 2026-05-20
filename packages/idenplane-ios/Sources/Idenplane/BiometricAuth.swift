@@ -53,7 +53,7 @@ public final class BiometricAuth: @unchecked Sendable {
     /// Prompt the user to authenticate via biometrics (or passcode if enabled).
     ///
     /// - Parameter reason: A human-readable string shown in the system prompt.
-    /// - Throws: `AuthMeError.biometricAuthFailed` if authentication is denied or unavailable.
+    /// - Throws: `IdenplaneError.biometricAuthFailed` if authentication is denied or unavailable.
     public func authenticate(reason: String = "Authenticate to access your account") async throws {
         let context = LAContext()
         context.localizedCancelTitle = "Cancel"
@@ -65,16 +65,16 @@ public final class BiometricAuth: @unchecked Sendable {
         var canEvalError: NSError?
         guard context.canEvaluatePolicy(policy, error: &canEvalError) else {
             let message = canEvalError?.localizedDescription ?? "Biometrics not available"
-            throw AuthMeError.biometricAuthFailed(message)
+            throw IdenplaneError.biometricAuthFailed(message)
         }
 
         do {
             let success = try await context.evaluatePolicy(policy, localizedReason: reason)
             guard success else {
-                throw AuthMeError.biometricAuthFailed("Authentication was not successful")
+                throw IdenplaneError.biometricAuthFailed("Authentication was not successful")
             }
         } catch let laError as LAError {
-            throw AuthMeError.biometricAuthFailed(laError.localizedDescription)
+            throw IdenplaneError.biometricAuthFailed(laError.localizedDescription)
         }
     }
 }

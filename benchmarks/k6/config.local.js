@@ -343,7 +343,7 @@ export default function () {
 // ─── Setup/Teardown ─────────────────────────────────────────────────────────────
 
 export function setup() {
-  console.log(`AuthMe Local Benchmark Configuration:`);
+  console.log(`Idenplane Local Benchmark Configuration:`);
   console.log(`  Target URL: ${TARGET_URL}`);
   console.log(`  VUs: ${VUS}`);
   console.log(`  Duration: ${DURATION}`);

@@ -117,12 +117,12 @@ model Realm {
 
   // Theming
   // SQLite: @db.VarChar is not supported — plain String is used instead
-  themeName    String  @default("authme") @map("theme_name")
+  themeName    String  @default("idenplane") @map("theme_name")
   // SQLite: Json → String (JSON-serialised text)
   theme        String  @default("{}") @map("theme")
-  loginTheme   String  @default("authme") @map("login_theme")
-  accountTheme String  @default("authme") @map("account_theme")
-  emailTheme   String  @default("authme") @map("email_theme")
+  loginTheme   String  @default("idenplane") @map("login_theme")
+  accountTheme String  @default("idenplane") @map("account_theme")
+  emailTheme   String  @default("idenplane") @map("email_theme")
 
   // Internationalization (i18n)
   defaultLocale String @default("en") @map("default_locale")
@@ -1471,7 +1471,7 @@ model ScimAttributeMapping {
   realm           Realm    @relation(fields: [realmId], references: [id], onDelete: Cascade)
   resourceType    String
   scimAttribute   String   @map("scim_attribute")
-  authmeAttribute String   @map("authme_attribute")
+  idenplaneAttribute String   @map("idenplane_attribute")
   enabled         Boolean  @default(true)
   direction       String   @default("inbound")
   createdAt       DateTime @default(now()) @map("created_at")

@@ -257,7 +257,7 @@ def main() -> int:
 
     print("")
     print("═══════════════════════════════════════════════════════════════════════════")
-    print("  AuthMe Benchmark Aggregation")
+    print("  Idenplane Benchmark Aggregation")
     print("═══════════════════════════════════════════════════════════════════════════")
     print("")
 

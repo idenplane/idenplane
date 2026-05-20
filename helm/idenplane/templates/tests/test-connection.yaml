@@ -1,10 +1,10 @@
 apiVersion: v1
 kind: Pod
 metadata:
-  name: "{{ include "authme.fullname" . }}-test-connection"
+  name: "{{ include "idenplane.fullname" . }}-test-connection"
   namespace: {{ .Release.Namespace | quote }}
   labels:
-    {{- include "authme.labels" . | nindent 4 }}
+    {{- include "idenplane.labels" . | nindent 4 }}
   annotations:
     "helm.sh/hook": test
     "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
@@ -18,4 +18,4 @@ spec:
       args:
         - --spider
         - --timeout=10
-        - "http://{{ include "authme.fullname" . }}:{{ .Values.service.port }}/health"
+        - "http://{{ include "idenplane.fullname" . }}:{{ .Values.service.port }}/health"

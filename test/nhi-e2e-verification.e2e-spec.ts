@@ -114,9 +114,9 @@ describe('NHI End-to-End Verification (e2e)', () => {
         adminRequest()
           .post(`/admin/realms/${REALM_NAME}/nhi/device-certificates`)
           .send({
-            name: `${DEVICE_NAME}.authme.local`,
-            subjectCommonName: `${DEVICE_NAME}.authme.local`,
-            subjectOrganization: 'AuthMe IoT',
+            name: `${DEVICE_NAME}.idenplane.local`,
+            subjectCommonName: `${DEVICE_NAME}.idenplane.local`,
+            subjectOrganization: 'Idenplane IoT',
             validityDays: 365,
             keyAlgorithm: 'ECDSA_P256',
           }),
@@ -148,9 +148,9 @@ describe('NHI End-to-End Verification (e2e)', () => {
         adminRequest()
           .post(`/admin/realms/${REALM_NAME}/nhi/device-certificates`)
           .send({
-            name: `${DEVICE_NAME}.authme.local`,
-            subjectCommonName: `${DEVICE_NAME}.authme.local`,
-            subjectOrganization: 'AuthMe IoT',
+            name: `${DEVICE_NAME}.idenplane.local`,
+            subjectCommonName: `${DEVICE_NAME}.idenplane.local`,
+            subjectOrganization: 'Idenplane IoT',
             validityDays: 365,
             keyAlgorithm: 'ECDSA_P256',
           }),

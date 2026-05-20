@@ -1,11 +1,11 @@
 /**
- * Vue Router navigation guard for AuthMe.
+ * Vue Router navigation guard for Idenplane.
  *
  * @example
  * ```typescript
  * // router/index.ts
  * import { createRouter, createWebHistory } from 'vue-router';
- * import { createAuthGuard } from '@authme/vue';
+ * import { createAuthGuard } from '@idenplane/vue';
  *
  * const router = createRouter({ history: createWebHistory(), routes });
  *
@@ -31,8 +31,8 @@
 
 import type { NavigationGuard, RouteLocationNormalized } from 'vue-router';
 import { inject } from 'vue';
-import type { AuthmeClient } from 'authme-sdk';
-import { AUTHME_KEY } from './plugin.js';
+import type { AuthmeClient } from 'idenplane-sdk';
+import { IDENPLANE_KEY } from './plugin.js';
 
 export interface AuthGuardOptions {
   /**
@@ -66,8 +66,8 @@ export interface AuthRouteMeta {
  * pass a pre-built `client` directly:
  *
  * ```typescript
- * import { createAuthGuard } from '@authme/vue';
- * import { AuthmeClient } from 'authme-sdk';
+ * import { createAuthGuard } from '@idenplane/vue';
+ * import { AuthmeClient } from 'idenplane-sdk';
  *
  * const client = new AuthmeClient({ ... });
  * router.beforeEach(createAuthGuard({ loginRoute: '/login' }, client));
@@ -87,7 +87,7 @@ export function createAuthGuard(
   let injectedClient: AuthmeClient | undefined;
   if (!clientOverride) {
     try {
-      injectedClient = inject<AuthmeClient>(AUTHME_KEY);
+      injectedClient = inject<AuthmeClient>(IDENPLANE_KEY);
     } catch {
       // Outside component context — client must be passed explicitly.
     }
@@ -103,7 +103,7 @@ export function createAuthGuard(
 
     if (!client) {
       console.warn(
-        '[authme-vue] createAuthGuard: no AuthmeClient available. ' +
+        '[idenplane-vue] createAuthGuard: no AuthmeClient available. ' +
           'Pass the client as the second argument or install AuthmePlugin.',
       );
       // Fail closed: no client means we cannot verify identity, so block

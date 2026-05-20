@@ -5,7 +5,7 @@
  * ```typescript
  * // app.config.ts  (Angular 15+ standalone)
  * import { provideHttpClient, withInterceptors } from '@angular/common/http';
- * import { authInterceptor } from '@authme/angular';
+ * import { authInterceptor } from '@idenplane/angular';
  *
  * export const appConfig: ApplicationConfig = {
  *   providers: [
@@ -47,7 +47,7 @@ function attachToken<T>(req: HttpRequest<T>, token: string | null): HttpRequest<
 
 /**
  * Class-based HTTP interceptor (NgModule-compatible).
- * Attaches the current AuthMe access token as a `Authorization: Bearer ...`
+ * Attaches the current Idenplane access token as a `Authorization: Bearer ...`
  * header when one is available.
  *
  * Issue #458: on a 401 response the interceptor now attempts a single token

@@ -18,7 +18,7 @@
 # Options:
 #   --format FORMAT  - Export format: json, csv, markdown, all (default: all)
 #   --output DIR    - Output directory (default: results/export)
-#   --target TARGET - Filter by target (authme, keycloak, etc.)
+#   --target TARGET - Filter by target (idenplane, keycloak, etc.)
 #   --latest        - Only export the latest results
 # ─────────────────────────────────────────────────────────────────────────────
 set -euo pipefail
@@ -71,7 +71,7 @@ esac
 
 echo ""
 echo "═══════════════════════════════════════════════════════════════════════════"
-echo "  AuthMe Benchmark Results Export"
+echo "  Idenplane Benchmark Results Export"
 echo "═══════════════════════════════════════════════════════════════════════════"
 echo ""
 echo "  Format:     ${FORMAT}"
@@ -142,7 +142,7 @@ export_csv() {
   fi
 
   # Extract data from JSON and convert to CSV
-  # This handles the nested structure in authme-baseline.json format
+  # This handles the nested structure in idenplane-baseline.json format
   local json_data
   json_data=$(cat "${RESULTS_DIR}/${input_file}")
 
@@ -307,13 +307,13 @@ echo "  ✓ CI metrics: ${CI_METRICS_FILE}"
 JUNIT_FILE="${OUTPUT_DIR}/benchmark-results.xml"
 cat > "${JUNIT_FILE}" << EOF
 <?xml version="1.0" encoding="UTF-8"?>
-<testsuite name="authme-benchmarks" tests="${#PROCESSED_RESULTS[@]}" time="$(date +%s)">
+<testsuite name="idenplane-benchmarks" tests="${#PROCESSED_RESULTS[@]}" time="$(date +%s)">
   <properties>
     <property name="exported_at" value="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"/>
   </properties>
 $(for file in "${PROCESSED_RESULTS[@]}"; do
   target_name=$(echo "${file}" | grep -oP '^[a-z]+(?=-)' || echo "unknown")
-  echo "  <testcase name=\"benchmark.${target_name}\" classname=\"authme.benchmarks\"/>"
+  echo "  <testcase name=\"benchmark.${target_name}\" classname=\"idenplane.benchmarks\"/>"
 done)
 </testsuite>
 EOF

@@ -1,10 +1,10 @@
 /**
- * Angular route guard for AuthMe.
+ * Angular route guard for Idenplane.
  *
  * @example
  * ```typescript
  * // app.routes.ts
- * import { AuthGuard } from '@authme/angular';
+ * import { AuthGuard } from '@idenplane/angular';
  *
  * export const routes: Routes = [
  *   { path: 'dashboard', component: DashboardComponent, canActivate: [AuthGuard] },

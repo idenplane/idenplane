@@ -1,4 +1,4 @@
-// Package client provides HTTP client functionality for AuthMe API communication
+// Package client provides HTTP client functionality for Idenplane API communication
 package client
 
 import (
@@ -205,7 +205,7 @@ func TestRealmsClient_DeleteRealm(t *testing.T) {
 
 func TestRealmsClient_GetThemes(t *testing.T) {
 	expectedThemes := []Theme{
-		{Name: "authme", DisplayName: "AuthMe Theme"},
+		{Name: "idenplane", DisplayName: "Idenplane Theme"},
 		{Name: "dark", DisplayName: "Dark Theme"},
 	}
 

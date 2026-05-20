@@ -78,7 +78,7 @@ interface HealthCheckResult {
 export function registerUpgradeCommand(program: Command): void {
   program
     .command('upgrade')
-    .description('Upgrade AuthMe: run pre-flight checks then apply database migrations')
+    .description('Upgrade Idenplane: run pre-flight checks then apply database migrations')
     .option('--dry-run', 'Preview what would change without applying')
     .option('--rollback', 'Roll back the last applied database migration')
     .option('--yes', 'Skip confirmation prompts')
@@ -87,7 +87,7 @@ export function registerUpgradeCommand(program: Command): void {
       const isDryRun = Boolean(opts.dryRun);
       const isRollback = Boolean(opts.rollback);
 
-      console.log(chalk.bold('\n  AuthMe Upgrade\n'));
+      console.log(chalk.bold('\n  Idenplane Upgrade\n'));
 
       // ------------------------------------------------------------------ //
       // Step 1: Pre-flight – server connectivity                             //
@@ -100,8 +100,8 @@ export function registerUpgradeCommand(program: Command): void {
         console.log(chalk.green('OK'));
       } catch {
         console.log(chalk.red('FAILED'));
-        console.error(chalk.red('\n  Cannot connect to the AuthMe server.'));
-        console.error(chalk.dim('  Make sure the server is running and `authme config set-url` is correct.\n'));
+        console.error(chalk.red('\n  Cannot connect to the Idenplane server.'));
+        console.error(chalk.dim('  Make sure the server is running and `idenplane config set-url` is correct.\n'));
         process.exitCode = 1;
         return;
       }
@@ -465,7 +465,7 @@ export function registerUpgradeCommand(program: Command): void {
           warn('  ⚠ No backup available for automatic restore.');
           console.log(chalk.dim('\n  Manual recovery options:'));
           console.log(chalk.dim('    1. Create a manual backup of current state'));
-          console.log(chalk.dim('    2. Run: authme upgrade --rollback'));
+          console.log(chalk.dim('    2. Run: idenplane upgrade --rollback'));
           console.log(chalk.dim('    3. Restore from any existing backups in the backup directory'));
           console.log(chalk.dim('\n  After recovery, review migration logs and retry the upgrade.'));
         }

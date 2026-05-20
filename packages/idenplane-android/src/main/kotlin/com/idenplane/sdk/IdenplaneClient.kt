@@ -1,4 +1,4 @@
-package com.authme.sdk
+package com.idenplane.sdk
 
 import android.content.Context
 import android.content.Intent
@@ -20,7 +20,7 @@ import java.net.URL
 import java.util.Base64
 
 /**
- * Main entry point for the AuthMe Android SDK.
+ * Main entry point for the Idenplane Android SDK.
  *
  * Manages the full OAuth 2.0 PKCE login flow, secure token storage via
  * [EncryptedSharedPreferences][androidx.security.crypto.EncryptedSharedPreferences],
@@ -34,7 +34,7 @@ import java.util.Base64
  *     clientId   = "my-android-app",
  *     redirectUri = "com.example.myapp://callback"
  * )
- * val authMe = AuthMeClient(applicationContext, config)
+ * val authMe = IdenplaneClient(applicationContext, config)
  *
  * // In your Activity:
  * authMe.login(activity)
@@ -43,7 +43,7 @@ import java.util.Base64
  * authMe.handleRedirectIntent(intent)
  * ```
  */
-class AuthMeClient(
+class IdenplaneClient(
     private val context: Context,
     private val config: AuthConfig,
 ) {
@@ -101,7 +101,7 @@ class AuthMeClient(
     /**
      * Start the OAuth 2.0 PKCE login flow using Chrome Custom Tabs.
      *
-     * This opens the AuthMe authorization endpoint in a Chrome Custom Tab.
+     * This opens the Idenplane authorization endpoint in a Chrome Custom Tab.
      * When the user completes authentication the browser redirects to your
      * [AuthConfig.redirectUri]. Call [handleRedirectIntent] in your Activity's
      * `onNewIntent` / `onResume` to complete the flow.
@@ -155,7 +155,7 @@ class AuthMeClient(
      * ```
      *
      * @param intent The intent received by the Activity.
-     * @return `true` if the intent was an AuthMe callback and was handled successfully.
+     * @return `true` if the intent was an Idenplane callback and was handled successfully.
      */
     suspend fun handleRedirectIntent(intent: Intent?): Boolean {
         val uri = intent?.data ?: return false
@@ -171,20 +171,20 @@ class AuthMeClient(
         val error = uri.getQueryParameter("error")
         if (error != null) {
             val description = uri.getQueryParameter("error_description") ?: error
-            throw AuthMeException.CallbackError(description)
+            throw IdenplaneException.CallbackError(description)
         }
 
         val code = uri.getQueryParameter("code")
-            ?: throw AuthMeException.CallbackError("Missing authorization code")
+            ?: throw IdenplaneException.CallbackError("Missing authorization code")
 
         val returnedState = uri.getQueryParameter("state")
         val storedState   = storage.authState
         if (storedState == null || returnedState != storedState) {
-            throw AuthMeException.StateMismatch()
+            throw IdenplaneException.StateMismatch()
         }
 
         val verifier = storage.pkceVerifier
-            ?: throw AuthMeException.PkceVerifierMissing()
+            ?: throw IdenplaneException.PkceVerifierMissing()
 
         val tokens = exchangeCode(code, verifier, oidc.tokenEndpoint)
         storage.store(tokens)
@@ -243,7 +243,7 @@ class AuthMeClient(
      *
      * @param activity The hosting [FragmentActivity].
      * @param title    Title shown in the biometric dialog.
-     * @throws [AuthMeException.BiometricAuthFailed] if authentication fails.
+     * @throws [IdenplaneException.BiometricAuthFailed] if authentication fails.
      */
     suspend fun getAccessToken(
         activity: FragmentActivity,
@@ -260,12 +260,12 @@ class AuthMeClient(
     /**
      * Refresh the access token using the stored refresh token.
      *
-     * @throws [AuthMeException.NoRefreshToken] if no refresh token is available.
-     * @throws [AuthMeException.ServerError] if the server rejects the refresh.
+     * @throws [IdenplaneException.NoRefreshToken] if no refresh token is available.
+     * @throws [IdenplaneException.ServerError] if the server rejects the refresh.
      */
     suspend fun refreshToken() {
         val oidc          = fetchDiscovery()
-        val refreshToken  = storage.refreshToken ?: throw AuthMeException.NoRefreshToken()
+        val refreshToken  = storage.refreshToken ?: throw IdenplaneException.NoRefreshToken()
 
         val body = listOf(
             "grant_type"    to "refresh_token",
@@ -279,7 +279,7 @@ class AuthMeClient(
                 body        = body,
                 contentType = "application/x-www-form-urlencoded",
             )
-        } catch (e: AuthMeException.ServerError) {
+        } catch (e: IdenplaneException.ServerError) {
             // On a 4xx the server definitively rejects the refresh token
             // (e.g. invalid_grant, revoked session).  Clear stored tokens so
             // isAuthenticated returns false and the caller can redirect to login.
@@ -308,10 +308,10 @@ class AuthMeClient(
     /**
      * Fetch the current user's profile from the userinfo endpoint.
      *
-     * @throws [AuthMeException.NotAuthenticated] if no valid token is available.
+     * @throws [IdenplaneException.NotAuthenticated] if no valid token is available.
      */
     suspend fun getUserInfo(): User {
-        val accessToken = getAccessToken() ?: throw AuthMeException.NotAuthenticated()
+        val accessToken = getAccessToken() ?: throw IdenplaneException.NotAuthenticated()
         val oidc        = fetchDiscovery()
 
         val responseBody = httpGet(
@@ -418,10 +418,10 @@ class AuthMeClient(
             // refresh failure (network error, revoked token, etc.) was silently
             // swallowed. Log failures so they are at least visible in Logcat;
             // callers who need programmatic handling should call refreshToken()
-            // directly and catch AuthMeException themselves.
+            // directly and catch IdenplaneException themselves.
             runCatching { refreshToken() }
                 .onFailure { err ->
-                    android.util.Log.e("AuthMe", "Auto-refresh failed: ${err.message}", err)
+                    android.util.Log.e("Idenplane", "Auto-refresh failed: ${err.message}", err)
                 }
         }
     }
@@ -476,7 +476,7 @@ class AuthMeClient(
             val body   = stream?.bufferedReader()?.readText() ?: ""
 
             if (code !in 200..299) {
-                throw AuthMeException.ServerError("HTTP $code: $body")
+                throw IdenplaneException.ServerError("HTTP $code: $body")
             }
             body
         } finally {
@@ -511,7 +511,7 @@ class AuthMeClient(
                     val jo = org.json.JSONObject(response)
                     jo.optString("error_description").ifBlank { jo.optString("error") }
                 }.getOrNull() ?: "HTTP $code"
-                throw AuthMeException.ServerError(message)
+                throw IdenplaneException.ServerError(message)
             }
             response
         } finally {

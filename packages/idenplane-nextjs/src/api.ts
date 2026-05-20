@@ -4,7 +4,7 @@
  * @example
  * ```typescript
  * // pages/api/profile.ts  (Pages Router)
- * import { withAuth } from '@authme/nextjs/api';
+ * import { withAuth } from '@idenplane/nextjs/api';
  *
  * export default withAuth(
  *   { serverUrl: 'http://localhost:3000', realm: 'my-realm' },
@@ -17,7 +17,7 @@
  * @example
  * ```typescript
  * // app/api/profile/route.ts  (App Router)
- * import { withAuthHandler } from '@authme/nextjs/api';
+ * import { withAuthHandler } from '@idenplane/nextjs/api';
  *
  * export const GET = withAuthHandler(
  *   { serverUrl: 'http://localhost:3000', realm: 'my-realm' },
@@ -31,7 +31,7 @@ import type { TokenPayload } from './server.js';
 // ── Shared types ─────────────────────────────────────────────────
 
 export interface ApiAuthConfig {
-  /** AuthMe server base URL */
+  /** Idenplane server base URL */
   serverUrl: string;
   /** Realm name */
   realm: string;
@@ -67,13 +67,13 @@ export type NextApiHandler = (
 ) => void | Promise<void>;
 
 /**
- * Verify a Bearer token via authme-sdk/server (JWKS).
+ * Verify a Bearer token via idenplane-sdk/server (JWKS).
  */
 async function verifyBearerToken(
   token: string,
   config: ApiAuthConfig,
 ): Promise<TokenPayload> {
-  const { verifyToken } = await import('authme-sdk/server');
+  const { verifyToken } = await import('idenplane-sdk/server');
   return verifyToken(token, {
     issuerUrl: config.serverUrl,
     realm: config.realm,
@@ -88,7 +88,7 @@ function extractBearer(headers: Record<string, string | string[] | undefined>): 
 }
 
 /**
- * Wrap a Next.js Pages Router API handler with AuthMe token validation.
+ * Wrap a Next.js Pages Router API handler with Idenplane token validation.
  * Responds with 401 if no token or invalid, 403 if roles are insufficient.
  */
 export function withAuth(
@@ -130,7 +130,7 @@ export type AppRouterHandler = (
 ) => Response | Promise<Response>;
 
 /**
- * Wrap a Next.js App Router Route Handler with AuthMe token validation.
+ * Wrap a Next.js App Router Route Handler with Idenplane token validation.
  * Returns a standard `Response` with 401/403 on failure.
  */
 export function withAuthHandler(

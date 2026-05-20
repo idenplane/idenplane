@@ -21,9 +21,9 @@
 
 import { Injectable, Inject, OnDestroy } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
-import { AuthmeClient } from 'authme-sdk';
-import type { UserInfo, AuthmeConfig, TokenResponse } from 'authme-sdk';
-import { AUTHME_CONFIG } from './auth.config.js';
+import { AuthmeClient } from 'idenplane-sdk';
+import type { UserInfo, AuthmeConfig, TokenResponse } from 'idenplane-sdk';
+import { IDENPLANE_CONFIG } from './auth.config.js';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService implements OnDestroy {
@@ -70,7 +70,7 @@ export class AuthService implements OnDestroy {
 
   private readonly _unsubscribers: Array<() => void> = [];
 
-  constructor(@Inject(AUTHME_CONFIG) config: AuthmeConfig) {
+  constructor(@Inject(IDENPLANE_CONFIG) config: AuthmeConfig) {
     this.client = new AuthmeClient(config);
     this._wireEvents();
     this._initialize();
@@ -95,7 +95,7 @@ export class AuthService implements OnDestroy {
 
   // ── Auth actions ────────────────────────────────────────────────
 
-  /** Redirect to the AuthMe login page. */
+  /** Redirect to the Idenplane login page. */
   async login(options?: { scope?: string[] }): Promise<void> {
     return this.client.login(options);
   }

@@ -1,13 +1,13 @@
 /**
- * Continuous Verification SDK for AuthMe
+ * Continuous Verification SDK for Idenplane
  *
  * Provides methods for client applications to report device posture and
  * behavioral biometric signals for continuous session risk assessment.
  *
  * @example
  * ```typescript
- * import { AuthmeClient } from 'authme-sdk';
- * import { ContinuousVerification } from 'authme-sdk/continuous-verification';
+ * import { AuthmeClient } from 'idenplane-sdk';
+ * import { ContinuousVerification } from 'idenplane-sdk/continuous-verification';
  *
  * const client = new AuthmeClient(config);
  * const cv = new ContinuousVerification(client);

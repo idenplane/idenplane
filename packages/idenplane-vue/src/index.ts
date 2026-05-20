@@ -1,9 +1,9 @@
 /**
- * @authme/vue — Vue 3 SDK for AuthMe
+ * @idenplane/vue — Vue 3 SDK for Idenplane
  */
 
 // Plugin
-export { AuthmePlugin, AUTHME_KEY } from './plugin.js';
+export { AuthmePlugin, IDENPLANE_KEY } from './plugin.js';
 export type { AuthmePluginOptions } from './plugin.js';
 
 // Composables
@@ -17,11 +17,11 @@ export type { AuthGuardOptions, AuthRouteMeta } from './guard.js';
 // Components
 export { AuthProvider } from './components.js';
 
-// Re-export core types from authme-sdk for convenience
-export { AuthmeClient } from 'authme-sdk';
+// Re-export core types from idenplane-sdk for convenience
+export { AuthmeClient } from 'idenplane-sdk';
 export type {
   AuthmeConfig,
   TokenResponse,
   TokenClaims,
   UserInfo,
-} from 'authme-sdk';
+} from 'idenplane-sdk';

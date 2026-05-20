@@ -1,4 +1,4 @@
-// Package client provides HTTP client functionality for AuthMe API communication
+// Package client provides HTTP client functionality for Idenplane API communication
 package client
 
 import (
@@ -12,7 +12,7 @@ import (
 	"time"
 )
 
-// HTTPClient is the AuthMe API HTTP client
+// HTTPClient is the Idenplane API HTTP client
 type HTTPClient struct {
 	serverURL string
 	apiKey    string
@@ -27,7 +27,7 @@ type HTTPClientConfig struct {
 	Timeout   time.Duration
 }
 
-// NewHTTPClient creates a new HTTP client for AuthMe API communication
+// NewHTTPClient creates a new HTTP client for Idenplane API communication
 func NewHTTPClient(config HTTPClientConfig) *HTTPClient {
 	// Remove trailing slash from server URL
 	serverURL := config.ServerURL

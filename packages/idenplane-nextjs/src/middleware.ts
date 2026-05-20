@@ -1,5 +1,5 @@
 /**
- * Next.js middleware factory for AuthMe authentication.
+ * Next.js middleware factory for Idenplane authentication.
  *
  * Use `createAuthMiddleware` in your `middleware.ts` file to protect routes
  * by checking for a valid auth cookie or Bearer token.
@@ -8,7 +8,7 @@
  * ```typescript
  * // middleware.ts
  * import { NextResponse } from 'next/server';
- * import { createAuthMiddleware } from '@authme/nextjs/middleware';
+ * import { createAuthMiddleware } from '@idenplane/nextjs/middleware';
  *
  * const authMiddleware = createAuthMiddleware({
  *   serverUrl: 'http://localhost:3000',
@@ -29,7 +29,7 @@
  */
 
 export interface AuthMiddlewareConfig {
-  /** AuthMe server base URL (e.g. "http://localhost:3000") */
+  /** Idenplane server base URL (e.g. "http://localhost:3000") */
   serverUrl: string;
   /** Realm name */
   realm: string;
@@ -39,7 +39,7 @@ export interface AuthMiddlewareConfig {
   protectedPaths?: string[];
   /** Path to redirect unauthenticated users to (default: "/login") */
   loginPath?: string;
-  /** Cookie name that holds the access token (default: "authme_access_token") */
+  /** Cookie name that holds the access token (default: "idenplane_access_token") */
   cookieName?: string;
 }
 
@@ -113,7 +113,7 @@ export function createAuthMiddleware(config: AuthMiddlewareConfig) {
   const {
     protectedPaths = [],
     loginPath = '/login',
-    cookieName = 'authme_access_token',
+    cookieName = 'idenplane_access_token',
   } = config;
 
   return async function authMiddleware(

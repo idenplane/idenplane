@@ -6,26 +6,26 @@ describe('detectProvider', () => {
   describe('PostgreSQL', () => {
     it('detects postgresql:// scheme', () => {
       expect(
-        detectProvider('postgresql://user:pass@localhost:5432/authme'),
+        detectProvider('postgresql://user:pass@localhost:5432/idenplane'),
       ).toBe(DatabaseProvider.POSTGRESQL);
     });
 
     it('detects postgres:// alias scheme', () => {
-      expect(detectProvider('postgres://user:pass@localhost:5432/authme')).toBe(
+      expect(detectProvider('postgres://user:pass@localhost:5432/idenplane')).toBe(
         DatabaseProvider.POSTGRESQL,
       );
     });
 
     it('is case-insensitive for the scheme', () => {
       expect(
-        detectProvider('POSTGRESQL://user:pass@localhost:5432/authme'),
+        detectProvider('POSTGRESQL://user:pass@localhost:5432/idenplane'),
       ).toBe(DatabaseProvider.POSTGRESQL);
     });
 
     it('handles a URL with query params (sslmode=require)', () => {
       expect(
         detectProvider(
-          'postgresql://user:pass@rds.example.com:5432/authme?sslmode=require',
+          'postgresql://user:pass@rds.example.com:5432/idenplane?sslmode=require',
         ),
       ).toBe(DatabaseProvider.POSTGRESQL);
     });
@@ -35,13 +35,13 @@ describe('detectProvider', () => {
 
   describe('MySQL', () => {
     it('detects mysql:// scheme', () => {
-      expect(detectProvider('mysql://user:pass@localhost:3306/authme')).toBe(
+      expect(detectProvider('mysql://user:pass@localhost:3306/idenplane')).toBe(
         DatabaseProvider.MYSQL,
       );
     });
 
     it('is case-insensitive for the scheme', () => {
-      expect(detectProvider('MYSQL://user:pass@localhost:3306/authme')).toBe(
+      expect(detectProvider('MYSQL://user:pass@localhost:3306/idenplane')).toBe(
         DatabaseProvider.MYSQL,
       );
     });
@@ -55,7 +55,7 @@ describe('detectProvider', () => {
     });
 
     it('detects file: scheme (absolute path)', () => {
-      expect(detectProvider('file:/tmp/authme-test.db')).toBe(
+      expect(detectProvider('file:/tmp/idenplane-test.db')).toBe(
         DatabaseProvider.SQLITE,
       );
     });
@@ -81,7 +81,7 @@ describe('detectProvider', () => {
     });
 
     it('throws for an unrecognised scheme', () => {
-      expect(() => detectProvider('mongodb://localhost/authme')).toThrow(
+      expect(() => detectProvider('mongodb://localhost/idenplane')).toThrow(
         'Unrecognised DATABASE_URL scheme',
       );
     });
@@ -91,7 +91,7 @@ describe('detectProvider', () => {
     });
 
     it('throws for a bare hostname without a scheme', () => {
-      expect(() => detectProvider('localhost:5432/authme')).toThrow(
+      expect(() => detectProvider('localhost:5432/idenplane')).toThrow(
         'Unrecognised DATABASE_URL scheme',
       );
     });

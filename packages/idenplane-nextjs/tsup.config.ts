@@ -12,5 +12,5 @@ export default defineConfig({
   splitting: false,
   sourcemap: true,
   clean: true,
-  external: ['authme-sdk', 'next', 'react'],
+  external: ['idenplane-sdk', 'next', 'react'],
 });

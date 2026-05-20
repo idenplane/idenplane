@@ -1,11 +1,11 @@
-# authme-vue
+# idenplane-vue
 
-Vue 3 SDK for [AuthMe](https://github.com/Islamawad132/Authme) — composables, a Vue plugin, Vue Router guard, and an `AuthProvider` component.
+Vue 3 SDK for [Idenplane](https://github.com/Islamawad132/Authme) — composables, a Vue plugin, Vue Router guard, and an `AuthProvider` component.
 
 ## Installation
 
 ```bash
-npm install authme-vue authme-sdk vue
+npm install idenplane-vue idenplane-sdk vue
 ```
 
 ## Quick Start
@@ -15,7 +15,7 @@ npm install authme-vue authme-sdk vue
 ```typescript
 // main.ts
 import { createApp } from 'vue';
-import { AuthmePlugin } from 'authme-vue';
+import { AuthmePlugin } from 'idenplane-vue';
 import App from './App.vue';
 
 const app = createApp(App);
@@ -34,7 +34,7 @@ app.mount('#app');
 
 ```vue
 <script setup lang="ts">
-import { useAuth } from 'authme-vue';
+import { useAuth } from 'idenplane-vue';
 
 const { isAuthenticated, user, login, logout, isLoading } = useAuth();
 </script>
@@ -56,8 +56,8 @@ const { isAuthenticated, user, login, logout, isLoading } = useAuth();
 ```typescript
 // router/index.ts
 import { createRouter, createWebHistory } from 'vue-router';
-import { createAuthGuard } from 'authme-vue';
-import { AuthmeClient } from 'authme-sdk';
+import { createAuthGuard } from 'idenplane-vue';
+import { AuthmeClient } from 'idenplane-sdk';
 
 const authClient = new AuthmeClient({
   url: 'http://localhost:3000',
@@ -104,7 +104,7 @@ export default router;
 </template>
 
 <script setup lang="ts">
-import { AuthProvider } from 'authme-vue';
+import { AuthProvider } from 'idenplane-vue';
 </script>
 ```
 
@@ -112,7 +112,7 @@ import { AuthProvider } from 'authme-vue';
 
 ```vue
 <script setup lang="ts">
-import { usePermissions } from 'authme-vue';
+import { usePermissions } from 'idenplane-vue';
 
 const { hasRole, hasPermission, roles } = usePermissions();
 </script>

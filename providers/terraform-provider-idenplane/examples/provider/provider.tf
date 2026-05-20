@@ -1,16 +1,16 @@
-# AuthMe Terraform Provider Configuration
+# Idenplane Terraform Provider Configuration
 #
-# This example demonstrates how to configure the AuthMe Terraform provider.
-# Replace the values with your actual AuthMe instance configuration.
+# This example demonstrates how to configure the Idenplane Terraform provider.
+# Replace the values with your actual Idenplane instance configuration.
 #
-# Documentation: https://docs.authme.io/terraform-provider
+# Documentation: https://docs.idenplane.io/terraform-provider
 
 terraform {
   required_version = ">= 1.0.0"
 
   required_providers {
-    authme = {
-      source  = "authme/authme"
+    idenplane = {
+      source  = "idenplane/idenplane"
       version = "~> 0.1.0"
     }
   }
@@ -20,8 +20,8 @@ terraform {
 
 # Option 1: Admin Credentials Authentication
 # Uses the master realm admin user credentials to authenticate.
-provider "authme" {
-  base_url    = "http://localhost:3000"  # AuthMe server URL
+provider "idenplane" {
+  base_url    = "http://localhost:3000"  # Idenplane server URL
   auth_method = "admin_credentials"      # Authentication method
   admin_user  = "admin"                 # Admin username
   admin_pass  = "your-admin-password"   # Admin password
@@ -29,10 +29,10 @@ provider "authme" {
 }
 
 # Option 2: API Key Authentication
-# Uses an API key for authentication (if configured in AuthMe).
+# Uses an API key for authentication (if configured in Idenplane).
 # Uncomment and use this instead of admin credentials if you prefer API keys.
 #
-# provider "authme" {
+# provider "idenplane" {
 #   base_url    = "http://localhost:3000"
 #   auth_method = "api_key"
 #   api_key     = "your-api-key"
@@ -43,7 +43,7 @@ provider "authme" {
 # Uses OAuth 2.0 client credentials for authentication.
 # Uncomment and use this for service-to-service authentication.
 #
-# provider "authme" {
+# provider "idenplane" {
 #   base_url       = "http://localhost:3000"
 #   auth_method   = "client_credentials"
 #   client_id     = "your-client-id"
@@ -52,7 +52,7 @@ provider "authme" {
 # }
 
 # Example: Creating a Realm
-resource "authme_realm" "example" {
+resource "idenplane_realm" "example" {
   name         = "example-realm"
   display_name = "Example Realm"
   enabled      = true
@@ -93,7 +93,7 @@ resource "authme_realm" "example" {
   admin_events_enabled  = true
 
   # Theming
-  theme_name    = "authme"
+  theme_name    = "idenplane"
   default_locale = "en"
 
   # Legal
@@ -101,8 +101,8 @@ resource "authme_realm" "example" {
 }
 
 # Example: Creating an OAuth Client
-resource "authme_client" "example" {
-  realm_id  = authme_realm.example.name
+resource "idenplane_client" "example" {
+  realm_id  = idenplane_realm.example.name
   client_id = "example-app"
   name      = "Example Application"
   enabled   = true
@@ -139,8 +139,8 @@ resource "authme_client" "example" {
 }
 
 # Example: Creating a Role
-resource "authme_role" "example" {
-  realm_id   = authme_realm.example.name
+resource "idenplane_role" "example" {
+  realm_id   = idenplane_realm.example.name
   name       = "example-role"
   description = "An example role for demonstration"
 
@@ -152,12 +152,12 @@ resource "authme_role" "example" {
 }
 
 # Example: Creating a Group
-resource "authme_group" "example" {
-  realm_id = authme_realm.example.name
+resource "idenplane_group" "example" {
+  realm_id = idenplane_realm.example.name
   name     = "example-group"
   path     = "/example-group"
   # Optional parent group (uncomment if needed)
-  # parent_id = authme_group.parent.name
+  # parent_id = idenplane_group.parent.name
 
   # Group attributes (optional)
   # attributes = {
@@ -166,8 +166,8 @@ resource "authme_group" "example" {
 }
 
 # Example: Creating an Identity Provider (OIDC)
-resource "authme_identity_provider" "google" {
-  realm_id    = authme_realm.example.name
+resource "idenplane_identity_provider" "google" {
+  realm_id    = idenplane_realm.example.name
   alias       = "google"
   provider_id = "oidc"
   enabled     = true
@@ -201,8 +201,8 @@ resource "authme_identity_provider" "google" {
 
 # Example: Creating an Identity Provider (SAML)
 # Uncomment when using SAML
-# resource "authme_identity_provider" "okta" {
-#   realm_id    = authme_realm.example.name
+# resource "idenplane_identity_provider" "okta" {
+#   realm_id    = idenplane_realm.example.name
 #   alias       = "okta"
 #   provider_id = "saml"
 #   enabled     = true
@@ -229,40 +229,40 @@ resource "authme_identity_provider" "google" {
 # Data sources for reading existing resources
 
 # Example: Reading an existing realm
-# data "authme_realm" "existing" {
+# data "idenplane_realm" "existing" {
 #   id = "existing-realm-name"
 # }
 
 # Example: Reading an existing client
-# data "authme_client" "existing" {
-#   realm_id = authme_realm.example.name
+# data "idenplane_client" "existing" {
+#   realm_id = idenplane_realm.example.name
 #   client_id = "existing-client-id"
 # }
 
 # Example: Reading an existing role
-# data "authme_role" "existing" {
-#   realm_id = authme_realm.example.name
+# data "idenplane_role" "existing" {
+#   realm_id = idenplane_realm.example.name
 #   name     = "existing-role-name"
 # }
 
 # Example: Reading an existing group
-# data "authme_group" "existing" {
-#   realm_id = authme_realm.example.name
+# data "idenplane_group" "existing" {
+#   realm_id = idenplane_realm.example.name
 #   name     = "existing-group-name"
 # }
 
 # Example: Reading an existing identity provider
-# data "authme_identity_provider" "existing" {
-#   realm_id = authme_realm.example.name
+# data "idenplane_identity_provider" "existing" {
+#   realm_id = idenplane_realm.example.name
 #   alias    = "existing-idp-alias"
 # }
 
 # Output values for integration with other Terraform configurations
 # output "realm_id" {
-#   value = authme_realm.example.name
+#   value = idenplane_realm.example.name
 # }
 #
 # output "client_id" {
-#   value = authme_client.example.client_id
+#   value = idenplane_client.example.client_id
 #   sensitive = true
 # }

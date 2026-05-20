@@ -1,11 +1,11 @@
-// terraform-provider-authme is the official Terraform provider for AuthMe
+// terraform-provider-idenplane is the official Terraform provider for Idenplane
 package main
 
 import (
 	"flag"
 	"os"
 
-	"github.com/authme/terraform-provider-authme/provider"
+	"github.com/idenplane/terraform-provider-idenplane/provider"
 
 	"github.com/hashicorp/terraform-plugin-framework/providerserver"
 )
@@ -20,7 +20,7 @@ func main() {
 	flag.Parse()
 
 	opts := providerserver.ServeOpts{
-		Address: "registry.terraform.io/authme/terraform-provider-authme",
+		Address: "registry.terraform.io/idenplane/terraform-provider-idenplane",
 		Debug:   debug,
 	}
 

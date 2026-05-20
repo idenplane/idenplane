@@ -49,7 +49,7 @@ const VERSION_SCHEMAS: Record<string, VersionSchema> = {
     removedFeatures: ['v1-auth-endpoints', 'legacy-sessions'],
     breakingChanges: [
       'JWT tokens now require RS256 algorithm',
-      'Session cookies renamed from session to authme_session',
+      'Session cookies renamed from session to idenplane_session',
     ],
   },
   '2.4.0': {

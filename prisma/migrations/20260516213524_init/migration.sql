@@ -429,7 +429,7 @@ CREATE TABLE "scim_attribute_mappings" (
     "realm_id" TEXT NOT NULL,
     "resourceType" TEXT NOT NULL,
     "scim_attribute" TEXT NOT NULL,
-    "authme_attribute" TEXT NOT NULL,
+    "idenplane_attribute" TEXT NOT NULL,
     "enabled" BOOLEAN NOT NULL DEFAULT true,
     "direction" TEXT NOT NULL DEFAULT 'inbound',
     "created_at" TIMESTAMP(3) NOT NULL DEFAULT CURRENT_TIMESTAMP,

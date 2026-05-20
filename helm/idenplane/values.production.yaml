@@ -1,9 +1,9 @@
 # ──────────────────────────────────────────────────────────────────────────────
-# AuthMe Helm Chart — Production Overrides
+# Idenplane Helm Chart — Production Overrides
 #
 # Usage:
-#   helm upgrade --install authme ./helm/authme \
-#     -f helm/authme/values.production.yaml \
+#   helm upgrade --install idenplane ./helm/idenplane \
+#     -f helm/idenplane/values.production.yaml \
 #     --set secrets.ADMIN_API_KEY="<strong-key>" \
 #     --set env.BASE_URL="https://auth.example.com"
 # ──────────────────────────────────────────────────────────────────────────────
@@ -48,7 +48,7 @@ ingress:
         - path: /
           pathType: Prefix
   tls:
-    - secretName: authme-tls
+    - secretName: idenplane-tls
       hosts:
         - auth.example.com
 
@@ -72,10 +72,10 @@ secrets:
 postgresql:
   enabled: true
   auth:
-    username: authme
+    username: idenplane
     # Override at deploy time: --set postgresql.auth.password="..."
     password: "REPLACE_WITH_STRONG_DB_PASSWORD"
-    database: authme
+    database: idenplane
   primary:
     persistence:
       enabled: true
@@ -111,5 +111,5 @@ affinity:
         podAffinityTerm:
           labelSelector:
             matchLabels:
-              app.kubernetes.io/name: authme
+              app.kubernetes.io/name: idenplane
           topologyKey: kubernetes.io/hostname

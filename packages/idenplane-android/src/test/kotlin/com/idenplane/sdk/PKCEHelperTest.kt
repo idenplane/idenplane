@@ -1,4 +1,4 @@
-package com.authme.sdk
+package com.idenplane.sdk
 
 import org.junit.Assert.assertEquals
 import org.junit.Assert.assertFalse

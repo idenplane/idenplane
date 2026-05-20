@@ -17,12 +17,12 @@ function createJwt(payload: Record<string, unknown>): string {
 
 describe('parseJwt', () => {
   it('should parse a valid JWT and return the payload', () => {
-    const jwt = createJwt({ sub: 'user-1', exp: 9999999999, iss: 'authme' });
+    const jwt = createJwt({ sub: 'user-1', exp: 9999999999, iss: 'idenplane' });
     const claims = parseJwt(jwt);
 
     expect(claims.sub).toBe('user-1');
     expect(claims.exp).toBe(9999999999);
-    expect(claims.iss).toBe('authme');
+    expect(claims.iss).toBe('idenplane');
   });
 
   it('should handle unicode characters in the payload', () => {

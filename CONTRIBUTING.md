@@ -1,6 +1,6 @@
-# Contributing to AuthMe
+# Contributing to Idenplane
 
-Thank you for your interest in contributing to AuthMe!
+Thank you for your interest in contributing to Idenplane!
 
 ## Getting Started
 
@@ -232,13 +232,13 @@ Include:
 
 **DO NOT** report security vulnerabilities via GitHub Issues.
 
-Email: security@authme.dev (or follow your organization's responsible disclosure policy)
+Email: security@idenplane.dev (or follow your organization's responsible disclosure policy)
 
 ## Questions?
 
 - GitHub Discussions: https://github.com/Islamawad132/Authme/discussions
-- Discord: https://discord.gg/authme
-- Documentation: https://authme.dev/docs
+- Discord: https://discord.gg/idenplane
+- Documentation: https://idenplane.dev/docs
 
 ## License
 

@@ -1,15 +1,15 @@
-name: authme-csharp-examples
+name: idenplane-csharp-examples
 runtime:
   name: dotnet
 description: |
-  C# examples for AuthMe Pulumi provider.
-  This project contains examples demonstrating how to use the AuthMe provider
+  C# examples for Idenplane Pulumi provider.
+  This project contains examples demonstrating how to use the Idenplane provider
   to manage realms, clients, and other identity resources.
 
 config:
-  authme:apiUrl:
-    value: "https://api.authme.io"
-    description: "AuthMe API URL"
-  authme:realm:
+  idenplane:apiUrl:
+    value: "https://api.idenplane.io"
+    description: "Idenplane API URL"
+  idenplane:realm:
     value: "default"
     description: "Default realm for client operations"

@@ -1,4 +1,4 @@
-// Package client provides HTTP client functionality for AuthMe API communication
+// Package client provides HTTP client functionality for Idenplane API communication
 package client
 
 import (
@@ -14,7 +14,7 @@ const (
 	ClientTypePublic       ClientType = "PUBLIC"
 )
 
-// Client represents an OAuth client in the AuthMe API
+// Client represents an OAuth client in the Idenplane API
 type Client struct {
 	ID                              string   `json:"id"`
 	RealmID                         string   `json:"realmId"`
@@ -85,7 +85,7 @@ type ServiceAccountUser struct {
 	UserRoles []Role   `json:"userRoles,omitempty"`
 }
 
-// ClientsClient provides methods for interacting with AuthMe clients API
+// ClientsClient provides methods for interacting with Idenplane clients API
 type ClientsClient struct {
 	httpClient *HTTPClient
 }

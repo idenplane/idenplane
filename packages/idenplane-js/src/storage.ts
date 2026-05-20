@@ -5,7 +5,7 @@ export interface TokenStorage {
   clear(): void;
 }
 
-const PREFIX = 'authme_';
+const PREFIX = 'idenplane_';
 
 export class BrowserStorage implements TokenStorage {
   private store: Storage;

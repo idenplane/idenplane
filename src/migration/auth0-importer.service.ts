@@ -54,7 +54,7 @@ export class Auth0ImporterService {
     if (data.organizations?.length) {
       report.warnings.push({
         entity: 'organizations',
-        message: `${data.organizations.length} Auth0 organizations found. Use AuthMe's Organization module to recreate them.`,
+        message: `${data.organizations.length} Auth0 organizations found. Use Idenplane's Organization module to recreate them.`,
       });
     }
 

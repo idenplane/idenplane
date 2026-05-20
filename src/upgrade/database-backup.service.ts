@@ -59,7 +59,7 @@ export class DatabaseBackupService {
     const timestamp = new Date();
     const timestampStr = timestamp.toISOString().replace(/[:.]/g, '-');
     const safeLabel = label ? `-${label.replace(/[^a-zA-Z0-9-_]/g, '')}` : '';
-    const backupFilename = `authme-backup-${timestampStr}${safeLabel}.sql.gz`;
+    const backupFilename = `idenplane-backup-${timestampStr}${safeLabel}.sql.gz`;
     const backupPath = path.join(this.backupDirectory, backupFilename);
 
     this.logger.log(`Starting database backup: ${backupFilename}`);

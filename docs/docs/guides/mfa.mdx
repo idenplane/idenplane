@@ -1,16 +1,16 @@
 ---
 id: mfa
 title: MFA Guide
-description: Complete guide to Multi-Factor Authentication (MFA) with TOTP in AuthMe
+description: Complete guide to Multi-Factor Authentication (MFA) with TOTP in Idenplane
 ---
 
 # MFA Guide
 
-Multi-Factor Authentication (MFA) adds an extra layer of security by requiring a second form of verification beyond passwords. AuthMe supports Time-based One-Time Passwords (TOTP) as the second factor, with optional recovery codes for account recovery.
+Multi-Factor Authentication (MFA) adds an extra layer of security by requiring a second form of verification beyond passwords. Idenplane supports Time-based One-Time Passwords (TOTP) as the second factor, with optional recovery codes for account recovery.
 
 ## Supported Methods
 
-AuthMe supports TOTP (RFC 6238) for multi-factor authentication:
+Idenplane supports TOTP (RFC 6238) for multi-factor authentication:
 
 | Method | Description | Security Level |
 |--------|-------------|----------------|
@@ -33,15 +33,15 @@ The TOTP setup flow involves generating a secret, displaying a QR code for easy 
 sequenceDiagram
     participant User as User
     participant App as Application
-    participant AuthMe as AuthMe Server
+    participant Idenplane as Idenplane Server
     participant Auth as Authenticator App
 
-    App->>AuthMe: 1. Request TOTP setup
-    AuthMe->>User: 2. Return secret + QR code
+    App->>Idenplane: 1. Request TOTP setup
+    Idenplane->>User: 2. Return secret + QR code
     User->>Auth: 3. Scan QR code
     User->>App: 4. Submit verification code
-    App->>AuthMe: 5. Verify code
-    AuthMe->>User: 6. MFA activated + recovery codes
+    App->>Idenplane: 5. Verify code
+    Idenplane->>User: 6. MFA activated + recovery codes
 ```
 
 ### Step 1: Initiate TOTP Setup
@@ -60,7 +60,7 @@ curl -X POST "http://localhost:3000/realms/my-realm/mfa/setup" \
 {
   "secret": "JBSWY3DPEHPK3PXP",
   "qrCodeDataUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg...",
-  "otpauthUrl": "otpauth://totp/AuthMe%20(my-realm)/user@example.com?secret=JBSWY3DPEHPK3PXP&issuer=AuthMe%20%28my-realm%29&algorithm=SHA1&digits=6&period=30"
+  "otpauthUrl": "otpauth://totp/Idenplane%20(my-realm)/user@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Idenplane%20%28my-realm%29&algorithm=SHA1&digits=6&period=30"
 }
 ```
 
@@ -138,17 +138,17 @@ After MFA is enabled, users must provide a TOTP code during authentication for s
 sequenceDiagram
     participant User as User
     participant App as Application
-    participant AuthMe as AuthMe Server
+    participant Idenplane as Idenplane Server
     participant Auth as Authenticator App
 
-    App->>AuthMe: 1. Begin login
-    AuthMe->>User: 2. Request MFA challenge
+    App->>Idenplane: 1. Begin login
+    Idenplane->>User: 2. Request MFA challenge
     User->>Auth: 3. Get code from app
     User->>App: 4. Submit code
-    App->>AuthMe: 5. Verify TOTP code
-    AuthMe->>App: 6. MFA verified
-    App->>AuthMe: 7. Complete login
-    AuthMe->>App: 8. Return tokens
+    App->>Idenplane: 5. Verify TOTP code
+    Idenplane->>App: 6. MFA verified
+    App->>Idenplane: 7. Complete login
+    Idenplane->>App: 8. Return tokens
 ```
 
 ### Standard Login with MFA
@@ -219,7 +219,7 @@ curl -X POST "http://localhost:3000/realms/my-realm/mfa/verify" \
 ```json
 {
   "verified": true,
-  "acr": "urn:authme:acr:mfa"
+  "acr": "urn:idenplane:acr:mfa"
 }
 ```
 
@@ -277,7 +277,7 @@ async function verifyTotpCode(code: string, challengeToken: string) {
 ```
 
 :::note TOTP Window
-AuthMe validates TOTP codes with a window of ±1 step (30 seconds). This accommodates clock skew between the server and authenticator app.
+Idenplane validates TOTP codes with a window of ±1 step (30 seconds). This accommodates clock skew between the server and authenticator app.
 :::
 
 ---
@@ -447,7 +447,7 @@ To disable a user's MFA, the administrator must:
 ```bash
 curl -X DELETE "http://localhost:3000/admin/realms/my-realm/users/${USER_ID}/mfa" \
   -H "Authorization: Bearer ${ADMIN_ACCESS_TOKEN}" \
-  -H "Cookie: AUTHME_SESSION=${ADMIN_SESSION_TOKEN}"
+  -H "Cookie: IDENPLANE_SESSION=${ADMIN_SESSION_TOKEN}"
 ```
 
 :::caution MFA Step-Up Required
@@ -467,7 +467,7 @@ This operation requires the administrator to have MFA-verified session. API key 
 ```json
 {
   "statusCode": 401,
-  "message": "MFA step-up is required to disable user MFA. Please complete MFA verification via POST /realms/:realmName/step-up/verify with acr=urn:authme:acr:mfa before retrying."
+  "message": "MFA step-up is required to disable user MFA. Please complete MFA verification via POST /realms/:realmName/step-up/verify with acr=urn:idenplane:acr:mfa before retrying."
 }
 ```
 
@@ -482,7 +482,7 @@ This operation requires the administrator to have MFA-verified session. API key 
 
 ## TOTP Configuration
 
-AuthMe uses industry-standard TOTP configuration:
+Idenplane uses industry-standard TOTP configuration:
 
 | Parameter | Value | Description |
 |-----------|-------|-------------|
@@ -493,7 +493,7 @@ AuthMe uses industry-standard TOTP configuration:
 
 ### Supported Authenticator Apps
 
-Most TOTP-compatible apps work with AuthMe:
+Most TOTP-compatible apps work with Idenplane:
 
 - **Google Authenticator** (iOS / Android)
 - **Microsoft Authenticator** (iOS / Android)
@@ -518,7 +518,7 @@ Enable MFA as soon as account creation is complete. Don't wait for a security in
 |--------|----------|----------------|
 | Authenticator App | High | Recommended |
 | Hardware Keys | Highest | Best for high-value accounts |
-| SMS | Vulnerable | Not supported by AuthMe |
+| SMS | Vulnerable | Not supported by Idenplane |
 
 ### Protect Recovery Codes
 
@@ -585,14 +585,14 @@ Understand RBAC and access control policies
 Complete REST API documentation with examples
 
 [**React SDK**](/docs/guides/sdks/react)
-Integrate AuthMe into your React application
+Integrate Idenplane into your React application
 
 </div>
 
 ---
 
 <p align="center">
-  <a href="https://authme.dev">authme.dev</a> &middot;
+  <a href="https://idenplane.dev">idenplane.dev</a> &middot;
   <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
-  <a href="https://discord.gg/authme">Discord</a>
+  <a href="https://discord.gg/idenplane">Discord</a>
 </p>

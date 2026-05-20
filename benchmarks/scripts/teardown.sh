@@ -2,7 +2,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # benchmarks/scripts/teardown.sh
 #
-# Stops and cleans up the AuthMe benchmark environment.
+# Stops and cleans up the Idenplane benchmark environment.
 #
 # What it does:
 #   1. Stops the benchmark Docker Compose stack
@@ -49,7 +49,7 @@ done
 
 echo ""
 echo "═══════════════════════════════════════════════════════════════════════════"
-echo "  AuthMe Benchmark Teardown"
+echo "  Idenplane Benchmark Teardown"
 echo "═══════════════════════════════════════════════════════════════════════════"
 echo ""
 
@@ -122,7 +122,7 @@ echo ""
 echo "[4/4] Final cleanup..."
 
 # Remove any orphaned containers
-ORPHANS=$(docker ps -a --filter "name=authme-benchmark" --format '{{.Names}}' 2>/dev/null || echo "")
+ORPHANS=$(docker ps -a --filter "name=idenplane-benchmark" --format '{{.Names}}' 2>/dev/null || echo "")
 if [[ -n "${ORPHANS}" ]]; then
   echo "  Removing orphaned containers..."
   echo "${ORPHANS}" | xargs docker rm -f 2>/dev/null || true

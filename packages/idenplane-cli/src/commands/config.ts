@@ -14,7 +14,7 @@ export function registerConfigCommands(program: Command): void {
     .action((opts) => {
       const config = loadConfig();
       if (!config) {
-        console.log(chalk.yellow('No config found. Run `authme init` or `authme login` first.'));
+        console.log(chalk.yellow('No config found. Run `idenplane init` or `idenplane login` first.'));
         return;
       }
       const display: Record<string, unknown> = {
@@ -36,7 +36,7 @@ export function registerConfigCommands(program: Command): void {
     .action(async () => {
       const config = loadConfig();
       if (!config) {
-        throw new Error('No config found. Run `authme init` or `authme login` first.');
+        throw new Error('No config found. Run `idenplane init` or `idenplane login` first.');
       }
 
       console.log(chalk.dim(`Connecting to ${config.serverUrl}...`));

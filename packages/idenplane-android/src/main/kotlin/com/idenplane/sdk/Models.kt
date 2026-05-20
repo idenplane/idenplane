@@ -1,4 +1,4 @@
-package com.authme.sdk
+package com.idenplane.sdk
 
 import kotlinx.serialization.SerialName
 import kotlinx.serialization.Serializable
@@ -8,11 +8,11 @@ import kotlinx.serialization.Serializable
 // ---------------------------------------------------------------------------
 
 /**
- * Configuration for creating an [AuthMeClient] instance.
+ * Configuration for creating an [IdenplaneClient] instance.
  *
- * @param serverUrl   Base URL of the AuthMe server, e.g. "https://auth.example.com"
+ * @param serverUrl   Base URL of the Idenplane server, e.g. "https://auth.example.com"
  * @param realm       Realm name to authenticate against
- * @param clientId    OAuth 2.0 client ID (must be a PUBLIC client in AuthMe)
+ * @param clientId    OAuth 2.0 client ID (must be a PUBLIC client in Idenplane)
  * @param redirectUri Custom scheme redirect URI, e.g. "com.example.app://callback"
  * @param scopes      OAuth 2.0 scopes to request (default: openid, profile, email)
  * @param autoRefresh Automatically refresh tokens before expiry (default: true)
@@ -78,49 +78,49 @@ internal data class OIDCConfiguration(
 )
 
 // ---------------------------------------------------------------------------
-// AuthMeException
+// IdenplaneException
 // ---------------------------------------------------------------------------
 
-/** Sealed hierarchy of exceptions thrown by the AuthMe Android SDK. */
-sealed class AuthMeException(message: String, cause: Throwable? = null) :
+/** Sealed hierarchy of exceptions thrown by the Idenplane Android SDK. */
+sealed class IdenplaneException(message: String, cause: Throwable? = null) :
     Exception(message, cause) {
 
     /** User is not currently authenticated. */
-    class NotAuthenticated : AuthMeException("User is not authenticated")
+    class NotAuthenticated : IdenplaneException("User is not authenticated")
 
     /** The stored access token has expired and no refresh token is available. */
-    class TokenExpired : AuthMeException("Access token has expired")
+    class TokenExpired : IdenplaneException("Access token has expired")
 
     /** No refresh token is available in storage. */
-    class NoRefreshToken : AuthMeException("No refresh token available")
+    class NoRefreshToken : IdenplaneException("No refresh token available")
 
     /** The redirect URI registered in the app does not match the config. */
     class InvalidRedirectUri(uri: String) :
-        AuthMeException("Invalid redirect URI: $uri")
+        IdenplaneException("Invalid redirect URI: $uri")
 
     /** The OAuth state parameter did not match — possible CSRF. */
-    class StateMismatch : AuthMeException("State mismatch — possible CSRF attack")
+    class StateMismatch : IdenplaneException("State mismatch — possible CSRF attack")
 
     /** The PKCE code verifier is missing from storage. */
-    class PkceVerifierMissing : AuthMeException("PKCE code verifier is missing")
+    class PkceVerifierMissing : IdenplaneException("PKCE code verifier is missing")
 
     /** A network or HTTP error occurred. */
     class NetworkError(message: String, cause: Throwable? = null) :
-        AuthMeException(message, cause)
+        IdenplaneException(message, cause)
 
-    /** The AuthMe server returned an error response. */
-    class ServerError(message: String) : AuthMeException(message)
+    /** The Idenplane server returned an error response. */
+    class ServerError(message: String) : IdenplaneException(message)
 
     /** The authorization callback contained an error. */
-    class CallbackError(message: String) : AuthMeException(message)
+    class CallbackError(message: String) : IdenplaneException(message)
 
     /** Failed to fetch or parse the OIDC discovery document. */
-    class DiscoveryFailed(message: String) : AuthMeException(message)
+    class DiscoveryFailed(message: String) : IdenplaneException(message)
 
     /** Biometric authentication failed or was cancelled. */
     class BiometricAuthFailed(reason: String) :
-        AuthMeException("Biometric authentication failed: $reason")
+        IdenplaneException("Biometric authentication failed: $reason")
 
     /** The login was cancelled by the user. */
-    class LoginCancelled : AuthMeException("Login was cancelled by the user")
+    class LoginCancelled : IdenplaneException("Login was cancelled by the user")
 }

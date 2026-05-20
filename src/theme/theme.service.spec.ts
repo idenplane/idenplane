@@ -23,15 +23,15 @@ describe('ThemeService', () => {
   describe('onModuleInit / loadThemes', () => {
     it('should load themes from the themes directory', async () => {
       mockedReaddir.mockResolvedValue([
-        { name: 'authme', isDirectory: () => true } as any,
+        { name: 'idenplane', isDirectory: () => true } as any,
         { name: 'dark', isDirectory: () => true } as any,
         { name: 'readme.txt', isDirectory: () => false } as any,
       ]);
       mockedReadFile
         .mockResolvedValueOnce(
           JSON.stringify({
-            name: 'authme',
-            displayName: 'AuthMe Default',
+            name: 'idenplane',
+            displayName: 'Idenplane Default',
             description: 'Default theme',
             colors: { primaryColor: '#2563eb' },
             types: { login: { css: ['login.css'] } },
@@ -41,7 +41,7 @@ describe('ThemeService', () => {
           JSON.stringify({
             name: 'dark',
             displayName: 'Dark',
-            parent: 'authme',
+            parent: 'idenplane',
             colors: { primaryColor: '#1e40af' },
             types: { login: { css: ['dark.css'] } },
           }),
@@ -49,9 +49,9 @@ describe('ThemeService', () => {
 
       await service.onModuleInit();
 
-      expect(service.getTheme('authme')).toBeDefined();
+      expect(service.getTheme('idenplane')).toBeDefined();
       expect(service.getTheme('dark')).toBeDefined();
-      expect(service.getTheme('authme')!.displayName).toBe('AuthMe Default');
+      expect(service.getTheme('idenplane')!.displayName).toBe('Idenplane Default');
     });
 
     it('should handle missing themes directory', async () => {
@@ -102,12 +102,12 @@ describe('ThemeService', () => {
   describe('getAvailableThemes', () => {
     it('should return theme info for all loaded themes', async () => {
       mockedReaddir.mockResolvedValue([
-        { name: 'authme', isDirectory: () => true } as any,
+        { name: 'idenplane', isDirectory: () => true } as any,
       ]);
       mockedReadFile.mockResolvedValue(
         JSON.stringify({
-          name: 'authme',
-          displayName: 'AuthMe',
+          name: 'idenplane',
+          displayName: 'Idenplane',
           description: 'Default',
           colors: { primaryColor: '#2563eb' },
         }),
@@ -118,8 +118,8 @@ describe('ThemeService', () => {
       const themes = service.getAvailableThemes();
       expect(themes).toHaveLength(1);
       expect(themes[0]).toEqual({
-        name: 'authme',
-        displayName: 'AuthMe',
+        name: 'idenplane',
+        displayName: 'Idenplane',
         description: 'Default',
         colors: { primaryColor: '#2563eb' },
       });
@@ -264,12 +264,12 @@ describe('ThemeService', () => {
   describe('resolveColors', () => {
     beforeEach(async () => {
       mockedReaddir.mockResolvedValue([
-        { name: 'authme', isDirectory: () => true } as any,
+        { name: 'idenplane', isDirectory: () => true } as any,
       ]);
       mockedReadFile.mockResolvedValue(
         JSON.stringify({
-          name: 'authme',
-          displayName: 'AuthMe',
+          name: 'idenplane',
+          displayName: 'Idenplane',
           colors: {
             primaryColor: '#2563eb',
             backgroundColor: '#f0f2f5',
@@ -288,12 +288,12 @@ describe('ThemeService', () => {
 
     it('should return theme colors with defaults', () => {
       const realm = { theme: {} } as any as Realm;
-      const colors = service.resolveColors('authme', realm);
+      const colors = service.resolveColors('idenplane', realm);
 
       expect(colors.primaryColor).toBe('#2563eb');
       expect(colors.backgroundColor).toBe('#f0f2f5');
       expect(colors.logoUrl).toBe('');
-      expect(colors.appTitle).toBe('AuthMe');
+      expect(colors.appTitle).toBe('Idenplane');
     });
 
     it('should apply per-realm color overrides', () => {
@@ -305,7 +305,7 @@ describe('ThemeService', () => {
         },
       } as any as Realm;
 
-      const colors = service.resolveColors('authme', realm);
+      const colors = service.resolveColors('idenplane', realm);
 
       expect(colors.primaryColor).toBe('#ff0000');
       expect(colors.logoUrl).toBe('/my-logo.png');
@@ -321,7 +321,7 @@ describe('ThemeService', () => {
 
     it('should compute primaryHoverColor from primaryColor', () => {
       const realm = { theme: {} } as any as Realm;
-      const colors = service.resolveColors('authme', realm);
+      const colors = service.resolveColors('idenplane', realm);
 
       expect(colors.primaryHoverColor).toBeDefined();
       expect(colors.primaryHoverColor).not.toBe(colors.primaryColor);
@@ -332,7 +332,7 @@ describe('ThemeService', () => {
         theme: { primaryHoverColor: '#0000ff' },
       } as any as Realm;
 
-      const colors = service.resolveColors('authme', realm);
+      const colors = service.resolveColors('idenplane', realm);
       expect(colors.primaryHoverColor).toBe('#0000ff');
     });
   });
@@ -340,12 +340,12 @@ describe('ThemeService', () => {
   describe('resolveTheme', () => {
     beforeEach(async () => {
       mockedReaddir.mockResolvedValue([
-        { name: 'authme', isDirectory: () => true } as any,
+        { name: 'idenplane', isDirectory: () => true } as any,
       ]);
       mockedReadFile.mockResolvedValue(
         JSON.stringify({
-          name: 'authme',
-          displayName: 'AuthMe',
+          name: 'idenplane',
+          displayName: 'Idenplane',
           colors: {
             primaryColor: '#2563eb',
             backgroundColor: '#f0f2f5',
@@ -365,8 +365,8 @@ describe('ThemeService', () => {
 
     it('should resolve colors and CSS together', () => {
       const realm = {
-        loginTheme: 'authme',
-        themeName: 'authme',
+        loginTheme: 'idenplane',
+        themeName: 'idenplane',
         theme: {},
       } as any as Realm;
 
@@ -374,14 +374,14 @@ describe('ThemeService', () => {
 
       expect(resolved.primaryColor).toBeDefined();
       expect(resolved.themeCssFiles).toContain(
-        '/themes/authme/login/resources/styles.css',
+        '/themes/idenplane/login/resources/styles.css',
       );
     });
 
     it('should fall back to themeName if loginTheme is not set', () => {
       const realm = {
         loginTheme: null,
-        themeName: 'authme',
+        themeName: 'idenplane',
         theme: {},
       } as any as Realm;
 
@@ -389,7 +389,7 @@ describe('ThemeService', () => {
       expect(resolved.themeCssFiles).toHaveLength(1);
     });
 
-    it('should fall back to "authme" if no theme fields are set', () => {
+    it('should fall back to "idenplane" if no theme fields are set', () => {
       const realm = {
         loginTheme: null,
         themeName: null,
@@ -403,17 +403,17 @@ describe('ThemeService', () => {
 
   describe('getRealmThemeName', () => {
     it('should return loginTheme for login type', () => {
-      const realm = { loginTheme: 'dark', themeName: 'authme' } as any;
+      const realm = { loginTheme: 'dark', themeName: 'idenplane' } as any;
       expect(service.getRealmThemeName(realm, 'login')).toBe('dark');
     });
 
     it('should return accountTheme for account type', () => {
-      const realm = { accountTheme: 'custom', themeName: 'authme' } as any;
+      const realm = { accountTheme: 'custom', themeName: 'idenplane' } as any;
       expect(service.getRealmThemeName(realm, 'account')).toBe('custom');
     });
 
     it('should return emailTheme for email type', () => {
-      const realm = { emailTheme: 'branded', themeName: 'authme' } as any;
+      const realm = { emailTheme: 'branded', themeName: 'idenplane' } as any;
       expect(service.getRealmThemeName(realm, 'email')).toBe('branded');
     });
 
@@ -422,9 +422,9 @@ describe('ThemeService', () => {
       expect(service.getRealmThemeName(realm, 'login')).toBe('custom');
     });
 
-    it('should fall back to "authme" when nothing is set', () => {
+    it('should fall back to "idenplane" when nothing is set', () => {
       const realm = { loginTheme: null, themeName: null } as any;
-      expect(service.getRealmThemeName(realm, 'login')).toBe('authme');
+      expect(service.getRealmThemeName(realm, 'login')).toBe('idenplane');
     });
   });
 });

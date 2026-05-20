@@ -9,16 +9,16 @@ import { homedir } from 'os';
 // Since config module reads HOME and constructs paths at load time, we test
 // via environment variable path in requireAuth.
 
-test('requireAuth: uses AUTHME_SERVER_URL + ADMIN_API_KEY env vars', async () => {
+test('requireAuth: uses IDENPLANE_SERVER_URL + ADMIN_API_KEY env vars', async () => {
   const orig = {
-    AUTHME_SERVER_URL: process.env['AUTHME_SERVER_URL'],
+    IDENPLANE_SERVER_URL: process.env['IDENPLANE_SERVER_URL'],
     ADMIN_API_KEY: process.env['ADMIN_API_KEY'],
-    AUTHME_TOKEN: process.env['AUTHME_TOKEN'],
+    IDENPLANE_TOKEN: process.env['IDENPLANE_TOKEN'],
   };
 
-  process.env['AUTHME_SERVER_URL'] = 'http://localhost:3000';
+  process.env['IDENPLANE_SERVER_URL'] = 'http://localhost:3000';
   process.env['ADMIN_API_KEY'] = 'test-api-key';
-  delete process.env['AUTHME_TOKEN'];
+  delete process.env['IDENPLANE_TOKEN'];
 
   try {
     // Dynamic import to get a fresh evaluation with env set
@@ -27,10 +27,10 @@ test('requireAuth: uses AUTHME_SERVER_URL + ADMIN_API_KEY env vars', async () =>
     assert.equal(result.serverUrl, 'http://localhost:3000');
     assert.equal(result.headers['x-admin-api-key'], 'test-api-key');
   } finally {
-    if (orig.AUTHME_SERVER_URL !== undefined) {
-      process.env['AUTHME_SERVER_URL'] = orig.AUTHME_SERVER_URL;
+    if (orig.IDENPLANE_SERVER_URL !== undefined) {
+      process.env['IDENPLANE_SERVER_URL'] = orig.IDENPLANE_SERVER_URL;
     } else {
-      delete process.env['AUTHME_SERVER_URL'];
+      delete process.env['IDENPLANE_SERVER_URL'];
     }
     if (orig.ADMIN_API_KEY !== undefined) {
       process.env['ADMIN_API_KEY'] = orig.ADMIN_API_KEY;
@@ -40,16 +40,16 @@ test('requireAuth: uses AUTHME_SERVER_URL + ADMIN_API_KEY env vars', async () =>
   }
 });
 
-test('requireAuth: uses AUTHME_SERVER_URL + AUTHME_TOKEN env vars', async () => {
+test('requireAuth: uses IDENPLANE_SERVER_URL + IDENPLANE_TOKEN env vars', async () => {
   const orig = {
-    AUTHME_SERVER_URL: process.env['AUTHME_SERVER_URL'],
+    IDENPLANE_SERVER_URL: process.env['IDENPLANE_SERVER_URL'],
     ADMIN_API_KEY: process.env['ADMIN_API_KEY'],
-    AUTHME_TOKEN: process.env['AUTHME_TOKEN'],
+    IDENPLANE_TOKEN: process.env['IDENPLANE_TOKEN'],
   };
 
-  process.env['AUTHME_SERVER_URL'] = 'http://localhost:3000';
+  process.env['IDENPLANE_SERVER_URL'] = 'http://localhost:3000';
   delete process.env['ADMIN_API_KEY'];
-  process.env['AUTHME_TOKEN'] = 'my-bearer-token';
+  process.env['IDENPLANE_TOKEN'] = 'my-bearer-token';
 
   try {
     const { requireAuth } = await import('../src/config.js');
@@ -57,20 +57,20 @@ test('requireAuth: uses AUTHME_SERVER_URL + AUTHME_TOKEN env vars', async () => 
     assert.equal(result.serverUrl, 'http://localhost:3000');
     assert.equal(result.headers['Authorization'], 'Bearer my-bearer-token');
   } finally {
-    if (orig.AUTHME_SERVER_URL !== undefined) {
-      process.env['AUTHME_SERVER_URL'] = orig.AUTHME_SERVER_URL;
+    if (orig.IDENPLANE_SERVER_URL !== undefined) {
+      process.env['IDENPLANE_SERVER_URL'] = orig.IDENPLANE_SERVER_URL;
     } else {
-      delete process.env['AUTHME_SERVER_URL'];
+      delete process.env['IDENPLANE_SERVER_URL'];
     }
     if (orig.ADMIN_API_KEY !== undefined) {
       process.env['ADMIN_API_KEY'] = orig.ADMIN_API_KEY;
     } else {
       delete process.env['ADMIN_API_KEY'];
     }
-    if (orig.AUTHME_TOKEN !== undefined) {
-      process.env['AUTHME_TOKEN'] = orig.AUTHME_TOKEN;
+    if (orig.IDENPLANE_TOKEN !== undefined) {
+      process.env['IDENPLANE_TOKEN'] = orig.IDENPLANE_TOKEN;
     } else {
-      delete process.env['AUTHME_TOKEN'];
+      delete process.env['IDENPLANE_TOKEN'];
     }
   }
 });

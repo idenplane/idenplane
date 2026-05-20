@@ -1,8 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import type { AuthMePlugin } from './plugin.interface.js';
+import type { IdenplanePlugin } from './plugin.interface.js';
 
 export interface PluginRegistryEntry {
-  plugin: AuthMePlugin;
+  plugin: IdenplanePlugin;
   enabled: boolean;
   loadedAt: Date;
 }
@@ -19,7 +19,7 @@ export class PluginRegistry {
   private readonly entries = new Map<string, PluginRegistryEntry>();
 
   /** Register a plugin in the in-memory registry. */
-  register(plugin: AuthMePlugin, enabled = true): void {
+  register(plugin: IdenplanePlugin, enabled = true): void {
     if (this.entries.has(plugin.name)) {
       this.logger.warn(
         `Plugin '${plugin.name}' is already registered; overwriting.`,
@@ -63,7 +63,7 @@ export class PluginRegistry {
   }
 
   /** Return enabled plugins filtered by type. */
-  getEnabledByType<T extends AuthMePlugin>(type: T['type']): T[] {
+  getEnabledByType<T extends IdenplanePlugin>(type: T['type']): T[] {
     return this.getEnabled()
       .filter((e) => e.plugin.type === type)
       .map((e) => e.plugin as T);

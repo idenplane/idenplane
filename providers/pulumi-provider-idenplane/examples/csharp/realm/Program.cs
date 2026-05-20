@@ -1,11 +1,11 @@
 /*
- * Pulumi C# example for AuthMe Realm resource
+ * Pulumi C# example for Idenplane Realm resource
  *
- * This example demonstrates creating and managing an AuthMe realm using Pulumi.
+ * This example demonstrates creating and managing an Idenplane realm using Pulumi.
  * Realms are top-level containers for identity and access management configuration.
  *
  * Documentation: https://www.pulumi.com/docs/
- * AuthMe Provider: https://www.pulumi.com/registry/packages/authme/
+ * Idenplane Provider: https://www.pulumi.com/registry/packages/idenplane/
  */
 
 using System;
@@ -63,7 +63,7 @@ return await Deployment.RunAsync(() =>
 
         // Security features
         WebauthnEnabled = true,
-        WebauthnRpName = "AuthMe Production",
+        WebauthnRpName = "Idenplane Production",
         WebauthnRpId = "auth.example.com",
 
         // Adaptive authentication (AI-powered)
@@ -72,7 +72,7 @@ return await Deployment.RunAsync(() =>
         RiskThresholdBlock = 90,
 
         // Theme configuration
-        ThemeName = "authme",
+        ThemeName = "idenplane",
         Theme = new RealmThemeArgs
         {
             PrimaryColor = "#0066cc",

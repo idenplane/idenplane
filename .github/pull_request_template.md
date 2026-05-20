@@ -1,5 +1,5 @@
 <!--
-  Thanks for contributing to AuthMe! Please fill out the sections below so reviewers
+  Thanks for contributing to Idenplane! Please fill out the sections below so reviewers
   can understand the change and verify it.
 
   For security fixes, please coordinate via SECURITY.md before opening a public PR.

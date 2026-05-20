@@ -1,8 +1,8 @@
 {
-  "authme": {
-    "target": "authme",
+  "idenplane": {
+    "target": "idenplane",
     "timestamp": "2026-05-10T00:00:00Z",
-    "run_id": "authme-baseline-001",
+    "run_id": "idenplane-baseline-001",
     "memory_mb": 150,
     "memory_percent": "12%",
     "cpu_percent": "8%",
@@ -41,7 +41,7 @@
     "metadata": {
       "version": "main",
       "environment": "docker",
-      "container_image": "authme:latest"
+      "container_image": "idenplane:latest"
     }
   }
 }

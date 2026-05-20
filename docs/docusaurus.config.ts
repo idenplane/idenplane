@@ -2,21 +2,21 @@ import { themes as prismThemes } from 'prism-react-renderer';
 import type { Config } from '@docusaurus/types';
 import type * as Preset from '@docusaurus/preset-classic';
 
-// AuthMe brand colors from themes/authme/theme.json
-const authmeColors = {
+// Idenplane brand colors from themes/idenplane/theme.json
+const idenplaneColors = {
   primaryColor: '#2563eb',
   backgroundColor: '#f0f2f5',
 };
 
 const config: Config = {
-  title: 'AuthMe',
+  title: 'Idenplane',
   tagline: 'Open-source authentication made simple',
   favicon: 'img/icon.svg',
 
-  url: 'https://authme.dev',
+  url: 'https://idenplane.dev',
   baseUrl: '/',
-  organizationName: 'authme-project',
-  projectName: 'authme-docs',
+  organizationName: 'idenplane-project',
+  projectName: 'idenplane-docs',
 
   onBrokenLinks: 'warn',
   onBrokenMarkdownLinks: 'warn',
@@ -32,7 +32,7 @@ const config: Config = {
       {
         docs: {
           sidebarPath: './sidebars.ts',
-          editUrl: 'https://github.com/authme-project/authme/tree/main/docs',
+          editUrl: 'https://github.com/idenplane-project/idenplane/tree/main/docs',
           routeBasePath: '/',
         },
         blog: false,
@@ -55,9 +55,9 @@ const config: Config = {
     },
 
     navbar: {
-      title: 'AuthMe',
+      title: 'Idenplane',
       logo: {
-        alt: 'AuthMe Logo',
+        alt: 'Idenplane Logo',
         src: 'img/logo.svg',
         srcDark: 'img/logo.svg',
       },
@@ -74,12 +74,12 @@ const config: Config = {
           position: 'left',
         },
         {
-          href: 'https://github.com/authme-project/authme',
+          href: 'https://github.com/idenplane-project/idenplane',
           label: 'GitHub',
           position: 'right',
         },
         {
-          href: 'https://discord.gg/authme',
+          href: 'https://discord.gg/idenplane',
           label: 'Discord',
           position: 'right',
         },
@@ -145,20 +145,20 @@ const config: Config = {
           items: [
             {
               label: 'GitHub',
-              href: 'https://github.com/authme-project/authme',
+              href: 'https://github.com/idenplane-project/idenplane',
             },
             {
               label: 'Discord',
-              href: 'https://discord.gg/authme',
+              href: 'https://discord.gg/idenplane',
             },
             {
               label: 'Twitter',
-              href: 'https://twitter.com/authme',
+              href: 'https://twitter.com/idenplane',
             },
           ],
         },
       ],
-      copyright: `Copyright © ${new Date().getFullYear()} AuthMe. Built with Docusaurus.`,
+      copyright: `Copyright © ${new Date().getFullYear()} Idenplane. Built with Docusaurus.`,
     },
 
     prism: {
@@ -176,8 +176,8 @@ const config: Config = {
 
     announcementBar: {
       id: 'support_us',
-      content: '⭐️ If you like AuthMe, give it a star on <a href="https://github.com/authme-project/authme" target="_blank" rel="noopener noreferrer">GitHub</a>!',
-      backgroundColor: authmeColors.primaryColor,
+      content: '⭐️ If you like Idenplane, give it a star on <a href="https://github.com/idenplane-project/idenplane" target="_blank" rel="noopener noreferrer">GitHub</a>!',
+      backgroundColor: idenplaneColors.primaryColor,
       textColor: '#ffffff',
       isCloseable: true,
     },

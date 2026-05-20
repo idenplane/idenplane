@@ -5,22 +5,22 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.authme</groupId>
-        <artifactId>authme-java</artifactId>
+        <groupId>io.idenplane</groupId>
+        <artifactId>idenplane-java</artifactId>
         <version>1.0.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>authme-java-spring</artifactId>
+    <artifactId>idenplane-java-spring</artifactId>
     <packaging>jar</packaging>
 
-    <name>AuthMe Java SDK - Spring</name>
-    <description>Spring Security integration module for the AuthMe Java SDK</description>
+    <name>Idenplane Java SDK - Spring</name>
+    <description>Spring Security integration module for the Idenplane Java SDK</description>
 
     <dependencies>
-        <!-- AuthMe Core Module -->
+        <!-- Idenplane Core Module -->
         <dependency>
-            <groupId>io.authme</groupId>
-            <artifactId>authme-java-core</artifactId>
+            <groupId>io.idenplane</groupId>
+            <artifactId>idenplane-java-core</artifactId>
         </dependency>
 
         <!-- Spring Security -->

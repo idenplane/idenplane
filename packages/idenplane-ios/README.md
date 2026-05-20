@@ -1,6 +1,6 @@
-# AuthMe iOS SDK
+# Idenplane iOS SDK
 
-Native Swift SDK for the [AuthMe](https://github.com/Islamawad132/Authme) Identity and Access Management server.
+Native Swift SDK for the [Idenplane](https://github.com/Islamawad132/Authme) Identity and Access Management server.
 
 Implements the **OAuth 2.0 Authorization Code flow with PKCE** (RFC 7636) using `ASWebAuthenticationSession`. Tokens are stored securely in the iOS Keychain and optional Face ID / Touch ID gating is built in.
 
@@ -30,13 +30,13 @@ dependencies: [
 
 Or in Xcode: **File › Add Package Dependencies…** and paste the repository URL.
 
-Add `AuthMe` to your target:
+Add `Idenplane` to your target:
 
 ```swift
 .target(
     name: "MyApp",
     dependencies: [
-        .product(name: "AuthMe", package: "Authme")
+        .product(name: "Idenplane", package: "Authme")
     ]
 )
 ```
@@ -45,7 +45,7 @@ Add `AuthMe` to your target:
 
 ### 1. Register a redirect URI
 
-In your AuthMe admin console, register your app's custom URL scheme as a redirect URI. For example:
+In your Idenplane admin console, register your app's custom URL scheme as a redirect URI. For example:
 
 ```
 com.example.myapp://callback
@@ -70,9 +70,9 @@ In `Info.plist`:
 ### 3. Create the client
 
 ```swift
-import AuthMe
+import Idenplane
 
-let authMe = AuthMeClient(
+let authMe = IdenplaneClient(
     serverUrl: URL(string: "https://auth.example.com")!,
     realm: "my-realm",
     clientId: "my-mobile-app",
@@ -92,7 +92,7 @@ let config = AuthConfig(
     autoRefresh: true,
     refreshBuffer: 30
 )
-let authMe = AuthMeClient(config: config)
+let authMe = IdenplaneClient(config: config)
 ```
 
 ## Login flow
@@ -111,7 +111,7 @@ Button("Sign in") {
 }
 ```
 
-`login()` opens an `ASWebAuthenticationSession` (Safari-based in-app browser) that navigates to the AuthMe authorization endpoint. When the user completes authentication, the browser redirects back to your app, and the SDK automatically exchanges the authorization code for tokens.
+`login()` opens an `ASWebAuthenticationSession` (Safari-based in-app browser) that navigates to the Idenplane authorization endpoint. When the user completes authentication, the browser redirects back to your app, and the SDK automatically exchanges the authorization code for tokens.
 
 ## Checking authentication state
 
@@ -152,7 +152,7 @@ To refresh manually:
 ```swift
 do {
     try await authMe.refreshToken()
-} catch AuthMeError.noRefreshToken {
+} catch IdenplaneError.noRefreshToken {
     // Prompt user to log in again
 } catch {
     print("Refresh failed: \(error)")
@@ -169,7 +169,7 @@ do {
         biometricReason: "Authenticate to access your account"
     )
     // token is only returned after successful biometric verification
-} catch AuthMeError.biometricAuthFailed(let reason) {
+} catch IdenplaneError.biometricAuthFailed(let reason) {
     print("Biometric failed: \(reason)")
 }
 ```
@@ -195,16 +195,16 @@ await authMe.logout()
 
 ## Error handling
 
-All errors are typed as `AuthMeError`:
+All errors are typed as `IdenplaneError`:
 
 ```swift
 do {
     try await authMe.login()
-} catch AuthMeError.stateMismatch {
+} catch IdenplaneError.stateMismatch {
     // Possible CSRF — abort
-} catch AuthMeError.serverError(let message) {
+} catch IdenplaneError.serverError(let message) {
     print("Server returned: \(message)")
-} catch AuthMeError.networkError(let underlying) {
+} catch IdenplaneError.networkError(let underlying) {
     print("Network: \(underlying)")
 } catch {
     print("Unknown error: \(error)")
@@ -219,24 +219,24 @@ do {
 | `stateMismatch` | OAuth state parameter mismatch (possible CSRF) |
 | `pkceVerifierMissing` | PKCE verifier not found in storage |
 | `networkError` | Underlying URLSession / transport error |
-| `serverError` | Non-2xx response from AuthMe server |
+| `serverError` | Non-2xx response from Idenplane server |
 | `biometricAuthFailed` | Face ID / Touch ID / passcode authentication failed |
 | `discoveryFailed` | Could not fetch the OIDC discovery document |
 | `callbackError` | Error received in the authorization callback URL |
 
 ## Thread safety
 
-`AuthMeClient` is annotated `@MainActor`. All public methods must be called from the main actor. The SDK internally uses `async/await` for network and biometric operations.
+`IdenplaneClient` is annotated `@MainActor`. All public methods must be called from the main actor. The SDK internally uses `async/await` for network and biometric operations.
 
 ## Complete SwiftUI example
 
 ```swift
 import SwiftUI
-import AuthMe
+import Idenplane
 
 @MainActor
 class AuthViewModel: ObservableObject {
-    let client = AuthMeClient(
+    let client = IdenplaneClient(
         serverUrl: URL(string: "https://auth.example.com")!,
         realm: "demo",
         clientId: "swiftui-app",
@@ -274,7 +274,7 @@ struct ContentView: View {
                 Text("Welcome, \(user.name ?? "User")!")
                 Button("Logout", action: vm.logout)
             } else {
-                Button("Sign in with AuthMe", action: vm.login)
+                Button("Sign in with Idenplane", action: vm.login)
             }
             if let error = vm.errorMessage {
                 Text(error).foregroundColor(.red)

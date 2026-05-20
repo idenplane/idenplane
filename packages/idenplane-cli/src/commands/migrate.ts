@@ -54,7 +54,7 @@ export function registerMigrateCommand(program: Command): void {
     .option('--json', 'Output as JSON', false)
     .action(async (opts) => {
       const config = loadConfig();
-      if (!config) { console.error(chalk.red('Not configured. Run: authme init')); process.exit(1); }
+      if (!config) { console.error(chalk.red('Not configured. Run: idenplane init')); process.exit(1); }
 
       let data: any;
       try {
@@ -90,7 +90,7 @@ export function registerMigrateCommand(program: Command): void {
     .option('--json', 'Output as JSON', false)
     .action(async (opts) => {
       const config = loadConfig();
-      if (!config) { console.error(chalk.red('Not configured. Run: authme init')); process.exit(1); }
+      if (!config) { console.error(chalk.red('Not configured. Run: idenplane init')); process.exit(1); }
 
       let data: any;
       try {

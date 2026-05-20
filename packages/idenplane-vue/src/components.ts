@@ -20,7 +20,7 @@
  * </template>
  *
  * <script setup>
- * import { AuthProvider } from '@authme/vue';
+ * import { AuthProvider } from '@idenplane/vue';
  * </script>
  * ```
  */
@@ -31,9 +31,9 @@ import {
   h,
   onUnmounted,
 } from 'vue';
-import { AuthmeClient } from 'authme-sdk';
-import type { AuthmeConfig } from 'authme-sdk';
-import { AUTHME_KEY } from './plugin.js';
+import { AuthmeClient } from 'idenplane-sdk';
+import type { AuthmeConfig } from 'idenplane-sdk';
+import { IDENPLANE_KEY } from './plugin.js';
 
 export const AuthProvider = defineComponent({
   name: 'AuthProvider',
@@ -63,7 +63,7 @@ export const AuthProvider = defineComponent({
     };
 
     const client = new AuthmeClient(config);
-    provide(AUTHME_KEY, client);
+    provide(IDENPLANE_KEY, client);
 
     onUnmounted(() => {
       // future: client.destroy();

@@ -1,4 +1,4 @@
-package com.authme.sdk
+package com.idenplane.sdk
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -10,7 +10,7 @@ import androidx.security.crypto.MasterKey
  *
  * All tokens are AES-256-GCM encrypted at rest using a key stored in the
  * Android Keystore. The preference file is scoped to the realm + clientId
- * combination so multiple AuthMe realms can coexist without key collisions.
+ * combination so multiple Idenplane realms can coexist without key collisions.
  */
 internal class TokenStorage(context: Context, realm: String, clientId: String) {
 
@@ -37,7 +37,7 @@ internal class TokenStorage(context: Context, realm: String, clientId: String) {
             .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
             .build()
 
-        val fileName = "authme_${realm}_${clientId}".replace(Regex("[^a-zA-Z0-9_]"), "_")
+        val fileName = "idenplane_${realm}_${clientId}".replace(Regex("[^a-zA-Z0-9_]"), "_")
 
         prefs = EncryptedSharedPreferences.create(
             context,

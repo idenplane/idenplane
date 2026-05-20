@@ -1,4 +1,4 @@
-// Package client provides HTTP client functionality for AuthMe API communication
+// Package client provides HTTP client functionality for Idenplane API communication
 package client
 
 import (
@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-// IdentityProvider represents an identity provider in the AuthMe API
+// IdentityProvider represents an identity provider in the Idenplane API
 type IdentityProvider struct {
 	ID                       string   `json:"id"`
 	RealmID                  string   `json:"realmId,omitempty"`
@@ -107,7 +107,7 @@ type CreateIdentityProviderMapperRequest struct {
 	Config                    map[string]string `json:"config,omitempty"`
 }
 
-// IdentityProvidersClient provides methods for interacting with AuthMe identity providers API
+// IdentityProvidersClient provides methods for interacting with Idenplane identity providers API
 type IdentityProvidersClient struct {
 	httpClient *HTTPClient
 }

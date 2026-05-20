@@ -253,7 +253,7 @@ async function bootstrap() {
   app.useGlobalFilters(new GlobalExceptionFilter());
 
   const config = new DocumentBuilder()
-    .setTitle('AuthMe')
+    .setTitle('Idenplane')
     .setDescription('Open-source Identity and Access Management Server')
     .setVersion('0.1.0')
     .addApiKey(
@@ -271,7 +271,7 @@ async function bootstrap() {
 
   const port = process.env['PORT'] ?? 3000;
   await app.listen(port);
-  console.log(`AuthMe is running on http://localhost:${port}`);
+  console.log(`Idenplane is running on http://localhost:${port}`);
   console.log(`Swagger UI: http://localhost:${port}/api`);
 }
 void bootstrap();

@@ -1,11 +1,11 @@
-// Package provider implements the Terraform provider for AuthMe
+// Package provider implements the Terraform provider for Idenplane
 package provider
 
 import (
 	"context"
 	"fmt"
 
-	"github.com/authme/terraform-provider-authme/client"
+	"github.com/idenplane/terraform-provider-idenplane/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -103,7 +103,7 @@ func (r *RealmResource) Metadata(ctx context.Context, req resource.MetadataReque
 // Schema returns the resource schema
 func (r *RealmResource) Schema(ctx context.Context, req resource.SchemaRequest, resp *resource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Manages an AuthMe realm. This resource allows you to create, update, and delete realms.",
+		MarkdownDescription: "Manages an Idenplane realm. This resource allows you to create, update, and delete realms.",
 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{

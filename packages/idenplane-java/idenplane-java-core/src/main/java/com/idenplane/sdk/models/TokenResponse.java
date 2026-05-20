@@ -1,4 +1,4 @@
-package com.authme.sdk.models;
+package com.idenplane.sdk.models;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 

@@ -2,12 +2,12 @@
 id: configuration
 title: Configuration
 sidebar_position: 2
-description: Complete reference for all AuthMe configuration options and environment variables.
+description: Complete reference for all Idenplane configuration options and environment variables.
 ---
 
 # Configuration
 
-AuthMe is configured through environment variables. This guide covers all available options.
+Idenplane is configured through environment variables. This guide covers all available options.
 
 ---
 
@@ -20,14 +20,14 @@ AuthMe is configured through environment variables. This guide covers all availa
 | `DATABASE_URL` | — | Yes | PostgreSQL/MySQL/SQLite connection string |
 | `DATABASE_URL` | `file:./dev.db` | No | SQLite file path (development only) |
 
-AuthMe supports three database providers:
+Idenplane supports three database providers:
 
 ```bash
 # PostgreSQL (recommended for production)
-DATABASE_URL=postgresql://authme:authme@localhost:5432/authme
+DATABASE_URL=postgresql://idenplane:idenplane@localhost:5432/idenplane
 
 # MySQL 8+ / MariaDB 10.5+
-DATABASE_URL=mysql://authme:authme@localhost:3306/authme
+DATABASE_URL=mysql://idenplane:idenplane@localhost:3306/idenplane
 
 # SQLite (development / CI only)
 DATABASE_URL=file:./dev.db
@@ -153,7 +153,7 @@ THROTTLE_LIMIT=100
 
 ## Reverse Proxy Settings
 
-When AuthMe sits behind a reverse proxy (nginx, Cloudflare, load balancer), configure trusted proxies for proper client IP resolution.
+When Idenplane sits behind a reverse proxy (nginx, Cloudflare, load balancer), configure trusted proxies for proper client IP resolution.
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
@@ -180,7 +180,7 @@ Here's a complete production `.env` file:
 ```bash
 # ─── Database ──────────────────────────────────────────────────────────────────
 # PostgreSQL (recommended for production):
-DATABASE_URL=postgresql://authme:secure_password@db.example.com:5432/authme
+DATABASE_URL=postgresql://idenplane:secure_password@db.example.com:5432/idenplane
 
 # ─── Server ────────────────────────────────────────────────────────────────────
 PORT=3000
@@ -252,20 +252,20 @@ Most settings can also be configured through the Admin Console at `/console`:
 <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
 
 [**Deployment**](/docs/deployment/docker)
-Deploy AuthMe to production with Docker
+Deploy Idenplane to production with Docker
 
 [**First Application**](/docs/guides/first-app)
 Register your first OAuth client
 
 [**SDK Guides**](/docs/guides/sdks/react)
-Integrate AuthMe with your application
+Integrate Idenplane with your application
 
 </div>
 
 ---
 
 <p align="center">
-  <a href="https://authme.dev">authme.dev</a> &middot;
+  <a href="https://idenplane.dev">idenplane.dev</a> &middot;
   <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
-  <a href="https://discord.gg/authme">Discord</a>
+  <a href="https://discord.gg/idenplane">Discord</a>
 </p>

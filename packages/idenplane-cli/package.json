@@ -1,10 +1,10 @@
 {
-  "name": "authme-cli",
+  "name": "idenplane-cli",
   "version": "1.0.1",
-  "description": "CLI tool for managing an AuthMe IAM server",
+  "description": "CLI tool for managing an Idenplane IAM server",
   "type": "module",
   "bin": {
-    "authme": "./dist/index.js"
+    "idenplane": "./dist/index.js"
   },
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
@@ -31,7 +31,7 @@
     "node": ">=18.0.0"
   },
   "keywords": [
-    "authme",
+    "idenplane",
     "cli",
     "iam",
     "identity",
@@ -43,7 +43,7 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/Islamawad132/Authme.git",
-    "directory": "packages/authme-cli"
+    "directory": "packages/idenplane-cli"
   },
   "publishConfig": {
     "access": "public"

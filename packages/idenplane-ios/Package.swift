@@ -4,31 +4,31 @@
 import PackageDescription
 
 let package = Package(
-    name: "AuthMe",
+    name: "Idenplane",
     platforms: [
         .iOS(.v15),
         .macOS(.v12),
     ],
     products: [
         .library(
-            name: "AuthMe",
-            targets: ["AuthMe"]
+            name: "Idenplane",
+            targets: ["Idenplane"]
         ),
     ],
     dependencies: [],
     targets: [
         .target(
-            name: "AuthMe",
+            name: "Idenplane",
             dependencies: [],
-            path: "Sources/AuthMe",
+            path: "Sources/Idenplane",
             swiftSettings: [
                 .enableExperimentalFeature("StrictConcurrency"),
             ]
         ),
         .testTarget(
-            name: "AuthMeTests",
-            dependencies: ["AuthMe"],
-            path: "Tests/AuthMeTests"
+            name: "IdenplaneTests",
+            dependencies: ["Idenplane"],
+            path: "Tests/IdenplaneTests"
         ),
     ]
 )

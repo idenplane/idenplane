@@ -6,8 +6,8 @@
  * and receiving access tokens for subsequent API access.
  *
  * Usage:
- *   k6 run benchmarks/k6/authme-login.js
- *   k6 run benchmarks/k6/authme-login.js -e TARGET_URL=http://localhost:3000 -e REALM_NAME=my-realm
+ *   k6 run benchmarks/k6/idenplane-login.js
+ *   k6 run benchmarks/k6/idenplane-login.js -e TARGET_URL=http://localhost:3000 -e REALM_NAME=my-realm
  *
  * Environment Variables:
  *   TARGET_URL         - Base URL of Authme server (default: http://localhost:3000)

@@ -6,8 +6,8 @@
  * caching public keys for token validation.
  *
  * Usage:
- *   k6 run benchmarks/k6/authme-jwks.js
- *   k6 run benchmarks/k6/authme-jwks.js -e TARGET_URL=http://localhost:3000 -e REALM_NAME=my-realm
+ *   k6 run benchmarks/k6/idenplane-jwks.js
+ *   k6 run benchmarks/k6/idenplane-jwks.js -e TARGET_URL=http://localhost:3000 -e REALM_NAME=my-realm
  *
  * Environment Variables:
  *   TARGET_URL         - Base URL of Authme server (default: http://localhost:3000)

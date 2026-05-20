@@ -1,4 +1,4 @@
-package com.authme.sdk
+package com.idenplane.sdk
 
 import android.content.Context
 import androidx.biometric.BiometricManager
@@ -72,7 +72,7 @@ class BiometricAuth(private val activity: FragmentActivity) {
      *                           when [allowDeviceCredential] is `false`).
      * @param allowDeviceCredential Whether to fall back to PIN/pattern/password.
      *
-     * @throws [AuthMeException.BiometricAuthFailed] if authentication fails or is cancelled.
+     * @throws [IdenplaneException.BiometricAuthFailed] if authentication fails or is cancelled.
      */
     suspend fun authenticate(
         title: String = "Authenticate",
@@ -92,7 +92,7 @@ class BiometricAuth(private val activity: FragmentActivity) {
             override fun onAuthenticationError(errorCode: Int, errString: CharSequence) {
                 if (continuation.isActive) {
                     continuation.resumeWithException(
-                        AuthMeException.BiometricAuthFailed(errString.toString())
+                        IdenplaneException.BiometricAuthFailed(errString.toString())
                     )
                 }
             }

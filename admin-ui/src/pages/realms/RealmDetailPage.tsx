@@ -116,10 +116,10 @@ export default function RealmDetailPage() {
     eventsExpiration: 604800,
     adminEventsEnabled: false,
     // Theme
-    themeName: 'authme',
-    loginTheme: 'authme',
-    accountTheme: 'authme',
-    emailTheme: 'authme',
+    themeName: 'idenplane',
+    loginTheme: 'idenplane',
+    accountTheme: 'idenplane',
+    emailTheme: 'idenplane',
   });
 
   useEffect(() => {
@@ -158,10 +158,10 @@ export default function RealmDetailPage() {
         eventsExpiration: realm.eventsExpiration ?? 604800,
         adminEventsEnabled: realm.adminEventsEnabled ?? false,
         // Theme
-        themeName: realm.themeName ?? 'authme',
-        loginTheme: realm.loginTheme ?? 'authme',
-        accountTheme: realm.accountTheme ?? 'authme',
-        emailTheme: realm.emailTheme ?? 'authme',
+        themeName: realm.themeName ?? 'idenplane',
+        loginTheme: realm.loginTheme ?? 'idenplane',
+        accountTheme: realm.accountTheme ?? 'idenplane',
+        emailTheme: realm.emailTheme ?? 'idenplane',
       });
     }
   }, [realm]);

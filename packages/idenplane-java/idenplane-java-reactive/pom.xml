@@ -5,22 +5,22 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.authme</groupId>
-        <artifactId>authme-java</artifactId>
+        <groupId>io.idenplane</groupId>
+        <artifactId>idenplane-java</artifactId>
         <version>1.0.0-SNAPSHOT</version>
     </parent>
 
-    <artifactId>authme-java-reactive</artifactId>
+    <artifactId>idenplane-java-reactive</artifactId>
     <packaging>jar</packaging>
 
-    <name>AuthMe Java SDK - Reactive</name>
-    <description>Reactive module of the AuthMe Java SDK with Project Reactor support</description>
+    <name>Idenplane Java SDK - Reactive</name>
+    <description>Reactive module of the Idenplane Java SDK with Project Reactor support</description>
 
     <dependencies>
-        <!-- AuthMe Core Module -->
+        <!-- Idenplane Core Module -->
         <dependency>
-            <groupId>io.authme</groupId>
-            <artifactId>authme-java-core</artifactId>
+            <groupId>io.idenplane</groupId>
+            <artifactId>idenplane-java-core</artifactId>
         </dependency>
 
         <!-- Project Reactor -->

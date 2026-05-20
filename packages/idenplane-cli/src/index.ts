@@ -19,8 +19,8 @@ const { version } = require('../package.json');
 const program = new Command();
 
 program
-  .name('authme')
-  .description('CLI for managing an AuthMe IAM server')
+  .name('idenplane')
+  .description('CLI for managing an Idenplane IAM server')
   .version(version);
 
 registerAuthCommands(program);

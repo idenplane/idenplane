@@ -16,15 +16,15 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: authme
-      POSTGRES_PASSWORD: authme
-      POSTGRES_DB: authme
+      POSTGRES_USER: idenplane
+      POSTGRES_PASSWORD: idenplane
+      POSTGRES_DB: idenplane
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U authme"]
+      test: ["CMD-SHELL", "pg_isready -U idenplane"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -34,10 +34,10 @@ services:
   # mysql:
   #   image: mysql:8.0
   #   environment:
-  #     MYSQL_ROOT_PASSWORD: authme
-  #     MYSQL_DATABASE: authme
-  #     MYSQL_USER: authme
-  #     MYSQL_PASSWORD: authme
+  #     MYSQL_ROOT_PASSWORD: idenplane
+  #     MYSQL_DATABASE: idenplane
+  #     MYSQL_USER: idenplane
+  #     MYSQL_PASSWORD: idenplane
   #   command: >
   #     --character-set-server=utf8mb4
   #     --collation-server=utf8mb4_unicode_ci
@@ -46,7 +46,7 @@ services:
   #   volumes:
   #     - mysqldata:/var/lib/mysql
   #   healthcheck:
-  #     test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "authme", "-pauthme"]
+  #     test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "idenplane", "-pidenplane"]
   #     interval: 5s
   #     timeout: 3s
   #     retries: 10
@@ -66,9 +66,9 @@ services:
       - /app/node_modules
     environment:
       # PostgreSQL (default):
-      DATABASE_URL: postgresql://authme:authme@db:5432/authme
+      DATABASE_URL: postgresql://idenplane:idenplane@db:5432/idenplane
       # MySQL — uncomment when using the mysql service above:
-      # DATABASE_URL: mysql://authme:authme@mysql:3306/authme
+      # DATABASE_URL: mysql://idenplane:idenplane@mysql:3306/idenplane
       # SQLite — not recommended inside Docker; use host-mode dev instead:
       # DATABASE_URL: file:./dev.db
       PORT: "3000"

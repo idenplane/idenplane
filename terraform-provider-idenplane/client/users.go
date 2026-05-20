@@ -1,4 +1,4 @@
-// Package client provides HTTP client functionality for AuthMe API communication
+// Package client provides HTTP client functionality for Idenplane API communication
 package client
 
 import (
@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-// User represents a user in the AuthMe API
+// User represents a user in the Idenplane API
 type User struct {
 	ID            string   `json:"id"`
 	RealmID       string   `json:"realmId,omitempty"`
@@ -52,7 +52,7 @@ type ResetPasswordRequest struct {
 	Value     string `json:"value"`
 }
 
-// UsersClient provides methods for interacting with AuthMe users API
+// UsersClient provides methods for interacting with Idenplane users API
 type UsersClient struct {
 	httpClient *HTTPClient
 }

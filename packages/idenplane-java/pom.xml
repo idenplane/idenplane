@@ -4,20 +4,20 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>io.authme</groupId>
-    <artifactId>authme-java</artifactId>
+    <groupId>io.idenplane</groupId>
+    <artifactId>idenplane-java</artifactId>
     <version>1.0.0-SNAPSHOT</version>
     <packaging>pom</packaging>
 
-    <name>AuthMe Java SDK</name>
-    <description>Java SDK for the AuthMe Identity and Access Management Server</description>
+    <name>Idenplane Java SDK</name>
+    <description>Java SDK for the Idenplane Identity and Access Management Server</description>
     <url>https://github.com/Islamawad132/Authme</url>
 
     <modules>
-        <module>authme-java-core</module>
-        <module>authme-java-reactive</module>
-        <module>authme-java-spring</module>
-        <module>authme-java-jakarta</module>
+        <module>idenplane-java-core</module>
+        <module>idenplane-java-reactive</module>
+        <module>idenplane-java-spring</module>
+        <module>idenplane-java-jakarta</module>
     </modules>
 
     <properties>
@@ -30,31 +30,31 @@
 
     <dependencyManagement>
         <dependencies>
-            <!-- AuthMe Core Module -->
+            <!-- Idenplane Core Module -->
             <dependency>
-                <groupId>io.authme</groupId>
-                <artifactId>authme-java-core</artifactId>
+                <groupId>io.idenplane</groupId>
+                <artifactId>idenplane-java-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
-            <!-- AuthMe Reactive Module -->
+            <!-- Idenplane Reactive Module -->
             <dependency>
-                <groupId>io.authme</groupId>
-                <artifactId>authme-java-reactive</artifactId>
+                <groupId>io.idenplane</groupId>
+                <artifactId>idenplane-java-reactive</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
-            <!-- AuthMe Spring Module -->
+            <!-- Idenplane Spring Module -->
             <dependency>
-                <groupId>io.authme</groupId>
-                <artifactId>authme-java-spring</artifactId>
+                <groupId>io.idenplane</groupId>
+                <artifactId>idenplane-java-spring</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
-            <!-- AuthMe Jakarta Module -->
+            <!-- Idenplane Jakarta Module -->
             <dependency>
-                <groupId>io.authme</groupId>
-                <artifactId>authme-java-jakarta</artifactId>
+                <groupId>io.idenplane</groupId>
+                <artifactId>idenplane-java-jakarta</artifactId>
                 <version>${project.version}</version>
             </dependency>
 

@@ -1,7 +1,7 @@
 {
-  "name": "authme-nextjs",
+  "name": "idenplane-nextjs",
   "version": "1.0.1",
-  "description": "Next.js SDK for AuthMe Identity and Access Management Server",
+  "description": "Next.js SDK for Idenplane Identity and Access Management Server",
   "type": "module",
   "main": "./dist/index.cjs",
   "module": "./dist/index.js",
@@ -49,7 +49,7 @@
     }
   },
   "peerDependencies": {
-    "authme-sdk": ">=1.0.0",
+    "idenplane-sdk": ">=1.0.0",
     "next": ">=13.0.0",
     "react": ">=18.0.0"
   },
@@ -70,7 +70,7 @@
   },
   "devDependencies": {
     "@types/react": "^19.0.0",
-    "authme-sdk": "file:../authme-js",
+    "idenplane-sdk": "file:../idenplane-js",
     "next": "^15.0.0",
     "react": "^19.0.0",
     "tsup": "^8.4.0",
@@ -82,7 +82,7 @@
     "README.md"
   ],
   "keywords": [
-    "authme",
+    "idenplane",
     "oauth2",
     "oidc",
     "nextjs",
@@ -93,7 +93,7 @@
   "repository": {
     "type": "git",
     "url": "https://github.com/Islamawad132/Authme.git",
-    "directory": "packages/authme-nextjs"
+    "directory": "packages/idenplane-nextjs"
   },
   "publishConfig": {
     "access": "public"

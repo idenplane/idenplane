@@ -11,8 +11,8 @@
  * - Concurrent introspection requests
  *
  * Usage:
- *   k6 run benchmarks/k6/authme-token-introspection.js
- *   k6 run benchmarks/k6/authme-token-introspection.js -e VUS=100 -e DURATION=120s
+ *   k6 run benchmarks/k6/idenplane-token-introspection.js
+ *   k6 run benchmarks/k6/idenplane-token-introspection.js -e VUS=100 -e DURATION=120s
  *
  * Environment Variables:
  *   TARGET_URL         - Base URL of Authme server (default: http://localhost:3000)

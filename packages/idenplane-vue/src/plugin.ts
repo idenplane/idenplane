@@ -1,5 +1,5 @@
 /**
- * Vue plugin for AuthMe.
+ * Vue plugin for Idenplane.
  *
  * Install via `app.use(AuthmePlugin, options)`.  The plugin creates a shared
  * `AuthmeClient` instance and makes it available to every component through
@@ -9,7 +9,7 @@
  * ```typescript
  * // main.ts
  * import { createApp } from 'vue';
- * import { AuthmePlugin } from '@authme/vue';
+ * import { AuthmePlugin } from '@idenplane/vue';
  * import App from './App.vue';
  *
  * const app = createApp(App);
@@ -24,11 +24,11 @@
  */
 
 import type { App } from 'vue';
-import { AuthmeClient } from 'authme-sdk';
-import type { AuthmeConfig } from 'authme-sdk';
+import { AuthmeClient } from 'idenplane-sdk';
+import type { AuthmeConfig } from 'idenplane-sdk';
 
 /** The provide/inject key used internally. */
-export const AUTHME_KEY = Symbol('authme');
+export const IDENPLANE_KEY = Symbol('idenplane');
 
 /** Options accepted by the Vue plugin — same as `AuthmeConfig`. */
 export type AuthmePluginOptions = AuthmeConfig;
@@ -36,11 +36,11 @@ export type AuthmePluginOptions = AuthmeConfig;
 export const AuthmePlugin = {
   install(app: App, options: AuthmePluginOptions): void {
     const client = new AuthmeClient(options);
-    app.provide(AUTHME_KEY, client);
+    app.provide(IDENPLANE_KEY, client);
     // Kick off OIDC discovery and session restoration immediately so that
     // guards and composables see the correct auth state on first render.
     client.init().catch((err: unknown) => {
-      console.error('[authme-vue] init() failed:', err);
+      console.error('[idenplane-vue] init() failed:', err);
     });
   },
 };

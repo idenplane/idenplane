@@ -1,6 +1,6 @@
-# AuthMe Android SDK
+# Idenplane Android SDK
 
-Native Kotlin SDK for the [AuthMe](https://github.com/Islamawad132/Authme) Identity and Access Management server.
+Native Kotlin SDK for the [Idenplane](https://github.com/Islamawad132/Authme) Identity and Access Management server.
 
 Implements the **OAuth 2.0 Authorization Code flow with PKCE** (RFC 7636) using Chrome Custom Tabs. Tokens are stored securely with `EncryptedSharedPreferences` (AES-256-GCM) and optional biometric gating via `BiometricPrompt` is built in.
 
@@ -47,7 +47,7 @@ dependencies {
 
 ### 1. Register a redirect URI
 
-In your AuthMe admin console, register a custom scheme redirect URI for your app:
+In your Idenplane admin console, register a custom scheme redirect URI for your app:
 
 ```
 com.example.myapp://callback
@@ -77,10 +77,10 @@ In `AndroidManifest.xml`, register the Activity that will handle the OAuth callb
 ### 3. Create the client
 
 ```kotlin
-import com.authme.sdk.AuthConfig
-import com.authme.sdk.AuthMeClient
+import com.idenplane.sdk.AuthConfig
+import com.idenplane.sdk.IdenplaneClient
 
-val authMe = AuthMeClient(
+val authMe = IdenplaneClient(
     context     = applicationContext,
     serverUrl   = "https://auth.example.com",
     realm       = "my-realm",
@@ -101,7 +101,7 @@ val config = AuthConfig(
     autoRefresh  = true,
     refreshBuffer = 30
 )
-val authMe = AuthMeClient(applicationContext, config)
+val authMe = IdenplaneClient(applicationContext, config)
 ```
 
 ## Login flow
@@ -113,7 +113,7 @@ binding.signInButton.setOnClickListener {
         try {
             authMe.login(this@MainActivity)
             // Browser opens — wait for the redirect callback
-        } catch (e: AuthMeException) {
+        } catch (e: IdenplaneException) {
             showError(e.message)
         }
     }
@@ -143,9 +143,9 @@ private fun handleAuthCallback(intent: Intent?) {
                 // Login successful — navigate to home screen
                 navigateToHome()
             }
-        } catch (e: AuthMeException.StateMismatch) {
+        } catch (e: IdenplaneException.StateMismatch) {
             showError("Security error: state mismatch")
-        } catch (e: AuthMeException.CallbackError) {
+        } catch (e: IdenplaneException.CallbackError) {
             showError("Login failed: ${e.message}")
         }
     }
@@ -181,7 +181,7 @@ lifecycleScope.launch {
         val user = authMe.getUserInfo()
         println("Hello, ${user.name ?: user.preferredUsername ?: "User"}")
         println("Email: ${user.email}")
-    } catch (e: AuthMeException.NotAuthenticated) {
+    } catch (e: IdenplaneException.NotAuthenticated) {
         redirectToLogin()
     }
 }
@@ -197,10 +197,10 @@ To refresh manually:
 lifecycleScope.launch {
     try {
         authMe.refreshToken()
-    } catch (e: AuthMeException.NoRefreshToken) {
+    } catch (e: IdenplaneException.NoRefreshToken) {
         // Prompt user to log in again
         redirectToLogin()
-    } catch (e: AuthMeException) {
+    } catch (e: IdenplaneException) {
         showError("Refresh failed: ${e.message}")
     }
 }
@@ -219,7 +219,7 @@ lifecycleScope.launch {
         )
         // token is non-null only after successful biometric auth
         useToken(token)
-    } catch (e: AuthMeException.BiometricAuthFailed) {
+    } catch (e: IdenplaneException.BiometricAuthFailed) {
         showError("Biometric failed: ${e.message}")
     }
 }
@@ -239,7 +239,7 @@ if (biometric.isBiometricAvailable) {
                 description = "Use your fingerprint or face to continue"
             )
             // Proceed with sensitive operation
-        } catch (e: AuthMeException.BiometricAuthFailed) {
+        } catch (e: IdenplaneException.BiometricAuthFailed) {
             showError(e.message)
         }
     }
@@ -269,18 +269,18 @@ override fun onDestroy() {
 
 ## Error handling
 
-All SDK errors are subclasses of `AuthMeException`:
+All SDK errors are subclasses of `IdenplaneException`:
 
 ```kotlin
 try {
     authMe.login(activity)
-} catch (e: AuthMeException.StateMismatch) {
+} catch (e: IdenplaneException.StateMismatch) {
     // Possible CSRF — abort and clear state
-} catch (e: AuthMeException.ServerError) {
+} catch (e: IdenplaneException.ServerError) {
     showError("Server: ${e.message}")
-} catch (e: AuthMeException.NetworkError) {
+} catch (e: IdenplaneException.NetworkError) {
     showError("Network: ${e.message}")
-} catch (e: AuthMeException) {
+} catch (e: IdenplaneException) {
     showError(e.message)
 }
 ```
@@ -293,7 +293,7 @@ try {
 | `StateMismatch` | OAuth state parameter mismatch (possible CSRF) |
 | `PkceVerifierMissing` | PKCE verifier missing from storage |
 | `NetworkError` | HTTP / IO error |
-| `ServerError` | Non-2xx response from the AuthMe server |
+| `ServerError` | Non-2xx response from the Idenplane server |
 | `CallbackError` | Error present in the redirect callback URI |
 | `DiscoveryFailed` | OIDC discovery document fetch failed |
 | `BiometricAuthFailed` | Biometric / device credential authentication failed |
@@ -304,14 +304,14 @@ try {
 ```kotlin
 import androidx.lifecycle.ViewModel
 import androidx.lifecycle.viewModelScope
-import com.authme.sdk.AuthMeClient
-import com.authme.sdk.AuthMeException
-import com.authme.sdk.User
+import com.idenplane.sdk.IdenplaneClient
+import com.idenplane.sdk.IdenplaneException
+import com.idenplane.sdk.User
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.launch
 
-class AuthViewModel(private val authMe: AuthMeClient) : ViewModel() {
+class AuthViewModel(private val authMe: IdenplaneClient) : ViewModel() {
 
     private val _user = MutableStateFlow<User?>(null)
     val user: StateFlow<User?> = _user

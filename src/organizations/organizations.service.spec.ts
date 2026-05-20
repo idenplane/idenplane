@@ -515,7 +515,7 @@ describe('OrganizationsService', () => {
         'org-1',
         'acme.com',
       );
-      expect(token.startsWith('authme-domain-verification=')).toBe(true);
+      expect(token.startsWith('idenplane-domain-verification=')).toBe(true);
     });
 
     it('should be deterministic for the same inputs', () => {
@@ -550,8 +550,8 @@ describe('OrganizationsService', () => {
       );
 
       expect(result.domain).toBe('acme.com');
-      expect(result.txtRecord).toBe('_authme-challenge.acme.com');
-      expect(result.txtValue).toContain('authme-domain-verification=');
+      expect(result.txtRecord).toBe('_idenplane-challenge.acme.com');
+      expect(result.txtValue).toContain('idenplane-domain-verification=');
     });
 
     it('should lowercase the domain', async () => {

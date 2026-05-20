@@ -1,5 +1,5 @@
 import XCTest
-@testable import AuthMe
+@testable import Idenplane
 
 final class PKCEHelperTests: XCTestCase {
 

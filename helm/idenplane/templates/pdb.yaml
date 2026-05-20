@@ -2,14 +2,14 @@
 apiVersion: policy/v1
 kind: PodDisruptionBudget
 metadata:
-  name: {{ include "authme.fullname" . }}
+  name: {{ include "idenplane.fullname" . }}
   namespace: {{ .Release.Namespace | quote }}
   labels:
-    {{- include "authme.labels" . | nindent 4 }}
+    {{- include "idenplane.labels" . | nindent 4 }}
 spec:
   selector:
     matchLabels:
-      {{- include "authme.selectorLabels" . | nindent 6 }}
+      {{- include "idenplane.selectorLabels" . | nindent 6 }}
   {{- if .Values.podDisruptionBudget.minAvailable }}
   minAvailable: {{ .Values.podDisruptionBudget.minAvailable }}
   {{- else }}

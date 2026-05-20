@@ -1,7 +1,7 @@
 ---
 id: users
 title: Users API
-description: User management endpoints for AuthMe
+description: User management endpoints for Idenplane
 ---
 
 # Users API

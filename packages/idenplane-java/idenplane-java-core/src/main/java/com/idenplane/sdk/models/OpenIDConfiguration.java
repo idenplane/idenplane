@@ -1,4 +1,4 @@
-package com.authme.sdk.models;
+package com.idenplane.sdk.models;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -56,7 +56,7 @@ public class OpenIDConfiguration {
     private java.util.List<String> scopesSupported;
 
     @JsonProperty("token_endpoint_auth_methods_supported")
-    private java.util.List<String> tokenEndpointAuthMethodsSupported;
+    private java.util.List<String> tokenEndpointIdenplanethodsSupported;
 
     @JsonProperty("claims_supported")
     private java.util.List<String> claimsSupported;
@@ -345,17 +345,17 @@ public class OpenIDConfiguration {
      *
      * @return The supported auth methods
      */
-    public java.util.List<String> getTokenEndpointAuthMethodsSupported() {
-        return tokenEndpointAuthMethodsSupported;
+    public java.util.List<String> getTokenEndpointIdenplanethodsSupported() {
+        return tokenEndpointIdenplanethodsSupported;
     }
 
     /**
      * Sets the supported token endpoint authentication methods.
      *
-     * @param tokenEndpointAuthMethodsSupported The supported auth methods
+     * @param tokenEndpointIdenplanethodsSupported The supported auth methods
      */
-    public void setTokenEndpointAuthMethodsSupported(java.util.List<String> tokenEndpointAuthMethodsSupported) {
-        this.tokenEndpointAuthMethodsSupported = tokenEndpointAuthMethodsSupported;
+    public void setTokenEndpointIdenplanethodsSupported(java.util.List<String> tokenEndpointIdenplanethodsSupported) {
+        this.tokenEndpointIdenplanethodsSupported = tokenEndpointIdenplanethodsSupported;
     }
 
     /**

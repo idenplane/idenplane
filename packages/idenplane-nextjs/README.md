@@ -1,11 +1,11 @@
-# authme-nextjs
+# idenplane-nextjs
 
-Next.js SDK for [AuthMe](https://github.com/Islamawad132/Authme) — integrates AuthMe OIDC authentication into Next.js applications with support for the App Router, Pages Router, middleware, and Server Components.
+Next.js SDK for [Idenplane](https://github.com/Islamawad132/Authme) — integrates Idenplane OIDC authentication into Next.js applications with support for the App Router, Pages Router, middleware, and Server Components.
 
 ## Installation
 
 ```bash
-npm install authme-nextjs authme-sdk
+npm install idenplane-nextjs idenplane-sdk
 ```
 
 ## Quick Start
@@ -15,7 +15,7 @@ npm install authme-nextjs authme-sdk
 ```tsx
 // app/layout.tsx
 'use client';
-import { AuthProvider } from 'authme-nextjs';
+import { AuthProvider } from 'idenplane-nextjs';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -39,7 +39,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
 ```tsx
 'use client';
-import { useAuth } from 'authme-nextjs';
+import { useAuth } from 'idenplane-nextjs';
 
 export function NavBar() {
   const { isAuthenticated, user, login, logout, isLoading } = useAuth();
@@ -61,7 +61,7 @@ export function NavBar() {
 // middleware.ts
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { createAuthMiddleware } from 'authme-nextjs/middleware';
+import { createAuthMiddleware } from 'idenplane-nextjs/middleware';
 
 const authMiddleware = createAuthMiddleware({
   serverUrl: 'http://localhost:3000',
@@ -85,7 +85,7 @@ export const config = {
 ```tsx
 // app/dashboard/page.tsx
 import { cookies } from 'next/headers';
-import { getServerUser } from 'authme-nextjs/server';
+import { getServerUser } from 'idenplane-nextjs/server';
 import { redirect } from 'next/navigation';
 
 export default async function DashboardPage() {
@@ -105,7 +105,7 @@ export default async function DashboardPage() {
 
 ```typescript
 // pages/api/profile.ts
-import { withAuth } from 'authme-nextjs/api';
+import { withAuth } from 'idenplane-nextjs/api';
 
 export default withAuth(
   { serverUrl: 'http://localhost:3000', realm: 'my-realm' },
@@ -119,7 +119,7 @@ export default withAuth(
 
 ```typescript
 // app/api/profile/route.ts
-import { withAuthHandler } from 'authme-nextjs/api';
+import { withAuthHandler } from 'idenplane-nextjs/api';
 
 export const GET = withAuthHandler(
   { serverUrl: 'http://localhost:3000', realm: 'my-realm' },
@@ -129,9 +129,9 @@ export const GET = withAuthHandler(
 
 ## API Reference
 
-### `authme-nextjs` (default export)
+### `idenplane-nextjs` (default export)
 
-Re-exports from `authme-sdk/react`:
+Re-exports from `idenplane-sdk/react`:
 
 - `AuthProvider` / `AuthmeProvider` — context provider
 - `useAuth()` — authentication state and actions
@@ -140,16 +140,16 @@ Re-exports from `authme-sdk/react`:
 - `ProtectedRoute` — render-gate component
 - `AuthmeClient` — raw client class
 
-### `authme-nextjs/middleware`
+### `idenplane-nextjs/middleware`
 
 - `createAuthMiddleware(config)` — Next.js Edge middleware factory
 
-### `authme-nextjs/server`
+### `idenplane-nextjs/server`
 
 - `getServerAuth(cookies, config?)` — returns `AuthSession | null`
 - `getServerUser(cookies, config?)` — returns `User | null`
 
-### `authme-nextjs/api`
+### `idenplane-nextjs/api`
 
 - `withAuth(config, handler)` — Pages Router API handler wrapper
 - `withAuthHandler(config, handler)` — App Router Route Handler wrapper

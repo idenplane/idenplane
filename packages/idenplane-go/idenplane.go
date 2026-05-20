@@ -1,6 +1,6 @@
-// Package authme provides a Go SDK for AuthMe server-side authentication,
+// Package idenplane provides a Go SDK for Idenplane server-side authentication,
 // token validation, user management, and middleware integration.
-package authme
+package idenplane
 
 import (
 	"context"
@@ -59,15 +59,15 @@ type User struct {
 // See [OpenIDConfiguration] in discovery.go for the full type definition.
 type OIDCConfiguration = OpenIDConfiguration
 
-// Config holds the configuration for an AuthMe client.
+// Config holds the configuration for an Idenplane client.
 type Config struct {
-	// ServerURL is the base URL of the AuthMe server (e.g., "https://auth.example.com").
+	// ServerURL is the base URL of the Idenplane server (e.g., "https://auth.example.com").
 	ServerURL string
 
 	// Realm is the realm name to authenticate against.
 	Realm string
 
-	// ClientID is the OAuth 2.0 client ID (must be a confidential or public client in AuthMe).
+	// ClientID is the OAuth 2.0 client ID (must be a confidential or public client in Idenplane).
 	ClientID string
 
 	// ClientSecret is the client secret for confidential clients. Optional for public clients.
@@ -126,12 +126,12 @@ func (c Config) scopes() []string {
 	return c.Scopes
 }
 
-// Client is the main AuthMe client for server-side operations.
+// Client is the main Idenplane client for server-side operations.
 type Client struct {
 	config Config
 }
 
-// NewClient creates a new AuthMe client with the given configuration.
+// NewClient creates a new Idenplane client with the given configuration.
 // It validates the config and returns an error if invalid.
 func NewClient(config Config) (*Client, error) {
 	if err := config.Validate(); err != nil {
@@ -140,7 +140,7 @@ func NewClient(config Config) (*Client, error) {
 	return &Client{config: config}, nil
 }
 
-// NewClientWithDefaults creates a new AuthMe client with default values for optional fields.
+// NewClientWithDefaults creates a new Idenplane client with default values for optional fields.
 func NewClientWithDefaults(serverURL, realm, clientID string) (*Client, error) {
 	return NewClient(Config{
 		ServerURL:    serverURL,
@@ -183,7 +183,7 @@ func (c *Client) doRequest(ctx context.Context, method, url string, body interfa
 	return resp, nil
 }
 
-// Error is the base error type for AuthMe errors.
+// Error is the base error type for Idenplane errors.
 type Error struct {
 	// Code is the error code.
 	Code ErrorCode
@@ -193,7 +193,7 @@ type Error struct {
 	Cause error
 }
 
-// ErrorCode represents an AuthMe error code.
+// ErrorCode represents an Idenplane error code.
 type ErrorCode string
 
 // Error codes.
@@ -280,9 +280,9 @@ func IsRetryable(err error) bool {
 	if err == nil {
 		return false
 	}
-	var authmeErr *Error
-	if errors.As(err, &authmeErr) {
-		return authmeErr.Code == ErrCodeNetworkError || authmeErr.Code == ErrCodeServerError
+	var idenplaneErr *Error
+	if errors.As(err, &idenplaneErr) {
+		return idenplaneErr.Code == ErrCodeNetworkError || idenplaneErr.Code == ErrCodeServerError
 	}
 	return true
 }

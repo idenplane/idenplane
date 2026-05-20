@@ -1,4 +1,4 @@
-// Package provider implements the Terraform provider for AuthMe
+// Package provider implements the Terraform provider for Idenplane
 package provider
 
 import (
@@ -6,7 +6,7 @@ import (
 	"os"
 	"time"
 
-	"github.com/authme/terraform-provider-authme/client"
+	"github.com/idenplane/terraform-provider-idenplane/client"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/function"
 	"github.com/hashicorp/terraform-plugin-framework/provider"
@@ -26,43 +26,43 @@ type AuthmeProvider struct {
 	// version is set during build via ldflags
 	version string
 
-	// httpClient is the AuthMe API HTTP client (nil until Configure is called)
+	// httpClient is the Idenplane API HTTP client (nil until Configure is called)
 	httpClient *client.HTTPClient
 }
 
 // ProviderConfigModel represents the provider configuration model
 // This is used to parse the provider configuration from Terraform
 type ProviderConfigModel struct {
-	URL    types.String `tfsdk:"url" doc:"AuthMe Admin API URL"`
-	APIKey types.String `tfsdk:"api_key" doc:"AuthMe Admin API key"`
+	URL    types.String `tfsdk:"url" doc:"Idenplane Admin API URL"`
+	APIKey types.String `tfsdk:"api_key" doc:"Idenplane Admin API key"`
 }
 
 // New creates a new provider instance
 func New() provider.Provider {
 	return &AuthmeProvider{
-		version: os.Getenv("AUTHME_PROVIDER_VERSION"),
+		version: os.Getenv("IDENPLANE_PROVIDER_VERSION"),
 	}
 }
 
 // Metadata returns the provider metadata (name and version)
 func (p *AuthmeProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
-	resp.TypeName = "authme"
+	resp.TypeName = "idenplane"
 	resp.Version = p.version
 }
 
 // Schema returns the provider schema (configuration options)
 func (p *AuthmeProvider) Schema(ctx context.Context, req provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Terraform provider for AuthMe Identity and Access Management. " +
+		MarkdownDescription: "Terraform provider for Idenplane Identity and Access Management. " +
 			"Manages realms, clients, roles, groups, users, identity providers, authentication flows, and organizations.",
 
 		Attributes: map[string]schema.Attribute{
 			"url": schema.StringAttribute{
-				MarkdownDescription: "AuthMe Admin API URL (e.g., https://authme.example.com)",
+				MarkdownDescription: "Idenplane Admin API URL (e.g., https://idenplane.example.com)",
 				Required:            true,
 			},
 			"api_key": schema.StringAttribute{
-				MarkdownDescription: "AuthMe Admin API key",
+				MarkdownDescription: "Idenplane Admin API key",
 				Required:            true,
 				Sensitive:           true,
 			},
@@ -72,7 +72,7 @@ func (p *AuthmeProvider) Schema(ctx context.Context, req provider.SchemaRequest,
 
 // Configure is called by Terraform to configure the provider
 func (p *AuthmeProvider) Configure(ctx context.Context, req provider.ConfigureRequest) (interface{}, any) {
-	tflog.Debug(ctx, "Configuring AuthMe provider")
+	tflog.Debug(ctx, "Configuring Idenplane provider")
 
 	// Retrieve provider config from terraform configuration
 	var config ProviderConfigModel
@@ -81,7 +81,7 @@ func (p *AuthmeProvider) Configure(ctx context.Context, req provider.ConfigureRe
 		return nil, nil
 	}
 
-	// Create the AuthMe HTTP client
+	// Create the Idenplane HTTP client
 	httpClient := client.NewHTTPClient(client.HTTPClientConfig{
 		ServerURL: config.URL.ValueString(),
 		APIKey:    config.APIKey.ValueString(),
@@ -89,7 +89,7 @@ func (p *AuthmeProvider) Configure(ctx context.Context, req provider.ConfigureRe
 	})
 
 	p.httpClient = httpClient
-	tflog.Debug(ctx, "AuthMe provider configured successfully")
+	tflog.Debug(ctx, "Idenplane provider configured successfully")
 
 	return httpClient, nil
 }

@@ -2,7 +2,7 @@ services:
   # k6 load generator
   k6:
     image: grafana/k6:latest
-    container_name: authme-benchmark-runner
+    container_name: idenplane-benchmark-runner
     depends_on:
       app:
         condition: service_healthy
@@ -18,18 +18,18 @@ services:
     command: >
       run --config /src/k6/config.js
       --out json=/src/k6/results/summary.json
-      /src/k6/authme-login.js
+      /src/k6/idenplane-login.js
     networks:
       - benchmarks
 
   # Authme application instance for benchmarking
   app:
-    image: islamawad/authme:latest
-    container_name: authme-benchmark-target
+    image: islamawad/idenplane:latest
+    container_name: idenplane-benchmark-target
     ports:
       - "3001:3000"
     environment:
-      DATABASE_URL: postgresql://authme:authme@db:5432/authme
+      DATABASE_URL: postgresql://idenplane:idenplane@db:5432/idenplane
       PORT: "3000"
       NODE_ENV: production
       ADMIN_API_KEY: ${ADMIN_API_KEY:-change-me-in-production}
@@ -54,17 +54,17 @@ services:
   # Database for benchmark target
   db:
     image: postgres:16-alpine
-    container_name: authme-benchmark-db
+    container_name: idenplane-benchmark-db
     environment:
-      POSTGRES_USER: authme
-      POSTGRES_PASSWORD: authme
-      POSTGRES_DB: authme
+      POSTGRES_USER: idenplane
+      POSTGRES_PASSWORD: idenplane
+      POSTGRES_DB: idenplane
     ports:
       - "5433:5432"
     volumes:
       - pgdata-bench:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U authme"]
+      test: ["CMD-SHELL", "pg_isready -U idenplane"]
       interval: 5s
       timeout: 3s
       retries: 5

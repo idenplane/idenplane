@@ -1,9 +1,9 @@
-module github.com/authme/pulumi-authme-examples-go
+module github.com/idenplane/pulumi-idenplane-examples-go
 
 go 1.21
 
 require (
-	github.com/authme/pulumi-authme/sdk/go/authme v0.1.0
+	github.com/idenplane/pulumi-idenplane/sdk/go/idenplane v0.1.0
 	github.com/pulumi/pulumi/sdk/v3 v3.105.0
 )
 

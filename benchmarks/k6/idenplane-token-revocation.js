@@ -6,8 +6,8 @@
  * and revoking their tokens.
  *
  * Usage:
- *   k6 run benchmarks/k6/authme-token-revocation.js
- *   k6 run benchmarks/k6/authme-token-revocation.js -e TARGET_URL=http://localhost:3000 -e REALM_NAME=my-realm
+ *   k6 run benchmarks/k6/idenplane-token-revocation.js
+ *   k6 run benchmarks/k6/idenplane-token-revocation.js -e TARGET_URL=http://localhost:3000 -e REALM_NAME=my-realm
  *
  * Environment Variables:
  *   TARGET_URL         - Base URL of Authme server (default: http://localhost:3000)

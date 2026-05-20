@@ -1,6 +1,6 @@
 # Technical Decision Log
 
-This document records important architectural and technical decisions made during AuthMe development.
+This document records important architectural and technical decisions made during Idenplane development.
 
 ---
 

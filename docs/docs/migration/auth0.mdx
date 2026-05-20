@@ -2,12 +2,12 @@
 id: auth0
 title: Migrate from Auth0
 sidebar_position: 2
-description: Complete guide to migrating from Auth0 to AuthMe
+description: Complete guide to migrating from Auth0 to Idenplane
 ---
 
 # Migrate from Auth0
 
-This guide covers migrating users, clients, roles, and connections from Auth0 to AuthMe. The migration is performed using Auth0's Management API export format.
+This guide covers migrating users, clients, roles, and connections from Auth0 to Idenplane. The migration is performed using Auth0's Management API export format.
 
 ---
 
@@ -15,14 +15,14 @@ This guide covers migrating users, clients, roles, and connections from Auth0 to
 
 Before starting the migration:
 
-- [AuthMe installed](/docs/getting-started/installation) and running
+- [Idenplane installed](/docs/getting-started/installation) and running
 - Admin API key configured
 - Auth0 Management API export file
 - Sufficient database storage for migrated data
-- Existing realm in AuthMe (target realm is **required**)
+- Existing realm in Idenplane (target realm is **required**)
 
 :::note Target Realm Required
-Unlike Keycloak migrations, Auth0 migrations **require** a target realm to be specified. Create a realm in AuthMe before importing.
+Unlike Keycloak migrations, Auth0 migrations **require** a target realm to be specified. Create a realm in Idenplane before importing.
 :::
 
 ---
@@ -84,7 +84,7 @@ Exported password hashes depend on Auth0's password hash configuration. See [Pas
 
 ---
 
-## Importing to AuthMe
+## Importing to Idenplane
 
 ### Step 1: Create Target Realm
 
@@ -151,7 +151,7 @@ The migration returns a detailed report:
     { "entity": "user", "name": "unknown@example.com", "error": "No username, email, or user_id" }
   ],
   "warnings": [
-    { "entity": "organizations", "message": "3 Auth0 organizations found. Use AuthMe's Organization module to recreate them." },
+    { "entity": "organizations", "message": "3 Auth0 organizations found. Use Idenplane's Organization module to recreate them." },
     { "entity": "connection", "message": "Database connection 'Username-Password-Connection' skipped — Auth0 DB connections don't map to identity providers" },
     { "entity": "client", "message": "Client 'my-app' has a wildcard webOrigin '*' — it has been stripped during import." }
   ]
@@ -185,7 +185,7 @@ The migration returns a detailed report:
 
 ### Supported Algorithms
 
-AuthMe recognizes and preserves password hashes for:
+Idenplane recognizes and preserves password hashes for:
 
 | Algorithm | Migration Status |
 |-----------|-----------------|
@@ -248,7 +248,7 @@ Configure Auth0 to export passwords with a supported algorithm (bcrypt recommend
 
 ### Grant Type Mapping
 
-| Auth0 Grant | AuthMe Grant |
+| Auth0 Grant | Idenplane Grant |
 |------------|--------------|
 | `authorization_code` | `authorization_code` |
 | `client_credentials` | `client_credentials` |
@@ -260,7 +260,7 @@ Configure Auth0 to export passwords with a supported algorithm (bcrypt recommend
 
 Auth0 `token_endpoint_auth_method`:
 
-| Auth0 Method | AuthMe Client Type |
+| Auth0 Method | Idenplane Client Type |
 |-------------|-------------------|
 | `none` | PUBLIC |
 | Other methods | CONFIDENTIAL |
@@ -308,7 +308,7 @@ curl -X POST "http://localhost:3000/admin/realms/my-realm/clients/${CLIENT_ID}/r
 
 ### Permissions
 
-Auth0 role permissions are **not** migrated. These need to be recreated using AuthMe's authorization policies:
+Auth0 role permissions are **not** migrated. These need to be recreated using Idenplane's authorization policies:
 
 ```typescript
 // Auth0 permission format
@@ -317,11 +317,11 @@ Auth0 role permissions are **not** migrated. These need to be recreated using Au
   "resource_server_identifier": "my-api"
 }
 
-// AuthMe equivalent: Create ABAC policy
+// Idenplane equivalent: Create ABAC policy
 {
   "effect": "ALLOW",
   "actions": ["users:read"],
-  "resources": ["urn:authme:resource:users:*"]
+  "resources": ["urn:idenplane:resource:users:*"]
 }
 ```
 
@@ -335,7 +335,7 @@ See [Authorization Guide](/docs/guides/authorization) for policy creation.
 
 Auth0 connections are migrated as identity providers based on strategy:
 
-| Strategy | AuthMe Provider Type |
+| Strategy | Idenplane Provider Type |
 |----------|---------------------|
 | `google-oauth2`, `github`, `facebook`, `microsoft`, `apple`, `linkedin`, `twitter` | OIDC |
 | `oauth2` variants | OIDC |
@@ -374,12 +374,12 @@ Auth0 Organizations are **not** automatically migrated:
 ```json
 {
   "warnings": [
-    { "entity": "organizations", "message": "3 Auth0 organizations found. Use AuthMe's Organization module to recreate them." }
+    { "entity": "organizations", "message": "3 Auth0 organizations found. Use Idenplane's Organization module to recreate them." }
   ]
 }
 ```
 
-Recreate organizations manually in AuthMe. See [Multi-Tenancy Documentation](/docs/guides/authorization) for organization setup.
+Recreate organizations manually in Idenplane. See [Multi-Tenancy Documentation](/docs/guides/authorization) for organization setup.
 
 ---
 
@@ -489,9 +489,9 @@ async function testMigration(realm: string, testUsers: { username: string; passw
 
 ### 4. Update Application Configurations
 
-Update applications to use AuthMe endpoints:
+Update applications to use Idenplane endpoints:
 
-| Auth0 Endpoint | AuthMe Endpoint |
+| Auth0 Endpoint | Idenplane Endpoint |
 |-----------------|-----------------|
 | `.../.auth0.com/authorize` | `.../realms/{realm}/protocol/openid-connect/auth` |
 | `.../.auth0.com/oauth/token` | `.../realms/{realm}/protocol/openid-connect/token` |
@@ -510,7 +510,7 @@ Users with social identity links will need to re-link their accounts after migra
 
 Auth0 Organizations need to be manually recreated:
 
-1. Create organizations in AuthMe
+1. Create organizations in Idenplane
 2. Assign users to organizations
 3. Configure organization-specific settings
 
@@ -561,7 +561,7 @@ curl -X POST "http://localhost:3000/admin/realms" \
 
 ### Wildcard Origins Stripped
 
-**Cause:** Wildcard web origins (`*`) are not allowed in AuthMe.
+**Cause:** Wildcard web origins (`*`) are not allowed in Idenplane.
 
 **Solution:** After migration, configure explicit allowed origins for affected clients.
 
@@ -621,14 +621,14 @@ Understand RBAC and access control policies
 Complete REST API documentation with examples
 
 [**React SDK**](/docs/guides/sdks/react)
-Integrate AuthMe into your React application
+Integrate Idenplane into your React application
 
 </div>
 
 ---
 
 <p align="center">
-  <a href="https://authme.dev">authme.dev</a> &middot;
+  <a href="https://idenplane.dev">idenplane.dev</a> &middot;
   <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
-  <a href="https://discord.gg/authme">Discord</a>
+  <a href="https://discord.gg/idenplane">Discord</a>
 </p>

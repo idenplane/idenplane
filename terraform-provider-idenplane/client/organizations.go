@@ -1,4 +1,4 @@
-// Package client provides HTTP client functionality for AuthMe API communication
+// Package client provides HTTP client functionality for Idenplane API communication
 package client
 
 import (
@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-// Organization represents an organization in the AuthMe API
+// Organization represents an organization in the Idenplane API
 type Organization struct {
 	ID              string   `json:"id"`
 	RealmID         string   `json:"realmId,omitempty"`
@@ -135,7 +135,7 @@ type UpdateSsoConnectionRequest struct {
 	Config  map[string]interface{} `json:"config,omitempty"`
 }
 
-// OrganizationsClient provides methods for interacting with AuthMe organizations API
+// OrganizationsClient provides methods for interacting with Idenplane organizations API
 type OrganizationsClient struct {
 	httpClient *HTTPClient
 }

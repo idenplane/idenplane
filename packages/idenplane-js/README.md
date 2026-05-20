@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="https://authme.dev/logo.svg" alt="AuthMe" width="60" />
+  <img src="https://idenplane.dev/logo.svg" alt="Idenplane" width="60" />
 </p>
 
-<h2 align="center">authme-sdk</h2>
+<h2 align="center">idenplane-sdk</h2>
 
 <p align="center">
-  <strong>Official client SDK for <a href="https://authme.dev">AuthMe</a></strong><br />
+  <strong>Official client SDK for <a href="https://idenplane.dev">Idenplane</a></strong><br />
   <sub>Zero-dependency TypeScript SDK with OAuth 2.0 PKCE, token management, React bindings, and Next.js support.</sub>
 </p>
 
@@ -21,7 +21,7 @@
 ## Install
 
 ```bash
-npm install authme-sdk
+npm install idenplane-sdk
 ```
 
 ---
@@ -31,9 +31,9 @@ npm install authme-sdk
 ### Vanilla JavaScript / TypeScript
 
 ```typescript
-import { AuthmeClient } from 'authme-sdk';
+import { AuthmeClient } from 'idenplane-sdk';
 
-const authme = new AuthmeClient({
+const idenplane = new AuthmeClient({
   url: 'http://localhost:3000',
   realm: 'my-realm',
   clientId: 'my-app',
@@ -41,21 +41,21 @@ const authme = new AuthmeClient({
 });
 
 // Initialize (restores existing session if any)
-await authme.init();
+await idenplane.init();
 
-if (!authme.isAuthenticated()) {
-  // Redirects to AuthMe login page
-  await authme.login();
+if (!idenplane.isAuthenticated()) {
+  // Redirects to Idenplane login page
+  await idenplane.login();
 }
 ```
 
 On your callback page:
 
 ```typescript
-const authme = new AuthmeClient({ /* same config */ });
-const success = await authme.handleCallback();
+const idenplane = new AuthmeClient({ /* same config */ });
+const success = await idenplane.handleCallback();
 if (success) {
-  const user = authme.getUserInfo();
+  const user = idenplane.getUserInfo();
   console.log(`Welcome, ${user?.name}!`);
 }
 ```
@@ -63,7 +63,7 @@ if (success) {
 ### React
 
 ```tsx
-import { AuthProvider, useAuth, useUser, usePermissions } from 'authme-sdk/react';
+import { AuthProvider, useAuth, useUser, usePermissions } from 'idenplane-sdk/react';
 
 function App() {
   return (
@@ -108,8 +108,8 @@ function Main() {
 ### AuthProvider with pre-built client
 
 ```tsx
-import { AuthmeClient } from 'authme-sdk';
-import { AuthProvider } from 'authme-sdk/react';
+import { AuthmeClient } from 'idenplane-sdk';
+import { AuthProvider } from 'idenplane-sdk/react';
 
 const client = new AuthmeClient({
   url: 'http://localhost:3000',
@@ -132,7 +132,7 @@ function App() {
 ### ProtectedRoute
 
 ```tsx
-import { AuthProvider, ProtectedRoute } from 'authme-sdk/react';
+import { AuthProvider, ProtectedRoute } from 'idenplane-sdk/react';
 import { useNavigate } from 'react-router-dom';
 
 function AdminPage() {
@@ -185,7 +185,7 @@ For the `silent` strategy, your app's redirect URI page must post a message back
 <script>
   const params = new URLSearchParams(window.location.search);
   window.parent.postMessage({
-    type: 'authme:silent_callback',
+    type: 'idenplane:silent_callback',
     code: params.get('code'),
     state: params.get('state'),
     error: params.get('error'),
@@ -253,7 +253,7 @@ const client = new AuthmeClient({
 ```typescript
 // pages/api/profile.ts  (or app/api/profile/route.ts)
 import type { NextApiRequest, NextApiResponse } from 'next';
-import { getServerSideAuth } from 'authme-sdk/server';
+import { getServerSideAuth } from 'idenplane-sdk/server';
 
 export default async function handler(req: NextApiRequest, res: NextApiResponse) {
   const { user, isAuthenticated } = await getServerSideAuth(req, {
@@ -276,7 +276,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
 ### getServerSideProps
 
 ```typescript
-import { getServerSideAuth } from 'authme-sdk/server';
+import { getServerSideAuth } from 'idenplane-sdk/server';
 
 export const getServerSideProps = async ({ req }) => {
   const { user, isAuthenticated } = await getServerSideAuth(req, {
@@ -302,7 +302,7 @@ export const getServerSideProps = async ({ req }) => {
 // middleware.ts
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { createNextMiddleware } from 'authme-sdk/server';
+import { createNextMiddleware } from 'idenplane-sdk/server';
 
 const authMiddleware = createNextMiddleware({
   issuerUrl: 'http://localhost:3000',
@@ -361,7 +361,7 @@ new AuthmeClient(config: AuthmeConfig)
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `url` | `string` | *required* | AuthMe server URL |
+| `url` | `string` | *required* | Idenplane server URL |
 | `realm` | `string` | *required* | Realm name |
 | `clientId` | `string` | *required* | OAuth2 client ID (PUBLIC client) |
 | `redirectUri` | `string` | *required* | Callback URL after login |
@@ -381,7 +381,7 @@ new AuthmeClient(config: AuthmeConfig)
 | Method | Returns | Description |
 |--------|---------|-------------|
 | `init()` | `Promise<boolean>` | Initialize client, restore session. Returns `true` if authenticated |
-| `login(options?)` | `Promise<void>` | Redirect to AuthMe login page |
+| `login(options?)` | `Promise<void>` | Redirect to Idenplane login page |
 | `handleCallback(url?)` | `Promise<boolean>` | Exchange authorization code for tokens |
 | `logout()` | `Promise<void>` | Clear tokens and call server logout endpoint |
 | `getAccessToken()` | `string \| null` | Current access token (null if expired) |
@@ -413,14 +413,14 @@ new AuthmeClient(config: AuthmeConfig)
 
 ### React
 
-Import from `authme-sdk/react`.
+Import from `idenplane-sdk/react`.
 
 #### `<AuthProvider>`
 
 | Prop | Type | Description |
 |------|------|-------------|
 | `client` | `AuthmeClient` | Pre-built client (mutually exclusive with inline config props) |
-| `serverUrl` | `string` | AuthMe server URL (alternative to `client`) |
+| `serverUrl` | `string` | Idenplane server URL (alternative to `client`) |
 | `realm` | `string` | Realm name (alternative to `client`) |
 | `clientId` | `string` | OAuth2 client ID (alternative to `client`) |
 | `redirectUri` | `string` | Redirect URI (alternative to `client`) |
@@ -478,7 +478,7 @@ roles;                          // string[] — all realm roles
 
 ---
 
-### Server (`authme-sdk/server`)
+### Server (`idenplane-sdk/server`)
 
 #### `verifyToken(token, config)`
 
@@ -515,16 +515,16 @@ NestJS guard factory for token validation.
 
 ```typescript
 import express from 'express';
-import { createAuthmeMiddleware } from 'authme-sdk/server';
+import { createAuthmeMiddleware } from 'idenplane-sdk/server';
 
 const app = express();
-const authme = createAuthmeMiddleware({
+const idenplane = createAuthmeMiddleware({
   issuerUrl: 'http://localhost:3000',
   realm: 'my-realm',
   requiredRoles: ['user'],  // optional
 });
 
-app.get('/api/profile', authme, (req: any, res) => {
+app.get('/api/profile', idenplane, (req: any, res) => {
   res.json(req.user); // AuthmeTokenPayload
 });
 ```
@@ -532,7 +532,7 @@ app.get('/api/profile', authme, (req: any, res) => {
 ### NestJS
 
 ```typescript
-import { createAuthmeGuard } from 'authme-sdk/server';
+import { createAuthmeGuard } from 'idenplane-sdk/server';
 
 const AuthmeGuard = createAuthmeGuard({
   issuerUrl: 'http://localhost:3000',
@@ -557,13 +557,13 @@ export class AppController {
 // With fetch
 const res = await fetch('/api/profile', {
   headers: {
-    Authorization: `Bearer ${authme.getAccessToken()}`,
+    Authorization: `Bearer ${idenplane.getAccessToken()}`,
   },
 });
 
 // With axios interceptor
 api.interceptors.request.use((config) => {
-  const token = authme.getAccessToken();
+  const token = idenplane.getAccessToken();
   if (token) config.headers.Authorization = `Bearer ${token}`;
   return config;
 });
@@ -576,7 +576,7 @@ api.interceptors.request.use((config) => {
 ```tsx
 // main.tsx
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { AuthProvider, ProtectedRoute } from 'authme-sdk/react';
+import { AuthProvider, ProtectedRoute } from 'idenplane-sdk/react';
 
 function App() {
   return (
@@ -612,7 +612,7 @@ function App() {
 ## Error Handling
 
 ```typescript
-authme.on('error', (error) => {
+idenplane.on('error', (error) => {
   console.error('Auth error:', error.message);
 
   // Common errors:
@@ -625,11 +625,11 @@ authme.on('error', (error) => {
 
 ---
 
-## AuthMe Client Setup
+## Idenplane Client Setup
 
-For the SDK to work, register a **PUBLIC** client in AuthMe:
+For the SDK to work, register a **PUBLIC** client in Idenplane:
 
-1. Open the AuthMe Admin Console at `/console`
+1. Open the Idenplane Admin Console at `/console`
 2. Navigate to your realm > **Clients** > **Create**
 3. Set **Client Type** to `PUBLIC`
 4. Add your app's URL to **Redirect URIs** (e.g., `http://localhost:5173/callback`)
@@ -645,5 +645,5 @@ MIT
 ---
 
 <p align="center">
-  Part of <a href="https://authme.dev">AuthMe</a> — Open-source Identity & Access Management
+  Part of <a href="https://idenplane.dev">Idenplane</a> — Open-source Identity & Access Management
 </p>

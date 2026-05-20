@@ -1,4 +1,4 @@
-// Package client provides HTTP client functionality for AuthMe API communication
+// Package client provides HTTP client functionality for Idenplane API communication
 package client
 
 import (
@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-// AuthFlow represents an authentication flow in the AuthMe API
+// AuthFlow represents an authentication flow in the Idenplane API
 type AuthFlow struct {
 	ID          string   `json:"id"`
 	Alias       string   `json:"alias"`
@@ -61,7 +61,7 @@ type ExecutionJSONRequest struct {
 	Requirement   string `json:"requirement"`
 }
 
-// AuthFlowsClient provides methods for interacting with AuthMe authentication flows API
+// AuthFlowsClient provides methods for interacting with Idenplane authentication flows API
 type AuthFlowsClient struct {
 	httpClient *HTTPClient
 }

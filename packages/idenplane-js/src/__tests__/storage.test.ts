@@ -36,11 +36,11 @@ describe('MemoryStorage', () => {
     expect(storage.get('token')).toBe('new');
   });
 
-  it('should use the authme_ prefix internally', () => {
+  it('should use the idenplane_ prefix internally', () => {
     const storage = new MemoryStorage();
     storage.set('token', 'abc');
     // Trying to get without prefix should return null
-    expect(storage.get('authme_token')).toBeNull();
+    expect(storage.get('idenplane_token')).toBeNull();
     // The intended key works
     expect(storage.get('token')).toBe('abc');
   });

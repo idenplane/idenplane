@@ -1,7 +1,7 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { defineComponent, provide, h } from 'vue';
 import { mount } from '@vue/test-utils';
-import { AUTHME_KEY } from '../plugin.js';
+import { IDENPLANE_KEY } from '../plugin.js';
 import { useAuth, useUser, usePermissions } from '../composables.js';
 
 // ── Fake AuthmeClient ─────────────────────────────────────────────
@@ -57,7 +57,7 @@ function withProvider(client: ReturnType<typeof buildClient>, setupFn: () => unk
 
   const Wrapper = defineComponent({
     setup() {
-      provide(AUTHME_KEY, client as never);
+      provide(IDENPLANE_KEY, client as never);
       return () => h(Inner);
     },
   });

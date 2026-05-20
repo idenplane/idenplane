@@ -1,7 +1,7 @@
 ---
 id: realms
 title: Realms API
-description: Realm administration endpoints for AuthMe
+description: Realm administration endpoints for Idenplane
 ---
 
 # Realms API
@@ -371,8 +371,8 @@ curl -X GET "http://localhost:3000/admin/realms/themes" \
 {
   "data": [
     {
-      "name": "authme",
-      "displayName": "AuthMe Default",
+      "name": "idenplane",
+      "displayName": "Idenplane Default",
       "types": ["login", "account", "email"]
     },
     {

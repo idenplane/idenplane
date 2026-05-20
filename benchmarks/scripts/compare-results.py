@@ -3,7 +3,7 @@
 # benchmarks/scripts/compare-results.py
 #
 # Compares benchmark results across multiple targets and generates
-# a comparison report highlighting AuthMe's efficiency advantages.
+# a comparison report highlighting Idenplane's efficiency advantages.
 #
 # What it does:
 #   1. Loads result JSON files from multiple targets
@@ -73,11 +73,11 @@ class BenchmarkResult:
 class ComparisonMetrics:
     target: str
     memory_mb: int
-    memory_vs_authme_pct: Optional[float]
+    memory_vs_idenplane_pct: Optional[float]
     cpu_percent: str
-    cpu_vs_authme_pct: Optional[float]
+    cpu_vs_idenplane_pct: Optional[float]
     rps: Optional[float]
-    rps_vs_authme_pct: Optional[float]
+    rps_vs_idenplane_pct: Optional[float]
     p50_ms: Optional[float]
     p95_ms: Optional[float]
     p99_ms: Optional[float]
@@ -110,26 +110,26 @@ def load_results(results_dir: Path) -> list[BenchmarkResult]:
 def calculate_comparisons(
     results: list[BenchmarkResult],
 ) -> list[ComparisonMetrics]:
-    """Calculate relative comparisons against AuthMe baseline."""
-    # Find AuthMe baseline
-    authme_result = next(
-        (r for r in results if r.target.lower() in ("authme", "authme-baseline")),
+    """Calculate relative comparisons against Idenplane baseline."""
+    # Find Idenplane baseline
+    idenplane_result = next(
+        (r for r in results if r.target.lower() in ("idenplane", "idenplane-baseline")),
         None,
     )
 
     comparisons = []
     for result in results:
-        authme_rps = authme_result.requests_per_second if authme_result else None
-        authme_mem = authme_result.memory_mb if authme_result else None
+        idenplane_rps = idenplane_result.requests_per_second if idenplane_result else None
+        idenplane_mem = idenplane_result.memory_mb if idenplane_result else None
 
         # Calculate percentage differences
-        mem_vs_authme = None
-        if authme_mem and result.memory_mb and authme_mem > 0:
-            mem_vs_authme = ((result.memory_mb - authme_mem) / authme_mem) * 100
+        mem_vs_idenplane = None
+        if idenplane_mem and result.memory_mb and idenplane_mem > 0:
+            mem_vs_idenplane = ((result.memory_mb - idenplane_mem) / idenplane_mem) * 100
 
-        rps_vs_authme = None
-        if authme_rps and result.requests_per_second and authme_rps > 0:
-            rps_vs_authme = ((result.requests_per_second - authme_rps) / authme_rps) * 100
+        rps_vs_idenplane = None
+        if idenplane_rps and result.requests_per_second and idenplane_rps > 0:
+            rps_vs_idenplane = ((result.requests_per_second - idenplane_rps) / idenplane_rps) * 100
 
         # Parse CPU percentage
         cpu_pct = result.cpu_percent.rstrip("%") if result.cpu_percent else "0"
@@ -138,11 +138,11 @@ def calculate_comparisons(
             ComparisonMetrics(
                 target=result.target,
                 memory_mb=result.memory_mb,
-                memory_vs_authme_pct=mem_vs_authme,
+                memory_vs_idenplane_pct=mem_vs_idenplane,
                 cpu_percent=result.cpu_percent,
-                cpu_vs_authme_pct=None,  # Would need authme CPU to calculate
+                cpu_vs_idenplane_pct=None,  # Would need idenplane CPU to calculate
                 rps=result.requests_per_second,
-                rps_vs_authme_pct=rps_vs_authme,
+                rps_vs_idenplane_pct=rps_vs_idenplane,
                 p50_ms=result.latency_p50_ms,
                 p95_ms=result.latency_p95_ms,
                 p99_ms=result.latency_p99_ms,
@@ -152,33 +152,33 @@ def calculate_comparisons(
     return comparisons
 
 
-def format_comparison_row(metric: ComparisonMetrics, is_authme: bool) -> str:
+def format_comparison_row(metric: ComparisonMetrics, is_idenplane: bool) -> str:
     """Format a comparison table row."""
     mem_diff = ""
-    if metric.memory_vs_authme_pct is not None:
-        sign = "+" if metric.memory_vs_authme_pct > 0 else ""
-        mem_diff = f"{sign}{metric.memory_vs_authme_pct:.1f}%"
+    if metric.memory_vs_idenplane_pct is not None:
+        sign = "+" if metric.memory_vs_idenplane_pct > 0 else ""
+        mem_diff = f"{sign}{metric.memory_vs_idenplane_pct:.1f}%"
 
     rps_diff = ""
-    if metric.rps_vs_authme_pct is not None:
-        sign = "+" if metric.rps_vs_authme_pct > 0 else ""
-        rps_diff = f"{sign}{metric.rps_vs_authme_pct:.1f}%"
+    if metric.rps_vs_idenplane_pct is not None:
+        sign = "+" if metric.rps_vs_idenplane_pct > 0 else ""
+        rps_diff = f"{sign}{metric.rps_vs_idenplane_pct:.1f}%"
 
     rps_display = f"{metric.rps:.2f}" if metric.rps else "N/A"
     p50_display = f"{metric.p50_ms:.2f}ms" if metric.p50_ms else "N/A"
     p95_display = f"{metric.p95_ms:.2f}ms" if metric.p95_ms else "N/A"
     p99_display = f"{metric.p99_ms:.2f}ms" if metric.p99_ms else "N/A"
 
-    row_class = "authme-row" if is_authme else ""
-    winner_cell = '<span class="winner-badge">BEST</span>' if is_authme else ""
+    row_class = "idenplane-row" if is_idenplane else ""
+    winner_cell = '<span class="winner-badge">BEST</span>' if is_idenplane else ""
 
     return f"""
         <tr class="{row_class}">
             <td>{metric.target} {winner_cell}</td>
             <td class="metric-value">{metric.memory_mb} MB</td>
-            <td class="metric-diff {('negative' if metric.memory_vs_authme_pct and metric.memory_vs_authme_pct > 0 else 'positive') if metric.memory_vs_authme_pct is not None else ''}">{mem_diff if mem_diff else "—"}</td>
+            <td class="metric-diff {('negative' if metric.memory_vs_idenplane_pct and metric.memory_vs_idenplane_pct > 0 else 'positive') if metric.memory_vs_idenplane_pct is not None else ''}">{mem_diff if mem_diff else "—"}</td>
             <td class="metric-value">{rps_display}</td>
-            <td class="metric-diff {('negative' if metric.rps_vs_authme_pct and metric.rps_vs_authme_pct < 0 else 'positive') if metric.rps_vs_authme_pct is not None else ''}">{rps_diff if rps_diff else "—"}</td>
+            <td class="metric-diff {('negative' if metric.rps_vs_idenplane_pct and metric.rps_vs_idenplane_pct < 0 else 'positive') if metric.rps_vs_idenplane_pct is not None else ''}">{rps_diff if rps_diff else "—"}</td>
             <td class="metric-value">{p50_display}</td>
             <td class="metric-value">{p95_display}</td>
             <td class="metric-value">{p99_display}</td>
@@ -195,8 +195,8 @@ def generate_html_report(
     # Build table rows
     table_rows = ""
     for metric in comparisons:
-        is_authme = metric.target.lower() in ("authme", "authme-baseline")
-        table_rows += format_comparison_row(metric, is_authme)
+        is_idenplane = metric.target.lower() in ("idenplane", "idenplane-baseline")
+        table_rows += format_comparison_row(metric, is_idenplane)
 
     # Find best performers
     if comparisons:
@@ -210,7 +210,7 @@ def generate_html_report(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AuthMe Benchmark Comparison</title>
+    <title>Idenplane Benchmark Comparison</title>
     <style>
         :root {{
             --bg-primary: #0f172a;
@@ -332,11 +332,11 @@ def generate_html_report(
             background: var(--bg-tertiary);
         }}
 
-        .authme-row {{
+        .idenplane-row {{
             background: rgba(59, 130, 246, 0.1);
         }}
 
-        .authme-row:hover {{
+        .idenplane-row:hover {{
             background: rgba(59, 130, 246, 0.15);
         }}
 
@@ -392,7 +392,7 @@ def generate_html_report(
 <body>
     <div class="container">
         <header>
-            <h1>AuthMe Benchmark Comparison</h1>
+            <h1>Idenplane Benchmark Comparison</h1>
             <p class="timestamp">Generated: {timestamp}</p>
         </header>
 
@@ -400,7 +400,7 @@ def generate_html_report(
             <div class="card">
                 <div class="card-title">Lowest Memory Usage</div>
                 <div class="card-value card-highlight">{lowest_mem.target if lowest_mem else 'N/A'}</div>
-                <div class="card-detail">{lowest_mem.memory_mb if lowest_mem else 0} MB{(' - ' + f'{lowest_mem.memory_vs_authme_pct:.1f}% vs AuthMe') if lowest_mem and lowest_mem != comparisons[0] else ''}</div>
+                <div class="card-detail">{lowest_mem.memory_mb if lowest_mem else 0} MB{(' - ' + f'{lowest_mem.memory_vs_idenplane_pct:.1f}% vs Idenplane') if lowest_mem and lowest_mem != comparisons[0] else ''}</div>
             </div>
             <div class="card">
                 <div class="card-title">Highest Throughput</div>
@@ -410,7 +410,7 @@ def generate_html_report(
             <div class="card">
                 <div class="card-title">Systems Compared</div>
                 <div class="card-value">{len(comparisons)}</div>
-                <div class="card-detail">AuthMe, Keycloak, Authentik, Zitadel</div>
+                <div class="card-detail">Idenplane, Keycloak, Authentik, Zitadel</div>
             </div>
         </div>
 
@@ -421,9 +421,9 @@ def generate_html_report(
                     <tr>
                         <th>Target</th>
                         <th>Memory</th>
-                        <th>vs AuthMe</th>
+                        <th>vs Idenplane</th>
                         <th>Throughput</th>
-                        <th>vs AuthMe</th>
+                        <th>vs Idenplane</th>
                         <th>p50 Latency</th>
                         <th>p95 Latency</th>
                         <th>p99 Latency</th>
@@ -436,7 +436,7 @@ def generate_html_report(
         </div>
 
         <footer>
-            <p>AuthMe Performance Benchmark Suite</p>
+            <p>Idenplane Performance Benchmark Suite</p>
         </footer>
     </div>
 </body>
@@ -461,9 +461,9 @@ def generate_json_summary(
             {
                 "target": c.target,
                 "memory_mb": c.memory_mb,
-                "memory_vs_authme_pct": c.memory_vs_authme_pct,
+                "memory_vs_idenplane_pct": c.memory_vs_idenplane_pct,
                 "rps": c.rps,
-                "rps_vs_authme_pct": c.rps_vs_authme_pct,
+                "rps_vs_idenplane_pct": c.rps_vs_idenplane_pct,
                 "p50_ms": c.p50_ms,
                 "p95_ms": c.p95_ms,
                 "p99_ms": c.p99_ms,
@@ -496,7 +496,7 @@ def main() -> int:
 
     print("")
     print("═══════════════════════════════════════════════════════════════════════════")
-    print("  AuthMe Benchmark Comparison")
+    print("  Idenplane Benchmark Comparison")
     print("═══════════════════════════════════════════════════════════════════════════")
     print("")
 

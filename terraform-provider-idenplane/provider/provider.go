@@ -1,4 +1,4 @@
-// Package provider implements the Terraform provider for AuthMe
+// Package provider implements the Terraform provider for Idenplane
 package provider
 
 // This file exists for backwards compatibility

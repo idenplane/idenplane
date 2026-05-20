@@ -103,7 +103,7 @@ export default function SetupWizardPage() {
               </div>
               <h1 className="text-2xl font-bold text-gray-900">Setup Complete!</h1>
               <p className="mt-2 text-sm text-gray-500">
-                Your AuthMe instance is now configured and ready to use.
+                Your Idenplane instance is now configured and ready to use.
                 Redirecting you to the admin console...
               </p>
             </>
@@ -126,7 +126,7 @@ export default function SetupWizardPage() {
               </div>
               <h1 className="text-2xl font-bold text-gray-900">Wizard Skipped</h1>
               <p className="mt-2 text-sm text-gray-500">
-                You can configure AuthMe manually through the admin console.
+                You can configure Idenplane manually through the admin console.
               </p>
             </>
           )}
@@ -146,7 +146,7 @@ export default function SetupWizardPage() {
         <header className="border-b border-gray-200 bg-white px-8 py-4">
           <div className="flex items-center justify-between">
             <div>
-              <h1 className="text-xl font-semibold text-gray-900">AuthMe Setup Wizard</h1>
+              <h1 className="text-xl font-semibold text-gray-900">Idenplane Setup Wizard</h1>
               <p className="mt-0.5 text-sm text-gray-500">
                 Step {currentStep + 1} of 6: {stepName}
               </p>

@@ -2,15 +2,15 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: authme
+      POSTGRES_USER: idenplane
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
-      POSTGRES_DB: authme
+      POSTGRES_DB: idenplane
     ports:
       - '5432:5432'
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ['CMD-SHELL', 'pg_isready -U authme']
+      test: ['CMD-SHELL', 'pg_isready -U idenplane']
       interval: 5s
       timeout: 3s
       retries: 5
@@ -20,7 +20,7 @@ services:
     ports:
       - '3001:3000'
     environment:
-      DATABASE_URL: postgresql://authme:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/authme
+      DATABASE_URL: postgresql://idenplane:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/idenplane
       BASE_URL: http://localhost:8081
       NODE_ENV: production
       ADMIN_USER: ${ADMIN_USER:-admin}
@@ -35,7 +35,7 @@ services:
     ports:
       - '3002:3000'
     environment:
-      DATABASE_URL: postgresql://authme:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/authme
+      DATABASE_URL: postgresql://idenplane:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/idenplane
       BASE_URL: http://localhost:8081
       NODE_ENV: production
       ADMIN_USER: ${ADMIN_USER:-admin}

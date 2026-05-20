@@ -2,8 +2,8 @@ import { Command } from 'commander';
 import chalk from 'chalk';
 
 const BASH_COMPLETION = `
-# authme bash completion
-_authme_completion() {
+# idenplane bash completion
+_idenplane_completion() {
   local cur prev words cword
   _init_completion || return
 
@@ -44,13 +44,13 @@ _authme_completion() {
   esac
 }
 
-complete -F _authme_completion authme
+complete -F _idenplane_completion idenplane
 `;
 
 const ZSH_COMPLETION = `
-#compdef authme
+#compdef idenplane
 
-_authme() {
+_idenplane() {
   local state line
   typeset -A opt_args
 
@@ -62,7 +62,7 @@ _authme() {
     command)
       local commands
       commands=(
-        'login:Authenticate with an AuthMe server'
+        'login:Authenticate with an Idenplane server'
         'logout:Clear saved credentials'
         'whoami:Show current authenticated user info'
         'init:Interactive setup wizard'
@@ -73,7 +73,7 @@ _authme() {
         'group:Manage groups'
         'config:Manage CLI configuration'
         'completion:Output shell completion script'
-        'upgrade:Upgrade the AuthMe server to a new version'
+        'upgrade:Upgrade the Idenplane server to a new version'
         'migrate:Migrate users and configuration from another IdP'
       )
       _describe 'command' commands
@@ -106,42 +106,42 @@ _authme() {
   esac
 }
 
-_authme
+_idenplane
 `;
 
 const FISH_COMPLETION = `
-# authme fish completion
+# idenplane fish completion
 
-set -l authme_commands login logout whoami init realm user client role group config completion upgrade migrate
+set -l idenplane_commands login logout whoami init realm user client role group config completion upgrade migrate
 
-complete -c authme -f -n '__fish_use_subcommand' -a login       -d 'Authenticate with an AuthMe server'
-complete -c authme -f -n '__fish_use_subcommand' -a logout      -d 'Clear saved credentials'
-complete -c authme -f -n '__fish_use_subcommand' -a whoami      -d 'Show current authenticated user info'
-complete -c authme -f -n '__fish_use_subcommand' -a init        -d 'Interactive setup wizard'
-complete -c authme -f -n '__fish_use_subcommand' -a realm       -d 'Manage realms'
-complete -c authme -f -n '__fish_use_subcommand' -a user        -d 'Manage users'
-complete -c authme -f -n '__fish_use_subcommand' -a client      -d 'Manage clients'
-complete -c authme -f -n '__fish_use_subcommand' -a role        -d 'Manage roles'
-complete -c authme -f -n '__fish_use_subcommand' -a group       -d 'Manage groups'
-complete -c authme -f -n '__fish_use_subcommand' -a config      -d 'Manage CLI configuration'
-complete -c authme -f -n '__fish_use_subcommand' -a completion  -d 'Output shell completion script'
-complete -c authme -f -n '__fish_use_subcommand' -a upgrade     -d 'Upgrade the AuthMe server to a new version'
-complete -c authme -f -n '__fish_use_subcommand' -a migrate     -d 'Migrate users and configuration from another IdP'
+complete -c idenplane -f -n '__fish_use_subcommand' -a login       -d 'Authenticate with an Idenplane server'
+complete -c idenplane -f -n '__fish_use_subcommand' -a logout      -d 'Clear saved credentials'
+complete -c idenplane -f -n '__fish_use_subcommand' -a whoami      -d 'Show current authenticated user info'
+complete -c idenplane -f -n '__fish_use_subcommand' -a init        -d 'Interactive setup wizard'
+complete -c idenplane -f -n '__fish_use_subcommand' -a realm       -d 'Manage realms'
+complete -c idenplane -f -n '__fish_use_subcommand' -a user        -d 'Manage users'
+complete -c idenplane -f -n '__fish_use_subcommand' -a client      -d 'Manage clients'
+complete -c idenplane -f -n '__fish_use_subcommand' -a role        -d 'Manage roles'
+complete -c idenplane -f -n '__fish_use_subcommand' -a group       -d 'Manage groups'
+complete -c idenplane -f -n '__fish_use_subcommand' -a config      -d 'Manage CLI configuration'
+complete -c idenplane -f -n '__fish_use_subcommand' -a completion  -d 'Output shell completion script'
+complete -c idenplane -f -n '__fish_use_subcommand' -a upgrade     -d 'Upgrade the Idenplane server to a new version'
+complete -c idenplane -f -n '__fish_use_subcommand' -a migrate     -d 'Migrate users and configuration from another IdP'
 
 # realm subcommands
-complete -c authme -f -n '__fish_seen_subcommand_from realm' -a 'list create get update delete export import'
+complete -c idenplane -f -n '__fish_seen_subcommand_from realm' -a 'list create get update delete export import'
 # user subcommands
-complete -c authme -f -n '__fish_seen_subcommand_from user'  -a 'list create get update delete set-password bulk-import'
+complete -c idenplane -f -n '__fish_seen_subcommand_from user'  -a 'list create get update delete set-password bulk-import'
 # client subcommands
-complete -c authme -f -n '__fish_seen_subcommand_from client' -a 'list create get update delete rotate-secret'
+complete -c idenplane -f -n '__fish_seen_subcommand_from client' -a 'list create get update delete rotate-secret'
 # role subcommands
-complete -c authme -f -n '__fish_seen_subcommand_from role'  -a 'list create get update delete assign unassign'
+complete -c idenplane -f -n '__fish_seen_subcommand_from role'  -a 'list create get update delete assign unassign'
 # group subcommands
-complete -c authme -f -n '__fish_seen_subcommand_from group' -a 'list create get update delete'
+complete -c idenplane -f -n '__fish_seen_subcommand_from group' -a 'list create get update delete'
 # config subcommands
-complete -c authme -f -n '__fish_seen_subcommand_from config' -a 'show validate'
+complete -c idenplane -f -n '__fish_seen_subcommand_from config' -a 'show validate'
 # completion subcommands
-complete -c authme -f -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish'
+complete -c idenplane -f -n '__fish_seen_subcommand_from completion' -a 'bash zsh fish'
 `;
 
 const SCRIPTS: Record<string, string> = {
@@ -151,9 +151,9 @@ const SCRIPTS: Record<string, string> = {
 };
 
 const INSTALL_HINTS: Record<string, string> = {
-  bash: `# Add to ~/.bashrc:\n# eval "$(authme completion bash)"`,
-  zsh: `# Add to ~/.zshrc:\n# eval "$(authme completion zsh)"`,
-  fish: `# Save to your fish completions directory:\n# authme completion fish > ~/.config/fish/completions/authme.fish`,
+  bash: `# Add to ~/.bashrc:\n# eval "$(idenplane completion bash)"`,
+  zsh: `# Add to ~/.zshrc:\n# eval "$(idenplane completion zsh)"`,
+  fish: `# Save to your fish completions directory:\n# idenplane completion fish > ~/.config/fish/completions/idenplane.fish`,
 };
 
 export function registerCompletionCommand(program: Command): void {

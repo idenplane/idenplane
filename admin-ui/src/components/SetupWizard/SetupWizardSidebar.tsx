@@ -17,7 +17,7 @@ interface HelpTooltip {
 const STEP_TOOLTIPS: Record<number, HelpTooltip> = {
   0: {
     title: 'Admin Account',
-    content: 'Create your master administrator account. This account will have full access to manage your AuthMe instance.',
+    content: 'Create your master administrator account. This account will have full access to manage your Idenplane instance.',
   },
   1: {
     title: 'Realm Settings',
@@ -29,11 +29,11 @@ const STEP_TOOLTIPS: Record<number, HelpTooltip> = {
   },
   3: {
     title: 'First Client',
-    content: 'Create your first client application. A client represents an application that will use AuthMe for authentication.',
+    content: 'Create your first client application. A client represents an application that will use Idenplane for authentication.',
   },
   4: {
     title: 'SDK Integration',
-    content: 'Get code snippets to integrate your application with AuthMe using our SDK. Supports multiple frameworks and languages.',
+    content: 'Get code snippets to integrate your application with Idenplane using our SDK. Supports multiple frameworks and languages.',
   },
   5: {
     title: 'Test Authentication',

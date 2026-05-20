@@ -9,5 +9,5 @@ export default defineConfig({
   splitting: false,
   sourcemap: true,
   clean: true,
-  external: ['authme-sdk', 'vue', 'vue-router'],
+  external: ['idenplane-sdk', 'vue', 'vue-router'],
 });

@@ -1,4 +1,4 @@
-module github.com/authme/terraform-provider-authme
+module github.com/idenplane/terraform-provider-idenplane
 
 go 1.22
 

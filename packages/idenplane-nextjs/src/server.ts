@@ -8,7 +8,7 @@
  * ```typescript
  * // app/dashboard/page.tsx
  * import { cookies } from 'next/headers';
- * import { getServerAuth, getServerUser } from '@authme/nextjs/server';
+ * import { getServerAuth, getServerUser } from '@idenplane/nextjs/server';
  * import { redirect } from 'next/navigation';
  *
  * export default async function DashboardPage() {
@@ -27,11 +27,11 @@
 // ── Shared types ─────────────────────────────────────────────────
 
 export interface ServerAuthConfig {
-  /** AuthMe server base URL */
+  /** Idenplane server base URL */
   serverUrl: string;
   /** Realm name */
   realm: string;
-  /** Cookie name holding the access token (default: "authme_access_token") */
+  /** Cookie name holding the access token (default: "idenplane_access_token") */
   cookieName?: string;
 }
 
@@ -75,12 +75,12 @@ export interface ReadonlyRequestCookies {
   get(name: string): { name: string; value: string } | undefined;
 }
 
-// ── JWT decode (no verification — use verifyToken from authme-sdk/server for full JWKS validation) ──
+// ── JWT decode (no verification — use verifyToken from idenplane-sdk/server for full JWKS validation) ──
 // Bug #438-3 acknowledged: cookie-based auth in this module performs no
 // cryptographic signature verification.  This is a known, documented
 // limitation.  The security warnings in getServerAuth() JSDoc are intentional.
 // Consumers who need cryptographic assurance MUST call verifyToken() from
-// authme-sdk/server before trusting any claim from the decoded payload.
+// idenplane-sdk/server before trusting any claim from the decoded payload.
 
 /**
  * Decode a JWT payload WITHOUT cryptographic signature verification.
@@ -92,11 +92,11 @@ export interface ReadonlyRequestCookies {
  *
  * Intended use — convenience reading in Server Components where the token has
  * already been cryptographically verified by a trusted upstream layer (e.g.
- * your API gateway, the AuthMe Edge middleware backed by JWKS verification, or
- * a call to `verifyToken` from `authme-sdk/server`).
+ * your API gateway, the Idenplane Edge middleware backed by JWKS verification, or
+ * a call to `verifyToken` from `idenplane-sdk/server`).
  *
  * If you are making access-control decisions based on the returned claims,
- * you MUST verify the token first with `verifyToken` from `authme-sdk/server`
+ * you MUST verify the token first with `verifyToken` from `idenplane-sdk/server`
  * (which performs full JWKS signature verification).
  */
 function decodeJwtPayload(token: string): TokenPayload | null {
@@ -129,17 +129,17 @@ function isExpired(payload: TokenPayload): boolean {
  *
  * DO NOT use the returned `payload` for authorization decisions (role checks,
  * permission gates, data access) without first verifying the token with
- * `verifyToken` from `authme-sdk/server`.  An attacker who can set an
+ * `verifyToken` from `idenplane-sdk/server`.  An attacker who can set an
  * arbitrary cookie value could otherwise forge any claims returned here.
  *
  * Returns `AuthSession | null`.  The token is decoded locally (no JWKS call).
- * Call `verifyToken` from `authme-sdk/server` if you need cryptographic validation.
+ * Call `verifyToken` from `idenplane-sdk/server` if you need cryptographic validation.
  */
 export async function getServerAuth(
   cookies: ReadonlyRequestCookies,
   config?: ServerAuthConfig,
 ): Promise<AuthSession | null> {
-  const cookieName = config?.cookieName ?? 'authme_access_token';
+  const cookieName = config?.cookieName ?? 'idenplane_access_token';
   const accessToken = cookies.get(cookieName)?.value;
 
   if (!accessToken) return null;

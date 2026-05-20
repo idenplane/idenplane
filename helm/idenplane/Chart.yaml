@@ -1,12 +1,12 @@
 apiVersion: v2
-name: authme
-description: A Helm chart for AuthMe — a self-hosted authentication service built with NestJS.
+name: idenplane
+description: A Helm chart for Idenplane — a self-hosted authentication service built with NestJS.
 type: application
 version: 0.1.0
 appVersion: "0.0.1"
 
 keywords:
-  - authme
+  - idenplane
   - authentication
   - sso
   - oauth

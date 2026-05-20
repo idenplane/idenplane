@@ -1,5 +1,5 @@
 /**
- * Server-side utilities for AuthMe token validation.
+ * Server-side utilities for Idenplane token validation.
  *
  * Provides:
  * - `verifyToken` — verify a JWT using JWKS
@@ -10,7 +10,7 @@
  *
  * @example
  * ```typescript
- * import { createAuthmeMiddleware } from 'authme-sdk/server';
+ * import { createAuthmeMiddleware } from 'idenplane-sdk/server';
  *
  * app.use('/api', createAuthmeMiddleware({
  *   issuerUrl: 'http://localhost:3000',
@@ -22,7 +22,7 @@
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 
 export interface AuthmeServerConfig {
-  /** AuthMe server base URL (e.g., 'http://localhost:3000') */
+  /** Idenplane server base URL (e.g., 'http://localhost:3000') */
   issuerUrl: string;
   /** Realm name */
   realm: string;
@@ -54,7 +54,7 @@ function getJWKS(issuerUrl: string, realm: string) {
 }
 
 /**
- * Verify an AuthMe JWT access token and return the decoded payload.
+ * Verify an Idenplane JWT access token and return the decoded payload.
  */
 export async function verifyToken(
   token: string,
@@ -108,20 +108,20 @@ export interface AuthmeRequest {
 }
 
 /**
- * Create an Express middleware that validates AuthMe JWT access tokens.
+ * Create an Express middleware that validates Idenplane JWT access tokens.
  *
  * @example
  * ```typescript
  * import express from 'express';
- * import { createAuthmeMiddleware } from 'authme-sdk/server';
+ * import { createAuthmeMiddleware } from 'idenplane-sdk/server';
  *
  * const app = express();
- * const authme = createAuthmeMiddleware({
+ * const idenplane = createAuthmeMiddleware({
  *   issuerUrl: 'http://localhost:3000',
  *   realm: 'my-realm',
  * });
  *
- * app.get('/api/profile', authme, (req, res) => {
+ * app.get('/api/profile', idenplane, (req, res) => {
  *   res.json(req.user);
  * });
  * ```
@@ -178,11 +178,11 @@ class HttpError extends Error {
 }
 
 /**
- * NestJS-compatible guard factory for AuthMe token validation.
+ * NestJS-compatible guard factory for Idenplane token validation.
  *
  * @example
  * ```typescript
- * import { createAuthmeGuard } from 'authme-sdk/server';
+ * import { createAuthmeGuard } from 'idenplane-sdk/server';
  *
  * const AuthmeGuard = createAuthmeGuard({
  *   issuerUrl: 'http://localhost:3000',
@@ -232,7 +232,7 @@ export function createAuthmeGuard(config: AuthmeServerConfig) {
 }
 
 /**
- * Helper to extract roles from an AuthMe token payload.
+ * Helper to extract roles from an Idenplane token payload.
  */
 export function getRolesFromToken(
   payload: AuthmeTokenPayload,
@@ -275,7 +275,7 @@ export interface ServerSideAuthResult {
  * @example
  * ```typescript
  * // pages/api/profile.ts
- * import { getServerSideAuth } from 'authme-sdk/server';
+ * import { getServerSideAuth } from 'idenplane-sdk/server';
  *
  * export default async function handler(req, res) {
  *   const { user, isAuthenticated } = await getServerSideAuth(req, {
@@ -332,7 +332,7 @@ export async function getServerSideAuth(
  * ```typescript
  * // middleware.ts
  * import { NextResponse } from 'next/server';
- * import { createNextMiddleware } from 'authme-sdk/server';
+ * import { createNextMiddleware } from 'idenplane-sdk/server';
  *
  * const authMiddleware = createNextMiddleware({
  *   issuerUrl: 'http://localhost:3000',

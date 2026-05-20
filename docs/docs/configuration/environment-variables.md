@@ -2,12 +2,12 @@
 id: environment-variables
 title: Environment Variables
 sidebar_position: 1
-description: Complete reference for all AuthMe environment variables and configuration options.
+description: Complete reference for all Idenplane environment variables and configuration options.
 ---
 
 # Environment Variables
 
-AuthMe is configured entirely through environment variables. This reference documents all available options with their defaults, requirements, and examples.
+Idenplane is configured entirely through environment variables. This reference documents all available options with their defaults, requirements, and examples.
 
 ---
 
@@ -32,7 +32,7 @@ AuthMe is configured entirely through environment variables. This reference docu
 
 ## Database
 
-AuthMe supports three database providers. Set `DATABASE_URL` to the connection string matching your environment.
+Idenplane supports three database providers. Set `DATABASE_URL` to the connection string matching your environment.
 
 ### Supported Providers
 
@@ -46,10 +46,10 @@ AuthMe supports three database providers. Set `DATABASE_URL` to the connection s
 
 ```bash
 # PostgreSQL (recommended for production)
-DATABASE_URL=postgresql://authme:authme@localhost:5432/authme
+DATABASE_URL=postgresql://idenplane:idenplane@localhost:5432/idenplane
 
 # MySQL 8+ / MariaDB 10.5+
-DATABASE_URL=mysql://authme:authme@localhost:3306/authme
+DATABASE_URL=mysql://idenplane:idenplane@localhost:3306/idenplane
 
 # SQLite (development / CI only)
 DATABASE_URL=file:./dev.db
@@ -92,7 +92,7 @@ BASE_URL=https://auth.example.com
 ## Security
 
 :::warning
-The following variables are **required in production**. AuthMe will refuse to start if you use placeholder values in a production environment.
+The following variables are **required in production**. Idenplane will refuse to start if you use placeholder values in a production environment.
 :::
 
 ### API Authentication
@@ -152,7 +152,7 @@ Redis is optional but recommended for production deployments with multiple insta
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
-| `REDIS_URL` | — | No | Redis connection string. If not set, AuthMe runs without Redis. |
+| `REDIS_URL` | — | No | Redis connection string. If not set, Idenplane runs without Redis. |
 
 ```bash
 # Basic Redis connection
@@ -224,7 +224,7 @@ THROTTLE_LIMIT=500
 
 ## Reverse Proxy / Trusted Proxies
 
-AuthMe sits behind a reverse proxy (nginx, Cloudflare, load balancer) to improve client IP resolution and enable rate limiting by user rather than by IP.
+Idenplane sits behind a reverse proxy (nginx, Cloudflare, load balancer) to improve client IP resolution and enable rate limiting by user rather than by IP.
 
 ### Configuration
 
@@ -249,7 +249,7 @@ TRUSTED_PROXIES=*
 ```
 
 :::warning
-Setting `TRUSTED_PROXIES=*` is only safe when the network layer prevents direct public access to the AuthMe process (e.g., behind a managed cloud load balancer).
+Setting `TRUSTED_PROXIES=*` is only safe when the network layer prevents direct public access to the Idenplane process (e.g., behind a managed cloud load balancer).
 :::
 
 ---
@@ -261,7 +261,7 @@ Here's a complete `.env` file for production:
 ```bash
 # ─── Database ──────────────────────────────────────────────────────────────────
 # PostgreSQL (recommended for production):
-DATABASE_URL=postgresql://authme:authme@localhost:5432/authme
+DATABASE_URL=postgresql://idenplane:idenplane@localhost:5432/idenplane
 
 # ─── Server ────────────────────────────────────────────────────────────────────
 PORT=3000
@@ -322,7 +322,7 @@ openssl rand -hex 16
 <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
 
 [**Configuration Guide**](/docs/getting-started/configuration)
-Configure AuthMe for your environment
+Configure Idenplane for your environment
 
 [**Installation**](/docs/getting-started/installation)
 Detailed installation instructions
@@ -335,7 +335,7 @@ Deploy to production with Docker
 ---
 
 <p align="center">
-  <a href="https://authme.dev">authme.dev</a> &middot;
+  <a href="https://idenplane.dev">idenplane.dev</a> &middot;
   <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
-  <a href="https://discord.gg/authme">Discord</a>
+  <a href="https://discord.gg/idenplane">Discord</a>
 </p>

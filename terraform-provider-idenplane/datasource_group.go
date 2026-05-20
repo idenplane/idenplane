@@ -1,11 +1,11 @@
-// Package provider implements the Terraform provider for AuthMe
+// Package provider implements the Terraform provider for Idenplane
 package provider
 
 import (
 	"context"
 	"fmt"
 
-	"github.com/authme/terraform-provider-authme/client"
+	"github.com/idenplane/terraform-provider-idenplane/client"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -69,7 +69,7 @@ func (d *GroupDataSource) Metadata(ctx context.Context, req datasource.MetadataR
 // Schema returns the data source schema
 func (d *GroupDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Provides information about an AuthMe group. This data source allows you to " +
+		MarkdownDescription: "Provides information about an Idenplane group. This data source allows you to " +
 			"read existing groups without managing them as Terraform resources.",
 
 		Attributes: map[string]schema.Attribute{
@@ -186,7 +186,7 @@ func (d *GroupDataSource) Configure(ctx context.Context, req datasource.Configur
 	d.httpClient = httpClient
 }
 
-// Read reads the group data from the AuthMe API
+// Read reads the group data from the Idenplane API
 func (d *GroupDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	tflog.Debug(ctx, "Reading group data source")
 

@@ -20,7 +20,7 @@ const EAGER_REFRESH_MULTIPLIER = 2;
  * Call this function on the page that serves as the silent-refresh redirect URI.
  *
  * Bug #438-1 fix: the `silentRefresh()` iframe flow requires the redirect-URI
- * page to post an `authme:silent_callback` message back to the parent window.
+ * page to post an `idenplane:silent_callback` message back to the parent window.
  * Without this, the parent's `message` event listener never fires and every
  * silent refresh times out after 10 seconds.
  *
@@ -29,7 +29,7 @@ const EAGER_REFRESH_MULTIPLIER = 2;
  * ```html
  * <!-- public/silent-callback.html -->
  * <script type="module">
- *   import { handleSilentCallback } from '@authme/js';
+ *   import { handleSilentCallback } from '@idenplane/js';
  *   handleSilentCallback();
  * </script>
  * ```
@@ -51,7 +51,7 @@ export function handleSilentCallback(): void {
 
   window.parent.postMessage(
     {
-      type: 'authme:silent_callback',
+      type: 'idenplane:silent_callback',
       code,
       state,
       error: errorDescription ?? error,
@@ -206,7 +206,7 @@ export class AuthmeClient {
   // ── Auth Flow ───────────────────────────────────────────────────
 
   /**
-   * Redirect the user to the AuthMe login page.
+   * Redirect the user to the Idenplane login page.
    * Generates PKCE challenge and state parameter automatically.
    */
   async login(options?: { scope?: string[]; state?: string }): Promise<void> {
@@ -590,13 +590,13 @@ export class AuthmeClient {
     // Resolve the redirect URI for the silent-refresh iframe.  A dedicated
     // silentRedirectUri (pointing at a page that calls handleSilentCallback)
     // is strongly recommended.  Falling back to the main redirectUri works
-    // only if that page also posts the authme:silent_callback message.
+    // only if that page also posts the idenplane:silent_callback message.
     let silentRedirectUri: string;
     if (this.config.silentRedirectUri) {
       silentRedirectUri = this.config.silentRedirectUri;
     } else {
       console.warn(
-        '[authme] silentRedirectUri is not set. ' +
+        '[idenplane] silentRedirectUri is not set. ' +
           'Falling back to redirectUri for the silent-refresh iframe. ' +
           'Set silentRedirectUri to a dedicated page that calls handleSilentCallback().',
       );
@@ -637,7 +637,7 @@ export class AuthmeClient {
 
       const onMessage = async (event: MessageEvent) => {
         if (event.origin !== window.location.origin) return;
-        if (!event.data?.type || event.data.type !== 'authme:silent_callback') return;
+        if (!event.data?.type || event.data.type !== 'idenplane:silent_callback') return;
 
         cleanup();
 

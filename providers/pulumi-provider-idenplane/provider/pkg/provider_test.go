@@ -11,8 +11,8 @@ func TestProviderInfo(t *testing.T) {
 	info := ProviderInfo()
 
 	// Verify provider name
-	if info.Name != tokens.Package("authme") {
-		t.Errorf("Expected provider name 'authme', got %v", info.Name)
+	if info.Name != tokens.Package("idenplane") {
+		t.Errorf("Expected provider name 'idenplane', got %v", info.Name)
 	}
 
 	// Verify description
@@ -31,12 +31,12 @@ func TestProviderResources(t *testing.T) {
 	info := ProviderInfo()
 
 	expectedResources := []string{
-		"authme_realm",
-		"authme_client",
-		"authme_role",
-		"authme_group",
-		"authme_organization",
-		"authme_identity_provider",
+		"idenplane_realm",
+		"idenplane_client",
+		"idenplane_role",
+		"idenplane_group",
+		"idenplane_organization",
+		"idenplane_identity_provider",
 	}
 
 	for _, resourceName := range expectedResources {
@@ -58,12 +58,12 @@ func TestProviderDataSources(t *testing.T) {
 	info := ProviderInfo()
 
 	expectedDataSources := []string{
-		"authme_realm",
-		"authme_client",
-		"authme_role",
-		"authme_group",
-		"authme_organization",
-		"authme_identity_provider",
+		"idenplane_realm",
+		"idenplane_client",
+		"idenplane_role",
+		"idenplane_group",
+		"idenplane_organization",
+		"idenplane_identity_provider",
 	}
 
 	for _, dsName := range expectedDataSources {
@@ -85,12 +85,12 @@ func TestResourceTokens(t *testing.T) {
 	info := ProviderInfo()
 
 	expectedTokens := map[string]tokens.Resource{
-		"authme_realm":              makeResource("index", "Realm"),
-		"authme_client":             makeResource("index", "Client"),
-		"authme_role":               makeResource("index", "Role"),
-		"authme_group":             makeResource("index", "Group"),
-		"authme_organization":      makeResource("index", "Organization"),
-		"authme_identity_provider": makeResource("index", "IdentityProvider"),
+		"idenplane_realm":              makeResource("index", "Realm"),
+		"idenplane_client":             makeResource("index", "Client"),
+		"idenplane_role":               makeResource("index", "Role"),
+		"idenplane_group":             makeResource("index", "Group"),
+		"idenplane_organization":      makeResource("index", "Organization"),
+		"idenplane_identity_provider": makeResource("index", "IdentityProvider"),
 	}
 
 	for resourceName, expectedTok := range expectedTokens {
@@ -111,12 +111,12 @@ func TestDataSourceTokens(t *testing.T) {
 	info := ProviderInfo()
 
 	expectedTokens := map[string]tokens.DataSource{
-		"authme_realm":              makeDataSource("index", "getRealm"),
-		"authme_client":             makeDataSource("index", "getClient"),
-		"authme_role":               makeDataSource("index", "getRole"),
-		"authme_group":             makeDataSource("index", "getGroup"),
-		"authme_organization":       makeDataSource("index", "getOrganization"),
-		"authme_identity_provider": makeDataSource("index", "getIdentityProvider"),
+		"idenplane_realm":              makeDataSource("index", "getRealm"),
+		"idenplane_client":             makeDataSource("index", "getClient"),
+		"idenplane_role":               makeDataSource("index", "getRole"),
+		"idenplane_group":             makeDataSource("index", "getGroup"),
+		"idenplane_organization":       makeDataSource("index", "getOrganization"),
+		"idenplane_identity_provider": makeDataSource("index", "getIdentityProvider"),
 	}
 
 	for dsName, expectedTok := range expectedTokens {
@@ -135,7 +135,7 @@ func TestDataSourceTokens(t *testing.T) {
 // TestMakeResource verifies makeResource creates correct tokens.
 func TestMakeResource(t *testing.T) {
 	tok := makeResource("index", "Realm")
-	expected := tokens.NewResource("authme", "index", "Realm")
+	expected := tokens.NewResource("idenplane", "index", "Realm")
 	if tok != expected {
 		t.Errorf("makeResource returned %v, want %v", tok, expected)
 	}
@@ -144,7 +144,7 @@ func TestMakeResource(t *testing.T) {
 // TestMakeDataSource verifies makeDataSource creates correct tokens.
 func TestMakeDataSource(t *testing.T) {
 	tok := makeDataSource("index", "getRealm")
-	expected := tokens.NewDataSource("authme", "index", "getRealm")
+	expected := tokens.NewDataSource("idenplane", "index", "getRealm")
 	if tok != expected {
 		t.Errorf("makeDataSource returned %v, want %v", tok, expected)
 	}

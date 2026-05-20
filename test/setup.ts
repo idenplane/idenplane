@@ -110,7 +110,7 @@ export async function createTestApp(): Promise<TestContext> {
 
   // Set up Swagger so /api-json is available (mirrors main.ts)
   const swaggerConfig = new DocumentBuilder()
-    .setTitle('AuthMe')
+    .setTitle('Idenplane')
     .setDescription('Open-source Identity and Access Management Server')
     .setVersion('0.1.0')
     .addApiKey({ type: 'apiKey', name: 'x-admin-api-key', in: 'header' }, 'admin-api-key')

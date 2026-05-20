@@ -2,12 +2,12 @@
 id: keycloak
 title: Migrate from Keycloak
 sidebar_position: 1
-description: Complete guide to migrating from Keycloak to AuthMe
+description: Complete guide to migrating from Keycloak to Idenplane
 ---
 
 # Migrate from Keycloak
 
-This guide covers migrating users, clients, and realm configuration from Keycloak to AuthMe. The migration is performed using Keycloak's realm export JSON format.
+This guide covers migrating users, clients, and realm configuration from Keycloak to Idenplane. The migration is performed using Keycloak's realm export JSON format.
 
 ---
 
@@ -15,7 +15,7 @@ This guide covers migrating users, clients, and realm configuration from Keycloa
 
 Before starting the migration:
 
-- [AuthMe installed](/docs/getting-started/installation) and running
+- [Idenplane installed](/docs/getting-started/installation) and running
 - Admin API key configured
 - Keycloak realm export JSON file
 - Sufficient database storage for migrated data
@@ -66,7 +66,7 @@ Exported password hashes depend on Keycloak's password hashing algorithm. See [P
 
 ---
 
-## Importing to AuthMe
+## Importing to Idenplane
 
 ### Basic Import
 
@@ -155,7 +155,7 @@ The migration returns a detailed report:
 | `email_conflict` | User email already exists in target realm | Delete existing user or change email |
 | `already_exists` | Username already exists | Delete existing user |
 | `invalid_data` | User data missing required fields | Fix export data |
-| `unsupported` | Feature not supported by AuthMe | Review and migrate manually |
+| `unsupported` | Feature not supported by Idenplane | Review and migrate manually |
 
 ---
 
@@ -163,7 +163,7 @@ The migration returns a detailed report:
 
 ### Supported Algorithms
 
-AuthMe recognizes and preserves password hashes for these algorithms:
+Idenplane recognizes and preserves password hashes for these algorithms:
 
 | Algorithm | Migration Status |
 |-----------|-----------------|
@@ -198,7 +198,7 @@ The migration report includes warnings for users with unsupported password hashe
 ```
 
 :::tip Password Reset Strategy
-Consider using AuthMe's bulk email feature to notify affected users before triggering password resets.
+Consider using Idenplane's bulk email feature to notify affected users before triggering password resets.
 :::
 
 ---
@@ -258,7 +258,7 @@ curl -X POST "http://localhost:3000/admin/realms/my-realm/clients/${CLIENT_ID}/r
 
 ### Role Types
 
-| Keycloak Role | AuthMe Equivalent |
+| Keycloak Role | Idenplane Equivalent |
 |---------------|-------------------|
 | Realm roles | Realm roles |
 | Client roles | Client-scoped roles |
@@ -266,9 +266,9 @@ curl -X POST "http://localhost:3000/admin/realms/my-realm/clients/${CLIENT_ID}/r
 
 ### Default Roles
 
-Keycloak default roles are mapped to AuthMe realm roles:
+Keycloak default roles are mapped to Idenplane realm roles:
 
-| Keycloak | AuthMe |
+| Keycloak | Idenplane |
 |----------|--------|
 | `uma_authorization` | Not migrated |
 | `offline_access` | Supported |
@@ -409,9 +409,9 @@ async function testMigration(realm: string, testUsers: string[]) {
 
 ### 3. Update Client Configurations
 
-Update applications to use AuthMe endpoints:
+Update applications to use Idenplane endpoints:
 
-| Keycloak Endpoint | AuthMe Endpoint |
+| Keycloak Endpoint | Idenplane Endpoint |
 |-------------------|----------------|
 | `.../auth/realms/{realm}` | `.../realms/{realm}` |
 | `.../auth/admin/realms/{realm}` | `.../admin/realms/{realm}` |
@@ -505,14 +505,14 @@ Understand RBAC and access control policies
 Complete REST API documentation with examples
 
 [**React SDK**](/docs/guides/sdks/react)
-Integrate AuthMe into your React application
+Integrate Idenplane into your React application
 
 </div>
 
 ---
 
 <p align="center">
-  <a href="https://authme.dev">authme.dev</a> &middot;
+  <a href="https://idenplane.dev">idenplane.dev</a> &middot;
   <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
-  <a href="https://discord.gg/authme">Discord</a>
+  <a href="https://discord.gg/idenplane">Discord</a>
 </p>

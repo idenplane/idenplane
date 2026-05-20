@@ -1,4 +1,4 @@
-// Package client provides HTTP client functionality for AuthMe API communication
+// Package client provides HTTP client functionality for Idenplane API communication
 package client
 
 import (
@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-// UserFederation represents a user federation configuration in the AuthMe API
+// UserFederation represents a user federation configuration in the Idenplane API
 type UserFederation struct {
 	ID               string `json:"id"`
 	RealmID          string `json:"realmId,omitempty"`
@@ -115,7 +115,7 @@ type SyncUsersResponse struct {
 	Message string `json:"message,omitempty"`
 }
 
-// UserFederationsClient provides methods for interacting with AuthMe user federations API
+// UserFederationsClient provides methods for interacting with Idenplane user federations API
 type UserFederationsClient struct {
 	httpClient *HTTPClient
 }

@@ -39,7 +39,7 @@ const plugin = {
     const { type, timestamp, realmId, userId, clientId, ipAddress, error, details } = event;
 
     const parts = [
-      `[AuthMe Event] type=${type}`,
+      `[Idenplane Event] type=${type}`,
       `ts=${timestamp}`,
       realmId ? `realm=${realmId}` : null,
       userId ? `user=${userId}` : null,

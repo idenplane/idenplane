@@ -1,4 +1,4 @@
-package com.authme.sdk.models;
+package com.idenplane.sdk.models;
 
 import com.fasterxml.jackson.annotation.JsonProperty;
 import com.fasterxml.jackson.annotation.JsonIgnoreProperties;
@@ -8,7 +8,7 @@ import java.util.List;
 
 /**
  * Parsed JWT claims from an access token.
- * Contains standard JWT claims and AuthMe-specific user claims.
+ * Contains standard JWT claims and Idenplane-specific user claims.
  */
 @JsonIgnoreProperties(ignoreUnknown = true)
 public class TokenClaims {

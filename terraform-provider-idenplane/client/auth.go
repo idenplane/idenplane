@@ -1,4 +1,4 @@
-// Package client provides HTTP client functionality for AuthMe API communication
+// Package client provides HTTP client functionality for Idenplane API communication
 package client
 
 import (
@@ -8,7 +8,7 @@ import (
 	"time"
 )
 
-// AuthMode defines the authentication mode for the AuthMe API
+// AuthMode defines the authentication mode for the Idenplane API
 type AuthMode string
 
 const (
@@ -18,7 +18,7 @@ const (
 	AuthModeBearer AuthMode = "bearer"
 )
 
-// AuthConfig contains authentication configuration for the AuthMe API
+// AuthConfig contains authentication configuration for the Idenplane API
 type AuthConfig struct {
 	// APIKey is the Admin API key for x-admin-api-key authentication
 	APIKey string
@@ -73,7 +73,7 @@ func WithCustomHeader(key, value string) ClientOption {
 	}
 }
 
-// NewClient creates a new AuthMe API client with the specified server URL and options
+// NewClient creates a new Idenplane API client with the specified server URL and options
 func NewClient(serverURL string, opts ...ClientOption) (*HTTPClient, error) {
 	if serverURL == "" {
 		return nil, fmt.Errorf("server URL is required")

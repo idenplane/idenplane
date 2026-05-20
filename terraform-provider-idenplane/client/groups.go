@@ -1,4 +1,4 @@
-// Package client provides HTTP client functionality for AuthMe API communication
+// Package client provides HTTP client functionality for Idenplane API communication
 package client
 
 import (
@@ -6,7 +6,7 @@ import (
 	"fmt"
 )
 
-// Group represents a group in the AuthMe API
+// Group represents a group in the Idenplane API
 type Group struct {
 	ID          string  `json:"id"`
 	RealmID     string  `json:"realmId"`
@@ -55,7 +55,7 @@ type AssignGroupRolesResponse struct {
 	Assigned []string `json:"assigned"`
 }
 
-// GroupsClient provides methods for interacting with AuthMe groups API
+// GroupsClient provides methods for interacting with Idenplane groups API
 type GroupsClient struct {
 	httpClient *HTTPClient
 }

@@ -1,12 +1,12 @@
 ---
 id: quickstart
 title: Quickstart
-description: Get AuthMe up and running in under 30 seconds with Docker Compose.
+description: Get Idenplane up and running in under 30 seconds with Docker Compose.
 ---
 
 # Quickstart
 
-Get AuthMe up and running in under 30 seconds.
+Get Idenplane up and running in under 30 seconds.
 
 ---
 
@@ -19,7 +19,7 @@ curl -o docker-compose.yml https://raw.githubusercontent.com/Islamawad132/Authme
 docker compose up -d
 ```
 
-That's it. AuthMe is now running:
+That's it. Idenplane is now running:
 
 | URL | Description |
 |-----|-------------|
@@ -30,7 +30,7 @@ That's it. AuthMe is now running:
 
 ### Default Credentials
 
-After starting AuthMe, you can access the Admin Console with these default credentials:
+After starting Idenplane, you can access the Admin Console with these default credentials:
 
 | Field | Value |
 |-------|-------|
@@ -39,7 +39,7 @@ After starting AuthMe, you can access the Admin Console with these default crede
 | API Key | Value of `ADMIN_API_KEY` in your `.env` file |
 
 :::warning
-**Important:** Change the default password and API key before exposing AuthMe to the internet. You can update these in the Admin Console under **Realm Settings > User Management**.
+**Important:** Change the default password and API key before exposing Idenplane to the internet. You can update these in the Admin Console under **Realm Settings > User Management**.
 :::
 
 ---
@@ -127,7 +127,7 @@ npm run db:setup          # Generate + migrate + seed
 
 Check the logs:
 ```bash
-docker compose logs authme
+docker compose logs idenplane
 ```
 
 Ensure port 3000 is not already in use:
@@ -139,7 +139,7 @@ lsof -i :3000
 
 If using an external PostgreSQL instance, verify your `DATABASE_URL` in `.env`:
 ```
-DATABASE_URL=postgresql://user:password@host:5432/authme
+DATABASE_URL=postgresql://user:password@host:5432/idenplane
 ```
 
 ### Health check fails
@@ -153,7 +153,7 @@ curl http://localhost:3000/health/ready
 
 ## Horizontal Scaling
 
-AuthMe is fully stateless — all state is stored in PostgreSQL (and optionally Redis). Scale horizontally:
+Idenplane is fully stateless — all state is stored in PostgreSQL (and optionally Redis). Scale horizontally:
 
 ```bash
 # Using the cluster compose file (2 instances + Nginx LB)
@@ -173,7 +173,7 @@ REDIS_URL=redis://your-redis:6379
 ---
 
 <p align="center">
-  <a href="https://authme.dev">authme.dev</a> &middot;
+  <a href="https://idenplane.dev">idenplane.dev</a> &middot;
   <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
-  <a href="https://discord.gg/authme">Discord</a>
+  <a href="https://discord.gg/idenplane">Discord</a>
 </p>

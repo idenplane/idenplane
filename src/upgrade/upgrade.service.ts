@@ -66,7 +66,7 @@ export interface UpgradeState {
 /**
  * UpgradeService
  *
- * Orchestrates the complete AuthMe upgrade flow, coordinating all
+ * Orchestrates the complete Idenplane upgrade flow, coordinating all
  * validation, backup, migration, and health-check services. This service
  * provides:
  *   - Sequential upgrade stages with progress tracking
@@ -759,7 +759,7 @@ export class UpgradeService {
   }
 
   /**
-   * Get the current AuthMe version.
+   * Get the current Idenplane version.
    */
   getCurrentVersion(): string {
     try {

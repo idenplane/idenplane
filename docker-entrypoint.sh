@@ -17,14 +17,14 @@ if [ -z "$DATABASE_URL" ]; then
   echo "  ERROR: DATABASE_URL is not set"
   echo "============================================"
   echo ""
-  echo "  AuthMe requires PostgreSQL to run."
+  echo "  Idenplane requires PostgreSQL to run."
   echo "  Use docker compose instead of docker run:"
   echo ""
   echo "  1. Create a docker-compose.yml (see README)"
   echo "  2. Run: docker compose up -d"
   echo ""
   echo "  Or provide DATABASE_URL manually:"
-  echo "  docker run -e DATABASE_URL=postgresql://user:pass@host:5432/authme islamawad/authme"
+  echo "  docker run -e DATABASE_URL=postgresql://user:pass@host:5432/idenplane islamawad/idenplane"
   echo ""
   echo "============================================"
   exit 1
@@ -138,5 +138,5 @@ fi
 
 npx prisma migrate deploy
 
-echo "Starting AuthMe..."
+echo "Starting Idenplane..."
 exec node dist/main.js

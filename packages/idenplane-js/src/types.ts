@@ -1,10 +1,10 @@
 /** Configuration for creating an AuthmeClient instance. */
 export interface AuthmeConfig {
-  /** Base URL of the AuthMe server (e.g. "http://localhost:3000") */
+  /** Base URL of the Idenplane server (e.g. "http://localhost:3000") */
   url: string;
   /** Realm name to authenticate against */
   realm: string;
-  /** OAuth2 client ID (must be registered in AuthMe as a PUBLIC client) */
+  /** OAuth2 client ID (must be registered in Idenplane as a PUBLIC client) */
   clientId: string;
   /** URL to redirect back to after login */
   redirectUri: string;

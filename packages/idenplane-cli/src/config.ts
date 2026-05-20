@@ -3,7 +3,7 @@ import { join } from 'path';
 import { existsSync, mkdirSync, readFileSync, writeFileSync, unlinkSync } from 'fs';
 import type { CliConfig } from './types.js';
 
-const CONFIG_DIR = join(homedir(), '.authme');
+const CONFIG_DIR = join(homedir(), '.idenplane');
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
 
 export function loadConfig(): CliConfig | null {
@@ -14,7 +14,7 @@ export function loadConfig(): CliConfig | null {
   } catch {
     throw new Error(
       `Config file at ${CONFIG_FILE} contains invalid JSON. ` +
-        'Fix or remove it and run `authme login` again.',
+        'Fix or remove it and run `idenplane login` again.',
     );
   }
 }
@@ -33,9 +33,9 @@ export function clearConfig(): void {
 }
 
 export function requireAuth(): { serverUrl: string; headers: Record<string, string> } {
-  const envUrl = process.env['AUTHME_SERVER_URL'];
+  const envUrl = process.env['IDENPLANE_SERVER_URL'];
   const envApiKey = process.env['ADMIN_API_KEY'];
-  const envToken = process.env['AUTHME_TOKEN'];
+  const envToken = process.env['IDENPLANE_TOKEN'];
 
   if (envUrl && envApiKey) {
     return { serverUrl: envUrl, headers: { 'x-admin-api-key': envApiKey } };
@@ -56,6 +56,6 @@ export function requireAuth(): { serverUrl: string; headers: Record<string, stri
   }
 
   throw new Error(
-    'Not authenticated. Run `authme login` or set AUTHME_SERVER_URL + ADMIN_API_KEY env vars.',
+    'Not authenticated. Run `idenplane login` or set IDENPLANE_SERVER_URL + ADMIN_API_KEY env vars.',
   );
 }

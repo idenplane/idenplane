@@ -1,10 +1,10 @@
 apiVersion: v1
 kind: Service
 metadata:
-  name: {{ include "authme.fullname" . }}
+  name: {{ include "idenplane.fullname" . }}
   namespace: {{ .Release.Namespace | quote }}
   labels:
-    {{- include "authme.labels" . | nindent 4 }}
+    {{- include "idenplane.labels" . | nindent 4 }}
   {{- with .Values.service.annotations }}
   annotations:
     {{- toYaml . | nindent 4 }}
@@ -17,4 +17,4 @@ spec:
       protocol: TCP
       name: http
   selector:
-    {{- include "authme.selectorLabels" . | nindent 4 }}
+    {{- include "idenplane.selectorLabels" . | nindent 4 }}

@@ -41,7 +41,7 @@ const plugin = {
       ...token,
       // Custom claims added by this plugin
       app_version: '1.0.0',
-      platform: 'authme',
+      platform: 'idenplane',
       enriched_at: new Date().toISOString(),
       // Example: attach a flag from the user object if available
       ...(user && user.emailVerified === true ? { email_verified_by_plugin: true } : {}),

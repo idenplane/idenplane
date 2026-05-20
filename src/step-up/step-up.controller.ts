@@ -54,7 +54,7 @@ export class StepUpController {
    * challenge type and, when the required level is MFA, an mfa_token to be
    * used with the verify endpoint.
    *
-   * The session token is read from the `AUTHME_SESSION` cookie rather than a
+   * The session token is read from the `IDENPLANE_SESSION` cookie rather than a
    * query parameter.  Passing security-sensitive tokens in the URL exposes
    * them in server access logs, browser history, and HTTP Referer headers.
    */
@@ -86,11 +86,11 @@ export class StepUpController {
     // in URLs (access logs, browser history, Referer headers).
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-member-access -- express Request.cookies typed as any
     const sessionToken: string | undefined = (req as any).cookies
-      ?.AUTHME_SESSION;
+      ?.IDENPLANE_SESSION;
 
     if (!requiredAcr || !clientId || !sessionToken) {
       throw new BadRequestException(
-        'acr and client_id are required; session must be provided via the AUTHME_SESSION cookie',
+        'acr and client_id are required; session must be provided via the IDENPLANE_SESSION cookie',
       );
     }
 
@@ -225,12 +225,12 @@ export class StepUpController {
     // or plain-text POST bodies, exposing it in server logs and browser history.
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-member-access -- express Request.cookies typed as any
     const session_token: string | undefined = (req as any).cookies
-      ?.AUTHME_SESSION;
+      ?.IDENPLANE_SESSION;
     const { acr, client_id, mfa_token, otp, password } = body;
 
     if (!session_token || !acr || !client_id) {
       throw new BadRequestException(
-        'acr and client_id are required; session must be provided via the AUTHME_SESSION cookie',
+        'acr and client_id are required; session must be provided via the IDENPLANE_SESSION cookie',
       );
     }
 

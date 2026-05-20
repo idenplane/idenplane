@@ -1,4 +1,4 @@
-// Pulumi provider for AuthMe - Bridge package
+// Pulumi provider for Idenplane - Bridge package
 // internal/bridge.go - Terraform bridge implementation
 package bridge
 
@@ -8,7 +8,7 @@ import (
 )
 
 // ProviderName is the name of this provider.
-const ProviderName = "authme"
+const ProviderName = "idenplane"
 
 // Version is the current version of the provider.
 const Version = "0.1.0"
@@ -27,11 +27,11 @@ func MakeDataSource(module, name string) tokens.DataSource {
 func Info() tfbridge.ProviderInfo {
 	return tfbridge.ProviderInfo{
 		Name:        tokens.Package(ProviderName),
-		Description: "A Pulumi provider for AuthMe identity and access management",
-		Keywords:    []string{"pulumi", "authme", "iam", "identity", "access-management"},
-		Homepage:    "https://authme.io",
-		Repository:  "https://github.com/authme/pulumi-provider-authme",
+		Description: "A Pulumi provider for Idenplane identity and access management",
+		Keywords:    []string{"pulumi", "idenplane", "iam", "identity", "access-management"},
+		Homepage:    "https://idenplane.io",
+		Repository:  "https://github.com/idenplane/pulumi-provider-idenplane",
 		Version:     Version,
-		Publisher:   "AuthMe",
+		Publisher:   "Idenplane",
 	}
 }

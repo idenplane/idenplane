@@ -47,7 +47,7 @@ export interface AuthProviderProps {
   client?: AuthmeClient;
 
   // Inline config props (alternative to passing a pre-built client)
-  /** AuthMe server URL */
+  /** Idenplane server URL */
   serverUrl?: string;
   /** Realm name */
   realm?: string;

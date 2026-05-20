@@ -154,7 +154,7 @@ export class MagicLinkService {
     const magicLinkFullUrl = `${baseUrl}?token=${rawToken}`;
 
     // 10. Get email subject from realm config or use default
-    const emailSubject = realm.magicLinkEmailSubject ?? 'Sign in to AuthMe';
+    const emailSubject = realm.magicLinkEmailSubject ?? 'Sign in to Idenplane';
 
     // 11. Send the email
     await this.emailService.sendEmail(
@@ -304,14 +304,14 @@ export class MagicLinkService {
   <meta name="viewport" content="width=device-width, initial-scale=1">
 </head>
 <body style="font-family:system-ui,-apple-system,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#111;">
-  <h2 style="color:${primaryColor};margin-bottom:16px;">Sign in to AuthMe</h2>
+  <h2 style="color:${primaryColor};margin-bottom:16px;">Sign in to Idenplane</h2>
   <p style="margin-bottom:24px;">Click the link below to sign in to your account. This link expires in 10 minutes.</p>
   <p style="margin-bottom:32px;">
     <a href="${magicLinkUrl}" style="display:inline-block;padding:12px 24px;background:${primaryColor};color:#fff;text-decoration:none;border-radius:6px;font-weight:600;">Sign In</a>
   </p>
   <p style="color:#6b7280;font-size:14px;">If you didn't request this, you can safely ignore this email.</p>
   <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;">
-  <p style="color:#9ca3af;font-size:12px;">AuthMe Security</p>
+  <p style="color:#9ca3af;font-size:12px;">Idenplane Security</p>
 </body>
 </html>
 `;

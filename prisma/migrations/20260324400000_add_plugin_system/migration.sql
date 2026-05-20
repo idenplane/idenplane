@@ -1,5 +1,5 @@
 -- CreateTable: installed_plugins
--- Tracks plugins installed in the AuthMe instance.
+-- Tracks plugins installed in the Idenplane instance.
 CREATE TABLE "installed_plugins" (
     "id"           TEXT        NOT NULL,
     "name"         TEXT        NOT NULL,

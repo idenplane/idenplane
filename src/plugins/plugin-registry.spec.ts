@@ -1,7 +1,7 @@
 import { PluginRegistry } from './plugin-registry.js';
-import type { AuthMePlugin, EventListenerPlugin } from './plugin.interface.js';
+import type { IdenplanePlugin, EventListenerPlugin } from './plugin.interface.js';
 
-const makePlugin = (overrides: Partial<AuthMePlugin> = {}): AuthMePlugin => ({
+const makePlugin = (overrides: Partial<IdenplanePlugin> = {}): IdenplanePlugin => ({
   name: 'test-plugin',
   version: '1.0.0',
   type: 'event-listener',

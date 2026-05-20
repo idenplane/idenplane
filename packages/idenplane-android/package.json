@@ -1,16 +1,16 @@
 {
-  "name": "@authme/authme-android",
+  "name": "@idenplane/idenplane-android",
   "version": "1.0.0",
-  "description": "Native Kotlin SDK for AuthMe Identity and Access Management server",
+  "description": "Native Kotlin SDK for Idenplane Identity and Access Management server",
   "type": "module",
   "main": "build.gradle.kts",
   "repository": {
     "type": "git",
     "url": "https://github.com/Islamawad132/Authme.git",
-    "directory": "packages/authme-android"
+    "directory": "packages/idenplane-android"
   },
   "keywords": [
-    "authme",
+    "idenplane",
     "oauth2",
     "oidc",
     "openid-connect",

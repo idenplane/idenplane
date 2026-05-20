@@ -1,8 +1,8 @@
 /**
  * Plugin & Extension System Interfaces
  *
- * All plugins must implement AuthMePlugin as the base interface.
- * Additional capability interfaces extend AuthMePlugin.
+ * All plugins must implement IdenplanePlugin as the base interface.
+ * Additional capability interfaces extend IdenplanePlugin.
  */
 
 // ─── Context ──────────────────────────────────────────────────────────────────
@@ -51,7 +51,7 @@ export type PluginType =
 
 // ─── Base Plugin ──────────────────────────────────────────────────────────────
 
-export interface AuthMePlugin {
+export interface IdenplanePlugin {
   name: string;
   version: string;
   description?: string;
@@ -66,24 +66,24 @@ export interface AuthMePlugin {
 
 // ─── Capability Extensions ────────────────────────────────────────────────────
 
-export interface AuthProviderPlugin extends AuthMePlugin {
+export interface AuthProviderPlugin extends IdenplanePlugin {
   type: 'auth-provider';
   authenticate(credentials: any, realm: string): Promise<AuthResult>;
   validateToken?(token: string): Promise<boolean>;
 }
 
-export interface EventListenerPlugin extends AuthMePlugin {
+export interface EventListenerPlugin extends IdenplanePlugin {
   type: 'event-listener';
   onEvent(event: PluginEvent): Promise<void>;
   subscribedEvents: string[];
 }
 
-export interface TokenEnrichmentPlugin extends AuthMePlugin {
+export interface TokenEnrichmentPlugin extends IdenplanePlugin {
   type: 'token-enrichment';
   enrichToken(token: any, user: any, realm: string): Promise<any>;
 }
 
-export interface ThemePlugin extends AuthMePlugin {
+export interface ThemePlugin extends IdenplanePlugin {
   type: 'theme';
   themeName: string;
   getTemplates(): Record<string, string>;
@@ -92,22 +92,22 @@ export interface ThemePlugin extends AuthMePlugin {
 
 // ─── Type Guards ──────────────────────────────────────────────────────────────
 
-export function isAuthProviderPlugin(p: AuthMePlugin): p is AuthProviderPlugin {
+export function isAuthProviderPlugin(p: IdenplanePlugin): p is AuthProviderPlugin {
   return p.type === 'auth-provider';
 }
 
 export function isEventListenerPlugin(
-  p: AuthMePlugin,
+  p: IdenplanePlugin,
 ): p is EventListenerPlugin {
   return p.type === 'event-listener';
 }
 
 export function isTokenEnrichmentPlugin(
-  p: AuthMePlugin,
+  p: IdenplanePlugin,
 ): p is TokenEnrichmentPlugin {
   return p.type === 'token-enrichment';
 }
 
-export function isThemePlugin(p: AuthMePlugin): p is ThemePlugin {
+export function isThemePlugin(p: IdenplanePlugin): p is ThemePlugin {
   return p.type === 'theme';
 }

@@ -1,11 +1,11 @@
-// Package provider implements the Terraform provider for AuthMe
+// Package provider implements the Terraform provider for Idenplane
 package provider
 
 import (
 	"context"
 	"fmt"
 
-	"github.com/authme/terraform-provider-authme/client"
+	"github.com/idenplane/terraform-provider-idenplane/client"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
@@ -54,7 +54,7 @@ func (d *OrganizationDataSource) Metadata(ctx context.Context, req datasource.Me
 // Schema returns the data source schema
 func (d *OrganizationDataSource) Schema(ctx context.Context, req datasource.SchemaRequest, resp *datasource.SchemaResponse) {
 	resp.Schema = schema.Schema{
-		MarkdownDescription: "Provides information about an AuthMe organization. This data source allows you to " +
+		MarkdownDescription: "Provides information about an Idenplane organization. This data source allows you to " +
 			"read existing organizations without managing them as Terraform resources.",
 
 		Attributes: map[string]schema.Attribute{
@@ -135,7 +135,7 @@ func (d *OrganizationDataSource) Configure(ctx context.Context, req datasource.C
 	d.httpClient = httpClient
 }
 
-// Read reads the organization data from the AuthMe API
+// Read reads the organization data from the Idenplane API
 func (d *OrganizationDataSource) Read(ctx context.Context, req datasource.ReadRequest, resp *datasource.ReadResponse) {
 	tflog.Debug(ctx, "Reading organization data source")
 

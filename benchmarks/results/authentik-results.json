@@ -49,8 +49,8 @@
       }
     },
     "resource_comparison": {
-      "memory_ratio_vs_authme": "4.8x",
-      "cpu_ratio_vs_authme": "4.4x",
+      "memory_ratio_vs_idenplane": "4.8x",
+      "cpu_ratio_vs_idenplane": "4.4x",
       "requests_per_second_ratio": "0.27x"
     },
     "metadata": {
@@ -63,7 +63,7 @@
       "benchmarker": "k6 0.50.0",
       "test_duration_seconds": 60,
       "warmup_seconds": 10,
-      "notes": "Results generated with identical workload to AuthMe baseline. Authentik uses Django + Goauthentik core with PostgreSQL and Redis backing services. Memory usage reflects typical 500-1020MB range from production deployments (pain-2-1)."
+      "notes": "Results generated with identical workload to Idenplane baseline. Authentik uses Django + Goauthentik core with PostgreSQL and Redis backing services. Memory usage reflects typical 500-1020MB range from production deployments (pain-2-1)."
     }
   }
 }

@@ -2,13 +2,13 @@ import Foundation
 
 // MARK: - AuthConfig
 
-/// Configuration for creating an AuthMeClient instance.
+/// Configuration for creating an IdenplaneClient instance.
 public struct AuthConfig: Sendable {
-    /// Base URL of the AuthMe server (e.g. "https://auth.example.com")
+    /// Base URL of the Idenplane server (e.g. "https://auth.example.com")
     public let serverUrl: URL
     /// Realm name to authenticate against
     public let realm: String
-    /// OAuth2 client ID (must be registered in AuthMe as a PUBLIC client)
+    /// OAuth2 client ID (must be registered in Idenplane as a PUBLIC client)
     public let clientId: String
     /// Custom URL scheme redirect URI (e.g. "com.example.app://callback")
     public let redirectUri: String
@@ -111,10 +111,10 @@ struct OIDCConfiguration: Codable {
     }
 }
 
-// MARK: - AuthMeError
+// MARK: - IdenplaneError
 
-/// Errors thrown by the AuthMe SDK.
-public enum AuthMeError: LocalizedError, Sendable {
+/// Errors thrown by the Idenplane SDK.
+public enum IdenplaneError: LocalizedError, Sendable {
     case notAuthenticated
     case tokenExpired
     case noRefreshToken

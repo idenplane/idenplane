@@ -16,7 +16,7 @@ body:
     id: proposal
     attributes:
       label: Proposed solution
-      description: How would you like AuthMe to solve this? API shape, UI flow, configuration, etc.
+      description: How would you like Idenplane to solve this? API shape, UI flow, configuration, etc.
     validations:
       required: true
 

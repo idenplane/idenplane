@@ -1,24 +1,24 @@
 package main
 
 /**
- * Pulumi Go example for AuthMe Realm resource
+ * Pulumi Go example for Idenplane Realm resource
  *
- * This example demonstrates creating and managing an AuthMe realm using Pulumi.
+ * This example demonstrates creating and managing an Idenplane realm using Pulumi.
  * Realms are top-level containers for identity and access management configuration.
  *
  * Documentation: https://www.pulumi.com/docs/
- * AuthMe Provider: https://www.pulumi.com/registry/packages/authme/
+ * Idenplane Provider: https://www.pulumi.com/registry/packages/idenplane/
  */
 
 import (
-	"github.com/authme/pulumi-authme/sdk/go/authme"
+	"github.com/idenplane/pulumi-idenplane/sdk/go/idenplane"
 	"github.com/pulumi/pulumi/sdk/v3/go/pulumi"
 )
 
 func main() {
 	pulumi.Run(func(ctx *pulumi.Context) error {
 		// Create a new realm for a production application
-		productionRealm, err := authme.NewRealm(ctx, "production-realm", &authme.RealmArgs{
+		productionRealm, err := idenplane.NewRealm(ctx, "production-realm", &idenplane.RealmArgs{
 			Name:        pulumi.String("production"),
 			DisplayName: pulumi.String("Production Realm"),
 			Enabled:     pulumi.Bool(true),
@@ -63,7 +63,7 @@ func main() {
 
 			// Security features
 			WebauthnEnabled: pulumi.Bool(true),
-			WebauthnRpName:  pulumi.String("AuthMe Production"),
+			WebauthnRpName:  pulumi.String("Idenplane Production"),
 			WebauthnRpId:    pulumi.String("auth.example.com"),
 
 			// Adaptive authentication (AI-powered)
@@ -72,8 +72,8 @@ func main() {
 			RiskThresholdBlock:   pulumi.Int(90),
 
 			// Theme configuration
-			ThemeName: pulumi.String("authme"),
-			Theme: &authme.RealmThemeArgs{
+			ThemeName: pulumi.String("idenplane"),
+			Theme: &idenplane.RealmThemeArgs{
 				PrimaryColor:    pulumi.String("#0066cc"),
 				BackgroundColor: pulumi.String("#ffffff"),
 				LogoUrl:         pulumi.String("https://example.com/logo.png"),
@@ -108,7 +108,7 @@ func main() {
 		ctx.Export("realmDisplayName", productionRealm.DisplayName)
 
 		// Example: Create a development realm with relaxed settings
-		devRealm, err := authme.NewRealm(ctx, "dev-realm", &authme.RealmArgs{
+		devRealm, err := idenplane.NewRealm(ctx, "dev-realm", &idenplane.RealmArgs{
 			Name:        pulumi.String("development"),
 			DisplayName: pulumi.String("Development Realm"),
 			Enabled:     pulumi.Bool(true),

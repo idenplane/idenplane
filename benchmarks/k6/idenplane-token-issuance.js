@@ -10,8 +10,8 @@
  * across different authentication flows.
  *
  * Usage:
- *   k6 run benchmarks/k6/authme-token-issuance.js
- *   k6 run benchmarks/k6/authme-token-issuance.js -e VUS=100 -e DURATION=120s
+ *   k6 run benchmarks/k6/idenplane-token-issuance.js
+ *   k6 run benchmarks/k6/idenplane-token-issuance.js -e VUS=100 -e DURATION=120s
  *
  * Environment Variables:
  *   TARGET_URL         - Base URL of Authme server (default: http://localhost:3000)

@@ -1,13 +1,13 @@
 /**
- * @authme/nextjs — Next.js SDK for AuthMe
+ * @idenplane/nextjs — Next.js SDK for Idenplane
  *
- * Re-exports the core React components from `authme-sdk/react` so you can
+ * Re-exports the core React components from `idenplane-sdk/react` so you can
  * import everything from a single package entry point.
  *
  * For server-side utilities import from the dedicated sub-paths:
- *   - `@authme/nextjs/middleware`  — Next.js Edge middleware
- *   - `@authme/nextjs/server`      — Server Component helpers
- *   - `@authme/nextjs/api`         — API route helpers
+ *   - `@idenplane/nextjs/middleware`  — Next.js Edge middleware
+ *   - `@idenplane/nextjs/server`      — Server Component helpers
+ *   - `@idenplane/nextjs/api`         — API route helpers
  */
 export {
   AuthProvider,
@@ -19,7 +19,7 @@ export {
   useRoles,
   ProtectedRoute,
   AuthmeClient,
-} from 'authme-sdk/react';
+} from 'idenplane-sdk/react';
 
 export type {
   AuthProviderProps,
@@ -29,4 +29,4 @@ export type {
   TokenResponse,
   TokenClaims,
   UserInfo,
-} from 'authme-sdk/react';
+} from 'idenplane-sdk/react';

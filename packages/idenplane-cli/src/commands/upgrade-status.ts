@@ -25,7 +25,7 @@ export function registerUpgradeStatusCommand(program: Command): void {
     .option('--json', 'Output results as JSON')
     .option('--limit <number>', 'Maximum number of entries to show', '20')
     .action(async (opts: { json?: boolean; limit?: string }) => {
-      console.log(chalk.bold('\n  AuthMe Upgrade Status\n'));
+      console.log(chalk.bold('\n  Idenplane Upgrade Status\n'));
 
       // ------------------------------------------------------------------ //
       // Step 1: Server connectivity check                                   //
@@ -37,8 +37,8 @@ export function registerUpgradeStatusCommand(program: Command): void {
         console.log(chalk.green('OK'));
       } catch {
         console.log(chalk.red('FAILED'));
-        console.error(chalk.red('\n  Cannot connect to the AuthMe server.'));
-        console.error(chalk.dim('  Make sure the server is running and `authme config set-url` is correct.\n'));
+        console.error(chalk.red('\n  Cannot connect to the Idenplane server.'));
+        console.error(chalk.dim('  Make sure the server is running and `idenplane config set-url` is correct.\n'));
         process.exitCode = 1;
         return;
       }

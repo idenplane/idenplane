@@ -1,14 +1,14 @@
 {
   "$schema": "http://json-schema.org/draft-07/schema#",
-  "title": "AuthMe Helm Chart Values",
-  "description": "Configuration schema for the AuthMe Helm chart. All values are optional unless marked as required.",
+  "title": "Idenplane Helm Chart Values",
+  "description": "Configuration schema for the Idenplane Helm chart. All values are optional unless marked as required.",
   "type": "object",
   "properties": {
     "replicaCount": {
       "type": "integer",
       "minimum": 0,
       "default": 1,
-      "description": "Number of AuthMe pod replicas."
+      "description": "Number of Idenplane pod replicas."
     },
     "image": {
       "type": "object",
@@ -54,7 +54,7 @@
         "create": {
           "type": "boolean",
           "default": true,
-          "description": "Create a dedicated ServiceAccount for AuthMe pods."
+          "description": "Create a dedicated ServiceAccount for Idenplane pods."
         },
         "automount": {
           "type": "boolean",
@@ -74,12 +74,12 @@
     },
     "podAnnotations": {
       "type": "object",
-      "description": "Annotations to add to the AuthMe pod.",
+      "description": "Annotations to add to the Idenplane pod.",
       "default": {}
     },
     "podLabels": {
       "type": "object",
-      "description": "Labels to add to the AuthMe pod.",
+      "description": "Labels to add to the Idenplane pod.",
       "default": {}
     },
     "podSecurityContext": {
@@ -563,7 +563,7 @@
         "PORT": {
           "type": "string",
           "default": "3000",
-          "description": "TCP port the AuthMe process listens on."
+          "description": "TCP port the Idenplane process listens on."
         },
         "NODE_ENV": {
           "type": "string",
@@ -572,8 +572,8 @@
         },
         "BASE_URL": {
           "type": "string",
-          "default": "http://authme.example.com",
-          "description": "Public URL of the AuthMe instance."
+          "default": "http://idenplane.example.com",
+          "description": "Public URL of the Idenplane instance."
         },
         "THROTTLE_TTL": {
           "type": "string",
@@ -633,15 +633,15 @@
           "properties": {
             "username": {
               "type": "string",
-              "default": "authme"
+              "default": "idenplane"
             },
             "password": {
               "type": "string",
-              "default": "authme"
+              "default": "idenplane"
             },
             "database": {
               "type": "string",
-              "default": "authme"
+              "default": "idenplane"
             },
             "existingSecret": {
               "type": "string",
@@ -690,7 +690,7 @@
             },
             "password": {
               "type": "string",
-              "default": "authme-redis"
+              "default": "idenplane-redis"
             },
             "existingSecret": {
               "type": "string"

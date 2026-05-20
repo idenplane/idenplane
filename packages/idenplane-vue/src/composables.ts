@@ -1,5 +1,5 @@
 /**
- * Vue composables for AuthMe.
+ * Vue composables for Idenplane.
  *
  * All composables rely on an `AuthmeClient` injected by `AuthmePlugin` or
  * provided manually via `AuthProvider.vue`.
@@ -7,9 +7,9 @@
 
 import { inject, ref, readonly, onMounted, onUnmounted, computed } from 'vue';
 import type { Ref, ComputedRef } from 'vue';
-import { AuthmeClient } from 'authme-sdk';
-import type { UserInfo } from 'authme-sdk';
-import { AUTHME_KEY } from './plugin.js';
+import { AuthmeClient } from 'idenplane-sdk';
+import type { UserInfo } from 'idenplane-sdk';
+import { IDENPLANE_KEY } from './plugin.js';
 
 // ── Init singleton ────────────────────────────────────────────────
 // Bug #438-4 fix: every component that calls useAuth() was triggering its own
@@ -53,10 +53,10 @@ function getOrStartInit(client: AuthmeClient): Promise<boolean> {
 // ── Internal helper ──────────────────────────────────────────────
 
 function useClient(): AuthmeClient {
-  const client = inject<AuthmeClient>(AUTHME_KEY);
+  const client = inject<AuthmeClient>(IDENPLANE_KEY);
   if (!client) {
     throw new Error(
-      '[authme-vue] No AuthmeClient found. Make sure you installed AuthmePlugin or wrapped your component with <AuthProvider>.',
+      '[idenplane-vue] No AuthmeClient found. Make sure you installed AuthmePlugin or wrapped your component with <AuthProvider>.',
     );
   }
   return client;
@@ -71,7 +71,7 @@ export interface UseAuthReturn {
   user: Readonly<Ref<UserInfo | null>>;
   /** Whether the auth client is still initializing */
   isLoading: Readonly<Ref<boolean>>;
-  /** Redirect to the AuthMe login page */
+  /** Redirect to the Idenplane login page */
   login: (options?: { scope?: string[] }) => Promise<void>;
   /** Log the user out and clear tokens */
   logout: () => Promise<void>;
@@ -87,7 +87,7 @@ export interface UseAuthReturn {
  * @example
  * ```vue
  * <script setup>
- * import { useAuth } from '@authme/vue';
+ * import { useAuth } from '@idenplane/vue';
  * const { isAuthenticated, user, login, logout, isLoading } = useAuth();
  * </script>
  * ```
@@ -196,7 +196,7 @@ export interface UseUserReturn {
  * @example
  * ```vue
  * <script setup>
- * import { useUser } from '@authme/vue';
+ * import { useUser } from '@idenplane/vue';
  * const { user, refresh } = useUser();
  * </script>
  * ```
@@ -246,7 +246,7 @@ export interface UsePermissionsReturn {
  * @example
  * ```vue
  * <script setup>
- * import { usePermissions } from '@authme/vue';
+ * import { usePermissions } from '@idenplane/vue';
  * const { hasRole, hasPermission, roles } = usePermissions();
  * </script>
  * ```
