@@ -213,6 +213,18 @@ async function bootstrap() {
   );
   app.use(cookieParser());
 
+  // Backward compatibility: the SSO session cookie used to be AUTHME_SESSION
+  // before the rebrand to Idenplane. Users who were logged in at upgrade time
+  // still send the legacy cookie; alias it to the new name so every controller
+  // can read IDENPLANE_SESSION without caring about the history. This fallback
+  // should be removed one release cycle after the rename.
+  app.use((req: any, _res: any, next: () => void) => {
+    if (req.cookies?.AUTHME_SESSION && !req.cookies?.IDENPLANE_SESSION) {
+      req.cookies.IDENPLANE_SESSION = req.cookies.AUTHME_SESSION;
+    }
+    next();
+  });
+
   // Handlebars template engine — templates live in themes/ and are resolved by ThemeRenderService
   app.setBaseViewsDir(join(__dirname, '..', 'themes'));
   app.setViewEngine('hbs');

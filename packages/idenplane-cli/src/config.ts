@@ -6,14 +6,34 @@ import type { CliConfig } from './types.js';
 const CONFIG_DIR = join(homedir(), '.idenplane');
 const CONFIG_FILE = join(CONFIG_DIR, 'config.json');
 
+// Legacy path used before the AuthMe → Idenplane rename. We read from it as a
+// fallback so users who upgrade do not have to re-login. First successful read
+// triggers a migration to the new path; the legacy file is left in place.
+const LEGACY_CONFIG_FILE = join(homedir(), '.authme', 'config.json');
+
 export function loadConfig(): CliConfig | null {
-  if (!existsSync(CONFIG_FILE)) return null;
-  const raw = readFileSync(CONFIG_FILE, 'utf-8');
+  const file = existsSync(CONFIG_FILE)
+    ? CONFIG_FILE
+    : existsSync(LEGACY_CONFIG_FILE)
+      ? LEGACY_CONFIG_FILE
+      : null;
+  if (!file) return null;
+  const raw = readFileSync(file, 'utf-8');
   try {
-    return JSON.parse(raw) as CliConfig;
+    const config = JSON.parse(raw) as CliConfig;
+    // If we read from the legacy path, copy to the new path so we stop reading
+    // the legacy one on the next invocation.
+    if (file === LEGACY_CONFIG_FILE) {
+      saveConfig(config);
+      console.warn(
+        `[idenplane-cli] Migrated config from ${LEGACY_CONFIG_FILE} to ${CONFIG_FILE}. ` +
+          'The legacy file can now be deleted.',
+      );
+    }
+    return config;
   } catch {
     throw new Error(
-      `Config file at ${CONFIG_FILE} contains invalid JSON. ` +
+      `Config file at ${file} contains invalid JSON. ` +
         'Fix or remove it and run `idenplane login` again.',
     );
   }
@@ -32,10 +52,28 @@ export function clearConfig(): void {
   }
 }
 
+// AUTHME_* env vars are accepted for backward compatibility with the old name
+// while users migrate. New code should set IDENPLANE_* — the legacy fallback
+// will be removed in a future major release.
+function readEnv(...names: string[]): string | undefined {
+  for (let i = 0; i < names.length; i++) {
+    const value = process.env[names[i]];
+    if (value) {
+      if (i > 0) {
+        console.warn(
+          `[idenplane-cli] ${names[i]} is deprecated; please set ${names[0]} instead.`,
+        );
+      }
+      return value;
+    }
+  }
+  return undefined;
+}
+
 export function requireAuth(): { serverUrl: string; headers: Record<string, string> } {
-  const envUrl = process.env['IDENPLANE_SERVER_URL'];
+  const envUrl = readEnv('IDENPLANE_SERVER_URL', 'AUTHME_SERVER_URL');
   const envApiKey = process.env['ADMIN_API_KEY'];
-  const envToken = process.env['IDENPLANE_TOKEN'];
+  const envToken = readEnv('IDENPLANE_TOKEN', 'AUTHME_TOKEN');
 
   if (envUrl && envApiKey) {
     return { serverUrl: envUrl, headers: { 'x-admin-api-key': envApiKey } };
