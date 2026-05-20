@@ -30,7 +30,7 @@ jobs:
 
       - name: Upload coverage
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: coverage-report
           path: coverage/
@@ -104,7 +104,7 @@ jobs:
 
       - name: Upload admin-ui coverage
         if: always()
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: admin-ui-coverage-report
           path: admin-ui/coverage/
