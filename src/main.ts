@@ -218,12 +218,20 @@ async function bootstrap() {
   // still send the legacy cookie; alias it to the new name so every controller
   // can read IDENPLANE_SESSION without caring about the history. This fallback
   // should be removed one release cycle after the rename.
-  app.use((req: any, _res: any, next: () => void) => {
-    if (req.cookies?.AUTHME_SESSION && !req.cookies?.IDENPLANE_SESSION) {
-      req.cookies.IDENPLANE_SESSION = req.cookies.AUTHME_SESSION;
-    }
-    next();
-  });
+  type CookieRequest = { cookies?: Record<string, string | undefined> };
+  app.use(
+    (
+      req: CookieRequest,
+      _res: unknown,
+      next: (err?: unknown) => void,
+    ): void => {
+      const cookies = req.cookies;
+      if (cookies && cookies.AUTHME_SESSION && !cookies.IDENPLANE_SESSION) {
+        cookies.IDENPLANE_SESSION = cookies.AUTHME_SESSION;
+      }
+      next();
+    },
+  );
 
   // Handlebars template engine — templates live in themes/ and are resolved by ThemeRenderService
   app.setBaseViewsDir(join(__dirname, '..', 'themes'));
