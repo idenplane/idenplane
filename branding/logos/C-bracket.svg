@@ -1,0 +1,20 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 96 96" width="96" height="96">
+  <!-- Concept C: THE BRACKET (the developer-native approach)
+       Inspired by code: square brackets [ ] enclosing an identity.
+       The brackets ARE the platform — the boundary, the protected space.
+       Inside: a single horizontal line — the "plane" / the identity record.
+       Compact, technical, instantly readable to developers. -->
+
+  <!-- Brackets in a warm off-white background block (optional) -->
+  <rect x="0" y="0" width="96" height="96" rx="14" fill="#0a0a0a"/>
+
+  <!-- Left bracket -->
+  <g stroke="#ffffff" stroke-width="6" stroke-linecap="square" fill="none">
+    <path d="M 30 26 L 22 26 L 22 70 L 30 70"/>
+    <!-- Right bracket -->
+    <path d="M 66 26 L 74 26 L 74 70 L 66 70"/>
+  </g>
+
+  <!-- The identity inside the brackets — a single bright horizontal stroke -->
+  <rect x="36" y="44" width="24" height="8" rx="2" fill="#34d399"/>
+</svg>

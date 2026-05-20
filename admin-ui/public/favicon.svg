@@ -1,0 +1,21 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 256 256" width="256" height="256">
+  <title>Idenplane mark</title>
+  <!-- Idenplane brand mark — "The Bracket" concept.
+       A black rounded square containing white code brackets [ ]
+       enclosing a single bright accent stroke (the identity record).
+       Scales cleanly from 16px to 1024px. -->
+
+  <!-- Background plate -->
+  <rect x="0" y="0" width="256" height="256" rx="36" fill="#0a0a0a"/>
+
+  <!-- Bracket pair — drawn as two stroked paths -->
+  <g stroke="#ffffff" stroke-width="14" stroke-linecap="square" stroke-linejoin="miter" fill="none">
+    <!-- Left bracket [ -->
+    <path d="M 88 72 L 64 72 L 64 184 L 88 184"/>
+    <!-- Right bracket ] -->
+    <path d="M 168 72 L 192 72 L 192 184 L 168 184"/>
+  </g>
+
+  <!-- The identity record — a single accent stroke inside the brackets -->
+  <rect x="100" y="120" width="56" height="16" rx="3" fill="#10b981"/>
+</svg>
