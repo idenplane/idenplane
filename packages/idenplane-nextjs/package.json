@@ -77,6 +77,9 @@
     "typescript": "^5.7.0",
     "vitest": "^4.0.18"
   },
+  "overrides": {
+    "postcss": "^8.5.10"
+  },
   "files": [
     "dist",
     "README.md"
