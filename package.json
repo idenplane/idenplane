@@ -29,11 +29,11 @@
   },
   "dependencies": {
     "@apollo/server": "^5.0.0",
-    "@nestjs/apollo": "^13.0.0",
+    "@nestjs/apollo": "^13.4.1",
     "@nestjs/common": "^11.0.1",
     "@nestjs/config": "^4.0.3",
     "@nestjs/core": "^11.0.1",
-    "@nestjs/graphql": "^13.0.0",
+    "@nestjs/graphql": "^13.4.1",
     "@nestjs/platform-express": "^11.0.1",
     "@nestjs/schedule": "^6.1.1",
     "@nestjs/serve-static": "^5.0.4",
