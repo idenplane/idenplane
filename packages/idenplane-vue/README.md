@@ -1,6 +1,6 @@
 # idenplane-vue
 
-Vue 3 SDK for [Idenplane](https://github.com/Islamawad132/Authme) — composables, a Vue plugin, Vue Router guard, and an `AuthProvider` component.
+Vue 3 SDK for [Idenplane](https://github.com/idenplane/idenplane) — composables, a Vue plugin, Vue Router guard, and an `AuthProvider` component.
 
 ## Installation
 
@@ -15,12 +15,12 @@ npm install idenplane-vue idenplane-sdk vue
 ```typescript
 // main.ts
 import { createApp } from 'vue';
-import { AuthmePlugin } from 'idenplane-vue';
+import { IdenplanePlugin } from 'idenplane-vue';
 import App from './App.vue';
 
 const app = createApp(App);
 
-app.use(AuthmePlugin, {
+app.use(IdenplanePlugin, {
   url: 'http://localhost:3000',
   realm: 'my-realm',
   clientId: 'my-app',
@@ -57,9 +57,9 @@ const { isAuthenticated, user, login, logout, isLoading } = useAuth();
 // router/index.ts
 import { createRouter, createWebHistory } from 'vue-router';
 import { createAuthGuard } from 'idenplane-vue';
-import { AuthmeClient } from 'idenplane-sdk';
+import { IdenplaneClient } from 'idenplane-sdk';
 
-const authClient = new AuthmeClient({
+const authClient = new IdenplaneClient({
   url: 'http://localhost:3000',
   realm: 'my-realm',
   clientId: 'my-app',
@@ -126,7 +126,7 @@ const { hasRole, hasPermission, roles } = usePermissions();
 
 ### Plugin
 
-- `AuthmePlugin` — Vue plugin, call `app.use(AuthmePlugin, AuthmeConfig)`
+- `IdenplanePlugin` — Vue plugin, call `app.use(IdenplanePlugin, IdenplaneConfig)`
 
 ### Composables
 

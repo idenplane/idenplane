@@ -4,7 +4,7 @@ import { mount } from '@vue/test-utils';
 import { IDENPLANE_KEY } from '../plugin.js';
 import { useAuth, useUser, usePermissions } from '../composables.js';
 
-// ── Fake AuthmeClient ─────────────────────────────────────────────
+// ── Fake IdenplaneClient ─────────────────────────────────────────────
 
 function buildClient(o: {
   authenticated?: boolean;
@@ -76,7 +76,7 @@ describe('useAuth', () => {
   it('throws when used outside AuthProvider', () => {
     const Bad = defineComponent({
       setup() {
-        expect(() => useAuth()).toThrow(/No AuthmeClient found/);
+        expect(() => useAuth()).toThrow(/No IdenplaneClient found/);
         return () => h('div');
       },
     });

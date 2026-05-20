@@ -90,7 +90,7 @@ afterEvaluate {
                 pom {
                     name.set("Idenplane Android SDK")
                     description.set("Android SDK for the Idenplane Identity and Access Management Server")
-                    url.set("https://github.com/Islamawad132/Authme")
+                    url.set("https://github.com/idenplane/idenplane")
                     licenses {
                         license {
                             name.set("MIT License")

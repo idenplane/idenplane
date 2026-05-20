@@ -1,5 +1,5 @@
-/** Configuration for creating an AuthmeClient instance. */
-export interface AuthmeConfig {
+/** Configuration for creating an IdenplaneClient instance. */
+export interface IdenplaneConfig {
   /** Base URL of the Idenplane server (e.g. "http://localhost:3000") */
   url: string;
   /** Realm name to authenticate against */
@@ -142,8 +142,8 @@ export interface OpenIDConfiguration {
   code_challenge_methods_supported?: string[];
 }
 
-/** Events emitted by AuthmeClient. */
-export type AuthmeEventMap = {
+/** Events emitted by IdenplaneClient. */
+export type IdenplaneEventMap = {
   /** Fired after successful login or callback */
   login: TokenResponse;
   /** Fired after logout completes */

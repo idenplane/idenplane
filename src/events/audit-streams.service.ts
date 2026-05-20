@@ -151,7 +151,7 @@ export class AuditStreamsService {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
-          'User-Agent': 'Authme-AuditStream/1.0',
+          'User-Agent': 'Idenplane-AuditStream/1.0',
           ...extraHeaders,
         },
         body,

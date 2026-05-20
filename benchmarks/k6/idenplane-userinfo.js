@@ -1,5 +1,5 @@
 /**
- * Authme Userinfo Endpoint Load Test
+ * Idenplane Userinfo Endpoint Load Test
  *
  * Tests the OAuth2/OIDC UserInfo endpoint which returns claims about the
  * authenticated user. This endpoint is typically called after token validation
@@ -16,7 +16,7 @@
  *   k6 run benchmarks/k6/idenplane-userinfo.js -e VUS=100 -e DURATION=120s
  *
  * Environment Variables:
- *   TARGET_URL         - Base URL of Authme server (default: http://localhost:3000)
+ *   TARGET_URL         - Base URL of Idenplane server (default: http://localhost:3000)
  *   REALM_NAME         - Realm name to test against (default: test-realm)
  *   VUS                - Number of virtual users (default: 50)
  *   DURATION           - Test duration (default: 60s)

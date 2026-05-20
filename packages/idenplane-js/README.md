@@ -31,9 +31,9 @@ npm install idenplane-sdk
 ### Vanilla JavaScript / TypeScript
 
 ```typescript
-import { AuthmeClient } from 'idenplane-sdk';
+import { IdenplaneClient } from 'idenplane-sdk';
 
-const idenplane = new AuthmeClient({
+const idenplane = new IdenplaneClient({
   url: 'http://localhost:3000',
   realm: 'my-realm',
   clientId: 'my-app',
@@ -52,7 +52,7 @@ if (!idenplane.isAuthenticated()) {
 On your callback page:
 
 ```typescript
-const idenplane = new AuthmeClient({ /* same config */ });
+const idenplane = new IdenplaneClient({ /* same config */ });
 const success = await idenplane.handleCallback();
 if (success) {
   const user = idenplane.getUserInfo();
@@ -108,10 +108,10 @@ function Main() {
 ### AuthProvider with pre-built client
 
 ```tsx
-import { AuthmeClient } from 'idenplane-sdk';
+import { IdenplaneClient } from 'idenplane-sdk';
 import { AuthProvider } from 'idenplane-sdk/react';
 
-const client = new AuthmeClient({
+const client = new IdenplaneClient({
   url: 'http://localhost:3000',
   realm: 'my-realm',
   clientId: 'my-app',
@@ -167,7 +167,7 @@ Configure how the SDK refreshes tokens via the `refreshStrategy` option:
 | `silent` | Uses a hidden iframe with `prompt=none` for silent re-auth |
 
 ```typescript
-const client = new AuthmeClient({
+const client = new IdenplaneClient({
   url: 'http://localhost:3000',
   realm: 'my-realm',
   clientId: 'my-app',
@@ -200,7 +200,7 @@ For the `silent` strategy, your app's redirect URI page must post a message back
 Subscribe to SDK events to react to authentication state changes:
 
 ```typescript
-const client = new AuthmeClient({ ... });
+const client = new IdenplaneClient({ ... });
 
 // Subscribe — returns an unsubscribe function
 const unsubscribe = client.on('login', (tokens) => {
@@ -232,7 +232,7 @@ client.off('login', myHandler);
 Alternatively, pass callbacks directly in the config:
 
 ```typescript
-const client = new AuthmeClient({
+const client = new IdenplaneClient({
   url: 'http://localhost:3000',
   realm: 'my-realm',
   clientId: 'my-app',
@@ -338,7 +338,7 @@ The SDK is fully SSR-safe. When `window` is undefined (e.g., in Node.js / Next.j
 
 ```typescript
 // This works safely in both browser and SSR environments
-const client = new AuthmeClient({
+const client = new IdenplaneClient({
   url: 'http://localhost:3000',
   realm: 'my-realm',
   clientId: 'my-app',
@@ -351,12 +351,12 @@ const client = new AuthmeClient({
 
 ## API Reference
 
-### `AuthmeClient`
+### `IdenplaneClient`
 
 #### Constructor
 
 ```typescript
-new AuthmeClient(config: AuthmeConfig)
+new IdenplaneClient(config: IdenplaneConfig)
 ```
 
 | Option | Type | Default | Description |
@@ -419,7 +419,7 @@ Import from `idenplane-sdk/react`.
 
 | Prop | Type | Description |
 |------|------|-------------|
-| `client` | `AuthmeClient` | Pre-built client (mutually exclusive with inline config props) |
+| `client` | `IdenplaneClient` | Pre-built client (mutually exclusive with inline config props) |
 | `serverUrl` | `string` | Idenplane server URL (alternative to `client`) |
 | `realm` | `string` | Realm name (alternative to `client`) |
 | `clientId` | `string` | OAuth2 client ID (alternative to `client`) |
@@ -446,7 +446,7 @@ const { isAuthenticated, isLoading, login, logout, getToken, user, client } = us
 | `logout` | `() => Promise<void>` | Trigger logout |
 | `getToken` | `() => string \| null` | Get current access token |
 | `user` | `UserInfo \| null` | Current user profile |
-| `client` | `AuthmeClient` | Underlying SDK client instance |
+| `client` | `IdenplaneClient` | Underlying SDK client instance |
 
 #### `useUser()`
 
@@ -499,11 +499,11 @@ Helper for Next.js API routes and `getServerSideProps`.
 
 Factory for Next.js middleware with route protection.
 
-#### `createAuthmeMiddleware(config)`
+#### `createIdenplaneMiddleware(config)`
 
 Express middleware for token validation.
 
-#### `createAuthmeGuard(config)`
+#### `createIdenplaneGuard(config)`
 
 NestJS guard factory for token validation.
 
@@ -515,26 +515,26 @@ NestJS guard factory for token validation.
 
 ```typescript
 import express from 'express';
-import { createAuthmeMiddleware } from 'idenplane-sdk/server';
+import { createIdenplaneMiddleware } from 'idenplane-sdk/server';
 
 const app = express();
-const idenplane = createAuthmeMiddleware({
+const idenplane = createIdenplaneMiddleware({
   issuerUrl: 'http://localhost:3000',
   realm: 'my-realm',
   requiredRoles: ['user'],  // optional
 });
 
 app.get('/api/profile', idenplane, (req: any, res) => {
-  res.json(req.user); // AuthmeTokenPayload
+  res.json(req.user); // IdenplaneTokenPayload
 });
 ```
 
 ### NestJS
 
 ```typescript
-import { createAuthmeGuard } from 'idenplane-sdk/server';
+import { createIdenplaneGuard } from 'idenplane-sdk/server';
 
-const AuthmeGuard = createAuthmeGuard({
+const IdenplaneGuard = createIdenplaneGuard({
   issuerUrl: 'http://localhost:3000',
   realm: 'my-realm',
 });
@@ -542,7 +542,7 @@ const AuthmeGuard = createAuthmeGuard({
 @Controller('api')
 export class AppController {
   @Get('profile')
-  @UseGuards(AuthmeGuard)
+  @UseGuards(IdenplaneGuard)
   getProfile(@Req() req) {
     return req.user;
   }

@@ -31,7 +31,7 @@
 
 import type { NavigationGuard, RouteLocationNormalized } from 'vue-router';
 import { inject } from 'vue';
-import type { AuthmeClient } from 'idenplane-sdk';
+import type { IdenplaneClient } from 'idenplane-sdk';
 import { IDENPLANE_KEY } from './plugin.js';
 
 export interface AuthGuardOptions {
@@ -59,23 +59,23 @@ export interface AuthRouteMeta {
  * Create a Vue Router `NavigationGuard` that enforces authentication and
  * optional role requirements.
  *
- * The guard reads the `AuthmeClient` from the Vue provide/inject system, so
- * it must be used inside a component tree that has had `AuthmePlugin` installed.
+ * The guard reads the `IdenplaneClient` from the Vue provide/inject system, so
+ * it must be used inside a component tree that has had `IdenplanePlugin` installed.
  *
  * For use outside a component (e.g. in router/index.ts before `app.use`),
  * pass a pre-built `client` directly:
  *
  * ```typescript
  * import { createAuthGuard } from '@idenplane/vue';
- * import { AuthmeClient } from 'idenplane-sdk';
+ * import { IdenplaneClient } from 'idenplane-sdk';
  *
- * const client = new AuthmeClient({ ... });
+ * const client = new IdenplaneClient({ ... });
  * router.beforeEach(createAuthGuard({ loginRoute: '/login' }, client));
  * ```
  */
 export function createAuthGuard(
   options: AuthGuardOptions = {},
-  clientOverride?: AuthmeClient,
+  clientOverride?: IdenplaneClient,
 ): NavigationGuard {
   const { loginRoute = '/login', roles: globalRoles = [] } = options;
 
@@ -84,10 +84,10 @@ export function createAuthGuard(
   // because the active component instance is no longer set once the first
   // await resumes.  Capture the reference here, synchronously, so the async
   // guard below can close over it safely.
-  let injectedClient: AuthmeClient | undefined;
+  let injectedClient: IdenplaneClient | undefined;
   if (!clientOverride) {
     try {
-      injectedClient = inject<AuthmeClient>(IDENPLANE_KEY);
+      injectedClient = inject<IdenplaneClient>(IDENPLANE_KEY);
     } catch {
       // Outside component context — client must be passed explicitly.
     }
@@ -99,12 +99,12 @@ export function createAuthGuard(
   ) => {
     // Resolve the client — prefer the explicit override, then the reference
     // captured synchronously above.
-    const client: AuthmeClient | undefined = clientOverride ?? injectedClient;
+    const client: IdenplaneClient | undefined = clientOverride ?? injectedClient;
 
     if (!client) {
       console.warn(
-        '[idenplane-vue] createAuthGuard: no AuthmeClient available. ' +
-          'Pass the client as the second argument or install AuthmePlugin.',
+        '[idenplane-vue] createAuthGuard: no IdenplaneClient available. ' +
+          'Pass the client as the second argument or install IdenplanePlugin.',
       );
       // Fail closed: no client means we cannot verify identity, so block
       // navigation and redirect to the login route.

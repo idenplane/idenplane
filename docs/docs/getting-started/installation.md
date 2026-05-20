@@ -38,7 +38,7 @@ The fastest way to get started is using our pre-built Docker image from Docker H
 docker pull islamawad/idenplane:latest
 
 # Start with Docker Compose
-curl -o docker-compose.yml https://raw.githubusercontent.com/Islamawad132/Authme/main/docker-compose.yml
+curl -o docker-compose.yml https://raw.githubusercontent.com/idenplane/idenplane/main/docker-compose.yml
 docker compose up -d
 ```
 
@@ -154,8 +154,8 @@ For development or custom deployments, build from source.
 1. **Clone the repository:**
 
    ```bash
-   git clone https://github.com/Islamawad132/Authme.git
-   cd Authme
+   git clone https://github.com/idenplane/idenplane.git
+   cd Idenplane
    ```
 
 2. **Install dependencies:**
@@ -290,6 +290,6 @@ Configure realms, users, and clients
 
 <p align="center">
   <a href="https://idenplane.dev">idenplane.dev</a> &middot;
-  <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
+  <a href="https://github.com/idenplane/idenplane">GitHub</a> &middot;
   <a href="https://discord.gg/idenplane">Discord</a>
 </p>

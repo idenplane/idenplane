@@ -2,9 +2,9 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { BehaviorSubject } from 'rxjs';
 
 // ── We test AuthService logic without Angular DI machinery ────────
-// We construct the service manually, injecting a fake AuthmeClient.
+// We construct the service manually, injecting a fake IdenplaneClient.
 
-// ── Fake AuthmeClient ─────────────────────────────────────────────
+// ── Fake IdenplaneClient ─────────────────────────────────────────────
 
 function buildFakeClient(opts: {
   authenticated?: boolean;

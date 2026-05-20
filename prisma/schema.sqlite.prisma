@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// SQLite variant of the Authme Prisma schema.
+// SQLite variant of the Idenplane Prisma schema.
 //
 // Intended for local development and CI testing only — not for production use.
 //

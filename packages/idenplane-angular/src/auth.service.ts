@@ -1,8 +1,8 @@
 /**
- * AuthService — injectable Angular service that wraps `AuthmeClient`.
+ * AuthService — injectable Angular service that wraps `IdenplaneClient`.
  *
  * Provides reactive auth state as RxJS observables and exposes the full
- * `AuthmeClient` API.
+ * `IdenplaneClient` API.
  *
  * @example
  * ```typescript
@@ -21,14 +21,14 @@
 
 import { Injectable, Inject, OnDestroy } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
-import { AuthmeClient } from 'idenplane-sdk';
-import type { UserInfo, AuthmeConfig, TokenResponse } from 'idenplane-sdk';
+import { IdenplaneClient } from 'idenplane-sdk';
+import type { UserInfo, IdenplaneConfig, TokenResponse } from 'idenplane-sdk';
 import { IDENPLANE_CONFIG } from './auth.config.js';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService implements OnDestroy {
-  /** The underlying AuthmeClient instance. */
-  readonly client: AuthmeClient;
+  /** The underlying IdenplaneClient instance. */
+  readonly client: IdenplaneClient;
 
   // ── Reactive state ──────────────────────────────────────────────
 
@@ -36,7 +36,7 @@ export class AuthService implements OnDestroy {
   private readonly _isLoading$ = new BehaviorSubject<boolean>(true);
   private readonly _user$ = new BehaviorSubject<UserInfo | null>(null);
   // Bug #438-5 fix: errors thrown during initialization (and surfaced by the
-  // underlying AuthmeClient 'error' event) were silently swallowed — the catch
+  // underlying IdenplaneClient 'error' event) were silently swallowed — the catch
   // block only updated isAuthenticated$ with no way for consumers to react.
   // Fix: expose a dedicated authError$ observable backed by a BehaviorSubject
   // so components can subscribe and display/log errors as needed.
@@ -55,7 +55,7 @@ export class AuthService implements OnDestroy {
   /**
    * Observable of the last authentication error, or `null` when no error has
    * occurred.  Errors are emitted for both initialization failures and for any
-   * errors propagated by the underlying `AuthmeClient` 'error' event.
+   * errors propagated by the underlying `IdenplaneClient` 'error' event.
    *
    * @example
    * ```typescript
@@ -70,8 +70,8 @@ export class AuthService implements OnDestroy {
 
   private readonly _unsubscribers: Array<() => void> = [];
 
-  constructor(@Inject(IDENPLANE_CONFIG) config: AuthmeConfig) {
-    this.client = new AuthmeClient(config);
+  constructor(@Inject(IDENPLANE_CONFIG) config: IdenplaneConfig) {
+    this.client = new IdenplaneClient(config);
     this._wireEvents();
     this._initialize();
   }

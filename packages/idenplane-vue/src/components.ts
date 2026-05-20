@@ -1,7 +1,7 @@
 /**
  * AuthProvider Vue component.
  *
- * An alternative to installing `AuthmePlugin` globally — useful when you want
+ * An alternative to installing `IdenplanePlugin` globally — useful when you want
  * to scope the auth context to a subtree of your component tree, or when you
  * prefer to instantiate the client inline in a template.
  *
@@ -31,8 +31,8 @@ import {
   h,
   onUnmounted,
 } from 'vue';
-import { AuthmeClient } from 'idenplane-sdk';
-import type { AuthmeConfig } from 'idenplane-sdk';
+import { IdenplaneClient } from 'idenplane-sdk';
+import type { IdenplaneConfig } from 'idenplane-sdk';
 import { IDENPLANE_KEY } from './plugin.js';
 
 export const AuthProvider = defineComponent({
@@ -52,7 +52,7 @@ export const AuthProvider = defineComponent({
   },
 
   setup(props, { slots }) {
-    const config: AuthmeConfig = {
+    const config: IdenplaneConfig = {
       url: props.url,
       realm: props.realm,
       clientId: props.clientId,
@@ -62,7 +62,7 @@ export const AuthProvider = defineComponent({
       autoRefresh: props.autoRefresh,
     };
 
-    const client = new AuthmeClient(config);
+    const client = new IdenplaneClient(config);
     provide(IDENPLANE_KEY, client);
 
     onUnmounted(() => {

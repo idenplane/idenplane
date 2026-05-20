@@ -1,5 +1,5 @@
 /**
- * Authme Token Revocation Load Test
+ * Idenplane Token Revocation Load Test
  *
  * Tests the OAuth2 token revocation endpoint which allows clients to revoke
  * access tokens and refresh tokens. This script simulates users logging out
@@ -10,7 +10,7 @@
  *   k6 run benchmarks/k6/idenplane-token-revocation.js -e TARGET_URL=http://localhost:3000 -e REALM_NAME=my-realm
  *
  * Environment Variables:
- *   TARGET_URL         - Base URL of Authme server (default: http://localhost:3000)
+ *   TARGET_URL         - Base URL of Idenplane server (default: http://localhost:3000)
  *   REALM_NAME         - Realm name to test against (default: test-realm)
  *   VUS                - Number of virtual users (default: 50)
  *   DURATION           - Test duration (default: 60s)

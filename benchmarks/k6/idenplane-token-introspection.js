@@ -1,5 +1,5 @@
 /**
- * Authme Token Introspection Load Test
+ * Idenplane Token Introspection Load Test
  *
  * Tests the OAuth2 token introspection endpoint which allows resource servers
  * to validate tokens and retrieve claims.
@@ -15,7 +15,7 @@
  *   k6 run benchmarks/k6/idenplane-token-introspection.js -e VUS=100 -e DURATION=120s
  *
  * Environment Variables:
- *   TARGET_URL         - Base URL of Authme server (default: http://localhost:3000)
+ *   TARGET_URL         - Base URL of Idenplane server (default: http://localhost:3000)
  *   REALM_NAME         - Realm name to test against (default: test-realm)
  *   VUS                - Number of virtual users (default: 50)
  *   DURATION           - Test duration (default: 60s)

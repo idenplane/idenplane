@@ -6,7 +6,7 @@ description: Integrate Idenplane authentication into your Angular application us
 
 # Angular SDK
 
-The Idenplane Angular SDK provides Angular-specific bindings for the idenplane-sdk, including an injectable `AuthService`, a route guard (`AuthGuard`), an HTTP interceptor (`AuthInterceptor` / `authInterceptor`), and an `NgModule` entry point (`AuthmeModule`).
+The Idenplane Angular SDK provides Angular-specific bindings for the idenplane-sdk, including an injectable `AuthService`, a route guard (`AuthGuard`), an HTTP interceptor (`AuthInterceptor` / `authInterceptor`), and an `NgModule` entry point (`IdenplaneModule`).
 
 ## Installation
 
@@ -18,18 +18,18 @@ npm install @idenplane/angular idenplane-sdk rxjs
 
 ## Quick Start
 
-### 1. Import `AuthmeModule.forRoot()`
+### 1. Import `IdenplaneModule.forRoot()`
 
 ```typescript
 // app.module.ts
 import { NgModule } from '@angular/core';
 import { HttpClientModule } from '@angular/common/http';
-import { AuthmeModule } from '@idenplane/angular';
+import { IdenplaneModule } from '@idenplane/angular';
 
 @NgModule({
   imports: [
     HttpClientModule,
-    AuthmeModule.forRoot({
+    IdenplaneModule.forRoot({
       url: 'http://localhost:3000',
       realm: 'my-realm',
       clientId: 'my-app',
@@ -94,7 +94,7 @@ export const routes: Routes = [
 
 ### 4. Automatically Attach Bearer Tokens (HTTP Interceptor)
 
-The HTTP interceptor is registered automatically when you use `AuthmeModule.forRoot()`.
+The HTTP interceptor is registered automatically when you use `IdenplaneModule.forRoot()`.
 
 For standalone / functional interceptor style (Angular 15+):
 
@@ -113,9 +113,9 @@ export const appConfig: ApplicationConfig = {
 
 ---
 
-## AuthmeModule
+## IdenplaneModule
 
-The `AuthmeModule.forRoot()` method registers all providers including `AuthService`, `AuthGuard`, and `AuthInterceptor`.
+The `IdenplaneModule.forRoot()` method registers all providers including `AuthService`, `AuthGuard`, and `AuthInterceptor`.
 
 ### Configuration
 
@@ -135,11 +135,11 @@ The `AuthmeModule.forRoot()` method registers all providers including `AuthServi
 ```typescript
 // app.module.ts
 import { NgModule } from '@angular/core';
-import { AuthmeModule } from '@idenplane/angular';
+import { IdenplaneModule } from '@idenplane/angular';
 
 @NgModule({
   imports: [
-    AuthmeModule.forRoot({
+    IdenplaneModule.forRoot({
       url: 'http://localhost:3000',
       realm: 'my-realm',
       clientId: 'my-app',
@@ -344,20 +344,20 @@ The HTTP interceptor automatically attaches `Authorization: Bearer <token>` head
 
 ### Class-based Interceptor (NgModule style)
 
-The interceptor is registered automatically with `AuthmeModule.forRoot()`.
+The interceptor is registered automatically with `IdenplaneModule.forRoot()`.
 
 For manual registration:
 
 ```typescript
 // app.module.ts
 import { NgModule } from '@angular/core';
-import { AuthmeModule, AuthInterceptor } from '@idenplane/angular';
+import { IdenplaneModule, AuthInterceptor } from '@idenplane/angular';
 import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
 
 @NgModule({
   imports: [
     HttpClientModule,
-    AuthmeModule.forRoot({
+    IdenplaneModule.forRoot({
       url: 'http://localhost:3000',
       realm: 'my-realm',
       clientId: 'my-app',
@@ -488,8 +488,8 @@ export class UserCardComponent {
 The SDK is written in TypeScript and provides full type definitions:
 
 ```typescript
-import { AuthService, AuthmeModule, AuthGuard, authInterceptor } from '@idenplane/angular';
-import type { AuthmeConfig, UserInfo, TokenResponse } from 'idenplane-sdk';
+import { AuthService, IdenplaneModule, AuthGuard, authInterceptor } from '@idenplane/angular';
+import type { IdenplaneConfig, UserInfo, TokenResponse } from 'idenplane-sdk';
 
 // AuthService is fully typed
 constructor(public auth: AuthService) {
@@ -525,6 +525,6 @@ Core SDK for non-framework applications
 
 <p align="center">
   <a href="https://idenplane.dev">idenplane.dev</a> &middot;
-  <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
+  <a href="https://github.com/idenplane/idenplane">GitHub</a> &middot;
   <a href="https://discord.gg/idenplane">Discord</a>
 </p>

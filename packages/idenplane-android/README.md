@@ -1,6 +1,6 @@
 # Idenplane Android SDK
 
-Native Kotlin SDK for the [Idenplane](https://github.com/Islamawad132/Authme) Identity and Access Management server.
+Native Kotlin SDK for the [Idenplane](https://github.com/idenplane/idenplane) Identity and Access Management server.
 
 Implements the **OAuth 2.0 Authorization Code flow with PKCE** (RFC 7636) using Chrome Custom Tabs. Tokens are stored securely with `EncryptedSharedPreferences` (AES-256-GCM) and optional biometric gating via `BiometricPrompt` is built in.
 
@@ -33,7 +33,7 @@ Add the dependency to your app or library module `build.gradle.kts`:
 
 ```kotlin
 dependencies {
-    implementation("com.github.Islamawad132:Authme:1.0.0")
+    implementation("com.github.Islamawad132:Idenplane:1.0.0")
 }
 ```
 

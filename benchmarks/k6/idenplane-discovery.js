@@ -1,5 +1,5 @@
 /**
- * Authme OpenID Discovery Load Test
+ * Idenplane OpenID Discovery Load Test
  *
  * Tests the OpenID Connect Discovery endpoint which provides metadata
  * about the OAuth/OIDC provider configuration. This script simulates
@@ -10,7 +10,7 @@
  *   k6 run benchmarks/k6/idenplane-discovery.js -e TARGET_URL=http://localhost:3000 -e REALM_NAME=my-realm
  *
  * Environment Variables:
- *   TARGET_URL         - Base URL of Authme server (default: http://localhost:3000)
+ *   TARGET_URL         - Base URL of Idenplane server (default: http://localhost:3000)
  *   REALM_NAME         - Realm name to test against (default: test-realm)
  *   VUS                - Number of virtual users (default: 50)
  *   DURATION           - Test duration (default: 60s)

@@ -3,16 +3,16 @@
  *
  * Provides:
  * - `verifyToken` — verify a JWT using JWKS
- * - `createAuthmeMiddleware` — Express middleware
- * - `createAuthmeGuard` — NestJS guard factory
+ * - `createIdenplaneMiddleware` — Express middleware
+ * - `createIdenplaneGuard` — NestJS guard factory
  * - `getServerSideAuth` — Next.js getServerSideProps helper
  * - `createNextMiddleware` — Next.js middleware helper
  *
  * @example
  * ```typescript
- * import { createAuthmeMiddleware } from 'idenplane-sdk/server';
+ * import { createIdenplaneMiddleware } from 'idenplane-sdk/server';
  *
- * app.use('/api', createAuthmeMiddleware({
+ * app.use('/api', createIdenplaneMiddleware({
  *   issuerUrl: 'http://localhost:3000',
  *   realm: 'my-realm',
  * }));
@@ -21,7 +21,7 @@
 
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 
-export interface AuthmeServerConfig {
+export interface IdenplaneServerConfig {
   /** Idenplane server base URL (e.g., 'http://localhost:3000') */
   issuerUrl: string;
   /** Realm name */
@@ -32,7 +32,7 @@ export interface AuthmeServerConfig {
   rolesClaimPath?: string;
 }
 
-export interface AuthmeTokenPayload extends JWTPayload {
+export interface IdenplaneTokenPayload extends JWTPayload {
   preferred_username?: string;
   email?: string;
   name?: string;
@@ -58,13 +58,13 @@ function getJWKS(issuerUrl: string, realm: string) {
  */
 export async function verifyToken(
   token: string,
-  config: AuthmeServerConfig,
-): Promise<AuthmeTokenPayload> {
+  config: IdenplaneServerConfig,
+): Promise<IdenplaneTokenPayload> {
   const JWKS = getJWKS(config.issuerUrl, config.realm);
   const issuer = `${config.issuerUrl}/realms/${config.realm}`;
 
   const { payload } = await jwtVerify(token, JWKS, { issuer });
-  return payload as AuthmeTokenPayload;
+  return payload as IdenplaneTokenPayload;
 }
 
 /**
@@ -81,7 +81,7 @@ export function extractBearerToken(authHeader: string | string[] | undefined): s
  * Check if a token payload has the required realm roles.
  */
 export function hasRealmRoles(
-  payload: AuthmeTokenPayload,
+  payload: IdenplaneTokenPayload,
   requiredRoles: string[],
 ): boolean {
   const userRoles = payload.realm_access?.roles ?? [];
@@ -92,7 +92,7 @@ export function hasRealmRoles(
  * Check if a token payload has the required client roles.
  */
 export function hasClientRoles(
-  payload: AuthmeTokenPayload,
+  payload: IdenplaneTokenPayload,
   clientId: string,
   requiredRoles: string[],
 ): boolean {
@@ -102,8 +102,8 @@ export function hasClientRoles(
 
 // ─── Express Middleware ────────────────────────────────────
 
-export interface AuthmeRequest {
-  user?: AuthmeTokenPayload;
+export interface IdenplaneRequest {
+  user?: IdenplaneTokenPayload;
   headers: Record<string, string | string[] | undefined>;
 }
 
@@ -113,10 +113,10 @@ export interface AuthmeRequest {
  * @example
  * ```typescript
  * import express from 'express';
- * import { createAuthmeMiddleware } from 'idenplane-sdk/server';
+ * import { createIdenplaneMiddleware } from 'idenplane-sdk/server';
  *
  * const app = express();
- * const idenplane = createAuthmeMiddleware({
+ * const idenplane = createIdenplaneMiddleware({
  *   issuerUrl: 'http://localhost:3000',
  *   realm: 'my-realm',
  * });
@@ -126,9 +126,9 @@ export interface AuthmeRequest {
  * });
  * ```
  */
-export function createAuthmeMiddleware(config: AuthmeServerConfig) {
+export function createIdenplaneMiddleware(config: IdenplaneServerConfig) {
   return async (
-    req: AuthmeRequest,
+    req: IdenplaneRequest,
     res: { status: (code: number) => { json: (body: unknown) => void } },
     next: () => void,
   ) => {
@@ -182,9 +182,9 @@ class HttpError extends Error {
  *
  * @example
  * ```typescript
- * import { createAuthmeGuard } from 'idenplane-sdk/server';
+ * import { createIdenplaneGuard } from 'idenplane-sdk/server';
  *
- * const AuthmeGuard = createAuthmeGuard({
+ * const IdenplaneGuard = createIdenplaneGuard({
  *   issuerUrl: 'http://localhost:3000',
  *   realm: 'my-realm',
  * });
@@ -192,17 +192,17 @@ class HttpError extends Error {
  * @Controller('api')
  * export class AppController {
  *   @Get('profile')
- *   @UseGuards(AuthmeGuard)
+ *   @UseGuards(IdenplaneGuard)
  *   getProfile(@Req() req) {
  *     return req.user;
  *   }
  * }
  * ```
  */
-export function createAuthmeGuard(config: AuthmeServerConfig) {
-  return class AuthmeGuard {
+export function createIdenplaneGuard(config: IdenplaneServerConfig) {
+  return class IdenplaneGuard {
     async canActivate(context: {
-      switchToHttp: () => { getRequest: () => AuthmeRequest };
+      switchToHttp: () => { getRequest: () => IdenplaneRequest };
     }): Promise<boolean> {
       const request = context.switchToHttp().getRequest();
       const authHeader = request.headers['authorization'] ?? request.headers['Authorization'];
@@ -235,7 +235,7 @@ export function createAuthmeGuard(config: AuthmeServerConfig) {
  * Helper to extract roles from an Idenplane token payload.
  */
 export function getRolesFromToken(
-  payload: AuthmeTokenPayload,
+  payload: IdenplaneTokenPayload,
   clientId?: string,
 ): string[] {
   if (clientId) {
@@ -261,7 +261,7 @@ export interface NextRequest {
 
 export interface ServerSideAuthResult {
   /** The verified token payload, or null if not authenticated */
-  user: AuthmeTokenPayload | null;
+  user: IdenplaneTokenPayload | null;
   /** The raw access token string, or null if not present/invalid */
   accessToken: string | null;
   /** Whether the user is authenticated */
@@ -304,7 +304,7 @@ export interface ServerSideAuthResult {
  */
 export async function getServerSideAuth(
   req: { headers: Record<string, string | string[] | undefined> },
-  config: AuthmeServerConfig,
+  config: IdenplaneServerConfig,
 ): Promise<ServerSideAuthResult> {
   const authHeader = req.headers['authorization'] ?? req.headers['Authorization'];
   const token = extractBearerToken(authHeader);
@@ -348,7 +348,7 @@ export async function getServerSideAuth(
  * };
  * ```
  */
-export interface NextMiddlewareConfig extends AuthmeServerConfig {
+export interface NextMiddlewareConfig extends IdenplaneServerConfig {
   /** Path prefixes that require authentication */
   protectedPaths?: string[];
   /** Path to redirect unauthenticated users to */

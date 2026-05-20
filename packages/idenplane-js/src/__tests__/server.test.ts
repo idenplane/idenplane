@@ -6,8 +6,8 @@ import {
   getRolesFromToken,
   getServerSideAuth,
   createNextMiddleware,
-  type AuthmeTokenPayload,
-  type AuthmeServerConfig,
+  type IdenplaneTokenPayload,
+  type IdenplaneServerConfig,
 } from '../server.js';
 
 // ── Mocks ──────────────────────────────────────────────────────
@@ -19,12 +19,12 @@ vi.mock('jose', () => ({
 
 const { jwtVerify } = await import('jose');
 
-const SERVER_CONFIG: AuthmeServerConfig = {
+const SERVER_CONFIG: IdenplaneServerConfig = {
   issuerUrl: 'http://localhost:3000',
   realm: 'test',
 };
 
-function makePayload(overrides: Partial<AuthmeTokenPayload> = {}): AuthmeTokenPayload {
+function makePayload(overrides: Partial<IdenplaneTokenPayload> = {}): IdenplaneTokenPayload {
   return {
     sub: 'user-123',
     iss: 'http://localhost:3000/realms/test',

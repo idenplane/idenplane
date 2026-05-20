@@ -9,15 +9,15 @@ import {
   useState,
   type ReactNode,
 } from 'react';
-import { AuthmeClient as AuthmeClientClass } from './client.js';
-import type { AuthmeClient } from './client.js';
-import type { AuthmeConfig, TokenResponse, UserInfo } from './types.js';
+import { IdenplaneClient as IdenplaneClientClass } from './client.js';
+import type { IdenplaneClient } from './client.js';
+import type { IdenplaneConfig, TokenResponse, UserInfo } from './types.js';
 
 // Re-export core for convenience
-export { AuthmeClient } from './client.js';
+export { IdenplaneClient } from './client.js';
 export type {
-  AuthmeConfig,
-  AuthmeEventMap,
+  IdenplaneConfig,
+  IdenplaneEventMap,
   TokenClaims,
   TokenResponse,
   UserInfo,
@@ -26,7 +26,7 @@ export type {
 // ── Context ─────────────────────────────────────────────────────
 
 interface AuthContextValue {
-  client: AuthmeClient;
+  client: IdenplaneClient;
   isAuthenticated: boolean;
   isLoading: boolean;
   user: UserInfo | null;
@@ -41,10 +41,10 @@ const AuthContext = createContext<AuthContextValue | null>(null);
 
 export interface AuthProviderProps {
   /**
-   * An already-constructed AuthmeClient instance.
+   * An already-constructed IdenplaneClient instance.
    * Mutually exclusive with the individual config props.
    */
-  client?: AuthmeClient;
+  client?: IdenplaneClient;
 
   // Inline config props (alternative to passing a pre-built client)
   /** Idenplane server URL */
@@ -75,7 +75,7 @@ export interface AuthProviderProps {
 }
 
 /**
- * AuthProvider wraps your application, initializes an AuthmeClient,
+ * AuthProvider wraps your application, initializes an IdenplaneClient,
  * and provides auth state to all child components via context.
  *
  * ```tsx
@@ -100,7 +100,7 @@ export function AuthProvider({
   onTokenRefresh,
 }: AuthProviderProps) {
   // Build or use the client. We hold it in a ref so we build it at most once.
-  const clientRef = useRef<AuthmeClient | null>(null);
+  const clientRef = useRef<IdenplaneClient | null>(null);
   if (!clientRef.current) {
     if (clientProp) {
       clientRef.current = clientProp;
@@ -110,7 +110,7 @@ export function AuthProvider({
           'AuthProvider requires either a `client` prop or all of: serverUrl, realm, clientId, redirectUri',
         );
       }
-      const config: AuthmeConfig = {
+      const config: IdenplaneConfig = {
         url: serverUrl,
         realm,
         clientId,
@@ -121,7 +121,7 @@ export function AuthProvider({
         onError,
         onTokenRefresh,
       };
-      clientRef.current = new AuthmeClientClass(config);
+      clientRef.current = new IdenplaneClientClass(config);
     }
   }
 
@@ -233,23 +233,23 @@ export function AuthProvider({
   return createElement(AuthContext.Provider, { value }, children);
 }
 
-// ── Backward-compatible AuthmeProvider alias ─────────────────────
+// ── Backward-compatible IdenplaneProvider alias ─────────────────────
 
 /** @deprecated Use AuthProvider instead */
-export interface AuthmeProviderProps {
-  client: AuthmeClient;
+export interface IdenplaneProviderProps {
+  client: IdenplaneClient;
   children: ReactNode;
   autoHandleCallback?: boolean;
   onReady?: (authenticated: boolean) => void;
 }
 
 /** @deprecated Use AuthProvider instead. This alias will be removed in v2. */
-export function AuthmeProvider({
+export function IdenplaneProvider({
   client,
   children,
   autoHandleCallback = true,
   onReady,
-}: AuthmeProviderProps) {
+}: IdenplaneProviderProps) {
   return createElement(AuthProvider, { client, children, autoHandleCallback, onReady });
 }
 
@@ -281,7 +281,7 @@ export function useAuth() {
  * @deprecated Use useAuth() instead.
  * Hook for authentication state and actions.
  */
-export function useAuthme() {
+export function useIdenplane() {
   const { client, isAuthenticated, isLoading, login, logout, getToken } = useAuthContext();
   const token = isAuthenticated ? getToken() : null;
   return { isAuthenticated, isLoading, login, logout, token, client };

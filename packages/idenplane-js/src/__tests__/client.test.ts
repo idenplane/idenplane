@@ -1,6 +1,6 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
-import { AuthmeClient } from '../client.js';
-import type { AuthmeConfig, TokenResponse } from '../types.js';
+import { IdenplaneClient } from '../client.js';
+import type { IdenplaneConfig, TokenResponse } from '../types.js';
 
 // ── Helpers ──────────────────────────────────────────────────────
 
@@ -79,7 +79,7 @@ const oidcDiscovery = {
   claims_supported: ['sub', 'name', 'email'],
 };
 
-const BASE_CONFIG: AuthmeConfig = {
+const BASE_CONFIG: IdenplaneConfig = {
   url: 'http://localhost:3000',
   realm: 'test',
   clientId: 'test-client',
@@ -101,7 +101,7 @@ function mockFetchDiscovery() {
 
 // ── Tests ────────────────────────────────────────────────────────
 
-describe('AuthmeClient', () => {
+describe('IdenplaneClient', () => {
   let fetchMock: ReturnType<typeof vi.fn>;
 
   beforeEach(() => {
@@ -118,18 +118,18 @@ describe('AuthmeClient', () => {
 
   describe('constructor', () => {
     it('sets default values for optional config', () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       expect(client).toBeDefined();
     });
 
     it('accepts refreshStrategy option', () => {
-      const client = new AuthmeClient({ ...BASE_CONFIG, refreshStrategy: 'eager' });
+      const client = new IdenplaneClient({ ...BASE_CONFIG, refreshStrategy: 'eager' });
       expect(client).toBeDefined();
     });
 
     it('wires up onLogin callback', () => {
       const onLogin = vi.fn();
-      const client = new AuthmeClient({ ...BASE_CONFIG, onLogin });
+      const client = new IdenplaneClient({ ...BASE_CONFIG, onLogin });
       // Simulate event
       const tokens = makeTokenResponse();
       (client as any).events.emit('login', tokens);
@@ -138,14 +138,14 @@ describe('AuthmeClient', () => {
 
     it('wires up onLogout callback', () => {
       const onLogout = vi.fn();
-      const client = new AuthmeClient({ ...BASE_CONFIG, onLogout });
+      const client = new IdenplaneClient({ ...BASE_CONFIG, onLogout });
       (client as any).events.emit('logout');
       expect(onLogout).toHaveBeenCalled();
     });
 
     it('wires up onError callback', () => {
       const onError = vi.fn();
-      const client = new AuthmeClient({ ...BASE_CONFIG, onError });
+      const client = new IdenplaneClient({ ...BASE_CONFIG, onError });
       const err = new Error('test error');
       (client as any).events.emit('error', err);
       expect(onError).toHaveBeenCalledWith(err);
@@ -153,7 +153,7 @@ describe('AuthmeClient', () => {
 
     it('wires up onTokenRefresh callback', () => {
       const onTokenRefresh = vi.fn();
-      const client = new AuthmeClient({ ...BASE_CONFIG, onTokenRefresh });
+      const client = new IdenplaneClient({ ...BASE_CONFIG, onTokenRefresh });
       const tokens = makeTokenResponse();
       (client as any).events.emit('tokenRefresh', tokens);
       expect(onTokenRefresh).toHaveBeenCalledWith(tokens);
@@ -164,13 +164,13 @@ describe('AuthmeClient', () => {
 
   describe('init()', () => {
     it('returns false when no tokens in storage', async () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       const result = await client.init();
       expect(result).toBe(false);
     });
 
     it('returns true when valid access token is in storage', async () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       // Pre-populate storage
       (client as any).storage.set('access_token', makeValidAccessToken());
       const result = await client.init();
@@ -178,7 +178,7 @@ describe('AuthmeClient', () => {
     });
 
     it('attempts refresh when access token is expired but refresh token exists', async () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       const tokens = makeTokenResponse();
 
       (client as any).storage.set('access_token', makeExpiredAccessToken());
@@ -199,7 +199,7 @@ describe('AuthmeClient', () => {
     });
 
     it('returns false and clears tokens when refresh fails', async () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
 
       (client as any).storage.set('access_token', makeExpiredAccessToken());
       (client as any).storage.set('refresh_token', 'expired-refresh-token');
@@ -223,7 +223,7 @@ describe('AuthmeClient', () => {
     });
 
     it('emits ready event with correct value', async () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       const handler = vi.fn();
       client.on('ready', handler);
 
@@ -236,18 +236,18 @@ describe('AuthmeClient', () => {
 
   describe('isAuthenticated()', () => {
     it('returns false when no token', () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       expect(client.isAuthenticated()).toBe(false);
     });
 
     it('returns true when valid token is present', () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       (client as any).storage.set('access_token', makeValidAccessToken());
       expect(client.isAuthenticated()).toBe(true);
     });
 
     it('returns false when token is expired', () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       (client as any).storage.set('access_token', makeExpiredAccessToken());
       expect(client.isAuthenticated()).toBe(false);
     });
@@ -257,19 +257,19 @@ describe('AuthmeClient', () => {
 
   describe('getAccessToken()', () => {
     it('returns null when no token stored', () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       expect(client.getAccessToken()).toBeNull();
     });
 
     it('returns the token string when valid', () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       const token = makeValidAccessToken();
       (client as any).storage.set('access_token', token);
       expect(client.getAccessToken()).toBe(token);
     });
 
     it('returns null for expired token', () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       (client as any).storage.set('access_token', makeExpiredAccessToken());
       expect(client.getAccessToken()).toBeNull();
     });
@@ -279,12 +279,12 @@ describe('AuthmeClient', () => {
 
   describe('getTokenClaims()', () => {
     it('returns null when no token', () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       expect(client.getTokenClaims()).toBeNull();
     });
 
     it('returns parsed claims', () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       (client as any).storage.set('access_token', makeValidAccessToken());
       const claims = client.getTokenClaims();
       expect(claims?.sub).toBe('user-123');
@@ -295,10 +295,10 @@ describe('AuthmeClient', () => {
   // ── Role helpers ──────────────────────────────────────────────
 
   describe('role helpers', () => {
-    let client: AuthmeClient;
+    let client: IdenplaneClient;
 
     beforeEach(() => {
-      client = new AuthmeClient(BASE_CONFIG);
+      client = new IdenplaneClient(BASE_CONFIG);
       (client as any).storage.set('access_token', makeValidAccessToken());
     });
 
@@ -340,12 +340,12 @@ describe('AuthmeClient', () => {
 
   describe('getUserInfo()', () => {
     it('returns null when not authenticated', () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       expect(client.getUserInfo()).toBeNull();
     });
 
     it('extracts user info from ID token', () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       const idToken = makeJwt({
         sub: 'user-123',
         iss: 'http://localhost:3000/realms/test',
@@ -371,13 +371,13 @@ describe('AuthmeClient', () => {
 
   describe('handleCallback()', () => {
     it('returns false when no code in URL', async () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       const result = await client.handleCallback('http://localhost:5173/callback');
       expect(result).toBe(false);
     });
 
     it('returns false and emits error when error param is present', async () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       const errorHandler = vi.fn();
       client.on('error', errorHandler);
 
@@ -390,7 +390,7 @@ describe('AuthmeClient', () => {
     });
 
     it('returns false and emits error when state does not match', async () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       const errorHandler = vi.fn();
       client.on('error', errorHandler);
 
@@ -409,7 +409,7 @@ describe('AuthmeClient', () => {
     });
 
     it('exchanges code for tokens successfully', async () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       const tokens = makeTokenResponse();
       const loginHandler = vi.fn();
       client.on('login', loginHandler);
@@ -441,7 +441,7 @@ describe('AuthmeClient', () => {
     });
 
     it('deduplicates concurrent callback calls', async () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       const tokens = makeTokenResponse();
 
       (client as any).storage.set('auth_state', 'valid-state');
@@ -477,12 +477,12 @@ describe('AuthmeClient', () => {
 
   describe('refreshTokens()', () => {
     it('throws when no refresh token is available', async () => {
-      const client = new AuthmeClient({ ...BASE_CONFIG, refreshStrategy: 'rotation' });
+      const client = new IdenplaneClient({ ...BASE_CONFIG, refreshStrategy: 'rotation' });
       await expect(client.refreshTokens()).rejects.toThrow('No refresh token available');
     });
 
     it('refreshes tokens successfully with rotation strategy', async () => {
-      const client = new AuthmeClient({ ...BASE_CONFIG, refreshStrategy: 'rotation' });
+      const client = new IdenplaneClient({ ...BASE_CONFIG, refreshStrategy: 'rotation' });
       const newTokens = makeTokenResponse();
       const refreshHandler = vi.fn();
       client.on('tokenRefresh', refreshHandler);
@@ -505,7 +505,7 @@ describe('AuthmeClient', () => {
     });
 
     it('clears tokens when refresh fails', async () => {
-      const client = new AuthmeClient({ ...BASE_CONFIG, refreshStrategy: 'rotation' });
+      const client = new IdenplaneClient({ ...BASE_CONFIG, refreshStrategy: 'rotation' });
       (client as any).storage.set('access_token', makeValidAccessToken());
       (client as any).storage.set('refresh_token', 'expired-refresh');
 
@@ -528,7 +528,7 @@ describe('AuthmeClient', () => {
     });
 
     it('emits backward-compatible tokenRefreshed event', async () => {
-      const client = new AuthmeClient({ ...BASE_CONFIG, refreshStrategy: 'rotation' });
+      const client = new IdenplaneClient({ ...BASE_CONFIG, refreshStrategy: 'rotation' });
       const newTokens = makeTokenResponse();
       const legacyHandler = vi.fn();
       client.on('tokenRefreshed', legacyHandler);
@@ -554,7 +554,7 @@ describe('AuthmeClient', () => {
 
   describe('logout()', () => {
     it('clears tokens on logout', async () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       (client as any).storage.set('access_token', makeValidAccessToken());
       (client as any).storage.set('refresh_token', 'some-refresh');
 
@@ -573,7 +573,7 @@ describe('AuthmeClient', () => {
     });
 
     it('emits logout event', async () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       const logoutHandler = vi.fn();
       client.on('logout', logoutHandler);
 
@@ -589,7 +589,7 @@ describe('AuthmeClient', () => {
     });
 
     it('completes even if server logout fails', async () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       (client as any).storage.set('refresh_token', 'some-refresh');
 
       fetchMock.mockImplementation((url: string) => {
@@ -608,7 +608,7 @@ describe('AuthmeClient', () => {
 
   describe('event system', () => {
     it('on() returns an unsubscribe function', () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       const handler = vi.fn();
       const unsubscribe = client.on('logout', handler);
 
@@ -621,7 +621,7 @@ describe('AuthmeClient', () => {
     });
 
     it('off() removes a specific handler', () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       const handler = vi.fn();
       client.on('logout', handler);
       client.off('logout', handler);
@@ -631,7 +631,7 @@ describe('AuthmeClient', () => {
     });
 
     it('supports login event (new API)', () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       const handler = vi.fn();
       client.on('login', handler);
       const tokens = makeTokenResponse();
@@ -640,7 +640,7 @@ describe('AuthmeClient', () => {
     });
 
     it('supports tokenRefresh event (new API)', () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       const handler = vi.fn();
       client.on('tokenRefresh', handler);
       const tokens = makeTokenResponse();
@@ -649,7 +649,7 @@ describe('AuthmeClient', () => {
     });
 
     it('backward-compatible authenticated event fires on login', async () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       const legacyHandler = vi.fn();
       client.on('authenticated', legacyHandler);
       const tokens = makeTokenResponse();
@@ -678,7 +678,7 @@ describe('AuthmeClient', () => {
     it('createStorage falls back to MemoryStorage when window is undefined', async () => {
       // The storage.ts module already handles this via createStorage()
       // By using storage: 'memory' in tests, we simulate SSR storage
-      const client = new AuthmeClient({ ...BASE_CONFIG, storage: 'memory' });
+      const client = new IdenplaneClient({ ...BASE_CONFIG, storage: 'memory' });
       expect(client).toBeDefined();
       // Should not throw when window is undefined
       expect(client.isAuthenticated()).toBe(false);
@@ -689,22 +689,22 @@ describe('AuthmeClient', () => {
 
   describe('refresh strategies', () => {
     it('uses rotation strategy by default', () => {
-      const client = new AuthmeClient(BASE_CONFIG);
+      const client = new IdenplaneClient(BASE_CONFIG);
       expect((client as any).config.refreshStrategy).toBe('rotation');
     });
 
     it('accepts silent strategy', () => {
-      const client = new AuthmeClient({ ...BASE_CONFIG, refreshStrategy: 'silent' });
+      const client = new IdenplaneClient({ ...BASE_CONFIG, refreshStrategy: 'silent' });
       expect((client as any).config.refreshStrategy).toBe('silent');
     });
 
     it('accepts eager strategy', () => {
-      const client = new AuthmeClient({ ...BASE_CONFIG, refreshStrategy: 'eager' });
+      const client = new IdenplaneClient({ ...BASE_CONFIG, refreshStrategy: 'eager' });
       expect((client as any).config.refreshStrategy).toBe('eager');
     });
 
     it('eager strategy uses a larger refresh buffer', () => {
-      const client = new AuthmeClient({ ...BASE_CONFIG, refreshStrategy: 'eager', refreshBuffer: 30 });
+      const client = new IdenplaneClient({ ...BASE_CONFIG, refreshStrategy: 'eager', refreshBuffer: 30 });
       // The eager multiplier doubles the buffer (30 * 2 = 60)
       const config = (client as any).config;
       expect(config.refreshStrategy).toBe('eager');

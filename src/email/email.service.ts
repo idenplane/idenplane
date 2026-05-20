@@ -48,8 +48,8 @@ export class EmailService {
       await transporter.sendMail({
         from: realm.smtpFrom ?? `noreply@${realm.smtpHost}`,
         to: realm.smtpFrom ?? `test@${realm.smtpHost}`,
-        subject: 'Authme SMTP Test',
-        html: '<p>This is a test email from Authme setup wizard.</p>',
+        subject: 'Idenplane SMTP Test',
+        html: '<p>This is a test email from Idenplane setup wizard.</p>',
       });
 
       this.logger.log(`Test email sent successfully for realm "${realmName}"`);

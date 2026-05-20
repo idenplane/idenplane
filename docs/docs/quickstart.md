@@ -15,7 +15,7 @@ Get Idenplane up and running in under 30 seconds.
 The fastest way to get started is with Docker Compose:
 
 ```bash
-curl -o docker-compose.yml https://raw.githubusercontent.com/Islamawad132/Authme/main/docker-compose.yml
+curl -o docker-compose.yml https://raw.githubusercontent.com/idenplane/idenplane/main/docker-compose.yml
 docker compose up -d
 ```
 
@@ -68,8 +68,8 @@ If you prefer to build from source, you'll need:
 **Prerequisites:** Node.js 22+, PostgreSQL 16+
 
 ```bash
-git clone https://github.com/Islamawad132/Authme.git
-cd Authme
+git clone https://github.com/idenplane/idenplane.git
+cd Idenplane
 
 # Install dependencies
 npm install
@@ -174,6 +174,6 @@ REDIS_URL=redis://your-redis:6379
 
 <p align="center">
   <a href="https://idenplane.dev">idenplane.dev</a> &middot;
-  <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
+  <a href="https://github.com/idenplane/idenplane">GitHub</a> &middot;
   <a href="https://discord.gg/idenplane">Discord</a>
 </p>

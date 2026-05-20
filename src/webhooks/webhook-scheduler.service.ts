@@ -281,7 +281,7 @@ export class WebhookSchedulerService {
           'Content-Type': 'application/json',
           'X-Webhook-Signature': signature,
           'X-Webhook-Timestamp': new Date().toISOString(),
-          'User-Agent': 'Authme-Webhook/1.0',
+          'User-Agent': 'Idenplane-Webhook/1.0',
         },
         body,
         signal: controller.signal,

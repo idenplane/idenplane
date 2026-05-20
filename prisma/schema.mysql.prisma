@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// MySQL / MariaDB variant of the Authme Prisma schema.
+// MySQL / MariaDB variant of the Idenplane Prisma schema.
 //
 // Intended for deployments that require MySQL 8.0+ or MariaDB 10.5+.
 // For new projects, PostgreSQL is still the recommended provider.

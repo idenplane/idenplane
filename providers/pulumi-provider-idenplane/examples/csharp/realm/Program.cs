@@ -11,7 +11,7 @@
 using System;
 using System.Collections.Generic;
 using Pulumi;
-using Authme.PulumiAuthme;
+using Idenplane.PulumiIdenplane;
 
 return await Deployment.RunAsync(() =>
 {

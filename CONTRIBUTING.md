@@ -8,8 +8,8 @@ Thank you for your interest in contributing to Idenplane!
 
 1. **Clone the repository**
 ```bash
-git clone https://github.com/Islamawad132/Authme.git
-cd Authme
+git clone https://github.com/idenplane/idenplane.git
+cd Idenplane
 ```
 
 2. **Install dependencies**
@@ -236,7 +236,7 @@ Email: security@idenplane.dev (or follow your organization's responsible disclos
 
 ## Questions?
 
-- GitHub Discussions: https://github.com/Islamawad132/Authme/discussions
+- GitHub Discussions: https://github.com/idenplane/idenplane/discussions
 - Discord: https://discord.gg/idenplane
 - Documentation: https://idenplane.dev/docs
 

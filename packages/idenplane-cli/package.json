@@ -42,7 +42,7 @@
   "license": "MIT",
   "repository": {
     "type": "git",
-    "url": "https://github.com/Islamawad132/Authme.git",
+    "url": "https://github.com/idenplane/idenplane.git",
     "directory": "packages/idenplane-cli"
   },
   "publishConfig": {

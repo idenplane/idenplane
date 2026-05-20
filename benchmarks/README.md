@@ -1,16 +1,16 @@
-# Authme Benchmark Suite
+# Idenplane Benchmark Suite
 
-Performance testing infrastructure for the Authme authentication server using k6.
+Performance testing infrastructure for the Idenplane authentication server using k6.
 
 ## Overview
 
-This directory contains load testing scripts and configuration for benchmarking Authme's API endpoints under various load conditions. It also supports comparison benchmarking against other authentication solutions: Keycloak, Authentik, and Zitadel.
+This directory contains load testing scripts and configuration for benchmarking Idenplane's API endpoints under various load conditions. It also supports comparison benchmarking against other authentication solutions: Keycloak, Authentik, and Zitadel.
 
 ## Prerequisites
 
 - [k6](https://grafana.com/docs/k6/latest/) - Load testing tool
 - Docker & Docker Compose (for containerized benchmarks)
-- Authme server running with benchmark target endpoint
+- Idenplane server running with benchmark target endpoint
 
 ## Structure
 
@@ -43,7 +43,7 @@ benchmarks/
 # Copy environment template
 cp benchmarks/.env.example benchmarks/.env
 
-# Edit benchmarks/.env with your Authme instance details
+# Edit benchmarks/.env with your Idenplane instance details
 ```
 
 ### 2. Run Benchmarks
@@ -64,7 +64,7 @@ Results are saved to `benchmarks/results/` in JSON format for analysis.
 
 See `.env.example` for required environment variables:
 
-- `TARGET_URL` - Authme server URL (default: http://localhost:3000)
+- `TARGET_URL` - Idenplane server URL (default: http://localhost:3000)
 - `ADMIN_API_KEY` - API key for authentication
 - `VUS` - Virtual users for load test
 - `DURATION` - Test duration

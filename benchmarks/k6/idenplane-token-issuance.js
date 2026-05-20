@@ -1,5 +1,5 @@
 /**
- * Authme Token Issuance Load Test
+ * Idenplane Token Issuance Load Test
  *
  * Tests OAuth2 token issuance across multiple grant types:
  * - Client Credentials Grant (machine-to-machine)
@@ -14,7 +14,7 @@
  *   k6 run benchmarks/k6/idenplane-token-issuance.js -e VUS=100 -e DURATION=120s
  *
  * Environment Variables:
- *   TARGET_URL         - Base URL of Authme server (default: http://localhost:3000)
+ *   TARGET_URL         - Base URL of Idenplane server (default: http://localhost:3000)
  *   REALM_NAME         - Realm name to test against (default: test-realm)
  *   VUS                - Number of virtual users (default: 50)
  *   DURATION           - Test duration (default: 60s)
