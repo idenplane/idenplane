@@ -52,10 +52,10 @@ echo ""
 echo "Done. Next steps:"
 echo ""
 echo "  1. Set DATABASE_URL in your .env file:"
-echo '     DATABASE_URL="mysql://user:pass@localhost:3306/authme"'
+echo '     DATABASE_URL="mysql://user:pass@localhost:3306/idenplane"'
 echo ""
 echo "  2. Ensure your MySQL server uses the utf8mb4 character set:"
-echo "     CREATE DATABASE authme CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
+echo "     CREATE DATABASE idenplane CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;"
 echo ""
 echo "  3. Run migrations:"
 echo "     npx prisma migrate dev --name init"

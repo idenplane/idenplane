@@ -19,9 +19,9 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: authme_test
+          POSTGRES_USER: idenplane_test
           POSTGRES_PASSWORD: test_password
-          POSTGRES_DB: authme_test
+          POSTGRES_DB: idenplane_test
         ports: ['5432:5432']
         options: >-
           --health-cmd pg_isready
@@ -30,7 +30,7 @@ jobs:
           --health-retries 5
 
     env:
-      DATABASE_URL: postgresql://authme_test:test_password@localhost:5432/authme_test
+      DATABASE_URL: postgresql://idenplane_test:test_password@localhost:5432/idenplane_test
       ADMIN_API_KEY: ci-test-key
       NODE_ENV: test
 
@@ -67,7 +67,7 @@ jobs:
 
           const app = await NestFactory.create(AppModule, { logger: false });
           const config = new DocumentBuilder()
-            .setTitle('AuthMe')
+            .setTitle('Idenplane')
             .setVersion('0.1.0')
             .build();
           const doc = SwaggerModule.createDocument(app, config);
@@ -98,7 +98,7 @@ jobs:
 
           const app = await NestFactory.create(AppModule, { logger: false });
           const config = new DocumentBuilder()
-            .setTitle('AuthMe')
+            .setTitle('Idenplane')
             .setVersion('0.1.0')
             .build();
           const doc = SwaggerModule.createDocument(app, config);

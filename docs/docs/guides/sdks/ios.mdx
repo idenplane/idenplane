@@ -1,12 +1,12 @@
 ---
 id: ios-sdk
 title: iOS SDK
-description: Integrate AuthMe authentication into your iOS application using the official Swift SDK
+description: Integrate Idenplane authentication into your iOS application using the official Swift SDK
 ---
 
 # iOS SDK
 
-The AuthMe iOS SDK provides native Swift bindings for the AuthMe Identity and Access Management server. It implements the **OAuth 2.0 Authorization Code flow with PKCE** (RFC 7636) using `ASWebAuthenticationSession` for secure, embedded authentication. Tokens are stored securely in the iOS Keychain and optional Face ID / Touch ID gating is built in.
+The Idenplane iOS SDK provides native Swift bindings for the Idenplane Identity and Access Management server. It implements the **OAuth 2.0 Authorization Code flow with PKCE** (RFC 7636) using `ASWebAuthenticationSession` for secure, embedded authentication. Tokens are stored securely in the iOS Keychain and optional Face ID / Touch ID gating is built in.
 
 ## Requirements
 
@@ -36,13 +36,13 @@ dependencies: [
 
 Or in Xcode: **File › Add Package Dependencies…** and paste the repository URL.
 
-Add `AuthMe` to your target:
+Add `Idenplane` to your target:
 
 ```swift
 .target(
     name: "MyApp",
     dependencies: [
-        .product(name: "AuthMe", package: "Authme")
+        .product(name: "Idenplane", package: "Authme")
     ]
 )
 ```
@@ -53,7 +53,7 @@ Add `AuthMe` to your target:
 
 ### 1. Register a redirect URI
 
-In your AuthMe admin console, register your app's custom URL scheme as a redirect URI. For example:
+In your Idenplane admin console, register your app's custom URL scheme as a redirect URI. For example:
 
 ```
 com.example.myapp://callback
@@ -78,9 +78,9 @@ In `Info.plist`:
 ### 3. Create the client
 
 ```swift
-import AuthMe
+import Idenplane
 
-let authMe = AuthMeClient(
+let authMe = IdenplaneClient(
     serverUrl: URL(string: "https://auth.example.com")!,
     realm: "my-realm",
     clientId: "my-mobile-app",
@@ -100,7 +100,7 @@ let config = AuthConfig(
     autoRefresh: true,
     refreshBuffer: 30
 )
-let authMe = AuthMeClient(config: config)
+let authMe = IdenplaneClient(config: config)
 ```
 
 ---
@@ -121,7 +121,7 @@ Button("Sign in") {
 }
 ```
 
-`login()` opens an `ASWebAuthenticationSession` (Safari-based in-app browser) that navigates to the AuthMe authorization endpoint. When the user completes authentication, the browser redirects back to your app, and the SDK automatically exchanges the authorization code for tokens.
+`login()` opens an `ASWebAuthenticationSession` (Safari-based in-app browser) that navigates to the Idenplane authorization endpoint. When the user completes authentication, the browser redirects back to your app, and the SDK automatically exchanges the authorization code for tokens.
 
 ---
 
@@ -168,7 +168,7 @@ To refresh manually:
 ```swift
 do {
     try await authMe.refreshToken()
-} catch AuthMeError.noRefreshToken {
+} catch IdenplaneError.noRefreshToken {
     // Prompt user to log in again
 } catch {
     print("Refresh failed: \(error)")
@@ -187,7 +187,7 @@ do {
         biometricReason: "Authenticate to access your account"
     )
     // token is only returned after successful biometric verification
-} catch AuthMeError.biometricAuthFailed(let reason) {
+} catch IdenplaneError.biometricAuthFailed(let reason) {
     print("Biometric failed: \(reason)")
 }
 ```
@@ -217,16 +217,16 @@ await authMe.logout()
 
 ## Error Handling
 
-All errors are typed as `AuthMeError`:
+All errors are typed as `IdenplaneError`:
 
 ```swift
 do {
     try await authMe.login()
-} catch AuthMeError.stateMismatch {
+} catch IdenplaneError.stateMismatch {
     // Possible CSRF — abort
-} catch AuthMeError.serverError(let message) {
+} catch IdenplaneError.serverError(let message) {
     print("Server returned: \(message)")
-} catch AuthMeError.networkError(let underlying) {
+} catch IdenplaneError.networkError(let underlying) {
     print("Network: \(underlying)")
 } catch {
     print("Unknown error: \(error)")
@@ -241,7 +241,7 @@ do {
 | `stateMismatch` | OAuth state parameter mismatch (possible CSRF) |
 | `pkceVerifierMissing` | PKCE verifier not found in storage |
 | `networkError` | Underlying URLSession / transport error |
-| `serverError` | Non-2xx response from AuthMe server |
+| `serverError` | Non-2xx response from Idenplane server |
 | `biometricAuthFailed` | Face ID / Touch ID / passcode authentication failed |
 | `discoveryFailed` | Could not fetch the OIDC discovery document |
 | `callbackError` | Error received in the authorization callback URL |
@@ -250,7 +250,7 @@ do {
 
 ## Thread Safety
 
-`AuthMeClient` is annotated `@MainActor`. All public methods must be called from the main actor. The SDK internally uses `async/await` for network and biometric operations.
+`IdenplaneClient` is annotated `@MainActor`. All public methods must be called from the main actor. The SDK internally uses `async/await` for network and biometric operations.
 
 ---
 
@@ -260,11 +260,11 @@ A complete example using SwiftUI:
 
 ```swift
 import SwiftUI
-import AuthMe
+import Idenplane
 
 @MainActor
 class AuthViewModel: ObservableObject {
-    let client = AuthMeClient(
+    let client = IdenplaneClient(
         serverUrl: URL(string: "https://auth.example.com")!,
         realm: "demo",
         clientId: "swiftui-app",
@@ -302,7 +302,7 @@ struct ContentView: View {
                 Text("Welcome, \(user.name ?? "User")!")
                 Button("Logout", action: vm.logout)
             } else {
-                Button("Sign in with AuthMe", action: vm.login)
+                Button("Sign in with Idenplane", action: vm.login)
             }
             if let error = vm.errorMessage {
                 Text(error).foregroundColor(.red)
@@ -320,7 +320,7 @@ struct ContentView: View {
 <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
 
 [**Quickstart**](/docs/quickstart)
-Set up AuthMe and create your first authenticated app
+Set up Idenplane and create your first authenticated app
 
 [**Configuration**](/docs/getting-started/configuration)
 Learn about all configuration options
@@ -329,14 +329,14 @@ Learn about all configuration options
 Complete REST API documentation
 
 [**Android SDK**](/docs/guides/sdks/android)
-AuthMe SDK for Android with Kotlin
+Idenplane SDK for Android with Kotlin
 
 </div>
 
 ---
 
 <p align="center">
-  <a href="https://authme.dev">authme.dev</a> &middot;
+  <a href="https://idenplane.dev">idenplane.dev</a> &middot;
   <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
-  <a href="https://discord.gg/authme">Discord</a>
+  <a href="https://discord.gg/idenplane">Discord</a>
 </p>

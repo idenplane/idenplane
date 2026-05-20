@@ -59,9 +59,9 @@ class BenchmarkSnapshot:
         """Load snapshot from a JSON file."""
         with open(filepath) as f:
             data = json.load(f)
-        # Handle nested structure like authme-baseline.json
-        if "authme" in data:
-            data = data["authme"]
+        # Handle nested structure like idenplane-baseline.json
+        if "idenplane" in data:
+            data = data["idenplane"]
 
         return cls(
             target=data.get("target", filepath.stem),
@@ -336,7 +336,7 @@ def generate_trend_report(
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AuthMe Performance Trend Report</title>
+    <title>Idenplane Performance Trend Report</title>
     <style>
         :root {{
             --bg-primary: #0f172a;
@@ -467,7 +467,7 @@ def generate_trend_report(
 <body>
     <div class="container">
         <header>
-            <h1>AuthMe Performance Trend Report</h1>
+            <h1>Idenplane Performance Trend Report</h1>
             <p class="timestamp">Generated: {timestamp}</p>
         </header>
 
@@ -503,7 +503,7 @@ def generate_trend_report(
         </table>
 
         <footer>
-            <p>AuthMe Continuous Benchmark Suite</p>
+            <p>Idenplane Continuous Benchmark Suite</p>
         </footer>
     </div>
 </body>
@@ -594,7 +594,7 @@ def main() -> int:
 
     print("")
     print("═══════════════════════════════════════════════════════════════════════════")
-    print("  AuthMe Continuous Benchmark")
+    print("  Idenplane Continuous Benchmark")
     print("═══════════════════════════════════════════════════════════════════════════")
     print("")
 

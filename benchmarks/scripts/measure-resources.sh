@@ -2,10 +2,10 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # benchmarks/scripts/measure-resources.sh
 #
-# Measures resource usage (memory, CPU, startup time) for AuthMe container.
+# Measures resource usage (memory, CPU, startup time) for Idenplane container.
 #
 # What it does:
-#   1. Validates AuthMe container is running
+#   1. Validates Idenplane container is running
 #   2. Captures current memory usage (RSS, working set)
 #   3. Captures current CPU usage percentage
 #   4. Measures startup time (time since container started)
@@ -13,11 +13,11 @@
 #
 # Usage:
 #   ./benchmarks/scripts/measure-resources.sh
-#   ./benchmarks/scripts/measure-resources.sh --container authme-benchmark-target
+#   ./benchmarks/scripts/measure-resources.sh --container idenplane-benchmark-target
 #   ./benchmarks/scripts/measure-resources.sh --output /path/to/results.json
 #
 # Options:
-#   --container NAME  - Container name to measure (default: authme-benchmark-target)
+#   --container NAME  - Container name to measure (default: idenplane-benchmark-target)
 #   --output PATH    - Output file path (default: results/YYYY-MM-DDTHH-MM-SS-resources.json)
 #   --json           - Output results as JSON to stdout
 #   --verbose        - Show detailed measurements
@@ -38,7 +38,7 @@ if [[ -f "${ENV_FILE}" ]]; then
 fi
 
 # ── Defaults ──────────────────────────────────────────────────────────────────
-CONTAINER_NAME="${CONTAINER_NAME:-authme-benchmark-target}"
+CONTAINER_NAME="${CONTAINER_NAME:-idenplane-benchmark-target}"
 OUTPUT_FILE=""
 OUTPUT_JSON=false
 VERBOSE=false
@@ -66,7 +66,7 @@ while [[ $# -gt 0 ]]; do
       echo "Usage: $0 [--container NAME] [--output PATH] [--json] [--verbose]"
       echo ""
       echo "Options:"
-      echo "  --container NAME  Container to measure (default: authme-benchmark-target)"
+      echo "  --container NAME  Container to measure (default: idenplane-benchmark-target)"
       echo "  --output PATH    Output file path"
       echo "  --json           Output JSON to stdout"
       echo "  --verbose        Show detailed measurements"
@@ -100,7 +100,7 @@ CONTAINER_STATUS="unknown"
 
 echo ""
 echo "═══════════════════════════════════════════════════════════════════════════"
-echo "  AuthMe Resource Measurement"
+echo "  Idenplane Resource Measurement"
 echo "═══════════════════════════════════════════════════════════════════════════"
 echo ""
 echo "  Container: ${CONTAINER_NAME}"

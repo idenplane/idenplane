@@ -575,7 +575,7 @@ export const GROUP_RESOURCE_TYPE: ScimResourceType = {
 // Service Provider Configuration - RFC 7644 Section 4
 export const SERVICE_PROVIDER_CONFIG: ScimServiceProviderConfig = {
   schemas: ['urn:scim:schemas:core:1.0:ServiceProviderConfig'],
-  documentationUri: 'https://authme.example.com/docs/scim',
+  documentationUri: 'https://idenplane.example.com/docs/scim',
   patch: { supported: true },
   bulk: {
     supported: true,
@@ -596,15 +596,15 @@ export const SERVICE_PROVIDER_CONFIG: ScimServiceProviderConfig = {
       description:
         'Authentication scheme using the OAuth Bearer Token Standard',
       specUri: 'https://www.rfc-editor.org/rfc/rfc6750',
-      documentationUri: 'https://authme.example.com/docs/scim/auth',
+      documentationUri: 'https://idenplane.example.com/docs/scim/auth',
       type: 'oauthbearertoken',
       primary: true,
     },
     {
       name: 'API Key',
       description: 'Authentication scheme using an API key',
-      specUri: 'https://authme.example.com/docs/scim/auth',
-      documentationUri: 'https://authme.example.com/docs/scim/auth',
+      specUri: 'https://idenplane.example.com/docs/scim/auth',
+      documentationUri: 'https://idenplane.example.com/docs/scim/auth',
       type: 'apiKey',
       primary: false,
     },
@@ -624,7 +624,7 @@ export const ALL_RESOURCE_TYPES: ScimResourceType[] = [
   GROUP_RESOURCE_TYPE,
 ];
 
-// Map AuthMe attributes to SCIM attributes
+// Map Idenplane attributes to SCIM attributes
 export const DEFAULT_USER_ATTRIBUTE_MAPPING: Record<string, string> = {
   username: 'userName',
   email: 'emails[primary=true].value',
@@ -638,8 +638,8 @@ export const DEFAULT_USER_ATTRIBUTE_MAPPING: Record<string, string> = {
   timezone: 'timezone',
 };
 
-// Map SCIM attributes to AuthMe attributes
-export const DEFAULT_SCIM_TO_AUTHME_MAPPING: Record<string, string> = {
+// Map SCIM attributes to Idenplane attributes
+export const DEFAULT_SCIM_TO_IDENPLANE_MAPPING: Record<string, string> = {
   userName: 'username',
   'name.givenName': 'firstName',
   'name.familyName': 'lastName',

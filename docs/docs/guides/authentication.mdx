@@ -1,16 +1,16 @@
 ---
 id: authentication
 title: Authentication Guide
-description: Complete guide to OAuth 2.0 and OpenID Connect authentication flows in AuthMe
+description: Complete guide to OAuth 2.0 and OpenID Connect authentication flows in Idenplane
 ---
 
 # Authentication Guide
 
-AuthMe implements OAuth 2.0 and OpenID Connect (OIDC) for secure authentication and authorization. This guide covers all supported flows, security considerations, and implementation patterns.
+Idenplane implements OAuth 2.0 and OpenID Connect (OIDC) for secure authentication and authorization. This guide covers all supported flows, security considerations, and implementation patterns.
 
 ## Supported Flows
 
-AuthMe supports the following OAuth 2.0 flows:
+Idenplane supports the following OAuth 2.0 flows:
 
 | Flow | Use Case | Security Level |
 |------|----------|----------------|
@@ -34,9 +34,9 @@ The Authorization Code flow is the recommended OAuth 2.0 flow for all applicatio
 ```mermaid
 sequenceDiagram
     participant App as Application
-    participant Auth as AuthMe Authorization Endpoint
+    participant Auth as Idenplane Authorization Endpoint
     participant Login as Login Page
-    participant Token as AuthMe Token Endpoint
+    participant Token as Idenplane Token Endpoint
     participant API as Resource API
 
     App->>Auth: 1. Redirect with code_challenge
@@ -155,7 +155,7 @@ authUrl.searchParams.set('code_challenge_method', 'S256');
 
 // Optional parameters
 authUrl.searchParams.set('nonce', generateRandomNonce());
-authUrl.searchParams.set('acr_values', 'urn:authme:acr:mfa');
+authUrl.searchParams.set('acr_values', 'urn:idenplane:acr:mfa');
 authUrl.searchParams.set('login_hint', 'user@example.com');
 
 // Redirect user
@@ -180,7 +180,7 @@ window.location.href = authUrl.toString();
 
 ### Step 3: Handle the Callback
 
-After authorization, AuthMe redirects to your `redirect_uri` with an authorization code:
+After authorization, Idenplane redirects to your `redirect_uri` with an authorization code:
 
 ```javascript
 // Extract code and state from URL
@@ -234,7 +234,7 @@ curl -X POST "http://localhost:3000/realms/my-realm/protocol/openid-connect/toke
 ### Complete Authorization Code Example
 
 ```typescript
-import { AuthmeClient, TokenResponse } from 'authme-sdk';
+import { AuthmeClient, TokenResponse } from 'idenplane-sdk';
 
 class AuthService {
   private client: AuthmeClient;
@@ -352,7 +352,7 @@ curl -X POST "http://localhost:3000/realms/my-realm/protocol/openid-connect/toke
 
 ### Service Account Setup
 
-1. Create a client in AuthMe Admin Console
+1. Create a client in Idenplane Admin Console
 2. Set the **Access Type** to `Confidential` (service accounts)
 3. Configure the allowed grant types (ensure `client_credentials` is enabled)
 4. Assign roles to the service account user
@@ -369,8 +369,8 @@ async function getServiceToken(): Promise<string> {
       },
       body: new URLSearchParams({
         grant_type: 'client_credentials',
-        client_id: process.env.AUTHME_CLIENT_ID,
-        client_secret: process.env.AUTHME_CLIENT_SECRET,
+        client_id: process.env.IDENPLANE_CLIENT_ID,
+        client_secret: process.env.IDENPLANE_CLIENT_SECRET,
         scope: 'read write',
       }),
     }
@@ -399,7 +399,7 @@ The Device Authorization grant (RFC 8628) is designed for devices with limited i
 
 ### Flow Overview
 
-1. Device requests authorization from AuthMe
+1. Device requests authorization from Idenplane
 2. User enters user code on another device
 3. Device polls for authorization completion
 4. Device receives tokens
@@ -417,8 +417,8 @@ curl -X POST "http://localhost:3000/realms/my-realm/protocol/openid-connect/devi
 {
   "device_code": "GmRhmhcxhwAzkoEqiMEg_DnyEysNkuNhszIySk9eS...",
   "user_code": "WDJB-MJHT",
-  "verification_uri": "https://authme.dev/device",
-  "verification_uri_complete": "https://authme.dev/device?user_code=WDJB-MJHT",
+  "verification_uri": "https://idenplane.dev/device",
+  "verification_uri_complete": "https://idenplane.dev/device?user_code=WDJB-MJHT",
   "expires_in": 600,
   "interval": 5
 }
@@ -529,7 +529,7 @@ curl -X POST "http://localhost:3000/realms/my-realm/protocol/openid-connect/toke
 
 ### Token Rotation
 
-AuthMe uses refresh token rotation by default. Each refresh token can only be used once, and a new refresh token is issued with each refresh. This provides enhanced security by detecting token theft through reuse attempts.
+Idenplane uses refresh token rotation by default. Each refresh token can only be used once, and a new refresh token is issued with each refresh. This provides enhanced security by detecting token theft through reuse attempts.
 
 ```typescript
 class TokenManager {
@@ -593,14 +593,14 @@ class TokenManager {
 
 ## Step-Up Authentication
 
-Step-up authentication allows requesting a higher assurance level for sensitive operations. AuthMe supports ACR (Authentication Context Class Reference) values to indicate the required authentication strength.
+Step-up authentication allows requesting a higher assurance level for sensitive operations. Idenplane supports ACR (Authentication Context Class Reference) values to indicate the required authentication strength.
 
 ### ACR Values
 
 | ACR Value | Description | Use Case |
 |-----------|-------------|----------|
-| `urn:authme:acr:password` | Password authentication only | Standard login |
-| `urn:authme:acr:mfa` | Multi-factor authentication | Sensitive operations |
+| `urn:idenplane:acr:password` | Password authentication only | Standard login |
+| `urn:idenplane:acr:mfa` | Multi-factor authentication | Sensitive operations |
 
 ### Requesting Step-Up
 
@@ -614,7 +614,7 @@ authUrl.searchParams.set('client_id', 'my-app');
 authUrl.searchParams.set('redirect_uri', 'https://myapp.com/callback');
 authUrl.searchParams.set('response_type', 'code');
 authUrl.searchParams.set('scope', 'openid profile email');
-authUrl.searchParams.set('acr_values', 'urn:authme:acr:mfa');
+authUrl.searchParams.set('acr_values', 'urn:idenplane:acr:mfa');
 
 // User will be prompted for MFA if not already authenticated with MFA
 ```
@@ -628,7 +628,7 @@ After step-up authentication, the ID token includes the ACR claim:
   "iss": "http://localhost:3000/realms/my-realm",
   "sub": "user-uuid-123",
   "aud": "my-app",
-  "acr": "urn:authme:acr:mfa",
+  "acr": "urn:idenplane:acr:mfa",
   "amr": ["pwd", "otp"],
   "exp": 1620000000
 }
@@ -659,8 +659,8 @@ async function verifyAccessTokenWithStepUp(
 
 function getAcrStrength(acr: string): number {
   const strengths: Record<string, number> = {
-    'urn:authme:acr:password': 1,
-    'urn:authme:acr:mfa': 2,
+    'urn:idenplane:acr:password': 1,
+    'urn:idenplane:acr:mfa': 2,
   };
   return strengths[acr] || 0;
 }
@@ -670,7 +670,7 @@ function getAcrStrength(acr: string): number {
 
 ## Session Management
 
-AuthMe manages sessions to track user authentication state and enforce concurrent session limits.
+Idenplane manages sessions to track user authentication state and enforce concurrent session limits.
 
 ### Session Lifecycle
 
@@ -700,12 +700,12 @@ When a user exceeds the limit, the oldest sessions are automatically evicted (FI
 
 ### Session Cookies
 
-AuthMe uses an `AUTHME_SESSION` cookie for browser-based SSO:
+Idenplane uses an `IDENPLANE_SESSION` cookie for browser-based SSO:
 
 ```typescript
-// Cookie configuration (set by AuthMe server)
+// Cookie configuration (set by Idenplane server)
 const cookieConfig = {
-  name: 'AUTHME_SESSION',
+  name: 'IDENPLANE_SESSION',
   httpOnly: true,      // Not accessible by JavaScript
   secure: true,        // HTTPS only in production
   sameSite: 'strict',   // CSRF protection
@@ -735,7 +735,7 @@ async function logout(accessToken: string, refreshToken: string) {
 
   // Clear local storage
   sessionStorage.clear();
-  localStorage.removeItem('authme_tokens');
+  localStorage.removeItem('idenplane_tokens');
 }
 ```
 
@@ -746,7 +746,7 @@ async function logout(accessToken: string, refreshToken: string) {
 ### Always Use PKCE
 
 :::warning PKCE Required for Public Clients
-OAuth 2.1 requires PKCE for all authorization code flows. AuthMe enforces this for public clients.
+OAuth 2.1 requires PKCE for all authorization code flows. Idenplane enforces this for public clients.
 :::
 
 ### Protect Against CSRF
@@ -905,14 +905,14 @@ Configure multi-factor authentication for your users
 Complete REST API documentation with examples
 
 [**React SDK**](/docs/guides/sdks/react)
-Integrate AuthMe into your React application
+Integrate Idenplane into your React application
 
 </div>
 
 ---
 
 <p align="center">
-  <a href="https://authme.dev">authme.dev</a> &middot;
+  <a href="https://idenplane.dev">idenplane.dev</a> &middot;
   <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
-  <a href="https://discord.gg/authme">Discord</a>
+  <a href="https://discord.gg/idenplane">Discord</a>
 </p>

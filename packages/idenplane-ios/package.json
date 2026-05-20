@@ -1,0 +1,27 @@
+{
+  "name": "@idenplane/idenplane-ios",
+  "version": "1.0.0",
+  "description": "Native Swift SDK for Idenplane Identity and Access Management server",
+  "type": "module",
+  "main": "Package.swift",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Islamawad132/Authme.git",
+    "directory": "packages/idenplane-ios"
+  },
+  "keywords": [
+    "idenplane",
+    "oauth2",
+    "oidc",
+    "openid-connect",
+    "authentication",
+    "identity",
+    "pkce",
+    "ios",
+    "swift"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}

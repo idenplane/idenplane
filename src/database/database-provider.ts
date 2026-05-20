@@ -22,10 +22,10 @@ export enum DatabaseProvider {
  * @throws    Error when the scheme is not recognised.
  *
  * @example
- *   detectProvider('postgresql://user:pass@localhost:5432/authme')
+ *   detectProvider('postgresql://user:pass@localhost:5432/idenplane')
  *   // → DatabaseProvider.POSTGRESQL
  *
- *   detectProvider('mysql://user:pass@localhost:3306/authme')
+ *   detectProvider('mysql://user:pass@localhost:3306/idenplane')
  *   // → DatabaseProvider.MYSQL
  *
  *   detectProvider('file:./dev.db')

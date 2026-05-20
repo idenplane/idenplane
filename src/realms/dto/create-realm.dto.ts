@@ -313,7 +313,7 @@ export class CreateRealmDto {
 
   // Theming
   @ApiPropertyOptional({
-    default: 'authme',
+    default: 'idenplane',
     description: 'Name of the theme preset to use',
   })
   @IsOptional()
@@ -328,20 +328,20 @@ export class CreateRealmDto {
   @IsObject()
   theme?: Record<string, unknown>;
 
-  @ApiPropertyOptional({ default: 'authme', description: 'Login page theme' })
+  @ApiPropertyOptional({ default: 'idenplane', description: 'Login page theme' })
   @IsOptional()
   @IsString()
   @MinLength(1)
   loginTheme?: string;
 
-  @ApiPropertyOptional({ default: 'authme', description: 'Account page theme' })
+  @ApiPropertyOptional({ default: 'idenplane', description: 'Account page theme' })
   @IsOptional()
   @IsString()
   @MinLength(1)
   accountTheme?: string;
 
   @ApiPropertyOptional({
-    default: 'authme',
+    default: 'idenplane',
     description: 'Email template theme',
   })
   @IsOptional()

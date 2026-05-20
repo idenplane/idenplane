@@ -24,7 +24,7 @@ import { VerifyDomainDto } from './dto/verify-domain.dto.js';
 const INVITATION_TTL_MS = 72 * 60 * 60 * 1000;
 
 /** Prefix embedded in every DNS TXT verification value. */
-const DNS_TXT_PREFIX = 'authme-domain-verification=';
+const DNS_TXT_PREFIX = 'idenplane-domain-verification=';
 
 @Injectable()
 export class OrganizationsService {
@@ -302,7 +302,7 @@ export class OrganizationsService {
 
   /**
    * Returns the DNS TXT record value that the customer must publish under
-   * `_authme-challenge.<domain>` to prove domain ownership.
+   * `_idenplane-challenge.<domain>` to prove domain ownership.
    *
    * The value is deterministic per (organizationId, domain) so calling this
    * endpoint multiple times always returns the same token.
@@ -329,7 +329,7 @@ export class OrganizationsService {
 
     return {
       domain,
-      txtRecord: `_authme-challenge.${domain}`,
+      txtRecord: `_idenplane-challenge.${domain}`,
       txtValue,
       message: `Add the following DNS TXT record to your domain, then call the verify endpoint.`,
     };
@@ -344,7 +344,7 @@ export class OrganizationsService {
     }
 
     const expectedTxt = this.generateDomainVerificationToken(org.id, domain);
-    const txtHost = `_authme-challenge.${domain}`;
+    const txtHost = `_idenplane-challenge.${domain}`;
 
     let records: string[][] = [];
     try {

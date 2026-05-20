@@ -213,6 +213,26 @@ async function bootstrap() {
   );
   app.use(cookieParser());
 
+  // Backward compatibility: the SSO session cookie used to be AUTHME_SESSION
+  // before the rebrand to Idenplane. Users who were logged in at upgrade time
+  // still send the legacy cookie; alias it to the new name so every controller
+  // can read IDENPLANE_SESSION without caring about the history. This fallback
+  // should be removed one release cycle after the rename.
+  type CookieRequest = { cookies?: Record<string, string | undefined> };
+  app.use(
+    (
+      req: CookieRequest,
+      _res: unknown,
+      next: (err?: unknown) => void,
+    ): void => {
+      const cookies = req.cookies;
+      if (cookies && cookies.AUTHME_SESSION && !cookies.IDENPLANE_SESSION) {
+        cookies.IDENPLANE_SESSION = cookies.AUTHME_SESSION;
+      }
+      next();
+    },
+  );
+
   // Handlebars template engine — templates live in themes/ and are resolved by ThemeRenderService
   app.setBaseViewsDir(join(__dirname, '..', 'themes'));
   app.setViewEngine('hbs');
@@ -253,7 +273,7 @@ async function bootstrap() {
   app.useGlobalFilters(new GlobalExceptionFilter());
 
   const config = new DocumentBuilder()
-    .setTitle('AuthMe')
+    .setTitle('Idenplane')
     .setDescription('Open-source Identity and Access Management Server')
     .setVersion('0.1.0')
     .addApiKey(
@@ -271,7 +291,7 @@ async function bootstrap() {
 
   const port = process.env['PORT'] ?? 3000;
   await app.listen(port);
-  console.log(`AuthMe is running on http://localhost:${port}`);
+  console.log(`Idenplane is running on http://localhost:${port}`);
   console.log(`Swagger UI: http://localhost:${port}/api`);
 }
 void bootstrap();

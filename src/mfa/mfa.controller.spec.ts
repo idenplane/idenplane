@@ -50,7 +50,7 @@ describe('MfaController', () => {
     };
 
     mockStepUpService = {
-      getSessionAcr: jest.fn().mockResolvedValue('urn:authme:acr:mfa'),
+      getSessionAcr: jest.fn().mockResolvedValue('urn:idenplane:acr:mfa'),
       satisfiesAcr: jest.fn().mockReturnValue(true),
     };
 
@@ -110,7 +110,7 @@ describe('MfaController', () => {
 
   describe('resetMfa', () => {
     const mockReq = {
-      cookies: { AUTHME_SESSION: mockSessionToken },
+      cookies: { IDENPLANE_SESSION: mockSessionToken },
       adminUser: { userId: 'user-1' },
     } as any;
 
@@ -124,7 +124,7 @@ describe('MfaController', () => {
 
     it('should throw UnauthorizedException when no adminUser is present', async () => {
       const reqWithoutAdmin = {
-        cookies: { AUTHME_SESSION: mockSessionToken },
+        cookies: { IDENPLANE_SESSION: mockSessionToken },
       } as any;
 
       await expect(
@@ -134,7 +134,7 @@ describe('MfaController', () => {
 
     it('should throw UnauthorizedException for API key authentication', async () => {
       const reqWithApiKey = {
-        cookies: { AUTHME_SESSION: mockSessionToken },
+        cookies: { IDENPLANE_SESSION: mockSessionToken },
         adminUser: { userId: 'api-key:abc123' },
       } as any;
 

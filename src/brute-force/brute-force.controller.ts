@@ -91,7 +91,7 @@ export class BruteForceController {
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- express Request.cookies typed as any
-    const sessionToken: string | undefined = req.cookies?.AUTHME_SESSION;
+    const sessionToken: string | undefined = req.cookies?.IDENPLANE_SESSION;
     if (!sessionToken) {
       throw new UnauthorizedException(
         'MFA step-up is required. No active session found. Please log in via the user login flow to establish an MFA-verified session.',
@@ -121,7 +121,7 @@ export class BruteForceController {
     const currentAcr = await this.stepUpService.getSessionAcr(loginSession.id);
     if (!this.stepUpService.satisfiesAcr(currentAcr, ACR_MFA)) {
       throw new UnauthorizedException(
-        'MFA step-up is required to unlock a user. Please complete MFA verification via POST /realms/:realmName/step-up/verify with acr=urn:authme:acr:mfa before retrying.',
+        'MFA step-up is required to unlock a user. Please complete MFA verification via POST /realms/:realmName/step-up/verify with acr=urn:idenplane:acr:mfa before retrying.',
       );
     }
   }
@@ -134,7 +134,7 @@ export class BruteForceController {
  * segment.  Both of these paths must work:
  *
  *   POST /admin/realms/:realmName/attack-detection/brute-force/users/:userId  (Keycloak style)
- *   POST /admin/realms/:realmName/brute-force/users/:userId/unlock             (AuthMe native, above)
+ *   POST /admin/realms/:realmName/brute-force/users/:userId/unlock             (Idenplane native, above)
  *
  * The Keycloak-style endpoint accepts the userId directly in the path with no
  * trailing `/unlock` segment, matching the Keycloak Admin REST API contract.
@@ -191,7 +191,7 @@ export class BruteForceAttackDetectionController {
     }
 
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- express Request.cookies typed as any
-    const sessionToken: string | undefined = req.cookies?.AUTHME_SESSION;
+    const sessionToken: string | undefined = req.cookies?.IDENPLANE_SESSION;
     if (!sessionToken) {
       throw new UnauthorizedException(
         'MFA step-up is required. No active session found. Please log in via the user login flow to establish an MFA-verified session.',
@@ -221,7 +221,7 @@ export class BruteForceAttackDetectionController {
     const currentAcr = await this.stepUpService.getSessionAcr(loginSession.id);
     if (!this.stepUpService.satisfiesAcr(currentAcr, ACR_MFA)) {
       throw new UnauthorizedException(
-        'MFA step-up is required to unlock a user. Please complete MFA verification via POST /realms/:realmName/step-up/verify with acr=urn:authme:acr:mfa before retrying.',
+        'MFA step-up is required to unlock a user. Please complete MFA verification via POST /realms/:realmName/step-up/verify with acr=urn:idenplane:acr:mfa before retrying.',
       );
     }
   }

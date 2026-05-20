@@ -49,8 +49,8 @@
       }
     },
     "resource_comparison": {
-      "memory_ratio_vs_authme": "8.3x",
-      "cpu_ratio_vs_authme": "5.6x",
+      "memory_ratio_vs_idenplane": "8.3x",
+      "cpu_ratio_vs_idenplane": "5.6x",
       "requests_per_second_ratio": "0.18x"
     },
     "metadata": {
@@ -63,7 +63,7 @@
       "benchmarker": "k6 0.50.0",
       "test_duration_seconds": 60,
       "warmup_seconds": 10,
-      "notes": "Results generated with identical workload to AuthMe baseline. Keycloak JVM heap settings: -Xms512m -Xmx1024m"
+      "notes": "Results generated with identical workload to Idenplane baseline. Keycloak JVM heap settings: -Xms512m -Xmx1024m"
     }
   }
 }

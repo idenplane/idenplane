@@ -27,7 +27,7 @@ describe('App bootstrap (e2e)', () => {
 
     expect(res.body).toHaveProperty('openapi');
     expect(res.body).toHaveProperty('info');
-    expect(res.body.info).toHaveProperty('title', 'AuthMe');
+    expect(res.body.info).toHaveProperty('title', 'Idenplane');
     expect(res.body).toHaveProperty('paths');
   });
 });

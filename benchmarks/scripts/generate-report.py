@@ -11,10 +11,10 @@
 #
 # Usage:
 #   python3 benchmarks/scripts/generate-report.py <summary_file> <output_dir>
-#   python3 benchmarks/scripts/generate-report.py benchmarks/results/authme-baseline.json benchmarks/results/
+#   python3 benchmarks/scripts/generate-report.py benchmarks/results/idenplane-baseline.json benchmarks/results/
 #
 # Output:
-#   <output_dir>/authme-report-<timestamp>.html
+#   <output_dir>/idenplane-report-<timestamp>.html
 # ─────────────────────────────────────────────────────────────────────────────
 
 import argparse
@@ -151,7 +151,7 @@ def generate_html_report(metrics: BenchmarkMetrics, output_path: Path) -> None:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>AuthMe Benchmark Report - {metrics.target}</title>
+    <title>Idenplane Benchmark Report - {metrics.target}</title>
     <style>
         :root {{
             --bg-primary: #0f172a;
@@ -325,7 +325,7 @@ def generate_html_report(metrics: BenchmarkMetrics, output_path: Path) -> None:
 <body>
     <div class="container">
         <header>
-            <h1>AuthMe Benchmark Report</h1>
+            <h1>Idenplane Benchmark Report</h1>
             <p class="subtitle">
                 Target: <strong>{metrics.target}</strong> |
                 Run ID: <span class="run-id">{metrics.run_id}</span>
@@ -425,7 +425,7 @@ def generate_html_report(metrics: BenchmarkMetrics, output_path: Path) -> None:
         </div>
 
         <footer>
-            <p>AuthMe Performance Benchmark Suite</p>
+            <p>Idenplane Performance Benchmark Suite</p>
         </footer>
     </div>
 </body>
@@ -447,7 +447,7 @@ def main() -> int:
 
     print("")
     print("═══════════════════════════════════════════════════════════════════════════")
-    print("  AuthMe Benchmark Report Generator")
+    print("  Idenplane Benchmark Report Generator")
     print("═══════════════════════════════════════════════════════════════════════════")
     print("")
 

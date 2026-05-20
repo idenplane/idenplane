@@ -1,0 +1,115 @@
+# ──────────────────────────────────────────────────────────────────────────────
+# Idenplane Helm Chart — Production Overrides
+#
+# Usage:
+#   helm upgrade --install idenplane ./helm/idenplane \
+#     -f helm/idenplane/values.production.yaml \
+#     --set secrets.ADMIN_API_KEY="<strong-key>" \
+#     --set env.BASE_URL="https://auth.example.com"
+# ──────────────────────────────────────────────────────────────────────────────
+
+# Run 3 pods by default; the HPA below will scale between 2 and 10.
+replicaCount: 3
+
+# ── Resources ─────────────────────────────────────────────────────────────────
+resources:
+  requests:
+    cpu: 250m
+    memory: 256Mi
+  limits:
+    cpu: 500m
+    memory: 512Mi
+
+# ── Horizontal Pod Autoscaler ─────────────────────────────────────────────────
+autoscaling:
+  enabled: true
+  minReplicas: 2
+  maxReplicas: 10
+  targetCPUUtilizationPercentage: 70
+
+# ── Pod Disruption Budget ─────────────────────────────────────────────────────
+# Ensures at least (replicaCount - 1) pods remain available during voluntary
+# disruptions such as node drains or rolling upgrades.
+podDisruptionBudget:
+  enabled: true
+  maxUnavailable: 1
+
+# ── Ingress ───────────────────────────────────────────────────────────────────
+ingress:
+  enabled: true
+  className: nginx
+  annotations:
+    cert-manager.io/cluster-issuer: letsencrypt-prod
+    nginx.ingress.kubernetes.io/proxy-body-size: "10m"
+    nginx.ingress.kubernetes.io/proxy-read-timeout: "60"
+  hosts:
+    - host: auth.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls:
+    - secretName: idenplane-tls
+      hosts:
+        - auth.example.com
+
+# ── Application Environment ───────────────────────────────────────────────────
+env:
+  NODE_ENV: "production"
+  BASE_URL: "https://auth.example.com"
+  SESSION_STORE: "database"
+  THROTTLE_TTL: "60000"
+  THROTTLE_LIMIT: "100"
+
+# ── Secrets ───────────────────────────────────────────────────────────────────
+# Override these values at deploy time; never commit real secrets to source
+# control. Example:
+#   --set secrets.ADMIN_API_KEY="$(openssl rand -hex 32)"
+secrets:
+  ADMIN_API_KEY: "REPLACE_WITH_STRONG_SECRET"
+  DATABASE_URL: ""   # auto-constructed from postgresql sub-chart when enabled
+
+# ── PostgreSQL Sub-chart ──────────────────────────────────────────────────────
+postgresql:
+  enabled: true
+  auth:
+    username: idenplane
+    # Override at deploy time: --set postgresql.auth.password="..."
+    password: "REPLACE_WITH_STRONG_DB_PASSWORD"
+    database: idenplane
+  primary:
+    persistence:
+      enabled: true
+      size: 20Gi
+  resources:
+    requests:
+      cpu: 250m
+      memory: 256Mi
+    limits:
+      cpu: 1000m
+      memory: 1Gi
+
+# ── Pod Security ──────────────────────────────────────────────────────────────
+podSecurityContext:
+  fsGroup: 1000
+  runAsNonRoot: true
+  runAsUser: 1000
+
+securityContext:
+  allowPrivilegeEscalation: false
+  capabilities:
+    drop:
+      - ALL
+  readOnlyRootFilesystem: false
+  runAsNonRoot: true
+  runAsUser: 1000
+
+# ── Affinity: spread pods across nodes for HA ─────────────────────────────────
+affinity:
+  podAntiAffinity:
+    preferredDuringSchedulingIgnoredDuringExecution:
+      - weight: 100
+        podAffinityTerm:
+          labelSelector:
+            matchLabels:
+              app.kubernetes.io/name: idenplane
+          topologyKey: kubernetes.io/hostname

@@ -2,10 +2,10 @@ import { Injectable, Logger } from '@nestjs/common';
 import { existsSync, readdirSync, readFileSync } from 'fs';
 import { createHash } from 'crypto';
 import { join, resolve } from 'path';
-import type { AuthMePlugin } from './plugin.interface.js';
+import type { IdenplanePlugin } from './plugin.interface.js';
 
 export interface DiscoveredPlugin {
-  plugin: AuthMePlugin;
+  plugin: IdenplanePlugin;
   source: 'directory' | 'npm';
   sourcePath: string;
 }
@@ -15,9 +15,9 @@ export interface DiscoveredPlugin {
  *
  * 1. `plugins/` directory at the project root — each subdirectory is a plugin.
  *    The subdirectory must export a default export or a named `plugin` export
- *    that satisfies the AuthMePlugin interface.
+ *    that satisfies the IdenplanePlugin interface.
  *
- * 2. npm packages with the `authme-plugin-` prefix installed in node_modules.
+ * 2. npm packages with the `idenplane-plugin-` prefix installed in node_modules.
  */
 @Injectable()
 export class PluginLoaderService {
@@ -86,7 +86,7 @@ export class PluginLoaderService {
   }
 
   /**
-   * Discover plugins installed as npm packages with the `authme-plugin-` prefix.
+   * Discover plugins installed as npm packages with the `idenplane-plugin-` prefix.
    */
   async discoverFromNpm(nodeModulesDir?: string): Promise<DiscoveredPlugin[]> {
     const nmDir = nodeModulesDir ?? resolve(process.cwd(), 'node_modules');
@@ -100,7 +100,7 @@ export class PluginLoaderService {
 
     try {
       entries = readdirSync(nmDir, { withFileTypes: true })
-        .filter((d) => d.isDirectory() && d.name.startsWith('authme-plugin-'))
+        .filter((d) => d.isDirectory() && d.name.startsWith('idenplane-plugin-'))
         .map((d) => d.name);
     } catch (err) {
       this.logger.warn(
@@ -159,7 +159,7 @@ export class PluginLoaderService {
               this.logger.error(
                 `Plugin '${candidate}' rejected — no manifest hash found. ` +
                   `In production, all plugins must have integrity verification. ` +
-                  `Generate a manifest with: authme plugins hash`,
+                  `Generate a manifest with: idenplane plugins hash`,
               );
               return null;
             }
@@ -184,7 +184,7 @@ export class PluginLoaderService {
 
       // Support both default export and named `plugin` export
       /* eslint-disable @typescript-eslint/no-unsafe-member-access */
-      const pluginExport: AuthMePlugin = loaded.default ?? loaded.plugin;
+      const pluginExport: IdenplanePlugin = loaded.default ?? loaded.plugin;
 
       if (!pluginExport) {
         this.logger.warn(
@@ -214,9 +214,9 @@ export class PluginLoaderService {
   }
 
   /**
-   * Validate that a loaded module satisfies the minimum AuthMePlugin shape.
+   * Validate that a loaded module satisfies the minimum IdenplanePlugin shape.
    */
-  validatePlugin(candidate: unknown): candidate is AuthMePlugin {
+  validatePlugin(candidate: unknown): candidate is IdenplanePlugin {
     if (typeof candidate !== 'object' || candidate === null) return false;
 
     const p = candidate as Record<string, unknown>;
@@ -254,9 +254,9 @@ export class PluginLoaderService {
    * Two manifest locations are checked in order:
    *  1. `plugins/.manifest.json`  — for plugins loaded from the local plugins/
    *     directory (source === 'directory').
-   *  2. `node_modules/.authme-plugin-manifest.json` — for npm-installed plugins
+   *  2. `node_modules/.idenplane-plugin-manifest.json` — for npm-installed plugins
    *     (source === 'npm').  The npm manifest uses the npm package name as its
-   *     key (e.g. "authme-plugin-my-plugin") in addition to the full file path.
+   *     key (e.g. "idenplane-plugin-my-plugin") in addition to the full file path.
    *
    * Both manifests map file paths (absolute or relative) OR plugin names to
    * their expected SHA-256 hashes.
@@ -296,12 +296,12 @@ export class PluginLoaderService {
     if (localHash !== null) return localHash;
 
     // 2. npm manifest — also try the package name derived from the path so
-    //    that entries like { "authme-plugin-foo": "<hash>" } are matched even
+    //    that entries like { "idenplane-plugin-foo": "<hash>" } are matched even
     //    when the manifest was generated without full paths.
     const npmManifest = resolve(
       process.cwd(),
       'node_modules',
-      '.authme-plugin-manifest.json',
+      '.idenplane-plugin-manifest.json',
     );
     // Extract package name: last segment of node_modules/<name>/...
     const nmDir = resolve(process.cwd(), 'node_modules');

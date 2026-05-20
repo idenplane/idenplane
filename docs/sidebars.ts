@@ -34,7 +34,7 @@ const sidebars: SidebarsConfig = {
       link: {
         type: 'generated-index',
         title: 'API Reference',
-        description: 'Complete API documentation for AuthMe',
+        description: 'Complete API documentation for Idenplane',
         slug: '/api',
       },
       items: [

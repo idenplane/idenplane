@@ -18,7 +18,7 @@ jest.mock('otpauth', () => {
     TOTP: jest.fn(() => ({
       toString: jest.fn(
         () =>
-          'otpauth://totp/AuthMe%20(test-realm):user1?secret=MOCKED_BASE32_SECRET&issuer=AuthMe',
+          'otpauth://totp/Idenplane%20(test-realm):user1?secret=MOCKED_BASE32_SECRET&issuer=Idenplane',
       ),
       validate: jest.fn(() => 0), // default: valid token (delta = 0)
     })),
@@ -106,7 +106,7 @@ describe('MfaService', () => {
 
       expect(OTPAuth.TOTP).toHaveBeenCalledWith(
         expect.objectContaining({
-          issuer: 'AuthMe (my-realm)',
+          issuer: 'Idenplane (my-realm)',
           label: 'john',
           algorithm: 'SHA1',
           digits: 6,

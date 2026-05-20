@@ -1,7 +1,7 @@
 ---
 id: authentication
 title: Authentication API
-description: OAuth 2.0 and OpenID Connect token endpoints for AuthMe
+description: OAuth 2.0 and OpenID Connect token endpoints for Idenplane
 ---
 
 # Authentication API
@@ -129,7 +129,7 @@ curl -X POST "http://localhost:3000/realms/master/protocol/openid-connect/token"
 {
   "error": "invalid_grant",
   "error_description": "The authorization code has expired",
-  "error_uri": "https://authme.dev/docs/api/authentication"
+  "error_uri": "https://idenplane.dev/docs/api/authentication"
 }
 ```
 
@@ -232,8 +232,8 @@ curl -X POST "http://localhost:3000/realms/master/protocol/openid-connect/device
 {
   "device_code": "GmRhmhcxhwAzkoEqiMEg_DnyEysNkuNhszIySk9eS...",
   "user_code": "WDJB-MJHT",
-  "verification_uri": "https://authme.dev/device",
-  "verification_uri_complete": "https://authme.dev/device?user_code=WDJB-MJHT",
+  "verification_uri": "https://idenplane.dev/device",
+  "verification_uri_complete": "https://idenplane.dev/device?user_code=WDJB-MJHT",
   "expires_in": 600,
   "interval": 5
 }

@@ -15,25 +15,25 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: authme
-      POSTGRES_PASSWORD: authme
-      POSTGRES_DB: authme
+      POSTGRES_USER: idenplane
+      POSTGRES_PASSWORD: idenplane
+      POSTGRES_DB: idenplane
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U authme"]
+      test: ["CMD-SHELL", "pg_isready -U idenplane"]
       interval: 5s
       timeout: 3s
       retries: 5
 
   app:
-    image: islamawad/authme:latest
+    image: islamawad/idenplane:latest
     ports:
       - "3000:3000"
     environment:
-      DATABASE_URL: postgresql://authme:authme@db:5432/authme
+      DATABASE_URL: postgresql://idenplane:idenplane@db:5432/idenplane
       PORT: "3000"
       NODE_ENV: production
       ADMIN_API_KEY: ${ADMIN_API_KEY:?Set ADMIN_API_KEY}

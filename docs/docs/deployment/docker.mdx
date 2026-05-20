@@ -2,18 +2,18 @@
 id: docker
 title: Docker Compose Deployment
 sidebar_position: 1
-description: Deploy AuthMe using Docker Compose for production and development environments.
+description: Deploy Idenplane using Docker Compose for production and development environments.
 ---
 
 # Docker Compose Deployment
 
-AuthMe provides production-ready Docker Compose configurations for easy deployment. This guide covers both production and development setups.
+Idenplane provides production-ready Docker Compose configurations for easy deployment. This guide covers both production and development setups.
 
 ---
 
 ## Quick Start
 
-The fastest way to deploy AuthMe with Docker Compose:
+The fastest way to deploy Idenplane with Docker Compose:
 
 ```bash
 # Download the production compose file
@@ -80,25 +80,25 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: authme
-      POSTGRES_PASSWORD: authme
-      POSTGRES_DB: authme
+      POSTGRES_USER: idenplane
+      POSTGRES_PASSWORD: idenplane
+      POSTGRES_DB: idenplane
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U authme"]
+      test: ["CMD-SHELL", "pg_isready -U idenplane"]
       interval: 5s
       timeout: 3s
       retries: 5
 
   app:
-    image: islamawad/authme:latest
+    image: islamawad/idenplane:latest
     ports:
       - "3000:3000"
     environment:
-      DATABASE_URL: postgresql://authme:authme@db:5432/authme
+      DATABASE_URL: postgresql://idenplane:idenplane@db:5432/idenplane
       PORT: "3000"
       NODE_ENV: production
       ADMIN_API_KEY: ${ADMIN_API_KEY:-change-me-in-production}
@@ -172,15 +172,15 @@ services:
   db:
     image: postgres:16-alpine
     environment:
-      POSTGRES_USER: authme
-      POSTGRES_PASSWORD: authme
-      POSTGRES_DB: authme
+      POSTGRES_USER: idenplane
+      POSTGRES_PASSWORD: idenplane
+      POSTGRES_DB: idenplane
     ports:
       - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U authme"]
+      test: ["CMD-SHELL", "pg_isready -U idenplane"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -190,10 +190,10 @@ services:
   # mysql:
   #   image: mysql:8.0
   #   environment:
-  #     MYSQL_ROOT_PASSWORD: authme
-  #     MYSQL_DATABASE: authme
-  #     MYSQL_USER: authme
-  #     MYSQL_PASSWORD: authme
+  #     MYSQL_ROOT_PASSWORD: idenplane
+  #     MYSQL_DATABASE: idenplane
+  #     MYSQL_USER: idenplane
+  #     MYSQL_PASSWORD: idenplane
   #   command: >
   #     --character-set-server=utf8mb4
   #     --collation-server=utf8mb4_unicode_ci
@@ -202,7 +202,7 @@ services:
   #   volumes:
   #     - mysqldata:/var/lib/mysql
   #   healthcheck:
-  #     test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "authme", "-pauthme"]
+  #     test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "idenplane", "-pidenplane"]
   #     interval: 5s
   #     timeout: 3s
   #     retries: 10
@@ -219,9 +219,9 @@ services:
       - "3000:3000"
     environment:
       # PostgreSQL (default):
-      DATABASE_URL: postgresql://authme:authme@db:5432/authme
+      DATABASE_URL: postgresql://idenplane:idenplane@db:5432/idenplane
       # MySQL — uncomment when using the mysql service above:
-      # DATABASE_URL: mysql://authme:authme@mysql:3306/authme
+      # DATABASE_URL: mysql://idenplane:idenplane@mysql:3306/idenplane
       # SQLite — not recommended inside Docker; use host-mode dev instead:
       # DATABASE_URL: file:./dev.db
       PORT: "3000"
@@ -267,9 +267,9 @@ PostgreSQL is the recommended database for production deployments:
 db:
   image: postgres:16-alpine
   environment:
-    POSTGRES_USER: authme
-    POSTGRES_PASSWORD: authme
-    POSTGRES_DB: authme
+    POSTGRES_USER: idenplane
+    POSTGRES_PASSWORD: idenplane
+    POSTGRES_DB: idenplane
 ```
 
 ### MySQL 8
@@ -285,7 +285,7 @@ To use MySQL instead:
 
 3. Update the DATABASE_URL:
    ```
-   DATABASE_URL: mysql://authme:authme@mysql:3306/authme
+   DATABASE_URL: mysql://idenplane:idenplane@mysql:3306/idenplane
    ```
 
 :::note
@@ -342,7 +342,7 @@ Redis is optional and can be enabled for session caching:
 
 ## Common Tasks
 
-### Updating AuthMe
+### Updating Idenplane
 
 ```bash
 # Pull the latest image
@@ -356,10 +356,10 @@ docker compose up -d
 
 ```bash
 # Backup PostgreSQL data
-docker compose exec db pg_dump -U authme authme > backup.sql
+docker compose exec db pg_dump -U idenplane idenplane > backup.sql
 
 # Restore from backup
-docker compose exec -T db psql -U authme authme < backup.sql
+docker compose exec -T db psql -U idenplane idenplane < backup.sql
 ```
 
 ### Viewing Logs
@@ -399,7 +399,7 @@ docker compose down -v
 ### Database Connection Errors
 
 1. Verify PostgreSQL is running: `docker compose ps db`
-2. Check health status: `docker compose exec db pg_isready -U authme`
+2. Check health status: `docker compose exec db pg_isready -U idenplane`
 3. Inspect connection string in `.env`
 
 ### Permission Denied Errors
@@ -409,7 +409,7 @@ If you see permission errors on volumes:
 ```bash
 # Reset volume permissions
 docker compose down
-docker volume rm $(docker volume ls -q | grep authme)
+docker volume rm $(docker volume ls -q | grep idenplane)
 docker compose up -d
 ```
 
@@ -420,7 +420,7 @@ docker compose up -d
 <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
 
 [**Kubernetes**](/docs/deployment/kubernetes)
-Deploy AuthMe on Kubernetes with Helm charts
+Deploy Idenplane on Kubernetes with Helm charts
 
 [**Environment Variables**](/docs/configuration/environment-variables)
 Complete list of all configuration options
@@ -433,7 +433,7 @@ Detailed configuration guide
 ---
 
 <p align="center">
-  <a href="https://authme.dev">authme.dev</a> &middot;
+  <a href="https://idenplane.dev">idenplane.dev</a> &middot;
   <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
-  <a href="https://discord.gg/authme">Discord</a>
+  <a href="https://discord.gg/idenplane">Discord</a>
 </p>

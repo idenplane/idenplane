@@ -2,12 +2,12 @@
 id: options
 title: Configuration Options
 sidebar_position: 2
-description: Complete reference for all AuthMe configuration options available through the Admin API and Admin Console.
+description: Complete reference for all Idenplane configuration options available through the Admin API and Admin Console.
 ---
 
 # Configuration Options
 
-This reference documents all configuration options available in AuthMe, organized by category. Options can be set through the Admin API, Admin Console, or programmatically via the SDK.
+This reference documents all configuration options available in Idenplane, organized by category. Options can be set through the Admin API, Admin Console, or programmatically via the SDK.
 
 ---
 
@@ -31,7 +31,7 @@ This reference documents all configuration options available in AuthMe, organize
 
 ## Realm Configuration
 
-Realms are top-level tenants in AuthMe, each with isolated user pools, clients, and configuration.
+Realms are top-level tenants in Idenplane, each with isolated user pools, clients, and configuration.
 
 ### Core Realm Settings
 
@@ -107,25 +107,25 @@ PUT /admin/realms/{realm}
 
 ## Theme Configuration
 
-AuthMe supports customizable themes for different UI contexts.
+Idenplane supports customizable themes for different UI contexts.
 
 ### Theme Types
 
 | Theme | Description | Options |
 |-------|-------------|---------|
-| `loginTheme` | Login, registration, password reset screens | `authme`, `base`, custom themes |
-| `accountTheme` | User account management console | `authme`, `base`, custom themes |
-| `adminTheme` | Admin console (legacy) | `authme`, `base`, custom themes |
-| `emailTheme` | Email templates | `authme`, `base`, custom themes |
+| `loginTheme` | Login, registration, password reset screens | `idenplane`, `base`, custom themes |
+| `accountTheme` | User account management console | `idenplane`, `base`, custom themes |
+| `adminTheme` | Admin console (legacy) | `idenplane`, `base`, custom themes |
+| `emailTheme` | Email templates | `idenplane`, `base`, custom themes |
 
 ### Theme Settings
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `loginTheme` | string | `authme` | Theme for login pages |
-| `accountTheme` | string | `authme` | Theme for user account console |
-| `adminTheme` | string | `authme` | Theme for admin console |
-| `emailTheme` | string | `authme` | Theme for email templates |
+| `loginTheme` | string | `idenplane` | Theme for login pages |
+| `accountTheme` | string | `idenplane` | Theme for user account console |
+| `adminTheme` | string | `idenplane` | Theme for admin console |
+| `emailTheme` | string | `idenplane` | Theme for email templates |
 | `defaultLocale` | string | `en` | Default locale (e.g., `en`, `de`, `fr`) |
 
 ### Creating Custom Themes
@@ -349,7 +349,7 @@ curl -X POST http://localhost:3000/admin/realms/{realm}/clients \
   -d '{
     "clientId": "my-app",
     "name": "My Application",
-    "description": "My application using AuthMe",
+    "description": "My application using Idenplane",
     "enabled": true,
     "publicClient": false,
     "redirectUris": ["http://localhost:3000/callback"],
@@ -553,7 +553,7 @@ curl -X PUT http://localhost:3000/admin/realms/{realm} \
   -d '{
     "eventsEnabled": true,
     "eventsExpiration": 2592000,
-    "eventsListeners": ["jboss-logging", "authme-events"]
+    "eventsListeners": ["jboss-logging", "idenplane-events"]
   }'
 ```
 
@@ -724,7 +724,7 @@ curl -X POST http://localhost:3000/admin/realms/{realm}/roles-by-id/{roleId}/com
 
 ## Webhook Configuration
 
-Configure webhooks to receive notifications about AuthMe events.
+Configure webhooks to receive notifications about Idenplane events.
 
 ### Webhook Settings
 
@@ -761,7 +761,7 @@ curl -X POST http://localhost:3000/admin/realms/{realm}/webhooks \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "url": "https://example.com/webhooks/authme",
+    "url": "https://example.com/webhooks/idenplane",
     "events": ["LOGIN", "LOGOUT", "USER_CREATED"],
     "secret": "your-webhook-secret",
     "enabled": true
@@ -770,7 +770,7 @@ curl -X POST http://localhost:3000/admin/realms/{realm}/webhooks \
 
 ### Verifying Webhooks
 
-AuthMe signs webhook payloads using HMAC-SHA256:
+Idenplane signs webhook payloads using HMAC-SHA256:
 
 ```typescript
 import crypto from 'crypto';
@@ -830,10 +830,10 @@ const defaultRealmConfig = {
   adminEventsEnabled: false,
 
   // Themes
-  loginTheme: 'authme',
-  accountTheme: 'authme',
-  adminTheme: 'authme',
-  emailTheme: 'authme',
+  loginTheme: 'idenplane',
+  accountTheme: 'idenplane',
+  adminTheme: 'idenplane',
+  emailTheme: 'idenplane',
 };
 ```
 
@@ -844,10 +844,10 @@ const defaultRealmConfig = {
 ### TypeScript SDK Configuration
 
 ```typescript
-import { AuthMeClient } from '@authme/sdk';
+import { IdenplaneClient } from '@idenplane/sdk';
 
 // Realm configuration
-const client = new AuthMeClient({
+const client = new IdenplaneClient({
   baseUrl: 'https://auth.example.com',
   realm: 'my-realm',
 });
@@ -891,7 +891,7 @@ Deploy with Docker Compose
 ---
 
 <p align="center">
-  <a href="https://authme.dev">authme.dev</a> &middot;
+  <a href="https://idenplane.dev">idenplane.dev</a> &middot;
   <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
-  <a href="https://discord.gg/authme">Discord</a>
+  <a href="https://discord.gg/idenplane">Discord</a>
 </p>

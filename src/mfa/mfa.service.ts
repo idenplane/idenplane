@@ -118,7 +118,7 @@ export class MfaService {
     const secret = new OTPAuth.Secret({ size: 20 });
 
     const totp = new OTPAuth.TOTP({
-      issuer: `AuthMe (${realmName})`,
+      issuer: `Idenplane (${realmName})`,
       label: username,
       algorithm: 'SHA1',
       digits: 6,

@@ -246,7 +246,7 @@ export class LoginController {
               oauthParamsForChallenge,
             );
 
-            res.cookie('AUTHME_MFA_CHALLENGE', challengeToken, {
+            res.cookie('IDENPLANE_MFA_CHALLENGE', challengeToken, {
               httpOnly: true,
               secure: process.env['NODE_ENV'] === 'production',
               sameSite: 'strict',
@@ -334,7 +334,7 @@ export class LoginController {
           oauthParams,
         );
 
-        res.cookie('AUTHME_MFA_CHALLENGE', challengeToken, {
+        res.cookie('IDENPLANE_MFA_CHALLENGE', challengeToken, {
           httpOnly: true,
           secure: process.env['NODE_ENV'] === 'production',
           sameSite: 'strict',
@@ -353,10 +353,10 @@ export class LoginController {
           user,
           resolveClientIp(req),
           req.headers['user-agent'],
-          req.cookies?.['AUTHME_SESSION'] as string | undefined,
+          req.cookies?.['IDENPLANE_SESSION'] as string | undefined,
         );
 
-        res.cookie('AUTHME_SESSION', sessionToken, {
+        res.cookie('IDENPLANE_SESSION', sessionToken, {
           httpOnly: true,
           secure: process.env['NODE_ENV'] === 'production',
           sameSite: 'strict',
@@ -421,10 +421,10 @@ export class LoginController {
       user,
       resolveClientIp(req),
       req.headers['user-agent'],
-      req.cookies?.['AUTHME_SESSION'] as string | undefined,
+      req.cookies?.['IDENPLANE_SESSION'] as string | undefined,
     );
 
-    res.cookie('AUTHME_SESSION', sessionToken, {
+    res.cookie('IDENPLANE_SESSION', sessionToken, {
       httpOnly: true,
       secure: process.env['NODE_ENV'] === 'production',
       sameSite: 'strict',
@@ -511,7 +511,7 @@ export class LoginController {
     this.validateCsrf(realm, body, req);
     const challengeToken = (
       req.cookies as Record<string, string | undefined>
-    )?.['AUTHME_MFA_CHALLENGE'];
+    )?.['IDENPLANE_MFA_CHALLENGE'];
     if (!challengeToken) {
       return res.redirect(
         `/realms/${realm.name}/login?error=${encodeURIComponent('MFA session expired. Please login again.')}`,
@@ -524,7 +524,7 @@ export class LoginController {
         challengeToken,
       );
     if (!challenge) {
-      res.clearCookie('AUTHME_MFA_CHALLENGE', {
+      res.clearCookie('IDENPLANE_MFA_CHALLENGE', {
         path: `/realms/${realm.name}`,
       });
       return res.redirect(
@@ -537,7 +537,7 @@ export class LoginController {
       this.logger.warn(
         `MFA cross-realm token use attempt: challenge realm ${challenge.realmId} used against realm ${realm.id}`,
       );
-      res.clearCookie('AUTHME_MFA_CHALLENGE', {
+      res.clearCookie('IDENPLANE_MFA_CHALLENGE', {
         path: `/realms/${realm.name}`,
       });
       return res.redirect(
@@ -600,7 +600,7 @@ export class LoginController {
 
     // MFA verified — consume the challenge and clear the cookie
     await this.mfaService.consumeMfaChallenge(challengeToken);
-    res.clearCookie('AUTHME_MFA_CHALLENGE', { path: `/realms/${realm.name}` });
+    res.clearCookie('IDENPLANE_MFA_CHALLENGE', { path: `/realms/${realm.name}` });
 
     // Reset TOTP failure tracking on successful verification
     await this.bruteForceService.resetTotpFailures(realm.id, challenge.userId);

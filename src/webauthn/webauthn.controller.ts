@@ -49,7 +49,7 @@ export class WebAuthnController {
 
   private async getSessionUser(realm: Realm, req: Request) {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- express Request.cookies typed as any
-    const sessionToken = req.cookies?.['AUTHME_SESSION'];
+    const sessionToken = req.cookies?.['IDENPLANE_SESSION'];
     if (!sessionToken) return null;
 
     return this.loginService.validateLoginSession(
@@ -198,10 +198,10 @@ export class WebAuthnController {
       user,
       resolveClientIp(req),
       req.headers['user-agent'],
-      req.cookies?.['AUTHME_SESSION'] as string | undefined,
+      req.cookies?.['IDENPLANE_SESSION'] as string | undefined,
     );
 
-    res.cookie('AUTHME_SESSION', sessionToken, {
+    res.cookie('IDENPLANE_SESSION', sessionToken, {
       httpOnly: true,
       secure: process.env['NODE_ENV'] === 'production',
       sameSite: 'lax',

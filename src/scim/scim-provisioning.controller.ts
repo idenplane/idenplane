@@ -154,7 +154,7 @@ export class ScimProvisioningController {
     dto: {
       resourceType: string;
       scimAttribute: string;
-      authmeAttribute: string;
+      idenplaneAttribute: string;
       direction?: string;
     },
   ) {
@@ -163,7 +163,7 @@ export class ScimProvisioningController {
         realmId: realm.id,
         resourceType: dto.resourceType,
         scimAttribute: dto.scimAttribute,
-        authmeAttribute: dto.authmeAttribute,
+        idenplaneAttribute: dto.idenplaneAttribute,
         direction: dto.direction || 'inbound',
       },
     });

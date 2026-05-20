@@ -178,11 +178,11 @@ model Realm {
   ipRateLimitPerHour       Int     @default(200) @map("ip_rate_limit_per_hour")
 
   // Theming
-  themeName    String @default("authme") @map("theme_name") @db.VarChar(50)
+  themeName    String @default("idenplane") @map("theme_name") @db.VarChar(50)
   theme        Json?  @default("{}") @map("theme")
-  loginTheme   String @default("authme") @map("login_theme") @db.VarChar(50)
-  accountTheme String @default("authme") @map("account_theme") @db.VarChar(50)
-  emailTheme   String @default("authme") @map("email_theme") @db.VarChar(50)
+  loginTheme   String @default("idenplane") @map("login_theme") @db.VarChar(50)
+  accountTheme String @default("idenplane") @map("account_theme") @db.VarChar(50)
+  emailTheme   String @default("idenplane") @map("email_theme") @db.VarChar(50)
 
   // Internationalization (i18n)
   defaultLocale    String   @default("en") @map("default_locale") @db.VarChar(10)
@@ -1643,7 +1643,7 @@ model ContinuousRiskPolicy {
   // Action when policy fires
   // "NO_ACTION" | "STEP_UP" | "TERMINATE" | "NOTIFY"
   action     String @default("NO_ACTION") @map("action")
-  actionData Json?  @map("action_data") // e.g. { "stepUpAcr": "urn:authme:acrs:phishing-resistant" }
+  actionData Json?  @map("action_data") // e.g. { "stepUpAcr": "urn:idenplane:acrs:phishing-resistant" }
 
   // Risk score contribution (added to running risk score when policy fires)
   riskScoreContribution Int @default(0) @map("risk_score_contribution")
@@ -1868,7 +1868,7 @@ model ScimAttributeMapping {
   realm           Realm    @relation(fields: [realmId], references: [id], onDelete: Cascade)
   resourceType    String // "User" | "Group"
   scimAttribute   String   @map("scim_attribute")
-  authmeAttribute String   @map("authme_attribute")
+  idenplaneAttribute String   @map("idenplane_attribute")
   enabled         Boolean  @default(true)
   direction       String   @default("inbound") // "inbound" | "outbound" | "bidirectional"
   createdAt       DateTime @default(now()) @map("created_at")

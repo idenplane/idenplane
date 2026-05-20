@@ -2,7 +2,7 @@
 # ─────────────────────────────────────────────────────────────────────────────
 # benchmarks/scripts/run-benchmarks.sh
 #
-# Executes the AuthMe performance benchmark suite.
+# Executes the Idenplane performance benchmark suite.
 #
 # What it does:
 #   1. Validates that the benchmark stack is running
@@ -12,11 +12,11 @@
 #
 # Usage:
 #   ./benchmarks/scripts/run-benchmarks.sh
-#   ./benchmarks/scripts/run-benchmarks.sh --target authme
+#   ./benchmarks/scripts/run-benchmarks.sh --target idenplane
 #
 # Options:
-#   --target TARGET  - Target to benchmark (authme, keycloak, authentik, zitadel, all)
-#                      Default: authme
+#   --target TARGET  - Target to benchmark (idenplane, keycloak, authentik, zitadel, all)
+#                      Default: idenplane
 #   --vus VUS        - Number of virtual users (overrides env)
 #   --duration DUR   - Test duration (overrides env)
 # ─────────────────────────────────────────────────────────────────────────────
@@ -29,7 +29,7 @@ RESULTS_DIR="${BENCHMARKS_DIR}/results"
 COMPOSE_FILE="${BENCHMARKS_DIR}/docker-compose.benchmarks.yml"
 
 # ── Parse arguments ───────────────────────────────────────────────────────────
-TARGET="authme"
+TARGET="idenplane"
 VUS_OVERRIDE=""
 DURATION_OVERRIDE=""
 
@@ -69,7 +69,7 @@ RAMP_UP="${RAMP_UP:-10s}"
 # ── Validate prerequisites ─────────────────────────────────────────────────────
 echo ""
 echo "═══════════════════════════════════════════════════════════════════════════"
-echo "  AuthMe Benchmark Runner"
+echo "  Idenplane Benchmark Runner"
 echo "═══════════════════════════════════════════════════════════════════════════"
 echo ""
 echo "  Target:     ${TARGET}"
@@ -95,7 +95,7 @@ APP_HEALTH=$(docker compose -f "${COMPOSE_FILE}" ps --format json app 2>/dev/nul
   grep -o '"Health":"[^"]*"' | cut -d'"' -f4 || echo "")
 
 if [[ "${APP_HEALTH}" != "healthy" ]]; then
-  echo "WARNING: AuthMe app health check returned: ${APP_HEALTH:-unknown}"
+  echo "WARNING: Idenplane app health check returned: ${APP_HEALTH:-unknown}"
   echo "  Attempting to continue..."
 fi
 
@@ -118,7 +118,7 @@ echo "[3/6] Capturing baseline resource metrics..."
 BASELINE_FILE="${RESULTS_DIR}/${TARGET}-baseline-${TIMESTAMP}.json"
 
 # Get container stats
-CONTAINER_STATS=$(docker stats --no-stream --format '{{json .}}' authme-benchmark-target 2>/dev/null || echo "{}")
+CONTAINER_STATS=$(docker stats --no-stream --format '{{json .}}' idenplane-benchmark-target 2>/dev/null || echo "{}")
 
 # Parse memory usage (convert to MB)
 MEMORY_RAW=$(echo "${CONTAINER_STATS}" | grep -o '"MemUsage":"[^"]*"' | cut -d'"' -f4 || echo "0MB / 512MB")
@@ -154,11 +154,11 @@ if [[ -f "${K6_CONFIG}" ]]; then
 fi
 
 # ── Define test scripts per target ────────────────────────────────────────────
-AUTHME_SCRIPTS=(
-  "authme-login"
-  "authme-token-issuance"
-  "authme-token-introspection"
-  "authme-userinfo"
+IDENPLANE_SCRIPTS=(
+  "idenplane-login"
+  "idenplane-token-issuance"
+  "idenplane-token-introspection"
+  "idenplane-userinfo"
 )
 
 KEYCLOAK_SCRIPTS=(
@@ -184,8 +184,8 @@ ZITADEL_SCRIPTS=(
 
 # ── Select test scripts based on target ───────────────────────────────────────
 case "${TARGET}" in
-  authme)
-    TEST_SCRIPTS=("${AUTHME_SCRIPTS[@]}")
+  idenplane)
+    TEST_SCRIPTS=("${IDENPLANE_SCRIPTS[@]}")
     ;;
   keycloak)
     TEST_SCRIPTS=("${KEYCLOAK_SCRIPTS[@]}")
@@ -198,7 +198,7 @@ case "${TARGET}" in
     ;;
   all)
     TEST_SCRIPTS=(
-      "${AUTHME_SCRIPTS[@]}"
+      "${IDENPLANE_SCRIPTS[@]}"
       "${KEYCLOAK_SCRIPTS[@]}"
       "${AUTHENTIK_SCRIPTS[@]}"
       "${ZITADEL_SCRIPTS[@]}"
@@ -206,7 +206,7 @@ case "${TARGET}" in
     ;;
   *)
     echo "ERROR: Unknown target: ${TARGET}" >&2
-    echo "  Valid targets: authme, keycloak, authentik, zitadel, all" >&2
+    echo "  Valid targets: idenplane, keycloak, authentik, zitadel, all" >&2
     exit 1
     ;;
 esac

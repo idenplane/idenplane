@@ -1,6 +1,6 @@
 # Benchmark Methodology
 
-This document describes how AuthMe's performance benchmarks are conducted, including hardware requirements, test setup, and step-by-step reproduction instructions.
+This document describes how Idenplane's performance benchmarks are conducted, including hardware requirements, test setup, and step-by-step reproduction instructions.
 
 ## Table of Contents
 
@@ -67,8 +67,8 @@ python3 --version
 ### 1. Clone the Repository
 
 ```bash
-git clone https://github.com/authme/authme.git
-cd authme
+git clone https://github.com/idenplane/idenplane.git
+cd idenplane
 ```
 
 ### 2. Prepare Environment
@@ -105,9 +105,9 @@ docker compose -f benchmarks/docker-compose.benchmarks.yml ps
 Expected output:
 ```
 NAME                  STATUS
-authme-benchmark-db   healthy
-authme-benchmark-target  healthy
-authme-benchmark-runner  running
+idenplane-benchmark-db   healthy
+idenplane-benchmark-target  healthy
+idenplane-benchmark-runner  running
 keycloak-benchmark-db   healthy
 keycloak-benchmark-target  healthy
 authentik-benchmark-db   healthy
@@ -123,14 +123,14 @@ Different IAM solutions have different startup times:
 
 | System | Typical Startup Time |
 |--------|---------------------|
-| AuthMe | 3-5 seconds |
+| Idenplane | 3-5 seconds |
 | Keycloak | 60-90 seconds |
 | Authentik | 30-60 seconds |
 | Zitadel | 15-30 seconds |
 
 ```bash
-# Wait for AuthMe specifically
-docker compose -f benchmarks/docker-compose.benchmarks.yml logs --follow app 2>&1 | grep -q "Server running" || echo "AuthMe started"
+# Wait for Idenplane specifically
+docker compose -f benchmarks/docker-compose.benchmarks.yml logs --follow app 2>&1 | grep -q "Server running" || echo "Idenplane started"
 ```
 
 ---
@@ -173,12 +173,12 @@ export const options = {
 
 #### High-Load Scenario
 ```bash
-VUS=100 DURATION=300s ./benchmarks/scripts/run-benchmarks.sh --target authme
+VUS=100 DURATION=300s ./benchmarks/scripts/run-benchmarks.sh --target idenplane
 ```
 
 #### Quick Smoke Test
 ```bash
-VUS=5 DURATION=10s ./benchmarks/scripts/run-benchmarks.sh --target authme
+VUS=5 DURATION=10s ./benchmarks/scripts/run-benchmarks.sh --target idenplane
 ```
 
 ---
@@ -195,8 +195,8 @@ VUS=5 DURATION=10s ./benchmarks/scripts/run-benchmarks.sh --target authme
 ### Individual System Benchmarks
 
 ```bash
-# AuthMe only
-./benchmarks/scripts/run-benchmarks.sh --target authme
+# Idenplane only
+./benchmarks/scripts/run-benchmarks.sh --target idenplane
 
 # Keycloak only
 ./benchmarks/scripts/run-benchmarks.sh --target keycloak
@@ -215,7 +215,7 @@ VUS=5 DURATION=10s ./benchmarks/scripts/run-benchmarks.sh --target authme
 python3 benchmarks/scripts/generate-report.py benchmarks/results/
 
 # Compare specific results
-python3 benchmarks/scripts/compare-results.py benchmarks/results/authme-baseline.json benchmarks/results/keycloak-results.json
+python3 benchmarks/scripts/compare-results.py benchmarks/results/idenplane-baseline.json benchmarks/results/keycloak-results.json
 ```
 
 ### Clean Up
@@ -257,7 +257,7 @@ docker compose -f benchmarks/docker-compose.benchmarks.yml down --volumes
 
 ```json
 {
-  "authme": {
+  "idenplane": {
     "memory_mb": 150,
     "requests_per_second": 2500,
     "latency_p50_ms": 12.5,
@@ -269,7 +269,7 @@ docker compose -f benchmarks/docker-compose.benchmarks.yml down --volumes
 
 ### Understanding the Comparison
 
-AuthMe vs Keycloak efficiency:
+Idenplane vs Keycloak efficiency:
 - **Memory**: 150MB vs 1,250MB = 8.3x more efficient
 - **Throughput**: 2,500 vs 450 req/s = 5.5x more throughput
 - **p99 Latency**: 98.7ms vs 423.5ms = 4.3x lower latency
@@ -314,7 +314,7 @@ docker compose -f benchmarks/docker-compose.benchmarks.yml ps
 # Docker Desktop > Settings > Resources > Memory > 8GB
 
 # Or reduce VUS for testing
-VUS=10 DURATION=30s ./benchmarks/scripts/run-benchmarks.sh --target authme
+VUS=10 DURATION=30s ./benchmarks/scripts/run-benchmarks.sh --target idenplane
 ```
 
 ### Performance Tips
@@ -327,7 +327,7 @@ VUS=10 DURATION=30s ./benchmarks/scripts/run-benchmarks.sh --target authme
 
 ### Getting Help
 
-- [AuthMe GitHub Issues](https://github.com/authme/authme/issues)
+- [Idenplane GitHub Issues](https://github.com/idenplane/idenplane/issues)
 - [k6 Documentation](https://grafana.com/docs/k6/latest/)
 - [Docker Compose Docs](https://docs.docker.com/compose/)
 

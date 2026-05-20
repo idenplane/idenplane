@@ -1,0 +1,21 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: "{{ include "idenplane.fullname" . }}-test-connection"
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "idenplane.labels" . | nindent 4 }}
+  annotations:
+    "helm.sh/hook": test
+    "helm.sh/hook-delete-policy": before-hook-creation,hook-succeeded
+spec:
+  restartPolicy: Never
+  containers:
+    - name: wget
+      image: busybox:1.36
+      command:
+        - wget
+      args:
+        - --spider
+        - --timeout=10
+        - "http://{{ include "idenplane.fullname" . }}:{{ .Values.service.port }}/health"

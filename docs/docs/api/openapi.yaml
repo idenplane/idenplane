@@ -1,8 +1,8 @@
 openapi: 3.0.3
 info:
-  title: AuthMe - Open Source Identity and Access Management
+  title: Idenplane - Open Source Identity and Access Management
   description: |
-    AuthMe is an open-source authentication and authorization server implementing
+    Idenplane is an open-source authentication and authorization server implementing
     the OAuth 2.0 and OpenID Connect protocols.
 
     ## Authentication
@@ -20,9 +20,9 @@ info:
     Some endpoints are rate-limited. See specific endpoint documentation for details.
   version: 1.0.0
   contact:
-    name: AuthMe Project
-    url: https://authme.dev
-    email: support@authme.dev
+    name: Idenplane Project
+    url: https://idenplane.dev
+    email: support@idenplane.dev
   license:
     name: Apache 2.0
     url: https://www.apache.org/licenses/LICENSE-2.0.html
@@ -2319,7 +2319,7 @@ components:
           default: false
         themeName:
           type: string
-          default: authme
+          default: idenplane
         defaultLocale:
           type: string
           default: en
@@ -2416,7 +2416,7 @@ components:
           default: false
         themeName:
           type: string
-          default: authme
+          default: idenplane
         webAuthnEnabled:
           type: boolean
           default: false

@@ -108,7 +108,7 @@ export class ThemeService implements OnModuleInit {
 
   /**
    * Returns the theme inheritance chain from child to root.
-   * E.g., for "dark" with parent "authme": ["dark", "authme"]
+   * E.g., for "dark" with parent "idenplane": ["dark", "idenplane"]
    */
   getInheritanceChain(themeName: string): string[] {
     const chain: string[] = [];
@@ -182,7 +182,7 @@ export class ThemeService implements OnModuleInit {
       mutedColor: getString('mutedColor', baseColors.mutedColor),
       logoUrl: getString('logoUrl', ''),
       faviconUrl: getString('faviconUrl', ''),
-      appTitle: getString('appTitle', 'AuthMe'),
+      appTitle: getString('appTitle', 'Idenplane'),
       customCss: getString('customCss', ''),
       themeCssFiles: [], // Will be set by ThemeRenderService
     };
@@ -193,7 +193,7 @@ export class ThemeService implements OnModuleInit {
    * Used during migration before per-type fields are added.
    */
   resolveTheme(realm: Realm): ResolvedTheme {
-    const themeName = realm.loginTheme ?? realm.themeName ?? 'authme';
+    const themeName = realm.loginTheme ?? realm.themeName ?? 'idenplane';
     const resolved = this.resolveColors(themeName, realm);
     resolved.themeCssFiles = this.resolveCss(themeName, 'login');
     return resolved;
@@ -205,13 +205,13 @@ export class ThemeService implements OnModuleInit {
   getRealmThemeName(realm: Realm, themeType: ThemeType): string {
     switch (themeType) {
       case 'login':
-        return realm.loginTheme ?? realm.themeName ?? 'authme';
+        return realm.loginTheme ?? realm.themeName ?? 'idenplane';
       case 'account':
-        return realm.accountTheme ?? realm.themeName ?? 'authme';
+        return realm.accountTheme ?? realm.themeName ?? 'idenplane';
       case 'email':
-        return realm.emailTheme ?? realm.themeName ?? 'authme';
+        return realm.emailTheme ?? realm.themeName ?? 'idenplane';
       default:
-        return realm.themeName ?? 'authme';
+        return realm.themeName ?? 'idenplane';
     }
   }
 

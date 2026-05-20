@@ -12,7 +12,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { PluginLoaderService } from './plugin-loader.service.js';
 import { PluginRegistry } from './plugin-registry.js';
 import type {
-  AuthMePlugin,
+  IdenplanePlugin,
   PluginContext,
   EventListenerPlugin,
   TokenEnrichmentPlugin,
@@ -93,7 +93,7 @@ export class PluginManagerService implements OnModuleInit {
    *   for integrity verification.
    */
   private async installOrSync(
-    plugin: AuthMePlugin,
+    plugin: IdenplanePlugin,
     sourcePath: string,
   ): Promise<void> {
     try {
@@ -350,7 +350,7 @@ export class PluginManagerService implements OnModuleInit {
   // ─── Helpers ──────────────────────────────────────────────────────────────
 
   private buildContext(
-    plugin: AuthMePlugin,
+    plugin: IdenplanePlugin,
     config: Record<string, any> | null,
   ): PluginContext {
     return {
@@ -364,7 +364,7 @@ export class PluginManagerService implements OnModuleInit {
    * Invoke a lifecycle hook on a plugin, isolating any thrown errors.
    */
   private async invokeLifecycle(
-    plugin: AuthMePlugin,
+    plugin: IdenplanePlugin,
     hook: 'onInstall' | 'onEnable' | 'onDisable' | 'onUninstall',
     context: PluginContext,
   ): Promise<void> {
@@ -382,11 +382,11 @@ export class PluginManagerService implements OnModuleInit {
 
   // ─── Type-narrowing helpers exposed for integration ───────────────────────
 
-  isEventListener(p: AuthMePlugin): p is EventListenerPlugin {
+  isEventListener(p: IdenplanePlugin): p is EventListenerPlugin {
     return isEventListenerPlugin(p);
   }
 
-  isTokenEnrichment(p: AuthMePlugin): p is TokenEnrichmentPlugin {
+  isTokenEnrichment(p: IdenplanePlugin): p is TokenEnrichmentPlugin {
     return isTokenEnrichmentPlugin(p);
   }
 }

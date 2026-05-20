@@ -45,7 +45,7 @@ export class AccountController {
   ) {}
 
   private async getSessionUser(realm: Realm, req: Request) {
-    const sessionToken = req.cookies?.['AUTHME_SESSION'] as string | undefined;
+    const sessionToken = req.cookies?.['IDENPLANE_SESSION'] as string | undefined;
     if (!sessionToken) return null;
     return this.loginService.validateLoginSession(realm, sessionToken);
   }

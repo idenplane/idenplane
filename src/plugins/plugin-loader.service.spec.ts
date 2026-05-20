@@ -129,18 +129,18 @@ describe('PluginLoaderService', () => {
       expect(result).toEqual([]);
     });
 
-    it('should only consider packages with authme-plugin- prefix', async () => {
+    it('should only consider packages with idenplane-plugin- prefix', async () => {
       mockExistsSync.mockImplementation((p: string) => {
         return p === '/node_modules';
       });
       mockReaddirSync.mockReturnValue([
         { isDirectory: () => true, name: 'some-other-package' },
-        { isDirectory: () => true, name: 'authme-plugin-example' },
+        { isDirectory: () => true, name: 'idenplane-plugin-example' },
       ]);
 
       // No index file present → skip gracefully
       const result = await service.discoverFromNpm('/node_modules');
-      // authme-plugin-example has no index file so it won't load, but it was considered
+      // idenplane-plugin-example has no index file so it won't load, but it was considered
       expect(result).toHaveLength(0);
     });
 

@@ -524,7 +524,7 @@ function generatePreviewHtml(
     <head>
       <meta charset="UTF-8">
       <meta name="viewport" content="width=device-width, initial-scale=1.0">
-      <title>${settings.appTitle || 'AuthMe'} - Login Preview</title>
+      <title>${settings.appTitle || 'Idenplane'} - Login Preview</title>
       <style>
         ${cssVars}
         ${baseStyles}

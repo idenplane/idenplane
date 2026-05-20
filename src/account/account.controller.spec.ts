@@ -79,7 +79,7 @@ describe('AccountController', () => {
 
     mockRes = { redirect: jest.fn() };
     mockReqWithSession = {
-      cookies: { AUTHME_SESSION: 'valid-token' },
+      cookies: { IDENPLANE_SESSION: 'valid-token' },
       query: {},
     };
     mockReqNoSession = { cookies: {} };

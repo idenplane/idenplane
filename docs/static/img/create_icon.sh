@@ -1,5 +1,5 @@
 #!/bin/bash
-# Create a minimal 32x32 PNG icon (blue shield with lock, AuthMe brand)
+# Create a minimal 32x32 PNG icon (blue shield with lock, Idenplane brand)
 # Using printf to write binary PNG data
 
 # Minimal valid PNG - 32x32 solid blue square

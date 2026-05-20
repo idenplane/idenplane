@@ -27,7 +27,7 @@ const TAG_BYTES = 16; // 128-bit authentication tag
 
 /** Default/placeholder values that must never be used in production. */
 const DEFAULT_WEBHOOK_SECRET_KEY = 'dev-webhook-secret-key-replace-me';
-const DEFAULT_WEBHOOK_ENCRYPTION_SALT = 'authme-webhook-salt';
+const DEFAULT_WEBHOOK_ENCRYPTION_SALT = 'idenplane-webhook-salt';
 
 @Injectable()
 export class CryptoService implements OnModuleInit {

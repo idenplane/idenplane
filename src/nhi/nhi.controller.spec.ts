@@ -339,7 +339,7 @@ describe('NhiController', () => {
           '-----BEGIN PRIVATE KEY-----\n...\n-----END PRIVATE KEY-----',
         info: {
           subject: 'CN=device-1',
-          issuer: 'CN=authme',
+          issuer: 'CN=idenplane',
           notBefore: '2026-01-01T00:00:00.000Z',
           notAfter: '2027-01-01T00:00:00.000Z',
           fingerprint: 'SHA256:AB:CD:EF',

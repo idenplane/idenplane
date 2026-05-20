@@ -2,13 +2,13 @@
 
 ## Reporting a Vulnerability
 
-The AuthMe team takes security seriously. If you believe you have found a security vulnerability, please report it to us privately so that we have an opportunity to fix it before public disclosure.
+The Idenplane team takes security seriously. If you believe you have found a security vulnerability, please report it to us privately so that we have an opportunity to fix it before public disclosure.
 
 **Please do _not_ report security vulnerabilities through public GitHub issues, discussions, or pull requests.**
 
 ### How to Report
 
-Send a detailed report to **security@authme.dev**.
+Send a detailed report to **security@idenplane.dev**.
 
 To help us triage your report quickly, please include:
 
@@ -22,7 +22,7 @@ You should receive an initial response within **48 hours**. If you do not, pleas
 
 ## Supported Versions
 
-Only the latest released version of AuthMe receives security updates. Older versions should be upgraded.
+Only the latest released version of Idenplane receives security updates. Older versions should be upgraded.
 
 | Version | Supported |
 |---------|-----------|
@@ -45,10 +45,10 @@ We aim to address all valid reports within **90 days** of the initial report. Cr
 
 In scope:
 
-- The AuthMe server (`src/`)
+- The Idenplane server (`src/`)
 - Official client SDKs in `packages/`
 - The admin UI (`admin-ui/`)
-- Docker images published under `islamawad/authme`
+- Docker images published under `islamawad/idenplane`
 - Helm charts and Terraform/Pulumi providers under this repository
 
 Out of scope:
@@ -66,4 +66,4 @@ We will not take legal action against researchers who:
 - Give us a reasonable time to respond before any public disclosure
 - Do not exploit the issue beyond what is necessary to demonstrate it
 
-Thank you for helping keep AuthMe and its users safe.
+Thank you for helping keep Idenplane and its users safe.

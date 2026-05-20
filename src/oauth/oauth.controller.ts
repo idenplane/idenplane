@@ -51,7 +51,7 @@ export class OAuthController {
 
     // Check for existing SSO session cookie
     const sessionCookie = (req.cookies as Record<string, string>)?.[
-      'AUTHME_SESSION'
+      'IDENPLANE_SESSION'
     ];
     if (sessionCookie) {
       const user = await this.loginService.validateLoginSession(
@@ -108,7 +108,7 @@ export class OAuthController {
               stepUpParams.set('acr', requiredAcr);
               stepUpParams.set('client_id', client.clientId);
               // session_token is intentionally omitted — the step-up challenge
-              // endpoint reads the session from the AUTHME_SESSION cookie so
+              // endpoint reads the session from the IDENPLANE_SESSION cookie so
               // the token is never exposed in URLs, server logs, or Referer headers.
               // Encode the original OAuth params as a `continue` parameter so
               // the step-up UI can redirect back after success.

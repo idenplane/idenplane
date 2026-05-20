@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="https://authme.dev/logo.svg" alt="AuthMe" width="60" />
+  <img src="https://idenplane.dev/logo.svg" alt="Idenplane" width="60" />
 </p>
 
-<h2 align="center">AuthMe Admin Console</h2>
+<h2 align="center">Idenplane Admin Console</h2>
 
 <p align="center">
-  <strong>Full-featured web dashboard for managing your AuthMe instance.</strong><br />
+  <strong>Full-featured web dashboard for managing your Idenplane instance.</strong><br />
   <sub>Built with React 19, Vite 7, Tailwind CSS 4, and React Query.</sub>
 </p>
 
@@ -13,7 +13,7 @@
 
 ## Overview
 
-The Admin Console is a single-page application served at `/console` that provides complete management of all AuthMe resources. It communicates with the backend via REST API using either an admin API key or credential-based JWT authentication.
+The Admin Console is a single-page application served at `/console` that provides complete management of all Idenplane resources. It communicates with the backend via REST API using either an admin API key or credential-based JWT authentication.
 
 ### Capabilities
 
@@ -137,5 +137,5 @@ In Docker, the multi-stage build handles this automatically — the admin consol
 ---
 
 <p align="center">
-  Part of <a href="https://authme.dev">AuthMe</a> — Open-source Identity & Access Management
+  Part of <a href="https://idenplane.dev">Idenplane</a> — Open-source Identity & Access Management
 </p>

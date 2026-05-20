@@ -31,7 +31,7 @@ describe('BruteForceController', () => {
       unlockUser: jest.fn(),
     };
     stepUpService = {
-      getSessionAcr: jest.fn().mockResolvedValue('urn:authme:acr:mfa'),
+      getSessionAcr: jest.fn().mockResolvedValue('urn:idenplane:acr:mfa'),
       satisfiesAcr: jest.fn().mockReturnValue(true),
     };
     loginService = {
@@ -72,10 +72,10 @@ describe('BruteForceController', () => {
       bruteForceService.unlockUser.mockResolvedValue(undefined);
       const realm = { id: 'realm-1', name: 'test' } as any;
 
-      // Provide a request with adminUser (non-api-key) and AUTHME_SESSION cookie
+      // Provide a request with adminUser (non-api-key) and IDENPLANE_SESSION cookie
       const req = {
         adminUser: { userId: 'admin-1' },
-        cookies: { AUTHME_SESSION: 'valid-session-token' },
+        cookies: { IDENPLANE_SESSION: 'valid-session-token' },
       } as any;
 
       await controller.unlockUser(realm, 'user-1', req);

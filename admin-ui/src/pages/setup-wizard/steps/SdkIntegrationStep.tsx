@@ -36,10 +36,10 @@ function generateSnippets(
     {
       language: 'typescript',
       label: 'TypeScript / Node.js',
-      code: `import AuthMe from '@authme/sdk';
+      code: `import Idenplane from '@idenplane/sdk';
 
-// Initialize the AuthMe SDK
-const auth = new AuthMe({
+// Initialize the Idenplane SDK
+const auth = new Idenplane({
   issuer: '${authServerUrl}/realms/${realmName}',
   clientId: '${clientId}',
   clientSecret: '${clientSecret}',
@@ -59,9 +59,9 @@ await auth.logout();`,
     {
       language: 'javascript',
       label: 'JavaScript',
-      code: `<script src="https://cdn.authme.example.com/authme.min.js"></script>
+      code: `<script src="https://cdn.idenplane.example.com/idenplane.min.js"></script>
 <script>
-  const auth = new AuthMe({
+  const auth = new Idenplane({
     issuer: '${authServerUrl}/realms/${realmName}',
     clientId: '${clientId}',
     clientSecret: '${clientSecret}',
@@ -80,9 +80,9 @@ await auth.logout();`,
     {
       language: 'python',
       label: 'Python',
-      code: `from authme import AuthMeClient
+      code: `from idenplane import IdenplaneClient
 
-client = AuthMeClient(
+client = IdenplaneClient(
     issuer='${authServerUrl}/realms/${realmName}',
     client_id='${clientId}',
     client_secret='${clientSecret}',
@@ -126,10 +126,10 @@ curl -X POST ${authServerUrl}/realms/${realmName}/protocol/openid-connect/token 
       language: 'java',
       label: 'Java (Spring Boot)',
       code: `// Add to pom.xml or build.gradle:
-// implementation 'org.authme:authme-sdk:1.0.0'
+// implementation 'org.idenplane:idenplane-sdk:1.0.0'
 
 @Autowired
-private AuthMeClient authMeClient;
+private IdenplaneClient authMeClient;
 
 @GetMapping("/login")
 public String login(HttpSession session) {

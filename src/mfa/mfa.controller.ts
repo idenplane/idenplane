@@ -126,7 +126,7 @@ export class MfaController {
       );
     }
 
-    const sessionToken = req.cookies?.['AUTHME_SESSION'] as string | undefined;
+    const sessionToken = req.cookies?.['IDENPLANE_SESSION'] as string | undefined;
     if (!sessionToken) {
       throw new UnauthorizedException(
         'MFA step-up is required. No active session found. Please log in via the user login flow to establish an MFA-verified session.',
@@ -156,7 +156,7 @@ export class MfaController {
     const currentAcr = await this.stepUpService.getSessionAcr(loginSession.id);
     if (!this.stepUpService.satisfiesAcr(currentAcr, ACR_MFA)) {
       throw new UnauthorizedException(
-        'MFA step-up is required to disable user MFA. Please complete MFA verification via POST /realms/:realmName/step-up/verify with acr=urn:authme:acr:mfa before retrying.',
+        'MFA step-up is required to disable user MFA. Please complete MFA verification via POST /realms/:realmName/step-up/verify with acr=urn:idenplane:acr:mfa before retrying.',
       );
     }
   }

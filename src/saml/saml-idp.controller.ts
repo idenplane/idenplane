@@ -154,7 +154,7 @@ export class SamlIdpController {
     });
 
     res.cookie(
-      'AUTHME_SAML_REQUEST',
+      'IDENPLANE_SAML_REQUEST',
       Buffer.from(samlSessionData).toString('base64'),
       {
         httpOnly: true,
@@ -166,7 +166,7 @@ export class SamlIdpController {
     );
 
     // Check if the user already has an active login session
-    const sessionToken = req.cookies?.['AUTHME_SESSION'] as string | undefined;
+    const sessionToken = req.cookies?.['IDENPLANE_SESSION'] as string | undefined;
     if (sessionToken) {
       const user = await this.loginService.validateLoginSession(
         realm,
@@ -212,7 +212,7 @@ export class SamlIdpController {
     );
 
     // Clear the SAML request cookie
-    res.clearCookie('AUTHME_SAML_REQUEST', { path: `/realms/${realm.name}` });
+    res.clearCookie('IDENPLANE_SAML_REQUEST', { path: `/realms/${realm.name}` });
 
     // Send an auto-submitting HTML form (POST binding)
     const html = `<!DOCTYPE html>

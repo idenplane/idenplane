@@ -30,7 +30,7 @@ describe('ThemeEmailService', () => {
 
   beforeEach(() => {
     themeService = {
-      getRealmThemeName: jest.fn().mockReturnValue('authme'),
+      getRealmThemeName: jest.fn().mockReturnValue('idenplane'),
       resolveColors: jest.fn().mockReturnValue({
         primaryColor: '#2563eb',
         backgroundColor: '#f0f2f5',
@@ -39,7 +39,7 @@ describe('ThemeEmailService', () => {
     templateService = {
       resolve: jest
         .fn()
-        .mockReturnValue('/app/themes/authme/email/templates/verify-email.hbs'),
+        .mockReturnValue('/app/themes/idenplane/email/templates/verify-email.hbs'),
     };
     messageService = {
       getMessages: jest.fn().mockReturnValue({
@@ -70,12 +70,12 @@ describe('ThemeEmailService', () => {
         'email',
       );
       expect(templateService.resolve).toHaveBeenCalledWith(
-        'authme',
+        'idenplane',
         'email',
         'verify-email',
       );
       expect(messageService.getMessages).toHaveBeenCalledWith(
-        'authme',
+        'idenplane',
         'email',
         'en',
       );

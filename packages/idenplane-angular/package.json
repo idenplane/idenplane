@@ -1,0 +1,61 @@
+{
+  "name": "idenplane-angular",
+  "version": "1.0.1",
+  "description": "Angular SDK for Idenplane Identity and Access Management Server",
+  "type": "commonjs",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "require": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      }
+    }
+  },
+  "peerDependencies": {
+    "@angular/common": ">=17.0.0",
+    "@angular/core": ">=17.0.0",
+    "@angular/router": ">=17.0.0",
+    "idenplane-sdk": ">=1.0.0",
+    "rxjs": ">=7.0.0"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "typecheck": "tsc --noEmit",
+    "test": "vitest run",
+    "test:watch": "vitest"
+  },
+  "devDependencies": {
+    "@angular/common": "^19.0.0",
+    "@angular/core": "^19.0.0",
+    "@angular/router": "^19.0.0",
+    "idenplane-sdk": "file:../idenplane-js",
+    "rxjs": "^7.8.0",
+    "typescript": "^5.7.0",
+    "vitest": "^4.0.18",
+    "zone.js": "^0.15.0"
+  },
+  "files": [
+    "dist",
+    "README.md"
+  ],
+  "keywords": [
+    "idenplane",
+    "oauth2",
+    "oidc",
+    "angular",
+    "authentication",
+    "interceptor",
+    "guard"
+  ],
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Islamawad132/Authme.git",
+    "directory": "packages/idenplane-angular"
+  },
+  "publishConfig": {
+    "access": "public"
+  }
+}

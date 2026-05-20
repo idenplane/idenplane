@@ -140,8 +140,8 @@ describe('RollbackService', () => {
       // Mock backup listing
       mockDatabaseBackupService.listBackups.mockReturnValue([
         {
-          path: '/backups/authme-backup-456.sql.gz',
-          filename: 'authme-backup-456.sql.gz',
+          path: '/backups/idenplane-backup-456.sql.gz',
+          filename: 'idenplane-backup-456.sql.gz',
           size: '50 MB',
           created: now,
           age: 1,
@@ -154,7 +154,7 @@ describe('RollbackService', () => {
       // Mock backup restore
       mockDatabaseBackupService.restoreBackup.mockReturnValue({
         success: true,
-        backupPath: '/backups/authme-backup-456.sql.gz',
+        backupPath: '/backups/idenplane-backup-456.sql.gz',
         duration: 5000,
         timestamp: new Date(),
       });
@@ -168,7 +168,7 @@ describe('RollbackService', () => {
         startedAt: now,
         completedAt: new Date(),
         initiatedBy: 'ROLLBACK_SERVICE',
-        backupId: '/backups/authme-backup-456.sql.gz',
+        backupId: '/backups/idenplane-backup-456.sql.gz',
         rollbackFromVersion: '2.1.0',
         errorMessage: null,
         checksPassed: {},
@@ -277,8 +277,8 @@ describe('RollbackService', () => {
 
       mockDatabaseBackupService.listBackups.mockReturnValue([
         {
-          path: '/backups/authme-backup-456.sql.gz',
-          filename: 'authme-backup-456.sql.gz',
+          path: '/backups/idenplane-backup-456.sql.gz',
+          filename: 'idenplane-backup-456.sql.gz',
           size: '50 MB',
           created: now,
           age: 1,
@@ -316,8 +316,8 @@ describe('RollbackService', () => {
 
       mockDatabaseBackupService.listBackups.mockReturnValue([
         {
-          path: '/backups/authme-backup-456.sql.gz',
-          filename: 'authme-backup-456.sql.gz',
+          path: '/backups/idenplane-backup-456.sql.gz',
+          filename: 'idenplane-backup-456.sql.gz',
           size: '50 MB',
           created: now,
           age: 1,
@@ -382,8 +382,8 @@ describe('RollbackService', () => {
 
       mockDatabaseBackupService.listBackups.mockReturnValue([
         {
-          path: '/backups/authme-backup-456.sql.gz',
-          filename: 'authme-backup-456.sql.gz',
+          path: '/backups/idenplane-backup-456.sql.gz',
+          filename: 'idenplane-backup-456.sql.gz',
           size: '50 MB',
           created: now,
           age: 1,
@@ -393,7 +393,7 @@ describe('RollbackService', () => {
       mockDatabaseBackupService.verifyBackup.mockReturnValue(true);
       mockDatabaseBackupService.restoreBackup.mockReturnValue({
         success: true,
-        backupPath: '/backups/authme-backup-456.sql.gz',
+        backupPath: '/backups/idenplane-backup-456.sql.gz',
         duration: 5000,
         timestamp: new Date(),
       });
@@ -406,7 +406,7 @@ describe('RollbackService', () => {
         startedAt: now,
         completedAt: new Date(),
         initiatedBy: 'ROLLBACK_SERVICE',
-        backupId: '/backups/authme-backup-456.sql.gz',
+        backupId: '/backups/idenplane-backup-456.sql.gz',
         rollbackFromVersion: '2.1.0',
         errorMessage: null,
         checksPassed: {},

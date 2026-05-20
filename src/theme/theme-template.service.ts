@@ -41,12 +41,12 @@ export class ThemeTemplateService {
       }
     }
 
-    // Fallback to the default 'authme' theme to prevent 500 errors
-    if (themeName !== 'authme') {
+    // Fallback to the default 'idenplane' theme to prevent 500 errors
+    if (themeName !== 'idenplane') {
       this.logger.warn(
-        `Template "${templateName}" not found for theme "${themeName}/${themeType}", falling back to "authme"`,
+        `Template "${templateName}" not found for theme "${themeName}/${themeType}", falling back to "idenplane"`,
       );
-      return this.resolve('authme', themeType, templateName);
+      return this.resolve('idenplane', themeType, templateName);
     }
 
     throw new Error(

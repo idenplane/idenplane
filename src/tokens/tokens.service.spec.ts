@@ -105,7 +105,7 @@ describe('TokensService', () => {
       });
       jwkService.verifyJwt.mockResolvedValue({
         sub: 'user-1',
-        iss: 'https://authme/realm-1',
+        iss: 'https://idenplane/realm-1',
         aud: 'my-app',
         exp: Math.floor(Date.now() / 1000) + 300,
         iat: Math.floor(Date.now() / 1000),
@@ -120,7 +120,7 @@ describe('TokensService', () => {
 
       expect(result.active).toBe(true);
       expect(result.sub).toBe('user-1');
-      expect(result.iss).toBe('https://authme/realm-1');
+      expect(result.iss).toBe('https://idenplane/realm-1');
       expect(result.aud).toBe('my-app');
       expect(result.scope).toBe('openid profile');
       expect(result.preferred_username).toBe('testuser');

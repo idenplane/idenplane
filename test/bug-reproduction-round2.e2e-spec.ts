@@ -415,7 +415,7 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
           response_type: 'code',
           scope: 'openid',
           redirect_uri: 'http://localhost:3000/callback',
-          acr_values: 'urn:authme:acr:mfa',
+          acr_values: 'urn:idenplane:acr:mfa',
         });
 
       // EXPECTED: 400 (client can't request ACR higher than its requiredAcr)

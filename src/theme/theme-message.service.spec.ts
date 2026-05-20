@@ -134,10 +134,10 @@ describe('ThemeMessageService', () => {
   describe('onModuleInit', () => {
     it('should pre-load messages for all themes and types', async () => {
       themeService.getAvailableThemes.mockReturnValue([
-        { name: 'authme' },
+        { name: 'idenplane' },
         { name: 'dark' },
       ]);
-      themeService.getInheritanceChain.mockReturnValue(['authme']);
+      themeService.getInheritanceChain.mockReturnValue(['idenplane']);
       mockedExistsSync.mockReturnValue(false);
 
       await service.onModuleInit();

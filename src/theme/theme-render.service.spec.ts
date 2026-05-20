@@ -34,7 +34,7 @@ describe('ThemeRenderService', () => {
 
   beforeEach(() => {
     themeService = {
-      getRealmThemeName: jest.fn().mockReturnValue('authme'),
+      getRealmThemeName: jest.fn().mockReturnValue('idenplane'),
       getThemesDir: jest.fn().mockReturnValue('/app/themes'),
       resolveColors: jest.fn().mockReturnValue({
         primaryColor: '#2563eb',
@@ -42,14 +42,14 @@ describe('ThemeRenderService', () => {
       }),
       resolveCss: jest
         .fn()
-        .mockReturnValue(['/themes/authme/login/resources/styles.css']),
+        .mockReturnValue(['/themes/idenplane/login/resources/styles.css']),
     };
     templateService = {
       resolve: jest
         .fn()
-        .mockReturnValueOnce('/app/themes/authme/login/templates/login.hbs')
+        .mockReturnValueOnce('/app/themes/idenplane/login/templates/login.hbs')
         .mockReturnValueOnce(
-          '/app/themes/authme/login/templates/layouts/main.hbs',
+          '/app/themes/idenplane/login/templates/layouts/main.hbs',
         ),
     };
     messageService = {
@@ -89,14 +89,14 @@ describe('ThemeRenderService', () => {
       const [template, data] = mockRes.render.mock.calls[0];
 
       // Template should be relative to themes dir
-      expect(template).toMatch(/authme[/\\]login[/\\]templates[/\\]login\.hbs/);
+      expect(template).toMatch(/idenplane[/\\]login[/\\]templates[/\\]login\.hbs/);
 
       // Data should include merged colors, messages, and page data
       expect(data.formAction).toBe('/login');
       expect(data.primaryColor).toBe('#2563eb');
       expect(data._messages).toEqual({ loginTitle: 'Sign In' });
       expect(data.themeCssFiles).toEqual([
-        '/themes/authme/login/resources/styles.css',
+        '/themes/idenplane/login/resources/styles.css',
       ]);
       expect(data.realmName).toBe('test-realm');
       expect(data.realmDisplayName).toBe('Test Realm');
@@ -130,12 +130,12 @@ describe('ThemeRenderService', () => {
 
       expect(templateService.resolve).toHaveBeenCalledTimes(2);
       expect(templateService.resolve).toHaveBeenCalledWith(
-        'authme',
+        'idenplane',
         'login',
         'login',
       );
       expect(templateService.resolve).toHaveBeenCalledWith(
-        'authme',
+        'idenplane',
         'login',
         'layouts/main',
       );
@@ -272,7 +272,7 @@ describe('ThemeRenderService', () => {
       );
 
       expect(messageService.getMessages).toHaveBeenCalledWith(
-        'authme',
+        'idenplane',
         'login',
         'de',
       );
@@ -284,7 +284,7 @@ describe('ThemeRenderService', () => {
       service.render(mockRes as any, realmWithLocale, 'login', 'login', {});
 
       expect(messageService.getMessages).toHaveBeenCalledWith(
-        'authme',
+        'idenplane',
         'login',
         'es',
       );
@@ -350,13 +350,13 @@ describe('ThemeRenderService', () => {
 
     it('should generate a unique nonce on each render call', () => {
       templateService.resolve
-        .mockReturnValueOnce('/app/themes/authme/login/templates/login.hbs')
+        .mockReturnValueOnce('/app/themes/idenplane/login/templates/login.hbs')
         .mockReturnValueOnce(
-          '/app/themes/authme/login/templates/layouts/main.hbs',
+          '/app/themes/idenplane/login/templates/layouts/main.hbs',
         )
-        .mockReturnValueOnce('/app/themes/authme/login/templates/login.hbs')
+        .mockReturnValueOnce('/app/themes/idenplane/login/templates/login.hbs')
         .mockReturnValueOnce(
-          '/app/themes/authme/login/templates/layouts/main.hbs',
+          '/app/themes/idenplane/login/templates/layouts/main.hbs',
         );
 
       service.render(

@@ -1,8 +1,8 @@
 <p align="center">
-  <img src="https://authme.dev/logo.svg" alt="AuthMe" width="80" />
+  <img src="https://idenplane.dev/logo.svg" alt="Idenplane" width="80" />
 </p>
 
-<h1 align="center">AuthMe</h1>
+<h1 align="center">Idenplane</h1>
 
 <p align="center">
   <strong>Open-Source Identity & Access Management</strong><br />
@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://authme.dev">Website</a> &middot;
+  <a href="https://idenplane.dev">Website</a> &middot;
   <a href="#features">Features</a> &middot;
   <a href="#quick-start">Quick Start</a> &middot;
   <a href="#client-sdks">SDKs</a> &middot;
@@ -21,18 +21,18 @@
 
 <p align="center">
   <a href="https://github.com/Islamawad132/Authme/actions"><img src="https://github.com/Islamawad132/Authme/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
-  <a href="https://www.npmjs.com/package/authme-sdk"><img src="https://img.shields.io/npm/v/authme-sdk?label=authme-sdk" alt="npm authme-sdk" /></a>
-  <a href="https://www.npmjs.com/package/authme-cli"><img src="https://img.shields.io/npm/v/authme-cli?label=authme-cli" alt="npm authme-cli" /></a>
-  <a href="https://hub.docker.com/r/islamawad/authme"><img src="https://img.shields.io/docker/v/islamawad/authme?label=Docker%20Hub" alt="Docker Hub" /></a>
+  <a href="https://www.npmjs.com/package/idenplane-sdk"><img src="https://img.shields.io/npm/v/idenplane-sdk?label=idenplane-sdk" alt="npm idenplane-sdk" /></a>
+  <a href="https://www.npmjs.com/package/idenplane-cli"><img src="https://img.shields.io/npm/v/idenplane-cli?label=idenplane-cli" alt="npm idenplane-cli" /></a>
+  <a href="https://hub.docker.com/r/islamawad/idenplane"><img src="https://img.shields.io/docker/v/islamawad/idenplane?label=Docker%20Hub" alt="Docker Hub" /></a>
   <a href="https://github.com/Islamawad132/Authme/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="License" /></a>
-  <a href="https://authme.dev"><img src="https://img.shields.io/badge/docs-authme.dev-blue" alt="Docs" /></a>
+  <a href="https://idenplane.dev"><img src="https://img.shields.io/badge/docs-idenplane.dev-blue" alt="Docs" /></a>
 </p>
 
 ---
 
-## Why AuthMe?
+## Why Idenplane?
 
-Most identity solutions are either too complex to self-host (Keycloak — 1GB+ RAM, Java) or too limited for production (simple JWT libraries). AuthMe fills that gap:
+Most identity solutions are either too complex to self-host (Keycloak — 1GB+ RAM, Java) or too limited for production (simple JWT libraries). Idenplane fills that gap:
 
 - **Deploy in 30 seconds** — single `docker compose up` gets you a full IAM server
 - **Modern stack** — TypeScript, NestJS, React, PostgreSQL. No Java, no XML
@@ -126,7 +126,7 @@ curl -o docker-compose.yml https://raw.githubusercontent.com/Islamawad132/Authme
 docker compose up -d
 ```
 
-That's it. AuthMe is now running:
+That's it. Idenplane is now running:
 
 | URL | Description |
 |-----|-------------|
@@ -175,50 +175,50 @@ npm run start:prod
 
 ## Client SDKs
 
-AuthMe provides official SDKs for every major platform:
+Idenplane provides official SDKs for every major platform:
 
 | Package | Install | Description |
 |---------|---------|-------------|
-| [**authme-sdk**](packages/authme-js/) | `npm i authme-sdk` | Core TypeScript SDK with React bindings (~5 KB gzipped) |
-| [**authme-nextjs**](packages/authme-nextjs/) | `npm i authme-nextjs` | Next.js SDK — App Router, middleware, Server Components |
-| [**authme-angular**](packages/authme-angular/) | `npm i authme-angular` | Angular SDK — service, guard, HTTP interceptor |
-| [**authme-vue**](packages/authme-vue/) | `npm i authme-vue` | Vue 3 SDK — composables, plugin, router guard |
-| [**authme-android**](packages/authme-android/) | Gradle/Maven | Android SDK — Chrome Custom Tabs, encrypted storage, biometrics |
-| [**authme-ios**](packages/authme-ios/) | Swift Package | iOS SDK — ASWebAuthenticationSession, Keychain, Face ID / Touch ID |
-| [**authme-cli**](packages/authme-cli/) | `npm i -g authme-cli` | CLI tool — manage realms, users, and configurations from terminal |
-| [**authme-python**](packages/authme-python/) | `pip install authme-python` | Python SDK — async client for Python 3.8+ applications |
-| [**authme-go**](packages/authme-go/) | `go get github.com/authme-go/authme` | Go SDK — idiomatic Go client with context support |
-| [**authme-java**](packages/authme-java/) | Maven/Gradle | Java SDK — Java 11+ client with Spring Boot integration |
+| [**idenplane-sdk**](packages/idenplane-js/) | `npm i idenplane-sdk` | Core TypeScript SDK with React bindings (~5 KB gzipped) |
+| [**idenplane-nextjs**](packages/idenplane-nextjs/) | `npm i idenplane-nextjs` | Next.js SDK — App Router, middleware, Server Components |
+| [**idenplane-angular**](packages/idenplane-angular/) | `npm i idenplane-angular` | Angular SDK — service, guard, HTTP interceptor |
+| [**idenplane-vue**](packages/idenplane-vue/) | `npm i idenplane-vue` | Vue 3 SDK — composables, plugin, router guard |
+| [**idenplane-android**](packages/idenplane-android/) | Gradle/Maven | Android SDK — Chrome Custom Tabs, encrypted storage, biometrics |
+| [**idenplane-ios**](packages/idenplane-ios/) | Swift Package | iOS SDK — ASWebAuthenticationSession, Keychain, Face ID / Touch ID |
+| [**idenplane-cli**](packages/idenplane-cli/) | `npm i -g idenplane-cli` | CLI tool — manage realms, users, and configurations from terminal |
+| [**idenplane-python**](packages/idenplane-python/) | `pip install idenplane-python` | Python SDK — async client for Python 3.8+ applications |
+| [**idenplane-go**](packages/idenplane-go/) | `go get github.com/idenplane-go/idenplane` | Go SDK — idiomatic Go client with context support |
+| [**idenplane-java**](packages/idenplane-java/) | Maven/Gradle | Java SDK — Java 11+ client with Spring Boot integration |
 
 ### Quick Example (5 Lines to Authenticate)
 
 ```typescript
-import { AuthmeClient } from 'authme-sdk';
+import { AuthmeClient } from 'idenplane-sdk';
 
-const authme = new AuthmeClient({
+const idenplane = new AuthmeClient({
   url: 'http://localhost:3000',
   realm: 'my-realm',
   clientId: 'my-app',
   redirectUri: 'http://localhost:5173/callback',
 });
 
-await authme.init();
-if (!authme.isAuthenticated()) {
-  await authme.login(); // Redirects to AuthMe login page
+await idenplane.init();
+if (!idenplane.isAuthenticated()) {
+  await idenplane.login(); // Redirects to Idenplane login page
 }
 ```
 
 ### React
 
 ```tsx
-import { AuthmeClient } from 'authme-sdk';
-import { AuthmeProvider, useAuthme, useUser } from 'authme-sdk/react';
+import { AuthmeClient } from 'idenplane-sdk';
+import { AuthmeProvider, useAuthme, useUser } from 'idenplane-sdk/react';
 
-const authme = new AuthmeClient({ /* config */ });
+const idenplane = new AuthmeClient({ /* config */ });
 
 function App() {
   return (
-    <AuthmeProvider client={authme}>
+    <AuthmeProvider client={idenplane}>
       <Dashboard />
     </AuthmeProvider>
   );
@@ -243,9 +243,9 @@ function Dashboard() {
 
 ```typescript
 // middleware.ts
-import { authmeMiddleware } from 'authme-nextjs/middleware';
+import { idenplaneMiddleware } from 'idenplane-nextjs/middleware';
 
-export default authmeMiddleware({
+export default idenplaneMiddleware({
   serverUrl: 'http://localhost:3000',
   realm: 'my-realm',
   clientId: 'my-app',
@@ -254,7 +254,7 @@ export default authmeMiddleware({
 });
 
 // app/dashboard/page.tsx (Server Component)
-import { getServerUser } from 'authme-nextjs/server';
+import { getServerUser } from 'idenplane-nextjs/server';
 
 export default async function Dashboard() {
   const user = await getServerUser();
@@ -266,7 +266,7 @@ export default async function Dashboard() {
 
 ```typescript
 // app.module.ts
-import { AuthModule } from 'authme-angular';
+import { AuthModule } from 'idenplane-angular';
 
 @NgModule({
   imports: [
@@ -287,7 +287,7 @@ export class AppModule {}
 
 ```typescript
 // main.ts
-import { createAuthmePlugin } from 'authme-vue';
+import { createAuthmePlugin } from 'idenplane-vue';
 
 app.use(createAuthmePlugin({
   serverUrl: 'http://localhost:3000',
@@ -301,38 +301,38 @@ app.use(createAuthmePlugin({
 
 ### Works with Any OIDC Library
 
-AuthMe implements standard OpenID Connect, so it works out of the box with `oidc-client-ts`, `react-oidc-context`, `next-auth`, and any other compliant library.
+Idenplane implements standard OpenID Connect, so it works out of the box with `oidc-client-ts`, `react-oidc-context`, `next-auth`, and any other compliant library.
 
 ---
 
 ## CLI
 
-AuthMe ships with a command-line tool for managing your server:
+Idenplane ships with a command-line tool for managing your server:
 
 ```bash
-npm install -g authme-cli
+npm install -g idenplane-cli
 ```
 
 ```bash
 # Configure connection
-authme config set --server http://localhost:3000 --api-key YOUR_KEY
+idenplane config set --server http://localhost:3000 --api-key YOUR_KEY
 
 # Manage realms
-authme realms list
-authme realms create my-realm
+idenplane realms list
+idenplane realms create my-realm
 
 # Manage users
-authme users list --realm my-realm
-authme users create --realm my-realm --username john --email john@example.com
+idenplane users list --realm my-realm
+idenplane users create --realm my-realm --username john --email john@example.com
 
 # Bulk import from CSV
-authme users import --realm my-realm --file users.csv
+idenplane users import --realm my-realm --file users.csv
 
 # Manage clients
-authme clients list --realm my-realm
+idenplane clients list --realm my-realm
 ```
 
-See the full CLI documentation at [`packages/authme-cli/`](packages/authme-cli/).
+See the full CLI documentation at [`packages/idenplane-cli/`](packages/idenplane-cli/).
 
 ---
 
@@ -348,7 +348,7 @@ graph TB
         API["API Client"]
     end
 
-    subgraph AuthMe["AuthMe Server"]
+    subgraph Idenplane["Idenplane Server"]
         subgraph Gateways["Gateways"]
             AdminAPI["Admin REST API"]
             OAuth["OAuth/OIDC Endpoints"]
@@ -401,20 +401,20 @@ graph TB
 ```mermaid
 sequenceDiagram
     participant Client
-    participant AuthMe
+    participant Idenplane
     participant DB as Database
     participant MFA as MFA Service
 
-    Client->>AuthMe: POST /token (credentials)
-    AuthMe->>DB: Validate credentials
-    DB-->>AuthMe: User found
-    AuthMe->>AuthMe: Check MFA required?
-    AuthMe->>MFA: Verify TOTP
-    MFA-->>AuthMe: MFA valid
-    AuthMe->>DB: Create session
-    AuthMe->>DB: Create tokens
-    DB-->>AuthMe: Tokens created
-    AuthMe-->>Client: { access_token, refresh_token }
+    Client->>Idenplane: POST /token (credentials)
+    Idenplane->>DB: Validate credentials
+    DB-->>Idenplane: User found
+    Idenplane->>Idenplane: Check MFA required?
+    Idenplane->>MFA: Verify TOTP
+    MFA-->>Idenplane: MFA valid
+    Idenplane->>DB: Create session
+    Idenplane->>DB: Create tokens
+    DB-->>Idenplane: Tokens created
+    Idenplane-->>Client: { access_token, refresh_token }
 ```
 
 ### Tech Stack
@@ -432,7 +432,7 @@ sequenceDiagram
 | **Observability** | Pino (logs), prom-client (metrics), @nestjs/terminus (health) |
 | **Container** | Docker multi-stage build, Docker Compose (single, dev, cluster) |
 | **SDKs** | TypeScript, React, Next.js, Angular, Vue, Android (Kotlin), iOS (Swift) |
-| **CLI** | authme-cli (Node.js, Commander.js) |
+| **CLI** | idenplane-cli (Node.js, Commander.js) |
 
 ---
 
@@ -591,15 +591,15 @@ Authme/
 │   └── common/                    # Shared guards, filters, decorators
 ├── admin-ui/                      # React admin console (React 19 + Tailwind 4)
 ├── packages/
-│   ├── authme-js/                 # Core TypeScript SDK
-│   ├── authme-nextjs/             # Next.js SDK
-│   ├── authme-angular/            # Angular SDK
-│   ├── authme-vue/                # Vue 3 SDK
-│   ├── authme-cli/                # CLI tool
-│   ├── authme-android/            # Android SDK (Kotlin)
-│   └── authme-ios/                # iOS SDK (Swift)
+│   ├── idenplane-js/                 # Core TypeScript SDK
+│   ├── idenplane-nextjs/             # Next.js SDK
+│   ├── idenplane-angular/            # Angular SDK
+│   ├── idenplane-vue/                # Vue 3 SDK
+│   ├── idenplane-cli/                # CLI tool
+│   ├── idenplane-android/            # Android SDK (Kotlin)
+│   └── idenplane-ios/                # iOS SDK (Swift)
 ├── themes/                        # Login/account page themes
-│   ├── authme/                    # Default theme
+│   ├── idenplane/                    # Default theme
 │   └── midnight/                  # Dark theme
 ├── prisma/                        # Database schema (83 models) & migrations
 ├── test/                          # E2E tests
@@ -644,7 +644,7 @@ npm run db:setup          # Generate + migrate + seed
 ### Docker Hub
 
 ```bash
-docker pull islamawad/authme:latest
+docker pull islamawad/idenplane:latest
 docker compose up -d
 ```
 
@@ -656,7 +656,7 @@ docker compose -f docker-compose.dev.yml up -d --build
 
 ### Horizontal Scaling
 
-AuthMe is fully stateless — all state is stored in PostgreSQL (and optionally Redis). Scale horizontally:
+Idenplane is fully stateless — all state is stored in PostgreSQL (and optionally Redis). Scale horizontally:
 
 ```bash
 # Using the cluster compose file (2 instances + Nginx LB)
@@ -677,7 +677,7 @@ REDIS_URL=redis://your-redis:6379
 
 ## Comparison
 
-| Feature | AuthMe | Keycloak | Auth0 | Clerk |
+| Feature | Idenplane | Keycloak | Auth0 | Clerk |
 |---------|--------|----------|-------|-------|
 | Self-hosted | Yes | Yes | No | No |
 | Open source | Yes | Yes | No | No |
@@ -717,17 +717,17 @@ Contributions are welcome! Please open an issue or submit a pull request.
 
 ## License
 
-AuthMe is released under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
+Idenplane is released under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
 
-You are free to use, modify, and distribute AuthMe. However, if you run a modified version of AuthMe as a network service (e.g. as a SaaS), the AGPL requires you to make the complete source code of your modified version available to its users.
+You are free to use, modify, and distribute Idenplane. However, if you run a modified version of Idenplane as a network service (e.g. as a SaaS), the AGPL requires you to make the complete source code of your modified version available to its users.
 
-For organizations that cannot comply with the AGPL — for example, because they want to embed AuthMe in a proprietary product — a **commercial license** is available. Contact [licensing@authme.dev](mailto:licensing@authme.dev) for details.
+For organizations that cannot comply with the AGPL — for example, because they want to embed Idenplane in a proprietary product — a **commercial license** is available. Contact [licensing@idenplane.dev](mailto:licensing@idenplane.dev) for details.
 
 See the [LICENSE](LICENSE) file for the full AGPL-3.0 text.
 
 ---
 
 <p align="center">
-  <a href="https://authme.dev">authme.dev</a> &middot;
+  <a href="https://idenplane.dev">idenplane.dev</a> &middot;
   Built with NestJS, React, and PostgreSQL
 </p>

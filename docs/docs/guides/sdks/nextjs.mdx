@@ -1,17 +1,17 @@
 ---
 id: nextjs-sdk
 title: Next.js SDK
-description: Integrate AuthMe authentication into your Next.js application using the official SDK with support for App Router, Pages Router, middleware, and Server Components
+description: Integrate Idenplane authentication into your Next.js application using the official SDK with support for App Router, Pages Router, middleware, and Server Components
 ---
 
 # Next.js SDK
 
-The AuthMe Next.js SDK provides seamless integration with Next.js applications, supporting both the App Router and Pages Router, route protection via middleware, and server-side authentication in Server Components and Route Handlers.
+The Idenplane Next.js SDK provides seamless integration with Next.js applications, supporting both the App Router and Pages Router, route protection via middleware, and server-side authentication in Server Components and Route Handlers.
 
 ## Installation
 
 ```bash
-npm install @authme/nextjs authme-sdk
+npm install @idenplane/nextjs idenplane-sdk
 ```
 
 ---
@@ -23,7 +23,7 @@ npm install @authme/nextjs authme-sdk
 ```tsx
 // app/layout.tsx
 'use client';
-import { AuthProvider } from '@authme/nextjs';
+import { AuthProvider } from '@idenplane/nextjs';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -47,7 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
 ```tsx
 'use client';
-import { useAuth } from '@authme/nextjs';
+import { useAuth } from '@idenplane/nextjs';
 
 export function NavBar() {
   const { isAuthenticated, user, login, logout, isLoading } = useAuth();
@@ -69,7 +69,7 @@ export function NavBar() {
 // middleware.ts
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { createAuthMiddleware } from '@authme/nextjs/middleware';
+import { createAuthMiddleware } from '@idenplane/nextjs/middleware';
 
 const authMiddleware = createAuthMiddleware({
   serverUrl: 'http://localhost:3000',
@@ -93,7 +93,7 @@ export const config = {
 ```tsx
 // app/dashboard/page.tsx
 import { cookies } from 'next/headers';
-import { getServerUser } from '@authme/nextjs/server';
+import { getServerUser } from '@idenplane/nextjs/server';
 import { redirect } from 'next/navigation';
 
 export default async function DashboardPage() {
@@ -119,7 +119,7 @@ The `AuthProvider` wraps your Next.js application and provides authentication st
 
 | Prop | Type | Required | Description |
 |------|------|----------|-------------|
-| `serverUrl` | `string` | Yes* | AuthMe server URL |
+| `serverUrl` | `string` | Yes* | Idenplane server URL |
 | `realm` | `string` | Yes* | Realm name |
 | `clientId` | `string` | Yes* | OAuth2 client ID |
 | `redirectUri` | `string` | Yes* | Redirect URI after login |
@@ -139,7 +139,7 @@ The `AuthProvider` wraps your Next.js application and provides authentication st
 ```tsx
 // app/layout.tsx
 'use client';
-import { AuthProvider } from '@authme/nextjs';
+import { AuthProvider } from '@idenplane/nextjs';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -171,8 +171,8 @@ For more control over the client configuration:
 ```tsx
 // app/providers.tsx
 'use client';
-import { AuthmeClient } from 'authme-sdk';
-import { AuthProvider } from '@authme/nextjs';
+import { AuthmeClient } from 'idenplane-sdk';
+import { AuthProvider } from '@idenplane/nextjs';
 
 const client = new AuthmeClient({
   url: 'http://localhost:3000',
@@ -231,7 +231,7 @@ const {
 
 ```tsx
 'use client';
-import { useAuth } from '@authme/nextjs';
+import { useAuth } from '@idenplane/nextjs';
 
 export function Navigation() {
   const { isAuthenticated, user, login, logout, isLoading } = useAuth();
@@ -262,7 +262,7 @@ export function Navigation() {
 
 ```tsx
 'use client';
-import { useAuth } from '@authme/nextjs';
+import { useAuth } from '@idenplane/nextjs';
 
 export function SignInButton() {
   const { login, isLoading } = useAuth();
@@ -287,7 +287,7 @@ export function SignInButton() {
 
 ```tsx
 'use client';
-import { useAuth } from '@authme/nextjs';
+import { useAuth } from '@idenplane/nextjs';
 
 export function TokenDisplay() {
   const { getToken, isAuthenticated } = useAuth();
@@ -317,7 +317,7 @@ Protect your routes at the edge with the `createAuthMiddleware` function:
 // middleware.ts
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { createAuthMiddleware } from '@authme/nextjs/middleware';
+import { createAuthMiddleware } from '@idenplane/nextjs/middleware';
 
 const authMiddleware = createAuthMiddleware({
   serverUrl: 'http://localhost:3000',
@@ -340,7 +340,7 @@ export const config = {
 
 | Option | Type | Required | Description |
 |--------|------|----------|-------------|
-| `serverUrl` | `string` | Yes | AuthMe server URL |
+| `serverUrl` | `string` | Yes | Idenplane server URL |
 | `realm` | `string` | Yes | Realm name |
 | `clientId` | `string` | Yes | OAuth2 client ID |
 | `protectedPaths` | `string[]` | Yes | Routes that require authentication |
@@ -354,7 +354,7 @@ export const config = {
 // middleware.ts
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { createAuthMiddleware } from '@authme/nextjs/middleware';
+import { createAuthMiddleware } from '@idenplane/nextjs/middleware';
 
 const authMiddleware = createAuthMiddleware({
   serverUrl: 'http://localhost:3000',
@@ -393,7 +393,7 @@ Access authentication state in Server Components using the `getServerUser` funct
 ```tsx
 // app/dashboard/page.tsx
 import { cookies } from 'next/headers';
-import { getServerUser } from '@authme/nextjs/server';
+import { getServerUser } from '@idenplane/nextjs/server';
 import { redirect } from 'next/navigation';
 
 export default async function DashboardPage() {
@@ -421,7 +421,7 @@ export default async function DashboardPage() {
 ```tsx
 // app/profile/page.tsx
 import { cookies } from 'next/headers';
-import { getServerAuth } from '@authme/nextjs/server';
+import { getServerAuth } from '@idenplane/nextjs/server';
 
 export default async function ProfilePage() {
   const cookieStore = cookies();
@@ -453,7 +453,7 @@ export default async function ProfilePage() {
 ```tsx
 // app/admin/page.tsx
 import { cookies } from 'next/headers';
-import { getServerUser } from '@authme/nextjs/server';
+import { getServerUser } from '@idenplane/nextjs/server';
 import { redirect } from 'next/navigation';
 
 export default async function AdminPage() {
@@ -495,7 +495,7 @@ Protect Pages Router API routes with the `withAuth` helper:
 
 ```typescript
 // pages/api/profile.ts
-import { withAuth } from '@authme/nextjs/api';
+import { withAuth } from '@idenplane/nextjs/api';
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 export default withAuth(
@@ -514,7 +514,7 @@ export default withAuth(
 
 ```typescript
 // pages/api/user-info.ts
-import { withAuth } from '@authme/nextjs/api';
+import { withAuth } from '@idenplane/nextjs/api';
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 export default withAuth(
@@ -540,7 +540,7 @@ Protect App Router Route Handlers with the `withAuthHandler` helper:
 
 ```typescript
 // app/api/profile/route.ts
-import { withAuthHandler } from '@authme/nextjs/api';
+import { withAuthHandler } from '@idenplane/nextjs/api';
 
 export const GET = withAuthHandler(
   { serverUrl: 'http://localhost:3000', realm: 'my-realm' },
@@ -560,7 +560,7 @@ export const GET = withAuthHandler(
 
 ```typescript
 // app/api/profile/route.ts
-import { withAuthHandler } from '@authme/nextjs/api';
+import { withAuthHandler } from '@idenplane/nextjs/api';
 
 export const GET = withAuthHandler(
   { serverUrl: 'http://localhost:3000', realm: 'my-realm' },
@@ -591,7 +591,7 @@ export const DELETE = withAuthHandler(
 
 ```typescript
 // app/api/data/route.ts
-import { withAuthHandler } from '@authme/nextjs/api';
+import { withAuthHandler } from '@idenplane/nextjs/api';
 
 export async function GET(req: Request) {
   try {
@@ -620,9 +620,9 @@ export async function GET(req: Request) {
 
 ## API Reference
 
-### `@authme/nextjs` (default export)
+### `@idenplane/nextjs` (default export)
 
-Re-exports from `authme-sdk/react`:
+Re-exports from `idenplane-sdk/react`:
 
 | Export | Description |
 |--------|-------------|
@@ -633,7 +633,7 @@ Re-exports from `authme-sdk/react`:
 | `ProtectedRoute` | Render-gate component for route protection |
 | `AuthmeClient` | Raw client class |
 
-### `@authme/nextjs/middleware`
+### `@idenplane/nextjs/middleware`
 
 | Export | Description |
 |--------|-------------|
@@ -653,14 +653,14 @@ interface AuthMiddlewareConfig {
 }
 ```
 
-### `@authme/nextjs/server`
+### `@idenplane/nextjs/server`
 
 | Export | Description |
 |--------|-------------|
 | `getServerAuth(cookies, config?)` | Returns `AuthSession | null` |
 | `getServerUser(cookies, config?)` | Returns `User | null` |
 
-### `@authme/nextjs/api`
+### `@idenplane/nextjs/api`
 
 | Export | Description |
 |--------|-------------|
@@ -680,21 +680,21 @@ import type {
   TokenResponse,
   UserInfo,
   AuthSession,
-} from 'authme-sdk';
+} from 'idenplane-sdk';
 
 // Server functions
-import { getServerUser, getServerAuth } from '@authme/nextjs/server';
-import type { User } from 'authme-sdk';
+import { getServerUser, getServerAuth } from '@idenplane/nextjs/server';
+import type { User } from 'idenplane-sdk';
 
 // Middleware
-import { createAuthMiddleware } from '@authme/nextjs/middleware';
-import type { AuthMiddlewareConfig } from '@authme/nextjs/middleware';
+import { createAuthMiddleware } from '@idenplane/nextjs/middleware';
+import type { AuthMiddlewareConfig } from '@idenplane/nextjs/middleware';
 
 // API helpers
-import { withAuth, withAuthHandler } from '@authme/nextjs/api';
+import { withAuth, withAuthHandler } from '@idenplane/nextjs/api';
 
 // Client hooks
-import { useAuth, useUser, usePermissions } from '@authme/nextjs';
+import { useAuth, useUser, usePermissions } from '@idenplane/nextjs';
 ```
 
 ---
@@ -704,7 +704,7 @@ import { useAuth, useUser, usePermissions } from '@authme/nextjs';
 <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
 
 [**Quickstart**](/docs/quickstart)
-Set up AuthMe and create your first authenticated Next.js app
+Set up Idenplane and create your first authenticated Next.js app
 
 [**React SDK**](/docs/guides/sdks/react)
 React-specific hooks and components
@@ -720,7 +720,7 @@ Complete REST API documentation
 ---
 
 <p align="center">
-  <a href="https://authme.dev">authme.dev</a> &middot;
+  <a href="https://idenplane.dev">idenplane.dev</a> &middot;
   <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
-  <a href="https://discord.gg/authme">Discord</a>
+  <a href="https://discord.gg/idenplane">Discord</a>
 </p>

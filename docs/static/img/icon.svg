@@ -1,5 +1,5 @@
 <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" fill="none">
-  <!-- AuthMe Icon - Blue Shield with Lock -->
+  <!-- Idenplane Icon - Blue Shield with Lock -->
   <path d="M16 3 L28 3 L28 12 Q28 24 16 29 Q4 24 4 12 L4 3 L16 3" fill="#2563eb" stroke="#1d4ed8" stroke-width="1.5"/>
   <rect x="10" y="14" width="12" height="10" rx="1.5" fill="#ffffff"/>
   <path d="M12 14 V11 Q12 8 16 8 Q20 8 20 11 V14" stroke="#ffffff" stroke-width="2" fill="none"/>

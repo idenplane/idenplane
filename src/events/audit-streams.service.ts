@@ -197,7 +197,7 @@ export class AuditStreamsService {
       hour12: false,
     });
 
-    const packet = `<${priority}>${ts} authme audit: ${message}`;
+    const packet = `<${priority}>${ts} idenplane audit: ${message}`;
     const buf = Buffer.from(packet, 'utf8');
 
     if (stream.syslogProtocol === 'tcp') {

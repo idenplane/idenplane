@@ -22,13 +22,13 @@ benchmarks/
 ├── k6/
 │   ├── config.js          # k6 configuration
 │   ├── config.local.js    # Local development config
-│   ├── authme-login.js    # Login load test
-│   ├── authme-token-issuance.js  # Token issuance test
-│   ├── authme-token-introspection.js  # Token introspection test
-│   ├── authme-token-revocation.js  # Token revocation test
-│   ├── authme-userinfo.js # Userinfo endpoint test
-│   ├── authme-discovery.js # OpenID Discovery endpoint test
-│   ├── authme-jwks.js     # JWKS endpoint test
+│   ├── idenplane-login.js    # Login load test
+│   ├── idenplane-token-issuance.js  # Token issuance test
+│   ├── idenplane-token-introspection.js  # Token introspection test
+│   ├── idenplane-token-revocation.js  # Token revocation test
+│   ├── idenplane-userinfo.js # Userinfo endpoint test
+│   ├── idenplane-discovery.js # OpenID Discovery endpoint test
+│   ├── idenplane-jwks.js     # JWKS endpoint test
 │   └── shared-scenarios.js # Shared utilities
 ├── scripts/               # Shell scripts for benchmark orchestration
 ├── competitors/           # Docker Compose files for competitor benchmarks
@@ -53,7 +53,7 @@ cp benchmarks/.env.example benchmarks/.env
 docker compose -f benchmarks/docker-compose.benchmarks.yml up
 
 # Or run k6 directly
-k6 run --config benchmarks/k6/config.js benchmarks/k6/authme-login.js
+k6 run --config benchmarks/k6/config.js benchmarks/k6/idenplane-login.js
 ```
 
 ### 3. View Results
@@ -73,13 +73,13 @@ See `.env.example` for required environment variables:
 
 | Test Script | Description |
 |-------------|-------------|
-| `authme-login.js` | Login endpoint load test |
-| `authme-token-issuance.js` | Token issuance performance test |
-| `authme-token-introspection.js` | Token introspection endpoint test |
-| `authme-token-revocation.js` | Token revocation endpoint test |
-| `authme-userinfo.js` | Userinfo endpoint load test |
-| `authme-discovery.js` | OpenID Discovery endpoint test |
-| `authme-jwks.js` | JWKS endpoint performance test |
+| `idenplane-login.js` | Login endpoint load test |
+| `idenplane-token-issuance.js` | Token issuance performance test |
+| `idenplane-token-introspection.js` | Token introspection endpoint test |
+| `idenplane-token-revocation.js` | Token revocation endpoint test |
+| `idenplane-userinfo.js` | Userinfo endpoint load test |
+| `idenplane-discovery.js` | OpenID Discovery endpoint test |
+| `idenplane-jwks.js` | JWKS endpoint performance test |
 
 ## Competitor Comparison Benchmarks
 
@@ -92,7 +92,7 @@ This suite supports benchmarking against other authentication solutions for perf
 docker compose -f benchmarks/competitors/docker-compose.keycloak.yml up -d
 
 # Run benchmarks against Keycloak
-k6 run --config benchmarks/k6/config.js benchmarks/k6/authme-login.js
+k6 run --config benchmarks/k6/config.js benchmarks/k6/idenplane-login.js
 ```
 
 ### Authentik
@@ -102,7 +102,7 @@ k6 run --config benchmarks/k6/config.js benchmarks/k6/authme-login.js
 docker compose -f benchmarks/competitors/docker-compose.authentik.yml up -d
 
 # Run benchmarks against Authentik
-k6 run --config benchmarks/k6/config.js benchmarks/k6/authme-login.js
+k6 run --config benchmarks/k6/config.js benchmarks/k6/idenplane-login.js
 ```
 
 ### Zitadel
@@ -112,7 +112,7 @@ k6 run --config benchmarks/k6/config.js benchmarks/k6/authme-login.js
 docker compose -f benchmarks/competitors/docker-compose.zitadel.yml up -d
 
 # Run benchmarks against Zitadel
-k6 run --config benchmarks/k6/config.js benchmarks/k6/authme-login.js
+k6 run --config benchmarks/k6/config.js benchmarks/k6/idenplane-login.js
 ```
 
 ## Orchestration Scripts

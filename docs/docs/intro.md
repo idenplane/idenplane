@@ -2,13 +2,13 @@
 id: intro
 title: Introduction
 slug: /
-description: AuthMe is an open-source identity and access management server with OAuth 2.0, OpenID Connect, SAML 2.0, WebAuthn, and more.
+description: Idenplane is an open-source identity and access management server with OAuth 2.0, OpenID Connect, SAML 2.0, WebAuthn, and more.
 ---
 
-# AuthMe
+# Idenplane
 
 <p align="center">
-  <img src="https://authme.dev/logo.svg" alt="AuthMe" width="80" />
+  <img src="https://idenplane.dev/logo.svg" alt="Idenplane" width="80" />
 </p>
 
 <p align="center">
@@ -18,15 +18,15 @@ description: AuthMe is an open-source identity and access management server with
 
 ---
 
-## What is AuthMe?
+## What is Idenplane?
 
-AuthMe is a modern, lightweight identity and access management (IAM) server built for teams that need enterprise-grade authentication without enterprise complexity.
+Idenplane is a modern, lightweight identity and access management (IAM) server built for teams that need enterprise-grade authentication without enterprise complexity.
 
 Most identity solutions are either:
 - **Too complex** — Keycloak requires 1GB+ RAM and Java expertise
 - **Too limited** — Simple JWT libraries lack production features
 
-AuthMe fills that gap with a complete, self-hosted solution that deploys in under 30 seconds and runs in ~150MB RAM.
+Idenplane fills that gap with a complete, self-hosted solution that deploys in under 30 seconds and runs in ~150MB RAM.
 
 ## Key Benefits
 
@@ -83,7 +83,7 @@ AuthMe fills that gap with a complete, self-hosted solution that deploys in unde
 
 ## Architecture Overview
 
-AuthMe follows a modular NestJS architecture with clear separation of concerns:
+Idenplane follows a modular NestJS architecture with clear separation of concerns:
 
 ```mermaid
 graph TB
@@ -93,7 +93,7 @@ graph TB
         API["API Client"]
     end
 
-    subgraph AuthMe["AuthMe Server"]
+    subgraph Idenplane["Idenplane Server"]
         subgraph Gateways["Gateways"]
             AdminAPI["Admin REST API"]
             OAuth["OAuth/OIDC Endpoints"]
@@ -151,9 +151,9 @@ graph TB
 | **Caching** | Redis with Sentinel HA support |
 | **SDKs** | TypeScript, React, Next.js, Angular, Vue, Android, iOS |
 
-## When to Use AuthMe
+## When to Use Idenplane
 
-AuthMe is ideal when you need:
+Idenplane is ideal when you need:
 
 - ✅ Self-hosted identity management (no vendor lock-in)
 - ✅ OAuth 2.0 / OIDC for modern applications
@@ -177,7 +177,7 @@ Get up and running in 30 seconds with Docker
 Detailed installation instructions for all platforms
 
 [**SDK Guides**](/docs/guides/sdks/react)
-Integrate AuthMe with your application
+Integrate Idenplane with your application
 
 [**API Reference**](/docs/api)
 Complete REST API documentation
@@ -187,7 +187,7 @@ Complete REST API documentation
 ---
 
 <p align="center">
-  <a href="https://authme.dev">authme.dev</a> &middot;
+  <a href="https://idenplane.dev">idenplane.dev</a> &middot;
   <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
-  <a href="https://discord.gg/authme">Discord</a>
+  <a href="https://discord.gg/idenplane">Discord</a>
 </p>

@@ -1,7 +1,7 @@
 ---
 id: clients
 title: Clients API
-description: Client application management endpoints for AuthMe
+description: Client application management endpoints for Idenplane
 ---
 
 # Clients API

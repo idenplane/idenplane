@@ -1,17 +1,17 @@
 ---
 id: react-sdk
 title: React SDK
-description: Integrate AuthMe authentication into your React application using the official SDK
+description: Integrate Idenplane authentication into your React application using the official SDK
 ---
 
 # React SDK
 
-The AuthMe React SDK provides React-specific bindings for the authme-sdk, including `AuthProvider`, `useAuth`, `useUser`, `usePermissions` hooks, and a `ProtectedRoute` component for declarative authentication.
+The Idenplane React SDK provides React-specific bindings for the idenplane-sdk, including `AuthProvider`, `useAuth`, `useUser`, `usePermissions` hooks, and a `ProtectedRoute` component for declarative authentication.
 
 ## Installation
 
 ```bash
-npm install authme-sdk
+npm install idenplane-sdk
 ```
 
 ---
@@ -21,7 +21,7 @@ npm install authme-sdk
 ### Basic Setup
 
 ```tsx
-import { AuthProvider, useAuth, useUser, usePermissions } from 'authme-sdk/react';
+import { AuthProvider, useAuth, useUser, usePermissions } from 'idenplane-sdk/react';
 
 function App() {
   return (
@@ -51,7 +51,7 @@ function Main() {
   if (!isAuthenticated) {
     return (
       <button onClick={() => login()}>
-        Sign In with AuthMe
+        Sign In with Idenplane
       </button>
     );
   }
@@ -88,7 +88,7 @@ The `AuthProvider` is the root component that initializes authentication and pro
 
 | Prop | Type | Required | Description |
 |------|------|----------|-------------|
-| `serverUrl` | `string` | Yes* | AuthMe server URL |
+| `serverUrl` | `string` | Yes* | Idenplane server URL |
 | `realm` | `string` | Yes* | Realm name |
 | `clientId` | `string` | Yes* | OAuth2 client ID |
 | `redirectUri` | `string` | Yes* | Redirect URI after login |
@@ -126,8 +126,8 @@ The `AuthProvider` is the root component that initializes authentication and pro
 For more control over the client configuration:
 
 ```tsx
-import { AuthmeClient } from 'authme-sdk';
-import { AuthProvider } from 'authme-sdk/react';
+import { AuthmeClient } from 'idenplane-sdk';
+import { AuthProvider } from 'idenplane-sdk/react';
 
 const client = new AuthmeClient({
   url: 'http://localhost:3000',
@@ -339,7 +339,7 @@ function ModeratorTools() {
 The `ProtectedRoute` component guards routes that require authentication or specific roles:
 
 ```tsx
-import { AuthProvider, ProtectedRoute } from 'authme-sdk/react';
+import { AuthProvider, ProtectedRoute } from 'idenplane-sdk/react';
 import { useNavigate } from 'react-router-dom';
 
 function AdminPage() {
@@ -382,7 +382,7 @@ function AdminPage() {
 
 ```tsx
 import { BrowserRouter, Routes, Route } from 'react-router-dom';
-import { AuthProvider, ProtectedRoute } from 'authme-sdk/react';
+import { AuthProvider, ProtectedRoute } from 'idenplane-sdk/react';
 
 function App() {
   return (
@@ -440,8 +440,8 @@ Configure how the SDK refreshes tokens via the `refreshStrategy` option:
 ### Example: Eager Refresh
 
 ```tsx
-import { AuthmeClient } from 'authme-sdk';
-import { AuthProvider } from 'authme-sdk/react';
+import { AuthmeClient } from 'idenplane-sdk';
+import { AuthProvider } from 'idenplane-sdk/react';
 
 const client = new AuthmeClient({
   url: 'http://localhost:3000',
@@ -482,7 +482,7 @@ function CallbackPage() {
     if (window.parent !== window) {
       window.parent.postMessage(
         {
-          type: 'authme:silent_callback',
+          type: 'idenplane:silent_callback',
           code,
           state,
           error,
@@ -504,7 +504,7 @@ Subscribe to SDK events to react to authentication state changes:
 
 ```tsx
 import { useEffect } from 'react';
-import { useAuth } from 'authme-sdk/react';
+import { useAuth } from 'idenplane-sdk/react';
 
 function AnalyticsTracker() {
   const { client } = useAuth();
@@ -573,7 +573,7 @@ import type {
   UserInfo,
   TokenClaims,
   AuthmeEventMap,
-} from 'authme-sdk';
+} from 'idenplane-sdk';
 
 // All hooks are fully typed
 function MyComponent() {
@@ -590,7 +590,7 @@ function MyComponent() {
 <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
 
 [**Quickstart**](/docs/quickstart)
-Set up AuthMe and create your first authenticated app
+Set up Idenplane and create your first authenticated app
 
 [**Configuration**](/docs/getting-started/configuration)
 Learn about all configuration options
@@ -606,7 +606,7 @@ Core SDK for non-React applications
 ---
 
 <p align="center">
-  <a href="https://authme.dev">authme.dev</a> &middot;
+  <a href="https://idenplane.dev">idenplane.dev</a> &middot;
   <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
-  <a href="https://discord.gg/authme">Discord</a>
+  <a href="https://discord.gg/idenplane">Discord</a>
 </p>

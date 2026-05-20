@@ -29,9 +29,9 @@ jobs:
           done
           echo "Services started, continuing with benchmark..."
 
-      - name: Run AuthMe benchmarks
+      - name: Run Idenplane benchmarks
         run: |
-          docker compose -f benchmarks/docker-compose.benchmarks.yml run --rm k6 run --config /src/k6/config.js /src/k6/authme-login.js
+          docker compose -f benchmarks/docker-compose.benchmarks.yml run --rm k6 run --config /src/k6/config.js /src/k6/idenplane-login.js
         continue-on-error: true
 
       - name: Generate comparison report

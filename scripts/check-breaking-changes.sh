@@ -53,7 +53,7 @@ import { AppModule } from './dist/app.module.js';
 
 const app = await NestFactory.create(AppModule, { logger: false });
 const config = new DocumentBuilder()
-  .setTitle('AuthMe')
+  .setTitle('Idenplane')
   .setVersion('0.1.0')
   .build();
 const doc = SwaggerModule.createDocument(app, config);

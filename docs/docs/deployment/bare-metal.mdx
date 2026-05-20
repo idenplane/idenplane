@@ -2,12 +2,12 @@
 id: bare-metal
 title: Bare Metal Deployment
 sidebar_position: 3
-description: Deploy AuthMe on bare metal or dedicated servers with systemd and reverse proxy configuration.
+description: Deploy Idenplane on bare metal or dedicated servers with systemd and reverse proxy configuration.
 ---
 
 # Bare Metal Deployment
 
-This guide covers deploying AuthMe directly on bare metal or dedicated servers without containerization. It includes systemd service setup, database installation, reverse proxy configuration, and production hardening.
+This guide covers deploying Idenplane directly on bare metal or dedicated servers without containerization. It includes systemd service setup, database installation, reverse proxy configuration, and production hardening.
 
 ---
 
@@ -22,7 +22,7 @@ This guide covers deploying AuthMe directly on bare metal or dedicated servers w
 | User privileges | sudo/root for service installation |
 
 :::note
-AuthMe runs in approximately 150 MB RAM, making it suitable for small VPS instances or dedicated servers.
+Idenplane runs in approximately 150 MB RAM, making it suitable for small VPS instances or dedicated servers.
 :::
 
 ---
@@ -71,9 +71,9 @@ sudo systemctl enable postgresql
 
 # Create database and user
 sudo -u postgres psql << 'EOF'
-CREATE USER authme WITH PASSWORD 'your_secure_password';
-CREATE DATABASE authme OWNER authme;
-GRANT ALL PRIVILEGES ON DATABASE authme TO authme;
+CREATE USER idenplane WITH PASSWORD 'your_secure_password';
+CREATE DATABASE idenplane OWNER idenplane;
+GRANT ALL PRIVILEGES ON DATABASE idenplane TO idenplane;
 EOF
 ```
 
@@ -94,7 +94,7 @@ sudo systemctl enable redis-server
 
 ---
 
-## Building AuthMe
+## Building Idenplane
 
 ### 1. Clone and Install Dependencies
 
@@ -123,7 +123,7 @@ Required environment variables for production:
 
 ```bash
 # Database (required)
-DATABASE_URL=postgresql://authme:your_secure_password@localhost:5432/authme
+DATABASE_URL=postgresql://idenplane:your_secure_password@localhost:5432/idenplane
 
 # Server
 PORT=3000
@@ -180,37 +180,37 @@ npm run build
 
 ### 1. Create the Service File
 
-Create `/etc/systemd/system/authme.service`:
+Create `/etc/systemd/system/idenplane.service`:
 
 ```ini
 [Unit]
-Description=AuthMe Identity Server
-Documentation=https://authme.dev/docs
+Description=Idenplane Identity Server
+Documentation=https://idenplane.dev/docs
 After=network.target postgresql.service redis.service
 Wants=postgresql.service redis.service
 
 [Service]
 Type=simple
-User=authme
-Group=authme
-WorkingDirectory=/opt/authme
+User=idenplane
+Group=idenplane
+WorkingDirectory=/opt/idenplane
 Environment=NODE_ENV=production
-EnvironmentFile=/opt/authme/.env
+EnvironmentFile=/opt/idenplane/.env
 ExecStart=/usr/bin/node dist/src/main.js
 Restart=on-failure
 RestartSec=10s
 StandardOutput=journal
 StandardError=journal
-SyslogIdentifier=authme
+SyslogIdentifier=idenplane
 
 # Security: Run as non-root user
-User=authme
-Group=authme
+User=idenplane
+Group=idenplane
 NoNewPrivileges=true
 PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
-ReadWritePaths=/opt/authme /var/log/authme
+ReadWritePaths=/opt/idenplane /var/log/idenplane
 
 # Health check
 HealthCheckInterval=30s
@@ -220,28 +220,28 @@ HealthCheckSymbol=:http://localhost:3000/health/live
 WantedBy=multi-user.target
 ```
 
-### 2. Create the AuthMe User
+### 2. Create the Idenplane User
 
 ```bash
 # Create system user (no login shell)
-sudo useradd --system --home /opt/authme --shell /usr/sbin/nologin authme
+sudo useradd --system --home /opt/idenplane --shell /usr/sbin/nologin idenplane
 
 # Create directories
-sudo mkdir -p /opt/authme /var/log/authme
-sudo chown -R authme:authme /opt/authme /var/log/authme
+sudo mkdir -p /opt/idenplane /var/log/idenplane
+sudo chown -R idenplane:idenplane /opt/idenplane /var/log/idenplane
 ```
 
 ### 3. Copy Build Files
 
 ```bash
 # Copy the built application
-sudo cp -r . /opt/authme/
-sudo chown -R authme:authme /opt/authme
+sudo cp -r . /opt/idenplane/
+sudo chown -R idenplane:idenplane /opt/idenplane
 
 # Copy environment file
-sudo cp .env /opt/authme/.env
-sudo chmod 600 /opt/authme/.env
-sudo chown authme:authme /opt/authme/.env
+sudo cp .env /opt/idenplane/.env
+sudo chmod 600 /opt/idenplane/.env
+sudo chown idenplane:idenplane /opt/idenplane/.env
 ```
 
 ### 4. Enable and Start the Service
@@ -251,29 +251,29 @@ sudo chown authme:authme /opt/authme/.env
 sudo systemctl daemon-reload
 
 # Enable service to start on boot
-sudo systemctl enable authme
+sudo systemctl enable idenplane
 
 # Start the service
-sudo systemctl start authme
+sudo systemctl start idenplane
 
 # Check status
-sudo systemctl status authme
+sudo systemctl status idenplane
 ```
 
 ### 5. Managing the Service
 
 ```bash
 # View logs
-sudo journalctl -u authme -f
+sudo journalctl -u idenplane -f
 
 # Restart after config changes
-sudo systemctl restart authme
+sudo systemctl restart idenplane
 
 # Stop the service
-sudo systemctl stop authme
+sudo systemctl stop idenplane
 
 # View recent logs
-sudo journalctl -u authme --since "1 hour ago"
+sudo journalctl -u idenplane --since "1 hour ago"
 ```
 
 ---
@@ -288,10 +288,10 @@ Install Nginx:
 sudo apt-get install -y nginx
 ```
 
-Create `/etc/nginx/sites-available/authme`:
+Create `/etc/nginx/sites-available/idenplane`:
 
 ```nginx
-upstream authme_backend {
+upstream idenplane_backend {
     server 127.0.0.1:3000;
     keepalive 32;
 }
@@ -329,7 +329,7 @@ server {
 
     # Proxy configuration
     location / {
-        proxy_pass http://authme_backend;
+        proxy_pass http://idenplane_backend;
         proxy_http_version 1.1;
         proxy_set_header Upgrade $http_upgrade;
         proxy_set_header Connection 'upgrade';
@@ -343,7 +343,7 @@ server {
 
     # Large file support for SAML metadata
     location /realms {
-        proxy_pass http://authme_backend;
+        proxy_pass http://idenplane_backend;
         proxy_http_version 1.1;
         proxy_set_header Host $host;
         proxy_set_header X-Real-IP $remote_addr;
@@ -357,7 +357,7 @@ server {
 Enable the site:
 
 ```bash
-sudo ln -s /etc/nginx/sites-available/authme /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/idenplane /etc/nginx/sites-enabled/
 sudo nginx -t
 sudo systemctl reload nginx
 ```
@@ -393,7 +393,7 @@ auth.yourdomain.com {
 
     # Logging
     log {
-        output file /var/log/caddy/authme.log
+        output file /var/log/caddy/idenplane.log
     }
 }
 ```
@@ -410,23 +410,23 @@ sudo systemctl enable --now caddy
 
 ### Automated Backups with Cron
 
-Create `/etc/cron.d/authme-backup`:
+Create `/etc/cron.d/idenplane-backup`:
 
 ```
-# AuthMe database backup - daily at 2 AM
-0 2 * * * postgres pg_dump -U authme authme | gzip > /var/backups/authme/authme_$(date +\%Y\%m\%d).sql.gz
+# Idenplane database backup - daily at 2 AM
+0 2 * * * postgres pg_dump -U idenplane idenplane | gzip > /var/backups/idenplane/idenplane_$(date +\%Y\%m\%d).sql.gz
 ```
 
 ### Backup Script
 
-Create `/opt/authme/backup.sh`:
+Create `/opt/idenplane/backup.sh`:
 
 ```bash
 #!/bin/bash
 set -e
 
-BACKUP_DIR="/var/backups/authme"
-DATABASE_URL="postgresql://authme:your_password@localhost:5432/authme"
+BACKUP_DIR="/var/backups/idenplane"
+DATABASE_URL="postgresql://idenplane:your_password@localhost:5432/idenplane"
 RETENTION_DAYS=30
 
 # Create backup directory
@@ -434,19 +434,19 @@ mkdir -p "$BACKUP_DIR"
 
 # Create timestamped backup
 TIMESTAMP=$(date +%Y%m%d_%H%M%S)
-FILENAME="authme_${TIMESTAMP}.sql.gz"
+FILENAME="idenplane_${TIMESTAMP}.sql.gz"
 
 pg_dump "$DATABASE_URL" | gzip > "$BACKUP_DIR/$FILENAME"
 
 # Remove old backups
-find "$BACKUP_DIR" -name "authme_*.sql.gz" -mtime +$RETENTION_DAYS -delete
+find "$BACKUP_DIR" -name "idenplane_*.sql.gz" -mtime +$RETENTION_DAYS -delete
 
 # Log completion
 echo "[$(date)] Backup completed: $FILENAME"
 ```
 
 ```bash
-chmod +x /opt/authme/backup.sh
+chmod +x /opt/idenplane/backup.sh
 ```
 
 ---
@@ -484,7 +484,7 @@ sudo firewall-cmd --reload
 
 ### Health Checks
 
-AuthMe provides health check endpoints:
+Idenplane provides health check endpoints:
 
 | Endpoint | Description |
 |----------|-------------|
@@ -494,12 +494,12 @@ AuthMe provides health check endpoints:
 
 ### Prometheus Metrics
 
-Configure Prometheus to scrape AuthMe metrics:
+Configure Prometheus to scrape Idenplane metrics:
 
 ```yaml
 # /etc/prometheus/prometheus.yml
 scrape_configs:
-  - job_name: 'authme'
+  - job_name: 'idenplane'
     static_configs:
       - targets: ['localhost:3000']
     metrics_path: '/metrics'
@@ -507,64 +507,64 @@ scrape_configs:
 
 ### Logrotate Configuration
 
-Create `/etc/logrotate.d/authme`:
+Create `/etc/logrotate.d/idenplane`:
 
 ```
-/var/log/authme/*.log {
+/var/log/idenplane/*.log {
     daily
     rotate 14
     compress
     delaycompress
     notifempty
-    create 0640 authme authme
+    create 0640 idenplane idenplane
     sharedscripts
     postrotate
-        systemctl reload authme > /dev/null 2>&1 || true
+        systemctl reload idenplane > /dev/null 2>&1 || true
     endscript
 }
 ```
 
 ---
 
-## Updating AuthMe
+## Updating Idenplane
 
 ### 1. Stop the Service
 
 ```bash
-sudo systemctl stop authme
+sudo systemctl stop idenplane
 ```
 
 ### 2. Pull Latest Code
 
 ```bash
-cd /opt/authme
-sudo -u authme git pull origin main
+cd /opt/idenplane
+sudo -u idenplane git pull origin main
 ```
 
 ### 3. Rebuild
 
 ```bash
 # Install dependencies
-sudo -u authme npm install
+sudo -u idenplane npm install
 
 # Build Admin UI
-sudo -u authme bash -c "cd admin-ui && npm install && npm run build"
+sudo -u idenplane bash -c "cd admin-ui && npm install && npm run build"
 
 # Build backend
-sudo -u authme npm run build
+sudo -u idenplane npm run build
 ```
 
 ### 4. Run Migrations
 
 ```bash
-sudo -u authme npm run prisma:migrate deploy
+sudo -u idenplane npm run prisma:migrate deploy
 ```
 
 ### 5. Start the Service
 
 ```bash
-sudo systemctl start authme
-sudo systemctl status authme
+sudo systemctl start idenplane
+sudo systemctl status idenplane
 ```
 
 ---
@@ -575,11 +575,11 @@ sudo systemctl status authme
 
 ```bash
 # Set correct ownership
-sudo chown -R authme:authme /opt/authme
+sudo chown -R idenplane:idenplane /opt/idenplane
 
 # Remove group/other permissions
-sudo chmod -R o-rwx /opt/authme
-sudo chmod 600 /opt/authme/.env
+sudo chmod -R o-rwx /opt/idenplane
+sudo chmod 600 /opt/idenplane/.env
 ```
 
 ### Fail2Ban
@@ -593,19 +593,19 @@ sudo apt-get install -y fail2ban
 Create `/etc/fail2ban/jail.local`:
 
 ```ini
-[authme-api]
+[idenplane-api]
 enabled = true
 port = 80,443,3000
 http-bind-host = 127.0.0.1
-filter = authme-api
-logpath = /var/log/authme/*.log
+filter = idenplane-api
+logpath = /var/log/idenplane/*.log
 maxretry = 10
 findtime = 600
 bantime = 3600
 action = iptables-multiport
 ```
 
-Create `/etc/fail2ban/filter.d/authme-api.conf`:
+Create `/etc/fail2ban/filter.d/idenplane-api.conf`:
 
 ```ini
 [Definition]
@@ -626,17 +626,17 @@ sudo systemctl start fail2ban
 
 1. Check logs:
    ```bash
-   sudo journalctl -u authme -n 100
+   sudo journalctl -u idenplane -n 100
    ```
 
 2. Verify environment variables:
    ```bash
-   sudo -u authme cat /opt/authme/.env
+   sudo -u idenplane cat /opt/idenplane/.env
    ```
 
 3. Test database connection:
    ```bash
-   sudo -u authme psql $DATABASE_URL -c "SELECT 1"
+   sudo -u idenplane psql $DATABASE_URL -c "SELECT 1"
    ```
 
 ### Database Connection Issues
@@ -648,7 +648,7 @@ sudo systemctl start fail2ban
 
 2. Check connection:
    ```bash
-   psql -U authme -h localhost -d authme -c "SELECT 1"
+   psql -U idenplane -h localhost -d idenplane -c "SELECT 1"
    ```
 
 3. Review connection string in `.env`
@@ -657,8 +657,8 @@ sudo systemctl start fail2ban
 
 1. Check process memory:
    ```bash
-   ps aux | grep authme
-   top -p $(pgrep -f authme)
+   ps aux | grep idenplane
+   top -p $(pgrep -f idenplane)
    ```
 
 2. Enable Redis for caching to reduce memory:
@@ -670,7 +670,7 @@ sudo systemctl start fail2ban
 
 3. Restart after changes:
    ```bash
-   sudo systemctl restart authme
+   sudo systemctl restart idenplane
    ```
 
 ---
@@ -696,7 +696,7 @@ Deploy on Kubernetes
 ---
 
 <p align="center">
-  <a href="https://authme.dev">authme.dev</a> ·
+  <a href="https://idenplane.dev">idenplane.dev</a> ·
   <a href="https://github.com/Islamawad132/Authme">GitHub</a> ·
-  <a href="https://discord.gg/authme">Discord</a>
+  <a href="https://discord.gg/idenplane">Discord</a>
 </p>

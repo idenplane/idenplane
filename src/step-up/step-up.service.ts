@@ -5,13 +5,13 @@ import { PrismaService } from '../prisma/prisma.service.js';
 // ─── ACR Level Constants ──────────────────────────────────────────────────────
 
 /** ACR level for password-only authentication (level 1). */
-export const ACR_PASSWORD = 'urn:authme:acr:password';
+export const ACR_PASSWORD = 'urn:idenplane:acr:password';
 
 /** ACR level for password + MFA/TOTP authentication (level 2). */
-export const ACR_MFA = 'urn:authme:acr:mfa';
+export const ACR_MFA = 'urn:idenplane:acr:mfa';
 
 /** ACR level for WebAuthn/passkey authentication (level 3). */
-export const ACR_WEBAUTHN = 'urn:authme:acr:webauthn';
+export const ACR_WEBAUTHN = 'urn:idenplane:acr:webauthn';
 
 /** All supported ACR values, ordered from lowest to highest assurance. */
 export const ACR_VALUES_SUPPORTED = [

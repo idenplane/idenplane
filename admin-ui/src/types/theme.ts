@@ -578,7 +578,7 @@ export const DEFAULT_THEME_ASSETS: ThemeAssets = {
 };
 
 export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
-  appTitle: 'AuthMe',
+  appTitle: 'Idenplane',
   appDescription: 'Sign in to your account',
   showRememberMe: true,
   showForgotPassword: true,

@@ -1,0 +1,25 @@
+{
+  "name": "idenplane",
+  "displayName": "Idenplane (Default)",
+  "description": "Clean light theme with blue accents",
+  "parent": null,
+  "colors": {
+    "primaryColor": "#2563eb",
+    "backgroundColor": "#f0f2f5",
+    "cardColor": "#ffffff",
+    "textColor": "#1a1a2e",
+    "labelColor": "#374151",
+    "inputBorderColor": "#d1d5db",
+    "inputBgColor": "#ffffff",
+    "mutedColor": "#6b7280"
+  },
+  "types": {
+    "login": {
+      "css": ["css/auth.css"]
+    },
+    "account": {
+      "css": ["css/auth.css"]
+    },
+    "email": {}
+  }
+}

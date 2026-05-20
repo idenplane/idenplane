@@ -1,7 +1,7 @@
 ---
 id: oauth
 title: OAuth Endpoints
-description: Authorization, UserInfo, and logout endpoints for AuthMe
+description: Authorization, UserInfo, and logout endpoints for Idenplane
 ---
 
 # OAuth Endpoints

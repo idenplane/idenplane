@@ -43,9 +43,9 @@ jobs:
       postgres:
         image: postgres:16-alpine
         env:
-          POSTGRES_USER: authme_test
+          POSTGRES_USER: idenplane_test
           POSTGRES_PASSWORD: test_password
-          POSTGRES_DB: authme_test
+          POSTGRES_DB: idenplane_test
         ports: ['5432:5432']
         options: >-
           --health-cmd pg_isready
@@ -67,12 +67,12 @@ jobs:
 
       - name: Run database migrations
         env:
-          DATABASE_URL: postgresql://authme_test:test_password@localhost:5432/authme_test
+          DATABASE_URL: postgresql://idenplane_test:test_password@localhost:5432/idenplane_test
         run: npx prisma migrate deploy
 
       - name: E2E Tests
         env:
-          DATABASE_URL: postgresql://authme_test:test_password@localhost:5432/authme_test
+          DATABASE_URL: postgresql://idenplane_test:test_password@localhost:5432/idenplane_test
           ADMIN_API_KEY: test-admin-key
           BASE_URL: http://localhost:3000
           NODE_ENV: test

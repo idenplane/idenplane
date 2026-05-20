@@ -49,8 +49,8 @@
       }
     },
     "resource_comparison": {
-      "memory_ratio_vs_authme": "2.1x",
-      "cpu_ratio_vs_authme": "2.5x",
+      "memory_ratio_vs_idenplane": "2.1x",
+      "cpu_ratio_vs_idenplane": "2.5x",
       "requests_per_second_ratio": "0.56x"
     },
     "metadata": {
@@ -63,7 +63,7 @@
       "benchmarker": "k6 0.50.0",
       "test_duration_seconds": 60,
       "warmup_seconds": 10,
-      "notes": "Results generated with identical workload to AuthMe baseline. Zitadel is a Go-based IAM solution that offers better resource efficiency than Keycloak or Authentik, but still requires 2.1x more memory than AuthMe. gRPC-based internal communication provides efficient token operations."
+      "notes": "Results generated with identical workload to Idenplane baseline. Zitadel is a Go-based IAM solution that offers better resource efficiency than Keycloak or Authentik, but still requires 2.1x more memory than Idenplane. gRPC-based internal communication provides efficient token operations."
     }
   }
 }
