@@ -40,7 +40,7 @@ jobs:
         continue-on-error: true
 
       - name: Upload benchmark results
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: benchmark-results-${{ github.run_number }}
           path: |
@@ -49,7 +49,7 @@ jobs:
           retention-days: 90
 
       - name: Upload comparison report
-        uses: actions/upload-artifact@v4
+        uses: actions/upload-artifact@v7
         with:
           name: comparison-report-${{ github.run_number }}
           path: benchmarks/results/comparison-report.html
