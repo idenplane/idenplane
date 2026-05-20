@@ -76,41 +76,45 @@
             <dependency>
                 <groupId>com.nimbusds</groupId>
                 <artifactId>nimbus-jose-jwt</artifactId>
-                <version>9.37.3</version>
+                <version>10.0.2</version>
             </dependency>
 
             <!-- Reactive -->
             <dependency>
                 <groupId>io.projectreactor</groupId>
                 <artifactId>reactor-core</artifactId>
-                <version>3.6.2</version>
+                <version>3.7.3</version>
             </dependency>
 
-            <!-- Spring Security -->
+            <!-- Spring Security — bumped from 6.2.2 to 6.5.7 to address two
+                 critical advisories on spring-security-web (HTTP headers not
+                 written under some conditions, authorization bypass of static
+                 resources in WebFlux apps) and a high on spring-security-core.
+                 See: https://spring.io/security -->
             <dependency>
                 <groupId>org.springframework.security</groupId>
                 <artifactId>spring-security-core</artifactId>
-                <version>6.2.2</version>
+                <version>6.5.7</version>
             </dependency>
 
             <dependency>
                 <groupId>org.springframework.security</groupId>
                 <artifactId>spring-security-web</artifactId>
-                <version>6.2.2</version>
+                <version>6.5.7</version>
             </dependency>
 
             <!-- Spring Boot Auto-configuration -->
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-autoconfigure</artifactId>
-                <version>3.2.2</version>
+                <version>3.5.4</version>
             </dependency>
 
             <!-- Spring Boot Configuration Processor -->
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-configuration-processor</artifactId>
-                <version>3.2.2</version>
+                <version>3.5.4</version>
             </dependency>
 
             <!-- Jakarta EE -->
@@ -144,7 +148,7 @@
             <dependency>
                 <groupId>org.assertj</groupId>
                 <artifactId>assertj-core</artifactId>
-                <version>3.25.1</version>
+                <version>3.27.4</version>
                 <scope>test</scope>
             </dependency>
         </dependencies>
