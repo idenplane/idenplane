@@ -1,0 +1,41 @@
+name: Feature Request
+description: Suggest a new feature or enhancement
+title: "[Feature]: "
+labels: ["enhancement"]
+body:
+  - type: textarea
+    id: problem
+    attributes:
+      label: What problem are you trying to solve?
+      description: A clear description of the user problem or use case. Start with the "why" before the "what".
+      placeholder: As a [user type], I want to [goal] so that [benefit].
+    validations:
+      required: true
+
+  - type: textarea
+    id: proposal
+    attributes:
+      label: Proposed solution
+      description: How would you like AuthMe to solve this? API shape, UI flow, configuration, etc.
+    validations:
+      required: true
+
+  - type: textarea
+    id: alternatives
+    attributes:
+      label: Alternatives considered
+      description: Other approaches you considered and why you rejected them.
+
+  - type: textarea
+    id: context
+    attributes:
+      label: Additional context
+      description: Links to related issues, prior art in other IAM products (Keycloak, Auth0, etc.), screenshots, mockups.
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmations
+      options:
+        - label: I have searched existing issues and discussions and this has not been requested before.
+          required: true

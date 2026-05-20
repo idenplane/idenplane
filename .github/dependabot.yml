@@ -1,0 +1,79 @@
+version: 2
+updates:
+  # Backend (root package.json)
+  - package-ecosystem: npm
+    directory: "/"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: "Africa/Cairo"
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - backend
+    groups:
+      nestjs:
+        patterns:
+          - "@nestjs/*"
+      prisma:
+        patterns:
+          - "@prisma/*"
+          - "prisma"
+      types:
+        patterns:
+          - "@types/*"
+        update-types:
+          - minor
+          - patch
+      dev-dependencies:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+
+  # Admin UI
+  - package-ecosystem: npm
+    directory: "/admin-ui"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: "Africa/Cairo"
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - frontend
+    groups:
+      react:
+        patterns:
+          - "react"
+          - "react-dom"
+          - "@types/react"
+          - "@types/react-dom"
+      tailwind:
+        patterns:
+          - "tailwindcss"
+          - "@tailwindcss/*"
+      vitest:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+
+  # GitHub Actions
+  - package-ecosystem: github-actions
+    directory: "/"
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+      - ci
+
+  # Docker base images
+  - package-ecosystem: docker
+    directory: "/"
+    schedule:
+      interval: weekly
+    labels:
+      - dependencies
+      - docker

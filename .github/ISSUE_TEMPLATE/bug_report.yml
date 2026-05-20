@@ -1,0 +1,90 @@
+name: Bug Report
+description: Report something that is not working as expected
+title: "[Bug]: "
+labels: ["bug", "triage"]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time to file a bug report. Please fill out the form below so we can reproduce and fix the issue quickly.
+
+        For security vulnerabilities, please **do not** open a public issue. See [SECURITY.md](../../SECURITY.md) instead.
+
+  - type: textarea
+    id: what-happened
+    attributes:
+      label: What happened?
+      description: A clear and concise description of the bug.
+      placeholder: When I do X, Y happens instead of Z.
+    validations:
+      required: true
+
+  - type: textarea
+    id: reproduce
+    attributes:
+      label: Steps to reproduce
+      description: Minimal steps that reliably trigger the bug.
+      placeholder: |
+        1. Start AuthMe with `docker compose up`
+        2. Create a realm named "test"
+        3. Call POST /realms/test/protocol/openid-connect/token with ...
+        4. Observe error
+    validations:
+      required: true
+
+  - type: textarea
+    id: expected
+    attributes:
+      label: Expected behavior
+      description: What did you expect to happen?
+    validations:
+      required: true
+
+  - type: input
+    id: version
+    attributes:
+      label: AuthMe version
+      description: Output of `docker inspect islamawad/authme:latest | grep Version` or commit SHA if built from source.
+      placeholder: "v1.2.3 or commit af335fb"
+    validations:
+      required: true
+
+  - type: dropdown
+    id: deployment
+    attributes:
+      label: Deployment
+      options:
+        - Docker Compose
+        - Kubernetes (Helm)
+        - From source (`npm run start`)
+        - Other
+    validations:
+      required: true
+
+  - type: dropdown
+    id: database
+    attributes:
+      label: Database
+      options:
+        - PostgreSQL
+        - MySQL / MariaDB
+        - SQLite
+    validations:
+      required: true
+
+  - type: textarea
+    id: logs
+    attributes:
+      label: Relevant logs / stack traces
+      description: Paste server logs, browser console output, or error messages. Will be formatted automatically — no backticks needed.
+      render: shell
+
+  - type: checkboxes
+    id: checks
+    attributes:
+      label: Confirmations
+      options:
+        - label: I have searched existing issues and this is not a duplicate.
+          required: true
+        - label: I am running the latest version of AuthMe.
+          required: false

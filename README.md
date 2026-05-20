@@ -24,7 +24,7 @@
   <a href="https://www.npmjs.com/package/authme-sdk"><img src="https://img.shields.io/npm/v/authme-sdk?label=authme-sdk" alt="npm authme-sdk" /></a>
   <a href="https://www.npmjs.com/package/authme-cli"><img src="https://img.shields.io/npm/v/authme-cli?label=authme-cli" alt="npm authme-cli" /></a>
   <a href="https://hub.docker.com/r/islamawad/authme"><img src="https://img.shields.io/docker/v/islamawad/authme?label=Docker%20Hub" alt="Docker Hub" /></a>
-  <a href="https://github.com/Islamawad132/Authme/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-proprietary-blue" alt="License" /></a>
+  <a href="https://github.com/Islamawad132/Authme/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="License" /></a>
   <a href="https://authme.dev"><img src="https://img.shields.io/badge/docs-authme.dev-blue" alt="Docs" /></a>
 </p>
 
@@ -717,7 +717,13 @@ Contributions are welcome! Please open an issue or submit a pull request.
 
 ## License
 
-This project is proprietary. All rights reserved.
+AuthMe is released under the **GNU Affero General Public License v3.0 (AGPL-3.0)**.
+
+You are free to use, modify, and distribute AuthMe. However, if you run a modified version of AuthMe as a network service (e.g. as a SaaS), the AGPL requires you to make the complete source code of your modified version available to its users.
+
+For organizations that cannot comply with the AGPL — for example, because they want to embed AuthMe in a proprietary product — a **commercial license** is available. Contact [licensing@authme.dev](mailto:licensing@authme.dev) for details.
+
+See the [LICENSE](LICENSE) file for the full AGPL-3.0 text.
 
 ---
 
