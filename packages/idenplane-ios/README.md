@@ -1,6 +1,6 @@
 # Idenplane iOS SDK
 
-Native Swift SDK for the [Idenplane](https://github.com/Islamawad132/Authme) Identity and Access Management server.
+Native Swift SDK for the [Idenplane](https://github.com/idenplane/idenplane) Identity and Access Management server.
 
 Implements the **OAuth 2.0 Authorization Code flow with PKCE** (RFC 7636) using `ASWebAuthenticationSession`. Tokens are stored securely in the iOS Keychain and optional Face ID / Touch ID gating is built in.
 
@@ -22,7 +22,7 @@ Add the package to your `Package.swift` dependencies:
 ```swift
 dependencies: [
     .package(
-        url: "https://github.com/Islamawad132/Authme",
+        url: "https://github.com/idenplane/idenplane",
         from: "1.0.0"
     )
 ]
@@ -36,7 +36,7 @@ Add `Idenplane` to your target:
 .target(
     name: "MyApp",
     dependencies: [
-        .product(name: "Idenplane", package: "Authme")
+        .product(name: "Idenplane", package: "Idenplane")
     ]
 )
 ```

@@ -1,7 +1,7 @@
-export { AuthmeClient, handleSilentCallback } from './client.js';
+export { IdenplaneClient, handleSilentCallback } from './client.js';
 export type {
-  AuthmeConfig,
-  AuthmeEventMap,
+  IdenplaneConfig,
+  IdenplaneEventMap,
   OpenIDConfiguration,
   TokenClaims,
   TokenResponse,

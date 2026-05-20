@@ -123,7 +123,7 @@ The `AuthProvider` wraps your Next.js application and provides authentication st
 | `realm` | `string` | Yes* | Realm name |
 | `clientId` | `string` | Yes* | OAuth2 client ID |
 | `redirectUri` | `string` | Yes* | Redirect URI after login |
-| `client` | `AuthmeClient` | Yes* | Pre-built client instance |
+| `client` | `IdenplaneClient` | Yes* | Pre-built client instance |
 | `scope` | `string[]` | No | OAuth2 scopes (default: `['openid', 'profile', 'email']`) |
 | `autoHandleCallback` | `boolean` | No | Auto-handle callback when URL has `?code=` (default: `true`) |
 | `onReady` | `(authenticated: boolean) => void` | No | Called when initialization completes |
@@ -171,10 +171,10 @@ For more control over the client configuration:
 ```tsx
 // app/providers.tsx
 'use client';
-import { AuthmeClient } from 'idenplane-sdk';
+import { IdenplaneClient } from 'idenplane-sdk';
 import { AuthProvider } from '@idenplane/nextjs';
 
-const client = new AuthmeClient({
+const client = new IdenplaneClient({
   url: 'http://localhost:3000',
   realm: 'my-realm',
   clientId: 'my-app',
@@ -217,7 +217,7 @@ The `useAuth` hook provides access to authentication state and actions in client
 
 ```tsx
 const {
-  client,           // The AuthmeClient instance
+  client,           // The IdenplaneClient instance
   isAuthenticated,  // boolean - whether user is authenticated
   isLoading,        // boolean - whether auth state is loading
   user,             // UserInfo | null - current user info
@@ -626,12 +626,12 @@ Re-exports from `idenplane-sdk/react`:
 
 | Export | Description |
 |--------|-------------|
-| `AuthProvider` / `AuthmeProvider` | Context provider for client components |
+| `AuthProvider` / `IdenplaneProvider` | Context provider for client components |
 | `useAuth()` | Authentication state and actions hook |
 | `useUser()` | Current user info hook |
 | `usePermissions()` | Role and permission helpers hook |
 | `ProtectedRoute` | Render-gate component for route protection |
-| `AuthmeClient` | Raw client class |
+| `IdenplaneClient` | Raw client class |
 
 ### `@idenplane/nextjs/middleware`
 
@@ -675,8 +675,8 @@ All exports are fully typed:
 
 ```tsx
 import type {
-  AuthmeClient,
-  AuthmeConfig,
+  IdenplaneClient,
+  IdenplaneConfig,
   TokenResponse,
   UserInfo,
   AuthSession,
@@ -721,6 +721,6 @@ Complete REST API documentation
 
 <p align="center">
   <a href="https://idenplane.dev">idenplane.dev</a> &middot;
-  <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
+  <a href="https://github.com/idenplane/idenplane">GitHub</a> &middot;
   <a href="https://discord.gg/idenplane">Discord</a>
 </p>

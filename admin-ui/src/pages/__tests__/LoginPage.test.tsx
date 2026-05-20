@@ -13,7 +13,7 @@ import LoginPage from '../LoginPage';
 describe('LoginPage – credentials mode', () => {
   it('renders the login form with username and password fields', () => {
     render(<LoginPage />);
-    expect(screen.getByText('Authme Admin')).toBeInTheDocument();
+    expect(screen.getByText('Idenplane Admin')).toBeInTheDocument();
     expect(screen.getByLabelText(/^username$/i)).toBeInTheDocument();
     // Use getByPlaceholderText to avoid ambiguity with "Show password" button
     expect(screen.getByPlaceholderText(/enter your password/i)).toBeInTheDocument();

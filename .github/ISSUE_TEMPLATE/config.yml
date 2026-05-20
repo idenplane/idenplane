@@ -1,10 +1,10 @@
 blank_issues_enabled: false
 contact_links:
   - name: 💬 Discussions
-    url: https://github.com/Islamawad132/Authme/discussions
+    url: https://github.com/idenplane/idenplane/discussions
     about: Ask questions, share ideas, and chat with the community.
   - name: 🔒 Report a security vulnerability
-    url: https://github.com/Islamawad132/Authme/security/policy
+    url: https://github.com/idenplane/idenplane/security/policy
     about: Please report security issues privately — do not open a public issue.
   - name: 📖 Documentation
     url: https://idenplane.dev

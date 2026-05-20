@@ -1,5 +1,5 @@
 /**
- * Shared E2E test setup for Authme.
+ * Shared E2E test setup for Idenplane.
  *
  * REQUIREMENTS:
  * - A running PostgreSQL database is required.

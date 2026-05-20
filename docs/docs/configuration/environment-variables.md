@@ -336,6 +336,6 @@ Deploy to production with Docker
 
 <p align="center">
   <a href="https://idenplane.dev">idenplane.dev</a> &middot;
-  <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
+  <a href="https://github.com/idenplane/idenplane">GitHub</a> &middot;
   <a href="https://discord.gg/idenplane">Discord</a>
 </p>

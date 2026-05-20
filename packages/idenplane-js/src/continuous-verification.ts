@@ -6,10 +6,10 @@
  *
  * @example
  * ```typescript
- * import { AuthmeClient } from 'idenplane-sdk';
+ * import { IdenplaneClient } from 'idenplane-sdk';
  * import { ContinuousVerification } from 'idenplane-sdk/continuous-verification';
  *
- * const client = new AuthmeClient(config);
+ * const client = new IdenplaneClient(config);
  * const cv = new ContinuousVerification(client);
  *
  * // Report device posture
@@ -32,7 +32,7 @@
  * ```
  */
 
-import type { AuthmeClient } from './client.js';
+import type { IdenplaneClient } from './client.js';
 
 // ─── Device Posture Types ────────────────────────────────────────────────────
 
@@ -155,14 +155,14 @@ export interface NetworkContextInput {
  * Enables client applications to report device posture, behavioral biometrics,
  * and network context signals for continuous session risk assessment.
  *
- * The SDK requires an initialized AuthmeClient for accessing auth tokens.
+ * The SDK requires an initialized IdenplaneClient for accessing auth tokens.
  */
 export class ContinuousVerification {
-  private readonly client: AuthmeClient;
+  private readonly client: IdenplaneClient;
   private readonly baseUrl: string;
   private readonly realm: string;
 
-  constructor(client: AuthmeClient, baseUrl?: string) {
+  constructor(client: IdenplaneClient, baseUrl?: string) {
     this.client = client;
     // Derive base URL from the client's configured URL
     this.baseUrl = baseUrl ?? client.getConfig().url;

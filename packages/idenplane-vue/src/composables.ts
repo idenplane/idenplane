@@ -1,25 +1,25 @@
 /**
  * Vue composables for Idenplane.
  *
- * All composables rely on an `AuthmeClient` injected by `AuthmePlugin` or
+ * All composables rely on an `IdenplaneClient` injected by `IdenplanePlugin` or
  * provided manually via `AuthProvider.vue`.
  */
 
 import { inject, ref, readonly, onMounted, onUnmounted, computed } from 'vue';
 import type { Ref, ComputedRef } from 'vue';
-import { AuthmeClient } from 'idenplane-sdk';
+import { IdenplaneClient } from 'idenplane-sdk';
 import type { UserInfo } from 'idenplane-sdk';
 import { IDENPLANE_KEY } from './plugin.js';
 
 // ── Init singleton ────────────────────────────────────────────────
 // Bug #438-4 fix: every component that calls useAuth() was triggering its own
-// client.init() call.  Although AuthmeClient.init() is re-entrant-safe and
+// client.init() call.  Although IdenplaneClient.init() is re-entrant-safe and
 // coalesces concurrent calls onto a single Promise, each component still went
 // through the full async path and set its own isLoading = false only after
 // awaiting.  The visible symptom is a loading flicker in every component that
 // mounts after the first one.
 //
-// Fix: keep a module-level WeakMap that maps each AuthmeClient instance to the
+// Fix: keep a module-level WeakMap that maps each IdenplaneClient instance to the
 // single init Promise (and its settled result).  Subsequent useAuth() calls on
 // the same client skip the init() await entirely when the Promise has already
 // resolved, and share the same in-flight Promise when init is still running.
@@ -28,9 +28,9 @@ interface InitRecord {
   settled: boolean;
   result: boolean;
 }
-const initRecords = new WeakMap<AuthmeClient, InitRecord>();
+const initRecords = new WeakMap<IdenplaneClient, InitRecord>();
 
-function getOrStartInit(client: AuthmeClient): Promise<boolean> {
+function getOrStartInit(client: IdenplaneClient): Promise<boolean> {
   const existing = initRecords.get(client);
   if (existing) return existing.promise;
 
@@ -52,11 +52,11 @@ function getOrStartInit(client: AuthmeClient): Promise<boolean> {
 
 // ── Internal helper ──────────────────────────────────────────────
 
-function useClient(): AuthmeClient {
-  const client = inject<AuthmeClient>(IDENPLANE_KEY);
+function useClient(): IdenplaneClient {
+  const client = inject<IdenplaneClient>(IDENPLANE_KEY);
   if (!client) {
     throw new Error(
-      '[idenplane-vue] No AuthmeClient found. Make sure you installed AuthmePlugin or wrapped your component with <AuthProvider>.',
+      '[idenplane-vue] No IdenplaneClient found. Make sure you installed IdenplanePlugin or wrapped your component with <AuthProvider>.',
     );
   }
   return client;
@@ -77,8 +77,8 @@ export interface UseAuthReturn {
   logout: () => Promise<void>;
   /** Get the current access token string */
   getToken: () => string | null;
-  /** Direct access to the underlying AuthmeClient */
-  client: AuthmeClient;
+  /** Direct access to the underlying IdenplaneClient */
+  client: IdenplaneClient;
 }
 
 /**

@@ -234,13 +234,13 @@ curl -X POST "http://localhost:3000/realms/my-realm/protocol/openid-connect/toke
 ### Complete Authorization Code Example
 
 ```typescript
-import { AuthmeClient, TokenResponse } from 'idenplane-sdk';
+import { IdenplaneClient, TokenResponse } from 'idenplane-sdk';
 
 class AuthService {
-  private client: AuthmeClient;
+  private client: IdenplaneClient;
 
   constructor() {
-    this.client = new AuthmeClient({
+    this.client = new IdenplaneClient({
       url: 'http://localhost:3000',
       realm: 'my-realm',
       clientId: 'my-app',
@@ -534,7 +534,7 @@ Idenplane uses refresh token rotation by default. Each refresh token can only be
 ```typescript
 class TokenManager {
   private refreshToken: string | null = null;
-  private client: AuthmeClient;
+  private client: IdenplaneClient;
 
   async refreshAccessToken(): Promise<void> {
     if (!this.refreshToken) {
@@ -913,6 +913,6 @@ Integrate Idenplane into your React application
 
 <p align="center">
   <a href="https://idenplane.dev">idenplane.dev</a> &middot;
-  <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
+  <a href="https://github.com/idenplane/idenplane">GitHub</a> &middot;
   <a href="https://discord.gg/idenplane">Discord</a>
 </p>

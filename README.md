@@ -20,11 +20,11 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/Islamawad132/Authme/actions"><img src="https://github.com/Islamawad132/Authme/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://github.com/idenplane/idenplane/actions"><img src="https://github.com/idenplane/idenplane/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
   <a href="https://www.npmjs.com/package/idenplane-sdk"><img src="https://img.shields.io/npm/v/idenplane-sdk?label=idenplane-sdk" alt="npm idenplane-sdk" /></a>
   <a href="https://www.npmjs.com/package/idenplane-cli"><img src="https://img.shields.io/npm/v/idenplane-cli?label=idenplane-cli" alt="npm idenplane-cli" /></a>
   <a href="https://hub.docker.com/r/islamawad/idenplane"><img src="https://img.shields.io/docker/v/islamawad/idenplane?label=Docker%20Hub" alt="Docker Hub" /></a>
-  <a href="https://github.com/Islamawad132/Authme/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="License" /></a>
+  <a href="https://github.com/idenplane/idenplane/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="License" /></a>
   <a href="https://idenplane.dev"><img src="https://img.shields.io/badge/docs-idenplane.dev-blue" alt="Docs" /></a>
 </p>
 
@@ -122,7 +122,7 @@ Most identity solutions are either too complex to self-host (Keycloak — 1GB+ R
 ### Docker Hub (Recommended)
 
 ```bash
-curl -o docker-compose.yml https://raw.githubusercontent.com/Islamawad132/Authme/main/docker-compose.yml
+curl -o docker-compose.yml https://raw.githubusercontent.com/idenplane/idenplane/main/docker-compose.yml
 docker compose up -d
 ```
 
@@ -150,8 +150,8 @@ That's it. Idenplane is now running:
 **Prerequisites:** Node.js 22+, PostgreSQL 16+
 
 ```bash
-git clone https://github.com/Islamawad132/Authme.git
-cd Authme
+git clone https://github.com/idenplane/idenplane.git
+cd Idenplane
 
 # Install dependencies
 npm install
@@ -193,9 +193,9 @@ Idenplane provides official SDKs for every major platform:
 ### Quick Example (5 Lines to Authenticate)
 
 ```typescript
-import { AuthmeClient } from 'idenplane-sdk';
+import { IdenplaneClient } from 'idenplane-sdk';
 
-const idenplane = new AuthmeClient({
+const idenplane = new IdenplaneClient({
   url: 'http://localhost:3000',
   realm: 'my-realm',
   clientId: 'my-app',
@@ -211,21 +211,21 @@ if (!idenplane.isAuthenticated()) {
 ### React
 
 ```tsx
-import { AuthmeClient } from 'idenplane-sdk';
-import { AuthmeProvider, useAuthme, useUser } from 'idenplane-sdk/react';
+import { IdenplaneClient } from 'idenplane-sdk';
+import { IdenplaneProvider, useIdenplane, useUser } from 'idenplane-sdk/react';
 
-const idenplane = new AuthmeClient({ /* config */ });
+const idenplane = new IdenplaneClient({ /* config */ });
 
 function App() {
   return (
-    <AuthmeProvider client={idenplane}>
+    <IdenplaneProvider client={idenplane}>
       <Dashboard />
-    </AuthmeProvider>
+    </IdenplaneProvider>
   );
 }
 
 function Dashboard() {
-  const { isAuthenticated, login, logout } = useAuthme();
+  const { isAuthenticated, login, logout } = useIdenplane();
   const user = useUser();
 
   if (!isAuthenticated) return <button onClick={() => login()}>Sign In</button>;
@@ -287,9 +287,9 @@ export class AppModule {}
 
 ```typescript
 // main.ts
-import { createAuthmePlugin } from 'idenplane-vue';
+import { createIdenplanePlugin } from 'idenplane-vue';
 
-app.use(createAuthmePlugin({
+app.use(createIdenplanePlugin({
   serverUrl: 'http://localhost:3000',
   realm: 'my-realm',
   clientId: 'my-app',
@@ -527,7 +527,7 @@ GET  /admin/metrics    # Requires x-admin-api-key header
 ## Project Structure
 
 ```
-Authme/
+Idenplane/
 ├── src/                           # NestJS backend (71 modules)
 │   ├── auth/                      # Core OAuth 2.0 authentication
 │   ├── oauth/                     # OAuth 2.0 protocol logic

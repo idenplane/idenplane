@@ -3,8 +3,8 @@
  */
 
 // Plugin
-export { AuthmePlugin, IDENPLANE_KEY } from './plugin.js';
-export type { AuthmePluginOptions } from './plugin.js';
+export { IdenplanePlugin, IDENPLANE_KEY } from './plugin.js';
+export type { IdenplanePluginOptions } from './plugin.js';
 
 // Composables
 export { useAuth, useUser, usePermissions } from './composables.js';
@@ -18,9 +18,9 @@ export type { AuthGuardOptions, AuthRouteMeta } from './guard.js';
 export { AuthProvider } from './components.js';
 
 // Re-export core types from idenplane-sdk for convenience
-export { AuthmeClient } from 'idenplane-sdk';
+export { IdenplaneClient } from 'idenplane-sdk';
 export type {
-  AuthmeConfig,
+  IdenplaneConfig,
   TokenResponse,
   TokenClaims,
   UserInfo,

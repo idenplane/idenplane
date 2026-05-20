@@ -1,6 +1,6 @@
 # idenplane-angular
 
-Angular SDK for [Idenplane](https://github.com/Islamawad132/Authme) — an injectable `AuthService`, a route guard, an HTTP interceptor, and an `NgModule` entry point.
+Angular SDK for [Idenplane](https://github.com/idenplane/idenplane) — an injectable `AuthService`, a route guard, an HTTP interceptor, and an `NgModule` entry point.
 
 ## Installation
 
@@ -10,18 +10,18 @@ npm install idenplane-angular idenplane-sdk rxjs
 
 ## Quick Start
 
-### 1. Import `AuthmeModule.forRoot()`
+### 1. Import `IdenplaneModule.forRoot()`
 
 ```typescript
 // app.module.ts
 import { NgModule } from '@angular/core';
 import { HttpClientModule } from '@angular/common/http';
-import { AuthmeModule } from 'idenplane-angular';
+import { IdenplaneModule } from 'idenplane-angular';
 
 @NgModule({
   imports: [
     HttpClientModule,
-    AuthmeModule.forRoot({
+    IdenplaneModule.forRoot({
       url: 'http://localhost:3000',
       realm: 'my-realm',
       clientId: 'my-app',
@@ -86,7 +86,7 @@ export const routes: Routes = [
 
 ### 4. Automatically attach Bearer tokens (HTTP interceptor)
 
-The HTTP interceptor is registered automatically when you use `AuthmeModule.forRoot()`.
+The HTTP interceptor is registered automatically when you use `IdenplaneModule.forRoot()`.
 
 For standalone / functional interceptor style (Angular 15+):
 
@@ -104,9 +104,9 @@ export const appConfig = {
 
 ## API Reference
 
-### `AuthmeModule`
+### `IdenplaneModule`
 
-- `AuthmeModule.forRoot(config: AuthmeConfig)` — registers all providers
+- `IdenplaneModule.forRoot(config: IdenplaneConfig)` — registers all providers
 
 ### `AuthService`
 

@@ -1,5 +1,5 @@
 /**
- * Shared scenarios and utilities for Authme OAuth k6 load tests.
+ * Shared scenarios and utilities for Idenplane OAuth k6 load tests.
  *
  * This module provides common functionality shared across all OAuth flow test scripts:
  * - Custom metrics (error rates, trends)
@@ -68,7 +68,7 @@ export const TEST_PASSWORD = __ENV.TEST_PASSWORD || 'TestPassword123!';
 /**
  * Build OAuth endpoint URLs for a given realm.
  * @param {string} realmName - The realm name
- * @param {string} baseUrl - The base URL of the Authme server
+ * @param {string} baseUrl - The base URL of the Idenplane server
  * @returns {Object} Object containing all OAuth endpoint URLs
  */
 export function buildOAuthUrls(realmName = DEFAULT_REALM, baseUrl = DEFAULT_TARGET_URL) {

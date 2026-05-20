@@ -1,5 +1,5 @@
 /**
- * Authme Login Load Test
+ * Idenplane Login Load Test
  *
  * Tests the OAuth2 password grant flow which represents the user login operation.
  * This script simulates users authenticating with username/password credentials
@@ -10,7 +10,7 @@
  *   k6 run benchmarks/k6/idenplane-login.js -e TARGET_URL=http://localhost:3000 -e REALM_NAME=my-realm
  *
  * Environment Variables:
- *   TARGET_URL         - Base URL of Authme server (default: http://localhost:3000)
+ *   TARGET_URL         - Base URL of Idenplane server (default: http://localhost:3000)
  *   REALM_NAME         - Realm name to test against (default: test-realm)
  *   VUS                - Number of virtual users (default: 50)
  *   DURATION           - Test duration (default: 60s)

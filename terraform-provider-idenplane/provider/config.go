@@ -18,11 +18,11 @@ import (
 
 // Ensure the implementation satisfies the expected interfaces
 var (
-	_ provider.Provider = &AuthmeProvider{}
+	_ provider.Provider = &IdenplaneProvider{}
 )
 
-// AuthmeProvider satisfies the terraform-plugin-framework provider interface
-type AuthmeProvider struct {
+// IdenplaneProvider satisfies the terraform-plugin-framework provider interface
+type IdenplaneProvider struct {
 	// version is set during build via ldflags
 	version string
 
@@ -39,19 +39,19 @@ type ProviderConfigModel struct {
 
 // New creates a new provider instance
 func New() provider.Provider {
-	return &AuthmeProvider{
+	return &IdenplaneProvider{
 		version: os.Getenv("IDENPLANE_PROVIDER_VERSION"),
 	}
 }
 
 // Metadata returns the provider metadata (name and version)
-func (p *AuthmeProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
+func (p *IdenplaneProvider) Metadata(ctx context.Context, req provider.MetadataRequest, resp *provider.MetadataResponse) {
 	resp.TypeName = "idenplane"
 	resp.Version = p.version
 }
 
 // Schema returns the provider schema (configuration options)
-func (p *AuthmeProvider) Schema(ctx context.Context, req provider.SchemaRequest, resp *provider.SchemaResponse) {
+func (p *IdenplaneProvider) Schema(ctx context.Context, req provider.SchemaRequest, resp *provider.SchemaResponse) {
 	resp.Schema = schema.Schema{
 		MarkdownDescription: "Terraform provider for Idenplane Identity and Access Management. " +
 			"Manages realms, clients, roles, groups, users, identity providers, authentication flows, and organizations.",
@@ -71,7 +71,7 @@ func (p *AuthmeProvider) Schema(ctx context.Context, req provider.SchemaRequest,
 }
 
 // Configure is called by Terraform to configure the provider
-func (p *AuthmeProvider) Configure(ctx context.Context, req provider.ConfigureRequest) (interface{}, any) {
+func (p *IdenplaneProvider) Configure(ctx context.Context, req provider.ConfigureRequest) (interface{}, any) {
 	tflog.Debug(ctx, "Configuring Idenplane provider")
 
 	// Retrieve provider config from terraform configuration
@@ -95,7 +95,7 @@ func (p *AuthmeProvider) Configure(ctx context.Context, req provider.ConfigureRe
 }
 
 // Resources returns a slice of resource implementations
-func (p *AuthmeProvider) Resources(ctx context.Context) []resource.Resource {
+func (p *IdenplaneProvider) Resources(ctx context.Context) []resource.Resource {
 	return []resource.Resource{
 		NewRealmResource(),
 		NewClientResource(),
@@ -108,7 +108,7 @@ func (p *AuthmeProvider) Resources(ctx context.Context) []resource.Resource {
 }
 
 // DataSources returns a slice of data source implementations
-func (p *AuthmeProvider) DataSources(ctx context.Context) []datasource.DataSource {
+func (p *IdenplaneProvider) DataSources(ctx context.Context) []datasource.DataSource {
 	return []datasource.DataSource{
 		NewRealmDataSource(),
 		NewClientDataSource(),
@@ -122,7 +122,7 @@ func (p *AuthmeProvider) DataSources(ctx context.Context) []datasource.DataSourc
 }
 
 // Functions returns a slice of function implementations
-func (p *AuthmeProvider) Functions(ctx context.Context) []function.Function {
+func (p *IdenplaneProvider) Functions(ctx context.Context) []function.Function {
 	return []function.Function{
 		// Functions will be added in future phases
 	}

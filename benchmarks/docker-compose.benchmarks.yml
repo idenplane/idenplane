@@ -22,7 +22,7 @@ services:
     networks:
       - benchmarks
 
-  # Authme application instance for benchmarking
+  # Idenplane application instance for benchmarking
   app:
     image: islamawad/idenplane:latest
     container_name: idenplane-benchmark-target

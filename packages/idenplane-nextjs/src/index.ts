@@ -11,21 +11,21 @@
  */
 export {
   AuthProvider,
-  AuthmeProvider,
+  IdenplaneProvider,
   useAuth,
-  useAuthme,
+  useIdenplane,
   useUser,
   usePermissions,
   useRoles,
   ProtectedRoute,
-  AuthmeClient,
+  IdenplaneClient,
 } from 'idenplane-sdk/react';
 
 export type {
   AuthProviderProps,
-  AuthmeProviderProps,
+  IdenplaneProviderProps,
   ProtectedRouteProps,
-  AuthmeConfig,
+  IdenplaneConfig,
   TokenResponse,
   TokenClaims,
   UserInfo,

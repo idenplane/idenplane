@@ -1,6 +1,6 @@
 import type {
-  AuthmeConfig,
-  AuthmeEventMap,
+  IdenplaneConfig,
+  IdenplaneEventMap,
   OpenIDConfiguration,
   TokenClaims,
   TokenResponse,
@@ -60,9 +60,9 @@ export function handleSilentCallback(): void {
   );
 }
 
-export class AuthmeClient {
+export class IdenplaneClient {
   private config: Required<
-    Pick<AuthmeConfig, 'url' | 'realm' | 'clientId' | 'redirectUri'>
+    Pick<IdenplaneConfig, 'url' | 'realm' | 'clientId' | 'redirectUri'>
   > & {
     scopes: string[];
     autoRefresh: boolean;
@@ -77,7 +77,7 @@ export class AuthmeClient {
   };
 
   private storage: TokenStorage;
-  private events = new EventEmitter<AuthmeEventMap>();
+  private events = new EventEmitter<IdenplaneEventMap>();
   private oidcConfig: OpenIDConfiguration | null = null;
   // Bug #438-2 fix: the discovery document was cached forever.  If the IdP
   // returns an error (e.g. 5xx) and `oidcConfig` somehow already held a stale
@@ -97,7 +97,7 @@ export class AuthmeClient {
   private callbackPromise: Promise<boolean> | null = null;
   private silentRefreshIframe: HTMLIFrameElement | null = null;
 
-  constructor(config: AuthmeConfig) {
+  constructor(config: IdenplaneConfig) {
     this.config = {
       url: config.url.replace(/\/$/, ''),
       realm: config.realm,
@@ -717,18 +717,18 @@ export class AuthmeClient {
   // ── Events ──────────────────────────────────────────────────────
 
   /** Subscribe to an event. Returns an unsubscribe function. */
-  on<K extends keyof AuthmeEventMap>(
+  on<K extends keyof IdenplaneEventMap>(
     event: K,
-    handler: AuthmeEventMap[K] extends void ? () => void : (data: AuthmeEventMap[K]) => void,
+    handler: IdenplaneEventMap[K] extends void ? () => void : (data: IdenplaneEventMap[K]) => void,
   ): () => void {
     this.events.on(event, handler);
     return () => this.events.off(event, handler);
   }
 
   /** Unsubscribe from an event. */
-  off<K extends keyof AuthmeEventMap>(
+  off<K extends keyof IdenplaneEventMap>(
     event: K,
-    handler: AuthmeEventMap[K] extends void ? () => void : (data: AuthmeEventMap[K]) => void,
+    handler: IdenplaneEventMap[K] extends void ? () => void : (data: IdenplaneEventMap[K]) => void,
   ): void {
     this.events.off(event, handler);
   }
@@ -785,7 +785,7 @@ export class AuthmeClient {
     const now = Date.now();
     const isExpired =
       this.oidcConfigFetchedAt === null ||
-      now - this.oidcConfigFetchedAt > AuthmeClient.DISCOVERY_TTL_MS;
+      now - this.oidcConfigFetchedAt > IdenplaneClient.DISCOVERY_TTL_MS;
 
     if (!this.oidcConfig || isExpired) {
       await this.fetchDiscovery();

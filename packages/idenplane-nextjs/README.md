@@ -1,6 +1,6 @@
 # idenplane-nextjs
 
-Next.js SDK for [Idenplane](https://github.com/Islamawad132/Authme) — integrates Idenplane OIDC authentication into Next.js applications with support for the App Router, Pages Router, middleware, and Server Components.
+Next.js SDK for [Idenplane](https://github.com/idenplane/idenplane) — integrates Idenplane OIDC authentication into Next.js applications with support for the App Router, Pages Router, middleware, and Server Components.
 
 ## Installation
 
@@ -133,12 +133,12 @@ export const GET = withAuthHandler(
 
 Re-exports from `idenplane-sdk/react`:
 
-- `AuthProvider` / `AuthmeProvider` — context provider
+- `AuthProvider` / `IdenplaneProvider` — context provider
 - `useAuth()` — authentication state and actions
 - `useUser()` — current user info
 - `usePermissions()` — role and permission helpers
 - `ProtectedRoute` — render-gate component
-- `AuthmeClient` — raw client class
+- `IdenplaneClient` — raw client class
 
 ### `idenplane-nextjs/middleware`
 

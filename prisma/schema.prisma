@@ -1,5 +1,5 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Authme — primary Prisma schema (PostgreSQL)
+// Idenplane — primary Prisma schema (PostgreSQL)
 //
 // This is the canonical schema used in production.  Two additional provider
 // variants live alongside it for alternative deployments:

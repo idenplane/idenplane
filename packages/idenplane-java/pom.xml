@@ -11,7 +11,7 @@
 
     <name>Idenplane Java SDK</name>
     <description>Java SDK for the Idenplane Identity and Access Management Server</description>
-    <url>https://github.com/Islamawad132/Authme</url>
+    <url>https://github.com/idenplane/idenplane</url>
 
     <modules>
         <module>idenplane-java-core</module>

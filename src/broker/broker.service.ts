@@ -65,7 +65,7 @@ export class BrokerService {
       throw new BadRequestException(`Identity provider '${alias}' is disabled`);
     }
 
-    // Validate the Authme client
+    // Validate the Idenplane client
     const client = await this.prisma.client.findUnique({
       where: {
         realmId_clientId: { realmId: realm.id, clientId: params.client_id },
@@ -114,7 +114,7 @@ export class BrokerService {
 
   /**
    * Handle the callback from the external provider.
-   * Exchange code, fetch user info, link/create user, issue Authme auth code.
+   * Exchange code, fetch user info, link/create user, issue Idenplane auth code.
    */
   async handleCallback(
     realm: Realm,
@@ -156,7 +156,7 @@ export class BrokerService {
     // Link or create local user
     const user = await this.linkOrCreateUser(realm, idp, externalUser);
 
-    // Issue Authme authorization code
+    // Issue Idenplane authorization code
     const client = await this.prisma.client.findUnique({
       where: {
         realmId_clientId: { realmId: realm.id, clientId: brokerState.clientId },

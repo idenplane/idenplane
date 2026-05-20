@@ -6,7 +6,7 @@ description: Integrate Idenplane authentication into your Vue 3 application usin
 
 # Vue SDK
 
-The Idenplane Vue SDK provides Vue 3-specific bindings for the idenplane-sdk, including an `AuthmePlugin`, composables (`useAuth`, `useUser`, `usePermissions`), a Vue Router navigation guard (`createAuthGuard`), and an `AuthProvider` component for scoped authentication context.
+The Idenplane Vue SDK provides Vue 3-specific bindings for the idenplane-sdk, including an `IdenplanePlugin`, composables (`useAuth`, `useUser`, `usePermissions`), a Vue Router navigation guard (`createAuthGuard`), and an `AuthProvider` component for scoped authentication context.
 
 ## Installation
 
@@ -23,12 +23,12 @@ npm install @idenplane/vue idenplane-sdk vue
 ```typescript
 // main.ts
 import { createApp } from 'vue';
-import { AuthmePlugin } from '@idenplane/vue';
+import { IdenplanePlugin } from '@idenplane/vue';
 import App from './App.vue';
 
 const app = createApp(App);
 
-app.use(AuthmePlugin, {
+app.use(IdenplanePlugin, {
   url: 'http://localhost:3000',
   realm: 'my-realm',
   clientId: 'my-app',
@@ -65,9 +65,9 @@ const { isAuthenticated, user, login, logout, isLoading } = useAuth();
 // router/index.ts
 import { createRouter, createWebHistory } from 'vue-router';
 import { createAuthGuard } from '@idenplane/vue';
-import { AuthmeClient } from 'idenplane-sdk';
+import { IdenplaneClient } from 'idenplane-sdk';
 
-const authClient = new AuthmeClient({
+const authClient = new IdenplaneClient({
   url: 'http://localhost:3000',
   realm: 'my-realm',
   clientId: 'my-app',
@@ -98,9 +98,9 @@ export default router;
 
 ---
 
-## AuthmePlugin
+## IdenplanePlugin
 
-The `AuthmePlugin` is a Vue 3 plugin that initializes authentication and provides auth state globally via composables.
+The `IdenplanePlugin` is a Vue 3 plugin that initializes authentication and provides auth state globally via composables.
 
 ### Plugin Options
 
@@ -123,12 +123,12 @@ The `AuthmePlugin` is a Vue 3 plugin that initializes authentication and provide
 ```typescript
 // main.ts
 import { createApp } from 'vue';
-import { AuthmePlugin } from '@idenplane/vue';
+import { IdenplanePlugin } from '@idenplane/vue';
 import App from './App.vue';
 
 const app = createApp(App);
 
-app.use(AuthmePlugin, {
+app.use(IdenplanePlugin, {
   url: 'http://localhost:3000',
   realm: 'my-realm',
   clientId: 'my-app',
@@ -155,11 +155,11 @@ For more control over the client configuration:
 ```typescript
 // main.ts
 import { createApp } from 'vue';
-import { AuthmePlugin } from '@idenplane/vue';
-import { AuthmeClient } from 'idenplane-sdk';
+import { IdenplanePlugin } from '@idenplane/vue';
+import { IdenplaneClient } from 'idenplane-sdk';
 import App from './App.vue';
 
-const authClient = new AuthmeClient({
+const authClient = new IdenplaneClient({
   url: 'http://localhost:3000',
   realm: 'my-realm',
   clientId: 'my-app',
@@ -171,7 +171,7 @@ const authClient = new AuthmeClient({
 
 const app = createApp(App);
 
-app.use(AuthmePlugin, authClient);
+app.use(IdenplanePlugin, authClient);
 
 app.mount('#app');
 ```
@@ -184,7 +184,7 @@ The `useAuth` composable provides access to authentication state and actions:
 
 ```typescript
 const {
-  client,            // AuthmeClient - the SDK client instance
+  client,            // IdenplaneClient - the SDK client instance
   isAuthenticated,    // boolean - whether user is authenticated
   isLoading,          // boolean - whether auth state is loading
   user,               // UserInfo | null - current user info
@@ -477,9 +477,9 @@ export default router;
 // router/index.ts
 import { createRouter, createWebHistory } from 'vue-router';
 import { createAuthGuard } from '@idenplane/vue';
-import { AuthmeClient } from 'idenplane-sdk';
+import { IdenplaneClient } from 'idenplane-sdk';
 
-const authClient = new AuthmeClient({
+const authClient = new IdenplaneClient({
   url: 'http://localhost:3000',
   realm: 'my-realm',
   clientId: 'my-app',
@@ -535,7 +535,7 @@ import { AuthProvider } from '@idenplane/vue';
 | `realm` | `string` | Yes | Realm name |
 | `clientId` | `string` | Yes | OAuth2 client ID |
 | `redirectUri` | `string` | Yes | Redirect URI after login |
-| `client` | `AuthmeClient` | Yes* | Pre-built client instance |
+| `client` | `IdenplaneClient` | Yes* | Pre-built client instance |
 | `scope` | `string[]` | No | OAuth2 scopes |
 | `auto-handle-callback` | `boolean` | No | Auto-handle callback (default: `true`) |
 
@@ -553,9 +553,9 @@ import { AuthProvider } from '@idenplane/vue';
 
 <script setup lang="ts">
 import { AuthProvider } from '@idenplane/vue';
-import { AuthmeClient } from 'idenplane-sdk';
+import { IdenplaneClient } from 'idenplane-sdk';
 
-const authClient = new AuthmeClient({
+const authClient = new IdenplaneClient({
   url: 'http://localhost:3000',
   realm: 'my-realm',
   clientId: 'my-app',
@@ -572,7 +572,7 @@ const authClient = new AuthmeClient({
 
 | Export | Description |
 |--------|-------------|
-| `AuthmePlugin` | Vue 3 plugin, call `app.use(AuthmePlugin, AuthmeConfig)` |
+| `IdenplanePlugin` | Vue 3 plugin, call `app.use(IdenplanePlugin, IdenplaneConfig)` |
 
 ### Composables
 
@@ -597,7 +597,7 @@ const authClient = new AuthmeClient({
 ### Types
 
 ```typescript
-interface AuthmeConfig {
+interface IdenplaneConfig {
   url: string;
   realm: string;
   clientId: string;
@@ -640,8 +640,8 @@ The SDK is written in TypeScript and provides full type definitions:
 
 ```typescript
 import type {
-  AuthmeClient,
-  AuthmeConfig,
+  IdenplaneClient,
+  IdenplaneConfig,
   TokenResponse,
   UserInfo,
 } from 'idenplane-sdk';
@@ -686,6 +686,6 @@ React-specific hooks and components
 
 <p align="center">
   <a href="https://idenplane.dev">idenplane.dev</a> &middot;
-  <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
+  <a href="https://github.com/idenplane/idenplane">GitHub</a> &middot;
   <a href="https://discord.gg/idenplane">Discord</a>
 </p>

@@ -585,9 +585,9 @@ import TabItem from '@theme/TabItem';
 <TabItem value="typescript" label="TypeScript">
 
 ```typescript
-import { AuthmeClient, PolicyEvaluationResult } from 'idenplane-sdk';
+import { IdenplaneClient, PolicyEvaluationResult } from 'idenplane-sdk';
 
-const client = new AuthmeClient({
+const client = new IdenplaneClient({
   url: 'http://localhost:3000',
   realm: 'my-realm',
   clientId: 'my-app',
@@ -635,9 +635,9 @@ async function testPolicy(): Promise<void> {
 <TabItem value="python" label="Python">
 
 ```python
-from idenplane import AuthmeClient
+from idenplane import IdenplaneClient
 
-client = AuthmeClient(
+client = IdenplaneClient(
     url='http://localhost:3000',
     realm='my-realm',
     client_id='my-app',
@@ -669,10 +669,10 @@ async def check_access():
 <TabItem value="kotlin" label="Kotlin">
 
 ```kotlin
-import com.idenplane.sdk.AuthmeClient
+import com.idenplane.sdk.IdenplaneClient
 import com.idenplane.sdk.authorization.*
 
-val client = AuthmeClient(
+val client = IdenplaneClient(
     url = "http://localhost:3000",
     realm = "my-realm",
     clientId = "my-app"
@@ -812,6 +812,6 @@ Integrate Idenplane into your React application
 
 <p align="center">
   <a href="https://idenplane.dev">idenplane.dev</a> &middot;
-  <a href="https://github.com/Islamawad132/Authme">GitHub</a> &middot;
+  <a href="https://github.com/idenplane/idenplane">GitHub</a> &middot;
   <a href="https://discord.gg/idenplane">Discord</a>
 </p>
