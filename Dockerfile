@@ -1,5 +1,5 @@
 # Stage 1: Dependencies
-FROM node:22-alpine AS deps
+FROM node:26-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 # --ignore-scripts: the root "postinstall" runs `prisma generate`, which needs
@@ -8,13 +8,13 @@ COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
 
 # Stage 1b: Admin UI dependencies
-FROM node:22-alpine AS admin-deps
+FROM node:26-alpine AS admin-deps
 WORKDIR /app/admin-ui
 COPY admin-ui/package.json admin-ui/package-lock.json ./
 RUN npm ci
 
 # Stage 2: Build
-FROM node:22-alpine AS build
+FROM node:26-alpine AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=admin-deps /app/admin-ui/node_modules ./admin-ui/node_modules
@@ -28,7 +28,7 @@ RUN npm run build
 RUN cp -r admin-ui/dist dist/admin-ui
 
 # Stage 3: Production
-FROM node:22-alpine AS production
+FROM node:26-alpine AS production
 WORKDIR /app
 
 COPY --from=build /app/node_modules ./node_modules
