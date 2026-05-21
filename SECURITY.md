@@ -8,7 +8,7 @@ The Idenplane team takes security seriously. If you believe you have found a sec
 
 ### How to Report
 
-Send a detailed report to **security@idenplane.dev**.
+Send a detailed report to **security@idenplane.com**.
 
 To help us triage your report quickly, please include:
 

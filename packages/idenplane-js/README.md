@@ -1,11 +1,11 @@
 <p align="center">
-  <img src="https://idenplane.dev/logo.svg" alt="Idenplane" width="60" />
+  <img src="https://idenplane.com/logo.svg" alt="Idenplane" width="60" />
 </p>
 
 <h2 align="center">idenplane-sdk</h2>
 
 <p align="center">
-  <strong>Official client SDK for <a href="https://idenplane.dev">Idenplane</a></strong><br />
+  <strong>Official client SDK for <a href="https://idenplane.com">Idenplane</a></strong><br />
   <sub>Zero-dependency TypeScript SDK with OAuth 2.0 PKCE, token management, React bindings, and Next.js support.</sub>
 </p>
 
@@ -645,5 +645,5 @@ MIT
 ---
 
 <p align="center">
-  Part of <a href="https://idenplane.dev">Idenplane</a> — Open-source Identity & Access Management
+  Part of <a href="https://idenplane.com">Idenplane</a> — Open-source Identity & Access Management
 </p>

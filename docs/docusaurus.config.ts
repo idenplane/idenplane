@@ -13,7 +13,7 @@ const config: Config = {
   tagline: 'Open-source authentication made simple',
   favicon: 'img/icon.svg',
 
-  url: 'https://idenplane.dev',
+  url: 'https://idenplane.com',
   baseUrl: '/',
   organizationName: 'idenplane-project',
   projectName: 'idenplane-docs',

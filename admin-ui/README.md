@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://idenplane.dev/logo.svg" alt="Idenplane" width="60" />
+  <img src="https://idenplane.com/logo.svg" alt="Idenplane" width="60" />
 </p>
 
 <h2 align="center">Idenplane Admin Console</h2>
@@ -137,5 +137,5 @@ In Docker, the multi-stage build handles this automatically — the admin consol
 ---
 
 <p align="center">
-  Part of <a href="https://idenplane.dev">Idenplane</a> — Open-source Identity & Access Management
+  Part of <a href="https://idenplane.com">Idenplane</a> — Open-source Identity & Access Management
 </p>

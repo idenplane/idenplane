@@ -289,7 +289,7 @@ Configure realms, users, and clients
 ---
 
 <p align="center">
-  <a href="https://idenplane.dev">idenplane.dev</a> &middot;
+  <a href="https://idenplane.com">idenplane.com</a> &middot;
   <a href="https://github.com/idenplane/idenplane">GitHub</a> &middot;
   <a href="https://discord.gg/idenplane">Discord</a>
 </p>

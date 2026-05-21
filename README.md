@@ -12,7 +12,7 @@
 </p>
 
 <p align="center">
-  <a href="https://idenplane.dev">Website</a> &middot;
+  <a href="https://idenplane.com">Website</a> &middot;
   <a href="#features">Features</a> &middot;
   <a href="#quick-start">Quick Start</a> &middot;
   <a href="#client-sdks">SDKs</a> &middot;
@@ -27,7 +27,7 @@
   <a href="https://www.npmjs.com/package/idenplane-cli"><img src="https://img.shields.io/npm/v/idenplane-cli?label=idenplane-cli" alt="npm idenplane-cli" /></a>
   <a href="https://hub.docker.com/r/islamawad/idenplane"><img src="https://img.shields.io/docker/v/islamawad/idenplane?label=Docker%20Hub" alt="Docker Hub" /></a>
   <a href="https://github.com/idenplane/idenplane/blob/main/LICENSE"><img src="https://img.shields.io/badge/license-AGPL--3.0-blue" alt="License" /></a>
-  <a href="https://idenplane.dev"><img src="https://img.shields.io/badge/docs-idenplane.dev-blue" alt="Docs" /></a>
+  <a href="https://idenplane.com"><img src="https://img.shields.io/badge/docs-idenplane.com-blue" alt="Docs" /></a>
 </p>
 
 ---
@@ -723,13 +723,13 @@ Idenplane is released under the **GNU Affero General Public License v3.0 (AGPL-3
 
 You are free to use, modify, and distribute Idenplane. However, if you run a modified version of Idenplane as a network service (e.g. as a SaaS), the AGPL requires you to make the complete source code of your modified version available to its users.
 
-For organizations that cannot comply with the AGPL — for example, because they want to embed Idenplane in a proprietary product — a **commercial license** is available. Contact [licensing@idenplane.dev](mailto:licensing@idenplane.dev) for details.
+For organizations that cannot comply with the AGPL — for example, because they want to embed Idenplane in a proprietary product — a **commercial license** is available. Contact [licensing@idenplane.com](mailto:licensing@idenplane.com) for details.
 
 See the [LICENSE](LICENSE) file for the full AGPL-3.0 text.
 
 ---
 
 <p align="center">
-  <a href="https://idenplane.dev">idenplane.dev</a> &middot;
+  <a href="https://idenplane.com">idenplane.com</a> &middot;
   Built with NestJS, React, and PostgreSQL
 </p>
