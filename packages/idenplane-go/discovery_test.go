@@ -55,6 +55,8 @@ func TestDiscoveryCacheConcurrency(t *testing.T) {
 		AuthorizationEndpoint: "https://auth.example.com/authorize",
 		TokenEndpoint:         "https://auth.example.com/token",
 	}
+	// Seed the cache so reads have something to observe under contention.
+	cache.Set(config)
 
 	var wg sync.WaitGroup
 	numGoroutines := 100
@@ -161,8 +163,9 @@ func mockDiscoveryServer(handler func(w http.ResponseWriter, r *http.Request)) *
 // TestDiscoveryClientGet tests fetching discovery document
 func TestDiscoveryClientGet(t *testing.T) {
 	server := mockDiscoveryServer(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/.well-known/openid-configuration" {
-			t.Errorf("Expected path /.well-known/openid-configuration, got %s", r.URL.Path)
+		const wantPath = "/realms/test-realm/.well-known/openid-configuration"
+		if r.URL.Path != wantPath {
+			t.Errorf("Expected path %s, got %s", wantPath, r.URL.Path)
 		}
 		if r.Header.Get("Accept") != "application/json" {
 			t.Errorf("Expected Accept: application/json header")

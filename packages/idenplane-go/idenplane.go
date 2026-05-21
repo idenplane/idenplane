@@ -36,22 +36,20 @@ type TokenResponse struct {
 	Scope string `json:"scope,omitempty"`
 }
 
-// User represents user information returned by the userinfo endpoint.
+// User is the resolved shape of a user as exposed by the SDK. It covers both
+// admin API user records (ID, Username, FirstName, ...) and OIDC userinfo
+// claims for the same subject.
 type User struct {
-	// Subject is the unique user identifier.
-	Subject string `json:"sub"`
-	// PreferredUsername is the user's preferred username.
-	PreferredUsername string `json:"preferred_username,omitempty"`
-	// Name is the user's full name.
-	Name string `json:"name,omitempty"`
-	// GivenName is the user's first name.
-	GivenName string `json:"given_name,omitempty"`
-	// FamilyName is the user's last name.
-	FamilyName string `json:"family_name,omitempty"`
-	// Email is the user's email address.
-	Email string `json:"email,omitempty"`
-	// EmailVerified indicates whether the email has been verified.
-	EmailVerified bool `json:"email_verified,omitempty"`
+	ID               string              `json:"id,omitempty"`
+	Username         string              `json:"username,omitempty"`
+	Enabled          bool                `json:"enabled,omitempty"`
+	EmailVerified    bool                `json:"emailVerified,omitempty"`
+	Email            string              `json:"email,omitempty"`
+	FirstName        string              `json:"firstName,omitempty"`
+	LastName         string              `json:"lastName,omitempty"`
+	Groups           []string            `json:"groups,omitempty"`
+	Attributes       map[string][]string `json:"attributes,omitempty"`
+	CreatedTimestamp *int64              `json:"createdTimestamp,omitempty"`
 }
 
 // OIDCConfiguration is an alias for OpenIDConfiguration for API compatibility.
@@ -129,19 +127,22 @@ func (c Config) scopes() []string {
 // Client is the main Idenplane client for server-side operations.
 type Client struct {
 	config Config
+	// Users exposes admin-API user management.
+	Users *UserService
 }
 
 // NewClient creates a new Idenplane client with the given configuration.
-// It validates the config and returns an error if invalid.
-func NewClient(config Config) (*Client, error) {
-	if err := config.Validate(); err != nil {
-		return nil, err
-	}
-	return &Client{config: config}, nil
+// Configuration is validated lazily at request time so callers can construct
+// a client in a single line without juggling errors. Use Config.Validate() up
+// front if you need to fail fast.
+func NewClient(config Config) *Client {
+	c := &Client{config: config}
+	c.Users = &UserService{client: c}
+	return c
 }
 
 // NewClientWithDefaults creates a new Idenplane client with default values for optional fields.
-func NewClientWithDefaults(serverURL, realm, clientID string) (*Client, error) {
+func NewClientWithDefaults(serverURL, realm, clientID string) *Client {
 	return NewClient(Config{
 		ServerURL:    serverURL,
 		Realm:        realm,
