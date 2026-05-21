@@ -3,7 +3,6 @@
 package idenplane
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -70,6 +69,11 @@ type Config struct {
 
 	// ClientSecret is the client secret for confidential clients. Optional for public clients.
 	ClientSecret string
+
+	// AdminToken is the bearer token used on admin API calls (e.g. UserService).
+	// Typically obtained via the client-credentials flow against a service account
+	// with the realm-management role. Leave empty to omit the Authorization header.
+	AdminToken string
 
 	// Scopes is the OAuth 2.0 scopes to request (default: ["openid", "profile", "email"]).
 	Scopes []string
@@ -157,31 +161,14 @@ func (c *Client) Config() Config {
 	return c.config
 }
 
-// realmAccessToken is a helper to get the realm access token for admin operations.
-// In server-side scenarios, this would typically come from a service account.
-func (c *Client) realmAccessToken() string {
-	// For server-side SDK, clients need to provide their own tokens
-	// or use client credentials flow. This method returns the client secret
-	// as a bearer token for admin API access.
-	return c.config.ClientSecret
-}
-
-// doRequest performs an HTTP request with proper error handling.
-func (c *Client) doRequest(ctx context.Context, method, url string, body interface{}) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, method, url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+// authHeader returns the Authorization header value for admin API calls.
+// Returns the empty string when no AdminToken is configured so callers can
+// skip setting the header.
+func (c *Client) authHeader() string {
+	if c.config.AdminToken == "" {
+		return ""
 	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := c.config.httpClient().Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-
-	return resp, nil
+	return "Bearer " + c.config.AdminToken
 }
 
 // Error is the base error type for Idenplane errors.

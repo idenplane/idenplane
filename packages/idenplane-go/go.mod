@@ -1,3 +1,3 @@
-module github.com/idenplane/idenplane-go
+module github.com/idenplane/idenplane/packages/idenplane-go
 
 go 1.24

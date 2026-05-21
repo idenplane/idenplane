@@ -99,27 +99,49 @@ func (us *UserService) usersURL() string {
 	return fmt.Sprintf("%s/admin/realms/%s/users", strings.TrimSuffix(us.client.config.ServerURL, "/"), us.client.config.Realm)
 }
 
-// Create creates a user and returns the resulting record. Idenplane's admin API
-// returns 201 with a Location header containing the new user's ID; we follow
-// that with a GET to populate the full record.
+// doRequest builds, authenticates, and dispatches an admin API request.
+// When body is non-nil it is JSON-encoded and the Content-Type header set.
+// When the client has an AdminToken configured, the Authorization header is
+// attached so admin endpoints don't return 401.
+func (us *UserService) doRequest(ctx context.Context, method, path string, body interface{}) (*http.Response, error) {
+	var reader io.Reader
+	if body != nil {
+		raw, err := json.Marshal(body)
+		if err != nil {
+			return nil, ErrServerError("marshal request body: " + err.Error())
+		}
+		reader = bytes.NewReader(raw)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, path, reader)
+	if err != nil {
+		return nil, ErrNetworkError("build request", err)
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req.Header.Set("Accept", "application/json")
+	if auth := us.client.authHeader(); auth != "" {
+		req.Header.Set("Authorization", auth)
+	}
+	resp, err := us.client.config.httpClient().Do(req)
+	if err != nil {
+		return nil, ErrNetworkError("request failed", err)
+	}
+	return resp, nil
+}
+
+// Create creates a user and returns the resulting record. Idenplane's admin
+// API returns 201 with a Location header containing the new user's ID; we
+// follow that with a GET to populate the full record. If the POST response
+// body itself already carries a full UserRepresentation (with an ID), we
+// trust it and skip the follow-up GET.
 func (us *UserService) Create(ctx context.Context, req CreateUserRequest) (*User, error) {
 	if req.Username == "" {
 		return nil, ErrInvalidConfig("Username is required")
 	}
-	body, err := json.Marshal(req)
+	resp, err := us.doRequest(ctx, http.MethodPost, us.usersURL(), req)
 	if err != nil {
-		return nil, ErrServerError("marshal create user: " + err.Error())
-	}
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPost, us.usersURL(), bytes.NewReader(body))
-	if err != nil {
-		return nil, ErrNetworkError("build create user request", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-	httpReq.Header.Set("Accept", "application/json")
-
-	resp, err := us.client.config.httpClient().Do(httpReq)
-	if err != nil {
-		return nil, ErrNetworkError("create user", err)
+		return nil, err
 	}
 	defer resp.Body.Close()
 
@@ -127,57 +149,42 @@ func (us *UserService) Create(ctx context.Context, req CreateUserRequest) (*User
 		return nil, ErrServerError(fmt.Sprintf("create user: status %d", resp.StatusCode))
 	}
 
-	var id string
+	var locationID string
 	if loc := resp.Header.Get("Location"); loc != "" {
-		id = extractUserID(loc)
+		locationID = extractUserID(loc)
 	}
 
 	rawBody, _ := io.ReadAll(resp.Body)
 	var rep UserRepresentation
 	if len(rawBody) > 0 {
 		_ = json.Unmarshal(rawBody, &rep)
-		if id == "" {
-			id = rep.ID
-		}
+	}
+
+	// Prefer the server's POST body when it already contains a full record.
+	if locationID == "" && rep.ID != "" {
+		return rep.toUser(), nil
+	}
+
+	id := locationID
+	if id == "" {
+		id = rep.ID
 	}
 	if id == "" {
 		return nil, ErrServerError("create user: no ID returned")
 	}
 
 	user, err := us.Get(ctx, id)
-	if err == nil {
-		return user, nil
+	if err != nil {
+		return nil, fmt.Errorf("user created (id=%s) but fetch failed: %w", id, err)
 	}
-	if rep.ID == "" {
-		rep.ID = id
-	}
-	if rep.Username == "" {
-		rep.Username = req.Username
-	}
-	if rep.Email == "" {
-		rep.Email = req.Email
-	}
-	if rep.FirstName == "" {
-		rep.FirstName = req.FirstName
-	}
-	if rep.LastName == "" {
-		rep.LastName = req.LastName
-	}
-	return rep.toUser(), nil
+	return user, nil
 }
 
 // Get fetches a single user by ID.
 func (us *UserService) Get(ctx context.Context, id string) (*User, error) {
-	u := us.usersURL() + "/" + url.PathEscape(id)
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u, nil)
+	resp, err := us.doRequest(ctx, http.MethodGet, us.usersURL()+"/"+url.PathEscape(id), nil)
 	if err != nil {
-		return nil, ErrNetworkError("build get user request", err)
-	}
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := us.client.config.httpClient().Do(req)
-	if err != nil {
-		return nil, ErrNetworkError("get user", err)
+		return nil, err
 	}
 	defer resp.Body.Close()
 
@@ -228,15 +235,9 @@ func (us *UserService) List(ctx context.Context, params ListUsersParams) ([]*Use
 	}
 	u.RawQuery = q.Encode()
 
-	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), nil)
+	resp, err := us.doRequest(ctx, http.MethodGet, u.String(), nil)
 	if err != nil {
-		return nil, 0, ErrNetworkError("build list users request", err)
-	}
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := us.client.config.httpClient().Do(req)
-	if err != nil {
-		return nil, 0, ErrNetworkError("list users", err)
+		return nil, 0, err
 	}
 	defer resp.Body.Close()
 
@@ -257,20 +258,9 @@ func (us *UserService) List(ctx context.Context, params ListUsersParams) ([]*Use
 
 // Update applies a partial update to the user with the given ID.
 func (us *UserService) Update(ctx context.Context, id string, req UpdateUserRequest) error {
-	body, err := json.Marshal(req)
+	resp, err := us.doRequest(ctx, http.MethodPut, us.usersURL()+"/"+url.PathEscape(id), req)
 	if err != nil {
-		return ErrServerError("marshal update: " + err.Error())
-	}
-	u := us.usersURL() + "/" + url.PathEscape(id)
-	httpReq, err := http.NewRequestWithContext(ctx, http.MethodPut, u, bytes.NewReader(body))
-	if err != nil {
-		return ErrNetworkError("build update request", err)
-	}
-	httpReq.Header.Set("Content-Type", "application/json")
-
-	resp, err := us.client.config.httpClient().Do(httpReq)
-	if err != nil {
-		return ErrNetworkError("update user", err)
+		return err
 	}
 	defer resp.Body.Close()
 
@@ -285,14 +275,9 @@ func (us *UserService) Update(ctx context.Context, id string, req UpdateUserRequ
 
 // Delete removes the user with the given ID.
 func (us *UserService) Delete(ctx context.Context, id string) error {
-	u := us.usersURL() + "/" + url.PathEscape(id)
-	req, err := http.NewRequestWithContext(ctx, http.MethodDelete, u, nil)
+	resp, err := us.doRequest(ctx, http.MethodDelete, us.usersURL()+"/"+url.PathEscape(id), nil)
 	if err != nil {
-		return ErrNetworkError("build delete request", err)
-	}
-	resp, err := us.client.config.httpClient().Do(req)
-	if err != nil {
-		return ErrNetworkError("delete user", err)
+		return err
 	}
 	defer resp.Body.Close()
 
@@ -313,20 +298,9 @@ func (us *UserService) ResetPassword(ctx context.Context, id, password string, t
 		"value":     password,
 		"temporary": temporary,
 	}
-	raw, err := json.Marshal(body)
+	resp, err := us.doRequest(ctx, http.MethodPut, us.usersURL()+"/"+url.PathEscape(id)+"/reset-password", body)
 	if err != nil {
-		return ErrServerError("marshal reset-password: " + err.Error())
-	}
-	u := us.usersURL() + "/" + url.PathEscape(id) + "/reset-password"
-	req, err := http.NewRequestWithContext(ctx, http.MethodPut, u, bytes.NewReader(raw))
-	if err != nil {
-		return ErrNetworkError("build reset-password request", err)
-	}
-	req.Header.Set("Content-Type", "application/json")
-
-	resp, err := us.client.config.httpClient().Do(req)
-	if err != nil {
-		return ErrNetworkError("reset password", err)
+		return err
 	}
 	defer resp.Body.Close()
 
