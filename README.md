@@ -1,9 +1,7 @@
 <p align="center">
-  <img src="branding/logos/idenplane-logo.svg" alt="Idenplane" width="420" />
-</p>
-
-<p align="center">
-  <strong>The identity control plane you own.</strong>
+  <a href="https://idenplane.com">
+    <img src="branding/logos/png/social-preview.png" alt="Idenplane — The identity control plane you own." width="100%" />
+  </a>
 </p>
 
 <p align="center">
