@@ -34,7 +34,7 @@ This Code of Conduct applies within all community spaces — GitHub issues, disc
 
 ## Enforcement
 
-Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the project maintainers at **conduct@idenplane.dev**. All complaints will be reviewed and investigated promptly and fairly.
+Instances of abusive, harassing, or otherwise unacceptable behavior may be reported to the project maintainers at **conduct@idenplane.com**. All complaints will be reviewed and investigated promptly and fairly.
 
 All maintainers are obligated to respect the privacy and safety of the reporter of any incident.
 

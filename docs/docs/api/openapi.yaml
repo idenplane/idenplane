@@ -21,8 +21,8 @@ info:
   version: 1.0.0
   contact:
     name: Idenplane Project
-    url: https://idenplane.dev
-    email: support@idenplane.dev
+    url: https://idenplane.com
+    email: support@idenplane.com
   license:
     name: Apache 2.0
     url: https://www.apache.org/licenses/LICENSE-2.0.html

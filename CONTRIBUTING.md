@@ -232,13 +232,13 @@ Include:
 
 **DO NOT** report security vulnerabilities via GitHub Issues.
 
-Email: security@idenplane.dev (or follow your organization's responsible disclosure policy)
+Email: security@idenplane.com (or follow your organization's responsible disclosure policy)
 
 ## Questions?
 
 - GitHub Discussions: https://github.com/idenplane/idenplane/discussions
 - Discord: https://discord.gg/idenplane
-- Documentation: https://idenplane.dev/docs
+- Documentation: https://idenplane.com/docs
 
 ## License
 
