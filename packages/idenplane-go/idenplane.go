@@ -3,7 +3,6 @@
 package idenplane
 
 import (
-	"context"
 	"errors"
 	"fmt"
 	"net/http"
@@ -36,22 +35,20 @@ type TokenResponse struct {
 	Scope string `json:"scope,omitempty"`
 }
 
-// User represents user information returned by the userinfo endpoint.
+// User is the resolved shape of a user as exposed by the SDK. It covers both
+// admin API user records (ID, Username, FirstName, ...) and OIDC userinfo
+// claims for the same subject.
 type User struct {
-	// Subject is the unique user identifier.
-	Subject string `json:"sub"`
-	// PreferredUsername is the user's preferred username.
-	PreferredUsername string `json:"preferred_username,omitempty"`
-	// Name is the user's full name.
-	Name string `json:"name,omitempty"`
-	// GivenName is the user's first name.
-	GivenName string `json:"given_name,omitempty"`
-	// FamilyName is the user's last name.
-	FamilyName string `json:"family_name,omitempty"`
-	// Email is the user's email address.
-	Email string `json:"email,omitempty"`
-	// EmailVerified indicates whether the email has been verified.
-	EmailVerified bool `json:"email_verified,omitempty"`
+	ID               string              `json:"id,omitempty"`
+	Username         string              `json:"username,omitempty"`
+	Enabled          bool                `json:"enabled,omitempty"`
+	EmailVerified    bool                `json:"emailVerified,omitempty"`
+	Email            string              `json:"email,omitempty"`
+	FirstName        string              `json:"firstName,omitempty"`
+	LastName         string              `json:"lastName,omitempty"`
+	Groups           []string            `json:"groups,omitempty"`
+	Attributes       map[string][]string `json:"attributes,omitempty"`
+	CreatedTimestamp *int64              `json:"createdTimestamp,omitempty"`
 }
 
 // OIDCConfiguration is an alias for OpenIDConfiguration for API compatibility.
@@ -72,6 +69,11 @@ type Config struct {
 
 	// ClientSecret is the client secret for confidential clients. Optional for public clients.
 	ClientSecret string
+
+	// AdminToken is the bearer token used on admin API calls (e.g. UserService).
+	// Typically obtained via the client-credentials flow against a service account
+	// with the realm-management role. Leave empty to omit the Authorization header.
+	AdminToken string
 
 	// Scopes is the OAuth 2.0 scopes to request (default: ["openid", "profile", "email"]).
 	Scopes []string
@@ -129,19 +131,22 @@ func (c Config) scopes() []string {
 // Client is the main Idenplane client for server-side operations.
 type Client struct {
 	config Config
+	// Users exposes admin-API user management.
+	Users *UserService
 }
 
 // NewClient creates a new Idenplane client with the given configuration.
-// It validates the config and returns an error if invalid.
-func NewClient(config Config) (*Client, error) {
-	if err := config.Validate(); err != nil {
-		return nil, err
-	}
-	return &Client{config: config}, nil
+// Configuration is validated lazily at request time so callers can construct
+// a client in a single line without juggling errors. Use Config.Validate() up
+// front if you need to fail fast.
+func NewClient(config Config) *Client {
+	c := &Client{config: config}
+	c.Users = &UserService{client: c}
+	return c
 }
 
 // NewClientWithDefaults creates a new Idenplane client with default values for optional fields.
-func NewClientWithDefaults(serverURL, realm, clientID string) (*Client, error) {
+func NewClientWithDefaults(serverURL, realm, clientID string) *Client {
 	return NewClient(Config{
 		ServerURL:    serverURL,
 		Realm:        realm,
@@ -156,31 +161,14 @@ func (c *Client) Config() Config {
 	return c.config
 }
 
-// realmAccessToken is a helper to get the realm access token for admin operations.
-// In server-side scenarios, this would typically come from a service account.
-func (c *Client) realmAccessToken() string {
-	// For server-side SDK, clients need to provide their own tokens
-	// or use client credentials flow. This method returns the client secret
-	// as a bearer token for admin API access.
-	return c.config.ClientSecret
-}
-
-// doRequest performs an HTTP request with proper error handling.
-func (c *Client) doRequest(ctx context.Context, method, url string, body interface{}) (*http.Response, error) {
-	req, err := http.NewRequestWithContext(ctx, method, url, nil)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create request: %w", err)
+// authHeader returns the Authorization header value for admin API calls.
+// Returns the empty string when no AdminToken is configured so callers can
+// skip setting the header.
+func (c *Client) authHeader() string {
+	if c.config.AdminToken == "" {
+		return ""
 	}
-
-	req.Header.Set("Content-Type", "application/json")
-	req.Header.Set("Accept", "application/json")
-
-	resp, err := c.config.httpClient().Do(req)
-	if err != nil {
-		return nil, fmt.Errorf("request failed: %w", err)
-	}
-
-	return resp, nil
+	return "Bearer " + c.config.AdminToken
 }
 
 // Error is the base error type for Idenplane errors.
