@@ -125,14 +125,6 @@ func (c Config) httpClient() *http.Client {
 	return &http.Client{Timeout: timeout}
 }
 
-// scopes returns the scopes, using defaults if not set.
-func (c Config) scopes() []string {
-	if len(c.Scopes) == 0 {
-		return DefaultScopes
-	}
-	return c.Scopes
-}
-
 // Client is the main Idenplane client for server-side operations.
 type Client struct {
 	config Config

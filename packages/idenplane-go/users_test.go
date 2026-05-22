@@ -40,7 +40,7 @@ func TestUserServiceCreate(t *testing.T) {
 			createdUserID = "user-123"
 			w.Header().Set("Location", "http://localhost/admin/realms/test-realm/users/"+createdUserID)
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			json.NewEncoder(w).Encode(map[string]any{
 				"id":      createdUserID,
 				"username": req.Username,
 				"enabled": true,
@@ -48,7 +48,7 @@ func TestUserServiceCreate(t *testing.T) {
 		},
 		"GET /admin/realms/test-realm/users/user-123": func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			json.NewEncoder(w).Encode(map[string]any{
 				"id":      createdUserID,
 				"username": "testuser",
 				"enabled": true,
@@ -98,7 +98,7 @@ func TestUserServiceCreateWithoutLocationHeader(t *testing.T) {
 	server := mockUsersServer(map[string]func(w http.ResponseWriter, r *http.Request){
 		"POST /admin/realms/test-realm/users": func(w http.ResponseWriter, r *http.Request) {
 			w.WriteHeader(http.StatusCreated)
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			json.NewEncoder(w).Encode(map[string]any{
 				"id":      "user-456",
 				"username": "newuser",
 				"enabled": true,
@@ -165,7 +165,7 @@ func TestUserServiceGet(t *testing.T) {
 	server := mockUsersServer(map[string]func(w http.ResponseWriter, r *http.Request){
 		"GET /admin/realms/test-realm/users/user-123": func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode(map[string]interface{}{
+			json.NewEncoder(w).Encode(map[string]any{
 				"id":        "user-123",
 				"username":  "testuser",
 				"enabled":   true,
@@ -280,7 +280,7 @@ func TestUserServiceList(t *testing.T) {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			users := []map[string]interface{}{
+			users := []map[string]any{
 				{"id": "user-1", "username": "user1", "enabled": true},
 				{"id": "user-2", "username": "user2", "enabled": true},
 				{"id": "user-3", "username": "user3", "enabled": false},
@@ -331,7 +331,7 @@ func TestUserServiceListDefaultPagination(t *testing.T) {
 				t.Errorf("Expected default limit='20', got '%s'", limit)
 			}
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode([]map[string]interface{}{})
+			json.NewEncoder(w).Encode([]map[string]any{})
 		},
 	})
 	defer server.Close()
@@ -355,7 +355,7 @@ func TestUserServiceListISOTimestamps(t *testing.T) {
 	server := mockUsersServer(map[string]func(w http.ResponseWriter, r *http.Request){
 		"GET /admin/realms/test-realm/users": func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode([]map[string]interface{}{
+			json.NewEncoder(w).Encode([]map[string]any{
 				{
 					"id":            "u-1",
 					"username":      "alice",
@@ -416,7 +416,7 @@ func TestUserServiceListWithFilters(t *testing.T) {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode([]map[string]interface{}{
+			json.NewEncoder(w).Encode([]map[string]any{
 				{"id": "user-1", "username": "johndoe", "enabled": true},
 			})
 		},
@@ -456,7 +456,7 @@ func TestUserServiceListEmpty(t *testing.T) {
 	server := mockUsersServer(map[string]func(w http.ResponseWriter, r *http.Request){
 		"GET /admin/realms/test-realm/users": func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode([]map[string]interface{}{})
+			json.NewEncoder(w).Encode([]map[string]any{})
 		},
 	})
 	defer server.Close()
@@ -661,7 +661,7 @@ func TestUserServiceDeleteServerError(t *testing.T) {
 func TestUserServiceResetPassword(t *testing.T) {
 	server := mockUsersServer(map[string]func(w http.ResponseWriter, r *http.Request){
 		"PUT /admin/realms/test-realm/users/user-123/reset-password": func(w http.ResponseWriter, r *http.Request) {
-			var reqBody map[string]interface{}
+			var reqBody map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
 				http.Error(w, "Invalid JSON", http.StatusBadRequest)
 				return
@@ -720,7 +720,7 @@ func TestUserServiceResetPasswordTemporary(t *testing.T) {
 	temporary := true
 	server := mockUsersServer(map[string]func(w http.ResponseWriter, r *http.Request){
 		"PUT /admin/realms/test-realm/users/user-123/reset-password": func(w http.ResponseWriter, r *http.Request) {
-			var reqBody map[string]interface{}
+			var reqBody map[string]any
 			if err := json.NewDecoder(r.Body).Decode(&reqBody); err != nil {
 				http.Error(w, "Invalid JSON", http.StatusBadRequest)
 				return
@@ -761,7 +761,7 @@ func TestUserServiceConcurrency(t *testing.T) {
 			mu.Unlock()
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode([]map[string]interface{}{
+			json.NewEncoder(w).Encode([]map[string]any{
 				{"id": "user-1", "username": "user1", "enabled": true},
 			})
 		},

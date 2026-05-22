@@ -106,7 +106,7 @@ func (us *UserService) usersURL() string {
 // When body is non-nil it is JSON-encoded and the Content-Type header set.
 // When the client has an AdminToken configured, the Authorization header is
 // attached so admin endpoints don't return 401.
-func (us *UserService) doRequest(ctx context.Context, method, path string, body interface{}) (*http.Response, error) {
+func (us *UserService) doRequest(ctx context.Context, method, path string, body any) (*http.Response, error) {
 	var reader io.Reader
 	if body != nil {
 		raw, err := json.Marshal(body)
@@ -231,10 +231,7 @@ func (us *UserService) List(ctx context.Context, params ListUsersParams) ([]*Use
 		q.Set("enabled", strconv.FormatBool(*params.Enabled))
 	}
 	// Default to backend's ListUsersQueryDto defaults: page=1, limit=20.
-	page := params.Page
-	if page < 1 {
-		page = 1
-	}
+	page := max(params.Page, 1)
 	limit := params.Limit
 	if limit < 1 {
 		limit = 20
@@ -301,7 +298,7 @@ func (us *UserService) Delete(ctx context.Context, id string) error {
 // ResetPassword sets a new password for the user. If temporary is true, the
 // user is required to change the password on next login.
 func (us *UserService) ResetPassword(ctx context.Context, id, password string, temporary bool) error {
-	body := map[string]interface{}{
+	body := map[string]any{
 		"type":      "password",
 		"value":     password,
 		"temporary": temporary,
