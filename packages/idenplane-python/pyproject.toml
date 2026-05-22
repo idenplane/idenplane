@@ -1,0 +1,126 @@
+[build-system]
+requires = ["hatchling>=1.18"]
+build-backend = "hatchling.build"
+
+[project]
+name = "idenplane"
+version = "0.3.0"
+description = "Server-side Python SDK for the Idenplane admin API (OIDC discovery + user management)"
+readme = "README.md"
+requires-python = ">=3.9"
+license = { text = "MIT" }
+authors = [
+    { name = "Idenplane Maintainers", email = "maintainers@idenplane.com" },
+]
+keywords = ["idenplane", "iam", "oidc", "oauth2", "sso", "identity", "auth", "sdk"]
+classifiers = [
+    "Development Status :: 4 - Beta",
+    "Intended Audience :: Developers",
+    "License :: OSI Approved :: MIT License",
+    "Operating System :: OS Independent",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.9",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Programming Language :: Python :: 3.13",
+    "Topic :: Security",
+    "Topic :: Software Development :: Libraries :: Python Modules",
+    "Topic :: System :: Systems Administration :: Authentication/Directory",
+    "Typing :: Typed",
+]
+dependencies = [
+    "requests>=2.31",
+    "typing-extensions>=4.7; python_version < '3.11'",
+]
+
+[project.optional-dependencies]
+dev = [
+    "pytest>=8.0",
+    "pytest-cov>=5.0",
+    "responses>=0.25",
+    "mypy>=1.8",
+    "ruff>=0.5",
+    "types-requests>=2.31",
+]
+
+[project.urls]
+Homepage = "https://idenplane.com"
+Repository = "https://github.com/idenplane/idenplane"
+Documentation = "https://github.com/idenplane/idenplane/tree/main/packages/idenplane-python"
+Issues = "https://github.com/idenplane/idenplane/issues"
+Changelog = "https://github.com/idenplane/idenplane/blob/main/CHANGELOG.md"
+
+[tool.hatch.build.targets.wheel]
+packages = ["idenplane"]
+
+[tool.hatch.build.targets.sdist]
+include = [
+    "/idenplane",
+    "/tests",
+    "/README.md",
+    "/LICENSE",
+    "/pyproject.toml",
+]
+
+[tool.ruff]
+line-length = 100
+target-version = "py39"
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle errors
+    "W",   # pycodestyle warnings
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # bugbear
+    "UP",  # pyupgrade
+    "N",   # pep8-naming
+    "SIM", # simplify
+    "RUF", # ruff-specific
+]
+ignore = [
+    "E501",  # line-length handled by formatter
+    "UP006", # keep typing.List/Dict for py3.9 compatibility in TypedDicts
+    "UP007", # keep Optional[X] over X | None for py3.9
+    "UP035", # keep typing imports for py3.9
+    "UP045", # keep Optional[X] over X | None for py3.9
+]
+
+[tool.ruff.lint.per-file-ignores]
+"tests/*" = ["B011", "N802"]
+
+[tool.mypy]
+python_version = "3.10"
+strict = true
+warn_unused_configs = true
+show_error_codes = true
+disallow_untyped_defs = true
+disallow_incomplete_defs = true
+check_untyped_defs = true
+no_implicit_optional = true
+warn_redundant_casts = true
+warn_unused_ignores = true
+warn_return_any = true
+warn_unreachable = true
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+addopts = [
+    "-ra",
+    "--strict-markers",
+    "--strict-config",
+]
+
+[tool.coverage.run]
+source = ["idenplane"]
+branch = true
+
+[tool.coverage.report]
+exclude_lines = [
+    "pragma: no cover",
+    "raise NotImplementedError",
+    "if TYPE_CHECKING:",
+]
+show_missing = true
