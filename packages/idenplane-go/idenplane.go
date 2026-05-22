@@ -38,17 +38,22 @@ type TokenResponse struct {
 // User is the resolved shape of a user as exposed by the SDK. It covers both
 // admin API user records (ID, Username, FirstName, ...) and OIDC userinfo
 // claims for the same subject.
+//
+// CreatedAt and UpdatedAt are ISO 8601 strings (e.g. "2026-05-22T08:30:00.000Z")
+// because Prisma serializes DateTime columns as ISO strings on the wire — not
+// Unix-epoch integers.
 type User struct {
-	ID               string              `json:"id,omitempty"`
-	Username         string              `json:"username,omitempty"`
-	Enabled          bool                `json:"enabled,omitempty"`
-	EmailVerified    bool                `json:"emailVerified,omitempty"`
-	Email            string              `json:"email,omitempty"`
-	FirstName        string              `json:"firstName,omitempty"`
-	LastName         string              `json:"lastName,omitempty"`
-	Groups           []string            `json:"groups,omitempty"`
-	Attributes       map[string][]string `json:"attributes,omitempty"`
-	CreatedTimestamp *int64              `json:"createdTimestamp,omitempty"`
+	ID            string              `json:"id,omitempty"`
+	Username      string              `json:"username,omitempty"`
+	Enabled       bool                `json:"enabled,omitempty"`
+	EmailVerified bool                `json:"emailVerified,omitempty"`
+	Email         string              `json:"email,omitempty"`
+	FirstName     string              `json:"firstName,omitempty"`
+	LastName      string              `json:"lastName,omitempty"`
+	Groups        []string            `json:"groups,omitempty"`
+	Attributes    map[string][]string `json:"attributes,omitempty"`
+	CreatedAt     string              `json:"createdAt,omitempty"`
+	UpdatedAt     string              `json:"updatedAt,omitempty"`
 }
 
 // OIDCConfiguration is an alias for OpenIDConfiguration for API compatibility.

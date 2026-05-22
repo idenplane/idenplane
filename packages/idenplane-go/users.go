@@ -30,6 +30,10 @@ type UpdateUserRequest struct {
 }
 
 // ListUsersParams holds optional filters and pagination for User.List.
+//
+// Page is 1-based and Limit defaults to 20 to match the backend
+// (ListUsersQueryDto in users.controller.ts). The backend computes
+// skip = (page - 1) * limit internally.
 type ListUsersParams struct {
 	Username  string
 	Email     string
@@ -37,14 +41,17 @@ type ListUsersParams struct {
 	LastName  string
 	Search    string
 	Enabled   *bool
-	First     int
-	Max       int
+	Page      int
+	Limit     int
 }
 
 // UserRepresentation is the wire representation of a user from the admin API.
+// CreatedAt and UpdatedAt are ISO 8601 strings; Prisma serializes DateTime
+// columns to ISO strings rather than Unix-epoch integers.
 type UserRepresentation struct {
 	ID            string              `json:"id"`
-	Created       int64               `json:"createdTimestamp"`
+	CreatedAt     string              `json:"createdAt"`
+	UpdatedAt     string              `json:"updatedAt"`
 	Username      string              `json:"username"`
 	Enabled       bool                `json:"enabled"`
 	EmailVerified bool                `json:"emailVerified"`
@@ -56,22 +63,18 @@ type UserRepresentation struct {
 }
 
 func (r *UserRepresentation) toUser() *User {
-	var ts *int64
-	if r.Created != 0 {
-		c := r.Created
-		ts = &c
-	}
 	return &User{
-		ID:               r.ID,
-		Username:         r.Username,
-		Enabled:          r.Enabled,
-		EmailVerified:    r.EmailVerified,
-		Email:            r.Email,
-		FirstName:        r.FirstName,
-		LastName:         r.LastName,
-		Groups:           r.Groups,
-		Attributes:       r.Attributes,
-		CreatedTimestamp: ts,
+		ID:            r.ID,
+		Username:      r.Username,
+		Enabled:       r.Enabled,
+		EmailVerified: r.EmailVerified,
+		Email:         r.Email,
+		FirstName:     r.FirstName,
+		LastName:      r.LastName,
+		Groups:        r.Groups,
+		Attributes:    r.Attributes,
+		CreatedAt:     r.CreatedAt,
+		UpdatedAt:     r.UpdatedAt,
 	}
 }
 
@@ -227,12 +230,17 @@ func (us *UserService) List(ctx context.Context, params ListUsersParams) ([]*Use
 	if params.Enabled != nil {
 		q.Set("enabled", strconv.FormatBool(*params.Enabled))
 	}
-	if params.First > 0 {
-		q.Set("first", strconv.Itoa(params.First))
+	// Default to backend's ListUsersQueryDto defaults: page=1, limit=20.
+	page := params.Page
+	if page < 1 {
+		page = 1
 	}
-	if params.Max > 0 {
-		q.Set("max", strconv.Itoa(params.Max))
+	limit := params.Limit
+	if limit < 1 {
+		limit = 20
 	}
+	q.Set("page", strconv.Itoa(page))
+	q.Set("limit", strconv.Itoa(limit))
 	u.RawQuery = q.Encode()
 
 	resp, err := us.doRequest(ctx, http.MethodGet, u.String(), nil)

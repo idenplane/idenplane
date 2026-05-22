@@ -166,13 +166,14 @@ func TestUserServiceGet(t *testing.T) {
 		"GET /admin/realms/test-realm/users/user-123": func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
 			json.NewEncoder(w).Encode(map[string]interface{}{
-				"id":      "user-123",
-				"username": "testuser",
-				"enabled": true,
-				"email":   "test@example.com",
+				"id":        "user-123",
+				"username":  "testuser",
+				"enabled":   true,
+				"email":     "test@example.com",
 				"firstName": "Test",
-				"lastName": "User",
-				"createdTimestamp": 1704067200000,
+				"lastName":  "User",
+				"createdAt": "2026-05-22T08:30:00.000Z",
+				"updatedAt": "2026-05-22T08:30:00.000Z",
 			})
 		},
 	})
@@ -251,17 +252,31 @@ func TestUserServiceGetServerError(t *testing.T) {
 	}
 }
 
-// TestUserServiceList tests listing users with pagination
+// TestUserServiceList tests listing users with pagination. The SDK must send
+// page/limit (not first/max), since the backend's ListUsersQueryDto only
+// understands those.
 func TestUserServiceList(t *testing.T) {
 	server := mockUsersServer(map[string]func(w http.ResponseWriter, r *http.Request){
 		"GET /admin/realms/test-realm/users": func(w http.ResponseWriter, r *http.Request) {
 			query := r.URL.Query()
 
 			// Verify query parameters are passed
-			if username := query.Get("username"); username != "" {
-				if username != "testuser" {
-					t.Errorf("Expected username filter 'testuser', got '%s'", username)
-				}
+			if username := query.Get("username"); username != "testuser" {
+				t.Errorf("Expected username filter 'testuser', got '%s'", username)
+			}
+			if page := query.Get("page"); page != "1" {
+				t.Errorf("Expected page='1', got '%s'", page)
+			}
+			if limit := query.Get("limit"); limit != "10" {
+				t.Errorf("Expected limit='10', got '%s'", limit)
+			}
+			// The legacy first/max names must NOT be sent — backend ignores them
+			// (silent-failure pagination bug fixed in this commit).
+			if got := query.Get("first"); got != "" {
+				t.Errorf("Unexpected 'first' param: %q", got)
+			}
+			if got := query.Get("max"); got != "" {
+				t.Errorf("Unexpected 'max' param: %q", got)
 			}
 
 			w.Header().Set("Content-Type", "application/json")
@@ -284,7 +299,8 @@ func TestUserServiceList(t *testing.T) {
 
 	params := ListUsersParams{
 		Username: "testuser",
-		Max:      10,
+		Page:     1,
+		Limit:    10,
 	}
 
 	users, count, err := client.Users.List(context.Background(), params)
@@ -298,6 +314,82 @@ func TestUserServiceList(t *testing.T) {
 
 	if count != 3 {
 		t.Errorf("Expected count 3, got %d", count)
+	}
+}
+
+// TestUserServiceListDefaultPagination asserts that an empty ListUsersParams
+// falls back to the backend defaults (page=1, limit=20 — matching
+// ListUsersQueryDto in users.controller.ts).
+func TestUserServiceListDefaultPagination(t *testing.T) {
+	server := mockUsersServer(map[string]func(w http.ResponseWriter, r *http.Request){
+		"GET /admin/realms/test-realm/users": func(w http.ResponseWriter, r *http.Request) {
+			query := r.URL.Query()
+			if page := query.Get("page"); page != "1" {
+				t.Errorf("Expected default page='1', got '%s'", page)
+			}
+			if limit := query.Get("limit"); limit != "20" {
+				t.Errorf("Expected default limit='20', got '%s'", limit)
+			}
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode([]map[string]interface{}{})
+		},
+	})
+	defer server.Close()
+
+	client := NewClient(Config{
+		ServerURL: server.URL,
+		Realm:     "test-realm",
+		ClientID:  "test-client",
+		ClientSecret: "test-secret",
+	})
+
+	_, _, err := client.Users.List(context.Background(), ListUsersParams{})
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+}
+
+// TestUserServiceListISOTimestamps locks the wire contract: createdAt/updatedAt
+// are ISO 8601 strings (Prisma DateTime serialization), not Unix epoch ints.
+func TestUserServiceListISOTimestamps(t *testing.T) {
+	server := mockUsersServer(map[string]func(w http.ResponseWriter, r *http.Request){
+		"GET /admin/realms/test-realm/users": func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			json.NewEncoder(w).Encode([]map[string]interface{}{
+				{
+					"id":            "u-1",
+					"username":      "alice",
+					"email":         "a@example.com",
+					"firstName":     "Alice",
+					"enabled":       true,
+					"emailVerified": true,
+					"createdAt":     "2026-05-22T08:30:00.000Z",
+					"updatedAt":     "2026-05-22T09:00:00.000Z",
+				},
+			})
+		},
+	})
+	defer server.Close()
+
+	client := NewClient(Config{
+		ServerURL:    server.URL,
+		Realm:        "test-realm",
+		ClientID:     "test-client",
+		ClientSecret: "test-secret",
+	})
+
+	users, _, err := client.Users.List(context.Background(), ListUsersParams{})
+	if err != nil {
+		t.Fatalf("List failed: %v", err)
+	}
+	if len(users) != 1 {
+		t.Fatalf("Expected 1 user, got %d", len(users))
+	}
+	if users[0].CreatedAt != "2026-05-22T08:30:00.000Z" {
+		t.Errorf("Expected CreatedAt '2026-05-22T08:30:00.000Z', got '%s'", users[0].CreatedAt)
+	}
+	if users[0].UpdatedAt != "2026-05-22T09:00:00.000Z" {
+		t.Errorf("Expected UpdatedAt '2026-05-22T09:00:00.000Z', got '%s'", users[0].UpdatedAt)
 	}
 }
 
@@ -345,8 +437,8 @@ func TestUserServiceListWithFilters(t *testing.T) {
 		LastName:  "Doe",
 		Search:    "john",
 		Enabled:   &enabled,
-		First:     0,
-		Max:       20,
+		Page:      1,
+		Limit:     20,
 	}
 
 	users, _, err := client.Users.List(context.Background(), params)
@@ -704,18 +796,21 @@ func TestUserServiceConcurrency(t *testing.T) {
 	mu.Unlock()
 }
 
-// TestUserRepresentationToUser tests conversion from UserRepresentation to User
+// TestUserRepresentationToUser tests conversion from UserRepresentation to User.
+// The createdAt/updatedAt wire fields are ISO 8601 strings because Prisma
+// serializes DateTime columns to ISO strings, not Unix-epoch integers.
 func TestUserRepresentationToUser(t *testing.T) {
 	rep := &UserRepresentation{
-		ID:      "user-123",
-		Created: 1704067200000,
-		Username: "testuser",
-		Enabled: true,
+		ID:            "user-123",
+		CreatedAt:     "2026-05-22T08:30:00.000Z",
+		UpdatedAt:     "2026-05-22T09:00:00.000Z",
+		Username:      "testuser",
+		Enabled:       true,
 		EmailVerified: true,
-		Email: "test@example.com",
-		FirstName: "Test",
-		LastName: "User",
-		Groups: []string{"admin", "users"},
+		Email:         "test@example.com",
+		FirstName:     "Test",
+		LastName:      "User",
+		Groups:        []string{"admin", "users"},
 		Attributes: map[string][]string{
 			"custom_attr": {"value1", "value2"},
 		},
@@ -755,8 +850,12 @@ func TestUserRepresentationToUser(t *testing.T) {
 		t.Errorf("Expected 2 groups, got %d", len(user.Groups))
 	}
 
-	if user.CreatedTimestamp == nil {
-		t.Error("Expected CreatedTimestamp to be set")
+	if user.CreatedAt != "2026-05-22T08:30:00.000Z" {
+		t.Errorf("Expected CreatedAt '2026-05-22T08:30:00.000Z', got '%s'", user.CreatedAt)
+	}
+
+	if user.UpdatedAt != "2026-05-22T09:00:00.000Z" {
+		t.Errorf("Expected UpdatedAt '2026-05-22T09:00:00.000Z', got '%s'", user.UpdatedAt)
 	}
 }
 
