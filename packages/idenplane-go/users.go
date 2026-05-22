@@ -30,6 +30,10 @@ type UpdateUserRequest struct {
 }
 
 // ListUsersParams holds optional filters and pagination for User.List.
+//
+// Page is 1-based and Limit defaults to 20 to match the backend
+// (ListUsersQueryDto in users.controller.ts). The backend computes
+// skip = (page - 1) * limit internally.
 type ListUsersParams struct {
 	Username  string
 	Email     string
@@ -37,14 +41,17 @@ type ListUsersParams struct {
 	LastName  string
 	Search    string
 	Enabled   *bool
-	First     int
-	Max       int
+	Page      int
+	Limit     int
 }
 
 // UserRepresentation is the wire representation of a user from the admin API.
+// CreatedAt and UpdatedAt are ISO 8601 strings; Prisma serializes DateTime
+// columns to ISO strings rather than Unix-epoch integers.
 type UserRepresentation struct {
 	ID            string              `json:"id"`
-	Created       int64               `json:"createdTimestamp"`
+	CreatedAt     string              `json:"createdAt"`
+	UpdatedAt     string              `json:"updatedAt"`
 	Username      string              `json:"username"`
 	Enabled       bool                `json:"enabled"`
 	EmailVerified bool                `json:"emailVerified"`
@@ -56,22 +63,18 @@ type UserRepresentation struct {
 }
 
 func (r *UserRepresentation) toUser() *User {
-	var ts *int64
-	if r.Created != 0 {
-		c := r.Created
-		ts = &c
-	}
 	return &User{
-		ID:               r.ID,
-		Username:         r.Username,
-		Enabled:          r.Enabled,
-		EmailVerified:    r.EmailVerified,
-		Email:            r.Email,
-		FirstName:        r.FirstName,
-		LastName:         r.LastName,
-		Groups:           r.Groups,
-		Attributes:       r.Attributes,
-		CreatedTimestamp: ts,
+		ID:            r.ID,
+		Username:      r.Username,
+		Enabled:       r.Enabled,
+		EmailVerified: r.EmailVerified,
+		Email:         r.Email,
+		FirstName:     r.FirstName,
+		LastName:      r.LastName,
+		Groups:        r.Groups,
+		Attributes:    r.Attributes,
+		CreatedAt:     r.CreatedAt,
+		UpdatedAt:     r.UpdatedAt,
 	}
 }
 
@@ -103,7 +106,7 @@ func (us *UserService) usersURL() string {
 // When body is non-nil it is JSON-encoded and the Content-Type header set.
 // When the client has an AdminToken configured, the Authorization header is
 // attached so admin endpoints don't return 401.
-func (us *UserService) doRequest(ctx context.Context, method, path string, body interface{}) (*http.Response, error) {
+func (us *UserService) doRequest(ctx context.Context, method, path string, body any) (*http.Response, error) {
 	var reader io.Reader
 	if body != nil {
 		raw, err := json.Marshal(body)
@@ -227,12 +230,14 @@ func (us *UserService) List(ctx context.Context, params ListUsersParams) ([]*Use
 	if params.Enabled != nil {
 		q.Set("enabled", strconv.FormatBool(*params.Enabled))
 	}
-	if params.First > 0 {
-		q.Set("first", strconv.Itoa(params.First))
+	// Default to backend's ListUsersQueryDto defaults: page=1, limit=20.
+	page := max(params.Page, 1)
+	limit := params.Limit
+	if limit < 1 {
+		limit = 20
 	}
-	if params.Max > 0 {
-		q.Set("max", strconv.Itoa(params.Max))
-	}
+	q.Set("page", strconv.Itoa(page))
+	q.Set("limit", strconv.Itoa(limit))
 	u.RawQuery = q.Encode()
 
 	resp, err := us.doRequest(ctx, http.MethodGet, u.String(), nil)
@@ -293,7 +298,7 @@ func (us *UserService) Delete(ctx context.Context, id string) error {
 // ResetPassword sets a new password for the user. If temporary is true, the
 // user is required to change the password on next login.
 func (us *UserService) ResetPassword(ctx context.Context, id, password string, temporary bool) error {
-	body := map[string]interface{}{
+	body := map[string]any{
 		"type":      "password",
 		"value":     password,
 		"temporary": temporary,
