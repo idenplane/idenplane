@@ -118,6 +118,8 @@ class TestGet:
                 "firstName": "Alice",
                 "enabled": True,
                 "emailVerified": True,
+                "createdAt": "2026-05-22T08:30:00.000Z",
+                "updatedAt": "2026-05-22T08:30:00.000Z",
             },
             status=200,
         )
@@ -128,6 +130,8 @@ class TestGet:
         assert user["id"] == "u-1"
         assert user["firstName"] == "Alice"
         assert user["emailVerified"] is True
+        assert user["createdAt"] == "2026-05-22T08:30:00.000Z"
+        assert user["updatedAt"] == "2026-05-22T08:30:00.000Z"
 
     @responses.activate
     def test_404_raises_not_found(self) -> None:
@@ -213,10 +217,24 @@ class TestList:
             USERS_URL,
             json=[],
             status=200,
-            match=[matchers.query_param_matcher({"first": "10", "max": "25"})],
+            match=[matchers.query_param_matcher({"page": "3", "limit": "25"})],
         )
         with _client() as client:
-            client.users.list(ListUsersOptions(skip=10, limit=25))
+            client.users.list(ListUsersOptions(page=3, limit=25))
+        assert len(responses.calls) == 1
+
+    @responses.activate
+    def test_default_pagination_is_page_one_limit_twenty(self) -> None:
+        """Defaults must match backend ListUsersQueryDto (page=1, limit=20)."""
+        responses.add(
+            responses.GET,
+            USERS_URL,
+            json=[],
+            status=200,
+            match=[matchers.query_param_matcher({"page": "1", "limit": "20"})],
+        )
+        with _client() as client:
+            client.users.list(ListUsersOptions())
         assert len(responses.calls) == 1
 
     @responses.activate
@@ -229,13 +247,14 @@ class TestList:
             match=[
                 matchers.query_param_matcher(
                     {
+                        "page": "1",
+                        "limit": "20",
                         "username": "alice",
                         "email": "a@e.com",
                         "firstName": "Alice",
                         "lastName": "Smith",
                         "search": "ali",
                         "enabled": "true",
-                        "max": "50",
                     }
                 )
             ],
@@ -259,10 +278,50 @@ class TestList:
             USERS_URL,
             json=[],
             status=200,
-            match=[matchers.query_param_matcher({"enabled": "false", "max": "50"})],
+            match=[
+                matchers.query_param_matcher(
+                    {"page": "1", "limit": "20", "enabled": "false"}
+                )
+            ],
         )
         with _client() as client:
             client.users.list(ListUsersOptions(enabled=False))
+
+    @responses.activate
+    def test_iso_timestamps_round_trip(self) -> None:
+        """User contract: createdAt/updatedAt are ISO 8601 strings.
+
+        Locks the wire contract: Prisma serializes DateTime → ISO strings,
+        not Unix-epoch integers.
+        """
+        responses.add(
+            responses.GET,
+            USERS_URL,
+            json=[
+                {
+                    "id": "u-1",
+                    "username": "alice",
+                    "email": "a@example.com",
+                    "firstName": "Alice",
+                    "lastName": "A",
+                    "enabled": True,
+                    "emailVerified": True,
+                    "createdAt": "2026-05-22T08:30:00.000Z",
+                    "updatedAt": "2026-05-22T09:00:00.000Z",
+                }
+            ],
+            status=200,
+        )
+        with _client() as client:
+            result = client.users.list()
+
+        assert result["total"] == 1
+        user = result["users"][0]
+        assert user["createdAt"] == "2026-05-22T08:30:00.000Z"
+        assert user["updatedAt"] == "2026-05-22T09:00:00.000Z"
+        # Old keys must be absent (would silently flow through if Backend changed).
+        assert "createdTimestamp" not in user
+        assert "updatedTimestamp" not in user
 
     @responses.activate
     def test_non_array_response_raises(self) -> None:

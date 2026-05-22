@@ -25,8 +25,12 @@ class User(TypedDict, total=False):
     """User record returned by the admin API.
 
     The Idenplane admin API uses camelCase keys (``firstName``, ``lastName``,
-    ``emailVerified``, ``createdTimestamp``); they are exposed here exactly
-    as returned to avoid surprising callers who consult the REST docs.
+    ``emailVerified``); they are exposed here exactly as returned to avoid
+    surprising callers who consult the REST docs.
+
+    ``createdAt`` and ``updatedAt`` are ISO 8601 timestamp strings (e.g.
+    ``"2026-05-22T08:30:00.000Z"``) because Prisma serializes ``DateTime``
+    columns to ISO strings on the wire.
     """
 
     id: str
@@ -36,8 +40,8 @@ class User(TypedDict, total=False):
     lastName: str
     enabled: bool
     emailVerified: bool
-    createdTimestamp: int
-    updatedTimestamp: int
+    createdAt: str
+    updatedAt: str
     attributes: dict[str, list[str]]
     groups: list[str]
 
@@ -67,10 +71,15 @@ class UpdateUserRequest(TypedDict, total=False):
 
 @dataclass
 class ListUsersOptions:
-    """Filters and pagination for :meth:`UserService.list`."""
+    """Filters and pagination for :meth:`UserService.list`.
 
-    skip: int = 0
-    limit: int = 50
+    ``page`` is 1-based and ``limit`` defaults to 20 to match the backend
+    (``ListUsersQueryDto`` in ``users.controller.ts``). The backend computes
+    ``skip = (page - 1) * limit`` internally.
+    """
+
+    page: int = 1
+    limit: int = 20
     username: Optional[str] = None
     email: Optional[str] = None
     first_name: Optional[str] = None
@@ -80,11 +89,10 @@ class ListUsersOptions:
 
     def to_query(self) -> dict[str, str]:
         """Render options as a flat query-parameter mapping."""
-        params: dict[str, str] = {}
-        if self.skip:
-            params["first"] = str(self.skip)
-        if self.limit:
-            params["max"] = str(self.limit)
+        params: dict[str, str] = {
+            "page": str(self.page),
+            "limit": str(self.limit),
+        }
         if self.username:
             params["username"] = self.username
         if self.email:

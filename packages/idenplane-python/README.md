@@ -67,9 +67,9 @@ with Client(Config.from_env()) as client:
     # Read
     user = client.users.get("user-id-123")
 
-    # List with filters and pagination
+    # List with filters and pagination (page is 1-based, limit defaults to 20)
     result = client.users.list(
-        ListUsersOptions(skip=0, limit=25, search="alice", enabled=True)
+        ListUsersOptions(page=1, limit=25, search="alice", enabled=True)
     )
     print(result["total"], "users")
     for u in result["users"]:
