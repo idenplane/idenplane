@@ -6,7 +6,14 @@ import tseslint from 'typescript-eslint';
 
 export default tseslint.config(
   {
-    ignores: ['eslint.config.mjs', 'test/**', '**/*.spec.ts'],
+    ignores: [
+      'eslint.config.mjs',
+      'test/**',
+      '**/*.spec.ts',
+      // Test-only mock utilities (use jest globals/types); excluded like specs.
+      '**/*.mock.ts',
+      '**/__mocks__/**',
+    ],
   },
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
