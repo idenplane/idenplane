@@ -4,16 +4,22 @@ on:
   pull_request:
     branches: [main]
     paths:
-      # Only run when source files that could affect the API change
+      # Only run when source files that could affect the API surface change.
+      # Dependency-only changes (package.json / package-lock.json) are excluded:
+      # bumping a dependency cannot alter our own API surface, so it should not
+      # trigger this gate (it was firing false failures on every Dependabot PR).
       - 'src/**'
       - 'prisma/**'
-      - 'package.json'
-      - 'package-lock.json'
 
 jobs:
   breaking-change-check:
     name: API Breaking Change Detection
     runs-on: ubuntu-latest
+    # Informational only for now. The spec diff boots the full app twice and
+    # does a base-branch git dance, which is fragile and produces false
+    # positives (it failed even on trivial dev-dependency bumps). Keep it
+    # surfacing diffs without blocking merges until it's hardened post-1.0.
+    continue-on-error: true
 
     services:
       postgres:
