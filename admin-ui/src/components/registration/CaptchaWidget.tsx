@@ -35,7 +35,7 @@ export default function CaptchaWidget({ provider, siteKey }: CaptchaWidgetProps)
       const grecaptcha = window.grecaptcha;
       grecaptcha.ready(() => {
         grecaptcha.execute(siteKey, { action: 'register' }).then((token) => {
-          (window as any).__captchaToken = token;
+          window.__captchaToken = token;
         }).catch(console.error);
       });
     } else if (provider === 'hcaptcha' && window.hcaptcha && containerRef.current) {
@@ -44,7 +44,7 @@ export default function CaptchaWidget({ provider, siteKey }: CaptchaWidgetProps)
       widgetIdRef.current = window.hcaptcha.render(containerId, {
         sitekey: siteKey,
         callback: (token: string) => {
-          (window as any).__captchaToken = token;
+          window.__captchaToken = token;
         },
       });
     }

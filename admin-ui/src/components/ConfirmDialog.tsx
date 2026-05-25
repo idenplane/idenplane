@@ -1,4 +1,4 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useMemo, useRef } from 'react';
 
 interface ConfirmDialogProps {
   isOpen?: boolean;
@@ -26,7 +26,10 @@ export default function ConfirmDialog({
   const cancelRef = useRef<HTMLButtonElement>(null);
   const dialogRef = useRef<HTMLDivElement>(null);
   const isDialogOpen = isOpen ?? open ?? false;
-  const handleClose = onClose ?? onCancel ?? (() => {});
+  const handleClose = useMemo(
+    () => onClose ?? onCancel ?? (() => {}),
+    [onClose, onCancel],
+  );
 
   // Move focus into the dialog when it opens; restore focus when it closes.
   useEffect(() => {
