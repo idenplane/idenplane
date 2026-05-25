@@ -287,6 +287,7 @@ export function WizardProvider({
 }
 
 /** Returns the full WizardContext value — must be used inside <WizardProvider>. */
+// eslint-disable-next-line react-refresh/only-export-components -- hook is intentionally co-located with its provider; only affects Fast Refresh granularity.
 export function useWizardContext(): WizardContextValue {
   const ctx = useContext(WizardContext);
   if (!ctx) {
@@ -296,6 +297,7 @@ export function useWizardContext(): WizardContextValue {
 }
 
 /** Hook for easier access to wizard state and common operations */
+// eslint-disable-next-line react-refresh/only-export-components -- hook is intentionally co-located with its provider; only affects Fast Refresh granularity.
 export function useWizard() {
   const context = useWizardContext();
   return {

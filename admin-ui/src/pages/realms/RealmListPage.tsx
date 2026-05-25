@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router-dom';
 import { getAllRealms, importRealm } from '../../api/realms';
+import { getErrorMessage } from '../../utils/getErrorMessage';
 
 export default function RealmListPage() {
   const navigate = useNavigate();
@@ -22,11 +23,10 @@ export default function RealmListPage() {
       const text = await file.text();
       const payload = JSON.parse(text);
       const result = await importRealm(payload);
-      setImportStatus({ type: 'success', message: `Realm "${(result as any).realmName}" imported successfully.` });
+      setImportStatus({ type: 'success', message: `Realm "${String(result.realmName ?? '')}" imported successfully.` });
       queryClient.invalidateQueries({ queryKey: ['realms'] });
-    } catch (err: any) {
-      const msg = err?.response?.data?.message ?? err.message ?? 'Import failed.';
-      setImportStatus({ type: 'error', message: msg });
+    } catch (err: unknown) {
+      setImportStatus({ type: 'error', message: getErrorMessage(err, 'Import failed.') });
     }
     // Reset file input
     if (fileInputRef.current) fileInputRef.current.value = '';

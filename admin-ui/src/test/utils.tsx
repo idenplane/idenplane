@@ -67,6 +67,7 @@ export function renderWithProviders(
   };
 }
 
-// Re-export everything from @testing-library/react for convenience
+// Re-export everything from @testing-library/react for convenience.
+// eslint-disable-next-line react-refresh/only-export-components -- test-only helper module; Fast Refresh does not apply.
 export * from '@testing-library/react';
 export { renderWithProviders as render };
