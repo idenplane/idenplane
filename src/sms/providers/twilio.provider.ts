@@ -53,7 +53,7 @@ export class TwilioSmsProvider implements SmsProvider {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Failed to send SMS to ${to}: ${errorMessage}`);
-      throw new Error(`Twilio SMS failed: ${errorMessage}`);
+      throw new Error(`Twilio SMS failed: ${errorMessage}`, { cause: error });
     }
   }
 

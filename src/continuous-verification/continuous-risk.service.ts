@@ -664,7 +664,7 @@ export class ContinuousRiskAssessmentService {
     const decay = Math.min(hoursSinceLastEval * 0.05, 0.5);
 
     // Risk level affects trust adjustment
-    let riskAdjustment = 0;
+    let riskAdjustment: number;
     if (riskLevel === 'CRITICAL') riskAdjustment = -30;
     else if (riskLevel === 'HIGH') riskAdjustment = -15;
     else if (riskLevel === 'MEDIUM') riskAdjustment = -5;

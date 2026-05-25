@@ -110,7 +110,7 @@ export class FlowExecutorService {
       return this.advanceSession(session, step, true);
     }
 
-    let success = false;
+    let success: boolean;
     let extraData: Record<string, unknown> | undefined;
 
     try {

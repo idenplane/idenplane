@@ -600,7 +600,9 @@ export class LoginController {
 
     // MFA verified — consume the challenge and clear the cookie
     await this.mfaService.consumeMfaChallenge(challengeToken);
-    res.clearCookie('IDENPLANE_MFA_CHALLENGE', { path: `/realms/${realm.name}` });
+    res.clearCookie('IDENPLANE_MFA_CHALLENGE', {
+      path: `/realms/${realm.name}`,
+    });
 
     // Reset TOTP failure tracking on successful verification
     await this.bruteForceService.resetTotpFailures(realm.id, challenge.userId);

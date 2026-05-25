@@ -100,7 +100,9 @@ export class PluginLoaderService {
 
     try {
       entries = readdirSync(nmDir, { withFileTypes: true })
-        .filter((d) => d.isDirectory() && d.name.startsWith('idenplane-plugin-'))
+        .filter(
+          (d) => d.isDirectory() && d.name.startsWith('idenplane-plugin-'),
+        )
         .map((d) => d.name);
     } catch (err) {
       this.logger.warn(
