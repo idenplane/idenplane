@@ -44,7 +44,7 @@
     "@prisma/adapter-pg": "^7.8.0",
     "@prisma/client": "^7.8.0",
     "@simplewebauthn/server": "^13.3.0",
-    "@types/bcryptjs": "^2.4.6",
+    "@types/bcryptjs": "^3.0.0",
     "argon2": "^0.44.0",
     "bcryptjs": "^3.0.3",
     "class-transformer": "^0.5.1",
