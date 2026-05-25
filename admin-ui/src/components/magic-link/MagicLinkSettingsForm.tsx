@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Realm } from '../../types';
 import type { MagicLinkSettings } from '../../types';
@@ -20,18 +20,20 @@ export default function MagicLinkSettingsForm({ realm }: MagicLinkSettingsFormPr
     emailTemplate: null,
   });
 
-  useEffect(() => {
-    if (realm) {
-      setForm({
-        enabled: realm.magicLinkEnabled ?? false,
-        expirySeconds: realm.magicLinkExpirySeconds ?? 300,
-        rateLimitPerEmail: realm.magicLinkRateLimitPerEmail ?? 3,
-        rateLimitWindowSeconds: realm.magicLinkRateLimitWindowSeconds ?? 900,
-        emailSubject: realm.magicLinkEmailSubject ?? null,
-        emailTemplate: realm.magicLinkEmailTemplate ?? null,
-      });
-    }
-  }, [realm]);
+  // Seed the editable form from the realm prop when it changes.
+  // Adjusting state during render (vs. an effect) avoids an extra render pass.
+  const [seededRealm, setSeededRealm] = useState(realm);
+  if (realm !== seededRealm) {
+    setSeededRealm(realm);
+    setForm({
+      enabled: realm.magicLinkEnabled ?? false,
+      expirySeconds: realm.magicLinkExpirySeconds ?? 300,
+      rateLimitPerEmail: realm.magicLinkRateLimitPerEmail ?? 3,
+      rateLimitWindowSeconds: realm.magicLinkRateLimitWindowSeconds ?? 900,
+      emailSubject: realm.magicLinkEmailSubject ?? null,
+      emailTemplate: realm.magicLinkEmailTemplate ?? null,
+    });
+  }
 
   const updateMutation = useMutation({
     mutationFn: () => updateRealm(realm.name, {

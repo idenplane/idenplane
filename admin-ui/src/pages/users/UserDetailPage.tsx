@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getUserById, updateUser, deleteUser, resetPassword, getMfaStatus, resetMfa, getOfflineSessions, revokeOfflineSession } from '../../api/users';
@@ -64,17 +64,19 @@ export default function UserDetailPage() {
     enabled: true,
   });
 
-  useEffect(() => {
-    if (user) {
-      setForm({
-        email: user.email ?? '',
-        emailVerified: user.emailVerified,
-        firstName: user.firstName ?? '',
-        lastName: user.lastName ?? '',
-        enabled: user.enabled,
-      });
-    }
-  }, [user]);
+  // Seed the editable form from fetched data when the loaded user changes.
+  // Adjusting state during render (vs. an effect) avoids an extra render pass.
+  const [seededUser, setSeededUser] = useState(user);
+  if (user && user !== seededUser) {
+    setSeededUser(user);
+    setForm({
+      email: user.email ?? '',
+      emailVerified: user.emailVerified,
+      firstName: user.firstName ?? '',
+      lastName: user.lastName ?? '',
+      enabled: user.enabled,
+    });
+  }
 
   const updateMutation = useMutation({
     mutationFn: () => updateUser(name!, id!, form),

@@ -19,6 +19,20 @@ function useBreadcrumbs(): Crumb[] {
   const path = pathname.replace(/^\/console/, '') || '/';
   const segments = path.split('/').filter(Boolean);
 
+  // Reset the resolved flow name when navigating away from an auth-flow detail
+  // page. Done during render (vs. an effect) to avoid a synchronous setState in
+  // the effect body; the effect below only handles the async fetch. We keep the
+  // previous name while navigating between auth-flow pages so it does not flash
+  // to null before the new name resolves.
+  const [prevPathname, setPrevPathname] = useState(pathname);
+  if (pathname !== prevPathname) {
+    setPrevPathname(pathname);
+    const idx = segments.indexOf('auth-flows');
+    if (idx === -1 || segments.length <= idx + 1) {
+      setFlowName(null);
+    }
+  }
+
   // Detect if we are on an auth-flow detail page and fetch the flow name.
   // URL pattern: /console/realms/:name/auth-flows/:flowId[/...]
   useEffect(() => {
@@ -34,7 +48,6 @@ function useBreadcrumbs(): Crumb[] {
         return () => { cancelled = true; };
       }
     }
-    setFlowName(null);
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [pathname]);
 
