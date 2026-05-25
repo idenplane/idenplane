@@ -77,3 +77,23 @@ updates:
     labels:
       - dependencies
       - docker
+
+  # Documentation site (was unmonitored — a transitive uuid advisory sat here
+  # with no fix PR because Dependabot wasn't watching this directory).
+  - package-ecosystem: npm
+    directory: "/docs"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: "Africa/Cairo"
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - docs
+    groups:
+      docs-dev-dependencies:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
