@@ -118,7 +118,7 @@ export class SamlIdpService {
 
     const sig = new SignedXml({ publicCert: certificate });
     sig.loadSignature(signatures[0]);
-    let valid = false;
+    let valid: boolean;
     try {
       valid = sig.checkSignature(xml);
     } catch (err) {

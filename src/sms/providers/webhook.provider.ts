@@ -100,14 +100,17 @@ export class WebhookSmsProvider implements SmsProvider {
         if (error.name === 'AbortError') {
           throw new Error(
             `Webhook SMS failed: Request timeout after ${this.timeoutMs}ms`,
+            { cause: error },
           );
         }
         if (error.message.startsWith('Webhook')) {
           throw error;
         }
-        throw new Error(`Webhook SMS failed: ${error.message}`);
+        throw new Error(`Webhook SMS failed: ${error.message}`, {
+          cause: error,
+        });
       }
-      throw new Error('Webhook SMS failed: Unknown error');
+      throw new Error('Webhook SMS failed: Unknown error', { cause: error });
     }
   }
 
