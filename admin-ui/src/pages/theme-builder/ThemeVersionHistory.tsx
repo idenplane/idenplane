@@ -40,7 +40,12 @@ export default function ThemeVersionHistory({
     }
   }, [themeId, realmName]);
 
+  // Fetch the version history on mount and whenever the target theme changes.
+  // This is a genuine "synchronize with an external system" effect; the
+  // synchronous setLoading/setError inside fetchVersions are the start of an
+  // async data load, not derived state, so the rule's warning does not apply.
   useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
     fetchVersions();
   }, [fetchVersions]);
 

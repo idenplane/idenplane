@@ -122,9 +122,12 @@ export default function RealmDetailPage() {
     emailTheme: 'idenplane',
   });
 
-  useEffect(() => {
-    if (realm) {
-      setForm({
+  // Seed the editable form from fetched data when the loaded realm changes.
+  // Adjusting state during render (vs. an effect) avoids an extra render pass.
+  const [seededRealm, setSeededRealm] = useState(realm);
+  if (realm && realm !== seededRealm) {
+    setSeededRealm(realm);
+    setForm({
         displayName: realm.displayName ?? '',
         enabled: realm.enabled,
         registrationAllowed: realm.registrationAllowed ?? true,
@@ -162,9 +165,8 @@ export default function RealmDetailPage() {
         loginTheme: realm.loginTheme ?? 'idenplane',
         accountTheme: realm.accountTheme ?? 'idenplane',
         emailTheme: realm.emailTheme ?? 'idenplane',
-      });
-    }
-  }, [realm]);
+    });
+  }
 
   const updateMutation = useMutation({
     mutationFn: () => updateRealm(name!, form),

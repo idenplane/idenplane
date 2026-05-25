@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getClientById, updateClient, deleteClient, regenerateSecret, getServiceAccountUser } from '../../api/clients';
@@ -66,21 +66,23 @@ export default function ClientDetailPage() {
     backchannelLogoutSessionRequired: true,
   });
 
-  useEffect(() => {
-    if (client) {
-      setForm({
-        name: client.name || '',
-        description: client.description || '',
-        redirectUris: (client.redirectUris || []).join('\n'),
-        webOrigins: (client.webOrigins || []).join('\n'),
-        grantTypes: (client.grantTypes || []).join(', '),
-        requireConsent: client.requireConsent,
-        enabled: client.enabled,
-        backchannelLogoutUri: client.backchannelLogoutUri || '',
-        backchannelLogoutSessionRequired: client.backchannelLogoutSessionRequired ?? true,
-      });
-    }
-  }, [client]);
+  // Seed the editable form from fetched data when the loaded client changes.
+  // Adjusting state during render (vs. an effect) avoids an extra render pass.
+  const [seededClient, setSeededClient] = useState(client);
+  if (client && client !== seededClient) {
+    setSeededClient(client);
+    setForm({
+      name: client.name || '',
+      description: client.description || '',
+      redirectUris: (client.redirectUris || []).join('\n'),
+      webOrigins: (client.webOrigins || []).join('\n'),
+      grantTypes: (client.grantTypes || []).join(', '),
+      requireConsent: client.requireConsent,
+      enabled: client.enabled,
+      backchannelLogoutUri: client.backchannelLogoutUri || '',
+      backchannelLogoutSessionRequired: client.backchannelLogoutSessionRequired ?? true,
+    });
+  }
 
   const updateMutation = useMutation({
     mutationFn: () =>

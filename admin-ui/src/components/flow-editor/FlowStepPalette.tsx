@@ -1,5 +1,5 @@
 import type { StepType } from '../../api/authFlows';
-import { STEP_TYPE_META } from './FlowStepNode';
+import { STEP_TYPE_META } from './stepTypeMeta';
 
 interface FlowStepPaletteProps {
   onAddStep: (type: StepType) => void;

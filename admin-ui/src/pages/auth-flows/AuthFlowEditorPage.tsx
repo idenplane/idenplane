@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router-dom';
 import {
@@ -33,15 +33,17 @@ export default function AuthFlowEditorPage() {
   const [isPreview, setIsPreview] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (remoteFlow) {
-      setDraftName(remoteFlow.name);
-      setDraftDescription(remoteFlow.description ?? '');
-      setDraftIsDefault(remoteFlow.isDefault);
-      setDraftSteps(remoteFlow.steps);
-      setIsDirty(false);
-    }
-  }, [remoteFlow]);
+  // Seed the editable draft from fetched data when the loaded flow changes.
+  // Adjusting state during render (vs. an effect) avoids an extra render pass.
+  const [seededFlow, setSeededFlow] = useState(remoteFlow);
+  if (remoteFlow && remoteFlow !== seededFlow) {
+    setSeededFlow(remoteFlow);
+    setDraftName(remoteFlow.name);
+    setDraftDescription(remoteFlow.description ?? '');
+    setDraftIsDefault(remoteFlow.isDefault);
+    setDraftSteps(remoteFlow.steps);
+    setIsDirty(false);
+  }
 
   // ── Save mutation ────────────────────────────────────────
 

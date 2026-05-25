@@ -20,7 +20,7 @@ describe('ImageUploader', () => {
   });
 
   const createMockFile = (name: string, type: string, size: number) => {
-    return new File([], name, { type });
+    return new File([new Uint8Array(size)], name, { type });
   };
 
   describe('Rendering', () => {

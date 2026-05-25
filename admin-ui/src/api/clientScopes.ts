@@ -89,11 +89,19 @@ export async function deleteMapper(
 
 // The API returns join records { id, clientScopeId, clientScope: { ... } }.
 // Flatten them into ClientScope objects so the UI can use scope.id / scope.name directly.
-function flattenScopeAssignments(data: any[]): ClientScope[] {
+type ScopeAssignment = {
+  id: string;
+  clientScopeId?: string;
+  clientScope?: ClientScope;
+};
+
+function flattenScopeAssignments(
+  data: (ScopeAssignment | ClientScope)[],
+): ClientScope[] {
   return data.map((entry) =>
-    entry.clientScope
+    'clientScope' in entry && entry.clientScope
       ? { ...entry.clientScope, assignmentId: entry.id }
-      : entry,
+      : (entry as ClientScope),
   );
 }
 

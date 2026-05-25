@@ -33,7 +33,7 @@ export default function ClientScopeCreatePage() {
       queryClient.invalidateQueries({ queryKey: ['clientScopes', name] });
       navigate(`/console/realms/${name}/client-scopes`);
     },
-    onError: (err: any) => {
+    onError: (err: Error) => {
       setError(err.message || 'Failed to create client scope');
     },
   });

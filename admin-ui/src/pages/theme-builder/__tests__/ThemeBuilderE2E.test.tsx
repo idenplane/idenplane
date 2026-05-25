@@ -35,7 +35,7 @@ import {
   DEFAULT_THEME_SETTINGS,
   COMPONENT_DEFINITIONS,
 } from '../../../types/theme';
-import type { ThemeComponent, ThemeStyles, ThemeAssets, ThemeSettings } from '../../../types/theme';
+import type { ThemeComponent } from '../../../types/theme';
 
 // ─── Mock API functions ────────────────────────────────────────────────────────
 
@@ -278,7 +278,6 @@ describe('ThemeBuilderPage E2E Tests', () => {
     });
 
     it('accepts viewport size changes', async () => {
-      const user = userEvent.setup();
       const onViewportChange = vi.fn();
 
       render(

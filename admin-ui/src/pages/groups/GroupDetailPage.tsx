@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -55,15 +55,17 @@ export default function GroupDetailPage() {
 
   const [form, setForm] = useState({ name: '', description: '', parentId: '' });
 
-  useEffect(() => {
-    if (group) {
-      setForm({
-        name: group.name,
-        description: group.description ?? '',
-        parentId: group.parentId ?? '',
-      });
-    }
-  }, [group]);
+  // Seed the editable form from fetched data when the loaded group changes.
+  // Adjusting state during render (vs. an effect) avoids an extra render pass.
+  const [seededGroup, setSeededGroup] = useState(group);
+  if (group && group !== seededGroup) {
+    setSeededGroup(group);
+    setForm({
+      name: group.name,
+      description: group.description ?? '',
+      parentId: group.parentId ?? '',
+    });
+  }
 
   const updateMutation = useMutation({
     mutationFn: () =>

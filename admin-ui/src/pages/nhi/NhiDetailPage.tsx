@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -77,16 +77,18 @@ export default function NhiDetailPage() {
     enabled: true,
   });
 
-  useEffect(() => {
-    if (identity) {
-      setForm({
-        name: identity.name || '',
-        description: identity.description || '',
-        agentPurpose: identity.agentPurpose || '',
-        enabled: identity.enabled,
-      });
-    }
-  }, [identity]);
+  // Seed the editable form from fetched data when the loaded identity changes.
+  // Adjusting state during render (vs. an effect) avoids an extra render pass.
+  const [seededIdentity, setSeededIdentity] = useState(identity);
+  if (identity && identity !== seededIdentity) {
+    setSeededIdentity(identity);
+    setForm({
+      name: identity.name || '',
+      description: identity.description || '',
+      agentPurpose: identity.agentPurpose || '',
+      enabled: identity.enabled,
+    });
+  }
 
   const updateMutation = useMutation({
     mutationFn: () =>

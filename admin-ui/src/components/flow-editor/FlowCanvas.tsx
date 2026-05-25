@@ -145,16 +145,18 @@ export default function FlowCanvas({ steps, onChange, isPreview = false }: FlowC
 
   // ── Drag-to-reorder (within canvas) ──────────────────────
 
-  const draggingId = useRef<string | null>(null);
+  // Tracks the node being dragged. Kept in state (not a ref) because it is
+  // read during render to dim the dragged node.
+  const [draggingId, setDraggingId] = useState<string | null>(null);
 
   function handleNodeDragStart(e: React.DragEvent, id: string) {
     if (isPreview) return;
-    draggingId.current = id;
+    setDraggingId(id);
     e.dataTransfer.effectAllowed = 'move';
   }
 
   function handleNodeDragOver(e: React.DragEvent, index: number) {
-    if (isPreview || !draggingId.current) return;
+    if (isPreview || !draggingId) return;
     e.preventDefault();
     e.dataTransfer.dropEffect = 'move';
     setDragOverIndex(index);
@@ -163,9 +165,9 @@ export default function FlowCanvas({ steps, onChange, isPreview = false }: FlowC
   function handleNodeDrop(e: React.DragEvent, dropIndex: number) {
     if (isPreview) return;
     e.preventDefault();
-    const dragId = draggingId.current;
+    const dragId = draggingId;
     if (!dragId) return;
-    draggingId.current = null;
+    setDraggingId(null);
     setDragOverIndex(null);
 
     const dragIndex = sorted.findIndex((s) => s.id === dragId);
@@ -291,7 +293,7 @@ export default function FlowCanvas({ steps, onChange, isPreview = false }: FlowC
                   onDragOver={(e) => handleNodeDragOver(e, index)}
                   onDrop={(e) => handleNodeDrop(e, index)}
                   className={`transition-opacity ${
-                    dragOverIndex === index && draggingId.current !== step.id
+                    dragOverIndex === index && draggingId !== step.id
                       ? 'opacity-50'
                       : 'opacity-100'
                   }`}
