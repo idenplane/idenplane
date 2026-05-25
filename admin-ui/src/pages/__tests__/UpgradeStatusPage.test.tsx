@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { screen, waitFor, act } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../test/mocks/server';
@@ -10,9 +10,6 @@ function renderUpgradeStatusPage() {
 }
 
 describe('UpgradeStatusPage', () => {
-  beforeAll(() => server.listen());
-  afterAll(() => server.close());
-
   it('renders the page heading', async () => {
     renderUpgradeStatusPage();
     expect(await screen.findByRole('heading', { name: /upgrade status/i })).toBeInTheDocument();

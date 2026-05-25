@@ -1,5 +1,6 @@
 import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
+import type { Realm } from '../../types';
 import { getRealmByName } from '../../api/realms';
 import { getPublicRegistrationFields } from '../../api/registration';
 import CaptchaWidget from '../../components/registration/CaptchaWidget';
@@ -16,7 +17,7 @@ interface RegistrationField {
 
 export default function PublicRegistrationPage() {
   const { realm: realmName } = useParams<{ realm: string }>();
-  const [realm, setRealm] = useState<any>(null);
+  const [realm, setRealm] = useState<Realm | null>(null);
   const [fields, setFields] = useState<Partial<RegistrationField>[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -68,7 +69,7 @@ export default function PublicRegistrationPage() {
         body: JSON.stringify({
           ...form,
           attributes: customAttributes,
-          captchaToken: (window as any).__captchaToken,
+          captchaToken: window.__captchaToken,
         }),
       });
 

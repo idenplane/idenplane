@@ -210,22 +210,22 @@ export function WizardProvider({
     let completed = false;
     switch (step) {
       case 0:
-        completed = !!wizardStateRef.current.adminAccount;
+        completed = !!wizardState.adminAccount;
         break;
       case 1:
-        completed = !!wizardStateRef.current.realmSettings;
+        completed = !!wizardState.realmSettings;
         break;
       case 2:
-        completed = !!wizardStateRef.current.smtpConfig;
+        completed = !!wizardState.smtpConfig;
         break;
       case 3:
-        completed = !!wizardStateRef.current.client;
+        completed = !!wizardState.client;
         break;
       case 4:
-        completed = wizardStateRef.current.sdkGenerated;
+        completed = wizardState.sdkGenerated;
         break;
       case 5:
-        completed = wizardStateRef.current.wizardCompleted;
+        completed = wizardState.wizardCompleted;
         break;
     }
     return {
@@ -233,7 +233,14 @@ export function WizardProvider({
       completed,
       required: stepInfo.required,
     };
-  }, [wizardStateRef.current.adminAccount, wizardStateRef.current.realmSettings, wizardStateRef.current.smtpConfig, wizardStateRef.current.client, wizardStateRef.current.sdkGenerated, wizardStateRef.current.wizardCompleted]);
+  }, [
+    wizardState.adminAccount,
+    wizardState.realmSettings,
+    wizardState.smtpConfig,
+    wizardState.client,
+    wizardState.sdkGenerated,
+    wizardState.wizardCompleted,
+  ]);
 
   const value = useMemo<WizardContextValue>(
     () => ({
@@ -280,6 +287,7 @@ export function WizardProvider({
 }
 
 /** Returns the full WizardContext value — must be used inside <WizardProvider>. */
+// eslint-disable-next-line react-refresh/only-export-components -- hook is intentionally co-located with its provider; only affects Fast Refresh granularity.
 export function useWizardContext(): WizardContextValue {
   const ctx = useContext(WizardContext);
   if (!ctx) {
@@ -289,6 +297,7 @@ export function useWizardContext(): WizardContextValue {
 }
 
 /** Hook for easier access to wizard state and common operations */
+// eslint-disable-next-line react-refresh/only-export-components -- hook is intentionally co-located with its provider; only affects Fast Refresh granularity.
 export function useWizard() {
   const context = useWizardContext();
   return {

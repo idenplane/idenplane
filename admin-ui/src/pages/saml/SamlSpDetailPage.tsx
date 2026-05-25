@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -32,21 +32,23 @@ export default function SamlSpDetailPage() {
     nameIdFormat: 'urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress',
   });
 
-  useEffect(() => {
-    if (sp) {
-      setForm({
-        name: sp.name,
-        entityId: sp.entityId,
-        enabled: sp.enabled,
-        acsUrl: sp.acsUrl,
-        sloUrl: sp.sloUrl ?? '',
-        certificate: sp.certificate ?? '',
-        signAssertions: sp.signAssertions,
-        signResponses: sp.signResponses,
-        nameIdFormat: sp.nameIdFormat,
-      });
-    }
-  }, [sp]);
+  // Seed the editable form from fetched data when the loaded SP changes.
+  // Adjusting state during render (vs. an effect) avoids an extra render pass.
+  const [seededSp, setSeededSp] = useState(sp);
+  if (sp && sp !== seededSp) {
+    setSeededSp(sp);
+    setForm({
+      name: sp.name,
+      entityId: sp.entityId,
+      enabled: sp.enabled,
+      acsUrl: sp.acsUrl,
+      sloUrl: sp.sloUrl ?? '',
+      certificate: sp.certificate ?? '',
+      signAssertions: sp.signAssertions,
+      signResponses: sp.signResponses,
+      nameIdFormat: sp.nameIdFormat,
+    });
+  }
 
   const updateMutation = useMutation({
     mutationFn: () =>

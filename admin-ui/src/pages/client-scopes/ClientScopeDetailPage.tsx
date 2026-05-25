@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from 'react'
+import { useState, type FormEvent } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getClientScopeById, updateClientScope, deleteClientScope, addMapper, deleteMapper } from '../../api/clientScopes'
@@ -27,11 +27,13 @@ export default function ClientScopeDetailPage() {
     enabled: !!name && !!scopeId
   })
 
-  useEffect(() => {
-    if (scope) {
-      setForm({ name: scope.name, description: scope.description || '' })
-    }
-  }, [scope])
+  // Seed the editable form from fetched data when the loaded scope changes.
+  // Adjusting state during render (vs. an effect) avoids an extra render pass.
+  const [seededScope, setSeededScope] = useState(scope)
+  if (scope && scope !== seededScope) {
+    setSeededScope(scope)
+    setForm({ name: scope.name, description: scope.description || '' })
+  }
 
   const updateMutation = useMutation({
     mutationFn: (data: { name: string; description: string }) =>
@@ -43,7 +45,7 @@ export default function ClientScopeDetailPage() {
       setErrorMessage('')
       setTimeout(() => setSuccessMessage(''), 3000)
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       setErrorMessage(error.message || 'Failed to update client scope')
       setSuccessMessage('')
     }
@@ -55,7 +57,7 @@ export default function ClientScopeDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['clientScopes', name] })
       navigate(`/console/realms/${name}/client-scopes`)
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       setErrorMessage(error.message || 'Failed to delete client scope')
       setSuccessMessage('')
       setShowDeleteDialog(false)
@@ -63,7 +65,7 @@ export default function ClientScopeDetailPage() {
   })
 
   const addMapperMutation = useMutation({
-    mutationFn: (data: { name: string; mapperType: string; config: any }) =>
+    mutationFn: (data: { name: string; mapperType: string; config: Record<string, unknown> }) =>
       addMapper(name!, scopeId!, data),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['clientScope', name, scopeId] })
@@ -72,7 +74,7 @@ export default function ClientScopeDetailPage() {
       setErrorMessage('')
       setTimeout(() => setSuccessMessage(''), 3000)
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       setErrorMessage(error.message || 'Failed to add mapper')
       setSuccessMessage('')
     }
@@ -88,7 +90,7 @@ export default function ClientScopeDetailPage() {
       setMapperToDelete(null)
       setTimeout(() => setSuccessMessage(''), 3000)
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       setErrorMessage(error.message || 'Failed to delete mapper')
       setSuccessMessage('')
       setShowDeleteMapperDialog(false)
@@ -110,7 +112,7 @@ export default function ClientScopeDetailPage() {
         mapperType: mapperForm.mapperType,
         config
       })
-    } catch (err) {
+    } catch {
       setErrorMessage('Invalid JSON in config field')
       setSuccessMessage('')
     }

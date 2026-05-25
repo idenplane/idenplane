@@ -245,7 +245,7 @@ export class AwsSnsProvider implements SmsProvider {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Failed to send SMS to ${to}: ${errorMessage}`);
-      throw new Error(`AWS SNS SMS failed: ${errorMessage}`);
+      throw new Error(`AWS SNS SMS failed: ${errorMessage}`, { cause: error });
     }
   }
 

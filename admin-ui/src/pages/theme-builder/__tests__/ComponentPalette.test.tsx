@@ -2,7 +2,6 @@ import { describe, it, expect, vi } from 'vitest';
 import { screen, fireEvent } from '@testing-library/react';
 import { render } from '../../../test/utils';
 import ComponentPalette from '../ComponentPalette';
-import type { ComponentType } from '../../../types/theme';
 
 describe('ComponentPalette', () => {
   it('renders the palette with a header', () => {

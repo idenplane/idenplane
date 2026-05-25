@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import type { FlowStep, StepType } from '../../api/authFlows';
-import { STEP_TYPE_META } from './FlowStepNode';
+import { STEP_TYPE_META } from './stepTypeMeta';
 import FlowConditionEditor from './FlowConditionEditor';
 
 interface FlowStepEditorProps {

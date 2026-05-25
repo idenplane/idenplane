@@ -1,6 +1,5 @@
-import { describe, it, expect, beforeAll, afterAll } from 'vitest';
+import { describe, it, expect } from 'vitest';
 import { screen, waitFor, act } from '@testing-library/react';
-import { fireEvent } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../test/mocks/server';
 import { render } from '../../test/utils';
@@ -11,9 +10,6 @@ function renderMigrationHistoryPage() {
 }
 
 describe('MigrationHistoryPage', () => {
-  beforeAll(() => server.listen());
-  afterAll(() => server.close());
-
   it('renders the page heading', async () => {
     renderMigrationHistoryPage();
     expect(await screen.findByRole('heading', { name: /migration history/i })).toBeInTheDocument();
@@ -124,7 +120,7 @@ describe('MigrationHistoryPage', () => {
 
   it('displays pagination controls when there are more entries', async () => {
     server.use(
-      http.get('/admin/upgrade/history', ({ request }) => {
+      http.get('/admin/upgrade/history', () => {
         const entries = Array.from({ length: 15 }, (_, i) => ({
           id: `upgrade-${i}`,
           fromVersion: '1.0.0',
@@ -148,7 +144,7 @@ describe('MigrationHistoryPage', () => {
 
   it('navigates to previous page when Previous is clicked', async () => {
     server.use(
-      http.get('/admin/upgrade/history', ({ request }) => {
+      http.get('/admin/upgrade/history', () => {
         const entries = Array.from({ length: 15 }, (_, i) => ({
           id: `upgrade-${i}`,
           fromVersion: '1.0.0',

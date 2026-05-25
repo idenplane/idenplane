@@ -77,7 +77,7 @@ export class VonageSmsProvider implements SmsProvider {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(`Failed to send SMS to ${to}: ${errorMessage}`);
-      throw new Error(`Vonage SMS failed: ${errorMessage}`);
+      throw new Error(`Vonage SMS failed: ${errorMessage}`, { cause: error });
     }
   }
 

@@ -10,6 +10,7 @@
         "tsconfig": {
           "module": "commonjs",
           "moduleResolution": "node",
+          "ignoreDeprecations": "6.0",
           "resolvePackageJsonExports": false,
           "esModuleInterop": true,
           "allowSyntheticDefaultImports": true,

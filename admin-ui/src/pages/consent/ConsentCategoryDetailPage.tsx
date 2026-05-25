@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -32,15 +32,17 @@ export default function ConsentCategoryDetailPage() {
     enabled: !isCreateMode(categoryId) && !!name && !!categoryId,
   });
 
-  useEffect(() => {
-    if (category) {
-      setForm({
-        name: category.name,
-        description: category.description || '',
-        required: category.required,
-      });
-    }
-  }, [category]);
+  // Seed the editable form from fetched data when the loaded category changes.
+  // Adjusting state during render (vs. an effect) avoids an extra render pass.
+  const [seededCategory, setSeededCategory] = useState(category);
+  if (category && category !== seededCategory) {
+    setSeededCategory(category);
+    setForm({
+      name: category.name,
+      description: category.description || '',
+      required: category.required,
+    });
+  }
 
   const createMutation = useMutation({
     mutationFn: (data: { name: string; description: string; required: boolean }) =>
@@ -51,7 +53,7 @@ export default function ConsentCategoryDetailPage() {
       setErrorMessage('');
       setTimeout(() => navigate(`/console/realms/${name}/consent-categories`), 1500);
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       setErrorMessage(error.message || 'Failed to create consent category');
       setSuccessMessage('');
     },
@@ -67,7 +69,7 @@ export default function ConsentCategoryDetailPage() {
       setErrorMessage('');
       setTimeout(() => setSuccessMessage(''), 3000);
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       setErrorMessage(error.message || 'Failed to update consent category');
       setSuccessMessage('');
     },
@@ -79,7 +81,7 @@ export default function ConsentCategoryDetailPage() {
       queryClient.invalidateQueries({ queryKey: ['consentCategories', name] });
       navigate(`/console/realms/${name}/consent-categories`);
     },
-    onError: (error: any) => {
+    onError: (error: Error) => {
       setErrorMessage(error.message || 'Failed to delete consent category');
       setSuccessMessage('');
       setShowDeleteDialog(false);

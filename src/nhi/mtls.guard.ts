@@ -301,7 +301,9 @@ export class NhiCertificateGuard implements CanActivate {
         if (error instanceof HttpException) {
           throw error;
         }
-        this.logger.error(`Certificate validation error: ${error}`);
+        const message =
+          error instanceof Error ? error.message : 'Unknown error';
+        this.logger.error(`Certificate validation error: ${message}`);
         throw new UnauthorizedException('Invalid certificate');
       }
     }

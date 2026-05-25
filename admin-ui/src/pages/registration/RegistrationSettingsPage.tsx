@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getRealmByName, updateRealm } from '../../api/realms';
@@ -30,25 +30,27 @@ export default function RegistrationSettingsPage() {
     captchaScoreThreshold: 0.5,
   });
 
-  useEffect(() => {
-    if (realm) {
-      setForm({
-        registrationAllowed: realm.registrationAllowed ?? true,
-        registrationApprovalRequired: realm.registrationApprovalRequired ?? false,
-        requireEmailVerification: realm.requireEmailVerification ?? false,
-        allowedEmailDomains: (realm.allowedEmailDomains || []).join(', '),
-        termsOfServiceUrl: realm.termsOfServiceUrl || '',
-        privacyPolicyUrl: realm.privacyPolicyUrl || '',
-        captchaEnabled: realm.captchaEnabled ?? false,
-        captchaProvider: realm.captchaProvider || 'recaptcha',
-        recaptchaSiteKey: realm.recaptchaSiteKey || '',
-        recaptchaSecretKey: realm.recaptchaSecretKey || '',
-        hcaptchaSiteKey: realm.hcaptchaSiteKey || '',
-        hcaptchaSecretKey: realm.hcaptchaSecretKey || '',
-        captchaScoreThreshold: realm.captchaScoreThreshold ?? 0.5,
-      });
-    }
-  }, [realm]);
+  // Seed the editable form from fetched data when the loaded realm changes.
+  // Adjusting state during render (vs. an effect) avoids an extra render pass.
+  const [seededRealm, setSeededRealm] = useState(realm);
+  if (realm && realm !== seededRealm) {
+    setSeededRealm(realm);
+    setForm({
+      registrationAllowed: realm.registrationAllowed ?? true,
+      registrationApprovalRequired: realm.registrationApprovalRequired ?? false,
+      requireEmailVerification: realm.requireEmailVerification ?? false,
+      allowedEmailDomains: (realm.allowedEmailDomains || []).join(', '),
+      termsOfServiceUrl: realm.termsOfServiceUrl || '',
+      privacyPolicyUrl: realm.privacyPolicyUrl || '',
+      captchaEnabled: realm.captchaEnabled ?? false,
+      captchaProvider: realm.captchaProvider || 'recaptcha',
+      recaptchaSiteKey: realm.recaptchaSiteKey || '',
+      recaptchaSecretKey: realm.recaptchaSecretKey || '',
+      hcaptchaSiteKey: realm.hcaptchaSiteKey || '',
+      hcaptchaSecretKey: realm.hcaptchaSecretKey || '',
+      captchaScoreThreshold: realm.captchaScoreThreshold ?? 0.5,
+    });
+  }
 
   const mutation = useMutation({
     mutationFn: (data: typeof form) => {

@@ -72,6 +72,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 }
 
 /** Returns the full AuthContext value — must be used inside <AuthProvider>. */
+// eslint-disable-next-line react-refresh/only-export-components -- hook is intentionally co-located with its provider; only affects Fast Refresh granularity.
 export function useAuthContext(): AuthContextValue {
   const ctx = useContext(AuthContext);
   if (!ctx) {

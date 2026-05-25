@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -38,26 +38,28 @@ export default function IdpDetailPage() {
     syncUserProfile: true,
   });
 
-  useEffect(() => {
-    if (idp) {
-      setForm({
-        displayName: idp.displayName ?? '',
-        providerType: idp.providerType,
-        clientId: idp.clientId,
-        clientSecret: idp.clientSecret,
-        authorizationUrl: idp.authorizationUrl,
-        tokenUrl: idp.tokenUrl,
-        userinfoUrl: idp.userinfoUrl ?? '',
-        jwksUrl: idp.jwksUrl ?? '',
-        issuer: idp.issuer ?? '',
-        defaultScopes: idp.defaultScopes,
-        enabled: idp.enabled,
-        trustEmail: idp.trustEmail,
-        linkOnly: idp.linkOnly,
-        syncUserProfile: idp.syncUserProfile,
-      });
-    }
-  }, [idp]);
+  // Seed the editable form from fetched data when the loaded IdP changes.
+  // Adjusting state during render (vs. an effect) avoids an extra render pass.
+  const [seededIdp, setSeededIdp] = useState(idp);
+  if (idp && idp !== seededIdp) {
+    setSeededIdp(idp);
+    setForm({
+      displayName: idp.displayName ?? '',
+      providerType: idp.providerType,
+      clientId: idp.clientId,
+      clientSecret: idp.clientSecret,
+      authorizationUrl: idp.authorizationUrl,
+      tokenUrl: idp.tokenUrl,
+      userinfoUrl: idp.userinfoUrl ?? '',
+      jwksUrl: idp.jwksUrl ?? '',
+      issuer: idp.issuer ?? '',
+      defaultScopes: idp.defaultScopes,
+      enabled: idp.enabled,
+      trustEmail: idp.trustEmail,
+      linkOnly: idp.linkOnly,
+      syncUserProfile: idp.syncUserProfile,
+    });
+  }
 
   const updateMutation = useMutation({
     mutationFn: () =>

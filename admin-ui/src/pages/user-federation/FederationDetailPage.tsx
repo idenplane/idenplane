@@ -1,4 +1,4 @@
-import { useState, useEffect, type FormEvent } from 'react';
+import { useState, type FormEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -48,30 +48,32 @@ export default function FederationDetailPage() {
     editMode: 'READ_ONLY',
   });
 
-  useEffect(() => {
-    if (federation) {
-      setForm({
-        name: federation.name,
-        enabled: federation.enabled,
-        priority: federation.priority,
-        connectionUrl: federation.connectionUrl,
-        bindDn: federation.bindDn,
-        bindCredential: federation.bindCredential,
-        startTls: federation.startTls,
-        connectionTimeout: federation.connectionTimeout,
-        usersDn: federation.usersDn,
-        userObjectClass: federation.userObjectClass,
-        usernameLdapAttr: federation.usernameLdapAttr,
-        rdnLdapAttr: federation.rdnLdapAttr,
-        uuidLdapAttr: federation.uuidLdapAttr,
-        searchFilter: federation.searchFilter ?? '',
-        syncMode: federation.syncMode,
-        syncPeriod: federation.syncPeriod,
-        importEnabled: federation.importEnabled,
-        editMode: federation.editMode,
-      });
-    }
-  }, [federation]);
+  // Seed the editable form from fetched data when the loaded federation changes.
+  // Adjusting state during render (vs. an effect) avoids an extra render pass.
+  const [seededFederation, setSeededFederation] = useState(federation);
+  if (federation && federation !== seededFederation) {
+    setSeededFederation(federation);
+    setForm({
+      name: federation.name,
+      enabled: federation.enabled,
+      priority: federation.priority,
+      connectionUrl: federation.connectionUrl,
+      bindDn: federation.bindDn,
+      bindCredential: federation.bindCredential,
+      startTls: federation.startTls,
+      connectionTimeout: federation.connectionTimeout,
+      usersDn: federation.usersDn,
+      userObjectClass: federation.userObjectClass,
+      usernameLdapAttr: federation.usernameLdapAttr,
+      rdnLdapAttr: federation.rdnLdapAttr,
+      uuidLdapAttr: federation.uuidLdapAttr,
+      searchFilter: federation.searchFilter ?? '',
+      syncMode: federation.syncMode,
+      syncPeriod: federation.syncPeriod,
+      importEnabled: federation.importEnabled,
+      editMode: federation.editMode,
+    });
+  }
 
   const updateMutation = useMutation({
     mutationFn: () =>

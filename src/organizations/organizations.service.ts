@@ -346,7 +346,7 @@ export class OrganizationsService {
     const expectedTxt = this.generateDomainVerificationToken(org.id, domain);
     const txtHost = `_idenplane-challenge.${domain}`;
 
-    let records: string[][] = [];
+    let records: string[][];
     try {
       records = await dns.resolveTxt(txtHost);
     } catch {
