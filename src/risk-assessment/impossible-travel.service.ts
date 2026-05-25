@@ -134,9 +134,7 @@ export class ImpossibleTravelService {
   private cacheCoords(ip: string, coords: GeoCoords | null): void {
     if (this.coordsCache.size >= this.maxCacheSize) {
       // Evict oldest entry
-      const firstKey = this.coordsCache.keys().next().value as
-        | string
-        | undefined;
+      const firstKey = this.coordsCache.keys().next().value;
       if (firstKey !== undefined) {
         this.coordsCache.delete(firstKey);
       }

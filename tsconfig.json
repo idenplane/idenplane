@@ -13,14 +13,21 @@
     "target": "ES2023",
     "sourceMap": true,
     "outDir": "./dist",
-    "baseUrl": "./",
+    // TS6 (TS5011) requires an explicit rootDir; the project's source root is ./src.
+    "rootDir": "./src",
     "incremental": true,
     "skipLibCheck": true,
     "strictNullChecks": true,
+    // TS6 enables strictPropertyInitialization whenever strictNullChecks is on.
+    // This project deliberately opts into strictNullChecks only (not full strict),
+    // and NestJS GraphQL/DTO classes have their decorated properties populated at
+    // runtime, so we keep the project's prior stance and leave this off.
+    "strictPropertyInitialization": false,
     "forceConsistentCasingInFileNames": true,
     "noImplicitAny": true,
     "strictBindCallApply": true,
     "noFallthroughCasesInSwitch": true
   },
-  "exclude": ["admin-ui", "dist"]
+  "include": ["src/**/*"],
+  "exclude": ["admin-ui", "dist", "test"]
 }
