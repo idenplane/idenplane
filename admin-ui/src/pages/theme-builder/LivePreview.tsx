@@ -16,22 +16,27 @@ interface LivePreviewProps {
 }
 
 // Debounce helper for avoiding excessive re-renders
-function useDebounce<T extends (...args: any[]) => void>(callback: T, delay: number): T {
+function useDebounce<TArgs extends unknown[]>(
+  callback: (...args: TArgs) => void,
+  delay: number,
+): (...args: TArgs) => void {
   const timeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const callbackRef = useRef(callback);
 
-  // Keep callback ref updated
-  callbackRef.current = callback;
+  // Keep the callback ref updated without mutating it during render.
+  useEffect(() => {
+    callbackRef.current = callback;
+  }, [callback]);
 
   return useCallback(
-    ((...args: any[]) => {
+    (...args: TArgs) => {
       if (timeoutRef.current) {
         clearTimeout(timeoutRef.current);
       }
       timeoutRef.current = setTimeout(() => {
         callbackRef.current(...args);
       }, delay);
-    }) as T,
+    },
     [delay],
   );
 }
@@ -363,7 +368,7 @@ function generatePreviewHtml(
         `;
         break;
 
-      case 'form':
+      case 'form': {
         const formProps = component.props as {
           showUsername?: boolean;
           showEmail?: boolean;
@@ -403,6 +408,7 @@ function generatePreviewHtml(
 
         componentsHtml += `</form>`;
         break;
+      }
 
       case 'rememberMe':
         if (settings.showRememberMe) {
@@ -417,7 +423,7 @@ function generatePreviewHtml(
         }
         break;
 
-      case 'button':
+      case 'button': {
         const btnProps = component.props as { label?: string; variant?: string };
         componentsHtml += `
           <div class="form-group">
@@ -425,6 +431,7 @@ function generatePreviewHtml(
           </div>
         `;
         break;
+      }
 
       case 'forgotPassword':
         if (settings.showForgotPassword) {
@@ -458,7 +465,7 @@ function generatePreviewHtml(
         }
         break;
 
-      case 'footer':
+      case 'footer': {
         const footerProps = component.props as {
           showPrivacyPolicy?: boolean;
           showTermsOfService?: boolean;
@@ -472,13 +479,15 @@ function generatePreviewHtml(
           </div>
         `;
         break;
+      }
 
-      case 'spacer':
+      case 'spacer': {
         const spacerHeight = (component.props as { height?: number }).height || 16;
         componentsHtml += `<div style="height: ${spacerHeight}px;"></div>`;
         break;
+      }
 
-      case 'alert':
+      case 'alert': {
         const alertProps = component.props as { type?: string; message?: string };
         if (alertProps.message) {
           componentsHtml += `
@@ -486,15 +495,17 @@ function generatePreviewHtml(
           `;
         }
         break;
+      }
 
-      case 'text':
+      case 'text': {
         const textProps = component.props as { content?: string; alignment?: string };
         componentsHtml += `
           <p style="text-align: ${textProps.alignment || 'center'};">${textProps.content || ''}</p>
         `;
         break;
+      }
 
-      case 'heading':
+      case 'heading': {
         const headingProps = component.props as {
           content?: string;
           level?: number;
@@ -505,13 +516,15 @@ function generatePreviewHtml(
           <${Tag} style="text-align: ${headingProps.alignment || 'center'};">${headingProps.content || ''}</${Tag}>
         `;
         break;
+      }
 
-      case 'divider':
+      case 'divider': {
         const dividerProps = component.props as { label?: string };
         componentsHtml += `
           <div class="divider">${dividerProps.label || ''}</div>
         `;
         break;
+      }
 
       default:
         break;
