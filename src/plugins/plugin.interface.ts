@@ -92,7 +92,9 @@ export interface ThemePlugin extends IdenplanePlugin {
 
 // ─── Type Guards ──────────────────────────────────────────────────────────────
 
-export function isAuthProviderPlugin(p: IdenplanePlugin): p is AuthProviderPlugin {
+export function isAuthProviderPlugin(
+  p: IdenplanePlugin,
+): p is AuthProviderPlugin {
   return p.type === 'auth-provider';
 }
 

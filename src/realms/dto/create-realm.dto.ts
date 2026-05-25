@@ -328,13 +328,19 @@ export class CreateRealmDto {
   @IsObject()
   theme?: Record<string, unknown>;
 
-  @ApiPropertyOptional({ default: 'idenplane', description: 'Login page theme' })
+  @ApiPropertyOptional({
+    default: 'idenplane',
+    description: 'Login page theme',
+  })
   @IsOptional()
   @IsString()
   @MinLength(1)
   loginTheme?: string;
 
-  @ApiPropertyOptional({ default: 'idenplane', description: 'Account page theme' })
+  @ApiPropertyOptional({
+    default: 'idenplane',
+    description: 'Account page theme',
+  })
   @IsOptional()
   @IsString()
   @MinLength(1)
