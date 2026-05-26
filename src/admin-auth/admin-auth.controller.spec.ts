@@ -32,6 +32,7 @@ describe('AdminAuthController', () => {
     login: jest.Mock;
     revokeToken: jest.Mock;
   };
+  let configService: { get: jest.Mock };
 
   beforeEach(() => {
     // Ensure no leftover TRUSTED_PROXIES env from other tests
@@ -41,7 +42,11 @@ describe('AdminAuthController', () => {
       login: jest.fn(),
       revokeToken: jest.fn(),
     };
-    controller = new AdminAuthController(adminAuthService as any);
+    configService = { get: jest.fn() };
+    controller = new AdminAuthController(
+      adminAuthService as any,
+      configService as any,
+    );
   });
 
   afterEach(() => {
@@ -154,6 +159,29 @@ describe('AdminAuthController', () => {
       await expect(
         controller.login({ username: 'admin', password: 'wrong' }, req, res),
       ).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  describe('getDemoInfo', () => {
+    it('returns { demo: false } when DEMO_MODE is not enabled', () => {
+      configService.get.mockReturnValue(undefined);
+      expect(controller.getDemoInfo()).toEqual({ demo: false });
+    });
+
+    it('returns the demo credentials when DEMO_MODE=true', () => {
+      configService.get.mockImplementation((key: string, def?: string) => {
+        const values: Record<string, string> = {
+          DEMO_MODE: 'true',
+          ADMIN_USER: 'demo',
+          ADMIN_PASSWORD: 'idenplane-demo',
+        };
+        return values[key] ?? def;
+      });
+      expect(controller.getDemoInfo()).toEqual({
+        demo: true,
+        username: 'demo',
+        password: 'idenplane-demo',
+      });
     });
   });
 
