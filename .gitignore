@@ -68,3 +68,9 @@ logs/security/
 
 # never commit npm auth tokens
 .npmrc
+
+# TypeScript incremental build cache
+*.tsbuildinfo
+
+# Playwright MCP scratch
+.playwright-mcp/
