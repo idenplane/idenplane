@@ -3,6 +3,11 @@ import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
 import apiClient from '../api/client';
 import PasswordInput from '../components/PasswordInput';
+import { Button, Icons } from '../components/ui';
+
+const FIELD_CLASS =
+  'w-full h-11 rounded-lg border border-line-strong bg-surface px-3 text-[13.5px] text-fg outline-none transition-all duration-150 placeholder:text-subtle focus:border-accent focus:shadow-[var(--shadow-focus)]';
+const LABEL_CLASS = 'mb-1.5 block text-[12.5px] font-medium text-fg';
 
 export default function LoginPage() {
   const [mode, setMode] = useState<'credentials' | 'apikey'>('credentials');
@@ -64,27 +69,26 @@ export default function LoginPage() {
   }
 
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-50">
-      <div className="w-full max-w-md">
-        <div className="rounded-lg bg-white px-8 py-10 shadow-lg">
-          <div className="mb-8 text-center">
-            <div className="mx-auto mb-4 flex h-14 w-14 items-center justify-center rounded-full bg-indigo-100">
-              <svg
-                className="h-8 w-8 text-indigo-600"
-                fill="none"
-                viewBox="0 0 24 24"
-                stroke="currentColor"
-                strokeWidth={2}
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z"
-                />
-              </svg>
+    <div className="grid min-h-screen bg-canvas lg:grid-cols-2">
+      {/* LEFT — form */}
+      <div className="flex flex-col justify-between px-6 py-10 sm:px-12 lg:px-16">
+        {/* Brand */}
+        <div className="flex items-center gap-2.5">
+          <Icons.IpMark size={32} fg="var(--fg)" accent="#10b981" />
+          <div>
+            <div className="text-[15px] font-semibold tracking-[-0.01em] text-fg">idenplane</div>
+            <div className="font-mono text-[10.5px] text-subtle">admin console</div>
+          </div>
+        </div>
+
+        {/* Form */}
+        <div className="mx-auto w-full max-w-[380px] py-10">
+          <div className="mb-7">
+            <div className="mb-2 font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-subtle">
+              Sign in
             </div>
-            <h1 className="text-2xl font-bold text-gray-900">Idenplane Admin</h1>
-            <p className="mt-1 text-sm text-gray-500">
+            <h1 className="text-2xl font-bold tracking-[-0.02em] text-fg">Idenplane Admin</h1>
+            <p className="mt-2 text-sm text-muted">
               {mode === 'credentials'
                 ? 'Sign in with your admin credentials'
                 : 'Enter your admin API key to continue'}
@@ -92,26 +96,23 @@ export default function LoginPage() {
           </div>
 
           {isDemo && mode === 'credentials' && (
-            <div className="mb-6 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm">
-              <p className="font-medium text-emerald-800">
-                🟢 Demo environment
-              </p>
-              <p className="mt-0.5 text-emerald-700">
-                Credentials are prefilled — just click{' '}
-                <span className="font-medium">Sign In</span>. This demo resets
-                hourly.
-              </p>
+            <div className="mb-5 flex gap-3 rounded-xl border border-emerald/30 bg-emerald-soft p-3.5">
+              <Icons.Terminal className="mt-0.5 h-[18px] w-[18px] shrink-0 text-emerald" />
+              <div className="text-[13px] leading-relaxed">
+                <div className="font-semibold text-fg">Demo environment</div>
+                <span className="text-muted">
+                  Credentials are prefilled — just click <span className="font-medium">Sign In</span>. This demo
+                  resets hourly.
+                </span>
+              </div>
             </div>
           )}
 
-          <form onSubmit={handleSubmit}>
+          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
             {mode === 'credentials' ? (
               <>
-                <div className="mb-4">
-                  <label
-                    htmlFor="username"
-                    className="mb-1.5 block text-sm font-medium text-gray-700"
-                  >
+                <div>
+                  <label htmlFor="username" className={LABEL_CLASS}>
                     Username
                   </label>
                   <input
@@ -121,14 +122,11 @@ export default function LoginPage() {
                     onChange={(e) => setUsername(e.target.value)}
                     required
                     placeholder="Enter your username"
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    className={FIELD_CLASS}
                   />
                 </div>
-                <div className="mb-6">
-                  <label
-                    htmlFor="password"
-                    className="mb-1.5 block text-sm font-medium text-gray-700"
-                  >
+                <div>
+                  <label htmlFor="password" className={LABEL_CLASS}>
                     Password
                   </label>
                   <PasswordInput
@@ -137,16 +135,13 @@ export default function LoginPage() {
                     onChange={(e) => setPassword(e.target.value)}
                     required
                     placeholder="Enter your password"
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    className={FIELD_CLASS}
                   />
                 </div>
               </>
             ) : (
-              <div className="mb-6">
-                <label
-                  htmlFor="apiKey"
-                  className="mb-1.5 block text-sm font-medium text-gray-700"
-                >
+              <div>
+                <label htmlFor="apiKey" className={LABEL_CLASS}>
                   Admin API Key
                 </label>
                 <PasswordInput
@@ -155,7 +150,7 @@ export default function LoginPage() {
                   onChange={(e) => setApiKey(e.target.value)}
                   required
                   placeholder="Enter your API key"
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className={FIELD_CLASS}
                 />
               </div>
             )}
@@ -165,34 +160,97 @@ export default function LoginPage() {
                 role="alert"
                 aria-live="assertive"
                 aria-atomic="true"
-                className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700"
+                className="rounded-lg border border-danger-soft bg-danger-soft p-3 text-sm text-danger-fg"
               >
                 {error}
               </div>
             )}
 
-            <button
+            <Button
               type="submit"
-              disabled={
-                loading ||
-                (mode === 'credentials' ? !username || !password : !apiKey)
-              }
-              className="w-full rounded-md bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+              size="lg"
+              full
+              disabled={loading || (mode === 'credentials' ? !username || !password : !apiKey)}
+              iconRight={loading ? undefined : Icons.ArrowR}
+              className="mt-1"
             >
               {loading ? 'Verifying...' : 'Sign In'}
-            </button>
+            </Button>
           </form>
 
-          <div className="mt-4 text-center">
+          <div className="mt-5 border-t border-line pt-5 text-center">
             <button
               type="button"
               onClick={toggleMode}
-              className="text-sm text-indigo-600 hover:text-indigo-500"
+              className="text-sm font-medium text-accent transition-colors hover:text-accent-hover"
             >
               {mode === 'credentials'
                 ? 'Sign in with API key instead'
                 : 'Sign in with username & password instead'}
             </button>
+          </div>
+        </div>
+
+        {/* Footer */}
+        <div className="text-[11.5px] text-subtle">
+          <span>© 2026 Idenplane · AGPL-licensed</span>
+        </div>
+      </div>
+
+      {/* RIGHT — showcase (decorative, hidden on small screens) */}
+      <div className="relative hidden overflow-hidden border-l border-line bg-sunken lg:flex lg:flex-col lg:justify-center lg:p-16">
+        <div className="mx-auto w-full max-w-[460px]">
+          <div className="mb-3.5 font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-subtle">
+            The identity control plane
+          </div>
+          <h2 className="text-balance text-[34px] font-bold leading-[1.1] tracking-[-0.025em] text-fg">
+            Self-hosted identity that boots in <span className="text-emerald">30 seconds</span> — not afternoons.
+          </h2>
+          <p className="mt-4 text-[15px] leading-relaxed text-muted">
+            OAuth 2.0, OIDC, SAML, WebAuthn. Ten first-party SDKs. ~150&nbsp;MB RAM. AGPL.
+          </p>
+
+          {/* Fake terminal */}
+          <div className="mt-7 overflow-hidden rounded-xl border border-line bg-surface shadow-pop">
+            <div className="flex items-center gap-1.5 border-b border-line bg-sunken px-3.5 py-2.5">
+              <span className="h-2.5 w-2.5 rounded-full bg-[#ef4444]" />
+              <span className="h-2.5 w-2.5 rounded-full bg-[#f59e0b]" />
+              <span className="h-2.5 w-2.5 rounded-full bg-[#10b981]" />
+              <span className="ml-2.5 font-mono text-[11px] text-subtle">~/idenplane</span>
+            </div>
+            <div className="p-4 font-mono text-[12.5px] leading-[1.7] text-fg">
+              <div>
+                <span className="text-accent">$</span> docker compose up -d
+              </div>
+              <div className="text-subtle">
+                ✓ idenplane-server&nbsp;&nbsp;<span className="text-success">healthy</span>
+              </div>
+              <div className="text-subtle">
+                ✓ idenplane-db&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;&nbsp;<span className="text-success">healthy</span>
+              </div>
+              <div className="text-subtle">
+                ✓ idenplane-redis&nbsp;&nbsp;&nbsp;<span className="text-success">healthy</span>
+              </div>
+              <div className="mt-1.5 text-subtle">
+                → Console: <span className="text-accent">http://localhost:8080/console</span>
+              </div>
+            </div>
+          </div>
+
+          {/* Stats */}
+          <div className="mt-5 grid grid-cols-3 gap-3">
+            {[
+              { v: '10', l: 'SDKs' },
+              { v: '~150', l: 'MB RAM' },
+              { v: '30s', l: 'cold boot' },
+            ].map((s) => (
+              <div key={s.l} className="rounded-xl border border-line bg-surface p-3.5">
+                <div className="text-2xl font-bold tracking-[-0.02em] text-fg">{s.v}</div>
+                <div className="mt-0.5 font-mono text-[11px] font-semibold uppercase tracking-[0.08em] text-subtle">
+                  {s.l}
+                </div>
+              </div>
+            ))}
           </div>
         </div>
       </div>

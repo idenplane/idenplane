@@ -1,1 +1,251 @@
 @import "tailwindcss";
+
+/* ============================================================================
+   Idenplane Admin — design tokens
+   ----------------------------------------------------------------------------
+   Foundation layer (Phase A of the admin-ui redesign). Purely ADDITIVE: it
+   introduces a semantic token system and bridges it to Tailwind v4 utilities.
+   Tailwind's default palette/shadows/radii are left intact, so existing pages
+   that use `bg-gray-50`, `text-indigo-600`, `shadow-sm`, … keep rendering
+   exactly as before. New redesigned surfaces opt into the tokens below.
+
+   Tokens are lifted from `new Design/Idenplane/{tokens,theme}.css`.
+   ========================================================================== */
+
+/* ── Runtime semantic variables ──────────────────────────────────────────────
+   These change per theme (light today; midnight is defined for the future but
+   no toggle is wired yet). Utilities reference them through `@theme inline`, so
+   a theme swap re-colors everything without rebuilding. */
+:root,
+[data-theme="light"] {
+  --bg:            #f6f7f9;
+  --bg-elevated:   #ffffff;
+  --bg-sunken:     #eef0f3;
+  --bg-hover:      #f1f3f6;
+  --bg-active:     #e9ecf1;
+
+  --fg:            #0a0a0a;
+  --fg-muted:      #475569;
+  --fg-subtle:     #94a3b8;
+  --fg-on-accent:  #ffffff;
+
+  --border:        #e4e7ec;
+  --border-strong: #cbd5e1;
+  --divider:       #eef0f3;
+
+  --accent:        #4f46e5;
+  --accent-hover:  #4338ca;
+  --accent-soft:   #eef2ff;
+  --accent-strong: #3730a3;
+
+  --emerald:       #10b981;
+  --emerald-soft:  #d1fae5;
+  --emerald-fg:    #065f46;
+
+  --info:          #2563eb;
+  --info-soft:     #dbeafe;
+  --info-fg:       #1e40af;
+
+  --warning:       #d97706;
+  --warning-soft:  #fef3c7;
+  --warning-fg:    #92400e;
+
+  --danger:        #dc2626;
+  --danger-soft:   #fee2e2;
+  --danger-fg:     #991b1b;
+
+  --success:       #16a34a;
+  --success-soft:  #dcfce7;
+  --success-fg:    #166534;
+
+  --sidebar-bg:        #0a0a0a;
+  --sidebar-fg:        #d4d4d8;
+  --sidebar-fg-active: #ffffff;
+  --sidebar-bg-active: rgba(255, 255, 255, 0.07);
+  --sidebar-bg-hover:  rgba(255, 255, 255, 0.04);
+  --sidebar-border:    rgba(255, 255, 255, 0.06);
+  --sidebar-muted:     #6b7280;
+
+  --topbar-bg: #ffffff;
+
+  --shadow-sm:         0 1px 3px rgba(15, 23, 42, .06), 0 1px 2px rgba(15, 23, 42, .04);
+  --shadow-md:         0 4px 8px -2px rgba(15, 23, 42, .08), 0 2px 4px -2px rgba(15, 23, 42, .04);
+  --shadow-lg:         0 12px 24px -8px rgba(15, 23, 42, .12), 0 4px 8px -4px rgba(15, 23, 42, .06);
+  --shadow-card-hover: 0 6px 16px -6px rgba(15, 23, 42, .10);
+  --shadow-focus:      0 0 0 3px rgba(79, 70, 229, .22);
+}
+
+[data-theme="midnight"] {
+  --bg:            #050311;
+  --bg-elevated:   rgba(255, 255, 255, 0.025);
+  --bg-sunken:     rgba(0, 0, 0, 0.35);
+  --bg-hover:      rgba(255, 255, 255, 0.04);
+  --bg-active:     rgba(255, 255, 255, 0.07);
+
+  --fg:            #f5f7fa;
+  --fg-muted:      #a1a8b8;
+  --fg-subtle:     #6b7383;
+  --fg-on-accent:  #ffffff;
+
+  --border:        rgba(255, 255, 255, 0.07);
+  --border-strong: rgba(255, 255, 255, 0.14);
+  --divider:       rgba(255, 255, 255, 0.05);
+
+  --accent:        #06b6d4;
+  --accent-hover:  #22d3ee;
+  --accent-soft:   rgba(6, 182, 212, 0.12);
+  --accent-strong: #67e8f9;
+
+  --emerald:       #10b981;
+  --emerald-soft:  rgba(16, 185, 129, 0.16);
+  --emerald-fg:    #6ee7b7;
+
+  --info:          #60a5fa;
+  --info-soft:     rgba(96, 165, 250, 0.16);
+  --info-fg:       #93c5fd;
+
+  --warning:       #fbbf24;
+  --warning-soft:  rgba(251, 191, 36, 0.16);
+  --warning-fg:    #fcd34d;
+
+  --danger:        #f87171;
+  --danger-soft:   rgba(248, 113, 113, 0.16);
+  --danger-fg:     #fca5a5;
+
+  --success:       #34d399;
+  --success-soft:  rgba(52, 211, 153, 0.16);
+  --success-fg:    #6ee7b7;
+
+  --sidebar-bg:        rgba(8, 6, 22, 0.6);
+  --sidebar-fg:        #c8ccda;
+  --sidebar-fg-active: #ffffff;
+  --sidebar-bg-active: rgba(6, 182, 212, 0.10);
+  --sidebar-bg-hover:  rgba(255, 255, 255, 0.04);
+  --sidebar-border:    rgba(255, 255, 255, 0.06);
+  --sidebar-muted:     #6b7383;
+
+  --topbar-bg: rgba(8, 6, 22, 0.5);
+
+  --shadow-sm:         0 2px 6px rgba(0, 0, 0, .4);
+  --shadow-md:         0 8px 20px -4px rgba(0, 0, 0, .5);
+  --shadow-lg:         0 18px 40px -10px rgba(0, 0, 0, .6);
+  --shadow-card-hover: 0 12px 28px -10px rgba(0, 0, 0, .6), 0 0 0 1px rgba(6, 182, 212, 0.18);
+  --shadow-focus:      0 0 0 3px rgba(6, 182, 212, .30);
+}
+
+/* ── Bridge runtime vars → Tailwind utilities (theme-reactive) ────────────────
+   `inline` makes each utility emit `var(--…)`, so it follows `[data-theme]`. */
+@theme inline {
+  /* surfaces */
+  --color-canvas:        var(--bg);
+  --color-surface:       var(--bg-elevated);
+  --color-sunken:        var(--bg-sunken);
+  --color-hover:         var(--bg-hover);
+  --color-active:        var(--bg-active);
+
+  /* text */
+  --color-fg:            var(--fg);
+  --color-muted:         var(--fg-muted);
+  --color-subtle:        var(--fg-subtle);
+  --color-on-accent:     var(--fg-on-accent);
+
+  /* lines */
+  --color-line:          var(--border);
+  --color-line-strong:   var(--border-strong);
+  --color-divider:       var(--divider);
+
+  /* accent + brand */
+  --color-accent:        var(--accent);
+  --color-accent-hover:  var(--accent-hover);
+  --color-accent-soft:   var(--accent-soft);
+  --color-accent-strong: var(--accent-strong);
+  --color-emerald:       var(--emerald);
+  --color-emerald-soft:  var(--emerald-soft);
+  --color-emerald-fg:    var(--emerald-fg);
+
+  /* semantic */
+  --color-success:       var(--success);
+  --color-success-soft:  var(--success-soft);
+  --color-success-fg:    var(--success-fg);
+  --color-danger:        var(--danger);
+  --color-danger-soft:   var(--danger-soft);
+  --color-danger-fg:     var(--danger-fg);
+  --color-warning:       var(--warning);
+  --color-warning-soft:  var(--warning-soft);
+  --color-warning-fg:    var(--warning-fg);
+  --color-info:          var(--info);
+  --color-info-soft:     var(--info-soft);
+  --color-info-fg:       var(--info-fg);
+
+  /* sidebar (dark chrome) */
+  --color-sidebar:        var(--sidebar-bg);
+  --color-sidebar-fg:     var(--sidebar-fg);
+  --color-sidebar-active: var(--sidebar-bg-active);
+  --color-sidebar-hover:  var(--sidebar-bg-hover);
+  --color-sidebar-line:   var(--sidebar-border);
+  --color-sidebar-muted:  var(--sidebar-muted);
+
+  --color-topbar:         var(--topbar-bg);
+
+  /* elevation */
+  --shadow-soft:  var(--shadow-sm);
+  --shadow-pop:   var(--shadow-md);
+  --shadow-float: var(--shadow-lg);
+  --shadow-lift:  var(--shadow-card-hover);
+}
+
+/* ── Static design tokens ─────────────────────────────────────────────────── */
+@theme {
+  --font-sans: 'Inter Variable', -apple-system, BlinkMacSystemFont, 'Segoe UI',
+               Roboto, 'Helvetica Neue', Arial, sans-serif;
+  --font-mono: 'JetBrains Mono Variable', ui-monospace, SFMono-Regular, Menlo,
+               Monaco, Consolas, 'Liberation Mono', 'Courier New', monospace;
+
+  --animate-pulse-dot: pulse-dot 1.8s ease-in-out infinite;
+  --animate-fade-up:   fade-up 380ms cubic-bezier(0.16, 1, 0.3, 1) both;
+  --animate-fade-in:   fade-in 200ms ease-out both;
+  --animate-scale-in:  scale-in 220ms cubic-bezier(0.16, 1, 0.3, 1) both;
+}
+
+@keyframes pulse-dot {
+  0%, 100% { opacity: 1; }
+  50%      { opacity: 0.4; }
+}
+@keyframes fade-up {
+  from { opacity: 0; transform: translateY(8px); }
+  to   { opacity: 1; transform: translateY(0); }
+}
+@keyframes fade-in {
+  from { opacity: 0; }
+  to   { opacity: 1; }
+}
+@keyframes scale-in {
+  from { opacity: 0; transform: scale(0.96); }
+  to   { opacity: 1; transform: scale(1); }
+}
+
+/* ── Minimal global base ─────────────────────────────────────────────────────
+   Tailwind's preflight already applies `--font-sans` to <html>; this layer adds
+   font smoothing, selection colour, and themed scrollbars. */
+@layer base {
+  body {
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+    font-feature-settings: 'cv02', 'cv03', 'cv04', 'cv11';
+  }
+
+  ::selection {
+    background: var(--accent-soft);
+    color: var(--accent-strong);
+  }
+
+  *::-webkit-scrollbar { width: 10px; height: 10px; }
+  *::-webkit-scrollbar-track { background: transparent; }
+  *::-webkit-scrollbar-thumb {
+    background: var(--border-strong);
+    border-radius: 10px;
+    border: 2px solid transparent;
+    background-clip: content-box;
+  }
+  *::-webkit-scrollbar-thumb:hover { background-color: var(--fg-subtle); }
+}
