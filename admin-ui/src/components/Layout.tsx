@@ -4,6 +4,10 @@ import { useQuery } from '@tanstack/react-query';
 import { getAllRealms } from '../api/realms';
 import { useAuth } from '../hooks/useAuth';
 import Breadcrumbs from './Breadcrumbs';
+import { Icons, cn } from './ui';
+import type { IconProps } from './ui';
+
+type NavItem = { to: string; label: string; icon: (p: IconProps) => React.JSX.Element; end?: boolean };
 
 export default function Layout() {
   const { name: currentRealm } = useParams<{ name: string }>();
@@ -28,37 +32,49 @@ export default function Layout() {
     return () => document.removeEventListener('mousedown', handleClickOutside);
   }, []);
 
-  const navItems = currentRealm
+  const navItems: NavItem[] = currentRealm
     ? [
-        { to: `/console/realms/${currentRealm}`, label: 'Overview' },
-        { to: `/console/realms/${currentRealm}/users`, label: 'Users' },
-        { to: `/console/realms/${currentRealm}/clients`, label: 'Clients' },
-        { to: `/console/realms/${currentRealm}/roles`, label: 'Roles' },
-        { to: `/console/realms/${currentRealm}/groups`, label: 'Groups' },
-        { to: `/console/realms/${currentRealm}/client-scopes`, label: 'Client Scopes' },
-        { to: `/console/realms/${currentRealm}/consent-categories`, label: 'Consent Categories' },
-        { to: `/console/realms/${currentRealm}/consent-management`, label: 'Consent Management' },
-        { to: `/console/realms/${currentRealm}/sessions`, label: 'Sessions' },
-        { to: `/console/realms/${currentRealm}/events`, label: 'Events' },
-        { to: `/console/realms/${currentRealm}/admin-events`, label: 'Admin Events' },
-        { to: `/console/realms/${currentRealm}/user-federation`, label: 'User Federation' },
-        { to: `/console/realms/${currentRealm}/identity-providers`, label: 'Identity Providers' },
-        { to: `/console/realms/${currentRealm}/saml-providers`, label: 'SAML Providers' },
-        { to: `/console/realms/${currentRealm}/auth-flows`, label: 'Auth Flows' },
+        { to: `/console/realms/${currentRealm}`, label: 'Overview', icon: Icons.Activity },
+        { to: `/console/realms/${currentRealm}/users`, label: 'Users', icon: Icons.Users },
+        { to: `/console/realms/${currentRealm}/clients`, label: 'Clients', icon: Icons.Clients },
+        { to: `/console/realms/${currentRealm}/roles`, label: 'Roles', icon: Icons.Roles },
+        { to: `/console/realms/${currentRealm}/groups`, label: 'Groups', icon: Icons.Groups },
+        { to: `/console/realms/${currentRealm}/client-scopes`, label: 'Client Scopes', icon: Icons.Code },
+        { to: `/console/realms/${currentRealm}/consent-categories`, label: 'Consent Categories', icon: Icons.ShieldCheck },
+        { to: `/console/realms/${currentRealm}/consent-management`, label: 'Consent Management', icon: Icons.Shield },
+        { to: `/console/realms/${currentRealm}/sessions`, label: 'Sessions', icon: Icons.Sessions },
+        { to: `/console/realms/${currentRealm}/events`, label: 'Events', icon: Icons.Events },
+        { to: `/console/realms/${currentRealm}/admin-events`, label: 'Admin Events', icon: Icons.Clock },
+        { to: `/console/realms/${currentRealm}/user-federation`, label: 'User Federation', icon: Icons.Database },
+        { to: `/console/realms/${currentRealm}/identity-providers`, label: 'Identity Providers', icon: Icons.Idp },
+        { to: `/console/realms/${currentRealm}/saml-providers`, label: 'SAML Providers', icon: Icons.Globe },
+        { to: `/console/realms/${currentRealm}/auth-flows`, label: 'Auth Flows', icon: Icons.Build },
       ]
     : [];
 
-  const globalNav = [
-    { to: '/console', label: 'Dashboard', end: true },
-    { to: '/console/realms', label: 'Realms', end: false },
+  const globalNav: NavItem[] = [
+    { to: '/console', label: 'Dashboard', icon: Icons.Dashboard, end: true },
+    { to: '/console/realms', label: 'Realms', icon: Icons.Realms, end: false },
   ];
 
+  const navLinkClass = ({ isActive }: { isActive: boolean }) =>
+    cn(
+      'group relative flex items-center gap-2.5 rounded-md px-2.5 py-[7px] text-[13px] transition-colors',
+      isActive
+        ? 'bg-sidebar-active font-medium text-white'
+        : 'text-sidebar-fg hover:bg-sidebar-hover hover:text-white',
+    );
+
+  const activeBar = (
+    <span className="absolute -left-1 top-1/2 h-4 w-0.5 -translate-y-1/2 rounded-full bg-emerald shadow-[0_0_8px_rgba(16,185,129,0.5)]" />
+  );
+
   return (
-    <div className="flex h-screen bg-gray-50">
+    <div className="flex h-screen bg-canvas">
       {/* Skip navigation link — visible on focus for keyboard users */}
       <a
         href="#main-content"
-        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-indigo-600 focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white focus:outline-none"
+        className="sr-only focus:not-sr-only focus:fixed focus:left-4 focus:top-4 focus:z-50 focus:rounded-md focus:bg-accent focus:px-4 focus:py-2 focus:text-sm focus:font-medium focus:text-white focus:outline-none"
       >
         Skip to main content
       </a>
@@ -74,68 +90,114 @@ export default function Layout() {
 
       {/* Sidebar */}
       <aside
-        className={`fixed inset-y-0 left-0 z-40 flex w-64 transform flex-col bg-gray-900 text-white transition-transform duration-200 md:relative md:translate-x-0 ${
-          sidebarOpen ? 'translate-x-0' : '-translate-x-full'
-        }`}
+        className={cn(
+          'fixed inset-y-0 left-0 z-40 flex w-64 transform flex-col border-r border-sidebar-line bg-sidebar text-sidebar-fg transition-transform duration-200 md:relative md:translate-x-0',
+          sidebarOpen ? 'translate-x-0' : '-translate-x-full',
+        )}
         aria-label="Sidebar"
       >
-        <div className="flex h-16 items-center border-b border-gray-700 px-6">
+        <div className="flex h-16 shrink-0 items-center border-b border-sidebar-line px-6">
           {/* Dark-background wordmark; the image already includes the
               "idenplane" text, so no separate label span is needed. */}
-          <img
-            src="/console/idenplane-logo-dark.png"
-            alt="Idenplane"
-            className="h-9 w-auto"
-          />
+          <img src="/console/idenplane-logo-dark.png" alt="Idenplane" className="h-9 w-auto" />
         </div>
 
-        <nav aria-label="Main navigation" className="mt-4 flex-1 space-y-1 overflow-y-auto px-3 pb-4">
-          {globalNav.map((item) => (
-            <NavLink
-              key={item.to}
-              to={item.to}
-              end={item.end}
-              onClick={() => setSidebarOpen(false)}
-              className={({ isActive }) =>
-                `flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                  isActive
-                    ? 'bg-gray-800 text-white'
-                    : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                }`
-              }
+        {/* Realm switcher */}
+        <div className="relative px-3 pt-3" ref={dropdownRef}>
+          <button
+            onClick={() => setRealmDropdownOpen(!realmDropdownOpen)}
+            aria-haspopup="listbox"
+            aria-expanded={realmDropdownOpen}
+            aria-label={currentRealm ? `Current realm: ${currentRealm}. Switch realm` : 'Select realm'}
+            className="flex w-full items-center gap-2.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-2 text-left transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:shadow-[var(--shadow-focus)]"
+          >
+            <span className="flex h-[22px] w-[22px] items-center justify-center rounded-md bg-gradient-to-br from-cyan-500 to-violet-600 text-[10px] font-bold text-white">
+              {(currentRealm || 'R')[0].toUpperCase()}
+            </span>
+            <span className="min-w-0 flex-1">
+              <span className="block text-[9.5px] font-semibold uppercase tracking-[0.08em] text-sidebar-muted">Realm</span>
+              <span className="block truncate font-mono text-[12.5px] font-medium text-white">
+                {currentRealm || 'Select Realm'}
+              </span>
+            </span>
+            <Icons.ChevronD className="h-3.5 w-3.5 text-sidebar-muted" />
+          </button>
+
+          {realmDropdownOpen && realms && (
+            <ul
+              role="listbox"
+              aria-label="Realms"
+              className="absolute left-3 right-3 z-50 mt-1 animate-fade-up rounded-xl border border-line bg-surface p-1 shadow-float"
             >
-              {item.label}
-            </NavLink>
-          ))}
+              {realms.map((realm) => (
+                <li key={realm.id} role="option" aria-selected={realm.name === currentRealm}>
+                  <button
+                    onClick={() => {
+                      navigate(`/console/realms/${realm.name}`);
+                      setRealmDropdownOpen(false);
+                    }}
+                    className={cn(
+                      'flex w-full items-center gap-2 rounded-md px-2.5 py-[7px] text-left font-mono text-[12.5px] transition-colors',
+                      realm.name === currentRealm
+                        ? 'bg-accent-soft font-semibold text-accent-strong'
+                        : 'text-fg hover:bg-hover',
+                    )}
+                  >
+                    <span className="flex-1 truncate">{realm.displayName || realm.name}</span>
+                    {realm.name === currentRealm && <Icons.Check className="h-3.5 w-3.5" />}
+                  </button>
+                </li>
+              ))}
+              {realms.length === 0 && <li className="px-3 py-2 text-sm text-subtle">No realms found</li>}
+            </ul>
+          )}
+        </div>
+
+        {/* Nav */}
+        <nav aria-label="Main navigation" className="mt-3 flex-1 overflow-y-auto px-3 pb-4">
+          <div className="px-2.5 pb-1 pt-2.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-sidebar-muted">
+            Global
+          </div>
+          {globalNav.map((item) => {
+            const Icon = item.icon;
+            return (
+              <NavLink key={item.to} to={item.to} end={item.end} onClick={() => setSidebarOpen(false)} className={navLinkClass}>
+                {({ isActive }) => (
+                  <>
+                    {isActive && activeBar}
+                    <Icon className="h-4 w-4 shrink-0" />
+                    <span>{item.label}</span>
+                  </>
+                )}
+              </NavLink>
+            );
+          })}
 
           {currentRealm && realms?.some((r) => r.name === currentRealm) && (
-            <>
+            <div className="mt-3">
               <div
-                className="mt-6 mb-2 px-3 text-xs font-semibold uppercase tracking-wider text-gray-400"
+                className="px-2.5 pb-1 pt-2.5 font-mono text-[10px] font-semibold uppercase tracking-[0.1em] text-sidebar-muted"
                 aria-hidden="true"
               >
                 {currentRealm}
               </div>
               <nav aria-label={`${currentRealm} realm navigation`}>
-                {navItems.map((item) => (
-                  <NavLink
-                    key={item.to}
-                    to={item.to}
-                    end
-                    onClick={() => setSidebarOpen(false)}
-                    className={({ isActive }) =>
-                      `flex items-center rounded-md px-3 py-2 text-sm font-medium transition-colors ${
-                        isActive
-                          ? 'bg-gray-800 text-white'
-                          : 'text-gray-300 hover:bg-gray-800 hover:text-white'
-                      }`
-                    }
-                  >
-                    {item.label}
-                  </NavLink>
-                ))}
+                {navItems.map((item) => {
+                  const Icon = item.icon;
+                  return (
+                    <NavLink key={item.to} to={item.to} end onClick={() => setSidebarOpen(false)} className={navLinkClass}>
+                      {({ isActive }) => (
+                        <>
+                          {isActive && activeBar}
+                          <Icon className="h-4 w-4 shrink-0" />
+                          <span>{item.label}</span>
+                        </>
+                      )}
+                    </NavLink>
+                  );
+                })}
               </nav>
-            </>
+            </div>
           )}
         </nav>
       </aside>
@@ -143,69 +205,26 @@ export default function Layout() {
       {/* Main content */}
       <div className="flex flex-1 flex-col overflow-hidden">
         {/* Top bar */}
-        <header className="flex h-16 items-center justify-between border-b border-gray-200 bg-white px-6">
+        <header className="flex h-14 items-center justify-between border-b border-line bg-topbar px-6">
           <div className="flex items-center gap-4">
             <button
               onClick={() => setSidebarOpen(true)}
               aria-label="Open navigation menu"
               aria-expanded={sidebarOpen}
-              className="text-gray-500 hover:text-gray-700 md:hidden"
+              className="text-muted hover:text-fg md:hidden"
             >
-              <svg className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 6h16M4 12h16M4 18h16" />
-              </svg>
+              <Icons.Menu className="h-6 w-6" />
             </button>
-
-            {/* Realm switcher */}
-            <div className="relative" ref={dropdownRef}>
-              <button
-                onClick={() => setRealmDropdownOpen(!realmDropdownOpen)}
-                aria-haspopup="listbox"
-                aria-expanded={realmDropdownOpen}
-                aria-label={currentRealm ? `Current realm: ${currentRealm}. Switch realm` : 'Select realm'}
-                className="flex items-center gap-2 rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
-              >
-                <span aria-hidden="true">{currentRealm || 'Select Realm'}</span>
-                <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 9l-7 7-7-7" />
-                </svg>
-              </button>
-
-              {realmDropdownOpen && realms && (
-                <ul
-                  role="listbox"
-                  aria-label="Realms"
-                  className="absolute left-0 z-20 mt-1 w-56 rounded-md border border-gray-200 bg-white py-1 shadow-lg"
-                >
-                  {realms.map((realm) => (
-                    <li key={realm.id} role="option" aria-selected={realm.name === currentRealm}>
-                      <button
-                        onClick={() => {
-                          navigate(`/console/realms/${realm.name}`);
-                          setRealmDropdownOpen(false);
-                        }}
-                        className={`block w-full px-4 py-2 text-left text-sm hover:bg-gray-100 ${
-                          realm.name === currentRealm
-                            ? 'bg-indigo-50 font-medium text-indigo-700'
-                            : 'text-gray-700'
-                        }`}
-                      >
-                        {realm.displayName || realm.name}
-                      </button>
-                    </li>
-                  ))}
-                  {realms.length === 0 && (
-                    <li className="px-4 py-2 text-sm text-gray-500">No realms found</li>
-                  )}
-                </ul>
-              )}
-            </div>
+            {currentRealm && (
+              <span className="hidden font-mono text-xs text-subtle md:inline">{currentRealm}</span>
+            )}
           </div>
 
           <button
             onClick={logout}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="inline-flex h-9 items-center gap-2 rounded-lg border border-line-strong bg-surface px-3.5 text-[13.5px] font-medium text-fg shadow-soft transition-all duration-150 hover:border-subtle hover:bg-hover focus-visible:outline-none focus-visible:shadow-[var(--shadow-focus)]"
           >
+            <Icons.Logout className="h-4 w-4" />
             Logout
           </button>
         </header>
