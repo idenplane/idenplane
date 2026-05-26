@@ -17,6 +17,7 @@ import {
   ApiSecurity,
 } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
+import { ConfigService } from '@nestjs/config';
 import { Public } from '../common/decorators/public.decorator.js';
 import { AdminAuthService } from './admin-auth.service.js';
 import { RateLimitGuard } from '../rate-limit/rate-limit.guard.js';
@@ -27,7 +28,31 @@ import { AdminLoginDto } from './dto/login.dto.js';
 @Controller('admin/auth')
 @ApiSecurity('admin-api-key')
 export class AdminAuthController {
-  constructor(private readonly adminAuthService: AdminAuthService) {}
+  constructor(
+    private readonly adminAuthService: AdminAuthService,
+    private readonly config: ConfigService,
+  ) {}
+
+  @Get('demo-info')
+  @Public()
+  @ApiOperation({
+    summary: 'Demo-mode login hint',
+    description:
+      'Returns the demo credentials so the login page can prefill them, ' +
+      'but only when DEMO_MODE=true. On normal self-hosted installs this ' +
+      'returns { demo: false } and exposes nothing.',
+  })
+  @ApiResponse({ status: 200, description: 'Demo info' })
+  getDemoInfo() {
+    if (this.config.get<string>('DEMO_MODE') !== 'true') {
+      return { demo: false };
+    }
+    return {
+      demo: true,
+      username: this.config.get<string>('ADMIN_USER', 'admin'),
+      password: this.config.get<string>('ADMIN_PASSWORD', 'admin'),
+    };
+  }
 
   @Post('login')
   @Public()
