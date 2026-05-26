@@ -1,6 +1,7 @@
-import { useState, type FormEvent } from 'react';
+import { useState, useEffect, type FormEvent } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '../hooks/useAuth';
+import apiClient from '../api/client';
 import PasswordInput from '../components/PasswordInput';
 
 export default function LoginPage() {
@@ -10,8 +11,27 @@ export default function LoginPage() {
   const [apiKey, setApiKey] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
+  const [isDemo, setIsDemo] = useState(false);
   const { login, loginWithCredentials, clearAuthState } = useAuth();
   const navigate = useNavigate();
+
+  // On demo deployments (DEMO_MODE=true) the server returns the demo
+  // credentials so we can prefill them and let visitors sign in instantly.
+  // Normal self-hosted installs return { demo: false } and nothing changes.
+  useEffect(() => {
+    apiClient
+      .get('/auth/demo-info')
+      .then(({ data }) => {
+        if (data?.demo) {
+          setIsDemo(true);
+          setUsername(data.username ?? '');
+          setPassword(data.password ?? '');
+        }
+      })
+      .catch(() => {
+        /* not a demo, or endpoint unavailable — show the normal login */
+      });
+  }, []);
 
   async function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -70,6 +90,19 @@ export default function LoginPage() {
                 : 'Enter your admin API key to continue'}
             </p>
           </div>
+
+          {isDemo && mode === 'credentials' && (
+            <div className="mb-6 rounded-md border border-emerald-200 bg-emerald-50 p-3 text-sm">
+              <p className="font-medium text-emerald-800">
+                🟢 Demo environment
+              </p>
+              <p className="mt-0.5 text-emerald-700">
+                Credentials are prefilled — just click{' '}
+                <span className="font-medium">Sign In</span>. This demo resets
+                hourly.
+              </p>
+            </div>
+          )}
 
           <form onSubmit={handleSubmit}>
             {mode === 'credentials' ? (

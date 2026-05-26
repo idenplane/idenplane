@@ -17,6 +17,12 @@ export const handlers = [
     return HttpResponse.json({ message: 'Logged out' });
   }),
 
+  // Demo-mode hint — default to "not a demo" so the login page behaves
+  // normally; demo-specific tests can override this with server.use(...).
+  http.get(`${BASE}/auth/demo-info`, () => {
+    return HttpResponse.json({ demo: false });
+  }),
+
   // Realms
   http.get(`${BASE}/realms`, () => {
     return HttpResponse.json([
