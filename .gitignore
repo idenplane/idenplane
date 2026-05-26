@@ -74,3 +74,6 @@ logs/security/
 
 # Playwright MCP scratch
 .playwright-mcp/
+
+# Local redesign verification screenshots
+admin-ui/.redesign-screens/
