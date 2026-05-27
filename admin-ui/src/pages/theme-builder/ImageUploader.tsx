@@ -85,12 +85,11 @@ export default function ImageUploader({
       const reader = new FileReader();
       reader.onload = (e) => {
         const dataUrl = e.target?.result as string;
-        // Only ever render an image data URL — guards against the FileReader
-        // result being interpreted as anything but an image (CodeQL
-        // js/xss-through-dom).
-        if (typeof dataUrl === 'string' && dataUrl.startsWith('data:image/')) {
-          setPreviewUrl(dataUrl);
-        }
+        // The on-screen preview keeps using the safe object URL created above
+        // (line: URL.createObjectURL); we deliberately do NOT route the
+        // FileReader result into the rendered <img src>, so untrusted "DOM text"
+        // never reaches that sink (CodeQL js/xss-through-dom). The data URL is
+        // only persisted into the theme assets below.
         setIsUploading(false);
 
         // Update assets based on upload type
