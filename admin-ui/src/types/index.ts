@@ -339,11 +339,17 @@ export interface NhiAuditLog {
 
 export interface ConsentCategory {
   id: string;
-  name: string;
+  realmId: string;
+  /** Stable, unique-per-realm identifier (immutable in practice). */
+  key: string;
+  /** Human-readable label. */
+  displayName: string;
   description: string | null;
   required: boolean;
+  configurableByUser: boolean;
+  showInAccountPortal: boolean;
+  order: number;
   enabled: boolean;
-  policyVersion: string | null;
   createdAt: string;
   updatedAt: string;
 }

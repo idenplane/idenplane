@@ -60,47 +60,28 @@ export async function deleteConsentCategory(
 // User Consents
 // ---------------------------------------------------------------------------
 
+// A consent is an OAuth scope grant per client (no GDPR-category link); the
+// shape mirrors users.service.getUserConsents exactly.
 export interface UserConsent {
   id: string;
-  userId: string;
   clientId: string;
-  categoryId: string;
-  grantedAt: string;
-  grantedVia: string;
-  policyVersion: string | null;
-  client?: {
-    id: string;
-    clientId: string;
-    name: string | null;
-  };
-  category?: {
-    id: string;
-    name: string;
-    required: boolean;
-  };
+  clientName: string;
+  scopes: string[];
+  createdAt: string;
+  updatedAt: string;
 }
 
 export interface UserConsentHistoryEntry {
   id: string;
-  userId: string;
   clientId: string;
-  categoryId: string;
+  clientName: string;
   action: string;
-  performedBy: string | null;
-  performedAt: string;
+  scopes: string[];
+  policyVersion: string | null;
   ipAddress: string | null;
   userAgent: string | null;
-  policyVersion: string | null;
-  client?: {
-    id: string;
-    clientId: string;
-    name: string | null;
-  };
-  category?: {
-    id: string;
-    name: string;
-    required: boolean;
-  };
+  metadata: Record<string, unknown> | null;
+  createdAt: string;
 }
 
 export async function getUserConsents(
@@ -113,24 +94,38 @@ export async function getUserConsents(
   return data;
 }
 
+export interface UserConsentHistoryResponse {
+  history: UserConsentHistoryEntry[];
+  total: number;
+  page: number;
+  pageSize: number;
+}
+
 export async function getUserConsentHistory(
   realmName: string,
   userId: string,
   page = 1,
   limit = 20,
-): Promise<{ history: UserConsentHistoryEntry[]; total: number }> {
-  const { data } = await apiClient.get<{
-    history: UserConsentHistoryEntry[];
-    total: number;
-  }>(`/realms/${realmName}/users/${userId}/consents/history`, {
-    params: { page, limit },
-  });
+): Promise<UserConsentHistoryResponse> {
+  const { data } = await apiClient.get<UserConsentHistoryResponse>(
+    `/realms/${realmName}/users/${userId}/consents/history`,
+    { params: { page, limit } },
+  );
   return data;
 }
 
 // ---------------------------------------------------------------------------
 // Consent Statistics
 // ---------------------------------------------------------------------------
+
+export interface ConsentCategoryCount {
+  categoryId: string;
+  categoryKey: string;
+  categoryName: string;
+  required: boolean;
+  totalGrants: number;
+  distinctUsers: number;
+}
 
 export interface ConsentStatistics {
   totalConsents: number;
@@ -140,12 +135,12 @@ export interface ConsentStatistics {
   consentActionsLast24h: number;
   consentActionsLast7d: number;
   consentActionsLast30d: number;
-  consentsByCategory: Array<{
-    categoryId: string;
-    categoryName: string;
-    totalGrants: number;
-  }>;
+  consentsGranted24h: number;
+  consentsRevoked24h: number;
+  consentsUpdated24h: number;
+  consentsByCategory: ConsentCategoryCount[];
   pendingDeletions: number;
+  pendingDeletionsGracePeriod: number;
 }
 
 export async function getConsentStatistics(
@@ -153,6 +148,34 @@ export async function getConsentStatistics(
 ): Promise<ConsentStatistics> {
   const { data } = await apiClient.get<ConsentStatistics>(
     `/realms/${realmName}/stats/consents`,
+  );
+  return data;
+}
+
+// ---------------------------------------------------------------------------
+// Per-category statistics
+// ---------------------------------------------------------------------------
+
+export interface CategoryStatistics {
+  categoryId: string;
+  categoryKey: string;
+  categoryName: string;
+  totalGrants: number;
+  totalRevokes: number;
+  grants24h: number;
+  grants7d: number;
+  grants30d: number;
+  activeUsers24h: number;
+  activeUsers7d: number;
+  activeUsers30d: number;
+}
+
+export async function getCategoryStatistics(
+  realmName: string,
+  categoryId: string,
+): Promise<CategoryStatistics> {
+  const { data } = await apiClient.get<CategoryStatistics>(
+    `/realms/${realmName}/consent-categories/${categoryId}/stats`,
   );
   return data;
 }

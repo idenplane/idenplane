@@ -8,6 +8,8 @@ interface UserConsentPanelProps {
   username: string;
 }
 
+const PAGE_SIZE = 20;
+
 export default function UserConsentPanel({ realmName, userId, username }: UserConsentPanelProps) {
   const [activeTab, setActiveTab] = useState<'current' | 'history'>('current');
   const [historyPage, setHistoryPage] = useState(1);
@@ -20,7 +22,7 @@ export default function UserConsentPanel({ realmName, userId, username }: UserCo
 
   const { data: historyData, isLoading: loadingHistory } = useQuery({
     queryKey: ['userConsentHistory', realmName, userId, historyPage],
-    queryFn: () => getUserConsentHistory(realmName, userId, historyPage),
+    queryFn: () => getUserConsentHistory(realmName, userId, historyPage, PAGE_SIZE),
     enabled: !!realmName && !!userId,
   });
 
@@ -32,9 +34,10 @@ export default function UserConsentPanel({ realmName, userId, username }: UserCo
     );
   }
 
-  const groupedConsents = groupConsentsByClient(consents ?? []);
   const hasConsents = consents && consents.length > 0;
-  const hasHistory = historyData && historyData.history && historyData.history.length > 0;
+  const hasHistory = historyData && historyData.history.length > 0;
+  const pageSize = historyData?.pageSize ?? PAGE_SIZE;
+  const total = historyData?.total ?? 0;
 
   return (
     <div className="space-y-6">
@@ -74,81 +77,49 @@ export default function UserConsentPanel({ realmName, userId, username }: UserCo
         </nav>
       </div>
 
-      {/* Current Consents Tab */}
+      {/* Current Consents Tab — one card per client, listing granted scopes */}
       {activeTab === 'current' && (
         <div className="space-y-4">
           {hasConsents ? (
-            <div className="space-y-6">
-              {Object.entries(groupedConsents).map(([clientId, clientConsents]) => (
+            <div className="space-y-4">
+              {consents.map((consent: UserConsent) => (
                 <div
-                  key={clientId}
+                  key={consent.id}
                   className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
                 >
-                  <div className="mb-4 flex items-center justify-between">
+                  <div className="mb-3 flex items-center justify-between">
                     <h3 className="text-base font-medium text-gray-900">
-                      {clientConsents[0].client?.name ?? clientConsents[0].client?.clientId ?? clientId}
+                      {consent.clientName}
                     </h3>
-                    <span className="text-xs text-gray-500">
-                      {clientConsents[0].client?.clientId ?? clientId}
+                    <span className="inline-flex rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
+                      Active
                     </span>
                   </div>
-                  <div className="divide-y divide-gray-100">
-                    {clientConsents.map((consent) => (
-                      <div key={consent.id} className="flex items-center justify-between py-3">
-                        <div className="flex items-center gap-3">
-                          <div
-                            className={`h-2.5 w-2.5 rounded-full ${
-                              consent.category?.required
-                                ? 'bg-amber-400'
-                                : 'bg-green-400'
-                            }`}
-                          />
-                          <div>
-                            <p className="text-sm font-medium text-gray-900">
-                              {consent.category?.name ?? 'Unknown Category'}
-                              {consent.category?.required && (
-                                <span className="ml-2 text-xs text-amber-600">(Required)</span>
-                              )}
-                            </p>
-                            <p className="text-xs text-gray-500">
-                              Granted on {formatDate(consent.grantedAt)} via {consent.grantedVia}
-                              {consent.policyVersion && ` · Policy v${consent.policyVersion}`}
-                            </p>
-                          </div>
-                        </div>
-                        <div className="flex items-center gap-2">
-                          <span className="inline-flex rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
-                            Active
-                          </span>
-                        </div>
-                      </div>
-                    ))}
+                  <div className="flex flex-wrap gap-1.5">
+                    {consent.scopes.length > 0 ? (
+                      consent.scopes.map((scope) => (
+                        <span
+                          key={scope}
+                          className="inline-flex rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700"
+                        >
+                          {scope}
+                        </span>
+                      ))
+                    ) : (
+                      <span className="text-xs text-gray-400">No scopes</span>
+                    )}
                   </div>
+                  <p className="mt-3 text-xs text-gray-500">
+                    Granted {formatDate(consent.createdAt)}
+                  </p>
                 </div>
               ))}
             </div>
           ) : (
-            <div className="rounded-lg border border-gray-200 bg-white p-8 text-center shadow-sm">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
-                <svg
-                  className="h-6 w-6 text-gray-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-              </div>
-              <h3 className="mt-4 text-sm font-medium text-gray-900">No consents found</h3>
-              <p className="mt-1 text-sm text-gray-500">
-                This user has not granted any consents yet.
-              </p>
-            </div>
+            <EmptyState
+              title="No consents found"
+              message="This user has not granted any consents yet."
+            />
           )}
         </div>
       )}
@@ -166,46 +137,36 @@ export default function UserConsentPanel({ realmName, userId, username }: UserCo
                         Action
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                        Category
+                        Client
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                        Client
+                        Scopes
                       </th>
                       <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                         Date
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
-                        Performed By
-                      </th>
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-200">
-                    {historyData?.history.map((entry) => (
+                    {historyData.history.map((entry) => (
                       <tr key={entry.id} className="hover:bg-gray-50">
                         <td className="whitespace-nowrap px-4 py-3 text-sm">
                           <span
-                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                              entry.action === 'GRANTED'
-                                ? 'bg-green-100 text-green-700'
-                                : entry.action === 'REVOKED'
-                                ? 'bg-red-100 text-red-700'
-                                : 'bg-blue-100 text-blue-700'
-                            }`}
+                            className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${actionClass(
+                              entry.action,
+                            )}`}
                           >
                             {formatAction(entry.action)}
                           </span>
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-900">
-                          {entry.category?.name ?? 'Unknown'}
+                        <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">
+                          {entry.clientName}
+                        </td>
+                        <td className="px-4 py-3 text-sm text-gray-500">
+                          {entry.scopes.length > 0 ? entry.scopes.join(', ') : '-'}
                         </td>
                         <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
-                          {entry.client?.name ?? entry.client?.clientId ?? '-'}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
-                          {formatDate(entry.performedAt)}
-                        </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
-                          {entry.performedBy ?? 'User'}
+                          {formatDate(entry.createdAt)}
                         </td>
                       </tr>
                     ))}
@@ -216,9 +177,8 @@ export default function UserConsentPanel({ realmName, userId, username }: UserCo
               {/* Pagination */}
               <div className="flex items-center justify-between">
                 <p className="text-sm text-gray-500">
-                  Showing {((historyPage - 1) * 20) + 1} to{' '}
-                  {Math.min(historyPage * 20, historyData?.total ?? 0)} of{' '}
-                  {historyData?.total ?? 0} entries
+                  Showing {(historyPage - 1) * pageSize + 1} to{' '}
+                  {Math.min(historyPage * pageSize, total)} of {total} entries
                 </p>
                 <div className="flex gap-2">
                   <button
@@ -230,7 +190,7 @@ export default function UserConsentPanel({ realmName, userId, username }: UserCo
                   </button>
                   <button
                     onClick={() => setHistoryPage((p) => p + 1)}
-                    disabled={!historyData || historyPage * 20 >= historyData.total}
+                    disabled={historyPage * pageSize >= total}
                     className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
                   >
                     Next
@@ -239,27 +199,10 @@ export default function UserConsentPanel({ realmName, userId, username }: UserCo
               </div>
             </>
           ) : (
-            <div className="rounded-lg border border-gray-200 bg-white p-8 text-center shadow-sm">
-              <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
-                <svg
-                  className="h-6 w-6 text-gray-400"
-                  fill="none"
-                  viewBox="0 0 24 24"
-                  stroke="currentColor"
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    strokeWidth={2}
-                    d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
-                  />
-                </svg>
-              </div>
-              <h3 className="mt-4 text-sm font-medium text-gray-900">No consent history</h3>
-              <p className="mt-1 text-sm text-gray-500">
-                This user has no recorded consent activity.
-              </p>
-            </div>
+            <EmptyState
+              title="No consent history"
+              message="This user has no recorded consent activity."
+            />
           )}
         </div>
       )}
@@ -267,18 +210,30 @@ export default function UserConsentPanel({ realmName, userId, username }: UserCo
   );
 }
 
-function groupConsentsByClient(consents: UserConsent[]): Record<string, UserConsent[]> {
-  return consents.reduce(
-    (acc, consent) => {
-      const key = consent.clientId;
-      if (!acc[key]) {
-        acc[key] = [];
-      }
-      acc[key].push(consent);
-      return acc;
-    },
-    {} as Record<string, UserConsent[]>,
+function EmptyState({ title, message }: { title: string; message: string }) {
+  return (
+    <div className="rounded-lg border border-gray-200 bg-white p-8 text-center shadow-sm">
+      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
+        <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+          <path
+            strokeLinecap="round"
+            strokeLinejoin="round"
+            strokeWidth={2}
+            d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
+          />
+        </svg>
+      </div>
+      <h3 className="mt-4 text-sm font-medium text-gray-900">{title}</h3>
+      <p className="mt-1 text-sm text-gray-500">{message}</p>
+    </div>
   );
+}
+
+function actionClass(action: string): string {
+  const a = action.toLowerCase();
+  if (a === 'granted') return 'bg-green-100 text-green-700';
+  if (a === 'revoked') return 'bg-red-100 text-red-700';
+  return 'bg-blue-100 text-blue-700';
 }
 
 function formatDate(dateString: string): string {
@@ -296,11 +251,11 @@ function formatDate(dateString: string): string {
 }
 
 function formatAction(action: string): string {
-  const actionLabels: Record<string, string> = {
-    GRANTED: 'Granted',
-    REVOKED: 'Revoked',
-    UPDATED: 'Updated',
-    EXPIRED: 'Expired',
+  const labels: Record<string, string> = {
+    granted: 'Granted',
+    revoked: 'Revoked',
+    updated: 'Updated',
+    expired: 'Expired',
   };
-  return actionLabels[action] ?? action;
+  return labels[action.toLowerCase()] ?? action;
 }

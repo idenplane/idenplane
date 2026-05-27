@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw';
-import { makeRealm, makeUser, makeClient, makeLoginEvent, makeAdminEvent, makeStats, makeAuthFlow, makeUpgradeAuditEntry, makePreUpgradeValidationResult, makeUpgradeHealthResult, makeRollbackCapability, makeNhiIdentity } from './data';
+import { makeRealm, makeUser, makeClient, makeLoginEvent, makeAdminEvent, makeStats, makeAuthFlow, makeUpgradeAuditEntry, makePreUpgradeValidationResult, makeUpgradeHealthResult, makeRollbackCapability, makeNhiIdentity, makeConsentCategory } from './data';
 
 const BASE = '/admin';
 
@@ -261,5 +261,86 @@ export const handlers = [
         createdBy: 'admin',
       },
     ]);
+  }),
+
+  // Consent categories
+  http.get(`${BASE}/realms/:name/consent-categories`, () => {
+    return HttpResponse.json([
+      makeConsentCategory({ id: 'cat-1', key: 'marketing', displayName: 'Marketing' }),
+      makeConsentCategory({
+        id: 'cat-2',
+        key: 'analytics',
+        displayName: 'Analytics',
+        required: true,
+      }),
+    ]);
+  }),
+
+  http.get(`${BASE}/realms/:name/consent-categories/:id/stats`, ({ params }) => {
+    return HttpResponse.json({
+      categoryId: params.id,
+      categoryKey: 'marketing',
+      categoryName: 'Marketing',
+      totalGrants: 120,
+      totalRevokes: 8,
+      grants24h: 5,
+      grants7d: 30,
+      grants30d: 95,
+      activeUsers24h: 4,
+      activeUsers7d: 22,
+      activeUsers30d: 70,
+    });
+  }),
+
+  http.get(`${BASE}/realms/:name/consent-categories/:id`, ({ params }) => {
+    return HttpResponse.json(
+      makeConsentCategory({ id: params.id as string }),
+    );
+  }),
+
+  http.post(`${BASE}/realms/:name/consent-categories`, async ({ request }) => {
+    const body = (await request.json()) as Record<string, unknown>;
+    return HttpResponse.json(makeConsentCategory({ id: 'cat-new', ...body }), {
+      status: 201,
+    });
+  }),
+
+  http.put(`${BASE}/realms/:name/consent-categories/:id`, async ({ params, request }) => {
+    const body = (await request.json()) as Record<string, unknown>;
+    return HttpResponse.json(
+      makeConsentCategory({ id: params.id as string, ...body }),
+    );
+  }),
+
+  http.delete(`${BASE}/realms/:name/consent-categories/:id`, () => {
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  // Consent statistics (realm)
+  http.get(`${BASE}/realms/:name/stats/consents`, () => {
+    return HttpResponse.json({
+      totalConsents: 42,
+      activeUsersWithConsents24h: 5,
+      activeUsersWithConsents7d: 12,
+      activeUsersWithConsents30d: 30,
+      consentActionsLast24h: 8,
+      consentActionsLast7d: 25,
+      consentActionsLast30d: 60,
+      consentsGranted24h: 6,
+      consentsRevoked24h: 1,
+      consentsUpdated24h: 1,
+      consentsByCategory: [
+        {
+          categoryId: 'cat-1',
+          categoryKey: 'marketing',
+          categoryName: 'Marketing',
+          required: false,
+          totalGrants: 120,
+          distinctUsers: 70,
+        },
+      ],
+      pendingDeletions: 3,
+      pendingDeletionsGracePeriod: 1,
+    });
   }),
 ];

@@ -57,6 +57,9 @@ export default function ConsentCategoriesListPage() {
                 Name
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                Key
+              </th>
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
                 Description
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
@@ -80,7 +83,12 @@ export default function ConsentCategoriesListPage() {
                   className="cursor-pointer hover:bg-gray-50"
                 >
                   <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-indigo-600">
-                    {category.name}
+                    {category.displayName}
+                  </td>
+                  <td className="whitespace-nowrap px-6 py-4 text-sm">
+                    <code className="rounded bg-gray-100 px-1.5 py-0.5 text-xs text-gray-700">
+                      {category.key}
+                    </code>
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-700">
                     {category.description || '-'}
@@ -104,7 +112,7 @@ export default function ConsentCategoriesListPage() {
             ) : (
               <tr>
                 <td
-                  colSpan={4}
+                  colSpan={5}
                   className="px-6 py-8 text-center text-sm text-gray-500"
                 >
                   No consent categories found in this realm.
