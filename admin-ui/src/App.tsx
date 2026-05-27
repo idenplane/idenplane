@@ -96,7 +96,7 @@ export default function App() {
           <Route path="/console/realms/:name/saml-providers/:id" element={<SamlSpDetailPage />} />
           <Route path="/console/realms/:name/auth-flows" element={<AuthFlowListPage />} />
           <Route path="/console/realms/:name/auth-flows/:flowId" element={<AuthFlowEditorPage />} />
-          <Route path="/console/registration-approvals" element={<PendingRegistrationsPage />} />
+          <Route path="/console/realms/:name/registration-approvals" element={<PendingRegistrationsPage />} />
           <Route path="/console/realms/:name/registration-fields" element={<RegistrationFieldsPage />} />
           <Route path="/console/realms/:name/registration-settings" element={<RegistrationSettingsPage />} />
           {/* Catch-all for unknown /console/... paths — rendered inside the Layout shell */}
