@@ -11,6 +11,10 @@ on:
       - 'src/**'
       - 'prisma/**'
 
+# Minimal default token permissions; the job only reads repo contents.
+permissions:
+  contents: read
+
 jobs:
   breaking-change-check:
     name: API Breaking Change Detection

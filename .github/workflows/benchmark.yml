@@ -4,6 +4,10 @@ on:
   release:
     types: [published]
 
+# Minimal default token permissions; jobs only read repo contents.
+permissions:
+  contents: read
+
 jobs:
   benchmark:
     name: Run Benchmarks & Generate Report
