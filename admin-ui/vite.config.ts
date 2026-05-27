@@ -40,8 +40,17 @@ export default defineConfig({
     assetsDir: 'assets',
     rollupOptions: {
       output: {
-        manualChunks: {
-          vendor: ['react', 'react-dom', 'react-router-dom', '@tanstack/react-query'],
+        // Vite 8 (Rolldown) dropped the object form of `manualChunks`; the
+        // function form is the supported equivalent. Keep the long-lived
+        // framework deps in a single `vendor` chunk for stable cache headers.
+        manualChunks(id) {
+          if (
+            /[\\/]node_modules[\\/](react|react-dom|react-router-dom|@tanstack[\\/]react-query)[\\/]/.test(
+              id,
+            )
+          ) {
+            return 'vendor'
+          }
         },
       },
     },
