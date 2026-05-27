@@ -78,8 +78,12 @@ export class GraphQLAuthGuard implements CanActivate {
         providedApiKey.length === expectedKey.length &&
         timingSafeEqual(Buffer.from(providedApiKey), Buffer.from(expectedKey))
       ) {
+        // Fingerprint the configured key (not the request value) — execution
+        // only reaches here once timingSafeEqual proved they are equal, so the
+        // fingerprint is identical, but the data hashed is now the server-side
+        // constant rather than request input (CodeQL js/insufficient-password-hash).
         const keyFingerprint = createHash('sha256')
-          .update(providedApiKey)
+          .update(expectedKey)
           .digest('hex')
           .slice(0, 12);
         request.adminUser = {
