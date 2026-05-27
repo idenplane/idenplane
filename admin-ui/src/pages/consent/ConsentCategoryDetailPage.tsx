@@ -22,6 +22,8 @@ interface CategoryForm {
   configurableByUser: boolean;
   showInAccountPortal: boolean;
   order: number;
+  /** Space-separated scope names while editing; parsed to string[] on submit. */
+  scopes: string;
 }
 
 const EMPTY_FORM: CategoryForm = {
@@ -32,7 +34,15 @@ const EMPTY_FORM: CategoryForm = {
   configurableByUser: true,
   showInAccountPortal: true,
   order: 0,
+  scopes: '',
 };
+
+/** Parse a space/comma-separated scope string into a clean string[]. */
+const parseScopes = (raw: string): string[] =>
+  raw
+    .split(/[\s,]+/)
+    .map((s) => s.trim())
+    .filter(Boolean);
 
 export default function ConsentCategoryDetailPage() {
   const { name, categoryId } = useParams<{ name: string; categoryId?: string }>();
@@ -70,6 +80,7 @@ export default function ConsentCategoryDetailPage() {
       configurableByUser: category.configurableByUser,
       showInAccountPortal: category.showInAccountPortal,
       order: category.order,
+      scopes: category.scopes.join(' '),
     });
   }
 
@@ -82,6 +93,7 @@ export default function ConsentCategoryDetailPage() {
     configurableByUser: f.configurableByUser,
     showInAccountPortal: f.showInAccountPortal,
     order: f.order,
+    scopes: parseScopes(f.scopes),
   });
   const toUpdatePayload = (f: CategoryForm): Partial<ConsentCategory> => {
     const { key: _key, ...rest } = toCreatePayload(f);
@@ -257,6 +269,24 @@ export default function ConsentCategoryDetailPage() {
               }
               className="w-32 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
             />
+          </div>
+          <div>
+            <label htmlFor="scopes" className="block text-sm font-medium text-gray-700">
+              Governed Scopes
+            </label>
+            <input
+              type="text"
+              id="scopes"
+              value={form.scopes}
+              onChange={(e) => setForm({ ...form, scopes: e.target.value })}
+              placeholder="profile email"
+              className="w-full rounded-md border border-gray-300 px-3 py-2 font-mono text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+            />
+            <p className="mt-1 text-xs text-gray-400">
+              Space-separated OIDC scopes this category governs (used to attribute
+              consent grants for statistics). Leave empty to govern the scope whose
+              name matches the key (<code className="font-mono">{form.key || 'key'}</code>).
+            </p>
           </div>
           <div className="flex flex-col gap-3">
             <label className="flex items-center gap-2">

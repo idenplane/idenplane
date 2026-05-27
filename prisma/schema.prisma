@@ -2102,6 +2102,11 @@ model ConsentCategory {
   showInAccountPortal Boolean  @default(true) @map("show_in_account_portal")
   order               Int      @default(0)
   enabled             Boolean  @default(true)
+  // OIDC scope names this category governs. Used to tag consent grants with
+  // their category for per-category statistics. Empty = unconfigured: the
+  // category then governs the scope whose name equals its `key` (convention
+  // default). Setting any scope here disables that key fallback for this row.
+  scopes              String[] @default([])
   createdAt           DateTime @default(now()) @map("created_at")
   updatedAt           DateTime @updatedAt @map("updated_at")
 

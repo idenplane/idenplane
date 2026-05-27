@@ -7,12 +7,11 @@
  *  - per-category stats (grant/revoke totals, grant and active-user windows) —
  *    for a single consent category's detail page.
  *
- * The only link between a consent event and a GDPR consent category is the
- * `categoryKey` stored in `UserConsentHistory.metadata`. Aggregations below
- * filter history on that JSON path. They are correct for any category-tagged
- * event; the live OAuth grant path does not yet tag events with a category, so
- * category-scoped numbers stay at zero until that tagging is wired in (a
- * separate feature — see F-16 notes). No metric is faked or hard-coded.
+ * The link between a consent event and its GDPR consent categories is the
+ * `categoryKeys` array stored in `UserConsentHistory.metadata` (the live grant
+ * path tags every grant via ConsentService.resolveCategoryKeys). Aggregations
+ * below filter history on that JSON path with `array_contains`. No metric is
+ * faked or hard-coded.
  */
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { Prisma, Realm } from '@prisma/client';
@@ -77,9 +76,12 @@ export class ConsentStatisticsService {
     };
   }
 
-  /** Prisma JSON-path filter matching history tagged with a category key. */
+  /**
+   * Prisma JSON-path filter matching history whose `metadata.categoryKeys`
+   * array contains the given category key.
+   */
   private categoryKeyFilter(key: string): Prisma.JsonFilter {
-    return { path: ['categoryKey'], equals: key };
+    return { path: ['categoryKeys'], array_contains: key };
   }
 
   /** Count distinct users in a history query. */
@@ -130,13 +132,25 @@ export class ConsentStatisticsService {
       }),
 
       this.prisma.userConsentHistory.count({
-        where: { ...realmScope, action: 'granted', createdAt: { gte: cutoff24h } },
+        where: {
+          ...realmScope,
+          action: 'granted',
+          createdAt: { gte: cutoff24h },
+        },
       }),
       this.prisma.userConsentHistory.count({
-        where: { ...realmScope, action: 'revoked', createdAt: { gte: cutoff24h } },
+        where: {
+          ...realmScope,
+          action: 'revoked',
+          createdAt: { gte: cutoff24h },
+        },
       }),
       this.prisma.userConsentHistory.count({
-        where: { ...realmScope, action: 'updated', createdAt: { gte: cutoff24h } },
+        where: {
+          ...realmScope,
+          action: 'updated',
+          createdAt: { gte: cutoff24h },
+        },
       }),
 
       this.getConsentsByCategory(realm.id),
@@ -148,7 +162,9 @@ export class ConsentStatisticsService {
         where: {
           user: { realmId: realm.id },
           status: 'pending',
-          scheduledAt: { lte: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000) },
+          scheduledAt: {
+            lte: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
+          },
         },
       }),
     ]);

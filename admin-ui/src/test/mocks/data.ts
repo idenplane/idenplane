@@ -259,6 +259,7 @@ export function makeConsentCategory(
     showInAccountPortal: true,
     order: 0,
     enabled: true,
+    scopes: [],
     createdAt: '2024-01-01T00:00:00.000Z',
     updatedAt: '2024-01-01T00:00:00.000Z',
     ...overrides,
