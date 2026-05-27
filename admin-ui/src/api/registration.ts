@@ -1,4 +1,4 @@
-import apiClient from './client';
+import { rootClient } from './client';
 
 export interface RegistrationField {
   id: string;
@@ -32,7 +32,7 @@ export async function getPendingRegistrations(
   skip = 0,
   take = 20,
 ): Promise<{ users: PendingRegistration[]; total: number }> {
-  const { data } = await apiClient.get<{ users: PendingRegistration[]; total: number }>(
+  const { data } = await rootClient.get<{ users: PendingRegistration[]; total: number }>(
     `/realms/${realmName}/registration/pending`,
     { params: { skip, take } },
   );
@@ -44,7 +44,7 @@ export async function approveRegistration(
   userId: string,
   note?: string,
 ): Promise<{ success: boolean; note?: string }> {
-  const { data } = await apiClient.post<{ success: boolean; note?: string }>(
+  const { data } = await rootClient.post<{ success: boolean; note?: string }>(
     `/realms/${realmName}/registration/approve/${userId}`,
     { note },
   );
@@ -56,7 +56,7 @@ export async function rejectRegistration(
   userId: string,
   reason?: string,
 ): Promise<{ success: boolean }> {
-  const { data } = await apiClient.post<{ success: boolean }>(
+  const { data } = await rootClient.post<{ success: boolean }>(
     `/realms/${realmName}/registration/reject/${userId}`,
     { reason },
   );
@@ -64,7 +64,7 @@ export async function rejectRegistration(
 }
 
 export async function getRegistrationFields(realmName: string): Promise<RegistrationField[]> {
-  const { data } = await apiClient.get<RegistrationField[]>(
+  const { data } = await rootClient.get<RegistrationField[]>(
     `/realms/${realmName}/registration/admin/fields`,
   );
   return data;
@@ -74,7 +74,7 @@ export async function createRegistrationField(
   realmName: string,
   field: Partial<RegistrationField>,
 ): Promise<RegistrationField> {
-  const { data } = await apiClient.post<RegistrationField>(
+  const { data } = await rootClient.post<RegistrationField>(
     `/realms/${realmName}/registration/admin/fields`,
     field,
   );
@@ -86,7 +86,7 @@ export async function updateRegistrationField(
   fieldId: string,
   field: Partial<RegistrationField>,
 ): Promise<RegistrationField> {
-  const { data } = await apiClient.put<RegistrationField>(
+  const { data } = await rootClient.put<RegistrationField>(
     `/realms/${realmName}/registration/admin/fields/${fieldId}`,
     field,
   );
@@ -97,11 +97,11 @@ export async function deleteRegistrationField(
   realmName: string,
   fieldId: string,
 ): Promise<void> {
-  await apiClient.delete(`/realms/${realmName}/registration/admin/fields/${fieldId}`);
+  await rootClient.delete(`/realms/${realmName}/registration/admin/fields/${fieldId}`);
 }
 
 export async function getPublicRegistrationFields(realmName: string): Promise<Partial<RegistrationField>[]> {
-  const { data } = await apiClient.get<Partial<RegistrationField>[]>(
+  const { data } = await rootClient.get<Partial<RegistrationField>[]>(
     `/realms/${realmName}/registration/fields`,
   );
   return data;

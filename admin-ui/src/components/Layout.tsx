@@ -41,7 +41,6 @@ export default function Layout() {
         { to: `/console/realms/${currentRealm}/groups`, label: 'Groups', icon: Icons.Groups },
         { to: `/console/realms/${currentRealm}/client-scopes`, label: 'Client Scopes', icon: Icons.Code },
         { to: `/console/realms/${currentRealm}/consent-categories`, label: 'Consent Categories', icon: Icons.ShieldCheck },
-        { to: `/console/realms/${currentRealm}/consent-management`, label: 'Consent Management', icon: Icons.Shield },
         { to: `/console/realms/${currentRealm}/sessions`, label: 'Sessions', icon: Icons.Sessions },
         { to: `/console/realms/${currentRealm}/events`, label: 'Events', icon: Icons.Events },
         { to: `/console/realms/${currentRealm}/admin-events`, label: 'Admin Events', icon: Icons.Clock },

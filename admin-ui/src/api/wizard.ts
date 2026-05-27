@@ -1,4 +1,4 @@
-import apiClient from './client';
+import { rootClient } from './client';
 
 export interface WizardStatus {
   isFirstRun: boolean;
@@ -86,19 +86,19 @@ export interface WizardCompleteResult {
 }
 
 export async function getWizardStatus(): Promise<WizardStatus> {
-  const { data } = await apiClient.get<WizardStatus>('/setup-wizard/status');
+  const { data } = await rootClient.get<WizardStatus>('/setup-wizard/status');
   return data;
 }
 
 export async function getWizardState(): Promise<WizardState> {
-  const { data } = await apiClient.get<WizardState>('/setup-wizard/state');
+  const { data } = await rootClient.get<WizardState>('/setup-wizard/state');
   return data;
 }
 
 export async function saveAdminAccount(
   account: AdminAccountData,
 ): Promise<WizardState> {
-  const { data } = await apiClient.post<WizardState>(
+  const { data } = await rootClient.post<WizardState>(
     '/setup-wizard/admin-account',
     account,
   );
@@ -108,7 +108,7 @@ export async function saveAdminAccount(
 export async function saveRealmSettings(
   settings: RealmSettingsData,
 ): Promise<WizardState> {
-  const { data } = await apiClient.post<WizardState>(
+  const { data } = await rootClient.post<WizardState>(
     '/setup-wizard/realm-settings',
     settings,
   );
@@ -118,7 +118,7 @@ export async function saveRealmSettings(
 export async function saveSmtpConfig(
   config: SmtpConfigData,
 ): Promise<WizardState> {
-  const { data } = await apiClient.post<WizardState>(
+  const { data } = await rootClient.post<WizardState>(
     '/setup-wizard/smtp-config',
     config,
   );
@@ -126,7 +126,7 @@ export async function saveSmtpConfig(
 }
 
 export async function testSmtp(testData: SmtpTestData): Promise<SmtpTestResult> {
-  const { data } = await apiClient.post<SmtpTestResult>(
+  const { data } = await rootClient.post<SmtpTestResult>(
     '/setup-wizard/smtp/test',
     testData,
   );
@@ -134,7 +134,7 @@ export async function testSmtp(testData: SmtpTestData): Promise<SmtpTestResult> 
 }
 
 export async function saveClient(client: ClientData): Promise<WizardState> {
-  const { data } = await apiClient.post<WizardState>(
+  const { data } = await rootClient.post<WizardState>(
     '/setup-wizard/client',
     client,
   );
@@ -142,24 +142,24 @@ export async function saveClient(client: ClientData): Promise<WizardState> {
 }
 
 export async function markSdkGenerated(): Promise<WizardState> {
-  const { data } = await apiClient.post<WizardState>('/setup-wizard/sdk-generated');
+  const { data } = await rootClient.post<WizardState>('/setup-wizard/sdk-generated');
   return data;
 }
 
 export async function completeWizard(): Promise<WizardCompleteResult> {
-  const { data } = await apiClient.post<WizardCompleteResult>(
+  const { data } = await rootClient.post<WizardCompleteResult>(
     '/setup-wizard/complete',
   );
   return data;
 }
 
 export async function skipWizard(): Promise<WizardState> {
-  const { data } = await apiClient.post<WizardState>('/setup-wizard/skip');
+  const { data } = await rootClient.post<WizardState>('/setup-wizard/skip');
   return data;
 }
 
 export async function resetWizard(): Promise<{ message: string }> {
-  const { data } = await apiClient.post<{ message: string }>(
+  const { data } = await rootClient.post<{ message: string }>(
     '/setup-wizard/reset',
   );
   return data;
