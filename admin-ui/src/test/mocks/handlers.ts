@@ -316,6 +316,45 @@ export const handlers = [
     return new HttpResponse(null, { status: 204 });
   }),
 
+  // User consents (per-client scope grants) + history
+  http.get(`${BASE}/realms/:name/users/:id/consents`, () => {
+    return HttpResponse.json([
+      {
+        id: 'uc-1',
+        clientId: 'client-1',
+        clientName: 'Test Client',
+        scopes: ['openid', 'profile'],
+        createdAt: '2026-05-20T10:00:00.000Z',
+        updatedAt: '2026-05-20T10:00:00.000Z',
+      },
+    ]);
+  }),
+
+  http.get(`${BASE}/realms/:name/users/:id/consents/history`, ({ request }) => {
+    const url = new URL(request.url);
+    const page = Number(url.searchParams.get('page') ?? 1);
+    const limit = Number(url.searchParams.get('limit') ?? 20);
+    return HttpResponse.json({
+      history: [
+        {
+          id: 'uch-1',
+          clientId: 'client-1',
+          clientName: 'Test Client',
+          action: 'granted',
+          scopes: ['openid', 'profile'],
+          policyVersion: null,
+          ipAddress: '127.0.0.1',
+          userAgent: 'test',
+          metadata: null,
+          createdAt: '2026-05-20T10:00:00.000Z',
+        },
+      ],
+      total: 1,
+      page,
+      pageSize: limit,
+    });
+  }),
+
   // Consent statistics (realm)
   http.get(`${BASE}/realms/:name/stats/consents`, () => {
     return HttpResponse.json({
