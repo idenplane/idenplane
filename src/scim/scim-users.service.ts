@@ -480,18 +480,26 @@ export class ScimUsersService {
    * Set nested value on object using dot notation
    */
   private setNestedValue(obj: unknown, path: string, value: unknown): void {
+    // Reject prototype-polluting segments inline, immediately before every
+    // indexed write, and create intermediate objects with a null prototype so
+    // there is no Object.prototype to pollute even via a missed path
+    // (CodeQL js/prototype-polluting-assignment). These segments are never valid
+    // SCIM attribute names.
+    const safeKey = (key: string): string => {
+      if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
+        throw new BadRequestException(`Invalid attribute path segment: ${key}`);
+      }
+      return key;
+    };
+
     const keys = path.split('.');
-    // Reject prototype-polluting segments from the (user-controlled) SCIM path
-    // before any assignment (CodeQL js/prototype-polluting-assignment). These
-    // are never valid SCIM attribute names.
-    const FORBIDDEN_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
-    if (keys.some((key) => FORBIDDEN_KEYS.has(key))) {
-      throw new BadRequestException(`Invalid attribute path: ${path}`);
-    }
-    const lastKey = keys.pop()!;
+    const lastKey = safeKey(keys.pop()!);
     const target = keys.reduce(
-      (current, key) => {
-        if (!current[key]) current[key] = {};
+      (current, rawKey) => {
+        const key = safeKey(rawKey);
+        if (!current[key]) {
+          current[key] = Object.create(null) as Record<string, unknown>;
+        }
         return current[key] as Record<string, unknown>;
       },
       obj as Record<string, unknown>,

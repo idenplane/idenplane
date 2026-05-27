@@ -28,6 +28,14 @@ export default function ImageUploader({
   const [previewUrl, setPreviewUrl] = useState<string | null>(currentUrl || null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  // Only ever feed an image/blob/same-origin URL to <img src> — guards every
+  // source of previewUrl (prop, object URL, FileReader result) at the single
+  // sink (CodeQL js/xss-through-dom).
+  const safePreviewUrl =
+    previewUrl && /^(blob:|data:image\/|https?:|\/)/i.test(previewUrl)
+      ? previewUrl
+      : null;
+
   const handleDragEnter = (e: DragEvent<HTMLDivElement>) => {
     e.preventDefault();
     e.stopPropagation();
@@ -185,11 +193,11 @@ export default function ImageUploader({
             <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600" />
             <p className="text-sm text-gray-500">Uploading...</p>
           </div>
-        ) : previewUrl ? (
+        ) : safePreviewUrl ? (
           <div className="flex flex-col items-center gap-4">
             <div className="relative">
               <img
-                src={previewUrl}
+                src={safePreviewUrl}
                 alt="Preview"
                 className="max-h-32 max-w-full rounded-lg object-contain"
                 data-testid={`image-uploader-preview-${uploadType}`}
