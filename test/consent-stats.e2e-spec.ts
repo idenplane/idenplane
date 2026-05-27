@@ -84,7 +84,7 @@ describe('Consent contract + statistics (e2e)', () => {
       ],
     });
 
-    const tagged = { categoryKey: CATEGORY_KEY };
+    const tagged = { categoryKeys: [CATEGORY_KEY] };
     const mkHistory = (
       userId: string,
       action: string,

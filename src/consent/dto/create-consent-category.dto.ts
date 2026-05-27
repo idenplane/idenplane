@@ -1,4 +1,11 @@
-import { IsString, IsOptional, IsBoolean, IsInt, Min } from 'class-validator';
+import {
+  IsString,
+  IsOptional,
+  IsBoolean,
+  IsInt,
+  Min,
+  IsArray,
+} from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 
 export class CreateConsentCategoryDto {
@@ -51,4 +58,18 @@ export class CreateConsentCategoryDto {
   @IsOptional()
   @IsBoolean()
   enabled?: boolean;
+
+  @ApiPropertyOptional({
+    type: [String],
+    example: ['profile', 'email'],
+    description:
+      'OIDC scope names this category governs (used to tag consent grants ' +
+      'for per-category statistics). Leave empty to fall back to the ' +
+      'convention that a category governs the scope whose name equals its ' +
+      '`key`; setting any scope here overrides that fallback.',
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  scopes?: string[];
 }
