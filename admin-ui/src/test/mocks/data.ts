@@ -1,4 +1,4 @@
-import type { Realm, User, Client, Role, NhiIdentity } from '../../types';
+import type { Realm, User, Client, Role, NhiIdentity, ConsentCategory } from '../../types';
 import type { LoginEvent, AdminEvent } from '../../api/events';
 import type { RealmStats } from '../../api/stats';
 import type { AuthFlow } from '../../api/authFlows';
@@ -239,6 +239,26 @@ export function makeNhiIdentity(overrides: Partial<NhiIdentity> = {}): NhiIdenti
     certificateNotAfter: null,
     suspendedAt: null,
     decommissionedAt: null,
+    createdAt: '2024-01-01T00:00:00.000Z',
+    updatedAt: '2024-01-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+export function makeConsentCategory(
+  overrides: Partial<ConsentCategory> = {},
+): ConsentCategory {
+  return {
+    id: 'cat-1',
+    realmId: 'realm-1',
+    key: 'marketing',
+    displayName: 'Marketing',
+    description: 'Marketing communications',
+    required: false,
+    configurableByUser: true,
+    showInAccountPortal: true,
+    order: 0,
+    enabled: true,
     createdAt: '2024-01-01T00:00:00.000Z',
     updatedAt: '2024-01-01T00:00:00.000Z',
     ...overrides,

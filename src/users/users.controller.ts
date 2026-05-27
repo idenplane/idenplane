@@ -280,7 +280,12 @@ export class UsersController {
   getUserConsentHistory(
     @CurrentRealm() realm: Realm,
     @Param('userId') userId: string,
+    @Query('page') page?: string,
+    @Query('limit') limit?: string,
   ) {
-    return this.usersService.getUserConsentHistory(realm, userId);
+    return this.usersService.getUserConsentHistory(realm, userId, {
+      page: page ? Number(page) : undefined,
+      limit: limit ? Number(limit) : undefined,
+    });
   }
 }

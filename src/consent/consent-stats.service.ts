@@ -1,54 +1,111 @@
 /**
- * This service provides statistical data for consent management.
- * It includes metrics like consent counts by category, history events, and pending actions.
+ * Statistical data for consent management.
+ *
+ * Two views are produced:
+ *  - realm-wide stats (totals, active-user and action windows, per-category
+ *    breakdown, pending deletions) — for the Consent Statistics dashboard;
+ *  - per-category stats (grant/revoke totals, grant and active-user windows) —
+ *    for a single consent category's detail page.
+ *
+ * The only link between a consent event and a GDPR consent category is the
+ * `categoryKey` stored in `UserConsentHistory.metadata`. Aggregations below
+ * filter history on that JSON path. They are correct for any category-tagged
+ * event; the live OAuth grant path does not yet tag events with a category, so
+ * category-scoped numbers stay at zero until that tagging is wired in (a
+ * separate feature — see F-16 notes). No metric is faked or hard-coded.
  */
-import { Injectable } from '@nestjs/common';
-import type { Realm } from '@prisma/client';
+import { Injectable, NotFoundException } from '@nestjs/common';
+import type { Prisma, Realm } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 
+/** A single row of the realm's per-category consent breakdown. */
+export interface CategoryConsentCount {
+  categoryId: string;
+  categoryKey: string;
+  categoryName: string;
+  required: boolean;
+  /** Count of `granted` history events tagged with this category. */
+  totalGrants: number;
+  /** Distinct users who have granted this category. */
+  distinctUsers: number;
+}
+
+/** Realm-wide consent statistics (Consent Statistics dashboard). */
 export interface ConsentStats {
   totalConsents: number;
   activeUsersWithConsents24h: number;
   activeUsersWithConsents7d: number;
   activeUsersWithConsents30d: number;
+  /** All consent history actions (grant/revoke/update) within the window. */
+  consentActionsLast24h: number;
+  consentActionsLast7d: number;
+  consentActionsLast30d: number;
+  /** Per-type breakdown for the last 24h (richer detail for the dashboard). */
   consentsGranted24h: number;
   consentsRevoked24h: number;
   consentsUpdated24h: number;
   consentsByCategory: CategoryConsentCount[];
   pendingDeletions: number;
   pendingDeletionsGracePeriod: number;
-  consentsRequiringReConsent: number;
 }
 
-export interface CategoryConsentCount {
+/** Detailed statistics for a single consent category. */
+export interface CategoryStats {
   categoryId: string;
   categoryKey: string;
-  categoryDisplayName: string;
-  consentCount: number;
-  requiredConsentCount: number;
-  optionalConsentCount: number;
+  categoryName: string;
+  totalGrants: number;
+  totalRevokes: number;
+  grants24h: number;
+  grants7d: number;
+  grants30d: number;
+  activeUsers24h: number;
+  activeUsers7d: number;
+  activeUsers30d: number;
 }
-
-const CONSENT_GRANTED_TYPES = ['granted'];
-const CONSENT_REVOKED_TYPES = ['revoked'];
-const CONSENT_UPDATED_TYPES = ['updated'];
 
 @Injectable()
 export class ConsentStatisticsService {
   constructor(private readonly prisma: PrismaService) {}
 
+  /** Cutoff timestamps for the standard 24h / 7d / 30d windows. */
+  private windows(now = new Date()) {
+    return {
+      cutoff24h: new Date(now.getTime() - 24 * 60 * 60 * 1000),
+      cutoff7d: new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000),
+      cutoff30d: new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000),
+    };
+  }
+
+  /** Prisma JSON-path filter matching history tagged with a category key. */
+  private categoryKeyFilter(key: string): Prisma.JsonFilter {
+    return { path: ['categoryKey'], equals: key };
+  }
+
+  /** Count distinct users in a history query. */
+  private async countDistinctUsers(
+    where: Prisma.UserConsentHistoryWhereInput,
+  ): Promise<number> {
+    const rows = await this.prisma.userConsentHistory.groupBy({
+      by: ['userId'],
+      where,
+    });
+    return rows.length;
+  }
+
   async getRealmConsentStats(realm: Realm): Promise<ConsentStats> {
     const now = new Date();
-
-    const cutoff24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const cutoff7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const cutoff30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
+    const { cutoff24h, cutoff7d, cutoff30d } = this.windows(now);
+    const realmScope = { user: { realmId: realm.id } };
 
     const [
       totalConsents,
       activeUsersWithConsents24h,
       activeUsersWithConsents7d,
       activeUsersWithConsents30d,
+      consentActionsLast24h,
+      consentActionsLast7d,
+      consentActionsLast30d,
       consentsGranted24h,
       consentsRevoked24h,
       consentsUpdated24h,
@@ -56,92 +113,42 @@ export class ConsentStatisticsService {
       pendingDeletions,
       pendingDeletionsGracePeriod,
     ] = await Promise.all([
-      // Total active consents for this realm's users
-      this.prisma.userConsent.count({
-        where: {
-          user: { realmId: realm.id },
-        },
-      }),
+      this.prisma.userConsent.count({ where: realmScope }),
 
-      // Distinct users with consent events in the last 24h
-      this.prisma.userConsentHistory
-        .groupBy({
-          by: ['userId'],
-          where: {
-            user: { realmId: realm.id },
-            createdAt: { gte: cutoff24h },
-          },
-        })
-        .then((rows) => rows.length),
+      this.countDistinctUsers({ ...realmScope, createdAt: { gte: cutoff24h } }),
+      this.countDistinctUsers({ ...realmScope, createdAt: { gte: cutoff7d } }),
+      this.countDistinctUsers({ ...realmScope, createdAt: { gte: cutoff30d } }),
 
-      // Distinct users with consent events in the last 7d
-      this.prisma.userConsentHistory
-        .groupBy({
-          by: ['userId'],
-          where: {
-            user: { realmId: realm.id },
-            createdAt: { gte: cutoff7d },
-          },
-        })
-        .then((rows) => rows.length),
-
-      // Distinct users with consent events in the last 30d
-      this.prisma.userConsentHistory
-        .groupBy({
-          by: ['userId'],
-          where: {
-            user: { realmId: realm.id },
-            createdAt: { gte: cutoff30d },
-          },
-        })
-        .then((rows) => rows.length),
-
-      // Consents granted in the last 24h
       this.prisma.userConsentHistory.count({
-        where: {
-          user: { realmId: realm.id },
-          action: { in: CONSENT_GRANTED_TYPES },
-          createdAt: { gte: cutoff24h },
-        },
+        where: { ...realmScope, createdAt: { gte: cutoff24h } },
       }),
-
-      // Consents revoked in the last 24h
       this.prisma.userConsentHistory.count({
-        where: {
-          user: { realmId: realm.id },
-          action: { in: CONSENT_REVOKED_TYPES },
-          createdAt: { gte: cutoff24h },
-        },
+        where: { ...realmScope, createdAt: { gte: cutoff7d } },
       }),
-
-      // Consents updated in the last 24h
       this.prisma.userConsentHistory.count({
-        where: {
-          user: { realmId: realm.id },
-          action: { in: CONSENT_UPDATED_TYPES },
-          createdAt: { gte: cutoff24h },
-        },
+        where: { ...realmScope, createdAt: { gte: cutoff30d } },
       }),
 
-      // Consents by category
+      this.prisma.userConsentHistory.count({
+        where: { ...realmScope, action: 'granted', createdAt: { gte: cutoff24h } },
+      }),
+      this.prisma.userConsentHistory.count({
+        where: { ...realmScope, action: 'revoked', createdAt: { gte: cutoff24h } },
+      }),
+      this.prisma.userConsentHistory.count({
+        where: { ...realmScope, action: 'updated', createdAt: { gte: cutoff24h } },
+      }),
+
       this.getConsentsByCategory(realm.id),
 
-      // Pending deletions count
       this.prisma.pendingDeletion.count({
-        where: {
-          user: { realmId: realm.id },
-          status: 'pending',
-        },
+        where: { user: { realmId: realm.id }, status: 'pending' },
       }),
-
-      // Pending deletions within grace period (next 7 days)
       this.prisma.pendingDeletion.count({
         where: {
           user: { realmId: realm.id },
           status: 'pending',
-          scheduledAt: {
-            lte: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000),
-          },
+          scheduledAt: { lte: new Date(now.getTime() + 7 * 24 * 60 * 60 * 1000) },
         },
       }),
     ]);
@@ -151,214 +158,115 @@ export class ConsentStatisticsService {
       activeUsersWithConsents24h,
       activeUsersWithConsents7d,
       activeUsersWithConsents30d,
+      consentActionsLast24h,
+      consentActionsLast7d,
+      consentActionsLast30d,
       consentsGranted24h,
       consentsRevoked24h,
       consentsUpdated24h,
       consentsByCategory,
       pendingDeletions,
       pendingDeletionsGracePeriod,
-      consentsRequiringReConsent: 0, // Computed separately if needed
     };
   }
 
-  /**
-   * Get consent counts grouped by consent category.
-   */
+  /** Per-category breakdown of granted consents for a realm. */
   private async getConsentsByCategory(
     realmId: string,
   ): Promise<CategoryConsentCount[]> {
     const categories = await this.prisma.consentCategory.findMany({
       where: { realmId, enabled: true },
-      include: {
-        policies: {
-          where: { isActive: true },
-        },
-      },
+      orderBy: [{ order: 'asc' }, { createdAt: 'asc' }],
     });
+    if (categories.length === 0) return [];
 
-    if (categories.length === 0) {
-      return [];
-    }
+    return Promise.all(
+      categories.map(async (category) => {
+        const grantedScope = {
+          user: { realmId },
+          action: 'granted',
+          metadata: this.categoryKeyFilter(category.key),
+        } satisfies Prisma.UserConsentHistoryWhereInput;
 
-    const categoryCounts: CategoryConsentCount[] = [];
+        const [totalGrants, distinctUsers] = await Promise.all([
+          this.prisma.userConsentHistory.count({ where: grantedScope }),
+          this.countDistinctUsers(grantedScope),
+        ]);
 
-    for (const category of categories) {
-      // Count users who have granted consent covering this category
-      // This requires checking the metadata or scopes in history
-      const historyWithCategory = await this.prisma.userConsentHistory.findMany(
-        {
-          where: {
-            user: { realmId },
-            action: 'granted',
-            metadata: {
-              path: ['categoryKey'],
-              equals: category.key,
-            },
-          },
-          distinct: ['userId'],
-        },
-      );
-
-      // For now, count active consents and determine required vs optional
-      const isRequired = category.required;
-
-      categoryCounts.push({
-        categoryId: category.id,
-        categoryKey: category.key,
-        categoryDisplayName: category.displayName,
-        consentCount: historyWithCategory.length,
-        requiredConsentCount: isRequired ? historyWithCategory.length : 0,
-        optionalConsentCount: isRequired ? 0 : historyWithCategory.length,
-      });
-    }
-
-    return categoryCounts;
+        return {
+          categoryId: category.id,
+          categoryKey: category.key,
+          categoryName: category.displayName,
+          required: category.required,
+          totalGrants,
+          distinctUsers,
+        };
+      }),
+    );
   }
 
   /**
-   * Get detailed statistics for a specific consent category.
+   * Detailed statistics for a single consent category (by id, realm-scoped).
    */
   async getCategoryStats(
     realm: Realm,
-    categoryKey: string,
-  ): Promise<{
-    totalUsers: number;
-    consentedUsers24h: number;
-    consentedUsers7d: number;
-    consentedUsers30d: number;
-    revokedUsers24h: number;
-    updatedUsers24h: number;
-  }> {
-    const now = new Date();
-
-    const cutoff24h = new Date(now.getTime() - 24 * 60 * 60 * 1000);
-    const cutoff7d = new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000);
-    const cutoff30d = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
-
-    const category = await this.prisma.consentCategory.findFirst({
-      where: { realmId: realm.id, key: categoryKey },
+    categoryId: string,
+  ): Promise<CategoryStats> {
+    const category = await this.prisma.consentCategory.findUnique({
+      where: { id: categoryId },
     });
-
-    if (!category) {
-      return {
-        totalUsers: 0,
-        consentedUsers24h: 0,
-        consentedUsers7d: 0,
-        consentedUsers30d: 0,
-        revokedUsers24h: 0,
-        updatedUsers24h: 0,
-      };
+    if (!category || category.realmId !== realm.id) {
+      throw new NotFoundException(`Consent category '${categoryId}' not found`);
     }
 
+    const { cutoff24h, cutoff7d, cutoff30d } = this.windows();
+    const keyFilter = this.categoryKeyFilter(category.key);
+    const base = {
+      user: { realmId: realm.id },
+      metadata: keyFilter,
+    } satisfies Prisma.UserConsentHistoryWhereInput;
+    const granted = { ...base, action: 'granted' };
+
     const [
-      historyWithCategory,
-      consentedUsers24h,
-      consentedUsers7d,
-      consentedUsers30d,
-      revokedUsers24h,
-      updatedUsers24h,
+      totalGrants,
+      totalRevokes,
+      grants24h,
+      grants7d,
+      grants30d,
+      activeUsers24h,
+      activeUsers7d,
+      activeUsers30d,
     ] = await Promise.all([
-      // All distinct users who ever consented to this category
-      this.prisma.userConsentHistory.findMany({
-        where: {
-          user: { realmId: realm.id },
-          action: 'granted',
-          metadata: {
-            path: ['categoryKey'],
-            equals: category.key,
-          },
-        },
-        distinct: ['userId'],
+      this.prisma.userConsentHistory.count({ where: granted }),
+      this.prisma.userConsentHistory.count({
+        where: { ...base, action: 'revoked' },
       }),
-
-      // Users who consented to this category in last 24h
-      this.prisma.userConsentHistory
-        .groupBy({
-          by: ['userId'],
-          where: {
-            user: { realmId: realm.id },
-            action: 'granted',
-            createdAt: { gte: cutoff24h },
-            metadata: {
-              path: ['categoryKey'],
-              equals: category.key,
-            },
-          },
-        })
-        .then((rows) => rows.length),
-
-      // Users who consented to this category in last 7d
-      this.prisma.userConsentHistory
-        .groupBy({
-          by: ['userId'],
-          where: {
-            user: { realmId: realm.id },
-            action: 'granted',
-            createdAt: { gte: cutoff7d },
-            metadata: {
-              path: ['categoryKey'],
-              equals: category.key,
-            },
-          },
-        })
-        .then((rows) => rows.length),
-
-      // Users who consented to this category in last 30d
-      this.prisma.userConsentHistory
-        .groupBy({
-          by: ['userId'],
-          where: {
-            user: { realmId: realm.id },
-            action: 'granted',
-            createdAt: { gte: cutoff30d },
-            metadata: {
-              path: ['categoryKey'],
-              equals: category.key,
-            },
-          },
-        })
-        .then((rows) => rows.length),
-
-      // Users who revoked consent to this category in last 24h
-      this.prisma.userConsentHistory
-        .groupBy({
-          by: ['userId'],
-          where: {
-            user: { realmId: realm.id },
-            action: 'revoked',
-            createdAt: { gte: cutoff24h },
-            metadata: {
-              path: ['categoryKey'],
-              equals: category.key,
-            },
-          },
-        })
-        .then((rows) => rows.length),
-
-      // Users who updated consent to this category in last 24h
-      this.prisma.userConsentHistory
-        .groupBy({
-          by: ['userId'],
-          where: {
-            user: { realmId: realm.id },
-            action: 'updated',
-            createdAt: { gte: cutoff24h },
-            metadata: {
-              path: ['categoryKey'],
-              equals: category.key,
-            },
-          },
-        })
-        .then((rows) => rows.length),
+      this.prisma.userConsentHistory.count({
+        where: { ...granted, createdAt: { gte: cutoff24h } },
+      }),
+      this.prisma.userConsentHistory.count({
+        where: { ...granted, createdAt: { gte: cutoff7d } },
+      }),
+      this.prisma.userConsentHistory.count({
+        where: { ...granted, createdAt: { gte: cutoff30d } },
+      }),
+      this.countDistinctUsers({ ...base, createdAt: { gte: cutoff24h } }),
+      this.countDistinctUsers({ ...base, createdAt: { gte: cutoff7d } }),
+      this.countDistinctUsers({ ...base, createdAt: { gte: cutoff30d } }),
     ]);
 
     return {
-      totalUsers: historyWithCategory.length,
-      consentedUsers24h,
-      consentedUsers7d,
-      consentedUsers30d,
-      revokedUsers24h,
-      updatedUsers24h,
+      categoryId: category.id,
+      categoryKey: category.key,
+      categoryName: category.displayName,
+      totalGrants,
+      totalRevokes,
+      grants24h,
+      grants7d,
+      grants30d,
+      activeUsers24h,
+      activeUsers7d,
+      activeUsers30d,
     };
   }
 }

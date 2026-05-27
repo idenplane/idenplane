@@ -76,14 +76,18 @@ export function createMockPrismaService(): MockPrismaService {
     },
     userConsent: {
       findUnique: jest.fn(),
+      findMany: jest.fn(),
       create: jest.fn(),
       upsert: jest.fn(),
       deleteMany: jest.fn(),
+      count: jest.fn(),
     },
     userConsentHistory: {
       findUnique: jest.fn(),
       findMany: jest.fn(),
       create: jest.fn(),
+      count: jest.fn(),
+      groupBy: jest.fn(),
     },
     consentCategory: {
       findUnique: jest.fn(),
@@ -102,6 +106,7 @@ export function createMockPrismaService(): MockPrismaService {
       findMany: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
+      count: jest.fn(),
     },
     authenticationFlow: {
       findUnique: jest.fn(),

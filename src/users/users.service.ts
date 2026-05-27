@@ -371,25 +371,28 @@ export class UsersService {
   async getUserConsentHistory(
     realm: Realm,
     userId: string,
-    options?: { limit?: number; offset?: number },
+    options?: { page?: number; limit?: number },
   ) {
     await this.findById(realm, userId);
-    const history = await this.prisma.userConsentHistory.findMany({
-      where: { userId },
-      include: {
-        client: {
-          select: {
-            id: true,
-            clientId: true,
-            name: true,
-          },
+
+    const limit = Math.min(Math.max(options?.limit ?? 20, 1), 100);
+    const page = Math.max(options?.page ?? 1, 1);
+    const skip = (page - 1) * limit;
+
+    const [rows, total] = await Promise.all([
+      this.prisma.userConsentHistory.findMany({
+        where: { userId },
+        include: {
+          client: { select: { id: true, clientId: true, name: true } },
         },
-      },
-      orderBy: { createdAt: 'desc' },
-      skip: options?.offset ?? 0,
-      take: options?.limit ?? 50,
-    });
-    return history.map((entry) => ({
+        orderBy: { createdAt: 'desc' },
+        skip,
+        take: limit,
+      }),
+      this.prisma.userConsentHistory.count({ where: { userId } }),
+    ]);
+
+    const history = rows.map((entry) => ({
       id: entry.id,
       clientId: entry.clientId,
       clientName: entry.client?.name ?? entry.client?.clientId ?? 'Unknown',
@@ -401,5 +404,7 @@ export class UsersService {
       metadata: entry.metadata,
       createdAt: entry.createdAt,
     }));
+
+    return { history, total, page, pageSize: limit };
   }
 }
