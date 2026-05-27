@@ -203,7 +203,7 @@ export class WebAuthnController {
 
     res.cookie('IDENPLANE_SESSION', sessionToken, {
       httpOnly: true,
-      secure: process.env['NODE_ENV'] === 'production',
+      secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
       sameSite: 'lax',
       path: `/realms/${realm.name}`,
     });
