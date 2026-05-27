@@ -1,6 +1,17 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import * as nodemailer from 'nodemailer';
+import sanitizeHtml from 'sanitize-html';
+
+// Allow the markup our email templates actually use (headings, basic text,
+// links, simple tables) while stripping scripts, event handlers, and dangerous
+// URL schemes. Applied to every outgoing body so no caller can inject markup
+// from user-controlled values (CodeQL js/xss).
+const EMAIL_SANITIZE_OPTIONS: sanitizeHtml.IOptions = {
+  allowedTags: [...sanitizeHtml.defaults.allowedTags, 'h1', 'h2'],
+  allowedAttributes: { '*': ['href', 'style', 'class', 'align', 'target'] },
+  allowedSchemes: ['http', 'https', 'mailto'],
+};
 
 @Injectable()
 export class EmailService {
@@ -101,7 +112,9 @@ export class EmailService {
       from: realm.smtpFrom ?? `noreply@${realm.smtpHost}`,
       to,
       subject,
-      html,
+      // Sanitize the whole body at the sink so any user-controlled value from
+      // any caller is neutralized before delivery (CodeQL js/xss).
+      html: sanitizeHtml(html, EMAIL_SANITIZE_OPTIONS),
     });
 
     this.logger.log(
