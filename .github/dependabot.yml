@@ -68,6 +68,12 @@ updates:
     labels:
       - dependencies
       - ci
+    # One grouped PR for all action bumps instead of a separate PR per action
+    # (which previously opened 4 PRs touching the same workflow file).
+    groups:
+      github-actions:
+        patterns:
+          - "*"
 
   # Docker base images
   - package-ecosystem: docker
