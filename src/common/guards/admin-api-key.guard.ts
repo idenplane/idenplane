@@ -9,7 +9,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
 import { Reflector } from '@nestjs/core';
-import { timingSafeEqual, createHash } from 'crypto';
+import { timingSafeEqual } from 'crypto';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator.js';
 import { AdminAuthService } from '../../admin-auth/admin-auth.service.js';
 import { RateLimitService } from '../../rate-limit/rate-limit.service.js';
@@ -85,16 +85,13 @@ export class AdminApiKeyGuard implements CanActivate {
         providedApiKey.length === expectedKey.length &&
         timingSafeEqual(Buffer.from(providedApiKey), Buffer.from(expectedKey))
       ) {
-        // Fingerprint the configured key (not the request value) — execution
-        // only reaches here once timingSafeEqual proved they are equal, so the
-        // fingerprint is identical, but the data hashed is now the server-side
-        // constant rather than request input (CodeQL js/insufficient-password-hash).
-        const keyFingerprint = createHash('sha256')
-          .update(expectedKey)
-          .digest('hex')
-          .slice(0, 12);
+        // There is a single configured ADMIN_API_KEY, so a key-derived
+        // fingerprint would always be the same constant — and hashing the key
+        // (request- or config-sourced) trips CodeQL js/insufficient-password-hash.
+        // Use a stable static identifier; the `api-key:` prefix is what
+        // downstream consumers branch on (impersonation/mfa/brute-force).
         adminReq.adminUser = {
-          userId: `api-key:${keyFingerprint}`,
+          userId: 'api-key:admin',
           roles: ['super-admin'],
         };
         return true;

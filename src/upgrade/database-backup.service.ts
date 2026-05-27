@@ -379,14 +379,13 @@ export class DatabaseBackupService {
    */
   private getFileSize(filePath: string): string {
     try {
-      // Constrain the stat to the backup directory so a crafted path can't be
-      // used to probe arbitrary files (CodeQL js/path-injection).
+      // Strip any directory component with path.basename so the stat target can
+      // only ever be a file directly inside the backup directory — a crafted
+      // path cannot traverse out (CodeQL js/path-injection). All callers pass a
+      // path already inside backupDirectory, so basename is behaviour-preserving.
       const root = path.resolve(this.backupDirectory);
-      const resolved = path.resolve(filePath);
-      if (resolved !== root && !resolved.startsWith(root + path.sep)) {
-        return 'unknown';
-      }
-      const stats = fs.statSync(resolved);
+      const safePath = path.join(root, path.basename(filePath));
+      const stats = fs.statSync(safePath);
       return this.formatFileSize(stats.size);
     } catch {
       return 'unknown';
