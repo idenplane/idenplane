@@ -1,7 +1,8 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
+import * as zlib from 'zlib';
 import { PrismaClient } from '@prisma/client';
 
 export interface BackupResult {
@@ -72,17 +73,18 @@ export class DatabaseBackupService {
       const databaseUrl = process.env.DATABASE_URL || '';
       const dbName = this.extractDatabaseName(databaseUrl);
 
-      // Build pg_dump command
-      const pgDumpCmd = this.buildPgDumpCommand(dbName, backupPath);
+      // Build pg_dump argument vector and run it WITHOUT a shell. Passing args
+      // as an array to execFileSync means no value is ever interpreted by a
+      // shell, eliminating command injection (CodeQL js/command-line-injection).
+      const pgDumpArgs = this.buildPgDumpArgs(dbName, backupPath);
 
-      this.logger.debug(
-        `Executing: ${pgDumpCmd.replace(/--password=\S+/g, '--password=******')}`,
-      );
+      this.logger.debug(`Executing: pg_dump ${pgDumpArgs.join(' ')}`);
 
-      // Execute pg_dump
-      execSync(pgDumpCmd, {
+      // Execute pg_dump (password supplied via PGPASSWORD env, never argv).
+      execFileSync('pg_dump', pgDumpArgs, {
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'pipe'],
+        env: this.pgEnv(),
       });
 
       const duration = Date.now() - startTime;
@@ -141,18 +143,29 @@ export class DatabaseBackupService {
       const databaseUrl = process.env.DATABASE_URL || '';
       const dbName = this.extractDatabaseName(databaseUrl);
 
-      // Build pg_restore or psql command based on file extension
-      const restoreCmd = this.buildRestoreCommand(backupPath, dbName);
+      // Run pg_restore WITHOUT a shell (arg array → no command injection).
+      // Compressed (.gz) backups are decompressed in-process with zlib and fed
+      // to pg_restore over stdin, replacing the previous `gunzip -c | pg_restore`
+      // shell pipe (CodeQL js/command-line-injection / shell-command-injection).
+      const restoreArgs = this.buildRestoreArgs(dbName);
+      const env = this.pgEnv();
 
-      this.logger.debug(
-        `Executing: ${restoreCmd.replace(/--password=\S+/g, '--password=******')}`,
-      );
+      this.logger.debug(`Executing: pg_restore ${restoreArgs.join(' ')}`);
 
-      // Execute restore command
-      execSync(restoreCmd, {
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
+      if (backupPath.endsWith('.gz')) {
+        const decompressed = zlib.gunzipSync(fs.readFileSync(backupPath));
+        execFileSync('pg_restore', restoreArgs, {
+          input: decompressed,
+          stdio: ['pipe', 'pipe', 'pipe'],
+          env,
+        });
+      } else {
+        execFileSync('pg_restore', [...restoreArgs, backupPath], {
+          encoding: 'utf-8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+          env,
+        });
+      }
 
       const duration = Date.now() - startTime;
 
@@ -298,68 +311,57 @@ export class DatabaseBackupService {
   /**
    * Build pg_dump command with appropriate options for backup.
    */
-  private buildPgDumpCommand(databaseName: string, outputPath: string): string {
+  /** Connection params for the pg_* tools, sourced from the environment. */
+  private pgConnParams(): {
+    host: string;
+    port: string;
+    user: string;
+    password: string;
+  } {
     const env = process.env;
-    const host = env.PGHOST || 'localhost';
-    const port = env.PGPORT || '5432';
-    const user = env.PGUSER || env.DATABASE_USERNAME || 'postgres';
-    const password = env.PGPASSWORD || env.DATABASE_PASSWORD || '';
-
-    // pg_dump with compression for PostgreSQL
-    const cmd = [
-      'pg_dump',
-      `-h ${host}`,
-      `-p ${port}`,
-      `-U ${user}`,
-      `-d ${databaseName}`,
-      '-Fc', // Custom format for compression
-      '-Z 6', // Compression level 6
-      '-f',
-      outputPath,
-    ];
-
-    if (password) {
-      cmd.push(`--password=${password}`);
-    }
-
-    return cmd.join(' ');
+    return {
+      host: env.PGHOST || 'localhost',
+      port: env.PGPORT || '5432',
+      user: env.PGUSER || env.DATABASE_USERNAME || 'postgres',
+      password: env.PGPASSWORD || env.DATABASE_PASSWORD || '',
+    };
   }
 
   /**
-   * Build pg_restore command for restoring from backup.
+   * Environment for pg_* child processes: the connection password is passed via
+   * PGPASSWORD rather than on the command line (avoids leaking it in argv / ps).
    */
-  private buildRestoreCommand(
-    backupPath: string,
-    databaseName: string,
-  ): string {
-    const env = process.env;
-    const host = env.PGHOST || 'localhost';
-    const port = env.PGPORT || '5432';
-    const user = env.PGUSER || env.DATABASE_USERNAME || 'postgres';
-    const password = env.PGPASSWORD || env.DATABASE_PASSWORD || '';
+  private pgEnv(): NodeJS.ProcessEnv {
+    const { password } = this.pgConnParams();
+    return password
+      ? { ...process.env, PGPASSWORD: password }
+      : { ...process.env };
+  }
 
-    const isCompressed = backupPath.endsWith('.gz');
-
-    if (isCompressed) {
-      // Decompress and pipe to pg_restore
-      return `gunzip -c "${backupPath}" | pg_restore -h ${host} -p ${port} -U ${user} -d ${databaseName}${password ? ` --password=${password}` : ''}`;
-    }
-
-    // pg_restore for custom format
-    const cmd = [
-      'pg_restore',
-      `-h ${host}`,
-      `-p ${port}`,
-      `-U ${user}`,
-      `-d ${databaseName}`,
-      backupPath,
+  /** pg_dump argument vector (no shell — passed straight to execFileSync). */
+  private buildPgDumpArgs(databaseName: string, outputPath: string): string[] {
+    const { host, port, user } = this.pgConnParams();
+    return [
+      '-h',
+      host,
+      '-p',
+      port,
+      '-U',
+      user,
+      '-d',
+      databaseName,
+      '-Fc', // Custom format for compression
+      '-Z',
+      '6', // Compression level 6
+      '-f',
+      outputPath,
     ];
+  }
 
-    if (password) {
-      cmd.push(`--password=${password}`);
-    }
-
-    return cmd.join(' ');
+  /** pg_restore argument vector (target db); the source is the file/stdin. */
+  private buildRestoreArgs(databaseName: string): string[] {
+    const { host, port, user } = this.pgConnParams();
+    return ['-h', host, '-p', port, '-U', user, '-d', databaseName];
   }
 
   /**
@@ -377,7 +379,14 @@ export class DatabaseBackupService {
    */
   private getFileSize(filePath: string): string {
     try {
-      const stats = fs.statSync(filePath);
+      // Constrain the stat to the backup directory so a crafted path can't be
+      // used to probe arbitrary files (CodeQL js/path-injection).
+      const root = path.resolve(this.backupDirectory);
+      const resolved = path.resolve(filePath);
+      if (resolved !== root && !resolved.startsWith(root + path.sep)) {
+        return 'unknown';
+      }
+      const stats = fs.statSync(resolved);
       return this.formatFileSize(stats.size);
     } catch {
       return 'unknown';
