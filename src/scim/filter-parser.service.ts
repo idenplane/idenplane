@@ -29,8 +29,12 @@ export function parseScimFilter(filter: string): FilterParseResult {
 
   // Match filter pattern: attribute operator value
   // Operators: eq, ne, co (contains), sw (starts with), ew (ends with), gt, ge, lt, le
+  // The value group is `\S.*` rather than `.+`: forcing the first character to
+  // be non-whitespace removes the overlap with the preceding `\s+`, which was
+  // the source of the polynomial backtracking (CodeQL js/polynomial-redos). The
+  // leading `\s+` already consumed any whitespace before the value.
   const operatorMatch = trimmed.match(
-    /^([\w.]+)\s+(eq|ne|co|sw|ew|gt|ge|lt|le)\s+(.+)$/i,
+    /^([\w.]+)\s+(eq|ne|co|sw|ew|gt|ge|lt|le)\s+(\S.*)$/i,
   );
 
   if (!operatorMatch) {
