@@ -41,7 +41,7 @@ export default function ConsentCategoriesListPage() {
         </div>
         <button
           onClick={() =>
-            navigate(`/console/realms/${name}/consent-categories/create`)
+            navigate(`/console/realms/${name}/consent-categories/new`)
           }
           className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
         >

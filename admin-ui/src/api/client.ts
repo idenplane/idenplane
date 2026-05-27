@@ -33,32 +33,44 @@ export function hasCredentials(): boolean {
 }
 
 // ---------------------------------------------------------------------------
-// Axios instance
+// Axios instances
 // ---------------------------------------------------------------------------
-const apiClient = axios.create({
-  baseURL: import.meta.env.VITE_API_BASE || '/admin',
-});
+// Both instances share the same in-memory credential injection and 401
+// handling; they differ only in baseURL. `apiClient` targets the admin API
+// (mounted under `/admin/...`), while `rootClient` targets root-mounted
+// controllers that have no `/admin` prefix (e.g. setup-wizard, the realm
+// registration endpoints) — mirroring how getHealthStatus reaches `/health`.
+function createClient(baseURL: string) {
+  const instance = axios.create({ baseURL });
 
-apiClient.interceptors.request.use((config) => {
-  if (_token) {
-    config.headers['Authorization'] = `Bearer ${_token}`;
-  }
-  if (_apiKey) {
-    config.headers['x-admin-api-key'] = _apiKey;
-  }
-  return config;
-});
-
-apiClient.interceptors.response.use(
-  (response) => response,
-  (error) => {
-    const isOnLoginPage = window.location.pathname === '/console/login';
-    if (error.response?.status === 401 && !isOnLoginPage) {
-      clearCredentials();
-      window.location.href = '/console/login';
+  instance.interceptors.request.use((config) => {
+    if (_token) {
+      config.headers['Authorization'] = `Bearer ${_token}`;
     }
-    return Promise.reject(error);
-  },
-);
+    if (_apiKey) {
+      config.headers['x-admin-api-key'] = _apiKey;
+    }
+    return config;
+  });
+
+  instance.interceptors.response.use(
+    (response) => response,
+    (error) => {
+      const isOnLoginPage = window.location.pathname === '/console/login';
+      if (error.response?.status === 401 && !isOnLoginPage) {
+        clearCredentials();
+        window.location.href = '/console/login';
+      }
+      return Promise.reject(error);
+    },
+  );
+
+  return instance;
+}
+
+const apiClient = createClient(import.meta.env.VITE_API_BASE || '/admin');
+
+/** Targets root-mounted controllers (no `/admin` prefix). */
+export const rootClient = createClient('/');
 
 export default apiClient;
