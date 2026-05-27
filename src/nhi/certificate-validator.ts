@@ -239,18 +239,19 @@ export class CertificateValidator {
   private static parseCertificateInfo(
     certificatePem: string,
   ): CertificateInfoDto {
-    // Extract base64 content between PEM markers
-    const match = certificatePem.match(
-      /-----BEGIN CERTIFICATE-----([\s\S]*?)-----END CERTIFICATE-----/,
-    );
-    if (!match) {
+    // Extract base64 content between PEM markers using plain string search
+    // (not a regex) to avoid super-linear backtracking on crafted input.
+    const begin = '-----BEGIN CERTIFICATE-----';
+    const end = '-----END CERTIFICATE-----';
+    const beginIdx = certificatePem.indexOf(begin);
+    const endIdx = certificatePem.indexOf(end, beginIdx + begin.length);
+    if (beginIdx === -1 || endIdx === -1) {
       throw new Error('Invalid certificate format: missing PEM markers');
     }
 
-    const derContent = match[1]
-      .replace(/\s/g, '')
-      .replace(/-----BEGIN CERTIFICATE-----/g, '')
-      .replace(/-----END CERTIFICATE-----/g, '');
+    const derContent = certificatePem
+      .slice(beginIdx + begin.length, endIdx)
+      .replace(/\s/g, '');
 
     // Compute SHA-256 fingerprint
     const derBuffer = Buffer.from(derContent, 'base64');
@@ -260,9 +261,13 @@ export class CertificateValidator {
       .match(/.{2}/g)
       ?.join(':')}`;
 
-    // Check for CA basic constraint
+    // Check for CA basic constraint. Locate the marker with indexOf and test a
+    // bounded regex on the remainder — avoids the `[\s\S]*` backtracking the
+    // previous single regex incurred on crafted input.
+    const basicConstraintsIdx = certificatePem.indexOf('basicConstraints');
     const isCA =
-      /basicConstraints[\s\S]*CA:(true|TRUE)/.test(certificatePem) ||
+      (basicConstraintsIdx !== -1 &&
+        /CA:\s*true/i.test(certificatePem.slice(basicConstraintsIdx))) ||
       /X509v3 Basic Constraints:\s*CA:TRUE/.test(certificatePem);
 
     // Extract subject components
@@ -281,10 +286,14 @@ export class CertificateValidator {
     if (stMatch) subjectParts.push(`ST=${stMatch[1].trim()}`);
     if (cMatch) subjectParts.push(`C=${cMatch[1].trim()}`);
 
-    // Extract issuer components
-    const issuerCnMatch = certificatePem.match(/issuer=.*CN\s*=\s*([^,\n]+)/i);
-    const issuerOumatch = certificatePem.match(/issuer=.*OU\s*=\s*([^,\n]+)/i);
-    const issuerOMatch = certificatePem.match(/issuer=.*O\s*=\s*([^,\n]+)/i);
+    // Extract issuer components. Isolate the issuer line first with a bounded
+    // regex (`[^\n]*` can't backtrack across the rest of the input), then pull
+    // the components from it — the previous `issuer=.*X` patterns backtracked
+    // on crafted input.
+    const issuerLine = certificatePem.match(/issuer\s*=([^\n]*)/i)?.[1] ?? '';
+    const issuerCnMatch = issuerLine.match(/CN\s*=\s*([^,\n]+)/i);
+    const issuerOumatch = issuerLine.match(/OU\s*=\s*([^,\n]+)/i);
+    const issuerOMatch = issuerLine.match(/O\s*=\s*([^,\n]+)/i);
 
     const issuerParts: string[] = [];
     if (issuerCnMatch) issuerParts.push(`CN=${issuerCnMatch[1].trim()}`);

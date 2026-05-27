@@ -115,11 +115,14 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
       // ACTUAL: May redirect to javascript: URL - OPEN REDIRECT
       if (res.status === 302 || res.status === 303) {
         const location = res.get('Location') || '';
-        if (location.startsWith('javascript:')) {
-          console.log('BUG CONFIRMED: Open redirect to javascript: URL!');
+        // Check all dangerous URL schemes, not just javascript: (CodeQL
+        // js/incomplete-url-scheme-check) — data: and vbscript: are equally unsafe.
+        if (/^(javascript|data|vbscript):/i.test(location)) {
+          console.log('BUG CONFIRMED: Open redirect to dangerous-scheme URL!');
         }
         expect(location).not.toMatch(/^javascript:/i);
         expect(location).not.toMatch(/^data:/i);
+        expect(location).not.toMatch(/^vbscript:/i);
       }
     });
 

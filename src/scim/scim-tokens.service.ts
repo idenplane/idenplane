@@ -288,10 +288,19 @@ export class ScimTokensService {
     const chars =
       'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789-_.~';
     const length = 32;
-    const buffer = randomBytes(length);
+    // Rejection sampling: discard bytes at or above the largest multiple of
+    // chars.length that fits in a byte, so `byte % chars.length` is unbiased
+    // (CodeQL js/biased-cryptographic-random — a plain modulo over-weights the
+    // first 256 % chars.length symbols).
+    const limit = Math.floor(256 / chars.length) * chars.length;
     let token = '';
-    for (let i = 0; i < length; i++) {
-      token += chars[buffer[i] % chars.length];
+    while (token.length < length) {
+      const buffer = randomBytes(length);
+      for (let i = 0; i < buffer.length && token.length < length; i++) {
+        if (buffer[i] < limit) {
+          token += chars[buffer[i] % chars.length];
+        }
+      }
     }
     return token;
   }

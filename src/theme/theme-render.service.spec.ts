@@ -421,5 +421,15 @@ describe('ThemeRenderService', () => {
     it('should return empty string unchanged', () => {
       expect(sanitizeCss('')).toBe('');
     });
+
+    it('should not leave a payload that a single pass would reform', () => {
+      // A single .replace() pass would splice these back into a live tag:
+      //   '<scr<script ipt' -> remove inner '<script' -> '<scr ipt'  (safe)
+      //   '<<script script ...' style nesting. Verify the fixed-point loop
+      //   leaves no '<script' or '</style' regardless of nesting.
+      expect(sanitizeCss('<scr<script ipt>')).not.toMatch(/<script/i);
+      expect(sanitizeCss('</sty</style le>')).not.toMatch(/<\/style/i);
+      expect(sanitizeCss('<scr<SCRIPT>IPT>')).not.toMatch(/<script/i);
+    });
   });
 });

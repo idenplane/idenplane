@@ -8,7 +8,7 @@ import {
   NotFoundException,
   ConflictException,
   Logger,
-  BadRequestException as _BadRequestException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
@@ -481,6 +481,13 @@ export class ScimUsersService {
    */
   private setNestedValue(obj: unknown, path: string, value: unknown): void {
     const keys = path.split('.');
+    // Reject prototype-polluting segments from the (user-controlled) SCIM path
+    // before any assignment (CodeQL js/prototype-polluting-assignment). These
+    // are never valid SCIM attribute names.
+    const FORBIDDEN_KEYS = new Set(['__proto__', 'prototype', 'constructor']);
+    if (keys.some((key) => FORBIDDEN_KEYS.has(key))) {
+      throw new BadRequestException(`Invalid attribute path: ${path}`);
+    }
     const lastKey = keys.pop()!;
     const target = keys.reduce(
       (current, key) => {

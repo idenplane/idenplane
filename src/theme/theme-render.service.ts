@@ -22,9 +22,20 @@ import type { ThemeType } from './theme.types.js';
  */
 export function sanitizeCss(css: string): string {
   // Remove any </style...> sequence (the closing bracket is optional because a
-  // browser may still parse a partial tag).
-  // Also remove opening <script tags for defence-in-depth.
-  return css.replace(/<\/style/gi, '').replace(/<script/gi, '');
+  // browser may still parse a partial tag). Also remove opening <script tags
+  // for defence-in-depth.
+  //
+  // Apply repeatedly until the string stops changing: a single pass is unsafe
+  // because removing one match can splice the surrounding text into a fresh
+  // match (e.g. `<scr<script ipt` -> `<script `). Looping to a fixed point
+  // defeats that (CodeQL js/incomplete-multi-character-sanitization).
+  let prev: string;
+  let out = css;
+  do {
+    prev = out;
+    out = out.replace(/<\/style/gi, '').replace(/<script/gi, '');
+  } while (out !== prev);
+  return out;
 }
 
 @Injectable()

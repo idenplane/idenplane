@@ -11,7 +11,7 @@ import { Reflector } from '@nestjs/core';
 import { AdminAuthService } from '../../admin-auth/admin-auth.service.js';
 import { RateLimitService } from '../../rate-limit/rate-limit.service.js';
 import { resolveClientIp } from '../../common/utils/proxy-ip.util.js';
-import { createHash, timingSafeEqual } from 'crypto';
+import { timingSafeEqual } from 'crypto';
 
 type AuthRequest = Request & {
   adminUser?: { userId: string; roles: string[] };
@@ -78,12 +78,12 @@ export class GraphQLAuthGuard implements CanActivate {
         providedApiKey.length === expectedKey.length &&
         timingSafeEqual(Buffer.from(providedApiKey), Buffer.from(expectedKey))
       ) {
-        const keyFingerprint = createHash('sha256')
-          .update(providedApiKey)
-          .digest('hex')
-          .slice(0, 12);
+        // Single configured ADMIN_API_KEY → a key-derived fingerprint is always
+        // the same constant, and hashing the key trips CodeQL
+        // js/insufficient-password-hash. Use a stable static identifier; the
+        // `api-key:` prefix is what downstream consumers branch on.
         request.adminUser = {
-          userId: `api-key:${keyFingerprint}`,
+          userId: 'api-key:admin',
           roles: ['super-admin'],
         };
         return true;

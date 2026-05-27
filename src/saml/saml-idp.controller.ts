@@ -158,7 +158,7 @@ export class SamlIdpController {
       Buffer.from(samlSessionData).toString('base64'),
       {
         httpOnly: true,
-        secure: process.env['NODE_ENV'] === 'production',
+        secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
         sameSite: 'lax',
         maxAge: 10 * 60 * 1000, // 10 minutes
         path: `/realms/${realm.name}`,

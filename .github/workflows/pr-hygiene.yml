@@ -10,6 +10,10 @@ on:
   pull_request:
     branches: [main]
 
+# Minimal default token permissions; the job only reads the diff.
+permissions:
+  contents: read
+
 jobs:
   hygiene:
     name: PR hygiene

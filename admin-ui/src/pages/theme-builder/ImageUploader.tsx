@@ -77,7 +77,12 @@ export default function ImageUploader({
       const reader = new FileReader();
       reader.onload = (e) => {
         const dataUrl = e.target?.result as string;
-        setPreviewUrl(dataUrl);
+        // Only ever render an image data URL — guards against the FileReader
+        // result being interpreted as anything but an image (CodeQL
+        // js/xss-through-dom).
+        if (typeof dataUrl === 'string' && dataUrl.startsWith('data:image/')) {
+          setPreviewUrl(dataUrl);
+        }
         setIsUploading(false);
 
         // Update assets based on upload type

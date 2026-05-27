@@ -2,6 +2,7 @@ import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { EmailService } from '../email/email.service.js';
+import { escapeHtml } from '../common/utils/html-escape.util.js';
 import { ImpossibleTravelService } from './impossible-travel.service.js';
 import {
   RiskSignal,
@@ -242,9 +243,12 @@ export class RiskAssessmentService {
   ): Promise<void> {
     if (!this.emailService) return;
 
-    const time = context.timestamp.toUTCString();
-    const location = geoLocation ?? 'Unknown location';
-    const ip = context.ipAddress ?? 'Unknown';
+    // Escape every interpolated value — IP, geo-location, and User-Agent are
+    // attacker-controlled request data going into an HTML email (CodeQL js/xss).
+    const time = escapeHtml(context.timestamp.toUTCString());
+    const location = escapeHtml(geoLocation ?? 'Unknown location');
+    const ip = escapeHtml(context.ipAddress ?? 'Unknown');
+    const device = escapeHtml(context.userAgent ?? 'Unknown');
 
     const html = `
       <h2>Suspicious Login Attempt Blocked</h2>
@@ -253,7 +257,7 @@ export class RiskAssessmentService {
         <tr><td style="padding:4px 12px 4px 0;font-weight:bold">Time</td><td>${time}</td></tr>
         <tr><td style="padding:4px 12px 4px 0;font-weight:bold">IP Address</td><td>${ip}</td></tr>
         <tr><td style="padding:4px 12px 4px 0;font-weight:bold">Location</td><td>${location}</td></tr>
-        <tr><td style="padding:4px 12px 4px 0;font-weight:bold">Device</td><td>${context.userAgent ?? 'Unknown'}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;font-weight:bold">Device</td><td>${device}</td></tr>
       </table>
       <p style="margin-top:16px">
         If this was you, please contact your administrator.<br/>

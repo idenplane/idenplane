@@ -9,6 +9,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
+import { escapeHtml } from '../common/utils/html-escape.util.js';
 import { VerificationService } from '../verification/verification.service.js';
 import { EmailService } from '../email/email.service.js';
 import { PasswordPolicyService } from '../password-policy/password-policy.service.js';
@@ -270,11 +271,16 @@ export class RegistrationService {
     const verifyUrl = `${baseUrl}/realms/${realm.name}/verify-email?token=${rawToken}`;
 
     const subject = `${realm.displayName || realm.name} - Verify your email`;
+    // Escape interpolations into the HTML body (CodeQL js/xss). The realm
+    // display name is operator-controlled and the URL is app-built, but both
+    // are escaped defensively so no value can break out of the markup.
+    const safeRealm = escapeHtml(realm.displayName || realm.name);
+    const safeVerifyUrl = escapeHtml(verifyUrl);
     const html = `
-      <h1>Welcome to ${realm.displayName || realm.name}!</h1>
+      <h1>Welcome to ${safeRealm}!</h1>
       <p>Please verify your email address by clicking the link below:</p>
-      <p><a href="${verifyUrl}">Verify Email</a></p>
-      <p>Or copy and paste this URL: ${verifyUrl}</p>
+      <p><a href="${safeVerifyUrl}">Verify Email</a></p>
+      <p>Or copy and paste this URL: ${safeVerifyUrl}</p>
       <p>This link will expire in 24 hours.</p>
     `;
 
@@ -296,9 +302,13 @@ export class RegistrationService {
     if (!configured) return;
 
     const subject = `Welcome to ${realm.displayName || realm.name}!`;
+    // username is user-chosen and realm display name operator-set — escape both
+    // before interpolating into the HTML body (CodeQL js/xss).
+    const safeUsername = escapeHtml(username);
+    const safeRealm = escapeHtml(realm.displayName || realm.name);
     const html = `
-      <h1>Welcome, ${username}!</h1>
-      <p>Your account has been successfully created in ${realm.displayName || realm.name}.</p>
+      <h1>Welcome, ${safeUsername}!</h1>
+      <p>Your account has been successfully created in ${safeRealm}.</p>
       <p>You can now log in and start using the system.</p>
     `;
 
