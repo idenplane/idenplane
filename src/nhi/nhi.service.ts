@@ -983,19 +983,20 @@ export class NhiService {
       );
     }
 
-    // Extract subject from certificate (simplified - in production use node-forge or similar)
-    const subjectMatch = certificatePem.match(
-      /-----BEGIN CERTIFICATE-----([\s\S]*?)-----END CERTIFICATE-----/,
-    );
-    if (!subjectMatch) {
+    // Extract the base64 DER body between the PEM markers using plain string
+    // search (not a regex) to avoid super-linear backtracking on crafted input.
+    const certBegin = '-----BEGIN CERTIFICATE-----';
+    const certEnd = '-----END CERTIFICATE-----';
+    const beginIdx = certificatePem.indexOf(certBegin);
+    const endIdx = certificatePem.indexOf(certEnd, beginIdx + certBegin.length);
+    if (beginIdx === -1 || endIdx === -1) {
       throw new BadRequestException('Invalid certificate format');
     }
 
     // Compute SHA-256 fingerprint
-    const derContent = subjectMatch[1]
-      .replace(/\s/g, '')
-      .replace(/-----BEGIN CERTIFICATE-----/g, '')
-      .replace(/-----END CERTIFICATE-----/g, '');
+    const derContent = certificatePem
+      .slice(beginIdx + certBegin.length, endIdx)
+      .replace(/\s/g, '');
     const fingerprint = createHash('sha256')
       .update(Buffer.from(derContent, 'base64'))
       .digest('hex');
@@ -1017,9 +1018,13 @@ export class NhiService {
       }
     }
 
-    // Check for CA basic constraint
+    // Check for CA basic constraint. Locate the marker with indexOf and test a
+    // bounded regex on the remainder — avoids the `[\s\S]*` backtracking the
+    // previous single regex incurred on crafted input.
+    const basicConstraintsIdx = certificatePem.indexOf('basicConstraints');
     const isCA =
-      /basicConstraints[\s\S]*CA:(true|TRUE)/.test(certificatePem) ||
+      (basicConstraintsIdx !== -1 &&
+        /CA:\s*true/i.test(certificatePem.slice(basicConstraintsIdx))) ||
       /X509v3 Basic Constraints:\s*CA:TRUE/.test(certificatePem);
 
     // For demonstration, set default validity dates
