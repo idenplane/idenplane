@@ -1,0 +1,42 @@
+name: Sync dev to main
+
+# Keeps `dev` from drifting behind `main`. After every push to `main` (e.g. a
+# dev→main promotion merge), fast-forward `dev` up to `main` so the next
+# feature branch always starts from the latest code.
+#
+# Fast-forward ONLY: if `dev` somehow has commits `main` lacks (un-promoted
+# work — shouldn't happen in our feature→dev→main flow), the push is rejected
+# and we log a warning instead of clobbering it.
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: sync-dev-to-main
+  cancel-in-progress: false
+
+jobs:
+  sync:
+    name: Fast-forward dev → main
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          fetch-depth: 0
+
+      - name: Fast-forward dev to main
+        run: |
+          set -euo pipefail
+          echo "main is at $(git rev-parse --short HEAD)"
+          # HEAD == main (the just-pushed commit). Push it to dev as a
+          # fast-forward (no --force): creates dev if missing, advances it if
+          # behind, refuses (warns) if dev has diverged.
+          if git push origin HEAD:refs/heads/dev; then
+            echo "✅ dev fast-forwarded to main."
+          else
+            echo "::warning::Could not fast-forward dev — it may have diverged (un-promoted commits). Left dev untouched; resync manually if needed."
+          fi
