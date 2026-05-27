@@ -91,7 +91,7 @@ export class LoginController {
     const token = this.csrfService.generateToken();
     res.cookie(this.csrfService.cookieName(realm.name), token, {
       httpOnly: true,
-      secure: process.env['NODE_ENV'] === 'production',
+      secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
       sameSite: 'strict',
       path: `/realms/${realm.name}`,
     });
@@ -248,7 +248,7 @@ export class LoginController {
 
             res.cookie('IDENPLANE_MFA_CHALLENGE', challengeToken, {
               httpOnly: true,
-              secure: process.env['NODE_ENV'] === 'production',
+              secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
               sameSite: 'strict',
               maxAge: 5 * 60 * 1000,
               path: `/realms/${realm.name}`,
@@ -336,7 +336,7 @@ export class LoginController {
 
         res.cookie('IDENPLANE_MFA_CHALLENGE', challengeToken, {
           httpOnly: true,
-          secure: process.env['NODE_ENV'] === 'production',
+          secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
           sameSite: 'strict',
           maxAge: 5 * 60 * 1000,
           path: `/realms/${realm.name}`,
@@ -358,7 +358,7 @@ export class LoginController {
 
         res.cookie('IDENPLANE_SESSION', sessionToken, {
           httpOnly: true,
-          secure: process.env['NODE_ENV'] === 'production',
+          secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
           sameSite: 'strict',
           path: `/realms/${realm.name}`,
         });
@@ -426,7 +426,7 @@ export class LoginController {
 
     res.cookie('IDENPLANE_SESSION', sessionToken, {
       httpOnly: true,
-      secure: process.env['NODE_ENV'] === 'production',
+      secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
       sameSite: 'strict',
       maxAge: body['rememberMe'] ? 30 * 24 * 60 * 60 * 1000 : undefined,
       path: `/realms/${realm.name}`,

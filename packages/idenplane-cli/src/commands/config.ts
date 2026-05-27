@@ -17,10 +17,12 @@ export function registerConfigCommands(program: Command): void {
         console.log(chalk.yellow('No config found. Run `idenplane init` or `idenplane login` first.'));
         return;
       }
+      // Stored credentials are redacted centrally by printResult
+      // (output.ts redactCredentials), so pass them through as-is.
       const display: Record<string, unknown> = {
         serverUrl: config.serverUrl,
-        apiKey: config.apiKey ? `${config.apiKey.slice(0, 6)}${'*'.repeat(Math.max(0, config.apiKey.length - 6))}` : undefined,
-        accessToken: config.accessToken ? '(token saved)' : undefined,
+        apiKey: config.apiKey ?? undefined,
+        accessToken: config.accessToken ?? undefined,
         defaultRealm: config.defaultRealm ?? '(not set)',
       };
       // Remove undefined entries

@@ -50,7 +50,7 @@ export class DeviceController {
     const token = this.csrfService.generateToken();
     res.cookie(this.csrfService.cookieName(realm.name), token, {
       httpOnly: true,
-      secure: process.env['NODE_ENV'] === 'production',
+      secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
       sameSite: 'strict',
       path: `/realms/${realm.name}`,
     });

@@ -1,17 +1,45 @@
 import chalk from 'chalk';
 
+// Stored auth credentials (persisted in the user's config file) — never useful
+// to echo back and a leak risk via shell history / CI logs. They are replaced
+// with a constant so the printed value carries no bytes of the secret (CodeQL
+// js/clear-text-logging). Response-payload secrets such as `clientSecret` from
+// `client rotate-secret` are intentionally NOT redacted — the user ran the
+// command specifically to retrieve that value.
+const STORED_CREDENTIAL_KEYS = new Set(['apiKey', 'accessToken']);
+const REDACTED = '<redacted — see ~/.idenplane/config>';
+
+function redactCredentials<T>(data: T): T {
+  if (Array.isArray(data)) {
+    return data.map((item) => redactCredentials(item)) as T;
+  }
+  if (data && typeof data === 'object') {
+    const out: Record<string, unknown> = {};
+    for (const [key, val] of Object.entries(data as Record<string, unknown>)) {
+      out[key] =
+        STORED_CREDENTIAL_KEYS.has(key) && typeof val === 'string'
+          ? REDACTED
+          : redactCredentials(val);
+    }
+    return out as T;
+  }
+  return data;
+}
+
 export function printResult(data: unknown, opts: { json?: boolean }): void {
+  const safe = redactCredentials(data);
+
   if (opts.json) {
-    console.log(JSON.stringify(data, null, 2));
+    console.log(JSON.stringify(safe, null, 2));
     return;
   }
 
-  if (Array.isArray(data)) {
-    printTable(data);
-  } else if (typeof data === 'object' && data !== null) {
-    printKeyValue(data as Record<string, unknown>);
+  if (Array.isArray(safe)) {
+    printTable(safe);
+  } else if (typeof safe === 'object' && safe !== null) {
+    printKeyValue(safe as Record<string, unknown>);
   } else {
-    console.log(data);
+    console.log(safe);
   }
 }
 
