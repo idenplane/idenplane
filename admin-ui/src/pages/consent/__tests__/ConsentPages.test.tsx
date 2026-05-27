@@ -56,6 +56,8 @@ describe('ConsentCategoryDetailPage', () => {
     const key = screen.getByLabelText('Key') as HTMLInputElement;
     expect(key).toBeEnabled();
     expect(screen.getByLabelText('Display Name')).toBeInTheDocument();
+    // scope→category mapping input
+    expect(screen.getByLabelText('Governed Scopes')).toBeInTheDocument();
   });
 
   it('edit mode loads the category and shows usage statistics', async () => {

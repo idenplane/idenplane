@@ -350,6 +350,11 @@ export interface ConsentCategory {
   showInAccountPortal: boolean;
   order: number;
   enabled: boolean;
+  /**
+   * OIDC scope names this category governs. Empty falls back to the convention
+   * that the category governs the scope whose name equals its `key`.
+   */
+  scopes: string[];
   createdAt: string;
   updatedAt: string;
 }
