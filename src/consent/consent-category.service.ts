@@ -20,6 +20,7 @@ const CATEGORY_SELECT = {
   showInAccountPortal: true,
   order: true,
   enabled: true,
+  scopes: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -56,6 +57,7 @@ export class ConsentCategoryService {
         showInAccountPortal: dto.showInAccountPortal ?? true,
         order: dto.order ?? 0,
         enabled: dto.enabled ?? true,
+        scopes: dto.scopes ?? [],
       },
       select: CATEGORY_SELECT,
     });
@@ -127,6 +129,7 @@ export class ConsentCategoryService {
         }),
         ...(dto.order !== undefined && { order: dto.order }),
         ...(dto.enabled !== undefined && { enabled: dto.enabled }),
+        ...(dto.scopes !== undefined && { scopes: dto.scopes }),
       },
       select: CATEGORY_SELECT,
     });

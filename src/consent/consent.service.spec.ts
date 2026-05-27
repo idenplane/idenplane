@@ -14,6 +14,7 @@ describe('ConsentService', () => {
     hashPassword: jest.Mock;
   };
 
+  const realmId = 'realm-1';
   const userId = 'user-1';
   const clientId = 'client-1';
 
@@ -34,6 +35,8 @@ describe('ConsentService', () => {
       verifyPassword: jest.fn(),
       hashPassword: jest.fn(),
     };
+    // No categories configured by default → recordConsentHistory tags nothing.
+    prisma.consentCategory.findMany.mockResolvedValue([]);
     service = new ConsentService(prisma as any, crypto as any);
   });
 
@@ -120,7 +123,12 @@ describe('ConsentService', () => {
       const expected = { userId, clientId, scopes };
       prisma.userConsent.upsert.mockResolvedValue(expected);
 
-      const result = await service.grantConsent(userId, clientId, scopes);
+      const result = await service.grantConsent(
+        realmId,
+        userId,
+        clientId,
+        scopes,
+      );
 
       expect(result).toEqual(expected);
       expect(prisma.userConsent.upsert).toHaveBeenCalledWith({
@@ -137,7 +145,7 @@ describe('ConsentService', () => {
         scopes: [],
       });
 
-      await service.grantConsent(userId, clientId, []);
+      await service.grantConsent(realmId, userId, clientId, []);
 
       expect(prisma.userConsent.upsert).toHaveBeenCalledWith({
         where: { userId_clientId: { userId, clientId } },
@@ -147,13 +155,85 @@ describe('ConsentService', () => {
     });
   });
 
+  // ─── resolveCategoryKeys + tagging ──────────────────────────
+
+  describe('category tagging', () => {
+    it('resolveCategoryKeys queries enabled categories by scope/key fallback', async () => {
+      prisma.consentCategory.findMany.mockResolvedValue([
+        { key: 'marketing' },
+        { key: 'profile' },
+      ]);
+
+      const keys = await service.resolveCategoryKeys(realmId, [
+        'openid',
+        'profile',
+      ]);
+
+      expect(keys).toEqual(['marketing', 'profile']);
+      expect(prisma.consentCategory.findMany).toHaveBeenCalledWith({
+        where: {
+          realmId,
+          enabled: true,
+          OR: [
+            { scopes: { hasSome: ['openid', 'profile'] } },
+            {
+              AND: [
+                { scopes: { isEmpty: true } },
+                { key: { in: ['openid', 'profile'] } },
+              ],
+            },
+          ],
+        },
+        select: { key: true },
+        orderBy: { key: 'asc' },
+      });
+    });
+
+    it('returns no keys for an empty scope list (no query)', async () => {
+      const keys = await service.resolveCategoryKeys(realmId, []);
+      expect(keys).toEqual([]);
+      expect(prisma.consentCategory.findMany).not.toHaveBeenCalled();
+    });
+
+    it('grantConsent tags history with the resolved categoryKeys', async () => {
+      prisma.userConsent.findUnique.mockResolvedValue(null);
+      prisma.userConsent.upsert.mockResolvedValue({ userId, clientId, scopes: ['profile'] });
+      prisma.consentCategory.findMany.mockResolvedValue([{ key: 'profile' }]);
+
+      await service.grantConsent(realmId, userId, clientId, ['profile']);
+
+      expect(prisma.userConsentHistory.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            action: 'granted',
+            metadata: { categoryKeys: ['profile'] },
+          }),
+        }),
+      );
+    });
+
+    it('grantConsent records JsonNull metadata when no category matches', async () => {
+      prisma.userConsent.findUnique.mockResolvedValue(null);
+      prisma.userConsent.upsert.mockResolvedValue({ userId, clientId, scopes: ['openid'] });
+      prisma.consentCategory.findMany.mockResolvedValue([]);
+
+      await service.grantConsent(realmId, userId, clientId, ['openid']);
+
+      const arg = prisma.userConsentHistory.create.mock.calls[0][0];
+      expect(arg.data.metadata).toBeDefined();
+      expect(arg.data.metadata).not.toEqual(
+        expect.objectContaining({ categoryKeys: expect.anything() }),
+      );
+    });
+  });
+
   // ─── revokeConsent ──────────────────────────────────────────
 
   describe('revokeConsent', () => {
     it('should deleteMany for the user-client pair', async () => {
       prisma.userConsent.deleteMany.mockResolvedValue({ count: 1 });
 
-      await service.revokeConsent(userId, clientId);
+      await service.revokeConsent(realmId, userId, clientId);
 
       expect(prisma.userConsent.deleteMany).toHaveBeenCalledWith({
         where: { userId, clientId },
@@ -164,7 +244,7 @@ describe('ConsentService', () => {
       prisma.userConsent.deleteMany.mockResolvedValue({ count: 0 });
 
       await expect(
-        service.revokeConsent(userId, clientId),
+        service.revokeConsent(realmId, userId, clientId),
       ).resolves.toBeUndefined();
     });
   });

@@ -64,10 +64,7 @@ export class ConsentCategoriesController {
   @ApiResponse({ status: 200, description: 'Consent category statistics' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
-  stats(
-    @CurrentRealm() realm: Realm,
-    @Param('categoryId') categoryId: string,
-  ) {
+  stats(@CurrentRealm() realm: Realm, @Param('categoryId') categoryId: string) {
     return this.statsService.getCategoryStats(realm, categoryId);
   }
 

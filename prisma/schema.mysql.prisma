@@ -501,6 +501,9 @@ model ConsentCategory {
   showInAccountPortal Boolean @default(true) @map("show_in_account_portal")
   order               Int     @default(0)
   enabled             Boolean @default(true)
+  // JSON array of OIDC scope names this category governs (see the Postgres
+  // schema for semantics). Stored as JSON on MySQL.
+  scopes              Json    @default("[]")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")

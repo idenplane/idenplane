@@ -113,9 +113,45 @@ export class ConsentService {
   }
 
   /**
+   * Resolve which consent categories a set of granted scopes belongs to, in a
+   * realm. A category governs a scope when the scope is in its configured
+   * `scopes`, or — when `scopes` is empty (unconfigured) — when the category
+   * `key` equals one of the scopes (the convention default). Setting any
+   * explicit scope on a category therefore overrides the key fallback for it.
+   *
+   * The returned keys are what per-category statistics group by
+   * (`UserConsentHistory.metadata.categoryKeys`).
+   */
+  async resolveCategoryKeys(
+    realmId: string,
+    scopes: string[],
+  ): Promise<string[]> {
+    if (scopes.length === 0) return [];
+    const categories = await this.prisma.consentCategory.findMany({
+      where: {
+        realmId,
+        enabled: true,
+        OR: [
+          { scopes: { hasSome: scopes } },
+          { AND: [{ scopes: { isEmpty: true } }, { key: { in: scopes } }] },
+        ],
+      },
+      select: { key: true },
+      orderBy: { key: 'asc' },
+    });
+    return categories.map((c) => c.key);
+  }
+
+  /**
    * Record a consent action in the history table.
+   *
+   * The granted scopes are resolved to their consent categories and stored as
+   * `metadata.categoryKeys` so per-category statistics populate from real
+   * grants. Runs for every action (grant/update/revoke) since both write paths
+   * funnel through here.
    */
   private async recordConsentHistory(
+    realmId: string,
     userId: string,
     clientId: string,
     action: ConsentAction,
@@ -124,6 +160,13 @@ export class ConsentService {
     context?: ConsentContext,
   ): Promise<void> {
     try {
+      const categoryKeys = await this.resolveCategoryKeys(realmId, scopes);
+      const baseMeta = context?.metadata;
+      const metadata =
+        categoryKeys.length > 0
+          ? { ...(baseMeta ?? {}), categoryKeys }
+          : baseMeta;
+
       await this.prisma.userConsentHistory.create({
         data: {
           userId,
@@ -133,8 +176,8 @@ export class ConsentService {
           policyVersion: policyVersion ?? null,
           ipAddress: context?.ipAddress ?? null,
           userAgent: context?.userAgent ?? null,
-          metadata: context?.metadata
-            ? (context.metadata as unknown as Prisma.InputJsonValue)
+          metadata: metadata
+            ? (metadata as unknown as Prisma.InputJsonValue)
             : Prisma.JsonNull,
         },
       });
@@ -149,6 +192,7 @@ export class ConsentService {
    * Grant consent with history tracking and versioning support.
    */
   async grantConsent(
+    realmId: string,
     userId: string,
     clientId: string,
     scopes: string[],
@@ -168,6 +212,7 @@ export class ConsentService {
     });
 
     await this.recordConsentHistory(
+      realmId,
       userId,
       clientId,
       action,
@@ -183,6 +228,7 @@ export class ConsentService {
    * Revoke consent for a user-client pair with history tracking.
    */
   async revokeConsent(
+    realmId: string,
     userId: string,
     clientId: string,
     context?: ConsentContext,
@@ -197,6 +243,7 @@ export class ConsentService {
 
     if (existing) {
       await this.recordConsentHistory(
+        realmId,
         userId,
         clientId,
         'revoked',
@@ -284,15 +331,16 @@ export class ConsentService {
       orderBy: { createdAt: 'desc' },
     });
 
-    // Build a map of category key -> last accepted version
+    // Build a map of category key -> last accepted version. A history entry
+    // may belong to several categories (metadata.categoryKeys); the entries are
+    // newest-first, so the first version seen per category is the latest.
     const lastAcceptedByCategory = new Map<string, string>();
     for (const entry of historyEntries) {
-      const metadata = entry.metadata as { categoryKey?: string } | null;
-      if (
-        metadata?.categoryKey &&
-        !lastAcceptedByCategory.has(metadata.categoryKey)
-      ) {
-        lastAcceptedByCategory.set(metadata.categoryKey, entry.policyVersion!);
+      const metadata = entry.metadata as { categoryKeys?: string[] } | null;
+      for (const key of metadata?.categoryKeys ?? []) {
+        if (!lastAcceptedByCategory.has(key)) {
+          lastAcceptedByCategory.set(key, entry.policyVersion!);
+        }
       }
     }
 

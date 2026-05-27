@@ -847,6 +847,7 @@ export class LoginController {
     }
 
     await this.consentService.grantConsent(
+      realm.id,
       consentReq.userId,
       consentReq.clientId,
       consentReq.scopes,
