@@ -74,7 +74,12 @@
   <script nonce="{{scriptNonce}}">
     (function() {
       var sel = document.getElementById('lang-switcher-select');
-      if (sel) { sel.addEventListener('change', function() { window.location.href = this.value; }); }
+      if (sel) { sel.addEventListener('change', function() {
+        // Only navigate to a same-origin URL (blocks javascript:/data:/off-site
+        // values reaching location — CodeQL js/xss-through-dom).
+        var dest = new URL(this.value, window.location.href);
+        if (dest.origin === window.location.origin) { window.location.href = dest.href; }
+      }); }
     })();
     document.querySelectorAll('input[type="password"]').forEach(function(input) {
       var wrapper = document.createElement('div');
