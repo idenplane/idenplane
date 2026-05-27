@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { NavLink, Outlet, useParams, useNavigate } from 'react-router-dom';
+import { NavLink, Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
 import { getAllRealms } from '../api/realms';
 import { useAuth } from '../hooks/useAuth';
@@ -10,7 +10,14 @@ import type { IconProps } from './ui';
 type NavItem = { to: string; label: string; icon: (p: IconProps) => React.JSX.Element; end?: boolean };
 
 export default function Layout() {
-  const { name: currentRealm } = useParams<{ name: string }>();
+  const { name: routeRealm } = useParams<{ name: string }>();
+  const location = useLocation();
+  // The in-Layout 404 catch-all (`*`) doesn't match the `:name` param, so fall
+  // back to the realm in the URL. This keeps the realm sidebar present on a
+  // realm-scoped 404 (F-15); the `realms.some(...)` guard below still rejects
+  // non-realm segments such as `/console/realms/create`.
+  const currentRealm =
+    routeRealm ?? location.pathname.match(/^\/console\/realms\/([^/]+)/)?.[1];
   const navigate = useNavigate();
   const { logout } = useAuth();
   const [realmDropdownOpen, setRealmDropdownOpen] = useState(false);

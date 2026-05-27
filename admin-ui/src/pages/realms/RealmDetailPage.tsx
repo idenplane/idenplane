@@ -35,51 +35,57 @@ export default function RealmDetailPage() {
     enabled: !!name,
   });
 
+  // Sub-resource lists are loaded lazily per tab so opening a realm doesn't fire
+  // a thundering herd of parallel list calls on mount. The overview counts below
+  // are only shown on the General tab; the theme list only on the Theme tab.
+  const overviewEnabled = !!name && !!realm && activeTab === 'general';
+
   const { data: users } = useQuery({
     queryKey: ['users', name],
     queryFn: () => getUsers(name!),
-    enabled: !!name && !!realm,
+    enabled: overviewEnabled,
   });
 
   const { data: clients } = useQuery({
     queryKey: ['clients', name],
     queryFn: () => getClients(name!),
-    enabled: !!name && !!realm,
+    enabled: overviewEnabled,
   });
 
   const { data: roles } = useQuery({
     queryKey: ['roles', name],
     queryFn: () => getRealmRoles(name!),
-    enabled: !!name && !!realm,
+    enabled: overviewEnabled,
   });
 
   const { data: groups } = useQuery({
     queryKey: ['groups', name],
     queryFn: () => getGroups(name!),
-    enabled: !!name && !!realm,
+    enabled: overviewEnabled,
   });
 
   const { data: clientScopes } = useQuery({
     queryKey: ['clientScopes', name],
     queryFn: () => getClientScopes(name!),
-    enabled: !!name && !!realm,
+    enabled: overviewEnabled,
   });
 
   const { data: sessions } = useQuery({
     queryKey: ['sessions', name],
     queryFn: () => getRealmSessions(name!),
-    enabled: !!name && !!realm,
+    enabled: overviewEnabled,
   });
 
   const { data: identityProviders } = useQuery({
     queryKey: ['identity-providers', name],
     queryFn: () => getIdentityProviders(name!),
-    enabled: !!name && !!realm,
+    enabled: overviewEnabled,
   });
 
   const { data: themes } = useQuery({
     queryKey: ['themes'],
     queryFn: () => getThemes(),
+    enabled: activeTab === 'theme',
   });
 
   const [form, setForm] = useState({

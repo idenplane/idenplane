@@ -77,10 +77,15 @@ export class RateLimitService {
   }
 
   async checkAdminApiKeyLimit(ip: string): Promise<RateLimitResult> {
-    // Production defaults preserved (15/min, 100/hour); overridable via env so
-    // test/CI harnesses are not throttled. Non-numeric/absent env => default.
-    const perMinute = this.envInt('ADMIN_API_KEY_RL_PER_MINUTE', 15);
-    const perHour = this.envInt('ADMIN_API_KEY_RL_PER_HOUR', 100);
+    // Defaults sized for real admin-console use: the console authenticates with
+    // an admin API key and a single page (e.g. the realm overview) legitimately
+    // issues a burst of parallel requests. The previous 15/min default throttled
+    // the console into 429 cascades on a normal page load. 60/min + 1000/hour
+    // still bounds brute-force/abuse while leaving headroom for interactive use.
+    // Overridable via env so test/CI harnesses are not throttled; non-numeric or
+    // absent env => default.
+    const perMinute = this.envInt('ADMIN_API_KEY_RL_PER_MINUTE', 60);
+    const perHour = this.envInt('ADMIN_API_KEY_RL_PER_HOUR', 1000);
     return this.check(`admin:apikey:${ip}`, perMinute, perHour);
   }
 
