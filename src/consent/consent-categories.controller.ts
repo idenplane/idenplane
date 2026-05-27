@@ -19,6 +19,7 @@ import {
 } from '@nestjs/swagger';
 import type { Realm } from '@prisma/client';
 import { ConsentCategoryService } from './consent-category.service.js';
+import { ConsentStatisticsService } from './consent-stats.service.js';
 import { CreateConsentCategoryDto } from './dto/create-consent-category.dto.js';
 import { UpdateConsentCategoryDto } from './dto/update-consent-category.dto.js';
 import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
@@ -30,7 +31,10 @@ import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 @UseGuards(RealmGuard, AdminApiKeyGuard)
 @ApiSecurity('admin-api-key')
 export class ConsentCategoriesController {
-  constructor(private readonly service: ConsentCategoryService) {}
+  constructor(
+    private readonly service: ConsentCategoryService,
+    private readonly statsService: ConsentStatisticsService,
+  ) {}
 
   @Get('consent-categories')
   @ApiOperation({ summary: 'List consent categories in a realm' })
@@ -53,6 +57,18 @@ export class ConsentCategoriesController {
     @Param('categoryId') categoryId: string,
   ) {
     return this.service.findById(realm, categoryId);
+  }
+
+  @Get('consent-categories/:categoryId/stats')
+  @ApiOperation({ summary: 'Get usage statistics for a consent category' })
+  @ApiResponse({ status: 200, description: 'Consent category statistics' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'Not found' })
+  stats(
+    @CurrentRealm() realm: Realm,
+    @Param('categoryId') categoryId: string,
+  ) {
+    return this.statsService.getCategoryStats(realm, categoryId);
   }
 
   @Post('consent-categories')
