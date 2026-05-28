@@ -1,5 +1,6 @@
 import {
   Injectable,
+  Logger,
   BadRequestException,
   UnauthorizedException,
 } from '@nestjs/common';
@@ -19,6 +20,35 @@ interface BrokerState {
   scope?: string;
   state?: string;
   nonce?: string;
+  codeChallenge?: string;
+  codeChallengeMethod?: string;
+}
+
+/** A single entry returned by GitHub's `GET /user/emails` endpoint. */
+interface GithubEmail {
+  email: string;
+  primary: boolean;
+  verified: boolean;
+  visibility: string | null;
+}
+
+const GITHUB_API_HOST = 'api.github.com';
+/** Sent on every userinfo request — required by GitHub's API, harmless elsewhere. */
+const USER_AGENT = 'Idenplane';
+
+/**
+ * Coerce a userinfo claim to a non-empty string. Userinfo payloads are
+ * untrusted JSON, so only primitive scalars are accepted — objects/arrays/null
+ * (and empty strings) collapse to `undefined` rather than `'[object Object]'`.
+ */
+function toStr(value: unknown): string | undefined {
+  if (typeof value === 'string') {
+    return value.length > 0 ? value : undefined;
+  }
+  if (typeof value === 'number' || typeof value === 'boolean') {
+    return String(value);
+  }
+  return undefined;
 }
 
 interface ExternalUserInfo {
@@ -33,6 +63,8 @@ interface ExternalUserInfo {
 
 @Injectable()
 export class BrokerService {
+  private readonly logger = new Logger(BrokerService.name);
+
   constructor(
     private readonly prisma: PrismaService,
     private readonly jwkService: JwkService,
@@ -51,6 +83,8 @@ export class BrokerService {
       scope?: string;
       state?: string;
       nonce?: string;
+      code_challenge?: string;
+      code_challenge_method?: string;
     },
   ): Promise<string> {
     if (!params.client_id) {
@@ -89,6 +123,8 @@ export class BrokerService {
       scope: params.scope,
       state: params.state,
       nonce: params.nonce,
+      codeChallenge: params.code_challenge,
+      codeChallengeMethod: params.code_challenge_method,
     };
 
     const stateJwt = await this.jwkService.signJwt(
@@ -175,6 +211,10 @@ export class BrokerService {
         redirectUri: brokerState.redirectUri,
         scope: brokerState.scope,
         nonce: brokerState.nonce,
+        // Carry PKCE from the original client request through the broker so the
+        // subsequent code→token exchange enforces it for public clients.
+        codeChallenge: brokerState.codeChallenge,
+        codeChallengeMethod: brokerState.codeChallengeMethod,
         expiresAt: new Date(Date.now() + 60 * 1000),
       },
     });
@@ -229,7 +269,12 @@ export class BrokerService {
     const url = idp.userinfoUrl ?? idp.tokenUrl.replace('/token', '/userinfo');
 
     const response = await fetch(url, {
-      headers: { Authorization: `Bearer ${accessToken}` },
+      headers: {
+        Authorization: `Bearer ${accessToken}`,
+        // GitHub's REST API rejects requests without a User-Agent; harmless for
+        // every other provider.
+        'User-Agent': USER_AGENT,
+      },
     });
 
     if (!response.ok) {
@@ -238,35 +283,116 @@ export class BrokerService {
       );
     }
 
-    const data = (await response.json()) as Record<string, string | undefined>;
+    const data = (await response.json()) as Record<string, unknown>;
 
-    const subject = String(data['sub'] ?? data['id'] ?? '');
-    const rawGivenName = data['given_name'] ?? data['first_name'];
-    const rawFamilyName = data['family_name'] ?? data['last_name'];
-    const rawPreferredUsername = data['preferred_username'] ?? data['login'];
-    const givenName =
-      rawGivenName !== undefined ? String(rawGivenName) : undefined;
-    const familyName =
-      rawFamilyName !== undefined ? String(rawFamilyName) : undefined;
-    const preferredUsername =
-      rawPreferredUsername !== undefined
-        ? String(rawPreferredUsername)
-        : undefined;
+    const subject = toStr(data['sub'] ?? data['id']) ?? '';
+    const name = toStr(data['name']);
+    let givenName = toStr(data['given_name'] ?? data['first_name']);
+    let familyName = toStr(data['family_name'] ?? data['last_name']);
+    const preferredUsername = toStr(
+      data['preferred_username'] ?? data['login'],
+    );
+
+    // Finding #17: providers like GitHub return a single full `name` (e.g.
+    // "Islam Awad") rather than OIDC-style given/family names. Derive them by
+    // splitting on the first whitespace so the user record gets a name.
+    if (givenName === undefined && familyName === undefined && name) {
+      const trimmed = name.trim();
+      const firstSpace = trimmed.search(/\s/);
+      if (firstSpace === -1) {
+        givenName = trimmed || undefined;
+      } else {
+        givenName = trimmed.slice(0, firstSpace);
+        familyName = trimmed.slice(firstSpace + 1).trim() || undefined;
+      }
+    }
+
+    let email = toStr(data['email']);
+    let emailVerified =
+      data['email_verified'] === true || data['email_verified'] === 'true'
+        ? true
+        : data['email_verified'] === false || data['email_verified'] === 'false'
+          ? false
+          : undefined;
+
+    // Finding #16: GitHub's /user endpoint returns email=null for users whose
+    // email is private, even when the user:email scope is granted. Fall back to
+    // the /user/emails endpoint to resolve their primary (or first verified)
+    // address. Scoped to GitHub — the well-known non-OIDC provider.
+    if (!email && this.isGithub(idp)) {
+      const githubEmail = await this.fetchGithubPrimaryEmail(accessToken);
+      if (githubEmail) {
+        email = githubEmail.email;
+        emailVerified = githubEmail.verified;
+      }
+    }
 
     return {
       sub: subject,
-      email: data['email'],
-      emailVerified:
-        data['email_verified'] === 'true'
-          ? true
-          : data['email_verified'] === 'false'
-            ? false
-            : undefined,
-      name: data['name'],
-      givenName: givenName,
-      familyName: familyName,
-      preferredUsername: preferredUsername,
+      email,
+      emailVerified,
+      name,
+      givenName,
+      familyName,
+      preferredUsername,
     };
+  }
+
+  /** Detect GitHub by its userinfo host so the email fallback stays targeted. */
+  private isGithub(idp: IdentityProvider): boolean {
+    if (!idp.userinfoUrl) {
+      return false;
+    }
+    try {
+      return new URL(idp.userinfoUrl).hostname === GITHUB_API_HOST;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Resolve a GitHub user's email via `GET /user/emails`, picking the primary
+   * address (falling back to the first verified one, else the first). Returns
+   * `undefined` and logs a warning if the request fails — never throws, so a
+   * private-email user can still log in (just without an email).
+   */
+  private async fetchGithubPrimaryEmail(
+    accessToken: string,
+  ): Promise<GithubEmail | undefined> {
+    try {
+      const response = await fetch('https://api.github.com/user/emails', {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'User-Agent': USER_AGENT,
+          Accept: 'application/vnd.github+json',
+        },
+      });
+
+      if (!response.ok) {
+        this.logger.warn(
+          `GitHub /user/emails returned ${response.status}; federated user will have no email`,
+        );
+        return undefined;
+      }
+
+      const emails = (await response.json()) as GithubEmail[];
+      if (!Array.isArray(emails) || emails.length === 0) {
+        return undefined;
+      }
+
+      return (
+        emails.find((e) => e.primary) ??
+        emails.find((e) => e.verified) ??
+        emails[0]
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Failed to fetch GitHub /user/emails: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
+      return undefined;
+    }
   }
 
   private async linkOrCreateUser(
