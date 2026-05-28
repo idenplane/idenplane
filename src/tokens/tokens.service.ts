@@ -400,6 +400,20 @@ export class TokensService {
       });
   }
 
+  /**
+   * Invalidate the browser SSO (login) session behind an IDENPLANE_SESSION
+   * cookie. RP-initiated logout must call this so a still-valid cookie cannot
+   * be replayed to silently re-authenticate at /authorize after sign-out.
+   */
+  async invalidateLoginSession(sessionToken: string): Promise<void> {
+    const tokenHash = this.crypto.sha256(sessionToken);
+    await this.prisma.loginSession
+      .delete({ where: { tokenHash } })
+      .catch(() => {
+        // Login session may already be absent/expired — nothing to do.
+      });
+  }
+
   async userinfo(realm: Realm, accessToken: string) {
     const signingKey = await this.prisma.realmSigningKey.findFirst({
       where: { realmId: realm.id, active: true },
