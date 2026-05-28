@@ -42,9 +42,16 @@ jobs:
       - name: Scan diff for inline secrets
         run: |
           set -e
-          if git diff origin/main...HEAD \
-             | grep -iE '(api[_-]?key|secret|password|token|bearer)[^A-Za-z]*[:=][^A-Za-z]*[A-Za-z0-9_-]{20,}' ; then
-            echo "::error::Possible secret leaked in diff"
+          # Scan only ADDED lines (skip context, the +++ header and @@ hunk
+          # headers) so a match must be introduced by this PR, and skip committed
+          # templates whose placeholders (e.g. REPLACE_ME...) are not real secrets.
+          HITS=$(git diff origin/main...HEAD \
+              -- . ':(exclude)*.example' ':(exclude)*.sample' ':(exclude)*.template' ':(exclude)*.dist' \
+            | grep -E '^\+[^+]' \
+            | grep -iE '(api[_-]?key|secret|password|token|bearer)[^A-Za-z]*[:=][^A-Za-z]*[A-Za-z0-9_-]{20,}' || true)
+          if [ -n "$HITS" ]; then
+            echo "::error::Possible secret leaked in diff:"
+            echo "$HITS"
             exit 1
           fi
 
