@@ -7,6 +7,8 @@
   <title>{{pageTitle}} &mdash; {{appTitle}}</title>
   {{#if faviconUrl}}
   <link rel="icon" href="{{faviconUrl}}">
+  {{else}}
+  <link rel="icon" href="data:,">
   {{/if}}
   {{#each themeCssFiles}}
   <link rel="stylesheet" href="{{this}}">
