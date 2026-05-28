@@ -16,7 +16,11 @@ import { ConfigService } from '@nestjs/config';
 import { ApiExcludeController } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { Prisma, type Realm, type User } from '@prisma/client';
-import type { AuthorizeParams } from '../oauth/oauth.service.js';
+import type {
+  AuthorizeParams,
+  SatisfiedAuthContext,
+} from '../oauth/oauth.service.js';
+import { ACR_PASSWORD, ACR_MFA } from '../step-up/step-up.service.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
@@ -390,8 +394,11 @@ export class LoginController {
         );
       }
 
-      // No MFA needed — proceed to create session
-      return await this.completeLogin(realm, user, b, oauthParams, req, res);
+      // No MFA needed — proceed to create session (password-only auth)
+      return await this.completeLogin(realm, user, b, oauthParams, req, res, {
+        acr: ACR_PASSWORD,
+        amr: ['pwd'],
+      });
     } catch (err: unknown) {
       const errMessage =
         err instanceof Error ? err.message : 'Invalid credentials';
@@ -428,6 +435,7 @@ export class LoginController {
     oauthParams: Record<string, string>,
     req: Request,
     res: Response,
+    authContext: SatisfiedAuthContext = {},
   ) {
     // Validate OAuth request (including redirect_uri) BEFORE creating session
     let client;
@@ -484,6 +492,10 @@ export class LoginController {
           realmName: realm.name,
           scopes,
           oauthParams,
+          // Carry the satisfied auth context across the consent round-trip so
+          // the code issued after consent reflects the real acr/amr.
+          satisfiedAcr: authContext.acr,
+          amr: authContext.amr,
         });
         return res.redirect(302, `/realms/${realm.name}/consent?req=${reqId}`);
       }
@@ -493,6 +505,7 @@ export class LoginController {
       realm,
       user,
       oauthParams as unknown as AuthorizeParams,
+      authContext,
     );
     res.redirect(302, result.redirectUrl);
   }
@@ -637,6 +650,7 @@ export class LoginController {
       );
     }
 
+    // Password + TOTP completed — second factor satisfied (RFC 8176).
     return await this.completeLogin(
       realm,
       user,
@@ -644,6 +658,7 @@ export class LoginController {
       challenge.oauthParams ?? {},
       req,
       res,
+      { acr: ACR_MFA, amr: ['pwd', 'otp'] },
     );
   }
 
@@ -884,6 +899,9 @@ export class LoginController {
       realm,
       user,
       consentReq.oauthParams as unknown as AuthorizeParams,
+      // Preserve the auth context established before the consent screen so the
+      // issued code carries the real acr/amr (not a defaulted password level).
+      { acr: consentReq.satisfiedAcr, amr: consentReq.amr },
     );
 
     res.redirect(302, result.redirectUrl);

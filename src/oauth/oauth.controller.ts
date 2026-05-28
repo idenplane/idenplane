@@ -5,7 +5,12 @@ import type { Realm } from '@prisma/client';
 import { OAuthService, type AuthorizeParams } from './oauth.service.js';
 import { LoginService } from '../login/login.service.js';
 import { ConsentService } from '../consent/consent.service.js';
-import { StepUpService } from '../step-up/step-up.service.js';
+import {
+  StepUpService,
+  ACR_PASSWORD,
+  ACR_MFA,
+  ACR_WEBAUTHN,
+} from '../step-up/step-up.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
@@ -73,6 +78,14 @@ export class OAuthController {
           return this.handlePromptLogin(res, realm.name, query);
         }
 
+        // Resolve the ACR actually satisfied by the existing SSO session so it
+        // can be reflected in any code issued silently below. Falls back to
+        // ACR_PASSWORD when there is no step-up record / login session.
+        const loginSession = await this.getLoginSessionByToken(sessionCookie);
+        const sessionAcr = loginSession
+          ? await this.stepUpService.getSessionAcr(loginSession.id)
+          : ACR_PASSWORD;
+
         // ── Step-up ACR check ────────────────────────────────────────────────
         //
         // Determine the highest required ACR from two sources:
@@ -90,12 +103,7 @@ export class OAuthController {
         );
 
         if (requiredAcr) {
-          // Look up the login session ID so we can check step-up records
-          const loginSession = await this.getLoginSessionByToken(sessionCookie);
           if (loginSession) {
-            const sessionAcr = await this.stepUpService.getSessionAcr(
-              loginSession.id,
-            );
             const stepUpNeeded = !this.stepUpService.satisfiesAcr(
               sessionAcr,
               requiredAcr,
@@ -124,6 +132,14 @@ export class OAuthController {
         }
         // ── End step-up check ────────────────────────────────────────────────
 
+        // Derive the satisfied auth context for any code issued via silent SSO.
+        // The session ACR is authoritative; the amr is derived from it: an
+        // MFA-or-stronger session implies the second factor was performed.
+        const ssoAuthContext = {
+          acr: sessionAcr,
+          amr: this.amrForSessionAcr(sessionAcr),
+        };
+
         // Check if client requires consent
         if (client.requireConsent) {
           const scopes = (query['scope'] ?? 'openid')
@@ -143,6 +159,8 @@ export class OAuthController {
               realmName: realm.name,
               scopes,
               oauthParams: query,
+              satisfiedAcr: ssoAuthContext.acr,
+              amr: ssoAuthContext.amr,
             });
             return res.redirect(
               302,
@@ -151,11 +169,13 @@ export class OAuthController {
           }
         }
 
-        // SSO: user already logged in and consent is granted, issue code directly
+        // SSO: user already logged in and consent is granted, issue code
+        // directly — carrying the session's satisfied acr/amr.
         const result = await this.oauthService.authorizeWithUser(
           realm,
           user,
           query as unknown as AuthorizeParams,
+          ssoAuthContext,
         );
         return res.redirect(302, result.redirectUrl);
       }
@@ -202,6 +222,26 @@ export class OAuthController {
     const reqStrength = this.stepUpService.getAcrStrength(requestedAcr);
     const clientStrength = this.stepUpService.getAcrStrength(clientAcr);
     return reqStrength >= clientStrength ? requestedAcr : clientAcr;
+  }
+
+  /**
+   * Derive RFC 8176 `amr` values from a session's satisfied ACR. We can only
+   * infer methods from the ACR level (we don't track per-method history on the
+   * SSO session), so each level maps to its canonical method set:
+   *   - WebAuthn  → ['hwk']        (hardware key; matches the passkey login path)
+   *   - MFA       → ['pwd', 'otp'] (password + second factor)
+   *   - otherwise → ['pwd']        (password only)
+   * Must be checked strongest-first so a WebAuthn session (which also satisfies
+   * MFA) is not mislabelled as password+otp.
+   */
+  private amrForSessionAcr(sessionAcr: string): string[] {
+    if (this.stepUpService.satisfiesAcr(sessionAcr, ACR_WEBAUTHN)) {
+      return ['hwk'];
+    }
+    if (this.stepUpService.satisfiesAcr(sessionAcr, ACR_MFA)) {
+      return ['pwd', 'otp'];
+    }
+    return ['pwd'];
   }
 
   private async getLoginSessionByToken(sessionToken: string) {

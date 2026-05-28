@@ -399,12 +399,17 @@ model UserRole {
 // ─── SESSIONS & REFRESH TOKENS ────────────────────────────
 
 model Session {
-  id        String  @id @default(uuid())
-  userId    String  @map("user_id")
-  realmId   String  @default("") @map("realm_id")
-  clientId  String? @map("client_id")
-  ipAddress String? @map("ip_address")
-  userAgent String? @map("user_agent")
+  id           String   @id @default(uuid())
+  userId       String   @map("user_id")
+  realmId      String   @default("") @map("realm_id")
+  clientId     String?  @map("client_id")
+  ipAddress    String?  @map("ip_address")
+  userAgent    String?  @map("user_agent")
+  /// The ACR level actually satisfied when this session was established.
+  /// Lets the refresh_token grant preserve acr/amr across token rotation.
+  satisfiedAcr String?  @map("satisfied_acr")
+  /// The authentication methods (RFC 8176) actually performed for this session.
+  amr          String[] @default([]) @map("amr")
 
   createdAt DateTime @default(now()) @map("created_at")
   expiresAt DateTime @map("expires_at")
@@ -449,8 +454,15 @@ model AuthorizationCode {
   codeChallenge       String? @map("code_challenge")
   codeChallengeMethod String? @map("code_challenge_method")
   nonce               String?
-  acrValues           String? @map("acr_values")
-  used                Boolean @default(false)
+  /// The ACR value(s) *requested* by the client at authorization time.
+  acrValues           String?  @map("acr_values")
+  /// The ACR level actually *satisfied* by the authentication that produced
+  /// this code (password vs. password+MFA vs. WebAuthn). Read back at the
+  /// code→token exchange so the issued tokens reflect the real auth context.
+  satisfiedAcr        String?  @map("satisfied_acr")
+  /// The authentication methods (RFC 8176) actually performed.
+  amr                 String[] @default([]) @map("amr")
+  used                Boolean  @default(false)
 
   createdAt DateTime @default(now()) @map("created_at")
   expiresAt DateTime @map("expires_at")

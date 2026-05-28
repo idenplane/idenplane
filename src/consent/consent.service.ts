@@ -11,6 +11,14 @@ export interface ConsentRequest {
   realmName: string;
   scopes: string[];
   oauthParams: Record<string, string>;
+  /**
+   * The ACR level satisfied by the authentication that preceded the consent
+   * screen. Carried across the consent round-trip so the issued authorization
+   * code reflects the real auth context (RFC 8176 / RFC 9068).
+   */
+  satisfiedAcr?: string;
+  /** The authentication methods performed (e.g. `['pwd', 'otp']`). */
+  amr?: string[];
 }
 
 export type ConsentAction = 'granted' | 'revoked' | 'updated';

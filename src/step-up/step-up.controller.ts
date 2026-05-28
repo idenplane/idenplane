@@ -338,7 +338,9 @@ export class StepUpController {
       return {
         status: 'success',
         acr: ACR_MFA,
-        amr: ['totp'],
+        // RFC 8176 vocabulary: 'otp' (matches the mfa-otp token grant). The
+        // session already proved 'pwd', so a completed TOTP step-up is pwd+otp.
+        amr: ['pwd', 'otp'],
       };
     }
 

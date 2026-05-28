@@ -11,6 +11,19 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { ScopesService } from '../scopes/scopes.service.js';
 import { matchesRedirectUri } from '../common/redirect-uri.utils.js';
 
+/**
+ * The authentication context actually *satisfied* by the flow that produced an
+ * authorization code (as opposed to the `acr_values` *requested* by the client).
+ * Persisted on the code so the code→token exchange can mint tokens whose
+ * `acr`/`amr` claims reflect the real authentication (RFC 8176 / RFC 9068).
+ */
+export interface SatisfiedAuthContext {
+  /** The ACR level satisfied (e.g. `urn:idenplane:acr:mfa`). */
+  acr?: string;
+  /** The authentication methods performed (e.g. `['pwd', 'otp']`). */
+  amr?: string[];
+}
+
 export interface AuthorizeParams {
   response_type: string;
   client_id: string;
@@ -105,6 +118,7 @@ export class OAuthService {
     realm: Realm,
     user: User,
     params: AuthorizeParams,
+    authContext: SatisfiedAuthContext = {},
   ): Promise<{ redirectUrl: string }> {
     const client = await this.validateAuthRequest(realm, params);
 
@@ -132,7 +146,11 @@ export class OAuthService {
         codeChallenge: params.code_challenge,
         codeChallengeMethod: params.code_challenge_method,
         nonce: params.nonce,
+        // `acrValues` is what the client *requested*; `satisfiedAcr`/`amr`
+        // record what the authentication flow actually *delivered*.
         acrValues: params.acr_values ?? null,
+        satisfiedAcr: authContext.acr ?? null,
+        amr: authContext.amr ?? [],
         expiresAt: new Date(Date.now() + 60 * 1000),
       },
     });

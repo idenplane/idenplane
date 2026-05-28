@@ -11,6 +11,7 @@ import {
   type MockPrismaService,
 } from '../prisma/prisma.mock.js';
 import type { Realm } from '@prisma/client';
+import { ACR_PASSWORD, ACR_MFA } from '../step-up/step-up.service.js';
 
 // ---------------------------------------------------------------------------
 // Helpers & fixtures
@@ -648,6 +649,8 @@ describe('AuthService', () => {
       session: {
         id: 'session-1',
         user: dbUser,
+        satisfiedAcr: null as string | null,
+        amr: [] as string[],
       },
     };
 
@@ -665,7 +668,7 @@ describe('AuthService', () => {
 
       const result = await service.handleTokenRequest(realm, {
         grant_type: 'refresh_token',
-        refresh_token: 'original-opaque-token',
+        refresh_token: 'orig-opaque-rt',
         client_id: 'my-client',
         client_secret: 'correct-secret',
         scope: 'openid',
@@ -683,6 +686,39 @@ describe('AuthService', () => {
 
       // New refresh token should be created
       expect(prisma.refreshToken.create).toHaveBeenCalled();
+    });
+
+    it('preserves the session acr/amr across refresh (no downgrade to password)', async () => {
+      setupValidClient();
+      setupSigningKey();
+      setupEmptyRoles();
+      setupRefreshTokenCreate();
+
+      const mfaToken = {
+        ...storedRefreshToken,
+        session: {
+          ...storedRefreshToken.session,
+          satisfiedAcr: ACR_MFA,
+          amr: ['pwd', 'otp'],
+        },
+      };
+      prisma.refreshToken.findUnique.mockResolvedValue(mfaToken);
+      prisma.refreshToken.update.mockResolvedValue({
+        ...mfaToken,
+        revoked: true,
+      });
+
+      await service.handleTokenRequest(realm, {
+        grant_type: 'refresh_token',
+        refresh_token: 'orig-opaque-rt',
+        client_id: 'my-client',
+        client_secret: 'correct-secret',
+        scope: 'openid',
+      });
+
+      const accessTokenPayload = jwkService.signJwt.mock.calls[0][0];
+      expect(accessTokenPayload.acr).toBe(ACR_MFA);
+      expect(accessTokenPayload.amr).toEqual(['pwd', 'otp']);
     });
 
     it('should throw BadRequestException when refresh_token is missing', async () => {
@@ -811,6 +847,9 @@ describe('AuthService', () => {
       nonce: 'test-nonce',
       codeChallenge: null,
       codeChallengeMethod: null,
+      acrValues: null as string | null,
+      satisfiedAcr: null as string | null,
+      amr: [] as string[],
       used: false,
       expiresAt: futureDate,
       createdAt: new Date(),
@@ -859,6 +898,77 @@ describe('AuthService', () => {
           data: { used: true },
         }),
       );
+    });
+
+    it('reflects the satisfied MFA context (acr/amr) when the code carries it', async () => {
+      setupForTokenIssuance();
+      prisma.authorizationCode.update.mockResolvedValue({
+        ...authCode,
+        satisfiedAcr: ACR_MFA,
+        amr: ['pwd', 'otp'],
+        used: true,
+      });
+      prisma.user.findUnique.mockResolvedValue(dbUser);
+
+      await service.handleTokenRequest(
+        realm,
+        {
+          grant_type: 'authorization_code',
+          code: 'valid-auth-code',
+          client_id: 'my-client',
+          client_secret: 'correct-secret',
+          redirect_uri: 'https://app.example.com/callback',
+        },
+        '127.0.0.1',
+        'jest-agent',
+      );
+
+      // signJwt[0] = access token payload, signJwt[1] = id token payload
+      const accessTokenPayload = jwkService.signJwt.mock.calls[0][0];
+      const idTokenPayload = jwkService.signJwt.mock.calls[1][0];
+      expect(accessTokenPayload.acr).toBe(ACR_MFA);
+      expect(accessTokenPayload.amr).toEqual(['pwd', 'otp']);
+      expect(idTokenPayload.acr).toBe(ACR_MFA);
+      expect(idTokenPayload.amr).toContain('otp');
+
+      // The satisfied context is also persisted on the new session so refresh
+      // can preserve it.
+      expect(prisma.session.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            satisfiedAcr: ACR_MFA,
+            amr: ['pwd', 'otp'],
+          }),
+        }),
+      );
+    });
+
+    it('defaults to password-level acr/amr when the code carries no satisfied context', async () => {
+      setupForTokenIssuance();
+      prisma.authorizationCode.update.mockResolvedValue({
+        ...authCode,
+        satisfiedAcr: null,
+        amr: [],
+        used: true,
+      });
+      prisma.user.findUnique.mockResolvedValue(dbUser);
+
+      await service.handleTokenRequest(
+        realm,
+        {
+          grant_type: 'authorization_code',
+          code: 'valid-auth-code',
+          client_id: 'my-client',
+          client_secret: 'correct-secret',
+          redirect_uri: 'https://app.example.com/callback',
+        },
+        '127.0.0.1',
+        'jest-agent',
+      );
+
+      const accessTokenPayload = jwkService.signJwt.mock.calls[0][0];
+      expect(accessTokenPayload.acr).toBe(ACR_PASSWORD);
+      expect(accessTokenPayload.amr).toEqual(['pwd']);
     });
 
     it('should throw BadRequestException when code is missing', async () => {
@@ -1339,6 +1449,9 @@ describe('AuthService', () => {
         nonce: 'my-nonce-value',
         codeChallenge: null,
         codeChallengeMethod: null,
+        acrValues: null,
+        satisfiedAcr: null,
+        amr: [] as string[],
         used: false,
         expiresAt: new Date(Date.now() + 60_000),
         createdAt: new Date(),
