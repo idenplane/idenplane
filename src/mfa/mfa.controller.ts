@@ -120,9 +120,18 @@ export class MfaController {
       throw new UnauthorizedException('Admin identity could not be determined');
     }
 
+    // Static admin API keys are intentionally rejected here. The key is a single
+    // shared secret that always carries super-admin, so if it ever leaks it must
+    // not be usable to bypass MFA on every account. Disabling a user's MFA
+    // therefore requires an interactively MFA-verified admin session (the Bearer
+    // path below). Users who lose their authenticator recover via their recovery
+    // codes; an MFA-verified admin reset is the fallback. (Deliberate: do not add
+    // an API-key break-glass path — it reintroduces the key-leak → mass-bypass risk.)
     if (adminUser.userId.startsWith('api-key:')) {
       throw new UnauthorizedException(
-        'MFA step-up is required to disable user MFA. API key authentication is not permitted for this operation.',
+        'Static admin API keys cannot disable user MFA — this is deliberate, so a leaked key cannot bypass MFA across every account. ' +
+          'Recovery paths: (1) the user redeems a recovery code; (2) an admin signs in interactively and completes MFA step-up ' +
+          '(POST /realms/:realmName/step-up/verify with acr=urn:idenplane:acr:mfa), then retries with that session.',
       );
     }
 

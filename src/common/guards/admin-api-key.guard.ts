@@ -13,6 +13,7 @@ import { timingSafeEqual } from 'crypto';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator.js';
 import { AdminAuthService } from '../../admin-auth/admin-auth.service.js';
 import { RateLimitService } from '../../rate-limit/rate-limit.service.js';
+import type { RateLimitResult } from '../../rate-limit/rate-limit.dto.js';
 import { resolveClientIp } from '../utils/proxy-ip.util.js';
 
 @Injectable()
@@ -64,8 +65,18 @@ export class AdminApiKeyGuard implements CanActivate {
     const providedApiKey = request.headers['x-admin-api-key'];
     if (expectedKey && typeof providedApiKey === 'string') {
       const ip = resolveClientIp(request);
-      const rateLimitResult =
-        await this.rateLimitService.checkAdminApiKeyLimit(ip);
+      // This guard can run twice for a single request — it is registered both
+      // globally (APP_GUARD) and in per-controller @UseGuards. Compute the
+      // admin-key rate limit once per request and reuse it; otherwise one call
+      // increments the counter twice and halves the effective limit.
+      const rlReq = request as AdminRequest & {
+        __adminApiKeyRateLimit?: RateLimitResult;
+      };
+      let rateLimitResult = rlReq.__adminApiKeyRateLimit;
+      if (!rateLimitResult) {
+        rateLimitResult = await this.rateLimitService.checkAdminApiKeyLimit(ip);
+        rlReq.__adminApiKeyRateLimit = rateLimitResult;
+      }
       const headers = this.rateLimitService.computeHeaders(rateLimitResult);
       for (const [name, value] of Object.entries(headers)) {
         response.setHeader(name, value);

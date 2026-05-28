@@ -100,6 +100,21 @@ describe('AdminApiKeyGuard', () => {
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
   });
 
+  it('counts the admin-key rate limit only once when run twice for one request (finding #3)', async () => {
+    reflector.getAllAndOverride.mockReturnValue(false);
+    configService.get.mockReturnValue('super-secret-key');
+    const ctx = createMockExecutionContext({
+      'x-admin-api-key': 'super-secret-key',
+    });
+
+    // The guard is registered both globally (APP_GUARD) and per-controller, so
+    // it runs twice for a single request — but must consume only one slot.
+    await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    await expect(guard.canActivate(ctx)).resolves.toBe(true);
+
+    expect(rateLimitService.checkAdminApiKeyLimit).toHaveBeenCalledTimes(1);
+  });
+
   it('should allow admin routes when a valid Bearer token is provided', async () => {
     reflector.getAllAndOverride.mockReturnValue(false);
     adminAuthService.validateAdminToken.mockResolvedValue({

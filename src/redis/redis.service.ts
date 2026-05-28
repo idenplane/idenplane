@@ -137,6 +137,15 @@ export class RedisService implements OnModuleInit, OnModuleDestroy {
     return count;
   }
 
+  /**
+   * Atomically decrement a key by 1. Used to undo a rejected request's INCR so
+   * throttled retries do not keep inflating the rate-limit counter.
+   */
+  async decr(key: string): Promise<number> {
+    if (!this.isAvailable()) return 0;
+    return this.client!.decr(key);
+  }
+
   /** Delete all keys matching a glob pattern (uses SCAN to avoid blocking). */
   async delPattern(pattern: string): Promise<void> {
     if (!this.isAvailable()) return;

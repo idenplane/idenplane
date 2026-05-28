@@ -94,7 +94,10 @@ export class EmailService {
 
     if (!realm?.smtpHost) {
       this.logger.warn(
-        `SMTP not configured for realm "${realmName}", skipping email to ${to}`,
+        `SMTP is not configured for realm "${realmName}" — skipping email to ${to}. ` +
+          `Email is configured per realm: PATCH /admin/realms/${realmName} with ` +
+          `smtpHost/smtpPort/smtpUser/smtpPassword/smtpFrom/smtpSecure. Until then, ` +
+          `password-reset / verification emails are silently dropped.`,
       );
       return;
     }

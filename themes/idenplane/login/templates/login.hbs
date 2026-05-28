@@ -180,6 +180,6 @@
 
 {{#if registrationAllowed}}
 <div style="text-align: center; margin-top: 1rem;">
-  <a href="/realms/{{realmName}}/register?client_id={{client_id}}&redirect_uri={{redirect_uri}}&response_type={{response_type}}&scope={{scope}}&state={{state}}&nonce={{nonce}}&code_challenge={{code_challenge}}&code_challenge_method={{code_challenge_method}}" style="color: var(--primary-color); text-decoration: none; font-size: 0.85rem;">{{msg "loginNoAccount"}}</a>
+  <a href="{{registerUrl}}" style="color: var(--primary-color); text-decoration: none; font-size: 0.85rem;">{{msg "loginNoAccount"}}</a>
 </div>
 {{/if}}
