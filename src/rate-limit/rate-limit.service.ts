@@ -185,6 +185,13 @@ export class RateLimitService {
     const minuteResetAt = (minuteWindow + 1) * 60;
     const hourResetAt = (hourWindow + 1) * 3600;
 
+    // Don't count rejected requests: undo this request's increments so a retry
+    // storm cannot keep inflating the counter and extend the lockout window.
+    if (minuteCount > limitPerMinute || hourCount > limitPerHour) {
+      await this.redis.decr(minuteKey).catch(() => undefined);
+      await this.redis.decr(hourKey).catch(() => undefined);
+    }
+
     // Check minute limit
     if (minuteCount > limitPerMinute) {
       const retryAfter = minuteResetAt - now;
@@ -288,6 +295,19 @@ export class RateLimitService {
     const hourResetAt = Math.ceil(
       (Math.max(entryHourWindowStart, now) + hourWindowMs) / 1000,
     );
+
+    // Don't count rejected requests: undo this request's increment so a retry
+    // storm cannot keep inflating the counter and extend the lockout window.
+    if (minuteCount > limitPerMinute || hourCount > limitPerHour) {
+      await this.prisma.rateLimitEntry
+        .update({
+          where: { key },
+          data: { minuteCount: { decrement: 1 }, hourCount: { decrement: 1 } },
+        })
+        .catch(() => {
+          // Entry may have been cleaned up concurrently — nothing to undo.
+        });
+    }
 
     if (minuteCount > limitPerMinute) {
       const retryAfter = minuteResetAt - Math.floor(now / 1000);

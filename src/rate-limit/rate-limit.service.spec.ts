@@ -97,6 +97,28 @@ describe('RateLimitService', () => {
     prisma = createMockPrismaService();
     upsertMock = createStatefulUpsertMock();
     prisma.rateLimitEntry.upsert = upsertMock;
+    // Stateful update mock sharing the upsert store so rejection-compensation
+    // (decrement) and window-reset writes are reflected in the same counters.
+    prisma.rateLimitEntry.update = jest
+      .fn()
+      .mockImplementation((args: { where: { key: string }; data: any }) => {
+        const store = (upsertMock as any).__store as Map<string, any>;
+        const entry = store.get(args.where.key);
+        if (entry) {
+          const d = args.data;
+          if (d.minuteCount?.decrement !== undefined)
+            entry.minuteCount -= d.minuteCount.decrement;
+          else if (typeof d.minuteCount === 'number')
+            entry.minuteCount = d.minuteCount;
+          if (d.hourCount?.decrement !== undefined)
+            entry.hourCount -= d.hourCount.decrement;
+          else if (typeof d.hourCount === 'number')
+            entry.hourCount = d.hourCount;
+          if (d.minuteWindowStart) entry.minuteWindowStart = d.minuteWindowStart;
+          if (d.hourWindowStart) entry.hourWindowStart = d.hourWindowStart;
+        }
+        return Promise.resolve(entry ? { ...entry } : { key: args.where.key });
+      });
     service = new RateLimitService(
       prisma as any,
       createMockRedisService() as any,
@@ -145,6 +167,28 @@ describe('RateLimitService', () => {
       expect(result.allowed).toBe(false);
       expect(result.remaining).toBe(0);
       expect(result.retryAfter).toBeGreaterThan(0);
+    });
+
+    it('does not inflate the counter when rejected requests retry (finding #7)', async () => {
+      prisma.realm.findUnique.mockResolvedValue({
+        ...rateLimitEnabledRealm,
+        clientRateLimitPerMinute: 2,
+      });
+
+      // Exhaust the 2 allowed requests
+      await service.checkClientLimit(clientId, realmId);
+      await service.checkClientLimit(clientId, realmId);
+
+      // Hammer with rejected retries — these must NOT keep incrementing
+      for (let i = 0; i < 5; i++) {
+        const r = await service.checkClientLimit(clientId, realmId);
+        expect(r.allowed).toBe(false);
+      }
+
+      const store = (upsertMock as any).__store as Map<string, any>;
+      const entry = [...store.values()][0];
+      // Counter stays capped at the limit (2), not 2 + 5 rejected retries.
+      expect(entry.minuteCount).toBe(2);
     });
 
     it('should track different clients independently', async () => {
