@@ -90,6 +90,16 @@ export class CreateClientDto {
   @IsString({ each: true })
   redirectUris?: string[];
 
+  @ApiPropertyOptional({
+    description:
+      'Allowed post_logout_redirect_uri values for RP-Initiated Logout. Falls back to redirectUris when empty.',
+    example: ['http://localhost:3000/after-logout'],
+  })
+  @IsOptional()
+  @IsArray()
+  @IsString({ each: true })
+  postLogoutRedirectUris?: string[];
+
   @ApiPropertyOptional({ example: ['http://localhost:3000'] })
   @IsOptional()
   @IsArray()

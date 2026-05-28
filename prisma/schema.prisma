@@ -324,9 +324,10 @@ model Client {
   enabled        Boolean    @default(true)
   requireConsent Boolean    @default(false) @map("require_consent")
 
-  redirectUris String[] @map("redirect_uris")
-  webOrigins   String[] @map("web_origins")
-  grantTypes   String[] @default(["authorization_code"]) @map("grant_types")
+  redirectUris           String[] @map("redirect_uris")
+  webOrigins             String[] @map("web_origins")
+  grantTypes             String[] @default(["authorization_code"]) @map("grant_types")
+  postLogoutRedirectUris String[] @default([]) @map("post_logout_redirect_uris")
 
   // Backchannel logout
   backchannelLogoutUri             String? @map("backchannel_logout_uri")

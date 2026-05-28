@@ -1,4 +1,4 @@
-import { UnauthorizedException } from '@nestjs/common';
+import { UnauthorizedException, BadRequestException } from '@nestjs/common';
 
 // Mock JwkService and ScopesService modules to avoid importing jose (ESM-only)
 jest.mock('../crypto/jwk.service.js', () => ({
@@ -152,6 +152,73 @@ describe('TokensService', () => {
       const result = await service.introspect(mockRealm, 'tampered-token');
 
       expect(result).toEqual({ active: false });
+    });
+  });
+
+  describe('validatePostLogoutRedirectUri', () => {
+    beforeEach(() => {
+      prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
+      jwkService.verifyJwt.mockResolvedValue({ azp: 'my-app' });
+    });
+
+    it('validates against the client postLogoutRedirectUris when present', async () => {
+      prisma.client.findUnique.mockResolvedValue({
+        redirectUris: ['https://app.example.com/callback'],
+        postLogoutRedirectUris: ['https://app.example.com/after-logout'],
+      });
+
+      await expect(
+        service.validatePostLogoutRedirectUri(
+          mockRealm,
+          'https://app.example.com/after-logout',
+          'id-token-hint',
+        ),
+      ).resolves.toBeUndefined();
+    });
+
+    it('does not accept an auth redirectUri as post-logout when the dedicated list is set', async () => {
+      prisma.client.findUnique.mockResolvedValue({
+        redirectUris: ['https://app.example.com/callback'],
+        postLogoutRedirectUris: ['https://app.example.com/after-logout'],
+      });
+
+      await expect(
+        service.validatePostLogoutRedirectUri(
+          mockRealm,
+          'https://app.example.com/callback',
+          'id-token-hint',
+        ),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('falls back to redirectUris when postLogoutRedirectUris is empty', async () => {
+      prisma.client.findUnique.mockResolvedValue({
+        redirectUris: ['https://app.example.com/callback'],
+        postLogoutRedirectUris: [],
+      });
+
+      await expect(
+        service.validatePostLogoutRedirectUri(
+          mockRealm,
+          'https://app.example.com/callback',
+          'id-token-hint',
+        ),
+      ).resolves.toBeUndefined();
+    });
+
+    it('rejects a uri that matches neither list', async () => {
+      prisma.client.findUnique.mockResolvedValue({
+        redirectUris: ['https://app.example.com/callback'],
+        postLogoutRedirectUris: ['https://app.example.com/after-logout'],
+      });
+
+      await expect(
+        service.validatePostLogoutRedirectUri(
+          mockRealm,
+          'https://evil.example.com/steal',
+          'id-token-hint',
+        ),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 

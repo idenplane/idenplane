@@ -350,14 +350,22 @@ export class TokensService {
 
     const client = await this.prisma.client.findUnique({
       where: { realmId_clientId: { realmId: realm.id, clientId } },
-      select: { redirectUris: true },
+      select: { redirectUris: true, postLogoutRedirectUris: true },
     });
 
     if (!client) {
       throw new BadRequestException('Invalid logout request');
     }
 
-    if (!matchesRedirectUri(postLogoutRedirectUri, client.redirectUris)) {
+    // OIDC RP-Initiated Logout: validate against the client's dedicated
+    // post_logout_redirect_uris. Fall back to redirectUris for clients that
+    // predate the field so existing integrations keep working.
+    const allowed =
+      client.postLogoutRedirectUris.length > 0
+        ? client.postLogoutRedirectUris
+        : client.redirectUris;
+
+    if (!matchesRedirectUri(postLogoutRedirectUri, allowed)) {
       throw new BadRequestException(
         'post_logout_redirect_uri is not valid for this client',
       );
