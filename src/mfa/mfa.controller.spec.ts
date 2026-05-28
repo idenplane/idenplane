@@ -140,7 +140,7 @@ describe('MfaController', () => {
 
       await expect(
         controller.resetMfa(realm, 'user-1', reqWithApiKey),
-      ).rejects.toThrow('API key authentication is not permitted');
+      ).rejects.toThrow('Static admin API keys cannot disable user MFA');
     });
 
     it('should throw UnauthorizedException when no session token is present', async () => {
