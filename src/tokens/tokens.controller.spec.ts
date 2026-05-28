@@ -10,6 +10,9 @@ describe('TokensController', () => {
     introspect: jest.Mock;
     revoke: jest.Mock;
     logout: jest.Mock;
+    logoutByIdToken: jest.Mock;
+    validatePostLogoutRedirectUri: jest.Mock;
+    invalidateLoginSession: jest.Mock;
     userinfo: jest.Mock;
     assertTokenBelongsToClient: jest.Mock;
   };
@@ -47,6 +50,9 @@ describe('TokensController', () => {
       introspect: jest.fn(),
       revoke: jest.fn(),
       logout: jest.fn(),
+      logoutByIdToken: jest.fn().mockResolvedValue(undefined),
+      validatePostLogoutRedirectUri: jest.fn().mockResolvedValue(undefined),
+      invalidateLoginSession: jest.fn().mockResolvedValue(undefined),
       userinfo: jest.fn(),
       assertTokenBelongsToClient: jest.fn().mockResolvedValue(undefined),
     };
@@ -172,6 +178,82 @@ describe('TokensController', () => {
         '127.0.0.1',
         'rt-123',
       );
+    });
+  });
+
+  describe('logoutGet (RP-initiated logout)', () => {
+    const mockRes = () =>
+      ({
+        redirect: jest.fn(),
+        status: jest.fn().mockReturnThis(),
+        send: jest.fn(),
+        clearCookie: jest.fn(),
+      }) as any;
+
+    it('invalidates the SSO session and clears IDENPLANE_SESSION with the matching path', async () => {
+      const req = mockReq({ cookies: { IDENPLANE_SESSION: 'sso-token-abc' } });
+      const res = mockRes();
+
+      await controller.logoutGet(
+        realm,
+        'id-token-hint',
+        undefined,
+        undefined,
+        req,
+        res,
+      );
+
+      expect(mockTokensService.invalidateLoginSession).toHaveBeenCalledWith(
+        'sso-token-abc',
+      );
+      // The cookie was set with path `/realms/<name>`; clearing with any other
+      // path silently no-ops in the browser, so assert the path explicitly.
+      expect(res.clearCookie).toHaveBeenCalledWith(
+        'IDENPLANE_SESSION',
+        expect.objectContaining({ path: `/realms/${realm.name}` }),
+      );
+      expect(res.status).toHaveBeenCalledWith(204);
+    });
+
+    it('still clears the cookie when redirecting to a post_logout_redirect_uri', async () => {
+      const req = mockReq({ cookies: { IDENPLANE_SESSION: 'sso-token-abc' } });
+      const res = mockRes();
+
+      await controller.logoutGet(
+        realm,
+        'id-token-hint',
+        'https://app.example.com/after-logout',
+        'xyz',
+        req,
+        res,
+      );
+
+      expect(
+        mockTokensService.validatePostLogoutRedirectUri,
+      ).toHaveBeenCalled();
+      expect(res.clearCookie).toHaveBeenCalledWith(
+        'IDENPLANE_SESSION',
+        expect.objectContaining({ path: `/realms/${realm.name}` }),
+      );
+      expect(res.redirect).toHaveBeenCalledWith(
+        'https://app.example.com/after-logout?state=xyz',
+      );
+    });
+
+    it('skips SSO invalidation when no session cookie is present', async () => {
+      const req = mockReq();
+      const res = mockRes();
+
+      await controller.logoutGet(
+        realm,
+        'id-token-hint',
+        undefined,
+        undefined,
+        req,
+        res,
+      );
+
+      expect(mockTokensService.invalidateLoginSession).not.toHaveBeenCalled();
     });
   });
 

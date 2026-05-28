@@ -286,6 +286,22 @@ export class TokensController {
       idTokenHint,
     );
 
+    // End the browser SSO session as well. Without this the IDENPLANE_SESSION
+    // cookie survives logout and /authorize silently re-authenticates the user
+    // on the next sign-in, so "Sign out" would not actually end the session.
+    const ssoToken = (req.cookies as Record<string, string> | undefined)?.[
+      'IDENPLANE_SESSION'
+    ];
+    if (ssoToken) {
+      await this.tokensService.invalidateLoginSession(ssoToken);
+    }
+    res.clearCookie('IDENPLANE_SESSION', {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+      path: `/realms/${realm.name}`,
+    });
+
     if (postLogoutRedirectUri) {
       const redirectUrl = new URL(postLogoutRedirectUri);
       if (state) {
