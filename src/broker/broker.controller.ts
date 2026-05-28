@@ -33,6 +33,8 @@ export class BrokerController {
     @Query('scope') scope: string,
     @Query('state') state: string,
     @Query('nonce') nonce: string,
+    @Query('code_challenge') codeChallenge: string,
+    @Query('code_challenge_method') codeChallengeMethod: string,
     @Res() res: Response,
   ) {
     const redirectUrl = await this.brokerService.initiateLogin(realm, alias, {
@@ -41,6 +43,8 @@ export class BrokerController {
       scope,
       state,
       nonce,
+      code_challenge: codeChallenge,
+      code_challenge_method: codeChallengeMethod,
     });
 
     res.redirect(302, redirectUrl);

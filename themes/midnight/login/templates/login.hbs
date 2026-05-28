@@ -38,6 +38,15 @@
   <button type="submit" class="btn-primary">{{msg "loginSignIn"}}</button>
 </form>
 
+{{#if identityProviders.length}}
+<div class="auth-divider" style="margin-top: 1rem;"><span>or</span></div>
+<div style="display: flex; flex-direction: column; gap: 0.5rem; margin-top: 0.75rem;">
+  {{#each identityProviders}}
+  <a href="{{this.loginUrl}}" class="btn-secondary">Sign in with {{this.displayName}}</a>
+  {{/each}}
+</div>
+{{/if}}
+
 {{#if registrationAllowed}}
 <div class="auth-footer-link">
   <a href="{{registerUrl}}">{{msg "loginNoAccount"}}</a>

@@ -31,6 +31,8 @@ describe('BrokerController', () => {
         scope: 'openid',
         state: 'abc',
         nonce: 'xyz',
+        code_challenge: 'challenge-abc',
+        code_challenge_method: 'S256',
       };
 
       await controller.login(
@@ -41,6 +43,8 @@ describe('BrokerController', () => {
         query.scope,
         query.state,
         query.nonce,
+        query.code_challenge,
+        query.code_challenge_method,
         res as any,
       );
 
@@ -53,6 +57,8 @@ describe('BrokerController', () => {
           scope: 'openid',
           state: 'abc',
           nonce: 'xyz',
+          code_challenge: 'challenge-abc',
+          code_challenge_method: 'S256',
         },
       );
       expect(res.redirect).toHaveBeenCalledWith(302, redirectUrl);
