@@ -40,6 +40,6 @@
 
 {{#if registrationAllowed}}
 <div class="auth-footer-link">
-  <a href="/realms/{{realmName}}/register?client_id={{client_id}}&redirect_uri={{redirect_uri}}&response_type={{response_type}}&scope={{scope}}&state={{state}}&nonce={{nonce}}&code_challenge={{code_challenge}}&code_challenge_method={{code_challenge_method}}">{{msg "loginNoAccount"}}</a>
+  <a href="{{registerUrl}}">{{msg "loginNoAccount"}}</a>
 </div>
 {{/if}}
