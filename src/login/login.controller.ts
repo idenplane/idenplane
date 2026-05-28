@@ -118,7 +118,7 @@ export class LoginController {
   // ─── LOGIN ──────────────────────────────────────────────
 
   @Get('login')
-  showLoginForm(
+  async showLoginForm(
     @CurrentRealm() realm: Realm,
     @Query() query: Record<string, string>,
     @Req() req: Request,
@@ -128,8 +128,7 @@ export class LoginController {
     // Build a properly percent-encoded register link so the hosted page does
     // not emit a URL with literal spaces (scope) or an unencoded redirect_uri,
     // and so empty params are dropped rather than rendered as `nonce=`.
-    const registerParams = new URLSearchParams();
-    for (const k of [
+    const oauthParamKeys = [
       'client_id',
       'redirect_uri',
       'response_type',
@@ -138,7 +137,9 @@ export class LoginController {
       'nonce',
       'code_challenge',
       'code_challenge_method',
-    ]) {
+    ];
+    const registerParams = new URLSearchParams();
+    for (const k of oauthParamKeys) {
       const v = query[k];
       if (v) registerParams.set(k, v);
     }
@@ -146,6 +147,27 @@ export class LoginController {
     const registerUrl = `/realms/${realm.name}/register${
       registerQs ? `?${registerQs}` : ''
     }`;
+
+    // Surface enabled identity providers as "Sign in with …" buttons. Each
+    // broker login URL carries the same OAuth/PKCE params (percent-encoded,
+    // empty params dropped) as the register link so social login stays secure
+    // for public PKCE clients.
+    const enabledIdps = await this.prisma.identityProvider.findMany({
+      where: { realmId: realm.id, enabled: true },
+      select: { alias: true, displayName: true },
+      orderBy: { alias: 'asc' },
+    });
+    const identityProviders = enabledIdps.map((idp) => {
+      const brokerQs = registerParams.toString();
+      return {
+        alias: idp.alias,
+        displayName: idp.displayName ?? idp.alias,
+        loginUrl: `/realms/${realm.name}/broker/${idp.alias}/login${
+          brokerQs ? `?${brokerQs}` : ''
+        }`,
+      };
+    });
+
     this.themeRender.render(
       res,
       realm,
@@ -167,6 +189,7 @@ export class LoginController {
         info: query['info'] ?? '',
         login_hint: query['login_hint'] ?? '',
         registerUrl,
+        identityProviders,
         csrfToken,
       },
       req,

@@ -232,6 +232,16 @@ describe('BrokerService', () => {
       scope: 'openid',
       state: 'client-state',
       nonce: 'client-nonce',
+      codeChallenge: 'challenge-abc',
+      codeChallengeMethod: 'S256',
+    };
+
+    const githubIdp = {
+      ...mockIdp,
+      alias: 'github',
+      displayName: 'GitHub',
+      userinfoUrl: 'https://api.github.com/user',
+      defaultScopes: 'read:user user:email',
     };
 
     const externalUserInfo = {
@@ -293,6 +303,10 @@ describe('BrokerService', () => {
           redirectUri: 'https://example.com/callback',
           scope: 'openid',
           nonce: 'client-nonce',
+          // Finding #15: PKCE carried through the broker so the code→token
+          // exchange can enforce it for public clients.
+          codeChallenge: 'challenge-abc',
+          codeChallengeMethod: 'S256',
         }),
       });
     });
@@ -656,6 +670,151 @@ describe('BrokerService', () => {
       await expect(
         service.handleCallback(mockRealm, 'google', 'auth-code', 'state-jwt'),
       ).rejects.toThrow(UnauthorizedException);
+    });
+
+    // Finding #16: GitHub returns email=null for private emails; fall back to
+    // /user/emails and pick the primary verified address.
+    it('should resolve a GitHub private email via /user/emails and send a User-Agent', async () => {
+      const githubState = { ...brokerState, alias: 'github' };
+      prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
+      jwkService.verifyJwt.mockResolvedValue(githubState);
+      idpService.findByAlias.mockResolvedValue({ ...githubIdp, trustEmail: true });
+
+      (global.fetch as jest.Mock)
+        // 1. token exchange
+        .mockResolvedValueOnce({
+          ok: true,
+          json: jest.fn().mockResolvedValue({ access_token: 'gh-access-token' }),
+        })
+        // 2. /user (private email → null)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: jest
+            .fn()
+            .mockResolvedValue({ id: 4242, login: 'octocat', email: null }),
+        })
+        // 3. /user/emails
+        .mockResolvedValueOnce({
+          ok: true,
+          json: jest.fn().mockResolvedValue([
+            { email: 'public@x.com', primary: false, verified: true },
+            { email: 'x@y.com', primary: true, verified: true },
+          ]),
+        });
+
+      prisma.federatedIdentity.findUnique.mockResolvedValue(null);
+      prisma.user.findFirst.mockResolvedValue(null);
+      prisma.user.create.mockResolvedValue({ ...mockUser, id: 'gh-user-1' });
+      prisma.federatedIdentity.create.mockResolvedValue({});
+      prisma.client.findUnique.mockResolvedValue(mockClient);
+      prisma.authorizationCode.create.mockResolvedValue({});
+
+      await service.handleCallback(
+        mockRealm,
+        'github',
+        'auth-code',
+        'state-jwt',
+      );
+
+      expect(prisma.user.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          email: 'x@y.com',
+          emailVerified: true,
+        }),
+      });
+
+      // The userinfo request (2nd fetch) must carry a User-Agent header.
+      const userinfoCall = (global.fetch as jest.Mock).mock.calls[1];
+      expect(userinfoCall[0]).toBe('https://api.github.com/user');
+      expect(userinfoCall[1].headers['User-Agent']).toBe('Idenplane');
+
+      // The /user/emails request (3rd fetch) must be made with GitHub headers.
+      const emailsCall = (global.fetch as jest.Mock).mock.calls[2];
+      expect(emailsCall[0]).toBe('https://api.github.com/user/emails');
+      expect(emailsCall[1].headers['User-Agent']).toBe('Idenplane');
+      expect(emailsCall[1].headers.Accept).toBe('application/vnd.github+json');
+    });
+
+    it('should leave email empty when GitHub /user/emails fails', async () => {
+      const githubState = { ...brokerState, alias: 'github' };
+      prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
+      jwkService.verifyJwt.mockResolvedValue(githubState);
+      idpService.findByAlias.mockResolvedValue(githubIdp);
+
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: jest.fn().mockResolvedValue({ access_token: 'gh-access-token' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: jest
+            .fn()
+            .mockResolvedValue({ id: 4242, login: 'octocat', email: null }),
+        })
+        // /user/emails returns 403 (e.g. missing scope) — must not crash login
+        .mockResolvedValueOnce({ ok: false, status: 403 });
+
+      prisma.federatedIdentity.findUnique.mockResolvedValue(null);
+      prisma.user.create.mockResolvedValue({ ...mockUser, id: 'gh-user-2' });
+      prisma.federatedIdentity.create.mockResolvedValue({});
+      prisma.client.findUnique.mockResolvedValue(mockClient);
+      prisma.authorizationCode.create.mockResolvedValue({});
+
+      await service.handleCallback(
+        mockRealm,
+        'github',
+        'auth-code',
+        'state-jwt',
+      );
+
+      expect(prisma.user.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({ email: undefined }),
+      });
+    });
+
+    // Finding #17: GitHub returns a single full `name`; split into first/last.
+    it('should split a full name into firstName/lastName when given/family absent', async () => {
+      const githubState = { ...brokerState, alias: 'github' };
+      prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
+      jwkService.verifyJwt.mockResolvedValue(githubState);
+      idpService.findByAlias.mockResolvedValue(githubIdp);
+
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: jest.fn().mockResolvedValue({ access_token: 'gh-access-token' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: jest.fn().mockResolvedValue({
+            id: 4242,
+            login: 'islam',
+            email: 'islam@x.com',
+            name: 'Islam Awad',
+          }),
+        });
+
+      prisma.federatedIdentity.findUnique.mockResolvedValue(null);
+      prisma.user.create.mockResolvedValue({ ...mockUser, id: 'gh-user-3' });
+      prisma.federatedIdentity.create.mockResolvedValue({});
+      prisma.client.findUnique.mockResolvedValue(mockClient);
+      prisma.authorizationCode.create.mockResolvedValue({});
+
+      await service.handleCallback(
+        mockRealm,
+        'github',
+        'auth-code',
+        'state-jwt',
+      );
+
+      expect(prisma.user.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          firstName: 'Islam',
+          lastName: 'Awad',
+          username: 'islam',
+        }),
+      });
     });
   });
 });
