@@ -668,7 +668,7 @@ describe('AuthService', () => {
 
       const result = await service.handleTokenRequest(realm, {
         grant_type: 'refresh_token',
-        refresh_token: 'original-opaque-token',
+        refresh_token: 'orig-opaque-rt',
         client_id: 'my-client',
         client_secret: 'correct-secret',
         scope: 'openid',
@@ -710,7 +710,7 @@ describe('AuthService', () => {
 
       await service.handleTokenRequest(realm, {
         grant_type: 'refresh_token',
-        refresh_token: 'original-opaque-token',
+        refresh_token: 'orig-opaque-rt',
         client_id: 'my-client',
         client_secret: 'correct-secret',
         scope: 'openid',
