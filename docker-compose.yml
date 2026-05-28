@@ -39,6 +39,10 @@ services:
       ADMIN_API_KEY: ${ADMIN_API_KEY:?Set ADMIN_API_KEY}
       ADMIN_USER: ${ADMIN_USER}
       ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      # Required: the server hard-exits in production when these are unset, so
+      # fail fast here with a clear message instead of an opaque restart loop.
+      WEBHOOK_SECRET_KEY: ${WEBHOOK_SECRET_KEY:?Set WEBHOOK_SECRET_KEY (openssl rand -hex 32)}
+      WEBHOOK_ENCRYPTION_SALT: ${WEBHOOK_ENCRYPTION_SALT:?Set WEBHOOK_ENCRYPTION_SALT (openssl rand -hex 16)}
       THROTTLE_TTL: ${THROTTLE_TTL:-60000}
       THROTTLE_LIMIT: ${THROTTLE_LIMIT:-100}
       BASE_URL: ${BASE_URL:-http://localhost:3000}
