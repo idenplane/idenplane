@@ -955,6 +955,12 @@ export class AuthService {
       typ: 'Bearer',
       azp: clientId,
       sid: sessionId,
+      // RFC 9068 §2.2: surface the authentication context (acr) and methods
+      // (amr) in the access token too, so a resource server can make step-up /
+      // assurance decisions from the bearer token without needing the id_token.
+      // Mirror the id_token resolution (default acr = password).
+      acr: acr ?? ACR_PASSWORD,
+      ...(amr && amr.length > 0 ? { amr } : {}),
       ...userClaims,
       ...(includeRoles
         ? {

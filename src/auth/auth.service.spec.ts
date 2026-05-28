@@ -366,6 +366,24 @@ describe('AuthService', () => {
       expect(result.access_token).toBeDefined();
     });
 
+    it('includes acr in the access token (RFC 9068, finding #12)', async () => {
+      setupForTokenIssuance();
+      prisma.user.findUnique.mockResolvedValue(dbUser);
+
+      await service.handleTokenRequest(realm, {
+        grant_type: 'password',
+        client_id: 'my-client',
+        client_secret: 'correct-secret',
+        username: 'testuser',
+        password: 'pass',
+        scope: 'openid',
+      });
+
+      // signJwt is called for the access token first, then the id_token.
+      const accessTokenPayload = jwkService.signJwt.mock.calls[0][0];
+      expect(accessTokenPayload).toHaveProperty('acr');
+    });
+
     it('should not require client_secret for a public client', async () => {
       setupForTokenIssuance(publicClient as any);
       prisma.user.findUnique.mockResolvedValue(dbUser);
