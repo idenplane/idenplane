@@ -1,6 +1,6 @@
 jest.mock('../crypto/jwk.service.js', () => ({ JwkService: jest.fn() }));
 
-import { UnauthorizedException } from '@nestjs/common';
+import { UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { TokensController } from './tokens.controller.js';
 import type { Realm } from '@prisma/client';
 
@@ -238,6 +238,34 @@ describe('TokensController', () => {
       expect(res.redirect).toHaveBeenCalledWith(
         'https://app.example.com/after-logout?state=xyz',
       );
+    });
+
+    it('redirects to the login page instead of raw JSON when the logout request is invalid (#10)', async () => {
+      mockTokensService.validatePostLogoutRedirectUri.mockRejectedValue(
+        new BadRequestException(
+          'post_logout_redirect_uri is not valid for this client',
+        ),
+      );
+      const req = mockReq({ cookies: { IDENPLANE_SESSION: 'sso-token-abc' } });
+      const res = mockRes();
+
+      await controller.logoutGet(
+        realm,
+        'id-token-hint',
+        'https://evil.example.com/steal',
+        undefined,
+        req,
+        res,
+      );
+
+      // Best-effort sign-out still happens, and the browser is redirected to
+      // the login page with the reason rather than shown a raw JSON 400.
+      expect(res.clearCookie).toHaveBeenCalledWith(
+        'IDENPLANE_SESSION',
+        expect.objectContaining({ path: `/realms/${realm.name}` }),
+      );
+      const redirectArg = res.redirect.mock.calls[0][0];
+      expect(redirectArg).toContain(`/realms/${realm.name}/login?error=`);
     });
 
     it('skips SSO invalidation when no session cookie is present', async () => {
