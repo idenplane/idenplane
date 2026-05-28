@@ -190,6 +190,9 @@ export class AuthService {
         userId: user.id,
         ipAddress: ip,
         userAgent,
+        // Persist so a later refresh preserves the password-level context.
+        satisfiedAcr: ACR_PASSWORD,
+        amr: ['pwd'],
         expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
       },
     });
@@ -314,6 +317,9 @@ export class AuthService {
         userId: user.id,
         ipAddress: ip,
         userAgent,
+        // Persist so a later refresh preserves the MFA-level context.
+        satisfiedAcr: ACR_MFA,
+        amr: ['pwd', 'otp'],
         expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
       },
     });
@@ -526,12 +532,23 @@ export class AuthService {
       grant_type: 'refresh_token',
     });
 
+    // Preserve the session's satisfied auth context across refresh so the
+    // rotated tokens keep their acr/amr (and don't silently downgrade to
+    // password level). Legacy sessions with no stored context fall back.
+    const session = storedToken.session;
+    const acr = session.satisfiedAcr ?? ACR_PASSWORD;
+    const amr = session.amr.length > 0 ? session.amr : ['pwd'];
+
     return this.issueTokens(
       realm,
       user,
       client_id,
       storedToken.sessionId,
       scope || storedToken.scope || undefined,
+      undefined,
+      undefined,
+      acr,
+      amr,
     );
   }
 
@@ -632,11 +649,21 @@ export class AuthService {
 
     await this.enforceSessionLimit(realm, user.id);
 
+    // Reflect the auth context actually *satisfied* during login (persisted on
+    // the code at authorization time), not merely the client-*requested*
+    // `acrValues`. Falls back to password-level for legacy/null codes.
+    const acr = authCode.satisfiedAcr ?? ACR_PASSWORD;
+    const amr = authCode.amr.length > 0 ? authCode.amr : ['pwd'];
+
     const session = await this.prisma.session.create({
       data: {
         userId: user.id,
         ipAddress: ip,
         userAgent,
+        // Persist so the refresh_token grant can preserve acr/amr (see
+        // handleRefreshTokenGrant).
+        satisfiedAcr: acr,
+        amr,
         expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
       },
     });
@@ -654,12 +681,6 @@ export class AuthService {
       grant_type: 'authorization_code',
     });
 
-    // Resolve ACR from the auth code's stored acr_values (set at authorization time)
-    const storedAcrValues = authCode.acrValues;
-    const resolvedAcr = storedAcrValues
-      ? storedAcrValues.split(' ')[0]
-      : ACR_PASSWORD;
-
     return this.issueTokens(
       realm,
       user,
@@ -668,8 +689,8 @@ export class AuthService {
       authCode.scope ?? undefined,
       authCode.nonce ?? undefined,
       new Date(),
-      resolvedAcr,
-      ['pwd'],
+      acr,
+      amr,
       authCode.code,
     );
   }

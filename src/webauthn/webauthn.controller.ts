@@ -29,6 +29,7 @@ import {
   VerifyAuthenticationDto,
 } from './webauthn.dto.js';
 import type { AuthorizeParams } from '../oauth/oauth.service.js';
+import { ACR_WEBAUTHN } from '../step-up/step-up.service.js';
 import type {
   RegistrationResponseJSON,
   AuthenticationResponseJSON,
@@ -213,6 +214,10 @@ export class WebAuthnController {
       return res.json({ redirectUrl: `/realms/${realm.name}/account` });
     }
 
+    // Passwordless WebAuthn assertion: the hardware authenticator is the sole
+    // factor, so amr is `['hwk']` (RFC 8176). ACR reflects the WebAuthn level.
+    const authContext = { acr: ACR_WEBAUTHN, amr: ['hwk'] };
+
     try {
       const client = await this.oauthService.validateAuthRequest(
         realm,
@@ -237,6 +242,8 @@ export class WebAuthnController {
             realmName: realm.name,
             scopes,
             oauthParams,
+            satisfiedAcr: authContext.acr,
+            amr: authContext.amr,
           });
           return res.json({
             redirectUrl: `/realms/${realm.name}/consent?req=${reqId}`,
@@ -248,6 +255,7 @@ export class WebAuthnController {
         realm,
         user,
         oauthParams as unknown as AuthorizeParams,
+        authContext,
       );
       return res.json({ redirectUrl: result.redirectUrl });
     } catch (err: unknown) {
