@@ -270,14 +270,30 @@ export class TokensController {
     @Res() res: Response,
   ) {
     if (postLogoutRedirectUri) {
-      // Validate post_logout_redirect_uri against the client's registered
-      // redirect URIs *before* performing any session teardown so that an
-      // attacker cannot abuse the endpoint as an open redirector.
-      await this.tokensService.validatePostLogoutRedirectUri(
-        realm,
-        postLogoutRedirectUri,
-        idTokenHint,
-      );
+      // Validate post_logout_redirect_uri against the client's registered URIs
+      // *before* any teardown so the endpoint can't be abused as an open
+      // redirector. This endpoint is reached by top-level browser navigation,
+      // so on failure send the user to the login page (signed out) with the
+      // reason rather than dumping a raw JSON error to the browser.
+      try {
+        await this.tokensService.validatePostLogoutRedirectUri(
+          realm,
+          postLogoutRedirectUri,
+          idTokenHint,
+        );
+      } catch (err) {
+        await this.tokensService
+          .logoutByIdToken(realm, resolveClientIp(req), idTokenHint)
+          .catch(() => undefined);
+        await this.clearBrowserSsoSession(realm, req, res);
+        const message =
+          err instanceof BadRequestException
+            ? this.extractErrorMessage(err)
+            : 'Invalid logout request';
+        return res.redirect(
+          `/realms/${realm.name}/login?error=${encodeURIComponent(message)}`,
+        );
+      }
     }
 
     await this.tokensService.logoutByIdToken(
@@ -285,10 +301,30 @@ export class TokensController {
       resolveClientIp(req),
       idTokenHint,
     );
+    await this.clearBrowserSsoSession(realm, req, res);
 
-    // End the browser SSO session as well. Without this the IDENPLANE_SESSION
-    // cookie survives logout and /authorize silently re-authenticates the user
-    // on the next sign-in, so "Sign out" would not actually end the session.
+    if (postLogoutRedirectUri) {
+      const redirectUrl = new URL(postLogoutRedirectUri);
+      if (state) {
+        redirectUrl.searchParams.set('state', state);
+      }
+      res.redirect(redirectUrl.toString());
+    } else {
+      res.status(HttpStatus.NO_CONTENT).send();
+    }
+  }
+
+  /**
+   * Invalidate the browser SSO (login) session and clear the IDENPLANE_SESSION
+   * cookie (matching the path it was set with) so RP-initiated logout actually
+   * ends the IdP session — otherwise /authorize silently re-authenticates from
+   * the surviving cookie on the next sign-in.
+   */
+  private async clearBrowserSsoSession(
+    realm: Realm,
+    req: Request,
+    res: Response,
+  ): Promise<void> {
     const ssoToken = (req.cookies as Record<string, string> | undefined)?.[
       'IDENPLANE_SESSION'
     ];
@@ -301,16 +337,14 @@ export class TokensController {
       sameSite: 'strict',
       path: `/realms/${realm.name}`,
     });
+  }
 
-    if (postLogoutRedirectUri) {
-      const redirectUrl = new URL(postLogoutRedirectUri);
-      if (state) {
-        redirectUrl.searchParams.set('state', state);
-      }
-      res.redirect(redirectUrl.toString());
-    } else {
-      res.status(HttpStatus.NO_CONTENT).send();
-    }
+  private extractErrorMessage(err: BadRequestException): string {
+    const resp = err.getResponse();
+    if (typeof resp === 'string') return resp;
+    const m = (resp as { message?: string | string[] }).message;
+    if (Array.isArray(m)) return m.join(', ');
+    return m ?? 'Invalid logout request';
   }
 
   @Get('userinfo')
