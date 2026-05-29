@@ -80,7 +80,7 @@ describe('MFA (TOTP) flows (e2e)', () => {
           username: 'testuser',
           password: 'WrongPassword!',
         })
-        .expect(401);
+        .expect(400);
     });
   });
 

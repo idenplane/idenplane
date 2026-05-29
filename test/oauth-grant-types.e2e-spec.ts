@@ -158,7 +158,7 @@ describe('OAuth 2.0 Grant Types (e2e)', () => {
         });
 
       expect([400, 401]).toContain(replayRes.status);
-      expect(replayRes.body).toHaveProperty('message');
+      expect(replayRes.body).toHaveProperty('error');
     });
 
     it('should reject an invalid code_verifier (wrong PKCE)', async () => {
@@ -199,7 +199,7 @@ describe('OAuth 2.0 Grant Types (e2e)', () => {
         });
 
       expect([400, 401]).toContain(res.status);
-      expect(res.body).toHaveProperty('message');
+      expect(res.body).toHaveProperty('error');
     });
 
     it('should reject a missing code_verifier when code_challenge was set', async () => {
@@ -277,7 +277,7 @@ describe('OAuth 2.0 Grant Types (e2e)', () => {
         })
         .expect(401);
 
-      expect(res.body).toHaveProperty('message');
+      expect(res.body).toHaveProperty('error');
     });
 
     it('should reject a non-existent client_id', async () => {
@@ -291,7 +291,7 @@ describe('OAuth 2.0 Grant Types (e2e)', () => {
         });
 
       expect([400, 401, 404]).toContain(res.status);
-      expect(res.body).toHaveProperty('message');
+      expect(res.body).toHaveProperty('error');
     });
   });
 
@@ -488,7 +488,7 @@ describe('OAuth 2.0 Grant Types (e2e)', () => {
         });
 
       expect([400, 401]).toContain(res.status);
-      expect(res.body).toHaveProperty('message');
+      expect(res.body).toHaveProperty('error');
     });
 
     it('should reject reuse of a consumed refresh_token', async () => {

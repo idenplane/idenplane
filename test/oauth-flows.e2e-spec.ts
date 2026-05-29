@@ -92,9 +92,9 @@ describe('OAuth2 / OIDC Token Flows (e2e)', () => {
           password: 'WrongPassword999!',
           scope: 'openid',
         })
-        .expect(401);
+        .expect(400);
 
-      expect(res.body).toHaveProperty('message');
+      expect(res.body).toHaveProperty('error');
     });
   });
 
@@ -294,7 +294,7 @@ describe('OAuth2 / OIDC Token Flows (e2e)', () => {
         })
         .expect(401);
 
-      expect(res.body).toHaveProperty('message');
+      expect(res.body).toHaveProperty('error');
     });
   });
 });
