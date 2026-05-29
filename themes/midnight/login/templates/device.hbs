@@ -7,6 +7,7 @@
 {{/if}}
 
 <form method="POST" action="/realms/{{realmName}}/device" class="auth-form">
+  <input type="hidden" name="_csrf" value="{{csrfToken}}">
   <div class="form-group">
     <label for="user_code">{{msg "deviceCode"}}</label>
     <input type="text" id="user_code" name="user_code" value="{{userCode}}" required
