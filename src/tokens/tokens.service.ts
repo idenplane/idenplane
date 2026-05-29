@@ -112,8 +112,42 @@ export class TokensService {
         resource_access: payload['resource_access'],
       };
     } catch {
+      // Not a verifiable JWT (access/id token). Treat it as an opaque refresh
+      // token so introspection (RFC 7662) also covers refresh tokens — a valid
+      // refresh token must report active:true, not false.
+      return this.introspectRefreshToken(realm, token);
+    }
+  }
+
+  private async introspectRefreshToken(realm: Realm, token: string) {
+    const stored = await this.prisma.refreshToken.findUnique({
+      where: { tokenHash: this.crypto.sha256(token) },
+      include: { session: { include: { user: true } } },
+    });
+
+    if (!stored || stored.revoked || stored.expiresAt < new Date()) {
       return { active: false };
     }
+
+    const user = stored.session?.user;
+    if (!user || !user.enabled || user.realmId !== realm.id) {
+      return { active: false };
+    }
+
+    return {
+      active: true,
+      token_type: 'refresh_token',
+      sub: user.id,
+      username: user.username,
+      preferred_username: user.username,
+      // azp/client_id let the controller's ownership check confirm the caller
+      // is the client the token was issued to.
+      azp: stored.clientId ?? undefined,
+      client_id: stored.clientId ?? undefined,
+      scope: stored.scope ?? undefined,
+      exp: Math.floor(stored.expiresAt.getTime() / 1000),
+      iat: Math.floor(stored.createdAt.getTime() / 1000),
+    };
   }
 
   /**

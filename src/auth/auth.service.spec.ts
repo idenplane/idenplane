@@ -1,17 +1,40 @@
-import { UnauthorizedException, BadRequestException } from '@nestjs/common';
-
 // Mock modules that transitively import jose (ESM-only) to avoid parse errors
 jest.mock('../crypto/jwk.service.js', () => ({
   JwkService: jest.fn(),
 }));
 
 import { AuthService } from './auth.service.js';
+import { OAuthTokenError } from './oauth-token-error.js';
 import {
   createMockPrismaService,
   type MockPrismaService,
 } from '../prisma/prisma.mock.js';
 import type { Realm } from '@prisma/client';
 import { ACR_PASSWORD, ACR_MFA } from '../step-up/step-up.service.js';
+
+/**
+ * Assert that the given promise rejects with an {@link OAuthTokenError}
+ * carrying the expected RFC 6749 §5.2 `error` code (and optional HTTP status).
+ */
+async function expectOAuthError(
+  promise: Promise<unknown>,
+  expectedCode: string,
+  expectedStatus?: number,
+): Promise<void> {
+  await expect(promise).rejects.toBeInstanceOf(OAuthTokenError);
+  try {
+    await promise;
+  } catch (err) {
+    const tokenError = err as OAuthTokenError;
+    expect(tokenError.code).toBe(expectedCode);
+    expect((tokenError.getResponse() as { error: string }).error).toBe(
+      expectedCode,
+    );
+    if (expectedStatus !== undefined) {
+      expect(tokenError.httpStatus).toBe(expectedStatus);
+    }
+  }
+}
 
 // ---------------------------------------------------------------------------
 // Helpers & fixtures
@@ -235,10 +258,20 @@ describe('AuthService', () => {
   // -----------------------------------------------------------------------
 
   describe('handleTokenRequest - unsupported grant type', () => {
-    it('should throw BadRequestException for an unknown grant_type', async () => {
-      await expect(
+    it('should throw unsupported_grant_type for an unknown grant_type', async () => {
+      await expectOAuthError(
         service.handleTokenRequest(realm, { grant_type: 'magic' }),
-      ).rejects.toThrow(BadRequestException);
+        'unsupported_grant_type',
+        400,
+      );
+    });
+
+    it('should throw invalid_request when grant_type is missing', async () => {
+      await expectOAuthError(
+        service.handleTokenRequest(realm, {}),
+        'invalid_request',
+        400,
+      );
     });
   });
 
@@ -247,37 +280,41 @@ describe('AuthService', () => {
   // -----------------------------------------------------------------------
 
   describe('validateClient (via password grant)', () => {
-    it('should throw BadRequestException when client_id is missing', async () => {
-      await expect(
+    it('should throw invalid_client when client_id is missing', async () => {
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'password',
           client_id: '',
           username: 'testuser',
           password: 'pass',
         }),
-      ).rejects.toThrow(BadRequestException);
+        'invalid_client',
+        401,
+      );
     });
 
-    it('should throw UnauthorizedException when client does not exist', async () => {
+    it('should throw invalid_client when client does not exist', async () => {
       prisma.client.findUnique.mockResolvedValue(null);
 
-      await expect(
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'password',
           client_id: 'nonexistent',
           username: 'testuser',
           password: 'pass',
         }),
-      ).rejects.toThrow(UnauthorizedException);
+        'invalid_client',
+        401,
+      );
     });
 
-    it('should throw UnauthorizedException when client is disabled', async () => {
+    it('should throw invalid_client when client is disabled', async () => {
       prisma.client.findUnique.mockResolvedValue({
         ...dbClient,
         enabled: false,
       });
 
-      await expect(
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'password',
           client_id: 'my-client',
@@ -285,14 +322,16 @@ describe('AuthService', () => {
           username: 'testuser',
           password: 'pass',
         }),
-      ).rejects.toThrow(UnauthorizedException);
+        'invalid_client',
+        401,
+      );
     });
 
-    it('should throw UnauthorizedException when client_secret is wrong for a confidential client', async () => {
+    it('should throw invalid_client when client_secret is wrong for a confidential client', async () => {
       prisma.client.findUnique.mockResolvedValue(dbClient);
       crypto.verifyPassword.mockResolvedValue(false);
 
-      await expect(
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'password',
           client_id: 'my-client',
@@ -300,16 +339,18 @@ describe('AuthService', () => {
           username: 'testuser',
           password: 'pass',
         }),
-      ).rejects.toThrow(UnauthorizedException);
+        'invalid_client',
+        401,
+      );
     });
 
-    it('should throw UnauthorizedException when confidential client has no secret configured', async () => {
+    it('should throw invalid_client when confidential client has no secret configured', async () => {
       prisma.client.findUnique.mockResolvedValue({
         ...dbClient,
         clientSecret: null,
       });
 
-      await expect(
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'password',
           client_id: 'my-client',
@@ -317,30 +358,34 @@ describe('AuthService', () => {
           username: 'testuser',
           password: 'pass',
         }),
-      ).rejects.toThrow(UnauthorizedException);
+        'invalid_client',
+        401,
+      );
     });
 
-    it('should throw UnauthorizedException when confidential client receives no client_secret', async () => {
+    it('should throw invalid_client when confidential client receives no client_secret', async () => {
       prisma.client.findUnique.mockResolvedValue(dbClient);
 
-      await expect(
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'password',
           client_id: 'my-client',
           username: 'testuser',
           password: 'pass',
         }),
-      ).rejects.toThrow(UnauthorizedException);
+        'invalid_client',
+        401,
+      );
     });
 
-    it('should throw BadRequestException when grant type is not allowed for the client', async () => {
+    it('should throw unauthorized_client when grant type is not allowed for the client', async () => {
       prisma.client.findUnique.mockResolvedValue({
         ...dbClient,
         grantTypes: ['client_credentials'],
       });
       crypto.verifyPassword.mockResolvedValue(true);
 
-      await expect(
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'password',
           client_id: 'my-client',
@@ -348,7 +393,9 @@ describe('AuthService', () => {
           username: 'testuser',
           password: 'pass',
         }),
-      ).rejects.toThrow(BadRequestException);
+        'unauthorized_client',
+        400,
+      );
     });
 
     it('should succeed for a valid confidential client', async () => {
@@ -460,37 +507,41 @@ describe('AuthService', () => {
       );
     });
 
-    it('should throw BadRequestException when username is missing', async () => {
+    it('should throw invalid_request when username is missing', async () => {
       setupValidClient();
 
-      await expect(
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'password',
           client_id: 'my-client',
           client_secret: 'correct-secret',
           password: 'pass',
         }),
-      ).rejects.toThrow(BadRequestException);
+        'invalid_request',
+        400,
+      );
     });
 
-    it('should throw BadRequestException when password is missing', async () => {
+    it('should throw invalid_request when password is missing', async () => {
       setupValidClient();
 
-      await expect(
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'password',
           client_id: 'my-client',
           client_secret: 'correct-secret',
           username: 'testuser',
         }),
-      ).rejects.toThrow(BadRequestException);
+        'invalid_request',
+        400,
+      );
     });
 
-    it('should throw UnauthorizedException when user does not exist', async () => {
+    it('should throw invalid_grant when user does not exist', async () => {
       setupValidClient();
       prisma.user.findUnique.mockResolvedValue(null);
 
-      await expect(
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'password',
           client_id: 'my-client',
@@ -498,14 +549,16 @@ describe('AuthService', () => {
           username: 'nonexistent',
           password: 'pass',
         }),
-      ).rejects.toThrow(UnauthorizedException);
+        'invalid_grant',
+        400,
+      );
     });
 
-    it('should throw UnauthorizedException when user is disabled', async () => {
+    it('should throw invalid_grant when user is disabled', async () => {
       setupValidClient();
       prisma.user.findUnique.mockResolvedValue({ ...dbUser, enabled: false });
 
-      await expect(
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'password',
           client_id: 'my-client',
@@ -513,17 +566,19 @@ describe('AuthService', () => {
           username: 'testuser',
           password: 'pass',
         }),
-      ).rejects.toThrow(UnauthorizedException);
+        'invalid_grant',
+        400,
+      );
     });
 
-    it('should throw UnauthorizedException when user has no passwordHash', async () => {
+    it('should throw invalid_grant when user has no passwordHash', async () => {
       setupValidClient();
       prisma.user.findUnique.mockResolvedValue({
         ...dbUser,
         passwordHash: null,
       });
 
-      await expect(
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'password',
           client_id: 'my-client',
@@ -531,10 +586,12 @@ describe('AuthService', () => {
           username: 'testuser',
           password: 'pass',
         }),
-      ).rejects.toThrow(UnauthorizedException);
+        'invalid_grant',
+        400,
+      );
     });
 
-    it('should throw UnauthorizedException when password is incorrect', async () => {
+    it('should throw invalid_grant when password is incorrect', async () => {
       prisma.client.findUnique.mockResolvedValue(dbClient);
       prisma.user.findUnique.mockResolvedValue(dbUser);
       // First call: client secret check (true), second: password check (false)
@@ -542,7 +599,7 @@ describe('AuthService', () => {
         .mockResolvedValueOnce(true)
         .mockResolvedValueOnce(false);
 
-      await expect(
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'password',
           client_id: 'my-client',
@@ -550,7 +607,9 @@ describe('AuthService', () => {
           username: 'testuser',
           password: 'wrong-password',
         }),
-      ).rejects.toThrow(UnauthorizedException);
+        'invalid_grant',
+        400,
+      );
     });
   });
 
@@ -595,17 +654,19 @@ describe('AuthService', () => {
       expect(result.scope).toBe('openid');
     });
 
-    it('should throw UnauthorizedException when client_secret is wrong', async () => {
+    it('should throw invalid_client when client_secret is wrong', async () => {
       prisma.client.findUnique.mockResolvedValue(dbClient);
       crypto.verifyPassword.mockResolvedValue(false);
 
-      await expect(
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'client_credentials',
           client_id: 'my-client',
           client_secret: 'wrong-secret',
         }),
-      ).rejects.toThrow(UnauthorizedException);
+        'invalid_client',
+        401,
+      );
     });
 
     it('should sign the JWT with the correct payload shape', async () => {
@@ -721,50 +782,56 @@ describe('AuthService', () => {
       expect(accessTokenPayload.amr).toEqual(['pwd', 'otp']);
     });
 
-    it('should throw BadRequestException when refresh_token is missing', async () => {
+    it('should throw invalid_request when refresh_token is missing', async () => {
       setupValidClient();
 
-      await expect(
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'refresh_token',
           client_id: 'my-client',
           client_secret: 'correct-secret',
         }),
-      ).rejects.toThrow(BadRequestException);
+        'invalid_request',
+        400,
+      );
     });
 
-    it('should throw UnauthorizedException when refresh token does not exist', async () => {
+    it('should throw invalid_grant when refresh token does not exist', async () => {
       setupValidClient();
       prisma.refreshToken.findUnique.mockResolvedValue(null);
 
-      await expect(
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'refresh_token',
           refresh_token: 'nonexistent-token',
           client_id: 'my-client',
           client_secret: 'correct-secret',
         }),
-      ).rejects.toThrow(UnauthorizedException);
+        'invalid_grant',
+        400,
+      );
     });
 
-    it('should throw UnauthorizedException when refresh token is expired', async () => {
+    it('should throw invalid_grant when refresh token is expired', async () => {
       setupValidClient();
       prisma.refreshToken.findUnique.mockResolvedValue({
         ...storedRefreshToken,
         expiresAt: new Date(Date.now() - 1000),
       });
 
-      await expect(
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'refresh_token',
           refresh_token: 'expired-token',
           client_id: 'my-client',
           client_secret: 'correct-secret',
         }),
-      ).rejects.toThrow(UnauthorizedException);
+        'invalid_grant',
+        400,
+      );
     });
 
-    it('should throw UnauthorizedException and revoke entire session when a revoked token is reused (reuse detection)', async () => {
+    it('should throw invalid_grant and revoke entire session when a revoked token is reused (reuse detection)', async () => {
       setupValidClient();
       prisma.refreshToken.findUnique.mockResolvedValue({
         ...storedRefreshToken,
@@ -772,14 +839,16 @@ describe('AuthService', () => {
       });
       prisma.refreshToken.updateMany.mockResolvedValue({ count: 3 });
 
-      await expect(
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'refresh_token',
           refresh_token: 'reused-token',
           client_id: 'my-client',
           client_secret: 'correct-secret',
         }),
-      ).rejects.toThrow(UnauthorizedException);
+        'invalid_grant',
+        400,
+      );
 
       // All tokens for the session should be revoked
       expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
@@ -796,14 +865,16 @@ describe('AuthService', () => {
         expiresAt: new Date(Date.now() - 1000),
       });
 
-      await expect(
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'refresh_token',
           refresh_token: 'expired-token',
           client_id: 'my-client',
           client_secret: 'correct-secret',
         }),
-      ).rejects.toThrow(UnauthorizedException);
+        'invalid_grant',
+        400,
+      );
 
       // updateMany should NOT be called because token was not revoked
       expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
@@ -813,14 +884,16 @@ describe('AuthService', () => {
       setupValidClient();
       prisma.refreshToken.findUnique.mockResolvedValue(null);
 
-      await expect(
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'refresh_token',
           refresh_token: 'some-opaque-token',
           client_id: 'my-client',
           client_secret: 'correct-secret',
         }),
-      ).rejects.toThrow(UnauthorizedException);
+        'invalid_grant',
+        400,
+      );
 
       expect(crypto.sha256).toHaveBeenCalledWith('some-opaque-token');
       expect(prisma.refreshToken.findUnique).toHaveBeenCalledWith({
@@ -971,23 +1044,25 @@ describe('AuthService', () => {
       expect(accessTokenPayload.amr).toEqual(['pwd']);
     });
 
-    it('should throw BadRequestException when code is missing', async () => {
-      await expect(
+    it('should throw invalid_request when code is missing', async () => {
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'authorization_code',
           client_id: 'my-client',
           client_secret: 'correct-secret',
           redirect_uri: 'https://app.example.com/callback',
         }),
-      ).rejects.toThrow(BadRequestException);
+        'invalid_request',
+        400,
+      );
     });
 
-    it('should throw UnauthorizedException when code does not exist', async () => {
+    it('should throw invalid_grant when code does not exist', async () => {
       setupValidClient();
       // update throws P2025 because no row matches (code doesn't exist)
       prisma.authorizationCode.update.mockRejectedValue(makePrismaP2025());
 
-      await expect(
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'authorization_code',
           code: 'nonexistent-code',
@@ -995,15 +1070,17 @@ describe('AuthService', () => {
           client_secret: 'correct-secret',
           redirect_uri: 'https://app.example.com/callback',
         }),
-      ).rejects.toThrow(UnauthorizedException);
+        'invalid_grant',
+        400,
+      );
     });
 
-    it('should throw UnauthorizedException when code is expired', async () => {
+    it('should throw invalid_grant when code is expired', async () => {
       setupValidClient();
       // update throws P2025 because the expiresAt filter excludes the expired row
       prisma.authorizationCode.update.mockRejectedValue(makePrismaP2025());
 
-      await expect(
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'authorization_code',
           code: 'expired-code',
@@ -1011,15 +1088,17 @@ describe('AuthService', () => {
           client_secret: 'correct-secret',
           redirect_uri: 'https://app.example.com/callback',
         }),
-      ).rejects.toThrow(UnauthorizedException);
+        'invalid_grant',
+        400,
+      );
     });
 
-    it('should throw UnauthorizedException when code was already used', async () => {
+    it('should throw invalid_grant when code was already used', async () => {
       setupValidClient();
       // update throws P2025 because used:false filter excludes the already-used row
       prisma.authorizationCode.update.mockRejectedValue(makePrismaP2025());
 
-      await expect(
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'authorization_code',
           code: 'used-code',
@@ -1027,10 +1106,12 @@ describe('AuthService', () => {
           client_secret: 'correct-secret',
           redirect_uri: 'https://app.example.com/callback',
         }),
-      ).rejects.toThrow(UnauthorizedException);
+        'invalid_grant',
+        400,
+      );
     });
 
-    it('should throw UnauthorizedException when code belongs to a different client', async () => {
+    it('should throw invalid_grant when code belongs to a different client', async () => {
       setupValidClient();
       prisma.authorizationCode.update.mockResolvedValue({
         ...authCode,
@@ -1038,7 +1119,7 @@ describe('AuthService', () => {
         used: true,
       });
 
-      await expect(
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'authorization_code',
           code: 'stolen-code',
@@ -1046,17 +1127,19 @@ describe('AuthService', () => {
           client_secret: 'correct-secret',
           redirect_uri: 'https://app.example.com/callback',
         }),
-      ).rejects.toThrow(UnauthorizedException);
+        'invalid_grant',
+        400,
+      );
     });
 
-    it('should throw BadRequestException when redirect_uri does not match', async () => {
+    it('should throw invalid_grant when redirect_uri does not match', async () => {
       setupValidClient();
       prisma.authorizationCode.update.mockResolvedValue({
         ...authCode,
         used: true,
       });
 
-      await expect(
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'authorization_code',
           code: 'valid-auth-code',
@@ -1064,10 +1147,12 @@ describe('AuthService', () => {
           client_secret: 'correct-secret',
           redirect_uri: 'https://evil.example.com/callback',
         }),
-      ).rejects.toThrow(BadRequestException);
+        'invalid_grant',
+        400,
+      );
     });
 
-    it('should throw UnauthorizedException when user is not found for the code', async () => {
+    it('should throw invalid_grant when user is not found for the code', async () => {
       setupValidClient();
       setupSigningKey();
       setupSessionCreate();
@@ -1077,7 +1162,7 @@ describe('AuthService', () => {
       });
       prisma.user.findUnique.mockResolvedValue(null);
 
-      await expect(
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'authorization_code',
           code: 'valid-auth-code',
@@ -1085,7 +1170,9 @@ describe('AuthService', () => {
           client_secret: 'correct-secret',
           redirect_uri: 'https://app.example.com/callback',
         }),
-      ).rejects.toThrow(UnauthorizedException);
+        'invalid_grant',
+        400,
+      );
     });
 
     describe('PKCE', () => {
@@ -1095,7 +1182,7 @@ describe('AuthService', () => {
         codeChallengeMethod: 'S256',
       };
 
-      it('should throw BadRequestException when code has PKCE but code_verifier is missing', async () => {
+      it('should throw invalid_request when code has PKCE but code_verifier is missing', async () => {
         setupValidClient();
         // update succeeds (code exists, not used, not expired) and returns the pkce code
         prisma.authorizationCode.update.mockResolvedValue({
@@ -1103,7 +1190,7 @@ describe('AuthService', () => {
           used: true,
         });
 
-        await expect(
+        await expectOAuthError(
           service.handleTokenRequest(realm, {
             grant_type: 'authorization_code',
             code: 'valid-auth-code',
@@ -1111,10 +1198,12 @@ describe('AuthService', () => {
             client_secret: 'correct-secret',
             redirect_uri: 'https://app.example.com/callback',
           }),
-        ).rejects.toThrow(BadRequestException);
+          'invalid_request',
+          400,
+        );
       });
 
-      it('should throw UnauthorizedException when code_verifier does not match', async () => {
+      it('should throw invalid_grant when code_verifier does not match', async () => {
         setupValidClient();
         // update succeeds and returns the pkce code
         prisma.authorizationCode.update.mockResolvedValue({
@@ -1124,7 +1213,7 @@ describe('AuthService', () => {
         // sha256 returns a hex string; the base64url of its buffer will not match the stored challenge
         crypto.sha256.mockReturnValue('aabbccdd');
 
-        await expect(
+        await expectOAuthError(
           service.handleTokenRequest(realm, {
             grant_type: 'authorization_code',
             code: 'valid-auth-code',
@@ -1133,7 +1222,9 @@ describe('AuthService', () => {
             redirect_uri: 'https://app.example.com/callback',
             code_verifier: 'wrong-verifier',
           }),
-        ).rejects.toThrow(UnauthorizedException);
+          'invalid_grant',
+          400,
+        );
       });
 
       it('should succeed when code_verifier is valid', async () => {
@@ -1204,7 +1295,7 @@ describe('AuthService', () => {
       crypto.verifyPassword.mockResolvedValue(true);
     }
 
-    it('should throw BadRequestException with slow_down when polled before the interval elapses', async () => {
+    it('should throw slow_down when polled before the interval elapses', async () => {
       setupDeviceClient();
       prisma.deviceCode.findUnique.mockResolvedValue(
         makeDeviceCode({
@@ -1214,14 +1305,21 @@ describe('AuthService', () => {
       );
       prisma.deviceCode.update.mockResolvedValue({} as any);
 
-      await expect(
-        service.handleTokenRequest(realm, {
-          grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
-          device_code: 'test-device-code',
-          client_id: deviceClientId,
-          client_secret: deviceClientSecret,
-        }),
-      ).rejects.toThrow('slow_down');
+      const promise = service.handleTokenRequest(realm, {
+        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+        device_code: 'test-device-code',
+        client_id: deviceClientId,
+        client_secret: deviceClientSecret,
+      });
+      await expectOAuthError(promise, 'slow_down', 400);
+      // RFC 8628 §3.5 codes carry no error_description.
+      try {
+        await promise;
+      } catch (err) {
+        expect((err as OAuthTokenError).getResponse()).toEqual({
+          error: 'slow_down',
+        });
+      }
     });
 
     it('should increase the polling interval by 5 seconds when returning slow_down', async () => {
@@ -1312,64 +1410,76 @@ describe('AuthService', () => {
       );
     });
 
-    it('should throw BadRequestException with authorization_pending when not yet approved', async () => {
+    it('should throw authorization_pending when not yet approved', async () => {
       setupDeviceClient();
       prisma.deviceCode.findUnique.mockResolvedValue(
         makeDeviceCode({ approved: false, userId: null }) as any,
       );
       prisma.deviceCode.update.mockResolvedValue({} as any);
 
-      await expect(
-        service.handleTokenRequest(realm, {
-          grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
-          device_code: 'test-device-code',
-          client_id: deviceClientId,
-          client_secret: deviceClientSecret,
-        }),
-      ).rejects.toThrow('authorization_pending');
+      const promise = service.handleTokenRequest(realm, {
+        grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+        device_code: 'test-device-code',
+        client_id: deviceClientId,
+        client_secret: deviceClientSecret,
+      });
+      await expectOAuthError(promise, 'authorization_pending', 400);
+      try {
+        await promise;
+      } catch (err) {
+        expect((err as OAuthTokenError).getResponse()).toEqual({
+          error: 'authorization_pending',
+        });
+      }
     });
 
-    it('should throw BadRequestException with access_denied when device is denied', async () => {
+    it('should throw access_denied when device is denied', async () => {
       setupDeviceClient();
       prisma.deviceCode.findUnique.mockResolvedValue(
         makeDeviceCode({ denied: true }) as any,
       );
       prisma.deviceCode.update.mockResolvedValue({} as any);
 
-      await expect(
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
           device_code: 'test-device-code',
           client_id: deviceClientId,
           client_secret: deviceClientSecret,
         }),
-      ).rejects.toThrow('access_denied');
+        'access_denied',
+        400,
+      );
     });
 
-    it('should throw BadRequestException with expired_token when device code is expired', async () => {
+    it('should throw expired_token when device code is expired', async () => {
       setupDeviceClient();
       prisma.deviceCode.findUnique.mockResolvedValue(
         makeDeviceCode({ expiresAt: new Date(Date.now() - 1_000) }) as any,
       );
 
-      await expect(
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
           device_code: 'test-device-code',
           client_id: deviceClientId,
           client_secret: deviceClientSecret,
         }),
-      ).rejects.toThrow('expired_token');
+        'expired_token',
+        400,
+      );
     });
 
-    it('should throw BadRequestException when device_code parameter is missing', async () => {
-      await expect(
+    it('should throw invalid_request when device_code parameter is missing', async () => {
+      await expectOAuthError(
         service.handleTokenRequest(realm, {
           grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
           client_id: deviceClientId,
           client_secret: deviceClientSecret,
         }),
-      ).rejects.toThrow('device_code is required');
+        'invalid_request',
+        400,
+      );
     });
   });
 
