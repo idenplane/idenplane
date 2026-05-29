@@ -140,8 +140,8 @@ describe('Brute-Force Protection (e2e)', () => {
     it('should reject further login attempts when account is locked', async () => {
       // Even with correct credentials, the account is locked
       const res = await successfulLogin();
-      expect([401, 423]).toContain(res.status);
-      expect(res.body).toHaveProperty('message');
+      expect([400, 401, 423]).toContain(res.status);
+      expect(res.body).toHaveProperty('error');
     });
   });
 
@@ -296,7 +296,7 @@ describe('Brute-Force Protection (e2e)', () => {
       await new Promise<void>((resolve) => setTimeout(resolve, 2_500));
 
       const res = await successfulLogin();
-      expect([401, 423]).toContain(res.status);
+      expect([400, 401, 423]).toContain(res.status);
     });
   });
 });

@@ -2,11 +2,10 @@ import {
   Injectable,
   Logger,
   Optional,
-  UnauthorizedException,
-  BadRequestException,
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
+import { OAuthTokenError } from './oauth-token-error.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { JwkService } from '../crypto/jwk.service.js';
@@ -74,6 +73,14 @@ export class AuthService {
   ): Promise<TokenResponse> {
     const grantType = body['grant_type'];
 
+    if (!grantType) {
+      throw new OAuthTokenError(
+        'invalid_request',
+        'grant_type is required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
     switch (grantType) {
       case 'password':
         return this.handlePasswordGrant(realm, body, ip, userAgent);
@@ -88,7 +95,11 @@ export class AuthService {
       case 'urn:ietf:params:oauth:grant-type:device_code':
         return this.handleDeviceCodeGrant(realm, body, ip, userAgent);
       default:
-        throw new BadRequestException(`Unsupported grant_type: ${grantType}`);
+        throw new OAuthTokenError(
+          'unsupported_grant_type',
+          `Unsupported grant_type: ${grantType}`,
+          HttpStatus.BAD_REQUEST,
+        );
     }
   }
 
@@ -109,21 +120,31 @@ export class AuthService {
     await this.validateClient(realm, client_id, client_secret, 'password');
 
     if (!username || !password) {
-      throw new BadRequestException('username and password are required');
+      throw new OAuthTokenError(
+        'invalid_request',
+        'username and password are required',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     const user = await this.prisma.user.findUnique({
       where: { realmId_username: { realmId: realm.id, username } },
     });
     if (!user || !user.enabled || !user.passwordHash) {
-      throw new UnauthorizedException('Invalid credentials');
+      throw new OAuthTokenError(
+        'invalid_grant',
+        'Invalid credentials',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     // Brute force check
     const lockStatus = this.bruteForceService.checkLocked(realm, user);
     if (lockStatus.locked) {
-      throw new UnauthorizedException(
+      throw new OAuthTokenError(
+        'invalid_grant',
         'Account is temporarily locked. Please try again later.',
+        HttpStatus.BAD_REQUEST,
       );
     }
 
@@ -142,7 +163,11 @@ export class AuthService {
         realm: realm.name,
         status: 'failure',
       });
-      throw new UnauthorizedException('Invalid credentials');
+      throw new OAuthTokenError(
+        'invalid_grant',
+        'Invalid credentials',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     // Reset brute force failures on success
@@ -150,8 +175,10 @@ export class AuthService {
 
     // Check password expiry
     if (this.passwordPolicyService.isExpired(user, realm)) {
-      throw new BadRequestException(
+      throw new OAuthTokenError(
+        'invalid_grant',
         'Password has expired. Please change your password.',
+        HttpStatus.BAD_REQUEST,
       );
     }
 
@@ -178,8 +205,10 @@ export class AuthService {
     }
 
     if (mfaRequired && !mfaEnabled) {
-      throw new BadRequestException(
+      throw new OAuthTokenError(
+        'invalid_grant',
         'MFA setup required. Please set up two-factor authentication.',
+        HttpStatus.BAD_REQUEST,
       );
     }
 
@@ -249,15 +278,21 @@ export class AuthService {
     );
 
     if (!mfa_token || !otp) {
-      throw new BadRequestException('mfa_token and otp are required');
+      throw new OAuthTokenError(
+        'invalid_request',
+        'mfa_token and otp are required',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     // Validate with attempt tracking (does not consume the challenge)
     const challenge =
       await this.mfaService.validateMfaChallengeWithAttemptCheck(mfa_token);
     if (!challenge) {
-      throw new UnauthorizedException(
+      throw new OAuthTokenError(
+        'invalid_grant',
         'Invalid or expired MFA token, or too many failed attempts',
+        HttpStatus.BAD_REQUEST,
       );
     }
 
@@ -266,8 +301,10 @@ export class AuthService {
       this.logger.warn(
         `MFA cross-realm token use attempt: challenge realm ${challenge.realmId} used against realm ${realm.id}`,
       );
-      throw new UnauthorizedException(
+      throw new OAuthTokenError(
+        'invalid_grant',
         'Invalid or expired MFA token, or too many failed attempts',
+        HttpStatus.BAD_REQUEST,
       );
     }
 
@@ -276,8 +313,10 @@ export class AuthService {
       this.logger.warn(
         `MFA cross-client token use attempt: challenge client ${challenge.clientId} used against client ${client_id}`,
       );
-      throw new UnauthorizedException(
+      throw new OAuthTokenError(
+        'invalid_grant',
         'Invalid or expired MFA token, or too many failed attempts',
+        HttpStatus.BAD_REQUEST,
       );
     }
 
@@ -296,7 +335,11 @@ export class AuthService {
           ipAddress: ip,
           error: 'Invalid OTP code',
         });
-        throw new UnauthorizedException('Invalid OTP code');
+        throw new OAuthTokenError(
+          'invalid_grant',
+          'Invalid OTP code',
+          HttpStatus.BAD_REQUEST,
+        );
       }
     }
 
@@ -307,7 +350,11 @@ export class AuthService {
       where: { id: challenge.userId },
     });
     if (!user) {
-      throw new UnauthorizedException('User not found');
+      throw new OAuthTokenError(
+        'invalid_grant',
+        'User not found',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     await this.enforceSessionLimit(realm, user.id);
@@ -455,7 +502,11 @@ export class AuthService {
     const { refresh_token, client_id, client_secret, scope } = body;
 
     if (!refresh_token) {
-      throw new BadRequestException('refresh_token is required');
+      throw new OAuthTokenError(
+        'invalid_request',
+        'refresh_token is required',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     await this.validateClient(realm, client_id, client_secret, 'refresh_token');
@@ -489,7 +540,11 @@ export class AuthService {
         ipAddress: ip,
         error: 'Invalid or expired refresh token',
       });
-      throw new UnauthorizedException('Invalid or expired refresh token');
+      throw new OAuthTokenError(
+        'invalid_grant',
+        'Invalid or expired refresh token',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     // Enforce that the refresh token was issued to the requesting client.
@@ -501,13 +556,17 @@ export class AuthService {
         `Refresh token ${storedToken.id} has no clientId (legacy). ` +
           `Rejecting to prevent cross-client token reuse. User must re-authenticate.`,
       );
-      throw new UnauthorizedException(
+      throw new OAuthTokenError(
+        'invalid_grant',
         'This refresh token predates client binding. Please log in again.',
+        HttpStatus.BAD_REQUEST,
       );
     }
     if (storedToken.clientId !== client_id) {
-      throw new UnauthorizedException(
+      throw new OAuthTokenError(
+        'invalid_grant',
         'Refresh token was not issued to this client',
+        HttpStatus.BAD_REQUEST,
       );
     }
 
@@ -562,7 +621,11 @@ export class AuthService {
       body;
 
     if (!code) {
-      throw new BadRequestException('code is required');
+      throw new OAuthTokenError(
+        'invalid_request',
+        'code is required',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     const client = await this.validateClient(
@@ -596,32 +659,48 @@ export class AuthService {
         err !== null &&
         (err as { code?: string }).code === 'P2025';
       if (isPrismaNotFound) {
-        throw new UnauthorizedException(
+        throw new OAuthTokenError(
+          'invalid_grant',
           'Invalid or expired authorization code',
+          HttpStatus.BAD_REQUEST,
         );
       }
       throw err;
     }
 
     if (authCode.clientId !== client.id) {
-      throw new UnauthorizedException('Invalid or expired authorization code');
+      throw new OAuthTokenError(
+        'invalid_grant',
+        'Invalid or expired authorization code',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     if (authCode.redirectUri !== redirect_uri) {
-      throw new BadRequestException('redirect_uri mismatch');
+      throw new OAuthTokenError(
+        'invalid_grant',
+        'redirect_uri mismatch',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     // PKCE enforcement: public clients must always use PKCE (OAuth 2.1 / RFC 7636)
     if (client.clientType === 'PUBLIC' && !authCode.codeChallenge) {
-      throw new BadRequestException(
+      throw new OAuthTokenError(
+        'invalid_request',
         'PKCE (code_challenge) is required for public clients',
+        HttpStatus.BAD_REQUEST,
       );
     }
 
     // PKCE verification
     if (authCode.codeChallenge) {
       if (!code_verifier) {
-        throw new BadRequestException('code_verifier is required for PKCE');
+        throw new OAuthTokenError(
+          'invalid_request',
+          'code_verifier is required for PKCE',
+          HttpStatus.BAD_REQUEST,
+        );
       }
       const computedChallenge = Buffer.from(
         this.crypto.sha256(code_verifier),
@@ -629,7 +708,11 @@ export class AuthService {
       ).toString('base64url');
 
       if (computedChallenge !== authCode.codeChallenge) {
-        throw new UnauthorizedException('Invalid code_verifier');
+        throw new OAuthTokenError(
+          'invalid_grant',
+          'Invalid code_verifier',
+          HttpStatus.BAD_REQUEST,
+        );
       }
     }
 
@@ -637,13 +720,19 @@ export class AuthService {
       where: { id: authCode.userId },
     });
     if (!user) {
-      throw new UnauthorizedException('User not found');
+      throw new OAuthTokenError(
+        'invalid_grant',
+        'User not found',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     const lockStatus = this.bruteForceService.checkLocked(realm, user);
     if (lockStatus.locked) {
-      throw new UnauthorizedException(
+      throw new OAuthTokenError(
+        'invalid_grant',
         'Account is temporarily locked. Please try again later.',
+        HttpStatus.BAD_REQUEST,
       );
     }
 
@@ -704,7 +793,11 @@ export class AuthService {
     const { device_code, client_id, client_secret } = body;
 
     if (!device_code) {
-      throw new BadRequestException('device_code is required');
+      throw new OAuthTokenError(
+        'invalid_request',
+        'device_code is required',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     await this.validateClient(
@@ -719,19 +812,35 @@ export class AuthService {
     });
 
     if (!deviceCode || deviceCode.realmId !== realm.id) {
-      throw new BadRequestException('authorization_pending');
+      throw new OAuthTokenError(
+        'authorization_pending',
+        undefined,
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     if (deviceCode.expiresAt < new Date()) {
-      throw new BadRequestException('expired_token');
+      throw new OAuthTokenError(
+        'expired_token',
+        undefined,
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     if (deviceCode.denied) {
-      throw new BadRequestException('access_denied');
+      throw new OAuthTokenError(
+        'access_denied',
+        undefined,
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     if (!deviceCode.approved || !deviceCode.userId) {
-      throw new BadRequestException('authorization_pending');
+      throw new OAuthTokenError(
+        'authorization_pending',
+        undefined,
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     // RFC 8628 §3.5 — enforce minimum polling interval.
@@ -747,7 +856,11 @@ export class AuthService {
             interval: deviceCode.interval + 5,
           },
         });
-        throw new BadRequestException('slow_down');
+        throw new OAuthTokenError(
+          'slow_down',
+          undefined,
+          HttpStatus.BAD_REQUEST,
+        );
       }
     }
 
@@ -758,7 +871,11 @@ export class AuthService {
     });
 
     if (!deviceCode.approved || !deviceCode.userId) {
-      throw new BadRequestException('authorization_pending');
+      throw new OAuthTokenError(
+        'authorization_pending',
+        undefined,
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     // Device has been approved — issue tokens
@@ -766,20 +883,28 @@ export class AuthService {
       where: { id: deviceCode.userId },
     });
     if (!user) {
-      throw new UnauthorizedException('User not found');
+      throw new OAuthTokenError(
+        'invalid_grant',
+        'User not found',
+        HttpStatus.BAD_REQUEST,
+      );
     }
 
     // Check MFA — device code flow does not support interactive MFA
     const mfaEnabled = await this.mfaService.isMfaEnabled(user.id);
     if (mfaEnabled) {
-      throw new BadRequestException(
+      throw new OAuthTokenError(
+        'invalid_grant',
         'MFA verification required. Device code grant does not support MFA. Use authorization_code grant instead.',
+        HttpStatus.BAD_REQUEST,
       );
     }
     const mfaRequired = await this.mfaService.isMfaRequired(realm, user.id);
     if (mfaRequired) {
-      throw new BadRequestException(
+      throw new OAuthTokenError(
+        'invalid_grant',
         'MFA setup required. Use authorization_code grant to complete MFA setup.',
+        HttpStatus.BAD_REQUEST,
       );
     }
 
@@ -828,7 +953,11 @@ export class AuthService {
     grantType?: string,
   ) {
     if (!clientId) {
-      throw new BadRequestException('client_id is required');
+      throw new OAuthTokenError(
+        'invalid_client',
+        'client_id is required',
+        HttpStatus.UNAUTHORIZED,
+      );
     }
 
     const client = await this.prisma.client.findUnique({
@@ -836,7 +965,11 @@ export class AuthService {
     });
 
     if (!client || !client.enabled) {
-      throw new UnauthorizedException('Invalid client');
+      throw new OAuthTokenError(
+        'invalid_client',
+        'Invalid client',
+        HttpStatus.UNAUTHORIZED,
+      );
     }
 
     if (grantType) {
@@ -854,25 +987,39 @@ export class AuthService {
         ? clientAllowsDevice
         : client.grantTypes.includes(grantType);
       if (!allowed) {
-        throw new BadRequestException(
+        throw new OAuthTokenError(
+          'unauthorized_client',
           `Grant type '${grantType}' not allowed for this client`,
+          HttpStatus.BAD_REQUEST,
         );
       }
     }
 
     if (client.clientType === 'CONFIDENTIAL') {
       if (!clientSecret) {
-        throw new UnauthorizedException('client_secret is required');
+        throw new OAuthTokenError(
+          'invalid_client',
+          'client_secret is required',
+          HttpStatus.UNAUTHORIZED,
+        );
       }
       if (!client.clientSecret) {
-        throw new UnauthorizedException('Client has no secret configured');
+        throw new OAuthTokenError(
+          'invalid_client',
+          'Client has no secret configured',
+          HttpStatus.UNAUTHORIZED,
+        );
       }
       const valid = await this.crypto.verifyPassword(
         client.clientSecret,
         clientSecret,
       );
       if (!valid) {
-        throw new UnauthorizedException('Invalid client credentials');
+        throw new OAuthTokenError(
+          'invalid_client',
+          'Invalid client credentials',
+          HttpStatus.UNAUTHORIZED,
+        );
       }
     }
 

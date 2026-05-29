@@ -1,4 +1,12 @@
-import { Controller, Get, Query, Req, Res, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpException,
+  Query,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import type { Realm } from '@prisma/client';
@@ -16,6 +24,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
+import { ThemeRenderService } from '../theme/theme-render.service.js';
 
 @ApiTags('OAuth')
 @Controller('realms/:realmName/protocol/openid-connect')
@@ -29,6 +38,7 @@ export class OAuthController {
     private readonly stepUpService: StepUpService,
     private readonly crypto: CryptoService,
     private readonly prisma: PrismaService,
+    private readonly themeRender: ThemeRenderService,
   ) {}
 
   @Get('auth')
@@ -47,6 +57,37 @@ export class OAuthController {
     @Query() query: Record<string, string>,
     @Req() req: Request,
     @Res() res: Response,
+  ) {
+    try {
+      await this.authorizeInternal(realm, query, req, res);
+    } catch (err) {
+      // The authorize endpoint is reached by the end-user's browser, so a
+      // validation failure (bad client_id / redirect_uri / response_type / PKCE)
+      // must render a themed error page rather than leak a raw JSON exception.
+      // These failures occur before a trusted redirect_uri is established, so a
+      // page (not a redirect) is the safe choice.
+      const status = err instanceof HttpException ? err.getStatus() : 400;
+      res.status(status);
+      this.themeRender.render(
+        res,
+        realm,
+        'login',
+        'error',
+        {
+          pageTitle: 'Request error',
+          errorTitle: 'We can’t complete this sign-in request',
+          errorMessage: this.describeAuthError(err),
+        },
+        req,
+      );
+    }
+  }
+
+  private async authorizeInternal(
+    realm: Realm,
+    query: Record<string, string>,
+    req: Request,
+    res: Response,
   ) {
     // Validate OAuth params (client_id, redirect_uri, etc.) early
     const client = await this.oauthService.validateAuthRequest(
@@ -205,6 +246,26 @@ export class OAuthController {
   }
 
   // ── Private helpers ────────────────────────────────────────────────────────
+
+  private describeAuthError(err: unknown): string {
+    if (err instanceof HttpException) {
+      const response = err.getResponse();
+      if (typeof response === 'string') {
+        return response;
+      }
+      if (response && typeof response === 'object' && 'message' in response) {
+        const message: unknown = response.message;
+        if (typeof message === 'string') {
+          return message;
+        }
+        if (Array.isArray(message)) {
+          return message.join(', ');
+        }
+      }
+      return err.message;
+    }
+    return 'The sign-in request could not be processed. Please try again.';
+  }
 
   /**
    * Given two optional ACR requirements, returns the one with higher
