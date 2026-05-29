@@ -7,7 +7,7 @@ import {
   UseGuards,
   HttpCode,
   HttpStatus,
-  BadRequestException,
+  HttpException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -20,6 +20,7 @@ import { SkipThrottle } from '@nestjs/throttler';
 import type { Request, Response } from 'express';
 import type { Realm } from '@prisma/client';
 import { AuthService } from './auth.service.js';
+import { OAuthTokenError } from './oauth-token-error.js';
 import { TokenRequestDto } from './dto/token-request.dto.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
@@ -82,15 +83,38 @@ export class AuthController {
         req.headers['user-agent'],
       );
     } catch (err) {
-      if (err instanceof BadRequestException) {
-        const msg =
-          typeof err.getResponse() === 'string'
-            ? err.getResponse()
-            : ((err.getResponse() as { message?: string }).message ??
-              'invalid_request');
-        res.status(400).json({ error: msg });
+      // RFC 6749 §5.2: serialize token-endpoint errors as
+      // `{ error: <code>, error_description? }` with the appropriate status.
+      if (err instanceof OAuthTokenError) {
+        if (err.code === 'invalid_client') {
+          // RFC 6749 §5.2: a 401 for failed client authentication must include
+          // a WWW-Authenticate header advertising the auth scheme.
+          res.set(
+            'WWW-Authenticate',
+            `Basic realm="${realm.name}", error="invalid_client"`,
+          );
+        }
+        res.status(err.httpStatus).json({
+          error: err.code,
+          ...(err.description ? { error_description: err.description } : {}),
+        });
         return;
       }
+      // Other HttpExceptions whose body already carries an `error` field — e.g.
+      // the `mfa_required` challenge response — are passed through verbatim so
+      // they keep their extra fields (such as `mfa_token`).
+      if (err instanceof HttpException) {
+        const responseBody = err.getResponse();
+        if (
+          typeof responseBody === 'object' &&
+          responseBody !== null &&
+          'error' in responseBody
+        ) {
+          res.status(err.getStatus()).json(responseBody);
+          return;
+        }
+      }
+      // Anything else is genuinely unexpected — let the global filter handle it.
       throw err;
     }
   }
