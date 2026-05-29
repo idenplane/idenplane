@@ -1,3 +1,4 @@
+import { UnauthorizedException } from '@nestjs/common';
 import { BrokerController } from './broker.controller.js';
 import type { Realm } from '@prisma/client';
 
@@ -7,6 +8,7 @@ describe('BrokerController', () => {
     initiateLogin: jest.Mock;
     handleCallback: jest.Mock;
   };
+  let themeRender: { render: jest.Mock };
 
   const realm = { id: 'realm-1', name: 'test-realm' } as Realm;
 
@@ -15,7 +17,11 @@ describe('BrokerController', () => {
       initiateLogin: jest.fn(),
       handleCallback: jest.fn(),
     };
-    controller = new BrokerController(brokerService as any);
+    themeRender = { render: jest.fn() };
+    controller = new BrokerController(
+      brokerService as any,
+      themeRender as any,
+    );
   });
 
   describe('login', () => {
@@ -65,13 +71,15 @@ describe('BrokerController', () => {
         redirectUrl: 'http://localhost/callback?code=authcode&state=abc',
       });
 
-      const res = { redirect: jest.fn() };
+      const req = {};
+      const res = { redirect: jest.fn(), status: jest.fn().mockReturnThis() };
 
       await controller.callback(
         realm,
         'google',
         'ext-code',
         'state-123',
+        req as any,
         res as any,
       );
 
@@ -84,6 +92,42 @@ describe('BrokerController', () => {
       expect(res.redirect).toHaveBeenCalledWith(
         302,
         'http://localhost/callback?code=authcode&state=abc',
+      );
+      expect(themeRender.render).not.toHaveBeenCalled();
+    });
+
+    it('should render a themed error page (not raw JSON) when federation fails', async () => {
+      brokerService.handleCallback.mockRejectedValue(
+        new UnauthorizedException(
+          'No matching user found and identity provider is configured as link-only',
+        ),
+      );
+
+      const req = {};
+      const res = { redirect: jest.fn(), status: jest.fn().mockReturnThis() };
+
+      await controller.callback(
+        realm,
+        'google',
+        'ext-code',
+        'state-123',
+        req as any,
+        res as any,
+      );
+
+      expect(res.redirect).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(401);
+      expect(themeRender.render).toHaveBeenCalledWith(
+        res,
+        realm,
+        'login',
+        'error',
+        expect.objectContaining({
+          errorTitle: 'Sign-in failed',
+          errorMessage:
+            'No matching user found and identity provider is configured as link-only',
+        }),
+        req,
       );
     });
   });
