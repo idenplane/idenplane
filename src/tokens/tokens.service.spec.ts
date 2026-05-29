@@ -153,6 +153,69 @@ describe('TokensService', () => {
 
       expect(result).toEqual({ active: false });
     });
+
+    it('should return active=true for a valid opaque refresh token (RFC 7662)', async () => {
+      prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
+      jwkService.verifyJwt.mockRejectedValue(new Error('not a JWT'));
+      cryptoService.sha256.mockReturnValue('rt-hash');
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        tokenHash: 'rt-hash',
+        revoked: false,
+        expiresAt: new Date(Date.now() + 1_800_000),
+        createdAt: new Date(Date.now() - 1_000),
+        scope: 'openid profile',
+        clientId: 'my-app',
+        session: {
+          user: {
+            id: 'user-1',
+            username: 'testuser',
+            enabled: true,
+            realmId: 'realm-1',
+          },
+        },
+      });
+
+      const result = await service.introspect(
+        mockRealm,
+        'opaque-refresh-token',
+      );
+
+      expect(result.active).toBe(true);
+      expect((result as Record<string, unknown>).token_type).toBe(
+        'refresh_token',
+      );
+      expect(result.sub).toBe('user-1');
+      expect((result as Record<string, unknown>).client_id).toBe('my-app');
+      expect((result as Record<string, unknown>).azp).toBe('my-app');
+      expect(result.scope).toBe('openid profile');
+      expect(prisma.refreshToken.findUnique).toHaveBeenCalledWith({
+        where: { tokenHash: 'rt-hash' },
+        include: { session: { include: { user: true } } },
+      });
+    });
+
+    it('should return active=false for a revoked refresh token', async () => {
+      prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
+      jwkService.verifyJwt.mockRejectedValue(new Error('not a JWT'));
+      cryptoService.sha256.mockReturnValue('rt-hash');
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        revoked: true,
+        expiresAt: new Date(Date.now() + 1_800_000),
+        createdAt: new Date(),
+        session: {
+          user: {
+            id: 'user-1',
+            username: 'u',
+            enabled: true,
+            realmId: 'realm-1',
+          },
+        },
+      });
+
+      const result = await service.introspect(mockRealm, 'revoked-rt');
+
+      expect(result).toEqual({ active: false });
+    });
   });
 
   describe('validatePostLogoutRedirectUri', () => {
