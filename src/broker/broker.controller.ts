@@ -1,18 +1,31 @@
-import { Controller, Get, Param, Query, Res, UseGuards } from '@nestjs/common';
+import {
+  Controller,
+  Get,
+  HttpException,
+  Param,
+  Query,
+  Req,
+  Res,
+  UseGuards,
+} from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
-import type { Response } from 'express';
+import type { Request, Response } from 'express';
 import type { Realm } from '@prisma/client';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
 import { BrokerService } from './broker.service.js';
+import { ThemeRenderService } from '../theme/theme-render.service.js';
 
 @ApiTags('Identity Broker')
 @Controller('realms/:realmName/broker')
 @UseGuards(RealmGuard)
 @Public()
 export class BrokerController {
-  constructor(private readonly brokerService: BrokerService) {}
+  constructor(
+    private readonly brokerService: BrokerService,
+    private readonly themeRender: ThemeRenderService,
+  ) {}
 
   @Get(':alias/login')
   @ApiOperation({ summary: 'Initiate social login with an external provider' })
@@ -67,14 +80,55 @@ export class BrokerController {
     @Param('alias') alias: string,
     @Query('code') code: string,
     @Query('state') state: string,
+    @Req() req: Request,
     @Res() res: Response,
   ) {
-    const result = await this.brokerService.handleCallback(
-      realm,
-      alias,
-      code,
-      state,
-    );
-    res.redirect(302, result.redirectUrl);
+    try {
+      const result = await this.brokerService.handleCallback(
+        realm,
+        alias,
+        code,
+        state,
+      );
+      res.redirect(302, result.redirectUrl);
+    } catch (err) {
+      // A broker callback is reached by the end-user's browser, so failures
+      // (link-only, token-exchange, invalid/expired state) must render a themed
+      // error page rather than leak a raw JSON exception to the user.
+      const status = err instanceof HttpException ? err.getStatus() : 400;
+      res.status(status);
+      this.themeRender.render(
+        res,
+        realm,
+        'login',
+        'error',
+        {
+          pageTitle: 'Sign-in failed',
+          errorTitle: 'Sign-in failed',
+          errorMessage: this.describeBrokerError(err),
+        },
+        req,
+      );
+    }
+  }
+
+  private describeBrokerError(err: unknown): string {
+    if (err instanceof HttpException) {
+      const response = err.getResponse();
+      if (typeof response === 'string') {
+        return response;
+      }
+      if (response && typeof response === 'object' && 'message' in response) {
+        const message = (response as { message: unknown }).message;
+        if (typeof message === 'string') {
+          return message;
+        }
+        if (Array.isArray(message)) {
+          return message.join(', ');
+        }
+      }
+      return err.message;
+    }
+    return 'Sign-in could not be completed. Please try again.';
   }
 }
