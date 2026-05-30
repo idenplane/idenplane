@@ -6,7 +6,10 @@
 <div class="auth-error">{{error}}</div>
 {{/if}}
 
-<h2 class="auth-subtitle">{{msg "accountTitle"}}</h2>
+<div style="display: flex; justify-content: space-between; align-items: center; gap: 1rem; margin-bottom: 0.5rem;">
+  <h2 class="auth-subtitle" style="margin: 0;">{{msg "accountTitle"}}</h2>
+  <a href="/realms/{{realmName}}/account/logout" class="auth-link" style="padding: 0.4rem 0.85rem; border: 1px solid currentColor; border-radius: 6px; font-size: 0.85rem; text-decoration: none; white-space: nowrap; opacity: 0.85;">{{msg "accountSignOut"}}</a>
+</div>
 
 <div class="account-section" style="text-align: center; border-bottom: none; padding-bottom: 0; margin-bottom: 0;">
   <span class="account-field-value">{{username}}</span>
