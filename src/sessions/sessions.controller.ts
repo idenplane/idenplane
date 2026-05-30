@@ -64,7 +64,7 @@ export class SessionsController {
   revokeSession(
     @CurrentRealm() realm: Realm,
     @Param('sessionId') sessionId: string,
-    @Query('type') type: 'oauth' | 'sso' = 'oauth',
+    @Query('type') type?: 'oauth' | 'sso',
   ) {
     return this.sessionsService.revokeSession(realm, sessionId, type);
   }

@@ -322,7 +322,17 @@ export class CustomAttributesService {
           }
         }
         break;
+      case 'text':
       default:
+        // Match the rest of the admin DTO surface (username, firstName,
+        // displayName, group/role names): reject angle brackets so stored
+        // attribute values can never become a vector if a downstream sink
+        // ever interpolates them into HTML without escaping.
+        if (/[<>]/.test(value)) {
+          throw new BadRequestException(
+            `'${displayName}' must not contain HTML tags or angle brackets`,
+          );
+        }
         break;
     }
   }

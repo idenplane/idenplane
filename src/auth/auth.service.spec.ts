@@ -198,6 +198,12 @@ describe('AuthService', () => {
       getOidcClaimsForUser: jest.fn().mockResolvedValue({}),
     };
 
+    const userFederationService = {
+      authenticateViaFederation: jest
+        .fn()
+        .mockResolvedValue({ authenticated: false }),
+    };
+
     service = new AuthService(
       prisma as any,
       crypto as any,
@@ -210,6 +216,7 @@ describe('AuthService', () => {
       eventsService as any,
       metricsService as any,
       customAttributesService as any,
+      userFederationService as any,
     );
   });
 

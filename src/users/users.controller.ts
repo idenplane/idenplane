@@ -211,8 +211,10 @@ export class UsersController {
     @CurrentRealm() realm: Realm,
     @Param('userId') userId: string,
   ) {
-    // Uniform response regardless of whether the user exists or has an email,
-    // so the endpoint cannot be used to enumerate user IDs / email presence.
+    // Anti-enumeration: uniform 200 + body whether the user exists, has no
+    // email, or does not exist at all. This is the original closed-#582 shape
+    // — a prior pass tried to surface real outcomes (#31) but that necessarily
+    // leaks user existence to admin-key holders, so it was reverted.
     try {
       const user = await this.usersService.findById(realm, userId);
       if (user.email) {
@@ -287,5 +289,34 @@ export class UsersController {
       page: page ? Number(page) : undefined,
       limit: limit ? Number(limit) : undefined,
     });
+  }
+
+  @Delete(':userId/consents')
+  @RequireAdminRoles(['super-admin', 'admin'])
+  @ApiOperation({
+    summary: "Revoke all of a user's stored consents (after-compromise lockout)",
+  })
+  @ApiResponse({ status: 200, description: 'Revoked consents count' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  revokeAllUserConsents(
+    @CurrentRealm() realm: Realm,
+    @Param('userId') userId: string,
+  ) {
+    return this.usersService.revokeUserConsents(realm, userId);
+  }
+
+  @Delete(':userId/consents/:clientId')
+  @RequireAdminRoles(['super-admin', 'admin'])
+  @ApiOperation({ summary: "Revoke a user's consent for a single client" })
+  @ApiResponse({ status: 200, description: 'Revoked consent count (0 or 1)' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'User or client not found' })
+  revokeUserConsentForClient(
+    @CurrentRealm() realm: Realm,
+    @Param('userId') userId: string,
+    @Param('clientId') clientIdOrUuid: string,
+  ) {
+    return this.usersService.revokeUserConsents(realm, userId, clientIdOrUuid);
   }
 }

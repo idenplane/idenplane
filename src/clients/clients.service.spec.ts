@@ -324,7 +324,7 @@ describe('ClientsService', () => {
   });
 
   describe('regenerateSecret', () => {
-    it('should regenerate the secret for a confidential client', async () => {
+    it('should regenerate the secret for a confidential client (looked up by clientId string)', async () => {
       prisma.client.findUnique.mockResolvedValue(mockClient);
       cryptoService.generateSecret.mockReturnValue('new-raw-secret');
       cryptoService.hashPassword.mockResolvedValue('new-hashed-secret');
@@ -337,10 +337,32 @@ describe('ClientsService', () => {
       expect(result.secretWarning).toBeDefined();
       expect(cryptoService.generateSecret).toHaveBeenCalled();
       expect(cryptoService.hashPassword).toHaveBeenCalledWith('new-raw-secret');
+      // Regression for the bug where the update used the raw URL param in the
+      // realmId_clientId compound key — that crashed with P2025 whenever the
+      // caller passed the row UUID. We now use the resolved row PK.
       expect(prisma.client.update).toHaveBeenCalledWith({
-        where: {
-          realmId_clientId: { realmId: 'realm-1', clientId: 'my-app' },
-        },
+        where: { id: mockClient.id },
+        data: { clientSecret: 'new-hashed-secret' },
+      });
+    });
+
+    it('should regenerate the secret when the caller passes the row UUID instead of the clientId string', async () => {
+      const uuid = '00000000-0000-0000-0000-000000000abc';
+      // findByClientId tries findUnique by realmId_clientId first; on a UUID
+      // that lookup returns null, then it falls back to findUnique({where:{id}})
+      // — and only the second resolves to the row.
+      prisma.client.findUnique
+        .mockResolvedValueOnce(null)
+        .mockResolvedValueOnce(mockClient);
+      cryptoService.generateSecret.mockReturnValue('new-raw-secret');
+      cryptoService.hashPassword.mockResolvedValue('new-hashed-secret');
+      prisma.client.update.mockResolvedValue({});
+
+      const result = await service.regenerateSecret(mockRealm, uuid);
+
+      expect(result.clientId).toBe(mockClient.clientId);
+      expect(prisma.client.update).toHaveBeenCalledWith({
+        where: { id: mockClient.id },
         data: { clientSecret: 'new-hashed-secret' },
       });
     });
