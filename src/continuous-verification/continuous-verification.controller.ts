@@ -25,7 +25,7 @@ import { BehavioralBiometricsService } from './behavioral-biometrics.service.js'
 
 @ApiTags('Continuous Verification')
 @ApiBearerAuth()
-@Controller('admin/realms/:realm/continuous-verification')
+@Controller('admin/realms/:realmName/continuous-verification')
 export class ContinuousVerificationController {
   constructor(
     private readonly prisma: PrismaService,
@@ -60,7 +60,7 @@ export class ContinuousVerificationController {
   @ApiQuery({ name: 'first', required: false })
   @ApiQuery({ name: 'max', required: false })
   async listRiskEvents(
-    @Param('realm') realmName: string,
+    @Param('realmName') realmName: string,
     @Query('userId') userId?: string,
     @Query('sessionId') sessionId?: string,
     @Query('action') action?: string,
@@ -98,7 +98,7 @@ export class ContinuousVerificationController {
   @ApiResponse({ status: 200, description: 'Continuous risk dashboard data' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
-  async getDashboard(@Param('realm') realmName: string) {
+  async getDashboard(@Param('realmName') realmName: string) {
     const realm = await this.requireRealm(realmName);
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // last 30 days
 
@@ -210,7 +210,7 @@ export class ContinuousVerificationController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
   async getRiskEvent(
-    @Param('realm') realmName: string,
+    @Param('realmName') realmName: string,
     @Param('id') id: string,
   ) {
     const realm = await this.requireRealm(realmName);
@@ -246,7 +246,7 @@ export class ContinuousVerificationController {
   @ApiQuery({ name: 'first', required: false })
   @ApiQuery({ name: 'max', required: false })
   async listSessionProfiles(
-    @Param('realm') realmName: string,
+    @Param('realmName') realmName: string,
     @Query('userId') userId?: string,
     @Query('riskLevel') riskLevel?: string,
     @Query('stepUpRequired') stepUpRequired?: string,
@@ -283,7 +283,7 @@ export class ContinuousVerificationController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
   async getSessionProfile(
-    @Param('realm') realmName: string,
+    @Param('realmName') realmName: string,
     @Param('sessionId') sessionId: string,
   ) {
     const realm = await this.requireRealm(realmName);
@@ -319,7 +319,7 @@ export class ContinuousVerificationController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
   async getDevicePosture(
-    @Param('realm') realmName: string,
+    @Param('realmName') realmName: string,
     @Param('sessionId') sessionId: string,
   ) {
     const realm = await this.requireRealm(realmName);
@@ -350,7 +350,7 @@ export class ContinuousVerificationController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
   async getNetworkContext(
-    @Param('realm') realmName: string,
+    @Param('realmName') realmName: string,
     @Param('sessionId') sessionId: string,
   ) {
     const realm = await this.requireRealm(realmName);
@@ -383,7 +383,7 @@ export class ContinuousVerificationController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
   async getBehavioralBiometrics(
-    @Param('realm') realmName: string,
+    @Param('realmName') realmName: string,
     @Param('userId') userId: string,
   ) {
     const _realm = await this.requireRealm(realmName);
@@ -418,7 +418,7 @@ export class ContinuousVerificationController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
   async getUserRiskSummary(
-    @Param('realm') realmName: string,
+    @Param('realmName') realmName: string,
     @Param('userId') userId: string,
   ) {
     const realm = await this.requireRealm(realmName);
@@ -525,7 +525,7 @@ export class ContinuousVerificationController {
     },
   })
   async recordDevicePosture(
-    @Param('realm') realmName: string,
+    @Param('realmName') realmName: string,
     @Body()
     body: {
       sessionId: string;
@@ -627,7 +627,7 @@ export class ContinuousVerificationController {
     },
   })
   async recordBehavioralSamples(
-    @Param('realm') realmName: string,
+    @Param('realmName') realmName: string,
     @Body()
     body: {
       sessionId: string;
@@ -710,7 +710,7 @@ export class ContinuousVerificationController {
     },
   })
   async recordNetworkContext(
-    @Param('realm') realmName: string,
+    @Param('realmName') realmName: string,
     @Body()
     body: {
       sessionId: string;

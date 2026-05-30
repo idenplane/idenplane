@@ -110,37 +110,54 @@ export class SessionsService {
   async revokeSession(
     realm: Realm | null,
     sessionId: string,
-    type: 'oauth' | 'sso',
+    type?: 'oauth' | 'sso',
   ): Promise<void> {
-    if (type === 'oauth') {
+    // When the caller doesn't say which table the session lives in, try both.
+    // Sessions are split across `Session` (OAuth-refresh-backed) and
+    // `LoginSession` (hosted-form/SSO) — the listing endpoint returns both
+    // as a merged list with a `type` field, but admins routinely paste the
+    // id without threading the type through. Returning 404 when the id
+    // exists in the *other* table is a UX cliff (#37).
+    const tryOauth = !type || type === 'oauth';
+    const trySso = !type || type === 'sso';
+
+    if (tryOauth) {
       const session = await this.prisma.session.findUnique({
         where: { id: sessionId },
         select: { userId: true, user: { select: { realmId: true } } },
       });
-      if (realm && session && session.user.realmId !== realm.id) {
+      if (session) {
+        if (realm && session.user.realmId !== realm.id) {
+          throw new NotFoundException('Session not found');
+        }
+        await this.prisma.refreshToken.updateMany({
+          where: { sessionId },
+          data: { revoked: true },
+        });
+        await this.prisma.session.delete({ where: { id: sessionId } });
+        return;
+      }
+      if (type === 'oauth') {
         throw new NotFoundException('Session not found');
       }
-      if (!session) {
-        throw new NotFoundException('Session not found');
-      }
-      await this.prisma.refreshToken.updateMany({
-        where: { sessionId },
-        data: { revoked: true },
-      });
-      await this.prisma.session.delete({ where: { id: sessionId } });
-    } else {
+      // fall through to sso when type was unspecified
+    }
+
+    if (trySso) {
       const loginSession = await this.prisma.loginSession.findUnique({
         where: { id: sessionId },
         select: { realmId: true },
       });
-      if (realm && loginSession && loginSession.realmId !== realm.id) {
-        throw new NotFoundException('Session not found');
+      if (loginSession) {
+        if (realm && loginSession.realmId !== realm.id) {
+          throw new NotFoundException('Session not found');
+        }
+        await this.prisma.loginSession.delete({ where: { id: sessionId } });
+        return;
       }
-      if (!loginSession) {
-        throw new NotFoundException('Session not found');
-      }
-      await this.prisma.loginSession.delete({ where: { id: sessionId } });
     }
+
+    throw new NotFoundException('Session not found');
   }
 
   async revokeAllUserSessions(realm: Realm, userId: string): Promise<void> {

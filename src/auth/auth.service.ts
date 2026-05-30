@@ -25,6 +25,7 @@ import {
   type UserClaimSource,
 } from '../scopes/claims.resolver.js';
 import { CustomAttributesService } from '../custom-attributes/custom-attributes.service.js';
+import { UserFederationService } from '../user-federation/user-federation.service.js';
 import {
   StepUpService,
   ACR_PASSWORD,
@@ -61,6 +62,7 @@ export class AuthService {
     private readonly eventsService: EventsService,
     private readonly metricsService: MetricsService,
     private readonly customAttributesService: CustomAttributesService,
+    private readonly userFederationService: UserFederationService,
     @Optional() private readonly stepUpService?: StepUpService,
     @Optional() private readonly pluginManager?: PluginManagerService,
   ) {}
@@ -127,15 +129,64 @@ export class AuthService {
       );
     }
 
-    const user = await this.prisma.user.findUnique({
+    let user = await this.prisma.user.findUnique({
       where: { realmId_username: { realmId: realm.id, username } },
     });
+
+    // Federated users have empty passwordHash — route to LDAP bind instead of
+    // rejecting outright. UserFederationService.authenticateViaFederation does
+    // the bind-as-service / find-DN / bind-as-user dance against the configured
+    // LDAP server, and find-or-imports the user. Realm-scoping is enforced
+    // inside that call.
+    if (
+      user &&
+      user.enabled &&
+      !user.passwordHash &&
+      user.federationLink
+    ) {
+      const federationResult =
+        await this.userFederationService.authenticateViaFederation(
+          realm.id,
+          username,
+          password,
+        );
+      if (!federationResult.authenticated) {
+        throw new OAuthTokenError(
+          'invalid_grant',
+          'Invalid credentials',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
+      // refresh the user row in case the federation flow updated attributes
+      user = await this.prisma.user.findUnique({
+        where: { id: federationResult.userId ?? user.id },
+      });
+    }
+
     if (!user || !user.enabled || !user.passwordHash) {
-      throw new OAuthTokenError(
-        'invalid_grant',
-        'Invalid credentials',
-        HttpStatus.BAD_REQUEST,
-      );
+      // Last-resort federation attempt for the "user doesn't exist locally"
+      // case — `authenticateViaFederation` will import-on-first-login when
+      // the federation has `importEnabled=true`.
+      if (!user || (!user.passwordHash && !user.federationLink)) {
+        const federationResult =
+          await this.userFederationService.authenticateViaFederation(
+            realm.id,
+            username,
+            password,
+          );
+        if (federationResult.authenticated && federationResult.userId) {
+          user = await this.prisma.user.findUnique({
+            where: { id: federationResult.userId },
+          });
+        }
+      }
+      if (!user || !user.enabled) {
+        throw new OAuthTokenError(
+          'invalid_grant',
+          'Invalid credentials',
+          HttpStatus.BAD_REQUEST,
+        );
+      }
     }
 
     // Brute force check
@@ -148,7 +199,13 @@ export class AuthService {
       );
     }
 
-    const valid = await this.crypto.verifyPassword(user.passwordHash, password);
+    // Skip local password check for federated users — already authenticated
+    // via LDAP above; no `passwordHash` to compare against.
+    const skipLocalPwdCheck = !user.passwordHash && !!user.federationLink;
+    const valid =
+      skipLocalPwdCheck ||
+      (user.passwordHash &&
+        (await this.crypto.verifyPassword(user.passwordHash, password)));
     if (!valid) {
       await this.bruteForceService.recordFailure(realm, user.id, ip);
       void this.eventsService.recordLoginEvent({
