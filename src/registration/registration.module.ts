@@ -7,6 +7,7 @@ import { EmailModule } from '../email/email.module.js';
 import { CryptoModule } from '../crypto/crypto.module.js';
 import { VerificationModule } from '../verification/verification.module.js';
 import { PasswordPolicyModule } from '../password-policy/password-policy.module.js';
+import { ThemeModule } from '../theme/theme.module.js';
 
 @Module({
   imports: [
@@ -15,6 +16,7 @@ import { PasswordPolicyModule } from '../password-policy/password-policy.module.
     CryptoModule,
     VerificationModule,
     PasswordPolicyModule,
+    ThemeModule,
   ],
   controllers: [RegistrationController],
   providers: [RegistrationService, CaptchaService],

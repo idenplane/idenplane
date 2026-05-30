@@ -3,6 +3,8 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { EmailService } from '../email/email.service.js';
 import { RateLimitService } from '../rate-limit/rate-limit.service.js';
+import { ThemeEmailService } from '../theme/theme-email.service.js';
+import { matchesRedirectUri } from '../common/redirect-uri.utils.js';
 import type { RateLimitResult } from '../rate-limit/rate-limit.dto.js';
 import { MagicLinkStatus } from '@prisma/client';
 
@@ -29,6 +31,7 @@ export class MagicLinkService {
     private readonly crypto: CryptoService,
     private readonly rateLimit: RateLimitService,
     private readonly emailService: EmailService,
+    private readonly themeEmail: ThemeEmailService,
   ) {}
 
   /**
@@ -39,11 +42,11 @@ export class MagicLinkService {
   async requestMagicLink(
     email: string,
     realmId: string,
+    clientId: string,
     ipAddress?: string,
     userAgent?: string,
     magicLinkUrl?: string,
   ): Promise<MagicLinkRequestResult> {
-    // 1. Validate realm has magic link enabled
     const realm = await this.prisma.realm.findUnique({
       where: { id: realmId },
       select: {
@@ -53,8 +56,6 @@ export class MagicLinkService {
         magicLinkExpirySeconds: true,
         magicLinkRateLimitPerEmail: true,
         magicLinkEmailSubject: true,
-        magicLinkEmailTemplate: true,
-        theme: true,
       },
     });
 
@@ -69,7 +70,40 @@ export class MagicLinkService {
       };
     }
 
-    // 2. Check IP rate limit first (if IP is available)
+    // Validate the callback URL against the client's registered redirect URIs.
+    // Without this, the @Public() endpoint would let any caller mail a victim
+    // a real Idenplane-themed magic-link pointing at an attacker host and
+    // exfiltrate the live token — the same risk OAuth solves for redirect_uri.
+    const client = await this.prisma.client.findFirst({
+      where: { realmId, clientId },
+      select: { id: true, redirectUris: true },
+    });
+
+    if (!client) {
+      return { success: false, message: 'Invalid client' };
+    }
+
+    let resolvedCallback: string;
+    if (magicLinkUrl) {
+      if (!matchesRedirectUri(magicLinkUrl, client.redirectUris)) {
+        this.logger.warn(
+          `magicLinkUrl "${magicLinkUrl}" not allowlisted for client "${clientId}" in realm "${realm.name}"`,
+        );
+        return { success: false, message: 'Invalid magic link URL' };
+      }
+      resolvedCallback = magicLinkUrl;
+    } else {
+      const fallback = client.redirectUris.find((u) => !u.endsWith('/*'));
+      if (!fallback) {
+        return {
+          success: false,
+          message:
+            'Client has no usable redirect URI for the magic link callback',
+        };
+      }
+      resolvedCallback = fallback;
+    }
+
     if (ipAddress) {
       const ipRateLimit = await this.rateLimit.checkIpLimit(ipAddress, realmId);
       if (!ipRateLimit.allowed) {
@@ -81,7 +115,6 @@ export class MagicLinkService {
       }
     }
 
-    // 3. Find user by email in this realm (includes disabled users for explicit error)
     const normalizedEmail = email.toLowerCase();
     const user = await this.prisma.user.findFirst({
       where: { realmId, email: normalizedEmail },
@@ -89,7 +122,6 @@ export class MagicLinkService {
     });
 
     if (!user) {
-      // Don't reveal whether the email exists - anti-email-enumeration
       this.logger.log(
         `Magic link requested for unknown email ${email} in realm ${realm.name}`,
       );
@@ -104,7 +136,6 @@ export class MagicLinkService {
       return { success: false, message: 'User account is disabled' };
     }
 
-    // 4. Check email-based rate limit
     const recentCount = await this.prisma.magicLinkRequest.count({
       where: {
         realmId,
@@ -124,19 +155,15 @@ export class MagicLinkService {
       };
     }
 
-    // 5. Cancel any existing pending magic link requests for this user in this realm
     await this.cancelPendingRequests(user.id, realmId);
 
-    // 6. Generate token and hash
     const rawToken = this.crypto.generateSecret(32);
     const tokenHash = this.crypto.sha256(rawToken);
 
-    // 7. Calculate expiry (default 600 seconds / 10 minutes)
     const expiresAt = new Date(
       Date.now() + (realm.magicLinkExpirySeconds ?? 600) * 1000,
     );
 
-    // 8. Store the magic link request
     await this.prisma.magicLinkRequest.create({
       data: {
         realmId,
@@ -149,19 +176,28 @@ export class MagicLinkService {
       },
     });
 
-    // 9. Build the magic link URL
-    const baseUrl = magicLinkUrl ?? `https://${realm.name}/auth/magic-link`;
-    const magicLinkFullUrl = `${baseUrl}?token=${rawToken}`;
+    const magicLinkFullUrl = this.appendToken(resolvedCallback, rawToken);
 
-    // 10. Get email subject from realm config or use default
-    const emailSubject = realm.magicLinkEmailSubject ?? 'Sign in to Idenplane';
+    const fullRealm = await this.prisma.realm.findUnique({
+      where: { id: realmId },
+    });
+    if (!fullRealm) {
+      return { success: false, message: 'Realm not found' };
+    }
 
-    // 11. Send the email
+    const emailSubject = this.themeEmail.getSubject(
+      fullRealm,
+      'magicLinkSubject',
+    );
+    const html = this.themeEmail.renderEmail(fullRealm, 'magic-link', {
+      magicLinkUrl: magicLinkFullUrl,
+    });
+
     await this.emailService.sendEmail(
       realm.name,
       normalizedEmail,
       emailSubject,
-      this.buildMagicLinkEmailHtml(realm, magicLinkFullUrl),
+      html,
     );
 
     this.logger.log(`Magic link sent to ${user.email} for realm ${realm.name}`);
@@ -231,7 +267,6 @@ export class MagicLinkService {
       return { valid: false, error: 'Invalid or expired token' };
     }
 
-    // Mark as completed (one-time use)
     await this.prisma.magicLinkRequest.update({
       where: { id: request.id },
       data: { status: MagicLinkStatus.COMPLETED, completedAt: new Date() },
@@ -280,40 +315,8 @@ export class MagicLinkService {
 
   // ── Private helpers ─────────────────────────────────────
 
-  private extractPrimaryColor(theme: unknown): string {
-    if (theme && typeof theme === 'object') {
-      const t = theme as Record<string, unknown>;
-      if (typeof t['primaryColor'] === 'string') {
-        return t['primaryColor'];
-      }
-    }
-    return '#3b82f6';
-  }
-
-  private buildMagicLinkEmailHtml(
-    realm: { name: string; theme?: unknown },
-    magicLinkUrl: string,
-  ): string {
-    const primaryColor = this.extractPrimaryColor(realm.theme);
-
-    return `
-<!DOCTYPE html>
-<html>
-<head>
-  <meta charset="utf-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-</head>
-<body style="font-family:system-ui,-apple-system,sans-serif;max-width:480px;margin:0 auto;padding:24px;color:#111;">
-  <h2 style="color:${primaryColor};margin-bottom:16px;">Sign in to Idenplane</h2>
-  <p style="margin-bottom:24px;">Click the link below to sign in to your account. This link expires in 10 minutes.</p>
-  <p style="margin-bottom:32px;">
-    <a href="${magicLinkUrl}" style="display:inline-block;padding:12px 24px;background:${primaryColor};color:#fff;text-decoration:none;border-radius:6px;font-weight:600;">Sign In</a>
-  </p>
-  <p style="color:#6b7280;font-size:14px;">If you didn't request this, you can safely ignore this email.</p>
-  <hr style="border:none;border-top:1px solid #e5e7eb;margin:24px 0;">
-  <p style="color:#9ca3af;font-size:12px;">Idenplane Security</p>
-</body>
-</html>
-`;
+  private appendToken(callback: string, rawToken: string): string {
+    const separator = callback.includes('?') ? '&' : '?';
+    return `${callback}${separator}token=${rawToken}`;
   }
 }

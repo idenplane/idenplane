@@ -9,9 +9,9 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
-import { escapeHtml } from '../common/utils/html-escape.util.js';
 import { VerificationService } from '../verification/verification.service.js';
 import { EmailService } from '../email/email.service.js';
+import { ThemeEmailService } from '../theme/theme-email.service.js';
 import { PasswordPolicyService } from '../password-policy/password-policy.service.js';
 import { WebhooksService } from '../webhooks/webhooks.service.js';
 import { CaptchaService, CaptchaProvider } from './captcha.service.js';
@@ -46,6 +46,7 @@ export class RegistrationService {
     private readonly crypto: CryptoService,
     private readonly verificationService: VerificationService,
     private readonly emailService: EmailService,
+    private readonly themeEmail: ThemeEmailService,
     private readonly passwordPolicyService: PasswordPolicyService,
     private readonly webhooksService: WebhooksService,
     private readonly captchaService: CaptchaService,
@@ -270,19 +271,10 @@ export class RegistrationService {
     );
     const verifyUrl = `${baseUrl}/realms/${realm.name}/verify-email?token=${rawToken}`;
 
-    const subject = `${realm.displayName || realm.name} - Verify your email`;
-    // Escape interpolations into the HTML body (CodeQL js/xss). The realm
-    // display name is operator-controlled and the URL is app-built, but both
-    // are escaped defensively so no value can break out of the markup.
-    const safeRealm = escapeHtml(realm.displayName || realm.name);
-    const safeVerifyUrl = escapeHtml(verifyUrl);
-    const html = `
-      <h1>Welcome to ${safeRealm}!</h1>
-      <p>Please verify your email address by clicking the link below:</p>
-      <p><a href="${safeVerifyUrl}">Verify Email</a></p>
-      <p>Or copy and paste this URL: ${safeVerifyUrl}</p>
-      <p>This link will expire in 24 hours.</p>
-    `;
+    const subject = this.themeEmail.getSubject(realm, 'verifyEmailSubject');
+    const html = this.themeEmail.renderEmail(realm, 'verify-email', {
+      verifyUrl,
+    });
 
     await this.emailService.sendEmail(realm.name, email, subject, html);
     this.logger.log(
@@ -301,16 +293,10 @@ export class RegistrationService {
     const configured = await this.emailService.isConfigured(realm.name);
     if (!configured) return;
 
-    const subject = `Welcome to ${realm.displayName || realm.name}!`;
-    // username is user-chosen and realm display name operator-set — escape both
-    // before interpolating into the HTML body (CodeQL js/xss).
-    const safeUsername = escapeHtml(username);
-    const safeRealm = escapeHtml(realm.displayName || realm.name);
-    const html = `
-      <h1>Welcome, ${safeUsername}!</h1>
-      <p>Your account has been successfully created in ${safeRealm}.</p>
-      <p>You can now log in and start using the system.</p>
-    `;
+    const subject = this.themeEmail.getSubject(realm, 'welcomeSubject');
+    const html = this.themeEmail.renderEmail(realm, 'welcome', {
+      username,
+    });
 
     await this.emailService.sendEmail(realm.name, email, subject, html);
   }

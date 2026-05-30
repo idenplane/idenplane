@@ -56,6 +56,7 @@ export class MagicLinkController {
     return this.magicLinkService.requestMagicLink(
       dto.email,
       realm.id,
+      dto.clientId,
       ipAddress,
       userAgent,
       dto.magicLinkUrl,
