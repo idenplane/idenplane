@@ -14,6 +14,7 @@ import { EmailService } from '../email/email.service.js';
 import { PasswordPolicyService } from '../password-policy/password-policy.service.js';
 import { ThemeEmailService } from '../theme/theme-email.service.js';
 import { BruteForceService } from '../brute-force/brute-force.service.js';
+import { ConsentService } from '../consent/consent.service.js';
 import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import type { Realm } from '@prisma/client';
@@ -44,6 +45,7 @@ export class UsersService {
     private readonly passwordPolicyService: PasswordPolicyService,
     private readonly themeEmail: ThemeEmailService,
     private readonly bruteForceService: BruteForceService,
+    private readonly consentService: ConsentService,
   ) {}
 
   async create(realm: Realm, dto: CreateUserDto) {
@@ -363,6 +365,49 @@ export class UsersService {
       createdAt: consent.createdAt,
       updatedAt: consent.updatedAt,
     }));
+  }
+
+  /**
+   * Revoke a user's stored consents. With no `clientIdOrUuid`, revokes every
+   * client the user has granted to (after-compromise lockout). With a
+   * `clientIdOrUuid`, revokes only that pairing. Each revocation is logged
+   * to `UserConsentHistory` by `ConsentService.revokeConsent`.
+   */
+  async revokeUserConsents(
+    realm: Realm,
+    userId: string,
+    clientIdOrUuid?: string,
+  ): Promise<{ revoked: number }> {
+    await this.findById(realm, userId);
+
+    if (clientIdOrUuid) {
+      const client = await this.prisma.client.findFirst({
+        where: {
+          realmId: realm.id,
+          OR: [{ id: clientIdOrUuid }, { clientId: clientIdOrUuid }],
+        },
+        select: { id: true },
+      });
+      if (!client) {
+        throw new NotFoundException(`Client '${clientIdOrUuid}' not found`);
+      }
+      const existing = await this.prisma.userConsent.findUnique({
+        where: { userId_clientId: { userId, clientId: client.id } },
+        select: { id: true },
+      });
+      if (!existing) return { revoked: 0 };
+      await this.consentService.revokeConsent(realm.id, userId, client.id);
+      return { revoked: 1 };
+    }
+
+    const all = await this.prisma.userConsent.findMany({
+      where: { userId },
+      select: { clientId: true },
+    });
+    for (const c of all) {
+      await this.consentService.revokeConsent(realm.id, userId, c.clientId);
+    }
+    return { revoked: all.length };
   }
 
   /**

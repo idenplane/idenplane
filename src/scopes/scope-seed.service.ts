@@ -1,7 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 
-const DEFAULT_SCOPES = [
+// Exported so non-Nest contexts (prisma/seed.ts, migration scripts) can seed
+// the same canonical OIDC scope catalog without rewriting it.
+export const DEFAULT_SCOPES = [
   {
     name: 'openid',
     description: 'OpenID Connect scope',
@@ -74,7 +76,7 @@ const DEFAULT_SCOPES = [
   },
 ];
 
-const OPTIONAL_SCOPES = [
+export const OPTIONAL_SCOPES = [
   {
     name: 'web-origins',
     description: 'Web origins for CORS',

@@ -6,12 +6,16 @@ import {
 import type { Realm } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { ClientsService } from '../clients/clients.service.js';
 import { CreateClientScopeDto } from './dto/create-client-scope.dto.js';
 import { UpdateClientScopeDto } from './dto/update-client-scope.dto.js';
 
 @Injectable()
 export class ClientScopesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly clientsService: ClientsService,
+  ) {}
 
   async findAll(realm: Realm) {
     return this.prisma.clientScope.findMany({
@@ -132,13 +136,17 @@ export class ClientScopesService {
     await this.prisma.protocolMapper.delete({ where: { id: mapperId } });
   }
 
-  // Client scope assignments
-  async getDefaultScopes(realm: Realm, clientId: string) {
-    const client = await this.prisma.client.findUnique({
-      where: { realmId_clientId: { realmId: realm.id, clientId } },
-    });
-    if (!client) throw new NotFoundException(`Client '${clientId}' not found`);
+  // ── Client scope assignments ────────────────────────────────
+  // The `:clientId` URL param accepts the human client_id string OR the row
+  // UUID — same shape as `/admin/realms/:r/clients/:id` CRUD. Resolve via
+  // ClientsService.findByClientId (which handles both) before any FK query,
+  // so a caller passing either form gets the same answer instead of 404.
 
+  async getDefaultScopes(realm: Realm, clientIdOrUuid: string) {
+    const client = await this.clientsService.findByClientId(
+      realm,
+      clientIdOrUuid,
+    );
     return this.prisma.clientDefaultScope.findMany({
       where: { clientId: client.id },
       include: { clientScope: true },
@@ -147,15 +155,14 @@ export class ClientScopesService {
 
   async assignDefaultScope(
     realm: Realm,
-    clientId: string,
+    clientIdOrUuid: string,
     clientScopeId: string,
   ) {
-    const client = await this.prisma.client.findUnique({
-      where: { realmId_clientId: { realmId: realm.id, clientId } },
-    });
-    if (!client) throw new NotFoundException(`Client '${clientId}' not found`);
+    const client = await this.clientsService.findByClientId(
+      realm,
+      clientIdOrUuid,
+    );
     await this.findById(realm, clientScopeId);
-
     return this.prisma.clientDefaultScope.create({
       data: { clientId: client.id, clientScopeId },
     });
@@ -163,25 +170,23 @@ export class ClientScopesService {
 
   async removeDefaultScope(
     realm: Realm,
-    clientId: string,
+    clientIdOrUuid: string,
     clientScopeId: string,
   ) {
-    const client = await this.prisma.client.findUnique({
-      where: { realmId_clientId: { realmId: realm.id, clientId } },
-    });
-    if (!client) throw new NotFoundException(`Client '${clientId}' not found`);
-
+    const client = await this.clientsService.findByClientId(
+      realm,
+      clientIdOrUuid,
+    );
     await this.prisma.clientDefaultScope.deleteMany({
       where: { clientId: client.id, clientScopeId },
     });
   }
 
-  async getOptionalScopes(realm: Realm, clientId: string) {
-    const client = await this.prisma.client.findUnique({
-      where: { realmId_clientId: { realmId: realm.id, clientId } },
-    });
-    if (!client) throw new NotFoundException(`Client '${clientId}' not found`);
-
+  async getOptionalScopes(realm: Realm, clientIdOrUuid: string) {
+    const client = await this.clientsService.findByClientId(
+      realm,
+      clientIdOrUuid,
+    );
     return this.prisma.clientOptionalScope.findMany({
       where: { clientId: client.id },
       include: { clientScope: true },
@@ -190,15 +195,14 @@ export class ClientScopesService {
 
   async assignOptionalScope(
     realm: Realm,
-    clientId: string,
+    clientIdOrUuid: string,
     clientScopeId: string,
   ) {
-    const client = await this.prisma.client.findUnique({
-      where: { realmId_clientId: { realmId: realm.id, clientId } },
-    });
-    if (!client) throw new NotFoundException(`Client '${clientId}' not found`);
+    const client = await this.clientsService.findByClientId(
+      realm,
+      clientIdOrUuid,
+    );
     await this.findById(realm, clientScopeId);
-
     return this.prisma.clientOptionalScope.create({
       data: { clientId: client.id, clientScopeId },
     });
@@ -206,14 +210,13 @@ export class ClientScopesService {
 
   async removeOptionalScope(
     realm: Realm,
-    clientId: string,
+    clientIdOrUuid: string,
     clientScopeId: string,
   ) {
-    const client = await this.prisma.client.findUnique({
-      where: { realmId_clientId: { realmId: realm.id, clientId } },
-    });
-    if (!client) throw new NotFoundException(`Client '${clientId}' not found`);
-
+    const client = await this.clientsService.findByClientId(
+      realm,
+      clientIdOrUuid,
+    );
     await this.prisma.clientOptionalScope.deleteMany({
       where: { clientId: client.id, clientScopeId },
     });

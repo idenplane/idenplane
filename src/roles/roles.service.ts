@@ -5,10 +5,14 @@ import {
 } from '@nestjs/common';
 import type { Realm } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { ClientsService } from '../clients/clients.service.js';
 
 @Injectable()
 export class RolesService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly clientsService: ClientsService,
+  ) {}
 
   // ─── Realm Roles ────────────────────────────────────────
 
@@ -86,32 +90,31 @@ export class RolesService {
 
   // ─── Client Roles ──────────────────────────────────────
 
+  // The `:clientId` URL param accepts either the human client_id string or
+  // the row UUID — same shape as `/admin/realms/:r/clients/:id` CRUD. Route
+  // through ClientsService.findByClientId so both forms work; previously the
+  // raw param went into `realmId_clientId` which only matched the string.
+
   async createClientRole(
     realm: Realm,
-    clientId: string,
+    clientIdOrUuid: string,
     name: string,
     description?: string,
   ) {
-    const client = await this.prisma.client.findUnique({
-      where: { realmId_clientId: { realmId: realm.id, clientId } },
-    });
-    if (!client) {
-      throw new NotFoundException(`Client '${clientId}' not found`);
-    }
-
+    const client = await this.clientsService.findByClientId(
+      realm,
+      clientIdOrUuid,
+    );
     return this.prisma.role.create({
       data: { realmId: realm.id, clientId: client.id, name, description },
     });
   }
 
-  async findClientRoles(realm: Realm, clientId: string) {
-    const client = await this.prisma.client.findUnique({
-      where: { realmId_clientId: { realmId: realm.id, clientId } },
-    });
-    if (!client) {
-      throw new NotFoundException(`Client '${clientId}' not found`);
-    }
-
+  async findClientRoles(realm: Realm, clientIdOrUuid: string) {
+    const client = await this.clientsService.findByClientId(
+      realm,
+      clientIdOrUuid,
+    );
     return this.prisma.role.findMany({
       where: { realmId: realm.id, clientId: client.id },
       orderBy: { name: 'asc' },
@@ -188,7 +191,7 @@ export class RolesService {
   async assignClientRoles(
     realm: Realm,
     userId: string,
-    clientId: string,
+    clientIdOrUuid: string,
     roleNames: string[],
   ) {
     const user = await this.prisma.user.findFirst({
@@ -198,12 +201,10 @@ export class RolesService {
       throw new NotFoundException(`User '${userId}' not found`);
     }
 
-    const client = await this.prisma.client.findUnique({
-      where: { realmId_clientId: { realmId: realm.id, clientId } },
-    });
-    if (!client) {
-      throw new NotFoundException(`Client '${clientId}' not found`);
-    }
+    const client = await this.clientsService.findByClientId(
+      realm,
+      clientIdOrUuid,
+    );
 
     const roles = await this.prisma.role.findMany({
       where: {
@@ -224,15 +225,13 @@ export class RolesService {
   async removeUserClientRoles(
     realm: Realm,
     userId: string,
-    clientId: string,
+    clientIdOrUuid: string,
     roleNames: string[],
   ) {
-    const client = await this.prisma.client.findUnique({
-      where: { realmId_clientId: { realmId: realm.id, clientId } },
-    });
-    if (!client) {
-      throw new NotFoundException(`Client '${clientId}' not found`);
-    }
+    const client = await this.clientsService.findByClientId(
+      realm,
+      clientIdOrUuid,
+    );
 
     const user = await this.prisma.user.findFirst({
       where: { id: userId, realmId: realm.id },
@@ -259,7 +258,11 @@ export class RolesService {
     return { removed: roleNames };
   }
 
-  async getUserClientRoles(realm: Realm, userId: string, clientId: string) {
+  async getUserClientRoles(
+    realm: Realm,
+    userId: string,
+    clientIdOrUuid: string,
+  ) {
     const user = await this.prisma.user.findFirst({
       where: { id: userId, realmId: realm.id },
     });
@@ -267,12 +270,10 @@ export class RolesService {
       throw new NotFoundException(`User '${userId}' not found`);
     }
 
-    const client = await this.prisma.client.findUnique({
-      where: { realmId_clientId: { realmId: realm.id, clientId } },
-    });
-    if (!client) {
-      throw new NotFoundException(`Client '${clientId}' not found`);
-    }
+    const client = await this.clientsService.findByClientId(
+      realm,
+      clientIdOrUuid,
+    );
 
     return this.prisma.role.findMany({
       where: {

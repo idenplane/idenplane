@@ -47,9 +47,15 @@ describe('ClientScopesService', () => {
     clientId: 'my-app',
   };
 
+  const mockClientsService = {
+    findByClientId: jest.fn().mockResolvedValue(mockClient),
+  };
+
   beforeEach(() => {
     prisma = createMockPrismaService();
-    service = new ClientScopesService(prisma as any);
+    mockClientsService.findByClientId.mockReset();
+    mockClientsService.findByClientId.mockResolvedValue(mockClient);
+    service = new ClientScopesService(prisma as any, mockClientsService as any);
   });
 
   // ─── findAll ────────────────────────────────────────────
@@ -331,7 +337,7 @@ describe('ClientScopesService', () => {
     });
 
     it('should throw NotFoundException when client does not exist', async () => {
-      prisma.client.findUnique.mockResolvedValue(null);
+      mockClientsService.findByClientId.mockRejectedValueOnce(new NotFoundException("Client not found"));
 
       await expect(
         service.getDefaultScopes(mockRealm, 'nonexistent'),
@@ -364,7 +370,7 @@ describe('ClientScopesService', () => {
     });
 
     it('should throw NotFoundException when client does not exist', async () => {
-      prisma.client.findUnique.mockResolvedValue(null);
+      mockClientsService.findByClientId.mockRejectedValueOnce(new NotFoundException("Client not found"));
 
       await expect(
         service.assignDefaultScope(mockRealm, 'bad-client', 'scope-1'),
@@ -396,7 +402,7 @@ describe('ClientScopesService', () => {
     });
 
     it('should throw NotFoundException when client does not exist', async () => {
-      prisma.client.findUnique.mockResolvedValue(null);
+      mockClientsService.findByClientId.mockRejectedValueOnce(new NotFoundException("Client not found"));
 
       await expect(
         service.removeDefaultScope(mockRealm, 'bad-client', 'scope-1'),
@@ -428,7 +434,7 @@ describe('ClientScopesService', () => {
     });
 
     it('should throw NotFoundException when client does not exist', async () => {
-      prisma.client.findUnique.mockResolvedValue(null);
+      mockClientsService.findByClientId.mockRejectedValueOnce(new NotFoundException("Client not found"));
 
       await expect(
         service.getOptionalScopes(mockRealm, 'nonexistent'),
@@ -461,7 +467,7 @@ describe('ClientScopesService', () => {
     });
 
     it('should throw NotFoundException when client does not exist', async () => {
-      prisma.client.findUnique.mockResolvedValue(null);
+      mockClientsService.findByClientId.mockRejectedValueOnce(new NotFoundException("Client not found"));
 
       await expect(
         service.assignOptionalScope(mockRealm, 'bad-client', 'scope-1'),
@@ -493,7 +499,7 @@ describe('ClientScopesService', () => {
     });
 
     it('should throw NotFoundException when client does not exist', async () => {
-      prisma.client.findUnique.mockResolvedValue(null);
+      mockClientsService.findByClientId.mockRejectedValueOnce(new NotFoundException("Client not found"));
 
       await expect(
         service.removeOptionalScope(mockRealm, 'bad-client', 'scope-1'),

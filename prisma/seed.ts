@@ -83,6 +83,99 @@ async function main() {
 
   console.log(`  Realm: ${realm.name} (${realm.id})`);
 
+  // Seed the canonical OIDC client-scope catalog for the realm so that
+  // `GET /admin/realms/test/client-scopes` is populated (matches what
+  // RealmsService.create does for realms created at runtime via the API).
+  // The seed script is run with raw Prisma and can't easily import from the
+  // Nest service tree, so the catalog is duplicated here — keep it in sync
+  // with `src/scopes/scope-seed.service.ts`. Idempotent — skip-on-conflict.
+  const SEEDED_SCOPES = [
+    {
+      name: 'openid',
+      description: 'OpenID Connect scope',
+      mappers: [
+        {
+          name: 'sub',
+          mapperType: 'oidc-usermodel-attribute-mapper',
+          config: { 'user.attribute': 'id', 'claim.name': 'sub' },
+        },
+      ],
+    },
+    {
+      name: 'profile',
+      description: 'User profile information',
+      mappers: [
+        {
+          name: 'username',
+          mapperType: 'oidc-usermodel-attribute-mapper',
+          config: { 'user.attribute': 'username', 'claim.name': 'preferred_username' },
+        },
+        { name: 'full name', mapperType: 'oidc-full-name-mapper', config: {} },
+        {
+          name: 'given name',
+          mapperType: 'oidc-usermodel-attribute-mapper',
+          config: { 'user.attribute': 'firstName', 'claim.name': 'given_name' },
+        },
+        {
+          name: 'family name',
+          mapperType: 'oidc-usermodel-attribute-mapper',
+          config: { 'user.attribute': 'lastName', 'claim.name': 'family_name' },
+        },
+      ],
+    },
+    {
+      name: 'email',
+      description: 'Email address',
+      mappers: [
+        {
+          name: 'email',
+          mapperType: 'oidc-usermodel-attribute-mapper',
+          config: { 'user.attribute': 'email', 'claim.name': 'email' },
+        },
+        {
+          name: 'email verified',
+          mapperType: 'oidc-usermodel-attribute-mapper',
+          config: { 'user.attribute': 'emailVerified', 'claim.name': 'email_verified' },
+        },
+      ],
+    },
+    {
+      name: 'roles',
+      description: 'User roles',
+      mappers: [
+        {
+          name: 'realm roles',
+          mapperType: 'oidc-role-list-mapper',
+          config: { 'claim.name': 'realm_access' },
+        },
+      ],
+    },
+    { name: 'web-origins', description: 'Web origins for CORS', mappers: [] },
+    { name: 'offline_access', description: 'Offline access for long-lived tokens', mappers: [] },
+  ];
+  for (const scope of SEEDED_SCOPES) {
+    const existing = await prisma.clientScope.findUnique({
+      where: { realmId_name: { realmId: realm.id, name: scope.name } },
+    });
+    if (existing) continue;
+    await prisma.clientScope.create({
+      data: {
+        realmId: realm.id,
+        name: scope.name,
+        description: scope.description,
+        builtIn: true,
+        protocolMappers: {
+          create: scope.mappers.map((m) => ({
+            name: m.name,
+            mapperType: m.mapperType,
+            config: m.config,
+          })),
+        },
+      },
+    });
+  }
+  console.log(`  Seeded ${SEEDED_SCOPES.length} client scopes`);
+
   // Create test user
   const passwordHash = await argon2.hash('password123', {
     type: argon2.argon2id,
