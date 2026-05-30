@@ -290,4 +290,33 @@ export class UsersController {
       limit: limit ? Number(limit) : undefined,
     });
   }
+
+  @Delete(':userId/consents')
+  @RequireAdminRoles(['super-admin', 'admin'])
+  @ApiOperation({
+    summary: "Revoke all of a user's stored consents (after-compromise lockout)",
+  })
+  @ApiResponse({ status: 200, description: 'Revoked consents count' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'User not found' })
+  revokeAllUserConsents(
+    @CurrentRealm() realm: Realm,
+    @Param('userId') userId: string,
+  ) {
+    return this.usersService.revokeUserConsents(realm, userId);
+  }
+
+  @Delete(':userId/consents/:clientId')
+  @RequireAdminRoles(['super-admin', 'admin'])
+  @ApiOperation({ summary: "Revoke a user's consent for a single client" })
+  @ApiResponse({ status: 200, description: 'Revoked consent count (0 or 1)' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'User or client not found' })
+  revokeUserConsentForClient(
+    @CurrentRealm() realm: Realm,
+    @Param('userId') userId: string,
+    @Param('clientId') clientIdOrUuid: string,
+  ) {
+    return this.usersService.revokeUserConsents(realm, userId, clientIdOrUuid);
+  }
 }

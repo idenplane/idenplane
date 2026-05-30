@@ -36,9 +36,15 @@ describe('RolesService', () => {
     clientId: 'my-app',
   };
 
+  const mockClientsService = {
+    findByClientId: jest.fn().mockResolvedValue(mockClient),
+  };
+
   beforeEach(() => {
     prisma = createMockPrismaService();
-    service = new RolesService(prisma as any);
+    mockClientsService.findByClientId.mockReset();
+    mockClientsService.findByClientId.mockResolvedValue(mockClient);
+    service = new RolesService(prisma as any, mockClientsService as any);
   });
 
   // ─── Realm Roles ────────────────────────────────────────
@@ -169,7 +175,7 @@ describe('RolesService', () => {
     });
 
     it('should throw NotFoundException when client does not exist', async () => {
-      prisma.client.findUnique.mockResolvedValue(null);
+      mockClientsService.findByClientId.mockRejectedValueOnce(new NotFoundException("Client not found"));
 
       await expect(
         service.createClientRole(mockRealm, 'nonexistent', 'role'),
@@ -193,7 +199,7 @@ describe('RolesService', () => {
     });
 
     it('should throw NotFoundException when client does not exist', async () => {
-      prisma.client.findUnique.mockResolvedValue(null);
+      mockClientsService.findByClientId.mockRejectedValueOnce(new NotFoundException("Client not found"));
 
       await expect(
         service.findClientRoles(mockRealm, 'nonexistent'),
@@ -352,7 +358,7 @@ describe('RolesService', () => {
     });
 
     it('should throw NotFoundException when client does not exist', async () => {
-      prisma.client.findUnique.mockResolvedValue(null);
+      mockClientsService.findByClientId.mockRejectedValueOnce(new NotFoundException("Client not found"));
 
       await expect(
         service.assignClientRoles(mockRealm, 'user-1', 'nonexistent', [
@@ -390,7 +396,7 @@ describe('RolesService', () => {
     });
 
     it('should throw NotFoundException when client does not exist', async () => {
-      prisma.client.findUnique.mockResolvedValue(null);
+      mockClientsService.findByClientId.mockRejectedValueOnce(new NotFoundException("Client not found"));
 
       await expect(
         service.getUserClientRoles(mockRealm, 'user-1', 'nonexistent'),
@@ -426,7 +432,7 @@ describe('RolesService', () => {
     });
 
     it('should throw NotFoundException when client does not exist', async () => {
-      prisma.client.findUnique.mockResolvedValue(null);
+      mockClientsService.findByClientId.mockRejectedValueOnce(new NotFoundException("Client not found"));
 
       await expect(
         service.removeUserClientRoles(mockRealm, 'user-1', 'nonexistent', [
