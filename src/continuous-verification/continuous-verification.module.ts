@@ -16,9 +16,10 @@ import { EmailModule } from '../email/email.module.js';
 import { ImpossibleTravelService } from '../risk-assessment/impossible-travel.service.js';
 import { SessionsModule } from '../sessions/sessions.module.js';
 import { StepUpModule } from '../step-up/step-up.module.js';
+import { CacheModule } from '../cache/cache.module.js';
 
 @Module({
-  imports: [PrismaModule, EmailModule, SessionsModule, StepUpModule],
+  imports: [PrismaModule, EmailModule, SessionsModule, StepUpModule, CacheModule],
   providers: [
     ContinuousRiskAssessmentService,
     DevicePostureService,
