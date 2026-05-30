@@ -20,7 +20,7 @@ import { SessionRiskEvaluator } from './session-risk-evaluator.js';
 
 @ApiTags('Session Risk')
 @ApiBearerAuth()
-@Controller('admin/realms/:realm/session-risk')
+@Controller('admin/realms/:realmName/session-risk')
 export class SessionRiskController {
   constructor(
     private readonly prisma: PrismaService,
@@ -47,7 +47,7 @@ export class SessionRiskController {
   @ApiQuery({ name: 'first', required: false })
   @ApiQuery({ name: 'max', required: false })
   async listSessionProfiles(
-    @Param('realm') realmName: string,
+    @Param('realmName') realmName: string,
     @Query('userId') userId?: string,
     @Query('riskLevel') riskLevel?: string,
     @Query('stepUpRequired') stepUpRequired?: string,
@@ -86,7 +86,7 @@ export class SessionRiskController {
   })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
-  async getDashboard(@Param('realm') realmName: string) {
+  async getDashboard(@Param('realmName') realmName: string) {
     const realm = await this.requireRealm(realmName);
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000); // last 30 days
 
@@ -190,7 +190,7 @@ export class SessionRiskController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
   async getSessionProfile(
-    @Param('realm') realmName: string,
+    @Param('realmName') realmName: string,
     @Param('sessionId') sessionId: string,
   ) {
     const realm = await this.requireRealm(realmName);
@@ -225,7 +225,7 @@ export class SessionRiskController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Session not found' })
   async triggerReevaluation(
-    @Param('realm') realmName: string,
+    @Param('realmName') realmName: string,
     @Param('sessionId') sessionId: string,
   ) {
     const realm = await this.requireRealm(realmName);
