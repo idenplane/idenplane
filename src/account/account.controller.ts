@@ -144,6 +144,40 @@ export class AccountController {
     );
   }
 
+  /**
+   * Account self-service sign-out — clears the IDENPLANE_SESSION cookie and
+   * deletes the matching loginSession row, then redirects to /login.
+   *
+   * This is a separate path from the OIDC RP-initiated logout endpoint
+   * (`/realms/:r/protocol/openid-connect/logout`) because that one requires
+   * `id_token_hint`/`post_logout_redirect_uri` plumbing and returns 204 on a
+   * bare GET — useless to a browser. Convention across other IdPs (Google,
+   * GitHub) is GET for the in-app "Sign out" link.
+   */
+  @Get('logout')
+  async logout(
+    @CurrentRealm() realm: Realm,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const sessionToken = req.cookies?.['IDENPLANE_SESSION'] as
+      | string
+      | undefined;
+    if (sessionToken) {
+      const tokenHash = this.crypto.sha256(sessionToken);
+      await this.prisma.loginSession
+        .delete({ where: { tokenHash } })
+        .catch(() => undefined);
+    }
+    res.clearCookie('IDENPLANE_SESSION', {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+      path: `/realms/${realm.name}`,
+    });
+    return res.redirect(`/realms/${realm.name}/login?signedOut=1`);
+  }
+
   @Post('profile')
   async updateProfile(
     @CurrentRealm() realm: Realm,
