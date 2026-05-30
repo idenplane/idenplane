@@ -3,6 +3,7 @@ import {
   IsOptional,
   IsBoolean,
   IsEnum,
+  IsInt,
   IsArray,
   MinLength,
   registerDecorator,
@@ -129,4 +130,22 @@ export class CreateClientDto {
   @IsOptional()
   @IsBoolean()
   backchannelLogoutSessionRequired?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'Minimum Authentication Context Class Reference required before issuing a code for this client. When set, /authorize will redirect a session that does not satisfy it to the step-up challenge. Use `null` (or omit) for no enforcement.',
+    example: 'urn:idenplane:acr:mfa',
+  })
+  @IsOptional()
+  @IsString()
+  requiredAcr?: string | null;
+
+  @ApiPropertyOptional({
+    description:
+      'How long (seconds) a satisfied step-up ACR can be re-used before a fresh challenge is required.',
+    example: 300,
+  })
+  @IsOptional()
+  @IsInt()
+  stepUpCacheDuration?: number;
 }
