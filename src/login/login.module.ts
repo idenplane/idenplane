@@ -20,6 +20,6 @@ import { CsrfService } from '../common/csrf/csrf.service.js';
   ],
   controllers: [LoginController],
   providers: [LoginService, CsrfService],
-  exports: [LoginService],
+  exports: [LoginService, CsrfService],
 })
 export class LoginModule {}

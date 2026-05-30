@@ -23,6 +23,7 @@
 <div class="account-section">
   <h2>{{msg "accountProfile"}}</h2>
   <form method="POST" action="/realms/{{realmName}}/account/profile" class="auth-form">
+    <input type="hidden" name="_csrf" value="{{csrfToken}}">
     <div class="auth-name-grid">
       <div class="form-group">
         <label for="firstName">{{msg "accountFirstName"}}</label>
@@ -42,6 +43,7 @@
 <div class="account-section">
   <h2>{{msg "accountChangePassword"}}</h2>
   <form method="POST" action="/realms/{{realmName}}/account/password" class="auth-form">
+    <input type="hidden" name="_csrf" value="{{csrfToken}}">
     <div class="form-group">
       <label for="currentPassword">{{msg "accountCurrentPassword"}}</label>
       <input type="password" id="currentPassword" name="currentPassword" required autocomplete="current-password">
@@ -70,6 +72,7 @@
   </div>
 
   <form method="POST" action="/realms/{{realmName}}/account/totp-disable" class="auth-form">
+    <input type="hidden" name="_csrf" value="{{csrfToken}}">
     <div class="form-group">
       <label for="disablePassword">{{msg "accountCurrentPassword"}}</label>
       <input type="password" id="disablePassword" name="currentPassword" required autocomplete="current-password">

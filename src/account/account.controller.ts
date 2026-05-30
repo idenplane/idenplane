@@ -1,5 +1,6 @@
 import {
   Controller,
+  ForbiddenException,
   Get,
   Post,
   UseGuards,
@@ -26,6 +27,7 @@ import { ThemeRenderService } from '../theme/theme-render.service.js';
 import { WebAuthnService } from '../webauthn/webauthn.service.js';
 import { DataExportService } from './data-export.service.js';
 import { AccountDeletionService } from './account-deletion.service.js';
+import { CsrfService } from '../common/csrf/csrf.service.js';
 
 @ApiExcludeController()
 @Controller('realms/:realmName/account')
@@ -42,7 +44,33 @@ export class AccountController {
     private readonly webAuthnService: WebAuthnService,
     private readonly dataExportService: DataExportService,
     private readonly accountDeletionService: AccountDeletionService,
+    private readonly csrfService: CsrfService,
   ) {}
+
+  /** Set a fresh CSRF cookie and return the token for embedding in the form. */
+  private setCsrfCookie(realm: Realm, res: Response): string {
+    const token = this.csrfService.generateToken();
+    res.cookie(this.csrfService.cookieName(realm.name), token, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'strict',
+      path: `/realms/${realm.name}`,
+    });
+    return token;
+  }
+
+  /** Throw `ForbiddenException` when the double-submit CSRF token is invalid. */
+  private validateCsrf(realm: Realm, body: object, req: Request): void {
+    const bodyToken = (body as Record<string, unknown>)['_csrf'] as
+      | string
+      | undefined;
+    const cookieToken = (req.cookies as Record<string, string | undefined>)?.[
+      this.csrfService.cookieName(realm.name)
+    ];
+    if (!this.csrfService.validate(bodyToken, cookieToken)) {
+      throw new ForbiddenException('Invalid or missing CSRF token');
+    }
+  }
 
   private async getSessionUser(realm: Realm, req: Request) {
     const sessionToken = req.cookies?.['IDENPLANE_SESSION'] as
@@ -91,6 +119,7 @@ export class AccountController {
       }));
     }
 
+    const csrfToken = this.setCsrfCookie(realm, res);
     this.themeRender.render(
       res,
       realm,
@@ -109,6 +138,7 @@ export class AccountController {
           webAuthnCredentials.length > 0 ? webAuthnCredentials : null,
         success: query['success'] ?? '',
         error: query['error'] ?? '',
+        csrfToken,
       },
       req,
     );
@@ -121,6 +151,7 @@ export class AccountController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    this.validateCsrf(realm, body, req);
     const user = await this.getSessionUser(realm, req);
     if (!user) {
       return res.redirect(`/realms/${realm.name}/login`);
@@ -158,6 +189,7 @@ export class AccountController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    this.validateCsrf(realm, body, req);
     const user = await this.getSessionUser(realm, req);
     if (!user) {
       return res.redirect(`/realms/${realm.name}/login`);
@@ -265,6 +297,7 @@ export class AccountController {
       user.username,
     );
 
+    const csrfToken = this.setCsrfCookie(realm, res);
     this.themeRender.render(
       res,
       realm,
@@ -276,6 +309,7 @@ export class AccountController {
         secret: setup.secret,
         error: query['error'] ?? '',
         info: query['info'] ?? '',
+        csrfToken,
       },
       req,
     );
@@ -290,6 +324,7 @@ export class AccountController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    this.validateCsrf(realm, body, req);
     const user = await this.getSessionUser(realm, req);
     if (!user) {
       return res.redirect(`/realms/${realm.name}/login`);
@@ -335,6 +370,7 @@ export class AccountController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    this.validateCsrf(realm, body, req);
     const user = await this.getSessionUser(realm, req);
     if (!user) {
       return res.redirect(`/realms/${realm.name}/login`);
@@ -412,6 +448,7 @@ export class AccountController {
       user.id,
     );
 
+    const csrfToken = this.setCsrfCookie(realm, res);
     this.themeRender.render(
       res,
       realm,
@@ -422,6 +459,7 @@ export class AccountController {
         deletionStatus,
         error: query['error'] ?? '',
         success: query['success'] ?? '',
+        csrfToken,
       },
       req,
     );
@@ -436,6 +474,7 @@ export class AccountController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    this.validateCsrf(realm, body, req);
     const user = await this.getSessionUser(realm, req);
     if (!user) {
       return res.redirect(`/realms/${realm.name}/login`);
@@ -487,6 +526,7 @@ export class AccountController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    this.validateCsrf(realm, body, req);
     const user = await this.getSessionUser(realm, req);
     if (!user) {
       return res.redirect(`/realms/${realm.name}/login`);
