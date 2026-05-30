@@ -36,6 +36,7 @@
 </div>
 
 <form method="POST" action="/realms/{{realmName}}/account/totp-setup" class="auth-form">
+  <input type="hidden" name="_csrf" value="{{csrfToken}}">
   <div class="form-group">
     <label for="code">{{msg "totpSetupVerifyLabel"}}</label>
     <input type="text" id="code" name="code" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" required autofocus

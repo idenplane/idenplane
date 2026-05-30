@@ -30,6 +30,8 @@ const CLIENT_SELECT = {
   backchannelLogoutUri: true,
   backchannelLogoutSessionRequired: true,
   serviceAccountUserId: true,
+  requiredAcr: true,
+  stepUpCacheDuration: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -105,6 +107,8 @@ export class ClientsService {
         backchannelLogoutUri: dto.backchannelLogoutUri,
         backchannelLogoutSessionRequired: dto.backchannelLogoutSessionRequired,
         serviceAccountUserId,
+        requiredAcr: dto.requiredAcr,
+        stepUpCacheDuration: dto.stepUpCacheDuration,
       },
       select: CLIENT_SELECT,
     });
@@ -202,6 +206,8 @@ export class ClientsService {
         requireConsent: dto.requireConsent,
         backchannelLogoutUri: dto.backchannelLogoutUri,
         backchannelLogoutSessionRequired: dto.backchannelLogoutSessionRequired,
+        requiredAcr: dto.requiredAcr,
+        stepUpCacheDuration: dto.stepUpCacheDuration,
       },
       select: CLIENT_SELECT,
     });
