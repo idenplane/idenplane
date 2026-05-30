@@ -25,11 +25,7 @@ import { TokenRequestDto } from './dto/token-request.dto.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
-import {
-  RateLimitGuard,
-  RateLimitByIp,
-  RateLimitBy,
-} from '../rate-limit/rate-limit.guard.js';
+import { RateLimitGuard, RateLimitBy } from '../rate-limit/rate-limit.guard.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 
 @ApiTags('Authentication')

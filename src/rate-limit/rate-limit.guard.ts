@@ -9,6 +9,7 @@ import {
 import { Reflector } from '@nestjs/core';
 import type { Request, Response } from 'express';
 import { RateLimitService } from './rate-limit.service.js';
+import type { RateLimitResult } from './rate-limit.dto.js';
 import { MetricsService } from '../metrics/metrics.service.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 
@@ -80,7 +81,7 @@ export class RateLimitGuard implements CanActivate {
     // — surfacing the IP-headers when the per-client bucket is two requests
     // from exhaustion would mislead callers into thinking they have more
     // headroom than they do.
-    let binding: { type: RateLimitType; result: Awaited<ReturnType<typeof this.runCheck>> } | undefined;
+    let binding: { type: RateLimitType; result: RateLimitResult } | undefined;
     for (const type of types) {
       const result = await this.runCheck(type, request, effectiveRealmId);
       if (!result) continue;
@@ -106,12 +107,12 @@ export class RateLimitGuard implements CanActivate {
         );
       }
 
-      if (!binding || result.remaining < binding.result!.remaining) {
+      if (!binding || result.remaining < binding.result.remaining) {
         binding = { type, result };
       }
     }
 
-    if (binding?.result) {
+    if (binding) {
       const headers = this.rateLimitService.computeHeaders(binding.result);
       for (const [name, value] of Object.entries(headers)) {
         response.setHeader(name, value);
@@ -125,7 +126,7 @@ export class RateLimitGuard implements CanActivate {
     type: RateLimitType,
     request: Request,
     realmId: string,
-  ) {
+  ): Promise<RateLimitResult | undefined> {
     switch (type) {
       case 'client': {
         const clientId = this.extractClientId(request);
