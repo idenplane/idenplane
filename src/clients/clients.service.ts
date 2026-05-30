@@ -267,8 +267,13 @@ export class ClientsService {
     });
   }
 
-  async regenerateSecret(realm: Realm, clientId: string) {
-    const client = await this.findByClientId(realm, clientId);
+  async regenerateSecret(realm: Realm, clientIdOrUuid: string) {
+    // The :clientId URL param can be either the human client_id string or the
+    // row UUID — match what `update`/`remove` accept. Use the resolved row PK
+    // for the Prisma update so the row is always found; previously this used
+    // the raw URL param in the realmId_clientId compound key, which crashed
+    // with P2025 whenever the caller passed the row UUID.
+    const client = await this.findByClientId(realm, clientIdOrUuid);
     if (client.clientType !== 'CONFIDENTIAL') {
       throw new ConflictException('Cannot generate secret for a PUBLIC client');
     }
@@ -277,17 +282,15 @@ export class ClientsService {
     const secretHash = await this.crypto.hashPassword(rawSecret);
 
     await this.prisma.client.update({
-      where: {
-        realmId_clientId: { realmId: realm.id, clientId },
-      },
+      where: { id: client.id },
       data: { clientSecret: secretHash },
     });
 
     // Secret changed — invalidate so the next lookup re-fetches the updated record
-    await this.cache.invalidateClientCache(`${realm.id}:${clientId}`);
+    await this.cache.invalidateClientCache(`${realm.id}:${client.clientId}`);
 
     return {
-      clientId,
+      clientId: client.clientId,
       clientSecret: rawSecret,
       secretWarning: 'Store this secret securely. It will not be shown again.',
     };
