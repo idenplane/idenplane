@@ -11,6 +11,7 @@ import {
   HttpCode,
   HttpStatus,
   UseGuards,
+  BadRequestException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -205,29 +206,22 @@ export class UsersController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Send or resend verification email to a user' })
   @ApiResponse({ status: 200, description: 'Verification email sent' })
+  @ApiResponse({ status: 400, description: 'User has no email address' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'User not found' })
   async sendVerificationEmail(
     @CurrentRealm() realm: Realm,
     @Param('userId') userId: string,
   ) {
-    // Uniform response regardless of whether the user exists or has an email,
-    // so the endpoint cannot be used to enumerate user IDs / email presence.
-    try {
-      const user = await this.usersService.findById(realm, userId);
-      if (user.email) {
-        await this.usersService.sendVerificationEmail(
-          realm,
-          user.id,
-          user.email,
-        );
-      }
-    } catch {
-      // Swallow not-found (and similar) — do not reveal existence.
+    // Admin endpoint — surface real outcomes so the operator can act. The caller
+    // already has the userId and an admin role, so anti-enumeration here would
+    // only hide information the admin already has access to via GET /users/:id.
+    const user = await this.usersService.findById(realm, userId);
+    if (!user.email) {
+      throw new BadRequestException('User has no email address');
     }
-    return {
-      message: 'If the account exists, a verification email has been sent.',
-    };
+    await this.usersService.sendVerificationEmail(realm, user.id, user.email);
+    return { message: 'Verification email sent' };
   }
 
   @Get(':userId/offline-sessions')
