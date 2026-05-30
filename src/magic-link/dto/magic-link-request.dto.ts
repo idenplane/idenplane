@@ -18,7 +18,7 @@ export class MagicLinkRequestDto {
   @ApiProperty({
     example: 'my-client',
     description:
-      "OAuth client_id whose registered redirect URIs allowlist `magicLinkUrl`. Required — the magic-link email points at an external callback, so the target must be allowlisted just like an OAuth redirect_uri (otherwise the email is a token-exfiltration phishing vector).",
+      'OAuth client_id whose registered redirect URIs allowlist `magicLinkUrl`. Required — the magic-link email points at an external callback, so the target must be allowlisted just like an OAuth redirect_uri (otherwise the email is a token-exfiltration phishing vector).',
   })
   @IsString()
   @IsNotEmpty()

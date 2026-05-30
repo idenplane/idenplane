@@ -138,12 +138,7 @@ export class AuthService {
     // the bind-as-service / find-DN / bind-as-user dance against the configured
     // LDAP server, and find-or-imports the user. Realm-scoping is enforced
     // inside that call.
-    if (
-      user &&
-      user.enabled &&
-      !user.passwordHash &&
-      user.federationLink
-    ) {
+    if (user && user.enabled && !user.passwordHash && user.federationLink) {
       const federationResult =
         await this.userFederationService.authenticateViaFederation(
           realm.id,

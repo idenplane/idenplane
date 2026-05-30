@@ -29,19 +29,29 @@ export class RateLimitInterceptor implements NestInterceptor {
   ) {}
 
   intercept(context: ExecutionContext, next: CallHandler): Observable<any> {
-    const type = this.reflector.getAllAndOverride<RateLimitType>(
-      RATE_LIMIT_TYPE_KEY,
-      [context.getHandler(), context.getClass()],
-    );
+    const raw = this.reflector.getAllAndOverride<unknown>(RATE_LIMIT_TYPE_KEY, [
+      context.getHandler(),
+      context.getClass(),
+    ]);
+    const types: RateLimitType[] = Array.isArray(raw)
+      ? (raw as RateLimitType[])
+      : typeof raw === 'string'
+        ? [raw as RateLimitType]
+        : [];
 
-    if (type) {
+    if (types.length > 0) {
       const request = context.switchToHttp().getRequest<Request>();
       const realmId: string | undefined =
         (request as Request & { realm?: { id: string } })['realm']?.id ??
         (request.params as Record<string, string>)['realmId'];
 
       if (realmId) {
-        this.metricsService.rateLimitChecksTotal.inc({ type, realm: realmId });
+        for (const type of types) {
+          this.metricsService.rateLimitChecksTotal.inc({
+            type,
+            realm: realmId,
+          });
+        }
       }
     }
 
