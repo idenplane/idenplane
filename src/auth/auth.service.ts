@@ -975,7 +975,8 @@ export class AuthService {
     if (grantType) {
       // For the device_code grant (RFC 8628) accept both the full URN and the
       // shorthand alias so that clients stored with either value are permitted
-      // (issue #503).  All other grant types must match exactly.
+      // (issue #503).  All other grant types must match exactly — with one
+      // continuation exception below.
       const DEVICE_URN = 'urn:ietf:params:oauth:grant-type:device_code';
       const isDeviceGrant =
         grantType === DEVICE_URN || grantType === 'device_code';
@@ -983,9 +984,22 @@ export class AuthService {
         client.grantTypes.includes(DEVICE_URN) ||
         client.grantTypes.includes('device_code');
 
+      // A `password`-grant client that hands back `mfa_required` must be able
+      // to complete the challenge it issued; implicitly permit the
+      // `mfa_otp` continuation so admins don't have to grant both side-by-side
+      // (finding #23).
+      const MFA_OTP_URN = 'urn:ietf:params:oauth:grant-type:mfa-otp';
+      const isMfaOtpGrant =
+        grantType === MFA_OTP_URN || grantType === 'mfa_otp';
+      const clientAllowsMfaOtp =
+        client.grantTypes.includes(MFA_OTP_URN) ||
+        client.grantTypes.includes('password');
+
       const allowed = isDeviceGrant
         ? clientAllowsDevice
-        : client.grantTypes.includes(grantType);
+        : isMfaOtpGrant
+          ? clientAllowsMfaOtp
+          : client.grantTypes.includes(grantType);
       if (!allowed) {
         throw new OAuthTokenError(
           'unauthorized_client',
