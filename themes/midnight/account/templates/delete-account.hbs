@@ -1,0 +1,38 @@
+{{#if success}}
+<div class="auth-success">{{success}}</div>
+{{/if}}
+
+{{#if error}}
+<div class="auth-error">{{error}}</div>
+{{/if}}
+
+<h2 class="auth-subtitle">{{msg "deleteAccountTitle"}}</h2>
+
+{{#if deletionStatus}}
+<div style="border: 1px solid rgba(251, 191, 36, 0.4); background: rgba(251, 191, 36, 0.08); border-radius: 8px; padding: 1rem; margin-bottom: 1.5rem;">
+  <p style="margin: 0 0 0.5rem; font-weight: 600;">{{msg "deleteAccountPendingTitle"}}</p>
+  <p style="margin: 0 0 0.5rem; font-size: 0.9rem;">{{msg "deleteAccountPendingBody"}} <strong>{{deletionStatus.daysRemaining}}</strong> {{msg "deleteAccountPendingDays"}}.</p>
+
+  <form method="POST" action="/realms/{{realmName}}/account/cancel-delete-account" class="auth-form" style="margin-top: 1rem;">
+    <input type="hidden" name="_csrf" value="{{csrfToken}}">
+    <button type="submit" class="btn-primary">{{msg "deleteAccountCancel"}}</button>
+  </form>
+</div>
+{{else}}
+<p style="color: #94a3b8; margin-bottom: 1.25rem; font-size: 0.9rem;">{{msg "deleteAccountWarning"}}</p>
+
+<form method="POST" action="/realms/{{realmName}}/account/delete-account" class="auth-form">
+  <input type="hidden" name="_csrf" value="{{csrfToken}}">
+
+  <div class="form-group">
+    <label for="currentPassword">{{msg "deleteAccountPassword"}}</label>
+    <input type="password" id="currentPassword" name="currentPassword" required autocomplete="current-password">
+  </div>
+
+  <button type="submit" class="btn-primary" style="background: #dc2626;">{{msg "deleteAccountSubmit"}}</button>
+</form>
+{{/if}}
+
+<p style="text-align: center; margin-top: 1.5rem;">
+  <a href="/realms/{{realmName}}/account" style="font-size: 0.85rem;">{{msg "deleteAccountBack"}}</a>
+</p>
