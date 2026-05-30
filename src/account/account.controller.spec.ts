@@ -66,6 +66,11 @@ describe('AccountController', () => {
     };
     themeRender = { render: jest.fn() };
     webAuthnService = { getUserCredentials: jest.fn().mockResolvedValue([]) };
+    const csrfService = {
+      validate: jest.fn().mockReturnValue(true),
+      generateToken: jest.fn().mockReturnValue('csrf-token-test'),
+      cookieName: jest.fn().mockReturnValue('XSRF-TOKEN-test'),
+    };
 
     controller = new AccountController(
       loginService as any,
@@ -75,9 +80,12 @@ describe('AccountController', () => {
       mfaService as any,
       themeRender as any,
       webAuthnService as any,
+      undefined as any, // dataExportService — not exercised in these tests
+      undefined as any, // accountDeletionService — not exercised in these tests
+      csrfService as any,
     );
 
-    mockRes = { redirect: jest.fn() };
+    mockRes = { redirect: jest.fn(), cookie: jest.fn() };
     mockReqWithSession = {
       cookies: { IDENPLANE_SESSION: 'valid-token' },
       query: {},

@@ -2,30 +2,44 @@ import { readFileSync, readdirSync } from 'node:fs';
 import { join } from 'node:path';
 
 /**
- * Every POST form rendered by a login theme must embed the `_csrf` hidden field
- * (the double-submit token validated by CsrfService). Regression guard for #22:
- * `device.hbs` omitted it, so every device approve/deny POST failed CSRF
- * validation (403) and the Device Authorization flow was unusable end-to-end.
+ * Every POST form rendered by a theme's `login` or `account` templates must
+ * embed the `_csrf` hidden field (the double-submit token validated by
+ * CsrfService). Regression guards for:
+ *   - #22: `login/device.hbs` omitted it, so device approve/deny → 403.
+ *   - #24: `account/totp-setup.hbs` (and the other account forms) omitted it,
+ *     and the corresponding controllers never called validateCsrf — every
+ *     account self-service POST (incl. password change & delete-account) was
+ *     missing its layered CSRF defense.
  */
-describe('login theme POST forms embed the CSRF field', () => {
+describe('theme POST forms embed the CSRF field', () => {
   const themesRoot = join(process.cwd(), 'themes');
   const themes = readdirSync(themesRoot, { withFileTypes: true })
     .filter((entry) => entry.isDirectory())
     .map((entry) => entry.name);
 
-  const cases: Array<{ theme: string; file: string; content: string }> = [];
+  // Subtrees of each theme that render user-facing forms — both must embed _csrf.
+  const themeSubtrees = ['login', 'account'] as const;
+
+  const cases: Array<{
+    theme: string;
+    subtree: string;
+    file: string;
+    content: string;
+  }> = [];
   for (const theme of themes) {
-    const dir = join(themesRoot, theme, 'login', 'templates');
-    let files: string[];
-    try {
-      files = readdirSync(dir).filter((f) => f.endsWith('.hbs'));
-    } catch {
-      continue; // theme has no login templates
-    }
-    for (const file of files) {
-      const content = readFileSync(join(dir, file), 'utf8');
-      if (/<form[^>]*method=["']POST["']/i.test(content)) {
-        cases.push({ theme, file, content });
+    for (const subtree of themeSubtrees) {
+      const dir = join(themesRoot, theme, subtree, 'templates');
+      let files: string[];
+      try {
+        files = readdirSync(dir).filter((f) => f.endsWith('.hbs'));
+      } catch {
+        continue; // theme/subtree absent
+      }
+      for (const file of files) {
+        const content = readFileSync(join(dir, file), 'utf8');
+        if (/<form[^>]*method=["']POST["']/i.test(content)) {
+          cases.push({ theme, subtree, file, content });
+        }
       }
     }
   }
@@ -34,7 +48,10 @@ describe('login theme POST forms embed the CSRF field', () => {
     expect(cases.length).toBeGreaterThan(0);
   });
 
-  it.each(cases)('$theme/$file includes name="_csrf"', ({ content }) => {
-    expect(content).toContain('name="_csrf"');
-  });
+  it.each(cases)(
+    '$theme/$subtree/$file includes name="_csrf"',
+    ({ content }) => {
+      expect(content).toContain('name="_csrf"');
+    },
+  );
 });

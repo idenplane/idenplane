@@ -24,21 +24,44 @@ const mockEmail = {
   sendEmail: jest.fn(),
 };
 
-const mockRealm = {
+const mockThemeEmail = {
+  getSubject: jest.fn().mockReturnValue('Sign in to Idenplane'),
+  renderEmail: jest
+    .fn()
+    .mockReturnValue('<a href="https://app.example.com/magic-link?token=raw-magic-link-token">Sign In</a>'),
+};
+
+const mockRealmSlim = {
   id: 'realm-1',
   name: 'test-realm',
   magicLinkEnabled: true,
   magicLinkExpirySeconds: 600,
   magicLinkRateLimitPerEmail: 5,
   magicLinkEmailSubject: 'Test Subject',
+};
+
+const mockRealmFull = {
+  ...mockRealmSlim,
   magicLinkEmailTemplate: null,
-  primaryColor: '#3b82f6',
+  theme: null,
+};
+
+const mockClient = {
+  id: 'client-1',
+  redirectUris: ['https://app.example.com/magic-link'],
 };
 
 const mockUser = {
   id: 'user-1',
   email: 'test@example.com',
   enabled: true,
+};
+
+const okRateLimit = {
+  allowed: true,
+  limit: 10,
+  remaining: 9,
+  resetAt: Math.ceil((Date.now() + 60 * 1000) / 1000),
 };
 
 describe('MagicLinkService', () => {
@@ -53,6 +76,7 @@ describe('MagicLinkService', () => {
       mockCrypto as any,
       mockRateLimit as any,
       mockEmail as any,
+      mockThemeEmail as any,
     );
   });
 
@@ -65,6 +89,7 @@ describe('MagicLinkService', () => {
       const result = await service.requestMagicLink(
         'test@example.com',
         'non-existent-realm',
+        'my-client',
       );
 
       expect(result.success).toBe(false);
@@ -74,13 +99,14 @@ describe('MagicLinkService', () => {
 
     it('should return error when magic link is not enabled for realm', async () => {
       prisma.realm.findUnique.mockResolvedValue({
-        ...mockRealm,
+        ...mockRealmSlim,
         magicLinkEnabled: false,
       });
 
       const result = await service.requestMagicLink(
         'test@example.com',
-        mockRealm.id,
+        mockRealmSlim.id,
+        'my-client',
       );
 
       expect(result.success).toBe(false);
@@ -90,19 +116,98 @@ describe('MagicLinkService', () => {
       expect(mockEmail.sendEmail).not.toHaveBeenCalled();
     });
 
-    it('should return success (no email enumeration) when user is not found', async () => {
-      prisma.realm.findUnique.mockResolvedValue(mockRealm);
-      prisma.user.findFirst.mockResolvedValue(null);
-      mockRateLimit.checkIpLimit.mockResolvedValue({
-        allowed: true,
-        limit: 10,
-        remaining: 9,
-        resetAt: Math.ceil((Date.now() + 60 * 1000) / 1000),
+    it('should reject when clientId does not exist in the realm', async () => {
+      prisma.realm.findUnique.mockResolvedValueOnce(mockRealmSlim);
+      prisma.client.findFirst.mockResolvedValue(null);
+
+      const result = await service.requestMagicLink(
+        'test@example.com',
+        mockRealmSlim.id,
+        'unknown-client',
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe('Invalid client');
+      expect(mockEmail.sendEmail).not.toHaveBeenCalled();
+    });
+
+    it('should reject when magicLinkUrl is not in client redirectUris (allowlist enforcement)', async () => {
+      prisma.realm.findUnique.mockResolvedValueOnce(mockRealmSlim);
+      prisma.client.findFirst.mockResolvedValue(mockClient);
+
+      const result = await service.requestMagicLink(
+        'test@example.com',
+        mockRealmSlim.id,
+        'my-client',
+        '192.168.1.1',
+        'Mozilla/5.0',
+        'https://attacker.evil/grab',
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe('Invalid magic link URL');
+      expect(mockEmail.sendEmail).not.toHaveBeenCalled();
+    });
+
+    it("should fall back to client's first redirectUri when magicLinkUrl is omitted", async () => {
+      prisma.realm.findUnique
+        .mockResolvedValueOnce(mockRealmSlim)
+        .mockResolvedValueOnce(mockRealmFull);
+      prisma.client.findFirst.mockResolvedValue(mockClient);
+      prisma.user.findFirst.mockResolvedValue(mockUser);
+      mockRateLimit.checkIpLimit.mockResolvedValue(okRateLimit);
+      prisma.magicLinkRequest.count.mockResolvedValue(0);
+      prisma.magicLinkRequest.create.mockResolvedValue({});
+      mockEmail.sendEmail.mockResolvedValue({ messageId: 'm' });
+
+      const result = await service.requestMagicLink(
+        'test@example.com',
+        mockRealmSlim.id,
+        'my-client',
+        '192.168.1.1',
+      );
+
+      expect(result.success).toBe(true);
+      expect(mockThemeEmail.renderEmail).toHaveBeenCalledWith(
+        mockRealmFull,
+        'magic-link',
+        {
+          magicLinkUrl:
+            'https://app.example.com/magic-link?token=raw-magic-link-token',
+        },
+      );
+    });
+
+    it('should reject when client has no usable (non-wildcard) redirectUri and no magicLinkUrl supplied', async () => {
+      prisma.realm.findUnique.mockResolvedValueOnce(mockRealmSlim);
+      prisma.client.findFirst.mockResolvedValue({
+        ...mockClient,
+        redirectUris: ['https://app.example.com/*'],
       });
 
       const result = await service.requestMagicLink(
+        'test@example.com',
+        mockRealmSlim.id,
+        'my-client',
+      );
+
+      expect(result.success).toBe(false);
+      expect(result.message).toBe(
+        'Client has no usable redirect URI for the magic link callback',
+      );
+    });
+
+    it('should return success (no email enumeration) when user is not found', async () => {
+      prisma.realm.findUnique.mockResolvedValueOnce(mockRealmSlim);
+      prisma.client.findFirst.mockResolvedValue(mockClient);
+      prisma.user.findFirst.mockResolvedValue(null);
+      mockRateLimit.checkIpLimit.mockResolvedValue(okRateLimit);
+
+      const result = await service.requestMagicLink(
         'nonexistent@example.com',
-        mockRealm.id,
+        mockRealmSlim.id,
+        'my-client',
+        '192.168.1.1',
       );
 
       expect(result.success).toBe(true);
@@ -111,18 +216,16 @@ describe('MagicLinkService', () => {
     });
 
     it('should return error when user is disabled', async () => {
-      prisma.realm.findUnique.mockResolvedValue(mockRealm);
+      prisma.realm.findUnique.mockResolvedValueOnce(mockRealmSlim);
+      prisma.client.findFirst.mockResolvedValue(mockClient);
       prisma.user.findFirst.mockResolvedValue({ ...mockUser, enabled: false });
-      mockRateLimit.checkIpLimit.mockResolvedValue({
-        allowed: true,
-        limit: 10,
-        remaining: 9,
-        resetAt: Math.ceil((Date.now() + 60 * 1000) / 1000),
-      });
+      mockRateLimit.checkIpLimit.mockResolvedValue(okRateLimit);
 
       const result = await service.requestMagicLink(
         'test@example.com',
-        mockRealm.id,
+        mockRealmSlim.id,
+        'my-client',
+        '192.168.1.1',
       );
 
       expect(result.success).toBe(false);
@@ -131,8 +234,8 @@ describe('MagicLinkService', () => {
     });
 
     it('should return error when rate limited by IP', async () => {
-      prisma.realm.findUnique.mockResolvedValue(mockRealm);
-      prisma.user.findFirst.mockResolvedValue(mockUser);
+      prisma.realm.findUnique.mockResolvedValueOnce(mockRealmSlim);
+      prisma.client.findFirst.mockResolvedValue(mockClient);
       mockRateLimit.checkIpLimit.mockResolvedValue({
         allowed: false,
         limit: 10,
@@ -143,33 +246,28 @@ describe('MagicLinkService', () => {
 
       const result = await service.requestMagicLink(
         'test@example.com',
-        mockRealm.id,
+        mockRealmSlim.id,
+        'my-client',
         '192.168.1.1',
       );
 
       expect(result.success).toBe(false);
       expect(result.message).toBe('Too many requests. Please try again later.');
-      expect(result.rateLimit).toBeDefined();
       expect(result.rateLimit?.allowed).toBe(false);
       expect(mockEmail.sendEmail).not.toHaveBeenCalled();
     });
 
     it('should return error when rate limited by email', async () => {
-      prisma.realm.findUnique.mockResolvedValue(mockRealm);
+      prisma.realm.findUnique.mockResolvedValueOnce(mockRealmSlim);
+      prisma.client.findFirst.mockResolvedValue(mockClient);
       prisma.user.findFirst.mockResolvedValue(mockUser);
-      mockRateLimit.checkIpLimit.mockResolvedValue({
-        allowed: true,
-        limit: 10,
-        remaining: 9,
-        resetAt: Math.ceil((Date.now() + 60 * 1000) / 1000),
-      });
-      // Mock recent count exceeding limit
+      mockRateLimit.checkIpLimit.mockResolvedValue(okRateLimit);
       prisma.magicLinkRequest.count.mockResolvedValue(5);
-      prisma.magicLinkRequest.create.mockResolvedValue({});
 
       const result = await service.requestMagicLink(
         'test@example.com',
-        mockRealm.id,
+        mockRealmSlim.id,
+        'my-client',
       );
 
       expect(result.success).toBe(false);
@@ -177,22 +275,21 @@ describe('MagicLinkService', () => {
       expect(mockEmail.sendEmail).not.toHaveBeenCalled();
     });
 
-    it('should generate token and send email on successful request', async () => {
-      prisma.realm.findUnique.mockResolvedValue(mockRealm);
+    it('should generate token and send themed email on successful allowlisted request', async () => {
+      prisma.realm.findUnique
+        .mockResolvedValueOnce(mockRealmSlim)
+        .mockResolvedValueOnce(mockRealmFull);
+      prisma.client.findFirst.mockResolvedValue(mockClient);
       prisma.user.findFirst.mockResolvedValue(mockUser);
-      mockRateLimit.checkIpLimit.mockResolvedValue({
-        allowed: true,
-        limit: 10,
-        remaining: 9,
-        resetAt: Math.ceil((Date.now() + 60 * 1000) / 1000),
-      });
+      mockRateLimit.checkIpLimit.mockResolvedValue(okRateLimit);
       prisma.magicLinkRequest.count.mockResolvedValue(0);
       prisma.magicLinkRequest.create.mockResolvedValue({});
       mockEmail.sendEmail.mockResolvedValue({ messageId: 'test-message-id' });
 
       const result = await service.requestMagicLink(
         'test@example.com',
-        mockRealm.id,
+        mockRealmSlim.id,
+        'my-client',
         '192.168.1.1',
         'Mozilla/5.0',
         'https://app.example.com/magic-link',
@@ -203,23 +300,33 @@ describe('MagicLinkService', () => {
       expect(mockCrypto.generateSecret).toHaveBeenCalledWith(32);
       expect(mockCrypto.sha256).toHaveBeenCalledWith('raw-magic-link-token');
       expect(prisma.magicLinkRequest.create).toHaveBeenCalled();
+      expect(mockThemeEmail.getSubject).toHaveBeenCalledWith(
+        mockRealmFull,
+        'magicLinkSubject',
+      );
+      expect(mockThemeEmail.renderEmail).toHaveBeenCalledWith(
+        mockRealmFull,
+        'magic-link',
+        {
+          magicLinkUrl:
+            'https://app.example.com/magic-link?token=raw-magic-link-token',
+        },
+      );
       expect(mockEmail.sendEmail).toHaveBeenCalledWith(
-        mockRealm.name,
+        mockRealmSlim.name,
         'test@example.com',
-        mockRealm.magicLinkEmailSubject,
+        'Sign in to Idenplane',
         expect.stringContaining('<a href='),
       );
     });
 
     it('should create magic link record with correct data', async () => {
-      prisma.realm.findUnique.mockResolvedValue(mockRealm);
+      prisma.realm.findUnique
+        .mockResolvedValueOnce(mockRealmSlim)
+        .mockResolvedValueOnce(mockRealmFull);
+      prisma.client.findFirst.mockResolvedValue(mockClient);
       prisma.user.findFirst.mockResolvedValue(mockUser);
-      mockRateLimit.checkIpLimit.mockResolvedValue({
-        allowed: true,
-        limit: 10,
-        remaining: 9,
-        resetAt: Math.ceil((Date.now() + 60 * 1000) / 1000),
-      });
+      mockRateLimit.checkIpLimit.mockResolvedValue(okRateLimit);
       prisma.magicLinkRequest.count.mockResolvedValue(0);
       prisma.magicLinkRequest.create.mockResolvedValue({});
       mockEmail.sendEmail.mockResolvedValue({ messageId: 'test-message-id' });
@@ -228,8 +335,9 @@ describe('MagicLinkService', () => {
       jest.spyOn(Date, 'now').mockReturnValue(now);
 
       await service.requestMagicLink(
-        'Test@Example.com', // uppercase to test normalization
-        mockRealm.id,
+        'Test@Example.com',
+        mockRealmSlim.id,
+        'my-client',
         '192.168.1.1',
         'Mozilla/5.0',
         'https://app.example.com/magic-link',
@@ -237,9 +345,9 @@ describe('MagicLinkService', () => {
 
       expect(prisma.magicLinkRequest.create).toHaveBeenCalledWith({
         data: {
-          realmId: mockRealm.id,
+          realmId: mockRealmSlim.id,
           userId: mockUser.id,
-          email: 'test@example.com', // normalized to lowercase
+          email: 'test@example.com',
           tokenHash: 'hashed-magic-link-token',
           expiresAt: new Date(now + 600 * 1000),
           ipAddress: '192.168.1.1',
@@ -251,17 +359,13 @@ describe('MagicLinkService', () => {
     });
 
     it('should use custom expiry from realm configuration', async () => {
-      prisma.realm.findUnique.mockResolvedValue({
-        ...mockRealm,
-        magicLinkExpirySeconds: 900, // 15 minutes
-      });
+      const customRealm = { ...mockRealmSlim, magicLinkExpirySeconds: 900 };
+      prisma.realm.findUnique
+        .mockResolvedValueOnce(customRealm)
+        .mockResolvedValueOnce({ ...mockRealmFull, magicLinkExpirySeconds: 900 });
+      prisma.client.findFirst.mockResolvedValue(mockClient);
       prisma.user.findFirst.mockResolvedValue(mockUser);
-      mockRateLimit.checkIpLimit.mockResolvedValue({
-        allowed: true,
-        limit: 10,
-        remaining: 9,
-        resetAt: Math.ceil((Date.now() + 60 * 1000) / 1000),
-      });
+      mockRateLimit.checkIpLimit.mockResolvedValue(okRateLimit);
       prisma.magicLinkRequest.count.mockResolvedValue(0);
       prisma.magicLinkRequest.create.mockResolvedValue({});
       mockEmail.sendEmail.mockResolvedValue({ messageId: 'test-message-id' });
@@ -269,7 +373,11 @@ describe('MagicLinkService', () => {
       const now = Date.now();
       jest.spyOn(Date, 'now').mockReturnValue(now);
 
-      await service.requestMagicLink('test@example.com', mockRealm.id);
+      await service.requestMagicLink(
+        'test@example.com',
+        mockRealmSlim.id,
+        'my-client',
+      );
 
       expect(prisma.magicLinkRequest.create).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -283,17 +391,13 @@ describe('MagicLinkService', () => {
     });
 
     it('should use default expiry when realm does not specify', async () => {
-      prisma.realm.findUnique.mockResolvedValue({
-        ...mockRealm,
-        magicLinkExpirySeconds: null,
-      });
+      const realmNullExpiry = { ...mockRealmSlim, magicLinkExpirySeconds: null };
+      prisma.realm.findUnique
+        .mockResolvedValueOnce(realmNullExpiry)
+        .mockResolvedValueOnce({ ...mockRealmFull, magicLinkExpirySeconds: null });
+      prisma.client.findFirst.mockResolvedValue(mockClient);
       prisma.user.findFirst.mockResolvedValue(mockUser);
-      mockRateLimit.checkIpLimit.mockResolvedValue({
-        allowed: true,
-        limit: 10,
-        remaining: 9,
-        resetAt: Math.ceil((Date.now() + 60 * 1000) / 1000),
-      });
+      mockRateLimit.checkIpLimit.mockResolvedValue(okRateLimit);
       prisma.magicLinkRequest.count.mockResolvedValue(0);
       prisma.magicLinkRequest.create.mockResolvedValue({});
       mockEmail.sendEmail.mockResolvedValue({ messageId: 'test-message-id' });
@@ -301,12 +405,16 @@ describe('MagicLinkService', () => {
       const now = Date.now();
       jest.spyOn(Date, 'now').mockReturnValue(now);
 
-      await service.requestMagicLink('test@example.com', mockRealm.id);
+      await service.requestMagicLink(
+        'test@example.com',
+        mockRealmSlim.id,
+        'my-client',
+      );
 
       expect(prisma.magicLinkRequest.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            expiresAt: new Date(now + 600 * 1000), // 10 minutes default
+            expiresAt: new Date(now + 600 * 1000),
           }),
         }),
       );
@@ -432,7 +540,7 @@ describe('MagicLinkService', () => {
         user: mockUser,
         tokenHash: 'hashed-magic-link-token',
         status: 'PENDING',
-        expiresAt: new Date(Date.now() - 1000), // expired 1 second ago
+        expiresAt: new Date(Date.now() - 1000),
       });
 
       const result = await service.validateMagicLink('raw-magic-link-token');
