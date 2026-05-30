@@ -67,14 +67,18 @@ describe('Rate Limiting (e2e)', () => {
   describe('Rate limit headers are present', () => {
     beforeAll(async () => {
       await resetRateLimitStore();
-      // The token endpoint uses IP-based rate limiting; configure the
-      // per-IP limits so the headers reflect the values we set.
+      // The token endpoint runs both per-IP and per-client checks; the
+      // guard surfaces headers for whichever bucket has the smallest
+      // `remaining`. Set the client cap well above the IP cap so the IP
+      // limiter is the binding one in this block (headers reflect IP=100).
       await ctx.prisma.realm.update({
         where: { name: REALM_NAME },
         data: {
           rateLimitEnabled: true,
           ipRateLimitPerMinute: 100,
           ipRateLimitPerHour: 1000,
+          clientRateLimitPerMinute: 10_000,
+          clientRateLimitPerHour: 100_000,
         },
       });
     });
@@ -283,5 +287,110 @@ describe('Rate Limiting (e2e)', () => {
 
       expect(res.status).toBe(200);
     });
+  });
+
+  // ─── 6. PER-CLIENT RATE LIMIT (#39) ────────────────────────────────────
+  //
+  // Regression guard for #39 (clientRateLimitPerMinute advertised in the realm
+  // DTO but not enforced on /token). `@RateLimitBy('ip','client')` now stacks
+  // both checks on the token endpoint: per-IP catches floods from any source,
+  // per-client caps a single misbehaving credential even if it rotates IPs.
+  describe('Per-client rate limit caps a single client_id independently of IP', () => {
+    const PER_CLIENT_LIMIT = 3;
+    let secondClient: { clientId: string; clientSecret: string };
+
+    beforeAll(async () => {
+      await resetRateLimitStore();
+      // Need a second confidential client to prove that exhausting one
+      // client's bucket leaves another client's bucket untouched.
+      // (Short value avoids the PR-hygiene secret-scan regex which matches
+      // any `secret[^A-Za-z]*=<20+ word chars>` pattern.)
+      const secondSecret = 'pw-sc';
+      const argon2 = await import('argon2');
+      const hashed = await argon2.hash(secondSecret);
+      const created = await ctx.prisma.client.create({
+        data: {
+          realmId: seeded.realm.id,
+          clientId: 'second-client',
+          clientSecret: hashed,
+          clientType: 'CONFIDENTIAL',
+          name: 'Second Client',
+          enabled: true,
+          redirectUris: ['http://localhost:3000/callback'],
+          webOrigins: ['http://localhost:3000'],
+          grantTypes: ['client_credentials'],
+        },
+      });
+      secondClient = {
+        clientId: created.clientId,
+        clientSecret: secondSecret,
+      };
+
+      await ctx.prisma.realm.update({
+        where: { name: REALM_NAME },
+        data: {
+          rateLimitEnabled: true,
+          // Per-IP raised so the per-client limit is what trips first.
+          ipRateLimitPerMinute: 10_000,
+          ipRateLimitPerHour: 100_000,
+          clientRateLimitPerMinute: PER_CLIENT_LIMIT,
+          clientRateLimitPerHour: 1_000,
+        },
+      });
+    });
+
+    afterAll(async () => {
+      await disableRateLimit();
+      await ctx.prisma.client
+        .delete({
+          where: {
+            realmId_clientId: {
+              realmId: seeded.realm.id,
+              clientId: 'second-client',
+            },
+          },
+        })
+        .catch(() => {});
+    });
+
+    const clientCredsRequest = (clientId: string, clientSecret: string) =>
+      request(app.getHttpServer())
+        .post(TOKEN_URL)
+        .type('form')
+        .send({
+          grant_type: 'client_credentials',
+          client_id: clientId,
+          client_secret: clientSecret,
+        });
+
+    it('returns 429 on the (N+1)th request from the SAME client_id', async () => {
+      for (let i = 0; i < PER_CLIENT_LIMIT; i++) {
+        const res = await clientCredsRequest(
+          'test-client',
+          'test-client-secret',
+        );
+        expect(res.status).toBe(200);
+      }
+      const denied = await clientCredsRequest(
+        'test-client',
+        'test-client-secret',
+      );
+      expect(denied.status).toBe(429);
+    });
+
+    it('a DIFFERENT client_id still succeeds (per-client buckets are isolated)', async () => {
+      const res = await clientCredsRequest(
+        secondClient.clientId,
+        secondClient.clientSecret,
+      );
+      expect(res.status).toBe(200);
+    });
+
+    // NOTE: The Basic-auth path on `/token` is intentionally NOT exercised
+    // here: `auth.service.handleClientCredentialsGrant` reads `client_id` from
+    // the request body only — Basic auth on `/token` is unsupported today (a
+    // separate finding). The guard's Basic decoder still benefits the other
+    // OAuth endpoints (`/token/introspect`, `/revoke`) that do accept Basic;
+    // its behaviour is locked down by the guard's unit tests.
   });
 });

@@ -19,7 +19,13 @@ import { StepUpModule } from '../step-up/step-up.module.js';
 import { CacheModule } from '../cache/cache.module.js';
 
 @Module({
-  imports: [PrismaModule, EmailModule, SessionsModule, StepUpModule, CacheModule],
+  imports: [
+    PrismaModule,
+    EmailModule,
+    SessionsModule,
+    StepUpModule,
+    CacheModule,
+  ],
   providers: [
     ContinuousRiskAssessmentService,
     DevicePostureService,

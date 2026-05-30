@@ -294,7 +294,8 @@ export class UsersController {
   @Delete(':userId/consents')
   @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({
-    summary: "Revoke all of a user's stored consents (after-compromise lockout)",
+    summary:
+      "Revoke all of a user's stored consents (after-compromise lockout)",
   })
   @ApiResponse({ status: 200, description: 'Revoked consents count' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
