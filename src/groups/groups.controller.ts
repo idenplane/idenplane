@@ -20,6 +20,7 @@ import type { Realm } from '@prisma/client';
 import { GroupsService } from './groups.service.js';
 import { CreateGroupDto } from './dto/create-group.dto.js';
 import { UpdateGroupDto } from './dto/update-group.dto.js';
+import { AssignRolesDto } from '../roles/dto/assign-role.dto.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
@@ -171,12 +172,12 @@ export class GroupsController {
   assignRoles(
     @CurrentRealm() realm: Realm,
     @Param('groupId') groupId: string,
-    @Body() body: { roleNames: string[] },
+    @Body() dto: AssignRolesDto,
   ) {
     return this.groupsService.assignRolesToGroup(
       realm,
       groupId,
-      body.roleNames,
+      dto.roleNames,
     );
   }
 
@@ -189,12 +190,12 @@ export class GroupsController {
   removeRoles(
     @CurrentRealm() realm: Realm,
     @Param('groupId') groupId: string,
-    @Body() body: { roleNames: string[] },
+    @Body() dto: AssignRolesDto,
   ) {
     return this.groupsService.removeRolesFromGroup(
       realm,
       groupId,
-      body.roleNames,
+      dto.roleNames,
     );
   }
 }

@@ -325,6 +325,30 @@ describe('CustomAttributesService', () => {
       expect(mockPrisma.$transaction).toHaveBeenCalled();
       expect(result).toBeDefined();
     });
+
+    it('should reject text values containing angle brackets (HTML injection guard)', async () => {
+      mockPrisma.user.findFirst.mockResolvedValue({
+        id: 'user-1',
+        realmId: 'realm-1',
+      });
+      mockPrisma.customAttribute.findMany.mockResolvedValue([
+        {
+          id: 'attr-1',
+          name: 'department',
+          displayName: 'Department',
+          type: 'text',
+          required: false,
+          options: null,
+        },
+      ]);
+
+      await expect(
+        service.setUserAttributes(mockRealm, 'user-1', {
+          department: '<script>alert(1)</script>',
+        }),
+      ).rejects.toThrow(/must not contain HTML tags/);
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+    });
   });
 
   // ─── Registration Helpers ──────────────────────────────────────────
