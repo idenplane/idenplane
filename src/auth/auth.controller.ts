@@ -28,6 +28,7 @@ import { Public } from '../common/decorators/public.decorator.js';
 import {
   RateLimitGuard,
   RateLimitByIp,
+  RateLimitBy,
 } from '../rate-limit/rate-limit.guard.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 
@@ -57,7 +58,7 @@ export class AuthController {
   @ApiBody({ type: TokenRequestDto })
   @SkipThrottle()
   @UseGuards(RateLimitGuard)
-  @RateLimitByIp()
+  @RateLimitBy('ip', 'client')
   async token(
     @CurrentRealm() realm: Realm,
     @Body() body: Record<string, string>,

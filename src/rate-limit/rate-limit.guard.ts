@@ -75,16 +75,22 @@ export class RateLimitGuard implements CanActivate {
       return true;
     }
 
+    // Run every configured check, but only surface headers for the BINDING
+    // one (the smallest `remaining`). Standard practice for stacked limiters
+    // — surfacing the IP-headers when the per-client bucket is two requests
+    // from exhaustion would mislead callers into thinking they have more
+    // headroom than they do.
+    let binding: { type: RateLimitType; result: Awaited<ReturnType<typeof this.runCheck>> } | undefined;
     for (const type of types) {
       const result = await this.runCheck(type, request, effectiveRealmId);
       if (!result) continue;
 
-      const headers = this.rateLimitService.computeHeaders(result);
-      for (const [name, value] of Object.entries(headers)) {
-        response.setHeader(name, value);
-      }
-
       if (!result.allowed) {
+        const headers = this.rateLimitService.computeHeaders(result);
+        for (const [name, value] of Object.entries(headers)) {
+          response.setHeader(name, value);
+        }
+
         this.metricsService.rateLimitHitsTotal.inc({
           type,
           realm: effectiveRealmId,
@@ -98,6 +104,17 @@ export class RateLimitGuard implements CanActivate {
           },
           HttpStatus.TOO_MANY_REQUESTS,
         );
+      }
+
+      if (!binding || result.remaining < binding.result!.remaining) {
+        binding = { type, result };
+      }
+    }
+
+    if (binding?.result) {
+      const headers = this.rateLimitService.computeHeaders(binding.result);
+      for (const [name, value] of Object.entries(headers)) {
+        response.setHeader(name, value);
       }
     }
 
