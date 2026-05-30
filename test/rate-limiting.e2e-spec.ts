@@ -284,4 +284,121 @@ describe('Rate Limiting (e2e)', () => {
       expect(res.status).toBe(200);
     });
   });
+
+  // ─── 6. PER-CLIENT RATE LIMIT (#39) ────────────────────────────────────
+  //
+  // Regression guard for #39 (clientRateLimitPerMinute advertised in the realm
+  // DTO but not enforced on /token). `@RateLimitBy('ip','client')` now stacks
+  // both checks on the token endpoint: per-IP catches floods from any source,
+  // per-client caps a single misbehaving credential even if it rotates IPs.
+  describe('Per-client rate limit caps a single client_id independently of IP', () => {
+    const PER_CLIENT_LIMIT = 3;
+    let secondClient: { clientId: string; clientSecret: string };
+
+    beforeAll(async () => {
+      await resetRateLimitStore();
+      // Need a second confidential client to prove that exhausting one
+      // client's bucket leaves another client's bucket untouched.
+      const secret = 'second-client-secret';
+      const argon2 = await import('argon2');
+      const hashed = await argon2.hash(secret);
+      const created = await ctx.prisma.client.create({
+        data: {
+          realmId: seeded.realm.id,
+          clientId: 'second-client',
+          clientSecret: hashed,
+          clientType: 'CONFIDENTIAL',
+          name: 'Second Client',
+          enabled: true,
+          redirectUris: ['http://localhost:3000/callback'],
+          webOrigins: ['http://localhost:3000'],
+          grantTypes: ['client_credentials'],
+        },
+      });
+      secondClient = {
+        clientId: created.clientId,
+        clientSecret: secret,
+      };
+
+      await ctx.prisma.realm.update({
+        where: { name: REALM_NAME },
+        data: {
+          rateLimitEnabled: true,
+          // Per-IP raised so the per-client limit is what trips first.
+          ipRateLimitPerMinute: 10_000,
+          ipRateLimitPerHour: 100_000,
+          clientRateLimitPerMinute: PER_CLIENT_LIMIT,
+          clientRateLimitPerHour: 1_000,
+        },
+      });
+    });
+
+    afterAll(async () => {
+      await disableRateLimit();
+      await ctx.prisma.client
+        .delete({
+          where: {
+            realmId_clientId: {
+              realmId: seeded.realm.id,
+              clientId: 'second-client',
+            },
+          },
+        })
+        .catch(() => {});
+    });
+
+    const clientCredsRequest = (clientId: string, clientSecret: string) =>
+      request(app.getHttpServer())
+        .post(TOKEN_URL)
+        .type('form')
+        .send({
+          grant_type: 'client_credentials',
+          client_id: clientId,
+          client_secret: clientSecret,
+        });
+
+    it('returns 429 on the (N+1)th request from the SAME client_id', async () => {
+      for (let i = 0; i < PER_CLIENT_LIMIT; i++) {
+        const res = await clientCredsRequest(
+          'test-client',
+          'test-client-secret',
+        );
+        expect(res.status).toBe(200);
+      }
+      const denied = await clientCredsRequest(
+        'test-client',
+        'test-client-secret',
+      );
+      expect(denied.status).toBe(429);
+    });
+
+    it('a DIFFERENT client_id still succeeds (per-client buckets are isolated)', async () => {
+      const res = await clientCredsRequest(
+        secondClient.clientId,
+        secondClient.clientSecret,
+      );
+      expect(res.status).toBe(200);
+    });
+
+    it('also caps confidential clients that authenticate via HTTP Basic (RFC 6749 §2.3.1)', async () => {
+      await resetRateLimitStore();
+      // After reset, exhaust 'test-client' via Basic auth instead of body params.
+      const basic = Buffer.from('test-client:test-client-secret').toString(
+        'base64',
+      );
+      const basicRequest = () =>
+        request(app.getHttpServer())
+          .post(TOKEN_URL)
+          .set('Authorization', `Basic ${basic}`)
+          .type('form')
+          .send({ grant_type: 'client_credentials' });
+
+      for (let i = 0; i < PER_CLIENT_LIMIT; i++) {
+        const res = await basicRequest();
+        expect(res.status).toBe(200);
+      }
+      const denied = await basicRequest();
+      expect(denied.status).toBe(429);
+    });
+  });
 });
