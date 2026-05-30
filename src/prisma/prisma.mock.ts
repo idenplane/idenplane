@@ -27,6 +27,7 @@ export function createMockPrismaService(): MockPrismaService {
     },
     client: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       findMany: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
