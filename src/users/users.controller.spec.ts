@@ -133,36 +133,28 @@ describe('UsersController', () => {
         'u1',
         'alice@example.com',
       );
-      expect(result).toEqual({ message: 'Verification email sent' });
+      expect(result).toEqual({ message: 'If the account exists, a verification email has been sent.' });
     });
 
-    it('should throw BadRequest when user has no email', async () => {
+    it('should return success message even when user has no email (does not send)', async () => {
       const user = { id: 'u1', email: null };
       usersService.findById.mockResolvedValue(user);
 
-      await expect(
-        controller.sendVerificationEmail(realm, 'u1'),
-      ).rejects.toThrow('User has no email address');
+      const result = await controller.sendVerificationEmail(realm, 'u1');
+
+      expect(usersService.findById).toHaveBeenCalledWith(realm, 'u1');
       expect(usersService.sendVerificationEmail).not.toHaveBeenCalled();
+      expect(result).toEqual({ message: 'If the account exists, a verification email has been sent.' });
     });
 
-    it('should throw BadRequest when user email is empty string', async () => {
+    it('should return success message even when user email is empty string', async () => {
       const user = { id: 'u1', email: '' };
       usersService.findById.mockResolvedValue(user);
 
-      await expect(
-        controller.sendVerificationEmail(realm, 'u1'),
-      ).rejects.toThrow('User has no email address');
-      expect(usersService.sendVerificationEmail).not.toHaveBeenCalled();
-    });
+      const result = await controller.sendVerificationEmail(realm, 'u1');
 
-    it('should propagate findById errors (e.g. user not found)', async () => {
-      usersService.findById.mockRejectedValue(new Error('User not found'));
-
-      await expect(
-        controller.sendVerificationEmail(realm, 'u-missing'),
-      ).rejects.toThrow('User not found');
       expect(usersService.sendVerificationEmail).not.toHaveBeenCalled();
+      expect(result).toEqual({ message: 'If the account exists, a verification email has been sent.' });
     });
   });
 
