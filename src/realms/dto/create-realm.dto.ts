@@ -4,12 +4,19 @@ import {
   IsBoolean,
   IsInt,
   IsArray,
+  IsEnum,
   IsObject,
   Min,
   MinLength,
   Matches,
+  ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import {
+  EmailProviderType,
+  EmailProviderConfigDto,
+} from '../../email/dto/email-config.dto.js';
 
 export class CreateRealmDto {
   @ApiProperty({ example: 'my-app' })
@@ -70,6 +77,25 @@ export class CreateRealmDto {
   @IsOptional()
   @IsBoolean()
   smtpSecure?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Email provider to use',
+    enum: EmailProviderType,
+    default: EmailProviderType.SMTP,
+  })
+  @IsOptional()
+  @IsEnum(EmailProviderType)
+  emailProvider?: EmailProviderType;
+
+  @ApiPropertyOptional({
+    description: 'Provider-specific email configuration',
+    type: EmailProviderConfigDto,
+  })
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => EmailProviderConfigDto)
+  emailProviderConfig?: EmailProviderConfigDto;
 
   // Password policies
   @ApiPropertyOptional({ default: 8 })
