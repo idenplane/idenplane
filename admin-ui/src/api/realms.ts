@@ -1,5 +1,5 @@
-import apiClient from './client';
 import type { Realm } from '../types';
+import apiClient from './client';
 
 export async function getAllRealms(): Promise<Realm[]> {
   const { data } = await apiClient.get<Realm[]>('/realms');
@@ -67,8 +67,10 @@ export interface ThemeInfo {
   };
 }
 
-export async function getThemes(): Promise<ThemeInfo[]> {
-  const { data } = await apiClient.get<ThemeInfo[]>('/realms/themes');
+export async function getThemes(realm?: string): Promise<ThemeInfo[]> {
+  const { data } = await apiClient.get<ThemeInfo[]>('/realms/themes', {
+    params: realm ? { realm } : undefined,
+  });
   return data;
 }
 

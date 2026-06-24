@@ -6,6 +6,7 @@ import {
   getThemes,
   publishTheme,
   rollbackTheme,
+  setActiveTheme,
   updateTheme,
 } from '../../api/themes';
 import type {
@@ -22,7 +23,6 @@ import {
   DEFAULT_THEME_SETTINGS,
   DEFAULT_THEME_STYLES,
 } from '../../types/theme';
-import ComponentPalette from './ComponentPalette';
 import ImageUploader from './ImageUploader';
 import LivePreview from './LivePreview';
 import StyleEditor from './StyleEditor';
@@ -45,7 +45,8 @@ type EditorPanel = 'palette' | 'canvas' | 'styles' | 'assets' | 'templates' | 'h
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ThemeBuilderPage() {
-  const { name: realmName } = useParams<{ name: string }>();
+  // `themeId` is present when navigating from the theme list (edit route).
+  const { name: realmName, themeId: routeThemeId } = useParams<{ name: string; themeId?: string }>();
 
   // ── Theme state (shared across all sections) ──────────────────────────────
 
@@ -80,7 +81,11 @@ export default function ThemeBuilderPage() {
     enabled: !!realmName,
   });
 
-  const activeTheme = themes?.find((t) => t.published) ?? themes?.[0] ?? null;
+  // When a specific themeId is in the URL, edit that theme; otherwise fall back
+  // to the first published theme, then the first overall.
+  const activeTheme = routeThemeId
+    ? (themes?.find((t) => t.id === routeThemeId) ?? themes?.[0] ?? null)
+    : (themes?.find((t) => t.published) ?? themes?.[0] ?? null);
   const themeId = activeTheme?.id ?? null;
   const [currentVersion, setCurrentVersion] = useState<number>(activeTheme?.version ?? 1);
 
@@ -88,7 +93,23 @@ export default function ThemeBuilderPage() {
   // editor state from its server-side styles/components/assets/settings.
   useEffect(() => {
     if (!activeTheme) return;
-    if (activeTheme.styles) setStyles(activeTheme.styles as ThemeStyles);
+    // Deep-merge server styles with defaults so every nested group
+    // (colors, typography, spacing, borders, shadows) always exists. Themes
+    // created with partial/empty styles would otherwise crash the editor and
+    // live preview when they read e.g. `styles.colors.primaryColor`.
+    const loaded = (activeTheme.styles ?? {}) as Partial<ThemeStyles>;
+    setStyles({
+      ...DEFAULT_THEME_STYLES,
+      ...loaded,
+      colors: { ...DEFAULT_THEME_STYLES.colors, ...(loaded.colors ?? {}) },
+      typography: {
+        ...DEFAULT_THEME_STYLES.typography,
+        ...(loaded.typography ?? {}),
+      },
+      spacing: { ...DEFAULT_THEME_STYLES.spacing, ...(loaded.spacing ?? {}) },
+      borders: { ...DEFAULT_THEME_STYLES.borders, ...(loaded.borders ?? {}) },
+      shadows: { ...DEFAULT_THEME_STYLES.shadows, ...(loaded.shadows ?? {}) },
+    });
     if (Array.isArray(activeTheme.components))
       setComponents(activeTheme.components as ThemeComponent[]);
     if (activeTheme.assets) setAssets((prev) => ({ ...prev, ...activeTheme.assets }));
@@ -102,6 +123,12 @@ export default function ThemeBuilderPage() {
 
   const [rollbackError, setRollbackError] = useState<string | null>(null);
   const [rollbackSuccess, setRollbackSuccess] = useState<string | null>(null);
+
+  // ── Activate state ────────────────────────────────────────────────────────
+
+  const [isActivating, setIsActivating] = useState(false);
+  const [activateSuccess, setActivateSuccess] = useState<string | null>(null);
+  const [activateError, setActivateError] = useState<string | null>(null);
 
   // ── Auto-save state ─────────────────────────────────────────────────────────
 
@@ -121,12 +148,13 @@ export default function ThemeBuilderPage() {
 
   // ── Save handler ────────────────────────────────────────────────────────────
 
-  const handleSave = useCallback(async (reason: 'manual' | 'auto-save' = 'manual') => {
-    if (isSaving) return;
+  const handleSave = useCallback(async (reason: 'manual' | 'auto-save' = 'manual'): Promise<string | null> => {
+    if (isSaving) return themeId;
 
     setIsSaving(true);
     setSaveError(null);
 
+    let resolvedId: string | null = themeId;
     try {
       const currentState = themeStateRef.current;
       if (themeId) {
@@ -139,7 +167,7 @@ export default function ThemeBuilderPage() {
         });
       } else {
         // No theme exists yet for this realm — create a draft and remember it.
-        await createTheme(realmName || '', {
+        const created = await createTheme(realmName || '', {
           name: `${realmName || 'realm'}-login`,
           themeType: 'login',
           styles: currentState.styles,
@@ -147,11 +175,13 @@ export default function ThemeBuilderPage() {
           assets: currentState.assets,
           settings: currentState.settings,
         });
+        resolvedId = created.id;
         // Refresh the list so activeTheme resolves to the newly created theme.
         await refetchThemes();
       }
       setLastSaved(new Date());
       setHasUnsavedChanges(false);
+      return resolvedId;
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Failed to save changes';
       setSaveError(message);
@@ -159,6 +189,7 @@ export default function ThemeBuilderPage() {
       if (reason === 'manual') {
         throw err;
       }
+      return resolvedId;
     } finally {
       setIsSaving(false);
     }
@@ -215,15 +246,9 @@ export default function ThemeBuilderPage() {
     setPublishSuccess(null);
 
     try {
-      // First save any pending changes (this also creates the theme if none exists yet).
-      await handleSave('manual');
-
-      // After save, refetch to resolve the themeId if it was just created.
-      let id = themeId;
-      if (!id) {
-        const refreshed = await refetchThemes();
-        id = (refreshed.data?.find((t) => t.published) ?? refreshed.data?.[0])?.id ?? null;
-      }
+      // First save any pending changes (this also creates the theme if none
+      // exists yet) and use the id it resolves so we never publish "undefined".
+      const id = await handleSave('manual');
       if (!id) {
         throw new Error('Could not resolve a theme to publish');
       }
@@ -245,9 +270,28 @@ export default function ThemeBuilderPage() {
     } finally {
       setIsPublishing(false);
     }
-  }, [realmName, themeId, isPublishing, handleSave, refetchThemes]);
+  }, [realmName, isPublishing, handleSave]);
 
   // ── Rollback handler ─────────────────────────────────────────────────────
+
+  // ── Activate handler ──────────────────────────────────────────────────────
+
+  const handleActivate = useCallback(async () => {
+    if (!themeId || isActivating) return;
+    setIsActivating(true);
+    setActivateError(null);
+    setActivateSuccess(null);
+    try {
+      await setActiveTheme(realmName || '', themeId);
+      await refetchThemes();
+      setActivateSuccess('Theme is now active for this realm');
+      setTimeout(() => setActivateSuccess(null), 3000);
+    } catch (err) {
+      setActivateError(err instanceof Error ? err.message : 'Failed to activate theme');
+    } finally {
+      setIsActivating(false);
+    }
+  }, [realmName, themeId, isActivating, refetchThemes]);
 
   const handleRollback = useCallback(async (version: ThemeVersion) => {
     setRollbackError(null);
@@ -403,6 +447,21 @@ export default function ThemeBuilderPage() {
           <span className="rounded bg-gray-100 px-2 py-1 text-sm text-gray-600">
             Realm: {realmName}
           </span>
+          {activeTheme && (
+            <span className="flex items-center gap-2">
+              <span className="text-sm font-medium text-gray-800">
+                {activeTheme.displayName || activeTheme.name}
+              </span>
+              <span
+                className={`rounded-full px-2 py-0.5 text-xs font-medium ${activeTheme.published
+                    ? 'bg-green-100 text-green-700'
+                    : 'bg-amber-100 text-amber-700'
+                  }`}
+              >
+                {activeTheme.published ? 'Published' : 'Draft'}
+              </span>
+            </span>
+          )}
           {lastSaved && (
             <span className="text-xs text-gray-400">
               {hasUnsavedChanges ? 'Unsaved changes' : `Saved ${lastSaved.toLocaleTimeString()}`}
@@ -455,6 +514,7 @@ export default function ThemeBuilderPage() {
           <button
             onClick={() => handleSave('manual')}
             disabled={isSaving || !hasUnsavedChanges}
+            title="Save your changes as a draft without making them live"
             className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isSaving ? (
@@ -470,6 +530,7 @@ export default function ThemeBuilderPage() {
           <button
             onClick={handlePublish}
             disabled={isPublishing || isSaving}
+            title="Publish this theme so it can be activated for the realm"
             className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isPublishing ? (
@@ -481,6 +542,24 @@ export default function ThemeBuilderPage() {
               'Publish'
             )}
           </button>
+          {/* Activate button — only shown when a published theme exists */}
+          {activeTheme?.published && (
+            <button
+              onClick={handleActivate}
+              disabled={isActivating || isSaving}
+              className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+              title="Set this theme as the active theme for this realm"
+            >
+              {isActivating ? (
+                <span className="flex items-center gap-1.5">
+                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
+                  Activating…
+                </span>
+              ) : (
+                'Activate'
+              )}
+            </button>
+          )}
           {/* Success/Error messages */}
           {saveError && (
             <span className="rounded bg-red-50 px-2 py-1 text-sm text-red-600">
@@ -490,6 +569,16 @@ export default function ThemeBuilderPage() {
           {publishSuccess && (
             <span className="rounded bg-green-50 px-2 py-1 text-sm text-green-600">
               {publishSuccess}
+            </span>
+          )}
+          {activateSuccess && (
+            <span className="rounded bg-emerald-50 px-2 py-1 text-sm text-emerald-700">
+              {activateSuccess}
+            </span>
+          )}
+          {activateError && (
+            <span className="rounded bg-red-50 px-2 py-1 text-sm text-red-600">
+              {activateError}
             </span>
           )}
           <button
@@ -515,23 +604,6 @@ export default function ThemeBuilderPage() {
 
       {/* Main content area */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Left: Component palette */}
-        <div className="w-52 shrink-0 overflow-y-auto border-r border-gray-200 bg-gray-50 p-4">
-          <ComponentPalette onAddComponent={(type) => {
-            // When adding from palette, create a new component and add to state
-            const id = `${type}-${Date.now()}`;
-            const newComponent: ThemeComponent = {
-              id,
-              type,
-              label: type.charAt(0).toUpperCase() + type.slice(1),
-              order: components.length,
-              visible: true,
-              props: {},
-            };
-            setComponents((prev) => [...prev, newComponent]);
-          }} />
-        </div>
-
         {/* Middle: Canvas or Live Preview */}
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* Section tabs */}
@@ -543,7 +615,7 @@ export default function ThemeBuilderPage() {
                 : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
             >
-              Canvas
+              Edit Layout
             </button>
             <button
               onClick={() => setActiveSection('preview')}
@@ -552,7 +624,7 @@ export default function ThemeBuilderPage() {
                 : 'border-transparent text-gray-500 hover:text-gray-700'
                 }`}
             >
-              Preview
+              Full Preview
             </button>
           </div>
 
@@ -595,7 +667,7 @@ export default function ThemeBuilderPage() {
                   : 'border-transparent text-gray-500 hover:text-gray-700'
                   }`}
               >
-                Preview
+                Live Preview
               </button>
               <button
                 onClick={() => setEditorPanel('styles')}

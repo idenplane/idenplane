@@ -56,7 +56,7 @@ export default function Layout() {
       { to: `/console/realms/${currentRealm}/identity-providers`, label: 'Identity Providers', icon: Icons.Idp },
       { to: `/console/realms/${currentRealm}/saml-providers`, label: 'SAML Providers', icon: Icons.Globe },
       { to: `/console/realms/${currentRealm}/auth-flows`, label: 'Auth Flows', icon: Icons.Build },
-      { to: `/console/realms/${currentRealm}/themes`, label: 'Theme Builder', icon: Icons.Palette },
+      { to: `/console/realms/${currentRealm}/themes`, label: 'Themes', icon: Icons.Palette },
     ]
     : [];
 

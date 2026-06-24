@@ -1,34 +1,34 @@
 import {
-  Controller,
-  Get,
-  Post,
-  Put,
-  Patch,
-  Delete,
-  Body,
-  Param,
-  Query,
-  HttpCode,
-  HttpStatus,
-  UseGuards,
+    Body,
+    Controller,
+    Delete,
+    Get,
+    HttpCode,
+    HttpStatus,
+    Param,
+    Patch,
+    Post,
+    Put,
+    Query,
+    UseGuards,
 } from '@nestjs/common';
 import {
-  ApiTags,
-  ApiOperation,
-  ApiSecurity,
-  ApiResponse,
+    ApiOperation,
+    ApiResponse,
+    ApiSecurity,
+    ApiTags,
 } from '@nestjs/swagger';
-import { RealmsService } from './realms.service.js';
-import { RealmExportService } from './realm-export.service.js';
-import { RealmImportService } from './realm-import.service.js';
-import { EmailService } from '../email/email.service.js';
-import { ThemeService } from '../theme/theme.service.js';
-import { ThemeEmailService } from '../theme/theme-email.service.js';
-import { CreateRealmDto } from './dto/create-realm.dto.js';
-import { UpdateRealmDto } from './dto/update-realm.dto.js';
+import { RequireAdminRoles } from '../common/decorators/require-admin-roles.decorator.js';
 import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
 import { AdminRolesGuard } from '../common/guards/admin-roles.guard.js';
-import { RequireAdminRoles } from '../common/decorators/require-admin-roles.decorator.js';
+import { EmailService } from '../email/email.service.js';
+import { ThemeEmailService } from '../theme/theme-email.service.js';
+import { ThemeService } from '../theme/theme.service.js';
+import { CreateRealmDto } from './dto/create-realm.dto.js';
+import { UpdateRealmDto } from './dto/update-realm.dto.js';
+import { RealmExportService } from './realm-export.service.js';
+import { RealmImportService } from './realm-import.service.js';
+import { RealmsService } from './realms.service.js';
 
 @ApiTags('Realms')
 @Controller('admin/realms')
@@ -70,7 +70,10 @@ export class RealmsController {
   @ApiOperation({ summary: 'List available themes' })
   @ApiResponse({ status: 200, description: 'List of available themes' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  getThemes() {
+  getThemes(@Query('realm') realm?: string) {
+    if (realm) {
+      return this.realmsService.getAvailableThemesForRealm(realm);
+    }
     return this.themeService.getAvailableThemes();
   }
 

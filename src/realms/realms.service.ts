@@ -1,15 +1,15 @@
 import {
-  Injectable,
-  BadRequestException,
-  ConflictException,
-  NotFoundException,
+    BadRequestException,
+    ConflictException,
+    Injectable,
+    NotFoundException,
 } from '@nestjs/common';
 import { Prisma, type Realm } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service.js';
+import { CacheService } from '../cache/cache.service.js';
 import { JwkService } from '../crypto/jwk.service.js';
+import { PrismaService } from '../prisma/prisma.service.js';
 import { ScopeSeedService } from '../scopes/scope-seed.service.js';
 import { ThemeService } from '../theme/theme.service.js';
-import { CacheService } from '../cache/cache.service.js';
 import { CreateRealmDto } from './dto/create-realm.dto.js';
 import { UpdateRealmDto } from './dto/update-realm.dto.js';
 
@@ -189,6 +189,15 @@ export class RealmsService {
     return realm;
   }
 
+  /**
+   * Lists the themes selectable for a realm: built-in filesystem themes merged
+   * with the realm's published DB-backed (theme builder) themes.
+   */
+  async getAvailableThemesForRealm(name: string) {
+    const realm = await this.findByNameRaw(name);
+    return this.themeService.getAvailableThemesForRealm(realm.id);
+  }
+
   async update(name: string, dto: UpdateRealmDto) {
     const existing = await this.findByNameRaw(name);
 
@@ -200,9 +209,9 @@ export class RealmsService {
       dto.themeName,
     ].filter(Boolean);
     if (themeFields.length > 0) {
-      const availableNames = this.themeService
-        .getAvailableThemes()
-        .map((t) => t.name);
+      const availableNames = (
+        await this.themeService.getAvailableThemesForRealm(existing.id)
+      ).map((t) => t.name);
       for (const themeName of themeFields) {
         if (!availableNames.includes(themeName!)) {
           throw new BadRequestException(
@@ -296,6 +305,21 @@ export class RealmsService {
     // Only update password if a real value is provided (not the redacted placeholder)
     if (dto.smtpPassword && dto.smtpPassword !== '••••••') {
       data.smtpPassword = dto.smtpPassword;
+    }
+
+    // When a login theme is (re)assigned, sync the realm's color overrides so a
+    // DB-backed (theme builder) theme's colors/customCss/logo are applied at
+    // render time. Selecting a filesystem theme clears any prior DB overrides
+    // so the filesystem theme's own colors take effect.
+    if (dto.theme === undefined) {
+      const effectiveTheme = dto.loginTheme ?? dto.themeName;
+      if (effectiveTheme) {
+        const overrides = await this.themeService.getRealmThemeOverrides(
+          existing.id,
+          effectiveTheme,
+        );
+        data.theme = overrides ?? {};
+      }
     }
 
     const realm = await this.prisma.realm.update({

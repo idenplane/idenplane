@@ -1,5 +1,8 @@
 node_modules
+admin-ui/node_modules
 dist
+admin-ui/dist
+*.tsbuildinfo
 .env
 .env.local
 .env.production
@@ -9,7 +12,15 @@ dist
 .env.staging
 .env.production.local
 .git
+.gitignore
 .claude
 coverage
 *.md
 test
+benchmarks
+docs
+branding
+packages
+providers
+terraform-provider-idenplane
+helm

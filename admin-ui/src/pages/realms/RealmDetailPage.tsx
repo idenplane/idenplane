@@ -1,15 +1,15 @@
-import { useState, useEffect, type FormEvent } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getRealmByName, updateRealm, deleteRealm, sendTestEmail, exportRealm, getThemes } from '../../api/realms';
-import type { ThemeInfo } from '../../api/realms';
-import { getUsers } from '../../api/users';
-import { getClients } from '../../api/clients';
-import { getRealmRoles } from '../../api/roles';
-import { getGroups } from '../../api/groups';
+import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import { useEffect, useState, type FormEvent } from 'react';
+import { Link, useNavigate, useParams } from 'react-router-dom';
 import { getClientScopes } from '../../api/clientScopes';
-import { getRealmSessions } from '../../api/sessions';
+import { getClients } from '../../api/clients';
+import { getGroups } from '../../api/groups';
 import { getIdentityProviders } from '../../api/identityProviders';
+import type { ThemeInfo } from '../../api/realms';
+import { deleteRealm, exportRealm, getRealmByName, getThemes, sendTestEmail, updateRealm } from '../../api/realms';
+import { getRealmRoles } from '../../api/roles';
+import { getRealmSessions } from '../../api/sessions';
+import { getUsers } from '../../api/users';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import PasswordInput from '../../components/PasswordInput';
 import MagicLinkSettingsForm from '../../components/magic-link/MagicLinkSettingsForm';
@@ -83,8 +83,8 @@ export default function RealmDetailPage() {
   });
 
   const { data: themes } = useQuery({
-    queryKey: ['themes'],
-    queryFn: () => getThemes(),
+    queryKey: ['realm-theme-options', name],
+    queryFn: () => getThemes(name),
     enabled: activeTab === 'theme',
   });
 
@@ -134,43 +134,43 @@ export default function RealmDetailPage() {
   if (realm && realm !== seededRealm) {
     setSeededRealm(realm);
     setForm({
-        displayName: realm.displayName ?? '',
-        enabled: realm.enabled,
-        registrationAllowed: realm.registrationAllowed ?? true,
-        accessTokenLifespan: realm.accessTokenLifespan,
-        refreshTokenLifespan: realm.refreshTokenLifespan,
-        offlineTokenLifespan: realm.offlineTokenLifespan ?? 2592000,
-        smtpHost: realm.smtpHost ?? '',
-        smtpPort: realm.smtpPort ?? 587,
-        smtpUser: realm.smtpUser ?? '',
-        smtpPassword: realm.smtpPassword ?? '',
-        smtpFrom: realm.smtpFrom ?? '',
-        smtpSecure: realm.smtpSecure ?? false,
-        // Security - Password Policy
-        passwordMinLength: realm.passwordMinLength ?? 8,
-        passwordRequireUppercase: realm.passwordRequireUppercase ?? false,
-        passwordRequireLowercase: realm.passwordRequireLowercase ?? false,
-        passwordRequireDigits: realm.passwordRequireDigits ?? false,
-        passwordRequireSpecialChars: realm.passwordRequireSpecialChars ?? false,
-        passwordHistoryCount: realm.passwordHistoryCount ?? 0,
-        passwordMaxAgeDays: realm.passwordMaxAgeDays ?? 0,
-        // Security - Brute Force Protection
-        bruteForceEnabled: realm.bruteForceEnabled ?? false,
-        maxLoginFailures: realm.maxLoginFailures ?? 5,
-        lockoutDuration: realm.lockoutDuration ?? 300,
-        failureResetTime: realm.failureResetTime ?? 600,
-        permanentLockoutAfter: realm.permanentLockoutAfter ?? 0,
-        // Security - MFA
-        mfaRequired: realm.mfaRequired ?? false,
-        // Events
-        eventsEnabled: realm.eventsEnabled ?? false,
-        eventsExpiration: realm.eventsExpiration ?? 604800,
-        adminEventsEnabled: realm.adminEventsEnabled ?? false,
-        // Theme
-        themeName: realm.themeName ?? 'idenplane',
-        loginTheme: realm.loginTheme ?? 'idenplane',
-        accountTheme: realm.accountTheme ?? 'idenplane',
-        emailTheme: realm.emailTheme ?? 'idenplane',
+      displayName: realm.displayName ?? '',
+      enabled: realm.enabled,
+      registrationAllowed: realm.registrationAllowed ?? true,
+      accessTokenLifespan: realm.accessTokenLifespan,
+      refreshTokenLifespan: realm.refreshTokenLifespan,
+      offlineTokenLifespan: realm.offlineTokenLifespan ?? 2592000,
+      smtpHost: realm.smtpHost ?? '',
+      smtpPort: realm.smtpPort ?? 587,
+      smtpUser: realm.smtpUser ?? '',
+      smtpPassword: realm.smtpPassword ?? '',
+      smtpFrom: realm.smtpFrom ?? '',
+      smtpSecure: realm.smtpSecure ?? false,
+      // Security - Password Policy
+      passwordMinLength: realm.passwordMinLength ?? 8,
+      passwordRequireUppercase: realm.passwordRequireUppercase ?? false,
+      passwordRequireLowercase: realm.passwordRequireLowercase ?? false,
+      passwordRequireDigits: realm.passwordRequireDigits ?? false,
+      passwordRequireSpecialChars: realm.passwordRequireSpecialChars ?? false,
+      passwordHistoryCount: realm.passwordHistoryCount ?? 0,
+      passwordMaxAgeDays: realm.passwordMaxAgeDays ?? 0,
+      // Security - Brute Force Protection
+      bruteForceEnabled: realm.bruteForceEnabled ?? false,
+      maxLoginFailures: realm.maxLoginFailures ?? 5,
+      lockoutDuration: realm.lockoutDuration ?? 300,
+      failureResetTime: realm.failureResetTime ?? 600,
+      permanentLockoutAfter: realm.permanentLockoutAfter ?? 0,
+      // Security - MFA
+      mfaRequired: realm.mfaRequired ?? false,
+      // Events
+      eventsEnabled: realm.eventsEnabled ?? false,
+      eventsExpiration: realm.eventsExpiration ?? 604800,
+      adminEventsEnabled: realm.adminEventsEnabled ?? false,
+      // Theme
+      themeName: realm.themeName ?? 'idenplane',
+      loginTheme: realm.loginTheme ?? 'idenplane',
+      accountTheme: realm.accountTheme ?? 'idenplane',
+      emailTheme: realm.emailTheme ?? 'idenplane',
     });
   }
 
@@ -198,7 +198,7 @@ export default function RealmDetailPage() {
   useEffect(() => {
     updateMutation.reset();
     testEmailMutation.reset();
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
   function handleSubmit(e: FormEvent) {
@@ -284,11 +284,10 @@ export default function RealmDetailPage() {
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`border-b-2 py-3 text-sm font-medium ${
-                activeTab === tab.key
+              className={`border-b-2 py-3 text-sm font-medium ${activeTab === tab.key
                   ? 'border-indigo-500 text-indigo-600'
                   : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
-              }`}
+                }`}
             >
               {tab.label}
             </button>

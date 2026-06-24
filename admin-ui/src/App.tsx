@@ -37,6 +37,8 @@ import SamlSpDetailPage from './pages/saml/SamlSpDetailPage';
 import SamlSpListPage from './pages/saml/SamlSpListPage';
 import SessionListPage from './pages/sessions/SessionListPage';
 import SetupWizardPage from './pages/setup-wizard/SetupWizardPage';
+import ThemeBuilderPage from './pages/theme-builder/ThemeBuilderPage';
+import ThemeListPage from './pages/theme-builder/ThemeListPage';
 import FederationCreatePage from './pages/user-federation/FederationCreatePage';
 import FederationDetailPage from './pages/user-federation/FederationDetailPage';
 import FederationListPage from './pages/user-federation/FederationListPage';
@@ -104,6 +106,9 @@ export default function App() {
             <Route path="/console/realms/:name/saml-providers/:id" element={<SamlSpDetailPage />} />
             <Route path="/console/realms/:name/auth-flows" element={<AuthFlowListPage />} />
             <Route path="/console/realms/:name/auth-flows/:flowId" element={<AuthFlowEditorPage />} />
+            <Route path="/console/realms/:name/themes" element={<ThemeListPage />} />
+            <Route path="/console/realms/:name/themes/builder" element={<ThemeBuilderPage />} />
+            <Route path="/console/realms/:name/themes/:themeId/edit" element={<ThemeBuilderPage />} />
             <Route path="/console/realms/:name/registration-approvals" element={<PendingRegistrationsPage />} />
             <Route path="/console/realms/:name/registration-fields" element={<RegistrationFieldsPage />} />
             <Route path="/console/realms/:name/registration-settings" element={<RegistrationSettingsPage />} />

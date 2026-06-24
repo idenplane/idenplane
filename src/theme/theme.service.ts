@@ -107,6 +107,105 @@ export class ThemeService implements OnModuleInit {
   }
 
   /**
+   * Returns filesystem themes merged with the realm's published DB-backed
+   * themes (theme builder). DB themes whose name collides with a filesystem
+   * theme are skipped so built-ins always win. Used by the realm theme picker
+   * and by realm update validation so DB themes are selectable and savable.
+   */
+  async getAvailableThemesForRealm(realmId: string): Promise<ThemeInfo[]> {
+    const fsThemes = this.getAvailableThemes();
+    const fsNames = new Set(fsThemes.map((t) => t.name));
+    const dbThemes = await this.prisma.theme.findMany({
+      where: { realmId, published: true },
+      orderBy: { updatedAt: 'desc' },
+    });
+    const dbInfos: ThemeInfo[] = dbThemes
+      .filter((t) => !fsNames.has(t.name))
+      .map((t) => ({
+        name: t.name,
+        displayName: t.displayName ?? t.name,
+        description: t.description ?? '',
+        colors: this.dbThemeColors(t.styles),
+      }));
+    return [...fsThemes, ...dbInfos];
+  }
+
+  /**
+   * Resolves the per-realm `theme` color override object for a selected theme
+   * name. Returns `null` for filesystem themes (which carry their own colors),
+   * or the override map for a DB-backed theme so its colors apply at render.
+   */
+  async getRealmThemeOverrides(
+    realmId: string,
+    themeName: string,
+  ): Promise<Record<string, string> | null> {
+    if (this.themes.has(themeName)) return null;
+    const dbTheme = await this.prisma.theme.findFirst({
+      where: { realmId, name: themeName },
+    });
+    if (!dbTheme) return null;
+    return this.dbThemeRealmOverrides(dbTheme);
+  }
+
+  /**
+   * Maps a DB-backed theme's `styles.colors` JSON onto the filesystem
+   * ThemeColors shape, falling back to engine defaults for missing values.
+   */
+  private dbThemeColors(styles: unknown): ThemeColors {
+    const s = (styles ?? {}) as Record<string, unknown>;
+    const c = (s.colors ?? {}) as Record<string, unknown>;
+    const pick = (value: unknown, fallback: string): string =>
+      typeof value === 'string' && value ? value : fallback;
+    return {
+      primaryColor: pick(c.primaryColor, this.defaultColors.primaryColor),
+      backgroundColor: pick(
+        c.backgroundColor,
+        this.defaultColors.backgroundColor,
+      ),
+      cardColor: pick(c.cardColor, this.defaultColors.cardColor),
+      textColor: pick(c.textColor, this.defaultColors.textColor),
+      labelColor: pick(c.textColor, this.defaultColors.labelColor),
+      inputBorderColor: pick(
+        c.borderColor,
+        this.defaultColors.inputBorderColor,
+      ),
+      inputBgColor: pick(c.cardColor, this.defaultColors.inputBgColor),
+      mutedColor: pick(c.textSecondaryColor, this.defaultColors.mutedColor),
+    };
+  }
+
+  /**
+   * Builds the per-realm `theme` override object consumed by `resolveColors`
+   * from a DB-backed theme's styles and assets. Only string values that are
+   * present are emitted so unset fields fall back to the base theme defaults.
+   */
+  private dbThemeRealmOverrides(theme: {
+    styles: unknown;
+    assets: unknown;
+  }): Record<string, string> {
+    const styles = (theme.styles ?? {}) as Record<string, unknown>;
+    const colors = (styles.colors ?? {}) as Record<string, unknown>;
+    const assets = (theme.assets ?? {}) as Record<string, unknown>;
+    const overrides: Record<string, string> = {};
+    const set = (key: string, value: unknown): void => {
+      if (typeof value === 'string' && value) overrides[key] = value;
+    };
+    set('primaryColor', colors.primaryColor);
+    set('primaryHoverColor', colors.primaryHoverColor);
+    set('backgroundColor', colors.backgroundColor);
+    set('cardColor', colors.cardColor);
+    set('textColor', colors.textColor);
+    set('labelColor', colors.textColor);
+    set('inputBorderColor', colors.borderColor);
+    set('inputBgColor', colors.cardColor);
+    set('mutedColor', colors.textSecondaryColor);
+    set('customCss', styles.customCss);
+    set('logoUrl', assets.logoUrl ?? assets.logo);
+    set('faviconUrl', assets.faviconUrl ?? assets.favicon);
+    return overrides;
+  }
+
+  /**
    * Returns the theme inheritance chain from child to root.
    * E.g., for "dark" with parent "idenplane": ["dark", "idenplane"]
    */
@@ -120,6 +219,20 @@ export class ThemeService implements OnModuleInit {
       chain.push(current);
       const theme = this.themes.get(current);
       current = theme?.parent ?? null;
+    }
+
+    // If the chain contains no known filesystem theme (e.g. the realm points at
+    // a DB-backed theme that has no templates/messages/CSS on disk), fall back
+    // to the default base theme so templates, messages, and CSS still resolve
+    // instead of rendering raw message keys with no styling.
+    const DEFAULT_BASE = 'idenplane';
+    const hasFsTheme = chain.some((t) => this.themes.has(t));
+    if (
+      !hasFsTheme &&
+      this.themes.has(DEFAULT_BASE) &&
+      !chain.includes(DEFAULT_BASE)
+    ) {
+      chain.push(DEFAULT_BASE);
     }
 
     return chain;
@@ -426,6 +539,11 @@ export class ThemeService implements OnModuleInit {
       realmUpdate.emailTheme = theme.name;
     }
     realmUpdate.themeName = theme.name;
+
+    // Map the DB theme's colors/customCss/assets onto the realm's `theme`
+    // override field so the rendering pipeline (which inherits templates and
+    // messages from the base filesystem theme) reflects the activated theme.
+    realmUpdate.theme = this.dbThemeRealmOverrides(theme);
 
     await this.prisma.realm.update({
       where: { id: theme.realmId },
