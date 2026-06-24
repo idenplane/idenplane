@@ -1,7 +1,7 @@
 import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
+import apiClient, { clearCredentials, setCredentials } from '../api/client';
 import { getAllRealms } from '../api/realms';
-import apiClient, { setCredentials, clearCredentials } from '../api/client';
 import { useAuthContext } from '../context/AuthContext';
 
 export function useAuth() {
@@ -39,6 +39,10 @@ export function useAuth() {
       try {
         const { data } = await apiClient.post('/auth/login', { username, password });
         if (data.access_token) {
+          // The backend also sets an httpOnly IDENPLANE_ADMIN_SESSION cookie
+          // for persistence across reloads. We keep the token in memory too
+          // so the axios interceptor can attach it as a Bearer header (the
+          // cookie alone would also work, but this is belt-and-suspenders).
           setCredentials({ token: data.access_token });
           setToken(data.access_token);
           return true;

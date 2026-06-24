@@ -1,19 +1,19 @@
 import {
-  Injectable,
-  NotFoundException,
-  type OnModuleInit,
-  Logger,
+    Injectable,
+    Logger,
+    NotFoundException,
+    type OnModuleInit,
 } from '@nestjs/common';
 import type { Prisma, Realm } from '@prisma/client';
-import { join } from 'path';
 import { readdir, readFile } from 'fs/promises';
+import { join } from 'path';
 import { PrismaService } from '../prisma/prisma.service.js';
 import type {
-  ThemeColors,
-  ThemeDefinition,
-  ThemeInfo,
-  ThemeType,
-  ResolvedTheme,
+    ResolvedTheme,
+    ThemeColors,
+    ThemeDefinition,
+    ThemeInfo,
+    ThemeType,
 } from './theme.types.js';
 
 function darkenHex(hex: string, percent: number): string {
@@ -245,9 +245,25 @@ export class ThemeService implements OnModuleInit {
     });
   }
 
-  async findAllByRealm(realmId: string) {
+  async findAllByRealm(
+    realmId: string,
+    filters?: {
+      themeType?: string;
+      status?: 'draft' | 'published' | 'archived';
+      isActive?: boolean;
+    },
+  ) {
+    const where: Prisma.ThemeWhereInput = { realmId };
+    if (filters?.themeType && filters.themeType !== 'full') {
+      where.themeType = filters.themeType;
+    }
+    if (filters?.status === 'published') {
+      where.published = true;
+    } else if (filters?.status === 'draft') {
+      where.published = false;
+    }
     return this.prisma.theme.findMany({
-      where: { realmId },
+      where,
       orderBy: { updatedAt: 'desc' },
     });
   }
@@ -334,5 +350,223 @@ export class ThemeService implements OnModuleInit {
         version: currentTheme.version + 1,
       },
     });
+  }
+
+  /**
+   * Soft-archive a theme so it no longer appears in the default list but is
+   * not deleted. Archived themes can be restored by updating `published`.
+   */
+  async archiveTheme(themeId: string) {
+    const theme = await this.prisma.theme.findUnique({
+      where: { id: themeId },
+    });
+    if (!theme) {
+      throw new NotFoundException(`Theme with ID '${themeId}' not found`);
+    }
+    return this.prisma.theme.update({
+      where: { id: themeId },
+      data: { published: false },
+    });
+  }
+
+  /**
+   * Duplicate a theme (including styles/components/assets/settings) under a
+   * new name within the same realm. The copy starts as a draft.
+   */
+  async duplicateTheme(themeId: string, newName: string) {
+    const theme = await this.prisma.theme.findUnique({
+      where: { id: themeId },
+    });
+    if (!theme) {
+      throw new NotFoundException(`Theme with ID '${themeId}' not found`);
+    }
+    return this.prisma.theme.create({
+      data: {
+        realmId: theme.realmId,
+        name: newName,
+        displayName: newName,
+        description: theme.description,
+        themeType: theme.themeType,
+        styles: theme.styles as Prisma.InputJsonValue,
+        components: theme.components as unknown as Prisma.InputJsonValue,
+        assets: theme.assets as Prisma.InputJsonValue,
+        settings: theme.settings as Prisma.InputJsonValue,
+        published: false,
+        version: 1,
+      },
+    });
+  }
+
+  /**
+   * Set a theme as the active theme for its type on its realm. This updates
+   * the realm's loginTheme/accountTheme/emailTheme field so the rendering
+   * pipeline picks it up. Only published themes can be activated.
+   */
+  async activateTheme(themeId: string) {
+    const theme = await this.prisma.theme.findUnique({
+      where: { id: themeId },
+      include: { realm: true },
+    });
+    if (!theme) {
+      throw new NotFoundException(`Theme with ID '${themeId}' not found`);
+    }
+    if (!theme.published) {
+      throw new Error('Only published themes can be activated');
+    }
+
+    const themeType = theme.themeType as 'login' | 'account' | 'email' | 'full';
+    const realmUpdate: Prisma.RealmUpdateInput = {};
+    if (themeType === 'login' || themeType === 'full') {
+      realmUpdate.loginTheme = theme.name;
+    }
+    if (themeType === 'account' || themeType === 'full') {
+      realmUpdate.accountTheme = theme.name;
+    }
+    if (themeType === 'email' || themeType === 'full') {
+      realmUpdate.emailTheme = theme.name;
+    }
+    realmUpdate.themeName = theme.name;
+
+    await this.prisma.realm.update({
+      where: { id: theme.realmId },
+      data: realmUpdate,
+    });
+
+    return this.prisma.theme.update({
+      where: { id: themeId },
+      data: { published: true },
+    });
+  }
+
+  /**
+   * Export a theme's full configuration as a plain JSON object (suitable for
+   * re-import via `importTheme`).
+   */
+  async exportTheme(themeId: string) {
+    const theme = await this.prisma.theme.findUnique({
+      where: { id: themeId },
+    });
+    if (!theme) {
+      throw new NotFoundException(`Theme with ID '${themeId}' not found`);
+    }
+    return {
+      version: '1.0',
+      name: theme.name,
+      displayName: theme.displayName,
+      description: theme.description,
+      themeType: theme.themeType,
+      styles: theme.styles,
+      components: theme.components,
+      assets: theme.assets,
+      settings: theme.settings,
+      exportedAt: new Date().toISOString(),
+    };
+  }
+
+  /**
+   * Import a theme from an exported JSON object. When `overwrite` is true and a
+   * theme with the same name exists in the realm, it is updated in place;
+   * otherwise a new theme is created. When `activate` is true, the imported
+   * theme is also activated on its realm.
+   */
+  async importTheme(
+    realmId: string,
+    payload: Record<string, unknown>,
+    options: { overwrite?: boolean; activate?: boolean } = {},
+  ) {
+    const name = String(payload['name'] ?? '');
+    if (!name) {
+      throw new Error('Import payload is missing a "name" field');
+    }
+
+    const data: Prisma.ThemeCreateInput | Prisma.ThemeUpdateInput = {
+      displayName: payload['displayName'] as string | null,
+      description: payload['description'] as string | null,
+      themeType: (payload['themeType'] as string) ?? 'login',
+      styles: (payload['styles'] ?? {}) as Prisma.InputJsonValue,
+      components: (payload['components'] ??
+        []) as unknown as Prisma.InputJsonValue,
+      assets: (payload['assets'] ?? {}) as Prisma.InputJsonValue,
+      settings: (payload['settings'] ?? {}) as Prisma.InputJsonValue,
+    };
+
+    const existing = await this.prisma.theme.findUnique({
+      where: { realmId_name: { realmId, name } },
+    });
+
+    let theme;
+    if (existing && options.overwrite) {
+      theme = await this.prisma.theme.update({
+        where: { id: existing.id },
+        data: data,
+      });
+    } else if (existing && !options.overwrite) {
+      throw new Error(
+        `A theme named '${name}' already exists in this realm. Use overwrite=true to replace it.`,
+      );
+    } else {
+      theme = await this.prisma.theme.create({
+        data: {
+          realmId,
+          name,
+          displayName: payload['displayName'] as string | null,
+          description: payload['description'] as string | null,
+          themeType: (payload['themeType'] as string) ?? 'login',
+          styles: payload['styles'] ?? {},
+          components: payload['components'] ?? [],
+          assets: payload['assets'] ?? {},
+          settings: payload['settings'] ?? {},
+        },
+      });
+    }
+
+    if (options.activate) {
+      await this.activateTheme(theme.id);
+    }
+
+    return theme;
+  }
+
+  /**
+   * Return the built-in theme definitions as "templates" the builder can seed
+   * from. Each template includes the theme's colors as a starting point.
+   *
+   * The backend `ThemeColors` type only carries the 8 core color fields used by
+   * the rendering pipeline; the admin-ui `ThemeColors` extends that with
+   * hover/active/secondary/surface/border/status colors. We map the core
+   * fields and provide sensible defaults for the extended fields so the
+   * returned template is shape-compatible with the frontend `ThemeStyles`.
+   */
+  getThemeTemplates() {
+    return Array.from(this.themes.values()).map(
+      ({ name, displayName, description, colors }) => ({
+        id: name,
+        name: displayName ?? name,
+        description: description ?? '',
+        previewImage: '',
+        themeType: 'login' as const,
+        styles: {
+          colors: {
+            primaryColor: colors?.primaryColor ?? '#2563eb',
+            primaryHoverColor: '#1d4ed8',
+            primaryActiveColor: '#1e40af',
+            secondaryColor: '#64748b',
+            backgroundColor: colors?.backgroundColor ?? '#f8fafc',
+            cardColor: colors?.cardColor ?? '#ffffff',
+            surfaceColor: '#f1f5f9',
+            textColor: colors?.textColor ?? '#1e293b',
+            textSecondaryColor: colors?.mutedColor ?? '#64748b',
+            borderColor: colors?.inputBorderColor ?? '#e2e8f0',
+            errorColor: '#dc2626',
+            warningColor: '#f59e0b',
+            successColor: '#16a34a',
+            infoColor: '#0ea5e9',
+          },
+        },
+        components: [],
+        assets: {},
+        settings: {},
+      }),
+    );
   }
 }

@@ -17,16 +17,22 @@ export interface Theme {
   id: string;
   realmId: string;
   name: string;
+  displayName?: string | null;
   description: string | null;
   themeType: ThemeType;
-  isBuiltIn: boolean;
-  isActive: boolean;
+  /** Whether this theme is a built-in (filesystem) theme. Not returned by the DB-backed API. */
+  isBuiltIn?: boolean;
+  /** Whether this theme is the active theme for its type on its realm. Not returned by the DB-backed API. */
+  isActive?: boolean;
   styles: ThemeStyles;
   components: ThemeComponent[];
   assets: ThemeAssets;
   settings: ThemeSettings;
   version: number;
-  status: ThemeStatus;
+  /** Backend flag indicating the theme is published. */
+  published?: boolean;
+  /** Frontend-derived status. Computed from `published` when not returned by the API. */
+  status?: ThemeStatus;
   createdAt: string;
   updatedAt: string;
   publishedAt: string | null;

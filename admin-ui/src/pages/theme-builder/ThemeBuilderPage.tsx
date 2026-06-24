@@ -1,25 +1,32 @@
-import { useState, useCallback, useRef, useEffect } from 'react';
+import { useQuery } from '@tanstack/react-query';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
+import {
+  createTheme,
+  getThemes,
+  publishTheme,
+  rollbackTheme,
+  updateTheme,
+} from '../../api/themes';
 import type {
-  ThemeStyles,
-  ThemeComponent,
-  ThemeAssets,
-  ThemeSettings,
-  ThemeVersion,
   ThemeComponent as DraggableComponent,
+  ThemeAssets,
+  ThemeComponent,
+  ThemeSettings,
+  ThemeStyles,
+  ThemeVersion,
 } from '../../types/theme';
 import {
-  DEFAULT_THEME_STYLES,
-  DEFAULT_THEME_COMPONENTS,
   DEFAULT_THEME_ASSETS,
+  DEFAULT_THEME_COMPONENTS,
   DEFAULT_THEME_SETTINGS,
+  DEFAULT_THEME_STYLES,
 } from '../../types/theme';
-import { rollbackTheme, updateTheme, publishTheme } from '../../api/themes';
 import ComponentPalette from './ComponentPalette';
-import ThemeCanvas from './ThemeCanvas';
+import ImageUploader from './ImageUploader';
 import LivePreview from './LivePreview';
 import StyleEditor from './StyleEditor';
-import ImageUploader from './ImageUploader';
+import ThemeCanvas from './ThemeCanvas';
 import ThemeTemplates from './ThemeTemplates';
 import ThemeVersionHistory from './ThemeVersionHistory';
 
@@ -56,9 +63,40 @@ export default function ThemeBuilderPage() {
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
-  // Placeholder theme state (would come from API in real implementation)
-  const [themeId] = useState<string>('demo-theme-id');
-  const [currentVersion, setCurrentVersion] = useState<number>(1);
+  // ── Theme list + active theme resolution ───────────────────────────────────
+  //
+  // Fetch all themes for the realm. We then pick the first published theme
+  // (or the first overall) as the one being edited. If no theme exists yet,
+  // we create a draft on first save. This replaces the old 'demo-theme-id'
+  // placeholder so the builder is fully wired to the backend.
+
+  const {
+    data: themes,
+    isLoading: themesLoading,
+    refetch: refetchThemes,
+  } = useQuery({
+    queryKey: ['themes', realmName],
+    queryFn: () => getThemes(realmName || ''),
+    enabled: !!realmName,
+  });
+
+  const activeTheme = themes?.find((t) => t.published) ?? themes?.[0] ?? null;
+  const themeId = activeTheme?.id ?? null;
+  const [currentVersion, setCurrentVersion] = useState<number>(activeTheme?.version ?? 1);
+
+  // When the active theme changes (or loads for the first time), hydrate the
+  // editor state from its server-side styles/components/assets/settings.
+  useEffect(() => {
+    if (!activeTheme) return;
+    if (activeTheme.styles) setStyles(activeTheme.styles as ThemeStyles);
+    if (Array.isArray(activeTheme.components))
+      setComponents(activeTheme.components as ThemeComponent[]);
+    if (activeTheme.assets) setAssets((prev) => ({ ...prev, ...activeTheme.assets }));
+    if (activeTheme.settings) setSettings((prev) => ({ ...prev, ...activeTheme.settings }));
+    if (activeTheme.version) setCurrentVersion(activeTheme.version);
+    // Only re-hydrate when the theme id changes — not on every keystroke.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [themeId]);
 
   // ── Rollback notification state ────────────────────────────────────────────
 
@@ -85,19 +123,33 @@ export default function ThemeBuilderPage() {
 
   const handleSave = useCallback(async (reason: 'manual' | 'auto-save' = 'manual') => {
     if (isSaving) return;
-    if (!themeId) return;
 
     setIsSaving(true);
     setSaveError(null);
 
     try {
       const currentState = themeStateRef.current;
-      await updateTheme(realmName || '', themeId, {
-        styles: currentState.styles,
-        components: currentState.components,
-        assets: currentState.assets,
-        settings: currentState.settings,
-      });
+      if (themeId) {
+        // Update the existing theme.
+        await updateTheme(realmName || '', themeId, {
+          styles: currentState.styles,
+          components: currentState.components,
+          assets: currentState.assets,
+          settings: currentState.settings,
+        });
+      } else {
+        // No theme exists yet for this realm — create a draft and remember it.
+        await createTheme(realmName || '', {
+          name: `${realmName || 'realm'}-login`,
+          themeType: 'login',
+          styles: currentState.styles,
+          components: currentState.components,
+          assets: currentState.assets,
+          settings: currentState.settings,
+        });
+        // Refresh the list so activeTheme resolves to the newly created theme.
+        await refetchThemes();
+      }
       setLastSaved(new Date());
       setHasUnsavedChanges(false);
     } catch (err) {
@@ -110,7 +162,7 @@ export default function ThemeBuilderPage() {
     } finally {
       setIsSaving(false);
     }
-  }, [realmName, themeId, isSaving]);
+  }, [realmName, themeId, isSaving, refetchThemes]);
 
   // Ref to track the latest handleSave for use in effect
   const handleSaveRef = useRef(handleSave);
@@ -157,18 +209,27 @@ export default function ThemeBuilderPage() {
 
   const handlePublish = useCallback(async () => {
     if (isPublishing) return;
-    if (!themeId) return;
 
     setIsPublishing(true);
     setSaveError(null);
     setPublishSuccess(null);
 
     try {
-      // First save any pending changes
+      // First save any pending changes (this also creates the theme if none exists yet).
       await handleSave('manual');
 
+      // After save, refetch to resolve the themeId if it was just created.
+      let id = themeId;
+      if (!id) {
+        const refreshed = await refetchThemes();
+        id = (refreshed.data?.find((t) => t.published) ?? refreshed.data?.[0])?.id ?? null;
+      }
+      if (!id) {
+        throw new Error('Could not resolve a theme to publish');
+      }
+
       // Then publish
-      const result = await publishTheme(realmName || '', themeId);
+      const result = await publishTheme(realmName || '', id);
 
       // Update version number from published result
       if (result.version) {
@@ -184,7 +245,7 @@ export default function ThemeBuilderPage() {
     } finally {
       setIsPublishing(false);
     }
-  }, [realmName, themeId, isPublishing, handleSave]);
+  }, [realmName, themeId, isPublishing, handleSave, refetchThemes]);
 
   // ── Rollback handler ─────────────────────────────────────────────────────
 
@@ -193,13 +254,15 @@ export default function ThemeBuilderPage() {
     setRollbackSuccess(null);
 
     try {
-      const updatedTheme = await rollbackTheme(realmName || '', themeId, version.id);
+      // The backend restore endpoint expects the numeric version number,
+      // not the version UUID. Use `version.version` here.
+      const updatedTheme = await rollbackTheme(realmName || '', themeId!, String(version.version));
       // Update theme state with the rolled-back data
       if (updatedTheme.styles) {
-        setStyles(updatedTheme.styles);
+        setStyles(updatedTheme.styles as ThemeStyles);
       }
       if (updatedTheme.components) {
-        setComponents(updatedTheme.components);
+        setComponents(updatedTheme.components as ThemeComponent[]);
       }
       if (updatedTheme.assets) {
         setAssets((prev) => ({ ...prev, ...updatedTheme.assets }));
@@ -320,6 +383,17 @@ export default function ThemeBuilderPage() {
 
   // ── Render ──────────────────────────────────────────────────────────────
 
+  if (themesLoading) {
+    return (
+      <div className="flex h-full items-center justify-center">
+        <div className="flex flex-col items-center gap-3 text-gray-500">
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-300 border-t-indigo-600" />
+          <span className="text-sm">Loading themes…</span>
+        </div>
+      </div>
+    );
+  }
+
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
@@ -420,21 +494,19 @@ export default function ThemeBuilderPage() {
           )}
           <button
             onClick={() => setActiveSection('canvas')}
-            className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
-              activeSection === 'canvas'
-                ? 'bg-indigo-100 text-indigo-700'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
+            className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${activeSection === 'canvas'
+              ? 'bg-indigo-100 text-indigo-700'
+              : 'text-gray-600 hover:bg-gray-100'
+              }`}
           >
             Editor
           </button>
           <button
             onClick={() => setActiveSection('preview')}
-            className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
-              activeSection === 'preview'
-                ? 'bg-indigo-100 text-indigo-700'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
+            className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${activeSection === 'preview'
+              ? 'bg-indigo-100 text-indigo-700'
+              : 'text-gray-600 hover:bg-gray-100'
+              }`}
           >
             Preview Only
           </button>
@@ -466,21 +538,19 @@ export default function ThemeBuilderPage() {
           <div className="flex border-b border-gray-200 bg-white px-4">
             <button
               onClick={() => setActiveSection('canvas')}
-              className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-                activeSection === 'canvas'
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+              className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${activeSection === 'canvas'
+                ? 'border-indigo-500 text-indigo-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
             >
               Canvas
             </button>
             <button
               onClick={() => setActiveSection('preview')}
-              className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
-                activeSection === 'preview'
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-              }`}
+              className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${activeSection === 'preview'
+                ? 'border-indigo-500 text-indigo-600'
+                : 'border-transparent text-gray-500 hover:text-gray-700'
+                }`}
             >
               Preview
             </button>
@@ -520,51 +590,46 @@ export default function ThemeBuilderPage() {
             <div className="flex border-b border-gray-200 bg-white">
               <button
                 onClick={() => setEditorPanel('canvas')}
-                className={`flex-1 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
-                  editorPanel === 'canvas'
-                    ? 'border-indigo-500 text-indigo-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
+                className={`flex-1 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${editorPanel === 'canvas'
+                  ? 'border-indigo-500 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
               >
                 Preview
               </button>
               <button
                 onClick={() => setEditorPanel('styles')}
-                className={`flex-1 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
-                  editorPanel === 'styles'
-                    ? 'border-indigo-500 text-indigo-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
+                className={`flex-1 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${editorPanel === 'styles'
+                  ? 'border-indigo-500 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
               >
                 Styles
               </button>
               <button
                 onClick={() => setEditorPanel('assets')}
-                className={`flex-1 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
-                  editorPanel === 'assets'
-                    ? 'border-indigo-500 text-indigo-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
+                className={`flex-1 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${editorPanel === 'assets'
+                  ? 'border-indigo-500 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
               >
                 Assets
               </button>
               <button
                 onClick={() => setEditorPanel('templates')}
-                className={`flex-1 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
-                  editorPanel === 'templates'
-                    ? 'border-indigo-500 text-indigo-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
+                className={`flex-1 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${editorPanel === 'templates'
+                  ? 'border-indigo-500 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
               >
                 Templates
               </button>
               <button
                 onClick={() => setEditorPanel('history')}
-                className={`flex-1 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
-                  editorPanel === 'history'
-                    ? 'border-indigo-500 text-indigo-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
+                className={`flex-1 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${editorPanel === 'history'
+                  ? 'border-indigo-500 text-indigo-600'
+                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  }`}
               >
                 History
               </button>
@@ -593,7 +658,7 @@ export default function ThemeBuilderPage() {
             ) : editorPanel === 'history' ? (
               <div className="flex flex-col h-full">
                 <ThemeVersionHistory
-                  themeId={themeId}
+                  themeId={themeId || ''}
                   realmName={realmName || ''}
                   currentVersion={currentVersion}
                   onRollback={handleRollback}

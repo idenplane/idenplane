@@ -1,19 +1,19 @@
 import {
-  CanActivate,
-  ExecutionContext,
-  Injectable,
-  UnauthorizedException,
-  HttpException,
-  HttpStatus,
+    CanActivate,
+    ExecutionContext,
+    HttpException,
+    HttpStatus,
+    Injectable,
+    UnauthorizedException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import type { Request, Response } from 'express';
 import { Reflector } from '@nestjs/core';
 import { timingSafeEqual } from 'crypto';
-import { IS_PUBLIC_KEY } from '../decorators/public.decorator.js';
+import type { Request, Response } from 'express';
 import { AdminAuthService } from '../../admin-auth/admin-auth.service.js';
-import { RateLimitService } from '../../rate-limit/rate-limit.service.js';
 import type { RateLimitResult } from '../../rate-limit/rate-limit.dto.js';
+import { RateLimitService } from '../../rate-limit/rate-limit.service.js';
+import { IS_PUBLIC_KEY } from '../decorators/public.decorator.js';
 import { resolveClientIp } from '../utils/proxy-ip.util.js';
 
 @Injectable()
@@ -47,10 +47,16 @@ export class AdminApiKeyGuard implements CanActivate {
     };
     const adminReq = request as AdminRequest;
 
-    // Try Bearer token (admin JWT) first
+    // Try Bearer token (admin JWT) first — either from the Authorization
+    // header or, as a fallback for full-page reloads, from the httpOnly
+    // IDENPLANE_ADMIN_SESSION cookie set on login.
     const authHeader = request.headers['authorization'];
-    if (authHeader && authHeader.startsWith('Bearer ')) {
-      const token = authHeader.slice(7);
+    const cookieToken = (request as Request & { cookies?: Record<string, string | undefined> }).cookies?.['IDENPLANE_ADMIN_SESSION'];
+    const token =
+      authHeader && authHeader.startsWith('Bearer ')
+        ? authHeader.slice(7)
+        : cookieToken;
+    if (token) {
       try {
         const adminUser = await this.adminAuthService.validateAdminToken(token);
         adminReq.adminUser = adminUser;

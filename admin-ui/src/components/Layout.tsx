@@ -1,11 +1,11 @@
-import { useState, useEffect, useRef } from 'react';
-import { NavLink, Outlet, useParams, useNavigate, useLocation } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
+import { useEffect, useRef, useState } from 'react';
+import { NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { getAllRealms } from '../api/realms';
 import { useAuth } from '../hooks/useAuth';
 import Breadcrumbs from './Breadcrumbs';
-import { Icons, cn } from './ui';
 import type { IconProps } from './ui';
+import { Icons, cn } from './ui';
 
 type NavItem = { to: string; label: string; icon: (p: IconProps) => React.JSX.Element; end?: boolean };
 
@@ -41,22 +41,23 @@ export default function Layout() {
 
   const navItems: NavItem[] = currentRealm
     ? [
-        { to: `/console/realms/${currentRealm}`, label: 'Overview', icon: Icons.Activity },
-        { to: `/console/realms/${currentRealm}/users`, label: 'Users', icon: Icons.Users },
-        { to: `/console/realms/${currentRealm}/clients`, label: 'Clients', icon: Icons.Clients },
-        { to: `/console/realms/${currentRealm}/roles`, label: 'Roles', icon: Icons.Roles },
-        { to: `/console/realms/${currentRealm}/groups`, label: 'Groups', icon: Icons.Groups },
-        { to: `/console/realms/${currentRealm}/client-scopes`, label: 'Client Scopes', icon: Icons.Code },
-        { to: `/console/realms/${currentRealm}/consent-categories`, label: 'Consent Categories', icon: Icons.ShieldCheck },
-        { to: `/console/realms/${currentRealm}/consent-statistics`, label: 'Consent Statistics', icon: Icons.Trend },
-        { to: `/console/realms/${currentRealm}/sessions`, label: 'Sessions', icon: Icons.Sessions },
-        { to: `/console/realms/${currentRealm}/events`, label: 'Events', icon: Icons.Events },
-        { to: `/console/realms/${currentRealm}/admin-events`, label: 'Admin Events', icon: Icons.Clock },
-        { to: `/console/realms/${currentRealm}/user-federation`, label: 'User Federation', icon: Icons.Database },
-        { to: `/console/realms/${currentRealm}/identity-providers`, label: 'Identity Providers', icon: Icons.Idp },
-        { to: `/console/realms/${currentRealm}/saml-providers`, label: 'SAML Providers', icon: Icons.Globe },
-        { to: `/console/realms/${currentRealm}/auth-flows`, label: 'Auth Flows', icon: Icons.Build },
-      ]
+      { to: `/console/realms/${currentRealm}`, label: 'Overview', icon: Icons.Activity },
+      { to: `/console/realms/${currentRealm}/users`, label: 'Users', icon: Icons.Users },
+      { to: `/console/realms/${currentRealm}/clients`, label: 'Clients', icon: Icons.Clients },
+      { to: `/console/realms/${currentRealm}/roles`, label: 'Roles', icon: Icons.Roles },
+      { to: `/console/realms/${currentRealm}/groups`, label: 'Groups', icon: Icons.Groups },
+      { to: `/console/realms/${currentRealm}/client-scopes`, label: 'Client Scopes', icon: Icons.Code },
+      { to: `/console/realms/${currentRealm}/consent-categories`, label: 'Consent Categories', icon: Icons.ShieldCheck },
+      { to: `/console/realms/${currentRealm}/consent-statistics`, label: 'Consent Statistics', icon: Icons.Trend },
+      { to: `/console/realms/${currentRealm}/sessions`, label: 'Sessions', icon: Icons.Sessions },
+      { to: `/console/realms/${currentRealm}/events`, label: 'Events', icon: Icons.Events },
+      { to: `/console/realms/${currentRealm}/admin-events`, label: 'Admin Events', icon: Icons.Clock },
+      { to: `/console/realms/${currentRealm}/user-federation`, label: 'User Federation', icon: Icons.Database },
+      { to: `/console/realms/${currentRealm}/identity-providers`, label: 'Identity Providers', icon: Icons.Idp },
+      { to: `/console/realms/${currentRealm}/saml-providers`, label: 'SAML Providers', icon: Icons.Globe },
+      { to: `/console/realms/${currentRealm}/auth-flows`, label: 'Auth Flows', icon: Icons.Build },
+      { to: `/console/realms/${currentRealm}/themes`, label: 'Theme Builder', icon: Icons.Palette },
+    ]
     : [];
 
   const globalNav: NavItem[] = [

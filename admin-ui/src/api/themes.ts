@@ -1,13 +1,13 @@
-import apiClient from './client';
 import type {
-  Theme,
-  ThemeVersion,
-  ThemeTemplate,
-  ThemeStyles,
-  ThemeComponent,
-  ThemeAssets,
-  ThemeSettings,
+    Theme,
+    ThemeAssets,
+    ThemeComponent,
+    ThemeSettings,
+    ThemeStyles,
+    ThemeTemplate,
+    ThemeVersion,
 } from '../types/theme';
+import apiClient from './client';
 
 export interface CreateThemePayload {
   name: string;
@@ -75,7 +75,7 @@ export async function updateTheme(
   id: string,
   payload: UpdateThemePayload,
 ): Promise<Theme> {
-  const { data } = await apiClient.patch<Theme>(
+  const { data } = await apiClient.put<Theme>(
     `/realms/${realmName}/themes/${id}`,
     payload,
   );

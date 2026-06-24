@@ -1,10 +1,22 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-VERSION="${1:-}"
+DRY_RUN=false
+VERSION=""
+
+for arg in "$@"; do
+    case "$arg" in
+        --dry)
+            DRY_RUN=true
+            ;;
+        *)
+            VERSION="$arg"
+            ;;
+    esac
+done
 
 if [ -z "$VERSION" ]; then
-	echo "Usage: sh build.sh <version>"
+	echo "Usage: sh publish.sh [--dry] <version>"
 	exit 1
 fi
 
@@ -16,5 +28,7 @@ docker build \
 	-t "$PREFIX:$VERSION" \
 	--platform linux/amd64 .
 
-docker push "$PREFIX:latest"
-docker push "$PREFIX:$VERSION"
+if [ "$DRY_RUN" = false ]; then
+	docker push "$PREFIX:latest"
+	docker push "$PREFIX:$VERSION"
+fi
