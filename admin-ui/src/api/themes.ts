@@ -20,6 +20,8 @@ export interface CreateThemePayload {
 }
 
 export interface UpdateThemePayload {
+  /** Human-readable theme name shown in the builder and theme list. */
+  displayName?: string;
   description?: string;
   styles?: Partial<ThemeStyles>;
   components?: ThemeComponent[];

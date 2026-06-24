@@ -19,8 +19,8 @@ services:
       POSTGRES_USER: idenplane
       POSTGRES_PASSWORD: idenplane
       POSTGRES_DB: idenplane
-    ports:
-      - "127.0.0.1:5432:5432"
+    # ports:
+    #   - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:

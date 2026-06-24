@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useCallback, useEffect, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   createTheme,
@@ -23,7 +23,9 @@ import {
   DEFAULT_THEME_SETTINGS,
   DEFAULT_THEME_STYLES,
 } from '../../types/theme';
+import ComponentInspector from './ComponentInspector';
 import ImageUploader from './ImageUploader';
+import InspectorSection from './InspectorSection';
 import LivePreview from './LivePreview';
 import StyleEditor from './StyleEditor';
 import ThemeCanvas from './ThemeCanvas';
@@ -34,13 +36,15 @@ import ThemeVersionHistory from './ThemeVersionHistory';
 
 type ViewportSize = 'desktop' | 'tablet' | 'mobile';
 
-// ─── Layout sections ──────────────────────────────────────────────────────────
+// ─── Builder step ─────────────────────────────────────────────────────────────
 
-type LayoutSection = 'canvas' | 'preview';
+type BuilderStep = 'design' | 'preview' | 'publish';
 
-// ─── Editor panel type ────────────────────────────────────────────────────────
-
-type EditorPanel = 'palette' | 'canvas' | 'styles' | 'assets' | 'templates' | 'history';
+const STEPS: { id: BuilderStep; label: string }[] = [
+  { id: 'design', label: 'Design' },
+  { id: 'preview', label: 'Preview' },
+  { id: 'publish', label: 'Publish' },
+];
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -59,10 +63,17 @@ export default function ThemeBuilderPage() {
 
   const [viewportSize, setViewportSize] = useState<ViewportSize>('desktop');
   const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
-  const [activeSection, setActiveSection] = useState<LayoutSection>('canvas');
-  const [editorPanel, setEditorPanel] = useState<EditorPanel>('canvas');
+  const [step, setStep] = useState<BuilderStep>('design');
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+
+  // Theme selected via the in-builder switcher. Takes precedence over the
+  // route param / first-published fallback once the user picks one.
+  const [selectedThemeId, setSelectedThemeId] = useState<string | null>(null);
+
+  // Inline rename state.
+  const [isRenaming, setIsRenaming] = useState(false);
+  const [renameValue, setRenameValue] = useState('');
 
   // ── Theme list + active theme resolution ───────────────────────────────────
   //
@@ -81,11 +92,15 @@ export default function ThemeBuilderPage() {
     enabled: !!realmName,
   });
 
-  // When a specific themeId is in the URL, edit that theme; otherwise fall back
-  // to the first published theme, then the first overall.
-  const activeTheme = routeThemeId
-    ? (themes?.find((t) => t.id === routeThemeId) ?? themes?.[0] ?? null)
-    : (themes?.find((t) => t.published) ?? themes?.[0] ?? null);
+  // Resolve the theme being edited. Priority:
+  //   1. The theme chosen via the in-builder switcher (`selectedThemeId`).
+  //   2. The theme id from the URL (edit route).
+  //   3. The first published theme, then the first overall.
+  const activeTheme =
+    (selectedThemeId ? themes?.find((t) => t.id === selectedThemeId) : undefined) ??
+    (routeThemeId
+      ? (themes?.find((t) => t.id === routeThemeId) ?? themes?.[0] ?? null)
+      : (themes?.find((t) => t.published) ?? themes?.[0] ?? null));
   const themeId = activeTheme?.id ?? null;
   const [currentVersion, setCurrentVersion] = useState<number>(activeTheme?.version ?? 1);
 
@@ -93,6 +108,9 @@ export default function ThemeBuilderPage() {
   // editor state from its server-side styles/components/assets/settings.
   useEffect(() => {
     if (!activeTheme) return;
+    // Loading an existing theme is not a user edit — suppress the next
+    // change-detection pass so Save/auto-save aren't triggered on load.
+    skipChangeDetectionRef.current = true;
     // Deep-merge server styles with defaults so every nested group
     // (colors, typography, spacing, borders, shadows) always exists. Themes
     // created with partial/empty styles would otherwise crash the editor and
@@ -145,6 +163,15 @@ export default function ThemeBuilderPage() {
   useEffect(() => {
     themeStateRef.current = { styles, components, assets, settings };
   }, [styles, components, assets, settings]);
+
+  // Dedicated baseline used purely for change detection. It is updated *after*
+  // each comparison (inside the auto-save effect), unlike `themeStateRef` which
+  // is refreshed by its own effect before the comparison runs — that ordering
+  // bug previously made the editor never see changes, leaving Save disabled.
+  const changeBaselineRef = useRef({ styles, components, assets, settings });
+  // When set, the next change-detection pass is treated as a hydration (theme
+  // load / rollback) and does not mark the theme as having unsaved changes.
+  const skipChangeDetectionRef = useRef(false);
 
   // ── Save handler ────────────────────────────────────────────────────────────
 
@@ -204,13 +231,25 @@ export default function ThemeBuilderPage() {
   // ── Auto-save effect ────────────────────────────────────────────────────────
 
   useEffect(() => {
-    // Track changes by comparing with ref values
-    const prev = themeStateRef.current;
+    // Compare against the dedicated baseline (updated below), not the
+    // latest-value ref.
+    const prev = changeBaselineRef.current;
     const hasChanges =
       prev.styles !== styles ||
       prev.components !== components ||
       prev.assets !== assets ||
       prev.settings !== settings;
+
+    // Always advance the baseline so the next pass compares against current.
+    changeBaselineRef.current = { styles, components, assets, settings };
+
+    // Hydration (theme load / rollback) changes state too — don't treat that
+    // as an edit that needs saving.
+    if (skipChangeDetectionRef.current) {
+      skipChangeDetectionRef.current = false;
+      setHasUnsavedChanges(false);
+      return;
+    }
 
     if (hasChanges) {
       setHasUnsavedChanges(true);
@@ -301,6 +340,8 @@ export default function ThemeBuilderPage() {
       // The backend restore endpoint expects the numeric version number,
       // not the version UUID. Use `version.version` here.
       const updatedTheme = await rollbackTheme(realmName || '', themeId!, String(version.version));
+      // Restoring a version replaces editor state — treat it like a load.
+      skipChangeDetectionRef.current = true;
       // Update theme state with the rolled-back data
       if (updatedTheme.styles) {
         setStyles(updatedTheme.styles as ThemeStyles);
@@ -341,6 +382,76 @@ export default function ThemeBuilderPage() {
   const handleSelectComponent = useCallback((component: DraggableComponent | null) => {
     setSelectedComponentId(component?.id ?? null);
   }, []);
+
+  // ── Selected component inspector ───────────────────────────────────────────
+
+  const selectedComponent = useMemo(
+    () => components.find((c) => c.id === selectedComponentId) ?? null,
+    [components, selectedComponentId],
+  );
+
+  const handleUpdateComponent = useCallback((updated: ThemeComponent) => {
+    setComponents((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
+  }, []);
+
+  // ── Theme switcher / create / rename ───────────────────────────────────────
+
+  const [isCreatingTheme, setIsCreatingTheme] = useState(false);
+
+  const handleSelectTheme = useCallback((id: string) => {
+    setSelectedThemeId(id);
+    setSelectedComponentId(null);
+  }, []);
+
+  const handleCreateTheme = useCallback(async () => {
+    if (isCreatingTheme) return;
+    setIsCreatingTheme(true);
+    setSaveError(null);
+    try {
+      const count = (themes?.length ?? 0) + 1;
+      const created = await createTheme(realmName || '', {
+        name: `${realmName || 'realm'}-theme-${count}`,
+        themeType: 'login',
+        styles: DEFAULT_THEME_STYLES,
+        components: DEFAULT_THEME_COMPONENTS,
+        assets: DEFAULT_THEME_ASSETS,
+        settings: DEFAULT_THEME_SETTINGS,
+      });
+      await refetchThemes();
+      setSelectedThemeId(created.id);
+      setSelectedComponentId(null);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to create theme');
+    } finally {
+      setIsCreatingTheme(false);
+    }
+  }, [realmName, themes, isCreatingTheme, refetchThemes]);
+
+  const [isSavingName, setIsSavingName] = useState(false);
+
+  const startRename = useCallback(() => {
+    setRenameValue(activeTheme?.displayName || activeTheme?.name || '');
+    setIsRenaming(true);
+  }, [activeTheme]);
+
+  const submitRename = useCallback(async () => {
+    const name = renameValue.trim();
+    if (!themeId || !name) {
+      setIsRenaming(false);
+      return;
+    }
+    setIsSavingName(true);
+    setSaveError(null);
+    try {
+      await updateTheme(realmName || '', themeId, { displayName: name });
+      await refetchThemes();
+      setIsRenaming(false);
+    } catch (err) {
+      setSaveError(err instanceof Error ? err.message : 'Failed to rename theme');
+    } finally {
+      setIsSavingName(false);
+    }
+  }, [realmName, themeId, renameValue, refetchThemes]);
 
   const handleStylesChange = useCallback((updated: ThemeStyles) => {
     setStyles(updated);
@@ -448,19 +559,74 @@ export default function ThemeBuilderPage() {
             Realm: {realmName}
           </span>
           {activeTheme && (
-            <span className="flex items-center gap-2">
-              <span className="text-sm font-medium text-gray-800">
-                {activeTheme.displayName || activeTheme.name}
-              </span>
+            <div className="flex items-center gap-2">
+              <select
+                value={themeId ?? ''}
+                onChange={(e) =>
+                  e.target.value === '__new__'
+                    ? handleCreateTheme()
+                    : handleSelectTheme(e.target.value)
+                }
+                disabled={isCreatingTheme}
+                title="Switch between themes or create a new one"
+                className="rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+              >
+                {(themes ?? []).map((t) => (
+                  <option key={t.id} value={t.id}>
+                    {(t.displayName || t.name) + (t.published ? '' : ' (draft)')}
+                  </option>
+                ))}
+                <option value="__new__">+ New theme…</option>
+              </select>
               <span
                 className={`rounded-full px-2 py-0.5 text-xs font-medium ${activeTheme.published
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-amber-100 text-amber-700'
+                  ? 'bg-green-100 text-green-700'
+                  : 'bg-amber-100 text-amber-700'
                   }`}
               >
                 {activeTheme.published ? 'Published' : 'Draft'}
               </span>
-            </span>
+              {isRenaming ? (
+                <span className="flex items-center gap-1">
+                  <input
+                    autoFocus
+                    value={renameValue}
+                    onChange={(e) => setRenameValue(e.target.value)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter') submitRename();
+                      if (e.key === 'Escape') setIsRenaming(false);
+                    }}
+                    className="w-40 rounded-md border border-gray-300 px-2 py-1 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                  />
+                  <button
+                    onClick={submitRename}
+                    disabled={isSavingName}
+                    className="rounded p-1 text-emerald-600 hover:bg-emerald-50 disabled:opacity-50"
+                    aria-label="Save name"
+                  >
+                    ✓
+                  </button>
+                  <button
+                    onClick={() => setIsRenaming(false)}
+                    className="rounded p-1 text-gray-400 hover:bg-gray-100"
+                    aria-label="Cancel rename"
+                  >
+                    ✕
+                  </button>
+                </span>
+              ) : (
+                <button
+                  onClick={startRename}
+                  title="Rename theme"
+                  aria-label="Rename theme"
+                  className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+                >
+                  <svg className="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
+                    <path d="M13.586 3.586a2 2 0 112.828 2.828l-.793.793-2.828-2.828.793-.793zM11.379 5.793L3 14.172V17h2.828l8.38-8.379-2.83-2.828z" />
+                  </svg>
+                </button>
+              )}
+            </div>
           )}
           {lastSaved && (
             <span className="text-xs text-gray-400">
@@ -526,216 +692,236 @@ export default function ThemeBuilderPage() {
               'Save'
             )}
           </button>
-          {/* Publish button */}
-          <button
-            onClick={handlePublish}
-            disabled={isPublishing || isSaving}
-            title="Publish this theme so it can be activated for the realm"
-            className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
-          >
-            {isPublishing ? (
-              <span className="flex items-center gap-1.5">
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                Publishing...
-              </span>
-            ) : (
-              'Publish'
-            )}
-          </button>
-          {/* Activate button — only shown when a published theme exists */}
-          {activeTheme?.published && (
-            <button
-              onClick={handleActivate}
-              disabled={isActivating || isSaving}
-              className="rounded-md bg-emerald-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
-              title="Set this theme as the active theme for this realm"
-            >
-              {isActivating ? (
-                <span className="flex items-center gap-1.5">
-                  <div className="h-4 w-4 animate-spin rounded-full border-2 border-white/30 border-t-white" />
-                  Activating…
-                </span>
-              ) : (
-                'Activate'
-              )}
-            </button>
-          )}
           {/* Success/Error messages */}
           {saveError && (
             <span className="rounded bg-red-50 px-2 py-1 text-sm text-red-600">
               {saveError}
             </span>
           )}
-          {publishSuccess && (
-            <span className="rounded bg-green-50 px-2 py-1 text-sm text-green-600">
-              {publishSuccess}
-            </span>
+        </div>
+      </div>
+
+      {/* Step progress indicator */}
+      <div className="flex items-center border-b border-gray-200 bg-white px-6 py-2.5">
+        {STEPS.map((s, i) => {
+          const currentIndex = STEPS.findIndex((x) => x.id === step);
+          const active = step === s.id;
+          const done = currentIndex > i;
+          return (
+            <div key={s.id} className="flex items-center">
+              <button
+                onClick={() => setStep(s.id)}
+                className="flex items-center gap-2"
+              >
+                <span
+                  className={`flex h-6 w-6 items-center justify-center rounded-full text-xs font-semibold ${active
+                    ? 'bg-indigo-600 text-white'
+                    : done
+                      ? 'bg-indigo-100 text-indigo-700'
+                      : 'bg-gray-100 text-gray-500'
+                    }`}
+                >
+                  {i + 1}
+                </span>
+                <span
+                  className={`text-sm font-medium ${active ? 'text-indigo-700' : 'text-gray-500'}`}
+                >
+                  {s.label}
+                </span>
+              </button>
+              {i < STEPS.length - 1 && (
+                <span className="mx-3 h-px w-10 bg-gray-200" />
+              )}
+            </div>
+          );
+        })}
+        <div className="ml-auto">
+          {step !== 'publish' && (
+            <button
+              onClick={() => {
+                const idx = STEPS.findIndex((x) => x.id === step);
+                setStep(STEPS[idx + 1].id);
+              }}
+              className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
+            >
+              Next: {STEPS[STEPS.findIndex((x) => x.id === step) + 1].label} →
+            </button>
           )}
-          {activateSuccess && (
-            <span className="rounded bg-emerald-50 px-2 py-1 text-sm text-emerald-700">
-              {activateSuccess}
-            </span>
-          )}
-          {activateError && (
-            <span className="rounded bg-red-50 px-2 py-1 text-sm text-red-600">
-              {activateError}
-            </span>
-          )}
-          <button
-            onClick={() => setActiveSection('canvas')}
-            className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${activeSection === 'canvas'
-              ? 'bg-indigo-100 text-indigo-700'
-              : 'text-gray-600 hover:bg-gray-100'
-              }`}
-          >
-            Editor
-          </button>
-          <button
-            onClick={() => setActiveSection('preview')}
-            className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${activeSection === 'preview'
-              ? 'bg-indigo-100 text-indigo-700'
-              : 'text-gray-600 hover:bg-gray-100'
-              }`}
-          >
-            Preview Only
-          </button>
         </div>
       </div>
 
       {/* Main content area */}
       <div className="flex flex-1 overflow-hidden">
-        {/* Middle: Canvas or Live Preview */}
-        <div className="flex flex-1 flex-col overflow-hidden">
-          {/* Section tabs */}
-          <div className="flex border-b border-gray-200 bg-white px-4">
-            <button
-              onClick={() => setActiveSection('canvas')}
-              className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${activeSection === 'canvas'
-                ? 'border-indigo-500 text-indigo-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-            >
-              Edit Layout
-            </button>
-            <button
-              onClick={() => setActiveSection('preview')}
-              className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${activeSection === 'preview'
-                ? 'border-indigo-500 text-indigo-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
-                }`}
-            >
-              Full Preview
-            </button>
-          </div>
+        {step === 'design' && (
+          <>
+            {/* Canvas (includes its own component palette) */}
+            <div className="flex flex-1 flex-col overflow-hidden">
+              <ThemeCanvas
+                components={components}
+                onChange={handleComponentsChange}
+                onSelectComponent={handleSelectComponent}
+                selectedComponentId={selectedComponentId}
+              />
+            </div>
 
-          {/* Content */}
-          <div className="flex flex-1 overflow-hidden">
-            {activeSection === 'canvas' ? (
-              <div className="flex flex-1">
-                {/* Canvas area */}
-                <div className="flex flex-1 flex-col">
-                  <ThemeCanvas
+            {/* Inspector — grouped, collapsible sections */}
+            <div className="flex w-[450px] shrink-0 flex-col overflow-y-auto border-l border-gray-200 bg-white">
+              {selectedComponent ? (
+                <ComponentInspector
+                  component={selectedComponent}
+                  onChange={handleUpdateComponent}
+                  onClose={() => setSelectedComponentId(null)}
+                />
+              ) : (
+                <p className="border-b border-gray-200 px-4 py-3 text-xs text-gray-400">
+                  Select a component on the canvas to edit its properties.
+                </p>
+              )}
+
+              <InspectorSection title="Live Preview" subtitle="Realtime render" defaultOpen>
+                <div className="h-[380px]">
+                  <LivePreview
+                    styles={styles}
                     components={components}
-                    onChange={handleComponentsChange}
-                    onSelectComponent={handleSelectComponent}
-                    selectedComponentId={selectedComponentId}
+                    assets={assets}
+                    settings={settings}
+                    viewportSize={viewportSize}
+                    onViewportChange={handleViewportChange}
                   />
                 </div>
-              </div>
-            ) : (
-              <LivePreview
-                styles={styles}
-                components={components}
-                assets={assets}
-                settings={settings}
-                viewportSize={viewportSize}
-                onViewportChange={handleViewportChange}
-              />
-            )}
-          </div>
-        </div>
+              </InspectorSection>
 
-        {/* Right: Live Preview or Style Editor (always visible when in canvas mode) */}
-        {activeSection === 'canvas' && (
-          <div className="w-[450px] shrink-0 flex flex-col border-l border-gray-200">
-            {/* Panel tabs */}
-            <div className="flex border-b border-gray-200 bg-white">
-              <button
-                onClick={() => setEditorPanel('canvas')}
-                className={`flex-1 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${editorPanel === 'canvas'
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
-              >
-                Live Preview
-              </button>
-              <button
-                onClick={() => setEditorPanel('styles')}
-                className={`flex-1 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${editorPanel === 'styles'
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
-              >
-                Styles
-              </button>
-              <button
-                onClick={() => setEditorPanel('assets')}
-                className={`flex-1 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${editorPanel === 'assets'
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
-              >
-                Assets
-              </button>
-              <button
-                onClick={() => setEditorPanel('templates')}
-                className={`flex-1 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${editorPanel === 'templates'
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
-              >
-                Templates
-              </button>
-              <button
-                onClick={() => setEditorPanel('history')}
-                className={`flex-1 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${editorPanel === 'history'
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
-                  }`}
-              >
-                History
-              </button>
+              <InspectorSection title="Styles" subtitle="Colors, typography, spacing">
+                <StyleEditor
+                  styles={styles}
+                  assets={assets}
+                  onChange={handleStylesChange}
+                  onAssetsChange={handleAssetsChange}
+                />
+              </InspectorSection>
+
+              <InspectorSection title="Assets" subtitle="Logo, background, favicon">
+                <div className="flex flex-col gap-6 p-4">
+                  <ImageUploader
+                    assets={assets}
+                    onAssetsChange={handleAssetsChange}
+                    uploadType="logo"
+                    label="Logo"
+                    description="Upload your brand logo"
+                    currentUrl={assets.logoUrl}
+                  />
+                  <ImageUploader
+                    assets={assets}
+                    onAssetsChange={handleAssetsChange}
+                    uploadType="background"
+                    label="Background Image"
+                    description="Upload a background image for the login page"
+                    currentUrl={assets.backgroundImageUrl}
+                  />
+                  <ImageUploader
+                    assets={assets}
+                    onAssetsChange={handleAssetsChange}
+                    uploadType="favicon"
+                    label="Favicon"
+                    description="Upload a favicon (32x32 or 16x16 recommended)"
+                    currentUrl={assets.faviconUrl}
+                  />
+                </div>
+              </InspectorSection>
+
+              <InspectorSection title="Templates" subtitle="Start from a preset">
+                <ThemeTemplates
+                  onApplyTemplate={handleApplyTemplate}
+                  currentTemplateId={null}
+                />
+              </InspectorSection>
             </div>
-            {editorPanel === 'canvas' ? (
-              <LivePreview
-                styles={styles}
-                components={components}
-                assets={assets}
-                settings={settings}
-                viewportSize={viewportSize}
-                onViewportChange={handleViewportChange}
-              />
-            ) : editorPanel === 'styles' ? (
-              <StyleEditor
-                styles={styles}
-                assets={assets}
-                onChange={handleStylesChange}
-                onAssetsChange={handleAssetsChange}
-              />
-            ) : editorPanel === 'templates' ? (
-              <ThemeTemplates
-                onApplyTemplate={handleApplyTemplate}
-                currentTemplateId={null}
-              />
-            ) : editorPanel === 'history' ? (
-              <div className="flex flex-col h-full">
+          </>
+        )}
+
+        {step === 'preview' && (
+          <LivePreview
+            styles={styles}
+            components={components}
+            assets={assets}
+            settings={settings}
+            viewportSize={viewportSize}
+            onViewportChange={handleViewportChange}
+          />
+        )}
+
+        {step === 'publish' && (
+          <div className="flex-1 overflow-y-auto bg-gray-50">
+            <div className="mx-auto max-w-2xl space-y-6 p-8">
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900">
+                  Publish {activeTheme?.displayName || activeTheme?.name || 'theme'}
+                </h2>
+                <p className="mt-1 text-sm text-gray-500">
+                  Publish to create a new version, then activate it to make it live
+                  for this realm.
+                </p>
+              </div>
+
+              {/* Status card */}
+              <div className="rounded-lg border border-gray-200 bg-white p-4">
+                <dl className="grid grid-cols-2 gap-4 text-sm">
+                  <div>
+                    <dt className="text-gray-500">Status</dt>
+                    <dd className="mt-0.5 font-medium text-gray-900">
+                      {activeTheme?.published ? 'Published' : 'Draft'}
+                    </dd>
+                  </div>
+                  <div>
+                    <dt className="text-gray-500">Version</dt>
+                    <dd className="mt-0.5 font-medium text-gray-900">v{currentVersion}</dd>
+                  </div>
+                  <div>
+                    <dt className="text-gray-500">Changes</dt>
+                    <dd className="mt-0.5 font-medium text-gray-900">
+                      {hasUnsavedChanges ? 'Unsaved changes' : 'All changes saved'}
+                    </dd>
+                  </div>
+                </dl>
+              </div>
+
+              {/* Actions */}
+              <div className="flex flex-wrap items-center gap-3">
+                <button
+                  onClick={handlePublish}
+                  disabled={isPublishing || isSaving}
+                  className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+                >
+                  {isPublishing ? 'Publishing…' : 'Publish version'}
+                </button>
+                {activeTheme?.published && (
+                  <button
+                    onClick={handleActivate}
+                    disabled={isActivating || isSaving}
+                    className="rounded-md bg-emerald-600 px-4 py-2 text-sm font-medium text-white hover:bg-emerald-700 disabled:cursor-not-allowed disabled:opacity-50"
+                  >
+                    {isActivating ? 'Activating…' : 'Activate for realm'}
+                  </button>
+                )}
+                {publishSuccess && (
+                  <span className="text-sm text-green-600">{publishSuccess}</span>
+                )}
+                {activateSuccess && (
+                  <span className="text-sm text-emerald-700">{activateSuccess}</span>
+                )}
+                {activateError && (
+                  <span className="text-sm text-red-600">{activateError}</span>
+                )}
+              </div>
+
+              {/* Version history */}
+              <div className="rounded-lg border border-gray-200 bg-white">
                 <ThemeVersionHistory
                   themeId={themeId || ''}
                   realmName={realmName || ''}
                   currentVersion={currentVersion}
                   onRollback={handleRollback}
                 />
-                {/* Rollback notifications */}
                 {rollbackError && (
                   <div className="m-4 rounded-md bg-red-50 p-3">
                     <p className="text-sm text-red-700">{rollbackError}</p>
@@ -747,34 +933,7 @@ export default function ThemeBuilderPage() {
                   </div>
                 )}
               </div>
-            ) : (
-              <div className="flex flex-col gap-6 p-4 overflow-y-auto">
-                <ImageUploader
-                  assets={assets}
-                  onAssetsChange={handleAssetsChange}
-                  uploadType="logo"
-                  label="Logo"
-                  description="Upload your brand logo"
-                  currentUrl={assets.logoUrl}
-                />
-                <ImageUploader
-                  assets={assets}
-                  onAssetsChange={handleAssetsChange}
-                  uploadType="background"
-                  label="Background Image"
-                  description="Upload a background image for the login page"
-                  currentUrl={assets.backgroundImageUrl}
-                />
-                <ImageUploader
-                  assets={assets}
-                  onAssetsChange={handleAssetsChange}
-                  uploadType="favicon"
-                  label="Favicon"
-                  description="Upload a favicon (32x32 or 16x16 recommended)"
-                  currentUrl={assets.faviconUrl}
-                />
-              </div>
-            )}
+            </div>
           </div>
         )}
       </div>
