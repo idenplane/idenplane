@@ -1,11 +1,11 @@
 import type {
-    Theme,
-    ThemeAssets,
-    ThemeComponent,
-    ThemeSettings,
-    ThemeStyles,
-    ThemeTemplate,
-    ThemeVersion,
+  Theme,
+  ThemeAssets,
+  ThemeComponent,
+  ThemeSettings,
+  ThemeStyles,
+  ThemeTemplate,
+  ThemeVersion,
 } from '../types/theme';
 import apiClient from './client';
 
@@ -23,6 +23,8 @@ export interface UpdateThemePayload {
   /** Human-readable theme name shown in the builder and theme list. */
   displayName?: string;
   description?: string;
+  /** Theme scope: login page, account console, email templates, or full. */
+  themeType?: 'login' | 'account' | 'email' | 'full';
   styles?: Partial<ThemeStyles>;
   components?: ThemeComponent[];
   assets?: Partial<ThemeAssets>;

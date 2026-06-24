@@ -5,6 +5,7 @@ import {
     type OnModuleInit,
 } from '@nestjs/common';
 import type { Prisma, Realm } from '@prisma/client';
+import { createHash } from 'crypto';
 import { readdir, readFile } from 'fs/promises';
 import { join } from 'path';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -182,10 +183,13 @@ export class ThemeService implements OnModuleInit {
   private dbThemeRealmOverrides(theme: {
     styles: unknown;
     assets: unknown;
+    settings?: unknown;
+    components?: unknown;
   }): Record<string, string> {
     const styles = (theme.styles ?? {}) as Record<string, unknown>;
     const colors = (styles.colors ?? {}) as Record<string, unknown>;
     const assets = (theme.assets ?? {}) as Record<string, unknown>;
+    const settings = (theme.settings ?? {}) as Record<string, unknown>;
     const overrides: Record<string, string> = {};
     const set = (key: string, value: unknown): void => {
       if (typeof value === 'string' && value) overrides[key] = value;
@@ -202,6 +206,31 @@ export class ThemeService implements OnModuleInit {
     set('customCss', styles.customCss);
     set('logoUrl', assets.logoUrl ?? assets.logo);
     set('faviconUrl', assets.faviconUrl ?? assets.favicon);
+    // The login/account layout renders {{appTitle}} as the page heading, so the
+    // title configured in the theme builder must flow through to the real page.
+    set('appTitle', settings.appTitle);
+    set('loginSubtitle', settings.appDescription);
+    set('loginFooterText', settings.customFooterText);
+    // Optional blocks default to shown; emit a hide flag only when explicitly
+    // disabled so existing themes keep their current behaviour.
+    const hideWhenFalse = (key: string, value: unknown): void => {
+      if (value === false) overrides[key] = '1';
+    };
+    hideWhenFalse('hideRememberMe', settings.showRememberMe);
+    hideWhenFalse('hideForgotPassword', settings.showForgotPassword);
+    hideWhenFalse('hideSocial', settings.showSocialProviders);
+    hideWhenFalse('hideRegistration', settings.showRegistrationLink);
+    // Surface the heading: prefer an explicit settings value, then fall back to
+    // the first visible heading component authored on the builder canvas.
+    const components = Array.isArray(theme.components) ? theme.components : [];
+    const heading = components.find((c) => {
+      const comp = (c ?? {}) as Record<string, unknown>;
+      return comp.type === 'heading' && comp.visible !== false;
+    }) as Record<string, unknown> | undefined;
+    const headingFromComponent = heading
+      ? ((heading.props ?? {}) as Record<string, unknown>).content
+      : undefined;
+    set('customHeading', settings.loginHeading ?? headingFromComponent);
     return overrides;
   }
 
@@ -297,6 +326,13 @@ export class ThemeService implements OnModuleInit {
       faviconUrl: getString('faviconUrl', ''),
       appTitle: getString('appTitle', 'Idenplane'),
       customCss: getString('customCss', ''),
+      customHeading: getString('customHeading', ''),
+      loginSubtitle: getString('loginSubtitle', ''),
+      loginFooterText: getString('loginFooterText', ''),
+      hideRememberMe: getString('hideRememberMe', ''),
+      hideForgotPassword: getString('hideForgotPassword', ''),
+      hideSocial: getString('hideSocial', ''),
+      hideRegistration: getString('hideRegistration', ''),
       themeCssFiles: [], // Will be set by ThemeRenderService
     };
   }
@@ -403,6 +439,9 @@ export class ThemeService implements OnModuleInit {
     if (!theme) {
       throw new NotFoundException(`Theme with ID '${themeId}' not found`);
     }
+    // Snapshot the current state as a version before applying changes so the
+    // publish-tab version history accumulates a restorable entry per save.
+    await this.snapshotVersion(theme);
     const data: Prisma.ThemeUpdateInput = {
       version: theme.version + 1,
     };
@@ -422,6 +461,45 @@ export class ThemeService implements OnModuleInit {
 
   async deleteTheme(themeId: string) {
     return this.prisma.theme.delete({ where: { id: themeId } });
+  }
+
+  /**
+   * Persist a snapshot of the given theme's current state into version history.
+   * Uses an upsert keyed on (themeId, version) so repeated calls for the same
+   * version are idempotent rather than throwing on the unique constraint.
+   */
+  private async snapshotVersion(theme: {
+    id: string;
+    version: number;
+    styles: unknown;
+    components: unknown;
+    assets: unknown;
+    settings: unknown;
+  }): Promise<void> {
+    const checksum = createHash('sha256')
+      .update(
+        JSON.stringify({
+          styles: theme.styles,
+          components: theme.components,
+          assets: theme.assets,
+          settings: theme.settings,
+        }),
+      )
+      .digest('hex')
+      .substring(0, 16);
+    await this.prisma.themeVersion.upsert({
+      where: { themeId_version: { themeId: theme.id, version: theme.version } },
+      create: {
+        themeId: theme.id,
+        version: theme.version,
+        checksum,
+        styles: theme.styles as Prisma.InputJsonValue,
+        components: theme.components as Prisma.InputJsonValue,
+        assets: theme.assets as Prisma.InputJsonValue,
+        settings: theme.settings as Prisma.InputJsonValue,
+      },
+      update: {},
+    });
   }
 
   async publishTheme(themeId: string) {
@@ -453,6 +531,8 @@ export class ThemeService implements OnModuleInit {
     if (!currentTheme) {
       throw new NotFoundException(`Theme with ID '${themeId}' not found`);
     }
+    // Preserve the pre-restore state in history so a restore is itself reversible.
+    await this.snapshotVersion(currentTheme);
     return this.prisma.theme.update({
       where: { id: themeId },
       data: {

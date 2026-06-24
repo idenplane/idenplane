@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 import { useParams } from 'react-router-dom';
 import {
   createTheme,
@@ -10,7 +10,6 @@ import {
   updateTheme,
 } from '../../api/themes';
 import type {
-  ThemeComponent as DraggableComponent,
   ThemeAssets,
   ThemeComponent,
   ThemeSettings,
@@ -23,12 +22,10 @@ import {
   DEFAULT_THEME_SETTINGS,
   DEFAULT_THEME_STYLES,
 } from '../../types/theme';
-import ComponentInspector from './ComponentInspector';
 import ImageUploader from './ImageUploader';
 import InspectorSection from './InspectorSection';
 import LivePreview from './LivePreview';
 import StyleEditor from './StyleEditor';
-import ThemeCanvas from './ThemeCanvas';
 import ThemeTemplates from './ThemeTemplates';
 import ThemeVersionHistory from './ThemeVersionHistory';
 
@@ -62,7 +59,6 @@ export default function ThemeBuilderPage() {
   // ── UI state ─────────────────────────────────────────────────────────────
 
   const [viewportSize, setViewportSize] = useState<ViewportSize>('desktop');
-  const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
   const [step, setStep] = useState<BuilderStep>('design');
   const [importError, setImportError] = useState<string | null>(null);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
@@ -375,33 +371,27 @@ export default function ThemeBuilderPage() {
     setViewportSize(size);
   }, []);
 
-  const handleComponentsChange = useCallback((updated: ThemeComponent[]) => {
-    setComponents(updated);
-  }, []);
-
-  const handleSelectComponent = useCallback((component: DraggableComponent | null) => {
-    setSelectedComponentId(component?.id ?? null);
-  }, []);
-
-  // ── Selected component inspector ───────────────────────────────────────────
-
-  const selectedComponent = useMemo(
-    () => components.find((c) => c.id === selectedComponentId) ?? null,
-    [components, selectedComponentId],
-  );
-
-  const handleUpdateComponent = useCallback((updated: ThemeComponent) => {
-    setComponents((prev) => prev.map((c) => (c.id === updated.id ? updated : c)));
-  }, []);
-
   // ── Theme switcher / create / rename ───────────────────────────────────────
 
   const [isCreatingTheme, setIsCreatingTheme] = useState(false);
 
   const handleSelectTheme = useCallback((id: string) => {
     setSelectedThemeId(id);
-    setSelectedComponentId(null);
   }, []);
+
+  const handleChangeThemeType = useCallback(
+    async (themeType: 'login' | 'account' | 'email' | 'full') => {
+      if (!themeId) return;
+      setSaveError(null);
+      try {
+        await updateTheme(realmName || '', themeId, { themeType });
+        await refetchThemes();
+      } catch (err) {
+        setSaveError(err instanceof Error ? err.message : 'Failed to change theme type');
+      }
+    },
+    [realmName, themeId, refetchThemes],
+  );
 
   const handleCreateTheme = useCallback(async () => {
     if (isCreatingTheme) return;
@@ -419,7 +409,6 @@ export default function ThemeBuilderPage() {
       });
       await refetchThemes();
       setSelectedThemeId(created.id);
-      setSelectedComponentId(null);
     } catch (err) {
       setSaveError(err instanceof Error ? err.message : 'Failed to create theme');
     } finally {
@@ -586,6 +575,21 @@ export default function ThemeBuilderPage() {
               >
                 {activeTheme.published ? 'Published' : 'Draft'}
               </span>
+              <select
+                value={activeTheme.themeType}
+                onChange={(e) =>
+                  handleChangeThemeType(
+                    e.target.value as 'login' | 'account' | 'email' | 'full',
+                  )
+                }
+                title="Which surface this theme applies to"
+                className="rounded-md border border-gray-300 px-2 py-1 text-sm text-gray-800 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+              >
+                <option value="login">Login</option>
+                <option value="account">Account</option>
+                <option value="email">Email</option>
+                <option value="full">Full</option>
+              </select>
               {isRenaming ? (
                 <span className="flex items-center gap-1">
                   <input
@@ -754,40 +758,98 @@ export default function ThemeBuilderPage() {
       <div className="flex flex-1 overflow-hidden">
         {step === 'design' && (
           <>
-            {/* Canvas (includes its own component palette) */}
+            {/* Primary pane: an accurate render of the real login page. */}
             <div className="flex flex-1 flex-col overflow-hidden">
-              <ThemeCanvas
+              <LivePreview
+                styles={styles}
                 components={components}
-                onChange={handleComponentsChange}
-                onSelectComponent={handleSelectComponent}
-                selectedComponentId={selectedComponentId}
+                assets={assets}
+                settings={settings}
+                viewportSize={viewportSize}
+                onViewportChange={handleViewportChange}
               />
             </div>
 
             {/* Inspector — grouped, collapsible sections */}
             <div className="flex w-[450px] shrink-0 flex-col overflow-y-auto border-l border-gray-200 bg-white">
-              {selectedComponent ? (
-                <ComponentInspector
-                  component={selectedComponent}
-                  onChange={handleUpdateComponent}
-                  onClose={() => setSelectedComponentId(null)}
-                />
-              ) : (
-                <p className="border-b border-gray-200 px-4 py-3 text-xs text-gray-400">
-                  Select a component on the canvas to edit its properties.
-                </p>
-              )}
+              <InspectorSection
+                title="Login Content"
+                subtitle="Text and optional blocks shown on the real login page"
+                defaultOpen
+              >
+                <div className="flex flex-col gap-4 p-4">
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="font-medium text-gray-700">Heading</span>
+                    <input
+                      type="text"
+                      value={settings.loginHeading}
+                      onChange={(e) =>
+                        setSettings((p) => ({ ...p, loginHeading: e.target.value }))
+                      }
+                      placeholder="e.g. Welcome back"
+                      className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="font-medium text-gray-700">Subtitle</span>
+                    <input
+                      type="text"
+                      value={settings.appDescription}
+                      onChange={(e) =>
+                        setSettings((p) => ({ ...p, appDescription: e.target.value }))
+                      }
+                      placeholder="e.g. Sign in to your account"
+                      className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </label>
+                  <label className="flex flex-col gap-1 text-sm">
+                    <span className="font-medium text-gray-700">Footer text</span>
+                    <input
+                      type="text"
+                      value={settings.customFooterText ?? ''}
+                      onChange={(e) =>
+                        setSettings((p) => ({
+                          ...p,
+                          customFooterText: e.target.value || null,
+                        }))
+                      }
+                      placeholder="e.g. © 2026 Your Company"
+                      className="rounded-md border border-gray-300 px-3 py-2 text-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500"
+                    />
+                  </label>
 
-              <InspectorSection title="Live Preview" subtitle="Realtime render" defaultOpen>
-                <div className="h-[380px]">
-                  <LivePreview
-                    styles={styles}
-                    components={components}
-                    assets={assets}
-                    settings={settings}
-                    viewportSize={viewportSize}
-                    onViewportChange={handleViewportChange}
-                  />
+                  <div className="mt-2 flex flex-col gap-2 border-t border-gray-100 pt-3">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-400">
+                      Optional blocks
+                    </span>
+                    {(
+                      [
+                        ['showRememberMe', 'Remember me'],
+                        ['showForgotPassword', 'Forgot password link'],
+                        ['showSocialProviders', 'Social / identity providers'],
+                        ['showRegistrationLink', 'Registration link'],
+                      ] as const
+                    ).map(([key, label]) => (
+                      <label
+                        key={key}
+                        className="flex items-center justify-between text-sm text-gray-700"
+                      >
+                        <span>{label}</span>
+                        <input
+                          type="checkbox"
+                          checked={settings[key]}
+                          onChange={(e) =>
+                            setSettings((p) => ({ ...p, [key]: e.target.checked }))
+                          }
+                          className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        />
+                      </label>
+                    ))}
+                    <p className="mt-1 text-xs text-gray-400">
+                      Social and registration blocks also depend on the realm having
+                      identity providers / self-registration enabled.
+                    </p>
+                  </div>
                 </div>
               </InspectorSection>
 
@@ -840,14 +902,16 @@ export default function ThemeBuilderPage() {
         )}
 
         {step === 'preview' && (
-          <LivePreview
-            styles={styles}
-            components={components}
-            assets={assets}
-            settings={settings}
-            viewportSize={viewportSize}
-            onViewportChange={handleViewportChange}
-          />
+          <div className="flex flex-1 flex-col overflow-hidden">
+            <LivePreview
+              styles={styles}
+              components={components}
+              assets={assets}
+              settings={settings}
+              viewportSize={viewportSize}
+              onViewportChange={handleViewportChange}
+            />
+          </div>
         )}
 
         {step === 'publish' && (
