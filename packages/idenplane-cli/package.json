@@ -47,5 +47,8 @@
   },
   "publishConfig": {
     "access": "public"
+  },
+  "overrides": {
+    "esbuild": ">=0.28.1"
   }
 }
