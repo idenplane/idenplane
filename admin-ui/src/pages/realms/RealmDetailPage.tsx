@@ -1,7 +1,7 @@
 import { useState, useEffect, type FormEvent } from 'react';
 import { useParams, useNavigate, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getRealmByName, updateRealm, deleteRealm, sendTestEmail, exportRealm, getThemes } from '../../api/realms';
+import { getRealmByName, updateRealm, deleteRealm, exportRealm, getThemes } from '../../api/realms';
 import type { ThemeInfo } from '../../api/realms';
 import { getUsers } from '../../api/users';
 import { getClients } from '../../api/clients';
@@ -11,8 +11,8 @@ import { getClientScopes } from '../../api/clientScopes';
 import { getRealmSessions } from '../../api/sessions';
 import { getIdentityProviders } from '../../api/identityProviders';
 import ConfirmDialog from '../../components/ConfirmDialog';
-import PasswordInput from '../../components/PasswordInput';
 import MagicLinkSettingsForm from '../../components/magic-link/MagicLinkSettingsForm';
+import EmailProviderForm from '../../components/email/EmailProviderForm';
 
 function formatDuration(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -27,7 +27,6 @@ export default function RealmDetailPage() {
   const queryClient = useQueryClient();
   const [showDelete, setShowDelete] = useState(false);
   const [activeTab, setActiveTab] = useState<'general' | 'tokens' | 'email' | 'security' | 'events' | 'theme' | 'magic-link'>('general');
-  const [testEmailTo, setTestEmailTo] = useState('');
 
   const { data: realm, isLoading } = useQuery({
     queryKey: ['realm', name],
@@ -95,12 +94,6 @@ export default function RealmDetailPage() {
     accessTokenLifespan: 300,
     refreshTokenLifespan: 1800,
     offlineTokenLifespan: 2592000,
-    smtpHost: '',
-    smtpPort: 587,
-    smtpUser: '',
-    smtpPassword: '',
-    smtpFrom: '',
-    smtpSecure: false,
     // Security - Password Policy
     passwordMinLength: 8,
     passwordRequireUppercase: false,
@@ -140,12 +133,6 @@ export default function RealmDetailPage() {
         accessTokenLifespan: realm.accessTokenLifespan,
         refreshTokenLifespan: realm.refreshTokenLifespan,
         offlineTokenLifespan: realm.offlineTokenLifespan ?? 2592000,
-        smtpHost: realm.smtpHost ?? '',
-        smtpPort: realm.smtpPort ?? 587,
-        smtpUser: realm.smtpUser ?? '',
-        smtpPassword: realm.smtpPassword ?? '',
-        smtpFrom: realm.smtpFrom ?? '',
-        smtpSecure: realm.smtpSecure ?? false,
         // Security - Password Policy
         passwordMinLength: realm.passwordMinLength ?? 8,
         passwordRequireUppercase: realm.passwordRequireUppercase ?? false,
@@ -190,14 +177,9 @@ export default function RealmDetailPage() {
     },
   });
 
-  const testEmailMutation = useMutation({
-    mutationFn: () => sendTestEmail(name!, testEmailTo),
-  });
-
   // Clear toast messages when switching tabs
   useEffect(() => {
     updateMutation.reset();
-    testEmailMutation.reset();
   // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
@@ -509,147 +491,7 @@ export default function RealmDetailPage() {
       )}
 
       {/* Email Tab */}
-      {activeTab === 'email' && (
-        <div className="space-y-6">
-          <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-gray-900">SMTP Configuration</h2>
-            <p className="text-sm text-gray-500">
-              Configure email delivery for this realm. Required for email verification and password reset.
-            </p>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="smtp-host" className="mb-1.5 block text-sm font-medium text-gray-700">SMTP Host</label>
-                <input
-                  id="smtp-host"
-                  type="text"
-                  value={form.smtpHost}
-                  onChange={(e) => setForm({ ...form, smtpHost: e.target.value })}
-                  placeholder="smtp.example.com"
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label htmlFor="smtp-port" className="mb-1.5 block text-sm font-medium text-gray-700">SMTP Port</label>
-                <input
-                  id="smtp-port"
-                  type="number"
-                  value={form.smtpPort}
-                  onChange={(e) => setForm({ ...form, smtpPort: Number(e.target.value) })}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="smtp-username" className="mb-1.5 block text-sm font-medium text-gray-700">Username</label>
-                <input
-                  id="smtp-username"
-                  type="text"
-                  value={form.smtpUser}
-                  onChange={(e) => setForm({ ...form, smtpUser: e.target.value })}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label htmlFor="smtp-password" className="mb-1.5 block text-sm font-medium text-gray-700">Password</label>
-                <PasswordInput
-                  id="smtp-password"
-                  value={form.smtpPassword}
-                  onChange={(e) => setForm({ ...form, smtpPassword: e.target.value })}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="smtp-from" className="mb-1.5 block text-sm font-medium text-gray-700">From Address</label>
-              <input
-                id="smtp-from"
-                type="email"
-                value={form.smtpFrom}
-                onChange={(e) => setForm({ ...form, smtpFrom: e.target.value })}
-                placeholder="noreply@example.com"
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-              />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="smtpSecure"
-                checked={form.smtpSecure}
-                onChange={(e) => setForm({ ...form, smtpSecure: e.target.checked })}
-                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-              />
-              <label htmlFor="smtpSecure" className="text-sm font-medium text-gray-700">
-                Use SSL/TLS
-              </label>
-              <span className="text-xs text-gray-400">(Enable for port 465, disable for STARTTLS on port 587)</span>
-            </div>
-
-            {updateMutation.isSuccess && (
-              <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">
-                Email settings updated successfully.
-              </div>
-            )}
-            {updateMutation.isError && (
-              <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
-                Failed to update email settings.
-              </div>
-            )}
-
-            <div className="flex justify-end border-t border-gray-200 pt-4">
-              <button
-                type="submit"
-                disabled={updateMutation.isPending}
-                className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-              >
-                {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
-              </button>
-            </div>
-          </form>
-
-          {/* Test Email */}
-          <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="text-sm font-semibold text-gray-900">Send Test Email</h3>
-            <p className="mt-1 text-xs text-gray-500">
-              Save your SMTP settings above first, then send a test email to verify the configuration.
-            </p>
-            <div className="mt-3 flex items-end gap-3">
-              <div className="flex-1">
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">Recipient</label>
-                <input
-                  type="email"
-                  value={testEmailTo}
-                  onChange={(e) => setTestEmailTo(e.target.value)}
-                  placeholder="test@example.com"
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => testEmailMutation.mutate()}
-                disabled={testEmailMutation.isPending || !testEmailTo}
-                className="rounded-md bg-gray-800 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50"
-              >
-                {testEmailMutation.isPending ? 'Sending...' : 'Send Test'}
-              </button>
-            </div>
-            {testEmailMutation.isSuccess && (
-              <div className="mt-3 rounded-md bg-green-50 p-3 text-sm text-green-700">
-                Test email sent successfully!
-              </div>
-            )}
-            {testEmailMutation.isError && (
-              <div className="mt-3 rounded-md bg-red-50 p-3 text-sm text-red-700">
-                Failed to send test email. Check your SMTP settings.
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {activeTab === 'email' && <EmailProviderForm realm={realm} />}
 
       {/* Security Tab */}
       {activeTab === 'security' && (
