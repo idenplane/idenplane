@@ -13,6 +13,7 @@ import { getIdentityProviders } from '../../api/identityProviders';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import MagicLinkSettingsForm from '../../components/magic-link/MagicLinkSettingsForm';
 import EmailProviderForm from '../../components/email/EmailProviderForm';
+import SmsProviderForm from '../../components/sms/SmsProviderForm';
 
 function formatDuration(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -26,7 +27,7 @@ export default function RealmDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showDelete, setShowDelete] = useState(false);
-  const [activeTab, setActiveTab] = useState<'general' | 'tokens' | 'email' | 'security' | 'events' | 'theme' | 'magic-link'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'tokens' | 'email' | 'sms' | 'security' | 'events' | 'theme' | 'magic-link'>('general');
 
   const { data: realm, isLoading } = useQuery({
     queryKey: ['realm', name],
@@ -208,6 +209,7 @@ export default function RealmDetailPage() {
     { key: 'general' as const, label: 'General' },
     { key: 'tokens' as const, label: 'Tokens' },
     { key: 'email' as const, label: 'Email' },
+    { key: 'sms' as const, label: 'SMS' },
     { key: 'security' as const, label: 'Security' },
     { key: 'events' as const, label: 'Events' },
     { key: 'theme' as const, label: 'Theme' },
@@ -492,6 +494,9 @@ export default function RealmDetailPage() {
 
       {/* Email Tab */}
       {activeTab === 'email' && <EmailProviderForm realm={realm} />}
+
+      {/* SMS Tab */}
+      {activeTab === 'sms' && <SmsProviderForm realm={realm} />}
 
       {/* Security Tab */}
       {activeTab === 'security' && (
