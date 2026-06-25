@@ -40,6 +40,24 @@ import SetupWizardPage from './pages/setup-wizard/SetupWizardPage';
 import PendingRegistrationsPage from './pages/registration/PendingRegistrationsPage';
 import RegistrationFieldsPage from './pages/registration/RegistrationFieldsPage';
 import RegistrationSettingsPage from './pages/registration/RegistrationSettingsPage';
+import ContinuousRiskDashboard from './pages/continuous-verification/ContinuousRiskDashboard';
+import RiskPolicyListPage from './pages/continuous-verification/RiskPolicyListPage';
+import SessionRiskDetailPage from './pages/continuous-verification/SessionRiskDetailPage';
+import OrganizationListPage from './pages/organizations/OrganizationListPage';
+import OrganizationCreatePage from './pages/organizations/OrganizationCreatePage';
+import OrganizationDetailPage from './pages/organizations/OrganizationDetailPage';
+import WebhookListPage from './pages/webhooks/WebhookListPage';
+import WebhookCreatePage from './pages/webhooks/WebhookCreatePage';
+import WebhookDetailPage from './pages/webhooks/WebhookDetailPage';
+import ServiceAccountListPage from './pages/service-accounts/ServiceAccountListPage';
+import ServiceAccountCreatePage from './pages/service-accounts/ServiceAccountCreatePage';
+import ServiceAccountDetailPage from './pages/service-accounts/ServiceAccountDetailPage';
+import CustomAttributesPage from './pages/custom-attributes/CustomAttributesPage';
+import ScimConfigPage from './pages/scim/ScimConfigPage';
+import PolicyListPage from './pages/authorization/PolicyListPage';
+import PolicyCreatePage from './pages/authorization/PolicyCreatePage';
+import PolicyDetailPage from './pages/authorization/PolicyDetailPage';
+import PluginsPage from './pages/plugins/PluginsPage';
 import NotFoundPage from './pages/NotFoundPage';
 import { hasCredentials } from './api/client';
 
@@ -99,6 +117,24 @@ export default function App() {
           <Route path="/console/realms/:name/registration-approvals" element={<PendingRegistrationsPage />} />
           <Route path="/console/realms/:name/registration-fields" element={<RegistrationFieldsPage />} />
           <Route path="/console/realms/:name/registration-settings" element={<RegistrationSettingsPage />} />
+          <Route path="/console/realms/:name/risk-dashboard" element={<ContinuousRiskDashboard />} />
+          <Route path="/console/realms/:name/risk-policies" element={<RiskPolicyListPage />} />
+          <Route path="/console/realms/:name/risk-sessions/:sessionId" element={<SessionRiskDetailPage />} />
+          <Route path="/console/realms/:name/organizations" element={<OrganizationListPage />} />
+          <Route path="/console/realms/:name/organizations/new" element={<OrganizationCreatePage />} />
+          <Route path="/console/realms/:name/organizations/:slug" element={<OrganizationDetailPage />} />
+          <Route path="/console/realms/:name/webhooks" element={<WebhookListPage />} />
+          <Route path="/console/realms/:name/webhooks/new" element={<WebhookCreatePage />} />
+          <Route path="/console/realms/:name/webhooks/:webhookId" element={<WebhookDetailPage />} />
+          <Route path="/console/realms/:name/service-accounts" element={<ServiceAccountListPage />} />
+          <Route path="/console/realms/:name/service-accounts/new" element={<ServiceAccountCreatePage />} />
+          <Route path="/console/realms/:name/service-accounts/:accountId" element={<ServiceAccountDetailPage />} />
+          <Route path="/console/realms/:name/custom-attributes" element={<CustomAttributesPage />} />
+          <Route path="/console/realms/:name/scim" element={<ScimConfigPage />} />
+          <Route path="/console/realms/:name/authorization-policies" element={<PolicyListPage />} />
+          <Route path="/console/realms/:name/authorization-policies/new" element={<PolicyCreatePage />} />
+          <Route path="/console/realms/:name/authorization-policies/:policyId" element={<PolicyDetailPage />} />
+          <Route path="/console/plugins" element={<PluginsPage />} />
           {/* Catch-all for unknown /console/... paths — rendered inside the Layout shell */}
           <Route path="*" element={<NotFoundPage />} />
         </Route>
