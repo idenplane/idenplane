@@ -71,7 +71,7 @@ export default function ScimConfigPage() {
     onSuccess: (result: ScimTokenCreateResult) => {
       queryClient.invalidateQueries({ queryKey: ['scim-tokens', name] });
       queryClient.invalidateQueries({ queryKey: ['scim-status', name] });
-      setNewPlainToken(result.plainToken);
+      setNewPlainToken(result.token ?? null);
       setTokenForm({ name: '', description: '', expiresAt: '', scopes: [] });
       setShowCreateToken(false);
     },
@@ -332,7 +332,7 @@ export default function ScimConfigPage() {
               <thead className="bg-gray-50">
                 <tr>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Prefix</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Requests</th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Enabled</th>
                   <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Expires</th>
                   <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">Actions</th>
@@ -347,8 +347,8 @@ export default function ScimConfigPage() {
                         <span className="ml-2 inline-flex rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">Revoked</span>
                       )}
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4">
-                      <code className="font-mono text-xs text-gray-600">{token.tokenPrefix}…</code>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-600">
+                      {token.requestCount}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm">
                       <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${token.enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>

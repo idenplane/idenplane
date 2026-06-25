@@ -2,19 +2,19 @@ import apiClient from './client';
 
 export interface ScimToken {
   id: string;
-  realmId: string;
   name: string;
-  tokenPrefix: string;
+  description: string | null;
   enabled: boolean;
   revoked: boolean;
-  expiresAt: string | null;
   scopes: string[];
-  description: string | null;
+  expiresAt: string | null;
+  lastUsedAt: string | null;
+  requestCount: number;
   createdAt: string;
 }
 
 export interface ScimTokenCreateResult extends ScimToken {
-  plainToken: string;
+  token: string;
 }
 
 export interface ScimAttributeMapping {

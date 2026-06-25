@@ -3,10 +3,12 @@ import apiClient from './client';
 export interface Plugin {
   name: string;
   version: string;
-  description: string;
+  description?: string;
+  type: string;
   enabled: boolean;
-  author?: string;
-  homepage?: string;
+  config: Record<string, unknown> | null;
+  installedAt: string;
+  updatedAt: string;
 }
 
 export async function getPlugins(): Promise<Plugin[]> {

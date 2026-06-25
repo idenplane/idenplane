@@ -27,19 +27,7 @@ function PluginCard({
             </span>
           </div>
           <p className="mt-1 text-sm text-gray-500">{plugin.description}</p>
-          <div className="mt-2 flex flex-wrap gap-3 text-xs text-gray-400">
-            {plugin.author && <span>by {plugin.author}</span>}
-            {plugin.homepage && (
-              <a
-                href={plugin.homepage}
-                target="_blank"
-                rel="noreferrer"
-                className="text-indigo-500 hover:text-indigo-700"
-              >
-                Homepage
-              </a>
-            )}
-          </div>
+          <p className="mt-2 text-xs text-gray-400">{plugin.type}</p>
         </div>
 
         {/* Toggle */}
