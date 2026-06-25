@@ -111,3 +111,20 @@ export async function revokeOfflineSession(
     `/realms/${realmName}/users/${userId}/offline-sessions/${tokenId}`,
   );
 }
+
+export interface ImpersonationResult {
+  accessToken: string;
+  refreshToken: string;
+  tokenType: string;
+  expiresIn: number;
+}
+
+export async function impersonateUser(
+  realmName: string,
+  userId: string,
+): Promise<ImpersonationResult> {
+  const { data } = await apiClient.post<ImpersonationResult>(
+    `/realms/${realmName}/users/${userId}/impersonate`,
+  );
+  return data;
+}
