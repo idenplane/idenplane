@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useParams, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getUserById, updateUser, deleteUser, resetPassword, getMfaStatus, resetMfa, getOfflineSessions, revokeOfflineSession } from '../../api/users';
+import { getUserById, updateUser, deleteUser, resetPassword, getMfaStatus, resetMfa, getOfflineSessions, revokeOfflineSession, impersonateUser, type ImpersonationResult } from '../../api/users';
 import {
   getRealmRoles,
   getUserRealmRoles,
@@ -25,6 +25,7 @@ export default function UserDetailPage() {
   const queryClient = useQueryClient();
   const [showDelete, setShowDelete] = useState(false);
   const [showResetMfa, setShowResetMfa] = useState(false);
+  const [impersonationResult, setImpersonationResult] = useState<ImpersonationResult | null>(null);
   const [newPassword, setNewPassword] = useState('');
   const [passwordMsg, setPasswordMsg] = useState('');
   const [selectedRole, setSelectedRole] = useState('');
@@ -217,6 +218,11 @@ export default function UserDetailPage() {
     onSuccess: () => refetchOffline(),
   });
 
+  const impersonateMutation = useMutation({
+    mutationFn: () => impersonateUser(name!, id!),
+    onSuccess: (result) => setImpersonationResult(result),
+  });
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     updateMutation.mutate();
@@ -257,13 +263,68 @@ export default function UserDetailPage() {
           <h1 className="text-2xl font-bold text-gray-900">{user.username}</h1>
           <p className="mt-1 text-sm text-gray-500">{user.email}</p>
         </div>
-        <button
-          onClick={() => setShowDelete(true)}
-          className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
-        >
-          Delete User
-        </button>
+        <div className="flex items-center gap-2">
+          <button
+            onClick={() => impersonateMutation.mutate()}
+            disabled={impersonateMutation.isPending}
+            className="rounded-md border border-amber-300 bg-amber-50 px-4 py-2 text-sm font-medium text-amber-700 hover:bg-amber-100 disabled:opacity-50"
+          >
+            {impersonateMutation.isPending ? 'Generating...' : 'Impersonate'}
+          </button>
+          <button
+            onClick={() => setShowDelete(true)}
+            className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+          >
+            Delete User
+          </button>
+        </div>
       </div>
+
+      {impersonationResult && (
+        <div className="rounded-lg border border-amber-200 bg-amber-50 p-4">
+          <div className="flex items-start justify-between">
+            <div>
+              <h3 className="text-sm font-semibold text-amber-800">Impersonation Tokens</h3>
+              <p className="mt-0.5 text-xs text-amber-600">
+                These tokens allow you to act as <span className="font-medium">{user.username}</span>. They expire in {impersonationResult.expiresIn}s. Copy and store securely.
+              </p>
+            </div>
+            <button onClick={() => setImpersonationResult(null)} className="text-amber-400 hover:text-amber-600">
+              <svg className="h-4 w-4" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2}><path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+          <div className="mt-3 space-y-2">
+            <div>
+              <span className="text-xs font-medium text-amber-700">Access Token</span>
+              <div className="mt-1 flex items-center gap-2">
+                <code className="flex-1 truncate rounded bg-amber-100 px-2 py-1 text-xs text-amber-900">{impersonationResult.accessToken}</code>
+                <button
+                  onClick={() => navigator.clipboard.writeText(impersonationResult.accessToken)}
+                  className="shrink-0 rounded border border-amber-300 px-2 py-1 text-xs text-amber-700 hover:bg-amber-100"
+                >Copy</button>
+              </div>
+            </div>
+            {impersonationResult.refreshToken && (
+              <div>
+                <span className="text-xs font-medium text-amber-700">Refresh Token</span>
+                <div className="mt-1 flex items-center gap-2">
+                  <code className="flex-1 truncate rounded bg-amber-100 px-2 py-1 text-xs text-amber-900">{impersonationResult.refreshToken}</code>
+                  <button
+                    onClick={() => navigator.clipboard.writeText(impersonationResult.refreshToken)}
+                    className="shrink-0 rounded border border-amber-300 px-2 py-1 text-xs text-amber-700 hover:bg-amber-100"
+                  >Copy</button>
+                </div>
+              </div>
+            )}
+          </div>
+        </div>
+      )}
+
+      {impersonateMutation.isError && (
+        <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+          Failed to impersonate user. Ensure impersonation is enabled for this realm.
+        </div>
+      )}
 
       {/* Profile form */}
       <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">

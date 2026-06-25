@@ -56,12 +56,21 @@ export default function Layout() {
         { to: `/console/realms/${currentRealm}/identity-providers`, label: 'Identity Providers', icon: Icons.Idp },
         { to: `/console/realms/${currentRealm}/saml-providers`, label: 'SAML Providers', icon: Icons.Globe },
         { to: `/console/realms/${currentRealm}/auth-flows`, label: 'Auth Flows', icon: Icons.Build },
+        { to: `/console/realms/${currentRealm}/risk-dashboard`, label: 'Risk Dashboard', icon: Icons.ShieldCheck },
+        { to: `/console/realms/${currentRealm}/risk-policies`, label: 'Risk Policies', icon: Icons.Roles },
+        { to: `/console/realms/${currentRealm}/webhooks`, label: 'Webhooks', icon: Icons.Globe },
+        { to: `/console/realms/${currentRealm}/service-accounts`, label: 'Service Accounts', icon: Icons.Clients },
+        { to: `/console/realms/${currentRealm}/organizations`, label: 'Organizations', icon: Icons.Groups },
+        { to: `/console/realms/${currentRealm}/custom-attributes`, label: 'Custom Attributes', icon: Icons.Code },
+        { to: `/console/realms/${currentRealm}/scim`, label: 'SCIM', icon: Icons.Database },
+        { to: `/console/realms/${currentRealm}/authorization-policies`, label: 'Authorization', icon: Icons.Roles },
       ]
     : [];
 
   const globalNav: NavItem[] = [
     { to: '/console', label: 'Dashboard', icon: Icons.Dashboard, end: true },
     { to: '/console/realms', label: 'Realms', icon: Icons.Realms, end: false },
+    { to: '/console/plugins', label: 'Plugins', icon: Icons.Zap, end: false },
   ];
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
