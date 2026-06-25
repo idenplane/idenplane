@@ -44,7 +44,8 @@ export class EmailService {
 
     if (!realm) return false;
 
-    const provider = realm.emailProvider ?? EmailProviderType.SMTP;
+    const provider = (realm.emailProvider ??
+      EmailProviderType.SMTP) as EmailProviderType;
     if (provider === EmailProviderType.NONE) return false;
     if (provider === EmailProviderType.SMTP) return !!realm.smtpHost;
     return true;
@@ -67,7 +68,7 @@ export class EmailService {
       },
     });
 
-    const provider = this.createProvider(realm as RealmEmailData | null);
+    const provider = this.createProvider(realm);
 
     if (!provider || !provider.isConfigured()) {
       return {
@@ -77,7 +78,7 @@ export class EmailService {
     }
 
     try {
-      const from = this.getFromAddress(realm as RealmEmailData);
+      const from = this.getFromAddress(realm);
       await provider.sendEmail(
         from,
         'Idenplane Email Test',
@@ -115,7 +116,7 @@ export class EmailService {
       },
     });
 
-    const provider = this.createProvider(realm as RealmEmailData | null);
+    const provider = this.createProvider(realm);
 
     if (!provider || !provider.isConfigured()) {
       this.logger.warn(
@@ -162,7 +163,8 @@ export class EmailService {
         });
 
       case EmailProviderType.RESEND: {
-        const rc = (config['resend'] as Record<string, unknown> | undefined) ?? config;
+        const rc =
+          (config['resend'] as Record<string, unknown> | undefined) ?? config;
         return new ResendEmailProvider({
           apiKey: (rc['apiKey'] as string) ?? '',
           from: (rc['from'] as string) ?? '',
@@ -170,7 +172,8 @@ export class EmailService {
       }
 
       case EmailProviderType.SENDGRID: {
-        const sc = (config['sendgrid'] as Record<string, unknown> | undefined) ?? config;
+        const sc =
+          (config['sendgrid'] as Record<string, unknown> | undefined) ?? config;
         return new SendGridEmailProvider({
           apiKey: (sc['apiKey'] as string) ?? '',
           from: (sc['from'] as string) ?? '',
@@ -178,7 +181,8 @@ export class EmailService {
       }
 
       case EmailProviderType.MAILGUN: {
-        const mc = (config['mailgun'] as Record<string, unknown> | undefined) ?? config;
+        const mc =
+          (config['mailgun'] as Record<string, unknown> | undefined) ?? config;
         return new MailgunEmailProvider({
           apiKey: (mc['apiKey'] as string) ?? '',
           domain: (mc['domain'] as string) ?? '',
@@ -188,7 +192,8 @@ export class EmailService {
       }
 
       case EmailProviderType.POSTMARK: {
-        const pc = (config['postmark'] as Record<string, unknown> | undefined) ?? config;
+        const pc =
+          (config['postmark'] as Record<string, unknown> | undefined) ?? config;
         return new PostmarkEmailProvider({
           serverToken: (pc['serverToken'] as string) ?? '',
           from: (pc['from'] as string) ?? '',
@@ -196,7 +201,9 @@ export class EmailService {
       }
 
       default:
-        this.logger.warn(`Unknown email provider type: ${providerType}`);
+        this.logger.warn(
+          `Unknown email provider type: ${String(providerType)}`,
+        );
         return null;
     }
   }
