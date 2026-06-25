@@ -1,3 +1,12 @@
+export type EmailProviderType = 'none' | 'smtp' | 'resend' | 'sendgrid' | 'mailgun' | 'postmark';
+
+export interface EmailProviderConfig {
+  resend?: { apiKey: string; from: string };
+  sendgrid?: { apiKey: string; from: string };
+  mailgun?: { apiKey: string; domain: string; from: string; region: 'us' | 'eu' };
+  postmark?: { serverToken: string; from: string };
+}
+
 export type SmsProviderType = 'none' | 'twilio' | 'vonage' | 'aws-sns' | 'webhook';
 
 export interface SmsProviderConfig {
@@ -30,6 +39,8 @@ export interface Realm {
   smtpPassword: string | null;
   smtpFrom: string | null;
   smtpSecure: boolean;
+  emailProvider?: EmailProviderType;
+  emailProviderConfig?: EmailProviderConfig | null;
   passwordMinLength: number;
   passwordRequireUppercase: boolean;
   passwordRequireLowercase: boolean;
