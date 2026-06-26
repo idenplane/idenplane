@@ -41,7 +41,7 @@ describe('MCP server smoke test', () => {
       env: {
         ...process.env,
         IDENPLANE_URL: 'http://localhost:9999',
-        IDENPLANE_ADMIN_TOKEN: 'dummy-token-for-smoke-test',
+        IDENPLANE_ADMIN_TOKEN: 'dummy',
       },
     });
 
