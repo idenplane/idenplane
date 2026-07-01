@@ -54,7 +54,7 @@ export class RealmsService {
         smtpFrom: dto.smtpFrom,
         smtpSecure: dto.smtpSecure,
         emailProvider: dto.emailProvider,
-        emailProviderConfig: dto.emailProviderConfig,
+        emailProviderConfig: dto.emailProviderConfig as object | undefined,
         passwordMinLength: dto.passwordMinLength,
         passwordRequireUppercase: dto.passwordRequireUppercase,
         passwordRequireLowercase: dto.passwordRequireLowercase,
