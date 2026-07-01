@@ -426,9 +426,7 @@ export class DevicePostureService {
       lastSecurityScan: patchDate ?? null,
       complianceStatus:
         (record.complianceStatus as
-          | 'COMPLIANT'
-          | 'NON_COMPLIANT'
-          | 'UNKNOWN') ?? 'UNKNOWN',
+          'COMPLIANT' | 'NON_COMPLIANT' | 'UNKNOWN') ?? 'UNKNOWN',
     };
   }
 

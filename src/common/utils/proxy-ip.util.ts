@@ -81,9 +81,7 @@ function ipInCidr(ip: string, cidr: string): boolean {
  * - `type: 'list'`  — comma-separated IPs/CIDRs; trust only when peer matches
  */
 type TrustedProxyConfig =
-  | { type: 'none' }
-  | { type: 'all' }
-  | { type: 'list'; entries: string[] };
+  { type: 'none' } | { type: 'all' } | { type: 'list'; entries: string[] };
 
 function parseTrustedProxies(raw: string | undefined): TrustedProxyConfig {
   if (!raw || raw.trim() === '') return { type: 'none' };

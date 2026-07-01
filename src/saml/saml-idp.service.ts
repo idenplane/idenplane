@@ -59,8 +59,7 @@ export class SamlIdpService {
 
       const doc = parser.parse(xml) as Record<string, unknown>;
       const authnRequest = doc['AuthnRequest'] as
-        | Record<string, unknown>
-        | undefined;
+        Record<string, unknown> | undefined;
       if (!authnRequest) {
         throw new BadRequestException(
           'Invalid AuthnRequest: root element not found',
@@ -72,8 +71,7 @@ export class SamlIdpService {
         typeof authnRequest['Issuer'] === 'string'
           ? authnRequest['Issuer']
           : (((authnRequest['Issuer'] as Record<string, unknown>)?.['#text'] as
-              | string
-              | undefined) ?? '');
+              string | undefined) ?? '');
       const acsUrl =
         (authnRequest['@_AssertionConsumerServiceURL'] as string | undefined) ??
         null;

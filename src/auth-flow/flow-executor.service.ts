@@ -278,8 +278,7 @@ export class FlowExecutorService {
     // If the assertion result is already on the context (placed there by that
     // controller), we accept it here.
     const webauthnVerified = session.context['webauthnVerified'] as
-      | boolean
-      | undefined;
+      boolean | undefined;
     const userId = credentials['userId'] as string | undefined;
 
     if (webauthnVerified && userId) {

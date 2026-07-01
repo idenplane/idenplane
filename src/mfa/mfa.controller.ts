@@ -136,8 +136,7 @@ export class MfaController {
     }
 
     const sessionToken = req.cookies?.['IDENPLANE_SESSION'] as
-      | string
-      | undefined;
+      string | undefined;
     if (!sessionToken) {
       throw new UnauthorizedException(
         'MFA step-up is required. No active session found. Please log in via the user login flow to establish an MFA-verified session.',
