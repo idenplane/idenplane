@@ -661,10 +661,7 @@ export class ContinuousVerificationController {
         userId,
         realmId: realm.id,
         interactionType: sample.interactionType as
-          | 'typing'
-          | 'pointer'
-          | 'scroll'
-          | 'keystroke',
+          'typing' | 'pointer' | 'scroll' | 'keystroke',
         timestamp: sample.collectedAt
           ? new Date(sample.collectedAt)
           : new Date(),

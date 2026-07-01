@@ -206,15 +206,9 @@ export class SessionTerminationService {
         riskScoreBefore: profile.riskScore,
         riskScoreAfter: profile.riskScore,
         riskLevelBefore: profile.riskLevel as
-          | 'LOW'
-          | 'MEDIUM'
-          | 'HIGH'
-          | 'CRITICAL',
+          'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
         riskLevelAfter: profile.riskLevel as
-          | 'LOW'
-          | 'MEDIUM'
-          | 'HIGH'
-          | 'CRITICAL',
+          'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
         trustScoreBefore: 0,
         trustScoreAfter: 0,
         signals: [],

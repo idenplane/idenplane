@@ -223,15 +223,9 @@ export class SessionStepUpTrigger {
         riskScoreBefore: profile.riskScore,
         riskScoreAfter: profile.riskScore,
         riskLevelBefore: profile.riskLevel as
-          | 'LOW'
-          | 'MEDIUM'
-          | 'HIGH'
-          | 'CRITICAL',
+          'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
         riskLevelAfter: profile.riskLevel as
-          | 'LOW'
-          | 'MEDIUM'
-          | 'HIGH'
-          | 'CRITICAL',
+          'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
         trustScoreBefore: 100,
         trustScoreAfter: 100,
         signals: [],

@@ -270,8 +270,7 @@ export class AdminAuthService implements OnModuleDestroy {
     }
 
     const realmAccess = payload['realm_access'] as
-      | { roles?: string[] }
-      | undefined;
+      { roles?: string[] } | undefined;
     const roles = realmAccess?.roles ?? [];
 
     return { userId: payload.sub as string, roles };
