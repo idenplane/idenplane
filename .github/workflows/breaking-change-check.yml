@@ -118,7 +118,7 @@ jobs:
           EOF
 
       - name: Restore PR branch files
-        run: git checkout -
+        run: git checkout HEAD -- .
 
       - name: Install oasdiff
         run: |
