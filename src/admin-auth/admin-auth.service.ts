@@ -207,16 +207,17 @@ export class AdminAuthService implements OnModuleDestroy {
       throw new UnauthorizedException('API key authentication not configured');
     }
 
-    let valid = false;
-    try {
-      const a = Buffer.from(apiKey);
-      const b = Buffer.from(expectedKey);
-      valid = a.length === b.length && timingSafeEqual(a, b);
-    } catch {
-      valid = false;
-    }
+    const isValidKey = (() => {
+      try {
+        const a = Buffer.from(apiKey);
+        const b = Buffer.from(expectedKey);
+        return a.length === b.length && timingSafeEqual(a, b);
+      } catch {
+        return false;
+      }
+    })();
 
-    if (!valid) {
+    if (!isValidKey) {
       throw new UnauthorizedException('Invalid API key');
     }
 
