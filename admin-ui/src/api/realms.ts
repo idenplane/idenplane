@@ -79,3 +79,12 @@ export async function sendTestEmail(
   const { data } = await apiClient.post(`/realms/${name}/email/test`, { to });
   return data;
 }
+
+export async function testRealmSmtp(
+  name: string,
+): Promise<{ success: boolean; error?: string }> {
+  const { data } = await apiClient.post<{ success: boolean; error?: string }>(
+    `/realms/${name}/smtp/test`,
+  );
+  return data;
+}
