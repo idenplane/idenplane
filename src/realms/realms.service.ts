@@ -127,6 +127,8 @@ export class RealmsService {
         hcaptchaSiteKey: dto.hcaptchaSiteKey,
         hcaptchaSecretKey: dto.hcaptchaSecretKey,
         captchaScoreThreshold: dto.captchaScoreThreshold,
+        // SCIM provisioning
+        scimEnabled: dto.scimEnabled,
         signingKeys: {
           create: {
             kid: keyPair.kid,
@@ -295,6 +297,8 @@ export class RealmsService {
       hcaptchaSiteKey: dto.hcaptchaSiteKey,
       hcaptchaSecretKey: dto.hcaptchaSecretKey,
       captchaScoreThreshold: dto.captchaScoreThreshold,
+      // SCIM provisioning
+      scimEnabled: dto.scimEnabled,
     };
 
     // Only update password if a real value is provided (not the redacted placeholder)

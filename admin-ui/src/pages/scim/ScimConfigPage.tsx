@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { useParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -14,6 +14,7 @@ import {
   deleteScimAttributeMapping,
 } from '../../api/scim';
 import type { ScimTokenCreateResult } from '../../api/scim';
+import { getRealmByName, updateRealm } from '../../api/realms';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { getErrorMessage } from '../../utils/getErrorMessage';
 
@@ -22,6 +23,8 @@ const SCIM_SCOPES = ['users:read', 'users:write', 'groups:read', 'groups:write']
 export default function ScimConfigPage() {
   const { name } = useParams<{ name: string }>();
   const queryClient = useQueryClient();
+
+  const [scimEnabledToggle, setScimEnabledToggle] = useState(false);
 
   const [showCreateToken, setShowCreateToken] = useState(false);
   const [tokenForm, setTokenForm] = useState({
@@ -41,6 +44,26 @@ export default function ScimConfigPage() {
     direction: 'inbound',
   });
   const [deleteMappingTarget, setDeleteMappingTarget] = useState<string | null>(null);
+
+  const { data: realm } = useQuery({
+    queryKey: ['realm', name],
+    queryFn: () => getRealmByName(name!),
+    enabled: !!name,
+  });
+
+  useEffect(() => {
+    if (realm !== undefined) {
+      setScimEnabledToggle(realm.scimEnabled ?? false);
+    }
+  }, [realm]);
+
+  const updateRealmMutation = useMutation({
+    mutationFn: (scimEnabled: boolean) => updateRealm(name!, { scimEnabled }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['realm', name] });
+      queryClient.invalidateQueries({ queryKey: ['scim-status', name] });
+    },
+  });
 
   const { data: status, isLoading: statusLoading } = useQuery({
     queryKey: ['scim-status', name],
@@ -149,20 +172,50 @@ export default function ScimConfigPage() {
       {/* Status card */}
       <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
         <h2 className="mb-4 text-lg font-semibold text-gray-900">Status</h2>
+
+        {/* SCIM Provisioning toggle */}
+        <div className="mb-6 rounded-md border border-gray-200 bg-gray-50 p-4">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-sm font-medium text-gray-900">SCIM Provisioning</p>
+              <p className="mt-0.5 text-xs text-gray-500">
+                When disabled, all SCIM endpoints for this realm return 403.
+              </p>
+            </div>
+            <label className="relative inline-flex cursor-pointer items-center">
+              <input
+                type="checkbox"
+                className="peer sr-only"
+                checked={scimEnabledToggle}
+                onChange={(e) => setScimEnabledToggle(e.target.checked)}
+              />
+              <div className="peer h-6 w-11 rounded-full bg-gray-200 after:absolute after:left-[2px] after:top-[2px] after:h-5 after:w-5 after:rounded-full after:border after:border-gray-300 after:bg-white after:transition-all after:content-[''] peer-checked:bg-indigo-600 peer-checked:after:translate-x-full peer-checked:after:border-white peer-focus:outline-none peer-focus:ring-2 peer-focus:ring-indigo-500 peer-focus:ring-offset-2" />
+            </label>
+          </div>
+          <div className="mt-3 flex items-center gap-3">
+            <button
+              type="button"
+              onClick={() => updateRealmMutation.mutate(scimEnabledToggle)}
+              disabled={updateRealmMutation.isPending}
+              className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {updateRealmMutation.isPending ? 'Saving...' : 'Save'}
+            </button>
+            {updateRealmMutation.isSuccess && (
+              <span className="text-xs text-green-600">Saved.</span>
+            )}
+            {updateRealmMutation.isError && (
+              <span className="text-xs text-red-600">
+                {getErrorMessage(updateRealmMutation.error, 'Failed to save.')}
+              </span>
+            )}
+          </div>
+        </div>
+
         {statusLoading ? (
           <div className="text-sm text-gray-500">Loading status...</div>
         ) : status ? (
           <dl className="grid grid-cols-2 gap-x-8 gap-y-3 sm:grid-cols-3">
-            <div>
-              <dt className="text-xs font-medium uppercase tracking-wider text-gray-500">SCIM Enabled</dt>
-              <dd className="mt-1">
-                <span
-                  className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${status.enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}
-                >
-                  {status.enabled ? 'Enabled' : 'Disabled'}
-                </span>
-              </dd>
-            </div>
             <div>
               <dt className="text-xs font-medium uppercase tracking-wider text-gray-500">Active Tokens</dt>
               <dd className="mt-1 text-sm font-medium text-gray-900">{status.activeTokens}</dd>
