@@ -22,6 +22,7 @@ import { RolesService } from './roles.service.js';
 import { CreateRoleDto } from './dto/create-role.dto.js';
 import { UpdateRoleDto } from './dto/update-role.dto.js';
 import { AssignRolesDto } from './dto/assign-role.dto.js';
+import { NormalizeRoleBodyPipe } from './pipes/normalize-role-body.pipe.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
@@ -155,9 +156,13 @@ export class RolesController {
   assignRealmRoles(
     @CurrentRealm() realm: Realm,
     @Param('userId') userId: string,
-    @Body() dto: AssignRolesDto,
+    @Body(NormalizeRoleBodyPipe) dto: AssignRolesDto,
   ) {
-    return this.rolesService.assignRealmRoles(realm, userId, dto.roleNames);
+    return this.rolesService.assignRealmRoles(
+      realm,
+      userId,
+      dto.effectiveNames,
+    );
   }
 
   @Get('users/:userId/role-mappings/realm')
@@ -181,9 +186,13 @@ export class RolesController {
   removeUserRealmRoles(
     @CurrentRealm() realm: Realm,
     @Param('userId') userId: string,
-    @Body() dto: AssignRolesDto,
+    @Body(NormalizeRoleBodyPipe) dto: AssignRolesDto,
   ) {
-    return this.rolesService.removeUserRealmRoles(realm, userId, dto.roleNames);
+    return this.rolesService.removeUserRealmRoles(
+      realm,
+      userId,
+      dto.effectiveNames,
+    );
   }
 
   // ─── User Client Role Assignment ────────────────────────
@@ -199,13 +208,13 @@ export class RolesController {
     @CurrentRealm() realm: Realm,
     @Param('userId') userId: string,
     @Param('clientId') clientId: string,
-    @Body() dto: AssignRolesDto,
+    @Body(NormalizeRoleBodyPipe) dto: AssignRolesDto,
   ) {
     return this.rolesService.assignClientRoles(
       realm,
       userId,
       clientId,
-      dto.roleNames,
+      dto.effectiveNames,
     );
   }
 
@@ -232,13 +241,13 @@ export class RolesController {
     @CurrentRealm() realm: Realm,
     @Param('userId') userId: string,
     @Param('clientId') clientId: string,
-    @Body() dto: AssignRolesDto,
+    @Body(NormalizeRoleBodyPipe) dto: AssignRolesDto,
   ) {
     return this.rolesService.removeUserClientRoles(
       realm,
       userId,
       clientId,
-      dto.roleNames,
+      dto.effectiveNames,
     );
   }
 }

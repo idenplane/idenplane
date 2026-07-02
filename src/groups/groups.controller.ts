@@ -21,6 +21,7 @@ import { GroupsService } from './groups.service.js';
 import { CreateGroupDto } from './dto/create-group.dto.js';
 import { UpdateGroupDto } from './dto/update-group.dto.js';
 import { AssignRolesDto } from '../roles/dto/assign-role.dto.js';
+import { NormalizeRoleBodyPipe } from '../roles/pipes/normalize-role-body.pipe.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
@@ -172,9 +173,13 @@ export class GroupsController {
   assignRoles(
     @CurrentRealm() realm: Realm,
     @Param('groupId') groupId: string,
-    @Body() dto: AssignRolesDto,
+    @Body(NormalizeRoleBodyPipe) dto: AssignRolesDto,
   ) {
-    return this.groupsService.assignRolesToGroup(realm, groupId, dto.roleNames);
+    return this.groupsService.assignRolesToGroup(
+      realm,
+      groupId,
+      dto.effectiveNames,
+    );
   }
 
   @Delete('groups/:groupId/role-mappings')
@@ -186,12 +191,12 @@ export class GroupsController {
   removeRoles(
     @CurrentRealm() realm: Realm,
     @Param('groupId') groupId: string,
-    @Body() dto: AssignRolesDto,
+    @Body(NormalizeRoleBodyPipe) dto: AssignRolesDto,
   ) {
     return this.groupsService.removeRolesFromGroup(
       realm,
       groupId,
-      dto.roleNames,
+      dto.effectiveNames,
     );
   }
 }
