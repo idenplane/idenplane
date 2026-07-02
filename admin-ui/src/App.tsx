@@ -57,6 +57,7 @@ import ScimConfigPage from './pages/scim/ScimConfigPage';
 import PolicyListPage from './pages/authorization/PolicyListPage';
 import PolicyCreatePage from './pages/authorization/PolicyCreatePage';
 import PolicyDetailPage from './pages/authorization/PolicyDetailPage';
+import ThemeBuilderPage from './pages/theme-builder/ThemeBuilderPage';
 import NhiListPage from './pages/nhi/NhiListPage';
 import NhiDetailPage from './pages/nhi/NhiDetailPage';
 import NhiAnalyticsPage from './pages/nhi/NhiAnalyticsPage';
@@ -137,6 +138,7 @@ export default function App() {
           <Route path="/console/realms/:name/authorization-policies" element={<PolicyListPage />} />
           <Route path="/console/realms/:name/authorization-policies/new" element={<PolicyCreatePage />} />
           <Route path="/console/realms/:name/authorization-policies/:policyId" element={<PolicyDetailPage />} />
+          <Route path="/console/realms/:name/theme-builder" element={<ThemeBuilderPage />} />
           <Route path="/console/realms/:name/nhi" element={<NhiListPage />} />
           <Route path="/console/realms/:name/nhi/:id" element={<NhiDetailPage />} />
           <Route path="/console/realms/:name/nhi-analytics" element={<NhiAnalyticsPage />} />
