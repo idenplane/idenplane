@@ -47,6 +47,17 @@ const NAV_PATHS: string[] = [
   ...[...layoutSrc.matchAll(/\bto:\s*'(\/[^']+)'/g)].map(([, p]) => p),
 ];
 
+/**
+ * Routes that legitimately have no direct sidebar nav entry.
+ * Add here when a route is intentionally reachable without appearing in the nav.
+ */
+const ROUTE_NAV_WHITELIST = new Set([
+  '/console/login',
+  '/setup',
+  '/console/realms/:name',         // realm overview — clicked from the realm list
+  '/console/realms/:name/nhi-analytics', // NHI analytics — linked from NHI list page
+]);
+
 describe('nav route coverage', () => {
   it('extracts at least one app route from App.tsx', () => {
     expect(APP_ROUTES.size).toBeGreaterThan(0);
@@ -61,6 +72,24 @@ describe('nav route coverage', () => {
     expect(
       orphaned,
       `Orphaned nav items (no matching route in App.tsx):\n  ${orphaned.join('\n  ')}`,
+    ).toHaveLength(0);
+  });
+
+  it('every navigable route has a nav entry or is whitelisted', () => {
+    const routesNeedingNav = [...APP_ROUTES].filter((route) => {
+      // Explicit whitelist (standalone / non-nav pages)
+      if (ROUTE_NAV_WHITELIST.has(route)) return false;
+      // Detail pages with two or more dynamic segments — reached via list-row clicks
+      if ((route.match(/:/g) ?? []).length >= 2) return false;
+      // Creation / new-item pages — reached via "Add" / "Create" buttons, not nav
+      if (/\/(create|new)$/.test(route)) return false;
+      return true;
+    });
+
+    const noNav = routesNeedingNav.filter((route) => !NAV_PATHS.includes(route));
+    expect(
+      noNav,
+      `Routes with no nav entry (add to ROUTE_NAV_WHITELIST if intentional):\n  ${noNav.join('\n  ')}`,
     ).toHaveLength(0);
   });
 });

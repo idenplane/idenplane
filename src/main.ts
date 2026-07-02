@@ -10,6 +10,7 @@ import { AppModule } from './app.module.js';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter.js';
 import { registerHandlebarsHelpers } from './theme/handlebars-helpers.js';
 import { CorsOriginService } from './cors/cors-origin.service.js';
+import { NormalizeRoleBodyPipe } from './roles/pipes/normalize-role-body.pipe.js';
 
 /** Known-insecure / placeholder values that must never reach production. */
 const INSECURE_ADMIN_API_KEY_VALUES = new Set([
@@ -262,7 +263,12 @@ async function bootstrap() {
   // Register theme engine Handlebars helpers ({{msg}}, {{msgArgs}})
   registerHandlebarsHelpers();
 
+  // NormalizeRoleBodyPipe MUST be registered before ValidationPipe so that
+  // bare-array Keycloak-style bodies (e.g. [{ name: "admin" }]) are reshaped
+  // to { roleNames: [...] } before ValidationPipe rejects them.
+  // The pipe's metatype guard ensures it only activates for AssignRolesDto params.
   app.useGlobalPipes(
+    new NormalizeRoleBodyPipe(),
     new ValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,

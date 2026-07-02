@@ -25,6 +25,8 @@ export default function ScimConfigPage() {
   const queryClient = useQueryClient();
 
   const [scimEnabledToggle, setScimEnabledToggle] = useState(false);
+  const [scimUserAutocreate, setScimUserAutocreate] = useState(true);
+  const [scimGroupSyncEnabled, setScimGroupSyncEnabled] = useState(true);
 
   const [showCreateToken, setShowCreateToken] = useState(false);
   const [tokenForm, setTokenForm] = useState({
@@ -54,11 +56,14 @@ export default function ScimConfigPage() {
   useEffect(() => {
     if (realm !== undefined) {
       setScimEnabledToggle(realm.scimEnabled ?? false);
+      setScimUserAutocreate(realm.scimUserAutocreate ?? true);
+      setScimGroupSyncEnabled(realm.scimGroupSyncEnabled ?? true);
     }
   }, [realm]);
 
   const updateRealmMutation = useMutation({
-    mutationFn: (scimEnabled: boolean) => updateRealm(name!, { scimEnabled }),
+    mutationFn: (payload: { scimEnabled: boolean; scimUserAutocreate: boolean; scimGroupSyncEnabled: boolean }) =>
+      updateRealm(name!, payload),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['realm', name] });
       queryClient.invalidateQueries({ queryKey: ['scim-status', name] });
@@ -195,7 +200,7 @@ export default function ScimConfigPage() {
           <div className="mt-3 flex items-center gap-3">
             <button
               type="button"
-              onClick={() => updateRealmMutation.mutate(scimEnabledToggle)}
+              onClick={() => updateRealmMutation.mutate({ scimEnabled: scimEnabledToggle, scimUserAutocreate, scimGroupSyncEnabled })}
               disabled={updateRealmMutation.isPending}
               className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
             >
@@ -222,18 +227,32 @@ export default function ScimConfigPage() {
             </div>
             <div>
               <dt className="text-xs font-medium uppercase tracking-wider text-gray-500">User Autocreate</dt>
-              <dd className="mt-1">
-                <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${status.userAutocreate ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
-                  {status.userAutocreate ? 'On' : 'Off'}
-                </span>
+              <dd className="mt-1 flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="scimUserAutocreate"
+                  checked={scimUserAutocreate}
+                  onChange={(e) => setScimUserAutocreate(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <label htmlFor="scimUserAutocreate" className="text-sm text-gray-700">
+                  {scimUserAutocreate ? 'On' : 'Off'}
+                </label>
               </dd>
             </div>
             <div>
               <dt className="text-xs font-medium uppercase tracking-wider text-gray-500">Group Sync</dt>
-              <dd className="mt-1">
-                <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${status.groupSyncEnabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-600'}`}>
-                  {status.groupSyncEnabled ? 'Enabled' : 'Disabled'}
-                </span>
+              <dd className="mt-1 flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  id="scimGroupSyncEnabled"
+                  checked={scimGroupSyncEnabled}
+                  onChange={(e) => setScimGroupSyncEnabled(e.target.checked)}
+                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                />
+                <label htmlFor="scimGroupSyncEnabled" className="text-sm text-gray-700">
+                  {scimGroupSyncEnabled ? 'Enabled' : 'Disabled'}
+                </label>
               </dd>
             </div>
             <div>
