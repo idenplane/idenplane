@@ -1,4 +1,8 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { RolesService } from './roles.service.js';
 import {
   createMockPrismaService,
@@ -249,6 +253,18 @@ describe('RolesService', () => {
         service.assignRealmRoles(mockRealm, 'user-1', ['admin', 'missing']),
       ).rejects.toThrow(NotFoundException);
     });
+
+    it('should throw BadRequestException when roleNames is empty', async () => {
+      await expect(
+        service.assignRealmRoles(mockRealm, 'user-1', []),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when roleNames is undefined (never throws TypeError)', async () => {
+      await expect(
+        service.assignRealmRoles(mockRealm, 'user-1', undefined as any),
+      ).rejects.toThrow(BadRequestException);
+    });
   });
 
   describe('getUserRealmRoles', () => {
@@ -310,6 +326,18 @@ describe('RolesService', () => {
       ).rejects.toThrow(NotFoundException);
     });
 
+    it('should throw BadRequestException when roleNames is empty', async () => {
+      await expect(
+        service.removeUserRealmRoles(mockRealm, 'user-1', []),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when roleNames is undefined', async () => {
+      await expect(
+        service.removeUserRealmRoles(mockRealm, 'user-1', undefined as any),
+      ).rejects.toThrow(BadRequestException);
+    });
+
     it('should handle removal of non-existent roles gracefully', async () => {
       prisma.user.findFirst.mockResolvedValue(mockUser);
       prisma.role.findMany.mockResolvedValue([]);
@@ -365,6 +393,23 @@ describe('RolesService', () => {
           'editor',
         ]),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    it('should throw BadRequestException when roleNames is empty', async () => {
+      await expect(
+        service.assignClientRoles(mockRealm, 'user-1', 'my-app', []),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when roleNames is undefined', async () => {
+      await expect(
+        service.assignClientRoles(
+          mockRealm,
+          'user-1',
+          'my-app',
+          undefined as any,
+        ),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 
@@ -466,6 +511,23 @@ describe('RolesService', () => {
       );
 
       expect(result).toEqual({ removed: ['nonexistent'] });
+    });
+
+    it('should throw BadRequestException when roleNames is empty', async () => {
+      await expect(
+        service.removeUserClientRoles(mockRealm, 'user-1', 'my-app', []),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('should throw BadRequestException when roleNames is undefined', async () => {
+      await expect(
+        service.removeUserClientRoles(
+          mockRealm,
+          'user-1',
+          'my-app',
+          undefined as any,
+        ),
+      ).rejects.toThrow(BadRequestException);
     });
   });
 });

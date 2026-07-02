@@ -174,7 +174,11 @@ export class GroupsController {
     @Param('groupId') groupId: string,
     @Body() dto: AssignRolesDto,
   ) {
-    return this.groupsService.assignRolesToGroup(realm, groupId, dto.roleNames);
+    return this.groupsService.assignRolesToGroup(
+      realm,
+      groupId,
+      dto.effectiveNames,
+    );
   }
 
   @Delete('groups/:groupId/role-mappings')
@@ -191,7 +195,7 @@ export class GroupsController {
     return this.groupsService.removeRolesFromGroup(
       realm,
       groupId,
-      dto.roleNames,
+      dto.effectiveNames,
     );
   }
 }
