@@ -24,6 +24,7 @@ import { AdminAuthService } from './admin-auth.service.js';
 import { RateLimitGuard } from '../rate-limit/rate-limit.guard.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 import { AdminLoginDto } from './dto/login.dto.js';
+import { AdminApiKeyLoginDto } from './dto/api-key-login.dto.js';
 
 const ADMIN_RT_COOKIE = 'admin_rt';
 const TOKEN_TTL_MS = 3600 * 1000;
@@ -81,6 +82,31 @@ export class AdminAuthController {
     for (const [name, value] of Object.entries(rateLimitHeaders)) {
       res.setHeader(name, value);
     }
+
+    const isProduction = this.config.get<string>('NODE_ENV') === 'production';
+    res.cookie(ADMIN_RT_COOKIE, tokenResponse.access_token, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'strict',
+      maxAge: TOKEN_TTL_MS,
+      path: '/admin/auth',
+    });
+
+    return tokenResponse;
+  }
+
+  @Post('login-with-api-key')
+  @Public()
+  @UseGuards(RateLimitGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Exchange admin API key for a session token' })
+  @ApiResponse({ status: 200, description: 'Returns bearer token and sets session cookie' })
+  @ApiResponse({ status: 401, description: 'Invalid API key' })
+  async loginWithApiKey(
+    @Body() body: AdminApiKeyLoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const tokenResponse = await this.adminAuthService.loginWithApiKey(body.apiKey);
 
     const isProduction = this.config.get<string>('NODE_ENV') === 'production';
     res.cookie(ADMIN_RT_COOKIE, tokenResponse.access_token, {
