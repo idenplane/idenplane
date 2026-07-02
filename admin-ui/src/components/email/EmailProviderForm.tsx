@@ -1,7 +1,7 @@
 import { useState, type FormEvent } from 'react';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Realm, EmailProviderType, EmailProviderConfig } from '../../types';
-import { updateRealm, sendTestEmail } from '../../api/realms';
+import { updateRealm, sendTestEmail, testRealmSmtp } from '../../api/realms';
 import PasswordInput from '../PasswordInput';
 import { getErrorMessage } from '../../utils/getErrorMessage';
 
@@ -456,6 +456,10 @@ export default function EmailProviderForm({ realm }: EmailProviderFormProps) {
     mutationFn: () => sendTestEmail(realm.name, testEmailTo),
   });
 
+  const smtpTestMutation = useMutation({
+    mutationFn: () => testRealmSmtp(realm.name),
+  });
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     updateMutation.mutate();
@@ -587,6 +591,41 @@ export default function EmailProviderForm({ realm }: EmailProviderFormProps) {
           {testMutation.isError && (
             <p role="alert" className="mt-3 text-sm text-red-700">
               {getErrorMessage(testMutation.error, 'Failed to send test email. Check your settings.')}
+            </p>
+          )}
+        </div>
+      )}
+
+      {/* Test connection */}
+      {hasConfig && (
+        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+          <h3 className="text-sm font-semibold text-gray-900">Test Connection</h3>
+          <p className="mt-1 text-xs text-gray-500">
+            Verify that the saved email provider settings can connect and send. No message is delivered to a real recipient.
+          </p>
+          <div className="mt-4">
+            <button
+              type="button"
+              onClick={() => { smtpTestMutation.reset(); smtpTestMutation.mutate(); }}
+              disabled={smtpTestMutation.isPending}
+              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {smtpTestMutation.isPending ? 'Testing…' : 'Test Connection'}
+            </button>
+          </div>
+          {smtpTestMutation.isSuccess && smtpTestMutation.data.success && (
+            <p role="status" className="mt-3 text-sm text-green-700">
+              ✓ Connection successful — email provider is reachable.
+            </p>
+          )}
+          {smtpTestMutation.isSuccess && !smtpTestMutation.data.success && (
+            <p role="alert" className="mt-3 text-sm text-red-700">
+              Connection failed: {smtpTestMutation.data.error ?? 'Unknown error. Check your provider settings.'}
+            </p>
+          )}
+          {smtpTestMutation.isError && (
+            <p role="alert" className="mt-3 text-sm text-red-700">
+              {getErrorMessage(smtpTestMutation.error, 'Connection test failed. Check your provider settings.')}
             </p>
           )}
         </div>
