@@ -15,13 +15,22 @@ function makeReqRes(
       ? { 'x-forwarded-for': overrides.forwardedFor }
       : {},
     socket: { remoteAddress: overrides.ip ?? '127.0.0.1' },
+    cookies: {},
   };
   const headers: Record<string, string> = {};
+  const cookies: Record<string, string> = {};
   const res: any = {
     setHeader: (name: string, value: string) => {
       headers[name] = value;
     },
+    cookie: (name: string, value: string) => {
+      cookies[name] = value;
+    },
+    clearCookie: (name: string) => {
+      delete cookies[name];
+    },
     _headers: headers,
+    _cookies: cookies,
   };
   return { req, res };
 }
