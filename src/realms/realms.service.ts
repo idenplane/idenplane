@@ -299,6 +299,13 @@ export class RealmsService {
       captchaScoreThreshold: dto.captchaScoreThreshold,
       // SCIM provisioning
       scimEnabled: dto.scimEnabled,
+      scimUserAutocreate: dto.scimUserAutocreate,
+      scimGroupSyncEnabled: dto.scimGroupSyncEnabled,
+      // Event retention
+      loginEventRetentionDays: dto.loginEventRetentionDays,
+      adminEventRetentionDays: dto.adminEventRetentionDays,
+      // User lifecycle
+      deletionGracePeriodDays: dto.deletionGracePeriodDays,
     };
 
     // Only update password if a real value is provided (not the redacted placeholder)

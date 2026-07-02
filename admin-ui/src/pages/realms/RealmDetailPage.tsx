@@ -130,6 +130,10 @@ export default function RealmDetailPage() {
     // Risk Thresholds
     riskThresholdStepUp: 50,
     riskThresholdBlock: 80,
+    // Session Limits
+    maxSessionsPerUser: 0,
+    // Adaptive Authentication
+    adaptiveAuthEnabled: false,
     // Locale
     defaultLocale: 'en',
     supportedLocales: [] as string[],
@@ -137,6 +141,9 @@ export default function RealmDetailPage() {
     eventsEnabled: false,
     eventsExpiration: 604800,
     adminEventsEnabled: false,
+    loginEventRetentionDays: 30,
+    adminEventRetentionDays: 90,
+    deletionGracePeriodDays: 14,
     // Theme
     themeName: 'idenplane',
     loginTheme: 'idenplane',
@@ -191,6 +198,10 @@ export default function RealmDetailPage() {
         // Risk Thresholds
         riskThresholdStepUp: (realm as any).riskThresholdStepUp ?? 50,
         riskThresholdBlock: (realm as any).riskThresholdBlock ?? 80,
+        // Session Limits
+        maxSessionsPerUser: (realm as any).maxSessionsPerUser ?? 0,
+        // Adaptive Authentication
+        adaptiveAuthEnabled: (realm as any).adaptiveAuthEnabled ?? false,
         // Locale
         defaultLocale: (realm as any).defaultLocale ?? 'en',
         supportedLocales: (realm as any).supportedLocales ?? [],
@@ -198,6 +209,9 @@ export default function RealmDetailPage() {
         eventsEnabled: realm.eventsEnabled ?? false,
         eventsExpiration: realm.eventsExpiration ?? 604800,
         adminEventsEnabled: realm.adminEventsEnabled ?? false,
+        loginEventRetentionDays: (realm as any).loginEventRetentionDays ?? 30,
+        adminEventRetentionDays: (realm as any).adminEventRetentionDays ?? 90,
+        deletionGracePeriodDays: (realm as any).deletionGracePeriodDays ?? 14,
         // Theme
         themeName: realm.themeName ?? 'idenplane',
         loginTheme: realm.loginTheme ?? 'idenplane',
@@ -957,6 +971,52 @@ export default function RealmDetailPage() {
             </div>
           </div>
 
+          {/* Session Limits */}
+          <div className="space-y-6 border-t border-gray-200 pt-6">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Session Limits</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Limit the number of concurrent active sessions per user.
+              </p>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Max sessions per user</label>
+              <input type="number" min={0} value={form.maxSessionsPerUser}
+                onChange={(e) => setForm({ ...form, maxSessionsPerUser: Number(e.target.value) })}
+                className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
+              <p className="mt-1 text-xs text-gray-400">
+                Maximum concurrent active sessions per user. When the limit is reached the oldest session is evicted.
+                Set to 0 for unlimited.
+              </p>
+            </div>
+          </div>
+
+          {/* Adaptive Authentication */}
+          <div className="space-y-6 border-t border-gray-200 pt-6">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Adaptive Authentication</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Enable AI-powered risk scoring to dynamically adjust authentication requirements.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="adaptiveAuthEnabled"
+                checked={form.adaptiveAuthEnabled}
+                onChange={(e) => setForm({ ...form, adaptiveAuthEnabled: e.target.checked })}
+                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <label htmlFor="adaptiveAuthEnabled" className="text-sm font-medium text-gray-700">
+                Enable adaptive authentication
+              </label>
+            </div>
+            <p className="ml-6 -mt-4 text-xs text-gray-400">
+              When enabled, each login attempt is scored for risk. High-risk logins trigger step-up MFA or are
+              blocked based on the thresholds above.
+            </p>
+          </div>
+
           {updateMutation.isSuccess && (
             <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">
               Security settings updated successfully.
@@ -1044,6 +1104,51 @@ export default function RealmDetailPage() {
               </div>
               <p className="mt-1 text-xs text-gray-400">
                 How long events are kept before automatic cleanup. Default: 7 days (604800s).
+              </p>
+            </div>
+          </div>
+
+          {/* Event Retention */}
+          <div className="space-y-6 border-t border-gray-200 pt-6">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Event Retention</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                How many days event records are retained in the database before being purged.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">Login event retention (days)</label>
+                <input type="number" min={1} value={form.loginEventRetentionDays}
+                  onChange={(e) => setForm({ ...form, loginEventRetentionDays: Number(e.target.value) })}
+                  className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
+                <p className="mt-1 text-xs text-gray-400">Days to keep login/auth event records. Default: 30.</p>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">Admin event retention (days)</label>
+                <input type="number" min={1} value={form.adminEventRetentionDays}
+                  onChange={(e) => setForm({ ...form, adminEventRetentionDays: Number(e.target.value) })}
+                  className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
+                <p className="mt-1 text-xs text-gray-400">Days to keep admin audit event records. Default: 90.</p>
+              </div>
+            </div>
+          </div>
+
+          {/* User Lifecycle */}
+          <div className="space-y-6 border-t border-gray-200 pt-6">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">User Lifecycle</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Configure how long deleted user accounts are retained before permanent removal.
+              </p>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Deletion grace period (days)</label>
+              <input type="number" min={0} value={form.deletionGracePeriodDays}
+                onChange={(e) => setForm({ ...form, deletionGracePeriodDays: Number(e.target.value) })}
+                className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
+              <p className="mt-1 text-xs text-gray-400">
+                Days before a soft-deleted account is permanently purged. Set to 0 to disable soft-deletion. Default: 14.
               </p>
             </div>
           </div>

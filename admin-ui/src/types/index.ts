@@ -79,6 +79,15 @@ export interface Realm {
   eventsEnabled: boolean;
   eventsExpiration: number;
   adminEventsEnabled: boolean;
+  loginEventRetentionDays?: number;
+  adminEventRetentionDays?: number;
+  deletionGracePeriodDays?: number;
+  maxSessionsPerUser?: number;
+  adaptiveAuthEnabled?: boolean;
+  riskThresholdStepUp?: number;
+  riskThresholdBlock?: number;
+  scimUserAutocreate?: boolean;
+  scimGroupSyncEnabled?: boolean;
   themeName: string;
   theme: RealmTheme | null;
   loginTheme: string;
