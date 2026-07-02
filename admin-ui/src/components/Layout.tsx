@@ -56,6 +56,9 @@ export default function Layout() {
         { to: `/console/realms/${currentRealm}/identity-providers`, label: 'Identity Providers', icon: Icons.Idp },
         { to: `/console/realms/${currentRealm}/saml-providers`, label: 'SAML Providers', icon: Icons.Globe },
         { to: `/console/realms/${currentRealm}/auth-flows`, label: 'Auth Flows', icon: Icons.Build },
+        { to: `/console/realms/${currentRealm}/registration-settings`, label: 'Registration Settings', icon: Icons.Settings },
+        { to: `/console/realms/${currentRealm}/registration-approvals`, label: 'Registration Approvals', icon: Icons.Clock },
+        { to: `/console/realms/${currentRealm}/registration-fields`, label: 'Registration Fields', icon: Icons.Code },
         { to: `/console/realms/${currentRealm}/risk-dashboard`, label: 'Risk Dashboard', icon: Icons.ShieldCheck },
         { to: `/console/realms/${currentRealm}/risk-policies`, label: 'Risk Policies', icon: Icons.Roles },
         { to: `/console/realms/${currentRealm}/webhooks`, label: 'Webhooks', icon: Icons.Globe },
@@ -64,6 +67,8 @@ export default function Layout() {
         { to: `/console/realms/${currentRealm}/custom-attributes`, label: 'Custom Attributes', icon: Icons.Code },
         { to: `/console/realms/${currentRealm}/scim`, label: 'SCIM', icon: Icons.Database },
         { to: `/console/realms/${currentRealm}/authorization-policies`, label: 'Authorization', icon: Icons.Roles },
+        { to: `/console/realms/${currentRealm}/theme-builder`, label: 'Theme Builder', icon: Icons.Sun },
+        { to: `/console/realms/${currentRealm}/nhi`, label: 'Non-Human Identity', icon: Icons.Server },
       ]
     : [];
 
@@ -71,6 +76,7 @@ export default function Layout() {
     { to: '/console', label: 'Dashboard', icon: Icons.Dashboard, end: true },
     { to: '/console/realms', label: 'Realms', icon: Icons.Realms, end: false },
     { to: '/console/plugins', label: 'Plugins', icon: Icons.Zap, end: false },
+    { to: '/console/system-status', label: 'System Status', icon: Icons.Server, end: false },
   ];
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>

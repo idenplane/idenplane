@@ -90,6 +90,7 @@ export interface Realm {
   magicLinkRateLimitWindowSeconds: number;
   magicLinkEmailSubject: string | null;
   magicLinkEmailTemplate: string | null;
+  scimEnabled?: boolean;
   createdAt: string;
   updatedAt: string;
 }

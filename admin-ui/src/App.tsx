@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { useEffect } from 'react';
 import ErrorBoundary from './components/ErrorBoundary';
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
@@ -57,22 +58,52 @@ import ScimConfigPage from './pages/scim/ScimConfigPage';
 import PolicyListPage from './pages/authorization/PolicyListPage';
 import PolicyCreatePage from './pages/authorization/PolicyCreatePage';
 import PolicyDetailPage from './pages/authorization/PolicyDetailPage';
+import ThemeBuilderPage from './pages/theme-builder/ThemeBuilderPage';
+import NhiListPage from './pages/nhi/NhiListPage';
+import NhiDetailPage from './pages/nhi/NhiDetailPage';
+import NhiAnalyticsPage from './pages/nhi/NhiAnalyticsPage';
 import PluginsPage from './pages/plugins/PluginsPage';
+import SystemStatusPage from './pages/system/SystemStatusPage';
 import NotFoundPage from './pages/NotFoundPage';
-import { hasCredentials } from './api/client';
+import { hasCredentials, refreshSession } from './api/client';
+import { useAuthContext } from './context/AuthContext';
 
 function ProtectedRoute() {
-  // hasCredentials() reads from the in-memory module-level store — no
-  // sessionStorage involved (see issue #330 fix).
+  const { bootstrapped } = useAuthContext();
+  // Wait for the bootstrap refresh call to complete before deciding to redirect.
+  // Without this, a page reload would always redirect to login even when a valid
+  // admin_rt cookie exists (fixes #1095).
+  if (!bootstrapped) {
+    return null;
+  }
   if (!hasCredentials()) {
     return <Navigate to="/console/login" replace />;
   }
   return <Outlet />;
 }
 
+function SessionBootstrap() {
+  const { setBootstrapped, setToken } = useAuthContext();
+
+  useEffect(() => {
+    let cancelled = false;
+    refreshSession().then((token) => {
+      if (cancelled) return;
+      if (token) {
+        setToken(token);
+      }
+      setBootstrapped(true);
+    });
+    return () => { cancelled = true; };
+  }, [setBootstrapped, setToken]);
+
+  return null;
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
+    <SessionBootstrap />
     <Routes>
       <Route path="/console/login" element={<LoginPage />} />
       <Route path="/setup" element={<SetupWizardPage />} />
@@ -134,7 +165,12 @@ export default function App() {
           <Route path="/console/realms/:name/authorization-policies" element={<PolicyListPage />} />
           <Route path="/console/realms/:name/authorization-policies/new" element={<PolicyCreatePage />} />
           <Route path="/console/realms/:name/authorization-policies/:policyId" element={<PolicyDetailPage />} />
+          <Route path="/console/realms/:name/theme-builder" element={<ThemeBuilderPage />} />
+          <Route path="/console/realms/:name/nhi" element={<NhiListPage />} />
+          <Route path="/console/realms/:name/nhi/:id" element={<NhiDetailPage />} />
+          <Route path="/console/realms/:name/nhi-analytics" element={<NhiAnalyticsPage />} />
           <Route path="/console/plugins" element={<PluginsPage />} />
+          <Route path="/console/system-status" element={<SystemStatusPage />} />
           {/* Catch-all for unknown /console/... paths — rendered inside the Layout shell */}
           <Route path="*" element={<NotFoundPage />} />
         </Route>
