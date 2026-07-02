@@ -53,17 +53,6 @@ export async function deletePolicy(realmName: string, id: string): Promise<void>
   await apiClient.delete(`/realms/${realmName}/policies/${id}`);
 }
 
-export async function evaluatePolicy(
-  realmName: string,
-  context: Record<string, unknown>,
-): Promise<unknown> {
-  const { data } = await apiClient.post<unknown>(
-    `/realms/${realmName}/policies/evaluate`,
-    context,
-  );
-  return data;
-}
-
 export async function testPolicy(
   realmName: string,
   id: string,

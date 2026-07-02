@@ -62,19 +62,6 @@ export async function addMapper(
   return data;
 }
 
-export async function updateMapper(
-  realmName: string,
-  scopeId: string,
-  mapperId: string,
-  mapper: { name?: string; config?: Record<string, unknown> },
-): Promise<ProtocolMapper> {
-  const { data } = await apiClient.put<ProtocolMapper>(
-    `/realms/${realmName}/client-scopes/${scopeId}/protocol-mappers/${mapperId}`,
-    mapper,
-  );
-  return data;
-}
-
 export async function deleteMapper(
   realmName: string,
   scopeId: string,
