@@ -61,5 +61,7 @@ export function useAuth() {
     navigate('/console/login');
   }, [clearAuthState, navigate]);
 
-  return { isAuthenticated, login, loginWithCredentials, logout, clearAuthState };
+  const { bootstrapped } = useAuthContext();
+
+  return { isAuthenticated, bootstrapped, login, loginWithCredentials, logout, clearAuthState };
 }
