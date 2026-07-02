@@ -1,12 +1,11 @@
 import { useCallback } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { getAllRealms } from '../api/realms';
 import apiClient, { setCredentials, clearCredentials } from '../api/client';
 import { useAuthContext } from '../context/AuthContext';
 
 export function useAuth() {
   const navigate = useNavigate();
-  const { apiKey, token, setApiKey, setToken, clearAuth } = useAuthContext();
+  const { apiKey, token, setToken, clearAuth } = useAuthContext();
 
   const isAuthenticated = apiKey !== null || token !== null;
 
@@ -18,19 +17,19 @@ export function useAuth() {
   const login = useCallback(
     async (key: string): Promise<boolean> => {
       clearAuthState();
-      // Optimistically load credentials so the probe request is authenticated.
-      setCredentials({ apiKey: key });
       try {
-        await getAllRealms();
-        // Probe succeeded — persist to React state.
-        setApiKey(key);
-        return true;
+        const { data } = await apiClient.post('/auth/login-with-api-key', { apiKey: key });
+        if (data.access_token) {
+          setCredentials({ token: data.access_token });
+          setToken(data.access_token);
+          return true;
+        }
+        return false;
       } catch {
-        clearCredentials();
         return false;
       }
     },
-    [clearAuthState, setApiKey],
+    [clearAuthState, setToken],
   );
 
   const loginWithCredentials = useCallback(

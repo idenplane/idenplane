@@ -6,6 +6,7 @@ import {
   HttpStatus,
   OnModuleDestroy,
 } from '@nestjs/common';
+import { timingSafeEqual } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { JwkService } from '../crypto/jwk.service.js';
@@ -194,6 +195,63 @@ export class AdminAuthService implements OnModuleDestroy {
         `Failed to persist revoked admin token to DB: ${(err as Error).message}`,
       );
     }
+  }
+
+  async loginWithApiKey(apiKey: string): Promise<{
+    access_token: string;
+    token_type: string;
+    expires_in: number;
+  }> {
+    const expectedKey = process.env['ADMIN_API_KEY'];
+    if (!expectedKey) {
+      throw new UnauthorizedException('API key authentication not configured');
+    }
+
+    let valid = false;
+    try {
+      const a = Buffer.from(apiKey);
+      const b = Buffer.from(expectedKey);
+      valid = a.length === b.length && timingSafeEqual(a, b);
+    } catch {
+      valid = false;
+    }
+
+    if (!valid) {
+      throw new UnauthorizedException('Invalid API key');
+    }
+
+    const masterRealm = await this.prisma.realm.findUnique({
+      where: { name: 'master' },
+    });
+
+    if (!masterRealm) {
+      throw new UnauthorizedException('Admin system not initialized');
+    }
+
+    const signingKey = await this.prisma.realmSigningKey.findFirst({
+      where: { realmId: masterRealm.id, active: true },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    if (!signingKey) {
+      throw new Error('No signing key found for master realm');
+    }
+
+    const baseUrl = process.env['BASE_URL'] ?? 'http://localhost:3000';
+    const token = await this.jwkService.signJwt(
+      {
+        iss: `${baseUrl}/realms/master`,
+        sub: 'api-key:admin',
+        typ: 'admin',
+        realm_access: { roles: ['super-admin'] },
+        preferred_username: 'api-key',
+      },
+      signingKey.privateKey,
+      signingKey.kid,
+      3600,
+    );
+
+    return { access_token: token, token_type: 'Bearer', expires_in: 3600 };
   }
 
   private extractJti(token: string): string | null {
