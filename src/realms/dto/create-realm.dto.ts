@@ -544,4 +544,13 @@ export class CreateRealmDto {
   @Min(0)
   @Min(1)
   captchaScoreThreshold?: number;
+
+  // SCIM provisioning
+  @ApiPropertyOptional({
+    default: false,
+    description: 'Enable SCIM provisioning for this realm',
+  })
+  @IsOptional()
+  @IsBoolean()
+  scimEnabled?: boolean;
 }
