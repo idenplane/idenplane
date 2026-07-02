@@ -182,7 +182,7 @@ function HighRiskRow({ profile, realmName }: { profile: SessionRiskProfile; real
       </td>
       <td className="whitespace-nowrap px-4 py-3 text-right">
         <Link
-          to={`/console/realms/${realmName}/continuous-verification/session/${profile.sessionId}`}
+          to={`/console/realms/${realmName}/risk-sessions/${profile.sessionId}`}
           className="text-sm font-medium text-indigo-600 hover:text-indigo-900"
         >
           Details
