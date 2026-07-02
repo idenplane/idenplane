@@ -1,0 +1,47 @@
+name: Release Version Check
+
+# Guards against the version-mismatch class of bug in
+# https://github.com/idenplane/idenplane/issues — a pushed release tag
+# must agree with package.json and have a matching CHANGELOG.md entry,
+# otherwise it's too easy for the tag, the package version, and the
+# changelog to silently drift apart.
+#
+# Triggers on every v* tag push (the same trigger docker-publish.yml
+# uses to build release images) so it fails before/alongside the image
+# build rather than after the fact.
+
+on:
+  push:
+    tags: ['v*']
+
+permissions:
+  contents: read
+
+jobs:
+  check-version-consistency:
+    name: Verify tag matches package.json and CHANGELOG.md
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Compare tag, package.json, and CHANGELOG.md
+        run: |
+          set -e
+
+          TAG_VERSION="${GITHUB_REF_NAME#v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+
+          echo "Tag:            ${GITHUB_REF_NAME} (${TAG_VERSION})"
+          echo "package.json:   ${PKG_VERSION}"
+
+          if [ "${TAG_VERSION}" != "${PKG_VERSION}" ]; then
+            echo "::error::Tag version (${TAG_VERSION}) does not match package.json version (${PKG_VERSION})"
+            exit 1
+          fi
+
+          if ! grep -qE "^## \[${TAG_VERSION}\] - [0-9]{4}-[0-9]{2}-[0-9]{2}$" CHANGELOG.md; then
+            echo "::error::CHANGELOG.md has no dated '## [${TAG_VERSION}] - YYYY-MM-DD' heading. Move the [Unreleased] entries under a heading for this release before tagging."
+            exit 1
+          fi
+
+          echo "Tag, package.json, and CHANGELOG.md agree on ${TAG_VERSION}."
