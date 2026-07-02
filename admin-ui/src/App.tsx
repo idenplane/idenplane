@@ -63,6 +63,7 @@ import NhiListPage from './pages/nhi/NhiListPage';
 import NhiDetailPage from './pages/nhi/NhiDetailPage';
 import NhiAnalyticsPage from './pages/nhi/NhiAnalyticsPage';
 import PluginsPage from './pages/plugins/PluginsPage';
+import SystemStatusPage from './pages/system/SystemStatusPage';
 import NotFoundPage from './pages/NotFoundPage';
 import { hasCredentials, refreshSession } from './api/client';
 import { useAuthContext } from './context/AuthContext';
@@ -169,6 +170,7 @@ export default function App() {
           <Route path="/console/realms/:name/nhi/:id" element={<NhiDetailPage />} />
           <Route path="/console/realms/:name/nhi-analytics" element={<NhiAnalyticsPage />} />
           <Route path="/console/plugins" element={<PluginsPage />} />
+          <Route path="/console/system-status" element={<SystemStatusPage />} />
           {/* Catch-all for unknown /console/... paths — rendered inside the Layout shell */}
           <Route path="*" element={<NotFoundPage />} />
         </Route>
