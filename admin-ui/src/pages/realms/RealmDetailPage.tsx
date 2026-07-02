@@ -27,7 +27,7 @@ export default function RealmDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showDelete, setShowDelete] = useState(false);
-  const [activeTab, setActiveTab] = useState<'general' | 'tokens' | 'email' | 'sms' | 'security' | 'events' | 'theme' | 'magic-link'>('general');
+  const [activeTab, setActiveTab] = useState<'general' | 'tokens' | 'email' | 'sms' | 'security' | 'events' | 'theme' | 'magic-link' | 'locale'>('general');
 
   const { data: realm, isLoading } = useQuery({
     queryKey: ['realm', name],
@@ -111,6 +111,28 @@ export default function RealmDetailPage() {
     permanentLockoutAfter: 0,
     // Security - MFA
     mfaRequired: false,
+    // WebAuthn
+    webAuthnEnabled: false,
+    webAuthnRpName: '',
+    webAuthnRpId: '',
+    webAuthnUserVerificationRequired: false,
+    // Rate Limiting
+    rateLimitEnabled: false,
+    clientRateLimitPerMinute: 100,
+    clientRateLimitPerHour: 1000,
+    userRateLimitPerMinute: 30,
+    userRateLimitPerHour: 300,
+    ipRateLimitPerMinute: 60,
+    ipRateLimitPerHour: 600,
+    // Impersonation
+    impersonationEnabled: false,
+    impersonationMaxDuration: 1800,
+    // Risk Thresholds
+    riskThresholdStepUp: 50,
+    riskThresholdBlock: 80,
+    // Locale
+    defaultLocale: 'en',
+    supportedLocales: [] as string[],
     // Events
     eventsEnabled: false,
     eventsExpiration: 604800,
@@ -150,6 +172,28 @@ export default function RealmDetailPage() {
         permanentLockoutAfter: realm.permanentLockoutAfter ?? 0,
         // Security - MFA
         mfaRequired: realm.mfaRequired ?? false,
+        // WebAuthn
+        webAuthnEnabled: (realm as any).webAuthnEnabled ?? false,
+        webAuthnRpName: (realm as any).webAuthnRpName ?? '',
+        webAuthnRpId: (realm as any).webAuthnRpId ?? '',
+        webAuthnUserVerificationRequired: (realm as any).webAuthnUserVerificationRequired ?? false,
+        // Rate Limiting
+        rateLimitEnabled: (realm as any).rateLimitEnabled ?? false,
+        clientRateLimitPerMinute: (realm as any).clientRateLimitPerMinute ?? 100,
+        clientRateLimitPerHour: (realm as any).clientRateLimitPerHour ?? 1000,
+        userRateLimitPerMinute: (realm as any).userRateLimitPerMinute ?? 30,
+        userRateLimitPerHour: (realm as any).userRateLimitPerHour ?? 300,
+        ipRateLimitPerMinute: (realm as any).ipRateLimitPerMinute ?? 60,
+        ipRateLimitPerHour: (realm as any).ipRateLimitPerHour ?? 600,
+        // Impersonation
+        impersonationEnabled: (realm as any).impersonationEnabled ?? false,
+        impersonationMaxDuration: (realm as any).impersonationMaxDuration ?? 1800,
+        // Risk Thresholds
+        riskThresholdStepUp: (realm as any).riskThresholdStepUp ?? 50,
+        riskThresholdBlock: (realm as any).riskThresholdBlock ?? 80,
+        // Locale
+        defaultLocale: (realm as any).defaultLocale ?? 'en',
+        supportedLocales: (realm as any).supportedLocales ?? [],
         // Events
         eventsEnabled: realm.eventsEnabled ?? false,
         eventsExpiration: realm.eventsExpiration ?? 604800,
@@ -214,6 +258,7 @@ export default function RealmDetailPage() {
     { key: 'events' as const, label: 'Events' },
     { key: 'theme' as const, label: 'Theme' },
     { key: 'magic-link' as const, label: 'Magic Link' },
+    { key: 'locale' as const, label: 'Locale' },
   ];
 
   const quickLinks = [
@@ -756,6 +801,162 @@ export default function RealmDetailPage() {
             </div>
           </div>
 
+          {/* WebAuthn */}
+          <div className="space-y-6 border-t border-gray-200 pt-6">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">WebAuthn / Passkeys</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Allow users to authenticate with hardware security keys and passkeys.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <input type="checkbox" id="webAuthnEnabled" checked={form.webAuthnEnabled}
+                onChange={(e) => setForm({ ...form, webAuthnEnabled: e.target.checked })}
+                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+              <label htmlFor="webAuthnEnabled" className="text-sm font-medium text-gray-700">Enable WebAuthn</label>
+            </div>
+            {form.webAuthnEnabled && (
+              <div className="space-y-4 pl-6">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Relying Party Name</label>
+                  <input type="text" value={form.webAuthnRpName}
+                    onChange={(e) => setForm({ ...form, webAuthnRpName: e.target.value })}
+                    placeholder="My App"
+                    className="w-full max-w-md rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
+                  <p className="mt-1 text-xs text-gray-400">Display name shown to users during passkey registration</p>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Relying Party ID (domain)</label>
+                  <input type="text" value={form.webAuthnRpId}
+                    onChange={(e) => setForm({ ...form, webAuthnRpId: e.target.value })}
+                    placeholder="example.com"
+                    className="w-full max-w-md rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
+                  <p className="mt-1 text-xs text-gray-400">Must match your domain. Credentials registered here only work on this domain.</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input type="checkbox" id="webAuthnUserVerificationRequired" checked={form.webAuthnUserVerificationRequired}
+                    onChange={(e) => setForm({ ...form, webAuthnUserVerificationRequired: e.target.checked })}
+                    className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+                  <label htmlFor="webAuthnUserVerificationRequired" className="text-sm font-medium text-gray-700">Require user verification (biometric/PIN)</label>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Rate Limiting */}
+          <div className="space-y-6 border-t border-gray-200 pt-6">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Rate Limiting</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Throttle authentication requests to prevent abuse.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <input type="checkbox" id="rateLimitEnabled" checked={form.rateLimitEnabled}
+                onChange={(e) => setForm({ ...form, rateLimitEnabled: e.target.checked })}
+                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+              <label htmlFor="rateLimitEnabled" className="text-sm font-medium text-gray-700">Enable rate limiting</label>
+            </div>
+            {form.rateLimitEnabled && (
+              <div className="space-y-4 pl-6">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">Client req/min</label>
+                    <input type="number" min={1} value={form.clientRateLimitPerMinute}
+                      onChange={(e) => setForm({ ...form, clientRateLimitPerMinute: Number(e.target.value) })}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">Client req/hour</label>
+                    <input type="number" min={1} value={form.clientRateLimitPerHour}
+                      onChange={(e) => setForm({ ...form, clientRateLimitPerHour: Number(e.target.value) })}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">User req/min</label>
+                    <input type="number" min={1} value={form.userRateLimitPerMinute}
+                      onChange={(e) => setForm({ ...form, userRateLimitPerMinute: Number(e.target.value) })}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">User req/hour</label>
+                    <input type="number" min={1} value={form.userRateLimitPerHour}
+                      onChange={(e) => setForm({ ...form, userRateLimitPerHour: Number(e.target.value) })}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">IP req/min</label>
+                    <input type="number" min={1} value={form.ipRateLimitPerMinute}
+                      onChange={(e) => setForm({ ...form, ipRateLimitPerMinute: Number(e.target.value) })}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">IP req/hour</label>
+                    <input type="number" min={1} value={form.ipRateLimitPerHour}
+                      onChange={(e) => setForm({ ...form, ipRateLimitPerHour: Number(e.target.value) })}
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Impersonation */}
+          <div className="space-y-6 border-t border-gray-200 pt-6">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Impersonation</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Allow admins to impersonate users for debugging and support.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <input type="checkbox" id="impersonationEnabled" checked={form.impersonationEnabled}
+                onChange={(e) => setForm({ ...form, impersonationEnabled: e.target.checked })}
+                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
+              <label htmlFor="impersonationEnabled" className="text-sm font-medium text-gray-700">Allow admin impersonation</label>
+            </div>
+            {form.impersonationEnabled && (
+              <div className="pl-6">
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">Max impersonation duration (seconds)</label>
+                <div className="flex items-center gap-3">
+                  <input type="number" min={60} value={form.impersonationMaxDuration}
+                    onChange={(e) => setForm({ ...form, impersonationMaxDuration: Number(e.target.value) })}
+                    className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
+                  <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">
+                    {formatDuration(form.impersonationMaxDuration)}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-gray-400">Default: 30 minutes. Impersonation tokens expire after this duration.</p>
+              </div>
+            )}
+          </div>
+
+          {/* Risk Thresholds */}
+          <div className="space-y-6 border-t border-gray-200 pt-6">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">Risk Thresholds</h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Score boundaries (0–100) that trigger step-up authentication or session block.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">Step-up threshold</label>
+                <input type="number" min={0} max={100} value={form.riskThresholdStepUp}
+                  onChange={(e) => setForm({ ...form, riskThresholdStepUp: Number(e.target.value) })}
+                  className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
+                <p className="mt-1 text-xs text-gray-400">Risk score ≥ this value triggers MFA step-up. Default: 50.</p>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">Block threshold</label>
+                <input type="number" min={0} max={100} value={form.riskThresholdBlock}
+                  onChange={(e) => setForm({ ...form, riskThresholdBlock: Number(e.target.value) })}
+                  className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
+                <p className="mt-1 text-xs text-gray-400">Risk score ≥ this value blocks the session entirely. Default: 80.</p>
+              </div>
+            </div>
+          </div>
+
           {updateMutation.isSuccess && (
             <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">
               Security settings updated successfully.
@@ -954,6 +1155,77 @@ export default function RealmDetailPage() {
       {/* Magic Link Tab */}
       {activeTab === 'magic-link' && realm && (
         <MagicLinkSettingsForm realm={realm} />
+      )}
+
+      {/* Locale Tab */}
+      {activeTab === 'locale' && (
+        <form onSubmit={handleSubmit} className="space-y-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">Locale &amp; Internationalization</h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Configure the default language and supported locales for this realm.
+            </p>
+          </div>
+
+          <div className="space-y-6">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Default Locale</label>
+              <input
+                type="text"
+                value={form.defaultLocale}
+                onChange={(e) => setForm({ ...form, defaultLocale: e.target.value })}
+                placeholder="en"
+                className="w-48 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              />
+              <p className="mt-1 text-xs text-gray-400">
+                BCP 47 language tag (e.g. en, en-US, fr, de, ar). Used when no user preference is set.
+              </p>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">Supported Locales</label>
+              <input
+                type="text"
+                value={form.supportedLocales.join(', ')}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    supportedLocales: e.target.value
+                      .split(',')
+                      .map((s) => s.trim())
+                      .filter(Boolean),
+                  })
+                }
+                placeholder="en, fr, de, ar"
+                className="w-full max-w-md rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              />
+              <p className="mt-1 text-xs text-gray-400">
+                Comma-separated list of supported locale codes. Users can switch between these in the account UI.
+              </p>
+            </div>
+          </div>
+
+          {updateMutation.isSuccess && (
+            <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">
+              Locale settings updated successfully.
+            </div>
+          )}
+          {updateMutation.isError && (
+            <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+              Failed to update locale settings.
+            </div>
+          )}
+
+          <div className="flex justify-end border-t border-gray-200 pt-4">
+            <button
+              type="submit"
+              disabled={updateMutation.isPending}
+              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
       )}
 
       <ConfirmDialog
