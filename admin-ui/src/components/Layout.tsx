@@ -67,6 +67,7 @@ export default function Layout() {
         { to: `/console/realms/${currentRealm}/custom-attributes`, label: 'Custom Attributes', icon: Icons.Code },
         { to: `/console/realms/${currentRealm}/scim`, label: 'SCIM', icon: Icons.Database },
         { to: `/console/realms/${currentRealm}/authorization-policies`, label: 'Authorization', icon: Icons.Roles },
+        { to: `/console/realms/${currentRealm}/theme-builder`, label: 'Theme Builder', icon: Icons.Sun },
         { to: `/console/realms/${currentRealm}/nhi`, label: 'Non-Human Identity', icon: Icons.Server },
       ]
     : [];
