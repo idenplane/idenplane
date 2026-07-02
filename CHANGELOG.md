@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 For full per-commit detail, see the [GitHub Releases](https://github.com/idenplane/idenplane/releases).
 
+## [Unreleased]
+
+### Added
+- `@idenplane/mcp` — first-party stdio MCP server for AI agent integration
+- Multi-provider email abstraction (Resend, SendGrid, Mailgun, Postmark, SMTP)
+- SMS provider configuration UI with card-grid selector
+- Admin UI: webhooks, service accounts, organizations, custom attributes, SCIM, authorization policies, plugins, impersonation, and risk-assessment routing pages
+
+### Security
+- Fixed all outstanding Dependabot vulnerability alerts via npm overrides
+
 ## [0.3.0] - 2026-05-21
 
 Enterprise provisioning, GraphQL Admin, and the Idenplane rebrand under AGPL-3.0.
