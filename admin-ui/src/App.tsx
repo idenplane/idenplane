@@ -58,6 +58,7 @@ import PolicyListPage from './pages/authorization/PolicyListPage';
 import PolicyCreatePage from './pages/authorization/PolicyCreatePage';
 import PolicyDetailPage from './pages/authorization/PolicyDetailPage';
 import PluginsPage from './pages/plugins/PluginsPage';
+import SystemStatusPage from './pages/system/SystemStatusPage';
 import NotFoundPage from './pages/NotFoundPage';
 import { hasCredentials } from './api/client';
 
@@ -135,6 +136,7 @@ export default function App() {
           <Route path="/console/realms/:name/authorization-policies/new" element={<PolicyCreatePage />} />
           <Route path="/console/realms/:name/authorization-policies/:policyId" element={<PolicyDetailPage />} />
           <Route path="/console/plugins" element={<PluginsPage />} />
+          <Route path="/console/system-status" element={<SystemStatusPage />} />
           {/* Catch-all for unknown /console/... paths — rendered inside the Layout shell */}
           <Route path="*" element={<NotFoundPage />} />
         </Route>

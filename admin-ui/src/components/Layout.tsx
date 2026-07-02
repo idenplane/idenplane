@@ -71,6 +71,7 @@ export default function Layout() {
     { to: '/console', label: 'Dashboard', icon: Icons.Dashboard, end: true },
     { to: '/console/realms', label: 'Realms', icon: Icons.Realms, end: false },
     { to: '/console/plugins', label: 'Plugins', icon: Icons.Zap, end: false },
+    { to: '/console/system-status', label: 'System Status', icon: Icons.Server, end: false },
   ];
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
