@@ -1,17 +1,35 @@
-import { PipeTransform, Injectable, BadRequestException } from '@nestjs/common';
+import {
+  PipeTransform,
+  Injectable,
+  BadRequestException,
+  ArgumentMetadata,
+} from '@nestjs/common';
+import { AssignRolesDto } from '../dto/assign-role.dto.js';
 
 /**
- * Pre-processes bare-array role-mapping bodies (Keycloak convention) into
- * the canonical `{ roleNames: string[] }` object format before the global
- * ValidationPipe runs.
+ * Global pipe that normalizes bare-array role-mapping bodies (Keycloak convention)
+ * into the canonical `{ roleNames: string[] }` object format before the global
+ * ValidationPipe sees the value.
  *
  * This handles the case where clients send `[{ name: "admin" }]` instead of
- * `{ "roleNames": ["admin"] }`.  Must be applied as the first pipe in @Body()
- * so it runs before the ValidationPipe sees the value.
+ * `{ "roleNames": ["admin"] }`.
+ *
+ * Registration: must be added via `app.useGlobalPipes()` BEFORE ValidationPipe
+ * (global pipes run in registration order). Do NOT use as a param-level pipe
+ * with @Body(NormalizeRoleBodyPipe) — param-level pipes run AFTER global pipes,
+ * which means ValidationPipe would reject the bare array first.
+ *
+ * The metatype guard ensures this pipe is a no-op for every endpoint except those
+ * that accept AssignRolesDto, so it cannot accidentally mangle other array bodies.
  */
 @Injectable()
 export class NormalizeRoleBodyPipe implements PipeTransform {
-  transform(value: unknown): unknown {
+  transform(value: unknown, metadata: ArgumentMetadata): unknown {
+    // Only activate for AssignRolesDto parameters — no-op for everything else.
+    if (metadata.metatype !== AssignRolesDto) {
+      return value;
+    }
+
     if (!Array.isArray(value)) {
       return value;
     }
