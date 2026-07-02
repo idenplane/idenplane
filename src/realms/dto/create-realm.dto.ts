@@ -553,4 +553,49 @@ export class CreateRealmDto {
   @IsOptional()
   @IsBoolean()
   scimEnabled?: boolean;
+
+  @ApiPropertyOptional({
+    default: true,
+    description: 'Automatically create users on SCIM provision if they do not exist',
+  })
+  @IsOptional()
+  @IsBoolean()
+  scimUserAutocreate?: boolean;
+
+  @ApiPropertyOptional({
+    default: true,
+    description: 'Sync SCIM group membership changes to realm groups',
+  })
+  @IsOptional()
+  @IsBoolean()
+  scimGroupSyncEnabled?: boolean;
+
+  // Event retention
+  @ApiPropertyOptional({
+    default: 30,
+    description: 'Number of days to retain login event records',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  loginEventRetentionDays?: number;
+
+  @ApiPropertyOptional({
+    default: 90,
+    description: 'Number of days to retain admin event records',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  adminEventRetentionDays?: number;
+
+  // User lifecycle
+  @ApiPropertyOptional({
+    default: 14,
+    description: 'Grace period in days before a soft-deleted user account is permanently removed',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(0)
+  deletionGracePeriodDays?: number;
 }
