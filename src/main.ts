@@ -196,7 +196,9 @@ async function bootstrap() {
             "'unsafe-inline'",
             'https://fonts.googleapis.com',
           ],
-          fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+          // 'data:' allows the admin-ui Vite bundle's inlined woff2 font,
+          // which is emitted as a data: URI (mirrors imgSrc below).
+          fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
           imgSrc: ["'self'", 'data:', 'blob:'],
           connectSrc: ["'self'"],
           formAction: ["'self'"],
