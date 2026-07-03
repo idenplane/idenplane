@@ -60,6 +60,7 @@ import PolicyCreatePage from './pages/authorization/PolicyCreatePage';
 import PolicyDetailPage from './pages/authorization/PolicyDetailPage';
 import ThemeBuilderPage from './pages/theme-builder/ThemeBuilderPage';
 import NhiListPage from './pages/nhi/NhiListPage';
+import NhiCreatePage from './pages/nhi/NhiCreatePage';
 import NhiDetailPage from './pages/nhi/NhiDetailPage';
 import NhiAnalyticsPage from './pages/nhi/NhiAnalyticsPage';
 import PluginsPage from './pages/plugins/PluginsPage';
@@ -167,6 +168,7 @@ export default function App() {
           <Route path="/console/realms/:name/authorization-policies/:policyId" element={<PolicyDetailPage />} />
           <Route path="/console/realms/:name/theme-builder" element={<ThemeBuilderPage />} />
           <Route path="/console/realms/:name/nhi" element={<NhiListPage />} />
+          <Route path="/console/realms/:name/nhi/new" element={<NhiCreatePage />} />
           <Route path="/console/realms/:name/nhi/:id" element={<NhiDetailPage />} />
           <Route path="/console/realms/:name/nhi-analytics" element={<NhiAnalyticsPage />} />
           <Route path="/console/plugins" element={<PluginsPage />} />

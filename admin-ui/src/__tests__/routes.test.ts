@@ -9,7 +9,7 @@
  */
 
 import { describe, it, expect } from 'vitest';
-import { readFileSync } from 'fs';
+import { readFileSync, readdirSync } from 'fs';
 import { fileURLToPath } from 'url';
 import path from 'path';
 
@@ -179,6 +179,90 @@ describe('route param consistency', () => {
     expect(
       violations,
       `Route param mismatches (page reads a param its route never provides):\n  ${violations.join('\n  ')}`,
+    ).toHaveLength(0);
+  });
+});
+
+/**
+ * In-app link-target coverage guard.
+ *
+ * Catches the "hard 404" class where a page's `<Link to>` or `navigate()` points
+ * at an absolute `/console/...` path that no route in App.tsx registers
+ * (idenplane#1147: the risk pages linked to `/continuous-verification/*` while
+ * the registered routes are `/risk-*`). The nav-coverage test above only checks
+ * Layout.tsx nav items, so links buried inside page components slip past it and
+ * surface only as a runtime "Page Not Found".
+ *
+ * Invariant enforced: every absolute `/console/...` target a component links to
+ * or navigates to must match some registered route in App.tsx.
+ */
+
+// Registered routes as concrete-path matchers (`:param` → one path segment).
+const ROUTE_MATCHERS = [...APP_ROUTES].map(
+  (p) => new RegExp('^' + p.replace(/:[^/]+/g, '[^/]+') + '$'),
+);
+
+/**
+ * Files intentionally excluded from this guard. The upgrade/migration pages are
+ * unrouted dead code (idenplane#1150) that link to `/console/upgrade` — drop
+ * this exclusion once that feature is wired up or removed.
+ */
+const LINK_GUARD_IGNORE = /[/\\]pages[/\\]upgrade[/\\]/;
+
+function walkTsx(dir: string): string[] {
+  const out: string[] = [];
+  for (const entry of readdirSync(dir, { withFileTypes: true })) {
+    const full = path.join(dir, entry.name);
+    if (entry.isDirectory()) out.push(...walkTsx(full));
+    else if (full.endsWith('.tsx')) out.push(full);
+  }
+  return out;
+}
+
+/** Absolute `/console/...` targets from `to={\`…\`}` / `to="…"` / `navigate(…)`. */
+function extractConsoleTargets(src: string): string[] {
+  const targets: string[] = [];
+  for (const [, lit] of src.matchAll(
+    /(?:\bto=\{|navigate\()\s*`(\/console[^`]*)`/g,
+  ))
+    targets.push(lit);
+  for (const [, lit] of src.matchAll(
+    /(?:\bto=|navigate\()\s*['"](\/console[^'"]*)['"]/g,
+  ))
+    targets.push(lit);
+  return targets;
+}
+
+/** Strip query/hash and collapse `${…}` template segments to a placeholder. */
+function normalizeConsoleTarget(t: string): string {
+  const s = t.split('?')[0].split('#')[0].replace(/\$\{[^}]+\}/g, 'X');
+  return s.replace(/\/+$/, '') || '/';
+}
+
+describe('in-app link target coverage', () => {
+  const scanDirs = ['../pages', '../components'].map((d) =>
+    path.resolve(__dirname, d),
+  );
+
+  it('every absolute /console link/navigate target matches a registered route', () => {
+    const violations: string[] = [];
+    for (const dir of scanDirs) {
+      for (const file of walkTsx(dir)) {
+        if (LINK_GUARD_IGNORE.test(file)) continue;
+        const src = readFileSync(file, 'utf-8');
+        for (const raw of extractConsoleTargets(src)) {
+          const norm = normalizeConsoleTarget(raw);
+          if (!ROUTE_MATCHERS.some((re) => re.test(norm))) {
+            violations.push(
+              `${path.relative(path.resolve(__dirname, '..'), file)} → ${raw}`,
+            );
+          }
+        }
+      }
+    }
+    expect(
+      violations,
+      `In-app links pointing at unregistered routes (hard 404s):\n  ${violations.join('\n  ')}`,
     ).toHaveLength(0);
   });
 });
