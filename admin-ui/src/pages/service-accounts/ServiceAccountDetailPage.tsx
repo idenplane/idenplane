@@ -14,7 +14,7 @@ import {
 import ConfirmDialog from '../../components/ConfirmDialog';
 
 export default function ServiceAccountDetailPage() {
-  const { name, id } = useParams<{ name: string; id: string }>();
+  const { name, accountId: id } = useParams<{ name: string; accountId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showDelete, setShowDelete] = useState(false);
