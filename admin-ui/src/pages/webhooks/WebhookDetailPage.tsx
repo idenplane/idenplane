@@ -26,7 +26,7 @@ const EVENT_TYPES = [
 ];
 
 export default function WebhookDetailPage() {
-  const { name, id } = useParams<{ name: string; id: string }>();
+  const { name, webhookId: id } = useParams<{ name: string; webhookId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showDelete, setShowDelete] = useState(false);
