@@ -75,7 +75,7 @@ export async function updateTheme(
   id: string,
   payload: UpdateThemePayload,
 ): Promise<Theme> {
-  const { data } = await apiClient.patch<Theme>(
+  const { data } = await apiClient.put<Theme>(
     `/realms/${realmName}/themes/${id}`,
     payload,
   );
@@ -144,10 +144,10 @@ export async function getThemeVersions(
 export async function rollbackTheme(
   realmName: string,
   id: string,
-  versionId: string,
+  version: number,
 ): Promise<Theme> {
   const { data } = await apiClient.post<Theme>(
-    `/realms/${realmName}/themes/${id}/rollback/${versionId}`,
+    `/realms/${realmName}/themes/${id}/restore/${version}`,
   );
   return data;
 }
