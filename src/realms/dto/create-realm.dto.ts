@@ -3,10 +3,12 @@ import {
   IsOptional,
   IsBoolean,
   IsInt,
+  IsNumber,
   IsArray,
   IsEnum,
   IsObject,
   Min,
+  Max,
   MinLength,
   Matches,
   ValidateNested,
@@ -540,9 +542,9 @@ export class CreateRealmDto {
     description: 'Minimum score threshold for reCAPTCHA v3 (0-1)',
   })
   @IsOptional()
-  @IsInt()
+  @IsNumber()
   @Min(0)
-  @Min(1)
+  @Max(1)
   captchaScoreThreshold?: number;
 
   // SCIM provisioning
