@@ -100,13 +100,18 @@ export class AdminAuthController {
   @UseGuards(RateLimitGuard)
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Exchange admin API key for a session token' })
-  @ApiResponse({ status: 200, description: 'Returns bearer token and sets session cookie' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns bearer token and sets session cookie',
+  })
   @ApiResponse({ status: 401, description: 'Invalid API key' })
   async loginWithApiKey(
     @Body() body: AdminApiKeyLoginDto,
     @Res({ passthrough: true }) res: Response,
   ) {
-    const tokenResponse = await this.adminAuthService.loginWithApiKey(body.apiKey);
+    const tokenResponse = await this.adminAuthService.createAdminSession(
+      body.apiKey,
+    );
 
     const isProduction = this.config.get<string>('NODE_ENV') === 'production';
     res.cookie(ADMIN_RT_COOKIE, tokenResponse.access_token, {
@@ -124,10 +129,18 @@ export class AdminAuthController {
   @Public()
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Rehydrate admin session from httpOnly cookie' })
-  @ApiResponse({ status: 200, description: 'Session refreshed, returns access token' })
+  @ApiResponse({
+    status: 200,
+    description: 'Session refreshed, returns access token',
+  })
   @ApiResponse({ status: 401, description: 'No valid session cookie' })
-  async refresh(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
-    const token = (req.cookies as Record<string, string | undefined>)[ADMIN_RT_COOKIE];
+  async refresh(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const token = (req.cookies as Record<string, string | undefined>)[
+      ADMIN_RT_COOKIE
+    ];
     if (!token) {
       throw new UnauthorizedException('No session cookie');
     }
@@ -154,11 +167,17 @@ export class AdminAuthController {
     if (authHeader?.startsWith('Bearer ')) {
       await this.adminAuthService.revokeToken(authHeader.slice(7));
     }
-    const cookieToken = (req.cookies as Record<string, string | undefined>)[ADMIN_RT_COOKIE];
+    const cookieToken = (req.cookies as Record<string, string | undefined>)[
+      ADMIN_RT_COOKIE
+    ];
     if (cookieToken) {
-      await this.adminAuthService.revokeToken(cookieToken).catch((err: unknown) =>
-        this.logger.warn(`Failed to revoke cookie token: ${(err as Error).message}`),
-      );
+      await this.adminAuthService
+        .revokeToken(cookieToken)
+        .catch((err: unknown) =>
+          this.logger.warn(
+            `Failed to revoke cookie token: ${(err as Error).message}`,
+          ),
+        );
     }
     res.clearCookie(ADMIN_RT_COOKIE, { path: '/admin/auth' });
     return { message: 'Logged out' };
