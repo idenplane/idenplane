@@ -96,7 +96,14 @@ jobs:
         run: npx prisma generate
 
       - name: Build base branch
-        run: npm run build
+        # Drop the incremental-build cache from the current-branch build first.
+        # tsconfig.json has incremental:true with the buildinfo at the repo root,
+        # outside dist/ — nest build wipes dist (deleteOutDir) but a stale
+        # tsbuildinfo makes tsc re-emit only files that differ from the current
+        # branch, leaving dist/ incomplete (e.g. missing app.module.js).
+        run: |
+          rm -f tsconfig.build.tsbuildinfo
+          npm run build
 
       - name: Generate OpenAPI spec (base branch)
         run: |
