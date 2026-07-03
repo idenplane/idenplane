@@ -193,7 +193,7 @@ export default function ThemeBuilderPage() {
     setRollbackSuccess(null);
 
     try {
-      const updatedTheme = await rollbackTheme(realmName || '', themeId, version.id);
+      const updatedTheme = await rollbackTheme(realmName || '', themeId, version.version);
       // Update theme state with the rolled-back data
       if (updatedTheme.styles) {
         setStyles(updatedTheme.styles);

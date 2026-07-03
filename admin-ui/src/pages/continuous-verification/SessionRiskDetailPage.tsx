@@ -409,7 +409,7 @@ export default function SessionRiskDetailPage() {
         <div>
           <div className="flex items-center gap-3">
             <Link
-              to={`/console/realms/${realmName}/continuous-verification/dashboard`}
+              to={`/console/realms/${realmName}/risk-dashboard`}
               className="text-sm text-gray-500 hover:text-gray-700"
             >
               ← Back to Dashboard
