@@ -39,71 +39,114 @@ import type { ThemeComponent } from '../../../types/theme';
 
 // ─── Mock API functions ────────────────────────────────────────────────────────
 
-vi.mock('../../api/themes', () => ({
-  getThemes: vi.fn().mockResolvedValue([]),
-  getThemeById: vi.fn().mockResolvedValue({
-    id: 'test-theme-id',
-    name: 'Test Theme',
-    styles: DEFAULT_THEME_STYLES,
-    components: DEFAULT_THEME_COMPONENTS,
-    assets: DEFAULT_THEME_ASSETS,
-    settings: DEFAULT_THEME_SETTINGS,
-  }),
-  createTheme: vi.fn().mockResolvedValue({ id: 'new-theme-id' }),
-  updateTheme: vi.fn().mockResolvedValue({ id: 'test-theme-id' }),
-  deleteTheme: vi.fn().mockResolvedValue(undefined),
-  publishTheme: vi.fn().mockResolvedValue({ id: 'test-theme-id', version: 2 }),
-  getThemeVersions: vi.fn().mockResolvedValue([
-    {
-      id: 'v2',
-      themeId: 'test-theme-id',
-      version: 2,
-      changes: 'Updated colors',
-      checksum: 'abc123',
-      styles: DEFAULT_THEME_STYLES,
-      components: DEFAULT_THEME_COMPONENTS,
-      assets: DEFAULT_THEME_ASSETS,
-      settings: DEFAULT_THEME_SETTINGS,
-      createdAt: new Date().toISOString(),
-      createdBy: null,
-    },
-    {
-      id: 'v1',
-      themeId: 'test-theme-id',
+vi.mock('../../../api/themes', async () => {
+  const {
+    DEFAULT_THEME_STYLES: styles,
+    DEFAULT_THEME_COMPONENTS: components,
+    DEFAULT_THEME_ASSETS: assets,
+    DEFAULT_THEME_SETTINGS: settings,
+  } = await vi.importActual<typeof import('../../../types/theme')>(
+    '../../../types/theme',
+  );
+
+  return {
+    getThemes: vi.fn().mockResolvedValue([
+      {
+        id: 'test-theme-id',
+        realmId: 'test-realm-id',
+        name: 'Test Theme',
+        displayName: 'Test Theme',
+        description: null,
+        themeType: 'login',
+        styles,
+        components,
+        assets,
+        settings,
+        version: 1,
+        published: true,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+        publishedAt: new Date().toISOString(),
+        createdBy: null,
+        updatedBy: null,
+      },
+    ]),
+    getThemeById: vi.fn().mockResolvedValue({
+      id: 'test-theme-id',
+      name: 'Test Theme',
+      styles,
+      components,
+      assets,
+      settings,
+    }),
+    createTheme: vi.fn().mockResolvedValue({ id: 'new-theme-id' }),
+    updateTheme: vi.fn().mockResolvedValue({ id: 'test-theme-id' }),
+    deleteTheme: vi.fn().mockResolvedValue(undefined),
+    getThemeTemplates: vi.fn().mockResolvedValue([]),
+    publishTheme: vi
+      .fn()
+      .mockResolvedValue({ id: 'test-theme-id', version: 2 }),
+    setActiveTheme: vi
+      .fn()
+      .mockResolvedValue({ id: 'test-theme-id', version: 2, published: true }),
+    getThemeVersions: vi.fn().mockResolvedValue([
+      {
+        id: 'v2',
+        themeId: 'test-theme-id',
+        version: 2,
+        changes: 'Updated colors',
+        checksum: 'abc123',
+        styles,
+        components,
+        assets,
+        settings,
+        createdAt: new Date().toISOString(),
+        createdBy: null,
+      },
+      {
+        id: 'v1',
+        themeId: 'test-theme-id',
+        version: 1,
+        changes: 'Initial version',
+        checksum: 'def456',
+        styles,
+        components,
+        assets,
+        settings,
+        createdAt: new Date(Date.now() - 3600000).toISOString(),
+        createdBy: null,
+      },
+    ]),
+    rollbackTheme: vi.fn().mockResolvedValue({
+      id: 'test-theme-id',
       version: 1,
-      changes: 'Initial version',
-      checksum: 'def456',
-      styles: DEFAULT_THEME_STYLES,
-      components: DEFAULT_THEME_COMPONENTS,
-      assets: DEFAULT_THEME_ASSETS,
-      settings: DEFAULT_THEME_SETTINGS,
-      createdAt: new Date(Date.now() - 3600000).toISOString(),
-      createdBy: null,
-    },
-  ]),
-  rollbackTheme: vi.fn().mockResolvedValue({
-    id: 'test-theme-id',
-    version: 1,
-    styles: DEFAULT_THEME_STYLES,
-    components: DEFAULT_THEME_COMPONENTS,
-    assets: DEFAULT_THEME_ASSETS,
-    settings: DEFAULT_THEME_SETTINGS,
-  }),
-}));
+      styles,
+      components,
+      assets,
+      settings,
+    }),
+  };
+});
 
 // ─── ThemeBuilderPage E2E Tests ─────────────────────────────────────────────
 
 const renderThemeBuilder = () => {
-  return render(
-    <ThemeBuilderPage />,
-    { initialUrl: '/console/realms/test-realm/theme-builder', routePattern: '/console/realms/:name/theme-builder' }
-  );
+  return render(<ThemeBuilderPage />, {
+    initialUrl: '/console/realms/test-realm/theme-builder',
+    routePattern: '/console/realms/:name/theme-builder',
+  });
+};
+
+const renderLoadedThemeBuilder = async () => {
+  const result = renderThemeBuilder();
+  await screen.findByText('Theme Builder');
+  return result;
 };
 
 describe('ThemeBuilderPage E2E Tests', () => {
   describe('Rendering and Navigation', () => {
-    it('renders the theme builder page with all main sections', () => {
-      renderThemeBuilder();
+    it('renders the theme builder page with all main sections', async () => {
+      await renderLoadedThemeBuilder();
 
       // Header should be visible
       expect(screen.getByText('Theme Builder')).toBeInTheDocument();
@@ -111,20 +154,20 @@ describe('ThemeBuilderPage E2E Tests', () => {
       // Realm badge should be visible
       expect(screen.getByText(/Realm:/)).toBeInTheDocument();
 
-      // Section tabs should be visible
-      expect(screen.getAllByText('Editor').length).toBeGreaterThan(0);
-      expect(screen.getAllByText('Preview Only').length).toBeGreaterThan(0);
-
-      // Editor panel tabs should be visible
+      // Builder steps should be visible
+      expect(screen.getAllByText('Design').length).toBeGreaterThan(0);
       expect(screen.getAllByText('Preview').length).toBeGreaterThan(0);
+      expect(screen.getAllByText('Publish').length).toBeGreaterThan(0);
+
+      // Inspector sections should be visible
+      expect(screen.getAllByText('Login Content').length).toBeGreaterThan(0);
       expect(screen.getAllByText('Styles').length).toBeGreaterThan(0);
       expect(screen.getAllByText('Assets').length).toBeGreaterThan(0);
       expect(screen.getAllByText('Templates').length).toBeGreaterThan(0);
-      expect(screen.getAllByText('History').length).toBeGreaterThan(0);
     });
 
-    it('displays action buttons in header', () => {
-      renderThemeBuilder();
+    it('displays action buttons in header', async () => {
+      await renderLoadedThemeBuilder();
 
       expect(screen.getByText('Import Theme')).toBeInTheDocument();
       expect(screen.getByText('Export Theme')).toBeInTheDocument();
@@ -138,7 +181,9 @@ describe('ThemeBuilderPage E2E Tests', () => {
       render(<ComponentPalette onAddComponent={vi.fn()} />);
 
       COMPONENT_DEFINITIONS.forEach((component) => {
-        expect(screen.getByTestId(`palette-component-${component.type}`)).toBeInTheDocument();
+        expect(
+          screen.getByTestId(`palette-component-${component.type}`),
+        ).toBeInTheDocument();
       });
     });
 
@@ -167,35 +212,46 @@ describe('ThemeBuilderPage E2E Tests', () => {
 
       fireEvent.dragStart(logoButton, { dataTransfer });
 
-      expect(dataTransfer.setData).toHaveBeenCalledWith('application/x-component-type', 'logo');
+      expect(dataTransfer.setData).toHaveBeenCalledWith(
+        'application/x-component-type',
+        'logo',
+      );
       expect(dataTransfer.effectAllowed).toBe('copy');
     });
   });
 
   describe('Theme Canvas', () => {
     it('displays empty state when no components exist', () => {
-      render(
-        <ThemeCanvas
-          components={[]}
-          onChange={vi.fn()}
-        />
-      );
+      render(<ThemeCanvas components={[]} onChange={vi.fn()} />);
 
-      expect(screen.getByText(/Drag a component from the palette or click to add it/)).toBeInTheDocument();
+      expect(
+        screen.getByText(
+          /Drag a component from the palette or click to add it/,
+        ),
+      ).toBeInTheDocument();
     });
 
     it('displays components with correct labels', () => {
       const components: ThemeComponent[] = [
-        { id: 'header-1', type: 'header', label: 'Header', order: 0, visible: true, props: {} },
-        { id: 'form-1', type: 'form', label: 'Form', order: 1, visible: true, props: {} },
+        {
+          id: 'header-1',
+          type: 'header',
+          label: 'Header',
+          order: 0,
+          visible: true,
+          props: {},
+        },
+        {
+          id: 'form-1',
+          type: 'form',
+          label: 'Form',
+          order: 1,
+          visible: true,
+          props: {},
+        },
       ];
 
-      render(
-        <ThemeCanvas
-          components={components}
-          onChange={vi.fn()}
-        />
-      );
+      render(<ThemeCanvas components={components} onChange={vi.fn()} />);
 
       expect(screen.getAllByText('Header').length).toBeGreaterThan(0);
       expect(screen.getAllByText('Form').length).toBeGreaterThan(0);
@@ -206,15 +262,17 @@ describe('ThemeBuilderPage E2E Tests', () => {
       const onChange = vi.fn();
 
       const components: ThemeComponent[] = [
-        { id: 'header-1', type: 'header', label: 'Header', order: 0, visible: true, props: {} },
+        {
+          id: 'header-1',
+          type: 'header',
+          label: 'Header',
+          order: 0,
+          visible: true,
+          props: {},
+        },
       ];
 
-      render(
-        <ThemeCanvas
-          components={components}
-          onChange={onChange}
-        />
-      );
+      render(<ThemeCanvas components={components} onChange={onChange} />);
 
       const removeButton = screen.getByTestId('remove-header-1');
       await user.click(removeButton);
@@ -227,16 +285,25 @@ describe('ThemeBuilderPage E2E Tests', () => {
       const onChange = vi.fn();
 
       const components: ThemeComponent[] = [
-        { id: 'header-1', type: 'header', label: 'Header', order: 0, visible: true, props: {} },
-        { id: 'form-1', type: 'form', label: 'Form', order: 1, visible: true, props: {} },
+        {
+          id: 'header-1',
+          type: 'header',
+          label: 'Header',
+          order: 0,
+          visible: true,
+          props: {},
+        },
+        {
+          id: 'form-1',
+          type: 'form',
+          label: 'Form',
+          order: 1,
+          visible: true,
+          props: {},
+        },
       ];
 
-      render(
-        <ThemeCanvas
-          components={components}
-          onChange={onChange}
-        />
-      );
+      render(<ThemeCanvas components={components} onChange={onChange} />);
 
       const moveDownButton = screen.getByTestId('move-down-header-1');
       await user.click(moveDownButton);
@@ -253,7 +320,7 @@ describe('ThemeBuilderPage E2E Tests', () => {
           components={DEFAULT_THEME_COMPONENTS}
           assets={DEFAULT_THEME_ASSETS}
           settings={DEFAULT_THEME_SETTINGS}
-        />
+        />,
       );
 
       expect(screen.getByText('Preview')).toBeInTheDocument();
@@ -270,7 +337,7 @@ describe('ThemeBuilderPage E2E Tests', () => {
           components={DEFAULT_THEME_COMPONENTS}
           assets={DEFAULT_THEME_ASSETS}
           settings={DEFAULT_THEME_SETTINGS}
-        />
+        />,
       );
 
       const iframe = screen.getByTitle('Theme Preview');
@@ -288,7 +355,7 @@ describe('ThemeBuilderPage E2E Tests', () => {
           settings={DEFAULT_THEME_SETTINGS}
           viewportSize="desktop"
           onViewportChange={onViewportChange}
-        />
+        />,
       );
 
       // Click on tablet viewport button (second button)
@@ -305,7 +372,7 @@ describe('ThemeBuilderPage E2E Tests', () => {
           assets={DEFAULT_THEME_ASSETS}
           onChange={vi.fn()}
           onAssetsChange={vi.fn()}
-        />
+        />,
       );
 
       expect(screen.getByText('Colors')).toBeInTheDocument();
@@ -323,7 +390,7 @@ describe('ThemeBuilderPage E2E Tests', () => {
           assets={DEFAULT_THEME_ASSETS}
           onChange={vi.fn()}
           onAssetsChange={vi.fn()}
-        />
+        />,
       );
 
       // Click on Colors tab to ensure it's active
@@ -344,7 +411,7 @@ describe('ThemeBuilderPage E2E Tests', () => {
           assets={DEFAULT_THEME_ASSETS}
           onChange={onChange}
           onAssetsChange={vi.fn()}
-        />
+        />,
       );
 
       // Switch to colors tab
@@ -365,11 +432,7 @@ describe('ThemeBuilderPage E2E Tests', () => {
 
   describe('Theme Templates', () => {
     it('renders template cards for all templates', () => {
-      render(
-        <ThemeTemplates
-          onApplyTemplate={vi.fn()}
-        />
-      );
+      render(<ThemeTemplates onApplyTemplate={vi.fn()} />);
 
       expect(screen.getAllByText('Theme Templates').length).toBeGreaterThan(0);
       expect(screen.getAllByText('Corporate').length).toBeGreaterThan(0);
@@ -378,44 +441,40 @@ describe('ThemeBuilderPage E2E Tests', () => {
     });
 
     it('renders category filters', () => {
-      render(
-        <ThemeTemplates
-          onApplyTemplate={vi.fn()}
-        />
-      );
+      render(<ThemeTemplates onApplyTemplate={vi.fn()} />);
 
       expect(screen.getByTestId('template-category-all')).toBeInTheDocument();
-      expect(screen.getByTestId('template-category-corporate')).toBeInTheDocument();
-      expect(screen.getByTestId('template-category-modern')).toBeInTheDocument();
-      expect(screen.getByTestId('template-category-minimal')).toBeInTheDocument();
+      expect(
+        screen.getByTestId('template-category-corporate'),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId('template-category-modern'),
+      ).toBeInTheDocument();
+      expect(
+        screen.getByTestId('template-category-minimal'),
+      ).toBeInTheDocument();
     });
 
     it('filters templates by category', async () => {
       const user = userEvent.setup();
 
-      render(
-        <ThemeTemplates
-          onApplyTemplate={vi.fn()}
-        />
-      );
+      render(<ThemeTemplates onApplyTemplate={vi.fn()} />);
 
       // Click on Modern category
       await user.click(screen.getByTestId('template-category-modern'));
 
       // Only Modern template should be visible
       expect(screen.getByTestId('template-card-modern')).toBeInTheDocument();
-      expect(screen.queryByTestId('template-card-corporate')).not.toBeInTheDocument();
+      expect(
+        screen.queryByTestId('template-card-corporate'),
+      ).not.toBeInTheDocument();
     });
 
     it('calls onApplyTemplate when template is applied', async () => {
       const user = userEvent.setup();
       const onApplyTemplate = vi.fn();
 
-      render(
-        <ThemeTemplates
-          onApplyTemplate={onApplyTemplate}
-        />
-      );
+      render(<ThemeTemplates onApplyTemplate={onApplyTemplate} />);
 
       // Click on Corporate template
       await user.click(screen.getByTestId('template-card-corporate'));
@@ -425,7 +484,7 @@ describe('ThemeBuilderPage E2E Tests', () => {
         () => {
           expect(onApplyTemplate).toHaveBeenCalled();
         },
-        { timeout: 1000 }
+        { timeout: 1000 },
       );
     });
   });
@@ -433,10 +492,7 @@ describe('ThemeBuilderPage E2E Tests', () => {
   describe('Theme Version History', () => {
     it('renders the version history component', async () => {
       render(
-        <ThemeVersionHistory
-          themeId="test-theme-id"
-          realmName="test-realm"
-        />
+        <ThemeVersionHistory themeId="test-theme-id" realmName="test-realm" />,
       );
 
       await waitFor(() => {
@@ -446,10 +502,7 @@ describe('ThemeBuilderPage E2E Tests', () => {
 
     it('displays version list when versions exist', async () => {
       render(
-        <ThemeVersionHistory
-          themeId="test-theme-id"
-          realmName="test-realm"
-        />
+        <ThemeVersionHistory themeId="test-theme-id" realmName="test-realm" />,
       );
 
       await waitFor(() => {
@@ -464,7 +517,7 @@ describe('ThemeBuilderPage E2E Tests', () => {
           themeId="test-theme-id"
           realmName="test-realm"
           currentVersion={2}
-        />
+        />,
       );
 
       await waitFor(() => {
@@ -479,7 +532,7 @@ describe('ThemeBuilderPage E2E Tests', () => {
           realmName="test-realm"
           currentVersion={2}
           onRollback={vi.fn()}
-        />
+        />,
       );
 
       await waitFor(() => {
@@ -496,11 +549,13 @@ describe('ThemeBuilderPage E2E Tests', () => {
           assets={DEFAULT_THEME_ASSETS}
           onAssetsChange={vi.fn()}
           uploadType="logo"
-        />
+        />,
       );
 
       expect(screen.getByText('Upload Image')).toBeInTheDocument();
-      expect(screen.getByText(/Drag and drop an image or click to browse/)).toBeInTheDocument();
+      expect(
+        screen.getByText(/Drag and drop an image or click to browse/),
+      ).toBeInTheDocument();
     });
 
     it('shows accepted file types', () => {
@@ -509,7 +564,7 @@ describe('ThemeBuilderPage E2E Tests', () => {
           assets={DEFAULT_THEME_ASSETS}
           onAssetsChange={vi.fn()}
           uploadType="logo"
-        />
+        />,
       );
 
       expect(screen.getByText(/PNG, JPG, GIF, SVG, WebP/)).toBeInTheDocument();
@@ -521,7 +576,7 @@ describe('ThemeBuilderPage E2E Tests', () => {
           assets={DEFAULT_THEME_ASSETS}
           onAssetsChange={vi.fn()}
           uploadType="logo"
-        />
+        />,
       );
 
       const uploader = screen.getByTestId('image-uploader-logo');
@@ -535,15 +590,15 @@ describe('ThemeBuilderPage E2E Tests', () => {
   });
 
   describe('Import/Export Flow', () => {
-    it('has import button that opens file dialog', () => {
-      renderThemeBuilder();
+    it('has import button that opens file dialog', async () => {
+      await renderLoadedThemeBuilder();
 
       const importButton = screen.getByText('Import Theme');
       expect(importButton).toBeInTheDocument();
     });
 
-    it('has export button', () => {
-      renderThemeBuilder();
+    it('has export button', async () => {
+      await renderLoadedThemeBuilder();
 
       const exportButton = screen.getByText('Export Theme');
       expect(exportButton).toBeInTheDocument();
@@ -555,7 +610,7 @@ describe('ThemeBuilderPage E2E Tests', () => {
       // Create a download link mock
       const createElementSpy = vi.spyOn(document, 'createElement');
 
-      renderThemeBuilder();
+      await renderLoadedThemeBuilder();
 
       const exportButton = screen.getByText('Export Theme');
       await user.click(exportButton);
@@ -566,17 +621,18 @@ describe('ThemeBuilderPage E2E Tests', () => {
   });
 
   describe('Save and Publish Flow', () => {
-    it('save button is initially enabled', () => {
-      renderThemeBuilder();
+    it('save button is initially enabled', async () => {
+      await renderLoadedThemeBuilder();
 
       const saveButton = screen.getByText('Save');
       expect(saveButton).toBeInTheDocument();
     });
 
-    it('publish button is present', () => {
-      renderThemeBuilder();
+    it('publish button is present', async () => {
+      await renderLoadedThemeBuilder();
 
-      const publishButton = screen.getByText('Publish');
+      await userEvent.click(screen.getByText('Publish'));
+      const publishButton = screen.getByText('Publish version');
       expect(publishButton).toBeInTheDocument();
     });
   });
@@ -589,7 +645,7 @@ describe('Theme Builder Integration Tests', () => {
     it('preview updates when styles change', async () => {
       const user = userEvent.setup();
 
-      renderThemeBuilder();
+      await renderLoadedThemeBuilder();
 
       // Switch to styles editor
       await user.click(screen.getByText('Styles'));
@@ -614,7 +670,7 @@ describe('Theme Builder Integration Tests', () => {
     it('applying template updates all theme state', async () => {
       const user = userEvent.setup();
 
-      renderThemeBuilder();
+      await renderLoadedThemeBuilder();
 
       // Click Templates tab in editor panel
       await user.click(screen.getByText('Templates'));
@@ -633,7 +689,7 @@ describe('Theme Builder Integration Tests', () => {
           // The template should be applied and styles should change
           expect(screen.getByTestId('theme-templates')).toBeInTheDocument();
         },
-        { timeout: 1000 }
+        { timeout: 1000 },
       );
     });
   });

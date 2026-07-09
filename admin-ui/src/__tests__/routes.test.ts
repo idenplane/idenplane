@@ -54,7 +54,8 @@ const NAV_PATHS: string[] = [
 const ROUTE_NAV_WHITELIST = new Set([
   '/console/login',
   '/setup',
-  '/console/realms/:name',         // realm overview — clicked from the realm list
+  '/console/realms/:name', // realm overview — clicked from the realm list
+  '/console/realms/:name/themes/builder', // theme builder entrypoint — reached from the theme list
   '/console/realms/:name/nhi-analytics', // NHI analytics — linked from NHI list page
 ]);
 
@@ -86,7 +87,9 @@ describe('nav route coverage', () => {
       return true;
     });
 
-    const noNav = routesNeedingNav.filter((route) => !NAV_PATHS.includes(route));
+    const noNav = routesNeedingNav.filter(
+      (route) => !NAV_PATHS.includes(route),
+    );
     expect(
       noNav,
       `Routes with no nav entry (add to ROUTE_NAV_WHITELIST if intentional):\n  ${noNav.join('\n  ')}`,
@@ -117,9 +120,7 @@ const COMPONENT_IMPORTS = new Map<string, string>(
 
 // Every <Route path="..." element={<Component ... />} /> pairing.
 const ROUTE_ELEMENTS = [
-  ...appSrc.matchAll(
-    /<Route\s+path="([^"]+)"\s+element=\{<(\w+)\s*\/?>\s*\}/g,
-  ),
+  ...appSrc.matchAll(/<Route\s+path="([^"]+)"\s+element=\{<(\w+)\s*\/?>\s*\}/g),
 ].map(([, routePath, comp]) => ({ routePath, comp }));
 
 /** Param names declared in a route path, e.g. `/x/:name/y/:webhookId` → [name, webhookId]. */
@@ -235,7 +236,10 @@ function extractConsoleTargets(src: string): string[] {
 
 /** Strip query/hash and collapse `${…}` template segments to a placeholder. */
 function normalizeConsoleTarget(t: string): string {
-  const s = t.split('?')[0].split('#')[0].replace(/\$\{[^}]+\}/g, 'X');
+  const s = t
+    .split('?')[0]
+    .split('#')[0]
+    .replace(/\$\{[^}]+\}/g, 'X');
   return s.replace(/\/+$/, '') || '/';
 }
 

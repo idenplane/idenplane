@@ -4,7 +4,9 @@ import { render } from '../../../test/utils';
 import ThemeCanvas from '../ThemeCanvas';
 import type { ThemeComponent } from '../../../types/theme';
 
-function makeComponent(overrides: Partial<ThemeComponent> = {}): ThemeComponent {
+function makeComponent(
+  overrides: Partial<ThemeComponent> = {},
+): ThemeComponent {
   return {
     id: 'button-1',
     type: 'button',
@@ -31,8 +33,12 @@ describe('ThemeCanvas', () => {
 
   it('renders nodes for each component', () => {
     render(<ThemeCanvas components={twoComponents} onChange={vi.fn()} />);
-    expect(screen.getByTestId('theme-canvas-component-button-1')).toBeInTheDocument();
-    expect(screen.getByTestId('theme-canvas-component-input-1')).toBeInTheDocument();
+    expect(
+      screen.getByTestId('theme-canvas-component-button-1'),
+    ).toBeInTheDocument();
+    expect(
+      screen.getByTestId('theme-canvas-component-input-1'),
+    ).toBeInTheDocument();
   });
 
   it('renders the component palette in edit mode', () => {
@@ -114,7 +120,11 @@ describe('ThemeCanvas', () => {
     render(<ThemeCanvas components={[]} onChange={onChange} />);
     // Click on the form component in the palette
     const paletteButtons = screen.getAllByTestId(/^palette-component-/);
-    fireEvent.click(paletteButtons.find((btn) => btn.getAttribute('data-testid') === 'palette-component-form')!);
+    fireEvent.click(
+      paletteButtons.find(
+        (btn) => btn.getAttribute('data-testid') === 'palette-component-form',
+      )!,
+    );
     const newComponents: ThemeComponent[] = onChange.mock.calls[0][0];
     expect(newComponents.length).toBe(1);
     expect(newComponents[0].type).toBe('form');
@@ -124,14 +134,17 @@ describe('ThemeCanvas', () => {
     const onChange = vi.fn();
     render(<ThemeCanvas components={[]} onChange={onChange} />);
 
-    const paletteButton = screen.getByTestId('palette-component-input');
-    const canvas = document.querySelector('.overflow-auto.bg-white') as HTMLElement;
+    const paletteButton = screen.getByTestId('palette-component-form');
+    const canvas = document.querySelector(
+      '.overflow-auto.bg-white',
+    ) as HTMLElement;
 
     // Simulate drag and drop
     fireEvent.dragStart(paletteButton, {
       dataTransfer: {
         setData: vi.fn(),
-        getData: (key: string) => (key === 'application/x-component-type' ? 'input' : ''),
+        getData: (key: string) =>
+          key === 'application/x-component-type' ? 'form' : '',
         effectAllowed: '',
       },
     });
@@ -144,7 +157,8 @@ describe('ThemeCanvas', () => {
 
     fireEvent.drop(canvas, {
       dataTransfer: {
-        getData: (key: string) => (key === 'application/x-component-type' ? 'input' : ''),
+        getData: (key: string) =>
+          key === 'application/x-component-type' ? 'input' : '',
       },
     });
 
@@ -168,8 +182,12 @@ describe('ThemeCanvas', () => {
   });
 
   it('hides placeholder in preview mode', () => {
-    render(<ThemeCanvas components={twoComponents} onChange={vi.fn()} isPreview />);
-    expect(screen.queryByTestId('add-component-placeholder')).not.toBeInTheDocument();
+    render(
+      <ThemeCanvas components={twoComponents} onChange={vi.fn()} isPreview />,
+    );
+    expect(
+      screen.queryByTestId('add-component-placeholder'),
+    ).not.toBeInTheDocument();
   });
 
   it('disables move-up button on first component', () => {
@@ -216,11 +234,20 @@ describe('ThemeCanvas', () => {
 
   it('generates unique IDs for new components', () => {
     const onChange = vi.fn();
-    render(<ThemeCanvas components={[makeComponent({ id: 'button-1' })]} onChange={onChange} />);
+    render(
+      <ThemeCanvas
+        components={[makeComponent({ id: 'button-1' })]}
+        onChange={onChange}
+      />,
+    );
 
     // Click on button in palette (there may already be button-1)
     const paletteButtons = screen.getAllByTestId(/^palette-component-/);
-    fireEvent.click(paletteButtons.find((btn) => btn.getAttribute('data-testid') === 'palette-component-button')!);
+    fireEvent.click(
+      paletteButtons.find(
+        (btn) => btn.getAttribute('data-testid') === 'palette-component-button',
+      )!,
+    );
 
     const newComponents: ThemeComponent[] = onChange.mock.calls[0][0];
     // Should be button-2 since button-1 already exists

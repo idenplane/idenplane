@@ -44,7 +44,8 @@ export async function getThemes(
   const searchParams = new URLSearchParams();
   if (params?.themeType) searchParams.set('themeType', params.themeType);
   if (params?.status) searchParams.set('status', params.status);
-  if (params?.isActive !== undefined) searchParams.set('isActive', String(params.isActive));
+  if (params?.isActive !== undefined)
+    searchParams.set('isActive', String(params.isActive));
 
   const queryString = searchParams.toString();
   const { data } = await apiClient.get<Theme[]>(
@@ -148,10 +149,10 @@ export async function getThemeVersions(
 export async function rollbackTheme(
   realmName: string,
   id: string,
-  version: number,
+  versionId: string,
 ): Promise<Theme> {
   const { data } = await apiClient.post<Theme>(
-    `/realms/${realmName}/themes/${id}/restore/${version}`,
+    `/realms/${realmName}/themes/${id}/rollback/${versionId}`,
   );
   return data;
 }
@@ -249,7 +250,5 @@ export async function deleteThemeAsset(
   id: string,
   assetId: string,
 ): Promise<void> {
-  await apiClient.delete(
-    `/realms/${realmName}/themes/${id}/assets/${assetId}`,
-  );
+  await apiClient.delete(`/realms/${realmName}/themes/${id}/assets/${assetId}`);
 }
