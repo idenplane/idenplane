@@ -53,6 +53,8 @@ export class RealmsService {
         smtpPassword: dto.smtpPassword,
         smtpFrom: dto.smtpFrom,
         smtpSecure: dto.smtpSecure,
+        emailProvider: dto.emailProvider,
+        emailProviderConfig: dto.emailProviderConfig as object | undefined,
         passwordMinLength: dto.passwordMinLength,
         passwordRequireUppercase: dto.passwordRequireUppercase,
         passwordRequireLowercase: dto.passwordRequireLowercase,
@@ -125,6 +127,8 @@ export class RealmsService {
         hcaptchaSiteKey: dto.hcaptchaSiteKey,
         hcaptchaSecretKey: dto.hcaptchaSecretKey,
         captchaScoreThreshold: dto.captchaScoreThreshold,
+        // SCIM provisioning
+        scimEnabled: dto.scimEnabled,
         signingKeys: {
           create: {
             kid: keyPair.kid,
@@ -231,6 +235,8 @@ export class RealmsService {
       smtpUser: dto.smtpUser,
       smtpFrom: dto.smtpFrom,
       smtpSecure: dto.smtpSecure,
+      emailProvider: dto.emailProvider,
+      emailProviderConfig: dto.emailProviderConfig,
       passwordMinLength: dto.passwordMinLength,
       passwordRequireUppercase: dto.passwordRequireUppercase,
       passwordRequireLowercase: dto.passwordRequireLowercase,
@@ -300,6 +306,15 @@ export class RealmsService {
       hcaptchaSiteKey: dto.hcaptchaSiteKey,
       hcaptchaSecretKey: dto.hcaptchaSecretKey,
       captchaScoreThreshold: dto.captchaScoreThreshold,
+      // SCIM provisioning
+      scimEnabled: dto.scimEnabled,
+      scimUserAutocreate: dto.scimUserAutocreate,
+      scimGroupSyncEnabled: dto.scimGroupSyncEnabled,
+      // Event retention
+      loginEventRetentionDays: dto.loginEventRetentionDays,
+      adminEventRetentionDays: dto.adminEventRetentionDays,
+      // User lifecycle
+      deletionGracePeriodDays: dto.deletionGracePeriodDays,
     };
 
     // Only update password if a real value is provided (not the redacted placeholder)

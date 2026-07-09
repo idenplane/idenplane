@@ -89,6 +89,9 @@ model Realm {
   smtpFrom     String? @map("smtp_from")
   smtpSecure   Boolean @default(false) @map("smtp_secure")
 
+  emailProvider       String  @default("smtp") @map("email_provider")
+  emailProviderConfig Json?   @map("email_provider_config")
+
   // Magic link / passwordless authentication
   magicLinkEnabled                Boolean @default(false) @map("magic_link_enabled")
   magicLinkExpirySeconds          Int     @default(300) @map("magic_link_expiry_seconds")

@@ -1,6 +1,8 @@
 jest.mock('../crypto/jwk.service.js', () => ({ JwkService: jest.fn() }));
 
+import { plainToInstance } from 'class-transformer';
 import { GroupsController } from './groups.controller.js';
+import { AssignRolesDto } from '../roles/dto/assign-role.dto.js';
 import type { Realm } from '@prisma/client';
 
 describe('GroupsController', () => {
@@ -186,11 +188,13 @@ describe('GroupsController', () => {
   });
 
   describe('assignRoles', () => {
-    it('should call groupsService.assignRolesToGroup with realm, groupId, and roleNames', () => {
-      const body = { roleNames: ['admin', 'editor'] };
+    it('should call groupsService.assignRolesToGroup with roleNames from roleNames format', () => {
+      const dto = plainToInstance(AssignRolesDto, {
+        roleNames: ['admin', 'editor'],
+      });
       mockGroupsService.assignRolesToGroup.mockReturnValue(undefined);
 
-      const result = controller.assignRoles(realm, 'group-1', body);
+      const result = controller.assignRoles(realm, 'group-1', dto);
 
       expect(mockGroupsService.assignRolesToGroup).toHaveBeenCalledWith(
         realm,
@@ -199,14 +203,29 @@ describe('GroupsController', () => {
       );
       expect(result).toBeUndefined();
     });
+
+    it('should call groupsService.assignRolesToGroup with roleNames from Keycloak roles format', () => {
+      const dto = plainToInstance(AssignRolesDto, {
+        roles: [{ name: 'admin' }],
+      });
+      mockGroupsService.assignRolesToGroup.mockReturnValue(undefined);
+
+      controller.assignRoles(realm, 'group-1', dto);
+
+      expect(mockGroupsService.assignRolesToGroup).toHaveBeenCalledWith(
+        realm,
+        'group-1',
+        ['admin'],
+      );
+    });
   });
 
   describe('removeRoles', () => {
-    it('should call groupsService.removeRolesFromGroup with realm, groupId, and roleNames', () => {
-      const body = { roleNames: ['editor'] };
+    it('should call groupsService.removeRolesFromGroup with roleNames from roleNames format', () => {
+      const dto = plainToInstance(AssignRolesDto, { roleNames: ['editor'] });
       mockGroupsService.removeRolesFromGroup.mockReturnValue(undefined);
 
-      const result = controller.removeRoles(realm, 'group-1', body);
+      const result = controller.removeRoles(realm, 'group-1', dto);
 
       expect(mockGroupsService.removeRolesFromGroup).toHaveBeenCalledWith(
         realm,
@@ -214,6 +233,21 @@ describe('GroupsController', () => {
         ['editor'],
       );
       expect(result).toBeUndefined();
+    });
+
+    it('should call groupsService.removeRolesFromGroup with Keycloak roles format', () => {
+      const dto = plainToInstance(AssignRolesDto, {
+        roles: [{ id: 'abc', name: 'editor' }],
+      });
+      mockGroupsService.removeRolesFromGroup.mockReturnValue(undefined);
+
+      controller.removeRoles(realm, 'group-1', dto);
+
+      expect(mockGroupsService.removeRolesFromGroup).toHaveBeenCalledWith(
+        realm,
+        'group-1',
+        ['editor'],
+      );
     });
   });
 });

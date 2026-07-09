@@ -157,7 +157,11 @@ export class RolesController {
     @Param('userId') userId: string,
     @Body() dto: AssignRolesDto,
   ) {
-    return this.rolesService.assignRealmRoles(realm, userId, dto.roleNames);
+    return this.rolesService.assignRealmRoles(
+      realm,
+      userId,
+      dto.effectiveNames,
+    );
   }
 
   @Get('users/:userId/role-mappings/realm')
@@ -183,7 +187,11 @@ export class RolesController {
     @Param('userId') userId: string,
     @Body() dto: AssignRolesDto,
   ) {
-    return this.rolesService.removeUserRealmRoles(realm, userId, dto.roleNames);
+    return this.rolesService.removeUserRealmRoles(
+      realm,
+      userId,
+      dto.effectiveNames,
+    );
   }
 
   // ─── User Client Role Assignment ────────────────────────
@@ -205,7 +213,7 @@ export class RolesController {
       realm,
       userId,
       clientId,
-      dto.roleNames,
+      dto.effectiveNames,
     );
   }
 
@@ -238,7 +246,7 @@ export class RolesController {
       realm,
       userId,
       clientId,
-      dto.roleNames,
+      dto.effectiveNames,
     );
   }
 }

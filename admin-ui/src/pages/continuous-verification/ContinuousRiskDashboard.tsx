@@ -182,7 +182,7 @@ function HighRiskRow({ profile, realmName }: { profile: SessionRiskProfile; real
       </td>
       <td className="whitespace-nowrap px-4 py-3 text-right">
         <Link
-          to={`/console/realms/${realmName}/continuous-verification/session/${profile.sessionId}`}
+          to={`/console/realms/${realmName}/risk-sessions/${profile.sessionId}`}
           className="text-sm font-medium text-indigo-600 hover:text-indigo-900"
         >
           Details
@@ -234,7 +234,7 @@ export default function ContinuousRiskDashboard() {
         </div>
         <div className="flex gap-2">
           <Link
-            to={`/console/realms/${realmName}/continuous-verification/policies`}
+            to={`/console/realms/${realmName}/risk-policies`}
             className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             Risk Policies

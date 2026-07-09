@@ -304,11 +304,9 @@ export class TokensService {
         signingKey.publicKey,
       );
       const sid = (payload as Record<string, unknown>)['sid'] as
-        | string
-        | undefined;
+        string | undefined;
       const sub = (payload as Record<string, unknown>)['sub'] as
-        | string
-        | undefined;
+        string | undefined;
 
       if (sid) {
         await this.endSession(realm, sid, sub, ip);

@@ -62,8 +62,7 @@ export class AccountController {
   /** Throw `ForbiddenException` when the double-submit CSRF token is invalid. */
   private validateCsrf(realm: Realm, body: object, req: Request): void {
     const bodyToken = (body as Record<string, unknown>)['_csrf'] as
-      | string
-      | undefined;
+      string | undefined;
     const cookieToken = (req.cookies as Record<string, string | undefined>)?.[
       this.csrfService.cookieName(realm.name)
     ];
@@ -74,8 +73,7 @@ export class AccountController {
 
   private async getSessionUser(realm: Realm, req: Request) {
     const sessionToken = req.cookies?.['IDENPLANE_SESSION'] as
-      | string
-      | undefined;
+      string | undefined;
     if (!sessionToken) return null;
     return this.loginService.validateLoginSession(realm, sessionToken);
   }
@@ -161,8 +159,7 @@ export class AccountController {
     @Res() res: Response,
   ) {
     const sessionToken = req.cookies?.['IDENPLANE_SESSION'] as
-      | string
-      | undefined;
+      string | undefined;
     if (sessionToken) {
       const tokenHash = this.crypto.sha256(sessionToken);
       await this.prisma.loginSession

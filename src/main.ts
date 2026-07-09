@@ -9,6 +9,7 @@ import { join } from 'path';
 import { AppModule } from './app.module.js';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter.js';
 import { CorsOriginService } from './cors/cors-origin.service.js';
+import { NormalizeRoleBodyPipe } from './roles/pipes/normalize-role-body.pipe.js';
 import { registerHandlebarsHelpers } from './theme/handlebars-helpers.js';
 
 /** Known-insecure / placeholder values that must never reach production. */
@@ -203,7 +204,9 @@ async function bootstrap() {
             "'unsafe-inline'",
             'https://fonts.googleapis.com',
           ],
-          fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+          // 'data:' allows the admin-ui Vite bundle's inlined woff2 font,
+          // which is emitted as a data: URI (mirrors imgSrc below).
+          fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
           imgSrc: ["'self'", 'data:', 'blob:'],
           connectSrc: ["'self'"],
           formAction: ["'self'"],
@@ -270,7 +273,12 @@ async function bootstrap() {
   // Register theme engine Handlebars helpers ({{msg}}, {{msgArgs}})
   registerHandlebarsHelpers();
 
+  // NormalizeRoleBodyPipe MUST be registered before ValidationPipe so that
+  // bare-array Keycloak-style bodies (e.g. [{ name: "admin" }]) are reshaped
+  // to { roleNames: [...] } before ValidationPipe rejects them.
+  // The pipe's metatype guard ensures it only activates for AssignRolesDto params.
   app.useGlobalPipes(
+    new NormalizeRoleBodyPipe(),
     new ValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,

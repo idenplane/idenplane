@@ -1,13 +1,24 @@
+import { useState, useEffect, useRef } from 'react';
+import {
+  NavLink,
+  Outlet,
+  useParams,
+  useNavigate,
+  useLocation,
+} from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { useEffect, useRef, useState } from 'react';
-import { NavLink, Outlet, useLocation, useNavigate, useParams } from 'react-router-dom';
 import { getAllRealms } from '../api/realms';
 import { useAuth } from '../hooks/useAuth';
 import Breadcrumbs from './Breadcrumbs';
-import type { IconProps } from './ui';
 import { Icons, cn } from './ui';
+import type { IconProps } from './ui';
 
-type NavItem = { to: string; label: string; icon: (p: IconProps) => React.JSX.Element; end?: boolean };
+type NavItem = {
+  to: string;
+  label: string;
+  icon: (p: IconProps) => React.JSX.Element;
+  end?: boolean;
+};
 
 export default function Layout() {
   const { name: routeRealm } = useParams<{ name: string }>();
@@ -31,7 +42,10 @@ export default function Layout() {
 
   useEffect(() => {
     function handleClickOutside(e: MouseEvent) {
-      if (dropdownRef.current && !dropdownRef.current.contains(e.target as Node)) {
+      if (
+        dropdownRef.current &&
+        !dropdownRef.current.contains(e.target as Node)
+      ) {
         setRealmDropdownOpen(false);
       }
     }
@@ -41,28 +55,164 @@ export default function Layout() {
 
   const navItems: NavItem[] = currentRealm
     ? [
-      { to: `/console/realms/${currentRealm}`, label: 'Overview', icon: Icons.Activity },
-      { to: `/console/realms/${currentRealm}/users`, label: 'Users', icon: Icons.Users },
-      { to: `/console/realms/${currentRealm}/clients`, label: 'Clients', icon: Icons.Clients },
-      { to: `/console/realms/${currentRealm}/roles`, label: 'Roles', icon: Icons.Roles },
-      { to: `/console/realms/${currentRealm}/groups`, label: 'Groups', icon: Icons.Groups },
-      { to: `/console/realms/${currentRealm}/client-scopes`, label: 'Client Scopes', icon: Icons.Code },
-      { to: `/console/realms/${currentRealm}/consent-categories`, label: 'Consent Categories', icon: Icons.ShieldCheck },
-      { to: `/console/realms/${currentRealm}/consent-statistics`, label: 'Consent Statistics', icon: Icons.Trend },
-      { to: `/console/realms/${currentRealm}/sessions`, label: 'Sessions', icon: Icons.Sessions },
-      { to: `/console/realms/${currentRealm}/events`, label: 'Events', icon: Icons.Events },
-      { to: `/console/realms/${currentRealm}/admin-events`, label: 'Admin Events', icon: Icons.Clock },
-      { to: `/console/realms/${currentRealm}/user-federation`, label: 'User Federation', icon: Icons.Database },
-      { to: `/console/realms/${currentRealm}/identity-providers`, label: 'Identity Providers', icon: Icons.Idp },
-      { to: `/console/realms/${currentRealm}/saml-providers`, label: 'SAML Providers', icon: Icons.Globe },
-      { to: `/console/realms/${currentRealm}/auth-flows`, label: 'Auth Flows', icon: Icons.Build },
-      { to: `/console/realms/${currentRealm}/themes`, label: 'Themes', icon: Icons.Palette },
-    ]
+        {
+          to: `/console/realms/${currentRealm}`,
+          label: 'Overview',
+          icon: Icons.Activity,
+        },
+        {
+          to: `/console/realms/${currentRealm}/users`,
+          label: 'Users',
+          icon: Icons.Users,
+        },
+        {
+          to: `/console/realms/${currentRealm}/clients`,
+          label: 'Clients',
+          icon: Icons.Clients,
+        },
+        {
+          to: `/console/realms/${currentRealm}/roles`,
+          label: 'Roles',
+          icon: Icons.Roles,
+        },
+        {
+          to: `/console/realms/${currentRealm}/groups`,
+          label: 'Groups',
+          icon: Icons.Groups,
+        },
+        {
+          to: `/console/realms/${currentRealm}/client-scopes`,
+          label: 'Client Scopes',
+          icon: Icons.Code,
+        },
+        {
+          to: `/console/realms/${currentRealm}/consent-categories`,
+          label: 'Consent Categories',
+          icon: Icons.ShieldCheck,
+        },
+        {
+          to: `/console/realms/${currentRealm}/consent-statistics`,
+          label: 'Consent Statistics',
+          icon: Icons.Trend,
+        },
+        {
+          to: `/console/realms/${currentRealm}/sessions`,
+          label: 'Sessions',
+          icon: Icons.Sessions,
+        },
+        {
+          to: `/console/realms/${currentRealm}/events`,
+          label: 'Events',
+          icon: Icons.Events,
+        },
+        {
+          to: `/console/realms/${currentRealm}/admin-events`,
+          label: 'Admin Events',
+          icon: Icons.Clock,
+        },
+        {
+          to: `/console/realms/${currentRealm}/user-federation`,
+          label: 'User Federation',
+          icon: Icons.Database,
+        },
+        {
+          to: `/console/realms/${currentRealm}/identity-providers`,
+          label: 'Identity Providers',
+          icon: Icons.Idp,
+        },
+        {
+          to: `/console/realms/${currentRealm}/saml-providers`,
+          label: 'SAML Providers',
+          icon: Icons.Globe,
+        },
+        {
+          to: `/console/realms/${currentRealm}/auth-flows`,
+          label: 'Auth Flows',
+          icon: Icons.Build,
+        },
+        {
+          to: `/console/realms/${currentRealm}/registration-settings`,
+          label: 'Registration Settings',
+          icon: Icons.Settings,
+        },
+        {
+          to: `/console/realms/${currentRealm}/registration-approvals`,
+          label: 'Registration Approvals',
+          icon: Icons.Clock,
+        },
+        {
+          to: `/console/realms/${currentRealm}/registration-fields`,
+          label: 'Registration Fields',
+          icon: Icons.Code,
+        },
+        {
+          to: `/console/realms/${currentRealm}/risk-dashboard`,
+          label: 'Risk Dashboard',
+          icon: Icons.ShieldCheck,
+        },
+        {
+          to: `/console/realms/${currentRealm}/risk-policies`,
+          label: 'Risk Policies',
+          icon: Icons.Roles,
+        },
+        {
+          to: `/console/realms/${currentRealm}/webhooks`,
+          label: 'Webhooks',
+          icon: Icons.Globe,
+        },
+        {
+          to: `/console/realms/${currentRealm}/service-accounts`,
+          label: 'Service Accounts',
+          icon: Icons.Clients,
+        },
+        {
+          to: `/console/realms/${currentRealm}/organizations`,
+          label: 'Organizations',
+          icon: Icons.Groups,
+        },
+        {
+          to: `/console/realms/${currentRealm}/custom-attributes`,
+          label: 'Custom Attributes',
+          icon: Icons.Code,
+        },
+        {
+          to: `/console/realms/${currentRealm}/scim`,
+          label: 'SCIM',
+          icon: Icons.Database,
+        },
+        {
+          to: `/console/realms/${currentRealm}/authorization-policies`,
+          label: 'Authorization',
+          icon: Icons.Roles,
+        },
+        {
+          to: `/console/realms/${currentRealm}/themes`,
+          label: 'Themes',
+          icon: Icons.Palette,
+        },
+        {
+          to: `/console/realms/${currentRealm}/theme-builder`,
+          label: 'Theme Builder',
+          icon: Icons.Sun,
+        },
+        {
+          to: `/console/realms/${currentRealm}/nhi`,
+          label: 'Non-Human Identity',
+          icon: Icons.Server,
+        },
+      ]
     : [];
 
   const globalNav: NavItem[] = [
     { to: '/console', label: 'Dashboard', icon: Icons.Dashboard, end: true },
     { to: '/console/realms', label: 'Realms', icon: Icons.Realms, end: false },
+    { to: '/console/plugins', label: 'Plugins', icon: Icons.Zap, end: false },
+    {
+      to: '/console/system-status',
+      label: 'System Status',
+      icon: Icons.Server,
+      end: false,
+    },
   ];
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
@@ -107,7 +257,11 @@ export default function Layout() {
         <div className="flex h-16 shrink-0 items-center border-b border-sidebar-line px-6">
           {/* Dark-background wordmark; the image already includes the
               "idenplane" text, so no separate label span is needed. */}
-          <img src="/console/idenplane-logo-dark.png" alt="Idenplane" className="h-9 w-auto" />
+          <img
+            src="/console/idenplane-logo-dark.png"
+            alt="Idenplane"
+            className="h-9 w-auto"
+          />
         </div>
 
         {/* Realm switcher */}
@@ -116,14 +270,20 @@ export default function Layout() {
             onClick={() => setRealmDropdownOpen(!realmDropdownOpen)}
             aria-haspopup="listbox"
             aria-expanded={realmDropdownOpen}
-            aria-label={currentRealm ? `Current realm: ${currentRealm}. Switch realm` : 'Select realm'}
+            aria-label={
+              currentRealm
+                ? `Current realm: ${currentRealm}. Switch realm`
+                : 'Select realm'
+            }
             className="flex w-full items-center gap-2.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-2 text-left transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:shadow-[var(--shadow-focus)]"
           >
             <span className="flex h-[22px] w-[22px] items-center justify-center rounded-md bg-gradient-to-br from-cyan-500 to-violet-600 text-[10px] font-bold text-white">
               {(currentRealm || 'R')[0].toUpperCase()}
             </span>
             <span className="min-w-0 flex-1">
-              <span className="block text-[9.5px] font-semibold uppercase tracking-[0.08em] text-sidebar-muted">Realm</span>
+              <span className="block text-[9.5px] font-semibold uppercase tracking-[0.08em] text-sidebar-muted">
+                Realm
+              </span>
               <span className="block truncate font-mono text-[12.5px] font-medium text-white">
                 {currentRealm || 'Select Realm'}
               </span>
@@ -138,7 +298,11 @@ export default function Layout() {
               className="absolute left-3 right-3 z-50 mt-1 animate-fade-up rounded-xl border border-line bg-surface p-1 shadow-float"
             >
               {realms.map((realm) => (
-                <li key={realm.id} role="option" aria-selected={realm.name === currentRealm}>
+                <li
+                  key={realm.id}
+                  role="option"
+                  aria-selected={realm.name === currentRealm}
+                >
                   <button
                     onClick={() => {
                       navigate(`/console/realms/${realm.name}`);
@@ -151,25 +315,42 @@ export default function Layout() {
                         : 'text-fg hover:bg-hover',
                     )}
                   >
-                    <span className="flex-1 truncate">{realm.displayName || realm.name}</span>
-                    {realm.name === currentRealm && <Icons.Check className="h-3.5 w-3.5" />}
+                    <span className="flex-1 truncate">
+                      {realm.displayName || realm.name}
+                    </span>
+                    {realm.name === currentRealm && (
+                      <Icons.Check className="h-3.5 w-3.5" />
+                    )}
                   </button>
                 </li>
               ))}
-              {realms.length === 0 && <li className="px-3 py-2 text-sm text-subtle">No realms found</li>}
+              {realms.length === 0 && (
+                <li className="px-3 py-2 text-sm text-subtle">
+                  No realms found
+                </li>
+              )}
             </ul>
           )}
         </div>
 
         {/* Nav */}
-        <nav aria-label="Main navigation" className="mt-3 flex-1 overflow-y-auto px-3 pb-4">
+        <nav
+          aria-label="Main navigation"
+          className="mt-3 flex-1 overflow-y-auto px-3 pb-4"
+        >
           <div className="px-2.5 pb-1 pt-2.5 text-[10px] font-semibold uppercase tracking-[0.1em] text-sidebar-muted">
             Global
           </div>
           {globalNav.map((item) => {
             const Icon = item.icon;
             return (
-              <NavLink key={item.to} to={item.to} end={item.end} onClick={() => setSidebarOpen(false)} className={navLinkClass}>
+              <NavLink
+                key={item.to}
+                to={item.to}
+                end={item.end}
+                onClick={() => setSidebarOpen(false)}
+                className={navLinkClass}
+              >
                 {({ isActive }) => (
                   <>
                     {isActive && activeBar}
@@ -193,7 +374,13 @@ export default function Layout() {
                 {navItems.map((item) => {
                   const Icon = item.icon;
                   return (
-                    <NavLink key={item.to} to={item.to} end onClick={() => setSidebarOpen(false)} className={navLinkClass}>
+                    <NavLink
+                      key={item.to}
+                      to={item.to}
+                      end
+                      onClick={() => setSidebarOpen(false)}
+                      className={navLinkClass}
+                    >
                       {({ isActive }) => (
                         <>
                           {isActive && activeBar}
@@ -224,7 +411,9 @@ export default function Layout() {
               <Icons.Menu className="h-6 w-6" />
             </button>
             {currentRealm && (
-              <span className="hidden font-mono text-xs text-subtle md:inline">{currentRealm}</span>
+              <span className="hidden font-mono text-xs text-subtle md:inline">
+                {currentRealm}
+              </span>
             )}
           </div>
 
@@ -238,7 +427,11 @@ export default function Layout() {
         </header>
 
         {/* Page content */}
-        <main id="main-content" className="flex-1 overflow-y-auto p-4 sm:p-6" tabIndex={-1}>
+        <main
+          id="main-content"
+          className="flex-1 overflow-y-auto p-4 sm:p-6"
+          tabIndex={-1}
+        >
           <Breadcrumbs />
           <Outlet />
         </main>

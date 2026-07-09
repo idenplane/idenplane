@@ -75,7 +75,7 @@ export default function RegistrationSettingsPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-32">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
       </div>
     );
   }
@@ -95,7 +95,7 @@ export default function RegistrationSettingsPage() {
                   type="checkbox"
                   checked={form.registrationAllowed}
                   onChange={(e) => setForm({ ...form, registrationAllowed: e.target.checked })}
-                  className="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
                 />
                 <span className="ml-2 text-sm text-gray-700">Allow self-registration</span>
               </label>
@@ -105,7 +105,7 @@ export default function RegistrationSettingsPage() {
                   type="checkbox"
                   checked={form.registrationApprovalRequired}
                   onChange={(e) => setForm({ ...form, registrationApprovalRequired: e.target.checked })}
-                  className="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
                 />
                 <span className="ml-2 text-sm text-gray-700">Require admin approval</span>
               </label>
@@ -115,7 +115,7 @@ export default function RegistrationSettingsPage() {
                   type="checkbox"
                   checked={form.requireEmailVerification}
                   onChange={(e) => setForm({ ...form, requireEmailVerification: e.target.checked })}
-                  className="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
                 />
                 <span className="ml-2 text-sm text-gray-700">Require email verification</span>
               </label>
@@ -133,7 +133,7 @@ export default function RegistrationSettingsPage() {
                 type="text"
                 value={form.allowedEmailDomains}
                 onChange={(e) => setForm({ ...form, allowedEmailDomains: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                 placeholder="example.com, company.org"
               />
             </div>
@@ -149,7 +149,7 @@ export default function RegistrationSettingsPage() {
                   type="url"
                   value={form.termsOfServiceUrl}
                   onChange={(e) => setForm({ ...form, termsOfServiceUrl: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                   placeholder="https://example.com/terms"
                 />
               </div>
@@ -159,7 +159,7 @@ export default function RegistrationSettingsPage() {
                   type="url"
                   value={form.privacyPolicyUrl}
                   onChange={(e) => setForm({ ...form, privacyPolicyUrl: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                   placeholder="https://example.com/privacy"
                 />
               </div>
@@ -175,7 +175,7 @@ export default function RegistrationSettingsPage() {
                   type="checkbox"
                   checked={form.captchaEnabled}
                   onChange={(e) => setForm({ ...form, captchaEnabled: e.target.checked })}
-                  className="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
                 />
                 <span className="ml-2 text-sm text-gray-700">Enable CAPTCHA</span>
               </label>
@@ -187,7 +187,7 @@ export default function RegistrationSettingsPage() {
                     <select
                       value={form.captchaProvider}
                       onChange={(e) => setForm({ ...form, captchaProvider: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                     >
                       <option value="recaptcha">reCAPTCHA v3</option>
                       <option value="hcaptcha">hCaptcha</option>
@@ -202,7 +202,7 @@ export default function RegistrationSettingsPage() {
                           type="text"
                           value={form.recaptchaSiteKey}
                           onChange={(e) => setForm({ ...form, recaptchaSiteKey: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                         />
                       </div>
                       <div>
@@ -211,7 +211,7 @@ export default function RegistrationSettingsPage() {
                           type="password"
                           value={form.recaptchaSecretKey}
                           onChange={(e) => setForm({ ...form, recaptchaSecretKey: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                         />
                       </div>
                       <div>
@@ -223,7 +223,7 @@ export default function RegistrationSettingsPage() {
                           max="1"
                           value={form.captchaScoreThreshold}
                           onChange={(e) => setForm({ ...form, captchaScoreThreshold: parseFloat(e.target.value) })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                         />
                         <p className="mt-1 text-xs text-gray-500">Lower values are more restrictive (default: 0.5)</p>
                       </div>
@@ -236,7 +236,7 @@ export default function RegistrationSettingsPage() {
                           type="text"
                           value={form.hcaptchaSiteKey}
                           onChange={(e) => setForm({ ...form, hcaptchaSiteKey: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                         />
                       </div>
                       <div>
@@ -245,7 +245,7 @@ export default function RegistrationSettingsPage() {
                           type="password"
                           value={form.hcaptchaSecretKey}
                           onChange={(e) => setForm({ ...form, hcaptchaSecretKey: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                         />
                       </div>
                     </>
@@ -259,7 +259,7 @@ export default function RegistrationSettingsPage() {
             <button
               type="submit"
               disabled={mutation.isPending}
-              className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50"
+              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50"
             >
               {mutation.isPending ? 'Saving...' : 'Save Changes'}
             </button>

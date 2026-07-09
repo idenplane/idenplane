@@ -1,33 +1,40 @@
 import {
-    Body,
-    Controller,
-    Get,
-    HttpCode,
-    HttpStatus,
-    Post,
-    Req,
-    Res,
-    UnauthorizedException,
-    UseGuards,
+  Controller,
+  Post,
+  Get,
+  Body,
+  Req,
+  Res,
+  UnauthorizedException,
+  HttpCode,
+  HttpStatus,
+  UseGuards,
+  Logger,
 } from '@nestjs/common';
-import { ConfigService } from '@nestjs/config';
 import {
-    ApiOperation,
-    ApiResponse,
-    ApiSecurity,
-    ApiTags,
+  ApiTags,
+  ApiOperation,
+  ApiResponse,
+  ApiSecurity,
 } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
+import { ConfigService } from '@nestjs/config';
 import { Public } from '../common/decorators/public.decorator.js';
-import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
-import { RateLimitGuard } from '../rate-limit/rate-limit.guard.js';
 import { AdminAuthService } from './admin-auth.service.js';
+import { RateLimitGuard } from '../rate-limit/rate-limit.guard.js';
+import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 import { AdminLoginDto } from './dto/login.dto.js';
+import { AdminApiKeyLoginDto } from './dto/api-key-login.dto.js';
+
+const ADMIN_RT_COOKIE = 'admin_rt';
+const TOKEN_TTL_MS = 3600 * 1000;
 
 @ApiTags('Admin Auth')
 @Controller('admin/auth')
 @ApiSecurity('admin-api-key')
 export class AdminAuthController {
+  private readonly logger = new Logger(AdminAuthController.name);
+
   constructor(
     private readonly adminAuthService: AdminAuthService,
     private readonly config: ConfigService,
@@ -76,30 +83,76 @@ export class AdminAuthController {
       res.setHeader(name, value);
     }
 
-    // Persist the admin session in an httpOnly cookie so that a full page
-    // reload (F5) keeps the user signed in. The cookie mirrors the bearer
-    // token returned in the body — the guard reads either form.
-    const isSecure =
-      req.protocol === 'https' ||
-      req.headers['x-forwarded-proto'] === 'https';
-    res.cookie('IDENPLANE_ADMIN_SESSION', tokenResponse.access_token, {
+    const isProduction = this.config.get<string>('NODE_ENV') === 'production';
+    res.cookie(ADMIN_RT_COOKIE, tokenResponse.access_token, {
       httpOnly: true,
-      secure: isSecure,
+      secure: isProduction,
       sameSite: 'strict',
-      maxAge: tokenResponse.expires_in * 1000,
-      path: '/',
-    });
-    // Non-sensitive marker cookie (readable from JS) so the SPA can detect
-    // that a session *might* exist and trigger a restoreSession() probe.
-    res.cookie('IDENPLANE_ADMIN_SESSION_MARKER', '1', {
-      httpOnly: false,
-      secure: isSecure,
-      sameSite: 'strict',
-      maxAge: tokenResponse.expires_in * 1000,
-      path: '/',
+      maxAge: TOKEN_TTL_MS,
+      path: '/admin/auth',
     });
 
     return tokenResponse;
+  }
+
+  @Post('login-with-api-key')
+  @Public()
+  @UseGuards(RateLimitGuard)
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Exchange admin API key for a session token' })
+  @ApiResponse({
+    status: 200,
+    description: 'Returns bearer token and sets session cookie',
+  })
+  @ApiResponse({ status: 401, description: 'Invalid API key' })
+  async loginWithApiKey(
+    @Body() body: AdminApiKeyLoginDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const tokenResponse = await this.adminAuthService.createAdminSession(
+      body.apiKey,
+    );
+
+    const isProduction = this.config.get<string>('NODE_ENV') === 'production';
+    res.cookie(ADMIN_RT_COOKIE, tokenResponse.access_token, {
+      httpOnly: true,
+      secure: isProduction,
+      sameSite: 'strict',
+      maxAge: TOKEN_TTL_MS,
+      path: '/admin/auth',
+    });
+
+    return tokenResponse;
+  }
+
+  @Get('refresh')
+  @Public()
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Rehydrate admin session from httpOnly cookie' })
+  @ApiResponse({
+    status: 200,
+    description: 'Session refreshed, returns access token',
+  })
+  @ApiResponse({ status: 401, description: 'No valid session cookie' })
+  async refresh(
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const token = (req.cookies as Record<string, string | undefined>)[
+      ADMIN_RT_COOKIE
+    ];
+    if (!token) {
+      throw new UnauthorizedException('No session cookie');
+    }
+
+    try {
+      await this.adminAuthService.validateAdminToken(token);
+    } catch {
+      res.clearCookie(ADMIN_RT_COOKIE, { path: '/admin/auth' });
+      throw new UnauthorizedException('Session expired');
+    }
+
+    return { access_token: token, token_type: 'Bearer' };
   }
 
   @Post('logout')
@@ -111,15 +164,22 @@ export class AdminAuthController {
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async logout(@Req() req: Request, @Res({ passthrough: true }) res: Response) {
     const authHeader = req.headers['authorization'];
-    const cookieToken = req.cookies?.['IDENPLANE_ADMIN_SESSION'];
-    const token = authHeader?.startsWith('Bearer ')
-      ? authHeader.slice(7)
-      : cookieToken;
-    if (token) {
-      await this.adminAuthService.revokeToken(token);
+    if (authHeader?.startsWith('Bearer ')) {
+      await this.adminAuthService.revokeToken(authHeader.slice(7));
     }
-    res.clearCookie('IDENPLANE_ADMIN_SESSION', { path: '/' });
-    res.clearCookie('IDENPLANE_ADMIN_SESSION_MARKER', { path: '/' });
+    const cookieToken = (req.cookies as Record<string, string | undefined>)[
+      ADMIN_RT_COOKIE
+    ];
+    if (cookieToken) {
+      await this.adminAuthService
+        .revokeToken(cookieToken)
+        .catch((err: unknown) =>
+          this.logger.warn(
+            `Failed to revoke cookie token: ${(err as Error).message}`,
+          ),
+        );
+    }
+    res.clearCookie(ADMIN_RT_COOKIE, { path: '/admin/auth' });
     return { message: 'Logged out' };
   }
 
@@ -129,12 +189,10 @@ export class AdminAuthController {
   @ApiResponse({ status: 200, description: 'Current admin user info' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   async getMe(@Req() req: Request) {
-    // Allow the bearer token to come from the Authorization header or the
-    // IDENPLANE_ADMIN_SESSION cookie (set on login). This lets the console
-    // restore a session after a full page reload without a persisted token
-    // in JavaScript memory.
     const authHeader = req.headers['authorization'];
-    const cookieToken = req.cookies?.['IDENPLANE_ADMIN_SESSION'];
+    const cookieToken = (req.cookies as Record<string, string | undefined>)[
+      ADMIN_RT_COOKIE
+    ];
     const token = authHeader?.startsWith('Bearer ')
       ? authHeader.slice(7)
       : cookieToken;
@@ -144,8 +202,7 @@ export class AdminAuthController {
     }
 
     try {
-      const adminUser = await this.adminAuthService.validateAdminToken(token);
-      return adminUser;
+      return await this.adminAuthService.validateAdminToken(token);
     } catch {
       throw new UnauthorizedException('Not authenticated');
     }

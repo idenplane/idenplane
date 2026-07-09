@@ -33,38 +33,23 @@ export function hasCredentials(): boolean {
 }
 
 /**
- * Returns true when an httpOnly admin session cookie is likely present.
- * The cookie itself is not readable from JS (httpOnly), so we use a
- * sibling, non-sensitive marker cookie set on login to know a session
- * *might* exist without exposing the token. Falls back to checking
- * hasCredentials() so the in-memory path still works.
+ * Attempts to rehydrate the in-memory access token from the httpOnly
+ * admin_rt cookie via GET /admin/auth/refresh.  Returns the token on
+ * success, null if the cookie is missing or expired.
  */
-export function hasSessionMarker(): boolean {
-  if (hasCredentials()) return true;
-  return document.cookie.includes('IDENPLANE_ADMIN_SESSION_MARKER=1');
-}
-
-/**
- * Best-effort session restore after a page reload.
- *
- * Calls `/auth/me`; the backend reads the httpOnly session cookie and, if
- * valid, returns the admin user. We then hydrate the in-memory token store
- * with a sentinel so hasCredentials() returns true and the axios
- * interceptor stops trying to attach a missing Authorization header — the
- * cookie alone authenticates subsequent requests.
- *
- * Returns the admin user on success, or null when no valid session exists.
- */
-export async function restoreSession(): Promise<{ userId: string; roles: string[] } | null> {
-  // If we already have in-memory credentials, nothing to restore.
-  if (hasCredentials()) return null;
+export async function refreshSession(): Promise<string | null> {
   try {
-    const { data } = await apiClient.get<{ userId: string; roles: string[] }>('/auth/me');
-    // Mark the in-memory store so hasCredentials() is true. The actual token
-    // lives in the httpOnly cookie; we use a sentinel value here only to
-    // gate ProtectedRoute and avoid re-running restore.
-    _token = '__session_cookie__';
-    return data;
+    const resp = await axios.get<{ access_token: string }>(
+      '/admin/auth/refresh',
+      {
+        withCredentials: true,
+      },
+    );
+    const token = resp.data.access_token;
+    if (token) {
+      setCredentials({ token });
+    }
+    return token ?? null;
   } catch {
     return null;
   }
@@ -81,16 +66,11 @@ export async function restoreSession(): Promise<{ userId: string; roles: string[
 function createClient(baseURL: string) {
   const instance = axios.create({
     baseURL,
-    // Send cookies (httpOnly IDENPLANE_ADMIN_SESSION) with every request so
-    // the admin session survives full page reloads. The backend CORS config
-    // already sets `credentials: true`.
     withCredentials: true,
   });
 
   instance.interceptors.request.use((config) => {
-    // The sentinel token means "auth via httpOnly cookie" — don't attach an
-    // Authorization header; the browser sends the cookie automatically.
-    if (_token && _token !== '__session_cookie__') {
+    if (_token) {
       config.headers['Authorization'] = `Bearer ${_token}`;
     }
     if (_apiKey) {

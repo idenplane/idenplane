@@ -6,13 +6,20 @@ import { getClients } from '../../api/clients';
 import { getGroups } from '../../api/groups';
 import { getIdentityProviders } from '../../api/identityProviders';
 import type { ThemeInfo } from '../../api/realms';
-import { deleteRealm, exportRealm, getRealmByName, getThemes, sendTestEmail, updateRealm } from '../../api/realms';
+import {
+  deleteRealm,
+  exportRealm,
+  getRealmByName,
+  getThemes,
+  updateRealm,
+} from '../../api/realms';
 import { getRealmRoles } from '../../api/roles';
 import { getRealmSessions } from '../../api/sessions';
 import { getUsers } from '../../api/users';
 import ConfirmDialog from '../../components/ConfirmDialog';
-import PasswordInput from '../../components/PasswordInput';
 import MagicLinkSettingsForm from '../../components/magic-link/MagicLinkSettingsForm';
+import EmailProviderForm from '../../components/email/EmailProviderForm';
+import SmsProviderForm from '../../components/sms/SmsProviderForm';
 
 function formatDuration(seconds: number): string {
   if (seconds < 60) return `${seconds}s`;
@@ -26,8 +33,17 @@ export default function RealmDetailPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const [showDelete, setShowDelete] = useState(false);
-  const [activeTab, setActiveTab] = useState<'general' | 'tokens' | 'email' | 'security' | 'events' | 'theme' | 'magic-link'>('general');
-  const [testEmailTo, setTestEmailTo] = useState('');
+  const [activeTab, setActiveTab] = useState<
+    | 'general'
+    | 'tokens'
+    | 'email'
+    | 'sms'
+    | 'security'
+    | 'events'
+    | 'theme'
+    | 'magic-link'
+    | 'locale'
+  >('general');
 
   const { data: realm, isLoading } = useQuery({
     queryKey: ['realm', name],
@@ -95,12 +111,6 @@ export default function RealmDetailPage() {
     accessTokenLifespan: 300,
     refreshTokenLifespan: 1800,
     offlineTokenLifespan: 2592000,
-    smtpHost: '',
-    smtpPort: 587,
-    smtpUser: '',
-    smtpPassword: '',
-    smtpFrom: '',
-    smtpSecure: false,
     // Security - Password Policy
     passwordMinLength: 8,
     passwordRequireUppercase: false,
@@ -117,10 +127,39 @@ export default function RealmDetailPage() {
     permanentLockoutAfter: 0,
     // Security - MFA
     mfaRequired: false,
+    // WebAuthn
+    webAuthnEnabled: false,
+    webAuthnRpName: '',
+    webAuthnRpId: '',
+    webAuthnUserVerificationRequired: false,
+    // Rate Limiting
+    rateLimitEnabled: false,
+    clientRateLimitPerMinute: 100,
+    clientRateLimitPerHour: 1000,
+    userRateLimitPerMinute: 30,
+    userRateLimitPerHour: 300,
+    ipRateLimitPerMinute: 60,
+    ipRateLimitPerHour: 600,
+    // Impersonation
+    impersonationEnabled: false,
+    impersonationMaxDuration: 1800,
+    // Risk Thresholds
+    riskThresholdStepUp: 50,
+    riskThresholdBlock: 80,
+    // Session Limits
+    maxSessionsPerUser: 0,
+    // Adaptive Authentication
+    adaptiveAuthEnabled: false,
+    // Locale
+    defaultLocale: 'en',
+    supportedLocales: [] as string[],
     // Events
     eventsEnabled: false,
     eventsExpiration: 604800,
     adminEventsEnabled: false,
+    loginEventRetentionDays: 30,
+    adminEventRetentionDays: 90,
+    deletionGracePeriodDays: 14,
     // Theme
     themeName: 'idenplane',
     loginTheme: 'idenplane',
@@ -140,12 +179,6 @@ export default function RealmDetailPage() {
       accessTokenLifespan: realm.accessTokenLifespan,
       refreshTokenLifespan: realm.refreshTokenLifespan,
       offlineTokenLifespan: realm.offlineTokenLifespan ?? 2592000,
-      smtpHost: realm.smtpHost ?? '',
-      smtpPort: realm.smtpPort ?? 587,
-      smtpUser: realm.smtpUser ?? '',
-      smtpPassword: realm.smtpPassword ?? '',
-      smtpFrom: realm.smtpFrom ?? '',
-      smtpSecure: realm.smtpSecure ?? false,
       // Security - Password Policy
       passwordMinLength: realm.passwordMinLength ?? 8,
       passwordRequireUppercase: realm.passwordRequireUppercase ?? false,
@@ -162,10 +195,40 @@ export default function RealmDetailPage() {
       permanentLockoutAfter: realm.permanentLockoutAfter ?? 0,
       // Security - MFA
       mfaRequired: realm.mfaRequired ?? false,
+      // WebAuthn
+      webAuthnEnabled: (realm as any).webAuthnEnabled ?? false,
+      webAuthnRpName: (realm as any).webAuthnRpName ?? '',
+      webAuthnRpId: (realm as any).webAuthnRpId ?? '',
+      webAuthnUserVerificationRequired:
+        (realm as any).webAuthnUserVerificationRequired ?? false,
+      // Rate Limiting
+      rateLimitEnabled: (realm as any).rateLimitEnabled ?? false,
+      clientRateLimitPerMinute: (realm as any).clientRateLimitPerMinute ?? 100,
+      clientRateLimitPerHour: (realm as any).clientRateLimitPerHour ?? 1000,
+      userRateLimitPerMinute: (realm as any).userRateLimitPerMinute ?? 30,
+      userRateLimitPerHour: (realm as any).userRateLimitPerHour ?? 300,
+      ipRateLimitPerMinute: (realm as any).ipRateLimitPerMinute ?? 60,
+      ipRateLimitPerHour: (realm as any).ipRateLimitPerHour ?? 600,
+      // Impersonation
+      impersonationEnabled: (realm as any).impersonationEnabled ?? false,
+      impersonationMaxDuration: (realm as any).impersonationMaxDuration ?? 1800,
+      // Risk Thresholds
+      riskThresholdStepUp: (realm as any).riskThresholdStepUp ?? 50,
+      riskThresholdBlock: (realm as any).riskThresholdBlock ?? 80,
+      // Session Limits
+      maxSessionsPerUser: (realm as any).maxSessionsPerUser ?? 0,
+      // Adaptive Authentication
+      adaptiveAuthEnabled: (realm as any).adaptiveAuthEnabled ?? false,
+      // Locale
+      defaultLocale: (realm as any).defaultLocale ?? 'en',
+      supportedLocales: (realm as any).supportedLocales ?? [],
       // Events
       eventsEnabled: realm.eventsEnabled ?? false,
       eventsExpiration: realm.eventsExpiration ?? 604800,
       adminEventsEnabled: realm.adminEventsEnabled ?? false,
+      loginEventRetentionDays: (realm as any).loginEventRetentionDays ?? 30,
+      adminEventRetentionDays: (realm as any).adminEventRetentionDays ?? 90,
+      deletionGracePeriodDays: (realm as any).deletionGracePeriodDays ?? 14,
       // Theme
       themeName: realm.themeName ?? 'idenplane',
       loginTheme: realm.loginTheme ?? 'idenplane',
@@ -190,14 +253,9 @@ export default function RealmDetailPage() {
     },
   });
 
-  const testEmailMutation = useMutation({
-    mutationFn: () => sendTestEmail(name!, testEmailTo),
-  });
-
   // Clear toast messages when switching tabs
   useEffect(() => {
     updateMutation.reset();
-    testEmailMutation.reset();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [activeTab]);
 
@@ -226,20 +284,50 @@ export default function RealmDetailPage() {
     { key: 'general' as const, label: 'General' },
     { key: 'tokens' as const, label: 'Tokens' },
     { key: 'email' as const, label: 'Email' },
+    { key: 'sms' as const, label: 'SMS' },
     { key: 'security' as const, label: 'Security' },
     { key: 'events' as const, label: 'Events' },
     { key: 'theme' as const, label: 'Theme' },
     { key: 'magic-link' as const, label: 'Magic Link' },
+    { key: 'locale' as const, label: 'Locale' },
   ];
 
   const quickLinks = [
-    { to: `/console/realms/${name}/users`, label: 'Users', count: users?.total },
-    { to: `/console/realms/${name}/clients`, label: 'Clients', count: clients?.length },
-    { to: `/console/realms/${name}/roles`, label: 'Roles', count: roles?.length },
-    { to: `/console/realms/${name}/groups`, label: 'Groups', count: groups?.length },
-    { to: `/console/realms/${name}/client-scopes`, label: 'Client Scopes', count: clientScopes?.length },
-    { to: `/console/realms/${name}/sessions`, label: 'Sessions', count: sessions?.length },
-    { to: `/console/realms/${name}/identity-providers`, label: 'Identity Providers', count: identityProviders?.length },
+    {
+      to: `/console/realms/${name}/users`,
+      label: 'Users',
+      count: users?.total,
+    },
+    {
+      to: `/console/realms/${name}/clients`,
+      label: 'Clients',
+      count: clients?.length,
+    },
+    {
+      to: `/console/realms/${name}/roles`,
+      label: 'Roles',
+      count: roles?.length,
+    },
+    {
+      to: `/console/realms/${name}/groups`,
+      label: 'Groups',
+      count: groups?.length,
+    },
+    {
+      to: `/console/realms/${name}/client-scopes`,
+      label: 'Client Scopes',
+      count: clientScopes?.length,
+    },
+    {
+      to: `/console/realms/${name}/sessions`,
+      label: 'Sessions',
+      count: sessions?.length,
+    },
+    {
+      to: `/console/realms/${name}/identity-providers`,
+      label: 'Identity Providers',
+      count: identityProviders?.length,
+    },
   ];
 
   return (
@@ -256,7 +344,9 @@ export default function RealmDetailPage() {
           <button
             onClick={async () => {
               const data = await exportRealm(name!, { includeUsers: true });
-              const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+              const blob = new Blob([JSON.stringify(data, null, 2)], {
+                type: 'application/json',
+              });
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a');
               a.href = url;
@@ -284,10 +374,11 @@ export default function RealmDetailPage() {
             <button
               key={tab.key}
               onClick={() => setActiveTab(tab.key)}
-              className={`border-b-2 py-3 text-sm font-medium ${activeTab === tab.key
+              className={`border-b-2 py-3 text-sm font-medium ${
+                activeTab === tab.key
                   ? 'border-indigo-500 text-indigo-600'
                   : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
-                }`}
+              }`}
             >
               {tab.label}
             </button>
@@ -307,24 +398,46 @@ export default function RealmDetailPage() {
                 className="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-4 shadow-sm hover:shadow-md transition-shadow"
               >
                 <div>
-                  <p className="text-sm font-medium text-gray-500">{link.label}</p>
+                  <p className="text-sm font-medium text-gray-500">
+                    {link.label}
+                  </p>
                   <p className="text-2xl font-bold text-gray-900">
                     {link.count !== undefined ? link.count : '-'}
                   </p>
                 </div>
-                <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                <svg
+                  className="h-5 w-5 text-gray-400"
+                  fill="none"
+                  viewBox="0 0 24 24"
+                  stroke="currentColor"
+                >
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    strokeWidth={2}
+                    d="M9 5l7 7-7 7"
+                  />
                 </svg>
               </Link>
             ))}
           </div>
 
           {/* General settings form */}
-          <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-gray-900">General Settings</h2>
+          <form
+            onSubmit={handleSubmit}
+            className="space-y-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm"
+          >
+            <h2 className="text-lg font-semibold text-gray-900">
+              General Settings
+            </h2>
 
             <div>
-              <label htmlFor="realm-name" className="mb-1.5 block text-sm font-medium text-gray-700">Name</label>
+              <label
+                htmlFor="realm-name"
+                className="mb-1.5 block text-sm font-medium text-gray-700"
+              >
+                Name
+              </label>
               <input
                 id="realm-name"
                 type="text"
@@ -332,16 +445,25 @@ export default function RealmDetailPage() {
                 disabled
                 className="w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500"
               />
-              <p className="mt-1 text-xs text-gray-400">Realm name cannot be changed</p>
+              <p className="mt-1 text-xs text-gray-400">
+                Realm name cannot be changed
+              </p>
             </div>
 
             <div>
-              <label htmlFor="realm-display-name" className="mb-1.5 block text-sm font-medium text-gray-700">Display Name</label>
+              <label
+                htmlFor="realm-display-name"
+                className="mb-1.5 block text-sm font-medium text-gray-700"
+              >
+                Display Name
+              </label>
               <input
                 id="realm-display-name"
                 type="text"
                 value={form.displayName}
-                onChange={(e) => setForm({ ...form, displayName: e.target.value })}
+                onChange={(e) =>
+                  setForm({ ...form, displayName: e.target.value })
+                }
                 className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
               />
             </div>
@@ -351,10 +473,15 @@ export default function RealmDetailPage() {
                 type="checkbox"
                 id="enabled"
                 checked={form.enabled}
-                onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
+                onChange={(e) =>
+                  setForm({ ...form, enabled: e.target.checked })
+                }
                 className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
               />
-              <label htmlFor="enabled" className="text-sm font-medium text-gray-700">
+              <label
+                htmlFor="enabled"
+                className="text-sm font-medium text-gray-700"
+              >
                 Enabled
               </label>
             </div>
@@ -365,14 +492,22 @@ export default function RealmDetailPage() {
                   type="checkbox"
                   id="registrationAllowed"
                   checked={form.registrationAllowed}
-                  onChange={(e) => setForm({ ...form, registrationAllowed: e.target.checked })}
+                  onChange={(e) =>
+                    setForm({ ...form, registrationAllowed: e.target.checked })
+                  }
                   className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                 />
-                <label htmlFor="registrationAllowed" className="text-sm font-medium text-gray-700">
+                <label
+                  htmlFor="registrationAllowed"
+                  className="text-sm font-medium text-gray-700"
+                >
                   User Registration
                 </label>
               </div>
-              <p className="mt-1 ml-6 text-xs text-gray-400">When disabled, users cannot self-register. Only admins can create accounts.</p>
+              <p className="mt-1 ml-6 text-xs text-gray-400">
+                When disabled, users cannot self-register. Only admins can
+                create accounts.
+              </p>
             </div>
 
             {updateMutation.isSuccess && (
@@ -401,15 +536,23 @@ export default function RealmDetailPage() {
 
       {/* Tokens Tab */}
       {activeTab === 'tokens' && (
-        <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-900">Token Lifespans</h2>
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm"
+        >
+          <h2 className="text-lg font-semibold text-gray-900">
+            Token Lifespans
+          </h2>
           <p className="text-sm text-gray-500">
             Configure how long access and refresh tokens remain valid.
           </p>
 
           <div className="space-y-6">
             <div>
-              <label htmlFor="access-token-lifespan" className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label
+                htmlFor="access-token-lifespan"
+                className="mb-1.5 block text-sm font-medium text-gray-700"
+              >
                 Access Token Lifespan
               </label>
               <div className="flex items-center gap-3">
@@ -419,7 +562,10 @@ export default function RealmDetailPage() {
                   min={1}
                   value={form.accessTokenLifespan}
                   onChange={(e) =>
-                    setForm({ ...form, accessTokenLifespan: Number(e.target.value) })
+                    setForm({
+                      ...form,
+                      accessTokenLifespan: Number(e.target.value),
+                    })
                   }
                   className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
                 />
@@ -434,7 +580,10 @@ export default function RealmDetailPage() {
             </div>
 
             <div>
-              <label htmlFor="refresh-token-lifespan" className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label
+                htmlFor="refresh-token-lifespan"
+                className="mb-1.5 block text-sm font-medium text-gray-700"
+              >
                 Refresh Token Lifespan
               </label>
               <div className="flex items-center gap-3">
@@ -444,7 +593,10 @@ export default function RealmDetailPage() {
                   min={1}
                   value={form.refreshTokenLifespan}
                   onChange={(e) =>
-                    setForm({ ...form, refreshTokenLifespan: Number(e.target.value) })
+                    setForm({
+                      ...form,
+                      refreshTokenLifespan: Number(e.target.value),
+                    })
                   }
                   className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
                 />
@@ -454,12 +606,16 @@ export default function RealmDetailPage() {
                 </span>
               </div>
               <p className="mt-1 text-xs text-gray-400">
-                How long a refresh token is valid. This also controls session duration.
+                How long a refresh token is valid. This also controls session
+                duration.
               </p>
             </div>
 
             <div>
-              <label htmlFor="offline-token-lifespan" className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label
+                htmlFor="offline-token-lifespan"
+                className="mb-1.5 block text-sm font-medium text-gray-700"
+              >
                 Offline Token Lifespan
               </label>
               <div className="flex items-center gap-3">
@@ -469,7 +625,10 @@ export default function RealmDetailPage() {
                   min={60}
                   value={form.offlineTokenLifespan}
                   onChange={(e) =>
-                    setForm({ ...form, offlineTokenLifespan: Number(e.target.value) })
+                    setForm({
+                      ...form,
+                      offlineTokenLifespan: Number(e.target.value),
+                    })
                   }
                   className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
                 />
@@ -479,7 +638,8 @@ export default function RealmDetailPage() {
                 </span>
               </div>
               <p className="mt-1 text-xs text-gray-400">
-                How long offline refresh tokens are valid. These survive session logout. Default: 30 days.
+                How long offline refresh tokens are valid. These survive session
+                logout. Default: 30 days.
               </p>
             </div>
           </div>
@@ -508,157 +668,26 @@ export default function RealmDetailPage() {
       )}
 
       {/* Email Tab */}
-      {activeTab === 'email' && (
-        <div className="space-y-6">
-          <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-gray-900">SMTP Configuration</h2>
-            <p className="text-sm text-gray-500">
-              Configure email delivery for this realm. Required for email verification and password reset.
-            </p>
+      {activeTab === 'email' && <EmailProviderForm realm={realm} />}
 
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="smtp-host" className="mb-1.5 block text-sm font-medium text-gray-700">SMTP Host</label>
-                <input
-                  id="smtp-host"
-                  type="text"
-                  value={form.smtpHost}
-                  onChange={(e) => setForm({ ...form, smtpHost: e.target.value })}
-                  placeholder="smtp.example.com"
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label htmlFor="smtp-port" className="mb-1.5 block text-sm font-medium text-gray-700">SMTP Port</label>
-                <input
-                  id="smtp-port"
-                  type="number"
-                  value={form.smtpPort}
-                  onChange={(e) => setForm({ ...form, smtpPort: Number(e.target.value) })}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label htmlFor="smtp-username" className="mb-1.5 block text-sm font-medium text-gray-700">Username</label>
-                <input
-                  id="smtp-username"
-                  type="text"
-                  value={form.smtpUser}
-                  onChange={(e) => setForm({ ...form, smtpUser: e.target.value })}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                />
-              </div>
-              <div>
-                <label htmlFor="smtp-password" className="mb-1.5 block text-sm font-medium text-gray-700">Password</label>
-                <PasswordInput
-                  id="smtp-password"
-                  value={form.smtpPassword}
-                  onChange={(e) => setForm({ ...form, smtpPassword: e.target.value })}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                />
-              </div>
-            </div>
-
-            <div>
-              <label htmlFor="smtp-from" className="mb-1.5 block text-sm font-medium text-gray-700">From Address</label>
-              <input
-                id="smtp-from"
-                type="email"
-                value={form.smtpFrom}
-                onChange={(e) => setForm({ ...form, smtpFrom: e.target.value })}
-                placeholder="noreply@example.com"
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-              />
-            </div>
-
-            <div className="flex items-center gap-2">
-              <input
-                type="checkbox"
-                id="smtpSecure"
-                checked={form.smtpSecure}
-                onChange={(e) => setForm({ ...form, smtpSecure: e.target.checked })}
-                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-              />
-              <label htmlFor="smtpSecure" className="text-sm font-medium text-gray-700">
-                Use SSL/TLS
-              </label>
-              <span className="text-xs text-gray-400">(Enable for port 465, disable for STARTTLS on port 587)</span>
-            </div>
-
-            {updateMutation.isSuccess && (
-              <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">
-                Email settings updated successfully.
-              </div>
-            )}
-            {updateMutation.isError && (
-              <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
-                Failed to update email settings.
-              </div>
-            )}
-
-            <div className="flex justify-end border-t border-gray-200 pt-4">
-              <button
-                type="submit"
-                disabled={updateMutation.isPending}
-                className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-              >
-                {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
-              </button>
-            </div>
-          </form>
-
-          {/* Test Email */}
-          <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-            <h3 className="text-sm font-semibold text-gray-900">Send Test Email</h3>
-            <p className="mt-1 text-xs text-gray-500">
-              Save your SMTP settings above first, then send a test email to verify the configuration.
-            </p>
-            <div className="mt-3 flex items-end gap-3">
-              <div className="flex-1">
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">Recipient</label>
-                <input
-                  type="email"
-                  value={testEmailTo}
-                  onChange={(e) => setTestEmailTo(e.target.value)}
-                  placeholder="test@example.com"
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-                />
-              </div>
-              <button
-                type="button"
-                onClick={() => testEmailMutation.mutate()}
-                disabled={testEmailMutation.isPending || !testEmailTo}
-                className="rounded-md bg-gray-800 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50"
-              >
-                {testEmailMutation.isPending ? 'Sending...' : 'Send Test'}
-              </button>
-            </div>
-            {testEmailMutation.isSuccess && (
-              <div className="mt-3 rounded-md bg-green-50 p-3 text-sm text-green-700">
-                Test email sent successfully!
-              </div>
-            )}
-            {testEmailMutation.isError && (
-              <div className="mt-3 rounded-md bg-red-50 p-3 text-sm text-red-700">
-                Failed to send test email. Check your SMTP settings.
-              </div>
-            )}
-          </div>
-        </div>
-      )}
+      {/* SMS Tab */}
+      {activeTab === 'sms' && <SmsProviderForm realm={realm} />}
 
       {/* Security Tab */}
       {activeTab === 'security' && (
-        <form onSubmit={handleSubmit} className="space-y-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm"
+        >
           {/* Password Policy */}
           <div className="space-y-6">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Password Policy</h2>
+              <h2 className="text-lg font-semibold text-gray-900">
+                Password Policy
+              </h2>
               <p className="mt-1 text-sm text-gray-500">
-                Define password complexity and rotation requirements for users in this realm.
+                Define password complexity and rotation requirements for users
+                in this realm.
               </p>
             </div>
 
@@ -671,7 +700,10 @@ export default function RealmDetailPage() {
                 min={1}
                 value={form.passwordMinLength}
                 onChange={(e) =>
-                  setForm({ ...form, passwordMinLength: Number(e.target.value) })
+                  setForm({
+                    ...form,
+                    passwordMinLength: Number(e.target.value),
+                  })
                 }
                 className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
               />
@@ -684,11 +716,17 @@ export default function RealmDetailPage() {
                   id="passwordRequireUppercase"
                   checked={form.passwordRequireUppercase}
                   onChange={(e) =>
-                    setForm({ ...form, passwordRequireUppercase: e.target.checked })
+                    setForm({
+                      ...form,
+                      passwordRequireUppercase: e.target.checked,
+                    })
                   }
                   className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                 />
-                <label htmlFor="passwordRequireUppercase" className="text-sm font-medium text-gray-700">
+                <label
+                  htmlFor="passwordRequireUppercase"
+                  className="text-sm font-medium text-gray-700"
+                >
                   Require uppercase letters
                 </label>
               </div>
@@ -699,11 +737,17 @@ export default function RealmDetailPage() {
                   id="passwordRequireLowercase"
                   checked={form.passwordRequireLowercase}
                   onChange={(e) =>
-                    setForm({ ...form, passwordRequireLowercase: e.target.checked })
+                    setForm({
+                      ...form,
+                      passwordRequireLowercase: e.target.checked,
+                    })
                   }
                   className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                 />
-                <label htmlFor="passwordRequireLowercase" className="text-sm font-medium text-gray-700">
+                <label
+                  htmlFor="passwordRequireLowercase"
+                  className="text-sm font-medium text-gray-700"
+                >
                   Require lowercase letters
                 </label>
               </div>
@@ -714,11 +758,17 @@ export default function RealmDetailPage() {
                   id="passwordRequireDigits"
                   checked={form.passwordRequireDigits}
                   onChange={(e) =>
-                    setForm({ ...form, passwordRequireDigits: e.target.checked })
+                    setForm({
+                      ...form,
+                      passwordRequireDigits: e.target.checked,
+                    })
                   }
                   className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                 />
-                <label htmlFor="passwordRequireDigits" className="text-sm font-medium text-gray-700">
+                <label
+                  htmlFor="passwordRequireDigits"
+                  className="text-sm font-medium text-gray-700"
+                >
                   Require digits
                 </label>
               </div>
@@ -729,11 +779,17 @@ export default function RealmDetailPage() {
                   id="passwordRequireSpecialChars"
                   checked={form.passwordRequireSpecialChars}
                   onChange={(e) =>
-                    setForm({ ...form, passwordRequireSpecialChars: e.target.checked })
+                    setForm({
+                      ...form,
+                      passwordRequireSpecialChars: e.target.checked,
+                    })
                   }
                   className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
                 />
-                <label htmlFor="passwordRequireSpecialChars" className="text-sm font-medium text-gray-700">
+                <label
+                  htmlFor="passwordRequireSpecialChars"
+                  className="text-sm font-medium text-gray-700"
+                >
                   Require special characters
                 </label>
               </div>
@@ -748,12 +804,16 @@ export default function RealmDetailPage() {
                 min={0}
                 value={form.passwordHistoryCount}
                 onChange={(e) =>
-                  setForm({ ...form, passwordHistoryCount: Number(e.target.value) })
+                  setForm({
+                    ...form,
+                    passwordHistoryCount: Number(e.target.value),
+                  })
                 }
                 className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
               />
               <p className="mt-1 text-xs text-gray-400">
-                Number of previous passwords to remember. Users cannot reuse these.
+                Number of previous passwords to remember. Users cannot reuse
+                these.
               </p>
             </div>
 
@@ -766,12 +826,16 @@ export default function RealmDetailPage() {
                 min={0}
                 value={form.passwordMaxAgeDays}
                 onChange={(e) =>
-                  setForm({ ...form, passwordMaxAgeDays: Number(e.target.value) })
+                  setForm({
+                    ...form,
+                    passwordMaxAgeDays: Number(e.target.value),
+                  })
                 }
                 className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
               />
               <p className="mt-1 text-xs text-gray-400">
-                0 = no expiry. Users will be required to change their password after this many days.
+                0 = no expiry. Users will be required to change their password
+                after this many days.
               </p>
             </div>
           </div>
@@ -779,7 +843,9 @@ export default function RealmDetailPage() {
           {/* Brute Force Protection */}
           <div className="space-y-6 border-t border-gray-200 pt-6">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Brute Force Protection</h2>
+              <h2 className="text-lg font-semibold text-gray-900">
+                Brute Force Protection
+              </h2>
               <p className="mt-1 text-sm text-gray-500">
                 Protect user accounts from brute force login attacks.
               </p>
@@ -795,7 +861,10 @@ export default function RealmDetailPage() {
                 }
                 className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
               />
-              <label htmlFor="bruteForceEnabled" className="text-sm font-medium text-gray-700">
+              <label
+                htmlFor="bruteForceEnabled"
+                className="text-sm font-medium text-gray-700"
+              >
                 Enable brute force protection
               </label>
             </div>
@@ -814,7 +883,8 @@ export default function RealmDetailPage() {
                 className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
               />
               <p className="mt-1 text-xs text-gray-400">
-                Number of consecutive login failures before the account is locked.
+                Number of consecutive login failures before the account is
+                locked.
               </p>
             </div>
 
@@ -828,7 +898,10 @@ export default function RealmDetailPage() {
                   min={1}
                   value={form.lockoutDuration}
                   onChange={(e) =>
-                    setForm({ ...form, lockoutDuration: Number(e.target.value) })
+                    setForm({
+                      ...form,
+                      lockoutDuration: Number(e.target.value),
+                    })
                   }
                   className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
                 />
@@ -851,7 +924,10 @@ export default function RealmDetailPage() {
                   min={1}
                   value={form.failureResetTime}
                   onChange={(e) =>
-                    setForm({ ...form, failureResetTime: Number(e.target.value) })
+                    setForm({
+                      ...form,
+                      failureResetTime: Number(e.target.value),
+                    })
                   }
                   className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
                 />
@@ -860,7 +936,8 @@ export default function RealmDetailPage() {
                 </span>
               </div>
               <p className="mt-1 text-xs text-gray-400">
-                Time after which the failure counter is reset if no new failures occur.
+                Time after which the failure counter is reset if no new failures
+                occur.
               </p>
             </div>
 
@@ -873,12 +950,16 @@ export default function RealmDetailPage() {
                 min={0}
                 value={form.permanentLockoutAfter}
                 onChange={(e) =>
-                  setForm({ ...form, permanentLockoutAfter: Number(e.target.value) })
+                  setForm({
+                    ...form,
+                    permanentLockoutAfter: Number(e.target.value),
+                  })
                 }
                 className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
               />
               <p className="mt-1 text-xs text-gray-400">
-                0 = disabled. Number of temporary lockouts before the account is permanently locked.
+                0 = disabled. Number of temporary lockouts before the account is
+                permanently locked.
               </p>
             </div>
           </div>
@@ -886,7 +967,9 @@ export default function RealmDetailPage() {
           {/* MFA */}
           <div className="space-y-6 border-t border-gray-200 pt-6">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Multi-Factor Authentication</h2>
+              <h2 className="text-lg font-semibold text-gray-900">
+                Multi-Factor Authentication
+              </h2>
               <p className="mt-1 text-sm text-gray-500">
                 Configure MFA requirements for this realm.
               </p>
@@ -902,10 +985,422 @@ export default function RealmDetailPage() {
                 }
                 className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
               />
-              <label htmlFor="mfaRequired" className="text-sm font-medium text-gray-700">
+              <label
+                htmlFor="mfaRequired"
+                className="text-sm font-medium text-gray-700"
+              >
                 Require all users to set up TOTP
               </label>
             </div>
+          </div>
+
+          {/* WebAuthn */}
+          <div className="space-y-6 border-t border-gray-200 pt-6">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                WebAuthn / Passkeys
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Allow users to authenticate with hardware security keys and
+                passkeys.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="webAuthnEnabled"
+                checked={form.webAuthnEnabled}
+                onChange={(e) =>
+                  setForm({ ...form, webAuthnEnabled: e.target.checked })
+                }
+                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <label
+                htmlFor="webAuthnEnabled"
+                className="text-sm font-medium text-gray-700"
+              >
+                Enable WebAuthn
+              </label>
+            </div>
+            {form.webAuthnEnabled && (
+              <div className="space-y-4 pl-6">
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                    Relying Party Name
+                  </label>
+                  <input
+                    type="text"
+                    value={form.webAuthnRpName}
+                    onChange={(e) =>
+                      setForm({ ...form, webAuthnRpName: e.target.value })
+                    }
+                    placeholder="My App"
+                    className="w-full max-w-md rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  />
+                  <p className="mt-1 text-xs text-gray-400">
+                    Display name shown to users during passkey registration
+                  </p>
+                </div>
+                <div>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                    Relying Party ID (domain)
+                  </label>
+                  <input
+                    type="text"
+                    value={form.webAuthnRpId}
+                    onChange={(e) =>
+                      setForm({ ...form, webAuthnRpId: e.target.value })
+                    }
+                    placeholder="example.com"
+                    className="w-full max-w-md rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  />
+                  <p className="mt-1 text-xs text-gray-400">
+                    Must match your domain. Credentials registered here only
+                    work on this domain.
+                  </p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="checkbox"
+                    id="webAuthnUserVerificationRequired"
+                    checked={form.webAuthnUserVerificationRequired}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        webAuthnUserVerificationRequired: e.target.checked,
+                      })
+                    }
+                    className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  />
+                  <label
+                    htmlFor="webAuthnUserVerificationRequired"
+                    className="text-sm font-medium text-gray-700"
+                  >
+                    Require user verification (biometric/PIN)
+                  </label>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Rate Limiting */}
+          <div className="space-y-6 border-t border-gray-200 pt-6">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                Rate Limiting
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Throttle authentication requests to prevent abuse.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="rateLimitEnabled"
+                checked={form.rateLimitEnabled}
+                onChange={(e) =>
+                  setForm({ ...form, rateLimitEnabled: e.target.checked })
+                }
+                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <label
+                htmlFor="rateLimitEnabled"
+                className="text-sm font-medium text-gray-700"
+              >
+                Enable rate limiting
+              </label>
+            </div>
+            {form.rateLimitEnabled && (
+              <div className="space-y-4 pl-6">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                      Client req/min
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={form.clientRateLimitPerMinute}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          clientRateLimitPerMinute: Number(e.target.value),
+                        })
+                      }
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                      Client req/hour
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={form.clientRateLimitPerHour}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          clientRateLimitPerHour: Number(e.target.value),
+                        })
+                      }
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                      User req/min
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={form.userRateLimitPerMinute}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          userRateLimitPerMinute: Number(e.target.value),
+                        })
+                      }
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                      User req/hour
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={form.userRateLimitPerHour}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          userRateLimitPerHour: Number(e.target.value),
+                        })
+                      }
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                      IP req/min
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={form.ipRateLimitPerMinute}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          ipRateLimitPerMinute: Number(e.target.value),
+                        })
+                      }
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                  <div>
+                    <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                      IP req/hour
+                    </label>
+                    <input
+                      type="number"
+                      min={1}
+                      value={form.ipRateLimitPerHour}
+                      onChange={(e) =>
+                        setForm({
+                          ...form,
+                          ipRateLimitPerHour: Number(e.target.value),
+                        })
+                      }
+                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    />
+                  </div>
+                </div>
+              </div>
+            )}
+          </div>
+
+          {/* Impersonation */}
+          <div className="space-y-6 border-t border-gray-200 pt-6">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                Impersonation
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Allow admins to impersonate users for debugging and support.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="impersonationEnabled"
+                checked={form.impersonationEnabled}
+                onChange={(e) =>
+                  setForm({ ...form, impersonationEnabled: e.target.checked })
+                }
+                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <label
+                htmlFor="impersonationEnabled"
+                className="text-sm font-medium text-gray-700"
+              >
+                Allow admin impersonation
+              </label>
+            </div>
+            {form.impersonationEnabled && (
+              <div className="pl-6">
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                  Max impersonation duration (seconds)
+                </label>
+                <div className="flex items-center gap-3">
+                  <input
+                    type="number"
+                    min={60}
+                    value={form.impersonationMaxDuration}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        impersonationMaxDuration: Number(e.target.value),
+                      })
+                    }
+                    className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  />
+                  <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">
+                    {formatDuration(form.impersonationMaxDuration)}
+                  </span>
+                </div>
+                <p className="mt-1 text-xs text-gray-400">
+                  Default: 30 minutes. Impersonation tokens expire after this
+                  duration.
+                </p>
+              </div>
+            )}
+          </div>
+
+          {/* Risk Thresholds */}
+          <div className="space-y-6 border-t border-gray-200 pt-6">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                Risk Thresholds
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Score boundaries (0–100) that trigger step-up authentication or
+                session block.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                  Step-up threshold
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={form.riskThresholdStepUp}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      riskThresholdStepUp: Number(e.target.value),
+                    })
+                  }
+                  className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                />
+                <p className="mt-1 text-xs text-gray-400">
+                  Risk score ≥ this value triggers MFA step-up. Default: 50.
+                </p>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                  Block threshold
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  max={100}
+                  value={form.riskThresholdBlock}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      riskThresholdBlock: Number(e.target.value),
+                    })
+                  }
+                  className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                />
+                <p className="mt-1 text-xs text-gray-400">
+                  Risk score ≥ this value blocks the session entirely. Default:
+                  80.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* Session Limits */}
+          <div className="space-y-6 border-t border-gray-200 pt-6">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                Session Limits
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Limit the number of concurrent active sessions per user.
+              </p>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                Max sessions per user
+              </label>
+              <input
+                type="number"
+                min={0}
+                value={form.maxSessionsPerUser}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    maxSessionsPerUser: Number(e.target.value),
+                  })
+                }
+                className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              />
+              <p className="mt-1 text-xs text-gray-400">
+                Maximum concurrent active sessions per user. When the limit is
+                reached the oldest session is evicted. Set to 0 for unlimited.
+              </p>
+            </div>
+          </div>
+
+          {/* Adaptive Authentication */}
+          <div className="space-y-6 border-t border-gray-200 pt-6">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                Adaptive Authentication
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Enable AI-powered risk scoring to dynamically adjust
+                authentication requirements.
+              </p>
+            </div>
+            <div className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="adaptiveAuthEnabled"
+                checked={form.adaptiveAuthEnabled}
+                onChange={(e) =>
+                  setForm({ ...form, adaptiveAuthEnabled: e.target.checked })
+                }
+                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              />
+              <label
+                htmlFor="adaptiveAuthEnabled"
+                className="text-sm font-medium text-gray-700"
+              >
+                Enable adaptive authentication
+              </label>
+            </div>
+            <p className="ml-6 -mt-4 text-xs text-gray-400">
+              When enabled, each login attempt is scored for risk. High-risk
+              logins trigger step-up MFA or are blocked based on the thresholds
+              above.
+            </p>
           </div>
 
           {updateMutation.isSuccess && (
@@ -933,11 +1428,17 @@ export default function RealmDetailPage() {
 
       {/* Events Tab */}
       {activeTab === 'events' && (
-        <form onSubmit={handleSubmit} className="space-y-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm"
+        >
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Event Configuration</h2>
+            <h2 className="text-lg font-semibold text-gray-900">
+              Event Configuration
+            </h2>
             <p className="mt-1 text-sm text-gray-500">
-              Control whether login and admin events are recorded for this realm.
+              Control whether login and admin events are recorded for this
+              realm.
             </p>
           </div>
 
@@ -947,15 +1448,21 @@ export default function RealmDetailPage() {
                 type="checkbox"
                 id="eventsEnabled"
                 checked={form.eventsEnabled}
-                onChange={(e) => setForm({ ...form, eventsEnabled: e.target.checked })}
+                onChange={(e) =>
+                  setForm({ ...form, eventsEnabled: e.target.checked })
+                }
                 className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
               />
-              <label htmlFor="eventsEnabled" className="text-sm font-medium text-gray-700">
+              <label
+                htmlFor="eventsEnabled"
+                className="text-sm font-medium text-gray-700"
+              >
                 Enable login events
               </label>
             </div>
             <p className="ml-6 -mt-4 text-xs text-gray-400">
-              Records login, logout, token refresh, and authentication error events.
+              Records login, logout, token refresh, and authentication error
+              events.
             </p>
 
             <div className="flex items-center gap-2">
@@ -963,15 +1470,21 @@ export default function RealmDetailPage() {
                 type="checkbox"
                 id="adminEventsEnabled"
                 checked={form.adminEventsEnabled}
-                onChange={(e) => setForm({ ...form, adminEventsEnabled: e.target.checked })}
+                onChange={(e) =>
+                  setForm({ ...form, adminEventsEnabled: e.target.checked })
+                }
                 className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
               />
-              <label htmlFor="adminEventsEnabled" className="text-sm font-medium text-gray-700">
+              <label
+                htmlFor="adminEventsEnabled"
+                className="text-sm font-medium text-gray-700"
+              >
                 Enable admin events
               </label>
             </div>
             <p className="ml-6 -mt-4 text-xs text-gray-400">
-              Records create, update, and delete operations performed through the admin API.
+              Records create, update, and delete operations performed through
+              the admin API.
             </p>
 
             <div>
@@ -984,7 +1497,10 @@ export default function RealmDetailPage() {
                   min={60}
                   value={form.eventsExpiration}
                   onChange={(e) =>
-                    setForm({ ...form, eventsExpiration: Number(e.target.value) })
+                    setForm({
+                      ...form,
+                      eventsExpiration: Number(e.target.value),
+                    })
                   }
                   className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
                 />
@@ -994,7 +1510,97 @@ export default function RealmDetailPage() {
                 </span>
               </div>
               <p className="mt-1 text-xs text-gray-400">
-                How long events are kept before automatic cleanup. Default: 7 days (604800s).
+                How long events are kept before automatic cleanup. Default: 7
+                days (604800s).
+              </p>
+            </div>
+          </div>
+
+          {/* Event Retention */}
+          <div className="space-y-6 border-t border-gray-200 pt-6">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                Event Retention
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                How many days event records are retained in the database before
+                being purged.
+              </p>
+            </div>
+            <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                  Login event retention (days)
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={form.loginEventRetentionDays}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      loginEventRetentionDays: Number(e.target.value),
+                    })
+                  }
+                  className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                />
+                <p className="mt-1 text-xs text-gray-400">
+                  Days to keep login/auth event records. Default: 30.
+                </p>
+              </div>
+              <div>
+                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                  Admin event retention (days)
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={form.adminEventRetentionDays}
+                  onChange={(e) =>
+                    setForm({
+                      ...form,
+                      adminEventRetentionDays: Number(e.target.value),
+                    })
+                  }
+                  className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                />
+                <p className="mt-1 text-xs text-gray-400">
+                  Days to keep admin audit event records. Default: 90.
+                </p>
+              </div>
+            </div>
+          </div>
+
+          {/* User Lifecycle */}
+          <div className="space-y-6 border-t border-gray-200 pt-6">
+            <div>
+              <h2 className="text-lg font-semibold text-gray-900">
+                User Lifecycle
+              </h2>
+              <p className="mt-1 text-sm text-gray-500">
+                Configure how long deleted user accounts are retained before
+                permanent removal.
+              </p>
+            </div>
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                Deletion grace period (days)
+              </label>
+              <input
+                type="number"
+                min={0}
+                value={form.deletionGracePeriodDays}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    deletionGracePeriodDays: Number(e.target.value),
+                  })
+                }
+                className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              />
+              <p className="mt-1 text-xs text-gray-400">
+                Days before a soft-deleted account is permanently purged. Set to
+                0 to disable soft-deletion. Default: 14.
               </p>
             </div>
           </div>
@@ -1024,9 +1630,14 @@ export default function RealmDetailPage() {
 
       {/* Theme Tab */}
       {activeTab === 'theme' && (
-        <form onSubmit={handleSubmit} className="space-y-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm"
+        >
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Theme Settings</h2>
+            <h2 className="text-lg font-semibold text-gray-900">
+              Theme Settings
+            </h2>
             <p className="mt-1 text-sm text-gray-500">
               Assign themes per page type and customize colors for this realm.
             </p>
@@ -1035,46 +1646,76 @@ export default function RealmDetailPage() {
           {/* Per-Type Theme Selectors */}
           {themes && themes.length > 0 && (
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500">Theme Assignment</h3>
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500">
+                Theme Assignment
+              </h3>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Login Theme</label>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                    Login Theme
+                  </label>
                   <select
                     value={form.loginTheme}
-                    onChange={(e) => setForm({ ...form, loginTheme: e.target.value, themeName: e.target.value })}
+                    onChange={(e) =>
+                      setForm({
+                        ...form,
+                        loginTheme: e.target.value,
+                        themeName: e.target.value,
+                      })
+                    }
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
                   >
                     {themes.map((t: ThemeInfo) => (
-                      <option key={t.name} value={t.name}>{t.displayName}</option>
+                      <option key={t.name} value={t.name}>
+                        {t.displayName}
+                      </option>
                     ))}
                   </select>
-                  <p className="mt-1 text-xs text-gray-400">Applied to login, register, consent, and other auth pages</p>
+                  <p className="mt-1 text-xs text-gray-400">
+                    Applied to login, register, consent, and other auth pages
+                  </p>
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Account Theme</label>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                    Account Theme
+                  </label>
                   <select
                     value={form.accountTheme}
-                    onChange={(e) => setForm({ ...form, accountTheme: e.target.value })}
+                    onChange={(e) =>
+                      setForm({ ...form, accountTheme: e.target.value })
+                    }
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
                   >
                     {themes.map((t: ThemeInfo) => (
-                      <option key={t.name} value={t.name}>{t.displayName}</option>
+                      <option key={t.name} value={t.name}>
+                        {t.displayName}
+                      </option>
                     ))}
                   </select>
-                  <p className="mt-1 text-xs text-gray-400">Applied to account management and TOTP setup pages</p>
+                  <p className="mt-1 text-xs text-gray-400">
+                    Applied to account management and TOTP setup pages
+                  </p>
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Email Theme</label>
+                  <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                    Email Theme
+                  </label>
                   <select
                     value={form.emailTheme}
-                    onChange={(e) => setForm({ ...form, emailTheme: e.target.value })}
+                    onChange={(e) =>
+                      setForm({ ...form, emailTheme: e.target.value })
+                    }
                     className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
                   >
                     {themes.map((t: ThemeInfo) => (
-                      <option key={t.name} value={t.name}>{t.displayName}</option>
+                      <option key={t.name} value={t.name}>
+                        {t.displayName}
+                      </option>
                     ))}
                   </select>
-                  <p className="mt-1 text-xs text-gray-400">Applied to verification and password reset emails</p>
+                  <p className="mt-1 text-xs text-gray-400">
+                    Applied to verification and password reset emails
+                  </p>
                 </div>
               </div>
             </div>
@@ -1106,6 +1747,91 @@ export default function RealmDetailPage() {
       {/* Magic Link Tab */}
       {activeTab === 'magic-link' && realm && (
         <MagicLinkSettingsForm realm={realm} />
+      )}
+
+      {/* Locale Tab */}
+      {activeTab === 'locale' && (
+        <form
+          onSubmit={handleSubmit}
+          className="space-y-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm"
+        >
+          <div>
+            <h2 className="text-lg font-semibold text-gray-900">
+              Locale &amp; Internationalization
+            </h2>
+            <p className="mt-1 text-sm text-gray-500">
+              Configure the default language and supported locales for this
+              realm.
+            </p>
+          </div>
+
+          <div className="space-y-6">
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                Default Locale
+              </label>
+              <input
+                type="text"
+                value={form.defaultLocale}
+                onChange={(e) =>
+                  setForm({ ...form, defaultLocale: e.target.value })
+                }
+                placeholder="en"
+                className="w-48 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              />
+              <p className="mt-1 text-xs text-gray-400">
+                BCP 47 language tag (e.g. en, en-US, fr, de, ar). Used when no
+                user preference is set.
+              </p>
+            </div>
+
+            <div>
+              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                Supported Locales
+              </label>
+              <input
+                type="text"
+                value={form.supportedLocales.join(', ')}
+                onChange={(e) =>
+                  setForm({
+                    ...form,
+                    supportedLocales: e.target.value
+                      .split(',')
+                      .map((s) => s.trim())
+                      .filter(Boolean),
+                  })
+                }
+                placeholder="en, fr, de, ar"
+                className="w-full max-w-md rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              />
+              <p className="mt-1 text-xs text-gray-400">
+                Comma-separated list of supported locale codes. Users can switch
+                between these in the account UI.
+              </p>
+            </div>
+          </div>
+
+          {updateMutation.isSuccess && (
+            <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">
+              Locale settings updated successfully.
+            </div>
+          )}
+          {updateMutation.isError && (
+            <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+              Failed to update locale settings.
+            </div>
+          )}
+
+          <div className="flex justify-end border-t border-gray-200 pt-4">
+            <button
+              type="submit"
+              disabled={updateMutation.isPending}
+              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            >
+              {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
+            </button>
+          </div>
+        </form>
       )}
 
       <ConfirmDialog

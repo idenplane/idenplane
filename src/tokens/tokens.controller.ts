@@ -72,8 +72,7 @@ export class TokensController {
     // tokens; fall back to aud when azp is absent (plain OAuth2 access tokens).
     if (result.active) {
       const tokenAzp = (result as Record<string, unknown>)['azp'] as
-        | string
-        | undefined;
+        string | undefined;
       const tokenAud = (result as Record<string, unknown>)['aud'];
       const audiences: string[] = tokenAzp
         ? [tokenAzp]

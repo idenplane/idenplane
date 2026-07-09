@@ -114,7 +114,7 @@ export default function RegistrationFieldsPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-32">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
       </div>
     );
   }
@@ -138,7 +138,7 @@ export default function RegistrationFieldsPage() {
         </div>
         <button
           onClick={() => { resetForm(); setShowCreate(true); }}
-          className="mt-4 sm:mt-0 px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700"
+          className="mt-4 sm:mt-0 px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700"
         >
           Add Field
         </button>
@@ -157,7 +157,7 @@ export default function RegistrationFieldsPage() {
                 value={form.name}
                 onChange={(e) => setForm({ ...form, name: e.target.value })}
                 disabled={!!editingField}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500 disabled:bg-gray-100"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 disabled:bg-gray-100"
                 placeholder="e.g., company_name"
               />
             </div>
@@ -167,7 +167,7 @@ export default function RegistrationFieldsPage() {
                 type="text"
                 value={form.displayName}
                 onChange={(e) => setForm({ ...form, displayName: e.target.value })}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                 placeholder="e.g., Company Name"
               />
             </div>
@@ -176,7 +176,7 @@ export default function RegistrationFieldsPage() {
               <select
                 value={form.type}
                 onChange={(e) => setForm({ ...form, type: e.target.value })}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
               >
                 {FIELD_TYPES.map((t) => (
                   <option key={t} value={t}>{t}</option>
@@ -189,7 +189,7 @@ export default function RegistrationFieldsPage() {
                 type="text"
                 value={form.placeholder}
                 onChange={(e) => setForm({ ...form, placeholder: e.target.value })}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
               />
             </div>
             <div className="md:col-span-2">
@@ -198,7 +198,7 @@ export default function RegistrationFieldsPage() {
                 type="text"
                 value={form.helpText}
                 onChange={(e) => setForm({ ...form, helpText: e.target.value })}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
               />
             </div>
             {form.type === 'select' && (
@@ -208,7 +208,7 @@ export default function RegistrationFieldsPage() {
                   type="text"
                   value={form.options}
                   onChange={(e) => setForm({ ...form, options: e.target.value })}
-                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                  className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                   placeholder="Option A, Option B, Option C"
                 />
               </div>
@@ -219,7 +219,7 @@ export default function RegistrationFieldsPage() {
                 type="text"
                 value={form.validationPattern}
                 onChange={(e) => setForm({ ...form, validationPattern: e.target.value })}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                 placeholder="e.g., ^[A-Za-z]+$"
               />
             </div>
@@ -229,7 +229,7 @@ export default function RegistrationFieldsPage() {
                 type="text"
                 value={form.defaultValue}
                 onChange={(e) => setForm({ ...form, defaultValue: e.target.value })}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
               />
             </div>
             <div>
@@ -238,7 +238,7 @@ export default function RegistrationFieldsPage() {
                 type="number"
                 value={form.sortOrder}
                 onChange={(e) => setForm({ ...form, sortOrder: parseInt(e.target.value, 10) || 0 })}
-                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="mt-1 block w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
               />
             </div>
             <div className="flex items-center">
@@ -247,7 +247,7 @@ export default function RegistrationFieldsPage() {
                   type="checkbox"
                   checked={form.required}
                   onChange={(e) => setForm({ ...form, required: e.target.checked })}
-                  className="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
                 />
                 <span className="ml-2 text-sm text-gray-700">Required field</span>
               </label>
@@ -258,7 +258,7 @@ export default function RegistrationFieldsPage() {
                   type="checkbox"
                   checked={form.enabled}
                   onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
-                  className="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                  className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
                 />
                 <span className="ml-2 text-sm text-gray-700">Enabled</span>
               </label>
@@ -274,7 +274,7 @@ export default function RegistrationFieldsPage() {
             <button
               onClick={() => editingField ? updateMutation.mutate() : createMutation.mutate()}
               disabled={createMutation.isPending || updateMutation.isPending}
-              className="px-4 py-2 bg-primary-600 text-white rounded-md hover:bg-primary-700 disabled:opacity-50"
+              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50"
             >
               {editingField ? 'Update' : 'Create'}
             </button>
@@ -332,7 +332,7 @@ export default function RegistrationFieldsPage() {
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
                     <button
                       onClick={() => startEdit(field)}
-                      className="text-primary-600 hover:text-primary-900 mr-4"
+                      className="text-indigo-600 hover:text-indigo-900 mr-4"
                     >
                       Edit
                     </button>

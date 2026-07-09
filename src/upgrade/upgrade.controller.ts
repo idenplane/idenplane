@@ -174,29 +174,6 @@ export class UpgradeController {
   }
 
   /**
-   * GET /admin/upgrade/:upgradeId
-   *
-   * Returns the current state of a specific upgrade operation.
-   */
-  @Get(':upgradeId')
-  @ApiParam({
-    name: 'upgradeId',
-    description: 'The unique identifier of the upgrade',
-  })
-  @ApiOperation({ summary: 'Get upgrade state by ID' })
-  @ApiResponse({ status: 200, description: 'Upgrade state with current stage' })
-  @ApiResponse({
-    status: 401,
-    description: 'Unauthorized — missing or invalid admin API key',
-  })
-  @ApiResponse({ status: 404, description: 'Upgrade not found' })
-  async getUpgradeState(
-    @Param('upgradeId') upgradeId: string,
-  ): Promise<UpgradeState | null> {
-    return this.upgradeService.getUpgradeState(upgradeId);
-  }
-
-  /**
    * GET /admin/upgrade/rollback/capability
    *
    * Returns whether a rollback is possible and information about the last
@@ -306,5 +283,33 @@ export class UpgradeController {
   ): Promise<ConfigCompatibilityResult> {
     const targetVersion = version ?? this.upgradeService.getCurrentVersion();
     return this.configCompatibility.checkCompatibility(targetVersion);
+  }
+
+  /**
+   * GET /admin/upgrade/:upgradeId
+   *
+   * Returns the current state of a specific upgrade operation.
+   *
+   * NOTE: this dynamic ':upgradeId' route MUST be declared AFTER all static
+   * single-segment GET routes (pre-validation, health, config-compatibility),
+   * otherwise it shadows them — Express matches routes in declaration order,
+   * so a bare ':upgradeId' placed earlier captures '/pre-validation' etc.
+   */
+  @Get(':upgradeId')
+  @ApiParam({
+    name: 'upgradeId',
+    description: 'The unique identifier of the upgrade',
+  })
+  @ApiOperation({ summary: 'Get upgrade state by ID' })
+  @ApiResponse({ status: 200, description: 'Upgrade state with current stage' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
+  @ApiResponse({ status: 404, description: 'Upgrade not found' })
+  async getUpgradeState(
+    @Param('upgradeId') upgradeId: string,
+  ): Promise<UpgradeState | null> {
+    return this.upgradeService.getUpgradeState(upgradeId);
   }
 }

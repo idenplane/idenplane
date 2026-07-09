@@ -78,7 +78,8 @@
     "vitest": "^4.0.18"
   },
   "overrides": {
-    "postcss": "^8.5.10"
+    "postcss": "^8.5.10",
+    "esbuild": ">=0.28.1"
   },
   "files": [
     "dist",
