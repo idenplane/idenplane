@@ -1351,8 +1351,7 @@ export class NhiService {
 
         result.id = identity.id;
         result.metadata = (identity.metadata ?? undefined) as
-          | Record<string, unknown>
-          | undefined;
+          Record<string, unknown> | undefined;
         result.success = true;
 
         // Generate certificate if requested

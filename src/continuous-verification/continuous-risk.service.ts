@@ -403,9 +403,7 @@ export class ContinuousRiskAssessmentService {
       lastSecurityScan: patchDate ?? null,
       complianceStatus:
         (record.complianceStatus as
-          | 'COMPLIANT'
-          | 'NON_COMPLIANT'
-          | 'UNKNOWN') ?? 'UNKNOWN',
+          'COMPLIANT' | 'NON_COMPLIANT' | 'UNKNOWN') ?? 'UNKNOWN',
     };
   }
 

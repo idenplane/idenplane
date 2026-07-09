@@ -92,7 +92,7 @@ export default function PublicRegistrationPage() {
   if (isLoading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-100">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary-600"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
       </div>
     );
   }
@@ -145,7 +145,7 @@ export default function PublicRegistrationPage() {
                 required
                 minLength={3}
                 pattern="^[a-zA-Z0-9_-]+$"
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                 placeholder="Choose a username"
               />
             </div>
@@ -159,7 +159,7 @@ export default function PublicRegistrationPage() {
                 value={form.email}
                 onChange={(e) => setForm({ ...form, email: e.target.value })}
                 required
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                 placeholder="you@example.com"
               />
             </div>
@@ -174,7 +174,7 @@ export default function PublicRegistrationPage() {
                 onChange={(e) => setForm({ ...form, password: e.target.value })}
                 required
                 minLength={8}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                 placeholder="Create a password"
               />
             </div>
@@ -186,7 +186,7 @@ export default function PublicRegistrationPage() {
                   type="text"
                   value={form.firstName}
                   onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                 />
               </div>
               <div>
@@ -195,7 +195,7 @@ export default function PublicRegistrationPage() {
                   type="text"
                   value={form.lastName}
                   onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                 />
               </div>
             </div>
@@ -212,7 +212,7 @@ export default function PublicRegistrationPage() {
                     value={customAttributes[field.name ?? ''] || ''}
                     onChange={(e) => setCustomAttributes({ ...customAttributes, [field.name!]: e.target.value })}
                     required={field.required}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                   >
                     <option value="">Select...</option>
                     {field.options.map((opt) => (
@@ -224,7 +224,7 @@ export default function PublicRegistrationPage() {
                     type="checkbox"
                     checked={customAttributes[field.name ?? ''] === 'true'}
                     onChange={(e) => setCustomAttributes({ ...customAttributes, [field.name!]: e.target.checked.toString() })}
-                    className="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500"
+                    className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
                   />
                 ) : (
                   <input
@@ -234,7 +234,7 @@ export default function PublicRegistrationPage() {
                     required={field.required}
                     placeholder={field.placeholder}
                     pattern={field.type === 'text' ? field.name ?? undefined : undefined}
-                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-primary-500 focus:border-primary-500"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
                   />
                 )}
                 {field.helpText && (
@@ -259,15 +259,15 @@ export default function PublicRegistrationPage() {
                   checked={form.acceptTerms}
                   onChange={(e) => setForm({ ...form, acceptTerms: e.target.checked })}
                   required
-                  className="h-4 w-4 text-primary-600 border-gray-300 rounded focus:ring-primary-500 mt-1"
+                  className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500 mt-1"
                 />
                 <label className="ml-2 text-sm text-gray-700">
                   I accept the{' '}
-                  <a href={realm.termsOfServiceUrl} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:text-primary-500">
+                  <a href={realm.termsOfServiceUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-500">
                     Terms of Service
                   </a>
                   {realm.privacyPolicyUrl && (
-                    <> and <a href={realm.privacyPolicyUrl} target="_blank" rel="noopener noreferrer" className="text-primary-600 hover:text-primary-500">
+                    <> and <a href={realm.privacyPolicyUrl} target="_blank" rel="noopener noreferrer" className="text-indigo-600 hover:text-indigo-500">
                       Privacy Policy
                     </a></>
                   )}
@@ -278,14 +278,14 @@ export default function PublicRegistrationPage() {
             <button
               type="submit"
               disabled={isSubmitting}
-              className="w-full py-2 px-4 bg-primary-600 text-white rounded-md hover:bg-primary-700 focus:outline-none focus:ring-2 focus:ring-primary-500 focus:ring-offset-2 disabled:opacity-50"
+              className="w-full py-2 px-4 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
             >
               {isSubmitting ? 'Creating Account...' : 'Create Account'}
             </button>
           </form>
 
           <div className="mt-6 text-center">
-            <a href={`/console/login`} className="text-sm text-primary-600 hover:text-primary-500">
+            <a href={`/console/login`} className="text-sm text-indigo-600 hover:text-indigo-500">
               Already have an account? Sign in
             </a>
           </div>

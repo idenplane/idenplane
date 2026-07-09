@@ -1,5 +1,5 @@
-import { IsString, IsOptional, IsObject } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
+import { IsArray, IsObject, IsOptional, IsString } from 'class-validator';
 
 export class UpdateThemeDto {
   @ApiPropertyOptional({ example: 'Updated Theme Name' })
@@ -27,7 +27,7 @@ export class UpdateThemeDto {
 
   @ApiPropertyOptional({ description: 'Component configurations' })
   @IsOptional()
-  @IsObject()
+  @IsArray()
   components?: unknown[];
 
   @ApiPropertyOptional({ description: 'Logo URLs, favicon, etc.' })

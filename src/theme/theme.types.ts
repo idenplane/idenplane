@@ -45,5 +45,16 @@ export interface ResolvedTheme {
   faviconUrl: string;
   appTitle: string;
   customCss: string;
+  /** Optional heading text from the theme builder's first visible heading component. */
+  customHeading: string;
+  /** Optional subtitle shown under the heading on the login page. */
+  loginSubtitle: string;
+  /** Optional footer text shown at the bottom of the login card. */
+  loginFooterText: string;
+  /** When truthy, hides the corresponding optional login block. */
+  hideRememberMe: string;
+  hideForgotPassword: string;
+  hideSocial: string;
+  hideRegistration: string;
   themeCssFiles: string[];
 }

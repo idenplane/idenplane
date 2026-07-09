@@ -1,17 +1,21 @@
-# Stage 1: Dependencies
+# Stage 1: Backend dependencies (all — needed to compile TypeScript)
 FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 # --ignore-scripts: the root "postinstall" runs `prisma generate`, which needs
 # prisma/schema.prisma + prisma.config.ts (not present in this deps-only stage).
 # The Prisma client is generated explicitly in the build stage instead.
-RUN npm ci --ignore-scripts
+# BuildKit cache mount keeps the npm download cache across builds so packages
+# are only re-downloaded when the registry content changes, not on every build.
+RUN --mount=type=cache,id=npm-root,target=/root/.npm \
+    npm ci --ignore-scripts --no-audit --no-fund --prefer-offline
 
-# Stage 1b: Admin UI dependencies
+# Stage 1c: Admin UI dependencies
 FROM node:22-alpine AS admin-deps
 WORKDIR /app/admin-ui
 COPY admin-ui/package.json admin-ui/package-lock.json ./
-RUN npm ci
+RUN --mount=type=cache,id=npm-admin,target=/root/.npm \
+    npm ci --no-audit --no-fund --prefer-offline
 
 # Stage 2: Build
 FROM node:22-alpine AS build
@@ -26,11 +30,17 @@ RUN npx prisma generate
 RUN npm run build
 # Copy admin-ui build output into dist
 RUN cp -r admin-ui/dist dist/admin-ui
+# Strip dev dependencies in-place so the production stage can copy a lean
+# node_modules tree directly — no second `npm ci` and no image bloat from
+# deleting files in a later layer.
+RUN --mount=type=cache,id=npm-root,target=/root/.npm \
+    npm prune --omit=dev --ignore-scripts --no-audit --no-fund
 
 # Stage 3: Production
 FROM node:22-alpine AS production
 WORKDIR /app
 
+# Copy the already-pruned (production-only) node_modules from the build stage.
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
@@ -38,13 +48,14 @@ COPY --from=build /app/themes ./themes
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/package-lock.json ./package-lock.json
 
+# Re-generate the Prisma client against the pruned production node_modules so
+# the query engine binary matches the Alpine runtime and survives the prune.
+RUN node_modules/.bin/prisma generate --schema=prisma/schema.prisma
+
 # prisma.config.ts is TypeScript and cannot be executed directly by Node in the
 # production image (no compiler present).  migrate deploy only needs the schema
 # file, which is already present under ./prisma/schema.prisma — the --schema flag
 # is passed explicitly in docker-entrypoint.sh instead.
-
-# Remove dev dependencies in production stage (not build stage)
-RUN npm prune --omit=dev
 
 # Use the existing 'node' user (UID 1000, GID 1000) from the base image
 # instead of creating a new group/user that conflicts with the pre-existing GID

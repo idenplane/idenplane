@@ -1,5 +1,6 @@
 import {
   Injectable,
+  BadRequestException,
   ConflictException,
   NotFoundException,
 } from '@nestjs/common';
@@ -124,6 +125,10 @@ export class RolesService {
   // ─── Role Assignment ───────────────────────────────────
 
   async assignRealmRoles(realm: Realm, userId: string, roleNames: string[]) {
+    const names = roleNames ?? [];
+    if (names.length === 0) {
+      throw new BadRequestException('At least one role name must be provided');
+    }
     const user = await this.prisma.user.findFirst({
       where: { id: userId, realmId: realm.id },
     });
@@ -132,11 +137,11 @@ export class RolesService {
     }
 
     const roles = await this.prisma.role.findMany({
-      where: { realmId: realm.id, clientId: null, name: { in: roleNames } },
+      where: { realmId: realm.id, clientId: null, name: { in: names } },
     });
 
     const foundNames = roles.map((r) => r.name);
-    const missing = roleNames.filter((n) => !foundNames.includes(n));
+    const missing = names.filter((n) => !foundNames.includes(n));
     if (missing.length > 0) {
       throw new NotFoundException(`Roles not found: ${missing.join(', ')}`);
     }
@@ -165,6 +170,10 @@ export class RolesService {
     userId: string,
     roleNames: string[],
   ) {
+    const names = roleNames ?? [];
+    if (names.length === 0) {
+      throw new BadRequestException('At least one role name must be provided');
+    }
     const user = await this.prisma.user.findFirst({
       where: { id: userId, realmId: realm.id },
     });
@@ -173,7 +182,7 @@ export class RolesService {
     }
 
     const roles = await this.prisma.role.findMany({
-      where: { realmId: realm.id, clientId: null, name: { in: roleNames } },
+      where: { realmId: realm.id, clientId: null, name: { in: names } },
     });
 
     await this.prisma.userRole.deleteMany({
@@ -183,7 +192,7 @@ export class RolesService {
       },
     });
 
-    return { removed: roleNames };
+    return { removed: names };
   }
 
   // ─── Client Role Assignment ─────────────────────────────
@@ -194,6 +203,11 @@ export class RolesService {
     clientIdOrUuid: string,
     roleNames: string[],
   ) {
+    const names = roleNames ?? [];
+    if (names.length === 0) {
+      throw new BadRequestException('At least one role name must be provided');
+    }
+
     const user = await this.prisma.user.findFirst({
       where: { id: userId, realmId: realm.id },
     });
@@ -210,7 +224,7 @@ export class RolesService {
       where: {
         realmId: realm.id,
         clientId: client.id,
-        name: { in: roleNames },
+        name: { in: names },
       },
     });
 
@@ -228,6 +242,11 @@ export class RolesService {
     clientIdOrUuid: string,
     roleNames: string[],
   ) {
+    const names = roleNames ?? [];
+    if (names.length === 0) {
+      throw new BadRequestException('At least one role name must be provided');
+    }
+
     const client = await this.clientsService.findByClientId(
       realm,
       clientIdOrUuid,
@@ -244,7 +263,7 @@ export class RolesService {
       where: {
         realmId: realm.id,
         clientId: client.id,
-        name: { in: roleNames },
+        name: { in: names },
       },
     });
 
@@ -255,7 +274,7 @@ export class RolesService {
       },
     });
 
-    return { removed: roleNames };
+    return { removed: names };
   }
 
   async getUserClientRoles(

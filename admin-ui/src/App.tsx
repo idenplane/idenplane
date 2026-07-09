@@ -1,4 +1,5 @@
 import { Routes, Route, Navigate, Outlet } from 'react-router-dom';
+import { useEffect } from 'react';
 import ErrorBoundary from './components/ErrorBoundary';
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
@@ -40,73 +41,332 @@ import SetupWizardPage from './pages/setup-wizard/SetupWizardPage';
 import PendingRegistrationsPage from './pages/registration/PendingRegistrationsPage';
 import RegistrationFieldsPage from './pages/registration/RegistrationFieldsPage';
 import RegistrationSettingsPage from './pages/registration/RegistrationSettingsPage';
+import ContinuousRiskDashboard from './pages/continuous-verification/ContinuousRiskDashboard';
+import RiskPolicyListPage from './pages/continuous-verification/RiskPolicyListPage';
+import SessionRiskDetailPage from './pages/continuous-verification/SessionRiskDetailPage';
+import OrganizationListPage from './pages/organizations/OrganizationListPage';
+import OrganizationCreatePage from './pages/organizations/OrganizationCreatePage';
+import OrganizationDetailPage from './pages/organizations/OrganizationDetailPage';
+import WebhookListPage from './pages/webhooks/WebhookListPage';
+import WebhookCreatePage from './pages/webhooks/WebhookCreatePage';
+import WebhookDetailPage from './pages/webhooks/WebhookDetailPage';
+import ServiceAccountListPage from './pages/service-accounts/ServiceAccountListPage';
+import ServiceAccountCreatePage from './pages/service-accounts/ServiceAccountCreatePage';
+import ServiceAccountDetailPage from './pages/service-accounts/ServiceAccountDetailPage';
+import CustomAttributesPage from './pages/custom-attributes/CustomAttributesPage';
+import ScimConfigPage from './pages/scim/ScimConfigPage';
+import PolicyListPage from './pages/authorization/PolicyListPage';
+import PolicyCreatePage from './pages/authorization/PolicyCreatePage';
+import PolicyDetailPage from './pages/authorization/PolicyDetailPage';
+import ThemeBuilderPage from './pages/theme-builder/ThemeBuilderPage';
+import ThemeListPage from './pages/theme-builder/ThemeListPage';
+import NhiListPage from './pages/nhi/NhiListPage';
+import NhiCreatePage from './pages/nhi/NhiCreatePage';
+import NhiDetailPage from './pages/nhi/NhiDetailPage';
+import NhiAnalyticsPage from './pages/nhi/NhiAnalyticsPage';
+import PluginsPage from './pages/plugins/PluginsPage';
+import SystemStatusPage from './pages/system/SystemStatusPage';
 import NotFoundPage from './pages/NotFoundPage';
-import { hasCredentials } from './api/client';
+import { hasCredentials, refreshSession } from './api/client';
+import { useAuthContext } from './context/AuthContext';
 
 function ProtectedRoute() {
-  // hasCredentials() reads from the in-memory module-level store — no
-  // sessionStorage involved (see issue #330 fix).
+  const { bootstrapped } = useAuthContext();
+  // Wait for the bootstrap refresh call to complete before deciding to redirect.
+  // Without this, a page reload would always redirect to login even when a valid
+  // admin_rt cookie exists (fixes #1095).
+  if (!bootstrapped) {
+    return null;
+  }
   if (!hasCredentials()) {
     return <Navigate to="/console/login" replace />;
   }
   return <Outlet />;
 }
 
+function SessionBootstrap() {
+  const { setBootstrapped, setToken } = useAuthContext();
+
+  useEffect(() => {
+    let cancelled = false;
+    refreshSession().then((token) => {
+      if (cancelled) return;
+      if (token) {
+        setToken(token);
+      }
+      setBootstrapped(true);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [setBootstrapped, setToken]);
+
+  return null;
+}
+
 export default function App() {
   return (
     <ErrorBoundary>
-    <Routes>
-      <Route path="/console/login" element={<LoginPage />} />
-      <Route path="/setup" element={<SetupWizardPage />} />
+      <SessionBootstrap />
+      <Routes>
+        <Route path="/console/login" element={<LoginPage />} />
+        <Route path="/setup" element={<SetupWizardPage />} />
 
-      <Route element={<ProtectedRoute />}>
-        <Route element={<Layout />}>
-          <Route path="/console" element={<DashboardPage />} />
-          <Route path="/console/realms" element={<RealmListPage />} />
-          <Route path="/console/realms/create" element={<RealmCreatePage />} />
-          <Route path="/console/realms/:name" element={<RealmDetailPage />} />
-          <Route path="/console/realms/:name/users" element={<UserListPage />} />
-          <Route path="/console/realms/:name/users/create" element={<UserCreatePage />} />
-          <Route path="/console/realms/:name/users/:id" element={<UserDetailPage />} />
-          <Route path="/console/realms/:name/clients" element={<ClientListPage />} />
-          <Route path="/console/realms/:name/clients/new" element={<ClientCreatePage />} />
-          <Route path="/console/realms/:name/clients/:id" element={<ClientDetailPage />} />
-          <Route path="/console/realms/:name/roles" element={<RoleListPage />} />
-          <Route path="/console/realms/:name/groups" element={<GroupListPage />} />
-          <Route path="/console/realms/:name/groups/create" element={<GroupCreatePage />} />
-          <Route path="/console/realms/:name/groups/:groupId" element={<GroupDetailPage />} />
-          <Route path="/console/realms/:name/sessions" element={<SessionListPage />} />
-          <Route path="/console/realms/:name/client-scopes" element={<ClientScopeListPage />} />
-          <Route path="/console/realms/:name/client-scopes/create" element={<ClientScopeCreatePage />} />
-          <Route path="/console/realms/:name/client-scopes/:scopeId" element={<ClientScopeDetailPage />} />
-          <Route path="/console/realms/:name/consent-categories" element={<ConsentCategoriesListPage />} />
-          <Route path="/console/realms/:name/consent-categories/new" element={<ConsentCategoryDetailPage />} />
-          <Route path="/console/realms/:name/consent-categories/:categoryId" element={<ConsentCategoryDetailPage />} />
-          <Route path="/console/realms/:name/consent-statistics" element={<ConsentStatisticsPage />} />
-          <Route path="/console/realms/:name/events" element={<LoginEventsPage />} />
-          <Route path="/console/realms/:name/admin-events" element={<AdminEventsPage />} />
-          <Route path="/console/realms/:name/user-federation" element={<FederationListPage />} />
-          <Route path="/console/realms/:name/user-federation/create" element={<FederationCreatePage />} />
-          <Route path="/console/realms/:name/user-federation/:id" element={<FederationDetailPage />} />
-          <Route path="/console/realms/:name/identity-providers" element={<IdpListPage />} />
-          <Route path="/console/realms/:name/identity-providers/create" element={<IdpCreatePage />} />
-          <Route path="/console/realms/:name/identity-providers/:alias" element={<IdpDetailPage />} />
-          <Route path="/console/realms/:name/saml-providers" element={<SamlSpListPage />} />
-          <Route path="/console/realms/:name/saml-providers/create" element={<SamlSpCreatePage />} />
-          <Route path="/console/realms/:name/saml-providers/:id" element={<SamlSpDetailPage />} />
-          <Route path="/console/realms/:name/auth-flows" element={<AuthFlowListPage />} />
-          <Route path="/console/realms/:name/auth-flows/:flowId" element={<AuthFlowEditorPage />} />
-          <Route path="/console/realms/:name/registration-approvals" element={<PendingRegistrationsPage />} />
-          <Route path="/console/realms/:name/registration-fields" element={<RegistrationFieldsPage />} />
-          <Route path="/console/realms/:name/registration-settings" element={<RegistrationSettingsPage />} />
-          {/* Catch-all for unknown /console/... paths — rendered inside the Layout shell */}
-          <Route path="*" element={<NotFoundPage />} />
+        <Route element={<ProtectedRoute />}>
+          <Route element={<Layout />}>
+            <Route path="/console" element={<DashboardPage />} />
+            <Route path="/console/realms" element={<RealmListPage />} />
+            <Route
+              path="/console/realms/create"
+              element={<RealmCreatePage />}
+            />
+            <Route path="/console/realms/:name" element={<RealmDetailPage />} />
+            <Route
+              path="/console/realms/:name/users"
+              element={<UserListPage />}
+            />
+            <Route
+              path="/console/realms/:name/users/create"
+              element={<UserCreatePage />}
+            />
+            <Route
+              path="/console/realms/:name/users/:id"
+              element={<UserDetailPage />}
+            />
+            <Route
+              path="/console/realms/:name/clients"
+              element={<ClientListPage />}
+            />
+            <Route
+              path="/console/realms/:name/clients/new"
+              element={<ClientCreatePage />}
+            />
+            <Route
+              path="/console/realms/:name/clients/:id"
+              element={<ClientDetailPage />}
+            />
+            <Route
+              path="/console/realms/:name/roles"
+              element={<RoleListPage />}
+            />
+            <Route
+              path="/console/realms/:name/groups"
+              element={<GroupListPage />}
+            />
+            <Route
+              path="/console/realms/:name/groups/create"
+              element={<GroupCreatePage />}
+            />
+            <Route
+              path="/console/realms/:name/groups/:groupId"
+              element={<GroupDetailPage />}
+            />
+            <Route
+              path="/console/realms/:name/sessions"
+              element={<SessionListPage />}
+            />
+            <Route
+              path="/console/realms/:name/client-scopes"
+              element={<ClientScopeListPage />}
+            />
+            <Route
+              path="/console/realms/:name/client-scopes/create"
+              element={<ClientScopeCreatePage />}
+            />
+            <Route
+              path="/console/realms/:name/client-scopes/:scopeId"
+              element={<ClientScopeDetailPage />}
+            />
+            <Route
+              path="/console/realms/:name/consent-categories"
+              element={<ConsentCategoriesListPage />}
+            />
+            <Route
+              path="/console/realms/:name/consent-categories/new"
+              element={<ConsentCategoryDetailPage />}
+            />
+            <Route
+              path="/console/realms/:name/consent-categories/:categoryId"
+              element={<ConsentCategoryDetailPage />}
+            />
+            <Route
+              path="/console/realms/:name/consent-statistics"
+              element={<ConsentStatisticsPage />}
+            />
+            <Route
+              path="/console/realms/:name/events"
+              element={<LoginEventsPage />}
+            />
+            <Route
+              path="/console/realms/:name/admin-events"
+              element={<AdminEventsPage />}
+            />
+            <Route
+              path="/console/realms/:name/user-federation"
+              element={<FederationListPage />}
+            />
+            <Route
+              path="/console/realms/:name/user-federation/create"
+              element={<FederationCreatePage />}
+            />
+            <Route
+              path="/console/realms/:name/user-federation/:id"
+              element={<FederationDetailPage />}
+            />
+            <Route
+              path="/console/realms/:name/identity-providers"
+              element={<IdpListPage />}
+            />
+            <Route
+              path="/console/realms/:name/identity-providers/create"
+              element={<IdpCreatePage />}
+            />
+            <Route
+              path="/console/realms/:name/identity-providers/:alias"
+              element={<IdpDetailPage />}
+            />
+            <Route
+              path="/console/realms/:name/saml-providers"
+              element={<SamlSpListPage />}
+            />
+            <Route
+              path="/console/realms/:name/saml-providers/create"
+              element={<SamlSpCreatePage />}
+            />
+            <Route
+              path="/console/realms/:name/saml-providers/:id"
+              element={<SamlSpDetailPage />}
+            />
+            <Route
+              path="/console/realms/:name/auth-flows"
+              element={<AuthFlowListPage />}
+            />
+            <Route
+              path="/console/realms/:name/auth-flows/:flowId"
+              element={<AuthFlowEditorPage />}
+            />
+            <Route
+              path="/console/realms/:name/registration-approvals"
+              element={<PendingRegistrationsPage />}
+            />
+            <Route
+              path="/console/realms/:name/registration-fields"
+              element={<RegistrationFieldsPage />}
+            />
+            <Route
+              path="/console/realms/:name/registration-settings"
+              element={<RegistrationSettingsPage />}
+            />
+            <Route
+              path="/console/realms/:name/risk-dashboard"
+              element={<ContinuousRiskDashboard />}
+            />
+            <Route
+              path="/console/realms/:name/risk-policies"
+              element={<RiskPolicyListPage />}
+            />
+            <Route
+              path="/console/realms/:name/risk-sessions/:sessionId"
+              element={<SessionRiskDetailPage />}
+            />
+            <Route
+              path="/console/realms/:name/organizations"
+              element={<OrganizationListPage />}
+            />
+            <Route
+              path="/console/realms/:name/organizations/new"
+              element={<OrganizationCreatePage />}
+            />
+            <Route
+              path="/console/realms/:name/organizations/:slug"
+              element={<OrganizationDetailPage />}
+            />
+            <Route
+              path="/console/realms/:name/webhooks"
+              element={<WebhookListPage />}
+            />
+            <Route
+              path="/console/realms/:name/webhooks/new"
+              element={<WebhookCreatePage />}
+            />
+            <Route
+              path="/console/realms/:name/webhooks/:webhookId"
+              element={<WebhookDetailPage />}
+            />
+            <Route
+              path="/console/realms/:name/service-accounts"
+              element={<ServiceAccountListPage />}
+            />
+            <Route
+              path="/console/realms/:name/service-accounts/new"
+              element={<ServiceAccountCreatePage />}
+            />
+            <Route
+              path="/console/realms/:name/service-accounts/:accountId"
+              element={<ServiceAccountDetailPage />}
+            />
+            <Route
+              path="/console/realms/:name/custom-attributes"
+              element={<CustomAttributesPage />}
+            />
+            <Route
+              path="/console/realms/:name/scim"
+              element={<ScimConfigPage />}
+            />
+            <Route
+              path="/console/realms/:name/authorization-policies"
+              element={<PolicyListPage />}
+            />
+            <Route
+              path="/console/realms/:name/authorization-policies/new"
+              element={<PolicyCreatePage />}
+            />
+            <Route
+              path="/console/realms/:name/authorization-policies/:policyId"
+              element={<PolicyDetailPage />}
+            />
+            <Route
+              path="/console/realms/:name/themes"
+              element={<ThemeListPage />}
+            />
+            <Route
+              path="/console/realms/:name/themes/builder"
+              element={<ThemeBuilderPage />}
+            />
+            <Route
+              path="/console/realms/:name/themes/:themeId/edit"
+              element={<ThemeBuilderPage />}
+            />
+            <Route
+              path="/console/realms/:name/theme-builder"
+              element={<ThemeBuilderPage />}
+            />
+            <Route path="/console/realms/:name/nhi" element={<NhiListPage />} />
+            <Route
+              path="/console/realms/:name/nhi/new"
+              element={<NhiCreatePage />}
+            />
+            <Route
+              path="/console/realms/:name/nhi/:id"
+              element={<NhiDetailPage />}
+            />
+            <Route
+              path="/console/realms/:name/nhi-analytics"
+              element={<NhiAnalyticsPage />}
+            />
+            <Route path="/console/plugins" element={<PluginsPage />} />
+            <Route
+              path="/console/system-status"
+              element={<SystemStatusPage />}
+            />
+            {/* Catch-all for unknown /console/... paths — rendered inside the Layout shell */}
+            <Route path="*" element={<NotFoundPage />} />
+          </Route>
         </Route>
-      </Route>
 
-      {/* Catch-all for every other URL (e.g. bare / or unknown top-level paths) */}
-      <Route path="*" element={<NotFoundPage />} />
-    </Routes>
+        {/* Catch-all for every other URL (e.g. bare / or unknown top-level paths) */}
+        <Route path="*" element={<NotFoundPage />} />
+      </Routes>
     </ErrorBoundary>
   );
 }

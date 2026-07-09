@@ -32,6 +32,29 @@ export function hasCredentials(): boolean {
   return _apiKey !== null || _token !== null;
 }
 
+/**
+ * Attempts to rehydrate the in-memory access token from the httpOnly
+ * admin_rt cookie via GET /admin/auth/refresh.  Returns the token on
+ * success, null if the cookie is missing or expired.
+ */
+export async function refreshSession(): Promise<string | null> {
+  try {
+    const resp = await axios.get<{ access_token: string }>(
+      '/admin/auth/refresh',
+      {
+        withCredentials: true,
+      },
+    );
+    const token = resp.data.access_token;
+    if (token) {
+      setCredentials({ token });
+    }
+    return token ?? null;
+  } catch {
+    return null;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Axios instances
 // ---------------------------------------------------------------------------
@@ -41,7 +64,10 @@ export function hasCredentials(): boolean {
 // controllers that have no `/admin` prefix (e.g. setup-wizard, the realm
 // registration endpoints) — mirroring how getHealthStatus reaches `/health`.
 function createClient(baseURL: string) {
-  const instance = axios.create({ baseURL });
+  const instance = axios.create({
+    baseURL,
+    withCredentials: true,
+  });
 
   instance.interceptors.request.use((config) => {
     if (_token) {

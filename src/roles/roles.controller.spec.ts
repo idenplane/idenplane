@@ -1,6 +1,8 @@
 jest.mock('../crypto/jwk.service.js', () => ({ JwkService: jest.fn() }));
 
+import { plainToInstance } from 'class-transformer';
 import { RolesController } from './roles.controller.js';
+import { AssignRolesDto } from './dto/assign-role.dto.js';
 import type { Realm } from '@prisma/client';
 
 describe('RolesController', () => {
@@ -120,18 +122,49 @@ describe('RolesController', () => {
   });
 
   describe('assignRealmRoles', () => {
-    it('should call rolesService.assignRealmRoles with realm, userId, and roleNames', () => {
-      const dto = { roleNames: ['admin', 'editor'] };
+    it('passes roleNames from roleNames format', () => {
+      const dto = plainToInstance(AssignRolesDto, {
+        roleNames: ['admin', 'editor'],
+      });
       mockRolesService.assignRealmRoles.mockReturnValue(undefined);
 
-      const result = controller.assignRealmRoles(realm, 'user-1', dto);
+      controller.assignRealmRoles(realm, 'user-1', dto);
 
       expect(mockRolesService.assignRealmRoles).toHaveBeenCalledWith(
         realm,
         'user-1',
         ['admin', 'editor'],
       );
-      expect(result).toBeUndefined();
+    });
+
+    it('passes roleNames from Keycloak roles[].name format', () => {
+      const dto = plainToInstance(AssignRolesDto, {
+        roles: [{ name: 'admin' }],
+      });
+      mockRolesService.assignRealmRoles.mockReturnValue(undefined);
+
+      controller.assignRealmRoles(realm, 'user-1', dto);
+
+      expect(mockRolesService.assignRealmRoles).toHaveBeenCalledWith(
+        realm,
+        'user-1',
+        ['admin'],
+      );
+    });
+
+    it('passes roleNames from Keycloak roles with id field', () => {
+      const dto = plainToInstance(AssignRolesDto, {
+        roles: [{ id: 'abc-123', name: 'admin' }],
+      });
+      mockRolesService.assignRealmRoles.mockReturnValue(undefined);
+
+      controller.assignRealmRoles(realm, 'user-1', dto);
+
+      expect(mockRolesService.assignRealmRoles).toHaveBeenCalledWith(
+        realm,
+        'user-1',
+        ['admin'],
+      );
     });
   });
 
@@ -151,32 +184,43 @@ describe('RolesController', () => {
   });
 
   describe('removeUserRealmRoles', () => {
-    it('should call rolesService.removeUserRealmRoles with realm, userId, and roleNames', () => {
-      const dto = { roleNames: ['admin'] };
+    it('passes roleNames from roleNames format', () => {
+      const dto = plainToInstance(AssignRolesDto, { roleNames: ['admin'] });
       mockRolesService.removeUserRealmRoles.mockReturnValue(undefined);
 
-      const result = controller.removeUserRealmRoles(realm, 'user-1', dto);
+      controller.removeUserRealmRoles(realm, 'user-1', dto);
 
       expect(mockRolesService.removeUserRealmRoles).toHaveBeenCalledWith(
         realm,
         'user-1',
         ['admin'],
       );
-      expect(result).toBeUndefined();
+    });
+
+    it('passes roleNames from Keycloak roles format', () => {
+      const dto = plainToInstance(AssignRolesDto, {
+        roles: [{ name: 'admin' }],
+      });
+      mockRolesService.removeUserRealmRoles.mockReturnValue(undefined);
+
+      controller.removeUserRealmRoles(realm, 'user-1', dto);
+
+      expect(mockRolesService.removeUserRealmRoles).toHaveBeenCalledWith(
+        realm,
+        'user-1',
+        ['admin'],
+      );
     });
   });
 
   describe('assignClientRoles', () => {
-    it('should call rolesService.assignClientRoles with realm, userId, clientId, and roleNames', () => {
-      const dto = { roleNames: ['editor', 'viewer'] };
+    it('passes roleNames from roleNames format', () => {
+      const dto = plainToInstance(AssignRolesDto, {
+        roleNames: ['editor', 'viewer'],
+      });
       mockRolesService.assignClientRoles.mockReturnValue(undefined);
 
-      const result = controller.assignClientRoles(
-        realm,
-        'user-1',
-        'client-1',
-        dto,
-      );
+      controller.assignClientRoles(realm, 'user-1', 'client-1', dto);
 
       expect(mockRolesService.assignClientRoles).toHaveBeenCalledWith(
         realm,
@@ -184,7 +228,22 @@ describe('RolesController', () => {
         'client-1',
         ['editor', 'viewer'],
       );
-      expect(result).toBeUndefined();
+    });
+
+    it('passes roleNames from Keycloak roles format', () => {
+      const dto = plainToInstance(AssignRolesDto, {
+        roles: [{ name: 'editor' }],
+      });
+      mockRolesService.assignClientRoles.mockReturnValue(undefined);
+
+      controller.assignClientRoles(realm, 'user-1', 'client-1', dto);
+
+      expect(mockRolesService.assignClientRoles).toHaveBeenCalledWith(
+        realm,
+        'user-1',
+        'client-1',
+        ['editor'],
+      );
     });
   });
 
@@ -205,16 +264,11 @@ describe('RolesController', () => {
   });
 
   describe('removeUserClientRoles', () => {
-    it('should call rolesService.removeUserClientRoles with realm, userId, clientId, and roleNames', () => {
-      const dto = { roleNames: ['editor'] };
+    it('passes roleNames from roleNames format', () => {
+      const dto = plainToInstance(AssignRolesDto, { roleNames: ['editor'] });
       mockRolesService.removeUserClientRoles.mockReturnValue(undefined);
 
-      const result = controller.removeUserClientRoles(
-        realm,
-        'user-1',
-        'client-1',
-        dto,
-      );
+      controller.removeUserClientRoles(realm, 'user-1', 'client-1', dto);
 
       expect(mockRolesService.removeUserClientRoles).toHaveBeenCalledWith(
         realm,
@@ -222,7 +276,22 @@ describe('RolesController', () => {
         'client-1',
         ['editor'],
       );
-      expect(result).toBeUndefined();
+    });
+
+    it('passes roleNames from Keycloak roles format', () => {
+      const dto = plainToInstance(AssignRolesDto, {
+        roles: [{ name: 'editor' }],
+      });
+      mockRolesService.removeUserClientRoles.mockReturnValue(undefined);
+
+      controller.removeUserClientRoles(realm, 'user-1', 'client-1', dto);
+
+      expect(mockRolesService.removeUserClientRoles).toHaveBeenCalledWith(
+        realm,
+        'user-1',
+        'client-1',
+        ['editor'],
+      );
     });
   });
 });

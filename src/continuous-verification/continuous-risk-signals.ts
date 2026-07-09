@@ -464,10 +464,7 @@ export interface ContinuousRiskThresholds {
 }
 
 export type ContinuousRiskAction =
-  | 'MONITOR'
-  | 'ALERT'
-  | 'STEP_UP'
-  | 'TERMINATE';
+  'MONITOR' | 'ALERT' | 'STEP_UP' | 'TERMINATE';
 
 export function determineContinuousAction(
   score: number,

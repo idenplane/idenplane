@@ -1,10 +1,7 @@
+import { useQuery } from '@tanstack/react-query';
 import { useState } from 'react';
-import type {
-  ThemeStyles,
-  ThemeComponent,
-  ThemeAssets,
-  ThemeSettings,
-} from '../../types/theme';
+import { getThemeTemplates } from '../../api/themes';
+import type { ThemeAssets, ThemeComponent, ThemeSettings, ThemeStyles, ThemeTemplate } from '../../types/theme';
 
 // ─── Template Data ──────────────────────────────────────────────────────────
 
@@ -294,8 +291,24 @@ const minimalTemplate: TemplateDefinition = {
   },
 };
 
-// All available templates
-const TEMPLATES: TemplateDefinition[] = [corporateTemplate, modernTemplate, minimalTemplate];
+// Bundled (local) templates — always available offline.
+const LOCAL_TEMPLATES: TemplateDefinition[] = [corporateTemplate, modernTemplate, minimalTemplate];
+
+/** Convert a server ThemeTemplate to the local TemplateDefinition shape. */
+function toLocal(t: ThemeTemplate): TemplateDefinition {
+  return {
+    id: t.id,
+    name: t.name,
+    description: t.description,
+    category: 'custom' as const,
+    previewGradient: 'from-slate-500 to-slate-700',
+    accentColor: (t.styles?.colors as unknown as Record<string, string> | undefined)?.primaryColor ?? '#6366f1',
+    styles: t.styles as TemplateDefinition['styles'],
+    components: (t.components ?? []) as TemplateDefinition['components'],
+    assets: (t.assets ?? {}) as Partial<TemplateDefinition['assets']>,
+    settings: (t.settings ?? {}) as Partial<TemplateDefinition['settings']>,
+  };
+}
 
 // ─── Props ──────────────────────────────────────────────────────────────────
 
@@ -315,12 +328,28 @@ export default function ThemeTemplates({
   onApplyTemplate,
   currentTemplateId,
 }: ThemeTemplatesProps) {
-  const [selectedCategory, setSelectedCategory] = useState<'all' | 'corporate' | 'modern' | 'minimal'>('all');
+  const [selectedCategory, setSelectedCategory] = useState<'all' | 'corporate' | 'modern' | 'minimal' | 'custom'>('all');
   const [applyingTemplateId, setApplyingTemplateId] = useState<string | null>(null);
 
+  // Fetch built-in themes from the server and merge with the bundled presets.
+  // Server templates appear under the 'custom' category tab.
+  const { data: serverTemplates } = useQuery({
+    queryKey: ['theme-templates'],
+    queryFn: getThemeTemplates,
+    staleTime: 5 * 60_000, // 5 min — theme list changes rarely
+  });
+
+  const allTemplates: TemplateDefinition[] = [
+    ...LOCAL_TEMPLATES,
+    // Add server templates whose ids don't clash with local ones.
+    ...(serverTemplates ?? []).filter(st => !LOCAL_TEMPLATES.some(lt => lt.id === st.id)).map(toLocal),
+  ];
+
   const filteredTemplates = selectedCategory === 'all'
-    ? TEMPLATES
-    : TEMPLATES.filter(t => t.category === selectedCategory);
+    ? allTemplates
+    : allTemplates.filter(t => t.category === selectedCategory);
+
+  const hasCustom = (serverTemplates?.length ?? 0) > 0;
 
   const handleApplyTemplate = (template: TemplateDefinition) => {
     setApplyingTemplateId(template.id);
@@ -342,6 +371,7 @@ export default function ThemeTemplates({
     { key: 'corporate' as const, label: 'Corporate' },
     { key: 'modern' as const, label: 'Modern' },
     { key: 'minimal' as const, label: 'Minimal' },
+    ...(hasCustom ? [{ key: 'custom' as const, label: 'Built-in' }] : []),
   ];
 
   return (
@@ -360,11 +390,10 @@ export default function ThemeTemplates({
           <button
             key={cat.key}
             onClick={() => setSelectedCategory(cat.key)}
-            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
-              selectedCategory === cat.key
-                ? 'bg-indigo-100 text-indigo-700'
-                : 'text-gray-600 hover:bg-gray-100'
-            }`}
+            className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${selectedCategory === cat.key
+              ? 'bg-indigo-100 text-indigo-700'
+              : 'text-gray-600 hover:bg-gray-100'
+              }`}
             data-testid={`template-category-${cat.key}`}
           >
             {cat.label}
@@ -380,13 +409,11 @@ export default function ThemeTemplates({
               key={template.id}
               onClick={() => handleApplyTemplate(template)}
               disabled={applyingTemplateId !== null}
-              className={`group relative overflow-hidden rounded-xl border-2 bg-white p-0 text-left transition-all hover:border-indigo-300 hover:shadow-md ${
-                currentTemplateId === template.id
-                  ? 'border-indigo-500 ring-2 ring-indigo-200'
-                  : 'border-gray-200'
-              } ${
-                applyingTemplateId === template.id ? 'opacity-70' : ''
-              }`}
+              className={`group relative overflow-hidden rounded-xl border-2 bg-white p-0 text-left transition-all hover:border-indigo-300 hover:shadow-md ${currentTemplateId === template.id
+                ? 'border-indigo-500 ring-2 ring-indigo-200'
+                : 'border-gray-200'
+                } ${applyingTemplateId === template.id ? 'opacity-70' : ''
+                }`}
               data-testid={`template-card-${template.id}`}
             >
               {/* Preview area */}

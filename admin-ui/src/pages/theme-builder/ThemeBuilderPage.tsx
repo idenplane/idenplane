@@ -33,7 +33,13 @@ type LayoutSection = 'canvas' | 'preview';
 
 // ─── Editor panel type ────────────────────────────────────────────────────────
 
-type EditorPanel = 'palette' | 'canvas' | 'styles' | 'assets' | 'templates' | 'history';
+type EditorPanel =
+  | 'palette'
+  | 'canvas'
+  | 'styles'
+  | 'assets'
+  | 'templates'
+  | 'history';
 
 // ─── Component ────────────────────────────────────────────────────────────────
 
@@ -43,14 +49,20 @@ export default function ThemeBuilderPage() {
   // ── Theme state (shared across all sections) ──────────────────────────────
 
   const [styles, setStyles] = useState<ThemeStyles>(DEFAULT_THEME_STYLES);
-  const [components, setComponents] = useState<ThemeComponent[]>(DEFAULT_THEME_COMPONENTS);
+  const [components, setComponents] = useState<ThemeComponent[]>(
+    DEFAULT_THEME_COMPONENTS,
+  );
   const [assets, setAssets] = useState<ThemeAssets>(DEFAULT_THEME_ASSETS);
-  const [settings, setSettings] = useState<ThemeSettings>(DEFAULT_THEME_SETTINGS);
+  const [settings, setSettings] = useState<ThemeSettings>(
+    DEFAULT_THEME_SETTINGS,
+  );
 
   // ── UI state ─────────────────────────────────────────────────────────────
 
   const [viewportSize, setViewportSize] = useState<ViewportSize>('desktop');
-  const [selectedComponentId, setSelectedComponentId] = useState<string | null>(null);
+  const [selectedComponentId, setSelectedComponentId] = useState<string | null>(
+    null,
+  );
   const [activeSection, setActiveSection] = useState<LayoutSection>('canvas');
   const [editorPanel, setEditorPanel] = useState<EditorPanel>('canvas');
   const [importError, setImportError] = useState<string | null>(null);
@@ -83,34 +95,38 @@ export default function ThemeBuilderPage() {
 
   // ── Save handler ────────────────────────────────────────────────────────────
 
-  const handleSave = useCallback(async (reason: 'manual' | 'auto-save' = 'manual') => {
-    if (isSaving) return;
-    if (!themeId) return;
+  const handleSave = useCallback(
+    async (reason: 'manual' | 'auto-save' = 'manual') => {
+      if (isSaving) return;
+      if (!themeId) return;
 
-    setIsSaving(true);
-    setSaveError(null);
+      setIsSaving(true);
+      setSaveError(null);
 
-    try {
-      const currentState = themeStateRef.current;
-      await updateTheme(realmName || '', themeId, {
-        styles: currentState.styles,
-        components: currentState.components,
-        assets: currentState.assets,
-        settings: currentState.settings,
-      });
-      setLastSaved(new Date());
-      setHasUnsavedChanges(false);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to save changes';
-      setSaveError(message);
-      // Don't throw - auto-save failures shouldn't break the editor
-      if (reason === 'manual') {
-        throw err;
+      try {
+        const currentState = themeStateRef.current;
+        await updateTheme(realmName || '', themeId, {
+          styles: currentState.styles,
+          components: currentState.components,
+          assets: currentState.assets,
+          settings: currentState.settings,
+        });
+        setLastSaved(new Date());
+        setHasUnsavedChanges(false);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Failed to save changes';
+        setSaveError(message);
+        // Don't throw - auto-save failures shouldn't break the editor
+        if (reason === 'manual') {
+          throw err;
+        }
+      } finally {
+        setIsSaving(false);
       }
-    } finally {
-      setIsSaving(false);
-    }
-  }, [realmName, themeId, isSaving]);
+    },
+    [realmName, themeId, isSaving],
+  );
 
   // Ref to track the latest handleSave for use in effect
   const handleSaveRef = useRef(handleSave);
@@ -178,7 +194,8 @@ export default function ThemeBuilderPage() {
       setPublishSuccess(`Published version ${result.version}`);
       setTimeout(() => setPublishSuccess(null), 3000);
     } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to publish theme';
+      const message =
+        err instanceof Error ? err.message : 'Failed to publish theme';
       setSaveError(message);
       throw err;
     } finally {
@@ -188,38 +205,48 @@ export default function ThemeBuilderPage() {
 
   // ── Rollback handler ─────────────────────────────────────────────────────
 
-  const handleRollback = useCallback(async (version: ThemeVersion) => {
-    setRollbackError(null);
-    setRollbackSuccess(null);
+  const handleRollback = useCallback(
+    async (version: ThemeVersion) => {
+      setRollbackError(null);
+      setRollbackSuccess(null);
 
-    try {
-      const updatedTheme = await rollbackTheme(realmName || '', themeId, version.id);
-      // Update theme state with the rolled-back data
-      if (updatedTheme.styles) {
-        setStyles(updatedTheme.styles);
+      try {
+        const updatedTheme = await rollbackTheme(
+          realmName || '',
+          themeId!,
+          version.version,
+        );
+        // Update theme state with the rolled-back data
+        if (updatedTheme.styles) {
+          setStyles(updatedTheme.styles);
+        }
+        if (updatedTheme.components) {
+          setComponents(updatedTheme.components);
+        }
+        if (updatedTheme.assets) {
+          setAssets((prev) => ({ ...prev, ...updatedTheme.assets }));
+        }
+        if (updatedTheme.settings) {
+          setSettings((prev) => ({ ...prev, ...updatedTheme.settings }));
+        }
+        // Update current version
+        if (updatedTheme.version) {
+          setCurrentVersion(updatedTheme.version);
+        }
+        setRollbackSuccess(
+          `Successfully restored to version ${version.version}`,
+        );
+        // Clear success message after 3 seconds
+        setTimeout(() => setRollbackSuccess(null), 3000);
+      } catch (err) {
+        const message =
+          err instanceof Error ? err.message : 'Failed to restore version';
+        setRollbackError(message);
+        throw err; // Re-throw so ThemeVersionHistory can handle the loading state
       }
-      if (updatedTheme.components) {
-        setComponents(updatedTheme.components);
-      }
-      if (updatedTheme.assets) {
-        setAssets((prev) => ({ ...prev, ...updatedTheme.assets }));
-      }
-      if (updatedTheme.settings) {
-        setSettings((prev) => ({ ...prev, ...updatedTheme.settings }));
-      }
-      // Update current version
-      if (updatedTheme.version) {
-        setCurrentVersion(updatedTheme.version);
-      }
-      setRollbackSuccess(`Successfully restored to version ${version.version}`);
-      // Clear success message after 3 seconds
-      setTimeout(() => setRollbackSuccess(null), 3000);
-    } catch (err) {
-      const message = err instanceof Error ? err.message : 'Failed to restore version';
-      setRollbackError(message);
-      throw err; // Re-throw so ThemeVersionHistory can handle the loading state
-    }
-  }, [realmName, themeId]);
+    },
+    [realmName, themeId],
+  );
 
   // ── Handlers ─────────────────────────────────────────────────────────────
 
@@ -231,9 +258,12 @@ export default function ThemeBuilderPage() {
     setComponents(updated);
   }, []);
 
-  const handleSelectComponent = useCallback((component: DraggableComponent | null) => {
-    setSelectedComponentId(component?.id ?? null);
-  }, []);
+  const handleSelectComponent = useCallback(
+    (component: DraggableComponent | null) => {
+      setSelectedComponentId(component?.id ?? null);
+    },
+    [],
+  );
 
   const handleStylesChange = useCallback((updated: ThemeStyles) => {
     setStyles(updated);
@@ -243,25 +273,37 @@ export default function ThemeBuilderPage() {
     setAssets(updated);
   }, []);
 
-  const handleApplyTemplate = useCallback((template: {
-    styles: ThemeStyles;
-    components: ThemeComponent[];
-    assets: Partial<ThemeAssets>;
-    settings: Partial<ThemeSettings>;
-  }) => {
-    setStyles(template.styles);
-    setComponents(template.components);
-    if (template.assets.logoUrl !== undefined) {
-      setAssets((prev) => ({ ...prev, logoUrl: template.assets.logoUrl ?? null }));
-    }
-    if (template.assets.backgroundImageUrl !== undefined) {
-      setAssets((prev) => ({ ...prev, backgroundImageUrl: template.assets.backgroundImageUrl ?? null }));
-    }
-    if (template.assets.faviconUrl !== undefined) {
-      setAssets((prev) => ({ ...prev, faviconUrl: template.assets.faviconUrl ?? null }));
-    }
-    setSettings((prev) => ({ ...prev, ...template.settings }));
-  }, []);
+  const handleApplyTemplate = useCallback(
+    (template: {
+      styles: ThemeStyles;
+      components: ThemeComponent[];
+      assets: Partial<ThemeAssets>;
+      settings: Partial<ThemeSettings>;
+    }) => {
+      setStyles(template.styles);
+      setComponents(template.components);
+      if (template.assets.logoUrl !== undefined) {
+        setAssets((prev) => ({
+          ...prev,
+          logoUrl: template.assets.logoUrl ?? null,
+        }));
+      }
+      if (template.assets.backgroundImageUrl !== undefined) {
+        setAssets((prev) => ({
+          ...prev,
+          backgroundImageUrl: template.assets.backgroundImageUrl ?? null,
+        }));
+      }
+      if (template.assets.faviconUrl !== undefined) {
+        setAssets((prev) => ({
+          ...prev,
+          faviconUrl: template.assets.faviconUrl ?? null,
+        }));
+      }
+      setSettings((prev) => ({ ...prev, ...template.settings }));
+    },
+    [],
+  );
 
   // ── Import/Export handlers ──────────────────────────────────────────────
 
@@ -275,48 +317,56 @@ export default function ThemeBuilderPage() {
     settings: ThemeSettings;
   }
 
-  const validateImportData = useCallback((data: unknown): data is ThemeExportData => {
-    if (!data || typeof data !== 'object') return false;
-    const obj = data as Record<string, unknown>;
-    if (!obj.styles || typeof obj.styles !== 'object') return false;
-    if (!Array.isArray(obj.components)) return false;
-    if (!obj.assets || typeof obj.assets !== 'object') return false;
-    if (!obj.settings || typeof obj.settings !== 'object') return false;
-    return true;
-  }, []);
+  const validateImportData = useCallback(
+    (data: unknown): data is ThemeExportData => {
+      if (!data || typeof data !== 'object') return false;
+      const obj = data as Record<string, unknown>;
+      if (!obj.styles || typeof obj.styles !== 'object') return false;
+      if (!Array.isArray(obj.components)) return false;
+      if (!obj.assets || typeof obj.assets !== 'object') return false;
+      if (!obj.settings || typeof obj.settings !== 'object') return false;
+      return true;
+    },
+    [],
+  );
 
-  const handleImportTheme = useCallback((event: React.ChangeEvent<HTMLInputElement>) => {
-    setImportError(null);
-    const file = event.target.files?.[0];
-    if (!file) return;
+  const handleImportTheme = useCallback(
+    (event: React.ChangeEvent<HTMLInputElement>) => {
+      setImportError(null);
+      const file = event.target.files?.[0];
+      if (!file) return;
 
-    const reader = new FileReader();
-    reader.onload = (e) => {
-      try {
-        const text = e.target?.result as string;
-        const parsed = JSON.parse(text);
+      const reader = new FileReader();
+      reader.onload = (e) => {
+        try {
+          const text = e.target?.result as string;
+          const parsed = JSON.parse(text);
 
-        if (!validateImportData(parsed)) {
-          setImportError('Invalid theme file: missing required fields (styles, components, assets, settings)');
-          return;
+          if (!validateImportData(parsed)) {
+            setImportError(
+              'Invalid theme file: missing required fields (styles, components, assets, settings)',
+            );
+            return;
+          }
+
+          setStyles(parsed.styles);
+          setComponents(parsed.components);
+          setAssets(parsed.assets);
+          setSettings(parsed.settings);
+        } catch {
+          setImportError('Invalid JSON file: could not parse the file');
         }
+      };
+      reader.onerror = () => {
+        setImportError('Failed to read file');
+      };
+      reader.readAsText(file);
 
-        setStyles(parsed.styles);
-        setComponents(parsed.components);
-        setAssets(parsed.assets);
-        setSettings(parsed.settings);
-      } catch {
-        setImportError('Invalid JSON file: could not parse the file');
-      }
-    };
-    reader.onerror = () => {
-      setImportError('Failed to read file');
-    };
-    reader.readAsText(file);
-
-    // Reset the input so the same file can be selected again
-    event.target.value = '';
-  }, [validateImportData]);
+      // Reset the input so the same file can be selected again
+      event.target.value = '';
+    },
+    [validateImportData],
+  );
 
   // ── Render ──────────────────────────────────────────────────────────────
 
@@ -331,7 +381,9 @@ export default function ThemeBuilderPage() {
           </span>
           {lastSaved && (
             <span className="text-xs text-gray-400">
-              {hasUnsavedChanges ? 'Unsaved changes' : `Saved ${lastSaved.toLocaleTimeString()}`}
+              {hasUnsavedChanges
+                ? 'Unsaved changes'
+                : `Saved ${lastSaved.toLocaleTimeString()}`}
             </span>
           )}
         </div>
@@ -365,7 +417,9 @@ export default function ThemeBuilderPage() {
                 assets,
                 settings,
               };
-              const blob = new Blob([JSON.stringify(exportData, null, 2)], { type: 'application/json' });
+              const blob = new Blob([JSON.stringify(exportData, null, 2)], {
+                type: 'application/json',
+              });
               const url = URL.createObjectURL(blob);
               const a = document.createElement('a');
               a.href = url;
@@ -445,19 +499,21 @@ export default function ThemeBuilderPage() {
       <div className="flex flex-1 overflow-hidden">
         {/* Left: Component palette */}
         <div className="w-52 shrink-0 overflow-y-auto border-r border-gray-200 bg-gray-50 p-4">
-          <ComponentPalette onAddComponent={(type) => {
-            // When adding from palette, create a new component and add to state
-            const id = `${type}-${Date.now()}`;
-            const newComponent: ThemeComponent = {
-              id,
-              type,
-              label: type.charAt(0).toUpperCase() + type.slice(1),
-              order: components.length,
-              visible: true,
-              props: {},
-            };
-            setComponents((prev) => [...prev, newComponent]);
-          }} />
+          <ComponentPalette
+            onAddComponent={(type) => {
+              // When adding from palette, create a new component and add to state
+              const id = `${type}-${Date.now()}`;
+              const newComponent: ThemeComponent = {
+                id,
+                type,
+                label: type.charAt(0).toUpperCase() + type.slice(1),
+                order: components.length,
+                visible: true,
+                props: {},
+              };
+              setComponents((prev) => [...prev, newComponent]);
+            }}
+          />
         </div>
 
         {/* Middle: Canvas or Live Preview */}

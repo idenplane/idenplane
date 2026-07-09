@@ -1,11 +1,21 @@
-import { IsArray, IsString, IsOptional, ValidateNested } from 'class-validator';
-import { Type, Transform } from 'class-transformer';
+import {
+  IsArray,
+  IsString,
+  IsOptional,
+  ValidateNested,
+} from 'class-validator';
+import { Type } from 'class-transformer';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 
 /**
- * Represents a role entry in the Keycloak-style format: { name: string }
+ * Represents a role entry in the Keycloak-style format.
+ * Accepts both `{ name: string }` and `{ id: string, name: string }` shapes.
  */
 class RoleEntry {
+  @IsOptional()
+  @IsString()
+  id?: string;
+
   @IsString()
   name!: string;
 }
@@ -15,11 +25,11 @@ class RoleEntry {
  *
  * Accepts two equivalent formats:
  *   - `roleNames: string[]`  – simple string array (preferred)
- *   - `roles: { name: string }[]` – Keycloak-compatible object array
+ *   - `roles: { name: string }[]` – Keycloak-compatible object array (id is optional)
  *
- * After class-transformer processing, `roleNames` is always populated from
- * whichever format the caller used.  The controller continues to reference
- * `dto.roleNames` without any change.
+ * Use `dto.effectiveNames` in controllers/services — it resolves names from
+ * whichever format the caller used, without relying on @Transform which does not
+ * fire for absent properties.
  */
 export class AssignRolesDto {
   @ApiPropertyOptional({
@@ -29,46 +39,10 @@ export class AssignRolesDto {
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
-  /**
-   * If the caller sent `roles: [{name: …}]` instead of `roleNames: […]`,
-   * extract the names here so that the rest of the codebase can keep using
-   * `dto.roleNames` without modification.
-   */
-  @Transform(
-    ({
-      value,
-      obj,
-    }: {
-      value: unknown;
-      obj: Record<string, unknown>;
-    }): string[] => {
-      // Already provided as roleNames — keep only the string entries.
-      if (Array.isArray(value) && value.length > 0) {
-        return (value as unknown[]).filter(
-          (v): v is string => typeof v === 'string',
-        );
-      }
-      // Fall back to the Keycloak-style `roles: [{ name }]` field.
-      const roles = obj['roles'];
-      if (Array.isArray(roles)) {
-        return (roles as unknown[])
-          .map((r): string | undefined => {
-            if (typeof r === 'string') return r;
-            if (r && typeof r === 'object' && 'name' in r) {
-              const n = r.name;
-              return typeof n === 'string' ? n : undefined;
-            }
-            return undefined;
-          })
-          .filter((n): n is string => n !== undefined);
-      }
-      return [];
-    },
-  )
-  roleNames!: string[];
+  roleNames?: string[];
 
   @ApiPropertyOptional({
-    example: [{ name: 'admin' }, { name: 'user' }],
+    example: [{ name: 'admin' }, { id: 'abc', name: 'user' }],
     description: 'Keycloak-compatible role list (alternative to roleNames)',
   })
   @IsOptional()
@@ -76,4 +50,20 @@ export class AssignRolesDto {
   @ValidateNested({ each: true })
   @Type(() => RoleEntry)
   roles?: RoleEntry[];
+
+  /**
+   * Resolves role names from whichever format the caller used.
+   * Prefer this over `dto.roleNames` directly.
+   */
+  get effectiveNames(): string[] {
+    if (this.roleNames && this.roleNames.length > 0) {
+      return this.roleNames;
+    }
+    if (this.roles && this.roles.length > 0) {
+      return this.roles
+        .map((r) => r.name)
+        .filter((n): n is string => typeof n === 'string' && n.length > 0);
+    }
+    return [];
+  }
 }

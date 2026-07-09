@@ -38,7 +38,7 @@ jobs:
     permissions:
       contents: read
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@v7
 
       # Enables building the linux/arm64 image on the amd64 runner via emulation.
       - name: Set up QEMU

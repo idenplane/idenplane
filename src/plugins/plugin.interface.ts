@@ -44,10 +44,7 @@ export interface AuthResult {
 // ─── Plugin Types ─────────────────────────────────────────────────────────────
 
 export type PluginType =
-  | 'auth-provider'
-  | 'event-listener'
-  | 'token-enrichment'
-  | 'theme';
+  'auth-provider' | 'event-listener' | 'token-enrichment' | 'theme';
 
 // ─── Base Plugin ──────────────────────────────────────────────────────────────
 

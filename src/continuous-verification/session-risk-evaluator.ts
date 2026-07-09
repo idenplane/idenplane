@@ -644,10 +644,7 @@ export class SessionRiskEvaluator {
         riskScoreBefore: profile.riskScore,
         riskScoreAfter: finalScore,
         riskLevelBefore: profile.riskLevel as
-          | 'LOW'
-          | 'MEDIUM'
-          | 'HIGH'
-          | 'CRITICAL',
+          'LOW' | 'MEDIUM' | 'HIGH' | 'CRITICAL',
         riskLevelAfter: finalRiskLevel,
         trustScoreBefore: profile.trustScore,
         trustScoreAfter: trustScore,

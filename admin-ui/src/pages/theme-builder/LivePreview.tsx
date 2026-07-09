@@ -1,9 +1,9 @@
-import { useMemo, useRef, useEffect, useCallback } from 'react';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import type {
-  ThemeStyles,
-  ThemeComponent,
   ThemeAssets,
+  ThemeComponent,
   ThemeSettings,
+  ThemeStyles,
 } from '../../types/theme';
 
 interface LivePreviewProps {
@@ -349,9 +349,9 @@ function generatePreviewHtml(
         componentsHtml += `
           <div class="login-logo">
             ${assets.logoUrl
-              ? `<img src="${assets.logoUrl}" alt="${assets.logoAlt || 'Logo'}" />`
-              : `<div class="login-logo-placeholder">${assets.logoAlt || 'Logo'}</div>`
-            }
+            ? `<img src="${assets.logoUrl}" alt="${assets.logoAlt || 'Logo'}" />`
+            : `<div class="login-logo-placeholder">${assets.logoAlt || 'Logo'}</div>`
+          }
           </div>
         `;
         break;
@@ -360,10 +360,14 @@ function generatePreviewHtml(
         componentsHtml += `
           <div class="login-header">
             <h1 class="login-title">${(component.props as { title?: string }).title || settings.appTitle || 'Welcome Back'}</h1>
+            ${settings.loginHeading
+            ? `<h2 class="login-heading" style="text-align: center; margin: 0.25rem 0 0;">${settings.loginHeading}</h2>`
+            : ''
+          }
             ${(component.props as { subtitle?: string }).subtitle
-              ? `<p class="login-subtitle">${(component.props as { subtitle?: string }).subtitle}</p>`
-              : `<p class="login-subtitle">${settings.appDescription || 'Sign in to your account'}</p>`
-            }
+            ? `<p class="login-subtitle">${(component.props as { subtitle?: string }).subtitle}</p>`
+            : `<p class="login-subtitle">${settings.appDescription || 'Sign in to your account'}</p>`
+          }
           </div>
         `;
         break;
@@ -476,6 +480,7 @@ function generatePreviewHtml(
             ${footerProps.showPrivacyPolicy ? `<a href="#">Privacy Policy</a> · ` : ''}
             ${footerProps.showTermsOfService ? `<a href="#">Terms of Service</a>` : ''}
             ${footerProps.customText ? `<p>${footerProps.customText}</p>` : ''}
+            ${settings.customFooterText ? `<p>${settings.customFooterText}</p>` : ''}
           </div>
         `;
         break;
@@ -601,11 +606,10 @@ export default function LivePreview({
         <div className="flex items-center gap-1">
           <button
             onClick={() => onViewportChange?.('desktop')}
-            className={`rounded p-1.5 transition-colors ${
-              viewportSize === 'desktop'
+            className={`rounded p-1.5 transition-colors ${viewportSize === 'desktop'
                 ? 'bg-indigo-100 text-indigo-600'
                 : 'text-gray-500 hover:bg-gray-100'
-            }`}
+              }`}
             title="Desktop view"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -614,11 +618,10 @@ export default function LivePreview({
           </button>
           <button
             onClick={() => onViewportChange?.('tablet')}
-            className={`rounded p-1.5 transition-colors ${
-              viewportSize === 'tablet'
+            className={`rounded p-1.5 transition-colors ${viewportSize === 'tablet'
                 ? 'bg-indigo-100 text-indigo-600'
                 : 'text-gray-500 hover:bg-gray-100'
-            }`}
+              }`}
             title="Tablet view"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
@@ -627,11 +630,10 @@ export default function LivePreview({
           </button>
           <button
             onClick={() => onViewportChange?.('mobile')}
-            className={`rounded p-1.5 transition-colors ${
-              viewportSize === 'mobile'
+            className={`rounded p-1.5 transition-colors ${viewportSize === 'mobile'
                 ? 'bg-indigo-100 text-indigo-600'
                 : 'text-gray-500 hover:bg-gray-100'
-            }`}
+              }`}
             title="Mobile view"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>

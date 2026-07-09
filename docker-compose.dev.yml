@@ -19,8 +19,8 @@ services:
       POSTGRES_USER: idenplane
       POSTGRES_PASSWORD: idenplane
       POSTGRES_DB: idenplane
-    ports:
-      - "127.0.0.1:5432:5432"
+    # ports:
+    #   - "127.0.0.1:5432:5432"
     volumes:
       - pgdata:/var/lib/postgresql/data
     healthcheck:
@@ -58,12 +58,15 @@ services:
   # Then: npx prisma migrate dev --name init
 
   app:
-    build: .
+    # build: .
+    image: git.troople.be/troople/idenplane:latest
     ports:
       - "3000:3000"
-    volumes:
-      - .:/app
-      - /app/node_modules
+    env_file:
+      - .env
+    # volumes:
+    #   - .:/app
+    # - /app/node_modules
     environment:
       # PostgreSQL (default):
       DATABASE_URL: postgresql://idenplane:idenplane@db:5432/idenplane

@@ -201,8 +201,7 @@ export class WebAuthnService {
     const rpId = this.getRpId(realm);
 
     let allowCredentials:
-      | { id: string; transports: AuthenticatorTransportFuture[] }[]
-      | undefined;
+      { id: string; transports: AuthenticatorTransportFuture[] }[] | undefined;
     if (userId) {
       const user = await this.prisma.user.findFirst({
         where: { id: userId, realmId: realm.id },

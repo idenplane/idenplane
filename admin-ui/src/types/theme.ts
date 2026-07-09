@@ -17,16 +17,22 @@ export interface Theme {
   id: string;
   realmId: string;
   name: string;
+  displayName?: string | null;
   description: string | null;
   themeType: ThemeType;
-  isBuiltIn: boolean;
-  isActive: boolean;
+  /** Whether this theme is a built-in (filesystem) theme. Not returned by the DB-backed API. */
+  isBuiltIn?: boolean;
+  /** Whether this theme is the active theme for its type on its realm. Not returned by the DB-backed API. */
+  isActive?: boolean;
   styles: ThemeStyles;
   components: ThemeComponent[];
   assets: ThemeAssets;
   settings: ThemeSettings;
   version: number;
-  status: ThemeStatus;
+  /** Backend flag indicating the theme is published. */
+  published?: boolean;
+  /** Frontend-derived status. Computed from `published` when not returned by the API. */
+  status?: ThemeStatus;
   createdAt: string;
   updatedAt: string;
   publishedAt: string | null;
@@ -409,6 +415,8 @@ export interface UploadedAsset {
 export interface ThemeSettings {
   appTitle: string;
   appDescription: string;
+  /** Optional heading shown above the login form. Empty hides it. */
+  loginHeading: string;
   showRememberMe: boolean;
   showForgotPassword: boolean;
   showRegistrationLink: boolean;
@@ -503,20 +511,20 @@ export const DEFAULT_THEME_STYLES: ThemeStyles = {
 
 export const DEFAULT_THEME_COMPONENTS: ThemeComponent[] = [
   {
-    id: 'header-1',
-    type: 'header',
-    label: 'Header',
-    order: 0,
-    visible: true,
-    props: {},
-  },
-  {
     id: 'logo-1',
     type: 'logo',
     label: 'Logo',
-    order: 1,
+    order: 0,
     visible: true,
     props: { size: 'medium', alignment: 'center' },
+  },
+  {
+    id: 'header-1',
+    type: 'header',
+    label: 'Header',
+    order: 1,
+    visible: true,
+    props: {},
   },
   {
     id: 'form-1',
@@ -543,12 +551,12 @@ export const DEFAULT_THEME_COMPONENTS: ThemeComponent[] = [
     props: {},
   },
   {
-    id: 'registration-1',
-    type: 'registrationLink',
-    label: 'Registration Link',
+    id: 'button-1',
+    type: 'button',
+    label: 'Sign In Button',
     order: 5,
     visible: true,
-    props: {},
+    props: { label: 'Sign In', variant: 'primary', fullWidth: true },
   },
   {
     id: 'social-1',
@@ -559,10 +567,18 @@ export const DEFAULT_THEME_COMPONENTS: ThemeComponent[] = [
     props: { providers: [] },
   },
   {
+    id: 'registration-1',
+    type: 'registrationLink',
+    label: 'Registration Link',
+    order: 7,
+    visible: true,
+    props: {},
+  },
+  {
     id: 'footer-1',
     type: 'footer',
     label: 'Footer',
-    order: 7,
+    order: 8,
     visible: true,
     props: {},
   },
@@ -580,6 +596,7 @@ export const DEFAULT_THEME_ASSETS: ThemeAssets = {
 export const DEFAULT_THEME_SETTINGS: ThemeSettings = {
   appTitle: 'Idenplane',
   appDescription: 'Sign in to your account',
+  loginHeading: '',
   showRememberMe: true,
   showForgotPassword: true,
   showRegistrationLink: true,
@@ -631,26 +648,6 @@ export const COMPONENT_DEFINITIONS: ComponentDefinition[] = [
     ],
   },
   {
-    type: 'input',
-    label: 'Text Input',
-    icon: 'text-input',
-    description: 'Single text input field',
-    defaultProps: { label: 'Username', placeholder: '', required: true },
-    allowedProps: ['label', 'placeholder', 'required', 'autocomplete'],
-    styles: [
-      { property: 'marginBottom', label: 'Margin Bottom', type: 'number', unit: 'px', min: 0, max: 24 },
-    ],
-  },
-  {
-    type: 'passwordInput',
-    label: 'Password Input',
-    icon: 'password',
-    description: 'Password field with visibility toggle',
-    defaultProps: { label: 'Password', placeholder: '', required: true, showForgotPassword: true },
-    allowedProps: ['label', 'placeholder', 'required', 'showForgotPassword'],
-    styles: [],
-  },
-  {
     type: 'button',
     label: 'Button',
     icon: 'button',
@@ -673,31 +670,6 @@ export const COMPONENT_DEFINITIONS: ComponentDefinition[] = [
     styles: [
       { property: 'backgroundColor', label: 'Background', type: 'color' },
       { property: 'borderColor', label: 'Border', type: 'color' },
-    ],
-  },
-  {
-    type: 'link',
-    label: 'Link',
-    icon: 'link',
-    description: 'Clickable text link',
-    defaultProps: { text: '', href: '', alignment: 'center' },
-    allowedProps: ['text', 'href', 'alignment', 'newTab'],
-    styles: [
-      { property: 'color', label: 'Color', type: 'color' },
-      { property: 'fontSize', label: 'Font Size', type: 'text' },
-    ],
-  },
-  {
-    type: 'card',
-    label: 'Card',
-    icon: 'card',
-    description: 'Container card with shadow',
-    defaultProps: { padding: 'medium' },
-    allowedProps: ['padding', 'shadow', 'bordered'],
-    styles: [
-      { property: 'backgroundColor', label: 'Background', type: 'color' },
-      { property: 'borderRadius', label: 'Border Radius', type: 'text', unit: 'px' },
-      { property: 'padding', label: 'Padding', type: 'number', unit: 'px', min: 0, max: 48 },
     ],
   },
   {
@@ -786,5 +758,14 @@ export const COMPONENT_DEFINITIONS: ComponentDefinition[] = [
     styles: [
       { property: 'color', label: 'Color', type: 'color' },
     ],
+  },
+  {
+    type: 'footer',
+    label: 'Footer',
+    icon: 'layout-footer',
+    description: 'Footer with legal links',
+    defaultProps: { showPrivacyPolicy: false, showTermsOfService: false, customText: '' },
+    allowedProps: ['showPrivacyPolicy', 'showTermsOfService', 'customText'],
+    styles: [],
   },
 ];

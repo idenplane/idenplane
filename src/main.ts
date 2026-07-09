@@ -1,15 +1,16 @@
-import { NestFactory } from '@nestjs/core';
 import { ValidationPipe, VersioningType } from '@nestjs/common';
-import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
+import { NestFactory } from '@nestjs/core';
 import type { NestExpressApplication } from '@nestjs/platform-express';
-import { Logger } from 'nestjs-pino';
-import helmet from 'helmet';
+import { DocumentBuilder, SwaggerModule } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
+import helmet from 'helmet';
+import { Logger } from 'nestjs-pino';
 import { join } from 'path';
 import { AppModule } from './app.module.js';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter.js';
-import { registerHandlebarsHelpers } from './theme/handlebars-helpers.js';
 import { CorsOriginService } from './cors/cors-origin.service.js';
+import { NormalizeRoleBodyPipe } from './roles/pipes/normalize-role-body.pipe.js';
+import { registerHandlebarsHelpers } from './theme/handlebars-helpers.js';
 
 /** Known-insecure / placeholder values that must never reach production. */
 const INSECURE_ADMIN_API_KEY_VALUES = new Set([
@@ -78,6 +79,14 @@ async function bootstrap() {
   });
 
   app.useLogger(app.get(Logger));
+
+  // ── Body parser limits ──────────────────────────────────────────────────────
+  // The default Express JSON limit is 100kb, which is too small for theme
+  // builder payloads: themes can embed base64-encoded logos/backgrounds and
+  // large component trees, so saving or publishing a draft would fail with
+  // `PayloadTooLargeError: request entity too large`. Raise the limit to 10mb.
+  app.useBodyParser('json', { limit: '10mb' });
+  app.useBodyParser('urlencoded', { limit: '10mb', extended: true });
 
   // ── CORS — must be enabled before any other middleware so that OPTIONS
   // preflight requests are handled immediately and never fall through to
@@ -195,7 +204,9 @@ async function bootstrap() {
             "'unsafe-inline'",
             'https://fonts.googleapis.com',
           ],
-          fontSrc: ["'self'", 'https://fonts.gstatic.com'],
+          // 'data:' allows the admin-ui Vite bundle's inlined woff2 font,
+          // which is emitted as a data: URI (mirrors imgSrc below).
+          fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
           imgSrc: ["'self'", 'data:', 'blob:'],
           connectSrc: ["'self'"],
           formAction: ["'self'"],
@@ -262,7 +273,12 @@ async function bootstrap() {
   // Register theme engine Handlebars helpers ({{msg}}, {{msgArgs}})
   registerHandlebarsHelpers();
 
+  // NormalizeRoleBodyPipe MUST be registered before ValidationPipe so that
+  // bare-array Keycloak-style bodies (e.g. [{ name: "admin" }]) are reshaped
+  // to { roleNames: [...] } before ValidationPipe rejects them.
+  // The pipe's metatype guard ensures it only activates for AssignRolesDto params.
   app.useGlobalPipes(
+    new NormalizeRoleBodyPipe(),
     new ValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,

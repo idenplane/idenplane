@@ -1,13 +1,13 @@
-import apiClient from './client';
 import type {
   Theme,
-  ThemeVersion,
-  ThemeTemplate,
-  ThemeStyles,
-  ThemeComponent,
   ThemeAssets,
+  ThemeComponent,
   ThemeSettings,
+  ThemeStyles,
+  ThemeTemplate,
+  ThemeVersion,
 } from '../types/theme';
+import apiClient from './client';
 
 export interface CreateThemePayload {
   name: string;
@@ -20,7 +20,11 @@ export interface CreateThemePayload {
 }
 
 export interface UpdateThemePayload {
+  /** Human-readable theme name shown in the builder and theme list. */
+  displayName?: string;
   description?: string;
+  /** Theme scope: login page, account console, email templates, or full. */
+  themeType?: 'login' | 'account' | 'email' | 'full';
   styles?: Partial<ThemeStyles>;
   components?: ThemeComponent[];
   assets?: Partial<ThemeAssets>;
@@ -75,7 +79,7 @@ export async function updateTheme(
   id: string,
   payload: UpdateThemePayload,
 ): Promise<Theme> {
-  const { data } = await apiClient.patch<Theme>(
+  const { data } = await apiClient.put<Theme>(
     `/realms/${realmName}/themes/${id}`,
     payload,
   );
@@ -144,10 +148,10 @@ export async function getThemeVersions(
 export async function rollbackTheme(
   realmName: string,
   id: string,
-  versionId: string,
+  version: number,
 ): Promise<Theme> {
   const { data } = await apiClient.post<Theme>(
-    `/realms/${realmName}/themes/${id}/rollback/${versionId}`,
+    `/realms/${realmName}/themes/${id}/restore/${version}`,
   );
   return data;
 }

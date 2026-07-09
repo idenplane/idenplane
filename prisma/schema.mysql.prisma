@@ -51,6 +51,9 @@ model Realm {
   smtpFrom     String?  @map("smtp_from")
   smtpSecure   Boolean  @default(false) @map("smtp_secure")
 
+  emailProvider       String  @default("smtp") @map("email_provider")
+  emailProviderConfig Json?   @map("email_provider_config")
+
   // Password policies
   passwordMinLength           Int     @default(8)    @map("password_min_length")
   passwordRequireUppercase    Boolean @default(false) @map("password_require_uppercase")

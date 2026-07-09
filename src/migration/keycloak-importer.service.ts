@@ -39,8 +39,7 @@ export class KeycloakImporterService {
       typeof data.realm === 'string'
         ? data.realm
         : (((data.realm as unknown as Record<string, unknown>)['realm'] as
-            | string
-            | undefined) ?? String(data.realm));
+            string | undefined) ?? String(data.realm));
     const realmName = options.targetRealm ?? exportRealmName;
 
     if (options.dryRun) {
@@ -190,8 +189,7 @@ export class KeycloakImporterService {
         typeof data.realm === 'string'
           ? data.realm
           : (((data.realm as unknown as Record<string, unknown>)['realm'] as
-              | string
-              | undefined) ?? String(data.realm));
+              string | undefined) ?? String(data.realm));
       if (
         [
           'offline_access',

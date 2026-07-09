@@ -167,8 +167,7 @@ export class SamlIdpController {
 
     // Check if the user already has an active login session
     const sessionToken = req.cookies?.['IDENPLANE_SESSION'] as
-      | string
-      | undefined;
+      string | undefined;
     if (sessionToken) {
       const user = await this.loginService.validateLoginSession(
         realm,

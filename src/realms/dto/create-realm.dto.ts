@@ -3,13 +3,22 @@ import {
   IsOptional,
   IsBoolean,
   IsInt,
+  IsNumber,
   IsArray,
+  IsEnum,
   IsObject,
   Min,
+  Max,
   MinLength,
   Matches,
+  ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
+import {
+  EmailProviderType,
+  EmailProviderConfigDto,
+} from '../../email/dto/email-config.dto.js';
 
 export class CreateRealmDto {
   @ApiProperty({ example: 'my-app' })
@@ -70,6 +79,25 @@ export class CreateRealmDto {
   @IsOptional()
   @IsBoolean()
   smtpSecure?: boolean;
+
+  @ApiPropertyOptional({
+    description: 'Email provider to use',
+    enum: EmailProviderType,
+    default: EmailProviderType.SMTP,
+  })
+  @IsOptional()
+  @IsEnum(EmailProviderType)
+  emailProvider?: EmailProviderType;
+
+  @ApiPropertyOptional({
+    description: 'Provider-specific email configuration',
+    type: EmailProviderConfigDto,
+  })
+  @IsOptional()
+  @IsObject()
+  @ValidateNested()
+  @Type(() => EmailProviderConfigDto)
+  emailProviderConfig?: EmailProviderConfigDto;
 
   // Password policies
   @ApiPropertyOptional({ default: 8 })
@@ -514,8 +542,62 @@ export class CreateRealmDto {
     description: 'Minimum score threshold for reCAPTCHA v3 (0-1)',
   })
   @IsOptional()
+  @IsNumber()
+  @Min(0)
+  @Max(1)
+  captchaScoreThreshold?: number;
+
+  // SCIM provisioning
+  @ApiPropertyOptional({
+    default: false,
+    description: 'Enable SCIM provisioning for this realm',
+  })
+  @IsOptional()
+  @IsBoolean()
+  scimEnabled?: boolean;
+
+  @ApiPropertyOptional({
+    default: true,
+    description: 'Automatically create users on SCIM provision if they do not exist',
+  })
+  @IsOptional()
+  @IsBoolean()
+  scimUserAutocreate?: boolean;
+
+  @ApiPropertyOptional({
+    default: true,
+    description: 'Sync SCIM group membership changes to realm groups',
+  })
+  @IsOptional()
+  @IsBoolean()
+  scimGroupSyncEnabled?: boolean;
+
+  // Event retention
+  @ApiPropertyOptional({
+    default: 30,
+    description: 'Number of days to retain login event records',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  loginEventRetentionDays?: number;
+
+  @ApiPropertyOptional({
+    default: 90,
+    description: 'Number of days to retain admin event records',
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  adminEventRetentionDays?: number;
+
+  // User lifecycle
+  @ApiPropertyOptional({
+    default: 14,
+    description: 'Grace period in days before a soft-deleted user account is permanently removed',
+  })
+  @IsOptional()
   @IsInt()
   @Min(0)
-  @Min(1)
-  captchaScoreThreshold?: number;
+  deletionGracePeriodDays?: number;
 }

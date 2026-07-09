@@ -105,8 +105,7 @@ export class LoginController {
   /** Throw `ForbiddenException` when the double-submit CSRF token is invalid. */
   private validateCsrf(realm: Realm, body: object, req: Request): void {
     const bodyToken = (body as Record<string, unknown>)['_csrf'] as
-      | string
-      | undefined;
+      string | undefined;
     const cookieToken = (req.cookies as Record<string, string | undefined>)?.[
       this.csrfService.cookieName(realm.name)
     ];
