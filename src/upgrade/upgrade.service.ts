@@ -1,4 +1,4 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { ConflictException, Injectable, Logger } from '@nestjs/common';
 import { execFileSync } from 'child_process';
 import { PreUpgradeValidatorService } from './pre-upgrade-validator.service.js';
 import {
@@ -108,10 +108,53 @@ export class UpgradeService {
    */
   async upgrade(
     toVersion: string,
-    options: { dryRun?: boolean; force?: boolean; initiatedBy?: string } = {},
+    options: {
+      dryRun?: boolean;
+      force?: boolean;
+      initiatedBy?: string;
+      note?: string;
+      ipAddress?: string;
+    } = {},
+  ): Promise<UpgradeResult> {
+    // Two guards against concurrent upgrades, because two processes running
+    // `prisma migrate deploy` against one database is a corruption scenario,
+    // not merely a race. docker-compose.cluster.yml runs two app replicas and
+    // the Helm chart supports autoscaling, so this is a real configuration.
+    //
+    // A dry run writes nothing, so it is exempt.
+    if (options.dryRun) {
+      return this.runUpgrade(toVersion, options);
+    }
+
+    await this.assertNoUpgradeInProgress(toVersion);
+
+    // finally, not a reset at each return site: runUpgrade has a dozen exit
+    // paths and a missed one would wedge this instance until it restarts.
+    try {
+      return await this.runUpgrade(toVersion, options);
+    } finally {
+      this.inFlight = false;
+    }
+  }
+
+  private async runUpgrade(
+    toVersion: string,
+    options: {
+      dryRun?: boolean;
+      force?: boolean;
+      initiatedBy?: string;
+      note?: string;
+      ipAddress?: string;
+    },
   ): Promise<UpgradeResult> {
     const startTime = Date.now();
-    const { dryRun = false, force = false, initiatedBy = 'CLI' } = options;
+    const {
+      dryRun = false,
+      force = false,
+      initiatedBy = 'CLI',
+      note,
+      ipAddress,
+    } = options;
     const upgradeId = this.generateUpgradeId();
     const stages: UpgradeStageResult[] = [];
 
@@ -122,7 +165,11 @@ export class UpgradeService {
     // Stage 1: Initialization
     const initResult = await this.executeStage(
       UpgradeStage.INITIALIZATION,
-      () => this.initializeUpgrade(upgradeId, toVersion, initiatedBy, dryRun),
+      () =>
+        this.initializeUpgrade(upgradeId, toVersion, initiatedBy, dryRun, {
+          note,
+          ipAddress,
+        }),
     );
     stages.push(initResult);
 
@@ -473,6 +520,56 @@ export class UpgradeService {
   }
 
   /**
+   * Refuse to start when another upgrade is already running.
+   *
+   * Two layers, because they fail differently:
+   *
+   *   1. An in-process flag catches a double-submit against this instance,
+   *      which the database check cannot: the losing request may arrive before
+   *      the winner's audit row is committed.
+   *   2. An IN_PROGRESS audit row catches a second *instance* — the case that
+   *      actually matters, since docker-compose.cluster.yml runs two replicas.
+   *
+   * Deliberately not pg_advisory_lock: a session-level advisory lock needs a
+   * pinned connection, which the PrismaPg pool does not guarantee, and the
+   * transaction-scoped variant would have to wrap the entire upgrade — which
+   * would deadlock against `prisma migrate deploy`.
+   *
+   * The TTL exists because a process killed mid-upgrade leaves its row
+   * IN_PROGRESS forever, and a stale row must not permanently wedge the
+   * endpoint. It is bounded rather than absent so a genuinely running upgrade
+   * is not overrun.
+   */
+  private static readonly IN_PROGRESS_TTL_MS = 2 * 60 * 60 * 1000;
+  private inFlight = false;
+
+  private async assertNoUpgradeInProgress(toVersion: string): Promise<void> {
+    if (this.inFlight) {
+      throw new ConflictException(
+        'An upgrade is already running on this instance.',
+      );
+    }
+
+    const cutoff = new Date(Date.now() - UpgradeService.IN_PROGRESS_TTL_MS);
+    const running = await this.prisma.upgradeAuditLog.findFirst({
+      where: { status: 'IN_PROGRESS', startedAt: { gte: cutoff } },
+      orderBy: { startedAt: 'desc' },
+    });
+
+    if (running) {
+      throw new ConflictException(
+        `An upgrade to ${running.toVersion} started at ` +
+          `${running.startedAt.toISOString()} is still in progress ` +
+          `(id ${running.id}). Refusing to start an upgrade to ${toVersion} ` +
+          'concurrently — two migrations against one database can corrupt it. ' +
+          'If that upgrade is known to have died, mark its row FAILED.',
+      );
+    }
+
+    this.inFlight = true;
+  }
+
+  /**
    * Initialize a new upgrade operation and record it in the audit log.
    */
   private async initializeUpgrade(
@@ -480,6 +577,7 @@ export class UpgradeService {
     toVersion: string,
     initiatedBy: string,
     dryRun: boolean,
+    meta: { note?: string; ipAddress?: string } = {},
   ): Promise<{ success: boolean; message: string }> {
     try {
       const currentVersion = this.getCurrentVersion();
@@ -492,10 +590,15 @@ export class UpgradeService {
           status: 'IN_PROGRESS',
           startedAt: new Date(),
           initiatedBy,
+          // Schema column that has existed since the table was created and was
+          // never written. Who ran an upgrade and from where is exactly what an
+          // audit log of a destructive operation is for.
+          ipAddress: meta.ipAddress ?? null,
           dryRun,
           details: {
             dryRun,
             initiatedBy,
+            ...(meta.note ? { note: meta.note } : {}),
           },
         },
       });

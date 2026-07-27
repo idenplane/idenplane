@@ -109,7 +109,64 @@ describe('RollbackService', () => {
     });
   });
 
+  describe('live-restore gating', () => {
+    // Restoring over the database this process is connected to needs its own
+    // opt-in: pg_restore --clean takes ACCESS EXCLUSIVE locks that conflict
+    // with any query another replica is running.
+    it('refuses when UPGRADE_ALLOW_LIVE_RESTORE is not set', async () => {
+      delete process.env.UPGRADE_ALLOW_LIVE_RESTORE;
+      mockPrisma.upgradeAuditLog.findFirst.mockResolvedValue({
+        id: 'upg-1',
+        backupPath: '/backups/x.dump',
+        status: 'COMPLETED',
+      });
+
+      const result = await rollbackService.executeRollback();
+
+      expect(result.success).toBe(false);
+      expect(result.error).toMatch(/UPGRADE_ALLOW_LIVE_RESTORE/);
+      expect(mockDatabaseBackupService.restoreBackup).not.toHaveBeenCalled();
+    });
+
+    it('returns the manual pg_restore command so the refusal is actionable', async () => {
+      delete process.env.UPGRADE_ALLOW_LIVE_RESTORE;
+      mockPrisma.upgradeAuditLog.findFirst.mockResolvedValue({
+        id: 'upg-1',
+        backupPath: '/backups/idenplane-backup-x.dump',
+        status: 'COMPLETED',
+      });
+
+      const result = await rollbackService.executeRollback();
+
+      expect(result.error).toContain('pg_restore');
+      expect(result.error).toContain('/backups/idenplane-backup-x.dump');
+      expect(result.error).toContain('--single-transaction');
+    });
+
+    it.each(['false', '1', 'yes', 'TRUE'])(
+      'refuses when the flag is %s rather than exactly "true"',
+      async (value) => {
+        process.env.UPGRADE_ALLOW_LIVE_RESTORE = value;
+        mockPrisma.upgradeAuditLog.findFirst.mockResolvedValue(null);
+
+        const result = await rollbackService.executeRollback();
+
+        expect(result.success).toBe(false);
+        expect(mockDatabaseBackupService.restoreBackup).not.toHaveBeenCalled();
+      },
+    );
+  });
+
   describe('executeRollback', () => {
+    // These exercise the restore path itself, so the gate is opened.
+    beforeEach(() => {
+      process.env.UPGRADE_ALLOW_LIVE_RESTORE = 'true';
+    });
+
+    afterEach(() => {
+      delete process.env.UPGRADE_ALLOW_LIVE_RESTORE;
+    });
+
     it('should successfully execute rollback when backup exists', async () => {
       const now = new Date();
 

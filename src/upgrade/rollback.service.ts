@@ -106,11 +106,72 @@ export class RollbackService {
    * @param upgradeId The ID of the upgrade to roll back (optional, defaults to most recent)
    * @returns RollbackResult with the outcome of the rollback operation
    */
+  /**
+   * The pg_restore invocation an operator would run by hand, with the archive
+   * this rollback would have used. Returned in the refusal so the 409 is
+   * actionable rather than merely a "no".
+   */
+  private async buildManualRestoreHint(upgradeId?: string): Promise<string> {
+    try {
+      const upgrade = upgradeId
+        ? await this.prisma.upgradeAuditLog.findUnique({
+            where: { id: upgradeId },
+          })
+        : await this.prisma.upgradeAuditLog.findFirst({
+            where: { status: 'COMPLETED' },
+            orderBy: { completedAt: 'desc' },
+          });
+
+      const archive = upgrade?.backupPath ?? upgrade?.backupId;
+      if (!archive) {
+        return '  (no backup is recorded for that upgrade — nothing to restore)';
+      }
+
+      return (
+        `  pg_restore --clean --if-exists --no-owner --no-privileges \\\n` +
+        `    --single-transaction --exit-on-error \\\n` +
+        `    -d "$DATABASE_URL" ${archive}`
+      );
+    } catch {
+      return '  (could not determine the backup archive for that upgrade)';
+    }
+  }
+
   async executeRollback(upgradeId?: string): Promise<RollbackResult> {
     const startTime = Date.now();
     const timestamp = new Date();
 
     this.logger.log('Starting upgrade rollback process');
+
+    // Restoring into the database this process is connected to is gated
+    // separately from UPGRADE_API_ENABLED, because it is a strictly harder
+    // operation than running migrations:
+    //
+    //   pg_restore --clean issues DROP TABLE for every object in the archive.
+    //   Those DROPs need ACCESS EXCLUSIVE locks, which conflict with any query
+    //   another replica is running. With more than one replica up, the restore
+    //   blocks — and once it does get the lock, the other replicas are talking
+    //   to a schema being dropped and recreated underneath them.
+    //
+    // Scaling to a single replica first is a deployment decision this service
+    // cannot make or verify, so the default is to refuse and hand the operator
+    // the exact command instead of half-performing it.
+    if (process.env.UPGRADE_ALLOW_LIVE_RESTORE !== 'true') {
+      const manual = await this.buildManualRestoreHint(upgradeId);
+      this.logger.warn(
+        'Rollback refused: UPGRADE_ALLOW_LIVE_RESTORE is not enabled',
+      );
+      return {
+        success: false,
+        timestamp,
+        error:
+          'Live database restore is disabled. Restoring over a running ' +
+          'database requires exclusive locks that conflict with other ' +
+          'replicas. Scale to a single instance, then either set ' +
+          'UPGRADE_ALLOW_LIVE_RESTORE=true or run the restore manually:\n' +
+          manual,
+      };
+    }
 
     try {
       // Find the upgrade to roll back

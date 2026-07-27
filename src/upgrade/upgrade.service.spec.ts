@@ -23,6 +23,7 @@ jest.mock('child_process', () => ({
   execFileSync: jest.fn(),
 }));
 
+import { ConflictException } from '@nestjs/common';
 import { UpgradeService, UpgradeStage } from './upgrade.service.js';
 import { PreUpgradeValidatorService } from './pre-upgrade-validator.service.js';
 import {
@@ -70,6 +71,11 @@ describe('UpgradeService', () => {
 
     // Mock execSync for getCurrentVersion
     (execSync as jest.Mock).mockReturnValue('2.0.0');
+
+    // No upgrade in flight by default. jest.clearAllMocks() clears calls but
+    // NOT implementations, so without this a single-flight test that stubs an
+    // IN_PROGRESS row would leak that row into every test after it.
+    mockPrisma.upgradeAuditLog.findFirst.mockResolvedValue(null);
 
     upgradeService = new UpgradeService(
       mockPrisma as any,
@@ -227,6 +233,109 @@ describe('UpgradeService', () => {
             }),
           }),
         );
+      });
+    });
+
+    describe('single-flight', () => {
+      // Two processes running `prisma migrate deploy` against one database is a
+      // corruption scenario, not merely a race — and docker-compose.cluster.yml
+      // runs two app replicas, so this is a real configuration, not a theory.
+      const arrangeHealthyRun = () => {
+        mockPreUpgradeValidator.validate.mockResolvedValue({
+          canProceed: true,
+          checks: [],
+          summary: { passed: 8, warnings: 0, failures: 0 },
+        });
+        mockConfigCompatibility.checkCompatibility.mockResolvedValue({
+          compatible: true,
+          version: '2.1.0',
+          issues: [],
+          summary: { errors: 0, warnings: 0 },
+        });
+        mockUpgradeHealthService.checkHealth.mockResolvedValue({
+          healthy: true,
+          version: '2.1.0',
+          checks: [],
+          summary: { passed: 7, warnings: 0, failures: 0 },
+        });
+        mockDatabaseBackupService.createBackup.mockReturnValue({
+          success: true,
+          backupPath: '/backups/x.dump',
+          backupSize: '1 MB',
+          timestamp: new Date(),
+        } as BackupResult);
+        mockPrisma.upgradeAuditLog.create.mockResolvedValue({ id: 'upg-1' });
+        mockPrisma.upgradeAuditLog.update.mockResolvedValue({ id: 'upg-1' });
+        // runDatabaseMigration reads the child process output.
+        (execFileSync as jest.Mock).mockReturnValue('Migration applied');
+      };
+
+      it('refuses when another instance has an upgrade IN_PROGRESS', async () => {
+        arrangeHealthyRun();
+        mockPrisma.upgradeAuditLog.findFirst.mockResolvedValue({
+          id: 'upg-running',
+          toVersion: '2.1.0',
+          status: 'IN_PROGRESS',
+          startedAt: new Date(),
+        });
+
+        await expect(upgradeService.upgrade('2.1.0')).rejects.toThrow(
+          ConflictException,
+        );
+        expect(mockPrisma.upgradeAuditLog.create).not.toHaveBeenCalled();
+      });
+
+      it('ignores a stale IN_PROGRESS row past the TTL', async () => {
+        // A process killed mid-upgrade leaves its row IN_PROGRESS forever; a
+        // stale row must not wedge the endpoint permanently.
+        arrangeHealthyRun();
+        mockPrisma.upgradeAuditLog.findFirst.mockResolvedValue(null);
+
+        const result = await upgradeService.upgrade('2.1.0');
+
+        expect(result.success).toBe(true);
+        // The TTL is expressed as a startedAt lower bound in the query.
+        expect(mockPrisma.upgradeAuditLog.findFirst).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({
+              status: 'IN_PROGRESS',
+              startedAt: { gte: expect.any(Date) },
+            }),
+          }),
+        );
+      });
+
+      it('releases the in-process lock after a failed run', async () => {
+        // If the flag leaked on the failure path, this instance would refuse
+        // every subsequent upgrade until it restarted.
+        arrangeHealthyRun();
+        mockPrisma.upgradeAuditLog.findFirst.mockResolvedValue(null);
+        mockDatabaseBackupService.createBackup.mockReturnValueOnce({
+          success: false,
+          error: 'disk full',
+          timestamp: new Date(),
+        } as BackupResult);
+
+        const first = await upgradeService.upgrade('2.1.0');
+        expect(first.success).toBe(false);
+
+        // Second attempt must be admitted, not rejected by a stuck flag.
+        const second = await upgradeService.upgrade('2.1.0');
+        expect(second.success).toBe(true);
+      });
+
+      it('exempts dry runs from the lock', async () => {
+        arrangeHealthyRun();
+        mockPrisma.upgradeAuditLog.findFirst.mockResolvedValue({
+          id: 'upg-running',
+          toVersion: '2.1.0',
+          status: 'IN_PROGRESS',
+          startedAt: new Date(),
+        });
+
+        const result = await upgradeService.upgrade('2.1.0', { dryRun: true });
+
+        expect(result.success).toBe(true);
       });
     });
 

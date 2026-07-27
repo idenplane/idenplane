@@ -1,3 +1,4 @@
+import { BadRequestException } from '@nestjs/common';
 import { UpgradeController } from './upgrade.controller.js';
 import {
   UpgradeService,
@@ -68,52 +69,86 @@ describe('UpgradeController', () => {
   });
 
   describe('startUpgrade', () => {
-    it('should call upgradeService.upgrade with correct parameters', async () => {
-      const mockResult: UpgradeResult = {
-        success: true,
-        upgradeId: 'upg-123',
-        toVersion: '2.1.0',
-        stages: [],
-        rollbackTriggered: false,
-        duration: 5000,
-      };
+    const req = (userId = 'admin-42') =>
+      ({
+        adminUser: { userId, roles: ['super-admin'] },
+        headers: {},
+        socket: { remoteAddress: '10.1.2.3' },
+      }) as never;
 
+    const mockResult: UpgradeResult = {
+      success: true,
+      upgradeId: 'upg-123',
+      toVersion: '2.1.0',
+      stages: [],
+      rollbackTriggered: false,
+      duration: 5000,
+    };
+
+    it('passes the request through on a dry run without requiring confirm', async () => {
       mockUpgradeService.upgrade.mockResolvedValue(mockResult);
 
-      const result = await controller.startUpgrade({
-        toVersion: '2.1.0',
-        dryRun: true,
-        force: false,
-        initiatedBy: 'Test',
-      });
+      const result = await controller.startUpgrade(
+        { toVersion: '2.1.0', dryRun: true, force: false },
+        req(),
+      );
 
-      expect(mockUpgradeService.upgrade).toHaveBeenCalledWith('2.1.0', {
-        dryRun: true,
-        force: false,
-        initiatedBy: 'Test',
-      });
+      expect(mockUpgradeService.upgrade).toHaveBeenCalledWith(
+        '2.1.0',
+        expect.objectContaining({ dryRun: true, force: false }),
+      );
       expect(result).toEqual(mockResult);
     });
 
-    it('should use defaults when optional parameters not provided', async () => {
-      const mockResult: UpgradeResult = {
-        success: true,
-        toVersion: '2.1.0',
-        stages: [],
-        rollbackTriggered: false,
-        duration: 5000,
-      };
+    // A dry run writes nothing, so prompting there would only train operators
+    // to type past the prompt that matters.
+    it('requires confirm to equal toVersion for a real upgrade', async () => {
+      await expect(
+        controller.startUpgrade({ toVersion: '2.1.0' }, req()),
+      ).rejects.toThrow(BadRequestException);
 
+      await expect(
+        controller.startUpgrade(
+          { toVersion: '2.1.0', confirm: '2.1.1' },
+          req(),
+        ),
+      ).rejects.toThrow(BadRequestException);
+
+      expect(mockUpgradeService.upgrade).not.toHaveBeenCalled();
+    });
+
+    it('proceeds when confirm matches', async () => {
       mockUpgradeService.upgrade.mockResolvedValue(mockResult);
 
-      const result = await controller.startUpgrade({ toVersion: '2.1.0' });
+      await controller.startUpgrade(
+        { toVersion: '2.1.0', confirm: '2.1.0' },
+        req(),
+      );
 
-      expect(mockUpgradeService.upgrade).toHaveBeenCalledWith('2.1.0', {
-        dryRun: false,
-        force: false,
-        initiatedBy: 'API',
-      });
-      expect(result).toEqual(mockResult);
+      expect(mockUpgradeService.upgrade).toHaveBeenCalled();
+    });
+
+    // An audit trail the caller can write for itself is not an audit trail.
+    it('takes the actor from the authenticated principal, not the body', async () => {
+      mockUpgradeService.upgrade.mockResolvedValue(mockResult);
+
+      await controller.startUpgrade(
+        {
+          toVersion: '2.1.0',
+          confirm: '2.1.0',
+          note: 'ticket OPS-1',
+        },
+        req('real-admin'),
+      );
+
+      expect(mockUpgradeService.upgrade).toHaveBeenCalledWith(
+        '2.1.0',
+        expect.objectContaining({
+          initiatedBy: 'real-admin',
+          note: 'ticket OPS-1',
+          ipAddress: expect.any(String),
+        }),
+      );
     });
   });
 
@@ -266,6 +301,25 @@ describe('UpgradeController', () => {
   });
 
   describe('executeRollback', () => {
+    const rollbackReq = () =>
+      ({
+        adminUser: { userId: 'admin-42', roles: ['super-admin'] },
+        headers: {},
+        socket: { remoteAddress: '10.1.2.3' },
+      }) as never;
+
+    // The literal string, not a boolean: a stray `confirm: true` from a
+    // hand-written client must not restore a dump over the live database.
+    it('requires confirm to be exactly "ROLLBACK"', async () => {
+      for (const confirm of ['', 'rollback', 'yes', 'ROLLBACK ']) {
+        await expect(
+          controller.executeRollback({ confirm }, rollbackReq()),
+        ).rejects.toThrow(BadRequestException);
+      }
+
+      expect(mockRollbackService.executeRollback).not.toHaveBeenCalled();
+    });
+
     it('should execute rollback for specific upgrade', async () => {
       const mockResult: RollbackResult = {
         success: true,
@@ -278,7 +332,10 @@ describe('UpgradeController', () => {
 
       mockRollbackService.executeRollback.mockResolvedValue(mockResult);
 
-      const result = await controller.executeRollback({ upgradeId: 'upg-123' });
+      const result = await controller.executeRollback(
+        { upgradeId: 'upg-123', confirm: 'ROLLBACK' },
+        rollbackReq(),
+      );
 
       expect(mockRollbackService.executeRollback).toHaveBeenCalledWith(
         'upg-123',
@@ -298,7 +355,10 @@ describe('UpgradeController', () => {
 
       mockRollbackService.executeRollback.mockResolvedValue(mockResult);
 
-      const result = await controller.executeRollback({});
+      const result = await controller.executeRollback(
+        { confirm: 'ROLLBACK' },
+        rollbackReq(),
+      );
 
       expect(mockRollbackService.executeRollback).toHaveBeenCalledWith(
         undefined,
@@ -315,7 +375,10 @@ describe('UpgradeController', () => {
 
       mockRollbackService.executeRollback.mockResolvedValue(mockResult);
 
-      const result = await controller.executeRollback({ upgradeId: 'upg-123' });
+      const result = await controller.executeRollback(
+        { upgradeId: 'upg-123', confirm: 'ROLLBACK' },
+        rollbackReq(),
+      );
 
       expect(result.success).toBe(false);
       expect(result.error).toBe('Backup file not found');
