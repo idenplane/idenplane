@@ -47,7 +47,17 @@ export interface UpgradeResult {
   toVersion: string;
   stages: UpgradeStageResult[];
   backupResult?: BackupResult;
+  /**
+   * A rollback was attempted. Says nothing about whether it worked — read
+   * `rollbackSucceeded` for that.
+   *
+   * This previously meant "a rollback succeeded", so a rollback that ran and
+   * failed reported `false` and was indistinguishable from one that never
+   * happened. That is the case an operator most needs to tell apart.
+   */
   rollbackTriggered: boolean;
+  /** Whether the attempted rollback completed. Undefined if none was attempted. */
+  rollbackSucceeded?: boolean;
   duration: number;
   error?: string;
 }
@@ -116,16 +126,33 @@ export class UpgradeService {
       ipAddress?: string;
     } = {},
   ): Promise<UpgradeResult> {
-    // Two guards against concurrent upgrades, because two processes running
-    // `prisma migrate deploy` against one database is a corruption scenario,
-    // not merely a race. docker-compose.cluster.yml runs two app replicas and
-    // the Helm chart supports autoscaling, so this is a real configuration.
-    //
-    // A dry run writes nothing, so it is exempt.
+    // A dry run writes nothing, so neither precondition below applies to it.
     if (options.dryRun) {
       return this.runUpgrade(toVersion, options);
     }
 
+    // Do not start what cannot be undone.
+    //
+    // Rolling back restores a dump over the live database, which is gated
+    // separately by UPGRADE_ALLOW_LIVE_RESTORE. Without that gate open the
+    // automatic rollback fails too — so an upgrade would migrate the database,
+    // fail its health check, and then find it has no way back. That is strictly
+    // worse than not starting: the operator ends up with a modified database
+    // and no recovery, having been told nothing beforehand.
+    //
+    // Checked here rather than in pre-validation because it is a property of
+    // the requested operation, not of the host: pre-validation answers "is this
+    // system healthy", this answers "is this action recoverable". force remains
+    // the documented escape hatch for an operator who takes backups by other
+    // means, and is already logged at error level by the controller.
+    if (!options.force) {
+      this.assertRollbackAvailable();
+    }
+
+    // Two guards against concurrent upgrades, because two processes running
+    // `prisma migrate deploy` against one database is a corruption scenario,
+    // not merely a race. docker-compose.cluster.yml runs two app replicas and
+    // the Helm chart supports autoscaling, so this is a real configuration.
     await this.assertNoUpgradeInProgress(toVersion);
 
     // finally, not a reset at each return site: runUpgrade has a dozen exit
@@ -543,6 +570,30 @@ export class UpgradeService {
   private static readonly IN_PROGRESS_TTL_MS = 2 * 60 * 60 * 1000;
   private inFlight = false;
 
+  /**
+   * Refuse an upgrade whose failure could not be undone.
+   *
+   * RollbackService declines to restore over the live database unless
+   * UPGRADE_ALLOW_LIVE_RESTORE is set. That check is right — a restore takes
+   * ACCESS EXCLUSIVE locks that conflict with other replicas — but it applies
+   * to the *automatic* rollback as well, so with only UPGRADE_API_ENABLED set
+   * an upgrade will migrate the database, fail, and then discover it has no way
+   * back. Found by rehearsing a failing upgrade against a real database.
+   */
+  private assertRollbackAvailable(): void {
+    if (process.env.UPGRADE_ALLOW_LIVE_RESTORE === 'true') {
+      return;
+    }
+
+    throw new ConflictException(
+      'Refusing to start: this upgrade could not be rolled back. Restoring a ' +
+        'backup over the running database requires UPGRADE_ALLOW_LIVE_RESTORE=true, ' +
+        'which is unset — so a failure after the migration would leave the database ' +
+        'modified with no automatic recovery. Scale to a single instance and set ' +
+        'that variable, or pass force to proceed without a recovery path.',
+    );
+  }
+
   private async assertNoUpgradeInProgress(toVersion: string): Promise<void> {
     if (this.inFlight) {
       throw new ConflictException(
@@ -883,6 +934,21 @@ export class UpgradeService {
   }
 
   /**
+   * Derive the rollback fields of an UpgradeResult from the stage list, so the
+   * two can never disagree about whether a rollback happened.
+   */
+  private static rollbackOutcome(stages: UpgradeStageResult[]): {
+    rollbackTriggered: boolean;
+    rollbackSucceeded?: boolean;
+  } {
+    const rollback = stages.find((s) => s.stage === UpgradeStage.ROLLBACK);
+
+    return rollback
+      ? { rollbackTriggered: true, rollbackSucceeded: rollback.success }
+      : { rollbackTriggered: false };
+  }
+
+  /**
    * Build a failure result object.
    */
   private buildFailureResult(
@@ -897,9 +963,7 @@ export class UpgradeService {
       upgradeId,
       toVersion,
       stages,
-      rollbackTriggered: stages.some(
-        (s) => s.stage === UpgradeStage.ROLLBACK && s.success,
-      ),
+      ...UpgradeService.rollbackOutcome(stages),
       duration: Date.now() - startTime,
       error: errorMessage,
     };

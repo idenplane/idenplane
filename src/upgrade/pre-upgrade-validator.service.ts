@@ -207,7 +207,40 @@ export class PreUpgradeValidatorService {
     const lines = output.split('\n');
     const pending: string[] = [];
 
-    for (const line of lines) {
+    // Prisma lists pending migrations as bare names under a heading:
+    //
+    //   Following migration have not yet been applied:
+    //   99990101000000_add_column
+    //
+    // Everything after that heading, up to the next blank line, is a migration
+    // name. The previous implementation looked for a `[ ]` checkbox marker,
+    // which Prisma does not emit — so it never matched, `pending` stayed empty,
+    // and the caller fell through to its "cannot determine status" branch and
+    // reported a hard FAILURE. That made canProceed false precisely when
+    // migrations were pending, i.e. in the only situation an upgrade is ever
+    // run: the operator's choice became "abandon" or "--force past every safety
+    // check". Found by rehearsing an upgrade against a database with a genuine
+    // pending migration.
+    let inPendingList = false;
+    for (const raw of lines) {
+      const line = raw.trim();
+
+      if (/have not yet been applied/i.test(line)) {
+        inPendingList = true;
+        continue;
+      }
+
+      if (inPendingList) {
+        // The list ends at the first blank line or prose sentence.
+        if (!line || /\s/.test(line)) {
+          inPendingList = false;
+          continue;
+        }
+        pending.push(line);
+        continue;
+      }
+
+      // Kept for any Prisma version that does use a checkbox form.
       const notApplied = line.match(/\[\s*\]\s+(\S+)/);
       if (notApplied) {
         pending.push(notApplied[1]);

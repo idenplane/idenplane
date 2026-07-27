@@ -142,6 +142,59 @@ describe('PreUpgradeValidatorService', () => {
   });
 
   describe('checkPendingMigrations', () => {
+    // Verbatim `prisma migrate status` output, captured from a real database
+    // with one pending migration during an upgrade rehearsal. The previous
+    // parser looked for a `[ ]` checkbox that Prisma does not emit, so it found
+    // nothing, fell through to the "cannot determine status" branch and
+    // reported a hard failure — making canProceed false in exactly the
+    // situation an upgrade exists for. The fixture is real output rather than
+    // invented text precisely so the parser cannot drift away from it again.
+    const REAL_PENDING_OUTPUT = [
+      'Loaded Prisma config from prisma.config.ts.',
+      '',
+      'Prisma schema loaded from prisma\\schema.prisma.',
+      'Datasource "db": PostgreSQL database "idenplane_rehearsal", schema "public" at "localhost:5432"',
+      '',
+      '45 migrations found in prisma/migrations',
+      'Following migration have not yet been applied:',
+      '99990101000000_rehearsal_add_column',
+      '',
+      'To apply migrations in development run prisma migrate dev.',
+      'To apply migrations in production run prisma migrate deploy.',
+    ].join('\n');
+
+    it('reports a pending migration as a warning, not a failure', () => {
+      (execSync as jest.Mock).mockImplementation(() => {
+        const err = new Error('exit 1') as NodeJS.ErrnoException & {
+          stdout: string;
+        };
+        err.stdout = REAL_PENDING_OUTPUT;
+        throw err;
+      });
+
+      const check = (validatorService as any).checkPendingMigrations();
+
+      expect(check.status).toBe('warn');
+      expect(check.message).toContain('1 pending migration');
+      expect(check.details).toContain('99990101000000_rehearsal_add_column');
+    });
+
+    it('does not swallow the prose that follows the list', () => {
+      (execSync as jest.Mock).mockImplementation(() => {
+        const err = new Error('exit 1') as NodeJS.ErrnoException & {
+          stdout: string;
+        };
+        err.stdout = REAL_PENDING_OUTPUT;
+        throw err;
+      });
+
+      const check = (validatorService as any).checkPendingMigrations();
+
+      // "To apply migrations in development run prisma migrate dev." must not
+      // be mistaken for a migration name.
+      expect(check.details).not.toMatch(/To apply|prisma migrate/);
+    });
+
     it('should return pass when no pending migrations', async () => {
       (execSync as jest.Mock).mockReturnValue('All migrations are up to date.');
 

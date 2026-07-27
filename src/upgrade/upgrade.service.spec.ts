@@ -77,6 +77,11 @@ describe('UpgradeService', () => {
     // IN_PROGRESS row would leak that row into every test after it.
     mockPrisma.upgradeAuditLog.findFirst.mockResolvedValue(null);
 
+    // A real upgrade now refuses to start unless it could be rolled back.
+    // These tests exercise the pipeline itself, so the precondition is
+    // satisfied; the tests that assert the refusal clear it explicitly.
+    process.env.UPGRADE_ALLOW_LIVE_RESTORE = 'true';
+
     upgradeService = new UpgradeService(
       mockPrisma as any,
       mockPreUpgradeValidator,
@@ -233,6 +238,84 @@ describe('UpgradeService', () => {
             }),
           }),
         );
+      });
+    });
+
+    describe('refuses an upgrade it could not undo', () => {
+      // Found by rehearsing a failing upgrade against a real database: with
+      // only UPGRADE_API_ENABLED set, the upgrade migrated the database, failed
+      // its health check, and then could not roll back — because restoring over
+      // a live database is gated separately. Starting was strictly worse than
+      // refusing.
+      const savedFlag = process.env.UPGRADE_ALLOW_LIVE_RESTORE;
+
+      afterEach(() => {
+        if (savedFlag === undefined)
+          delete process.env.UPGRADE_ALLOW_LIVE_RESTORE;
+        else process.env.UPGRADE_ALLOW_LIVE_RESTORE = savedFlag;
+      });
+
+      it('refuses before touching anything when live restore is disabled', async () => {
+        delete process.env.UPGRADE_ALLOW_LIVE_RESTORE;
+
+        await expect(upgradeService.upgrade('2.1.0')).rejects.toThrow(
+          ConflictException,
+        );
+        expect(mockPrisma.upgradeAuditLog.create).not.toHaveBeenCalled();
+        expect(mockDatabaseBackupService.createBackup).not.toHaveBeenCalled();
+      });
+
+      it('names the variable to set, so the refusal is actionable', async () => {
+        delete process.env.UPGRADE_ALLOW_LIVE_RESTORE;
+
+        await expect(upgradeService.upgrade('2.1.0')).rejects.toThrow(
+          /UPGRADE_ALLOW_LIVE_RESTORE/,
+        );
+      });
+
+      it('does not block a dry run, which has nothing to undo', async () => {
+        delete process.env.UPGRADE_ALLOW_LIVE_RESTORE;
+        mockPreUpgradeValidator.validate.mockResolvedValue({
+          canProceed: true,
+          checks: [],
+          summary: { passed: 8, warnings: 0, failures: 0 },
+        });
+        mockConfigCompatibility.checkCompatibility.mockResolvedValue({
+          compatible: true,
+          version: '2.1.0',
+          issues: [],
+          summary: { errors: 0, warnings: 0 },
+        });
+        mockUpgradeHealthService.checkHealth.mockResolvedValue({
+          healthy: true,
+          version: '2.1.0',
+          checks: [],
+          summary: { passed: 7, warnings: 0, failures: 0 },
+        });
+        mockPrisma.upgradeAuditLog.create.mockResolvedValue({ id: 'upg-1' });
+        mockPrisma.upgradeAuditLog.update.mockResolvedValue({ id: 'upg-1' });
+
+        const result = await upgradeService.upgrade('2.1.0', { dryRun: true });
+
+        expect(result.success).toBe(true);
+      });
+
+      it('lets force through — the documented escape hatch', async () => {
+        delete process.env.UPGRADE_ALLOW_LIVE_RESTORE;
+        mockPreUpgradeValidator.validate.mockResolvedValue({
+          canProceed: false,
+          checks: [],
+          summary: { passed: 0, warnings: 0, failures: 1 },
+        });
+        mockPrisma.upgradeAuditLog.create.mockResolvedValue({ id: 'upg-1' });
+        mockPrisma.upgradeAuditLog.update.mockResolvedValue({ id: 'upg-1' });
+        mockPrisma.upgradeAuditLog.findFirst.mockResolvedValue(null);
+
+        // Reaches the pipeline rather than being refused outright.
+        await expect(
+          upgradeService.upgrade('2.1.0', { force: true }),
+        ).resolves.toBeDefined();
+        expect(mockPrisma.upgradeAuditLog.create).toHaveBeenCalled();
       });
     });
 

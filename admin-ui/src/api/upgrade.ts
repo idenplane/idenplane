@@ -18,7 +18,10 @@ export interface UpgradeResult {
   fromVersion?: string;
   toVersion: string;
   stages: UpgradeStageResult[];
+  /** A rollback was attempted. Read `rollbackSucceeded` for whether it worked. */
   rollbackTriggered: boolean;
+  /** Whether the attempted rollback completed. Absent if none was attempted. */
+  rollbackSucceeded?: boolean;
   duration: number;
   error?: string;
 }
@@ -157,7 +160,9 @@ export interface SystemVersion {
 /**
  * Start a new upgrade to the target version.
  */
-export async function startUpgrade(request: UpgradeRequest): Promise<UpgradeResult> {
+export async function startUpgrade(
+  request: UpgradeRequest,
+): Promise<UpgradeResult> {
   const { data } = await apiClient.post<UpgradeResult>('/upgrade', request);
   return data;
 }
@@ -166,25 +171,36 @@ export async function startUpgrade(request: UpgradeRequest): Promise<UpgradeResu
  * Get the status of the most recent upgrade.
  */
 export async function getUpgradeStatus(): Promise<UpgradeAuditEntry | null> {
-  const { data } = await apiClient.get<UpgradeAuditEntry | null>('/upgrade/status');
+  const { data } = await apiClient.get<UpgradeAuditEntry | null>(
+    '/upgrade/status',
+  );
   return data;
 }
 
 /**
  * Get upgrade history for audit purposes.
  */
-export async function getUpgradeHistory(limit = 10): Promise<UpgradeAuditEntry[]> {
-  const { data } = await apiClient.get<UpgradeAuditEntry[]>('/upgrade/history', {
-    params: { limit },
-  });
+export async function getUpgradeHistory(
+  limit = 10,
+): Promise<UpgradeAuditEntry[]> {
+  const { data } = await apiClient.get<UpgradeAuditEntry[]>(
+    '/upgrade/history',
+    {
+      params: { limit },
+    },
+  );
   return data;
 }
 
 /**
  * Get the current state of a specific upgrade operation.
  */
-export async function getUpgradeState(upgradeId: string): Promise<UpgradeState | null> {
-  const { data } = await apiClient.get<UpgradeState | null>(`/upgrade/${upgradeId}`);
+export async function getUpgradeState(
+  upgradeId: string,
+): Promise<UpgradeState | null> {
+  const { data } = await apiClient.get<UpgradeState | null>(
+    `/upgrade/${upgradeId}`,
+  );
   return data;
 }
 
@@ -192,7 +208,9 @@ export async function getUpgradeState(upgradeId: string): Promise<UpgradeState |
  * Run pre-upgrade validation checks to verify the system is ready.
  */
 export async function runPreValidation(): Promise<PreUpgradeValidationResult> {
-  const { data } = await apiClient.get<PreUpgradeValidationResult>('/upgrade/pre-validation');
+  const { data } = await apiClient.get<PreUpgradeValidationResult>(
+    '/upgrade/pre-validation',
+  );
   return data;
 }
 
@@ -207,10 +225,15 @@ export async function runHealthCheck(): Promise<UpgradeHealthResult> {
 /**
  * Check configuration compatibility for a target version.
  */
-export async function checkConfigCompatibility(version?: string): Promise<ConfigCompatibilityResult> {
-  const { data } = await apiClient.get<ConfigCompatibilityResult>('/upgrade/config-compatibility', {
-    params: version ? { version } : undefined,
-  });
+export async function checkConfigCompatibility(
+  version?: string,
+): Promise<ConfigCompatibilityResult> {
+  const { data } = await apiClient.get<ConfigCompatibilityResult>(
+    '/upgrade/config-compatibility',
+    {
+      params: version ? { version } : undefined,
+    },
+  );
   return data;
 }
 
@@ -218,14 +241,18 @@ export async function checkConfigCompatibility(version?: string): Promise<Config
  * Check if rollback is possible.
  */
 export async function checkRollbackCapability(): Promise<RollbackCapability> {
-  const { data } = await apiClient.get<RollbackCapability>('/upgrade/rollback/capability');
+  const { data } = await apiClient.get<RollbackCapability>(
+    '/upgrade/rollback/capability',
+  );
   return data;
 }
 
 /**
  * Execute a rollback to the previous version.
  */
-export async function executeRollback(upgradeId?: string): Promise<RollbackResult> {
+export async function executeRollback(
+  upgradeId?: string,
+): Promise<RollbackResult> {
   // `confirm` is mandatory server-side: a rollback restores a dump over the
   // live database and discards every write since that backup. The literal is
   // sent here rather than threaded through the caller because the UI already
