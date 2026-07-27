@@ -11,6 +11,12 @@ on:
       - 'src/**'
       - 'prisma/**'
 
+# Re-pushing to a PR supersedes the previous API surface, so only the latest
+# push needs checking.
+concurrency:
+  group: breaking-change-${{ github.ref }}
+  cancel-in-progress: true
+
 # Minimal default token permissions; the job only reads repo contents.
 permissions:
   contents: read
