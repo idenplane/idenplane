@@ -5,12 +5,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/idenplane/terraform-provider-idenplane/client"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/idenplane/terraform-provider-idenplane/client"
 )
 
 // Ensure the implementation satisfies the expected interfaces
@@ -26,11 +25,11 @@ type OrganizationDataSource struct {
 
 // OrganizationDataSourceModel represents the Terraform model for organization data source
 type OrganizationDataSourceModel struct {
-	ID               types.String `tfsdk:"id"`
-	RealmID          types.String `tfsdk:"realm_id"`
-	Slug             types.String `tfsdk:"slug"`
-	Name             types.String `tfsdk:"name"`
-	DisplayName      types.String `tfsdk:"display_name"`
+	ID              types.String `tfsdk:"id"`
+	RealmID         types.String `tfsdk:"realm_id"`
+	Slug            types.String `tfsdk:"slug"`
+	Name            types.String `tfsdk:"name"`
+	DisplayName     types.String `tfsdk:"display_name"`
 	Description     types.String `tfsdk:"description"`
 	Enabled         types.Bool   `tfsdk:"enabled"`
 	LogoURL         types.String `tfsdk:"logo_url"`
@@ -60,56 +59,56 @@ func (d *OrganizationDataSource) Schema(ctx context.Context, req datasource.Sche
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Unique identifier for the organization",
-				Computed:             true,
+				Computed:            true,
 			},
 			"realm_id": schema.StringAttribute{
 				MarkdownDescription: "The realm ID this organization belongs to",
-				Required:             true,
+				Required:            true,
 			},
 			"slug": schema.StringAttribute{
 				MarkdownDescription: "The organization slug (unique identifier)",
-				Required:             true,
+				Required:            true,
 			},
 			"name": schema.StringAttribute{
 				MarkdownDescription: "Organization name",
-				Computed:             true,
+				Computed:            true,
 			},
 			"display_name": schema.StringAttribute{
 				MarkdownDescription: "Display name of the organization",
-				Computed:             true,
+				Computed:            true,
 			},
 			"description": schema.StringAttribute{
 				MarkdownDescription: "Description of the organization",
-				Computed:             true,
+				Computed:            true,
 			},
 			"enabled": schema.BoolAttribute{
 				MarkdownDescription: "Whether the organization is enabled",
-				Computed:             true,
+				Computed:            true,
 			},
 			"logo_url": schema.StringAttribute{
 				MarkdownDescription: "Logo URL",
-				Computed:             true,
+				Computed:            true,
 			},
 			"primary_color": schema.StringAttribute{
 				MarkdownDescription: "Primary color",
-				Computed:             true,
+				Computed:            true,
 			},
 			"require_mfa": schema.BoolAttribute{
 				MarkdownDescription: "Whether MFA is required",
-				Computed:             true,
+				Computed:            true,
 			},
 			"verified_domains": schema.ListAttribute{
 				MarkdownDescription: "List of verified email domains",
-				Computed:             true,
-				ElementType:          types.StringType,
+				Computed:            true,
+				ElementType:         types.StringType,
 			},
 			"created_at": schema.StringAttribute{
 				MarkdownDescription: "Creation timestamp",
-				Computed:             true,
+				Computed:            true,
 			},
 			"updated_at": schema.StringAttribute{
 				MarkdownDescription: "Last update timestamp",
-				Computed:             true,
+				Computed:            true,
 			},
 		},
 	}

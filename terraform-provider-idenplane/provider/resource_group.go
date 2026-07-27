@@ -6,14 +6,16 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/idenplane/terraform-provider-idenplane/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/idenplane/terraform-provider-idenplane/client"
 )
 
 // Ensure the implementation satisfies the expected interfaces
@@ -59,13 +61,13 @@ func (r *GroupResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Unique identifier for the group (UUID, computed)",
-				Computed:             true,
+				Computed:            true,
 			},
 			"realm_id": schema.StringAttribute{
 				MarkdownDescription: "The realm ID this group belongs to",
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
-					planmodifier.RequiresReplace(),
+					stringplanmodifier.RequiresReplace(),
 				},
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
@@ -75,7 +77,7 @@ func (r *GroupResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 				MarkdownDescription: "The group name",
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
-					planmodifier.RequiresReplace(),
+					stringplanmodifier.RequiresReplace(),
 				},
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
@@ -83,26 +85,26 @@ func (r *GroupResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 			},
 			"path": schema.StringAttribute{
 				MarkdownDescription: "The group path (computed)",
-				Computed:             true,
+				Computed:            true,
 			},
 			"description": schema.StringAttribute{
 				MarkdownDescription: "Description of the group",
-				Optional:           true,
+				Optional:            true,
 			},
 			"parent_id": schema.StringAttribute{
 				MarkdownDescription: "The parent group ID (for creating sub-groups)",
-				Optional:           true,
+				Optional:            true,
 				PlanModifiers: []planmodifier.String{
-					planmodifier.RequiresReplace(),
+					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"created_at": schema.StringAttribute{
 				MarkdownDescription: "Creation timestamp (computed)",
-				Computed:             true,
+				Computed:            true,
 			},
 			"updated_at": schema.StringAttribute{
 				MarkdownDescription: "Last update timestamp (computed)",
-				Computed:             true,
+				Computed:            true,
 			},
 		},
 	}
@@ -388,7 +390,7 @@ func (r *GroupResource) ImportState(ctx context.Context, req resource.ImportStat
 	}
 
 	// Add the import state ID
-	resource.ImportStatePassthroughID(ctx, resource.DefaultsPath("id"), req, resp)
+	resource.ImportStatePassthroughID(ctx, path.Root("id"), req, resp)
 
 	tflog.Debug(ctx, "Group imported successfully", map[string]interface{}{
 		"name":     group.Name,

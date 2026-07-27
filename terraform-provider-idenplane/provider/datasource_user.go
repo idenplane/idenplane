@@ -5,12 +5,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/idenplane/terraform-provider-idenplane/client"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/idenplane/terraform-provider-idenplane/client"
 )
 
 // Ensure the implementation satisfies the expected interfaces
@@ -75,88 +75,88 @@ func (d *UserDataSource) Schema(ctx context.Context, req datasource.SchemaReques
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Unique identifier for the user (UUID)",
-				Computed:             true,
+				Computed:            true,
 			},
 			"realm_id": schema.StringAttribute{
 				MarkdownDescription: "The realm ID this user belongs to",
-				Required:             true,
+				Required:            true,
 			},
 			"username": schema.StringAttribute{
 				MarkdownDescription: "The username",
-				Required:             true,
+				Required:            true,
 			},
 			"email": schema.StringAttribute{
 				MarkdownDescription: "Email address",
-				Computed:             true,
+				Computed:            true,
 			},
 			"email_verified": schema.BoolAttribute{
 				MarkdownDescription: "Whether the email has been verified",
-				Computed:             true,
+				Computed:            true,
 			},
 			"first_name": schema.StringAttribute{
 				MarkdownDescription: "First name",
-				Computed:             true,
+				Computed:            true,
 			},
 			"last_name": schema.StringAttribute{
 				MarkdownDescription: "Last name",
-				Computed:             true,
+				Computed:            true,
 			},
 			"enabled": schema.BoolAttribute{
 				MarkdownDescription: "Whether the user is enabled",
-				Computed:             true,
+				Computed:            true,
 			},
 			"created_at": schema.StringAttribute{
 				MarkdownDescription: "Creation timestamp",
-				Computed:             true,
+				Computed:            true,
 			},
 			"updated_at": schema.StringAttribute{
 				MarkdownDescription: "Last update timestamp",
-				Computed:             true,
+				Computed:            true,
 			},
 			"groups": schema.ListNestedAttribute{
 				MarkdownDescription: "List of groups the user belongs to",
-				Computed:             true,
+				Computed:            true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
 							MarkdownDescription: "Group ID",
-							Computed:             true,
+							Computed:            true,
 						},
 						"name": schema.StringAttribute{
 							MarkdownDescription: "Group name",
-							Computed:             true,
+							Computed:            true,
 						},
 						"path": schema.StringAttribute{
 							MarkdownDescription: "Group path",
-							Computed:             true,
+							Computed:            true,
 						},
 					},
 				},
 			},
 			"roles": schema.ListNestedAttribute{
 				MarkdownDescription: "List of roles assigned to the user",
-				Computed:             true,
+				Computed:            true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
 							MarkdownDescription: "Role ID",
-							Computed:             true,
+							Computed:            true,
 						},
 						"name": schema.StringAttribute{
 							MarkdownDescription: "Role name",
-							Computed:             true,
+							Computed:            true,
 						},
 						"description": schema.StringAttribute{
 							MarkdownDescription: "Role description",
-							Computed:             true,
+							Computed:            true,
 						},
 						"composite": schema.BoolAttribute{
 							MarkdownDescription: "Whether this is a composite role",
-							Computed:             true,
+							Computed:            true,
 						},
 						"client_role": schema.BoolAttribute{
 							MarkdownDescription: "Whether this is a client-specific role",
-							Computed:             true,
+							Computed:            true,
 						},
 					},
 				},

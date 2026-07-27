@@ -5,12 +5,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/idenplane/terraform-provider-idenplane/client"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/idenplane/terraform-provider-idenplane/client"
 )
 
 // Ensure the implementation satisfies the expected interfaces
@@ -40,15 +40,15 @@ type AuthFlowDataSourceModel struct {
 
 // ExecutionModel represents a simplified execution model for auth flow executions
 type ExecutionModel struct {
-	ID                  types.String `tfsdk:"id"`
-	DisplayName         types.String `tfsdk:"display_name"`
-	Requirement         types.String `tfsdk:"requirement"`
-	Authenticator       types.String `tfsdk:"authenticator"`
-	AuthenticatorFlow   types.Bool   `tfsdk:"authenticator_flow"`
-	Priority            types.Int64  `tfsdk:"priority"`
-	Configurable        types.Bool   `tfsdk:"configurable"`
-	Authentication      types.String `tfsdk:"authentication"`
-	SubFlow             types.Bool   `tfsdk:"sub_flow"`
+	ID                types.String `tfsdk:"id"`
+	DisplayName       types.String `tfsdk:"display_name"`
+	Requirement       types.String `tfsdk:"requirement"`
+	Authenticator     types.String `tfsdk:"authenticator"`
+	AuthenticatorFlow types.Bool   `tfsdk:"authenticator_flow"`
+	Priority          types.Int64  `tfsdk:"priority"`
+	Configurable      types.Bool   `tfsdk:"configurable"`
+	Authentication    types.String `tfsdk:"authentication"`
+	SubFlow           types.Bool   `tfsdk:"sub_flow"`
 }
 
 // NewAuthFlowDataSource creates a new auth flow data source
@@ -70,80 +70,80 @@ func (d *AuthFlowDataSource) Schema(ctx context.Context, req datasource.SchemaRe
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Unique identifier for the authentication flow",
-				Computed:             true,
+				Computed:            true,
 			},
 			"realm_id": schema.StringAttribute{
 				MarkdownDescription: "The realm ID this authentication flow belongs to",
-				Required:             true,
+				Required:            true,
 			},
 			"alias": schema.StringAttribute{
 				MarkdownDescription: "The authentication flow alias (unique identifier)",
-				Required:             true,
+				Required:            true,
 			},
 			"description": schema.StringAttribute{
 				MarkdownDescription: "Description of the authentication flow",
-				Computed:             true,
+				Computed:            true,
 			},
 			"provider_id": schema.StringAttribute{
 				MarkdownDescription: "Provider ID",
-				Computed:             true,
+				Computed:            true,
 			},
 			"type": schema.StringAttribute{
 				MarkdownDescription: "Flow type",
-				Computed:             true,
+				Computed:            true,
 			},
 			"built_in": schema.BoolAttribute{
 				MarkdownDescription: "Whether this is a built-in flow",
-				Computed:             true,
+				Computed:            true,
 			},
 			"created_at": schema.StringAttribute{
 				MarkdownDescription: "Creation timestamp",
-				Computed:             true,
+				Computed:            true,
 			},
 			"updated_at": schema.StringAttribute{
 				MarkdownDescription: "Last update timestamp",
-				Computed:             true,
+				Computed:            true,
 			},
 			"executions": schema.ListNestedAttribute{
 				MarkdownDescription: "List of authentication executions",
-				Computed:             true,
+				Computed:            true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
 							MarkdownDescription: "Execution ID",
-							Computed:             true,
+							Computed:            true,
 						},
 						"display_name": schema.StringAttribute{
 							MarkdownDescription: "Display name",
-							Computed:             true,
+							Computed:            true,
 						},
 						"requirement": schema.StringAttribute{
 							MarkdownDescription: "Requirement (REQUIRED, OPTIONAL, DISABLED, ALTERNATIVE)",
-							Computed:             true,
+							Computed:            true,
 						},
 						"authenticator": schema.StringAttribute{
 							MarkdownDescription: "Authenticator",
-							Computed:             true,
+							Computed:            true,
 						},
 						"authenticator_flow": schema.BoolAttribute{
 							MarkdownDescription: "Whether this is an authenticator flow",
-							Computed:             true,
+							Computed:            true,
 						},
 						"priority": schema.Int64Attribute{
 							MarkdownDescription: "Execution priority",
-							Computed:             true,
+							Computed:            true,
 						},
 						"configurable": schema.BoolAttribute{
 							MarkdownDescription: "Whether this execution is configurable",
-							Computed:             true,
+							Computed:            true,
 						},
 						"authentication": schema.StringAttribute{
 							MarkdownDescription: "Authentication",
-							Computed:             true,
+							Computed:            true,
 						},
 						"sub_flow": schema.BoolAttribute{
 							MarkdownDescription: "Whether this is a sub-flow",
-							Computed:             true,
+							Computed:            true,
 						},
 					},
 				},
@@ -252,15 +252,15 @@ func (d *AuthFlowDataSource) Read(ctx context.Context, req datasource.ReadReques
 		})
 	}
 	state.Executions = types.ListValueMust(types.ObjectType{AttrTypes: map[string]attr.Type{
-		"id":                   types.StringType,
-		"display_name":         types.StringType,
-		"requirement":          types.StringType,
-		"authenticator":       types.StringType,
-		"authenticator_flow":   types.BoolType,
-		"priority":             types.Int64Type,
-		"configurable":         types.BoolType,
-		"authentication":       types.StringType,
-		"sub_flow":             types.BoolType,
+		"id":                 types.StringType,
+		"display_name":       types.StringType,
+		"requirement":        types.StringType,
+		"authenticator":      types.StringType,
+		"authenticator_flow": types.BoolType,
+		"priority":           types.Int64Type,
+		"configurable":       types.BoolType,
+		"authentication":     types.StringType,
+		"sub_flow":           types.BoolType,
 	}}, convertExecutionsToNestedAttr(execs))
 
 	// Set the state
@@ -277,25 +277,25 @@ func convertExecutionsToNestedAttr(execs []ExecutionModel) []attr.Value {
 	result := make([]attr.Value, 0, len(execs))
 	for _, e := range execs {
 		obj, _ := types.ObjectValue(map[string]attr.Type{
-			"id":                   types.StringType,
-			"display_name":         types.StringType,
-			"requirement":          types.StringType,
-			"authenticator":        types.StringType,
-			"authenticator_flow":   types.BoolType,
-			"priority":             types.Int64Type,
-			"configurable":         types.BoolType,
-			"authentication":       types.StringType,
-			"sub_flow":             types.BoolType,
+			"id":                 types.StringType,
+			"display_name":       types.StringType,
+			"requirement":        types.StringType,
+			"authenticator":      types.StringType,
+			"authenticator_flow": types.BoolType,
+			"priority":           types.Int64Type,
+			"configurable":       types.BoolType,
+			"authentication":     types.StringType,
+			"sub_flow":           types.BoolType,
 		}, map[string]attr.Value{
-			"id":                   e.ID,
-			"display_name":         e.DisplayName,
-			"requirement":          e.Requirement,
-			"authenticator":        e.Authenticator,
-			"authenticator_flow":   e.AuthenticatorFlow,
-			"priority":             e.Priority,
-			"configurable":         e.Configurable,
-			"authentication":      e.Authentication,
-			"sub_flow":             e.SubFlow,
+			"id":                 e.ID,
+			"display_name":       e.DisplayName,
+			"requirement":        e.Requirement,
+			"authenticator":      e.Authenticator,
+			"authenticator_flow": e.AuthenticatorFlow,
+			"priority":           e.Priority,
+			"configurable":       e.Configurable,
+			"authentication":     e.Authentication,
+			"sub_flow":           e.SubFlow,
 		})
 		result = append(result, obj)
 	}

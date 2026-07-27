@@ -5,11 +5,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/idenplane/terraform-provider-idenplane/client"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/idenplane/terraform-provider-idenplane/client"
 )
 
 // Ensure the implementation satisfies the expected interfaces
@@ -25,22 +25,22 @@ type ClientDataSource struct {
 
 // ClientDataSourceModel represents the Terraform model for client data source
 type ClientDataSourceModel struct {
-	ID                            types.String   `tfsdk:"id"`
-	RealmID                       types.String   `tfsdk:"realm_id"`
-	ClientID                      types.String   `tfsdk:"client_id"`
-	ClientType                    types.String   `tfsdk:"client_type"`
-	Name                          types.String   `tfsdk:"name"`
-	Description                   types.String   `tfsdk:"description"`
-	Enabled                       types.Bool     `tfsdk:"enabled"`
-	RedirectUris                  types.List     `tfsdk:"redirect_uris"`
-	WebOrigins                    types.List     `tfsdk:"web_origins"`
-	GrantTypes                    types.List     `tfsdk:"grant_types"`
-	RequireConsent                types.Bool     `tfsdk:"require_consent"`
-	BackchannelLogoutUri          types.String   `tfsdk:"backchannel_logout_uri"`
-	BackchannelLogoutSessionRequired types.Bool `tfsdk:"backchannel_logout_session_required"`
-	ServiceAccountUserID          types.String   `tfsdk:"service_account_user_id"`
-	CreatedAt                     types.String   `tfsdk:"created_at"`
-	UpdatedAt                     types.String   `tfsdk:"updated_at"`
+	ID                               types.String `tfsdk:"id"`
+	RealmID                          types.String `tfsdk:"realm_id"`
+	ClientID                         types.String `tfsdk:"client_id"`
+	ClientType                       types.String `tfsdk:"client_type"`
+	Name                             types.String `tfsdk:"name"`
+	Description                      types.String `tfsdk:"description"`
+	Enabled                          types.Bool   `tfsdk:"enabled"`
+	RedirectUris                     types.List   `tfsdk:"redirect_uris"`
+	WebOrigins                       types.List   `tfsdk:"web_origins"`
+	GrantTypes                       types.List   `tfsdk:"grant_types"`
+	RequireConsent                   types.Bool   `tfsdk:"require_consent"`
+	BackchannelLogoutUri             types.String `tfsdk:"backchannel_logout_uri"`
+	BackchannelLogoutSessionRequired types.Bool   `tfsdk:"backchannel_logout_session_required"`
+	ServiceAccountUserID             types.String `tfsdk:"service_account_user_id"`
+	CreatedAt                        types.String `tfsdk:"created_at"`
+	UpdatedAt                        types.String `tfsdk:"updated_at"`
 }
 
 // NewClientDataSource creates a new client data source
@@ -62,70 +62,70 @@ func (d *ClientDataSource) Schema(ctx context.Context, req datasource.SchemaRequ
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Unique identifier for the client (UUID)",
-				Computed:             true,
+				Computed:            true,
 			},
 			"realm_id": schema.StringAttribute{
 				MarkdownDescription: "The realm ID this client belongs to",
-				Computed:             true,
+				Computed:            true,
 			},
 			"client_id": schema.StringAttribute{
 				MarkdownDescription: "The OAuth client identifier (client_id)",
-				Required:             true,
+				Required:            true,
 			},
 			"client_type": schema.StringAttribute{
 				MarkdownDescription: "Client type (CONFIDENTIAL or PUBLIC)",
-				Computed:             true,
+				Computed:            true,
 			},
 			"name": schema.StringAttribute{
 				MarkdownDescription: "Display name of the client",
-				Computed:             true,
+				Computed:            true,
 			},
 			"description": schema.StringAttribute{
 				MarkdownDescription: "Description of the client",
-				Computed:             true,
+				Computed:            true,
 			},
 			"enabled": schema.BoolAttribute{
 				MarkdownDescription: "Whether the client is enabled",
-				Computed:             true,
+				Computed:            true,
 			},
 			"redirect_uris": schema.ListAttribute{
 				MarkdownDescription: "List of valid redirect URIs",
-				Computed:             true,
-				ElementType:          types.StringType,
+				Computed:            true,
+				ElementType:         types.StringType,
 			},
 			"web_origins": schema.ListAttribute{
 				MarkdownDescription: "List of allowed web origins for CORS",
-				Computed:             true,
-				ElementType:          types.StringType,
+				Computed:            true,
+				ElementType:         types.StringType,
 			},
 			"grant_types": schema.ListAttribute{
 				MarkdownDescription: "List of allowed grant types",
-				Computed:             true,
-				ElementType:          types.StringType,
+				Computed:            true,
+				ElementType:         types.StringType,
 			},
 			"require_consent": schema.BoolAttribute{
 				MarkdownDescription: "Whether consent is required from users",
-				Computed:             true,
+				Computed:            true,
 			},
 			"backchannel_logout_uri": schema.StringAttribute{
 				MarkdownDescription: "Backchannel logout URI",
-				Computed:             true,
+				Computed:            true,
 			},
 			"backchannel_logout_session_required": schema.BoolAttribute{
 				MarkdownDescription: "Whether backchannel logout session is required",
-				Computed:             true,
+				Computed:            true,
 			},
 			"service_account_user_id": schema.StringAttribute{
 				MarkdownDescription: "Service account user ID (if client is a service account)",
-				Computed:             true,
+				Computed:            true,
 			},
 			"created_at": schema.StringAttribute{
 				MarkdownDescription: "Creation timestamp",
-				Computed:             true,
+				Computed:            true,
 			},
 			"updated_at": schema.StringAttribute{
 				MarkdownDescription: "Last update timestamp",
-				Computed:             true,
+				Computed:            true,
 			},
 		},
 	}

@@ -5,12 +5,12 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/idenplane/terraform-provider-idenplane/client"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/idenplane/terraform-provider-idenplane/client"
 )
 
 // Ensure the implementation satisfies the expected interfaces
@@ -42,9 +42,9 @@ type GroupDataSourceModel struct {
 
 // GroupMemberModel represents a simplified user model for group members
 type GroupMemberModel struct {
-	ID       types.String `tfsdk:"id"`
-	Username types.String `tfsdk:"username"`
-	Email    types.String `tfsdk:"email"`
+	ID        types.String `tfsdk:"id"`
+	Username  types.String `tfsdk:"username"`
+	Email     types.String `tfsdk:"email"`
 	FirstName types.String `tfsdk:"first_name"`
 	LastName  types.String `tfsdk:"last_name"`
 }
@@ -75,89 +75,89 @@ func (d *GroupDataSource) Schema(ctx context.Context, req datasource.SchemaReque
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Unique identifier for the group",
-				Computed:             true,
+				Computed:            true,
 			},
 			"realm_id": schema.StringAttribute{
 				MarkdownDescription: "The realm ID this group belongs to",
-				Required:             true,
+				Required:            true,
 			},
 			"name": schema.StringAttribute{
 				MarkdownDescription: "The group name",
-				Required:             true,
+				Required:            true,
 			},
 			"path": schema.StringAttribute{
 				MarkdownDescription: "The group path (e.g., /parent/child)",
-				Computed:             true,
+				Computed:            true,
 			},
 			"description": schema.StringAttribute{
 				MarkdownDescription: "Description of the group",
-				Computed:             true,
+				Computed:            true,
 			},
 			"parent_id": schema.StringAttribute{
 				MarkdownDescription: "The parent group ID (if this is a sub-group)",
-				Computed:             true,
-				Optional:             true,
+				Computed:            true,
+				Optional:            true,
 			},
 			"member_count": schema.Int64Attribute{
 				MarkdownDescription: "Number of members in the group",
-				Computed:             true,
+				Computed:            true,
 			},
 			"role_count": schema.Int64Attribute{
 				MarkdownDescription: "Number of roles assigned to the group",
-				Computed:             true,
+				Computed:            true,
 			},
 			"created_at": schema.StringAttribute{
 				MarkdownDescription: "Creation timestamp",
-				Computed:             true,
+				Computed:            true,
 			},
 			"updated_at": schema.StringAttribute{
 				MarkdownDescription: "Last update timestamp",
-				Computed:             true,
+				Computed:            true,
 			},
 			"members": schema.ListNestedAttribute{
 				MarkdownDescription: "List of group members",
-				Computed:             true,
+				Computed:            true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
 							MarkdownDescription: "User ID",
-							Computed:             true,
+							Computed:            true,
 						},
 						"username": schema.StringAttribute{
 							MarkdownDescription: "Username",
-							Computed:             true,
+							Computed:            true,
 						},
 						"email": schema.StringAttribute{
 							MarkdownDescription: "Email address",
-							Computed:             true,
+							Computed:            true,
 						},
 						"first_name": schema.StringAttribute{
 							MarkdownDescription: "First name",
-							Computed:             true,
+							Computed:            true,
 						},
 						"last_name": schema.StringAttribute{
 							MarkdownDescription: "Last name",
-							Computed:             true,
+							Computed:            true,
 						},
 					},
 				},
 			},
 			"children": schema.ListNestedAttribute{
 				MarkdownDescription: "List of sub-groups",
-				Computed:             true,
+				Computed:            true,
 				NestedObject: schema.NestedAttributeObject{
 					Attributes: map[string]schema.Attribute{
 						"id": schema.StringAttribute{
 							MarkdownDescription: "Group ID",
-							Computed:             true,
+							Computed:            true,
 						},
 						"name": schema.StringAttribute{
 							MarkdownDescription: "Group name",
-							Computed:             true,
+							Computed:            true,
 						},
 						"path": schema.StringAttribute{
 							MarkdownDescription: "Group path",
-							Computed:             true,
+							Computed:            true,
 						},
 					},
 				},

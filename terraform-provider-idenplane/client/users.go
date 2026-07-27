@@ -81,7 +81,7 @@ func (c *UsersClient) CreateUser(ctx context.Context, realmName string, req Crea
 func (c *UsersClient) ListUsers(ctx context.Context, realmName string) ([]User, error) {
 	var users []User
 	path := fmt.Sprintf("/admin/realms/%s/users", realmName)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &users)
+	err := c.httpClient.GetJSON(ctx, path, nil, &users)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list users: %w", err)
 	}
@@ -92,7 +92,7 @@ func (c *UsersClient) ListUsers(ctx context.Context, realmName string) ([]User, 
 func (c *UsersClient) GetUser(ctx context.Context, realmName, userID string) (*User, error) {
 	var user User
 	path := fmt.Sprintf("/admin/realms/%s/users/%s", realmName, userID)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &user)
+	err := c.httpClient.GetJSON(ctx, path, nil, &user)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user %s: %w", userID, err)
 	}

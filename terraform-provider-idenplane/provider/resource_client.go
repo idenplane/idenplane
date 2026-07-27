@@ -6,14 +6,16 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/idenplane/terraform-provider-idenplane/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/idenplane/terraform-provider-idenplane/client"
 )
 
 // Ensure the implementation satisfies the expected interfaces
@@ -31,23 +33,23 @@ type ClientResource struct {
 
 // ClientResourceModel represents the Terraform model for client resource
 type ClientResourceModel struct {
-	ID                                  types.String `tfsdk:"id"`
-	RealmID                             types.String `tfsdk:"realm_id"`
-	ClientID                            types.String `tfsdk:"client_id"`
-	ClientType                          types.String `tfsdk:"client_type"`
-	Name                                types.String `tfsdk:"name"`
-	Description                         types.String `tfsdk:"description"`
-	Enabled                             types.Bool   `tfsdk:"enabled"`
-	RedirectUris                        types.List   `tfsdk:"redirect_uris"`
-	WebOrigins                          types.List   `tfsdk:"web_origins"`
-	GrantTypes                          types.List   `tfsdk:"grant_types"`
-	RequireConsent                      types.Bool   `tfsdk:"require_consent"`
-	BackchannelLogoutUri                types.String `tfsdk:"backchannel_logout_uri"`
-	BackchannelLogoutSessionRequired     types.Bool   `tfsdk:"backchannel_logout_session_required"`
-	ServiceAccountUserID                types.String `tfsdk:"service_account_user_id"`
-	ClientSecret                        types.String `tfsdk:"client_secret"`
-	CreatedAt                           types.String `tfsdk:"created_at"`
-	UpdatedAt                           types.String `tfsdk:"updated_at"`
+	ID                               types.String `tfsdk:"id"`
+	RealmID                          types.String `tfsdk:"realm_id"`
+	ClientID                         types.String `tfsdk:"client_id"`
+	ClientType                       types.String `tfsdk:"client_type"`
+	Name                             types.String `tfsdk:"name"`
+	Description                      types.String `tfsdk:"description"`
+	Enabled                          types.Bool   `tfsdk:"enabled"`
+	RedirectUris                     types.List   `tfsdk:"redirect_uris"`
+	WebOrigins                       types.List   `tfsdk:"web_origins"`
+	GrantTypes                       types.List   `tfsdk:"grant_types"`
+	RequireConsent                   types.Bool   `tfsdk:"require_consent"`
+	BackchannelLogoutUri             types.String `tfsdk:"backchannel_logout_uri"`
+	BackchannelLogoutSessionRequired types.Bool   `tfsdk:"backchannel_logout_session_required"`
+	ServiceAccountUserID             types.String `tfsdk:"service_account_user_id"`
+	ClientSecret                     types.String `tfsdk:"client_secret"`
+	CreatedAt                        types.String `tfsdk:"created_at"`
+	UpdatedAt                        types.String `tfsdk:"updated_at"`
 }
 
 // NewClientResource creates a new client resource
@@ -68,13 +70,13 @@ func (r *ClientResource) Schema(ctx context.Context, req resource.SchemaRequest,
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Unique identifier for the client (UUID, computed)",
-				Computed:             true,
+				Computed:            true,
 			},
 			"realm_id": schema.StringAttribute{
 				MarkdownDescription: "The realm ID this client belongs to",
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
-					planmodifier.RequiresReplace(),
+					stringplanmodifier.RequiresReplace(),
 				},
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
@@ -84,7 +86,7 @@ func (r *ClientResource) Schema(ctx context.Context, req resource.SchemaRequest,
 				MarkdownDescription: "The OAuth client identifier (client_id)",
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
-					planmodifier.RequiresReplace(),
+					stringplanmodifier.RequiresReplace(),
 				},
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
@@ -92,67 +94,67 @@ func (r *ClientResource) Schema(ctx context.Context, req resource.SchemaRequest,
 			},
 			"client_type": schema.StringAttribute{
 				MarkdownDescription: "Client type (CONFIDENTIAL or PUBLIC)",
-				Optional:           true,
-				Computed:           true,
+				Optional:            true,
+				Computed:            true,
 			},
 			"name": schema.StringAttribute{
 				MarkdownDescription: "Display name of the client",
-				Optional:           true,
+				Optional:            true,
 			},
 			"description": schema.StringAttribute{
 				MarkdownDescription: "Description of the client",
-				Optional:           true,
+				Optional:            true,
 			},
 			"enabled": schema.BoolAttribute{
 				MarkdownDescription: "Whether the client is enabled",
-				Optional:           true,
-				Computed:           true,
+				Optional:            true,
+				Computed:            true,
 			},
 			"redirect_uris": schema.ListAttribute{
 				MarkdownDescription: "List of valid redirect URIs",
-				Optional:           true,
-				ElementType:        types.StringType,
+				Optional:            true,
+				ElementType:         types.StringType,
 			},
 			"web_origins": schema.ListAttribute{
 				MarkdownDescription: "List of allowed web origins for CORS",
-				Optional:           true,
-				ElementType:        types.StringType,
+				Optional:            true,
+				ElementType:         types.StringType,
 			},
 			"grant_types": schema.ListAttribute{
 				MarkdownDescription: "List of allowed grant types",
-				Optional:           true,
-				ElementType:        types.StringType,
+				Optional:            true,
+				ElementType:         types.StringType,
 			},
 			"require_consent": schema.BoolAttribute{
 				MarkdownDescription: "Whether consent is required from users",
-				Optional:           true,
-				Computed:           true,
+				Optional:            true,
+				Computed:            true,
 			},
 			"backchannel_logout_uri": schema.StringAttribute{
 				MarkdownDescription: "Backchannel logout URI",
-				Optional:           true,
+				Optional:            true,
 			},
 			"backchannel_logout_session_required": schema.BoolAttribute{
 				MarkdownDescription: "Whether backchannel logout session is required",
-				Optional:           true,
-				Computed:           true,
+				Optional:            true,
+				Computed:            true,
 			},
 			"service_account_user_id": schema.StringAttribute{
 				MarkdownDescription: "Service account user ID (computed if client is a service account)",
-				Computed:             true,
+				Computed:            true,
 			},
 			"client_secret": schema.StringAttribute{
 				MarkdownDescription: "Client secret (sensitive, computed on creation for confidential clients)",
-				Computed:             true,
-				Sensitive:            true,
+				Computed:            true,
+				Sensitive:           true,
 			},
 			"created_at": schema.StringAttribute{
 				MarkdownDescription: "Creation timestamp (computed)",
-				Computed:             true,
+				Computed:            true,
 			},
 			"updated_at": schema.StringAttribute{
 				MarkdownDescription: "Last update timestamp (computed)",
-				Computed:             true,
+				Computed:            true,
 			},
 		},
 	}
@@ -432,7 +434,7 @@ func (r *ClientResource) ImportState(ctx context.Context, req resource.ImportSta
 	}
 
 	// Add the import state ID
-	resource.ImportStatePassthroughID(ctx, resource.DefaultsPath("client_id"), req, resp)
+	resource.ImportStatePassthroughID(ctx, path.Root("client_id"), req, resp)
 
 	tflog.Debug(ctx, "Client imported successfully", map[string]interface{}{
 		"client_id": clientData.ClientID,

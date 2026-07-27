@@ -5,14 +5,16 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/idenplane/terraform-provider-idenplane/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/idenplane/terraform-provider-idenplane/client"
 )
 
 // Ensure the implementation satisfies the expected interfaces
@@ -47,7 +49,7 @@ type RealmResourceModel struct {
 	PasswordRequireUppercase     types.Bool   `tfsdk:"password_require_uppercase"`
 	PasswordRequireLowercase     types.Bool   `tfsdk:"password_require_lowercase"`
 	PasswordRequireDigits        types.Bool   `tfsdk:"password_require_digits"`
-	PasswordRequireSpecial      types.Bool   `tfsdk:"password_require_special"`
+	PasswordRequireSpecial       types.Bool   `tfsdk:"password_require_special"`
 	PasswordHistoryCount         types.Int64  `tfsdk:"password_history_count"`
 	PasswordMaxAgeDays           types.Int64  `tfsdk:"password_max_age_days"`
 	BruteForceEnabled            types.Bool   `tfsdk:"brute_force_enabled"`
@@ -68,7 +70,7 @@ type RealmResourceModel struct {
 	UserRateLimitPerHour         types.Int64  `tfsdk:"user_rate_limit_per_hour"`
 	IPRateLimitPerMinute         types.Int64  `tfsdk:"ip_rate_limit_per_minute"`
 	IPRateLimitPerHour           types.Int64  `tfsdk:"ip_rate_limit_per_hour"`
-	MaxSessionsPerUser          types.Int64  `tfsdk:"max_sessions_per_user"`
+	MaxSessionsPerUser           types.Int64  `tfsdk:"max_sessions_per_user"`
 	ThemeName                    types.String `tfsdk:"theme_name"`
 	LoginTheme                   types.String `tfsdk:"login_theme"`
 	AccountTheme                 types.String `tfsdk:"account_theme"`
@@ -77,17 +79,17 @@ type RealmResourceModel struct {
 	ImpersonationMaxDuration     types.Int64  `tfsdk:"impersonation_max_duration"`
 	WebAuthnEnabled              types.Bool   `tfsdk:"webauthn_enabled"`
 	WebAuthnRpName               types.String `tfsdk:"webauthn_rp_name"`
-	WebAuthnRpID                types.String `tfsdk:"webauthn_rp_id"`
-	AdaptiveAuthEnabled         types.Bool   `tfsdk:"adaptive_auth_enabled"`
+	WebAuthnRpID                 types.String `tfsdk:"webauthn_rp_id"`
+	AdaptiveAuthEnabled          types.Bool   `tfsdk:"adaptive_auth_enabled"`
 	RiskThresholdStepUp          types.Int64  `tfsdk:"risk_threshold_step_up"`
 	RiskThresholdBlock           types.Int64  `tfsdk:"risk_threshold_block"`
 	DefaultLocale                types.String `tfsdk:"default_locale"`
-	SupportedLocales            types.List   `tfsdk:"supported_locales"`
+	SupportedLocales             types.List   `tfsdk:"supported_locales"`
 	TermsOfServiceURL            types.String `tfsdk:"terms_of_service_url"`
 	RegistrationApprovalRequired types.Bool   `tfsdk:"registration_approval_required"`
-	AllowedEmailDomains         types.List   `tfsdk:"allowed_email_domains"`
-	CreatedAt                   types.String `tfsdk:"created_at"`
-	UpdatedAt                   types.String `tfsdk:"updated_at"`
+	AllowedEmailDomains          types.List   `tfsdk:"allowed_email_domains"`
+	CreatedAt                    types.String `tfsdk:"created_at"`
+	UpdatedAt                    types.String `tfsdk:"updated_at"`
 }
 
 // NewRealmResource creates a new realm resource
@@ -108,13 +110,13 @@ func (r *RealmResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Unique identifier for the realm (computed)",
-				Computed:           true,
+				Computed:            true,
 			},
 			"name": schema.StringAttribute{
 				MarkdownDescription: "Unique name of the realm",
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
-					planmodifier.RequiresReplace(),
+					stringplanmodifier.RequiresReplace(),
 				},
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
@@ -122,251 +124,251 @@ func (r *RealmResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 			},
 			"display_name": schema.StringAttribute{
 				MarkdownDescription: "Display name of the realm",
-				Optional:           true,
+				Optional:            true,
 			},
 			"enabled": schema.BoolAttribute{
 				MarkdownDescription: "Whether the realm is enabled",
-				Optional:           true,
-				Computed:           true,
+				Optional:            true,
+				Computed:            true,
 			},
 			"access_token_lifespan": schema.Int64Attribute{
 				MarkdownDescription: "Access token lifespan in seconds",
-				Optional:           true,
-				Computed:           true,
+				Optional:            true,
+				Computed:            true,
 			},
 			"refresh_token_lifespan": schema.Int64Attribute{
 				MarkdownDescription: "Refresh token lifespan in seconds",
-				Optional:           true,
-				Computed:           true,
+				Optional:            true,
+				Computed:            true,
 			},
 			"offline_token_lifespan": schema.Int64Attribute{
 				MarkdownDescription: "Offline token lifespan in seconds",
-				Optional:           true,
-				Computed:           true,
+				Optional:            true,
+				Computed:            true,
 			},
 			// SMTP settings
 			"smtp_host": schema.StringAttribute{
 				MarkdownDescription: "SMTP host",
-				Optional:           true,
+				Optional:            true,
 			},
 			"smtp_port": schema.Int64Attribute{
 				MarkdownDescription: "SMTP port",
-				Optional:           true,
+				Optional:            true,
 			},
 			"smtp_user": schema.StringAttribute{
 				MarkdownDescription: "SMTP username",
-				Optional:           true,
+				Optional:            true,
 			},
 			"smtp_password": schema.StringAttribute{
 				MarkdownDescription: "SMTP password (sensitive)",
-				Optional:           true,
-				Sensitive:          true,
+				Optional:            true,
+				Sensitive:           true,
 			},
 			"smtp_from": schema.StringAttribute{
 				MarkdownDescription: "SMTP from address",
-				Optional:           true,
+				Optional:            true,
 			},
 			"smtp_secure": schema.BoolAttribute{
 				MarkdownDescription: "Whether to use SMTP over TLS/SSL",
-				Optional:           true,
-				Computed:           true,
+				Optional:            true,
+				Computed:            true,
 			},
 			// Password settings
 			"password_min_length": schema.Int64Attribute{
 				MarkdownDescription: "Minimum password length",
-				Optional:           true,
+				Optional:            true,
 			},
 			"password_require_uppercase": schema.BoolAttribute{
 				MarkdownDescription: "Require uppercase characters in passwords",
-				Optional:           true,
+				Optional:            true,
 			},
 			"password_require_lowercase": schema.BoolAttribute{
 				MarkdownDescription: "Require lowercase characters in passwords",
-				Optional:           true,
+				Optional:            true,
 			},
 			"password_require_digits": schema.BoolAttribute{
 				MarkdownDescription: "Require digits in passwords",
-				Optional:           true,
+				Optional:            true,
 			},
 			"password_require_special": schema.BoolAttribute{
 				MarkdownDescription: "Require special characters in passwords",
-				Optional:           true,
+				Optional:            true,
 			},
 			"password_history_count": schema.Int64Attribute{
 				MarkdownDescription: "Number of previous passwords to remember",
-				Optional:           true,
+				Optional:            true,
 			},
 			"password_max_age_days": schema.Int64Attribute{
 				MarkdownDescription: "Maximum password age in days",
-				Optional:           true,
+				Optional:            true,
 			},
 			// Brute force protection
 			"brute_force_enabled": schema.BoolAttribute{
 				MarkdownDescription: "Whether brute force protection is enabled",
-				Optional:           true,
-				Computed:           true,
+				Optional:            true,
+				Computed:            true,
 			},
 			"max_login_failures": schema.Int64Attribute{
 				MarkdownDescription: "Maximum login failures before lockout",
-				Optional:           true,
+				Optional:            true,
 			},
 			"lockout_duration": schema.Int64Attribute{
 				MarkdownDescription: "Lockout duration in minutes",
-				Optional:           true,
+				Optional:            true,
 			},
 			"failure_reset_time": schema.Int64Attribute{
 				MarkdownDescription: "Time in minutes before failure count resets",
-				Optional:           true,
+				Optional:            true,
 			},
 			"permanent_lockout_after": schema.Int64Attribute{
 				MarkdownDescription: "Number of permanent lockouts before permanent ban",
-				Optional:           true,
+				Optional:            true,
 			},
 			// Registration settings
 			"registration_allowed": schema.BoolAttribute{
 				MarkdownDescription: "Whether user registration is allowed",
-				Optional:           true,
-				Computed:           true,
+				Optional:            true,
+				Computed:            true,
 			},
 			"require_email_verification": schema.BoolAttribute{
 				MarkdownDescription: "Whether email verification is required",
-				Optional:           true,
-				Computed:           true,
+				Optional:            true,
+				Computed:            true,
 			},
 			"mfa_required": schema.BoolAttribute{
 				MarkdownDescription: "Whether multi-factor authentication is required",
-				Optional:           true,
-				Computed:           true,
+				Optional:            true,
+				Computed:            true,
 			},
 			// Event settings
 			"events_enabled": schema.BoolAttribute{
 				MarkdownDescription: "Whether events are enabled",
-				Optional:           true,
-				Computed:           true,
+				Optional:            true,
+				Computed:            true,
 			},
 			"events_expiration": schema.Int64Attribute{
 				MarkdownDescription: "Event expiration time in seconds",
-				Optional:           true,
+				Optional:            true,
 			},
 			"admin_events_enabled": schema.BoolAttribute{
 				MarkdownDescription: "Whether admin events are enabled",
-				Optional:           true,
-				Computed:           true,
+				Optional:            true,
+				Computed:            true,
 			},
 			// Rate limiting
 			"rate_limit_enabled": schema.BoolAttribute{
 				MarkdownDescription: "Whether rate limiting is enabled",
-				Optional:           true,
-				Computed:           true,
+				Optional:            true,
+				Computed:            true,
 			},
 			"client_rate_limit_per_minute": schema.Int64Attribute{
 				MarkdownDescription: "Client rate limit per minute",
-				Optional:           true,
+				Optional:            true,
 			},
 			"client_rate_limit_per_hour": schema.Int64Attribute{
 				MarkdownDescription: "Client rate limit per hour",
-				Optional:           true,
+				Optional:            true,
 			},
 			"user_rate_limit_per_minute": schema.Int64Attribute{
 				MarkdownDescription: "User rate limit per minute",
-				Optional:           true,
+				Optional:            true,
 			},
 			"user_rate_limit_per_hour": schema.Int64Attribute{
 				MarkdownDescription: "User rate limit per hour",
-				Optional:           true,
+				Optional:            true,
 			},
 			"ip_rate_limit_per_minute": schema.Int64Attribute{
 				MarkdownDescription: "IP rate limit per minute",
-				Optional:           true,
+				Optional:            true,
 			},
 			"ip_rate_limit_per_hour": schema.Int64Attribute{
 				MarkdownDescription: "IP rate limit per hour",
-				Optional:           true,
+				Optional:            true,
 			},
 			// Session settings
 			"max_sessions_per_user": schema.Int64Attribute{
 				MarkdownDescription: "Maximum sessions per user",
-				Optional:           true,
+				Optional:            true,
 			},
 			// Theme settings
 			"theme_name": schema.StringAttribute{
 				MarkdownDescription: "Name of the theme",
-				Optional:           true,
+				Optional:            true,
 			},
 			"login_theme": schema.StringAttribute{
 				MarkdownDescription: "Login page theme",
-				Optional:           true,
+				Optional:            true,
 			},
 			"account_theme": schema.StringAttribute{
 				MarkdownDescription: "Account page theme",
-				Optional:           true,
+				Optional:            true,
 			},
 			"email_theme": schema.StringAttribute{
 				MarkdownDescription: "Email template theme",
-				Optional:           true,
+				Optional:            true,
 			},
 			// Impersonation settings
 			"impersonation_enabled": schema.BoolAttribute{
 				MarkdownDescription: "Whether impersonation is enabled",
-				Optional:           true,
-				Computed:           true,
+				Optional:            true,
+				Computed:            true,
 			},
 			"impersonation_max_duration": schema.Int64Attribute{
 				MarkdownDescription: "Maximum impersonation duration in minutes",
-				Optional:           true,
+				Optional:            true,
 			},
 			// WebAuthn settings
 			"webauthn_enabled": schema.BoolAttribute{
 				MarkdownDescription: "Whether WebAuthn/passkeys are enabled",
-				Optional:           true,
-				Computed:           true,
+				Optional:            true,
+				Computed:            true,
 			},
 			"webauthn_rp_name": schema.StringAttribute{
 				MarkdownDescription: "WebAuthn relying party name",
-				Optional:           true,
+				Optional:            true,
 			},
 			"webauthn_rp_id": schema.StringAttribute{
 				MarkdownDescription: "WebAuthn relying party ID",
-				Optional:           true,
+				Optional:            true,
 			},
 			// Adaptive auth settings
 			"adaptive_auth_enabled": schema.BoolAttribute{
 				MarkdownDescription: "Whether adaptive authentication is enabled",
-				Optional:           true,
-				Computed:           true,
+				Optional:            true,
+				Computed:            true,
 			},
 			"risk_threshold_step_up": schema.Int64Attribute{
 				MarkdownDescription: "Risk threshold for step-up authentication",
-				Optional:           true,
+				Optional:            true,
 			},
 			"risk_threshold_block": schema.Int64Attribute{
 				MarkdownDescription: "Risk threshold for blocking",
-				Optional:           true,
+				Optional:            true,
 			},
 			// Locale settings
 			"default_locale": schema.StringAttribute{
 				MarkdownDescription: "Default locale",
-				Optional:           true,
+				Optional:            true,
 			},
 			"supported_locales": schema.ListAttribute{
 				MarkdownDescription: "List of supported locales",
-				Optional:           true,
-				ElementType:        types.StringType,
+				Optional:            true,
+				ElementType:         types.StringType,
 			},
 			// Legal / registration controls
 			"terms_of_service_url": schema.StringAttribute{
 				MarkdownDescription: "Terms of service URL",
-				Optional:           true,
+				Optional:            true,
 			},
 			"registration_approval_required": schema.BoolAttribute{
 				MarkdownDescription: "Whether registration requires approval",
-				Optional:           true,
-				Computed:           true,
+				Optional:            true,
+				Computed:            true,
 			},
 			"allowed_email_domains": schema.ListAttribute{
 				MarkdownDescription: "List of allowed email domains",
-				Optional:           true,
-				ElementType:        types.StringType,
+				Optional:            true,
+				ElementType:         types.StringType,
 			},
 			// Timestamps
 			"created_at": schema.StringAttribute{
@@ -622,7 +624,7 @@ func (r *RealmResource) ImportState(ctx context.Context, req resource.ImportStat
 	}
 
 	// Add the import state ID
-	resource.ImportStatePassthroughID(ctx, resource.DefaultsPath("name"), req, resp)
+	resource.ImportStatePassthroughID(ctx, path.Root("name"), req, resp)
 
 	tflog.Debug(ctx, "Realm imported successfully", map[string]interface{}{
 		"name": realm.Name,

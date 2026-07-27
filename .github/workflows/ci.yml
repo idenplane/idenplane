@@ -192,15 +192,21 @@ jobs:
       - name: Test
         run: npm run ${{ matrix.package == 'idenplane-mcp' && 'test:all' || 'test' }}
 
-  go-sdk:
-    # 35 tests in packages/idenplane-go had never run — no job in this
-    # workflow touched Go at all. The module declares no external
-    # dependencies, so there is no go.sum to restore and nothing to cache.
-    name: Go SDK
+  go-modules:
+    # No job in this workflow touched Go at all, so 35 tests in
+    # packages/idenplane-go had never run and terraform-provider-idenplane had
+    # never been compiled — it turned out not to.
+    name: Go — ${{ matrix.module }}
     runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        module:
+          - packages/idenplane-go
+          - terraform-provider-idenplane
     defaults:
       run:
-        working-directory: packages/idenplane-go
+        working-directory: ${{ matrix.module }}
     steps:
       - uses: actions/checkout@v7
 

@@ -144,7 +144,7 @@ func (c *UserFederationsClient) CreateUserFederation(ctx context.Context, realmN
 func (c *UserFederationsClient) ListUserFederations(ctx context.Context, realmName string) ([]UserFederation, error) {
 	var federations []UserFederation
 	path := fmt.Sprintf("/admin/realms/%s/user-federations", realmName)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &federations)
+	err := c.httpClient.GetJSON(ctx, path, nil, &federations)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list user federations: %w", err)
 	}
@@ -155,7 +155,7 @@ func (c *UserFederationsClient) ListUserFederations(ctx context.Context, realmNa
 func (c *UserFederationsClient) GetUserFederation(ctx context.Context, realmName, federationID string) (*UserFederation, error) {
 	var federation UserFederation
 	path := fmt.Sprintf("/admin/realms/%s/user-federations/%s", realmName, federationID)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &federation)
+	err := c.httpClient.GetJSON(ctx, path, nil, &federation)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user federation %s: %w", federationID, err)
 	}
@@ -226,7 +226,7 @@ func (c *UserFederationsClient) CreateMapper(ctx context.Context, realmName, fed
 func (c *UserFederationsClient) ListMappers(ctx context.Context, realmName, federationID string) ([]UserFederationMapper, error) {
 	var mappers []UserFederationMapper
 	path := fmt.Sprintf("/admin/realms/%s/user-federations/%s/mappers", realmName, federationID)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &mappers)
+	err := c.httpClient.GetJSON(ctx, path, nil, &mappers)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list mappers: %w", err)
 	}
@@ -237,7 +237,7 @@ func (c *UserFederationsClient) ListMappers(ctx context.Context, realmName, fede
 func (c *UserFederationsClient) GetMapper(ctx context.Context, realmName, federationID, mapperID string) (*UserFederationMapper, error) {
 	var mapper UserFederationMapper
 	path := fmt.Sprintf("/admin/realms/%s/user-federations/%s/mappers/%s", realmName, federationID, mapperID)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &mapper)
+	err := c.httpClient.GetJSON(ctx, path, nil, &mapper)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get mapper %s: %w", mapperID, err)
 	}

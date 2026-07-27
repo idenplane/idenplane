@@ -82,7 +82,7 @@ func (c *GroupsClient) CreateGroup(ctx context.Context, realmName string, req Cr
 func (c *GroupsClient) ListGroups(ctx context.Context, realmName string) ([]Group, error) {
 	var groups []Group
 	path := fmt.Sprintf("/admin/realms/%s/groups", realmName)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &groups)
+	err := c.httpClient.GetJSON(ctx, path, nil, &groups)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list groups: %w", err)
 	}
@@ -93,7 +93,7 @@ func (c *GroupsClient) ListGroups(ctx context.Context, realmName string) ([]Grou
 func (c *GroupsClient) GetGroup(ctx context.Context, realmName, groupID string) (*Group, error) {
 	var group Group
 	path := fmt.Sprintf("/admin/realms/%s/groups/%s", realmName, groupID)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &group)
+	err := c.httpClient.GetJSON(ctx, path, nil, &group)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get group %s: %w", groupID, err)
 	}
@@ -127,7 +127,7 @@ func (c *GroupsClient) DeleteGroup(ctx context.Context, realmName, groupID strin
 func (c *GroupsClient) GetGroupMembers(ctx context.Context, realmName, groupID string) ([]User, error) {
 	var users []User
 	path := fmt.Sprintf("/admin/realms/%s/groups/%s/members", realmName, groupID)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &users)
+	err := c.httpClient.GetJSON(ctx, path, nil, &users)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get group members: %w", err)
 	}
@@ -158,7 +158,7 @@ func (c *GroupsClient) RemoveUserFromGroup(ctx context.Context, realmName, userI
 func (c *GroupsClient) GetUserGroups(ctx context.Context, realmName, userID string) ([]Group, error) {
 	var groups []Group
 	path := fmt.Sprintf("/admin/realms/%s/users/%s/groups", realmName, userID)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &groups)
+	err := c.httpClient.GetJSON(ctx, path, nil, &groups)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user groups: %w", err)
 	}
@@ -171,7 +171,7 @@ func (c *GroupsClient) GetUserGroups(ctx context.Context, realmName, userID stri
 func (c *GroupsClient) GetGroupRoles(ctx context.Context, realmName, groupID string) ([]Role, error) {
 	var roles []Role
 	path := fmt.Sprintf("/admin/realms/%s/groups/%s/role-mappings", realmName, groupID)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &roles)
+	err := c.httpClient.GetJSON(ctx, path, nil, &roles)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get group roles: %w", err)
 	}
@@ -205,7 +205,7 @@ func (c *GroupsClient) RemoveRolesFromGroup(ctx context.Context, realmName, grou
 func (c *GroupsClient) GetUserGroupRoles(ctx context.Context, realmName, userID string) ([]Role, error) {
 	var roles []Role
 	path := fmt.Sprintf("/admin/realms/%s/users/%s/role-mappings/groups", realmName, userID)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &roles)
+	err := c.httpClient.GetJSON(ctx, path, nil, &roles)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user group roles: %w", err)
 	}
