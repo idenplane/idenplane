@@ -3,7 +3,6 @@ import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import * as zlib from 'zlib';
-import { PrismaClient } from '@prisma/client';
 
 export interface BackupResult {
   success: boolean;
@@ -40,11 +39,9 @@ export interface BackupListing {
 @Injectable()
 export class DatabaseBackupService {
   private readonly logger = new Logger(DatabaseBackupService.name);
-  private readonly prisma: PrismaClient;
   private readonly backupDirectory: string;
 
   constructor() {
-    this.prisma = new PrismaClient();
     // Default backup directory within project
     this.backupDirectory = process.env.BACKUP_DIR || './backups';
   }
@@ -406,12 +403,5 @@ export class DatabaseBackupService {
     }
 
     return `${size.toFixed(1)} ${units[unitIndex]}`;
-  }
-
-  /**
-   * Clean up Prisma client connections.
-   */
-  async onModuleDestroy(): Promise<void> {
-    await this.prisma.$disconnect();
   }
 }

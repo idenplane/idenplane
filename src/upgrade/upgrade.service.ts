@@ -9,6 +9,7 @@ import { ConfigCompatibilityService } from './config-compatibility.service.js';
 import { RollbackService } from './rollback.service.js';
 import { UpgradeHealthService } from './upgrade-health.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { APP_VERSION } from '../versioning/app-version.js';
 
 /**
  * Upgrade stage enumeration tracking progress through the upgrade workflow.
@@ -760,21 +761,16 @@ export class UpgradeService {
 
   /**
    * Get the current Idenplane version.
+   *
+   * Previously shelled out to `node -p "require("./package.json").version"`.
+   * The shell stripped the inner quotes, so node evaluated
+   * `require(./package.json).version` — a SyntaxError — and the catch returned
+   * 'unknown' every single time. Every upgrade_audit_log.fromVersion written
+   * before this fix therefore reads 'unknown'. APP_VERSION reads the same
+   * package.json directly and is already used by the versioning module.
    */
   getCurrentVersion(): string {
-    try {
-      // Try to read version from package.json
-      const output = execSync(
-        'node -p "require("./package.json").version" 2>&1',
-        {
-          encoding: 'utf-8',
-          stdio: ['pipe', 'pipe', 'pipe'],
-        },
-      );
-      return output.trim();
-    } catch {
-      return 'unknown';
-    }
+    return APP_VERSION;
   }
 
   /**
@@ -784,12 +780,5 @@ export class UpgradeService {
     const timestamp = Date.now().toString(36);
     const random = Math.random().toString(36).substring(2, 8);
     return `upg-${timestamp}-${random}`;
-  }
-
-  /**
-   * Clean up Prisma client connections.
-   */
-  async onModuleDestroy(): Promise<void> {
-    await this.prisma.$disconnect();
   }
 }

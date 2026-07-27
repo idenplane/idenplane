@@ -77,3 +77,7 @@ logs/security/
 
 # Local redesign verification screenshots
 admin-ui/.redesign-screens/
+
+# Database backups written by the upgrade flow (BACKUP_DIR, default ./backups).
+# These are full production dumps — they must never be committed.
+backups/

@@ -7,6 +7,7 @@ import { DatabaseBackupService } from './database-backup.service.js';
 import { ConfigCompatibilityService } from './config-compatibility.service.js';
 import { UpgradeHealthService } from './upgrade-health.service.js';
 import { PrismaModule } from '../prisma/prisma.module.js';
+import { UpgradeEnabledGuard } from './guards/upgrade-enabled.guard.js';
 
 @Module({
   imports: [PrismaModule],
@@ -18,14 +19,11 @@ import { PrismaModule } from '../prisma/prisma.module.js';
     DatabaseBackupService,
     ConfigCompatibilityService,
     UpgradeHealthService,
+    UpgradeEnabledGuard,
   ],
-  exports: [
-    UpgradeService,
-    RollbackService,
-    PreUpgradeValidatorService,
-    DatabaseBackupService,
-    ConfigCompatibilityService,
-    UpgradeHealthService,
-  ],
+  // Nothing outside this module consumes these services — the controller and
+  // the CLI are the only entry points. Kept empty rather than re-exporting a
+  // list that would drift.
+  exports: [],
 })
 export class UpgradeModule {}

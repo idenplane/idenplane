@@ -171,6 +171,28 @@ describe('UpgradeController', () => {
       expect(mockRollbackService.getUpgradeHistory).toHaveBeenCalled();
       expect(result).toEqual(mockHistory);
     });
+
+    // The endpoint previously declared no @Query at all, so the ?limit the
+    // admin console sends (20 on the status page, 100 for migration history)
+    // was silently dropped and every caller got the service default of 10.
+    it.each([
+      ['50', 50],
+      ['1', 1],
+      ['100', 100],
+      ['500', 100], // clamped up-bound
+      ['0', 1], // clamped low-bound
+      ['-7', 1],
+      ['abc', 10], // unparseable falls back to the default
+      [undefined, 10],
+    ])('passes limit=%s to the service as %s', async (input, expected) => {
+      mockRollbackService.getUpgradeHistory.mockResolvedValue([]);
+
+      await controller.getUpgradeHistory(input as string | undefined);
+
+      expect(mockRollbackService.getUpgradeHistory).toHaveBeenCalledWith(
+        expected,
+      );
+    });
   });
 
   describe('getUpgradeState', () => {

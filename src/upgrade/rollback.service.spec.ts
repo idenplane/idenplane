@@ -10,16 +10,13 @@ const mockPrisma = {
   },
 };
 
-jest.mock('@prisma/client', () => ({
-  PrismaClient: jest.fn(() => mockPrisma),
-}));
-
 import {
   RollbackService,
   RollbackResult,
   RollbackCapability,
 } from './rollback.service.js';
 import { DatabaseBackupService } from './database-backup.service.js';
+import { PrismaService } from '../prisma/prisma.service.js';
 
 describe('RollbackService', () => {
   let rollbackService: RollbackService;
@@ -35,11 +32,10 @@ describe('RollbackService', () => {
       createBackup: jest.fn(),
     } as unknown as jest.Mocked<DatabaseBackupService>;
 
-    rollbackService = new RollbackService(mockDatabaseBackupService);
-  });
-
-  afterEach(async () => {
-    await rollbackService.onModuleDestroy();
+    rollbackService = new RollbackService(
+      mockPrisma as unknown as PrismaService,
+      mockDatabaseBackupService,
+    );
   });
 
   describe('checkRollbackCapability', () => {

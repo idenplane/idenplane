@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { execSync } from 'child_process';
-import { PrismaClient } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service.js';
 
 export interface PreUpgradeCheck {
   name: string;
@@ -34,11 +34,7 @@ export interface PreUpgradeValidationResult {
 @Injectable()
 export class PreUpgradeValidatorService {
   private readonly logger = new Logger(PreUpgradeValidatorService.name);
-  private readonly prisma: PrismaClient;
-
-  constructor() {
-    this.prisma = new PrismaClient();
-  }
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * Run all pre-upgrade validation checks.
@@ -409,12 +405,5 @@ export class PreUpgradeValidatorService {
         details: err instanceof Error ? err.message : String(err),
       };
     }
-  }
-
-  /**
-   * Clean up Prisma client connections.
-   */
-  async onModuleDestroy(): Promise<void> {
-    await this.prisma.$disconnect();
   }
 }
