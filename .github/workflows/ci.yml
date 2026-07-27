@@ -6,6 +6,13 @@ on:
   pull_request:
     branches: [main, dev]
 
+# Only the newest commit per branch is worth testing; superseded runs are
+# cancelled so a burst of merges (e.g. clearing a Dependabot backlog) doesn't
+# queue dozens of runs against commits that are already stale.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
 # Minimal default token permissions; all jobs only read repo contents
 # (checkout, install, test, build, upload-artifact). Elevate per-job if a
 # future job needs write access.
