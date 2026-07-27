@@ -192,6 +192,30 @@ jobs:
       - name: Test
         run: npm run ${{ matrix.package == 'idenplane-mcp' && 'test:all' || 'test' }}
 
+  docs-build:
+    # The docs site had been failing to build and nothing noticed, because no
+    # job ever built it. Its dependency tree is separate from the root one, so
+    # a bad resolution there is invisible to every other job here.
+    name: Docs Build
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: docs
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: docs/package-lock.json
+
+      - name: Install docs dependencies
+        run: npm ci
+
+      - name: Build docs
+        run: npm run build
+
   build:
     name: Build
     runs-on: ubuntu-latest
