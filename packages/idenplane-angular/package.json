@@ -2,12 +2,12 @@
   "name": "idenplane-angular",
   "version": "1.0.1",
   "description": "Angular SDK for Idenplane Identity and Access Management Server",
-  "type": "commonjs",
+  "type": "module",
   "main": "./dist/index.js",
   "types": "./dist/index.d.ts",
   "exports": {
     ".": {
-      "require": {
+      "import": {
         "types": "./dist/index.d.ts",
         "default": "./dist/index.js"
       }
@@ -57,5 +57,6 @@
   },
   "publishConfig": {
     "access": "public"
-  }
+  },
+  "module": "./dist/index.js"
 }

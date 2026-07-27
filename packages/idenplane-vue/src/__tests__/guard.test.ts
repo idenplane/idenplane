@@ -120,7 +120,7 @@ describe('createAuthGuard', () => {
     expect(client.init).toHaveBeenCalled();
   });
 
-  it('warns and fails-open when no client is available', async () => {
+  it('warns and fails closed when no client is available', async () => {
     const warnSpy = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const guard = createAuthGuard(); // no client override, no inject context
 
@@ -128,7 +128,14 @@ describe('createAuthGuard', () => {
     const from = makeRoute({ path: '/' });
     const result = await guard(to, from, vi.fn() as never);
 
-    expect(result).toBe(true); // fail-open
+    // No client means identity cannot be verified. Letting navigation through
+    // would hand out a protected route to an unauthenticated visitor, so the
+    // guard redirects instead — and carries `next` so the user lands back on
+    // the route they asked for once they have signed in.
+    expect(result).toEqual({
+      path: '/login',
+      query: { next: '/dashboard' },
+    });
     expect(warnSpy).toHaveBeenCalled();
     warnSpy.mockRestore();
   });
