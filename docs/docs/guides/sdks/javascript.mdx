@@ -1,0 +1,264 @@
+---
+id: javascript-sdk
+title: JavaScript SDK
+description: Integrate Idenplane authentication into any JavaScript or TypeScript application using the core browser SDK
+---
+
+# JavaScript SDK
+
+`idenplane-sdk` is the core browser SDK. Every framework package — React, Next.js, Angular, Vue — wraps this one, so anything documented here is available through them too. Use it directly in plain JavaScript or TypeScript applications, or in any framework without a dedicated Idenplane package.
+
+It implements the OAuth 2.0 Authorization Code flow with PKCE against a public client, and handles token storage, refresh, and role checks for you.
+
+## Installation
+
+```bash
+npm install idenplane-sdk
+```
+
+---
+
+## Quick Start
+
+### 1. Create a client
+
+```typescript
+import { IdenplaneClient } from 'idenplane-sdk';
+
+const client = new IdenplaneClient({
+  url: 'http://localhost:3000',
+  realm: 'my-realm',
+  clientId: 'my-app',
+  redirectUri: `${window.location.origin}/callback`,
+});
+```
+
+The `clientId` must be registered in Idenplane as a **public** client, and `redirectUri` must be one of its allowed redirect URIs.
+
+### 2. Initialise on page load
+
+`init()` restores an existing session if there is one, and returns whether the user ended up authenticated.
+
+```typescript
+const isAuthenticated = await client.init();
+
+if (isAuthenticated) {
+  const user = client.getUserInfo();
+  console.log(`Signed in as ${user?.preferred_username}`);
+} else {
+  await client.login();
+}
+```
+
+### 3. Handle the callback
+
+On the page you registered as `redirectUri`:
+
+```typescript
+import { IdenplaneClient } from 'idenplane-sdk';
+
+const client = new IdenplaneClient({ /* same config */ });
+
+const success = await client.handleCallback();
+if (success) {
+  window.location.replace('/');
+}
+```
+
+---
+
+## Configuration
+
+`IdenplaneConfig` is passed to the constructor.
+
+### Required
+
+| Option | Type | Description |
+|---|---|---|
+| `url` | `string` | Base URL of the Idenplane server, e.g. `http://localhost:3000` |
+| `realm` | `string` | Realm to authenticate against |
+| `clientId` | `string` | OAuth 2.0 client ID — must be registered as a **public** client |
+| `redirectUri` | `string` | URL to return to after login |
+
+### Optional
+
+| Option | Type | Default | Description |
+|---|---|---|---|
+| `scopes` | `string[]` | `['openid', 'profile', 'email']` | Scopes to request |
+| `storage` | `'memory' \| 'sessionStorage' \| 'localStorage'` | `'memory'` | Where tokens are kept |
+| `autoRefresh` | `boolean` | `true` | Refresh tokens before they expire |
+| `refreshBuffer` | `number` | `30` | Seconds before expiry to trigger a refresh |
+| `refreshStrategy` | `'rotation' \| 'silent' \| 'eager'` | `'rotation'` | How refreshes are performed |
+| `silentRedirectUri` | `string` | falls back to `redirectUri` | Redirect target for the silent-refresh iframe |
+| `postLogoutRedirectUri` | `string` | — | Where to send the browser after logout |
+
+### Choosing a storage type
+
+`memory` is the default because it is the safest: tokens never leave the JavaScript heap, so nothing survives a reload or is readable by other scripts. The cost is that every page load starts a fresh silent re-authentication.
+
+`sessionStorage` persists tokens for the life of the tab, and `localStorage` across tabs and restarts. Both put tokens somewhere any script on the origin can read them, so they trade XSS resistance for convenience — prefer them only when a full re-authentication on every load is genuinely not workable.
+
+### Refresh strategies
+
+- **`rotation`** — exchanges the refresh token for a new access token. The standard choice.
+- **`silent`** — re-authenticates through a hidden iframe. Use when the server does not issue refresh tokens to public clients. Requires `silentRedirectUri` to point at a page that calls `handleSilentCallback()`.
+- **`eager`** — rotation, but checks earlier than `refreshBuffer` so a slow network cannot leave a request holding an expired token.
+
+---
+
+## Silent refresh
+
+If you use `refreshStrategy: 'silent'`, serve a minimal page at `silentRedirectUri` that does nothing but complete the handshake:
+
+```typescript
+// /silent-callback.html
+import { handleSilentCallback } from 'idenplane-sdk';
+
+handleSilentCallback();
+```
+
+`handleSilentCallback()` returns immediately when the page is not inside an iframe, so it is safe to ship on a route that might also be opened directly.
+
+---
+
+## Authentication
+
+### `init()`
+
+```typescript
+const isAuthenticated: boolean = await client.init();
+```
+
+Discovers the realm's OpenID configuration, restores any stored session, and starts the refresh timer. Call it once, before anything else.
+
+### `login(options?)`
+
+```typescript
+await client.login();
+
+// request extra scopes, or round-trip your own state
+await client.login({ scope: ['openid', 'profile', 'offline_access'] });
+await client.login({ state: '/dashboard' });
+```
+
+Redirects the browser to the authorization endpoint. Nothing after this call runs.
+
+### `handleCallback(url?)`
+
+```typescript
+const success: boolean = await client.handleCallback();
+```
+
+Exchanges the authorization code for tokens. Defaults to reading the current URL; pass one explicitly if your router has already consumed it.
+
+### `logout()`
+
+```typescript
+await client.logout();
+```
+
+Clears stored tokens and redirects to the realm's end-session endpoint.
+
+---
+
+## Tokens
+
+```typescript
+client.getAccessToken();      // string | null
+client.getTokenClaims();      // TokenClaims | null — decoded access token
+client.getIdTokenClaims();    // TokenClaims | null — decoded ID token
+client.isAuthenticated();     // boolean
+await client.refreshTokens(); // TokenResponse — force a refresh now
+```
+
+Standalone helpers are exported for working with tokens you hold yourself:
+
+```typescript
+import { parseJwt, isTokenExpired, getTokenExpiresIn } from 'idenplane-sdk';
+
+const claims = parseJwt(someToken);
+const expired = isTokenExpired(someToken);
+const seconds = getTokenExpiresIn(someToken);
+```
+
+:::note
+`parseJwt` decodes a token; it does not verify its signature. Treat anything it returns as untrusted input — signature verification belongs on the server.
+:::
+
+---
+
+## User info
+
+```typescript
+await client.fetchUserInfo(); // UserInfo | null — calls the userinfo endpoint
+client.getUserInfo();         // UserInfo | null — cached, no network call
+```
+
+---
+
+## Roles and permissions
+
+```typescript
+client.hasRealmRole('admin');                  // boolean
+client.hasClientRole('my-app', 'editor');      // boolean
+client.getRealmRoles();                        // string[]
+client.getClientRoles('my-app');               // string[]
+client.hasPermission('users:read');            // boolean
+```
+
+:::warning
+These read the claims in the token the browser holds, so they are only suitable for deciding what to show. Every protected operation must be authorised again on the server — a token's claims are visible and editable by anyone who can open developer tools.
+:::
+
+---
+
+## Events
+
+```typescript
+client.on('login', (tokens) => { /* TokenResponse */ });
+client.on('logout', () => {});
+client.on('tokenRefresh', (tokens) => { /* TokenResponse */ });
+client.on('error', (error) => { /* Error */ });
+client.on('ready', (isAuthenticated) => { /* boolean */ });
+```
+
+`off()` removes a listener with the same arguments:
+
+```typescript
+const onLogin = (tokens) => console.log(tokens);
+client.on('login', onLogin);
+client.off('login', onLogin);
+```
+
+`authenticated` and `tokenRefreshed` are kept as aliases for `login` and `tokenRefresh`; prefer the shorter names in new code.
+
+The `onLogin`, `onLogout`, `onError` and `onTokenRefresh` config callbacks fire alongside the matching events — use whichever suits the call site.
+
+---
+
+## Continuous verification
+
+For deployments using continuous verification, the SDK exposes a client for reporting device posture and behavioural signals:
+
+```typescript
+import { ContinuousVerification } from 'idenplane-sdk';
+```
+
+See the [Authentication Guide](/guides/authentication) for how these signals are evaluated.
+
+---
+
+## Next steps
+
+<div className="row">
+
+[**Authentication Guide**](/guides/authentication)
+OAuth 2.0 flows in depth
+
+[**Authorization Guide**](/guides/authorization)
+Roles, scopes and permissions
+
+[**API Reference**](/api)
+Complete REST API documentation
+
+</div>

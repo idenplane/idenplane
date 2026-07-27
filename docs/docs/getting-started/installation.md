@@ -281,8 +281,8 @@ Learn about all configuration options and environment variables
 [**Quickstart**](/quickstart)
 Get started with Idenplane authentication in your first application
 
-[**Admin Console**](/getting-started/admin-console)
-Configure realms, users, and clients
+[**API Reference**](/api)
+Manage realms, users, and clients over the REST API
 
 </div>
 

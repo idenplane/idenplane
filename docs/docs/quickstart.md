@@ -51,11 +51,11 @@ After starting Idenplane, you can access the Admin Console with these default cr
 [**Installation Guide**](/getting-started/installation)
 Detailed installation instructions for Docker, Kubernetes, and bare metal
 
-[**Admin Console**](/getting-started/admin-console)
-Learn how to configure realms, users, and clients
+[**Configuration**](/getting-started/configuration)
+Environment variables, realms, and server options
 
-[**First Application**](/guides/first-app)
-Register your first OAuth client and integrate with your app
+[**JavaScript SDK**](/guides/sdks/javascript-sdk)
+Register a public client and integrate it with your app
 
 </div>
 

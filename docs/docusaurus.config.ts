@@ -18,8 +18,12 @@ const config: Config = {
   organizationName: 'idenplane-project',
   projectName: 'idenplane-docs',
 
-  onBrokenLinks: 'warn',
-  onBrokenMarkdownLinks: 'warn',
+  // Fail the build rather than warn. Warnings scrolled past unread for long
+  // enough that 72 internal links pointed at a /docs/ prefix the site does not
+  // use, and three "next steps" cards led to pages nobody had written.
+  onBrokenLinks: 'throw',
+  onBrokenMarkdownLinks: 'throw',
+  onBrokenAnchors: 'throw',
 
   i18n: {
     defaultLocale: 'en',
