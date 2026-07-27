@@ -448,7 +448,29 @@ export class DatabaseBackupService {
       : { ...process.env };
   }
 
-  /** pg_dump argument vector (no shell — passed straight to execFileSync). */
+  /**
+   * pg_dump argument vector (no shell — passed straight to execFileSync).
+   *
+   * upgrade_audit_log is deliberately excluded. It records upgrades; it is not
+   * application data that should be rewound by one. Including it meant a
+   * rollback destroyed the very record of the failure that triggered it:
+   *
+   *   1. INITIALIZATION writes the audit row (status IN_PROGRESS).
+   *   2. BACKUP dumps the database — capturing that row as IN_PROGRESS — and
+   *      then updates it with the archive path.
+   *   3. The migration fails; the rollback restores the archive, reverting the
+   *      table to step 2's contents.
+   *
+   * The result was a row stuck at IN_PROGRESS with no backupId, no failure
+   * reason and no rollback record — and, since #1199, a stale IN_PROGRESS row
+   * blocks every further upgrade for the two-hour TTL. Excluding the table
+   * leaves it untouched by the restore, so the audit trail survives the
+   * rollback. `--exclude-table` only affects the dump; pg_restore --clean drops
+   * what is in the archive, so a table that was never dumped is never dropped.
+   *
+   * Found by test/upgrade-failure-rollback.e2e-spec.ts, which is the first test
+   * to run a failing upgrade against a real database.
+   */
   private buildPgDumpArgs(databaseName: string, outputPath: string): string[] {
     const { host, port, user } = this.pgConnParams();
     return [
@@ -460,6 +482,7 @@ export class DatabaseBackupService {
       user,
       '-d',
       databaseName,
+      '--exclude-table=upgrade_audit_log',
       '-Fc', // Custom format — required for pg_restore's selective/parallel modes
       '-Z',
       '6', // Compression level 6

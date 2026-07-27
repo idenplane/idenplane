@@ -694,9 +694,23 @@ export class UpgradeService {
       // matters because prisma.config.ts is not present in the production image
       // (docker-entrypoint.sh generates a prisma.config.js at runtime, which
       // will not exist if the process was started any other way).
+      // Run Prisma's CLI entrypoint with this process's own node binary rather
+      // than going through `npx`. npx is a shell script on POSIX and npx.cmd on
+      // Windows, and execFileSync deliberately does not use a shell — so the
+      // bare name is ENOENT on Windows and the .cmd is EINVAL (Node refuses to
+      // exec a batch file without a shell since CVE-2024-27980). Resolving the
+      // entrypoint avoids the shell entirely on every platform and does not
+      // depend on PATH. `prisma` is a regular dependency, so it survives the
+      // `npm prune --omit=dev` in the production image.
       const output = execFileSync(
-        'npx',
-        ['prisma', 'migrate', 'deploy', '--schema', 'prisma/schema.prisma'],
+        process.execPath,
+        [
+          require.resolve('prisma/build/index.js'),
+          'migrate',
+          'deploy',
+          '--schema',
+          'prisma/schema.prisma',
+        ],
         {
           encoding: 'utf-8',
           stdio: ['pipe', 'pipe', 'pipe'],
