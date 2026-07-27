@@ -430,11 +430,27 @@ export class DatabaseBackupService {
       } catch {
         return {
           available: false,
-          detail: `${tool} was not found on PATH. Install postgresql-client (client major version >= the server's).`,
+          detail: `${tool} was not found on PATH. Install postgresql-client matching the server's major version.`,
         };
       }
     }
     return { available: true, detail: 'pg_dump and pg_restore are available' };
+  }
+
+  /**
+   * Major version of the installed pg_dump, or null if it cannot be determined.
+   */
+  clientMajorVersion(): number | null {
+    try {
+      const out = execFileSync('pg_dump', ['--version'], {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      const match = out.match(/(\d+)/);
+      return match ? parseInt(match[1], 10) : null;
+    } catch {
+      return null;
+    }
   }
 
   /**
