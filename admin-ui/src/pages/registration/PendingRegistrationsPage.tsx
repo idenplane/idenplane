@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams } from 'react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getPendingRegistrations, approveRegistration, rejectRegistration } from '../../api/registration';
 import ConfirmDialog from '../../components/ConfirmDialog';

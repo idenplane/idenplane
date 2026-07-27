@@ -1,7 +1,7 @@
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { Route, Routes } from 'react-router-dom';
+import { Route, Routes } from 'react-router';
 import { render } from '../../../test/utils';
 import { server } from '../../../test/mocks/server';
 import StartUpgradePage from '../StartUpgradePage';

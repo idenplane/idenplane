@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams } from 'react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getRealmRoles, createRealmRole, deleteRealmRole } from '../../api/roles';
 import ConfirmDialog from '../../components/ConfirmDialog';

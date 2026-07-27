@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { useParams } from 'react-router-dom';
+import { useParams } from 'react-router';
 import type { Realm } from '../../types';
 import { getRealmByName } from '../../api/realms';
 import { getPublicRegistrationFields } from '../../api/registration';

@@ -1,4 +1,4 @@
-import { Link, useParams } from 'react-router-dom';
+import { Link, useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { getGroups } from '../../api/groups';
 import type { Group } from '../../types';
