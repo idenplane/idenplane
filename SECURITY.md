@@ -49,7 +49,7 @@ In scope:
 - Official client SDKs in `packages/`
 - The admin UI (`admin-ui/`)
 - Docker images published under `islamawad/idenplane`
-- Helm charts and Terraform/Pulumi providers under this repository
+- Helm charts and the Terraform provider under this repository
 
 Out of scope:
 
