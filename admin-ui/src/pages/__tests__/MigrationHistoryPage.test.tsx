@@ -89,7 +89,9 @@ describe('MigrationHistoryPage', () => {
 
   it('shows empty state when no history is available', async () => {
     server.use(
-      http.get('/admin/upgrade/history', () => HttpResponse.json([])),
+      http.get('/admin/upgrade/audit', () =>
+        HttpResponse.json({ entries: [], total: 0 }),
+      ),
     );
     renderMigrationHistoryPage();
     await waitFor(() => {
@@ -99,9 +101,9 @@ describe('MigrationHistoryPage', () => {
 
   it('shows loading state', async () => {
     server.use(
-      http.get('/admin/upgrade/history', async () => {
+      http.get('/admin/upgrade/audit', async () => {
         await new Promise((r) => setTimeout(r, 100));
-        return HttpResponse.json([]);
+        return HttpResponse.json({ entries: [], total: 0 });
       }),
     );
     renderMigrationHistoryPage();
@@ -113,7 +115,7 @@ describe('MigrationHistoryPage', () => {
 
   it('shows error state when API fails', async () => {
     server.use(
-      http.get('/admin/upgrade/history', () => HttpResponse.json({}, { status: 500 })),
+      http.get('/admin/upgrade/audit', () => HttpResponse.json({}, { status: 500 })),
     );
     renderMigrationHistoryPage();
     await waitFor(() => {
@@ -123,7 +125,7 @@ describe('MigrationHistoryPage', () => {
 
   it('displays pagination controls when there are more entries', async () => {
     server.use(
-      http.get('/admin/upgrade/history', () => {
+      http.get('/admin/upgrade/audit', () => {
         const entries = Array.from({ length: 15 }, (_, i) => ({
           id: `upgrade-${i}`,
           fromVersion: '1.0.0',
@@ -134,7 +136,7 @@ describe('MigrationHistoryPage', () => {
           backupId: null,
           errorMessage: null,
         }));
-        return HttpResponse.json(entries);
+        return HttpResponse.json({ entries, total: entries.length });
       }),
     );
     renderMigrationHistoryPage();
@@ -147,7 +149,7 @@ describe('MigrationHistoryPage', () => {
 
   it('navigates to previous page when Previous is clicked', async () => {
     server.use(
-      http.get('/admin/upgrade/history', () => {
+      http.get('/admin/upgrade/audit', () => {
         const entries = Array.from({ length: 15 }, (_, i) => ({
           id: `upgrade-${i}`,
           fromVersion: '1.0.0',
@@ -158,7 +160,7 @@ describe('MigrationHistoryPage', () => {
           backupId: null,
           errorMessage: null,
         }));
-        return HttpResponse.json(entries);
+        return HttpResponse.json({ entries, total: entries.length });
       }),
     );
     renderMigrationHistoryPage();
@@ -179,19 +181,22 @@ describe('MigrationHistoryPage', () => {
 
   it('displays error message in detail modal for failed upgrades', async () => {
     server.use(
-      http.get('/admin/upgrade/history', () =>
-        HttpResponse.json([
-          {
-            id: 'upgrade-3',
-            fromVersion: '1.0.0',
-            toVersion: '1.2.0',
-            status: 'FAILED',
-            startedAt: new Date('2024-01-01T10:00:00.000Z').toISOString(),
-            completedAt: new Date('2024-01-01T10:05:00.000Z').toISOString(),
-            backupId: 'backup-123',
-            errorMessage: 'Database migration failed due to schema conflict',
-          },
-        ]),
+      http.get('/admin/upgrade/audit', () =>
+        HttpResponse.json({
+          entries: [
+            {
+              id: 'upgrade-3',
+              fromVersion: '1.0.0',
+              toVersion: '1.2.0',
+              status: 'FAILED',
+              startedAt: new Date('2024-01-01T10:00:00.000Z').toISOString(),
+              completedAt: new Date('2024-01-01T10:05:00.000Z').toISOString(),
+              backupId: 'backup-123',
+              errorMessage: 'Database migration failed due to schema conflict',
+            },
+          ],
+          total: 1,
+        }),
       ),
     );
     renderMigrationHistoryPage();
@@ -199,6 +204,37 @@ describe('MigrationHistoryPage', () => {
     act(() => { viewDetailsButton.click(); });
     await waitFor(() => {
       expect(screen.getByText('Database migration failed due to schema conflict')).toBeInTheDocument();
+    });
+  });
+
+  // The server has always returned checksPassed and the UI always dropped it.
+  it('renders checksPassed in the detail modal when present', async () => {
+    server.use(
+      http.get('/admin/upgrade/audit', () =>
+        HttpResponse.json({
+          entries: [
+            {
+              id: 'upgrade-4',
+              fromVersion: '1.0.0',
+              toVersion: '1.3.0',
+              status: 'FAILED',
+              startedAt: new Date('2024-01-01T10:00:00.000Z').toISOString(),
+              completedAt: null,
+              backupId: null,
+              errorMessage: null,
+              checksPassed: { schema_integrity: 'fail', disk_space: 'pass' },
+            },
+          ],
+          total: 1,
+        }),
+      ),
+    );
+    renderMigrationHistoryPage();
+    const viewDetailsButton = await screen.findByRole('button', { name: /view details/i });
+    act(() => { viewDetailsButton.click(); });
+    await waitFor(() => {
+      expect(screen.getByText(/check results/i)).toBeInTheDocument();
+      expect(screen.getByText(/schema_integrity/)).toBeInTheDocument();
     });
   });
 });

@@ -32,6 +32,13 @@ export interface UpgradeAuditEntry {
   completedAt: Date | null;
   backupId: string | null;
   errorMessage: string | null;
+  /**
+   * Per-stage check results. The server has always returned this and the UI
+   * has always dropped it, even though it is the richest diagnostic available
+   * when an upgrade fails. Optional so existing call sites and test factories
+   * keep type-checking.
+   */
+  checksPassed?: Record<string, unknown> | null;
 }
 
 export interface UpgradeState {
@@ -123,7 +130,24 @@ export interface UpgradeRequest {
   toVersion: string;
   dryRun?: boolean;
   force?: boolean;
-  initiatedBy?: string;
+  /**
+   * Free-text note recorded with the upgrade. Note this is NOT the actor —
+   * the server derives that from the authenticated principal and ignores
+   * anything the client claims here.
+   */
+  note?: string;
+  /**
+   * Must equal `toVersion` for a real upgrade; the server rejects the request
+   * otherwise. Not required for a dry run, which writes nothing.
+   */
+  confirm?: string;
+}
+
+export interface SystemVersion {
+  version: string;
+  schemaVersion: string | null;
+  pendingMigrations: string[];
+  databaseUpToDate: boolean;
 }
 
 // ============================================================================
@@ -202,6 +226,38 @@ export async function checkRollbackCapability(): Promise<RollbackCapability> {
  * Execute a rollback to the previous version.
  */
 export async function executeRollback(upgradeId?: string): Promise<RollbackResult> {
-  const { data } = await apiClient.post<RollbackResult>('/upgrade/rollback', { upgradeId });
+  // `confirm` is mandatory server-side: a rollback restores a dump over the
+  // live database and discards every write since that backup. The literal is
+  // sent here rather than threaded through the caller because the UI already
+  // gates this behind its own explicit confirmation dialog — the server check
+  // guards against a hand-written or replayed request, not against this page.
+  const { data } = await apiClient.post<RollbackResult>('/upgrade/rollback', {
+    upgradeId,
+    confirm: 'ROLLBACK',
+  });
+  return data;
+}
+
+/**
+ * Paginated audit entries. Prefer this over `getUpgradeHistory` when a caller
+ * needs more than a handful of rows: `/upgrade/audit` returns `{entries, total}`
+ * and clamps `limit` to 1..100 server-side.
+ */
+export async function getUpgradeAudit(
+  limit = 100,
+): Promise<{ entries: UpgradeAuditEntry[]; total: number }> {
+  const { data } = await apiClient.get<{
+    entries: UpgradeAuditEntry[];
+    total: number;
+  }>('/upgrade/audit', { params: { limit } });
+  return data;
+}
+
+/**
+ * Current application version and migration state. Lives here rather than in a
+ * new module because the upgrade wizard is its only consumer.
+ */
+export async function getSystemVersion(): Promise<SystemVersion> {
+  const { data } = await apiClient.get<SystemVersion>('/system/version');
   return data;
 }
