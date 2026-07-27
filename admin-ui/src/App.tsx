@@ -65,6 +65,9 @@ import NhiDetailPage from './pages/nhi/NhiDetailPage';
 import NhiAnalyticsPage from './pages/nhi/NhiAnalyticsPage';
 import PluginsPage from './pages/plugins/PluginsPage';
 import SystemStatusPage from './pages/system/SystemStatusPage';
+import UpgradeStatusPage from './pages/upgrade/UpgradeStatusPage';
+import StartUpgradePage from './pages/upgrade/StartUpgradePage';
+import MigrationHistoryPage from './pages/upgrade/MigrationHistoryPage';
 import NotFoundPage from './pages/NotFoundPage';
 import { hasCredentials, refreshSession } from './api/client';
 import { useAuthContext } from './context/AuthContext';
@@ -173,6 +176,9 @@ export default function App() {
           <Route path="/console/realms/:name/nhi-analytics" element={<NhiAnalyticsPage />} />
           <Route path="/console/plugins" element={<PluginsPage />} />
           <Route path="/console/system-status" element={<SystemStatusPage />} />
+          <Route path="/console/upgrade" element={<UpgradeStatusPage />} />
+          <Route path="/console/upgrade/new" element={<StartUpgradePage />} />
+          <Route path="/console/upgrade/history" element={<MigrationHistoryPage />} />
           {/* Catch-all for unknown /console/... paths — rendered inside the Layout shell */}
           <Route path="*" element={<NotFoundPage />} />
         </Route>

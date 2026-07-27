@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { Link, useNavigate } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
   getUpgradeStatus,
@@ -397,7 +397,17 @@ export default function UpgradeStatusPage() {
 
       {/* Upgrade History */}
       <div>
-        <h2 className="mb-4 text-base font-semibold text-gray-900">Upgrade History</h2>
+        <div className="mb-4 flex items-center justify-between">
+          <h2 className="text-base font-semibold text-gray-900">Upgrade History</h2>
+          {/* The table below is a recent-activity preview; the history page is
+              the paginated deep dive. Nothing linked forward to it before. */}
+          <Link
+            to="/console/upgrade/history"
+            className="text-sm text-indigo-600 hover:underline"
+          >
+            View full history
+          </Link>
+        </div>
         {historyLoading ? (
           <div className="animate-pulse rounded-lg border border-gray-200 bg-gray-100 p-8">
             <div className="h-4 w-32 rounded bg-gray-200" />

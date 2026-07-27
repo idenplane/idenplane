@@ -231,6 +231,69 @@ export const handlers = [
     return HttpResponse.json(makeRollbackCapability());
   }),
 
+  // /upgrade/audit is what MigrationHistoryPage uses: unlike /history it
+  // honours ?limit server-side. Clamped to 100 here to mirror the server, so
+  // the mock cannot be more permissive than production — that mismatch is
+  // exactly what hid the broken pagination.
+  http.get(`${BASE}/upgrade/audit`, ({ request }) => {
+    const url = new URL(request.url);
+    const raw = Number(url.searchParams.get('limit') ?? 20);
+    const limit = Math.min(Math.max(Number.isNaN(raw) ? 20 : raw, 1), 100);
+    const entries = [
+      makeUpgradeAuditEntry({ id: 'upgrade-1', status: 'COMPLETED' }),
+      makeUpgradeAuditEntry({ id: 'upgrade-2', status: 'COMPLETED', fromVersion: '0.9.0', toVersion: '1.0.0' }),
+      makeUpgradeAuditEntry({ id: 'upgrade-3', status: 'FAILED', toVersion: '1.2.0', errorMessage: 'Database migration failed' }),
+    ].slice(0, limit);
+    return HttpResponse.json({ entries, total: entries.length });
+  }),
+
+  http.get(`${BASE}/upgrade/config-compatibility`, () => {
+    return HttpResponse.json({
+      compatible: true,
+      version: '1.2.0',
+      issues: [],
+      summary: { errors: 0, warnings: 0 },
+    });
+  }),
+
+  http.post(`${BASE}/upgrade`, async ({ request }) => {
+    const body = (await request.json()) as { toVersion: string; dryRun?: boolean };
+    return HttpResponse.json({
+      success: true,
+      upgradeId: 'upg-mock',
+      fromVersion: '1.1.0',
+      toVersion: body.toVersion,
+      stages: [
+        { stage: 'INITIALIZATION', success: true, message: 'Initialized', duration: 10 },
+        { stage: 'PRE_VALIDATION', success: true, message: 'Checks passed', duration: 20 },
+      ],
+      rollbackTriggered: false,
+      duration: 30,
+    });
+  }),
+
+  // Previously absent, so UpgradeStatusPage's rollback mutation fired at
+  // nothing and that path was never exercised.
+  http.post(`${BASE}/upgrade/rollback`, () => {
+    return HttpResponse.json({
+      success: true,
+      rollbackVersion: '1.0.0',
+      previousVersion: '1.1.0',
+      backupRestored: true,
+      duration: 1200,
+      timestamp: new Date().toISOString(),
+    });
+  }),
+
+  http.get(`${BASE}/system/version`, () => {
+    return HttpResponse.json({
+      version: '1.1.0',
+      schemaVersion: '20260101000000_init',
+      pendingMigrations: [],
+      databaseUpToDate: true,
+    });
+  }),
+
   // Theme versions
   http.get(`${BASE}/realms/:name/themes/:themeId/versions`, () => {
     return HttpResponse.json([

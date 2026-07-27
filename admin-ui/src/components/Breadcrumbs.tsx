@@ -71,6 +71,8 @@ function useBreadcrumbs(): Crumb[] {
     // Known static segments
     const staticLabels: Record<string, string> = {
       realms: 'Realms',
+      upgrade: 'Upgrade',
+      history: 'History',
       create: 'Create',
       users: 'Users',
       clients: 'Clients',

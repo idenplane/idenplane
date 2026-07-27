@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useQuery } from '@tanstack/react-query';
-import { getUpgradeHistory, type UpgradeAuditEntry } from '../../api/upgrade';
+import { getUpgradeAudit, type UpgradeAuditEntry } from '../../api/upgrade';
 
 // ─── Status Badge ─────────────────────────────────────────────────────────────
 
@@ -216,6 +216,19 @@ function DetailModal({
               <p className="mt-1 text-sm text-red-700">{entry.errorMessage}</p>
             </div>
           )}
+          {/* The per-stage check results. The server has always returned these
+              and the UI has always dropped them, even though on a failed
+              upgrade they are the most useful thing on the record. */}
+          {entry.checksPassed && (
+            <details>
+              <summary className="cursor-pointer text-xs font-medium uppercase tracking-wider text-gray-500">
+                Check results
+              </summary>
+              <pre className="mt-2 max-h-64 overflow-auto rounded-md bg-gray-50 p-3 text-xs text-gray-700">
+                {JSON.stringify(entry.checksPassed, null, 2)}
+              </pre>
+            </details>
+          )}
         </div>
         <div className="flex justify-end border-t border-gray-200 px-6 py-4">
           <button
@@ -257,11 +270,13 @@ export default function MigrationHistoryPage() {
   const { data: response, isLoading, isError, error } = useQuery<{ data: UpgradeAuditEntry[]; total: number }>({
     queryKey: ['migration-history', page],
     queryFn: async () => {
-      const data = await getUpgradeHistory(100);
-      return {
-        data,
-        total: data.length,
-      };
+      // /upgrade/audit rather than /upgrade/history: audit honours ?limit
+      // (clamped 1..100 server-side) and returns {entries, total}. history
+      // ignored ?limit entirely until #1197, which meant this page's
+      // pagination worked against the MSW mock and never in production —
+      // the mock honoured the parameter while the server capped at 10.
+      const { entries, total } = await getUpgradeAudit(100);
+      return { data: entries, total };
     },
     refetchInterval: 60_000,
   });

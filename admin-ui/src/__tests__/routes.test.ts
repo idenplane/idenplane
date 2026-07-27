@@ -56,6 +56,7 @@ const ROUTE_NAV_WHITELIST = new Set([
   '/setup',
   '/console/realms/:name',         // realm overview — clicked from the realm list
   '/console/realms/:name/nhi-analytics', // NHI analytics — linked from NHI list page
+  '/console/upgrade/history',      // migration history — linked from the upgrade status page
 ]);
 
 describe('nav route coverage', () => {
@@ -202,13 +203,6 @@ const ROUTE_MATCHERS = [...APP_ROUTES].map(
   (p) => new RegExp('^' + p.replace(/:[^/]+/g, '[^/]+') + '$'),
 );
 
-/**
- * Files intentionally excluded from this guard. The upgrade/migration pages are
- * unrouted dead code (idenplane#1150) that link to `/console/upgrade` — drop
- * this exclusion once that feature is wired up or removed.
- */
-const LINK_GUARD_IGNORE = /[/\\]pages[/\\]upgrade[/\\]/;
-
 function walkTsx(dir: string): string[] {
   const out: string[] = [];
   for (const entry of readdirSync(dir, { withFileTypes: true })) {
@@ -248,7 +242,6 @@ describe('in-app link target coverage', () => {
     const violations: string[] = [];
     for (const dir of scanDirs) {
       for (const file of walkTsx(dir)) {
-        if (LINK_GUARD_IGNORE.test(file)) continue;
         const src = readFileSync(file, 'utf-8');
         for (const raw of extractConsoleTargets(src)) {
           const norm = normalizeConsoleTarget(raw);
