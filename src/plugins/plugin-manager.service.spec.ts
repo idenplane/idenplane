@@ -137,6 +137,34 @@ describe('PluginManagerService', () => {
       expect(plugin.onInstall).toHaveBeenCalled();
     });
 
+    // The existing lifecycle assertions use jest.fn() mocks, which are
+    // indifferent to `this` — so they would pass whether or not the hook is
+    // invoked with its plugin bound. A plugin written as an object with methods
+    // that reach for `this` is the normal case, and the only thing that catches
+    // a regression in how invokeLifecycle dispatches.
+    it('invokes a lifecycle hook with `this` bound to the plugin', async () => {
+      let seenName: string | undefined;
+      const plugin = {
+        ...makeEventListenerPlugin('this-aware'),
+        onInstall(this: { name: string }) {
+          seenName = this?.name;
+          return Promise.resolve();
+        },
+      };
+
+      (loader.discoverAll as jest.Mock).mockResolvedValue([
+        { plugin, source: 'directory', sourcePath: '/plugins/this-aware' },
+      ]);
+      prisma.installedPlugin.findUnique.mockResolvedValue(null);
+      prisma.installedPlugin.create.mockResolvedValue(
+        makeDbRecord({ name: 'this-aware' }),
+      );
+
+      await service.onModuleInit();
+
+      expect(seenName).toBe('this-aware');
+    });
+
     it('should continue loading other plugins when one fails', async () => {
       const badPlugin = makeEventListenerPlugin('bad-plugin');
       const goodPlugin = makeEventListenerPlugin('good-plugin');
