@@ -10,17 +10,47 @@ jest.mock('child_process', () => ({
   execSync: jest.fn(),
 }));
 
+// fs is mocked as a module rather than spied on: its exports are
+// non-configurable under Node 22, so jest.spyOn throws "Cannot redefine
+// property". Mocking keeps the suite hermetic — checkBackupDirectory writes a
+// probe file, which must not touch the real working tree.
+jest.mock('fs', () => ({
+  existsSync: jest.fn(),
+  mkdirSync: jest.fn(),
+  writeFileSync: jest.fn(),
+  unlinkSync: jest.fn(),
+  statfsSync: jest.fn(),
+}));
+
 import { PreUpgradeValidatorService } from './pre-upgrade-validator.service.js';
 import { execSync } from 'child_process';
+import * as fs from 'fs';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { DatabaseBackupService } from './database-backup.service.js';
 
 describe('PreUpgradeValidatorService', () => {
   let validatorService: PreUpgradeValidatorService;
+  let mockBackupService: jest.Mocked<DatabaseBackupService>;
 
   beforeEach(() => {
     jest.clearAllMocks();
+
+    mockBackupService = {
+      pgToolsAvailable: jest
+        .fn()
+        .mockReturnValue({ available: true, detail: 'ok' }),
+    } as unknown as jest.Mocked<DatabaseBackupService>;
+
+    // Defaults: directory usable, plenty of space. Individual tests override.
+    (fs.existsSync as jest.Mock).mockReturnValue(true);
+    (fs.statfsSync as jest.Mock).mockReturnValue({
+      bavail: 5_000_000,
+      bsize: 4096,
+    });
+
     validatorService = new PreUpgradeValidatorService(
       mockPrisma as unknown as PrismaService,
+      mockBackupService,
     );
   });
 
@@ -159,41 +189,55 @@ migration-3   [x] Applied
   });
 
   describe('checkDiskSpace', () => {
-    it('should return pass when sufficient disk space (>=1GB)', async () => {
-      (execSync as jest.Mock).mockReturnValue(
-        'Filesystem  1K-blocks  Used Available Use% Mounted on\n/dev/sda1  100000000  50000000  50000000  50% /',
-      );
+    // These used to mock `df -k .`. That shell-out is gone: `df` does not exist
+    // on Windows, and `.` is the process cwd rather than BACKUP_DIR, so the
+    // check could pass on a roomy root while the backup volume was full.
+    // statfsSync measures the filesystem the backups actually land on.
+    const withFreeBytes = (bytes: number) => {
+      (fs.statfsSync as jest.Mock).mockReturnValue({
+        bavail: bytes / 4096,
+        bsize: 4096,
+      });
+      (fs.existsSync as jest.Mock).mockReturnValue(true);
+    };
 
-      const check = await (validatorService as any).checkDiskSpace();
+    it('should return pass when sufficient disk space (>=1GB)', () => {
+      withFreeBytes(50 * 1024 * 1024 * 1024);
+
+      const check = (validatorService as any).checkDiskSpace();
 
       expect(check.name).toBe('disk_space');
       expect(check.status).toBe('pass');
       expect(check.message).toContain('GB');
     });
 
-    it('should return warn when low disk space (256MB-1GB)', async () => {
-      // 500MB available
-      (execSync as jest.Mock).mockReturnValue(
-        'Filesystem  1K-blocks  Used Available Use% Mounted on\n/dev/sda1  1000000  500000  500000  50% /',
-      );
+    it('should return warn when low disk space (256MB-1GB)', () => {
+      withFreeBytes(500 * 1024 * 1024);
 
-      const check = await (validatorService as any).checkDiskSpace();
+      const check = (validatorService as any).checkDiskSpace();
 
-      expect(check.name).toBe('disk_space');
       expect(check.status).toBe('warn');
     });
 
-    it('should return fail when insufficient disk space (<256MB)', async () => {
-      // 100MB available
-      (execSync as jest.Mock).mockReturnValue(
-        'Filesystem  1K-blocks  Used Available Use% Mounted on\n/dev/sda1  1000000  900000  100000  90% /',
-      );
+    it('should return fail when insufficient disk space (<256MB)', () => {
+      withFreeBytes(100 * 1024 * 1024);
 
-      const check = await (validatorService as any).checkDiskSpace();
+      const check = (validatorService as any).checkDiskSpace();
 
-      expect(check.name).toBe('disk_space');
       expect(check.status).toBe('fail');
       expect(check.message).toContain('Insufficient');
+    });
+
+    it('measures BACKUP_DIR rather than the process working directory', () => {
+      process.env.BACKUP_DIR = '/var/lib/idenplane/backups';
+      withFreeBytes(50 * 1024 * 1024 * 1024);
+
+      (validatorService as any).checkDiskSpace();
+
+      expect(fs.statfsSync).toHaveBeenCalledWith(
+        expect.stringContaining('backups'),
+      );
+      delete process.env.BACKUP_DIR;
     });
   });
 

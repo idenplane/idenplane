@@ -16,9 +16,11 @@ jest.mock('@prisma/client', () => ({
   PrismaClient: jest.fn(() => mockPrisma),
 }));
 
-// Mock child_process execSync
+// runDatabaseMigration uses execFileSync (no shell); getCurrentVersion no
+// longer shells out at all.
 jest.mock('child_process', () => ({
   execSync: jest.fn(),
+  execFileSync: jest.fn(),
 }));
 
 import { UpgradeService, UpgradeStage } from './upgrade.service.js';
@@ -30,7 +32,7 @@ import {
 import { ConfigCompatibilityService } from './config-compatibility.service.js';
 import { RollbackService } from './rollback.service.js';
 import { UpgradeHealthService } from './upgrade-health.service.js';
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
 import { readFileSync } from 'fs';
 import { join } from 'path';
 
@@ -148,7 +150,7 @@ describe('UpgradeService', () => {
         // In dry-run, backup should NOT be called
         expect(mockDatabaseBackupService.createBackup).not.toHaveBeenCalled();
         // Migration step should be skipped
-        expect(execSync).not.toHaveBeenCalledWith(
+        expect(execFileSync).not.toHaveBeenCalledWith(
           expect.stringContaining('prisma migrate deploy'),
           expect.any(Object),
         );
@@ -225,6 +227,89 @@ describe('UpgradeService', () => {
             }),
           }),
         );
+      });
+    });
+
+    describe('backup identity persistence', () => {
+      // Regression guard for the defect that made automatic rollback
+      // unreachable: backupId used to be recovered at COMPLETION by regexing
+      // the stage's own log message. An upgrade that fails never reaches
+      // completion, so the audit row still had backupId = null when
+      // attemptRollback() looked it up — and RollbackService refuses with
+      // "Upgrade does not have an associated backup for rollback".
+      const arrangeSuccessfulBackup = () => {
+        mockPreUpgradeValidator.validate.mockResolvedValue({
+          canProceed: true,
+          checks: [],
+          summary: { passed: 8, warnings: 0, failures: 0 },
+        });
+        mockConfigCompatibility.checkCompatibility.mockResolvedValue({
+          compatible: true,
+          version: '2.1.0',
+          issues: [],
+          summary: { errors: 0, warnings: 0 },
+        });
+        mockDatabaseBackupService.createBackup.mockReturnValue({
+          success: true,
+          backupPath: '/backups/idenplane-backup-x.dump',
+          backupSize: '12.5 MB',
+          timestamp: new Date(),
+        } as BackupResult);
+        mockPrisma.upgradeAuditLog.create.mockResolvedValue({ id: 'upg-123' });
+        mockPrisma.upgradeAuditLog.update.mockResolvedValue({ id: 'upg-123' });
+      };
+
+      it('persists the backup path on the audit row during the BACKUP stage', async () => {
+        arrangeSuccessfulBackup();
+        mockUpgradeHealthService.checkHealth.mockResolvedValue({
+          healthy: true,
+          version: '2.1.0',
+          checks: [],
+          summary: { passed: 7, warnings: 0, failures: 0 },
+        });
+
+        await upgradeService.upgrade('2.1.0');
+
+        expect(mockPrisma.upgradeAuditLog.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              backupId: '/backups/idenplane-backup-x.dump',
+              backupPath: '/backups/idenplane-backup-x.dump',
+              backupSize: '12.5 MB',
+            }),
+          }),
+        );
+      });
+
+      it('persists it even when a later stage fails — the rollback path depends on it', async () => {
+        arrangeSuccessfulBackup();
+        // Health check fails, so the upgrade never reaches completeUpgrade().
+        mockUpgradeHealthService.checkHealth.mockResolvedValue({
+          healthy: false,
+          version: '2.1.0',
+          checks: [
+            {
+              name: 'schema_integrity',
+              status: 'fail',
+              message: 'boom',
+            },
+          ],
+          summary: { passed: 0, warnings: 0, failures: 1 },
+        });
+        mockRollbackService.executeRollback.mockResolvedValue({
+          success: true,
+          timestamp: new Date(),
+        } as never);
+
+        const result = await upgradeService.upgrade('2.1.0');
+
+        expect(result.success).toBe(false);
+        const wroteBackupId = mockPrisma.upgradeAuditLog.update.mock.calls.some(
+          (call) =>
+            (call[0] as { data?: { backupId?: string } })?.data?.backupId ===
+            '/backups/idenplane-backup-x.dump',
+        );
+        expect(wroteBackupId).toBe(true);
       });
     });
 
@@ -317,7 +402,7 @@ describe('UpgradeService', () => {
           summary: { errors: 0, warnings: 0 },
         });
 
-        (execSync as jest.Mock).mockReturnValue('Database reset completed');
+        (execFileSync as jest.Mock).mockReturnValue('Database reset completed');
 
         mockUpgradeHealthService.checkHealth.mockResolvedValue({
           healthy: true,
@@ -394,7 +479,7 @@ describe('UpgradeService', () => {
           summary: { errors: 0, warnings: 0 },
         });
 
-        (execSync as jest.Mock).mockReturnValue('Migration applied');
+        (execFileSync as jest.Mock).mockReturnValue('Migration applied');
 
         mockUpgradeHealthService.checkHealth.mockResolvedValue({
           healthy: true,
@@ -517,7 +602,7 @@ describe('UpgradeService', () => {
           }),
         );
         // Migration should not be attempted
-        expect(execSync).not.toHaveBeenCalledWith(
+        expect(execFileSync).not.toHaveBeenCalledWith(
           expect.stringContaining('prisma migrate deploy'),
           expect.any(Object),
         );
@@ -629,7 +714,7 @@ describe('UpgradeService', () => {
           summary: { errors: 0, warnings: 0 },
         });
 
-        (execSync as jest.Mock).mockReturnValue('Migration applied');
+        (execFileSync as jest.Mock).mockReturnValue('Migration applied');
 
         // Health check fails
         mockUpgradeHealthService.checkHealth.mockResolvedValue({

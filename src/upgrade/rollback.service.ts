@@ -322,13 +322,19 @@ export class RollbackService {
         fromVersion: originalUpgrade.toVersion,
         toVersion: originalUpgrade.fromVersion,
         status: success ? 'ROLLBACK_COMPLETED' : 'ROLLBACK_FAILED',
-        startedAt: originalUpgrade.startedAt ?? now,
+        // The rollback started now — it must not inherit the original upgrade's
+        // startedAt. Copying it made the two rows tie on every
+        // `orderBy: { startedAt: 'desc' }`, so getLatestUpgradeStatus() and
+        // getUpgradeHistory() could return the failed upgrade *after* it had
+        // been rolled back, reporting the rollback as though it never happened.
+        startedAt: now,
         completedAt: now,
         initiatedBy: 'ROLLBACK_SERVICE',
         backupId: backupPath ?? null,
         rollbackTriggered: true,
         details: {
           rollbackFromVersion: originalUpgrade.toVersion,
+          originalStartedAt: originalUpgrade.startedAt?.toISOString() ?? null,
           errorMessage: error ?? null,
         },
       },

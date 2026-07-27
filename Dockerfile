@@ -31,6 +31,18 @@ RUN cp -r admin-ui/dist dist/admin-ui
 FROM node:22-alpine AS production
 WORKDIR /app
 
+# pg_dump / pg_restore, used by the upgrade flow to take a backup before running
+# migrations and to restore it on rollback. Without these the upgrade endpoints
+# abort at pre-validation (by design — an upgrade that cannot be rolled back
+# should not start), so this is what makes UPGRADE_API_ENABLED usable at all.
+#
+# The client major version must be >= the server's; compose ships postgres 16
+# and the Alpine default here is newer, which is the supported direction.
+# Verified at build time so a base-image change cannot silently regress it.
+RUN apk add --no-cache postgresql-client \
+    && pg_dump --version \
+    && pg_restore --version
+
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
