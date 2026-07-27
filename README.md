@@ -111,6 +111,7 @@ Most identity solutions are either too complex to self-host (Keycloak — 1GB+ R
 | **Horizontal Scaling** | Stateless design — run multiple instances behind a load balancer |
 | **Redis Support** | Optional Redis for session storage and caching (Sentinel support for HA) |
 | **Multi-Database** | PostgreSQL (primary), MySQL, and SQLite support |
+| **Guided Upgrades** | Pre-flight validation, automatic pre-upgrade backup, and rollback on failure — opt-in, see [Upgrading](https://docs.idenplane.io/deployment/upgrading) |
 | **API Versioning** | Versioned API with deprecation and sunset headers (RFC 8594) |
 | **CORS Management** | Dynamic origin validation with two-level caching (in-process + Redis) |
 | **Realm Theming** | Custom logos, colors, and CSS per realm for login, consent, account, and email pages |
