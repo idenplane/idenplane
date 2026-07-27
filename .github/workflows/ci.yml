@@ -248,6 +248,70 @@ jobs:
       - name: Build docs
         run: npm run build
 
+  docker-build:
+    # The publish workflow only runs after a merge to main, so until now a
+    # Dockerfile change was never built while it could still be rejected — it
+    # broke the published image instead. This builds the same Dockerfile on the
+    # PR, without pushing anything.
+    name: Docker Build
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Set up Docker Buildx
+        uses: docker/setup-buildx-action@v4
+
+      # amd64 only: the publish workflow also does arm64 through QEMU, which
+      # roughly triples the build and is not worth it for a pre-merge check.
+      - name: Build image
+        uses: docker/build-push-action@v7
+        with:
+          context: .
+          push: false
+          load: true
+          tags: idenplane:ci
+          platforms: linux/amd64
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      # The upgrade feature shells out to these. They are installed in the
+      # Dockerfile and their --version is asserted there, but that only proves
+      # they existed at build time in that layer; this proves they are in the
+      # final image and on PATH for the entrypoint.
+      - name: Backup tooling present in the image
+        run: |
+          docker run --rm --entrypoint pg_dump idenplane:ci --version
+          docker run --rm --entrypoint pg_restore idenplane:ci --version
+
+  helm-chart:
+    # 16 files that ship to anyone deploying on Kubernetes, and nothing had
+    # ever linted or rendered them. values.schema.json in particular was being
+    # validated against nothing at all.
+    name: Helm Chart
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: azure/setup-helm@v5
+
+      # postgresql and redis are declared as dependencies. Their conditions
+      # control whether they get installed, not whether helm needs them
+      # present — without this, lint warns and template refuses outright.
+      - name: Fetch chart dependencies
+        run: helm dependency build helm/idenplane
+
+      - name: Lint
+        run: helm lint helm/idenplane
+
+      # Rendering is what catches a template that only fails on a value it has
+      # never been given. Both value files go through it, and helm validates
+      # each against values.schema.json on the way.
+      - name: Render with default values
+        run: helm template idenplane helm/idenplane > /dev/null
+
+      - name: Render with production values
+        run: helm template idenplane helm/idenplane -f helm/idenplane/values.production.yaml > /dev/null
+
   build:
     name: Build
     runs-on: ubuntu-latest
