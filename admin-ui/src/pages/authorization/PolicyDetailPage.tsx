@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getPolicy, updatePolicy, deletePolicy, testPolicy } from '../../api/authorization';
 import ConfirmDialog from '../../components/ConfirmDialog';

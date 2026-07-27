@@ -10,7 +10,7 @@
 
 import { useState, type FormEvent } from 'react';
 import { useMutation } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { completeWizard } from '../../../api/wizard';
 import { useWizard } from '../../../context/WizardContext';
 import { getErrorMessage } from '../../../utils/getErrorMessage';

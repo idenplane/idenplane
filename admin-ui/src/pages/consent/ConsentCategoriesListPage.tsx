@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router';
 import type { ConsentCategory } from '../../types';
 import { getConsentCategories } from '../../api/consent';
 

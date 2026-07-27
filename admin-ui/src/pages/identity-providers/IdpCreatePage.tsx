@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createIdentityProvider } from '../../api/identityProviders';
 import PasswordInput from '../../components/PasswordInput';
