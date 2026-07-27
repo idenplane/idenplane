@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, waitForElementToBeRemoved } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../../test/mocks/server';
@@ -112,5 +112,8 @@ describe('ClientCreatePage', () => {
     await user.click(screen.getByRole('button', { name: /^create client$/i }));
 
     expect(await screen.findByRole('button', { name: /creating/i })).toBeInTheDocument();
+    // Let the delayed 201 land before the test ends — see DashboardPage.test.tsx
+    // for why an in-flight request outliving the test breaks the whole run.
+    await waitForElementToBeRemoved(() => screen.queryByRole('button', { name: /creating/i }));
   });
 });
