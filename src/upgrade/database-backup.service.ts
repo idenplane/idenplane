@@ -146,11 +146,14 @@ export class DatabaseBackupService {
       // There is exactly one code path: pg_dump -Fc writes a custom-format
       // archive and pg_restore reads it directly from the file. The previous
       // zlib branch existed only to service the misleading .sql.gz name.
-      const restoreArgs = this.buildRestoreArgs(dbName);
+      const restoreArgs = [...this.buildRestoreArgs(dbName), backupPath];
 
+      // Log the full vector including the archive. Logging buildRestoreArgs()
+      // alone omitted the one argument an operator debugging a failed rollback
+      // most needs to see — which archive was actually read.
       this.logger.debug(`Executing: pg_restore ${restoreArgs.join(' ')}`);
 
-      execFileSync('pg_restore', [...restoreArgs, backupPath], {
+      execFileSync('pg_restore', restoreArgs, {
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'pipe'],
         env: this.pgEnv(),
