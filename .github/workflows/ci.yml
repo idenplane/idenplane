@@ -210,9 +210,11 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # Each module declares what it needs; a pinned number here goes stale the
+      # first time a dependency bump raises one of them.
       - uses: actions/setup-go@v7
         with:
-          go-version: '1.24'
+          go-version-file: ${{ matrix.module }}/go.mod
           cache: false
 
       - name: Build
