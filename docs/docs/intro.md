@@ -170,16 +170,16 @@ Idenplane is ideal when you need:
 
 <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
 
-[**Quickstart**](/docs/quickstart)
+[**Quickstart**](/quickstart)
 Get up and running in 30 seconds with Docker
 
-[**Installation**](/docs/getting-started/installation)
+[**Installation**](/getting-started/installation)
 Detailed installation instructions for all platforms
 
-[**SDK Guides**](/docs/guides/sdks/react)
+[**SDK Guides**](/guides/sdks/react-sdk)
 Integrate Idenplane with your application
 
-[**API Reference**](/docs/api)
+[**API Reference**](/api)
 Complete REST API documentation
 
 </div>

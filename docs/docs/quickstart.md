@@ -48,13 +48,13 @@ After starting Idenplane, you can access the Admin Console with these default cr
 
 <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
 
-[**Installation Guide**](/docs/getting-started/installation)
+[**Installation Guide**](/getting-started/installation)
 Detailed installation instructions for Docker, Kubernetes, and bare metal
 
-[**Admin Console**](/docs/getting-started/admin-console)
+[**Admin Console**](/getting-started/admin-console)
 Learn how to configure realms, users, and clients
 
-[**First Application**](/docs/guides/first-app)
+[**First Application**](/guides/first-app)
 Register your first OAuth client and integrate with your app
 
 </div>
