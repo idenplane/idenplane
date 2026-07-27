@@ -25,6 +25,9 @@
     "typescript": "^5.7.0",
     "@types/node": "^22.10.7"
   },
+  "overrides": {
+    "esbuild": "^0.28.1"
+  },
   "files": [
     "dist",
     "README.md"
