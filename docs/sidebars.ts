@@ -162,6 +162,11 @@ const sidebars: SidebarsConfig = {
           id: 'deployment/bare-metal',
           label: 'Bare Metal',
         },
+        {
+          type: 'doc',
+          id: 'deployment/upgrading',
+          label: 'Upgrading',
+        },
       ],
     },
     {
