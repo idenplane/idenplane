@@ -891,6 +891,54 @@ function parseCallback(): { code?: string; error?: string; state?: string } {
 
 ---
 
+## Identity Providers
+
+Idenplane can delegate authentication to an external provider, so users sign in with an account they already have. Providers are configured per realm, under **Identity Providers** in the admin console.
+
+### What this covers
+
+These endpoints handle **OpenID Connect** providers — Okta, Auth0, Microsoft Entra, Google, another Keycloak or Idenplane, anything that speaks OIDC. `providerType` defaults to `oidc` and is the only type this module has behaviour for.
+
+Two neighbouring features are managed separately:
+
+- **SAML 2.0** providers have their own module and their own console section, **SAML Providers**
+- **LDAP** and other external user stores live under **User Federation**, which synchronises users rather than delegating the login
+
+### Configuring one
+
+```bash
+curl -X POST http://localhost:3000/admin/realms/my-realm/identity-providers   -H "x-admin-api-key: $ADMIN_API_KEY"   -H "Content-Type: application/json"   -d '{
+    "alias": "okta",
+    "displayName": "Okta",
+    "providerType": "oidc",
+    "clientId": "0oa...",
+    "clientSecret": "...",
+    "issuer": "https://your-org.okta.com",
+    "authorizationUrl": "https://your-org.okta.com/oauth2/v1/authorize",
+    "tokenUrl": "https://your-org.okta.com/oauth2/v1/token",
+    "userinfoUrl": "https://your-org.okta.com/oauth2/v1/userinfo",
+    "jwksUrl": "https://your-org.okta.com/oauth2/v1/keys",
+    "defaultScopes": "openid profile email",
+    "enabled": true
+  }'
+```
+
+`alias` identifies the provider within the realm and appears in its callback URL, so pick it once and keep it.
+
+### Options that change behaviour
+
+| Field | Effect |
+|---|---|
+| `trustEmail` | Accept the provider's email as verified, skipping your own verification step |
+| `linkOnly` | Allow linking to existing accounts but do not create new ones from this provider |
+| `syncUserProfile` | Refresh name and email from the provider on each login |
+
+:::warning
+`trustEmail` makes the provider authoritative for email addresses. Only enable it for a provider that verifies them — otherwise someone can claim an address they do not own and, if an account already exists for it, be linked to that account.
+:::
+
+---
+
 ## Next Steps
 
 <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>

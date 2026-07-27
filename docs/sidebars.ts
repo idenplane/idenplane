@@ -26,6 +26,11 @@ const sidebars: SidebarsConfig = {
           id: 'getting-started/configuration',
           label: 'Configuration',
         },
+        {
+          type: 'doc',
+          id: 'getting-started/admin-console',
+          label: 'Admin Console',
+        },
       ],
     },
     {
@@ -110,6 +115,11 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Guides',
       items: [
+        {
+          type: 'doc',
+          id: 'guides/first-app',
+          label: 'Your First Application',
+        },
         {
           type: 'doc',
           id: 'guides/authentication',
