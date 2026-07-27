@@ -254,8 +254,8 @@ Most settings can also be configured through the Admin Console at `/console`:
 [**Deployment**](/deployment/docker)
 Deploy Idenplane to production with Docker
 
-[**First Application**](/guides/first-app)
-Register your first OAuth client
+[**Authentication**](/guides/authentication)
+OAuth 2.0 flows and how clients authenticate
 
 [**SDK Guides**](/guides/sdks/react-sdk)
 Integrate Idenplane with your application

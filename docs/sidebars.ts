@@ -71,6 +71,11 @@ const sidebars: SidebarsConfig = {
       items: [
         {
           type: 'doc',
+          id: 'guides/sdks/javascript-sdk',
+          label: 'JavaScript',
+        },
+        {
+          type: 'doc',
           id: 'guides/sdks/react-sdk',
           label: 'React',
         },
