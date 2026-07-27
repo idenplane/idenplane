@@ -129,6 +129,22 @@ describe('DatabaseBackupService', () => {
     // It was being written to a file named .sql.gz, and restoreBackup branched
     // on that suffix and ran gunzipSync — which throws on every archive this
     // service has ever produced.
+    // Regression guard: including upgrade_audit_log meant a rollback restored
+    // the table it was being recorded in, wiping the backup path, the failure
+    // reason and the rollback record — and leaving a stale IN_PROGRESS row that
+    // blocks further upgrades. Caught by the real failure/rollback e2e spec.
+    it('excludes the upgrade audit log from the dump', () => {
+      const service = buildService({
+        DATABASE_URL: 'postgresql://u:p@db:5432/idenplane',
+      });
+
+      service.createBackup();
+
+      expect(callToString(findCall('pg_dump')!)).toContain(
+        '--exclude-table=upgrade_audit_log',
+      );
+    });
+
     it('writes a .dump file, not .sql.gz', () => {
       const service = buildService({
         DATABASE_URL: 'postgresql://u:p@db:5432/idenplane',
