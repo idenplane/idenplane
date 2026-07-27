@@ -123,14 +123,21 @@ export default function StartUpgradePage() {
           {result.fromVersion ?? currentVersion} → {result.toVersion}
         </p>
 
+        {/* A rollback that ran and failed is the state an operator most needs
+            to tell apart from one that ran and worked — the database is left
+            modified with no recovery applied. Never report a restore that did
+            not happen. */}
         {result.rollbackTriggered && (
           <div className="mb-6 rounded border border-red-200 bg-red-50 p-4">
             <p className="text-sm font-medium text-red-800">
-              A rollback was triggered.
+              {result.rollbackSucceeded === false
+                ? 'A rollback was attempted and failed.'
+                : 'A rollback was triggered.'}
             </p>
             <p className="text-sm text-red-700 mt-1">
-              The upgrade failed after the database was modified and the backup
-              was restored. Verify the system state before retrying.
+              {result.rollbackSucceeded === false
+                ? 'The upgrade failed after the database was modified, and the backup could not be restored. The database is still in its post-migration state — restore it manually before using this instance.'
+                : 'The upgrade failed after the database was modified and the backup was restored. Verify the system state before retrying.'}
             </p>
           </div>
         )}
@@ -223,7 +230,9 @@ export default function StartUpgradePage() {
           <div>
             <p className="text-sm text-gray-500">Current version</p>
             <p className="text-lg font-medium text-gray-900">
-              {versionQuery.isLoading ? 'Loading…' : (currentVersion ?? 'unknown')}
+              {versionQuery.isLoading
+                ? 'Loading…'
+                : (currentVersion ?? 'unknown')}
             </p>
           </div>
 
