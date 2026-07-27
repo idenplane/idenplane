@@ -139,6 +139,59 @@ jobs:
           path: admin-ui/coverage/
           retention-days: 14
 
+  sdk-packages:
+    # Nothing built or tested these until now, so breakage sat unnoticed:
+    # idenplane-angular had not compiled since Angular went ESM-only, and a
+    # vue guard test asserted behaviour the guard had deliberately stopped
+    # having. One job per package so a red square names the culprit.
+    name: SDK — ${{ matrix.package }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        package:
+          - idenplane-js
+          - idenplane-vue
+          - idenplane-angular
+          - idenplane-nextjs
+          - idenplane-mcp
+    defaults:
+      run:
+        working-directory: packages/${{ matrix.package }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: packages/${{ matrix.package }}/package-lock.json
+
+      # vue, angular and nextjs consume idenplane-js through `file:../idenplane-js`,
+      # and its dist/ is gitignored — so on a fresh checkout `idenplane-sdk` has no
+      # type declarations to resolve and all three fail to typecheck. Build it first.
+      - name: Build idenplane-js (local file: dependency)
+        if: matrix.package != 'idenplane-js' && matrix.package != 'idenplane-mcp'
+        working-directory: packages/idenplane-js
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Build
+        run: npm run build
+
+      - name: Typecheck
+        run: npm run typecheck
+
+      # idenplane-mcp splits its suites: `test` is the integration suite, which
+      # skips itself without a live Idenplane instance, and `test:all` adds the
+      # smoke test. The other four expose a single `test`.
+      - name: Test
+        run: npm run ${{ matrix.package == 'idenplane-mcp' && 'test:all' || 'test' }}
+
   build:
     name: Build
     runs-on: ubuntu-latest

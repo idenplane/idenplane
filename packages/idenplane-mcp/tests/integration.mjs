@@ -28,6 +28,25 @@ const TEST_REALM = `mcp-test-${Date.now()}`;
 
 let mcpClient;
 
+/**
+ * These tests drive the MCP server against a real Idenplane instance, so they
+ * are only meaningful when one is running. Probe for it up front and skip the
+ * suite when it is absent — otherwise every run without a server reports five
+ * failures that say nothing about the code, which is exactly what kept this
+ * package out of CI.
+ */
+async function skipReason() {
+  try {
+    const res = await fetch(`${IDENPLANE_URL}/health`, {
+      signal: AbortSignal.timeout(3000),
+    });
+    if (res.ok) return false;
+    return `Idenplane at ${IDENPLANE_URL} answered /health with ${res.status}`;
+  } catch {
+    return `no Idenplane instance reachable at ${IDENPLANE_URL} — start one with \`docker compose up db -d && npm run start:dev\` from the repo root`;
+  }
+}
+
 /** Call a tool and return the first text content string. */
 async function callTool(name, args) {
   const result = await mcpClient.callTool({ name, arguments: args ?? {} });
@@ -37,7 +56,7 @@ async function callTool(name, args) {
   return JSON.parse(text);
 }
 
-describe('Idenplane MCP integration (over protocol)', () => {
+describe('Idenplane MCP integration (over protocol)', { skip: await skipReason() }, () => {
   before(async () => {
     const transport = new StdioClientTransport({
       command: 'node',
