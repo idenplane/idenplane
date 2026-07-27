@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { execSync } from 'child_process';
+import { execFileSync } from 'child_process';
 import { PreUpgradeValidatorService } from './pre-upgrade-validator.service.js';
 import {
   DatabaseBackupService,
@@ -165,13 +165,32 @@ export class UpgradeService {
     if (!dryRun) {
       const backupStageResult = await this.executeStage(
         UpgradeStage.BACKUP,
-        () => {
+        async () => {
           backupResult = this.databaseBackupService.createBackup(
             `pre-upgrade-${toVersion}`,
           );
           if (!backupResult.success) {
             throw new Error(`Backup failed: ${backupResult.error}`);
           }
+
+          // Record the backup on the audit row NOW, not at completion.
+          //
+          // completeUpgrade() used to recover this by regexing its own log
+          // message (/Backup created: (.+)/), which meant the row carried
+          // backupId = null for the entire window in which an upgrade can
+          // fail. attemptRollback() looks the row up and bails with "Upgrade
+          // does not have an associated backup for rollback" when backupId is
+          // null — so the automatic rollback was unreachable in exactly the
+          // situation it exists for.
+          await this.prisma.upgradeAuditLog.update({
+            where: { id: upgradeId },
+            data: {
+              backupId: backupResult.backupPath,
+              backupPath: backupResult.backupPath,
+              backupSize: backupResult.backupSize,
+            },
+          });
+
           return {
             success: true,
             message: `Backup created: ${backupResult.backupPath}`,
@@ -567,10 +586,21 @@ export class UpgradeService {
     try {
       this.logger.log(`Running database migrations for ${toVersion}...`);
 
-      const output = execSync('npx prisma migrate deploy 2>&1', {
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
+      // execFileSync, not execSync: no shell means no `2>&1` redirect to parse
+      // and nothing interpretable in the argument vector. The explicit --schema
+      // matters because prisma.config.ts is not present in the production image
+      // (docker-entrypoint.sh generates a prisma.config.js at runtime, which
+      // will not exist if the process was started any other way).
+      const output = execFileSync(
+        'npx',
+        ['prisma', 'migrate', 'deploy', '--schema', 'prisma/schema.prisma'],
+        {
+          encoding: 'utf-8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+          timeout: 10 * 60 * 1000,
+          maxBuffer: 10 * 1024 * 1024,
+        },
+      );
 
       return {
         success: true,
@@ -630,18 +660,17 @@ export class UpgradeService {
     void initiatedBy;
     try {
       const stageNames = stages.filter((s) => s.success).map((s) => s.stage);
-      const backupStage = stages.find(
-        (s) => s.stage === UpgradeStage.BACKUP && s.success,
-      );
-      const backupIdMatch = backupStage?.message?.match(/Backup created: (.+)/);
-      const backupId = backupIdMatch ? backupIdMatch[1] : null;
 
+      // backupId is deliberately not written here: the BACKUP stage persists it
+      // the moment the archive exists, which is what makes it available to
+      // attemptRollback() on the failure path. Re-deriving it from a log message
+      // at completion (the previous behaviour) both duplicated the write and
+      // made it useless, since an upgrade that fails never reaches completion.
       await this.prisma.upgradeAuditLog.update({
         where: { id: upgradeId },
         data: {
           status: 'COMPLETED',
           completedAt: new Date(),
-          backupId,
 
           details: {
             stepsCompleted: stageNames,

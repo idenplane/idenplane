@@ -189,6 +189,24 @@ persistence:
   # not both).
   selector: {}
 
+# ── Upgrade backups ────────────────────────────────────────────────────────────
+# Durable storage for the database dumps the upgrade flow takes before running
+# migrations. Required if you intend to set UPGRADE_API_ENABLED: a dump written
+# to the container filesystem does not survive the pod, so there would be
+# nothing to roll back to — which is precisely when it is needed.
+backups:
+  enabled: false
+  # Mounted here, and BACKUP_DIR below must match.
+  mountPath: /var/lib/idenplane/backups
+  # Dumps are roughly the size of the database and several are retained
+  # (cleanupOldBackups keeps a minimum of 3), so size this generously.
+  size: 10Gi
+  accessModes:
+    - ReadWriteOnce
+  storageClass: ""
+  annotations: {}
+  selector: {}
+
 # ── Idenplane Application Configuration ─────────────────────────────────────────
 env:
   # ── Server ────────────────────────────────────────────────────────────────
