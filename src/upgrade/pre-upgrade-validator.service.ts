@@ -117,6 +117,14 @@ export class PreUpgradeValidatorService {
     else if (backupDirCheck.status === 'warn') warnings++;
     else failures++;
 
+    // 9. Client and server majors must match, or the restore silently is not
+    //    one — see checkPgVersionMatch.
+    const versionCheck = await this.checkPgVersionMatch();
+    checks.push(versionCheck);
+    if (versionCheck.status === 'pass') passed++;
+    else if (versionCheck.status === 'warn') warnings++;
+    else failures++;
+
     const canProceed = failures === 0;
 
     this.logger.log(
@@ -271,6 +279,86 @@ export class PreUpgradeValidatorService {
             'Backup tooling is missing — an upgrade cannot be rolled back',
           details: detail,
         };
+  }
+
+  /**
+   * The pg client major must equal the server major, or the backup cannot be
+   * restored — which means there is no rollback, discovered only at the moment
+   * one is needed.
+   *
+   * Measured, not assumed. Against a PostgreSQL 16 server:
+   *
+   *   pg_dump 18 → archive written fine (624 KB, PGDMP header)
+   *   pg_restore 18 → ERROR: unrecognized configuration parameter
+   *                   "transaction_timeout"   (added in PG 17)
+   *   pg_restore 16 on that archive → ERROR: unsupported version (1.16)
+   *                   in file header
+   *   pg_dump 16 + pg_restore 16 → restores, rows come back
+   *
+   * So a newer client is not merely "the supported direction": it produces
+   * backups nothing can restore onto that server. An older client is no better,
+   * since pg_dump refuses to dump a newer server at all. Equality is the rule.
+   *
+   * This matters for the published image specifically: it installs Alpine's
+   * default postgresql-client, which is currently 18, while docker-compose.yml
+   * ships postgres:16-alpine. That combination has no working rollback.
+   */
+  /** Server major, or null if it cannot be read. server_version_num is MMmmpp. */
+  private async readServerMajorVersion(): Promise<number | null> {
+    try {
+      const rows = await this.prisma.$queryRaw<
+        Array<{ server_version_num: string }>
+      >`SHOW server_version_num`;
+      const num = Number(rows[0]?.server_version_num);
+      return Number.isFinite(num) ? Math.floor(num / 10000) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async checkPgVersionMatch(): Promise<PreUpgradeCheck> {
+    const clientMajor = this.databaseBackupService.clientMajorVersion();
+
+    if (clientMajor === null) {
+      return {
+        name: 'pg_client_version',
+        status: 'warn',
+        message: 'Could not determine the pg_dump version',
+        details:
+          'Unable to verify that the client and server majors match, which a ' +
+          'restore requires.',
+      };
+    }
+
+    const serverMajor = await this.readServerMajorVersion();
+
+    if (serverMajor === null) {
+      return {
+        name: 'pg_client_version',
+        status: 'warn',
+        message: 'Could not determine the PostgreSQL server version',
+        details: `Client is ${clientMajor}; server version unavailable.`,
+      };
+    }
+
+    if (clientMajor !== serverMajor) {
+      return {
+        name: 'pg_client_version',
+        status: 'fail',
+        message: `pg client ${clientMajor} does not match server ${serverMajor}`,
+        details:
+          `A backup taken by pg_dump ${clientMajor} cannot be restored onto a ` +
+          `PostgreSQL ${serverMajor} server, so this upgrade would have no ` +
+          `rollback. Install postgresql-client ${serverMajor} (or run a ` +
+          `PostgreSQL ${clientMajor} server).`,
+      };
+    }
+
+    return {
+      name: 'pg_client_version',
+      status: 'pass',
+      message: `pg client and server majors match (${clientMajor})`,
+    };
   }
 
   /**

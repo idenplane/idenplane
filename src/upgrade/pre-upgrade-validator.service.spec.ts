@@ -39,6 +39,8 @@ describe('PreUpgradeValidatorService', () => {
       pgToolsAvailable: jest
         .fn()
         .mockReturnValue({ available: true, detail: 'ok' }),
+      // Matching majors by default; the version-match tests override this.
+      clientMajorVersion: jest.fn().mockReturnValue(16),
     } as unknown as jest.Mocked<DatabaseBackupService>;
 
     // Defaults: directory usable, plenty of space. Individual tests override.
@@ -138,6 +140,63 @@ describe('PreUpgradeValidatorService', () => {
       expect(check.name).toBe('database_connection');
       expect(check.status).toBe('fail');
       expect(check.message).toBe('Cannot connect to database');
+    });
+  });
+
+  describe('checkPgVersionMatch', () => {
+    // Measured against a real PostgreSQL 16 server: pg_dump 18 writes an
+    // archive fine, but pg_restore 18 fails with "unrecognized configuration
+    // parameter transaction_timeout" (a PG 17 GUC) and pg_restore 16 fails with
+    // "unsupported version (1.16) in file header". A newer client therefore
+    // produces backups nothing can restore onto that server — no rollback, and
+    // you only find out when you need one. Equality is the requirement.
+    const withVersions = (client: number | null, serverNum: string | null) => {
+      mockBackupService.clientMajorVersion = jest.fn().mockReturnValue(client);
+      mockPrisma.$queryRaw.mockImplementation(() =>
+        serverNum === null
+          ? Promise.reject(new Error('no server version'))
+          : Promise.resolve([{ server_version_num: serverNum }]),
+      );
+    };
+
+    it('passes when the majors match', async () => {
+      withVersions(16, '160014');
+
+      const check = await (validatorService as any).checkPgVersionMatch();
+
+      expect(check.status).toBe('pass');
+      expect(check.message).toContain('16');
+    });
+
+    it('fails when the client is newer than the server', async () => {
+      withVersions(18, '160014');
+
+      const check = await (validatorService as any).checkPgVersionMatch();
+
+      expect(check.status).toBe('fail');
+      expect(check.message).toMatch(/18.*16/);
+      // The remedy must name the version to install, not just state the problem.
+      expect(check.details).toContain('postgresql-client 16');
+    });
+
+    it('fails when the client is older than the server', async () => {
+      withVersions(16, '180004');
+
+      const check = await (validatorService as any).checkPgVersionMatch();
+
+      expect(check.status).toBe('fail');
+    });
+
+    it('warns rather than fails when either version is unknown', async () => {
+      withVersions(null, '160014');
+      expect(
+        (await (validatorService as any).checkPgVersionMatch()).status,
+      ).toBe('warn');
+
+      withVersions(16, null);
+      expect(
+        (await (validatorService as any).checkPgVersionMatch()).status,
+      ).toBe('warn');
     });
   });
 
