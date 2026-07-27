@@ -321,13 +321,13 @@ openssl rand -hex 16
 
 <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
 
-[**Configuration Guide**](/docs/getting-started/configuration)
+[**Configuration Guide**](/getting-started/configuration)
 Configure Idenplane for your environment
 
-[**Installation**](/docs/getting-started/installation)
+[**Installation**](/getting-started/installation)
 Detailed installation instructions
 
-[**Deployment**](/docs/deployment/docker)
+[**Deployment**](/deployment/docker)
 Deploy to production with Docker
 
 </div>
