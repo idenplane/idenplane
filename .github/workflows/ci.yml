@@ -78,6 +78,22 @@ jobs:
 
       - run: npx prisma generate
 
+      # upgrade-backup-roundtrip.e2e-spec.ts exercises the real pg_dump /
+      # pg_restore path — the only test that does; every unit test mocks the
+      # shell. It skips itself when the binaries are absent, so install them
+      # explicitly rather than relying on whatever the runner image happens to
+      # ship: a silently skipped test here would leave the backup/restore
+      # mechanics unverified while still reporting green.
+      #
+      # Ubuntu 24.04's postgresql-client is 16, matching the service container.
+      # The client major must be >= the server's.
+      - name: Install PostgreSQL client (for the backup round-trip spec)
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends postgresql-client
+          pg_dump --version
+          pg_restore --version
+
       - name: Run database migrations
         env:
           DATABASE_URL: postgresql://idenplane_test:test_password@localhost:5432/idenplane_test
