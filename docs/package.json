@@ -46,9 +46,9 @@
   },
   "overrides": {
     "serialize-javascript": "^7.0.5",
-    "js-yaml": ">=4.2.0",
-    "@babel/core": ">=7.29.6",
-    "http-proxy-middleware": ">=2.0.10",
-    "joi": ">=17.13.4"
+    "js-yaml": "^4.3.0",
+    "@babel/core": "^7.29.6",
+    "http-proxy-middleware": "^2.0.10",
+    "joi": "^17.13.4"
   }
 }

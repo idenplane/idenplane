@@ -1,0 +1,6 @@
+# Production build output
+/build
+
+# Docusaurus generated files
+/.docusaurus
+/.cache-loader
