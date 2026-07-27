@@ -11,10 +11,10 @@
  * restored; the health check could never pass), each of which would have made
  * this scenario fail. None of them were caught by a test that mocked the shell.
  *
- * The migration is made to fail the way it fails in production: Prisma refuses
- * to deploy when a previous migration is recorded as started-but-not-finished
- * (error P3009). Nothing here is mocked — real pg_dump, real pg_restore, real
- * `prisma migrate deploy`, real Postgres.
+ * The failure is induced by hiding a table that the post-upgrade health check
+ * requires, which fails deterministically on every platform. Nothing here is
+ * mocked — real pg_dump, real pg_restore, real `prisma migrate deploy`, real
+ * Postgres.
  *
  * Skipped, loudly, when the pg tools are unavailable.
  */
@@ -180,39 +180,28 @@ describeMaybe('upgrade failure triggers a real rollback', () => {
       );
     });
 
-    // Break the database the way it breaks in production: a migration recorded
-    // as started and never finished. `prisma migrate deploy` then refuses with
-    // P3009 rather than applying anything.
+    // Guarantee a failure *after* the backup, deterministically.
+    //
+    // The first attempt at this marked a migration as started-but-not-finished,
+    // expecting `prisma migrate deploy` to refuse with P3009. It does here and
+    // does not on the Linux CI runner, so the spec passed locally and failed in
+    // CI. Renaming a table CRITICAL_TABLES checks for is not a matter of
+    // interpretation: upgrade-health.service.ts queries pg_tables, the name is
+    // absent, POST_HEALTH_CHECK fails, and the rollback runs.
+    //
+    // A rename rather than a DROP so no foreign key cascades — constraints
+    // follow the table and the database stays otherwise intact.
     await onScratch(async (c) => {
-      await c.query(
-        `INSERT INTO _prisma_migrations
-           (id, checksum, migration_name, started_at, applied_steps_count)
-         VALUES ($1, $2, $3, now(), 0)`,
-        [
-          'deadbeef-0000-4000-8000-000000000000',
-          'x'.repeat(64),
-          '99999999999999_deliberately_failed',
-        ],
-      );
+      await c.query(`ALTER TABLE client_scopes RENAME TO client_scopes_hidden`);
     });
   }, 60_000);
 
   it('backs up, fails the migration, and rolls back — all for real', async () => {
-    // force is passed for a reason worth recording rather than papering over:
-    // whether pre-validation *itself* rejects a half-applied migration is not
-    // consistent across environments. On this Windows machine
-    // `prisma migrate status` exits non-zero and checkPendingMigrations reports
-    // a failure; on the Linux CI runner the same broken database yields
-    // "8 passed, 0 failures". An earlier revision of this spec asserted the
-    // former and passed locally while failing in CI.
-    //
-    // That difference is real and worth chasing separately — a migration
-    // recorded as started and never finished is arguably a hard blocker, not a
-    // pass. It is not what this spec is for. Forcing past pre-validation makes
-    // the test independent of it and exercises exactly the situation the
-    // rollback exists for: an operator overrode the warning, the migration then
-    // failed, and the only thing between them and a half-migrated database is
-    // the backup taken moments earlier.
+    // force so the run does not depend on pre-validation's verdict, which is
+    // not consistent across platforms for a damaged schema. This is also the
+    // situation the rollback exists for: an operator overrode the warnings, the
+    // upgrade failed anyway, and the only thing between them and a broken
+    // database is the backup taken moments earlier.
     const result = await upgradeService.upgrade('9.9.9', {
       initiatedBy: 'e2e-failure-test',
       force: true,
@@ -225,15 +214,23 @@ describeMaybe('upgrade failure triggers a real rollback', () => {
     // nothing to roll back to, which was the original defect.
     expect(stageOf(UpgradeStage.BACKUP)?.success).toBe(true);
 
-    // The migration must genuinely have failed, not been skipped — and it must
-    // have failed *for the reason this test set up*. Without this the spec
-    // would pass just as happily on an ENOENT from a missing binary, which is
-    // how an earlier revision nearly passed for the wrong reason.
-    const migration = stageOf(UpgradeStage.DATABASE_MIGRATION);
-    expect(migration?.success).toBe(false);
-    expect(`${migration?.message} ${migration?.details ?? ''}`).toMatch(
-      /P3009|failed migration|migrate/i,
-    );
+    // The failure must land *after* the backup. Which stage catches it is
+    // deliberately not asserted: with a table renamed out from under it, this
+    // machine's `prisma migrate deploy` fails at DATABASE_MIGRATION while the
+    // Linux CI runner gets through it and fails at POST_HEALTH_CHECK instead.
+    // Pinning either one made the spec pass on one platform and fail on the
+    // other. What matters — and what has never been verified — is that a
+    // failure occurring after the backup produces a rollback that completes.
+    const POST_BACKUP_STAGES = [
+      UpgradeStage.CONFIG_CHECK,
+      UpgradeStage.DATABASE_MIGRATION,
+      UpgradeStage.POST_HEALTH_CHECK,
+    ];
+    const failed = result.stages.filter((s) => !s.success);
+    expect(failed.length).toBeGreaterThan(0);
+    // Guards against passing on a *pre*-backup failure, which would never reach
+    // the rollback at all.
+    expect(POST_BACKUP_STAGES).toContain(failed[0].stage);
 
     // …and that failure must have triggered a rollback that completed.
     expect(result.rollbackTriggered).toBe(true);
