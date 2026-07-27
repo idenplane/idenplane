@@ -112,8 +112,10 @@
     "lodash": "^4.17.23",
     "ws": ">=8.21.0",
     "multer": ">=2.2.0",
-    "js-yaml": ">=4.2.0",
-    "@babel/core": ">=7.29.6"
+    "@nestjs/swagger": {
+      "js-yaml": "^5.2.2"
+    },
+    "@babel/core": "^7.29.6"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
