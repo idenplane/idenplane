@@ -40,6 +40,9 @@ import {
   UpgradeHealthResult,
 } from './upgrade-health.service.js';
 import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
+import { AdminRolesGuard } from '../common/guards/admin-roles.guard.js';
+import { RequireAdminRoles } from '../common/decorators/require-admin-roles.decorator.js';
+import { UpgradeEnabledGuard } from './guards/upgrade-enabled.guard.js';
 
 class UpgradeRequestDto {
   @IsString()
@@ -66,7 +69,7 @@ class RollbackRequestDto {
 
 @ApiTags('Upgrade')
 @ApiSecurity('admin-api-key')
-@UseGuards(AdminApiKeyGuard)
+@UseGuards(AdminApiKeyGuard, AdminRolesGuard)
 @Controller('admin/upgrade')
 export class UpgradeController {
   constructor(
@@ -85,6 +88,8 @@ export class UpgradeController {
    * migration, and post-upgrade health checks.
    */
   @Post()
+  @UseGuards(UpgradeEnabledGuard)
+  @RequireAdminRoles(['super-admin'])
   @ApiOperation({ summary: 'Start an upgrade to a target version' })
   @ApiResponse({
     status: 200,
@@ -98,7 +103,15 @@ export class UpgradeController {
     status: 401,
     description: 'Unauthorized — missing or invalid admin API key',
   })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires super-admin role',
+  })
   @ApiResponse({ status: 409, description: 'Upgrade already in progress' })
+  @ApiResponse({
+    status: 503,
+    description: 'Upgrade execution disabled — set UPGRADE_API_ENABLED=true',
+  })
   async startUpgrade(@Body() dto: UpgradeRequestDto): Promise<UpgradeResult> {
     return this.upgradeService.upgrade(dto.toVersion, {
       dryRun: dto.dryRun ?? false,
@@ -131,13 +144,23 @@ export class UpgradeController {
    */
   @Get('history')
   @ApiOperation({ summary: 'Get upgrade history' })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Maximum number of entries to return (1-100, default 10)',
+    type: Number,
+  })
   @ApiResponse({ status: 200, description: 'Array of upgrade audit entries' })
   @ApiResponse({
     status: 401,
     description: 'Unauthorized — missing or invalid admin API key',
   })
-  async getUpgradeHistory(): Promise<UpgradeAuditEntry[]> {
-    return this.rollbackService.getUpgradeHistory();
+  async getUpgradeHistory(
+    @Query('limit') limit?: string,
+  ): Promise<UpgradeAuditEntry[]> {
+    return this.rollbackService.getUpgradeHistory(
+      UpgradeController.parseLimit(limit, 10),
+    );
   }
 
   /**
@@ -168,9 +191,21 @@ export class UpgradeController {
     total: number;
   }> {
     const entries = await this.rollbackService.getUpgradeHistory(
-      limit ? Math.min(Math.max(parseInt(limit, 10), 1), 100) : 20,
+      UpgradeController.parseLimit(limit, 20),
     );
     return { entries, total: entries.length };
+  }
+
+  /**
+   * Clamp a caller-supplied ?limit into 1..100, falling back to `fallback`
+   * when absent or unparseable. `parseInt('abc')` is NaN, and NaN survives
+   * Math.min/Math.max — so the isNaN check is load-bearing, not defensive.
+   */
+  private static parseLimit(limit: string | undefined, fallback: number) {
+    if (limit === undefined) return fallback;
+    const parsed = parseInt(limit, 10);
+    if (Number.isNaN(parsed)) return fallback;
+    return Math.min(Math.max(parsed, 1), 100);
   }
 
   /**
@@ -197,11 +232,21 @@ export class UpgradeController {
    * rolls back the most recent successful upgrade.
    */
   @Post('rollback')
+  @UseGuards(UpgradeEnabledGuard)
+  @RequireAdminRoles(['super-admin'])
   @ApiOperation({ summary: 'Execute rollback to previous version' })
   @ApiResponse({ status: 200, description: 'Rollback result with outcome' })
   @ApiResponse({
     status: 401,
     description: 'Unauthorized — missing or invalid admin API key',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires super-admin role',
+  })
+  @ApiResponse({
+    status: 503,
+    description: 'Upgrade execution disabled — set UPGRADE_API_ENABLED=true',
   })
   @ApiResponse({ status: 404, description: 'No upgrade found to roll back' })
   @ApiResponse({

@@ -5,10 +5,6 @@ const mockPrisma = {
   $disconnect: jest.fn(),
 };
 
-jest.mock('@prisma/client', () => ({
-  PrismaClient: jest.fn(() => mockPrisma),
-}));
-
 // Mock child_process execSync
 jest.mock('child_process', () => ({
   execSync: jest.fn(),
@@ -16,17 +12,16 @@ jest.mock('child_process', () => ({
 
 import { PreUpgradeValidatorService } from './pre-upgrade-validator.service.js';
 import { execSync } from 'child_process';
+import { PrismaService } from '../prisma/prisma.service.js';
 
 describe('PreUpgradeValidatorService', () => {
   let validatorService: PreUpgradeValidatorService;
 
   beforeEach(() => {
     jest.clearAllMocks();
-    validatorService = new PreUpgradeValidatorService();
-  });
-
-  afterEach(async () => {
-    await validatorService.onModuleDestroy();
+    validatorService = new PreUpgradeValidatorService(
+      mockPrisma as unknown as PrismaService,
+    );
   });
 
   describe('validate', () => {
@@ -137,7 +132,9 @@ migration-3   [x] Applied
       `;
 
       (execSync as jest.Mock).mockImplementation(() => {
-        const err = new Error('Migration pending') as NodeJS.ErrnoException & { stdout: string };
+        const err = new Error('Migration pending') as NodeJS.ErrnoException & {
+          stdout: string;
+        };
         err.stdout = output;
         throw err;
       });

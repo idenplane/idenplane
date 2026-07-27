@@ -31,6 +31,8 @@ import { ConfigCompatibilityService } from './config-compatibility.service.js';
 import { RollbackService } from './rollback.service.js';
 import { UpgradeHealthService } from './upgrade-health.service.js';
 import { execSync } from 'child_process';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 describe('UpgradeService', () => {
   let upgradeService: UpgradeService;
@@ -75,10 +77,6 @@ describe('UpgradeService', () => {
       mockRollbackService,
       mockUpgradeHealthService,
     );
-  });
-
-  afterEach(async () => {
-    await upgradeService.onModuleDestroy();
   });
 
   describe('upgrade', () => {
@@ -769,22 +767,29 @@ describe('UpgradeService', () => {
     });
 
     describe('getCurrentVersion', () => {
-      it('should return current version from package.json', async () => {
-        (execSync as jest.Mock).mockReturnValue('2.5.0');
+      // These used to assert against a mocked execSync return value, which is
+      // why the broken shell quoting in the old implementation went unnoticed:
+      // in production it threw every time and the catch returned 'unknown'.
+      // getCurrentVersion now returns APP_VERSION, read from package.json at
+      // module load, so assert against that real value.
+      it('should return the real application version', () => {
+        const pkg = JSON.parse(
+          readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf-8'),
+        ) as { version: string };
 
-        const version = await upgradeService.getCurrentVersion();
-
-        expect(version).toBe('2.5.0');
+        expect(upgradeService.getCurrentVersion()).toBe(pkg.version);
       });
 
-      it('should return unknown if reading package.json fails', async () => {
-        (execSync as jest.Mock).mockImplementation(() => {
-          throw new Error('File not found');
-        });
+      it('should never return the placeholder the old implementation returned', () => {
+        expect(upgradeService.getCurrentVersion()).not.toBe('unknown');
+      });
 
-        const version = await upgradeService.getCurrentVersion();
+      it('should not shell out', () => {
+        (execSync as jest.Mock).mockClear();
 
-        expect(version).toBe('unknown');
+        upgradeService.getCurrentVersion();
+
+        expect(execSync).not.toHaveBeenCalled();
       });
     });
 

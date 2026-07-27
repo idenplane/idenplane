@@ -1,5 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service.js';
+import { APP_VERSION } from '../versioning/app-version.js';
+
+/**
+ * Minimum PostgreSQL major version. The schema uses native scalar-list arrays
+ * and JSONB, and Prisma 7's postgres adapter drops support below 13.
+ */
+const MIN_POSTGRES_MAJOR = 13;
 
 export interface ConfigCompatibilityIssue {
   type: 'error' | 'warning';
@@ -23,68 +30,47 @@ export interface VersionSchema {
   version: string;
   minConfigVersion: string;
   requiredEnvVars: string[];
+  /** Required only when NODE_ENV=production, matching docker-entrypoint.sh. */
+  productionRequiredEnvVars?: string[];
   optionalEnvVars: string[];
   deprecatedEnvVars: string[];
   removedFeatures: string[];
   breakingChanges: string[];
 }
 
-// Schema definitions for supported versions
-const VERSION_SCHEMAS: Record<string, VersionSchema> = {
-  '2.5.0': {
-    version: '2.5.0',
-    minConfigVersion: '2.0.0',
-    requiredEnvVars: ['DATABASE_URL'],
-    optionalEnvVars: [
-      'REDIS_URL',
-      'JWT_SECRET',
-      'SMTP_HOST',
-      'LOG_LEVEL',
-      'BACKUP_DIR',
-      'PGHOST',
-      'PGPORT',
-      'PGUSER',
-    ],
-    deprecatedEnvVars: ['AUTH_VERSION', 'LEGACY_AUTH'],
-    removedFeatures: ['v1-auth-endpoints', 'legacy-sessions'],
-    breakingChanges: [
-      'JWT tokens now require RS256 algorithm',
-      'Session cookies renamed from session to idenplane_session',
-    ],
-  },
-  '2.4.0': {
-    version: '2.4.0',
-    minConfigVersion: '2.0.0',
-    requiredEnvVars: ['DATABASE_URL'],
-    optionalEnvVars: [
-      'REDIS_URL',
-      'JWT_SECRET',
-      'SMTP_HOST',
-      'LOG_LEVEL',
-      'BACKUP_DIR',
-      'PGHOST',
-      'PGPORT',
-      'PGUSER',
-    ],
-    deprecatedEnvVars: ['AUTH_VERSION'],
-    removedFeatures: [],
-    breakingChanges: [],
-  },
-  '2.3.0': {
-    version: '2.3.0',
-    minConfigVersion: '2.0.0',
-    requiredEnvVars: ['DATABASE_URL'],
-    optionalEnvVars: [
-      'REDIS_URL',
-      'JWT_SECRET',
-      'SMTP_HOST',
-      'LOG_LEVEL',
-      'BACKUP_DIR',
-    ],
-    deprecatedEnvVars: [],
-    removedFeatures: [],
-    breakingChanges: [],
-  },
+/**
+ * Configuration contract for the running application.
+ *
+ * This replaces a hand-maintained `VERSION_SCHEMAS` map keyed on '2.3.0' /
+ * '2.4.0' / '2.5.0'. The project has never shipped a 2.x — package.json is on
+ * 0.x — so every lookup missed and silently fell through to a "latest schema"
+ * fallback, and the breaking-change strings it carried described releases that
+ * do not exist.
+ *
+ * Rather than invent an entry per version, describe what the *current* binary
+ * actually requires. The required list mirrors what docker-entrypoint.sh
+ * refuses to start without, so this check and startup agree.
+ */
+const CURRENT_SCHEMA: VersionSchema = {
+  version: APP_VERSION,
+  minConfigVersion: APP_VERSION,
+  requiredEnvVars: ['DATABASE_URL'],
+  // Enforced by docker-entrypoint.sh only when NODE_ENV=production.
+  productionRequiredEnvVars: ['ADMIN_API_KEY'],
+  optionalEnvVars: [
+    'REDIS_URL',
+    'JWT_SECRET',
+    'SMTP_HOST',
+    'LOG_LEVEL',
+    'BACKUP_DIR',
+    'ADMIN_USER',
+    'PGHOST',
+    'PGPORT',
+    'PGUSER',
+  ],
+  deprecatedEnvVars: [],
+  removedFeatures: [],
+  breakingChanges: [],
 };
 
 /**
@@ -97,11 +83,7 @@ const VERSION_SCHEMAS: Record<string, VersionSchema> = {
 @Injectable()
 export class ConfigCompatibilityService {
   private readonly logger = new Logger(ConfigCompatibilityService.name);
-  private readonly prisma: PrismaClient;
-
-  constructor() {
-    this.prisma = new PrismaClient();
-  }
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * Check configuration compatibility for a target version.
@@ -118,8 +100,7 @@ export class ConfigCompatibilityService {
 
     const issues: ConfigCompatibilityIssue[] = [];
 
-    // Get schema for target version (or use latest schema as fallback)
-    const schema = VERSION_SCHEMAS[targetVersion] ?? this.getLatestSchema();
+    const schema = CURRENT_SCHEMA;
 
     // 1. Check required environment variables
     const requiredIssues = this.checkRequiredEnvVars(schema);
@@ -162,7 +143,14 @@ export class ConfigCompatibilityService {
   ): ConfigCompatibilityIssue[] {
     const issues: ConfigCompatibilityIssue[] = [];
 
-    for (const varName of schema.requiredEnvVars) {
+    const required = [
+      ...schema.requiredEnvVars,
+      ...(process.env.NODE_ENV === 'production'
+        ? (schema.productionRequiredEnvVars ?? [])
+        : []),
+    ];
+
+    for (const varName of required) {
       if (!process.env[varName]) {
         issues.push({
           type: 'error',
@@ -247,7 +235,7 @@ export class ConfigCompatibilityService {
    * Check database configuration compatibility.
    */
   private async checkDatabaseCompatibility(
-    targetVersion: string,
+    _targetVersion: string,
   ): Promise<ConfigCompatibilityIssue[]> {
     const issues: ConfigCompatibilityIssue[] = [];
 
@@ -259,17 +247,13 @@ export class ConfigCompatibilityService {
 
       if (result.length > 0) {
         const dbVersion = result[0].version;
-        const isCompatible = this.isDatabaseVersionCompatible(
-          dbVersion,
-          targetVersion,
-        );
-
-        if (!isCompatible) {
+        if (!this.isDatabaseVersionCompatible(dbVersion)) {
           issues.push({
             type: 'error',
             path: 'database.version',
-            message: `Database version may not be compatible with ${targetVersion}`,
+            message: `PostgreSQL ${MIN_POSTGRES_MAJOR} or newer is required`,
             currentValue: dbVersion,
+            requiredValue: `PostgreSQL >= ${MIN_POSTGRES_MAJOR}`,
           });
         }
       }
@@ -302,49 +286,22 @@ export class ConfigCompatibilityService {
   /**
    * Check if database version is compatible with target version.
    */
-  private isDatabaseVersionCompatible(
-    dbVersion: string,
-    targetVersion: string,
-  ): boolean {
-    // Parse database version string
-    const pgMatch = dbVersion.match(/PostgreSQL (\d+)\.(\d+)/);
-    if (!pgMatch) {
-      return true; // Assume compatible if we can't parse
-    }
-
-    const majorVersion = parseInt(pgMatch[1], 10);
-    const minorVersion = parseInt(pgMatch[2], 10);
-
-    // Require PostgreSQL 12+ for latest versions
-    if (targetVersion >= '2.5.0') {
-      return majorVersion >= 13 || (majorVersion === 12 && minorVersion >= 1);
-    }
-
-    // Require PostgreSQL 11+ for earlier versions
-    return majorVersion >= 11;
-  }
-
   /**
-   * Get the latest version schema definition.
+   * The previous implementation branched on `targetVersion >= '2.5.0'`, a
+   * *string* comparison — so '0.10.0' < '0.9.0' and '10.0.0' < '2.0.0'. It also
+   * keyed off versions this project has never shipped. The Postgres floor does
+   * not vary by app version, so drop the branch entirely.
+   *
+   * PostgreSQL 13 is the floor: the schema uses native scalar-list arrays and
+   * JSONB, and Prisma 7's postgres adapter drops support below 13.
    */
-  private getLatestSchema(): VersionSchema {
-    const versions = Object.keys(VERSION_SCHEMAS).sort((a, b) => {
-      const [aMajor, aMinor, aPatch] = a.split('.').map(Number);
-      const [bMajor, bMinor, bPatch] = b.split('.').map(Number);
-      return bMajor - aMajor || bMinor - aMinor || bPatch - aPatch;
-    });
+  private isDatabaseVersionCompatible(dbVersion: string): boolean {
+    const pgMatch = dbVersion.match(/PostgreSQL (\d+)/);
+    if (!pgMatch) {
+      return true; // Unparseable banner — don't block the upgrade on it.
+    }
 
-    return (
-      VERSION_SCHEMAS[versions[0]] ?? {
-        version: 'unknown',
-        minConfigVersion: '2.0.0',
-        requiredEnvVars: ['DATABASE_URL'],
-        optionalEnvVars: [],
-        deprecatedEnvVars: [],
-        removedFeatures: [],
-        breakingChanges: [],
-      }
-    );
+    return parseInt(pgMatch[1], 10) >= MIN_POSTGRES_MAJOR;
   }
 
   /**
@@ -353,9 +310,8 @@ export class ConfigCompatibilityService {
    * @param targetVersion The version to check
    * @returns List of breaking change descriptions
    */
-  getBreakingChanges(targetVersion: string): string[] {
-    const schema = VERSION_SCHEMAS[targetVersion];
-    return schema?.breakingChanges ?? [];
+  getBreakingChanges(_targetVersion: string): string[] {
+    return CURRENT_SCHEMA.breakingChanges;
   }
 
   /**
@@ -364,8 +320,8 @@ export class ConfigCompatibilityService {
    * @param targetVersion The version to check
    * @returns List of deprecated variable names
    */
-  getDeprecatedEnvVars(targetVersion: string): string[] {
-    const schema = VERSION_SCHEMAS[targetVersion];
+  getDeprecatedEnvVars(_targetVersion: string): string[] {
+    const schema = CURRENT_SCHEMA;
     return schema?.deprecatedEnvVars ?? [];
   }
 
@@ -476,12 +432,5 @@ export class ConfigCompatibilityService {
     }
 
     return null;
-  }
-
-  /**
-   * Clean up Prisma client connections.
-   */
-  async onModuleDestroy(): Promise<void> {
-    await this.prisma.$disconnect();
   }
 }

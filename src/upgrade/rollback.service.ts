@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
-import { DatabaseBackupService } from './database-backup.service';
+import { PrismaService } from '../prisma/prisma.service.js';
+import { DatabaseBackupService } from './database-backup.service.js';
 
 export interface RollbackResult {
   success: boolean;
@@ -48,11 +48,10 @@ export interface UpgradeAuditEntry {
 @Injectable()
 export class RollbackService {
   private readonly logger = new Logger(RollbackService.name);
-  private readonly prisma: PrismaClient;
-
-  constructor(private readonly databaseBackupService: DatabaseBackupService) {
-    this.prisma = new PrismaClient();
-  }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly databaseBackupService: DatabaseBackupService,
+  ) {}
 
   /**
    * Check if a rollback is possible and retrieve the last successful upgrade.
@@ -334,12 +333,5 @@ export class RollbackService {
         },
       },
     });
-  }
-
-  /**
-   * Clean up Prisma client connections.
-   */
-  async onModuleDestroy(): Promise<void> {
-    await this.prisma.$disconnect();
   }
 }
