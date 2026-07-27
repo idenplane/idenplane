@@ -170,7 +170,7 @@ jobs:
       # vue, angular and nextjs consume idenplane-js through `file:../idenplane-js`,
       # and its dist/ is gitignored — so on a fresh checkout `idenplane-sdk` has no
       # type declarations to resolve and all three fail to typecheck. Build it first.
-      - name: Build idenplane-js (local file: dependency)
+      - name: Build the local idenplane-js dependency
         if: matrix.package != 'idenplane-js' && matrix.package != 'idenplane-mcp'
         working-directory: packages/idenplane-js
         run: |
