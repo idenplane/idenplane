@@ -5,11 +5,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/idenplane/terraform-provider-idenplane/client"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/idenplane/terraform-provider-idenplane/client"
 )
 
 // Ensure the implementation satisfies the expected interfaces
@@ -55,39 +55,39 @@ func (d *RoleDataSource) Schema(ctx context.Context, req datasource.SchemaReques
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Unique identifier for the role",
-				Computed:             true,
+				Computed:            true,
 			},
 			"realm_id": schema.StringAttribute{
 				MarkdownDescription: "The realm ID this role belongs to",
-				Required:             true,
+				Required:            true,
 			},
 			"client_id": schema.StringAttribute{
 				MarkdownDescription: "The client ID (only for client-specific roles)",
-				Optional:             true,
+				Optional:            true,
 			},
 			"name": schema.StringAttribute{
 				MarkdownDescription: "The role name",
-				Required:             true,
+				Required:            true,
 			},
 			"description": schema.StringAttribute{
 				MarkdownDescription: "Description of the role",
-				Computed:             true,
+				Computed:            true,
 			},
 			"composite": schema.BoolAttribute{
 				MarkdownDescription: "Whether this is a composite role",
-				Computed:             true,
+				Computed:            true,
 			},
 			"client_role": schema.BoolAttribute{
 				MarkdownDescription: "Whether this is a client-specific role",
-				Computed:             true,
+				Computed:            true,
 			},
 			"created_at": schema.StringAttribute{
 				MarkdownDescription: "Creation timestamp",
-				Computed:             true,
+				Computed:            true,
 			},
 			"updated_at": schema.StringAttribute{
 				MarkdownDescription: "Last update timestamp",
-				Computed:             true,
+				Computed:            true,
 			},
 		},
 	}

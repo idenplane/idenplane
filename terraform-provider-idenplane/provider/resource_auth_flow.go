@@ -6,15 +6,17 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/idenplane/terraform-provider-idenplane/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/attr"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/idenplane/terraform-provider-idenplane/client"
 )
 
 // Ensure the implementation satisfies the expected interfaces
@@ -46,15 +48,15 @@ type AuthFlowResourceModel struct {
 
 // AuthFlowExecutionModel represents an execution within an auth flow
 type AuthFlowExecutionModel struct {
-	ID                 types.String `tfsdk:"id"`
-	DisplayName        types.String `tfsdk:"display_name"`
-	Requirement        types.String `tfsdk:"requirement"`
-	Authenticator      types.String `tfsdk:"authenticator"`
-	AuthenticatorFlow  types.Bool   `tfsdk:"authenticator_flow"`
-	Priority           types.Int64  `tfsdk:"priority"`
-	Configurable       types.Bool   `tfsdk:"configurable"`
-	Authentication     types.String `tfsdk:"authentication"`
-	SubFlow            types.Bool   `tfsdk:"sub_flow"`
+	ID                types.String `tfsdk:"id"`
+	DisplayName       types.String `tfsdk:"display_name"`
+	Requirement       types.String `tfsdk:"requirement"`
+	Authenticator     types.String `tfsdk:"authenticator"`
+	AuthenticatorFlow types.Bool   `tfsdk:"authenticator_flow"`
+	Priority          types.Int64  `tfsdk:"priority"`
+	Configurable      types.Bool   `tfsdk:"configurable"`
+	Authentication    types.String `tfsdk:"authentication"`
+	SubFlow           types.Bool   `tfsdk:"sub_flow"`
 }
 
 // NewAuthFlowResource creates a new auth flow resource
@@ -81,14 +83,14 @@ func (r *AuthFlowResource) Schema(ctx context.Context, req resource.SchemaReques
 				MarkdownDescription: "The realm ID this authentication flow belongs to",
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
-					planmodifier.RequiresReplace(),
+					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"alias": schema.StringAttribute{
 				MarkdownDescription: "The authentication flow alias (unique identifier)",
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
-					planmodifier.RequiresReplace(),
+					stringplanmodifier.RequiresReplace(),
 				},
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
@@ -303,15 +305,15 @@ func (r *AuthFlowResource) Read(ctx context.Context, req resource.ReadRequest, r
 			})
 		}
 		state.Executions = types.ListValueMust(types.ObjectType{AttrTypes: map[string]attr.Type{
-			"id":                  types.StringType,
-			"display_name":        types.StringType,
-			"requirement":         types.StringType,
-			"authenticator":       types.StringType,
-			"authenticator_flow":  types.BoolType,
-			"priority":            types.Int64Type,
-			"configurable":        types.BoolType,
-			"authentication":      types.StringType,
-			"sub_flow":            types.BoolType,
+			"id":                 types.StringType,
+			"display_name":       types.StringType,
+			"requirement":        types.StringType,
+			"authenticator":      types.StringType,
+			"authenticator_flow": types.BoolType,
+			"priority":           types.Int64Type,
+			"configurable":       types.BoolType,
+			"authentication":     types.StringType,
+			"sub_flow":           types.BoolType,
 		}}, convertAuthFlowExecutionsToNestedAttr(execs))
 	}
 
@@ -534,15 +536,15 @@ func (r *AuthFlowResource) ImportState(ctx context.Context, req resource.ImportS
 			})
 		}
 		state.Executions = types.ListValueMust(types.ObjectType{AttrTypes: map[string]attr.Type{
-			"id":                  types.StringType,
-			"display_name":        types.StringType,
-			"requirement":         types.StringType,
-			"authenticator":       types.StringType,
-			"authenticator_flow":  types.BoolType,
-			"priority":            types.Int64Type,
-			"configurable":        types.BoolType,
-			"authentication":      types.StringType,
-			"sub_flow":            types.BoolType,
+			"id":                 types.StringType,
+			"display_name":       types.StringType,
+			"requirement":        types.StringType,
+			"authenticator":      types.StringType,
+			"authenticator_flow": types.BoolType,
+			"priority":           types.Int64Type,
+			"configurable":       types.BoolType,
+			"authentication":     types.StringType,
+			"sub_flow":           types.BoolType,
 		}}, convertAuthFlowExecutionsToNestedAttr(execs))
 	}
 
@@ -553,7 +555,7 @@ func (r *AuthFlowResource) ImportState(ctx context.Context, req resource.ImportS
 	}
 
 	// Add the import state ID
-	resource.ImportStatePassthroughID(ctx, resource.DefaultsPath("alias"), req, resp)
+	resource.ImportStatePassthroughID(ctx, path.Root("alias"), req, resp)
 
 	tflog.Debug(ctx, "Auth flow imported successfully", map[string]interface{}{
 		"alias":    flow.Alias,
@@ -605,25 +607,25 @@ func convertAuthFlowExecutionsToNestedAttr(execs []AuthFlowExecutionModel) []att
 	result := make([]attr.Value, 0, len(execs))
 	for _, e := range execs {
 		obj, _ := types.ObjectValue(map[string]attr.Type{
-			"id":                  types.StringType,
-			"display_name":        types.StringType,
-			"requirement":         types.StringType,
-			"authenticator":       types.StringType,
-			"authenticator_flow":  types.BoolType,
-			"priority":            types.Int64Type,
-			"configurable":        types.BoolType,
-			"authentication":      types.StringType,
-			"sub_flow":            types.BoolType,
+			"id":                 types.StringType,
+			"display_name":       types.StringType,
+			"requirement":        types.StringType,
+			"authenticator":      types.StringType,
+			"authenticator_flow": types.BoolType,
+			"priority":           types.Int64Type,
+			"configurable":       types.BoolType,
+			"authentication":     types.StringType,
+			"sub_flow":           types.BoolType,
 		}, map[string]attr.Value{
-			"id":                  e.ID,
-			"display_name":        e.DisplayName,
-			"requirement":         e.Requirement,
-			"authenticator":       e.Authenticator,
-			"authenticator_flow":  e.AuthenticatorFlow,
-			"priority":            e.Priority,
-			"configurable":        e.Configurable,
-			"authentication":      e.Authentication,
-			"sub_flow":            e.SubFlow,
+			"id":                 e.ID,
+			"display_name":       e.DisplayName,
+			"requirement":        e.Requirement,
+			"authenticator":      e.Authenticator,
+			"authenticator_flow": e.AuthenticatorFlow,
+			"priority":           e.Priority,
+			"configurable":       e.Configurable,
+			"authentication":     e.Authentication,
+			"sub_flow":           e.SubFlow,
 		})
 		result = append(result, obj)
 	}

@@ -88,7 +88,7 @@ func (c *AuthFlowsClient) CreateAuthFlow(ctx context.Context, realmName string, 
 func (c *AuthFlowsClient) ListAuthFlows(ctx context.Context, realmName string) ([]AuthFlow, error) {
 	var flows []AuthFlow
 	path := fmt.Sprintf("/admin/realms/%s/authentication/flows", realmName)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &flows)
+	err := c.httpClient.GetJSON(ctx, path, nil, &flows)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list auth flows: %w", err)
 	}
@@ -99,7 +99,7 @@ func (c *AuthFlowsClient) ListAuthFlows(ctx context.Context, realmName string) (
 func (c *AuthFlowsClient) GetAuthFlow(ctx context.Context, realmName, flowID string) (*AuthFlow, error) {
 	var flow AuthFlow
 	path := fmt.Sprintf("/admin/realms/%s/authentication/flows/%s", realmName, flowID)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &flow)
+	err := c.httpClient.GetJSON(ctx, path, nil, &flow)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get auth flow %s: %w", flowID, err)
 	}
@@ -111,7 +111,7 @@ func (c *AuthFlowsClient) GetAuthFlowByAlias(ctx context.Context, realmName, ali
 	// First get the flow by alias via executions
 	var flow AuthFlow
 	path := fmt.Sprintf("/admin/realms/%s/authentication/flows/%s", realmName, alias)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &flow)
+	err := c.httpClient.GetJSON(ctx, path, nil, &flow)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get auth flow %s: %w", alias, err)
 	}
@@ -157,7 +157,7 @@ func (c *AuthFlowsClient) CopyAuthFlow(ctx context.Context, realmName, flowID st
 func (c *AuthFlowsClient) GetExecutions(ctx context.Context, realmName, flowID string) ([]AuthExecution, error) {
 	var executions []AuthExecution
 	path := fmt.Sprintf("/admin/realms/%s/authentication/flows/%s/executions", realmName, flowID)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &executions)
+	err := c.httpClient.GetJSON(ctx, path, nil, &executions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get executions for flow %s: %w", flowID, err)
 	}
@@ -232,7 +232,7 @@ type RequiredAction struct {
 func (c *AuthFlowsClient) GetRequiredActions(ctx context.Context, realmName string) ([]RequiredAction, error) {
 	var actions []RequiredAction
 	path := fmt.Sprintf("/admin/realms/%s/authentication/register-actions", realmName)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &actions)
+	err := c.httpClient.GetJSON(ctx, path, nil, &actions)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get required actions: %w", err)
 	}

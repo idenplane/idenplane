@@ -6,14 +6,16 @@ import (
 	"fmt"
 	"strings"
 
-	"github.com/idenplane/terraform-provider-idenplane/client"
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema/planmodifier"
+	"github.com/hashicorp/terraform-plugin-framework/resource/schema/stringplanmodifier"
 	"github.com/hashicorp/terraform-plugin-framework/schema/validator"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/idenplane/terraform-provider-idenplane/client"
 )
 
 // Ensure the implementation satisfies the expected interfaces
@@ -60,13 +62,13 @@ func (r *RoleResource) Schema(ctx context.Context, req resource.SchemaRequest, r
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Unique identifier for the role (computed)",
-				Computed:             true,
+				Computed:            true,
 			},
 			"realm_id": schema.StringAttribute{
 				MarkdownDescription: "The realm ID this role belongs to",
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
-					planmodifier.RequiresReplace(),
+					stringplanmodifier.RequiresReplace(),
 				},
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
@@ -74,16 +76,16 @@ func (r *RoleResource) Schema(ctx context.Context, req resource.SchemaRequest, r
 			},
 			"client_id": schema.StringAttribute{
 				MarkdownDescription: "The client ID (only for client-specific roles). If not set, a realm role is created.",
-				Optional:           true,
+				Optional:            true,
 				PlanModifiers: []planmodifier.String{
-					planmodifier.RequiresReplace(),
+					stringplanmodifier.RequiresReplace(),
 				},
 			},
 			"name": schema.StringAttribute{
 				MarkdownDescription: "The role name",
 				Required:            true,
 				PlanModifiers: []planmodifier.String{
-					planmodifier.RequiresReplace(),
+					stringplanmodifier.RequiresReplace(),
 				},
 				Validators: []validator.String{
 					stringvalidator.LengthAtLeast(1),
@@ -91,23 +93,23 @@ func (r *RoleResource) Schema(ctx context.Context, req resource.SchemaRequest, r
 			},
 			"description": schema.StringAttribute{
 				MarkdownDescription: "Description of the role",
-				Optional:           true,
+				Optional:            true,
 			},
 			"composite": schema.BoolAttribute{
 				MarkdownDescription: "Whether this is a composite role (computed)",
-				Computed:             true,
+				Computed:            true,
 			},
 			"client_role": schema.BoolAttribute{
 				MarkdownDescription: "Whether this is a client-specific role (computed)",
-				Computed:             true,
+				Computed:            true,
 			},
 			"created_at": schema.StringAttribute{
 				MarkdownDescription: "Creation timestamp (computed)",
-				Computed:             true,
+				Computed:            true,
 			},
 			"updated_at": schema.StringAttribute{
 				MarkdownDescription: "Last update timestamp (computed)",
-				Computed:             true,
+				Computed:            true,
 			},
 		},
 	}
@@ -197,9 +199,9 @@ func (r *RoleResource) Create(ctx context.Context, req resource.CreateRequest, r
 	}
 
 	tflog.Debug(ctx, "Role created successfully", map[string]interface{}{
-		"name":     role.Name,
-		"id":       role.ID,
-		"realm_id": realmName,
+		"name":      role.Name,
+		"id":        role.ID,
+		"realm_id":  realmName,
 		"client_id": clientID,
 	})
 }
@@ -269,9 +271,9 @@ func (r *RoleResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 	}
 
 	tflog.Debug(ctx, "Role read successfully", map[string]interface{}{
-		"name":     role.Name,
-		"id":       role.ID,
-		"realm_id": realmName,
+		"name":      role.Name,
+		"id":        role.ID,
+		"realm_id":  realmName,
 		"client_id": clientID,
 	})
 }
@@ -348,9 +350,9 @@ func (r *RoleResource) Update(ctx context.Context, req resource.UpdateRequest, r
 	}
 
 	tflog.Debug(ctx, "Role updated successfully", map[string]interface{}{
-		"name":     role.Name,
-		"id":       role.ID,
-		"realm_id": realmName,
+		"name":      role.Name,
+		"id":        role.ID,
+		"realm_id":  realmName,
 		"client_id": clientID,
 	})
 }
@@ -406,8 +408,8 @@ func (r *RoleResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 	}
 
 	tflog.Debug(ctx, "Role deleted successfully", map[string]interface{}{
-		"name":     roleName,
-		"realm_id": realmName,
+		"name":      roleName,
+		"realm_id":  realmName,
 		"client_id": clientID,
 	})
 }
@@ -497,12 +499,12 @@ func (r *RoleResource) ImportState(ctx context.Context, req resource.ImportState
 	}
 
 	// Add the import state ID
-	resource.ImportStatePassthroughID(ctx, resource.DefaultsPath("name"), req, resp)
+	resource.ImportStatePassthroughID(ctx, path.Root("name"), req, resp)
 
 	tflog.Debug(ctx, "Role imported successfully", map[string]interface{}{
-		"name":     role.Name,
-		"id":       role.ID,
-		"realm_id": realmName,
+		"name":      role.Name,
+		"id":        role.ID,
+		"realm_id":  realmName,
 		"client_id": clientID,
 	})
 }

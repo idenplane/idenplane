@@ -261,7 +261,7 @@ func (c *RealmsClient) CreateRealm(ctx context.Context, req CreateRealmRequest) 
 // ListRealms returns all realms
 func (c *RealmsClient) ListRealms(ctx context.Context) ([]Realm, error) {
 	var realms []Realm
-	err := c.httpClient.GetJSON(ctx, "/admin/realms", nil, nil, &realms)
+	err := c.httpClient.GetJSON(ctx, "/admin/realms", nil, &realms)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list realms: %w", err)
 	}
@@ -272,7 +272,7 @@ func (c *RealmsClient) ListRealms(ctx context.Context) ([]Realm, error) {
 func (c *RealmsClient) GetRealm(ctx context.Context, realmName string) (*Realm, error) {
 	var realm Realm
 	path := fmt.Sprintf("/admin/realms/%s", realmName)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &realm)
+	err := c.httpClient.GetJSON(ctx, path, nil, &realm)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get realm %s: %w", realmName, err)
 	}
@@ -303,7 +303,7 @@ func (c *RealmsClient) DeleteRealm(ctx context.Context, realmName string) error 
 // GetThemes returns all available themes
 func (c *RealmsClient) GetThemes(ctx context.Context) ([]Theme, error) {
 	var themes []Theme
-	err := c.httpClient.GetJSON(ctx, "/admin/realms/themes", nil, nil, &themes)
+	err := c.httpClient.GetJSON(ctx, "/admin/realms/themes", nil, &themes)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get themes: %w", err)
 	}
@@ -322,7 +322,7 @@ func (c *RealmsClient) ExportRealm(ctx context.Context, realmName string, opts E
 
 	var exportData map[string]interface{}
 	path := fmt.Sprintf("/admin/realms/%s/export", realmName)
-	err := c.httpClient.GetJSON(ctx, path, query, nil, &exportData)
+	err := c.httpClient.GetJSON(ctx, path, query, &exportData)
 	if err != nil {
 		return nil, fmt.Errorf("failed to export realm %s: %w", realmName, err)
 	}

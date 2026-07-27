@@ -164,7 +164,7 @@ func (c *OrganizationsClient) CreateOrganization(ctx context.Context, realmName 
 func (c *OrganizationsClient) ListOrganizations(ctx context.Context, realmName string) ([]Organization, error) {
 	var orgs []Organization
 	path := fmt.Sprintf("/admin/realms/%s/organizations", realmName)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &orgs)
+	err := c.httpClient.GetJSON(ctx, path, nil, &orgs)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list organizations: %w", err)
 	}
@@ -175,7 +175,7 @@ func (c *OrganizationsClient) ListOrganizations(ctx context.Context, realmName s
 func (c *OrganizationsClient) GetOrganization(ctx context.Context, realmName, slug string) (*Organization, error) {
 	var org Organization
 	path := fmt.Sprintf("/admin/realms/%s/organizations/%s", realmName, slug)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &org)
+	err := c.httpClient.GetJSON(ctx, path, nil, &org)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get organization %s: %w", slug, err)
 	}
@@ -220,7 +220,7 @@ func (c *OrganizationsClient) AddMember(ctx context.Context, realmName, slug str
 func (c *OrganizationsClient) ListMembers(ctx context.Context, realmName, slug string) ([]OrganizationMember, error) {
 	var members []OrganizationMember
 	path := fmt.Sprintf("/admin/realms/%s/organizations/%s/members", realmName, slug)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &members)
+	err := c.httpClient.GetJSON(ctx, path, nil, &members)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list members: %w", err)
 	}
@@ -276,7 +276,7 @@ func (c *OrganizationsClient) AcceptInvitation(ctx context.Context, realmName, s
 func (c *OrganizationsClient) ListInvitations(ctx context.Context, realmName, slug string) ([]OrganizationInvitation, error) {
 	var invitations []OrganizationInvitation
 	path := fmt.Sprintf("/admin/realms/%s/organizations/%s/invitations", realmName, slug)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &invitations)
+	err := c.httpClient.GetJSON(ctx, path, nil, &invitations)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list invitations: %w", err)
 	}
@@ -324,7 +324,7 @@ func (c *OrganizationsClient) CreateSsoConnection(ctx context.Context, realmName
 func (c *OrganizationsClient) ListSsoConnections(ctx context.Context, realmName, slug string) ([]OrganizationSsoConnection, error) {
 	var conns []OrganizationSsoConnection
 	path := fmt.Sprintf("/admin/realms/%s/organizations/%s/sso-connections", realmName, slug)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &conns)
+	err := c.httpClient.GetJSON(ctx, path, nil, &conns)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list SSO connections: %w", err)
 	}
@@ -335,7 +335,7 @@ func (c *OrganizationsClient) ListSsoConnections(ctx context.Context, realmName,
 func (c *OrganizationsClient) GetSsoConnection(ctx context.Context, realmName, slug, connectionID string) (*OrganizationSsoConnection, error) {
 	var conn OrganizationSsoConnection
 	path := fmt.Sprintf("/admin/realms/%s/organizations/%s/sso-connections/%s", realmName, slug, connectionID)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &conn)
+	err := c.httpClient.GetJSON(ctx, path, nil, &conn)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get SSO connection %s: %w", connectionID, err)
 	}

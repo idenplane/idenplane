@@ -5,12 +5,11 @@ import (
 	"context"
 	"fmt"
 
-	"github.com/idenplane/terraform-provider-idenplane/client"
-	"github.com/hashicorp/terraform-plugin-framework/attr"
 	"github.com/hashicorp/terraform-plugin-framework/datasource"
 	"github.com/hashicorp/terraform-plugin-framework/datasource/schema"
 	"github.com/hashicorp/terraform-plugin-framework/types"
 	"github.com/hashicorp/terraform-plugin-log/tflog"
+	"github.com/idenplane/terraform-provider-idenplane/client"
 )
 
 // Ensure the implementation satisfies the expected interfaces
@@ -26,37 +25,37 @@ type IdentityProviderDataSource struct {
 
 // IdentityProviderDataSourceModel represents the Terraform model for identity provider data source
 type IdentityProviderDataSourceModel struct {
-	ID                          types.String `tfsdk:"id"`
-	RealmID                     types.String `tfsdk:"realm_id"`
-	Alias                       types.String `tfsdk:"alias"`
-	DisplayName                 types.String `tfsdk:"display_name"`
-	Enabled                     types.Bool   `tfsdk:"enabled"`
-	ProviderID                  types.String `tfsdk:"provider_id"`
-	FirstBrokerLoginFlowAlias   types.String `tfsdk:"first_broker_login_flow_alias"`
-	PostBrokerLoginFlowAlias    types.String `tfsdk:"post_broker_login_flow_alias"`
-	InternalID                  types.String `tfsdk:"internal_id"`
-	TrustEmail                  types.Bool   `tfsdk:"trust_email"`
-	StoreToken                  types.Bool   `tfsdk:"store_token"`
-	ReadOnly                    types.Bool   `tfsdk:"read_only"`
-	AddReadTokenRoleOnCreate    types.Bool   `tfsdk:"add_read_token_role_on_create"`
-	SyncMode                    types.String `tfsdk:"sync_mode"`
-	Discoverable               types.Bool   `tfsdk:"discoverable"`
-	SamlMetadataURL             types.String `tfsdk:"saml_metadata_url"`
-	SamlMetadata                types.String `tfsdk:"saml_metadata"`
-	WantAssertionsSigned        types.Bool   `tfsdk:"want_assertions_signed"`
-	OidcMetadataURL             types.String `tfsdk:"oidc_metadata_url"`
-	ClientID                    types.String `tfsdk:"client_id"`
-	HideOnLoginPage             types.Bool   `tfsdk:"hide_on_login_page"`
-	CreatedAt                   types.String `tfsdk:"created_at"`
-	UpdatedAt                   types.String `tfsdk:"updated_at"`
+	ID                        types.String `tfsdk:"id"`
+	RealmID                   types.String `tfsdk:"realm_id"`
+	Alias                     types.String `tfsdk:"alias"`
+	DisplayName               types.String `tfsdk:"display_name"`
+	Enabled                   types.Bool   `tfsdk:"enabled"`
+	ProviderID                types.String `tfsdk:"provider_id"`
+	FirstBrokerLoginFlowAlias types.String `tfsdk:"first_broker_login_flow_alias"`
+	PostBrokerLoginFlowAlias  types.String `tfsdk:"post_broker_login_flow_alias"`
+	InternalID                types.String `tfsdk:"internal_id"`
+	TrustEmail                types.Bool   `tfsdk:"trust_email"`
+	StoreToken                types.Bool   `tfsdk:"store_token"`
+	ReadOnly                  types.Bool   `tfsdk:"read_only"`
+	AddReadTokenRoleOnCreate  types.Bool   `tfsdk:"add_read_token_role_on_create"`
+	SyncMode                  types.String `tfsdk:"sync_mode"`
+	Discoverable              types.Bool   `tfsdk:"discoverable"`
+	SamlMetadataURL           types.String `tfsdk:"saml_metadata_url"`
+	SamlMetadata              types.String `tfsdk:"saml_metadata"`
+	WantAssertionsSigned      types.Bool   `tfsdk:"want_assertions_signed"`
+	OidcMetadataURL           types.String `tfsdk:"oidc_metadata_url"`
+	ClientID                  types.String `tfsdk:"client_id"`
+	HideOnLoginPage           types.Bool   `tfsdk:"hide_on_login_page"`
+	CreatedAt                 types.String `tfsdk:"created_at"`
+	UpdatedAt                 types.String `tfsdk:"updated_at"`
 }
 
 // MapperModel represents a simplified mapper model for identity provider mappers
 type MapperModel struct {
-	ID                          types.String `tfsdk:"id"`
-	Name                        types.String `tfsdk:"name"`
-	IdentityProviderAlias       types.String `tfsdk:"identity_provider_alias"`
-	IdentityProviderMapperType  types.String `tfsdk:"identity_provider_mapper_type"`
+	ID                         types.String `tfsdk:"id"`
+	Name                       types.String `tfsdk:"name"`
+	IdentityProviderAlias      types.String `tfsdk:"identity_provider_alias"`
+	IdentityProviderMapperType types.String `tfsdk:"identity_provider_mapper_type"`
 }
 
 // NewIdentityProviderDataSource creates a new identity provider data source
@@ -78,95 +77,95 @@ func (d *IdentityProviderDataSource) Schema(ctx context.Context, req datasource.
 		Attributes: map[string]schema.Attribute{
 			"id": schema.StringAttribute{
 				MarkdownDescription: "Unique identifier for the identity provider",
-				Computed:             true,
+				Computed:            true,
 			},
 			"realm_id": schema.StringAttribute{
 				MarkdownDescription: "The realm ID this identity provider belongs to",
-				Required:             true,
+				Required:            true,
 			},
 			"alias": schema.StringAttribute{
 				MarkdownDescription: "The identity provider alias (unique identifier)",
-				Required:             true,
+				Required:            true,
 			},
 			"display_name": schema.StringAttribute{
 				MarkdownDescription: "Display name of the identity provider",
-				Computed:             true,
+				Computed:            true,
 			},
 			"enabled": schema.BoolAttribute{
 				MarkdownDescription: "Whether the identity provider is enabled",
-				Computed:             true,
+				Computed:            true,
 			},
 			"provider_id": schema.StringAttribute{
 				MarkdownDescription: "The identity provider type (e.g., oidc, saml)",
-				Computed:             true,
+				Computed:            true,
 			},
 			"first_broker_login_flow_alias": schema.StringAttribute{
 				MarkdownDescription: "First broker login flow alias",
-				Computed:             true,
+				Computed:            true,
 			},
 			"post_broker_login_flow_alias": schema.StringAttribute{
 				MarkdownDescription: "Post broker login flow alias",
-				Computed:             true,
+				Computed:            true,
 			},
 			"internal_id": schema.StringAttribute{
 				MarkdownDescription: "Internal ID of the identity provider",
-				Computed:             true,
+				Computed:            true,
 			},
 			"trust_email": schema.BoolAttribute{
 				MarkdownDescription: "Whether to trust email addresses from this provider",
-				Computed:             true,
+				Computed:            true,
 			},
 			"store_token": schema.BoolAttribute{
 				MarkdownDescription: "Whether to store tokens from this provider",
-				Computed:             true,
+				Computed:            true,
 			},
 			"read_only": schema.BoolAttribute{
 				MarkdownDescription: "Whether the identity provider is read-only",
-				Computed:             true,
+				Computed:            true,
 			},
 			"add_read_token_role_on_create": schema.BoolAttribute{
 				MarkdownDescription: "Whether to add read token role on create",
-				Computed:             true,
+				Computed:            true,
 			},
 			"sync_mode": schema.StringAttribute{
 				MarkdownDescription: "Sync mode (IMPORT, LEGACY, FORCED)",
-				Computed:             true,
+				Computed:            true,
 			},
 			"discoverable": schema.BoolAttribute{
 				MarkdownDescription: "Whether the identity provider is discoverable",
-				Computed:             true,
+				Computed:            true,
 			},
 			"saml_metadata_url": schema.StringAttribute{
 				MarkdownDescription: "SAML metadata URL",
-				Computed:             true,
+				Computed:            true,
 			},
 			"saml_metadata": schema.StringAttribute{
 				MarkdownDescription: "SAML metadata XML",
-				Computed:             true,
+				Computed:            true,
 			},
 			"want_assertions_signed": schema.BoolAttribute{
 				MarkdownDescription: "Whether assertions should be signed",
-				Computed:             true,
+				Computed:            true,
 			},
 			"oidc_metadata_url": schema.StringAttribute{
 				MarkdownDescription: "OIDC metadata URL",
-				Computed:             true,
+				Computed:            true,
 			},
 			"client_id": schema.StringAttribute{
 				MarkdownDescription: "Client ID for OIDC provider",
-				Computed:             true,
+				Computed:            true,
 			},
 			"hide_on_login_page": schema.BoolAttribute{
 				MarkdownDescription: "Whether to hide this provider on login page",
-				Computed:             true,
+				Computed:            true,
 			},
 			"created_at": schema.StringAttribute{
 				MarkdownDescription: "Creation timestamp",
-				Computed:             true,
+				Computed:            true,
 			},
 			"updated_at": schema.StringAttribute{
 				MarkdownDescription: "Last update timestamp",
-				Computed:             true,
+				Computed:            true,
 			},
 		},
 	}
