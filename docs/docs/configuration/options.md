@@ -877,13 +877,13 @@ await client.realms.update('my-realm', {
 
 <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
 
-[**Environment Variables**](/docs/configuration/environment-variables)
+[**Environment Variables**](/configuration/environment-variables)
 Environment-based configuration reference
 
-[**Admin API**](/docs/api/realms)
+[**Admin API**](/api/realms)
 Manage realms programmatically
 
-[**Deployment**](/docs/deployment/docker)
+[**Deployment**](/deployment/docker)
 Deploy with Docker Compose
 
 </div>

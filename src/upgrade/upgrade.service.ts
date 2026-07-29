@@ -1,5 +1,5 @@
-import { Injectable, Logger } from '@nestjs/common';
-import { execSync } from 'child_process';
+import { ConflictException, Injectable, Logger } from '@nestjs/common';
+import { execFileSync } from 'child_process';
 import { PreUpgradeValidatorService } from './pre-upgrade-validator.service.js';
 import {
   DatabaseBackupService,
@@ -9,6 +9,7 @@ import { ConfigCompatibilityService } from './config-compatibility.service.js';
 import { RollbackService } from './rollback.service.js';
 import { UpgradeHealthService } from './upgrade-health.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { APP_VERSION } from '../versioning/app-version.js';
 
 /**
  * Upgrade stage enumeration tracking progress through the upgrade workflow.
@@ -46,7 +47,17 @@ export interface UpgradeResult {
   toVersion: string;
   stages: UpgradeStageResult[];
   backupResult?: BackupResult;
+  /**
+   * A rollback was attempted. Says nothing about whether it worked — read
+   * `rollbackSucceeded` for that.
+   *
+   * This previously meant "a rollback succeeded", so a rollback that ran and
+   * failed reported `false` and was indistinguishable from one that never
+   * happened. That is the case an operator most needs to tell apart.
+   */
   rollbackTriggered: boolean;
+  /** Whether the attempted rollback completed. Undefined if none was attempted. */
+  rollbackSucceeded?: boolean;
   duration: number;
   error?: string;
 }
@@ -107,10 +118,70 @@ export class UpgradeService {
    */
   async upgrade(
     toVersion: string,
-    options: { dryRun?: boolean; force?: boolean; initiatedBy?: string } = {},
+    options: {
+      dryRun?: boolean;
+      force?: boolean;
+      initiatedBy?: string;
+      note?: string;
+      ipAddress?: string;
+    } = {},
+  ): Promise<UpgradeResult> {
+    // A dry run writes nothing, so neither precondition below applies to it.
+    if (options.dryRun) {
+      return this.runUpgrade(toVersion, options);
+    }
+
+    // Do not start what cannot be undone.
+    //
+    // Rolling back restores a dump over the live database, which is gated
+    // separately by UPGRADE_ALLOW_LIVE_RESTORE. Without that gate open the
+    // automatic rollback fails too — so an upgrade would migrate the database,
+    // fail its health check, and then find it has no way back. That is strictly
+    // worse than not starting: the operator ends up with a modified database
+    // and no recovery, having been told nothing beforehand.
+    //
+    // Checked here rather than in pre-validation because it is a property of
+    // the requested operation, not of the host: pre-validation answers "is this
+    // system healthy", this answers "is this action recoverable". force remains
+    // the documented escape hatch for an operator who takes backups by other
+    // means, and is already logged at error level by the controller.
+    if (!options.force) {
+      this.assertRollbackAvailable();
+    }
+
+    // Two guards against concurrent upgrades, because two processes running
+    // `prisma migrate deploy` against one database is a corruption scenario,
+    // not merely a race. docker-compose.cluster.yml runs two app replicas and
+    // the Helm chart supports autoscaling, so this is a real configuration.
+    await this.assertNoUpgradeInProgress(toVersion);
+
+    // finally, not a reset at each return site: runUpgrade has a dozen exit
+    // paths and a missed one would wedge this instance until it restarts.
+    try {
+      return await this.runUpgrade(toVersion, options);
+    } finally {
+      this.inFlight = false;
+    }
+  }
+
+  private async runUpgrade(
+    toVersion: string,
+    options: {
+      dryRun?: boolean;
+      force?: boolean;
+      initiatedBy?: string;
+      note?: string;
+      ipAddress?: string;
+    },
   ): Promise<UpgradeResult> {
     const startTime = Date.now();
-    const { dryRun = false, force = false, initiatedBy = 'CLI' } = options;
+    const {
+      dryRun = false,
+      force = false,
+      initiatedBy = 'CLI',
+      note,
+      ipAddress,
+    } = options;
     const upgradeId = this.generateUpgradeId();
     const stages: UpgradeStageResult[] = [];
 
@@ -121,7 +192,11 @@ export class UpgradeService {
     // Stage 1: Initialization
     const initResult = await this.executeStage(
       UpgradeStage.INITIALIZATION,
-      () => this.initializeUpgrade(upgradeId, toVersion, initiatedBy, dryRun),
+      () =>
+        this.initializeUpgrade(upgradeId, toVersion, initiatedBy, dryRun, {
+          note,
+          ipAddress,
+        }),
     );
     stages.push(initResult);
 
@@ -164,13 +239,32 @@ export class UpgradeService {
     if (!dryRun) {
       const backupStageResult = await this.executeStage(
         UpgradeStage.BACKUP,
-        () => {
+        async () => {
           backupResult = this.databaseBackupService.createBackup(
             `pre-upgrade-${toVersion}`,
           );
           if (!backupResult.success) {
             throw new Error(`Backup failed: ${backupResult.error}`);
           }
+
+          // Record the backup on the audit row NOW, not at completion.
+          //
+          // completeUpgrade() used to recover this by regexing its own log
+          // message (/Backup created: (.+)/), which meant the row carried
+          // backupId = null for the entire window in which an upgrade can
+          // fail. attemptRollback() looks the row up and bails with "Upgrade
+          // does not have an associated backup for rollback" when backupId is
+          // null — so the automatic rollback was unreachable in exactly the
+          // situation it exists for.
+          await this.prisma.upgradeAuditLog.update({
+            where: { id: upgradeId },
+            data: {
+              backupId: backupResult.backupPath,
+              backupPath: backupResult.backupPath,
+              backupSize: backupResult.backupSize,
+            },
+          });
+
           return {
             success: true,
             message: `Backup created: ${backupResult.backupPath}`,
@@ -453,6 +547,80 @@ export class UpgradeService {
   }
 
   /**
+   * Refuse to start when another upgrade is already running.
+   *
+   * Two layers, because they fail differently:
+   *
+   *   1. An in-process flag catches a double-submit against this instance,
+   *      which the database check cannot: the losing request may arrive before
+   *      the winner's audit row is committed.
+   *   2. An IN_PROGRESS audit row catches a second *instance* — the case that
+   *      actually matters, since docker-compose.cluster.yml runs two replicas.
+   *
+   * Deliberately not pg_advisory_lock: a session-level advisory lock needs a
+   * pinned connection, which the PrismaPg pool does not guarantee, and the
+   * transaction-scoped variant would have to wrap the entire upgrade — which
+   * would deadlock against `prisma migrate deploy`.
+   *
+   * The TTL exists because a process killed mid-upgrade leaves its row
+   * IN_PROGRESS forever, and a stale row must not permanently wedge the
+   * endpoint. It is bounded rather than absent so a genuinely running upgrade
+   * is not overrun.
+   */
+  private static readonly IN_PROGRESS_TTL_MS = 2 * 60 * 60 * 1000;
+  private inFlight = false;
+
+  /**
+   * Refuse an upgrade whose failure could not be undone.
+   *
+   * RollbackService declines to restore over the live database unless
+   * UPGRADE_ALLOW_LIVE_RESTORE is set. That check is right — a restore takes
+   * ACCESS EXCLUSIVE locks that conflict with other replicas — but it applies
+   * to the *automatic* rollback as well, so with only UPGRADE_API_ENABLED set
+   * an upgrade will migrate the database, fail, and then discover it has no way
+   * back. Found by rehearsing a failing upgrade against a real database.
+   */
+  private assertRollbackAvailable(): void {
+    if (process.env.UPGRADE_ALLOW_LIVE_RESTORE === 'true') {
+      return;
+    }
+
+    throw new ConflictException(
+      'Refusing to start: this upgrade could not be rolled back. Restoring a ' +
+        'backup over the running database requires UPGRADE_ALLOW_LIVE_RESTORE=true, ' +
+        'which is unset — so a failure after the migration would leave the database ' +
+        'modified with no automatic recovery. Scale to a single instance and set ' +
+        'that variable, or pass force to proceed without a recovery path.',
+    );
+  }
+
+  private async assertNoUpgradeInProgress(toVersion: string): Promise<void> {
+    if (this.inFlight) {
+      throw new ConflictException(
+        'An upgrade is already running on this instance.',
+      );
+    }
+
+    const cutoff = new Date(Date.now() - UpgradeService.IN_PROGRESS_TTL_MS);
+    const running = await this.prisma.upgradeAuditLog.findFirst({
+      where: { status: 'IN_PROGRESS', startedAt: { gte: cutoff } },
+      orderBy: { startedAt: 'desc' },
+    });
+
+    if (running) {
+      throw new ConflictException(
+        `An upgrade to ${running.toVersion} started at ` +
+          `${running.startedAt.toISOString()} is still in progress ` +
+          `(id ${running.id}). Refusing to start an upgrade to ${toVersion} ` +
+          'concurrently — two migrations against one database can corrupt it. ' +
+          'If that upgrade is known to have died, mark its row FAILED.',
+      );
+    }
+
+    this.inFlight = true;
+  }
+
+  /**
    * Initialize a new upgrade operation and record it in the audit log.
    */
   private async initializeUpgrade(
@@ -460,6 +628,7 @@ export class UpgradeService {
     toVersion: string,
     initiatedBy: string,
     dryRun: boolean,
+    meta: { note?: string; ipAddress?: string } = {},
   ): Promise<{ success: boolean; message: string }> {
     try {
       const currentVersion = this.getCurrentVersion();
@@ -472,10 +641,15 @@ export class UpgradeService {
           status: 'IN_PROGRESS',
           startedAt: new Date(),
           initiatedBy,
+          // Schema column that has existed since the table was created and was
+          // never written. Who ran an upgrade and from where is exactly what an
+          // audit log of a destructive operation is for.
+          ipAddress: meta.ipAddress ?? null,
           dryRun,
           details: {
             dryRun,
             initiatedBy,
+            ...(meta.note ? { note: meta.note } : {}),
           },
         },
       });
@@ -566,10 +740,35 @@ export class UpgradeService {
     try {
       this.logger.log(`Running database migrations for ${toVersion}...`);
 
-      const output = execSync('npx prisma migrate deploy 2>&1', {
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
+      // execFileSync, not execSync: no shell means no `2>&1` redirect to parse
+      // and nothing interpretable in the argument vector. The explicit --schema
+      // matters because prisma.config.ts is not present in the production image
+      // (docker-entrypoint.sh generates a prisma.config.js at runtime, which
+      // will not exist if the process was started any other way).
+      // Run Prisma's CLI entrypoint with this process's own node binary rather
+      // than going through `npx`. npx is a shell script on POSIX and npx.cmd on
+      // Windows, and execFileSync deliberately does not use a shell — so the
+      // bare name is ENOENT on Windows and the .cmd is EINVAL (Node refuses to
+      // exec a batch file without a shell since CVE-2024-27980). Resolving the
+      // entrypoint avoids the shell entirely on every platform and does not
+      // depend on PATH. `prisma` is a regular dependency, so it survives the
+      // `npm prune --omit=dev` in the production image.
+      const output = execFileSync(
+        process.execPath,
+        [
+          require.resolve('prisma/build/index.js'),
+          'migrate',
+          'deploy',
+          '--schema',
+          'prisma/schema.prisma',
+        ],
+        {
+          encoding: 'utf-8',
+          stdio: ['pipe', 'pipe', 'pipe'],
+          timeout: 10 * 60 * 1000,
+          maxBuffer: 10 * 1024 * 1024,
+        },
+      );
 
       return {
         success: true,
@@ -629,18 +828,17 @@ export class UpgradeService {
     void initiatedBy;
     try {
       const stageNames = stages.filter((s) => s.success).map((s) => s.stage);
-      const backupStage = stages.find(
-        (s) => s.stage === UpgradeStage.BACKUP && s.success,
-      );
-      const backupIdMatch = backupStage?.message?.match(/Backup created: (.+)/);
-      const backupId = backupIdMatch ? backupIdMatch[1] : null;
 
+      // backupId is deliberately not written here: the BACKUP stage persists it
+      // the moment the archive exists, which is what makes it available to
+      // attemptRollback() on the failure path. Re-deriving it from a log message
+      // at completion (the previous behaviour) both duplicated the write and
+      // made it useless, since an upgrade that fails never reaches completion.
       await this.prisma.upgradeAuditLog.update({
         where: { id: upgradeId },
         data: {
           status: 'COMPLETED',
           completedAt: new Date(),
-          backupId,
 
           details: {
             stepsCompleted: stageNames,
@@ -736,6 +934,21 @@ export class UpgradeService {
   }
 
   /**
+   * Derive the rollback fields of an UpgradeResult from the stage list, so the
+   * two can never disagree about whether a rollback happened.
+   */
+  private static rollbackOutcome(stages: UpgradeStageResult[]): {
+    rollbackTriggered: boolean;
+    rollbackSucceeded?: boolean;
+  } {
+    const rollback = stages.find((s) => s.stage === UpgradeStage.ROLLBACK);
+
+    return rollback
+      ? { rollbackTriggered: true, rollbackSucceeded: rollback.success }
+      : { rollbackTriggered: false };
+  }
+
+  /**
    * Build a failure result object.
    */
   private buildFailureResult(
@@ -750,9 +963,7 @@ export class UpgradeService {
       upgradeId,
       toVersion,
       stages,
-      rollbackTriggered: stages.some(
-        (s) => s.stage === UpgradeStage.ROLLBACK && s.success,
-      ),
+      ...UpgradeService.rollbackOutcome(stages),
       duration: Date.now() - startTime,
       error: errorMessage,
     };
@@ -760,21 +971,16 @@ export class UpgradeService {
 
   /**
    * Get the current Idenplane version.
+   *
+   * Previously shelled out to `node -p "require("./package.json").version"`.
+   * The shell stripped the inner quotes, so node evaluated
+   * `require(./package.json).version` — a SyntaxError — and the catch returned
+   * 'unknown' every single time. Every upgrade_audit_log.fromVersion written
+   * before this fix therefore reads 'unknown'. APP_VERSION reads the same
+   * package.json directly and is already used by the versioning module.
    */
   getCurrentVersion(): string {
-    try {
-      // Try to read version from package.json
-      const output = execSync(
-        'node -p "require("./package.json").version" 2>&1',
-        {
-          encoding: 'utf-8',
-          stdio: ['pipe', 'pipe', 'pipe'],
-        },
-      );
-      return output.trim();
-    } catch {
-      return 'unknown';
-    }
+    return APP_VERSION;
   }
 
   /**
@@ -784,12 +990,5 @@ export class UpgradeService {
     const timestamp = Date.now().toString(36);
     const random = Math.random().toString(36).substring(2, 8);
     return `upg-${timestamp}-${random}`;
-  }
-
-  /**
-   * Clean up Prisma client connections.
-   */
-  async onModuleDestroy(): Promise<void> {
-    await this.prisma.$disconnect();
   }
 }

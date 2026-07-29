@@ -10,6 +10,12 @@ on:
   pull_request:
     branches: [main]
 
+# Re-pushing to a PR supersedes the previous diff, so only the latest push
+# needs checking.
+concurrency:
+  group: pr-hygiene-${{ github.ref }}
+  cancel-in-progress: true
+
 # Minimal default token permissions; the job only reads the diff.
 permissions:
   contents: read

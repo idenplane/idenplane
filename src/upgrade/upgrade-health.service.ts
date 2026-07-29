@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { execSync } from 'child_process';
-import { PrismaClient } from '@prisma/client';
+import { PrismaService } from '../prisma/prisma.service.js';
 
 export interface UpgradeHealthCheck {
   name: string;
@@ -31,14 +31,31 @@ export interface UpgradeHealthResult {
  *   - Service connectivity (Redis, etc.)
  *   - Configuration consistency
  */
+
+/**
+ * Tables whose absence means the schema is unusable after an upgrade.
+ *
+ * These are the physical table names — i.e. the `@@map(...)` values in
+ * prisma/schema.prisma, not the Prisma model names. They are checked against
+ * `pg_tables`, which only ever sees the mapped names. `upgrade-health.service.spec.ts`
+ * parses the schema and asserts every entry here still exists, so a future
+ * `@@map` rename fails the suite instead of silently making every upgrade
+ * abort at POST_HEALTH_CHECK.
+ */
+export const CRITICAL_TABLES = [
+  'realms',
+  'users',
+  'clients',
+  'roles',
+  'client_scopes',
+  'sessions',
+  'upgrade_audit_log',
+] as const;
+
 @Injectable()
 export class UpgradeHealthService {
   private readonly logger = new Logger(UpgradeHealthService.name);
-  private readonly prisma: PrismaClient;
-
-  constructor() {
-    this.prisma = new PrismaClient();
-  }
+  constructor(private readonly prisma: PrismaService) {}
 
   /**
    * Run all post-upgrade health checks.
@@ -154,18 +171,8 @@ export class UpgradeHealthService {
         ORDER BY tablename
       `;
 
-      // Check for critical tables that must exist
-      const criticalTables = [
-        'realm',
-        'client',
-        'user',
-        'role',
-        'scope',
-        'session',
-      ];
-
       const existingTables = new Set(tables.map((t) => t.tablename));
-      const missingTables = criticalTables.filter(
+      const missingTables = CRITICAL_TABLES.filter(
         (t) => !existingTables.has(t),
       );
 
@@ -182,7 +189,7 @@ export class UpgradeHealthService {
         name: 'schema_integrity',
         status: 'pass',
         message: `Schema integrity verified (${tables.length} tables found)`,
-        details: `All ${criticalTables.length} critical tables present`,
+        details: `All ${CRITICAL_TABLES.length} critical tables present`,
       };
     } catch (err) {
       this.logger.error('Schema integrity check failed', err);
@@ -266,49 +273,41 @@ export class UpgradeHealthService {
   }
 
   /**
-   * Check data integrity by verifying referential integrity.
+   * Check referential integrity.
+   *
+   * Deliberately does NOT hand-write orphan queries. Every relationship here is
+   * backed by a real FK constraint created by Prisma migrations, so a validated
+   * constraint cannot have orphans — such a query can only ever return 0.
+   *
+   * What *can* actually go wrong after an upgrade or a restore is a constraint
+   * left NOT VALID: `pg_restore` adds constraints without re-checking existing
+   * rows, so a partial or out-of-order restore leaves them unvalidated and the
+   * data underneath them unverified. That is the real post-upgrade failure mode,
+   * and it is what this checks.
    */
   private async checkDataIntegrity(): Promise<UpgradeHealthCheck> {
     try {
-      // Check for orphaned foreign keys by verifying a few critical relationships
-      const checks = await Promise.all([
-        // Check for realms with invalid parent references
-        this.prisma.$queryRaw<Array<{ count: bigint }>>`
-          SELECT count(*) as count FROM realm
-          WHERE parent_id IS NOT NULL
-          AND parent_id NOT IN (SELECT id FROM realm WHERE id != realm.id)
-        `,
-        // Check for clients with invalid realm references
-        this.prisma.$queryRaw<Array<{ count: bigint }>>`
-          SELECT count(*) as count FROM client
-          WHERE realm_id NOT IN (SELECT id FROM realm)
-        `,
-        // Check for users with invalid realm references
-        this.prisma.$queryRaw<Array<{ count: bigint }>>`
-          SELECT count(*) as count FROM "user"
-          WHERE realm_id NOT IN (SELECT id FROM realm)
-        `,
-      ]);
+      const unvalidated = await this.prisma.$queryRaw<
+        Array<{ conname: string; table_name: string }>
+      >`
+        SELECT c.conname, rel.relname AS table_name
+        FROM pg_constraint c
+        JOIN pg_class rel ON rel.oid = c.conrelid
+        JOIN pg_namespace ns ON ns.oid = rel.relnamespace
+        WHERE ns.nspname = 'public'
+          AND c.contype = 'f'
+          AND NOT c.convalidated
+        ORDER BY rel.relname, c.conname
+      `;
 
-      const orphanedRealms = Number(checks[0][0]?.count ?? 0);
-      const orphanedClients = Number(checks[1][0]?.count ?? 0);
-      const orphanedUsers = Number(checks[2][0]?.count ?? 0);
-      const totalOrphans = orphanedRealms + orphanedClients + orphanedUsers;
-
-      if (totalOrphans > 0) {
-        const details = [
-          orphanedRealms > 0 ? `${orphanedRealms} orphaned realm(s)` : null,
-          orphanedClients > 0 ? `${orphanedClients} orphaned client(s)` : null,
-          orphanedUsers > 0 ? `${orphanedUsers} orphaned user(s)` : null,
-        ]
-          .filter(Boolean)
-          .join(', ');
-
+      if (unvalidated.length > 0) {
         return {
           name: 'data_integrity',
           status: 'fail',
-          message: `Data integrity issues detected: ${totalOrphans} orphaned records`,
-          details,
+          message: `${unvalidated.length} foreign key constraint(s) are not validated`,
+          details: unvalidated
+            .map((c) => `${c.table_name}.${c.conname}`)
+            .join(', '),
         };
       }
 
@@ -316,7 +315,7 @@ export class UpgradeHealthService {
         name: 'data_integrity',
         status: 'pass',
         message: 'Data integrity verified',
-        details: 'No orphaned foreign key references detected',
+        details: 'All foreign key constraints are validated',
       };
     } catch (err) {
       this.logger.warn('Data integrity check failed, skipping', err);
@@ -443,37 +442,33 @@ export class UpgradeHealthService {
   private async checkCriticalTables(): Promise<UpgradeHealthCheck> {
     try {
       const issues: string[] = [];
+      const warnings: string[] = [];
 
-      // Check realms have at least one enabled realm
-      const enabledRealms = await this.prisma.$queryRaw<
-        Array<{ count: bigint; enabled: boolean }>
-      >`
-        SELECT count(*) as count, enabled FROM realm GROUP BY enabled
-      `;
-
-      const hasEnabledRealm = enabledRealms.some(
-        (r) => r.enabled && Number(r.count) > 0,
-      );
-      if (!hasEnabledRealm) {
+      // Use the Prisma accessors rather than raw SQL: Prisma applies the
+      // @@map(...) names, hand-written SQL does not.
+      const enabledRealmCount = await this.prisma.realm.count({
+        where: { enabled: true },
+      });
+      if (enabledRealmCount === 0) {
         issues.push('No enabled realms found');
       }
 
-      // Check that master realm exists
       const masterRealm = await this.prisma.realm.findFirst({
         where: { name: 'master' },
       });
-
       if (!masterRealm) {
         issues.push('Master realm not found');
       }
 
-      // Check for admin users
-      const adminUsers = await this.prisma.$queryRaw<Array<{ count: bigint }>>`
-        SELECT count(*) as count FROM "user" WHERE username = 'admin'
-      `;
-
-      if (Number(adminUsers[0]?.count ?? 0) === 0) {
-        issues.push('Admin user not found');
+      // The seeded admin username is configurable (ADMIN_USER, see
+      // AdminSeedService), and an install that has moved to SSO may have
+      // removed it entirely — so its absence is a warning, not a failure.
+      const adminUsername = process.env.ADMIN_USER || 'admin';
+      const adminUserCount = await this.prisma.user.count({
+        where: { username: adminUsername },
+      });
+      if (adminUserCount === 0) {
+        warnings.push(`Admin user '${adminUsername}' not found`);
       }
 
       if (issues.length > 0) {
@@ -481,7 +476,16 @@ export class UpgradeHealthService {
           name: 'critical_tables',
           status: 'fail',
           message: `Critical data missing: ${issues.length} issue(s)`,
-          details: issues.join('; '),
+          details: [...issues, ...warnings].join('; '),
+        };
+      }
+
+      if (warnings.length > 0) {
+        return {
+          name: 'critical_tables',
+          status: 'warn',
+          message: 'Critical tables present, with warnings',
+          details: warnings.join('; '),
         };
       }
 
@@ -500,12 +504,5 @@ export class UpgradeHealthService {
         details: err instanceof Error ? err.message : String(err),
       };
     }
-  }
-
-  /**
-   * Clean up Prisma client connections.
-   */
-  async onModuleDestroy(): Promise<void> {
-    await this.prisma.$disconnect();
   }
 }

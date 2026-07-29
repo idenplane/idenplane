@@ -73,7 +73,7 @@ func (c *RolesClient) CreateRealmRole(ctx context.Context, realmName string, req
 func (c *RolesClient) ListRealmRoles(ctx context.Context, realmName string) ([]Role, error) {
 	var roles []Role
 	path := fmt.Sprintf("/admin/realms/%s/roles", realmName)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &roles)
+	err := c.httpClient.GetJSON(ctx, path, nil, &roles)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list realm roles: %w", err)
 	}
@@ -84,7 +84,7 @@ func (c *RolesClient) ListRealmRoles(ctx context.Context, realmName string) ([]R
 func (c *RolesClient) GetRealmRole(ctx context.Context, realmName, roleName string) (*Role, error) {
 	var role Role
 	path := fmt.Sprintf("/admin/realms/%s/roles/%s", realmName, roleName)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &role)
+	err := c.httpClient.GetJSON(ctx, path, nil, &role)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get realm role %s: %w", roleName, err)
 	}
@@ -129,7 +129,7 @@ func (c *RolesClient) CreateClientRole(ctx context.Context, realmName, clientID 
 func (c *RolesClient) ListClientRoles(ctx context.Context, realmName, clientID string) ([]Role, error) {
 	var roles []Role
 	path := fmt.Sprintf("/admin/realms/%s/clients/%s/roles", realmName, clientID)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &roles)
+	err := c.httpClient.GetJSON(ctx, path, nil, &roles)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list client roles: %w", err)
 	}
@@ -140,7 +140,7 @@ func (c *RolesClient) ListClientRoles(ctx context.Context, realmName, clientID s
 func (c *RolesClient) GetClientRole(ctx context.Context, realmName, clientID, roleName string) (*Role, error) {
 	var role Role
 	path := fmt.Sprintf("/admin/realms/%s/clients/%s/roles/%s", realmName, clientID, roleName)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &role)
+	err := c.httpClient.GetJSON(ctx, path, nil, &role)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get client role %s: %w", roleName, err)
 	}
@@ -174,7 +174,7 @@ func (c *RolesClient) DeleteClientRole(ctx context.Context, realmName, clientID,
 func (c *RolesClient) GetUserRealmRoles(ctx context.Context, realmName, userID string) ([]Role, error) {
 	var roles []Role
 	path := fmt.Sprintf("/admin/realms/%s/users/%s/role-mappings/realm", realmName, userID)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &roles)
+	err := c.httpClient.GetJSON(ctx, path, nil, &roles)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user realm roles: %w", err)
 	}
@@ -208,7 +208,7 @@ func (c *RolesClient) RemoveUserRealmRoles(ctx context.Context, realmName, userI
 func (c *RolesClient) GetUserClientRoles(ctx context.Context, realmName, userID, clientID string) ([]Role, error) {
 	var roles []Role
 	path := fmt.Sprintf("/admin/realms/%s/users/%s/role-mappings/clients/%s", realmName, userID, clientID)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &roles)
+	err := c.httpClient.GetJSON(ctx, path, nil, &roles)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get user client roles: %w", err)
 	}

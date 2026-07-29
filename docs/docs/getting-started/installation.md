@@ -275,13 +275,13 @@ After starting Idenplane, verify the installation:
 
 <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
 
-[**Configuration**](/docs/getting-started/configuration)
+[**Configuration**](/getting-started/configuration)
 Learn about all configuration options and environment variables
 
-[**Quickstart**](/docs/quickstart)
+[**Quickstart**](/quickstart)
 Get started with Idenplane authentication in your first application
 
-[**Admin Console**](/docs/getting-started/admin-console)
+[**Admin Console**](/getting-started/admin-console)
 Configure realms, users, and clients
 
 </div>

@@ -112,7 +112,7 @@ func (c *ClientsClient) CreateClient(ctx context.Context, realmName string, req 
 func (c *ClientsClient) ListClients(ctx context.Context, realmName string) ([]Client, error) {
 	var clients []Client
 	path := fmt.Sprintf("/admin/realms/%s/clients", realmName)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &clients)
+	err := c.httpClient.GetJSON(ctx, path, nil, &clients)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list clients: %w", err)
 	}
@@ -123,7 +123,7 @@ func (c *ClientsClient) ListClients(ctx context.Context, realmName string) ([]Cl
 func (c *ClientsClient) GetClient(ctx context.Context, realmName, clientID string) (*Client, error) {
 	var client Client
 	path := fmt.Sprintf("/admin/realms/%s/clients/%s", realmName, clientID)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &client)
+	err := c.httpClient.GetJSON(ctx, path, nil, &client)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get client %s: %w", clientID, err)
 	}
@@ -155,7 +155,7 @@ func (c *ClientsClient) DeleteClient(ctx context.Context, realmName, clientID st
 func (c *ClientsClient) GetServiceAccount(ctx context.Context, realmName, clientID string) (*ServiceAccountUser, error) {
 	var user ServiceAccountUser
 	path := fmt.Sprintf("/admin/realms/%s/clients/%s/service-account", realmName, clientID)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &user)
+	err := c.httpClient.GetJSON(ctx, path, nil, &user)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get service account for client %s: %w", clientID, err)
 	}

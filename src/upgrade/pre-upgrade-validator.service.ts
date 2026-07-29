@@ -1,6 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { execSync } from 'child_process';
-import { PrismaClient } from '@prisma/client';
+import * as fs from 'fs';
+import * as path from 'path';
+import { PrismaService } from '../prisma/prisma.service.js';
+import { DatabaseBackupService } from './database-backup.service.js';
 
 export interface PreUpgradeCheck {
   name: string;
@@ -34,11 +37,10 @@ export interface PreUpgradeValidationResult {
 @Injectable()
 export class PreUpgradeValidatorService {
   private readonly logger = new Logger(PreUpgradeValidatorService.name);
-  private readonly prisma: PrismaClient;
-
-  constructor() {
-    this.prisma = new PrismaClient();
-  }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly databaseBackupService: DatabaseBackupService,
+  ) {}
 
   /**
    * Run all pre-upgrade validation checks.
@@ -94,6 +96,33 @@ export class PreUpgradeValidatorService {
     checks.push(txCheck);
     if (txCheck.status === 'pass') passed++;
     else if (txCheck.status === 'warn') warnings++;
+    else failures++;
+
+    // 7. Backup tooling — a hard failure, deliberately.
+    //
+    // Without pg_dump the upgrade would previously get all the way to the BACKUP
+    // stage before discovering it cannot take one, and a failure any time after
+    // DATABASE_MIGRATION would then have nothing to roll back to. Failing here
+    // aborts before anything has been touched.
+    const toolingCheck = this.checkBackupTooling();
+    checks.push(toolingCheck);
+    if (toolingCheck.status === 'pass') passed++;
+    else if (toolingCheck.status === 'warn') warnings++;
+    else failures++;
+
+    // 8. Backup directory must be writable, for the same reason.
+    const backupDirCheck = this.checkBackupDirectory();
+    checks.push(backupDirCheck);
+    if (backupDirCheck.status === 'pass') passed++;
+    else if (backupDirCheck.status === 'warn') warnings++;
+    else failures++;
+
+    // 9. Client and server majors must match, or the restore silently is not
+    //    one — see checkPgVersionMatch.
+    const versionCheck = await this.checkPgVersionMatch();
+    checks.push(versionCheck);
+    if (versionCheck.status === 'pass') passed++;
+    else if (versionCheck.status === 'warn') warnings++;
     else failures++;
 
     const canProceed = failures === 0;
@@ -186,7 +215,40 @@ export class PreUpgradeValidatorService {
     const lines = output.split('\n');
     const pending: string[] = [];
 
-    for (const line of lines) {
+    // Prisma lists pending migrations as bare names under a heading:
+    //
+    //   Following migration have not yet been applied:
+    //   99990101000000_add_column
+    //
+    // Everything after that heading, up to the next blank line, is a migration
+    // name. The previous implementation looked for a `[ ]` checkbox marker,
+    // which Prisma does not emit — so it never matched, `pending` stayed empty,
+    // and the caller fell through to its "cannot determine status" branch and
+    // reported a hard FAILURE. That made canProceed false precisely when
+    // migrations were pending, i.e. in the only situation an upgrade is ever
+    // run: the operator's choice became "abandon" or "--force past every safety
+    // check". Found by rehearsing an upgrade against a database with a genuine
+    // pending migration.
+    let inPendingList = false;
+    for (const raw of lines) {
+      const line = raw.trim();
+
+      if (/have not yet been applied/i.test(line)) {
+        inPendingList = true;
+        continue;
+      }
+
+      if (inPendingList) {
+        // The list ends at the first blank line or prose sentence.
+        if (!line || /\s/.test(line)) {
+          inPendingList = false;
+          continue;
+        }
+        pending.push(line);
+        continue;
+      }
+
+      // Kept for any Prisma version that does use a checkbox form.
       const notApplied = line.match(/\[\s*\]\s+(\S+)/);
       if (notApplied) {
         pending.push(notApplied[1]);
@@ -197,56 +259,206 @@ export class PreUpgradeValidatorService {
   }
 
   /**
-   * Check available disk space for backups.
-   * Requires at least 1GB of free space.
+   * Verify pg_dump / pg_restore are reachable, since the whole safety story of
+   * an upgrade rests on being able to take a backup and put it back.
+   */
+  private checkBackupTooling(): PreUpgradeCheck {
+    const { available, detail } = this.databaseBackupService.pgToolsAvailable();
+
+    return available
+      ? {
+          name: 'backup_tooling',
+          status: 'pass',
+          message: 'Backup tooling is available',
+          details: detail,
+        }
+      : {
+          name: 'backup_tooling',
+          status: 'fail',
+          message:
+            'Backup tooling is missing — an upgrade cannot be rolled back',
+          details: detail,
+        };
+  }
+
+  /**
+   * The pg client major must equal the server major, or the backup cannot be
+   * restored — which means there is no rollback, discovered only at the moment
+   * one is needed.
+   *
+   * Measured, not assumed. Against a PostgreSQL 16 server:
+   *
+   *   pg_dump 18 → archive written fine (624 KB, PGDMP header)
+   *   pg_restore 18 → ERROR: unrecognized configuration parameter
+   *                   "transaction_timeout"   (added in PG 17)
+   *   pg_restore 16 on that archive → ERROR: unsupported version (1.16)
+   *                   in file header
+   *   pg_dump 16 + pg_restore 16 → restores, rows come back
+   *
+   * So a newer client is not merely "the supported direction": it produces
+   * backups nothing can restore onto that server. An older client is no better,
+   * since pg_dump refuses to dump a newer server at all. Equality is the rule.
+   *
+   * This matters for the published image specifically: it installs Alpine's
+   * default postgresql-client, which is currently 18, while docker-compose.yml
+   * ships postgres:16-alpine. That combination has no working rollback.
+   */
+  /** Server major, or null if it cannot be read. server_version_num is MMmmpp. */
+  private async readServerMajorVersion(): Promise<number | null> {
+    try {
+      const rows = await this.prisma.$queryRaw<
+        Array<{ server_version_num: string }>
+      >`SHOW server_version_num`;
+      const num = Number(rows[0]?.server_version_num);
+      return Number.isFinite(num) ? Math.floor(num / 10000) : null;
+    } catch {
+      return null;
+    }
+  }
+
+  private async checkPgVersionMatch(): Promise<PreUpgradeCheck> {
+    const clientMajor = this.databaseBackupService.clientMajorVersion();
+
+    if (clientMajor === null) {
+      return {
+        name: 'pg_client_version',
+        status: 'warn',
+        message: 'Could not determine the pg_dump version',
+        details:
+          'Unable to verify that the client and server majors match, which a ' +
+          'restore requires.',
+      };
+    }
+
+    const serverMajor = await this.readServerMajorVersion();
+
+    if (serverMajor === null) {
+      return {
+        name: 'pg_client_version',
+        status: 'warn',
+        message: 'Could not determine the PostgreSQL server version',
+        details: `Client is ${clientMajor}; server version unavailable.`,
+      };
+    }
+
+    if (clientMajor !== serverMajor) {
+      return {
+        name: 'pg_client_version',
+        status: 'fail',
+        message: `pg client ${clientMajor} does not match server ${serverMajor}`,
+        details:
+          `A backup taken by pg_dump ${clientMajor} cannot be restored onto a ` +
+          `PostgreSQL ${serverMajor} server, so this upgrade would have no ` +
+          `rollback. Install postgresql-client ${serverMajor} (or run a ` +
+          `PostgreSQL ${clientMajor} server).`,
+      };
+    }
+
+    return {
+      name: 'pg_client_version',
+      status: 'pass',
+      message: `pg client and server majors match (${clientMajor})`,
+    };
+  }
+
+  /**
+   * Verify the backup directory can actually be written to.
+   *
+   * Writes and removes a probe file rather than checking permission bits: a
+   * read-only mount, a full filesystem and a wrong-uid container all present
+   * differently in the metadata but identically here — as a failed write.
+   */
+  private checkBackupDirectory(): PreUpgradeCheck {
+    const backupDir = process.env.BACKUP_DIR || './backups';
+    const configured = Boolean(process.env.BACKUP_DIR);
+
+    try {
+      fs.mkdirSync(backupDir, { recursive: true });
+
+      const probe = path.join(
+        backupDir,
+        `.idenplane-write-probe-${process.pid}`,
+      );
+      fs.writeFileSync(probe, 'probe');
+      fs.unlinkSync(probe);
+
+      if (!configured && process.env.NODE_ENV === 'production') {
+        return {
+          name: 'backup_directory',
+          status: 'warn',
+          message: 'BACKUP_DIR is not set; using the default ./backups',
+          details:
+            'In production this is usually a container filesystem that does not ' +
+            'survive a restart. Point BACKUP_DIR at mounted, durable storage.',
+        };
+      }
+
+      return {
+        name: 'backup_directory',
+        status: 'pass',
+        message: `Backup directory is writable: ${backupDir}`,
+      };
+    } catch (err) {
+      return {
+        name: 'backup_directory',
+        status: 'fail',
+        message: `Backup directory is not writable: ${backupDir}`,
+        details: err instanceof Error ? err.message : String(err),
+      };
+    }
+  }
+
+  /**
+   * Check available disk space where backups will actually be written.
+   *
+   * Previously shelled out to `df -k .`, which had two problems: `df` does not
+   * exist on Windows (so this silently degraded to a warning on every developer
+   * machine), and `.` is the process working directory, not BACKUP_DIR — the
+   * check could pass on a roomy root filesystem while the mounted backup volume
+   * was full. statfsSync measures the right filesystem and needs no shell.
    */
   private checkDiskSpace(): PreUpgradeCheck {
+    const backupDir = process.env.BACKUP_DIR || './backups';
+
     try {
-      const output = execSync('df -k . 2>&1', {
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
+      // statfs needs an existing path; walk up to the nearest one that exists
+      // so an as-yet-uncreated backup directory still reports its volume.
+      let probe = path.resolve(backupDir);
+      while (!fs.existsSync(probe)) {
+        const parent = path.dirname(probe);
+        if (parent === probe) break;
+        probe = parent;
+      }
 
-      const lines = output.split('\n');
-      if (lines.length >= 2) {
-        const lastLine = lines[lines.length - 1];
-        const parts = lastLine.split(/\s+/);
-        if (parts.length >= 4) {
-          const availableKb = parseInt(parts[3], 10);
-          const availableMb = availableKb / 1024;
-          const availableGb = availableMb / 1024;
+      const stats = fs.statfsSync(probe);
+      const availableBytes = stats.bavail * stats.bsize;
+      const availableMb = availableBytes / (1024 * 1024);
+      const availableGb = availableMb / 1024;
+      const where = `${availableMb.toFixed(0)} MB available on the filesystem holding ${probe}`;
 
-          // Require at least 1GB (1024MB)
-          if (availableGb >= 1) {
-            return {
-              name: 'disk_space',
-              status: 'pass',
-              message: `Sufficient disk space available: ${availableGb.toFixed(2)} GB`,
-              details: `${availableMb.toFixed(0)} MB available`,
-            };
-          } else if (availableMb >= 256) {
-            return {
-              name: 'disk_space',
-              status: 'warn',
-              message: `Low disk space: ${availableGb.toFixed(2)} GB available`,
-              details: `${availableMb.toFixed(0)} MB available (recommended: 1 GB minimum)`,
-            };
-          } else {
-            return {
-              name: 'disk_space',
-              status: 'fail',
-              message: `Insufficient disk space: ${availableMb.toFixed(0)} MB available`,
-              details: 'Minimum 1 GB recommended for safe backups',
-            };
-          }
-        }
+      if (availableGb >= 1) {
+        return {
+          name: 'disk_space',
+          status: 'pass',
+          message: `Sufficient disk space available: ${availableGb.toFixed(2)} GB`,
+          details: where,
+        };
+      }
+
+      if (availableMb >= 256) {
+        return {
+          name: 'disk_space',
+          status: 'warn',
+          message: `Low disk space: ${availableGb.toFixed(2)} GB available`,
+          details: `${where} (recommended: 1 GB minimum)`,
+        };
       }
 
       return {
         name: 'disk_space',
-        status: 'warn',
-        message: 'Unable to determine disk space',
-        details: output.trim(),
+        status: 'fail',
+        message: `Insufficient disk space: ${availableMb.toFixed(0)} MB available`,
+        details: `${where}. Minimum 1 GB recommended for safe backups.`,
       };
     } catch (err) {
       return {
@@ -409,12 +621,5 @@ export class PreUpgradeValidatorService {
         details: err instanceof Error ? err.message : String(err),
       };
     }
-  }
-
-  /**
-   * Clean up Prisma client connections.
-   */
-  async onModuleDestroy(): Promise<void> {
-    await this.prisma.$disconnect();
   }
 }

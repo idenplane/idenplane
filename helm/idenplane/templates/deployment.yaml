@@ -83,14 +83,23 @@ spec:
             - name: themes-storage
               mountPath: /app/themes
             {{- end }}
+            {{- if .Values.backups.enabled }}
+            - name: backups-storage
+              mountPath: {{ .Values.backups.mountPath }}
+            {{- end }}
           {{- end }}
-      {{- if or .Values.volumes .Values.persistence.enabled }}
+      {{- if or .Values.volumes .Values.persistence.enabled .Values.backups.enabled }}
       volumes:
         {{- toYaml .Values.volumes | nindent 8 }}
         {{- if .Values.persistence.enabled }}
         - name: themes-storage
           persistentVolumeClaim:
             claimName: {{ include "idenplane.fullname" . }}-themes
+        {{- end }}
+        {{- if .Values.backups.enabled }}
+        - name: backups-storage
+          persistentVolumeClaim:
+            claimName: {{ include "idenplane.fullname" . }}-backups
         {{- end }}
       {{- end }}
       {{- with .Values.nodeSelector }}

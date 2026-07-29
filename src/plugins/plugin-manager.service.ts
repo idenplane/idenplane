@@ -368,11 +368,17 @@ export class PluginManagerService implements OnModuleInit {
     hook: 'onInstall' | 'onEnable' | 'onDisable' | 'onUninstall',
     context: PluginContext,
   ): Promise<void> {
-    const fn = plugin[hook];
+    // Bind at the point of extraction rather than pulling the method off the
+    // object and restoring `this` later with .call(). The previous form was
+    // correct — .call(plugin, ...) rebound it — but it left an unbound method
+    // reference in a local, which typescript-eslint 8.65's unbound-method rule
+    // reports: a plugin author reading this could reasonably pass `fn` on,
+    // and it would then be invoked with the wrong `this`.
+    const fn = plugin[hook]?.bind(plugin);
     if (typeof fn !== 'function') return;
 
     try {
-      await fn.call(plugin, context);
+      await fn(context);
     } catch (err) {
       this.logger.warn(
         `Plugin '${plugin.name}' threw during '${hook}': ${(err as Error).message}`,

@@ -11,4 +11,9 @@ data:
   BASE_URL: {{ .Values.env.BASE_URL | quote }}
   THROTTLE_TTL: {{ .Values.env.THROTTLE_TTL | quote }}
   THROTTLE_LIMIT: {{ .Values.env.THROTTLE_LIMIT | quote }}
+  {{- if .Values.backups.enabled }}
+  # Kept in step with the volumeMount in deployment.yaml — the app writes dumps
+  # here, so a mismatch would silently write them to the container filesystem.
+  BACKUP_DIR: {{ .Values.backups.mountPath | quote }}
+  {{- end }}
   SESSION_STORE: {{ .Values.env.SESSION_STORE | quote }}

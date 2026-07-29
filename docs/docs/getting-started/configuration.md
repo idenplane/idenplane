@@ -251,13 +251,13 @@ Most settings can also be configured through the Admin Console at `/console`:
 
 <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
 
-[**Deployment**](/docs/deployment/docker)
+[**Deployment**](/deployment/docker)
 Deploy Idenplane to production with Docker
 
-[**First Application**](/docs/guides/first-app)
+[**First Application**](/guides/first-app)
 Register your first OAuth client
 
-[**SDK Guides**](/docs/guides/sdks/react)
+[**SDK Guides**](/guides/sdks/react-sdk)
 Integrate Idenplane with your application
 
 </div>

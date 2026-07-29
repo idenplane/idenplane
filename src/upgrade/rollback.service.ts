@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { PrismaClient } from '@prisma/client';
-import { DatabaseBackupService } from './database-backup.service';
+import { PrismaService } from '../prisma/prisma.service.js';
+import { DatabaseBackupService } from './database-backup.service.js';
 
 export interface RollbackResult {
   success: boolean;
@@ -48,11 +48,10 @@ export interface UpgradeAuditEntry {
 @Injectable()
 export class RollbackService {
   private readonly logger = new Logger(RollbackService.name);
-  private readonly prisma: PrismaClient;
-
-  constructor(private readonly databaseBackupService: DatabaseBackupService) {
-    this.prisma = new PrismaClient();
-  }
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly databaseBackupService: DatabaseBackupService,
+  ) {}
 
   /**
    * Check if a rollback is possible and retrieve the last successful upgrade.
@@ -107,11 +106,72 @@ export class RollbackService {
    * @param upgradeId The ID of the upgrade to roll back (optional, defaults to most recent)
    * @returns RollbackResult with the outcome of the rollback operation
    */
+  /**
+   * The pg_restore invocation an operator would run by hand, with the archive
+   * this rollback would have used. Returned in the refusal so the 409 is
+   * actionable rather than merely a "no".
+   */
+  private async buildManualRestoreHint(upgradeId?: string): Promise<string> {
+    try {
+      const upgrade = upgradeId
+        ? await this.prisma.upgradeAuditLog.findUnique({
+            where: { id: upgradeId },
+          })
+        : await this.prisma.upgradeAuditLog.findFirst({
+            where: { status: 'COMPLETED' },
+            orderBy: { completedAt: 'desc' },
+          });
+
+      const archive = upgrade?.backupPath ?? upgrade?.backupId;
+      if (!archive) {
+        return '  (no backup is recorded for that upgrade — nothing to restore)';
+      }
+
+      return (
+        `  pg_restore --clean --if-exists --no-owner --no-privileges \\\n` +
+        `    --single-transaction --exit-on-error \\\n` +
+        `    -d "$DATABASE_URL" ${archive}`
+      );
+    } catch {
+      return '  (could not determine the backup archive for that upgrade)';
+    }
+  }
+
   async executeRollback(upgradeId?: string): Promise<RollbackResult> {
     const startTime = Date.now();
     const timestamp = new Date();
 
     this.logger.log('Starting upgrade rollback process');
+
+    // Restoring into the database this process is connected to is gated
+    // separately from UPGRADE_API_ENABLED, because it is a strictly harder
+    // operation than running migrations:
+    //
+    //   pg_restore --clean issues DROP TABLE for every object in the archive.
+    //   Those DROPs need ACCESS EXCLUSIVE locks, which conflict with any query
+    //   another replica is running. With more than one replica up, the restore
+    //   blocks — and once it does get the lock, the other replicas are talking
+    //   to a schema being dropped and recreated underneath them.
+    //
+    // Scaling to a single replica first is a deployment decision this service
+    // cannot make or verify, so the default is to refuse and hand the operator
+    // the exact command instead of half-performing it.
+    if (process.env.UPGRADE_ALLOW_LIVE_RESTORE !== 'true') {
+      const manual = await this.buildManualRestoreHint(upgradeId);
+      this.logger.warn(
+        'Rollback refused: UPGRADE_ALLOW_LIVE_RESTORE is not enabled',
+      );
+      return {
+        success: false,
+        timestamp,
+        error:
+          'Live database restore is disabled. Restoring over a running ' +
+          'database requires exclusive locks that conflict with other ' +
+          'replicas. Scale to a single instance, then either set ' +
+          'UPGRADE_ALLOW_LIVE_RESTORE=true or run the restore manually:\n' +
+          manual,
+      };
+    }
 
     try {
       // Find the upgrade to roll back
@@ -323,23 +383,22 @@ export class RollbackService {
         fromVersion: originalUpgrade.toVersion,
         toVersion: originalUpgrade.fromVersion,
         status: success ? 'ROLLBACK_COMPLETED' : 'ROLLBACK_FAILED',
-        startedAt: originalUpgrade.startedAt ?? now,
+        // The rollback started now — it must not inherit the original upgrade's
+        // startedAt. Copying it made the two rows tie on every
+        // `orderBy: { startedAt: 'desc' }`, so getLatestUpgradeStatus() and
+        // getUpgradeHistory() could return the failed upgrade *after* it had
+        // been rolled back, reporting the rollback as though it never happened.
+        startedAt: now,
         completedAt: now,
         initiatedBy: 'ROLLBACK_SERVICE',
         backupId: backupPath ?? null,
         rollbackTriggered: true,
         details: {
           rollbackFromVersion: originalUpgrade.toVersion,
+          originalStartedAt: originalUpgrade.startedAt?.toISOString() ?? null,
           errorMessage: error ?? null,
         },
       },
     });
-  }
-
-  /**
-   * Clean up Prisma client connections.
-   */
-  async onModuleDestroy(): Promise<void> {
-    await this.prisma.$disconnect();
   }
 }

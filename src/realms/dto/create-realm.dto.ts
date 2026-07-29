@@ -558,7 +558,8 @@ export class CreateRealmDto {
 
   @ApiPropertyOptional({
     default: true,
-    description: 'Automatically create users on SCIM provision if they do not exist',
+    description:
+      'Automatically create users on SCIM provision if they do not exist',
   })
   @IsOptional()
   @IsBoolean()
@@ -594,7 +595,8 @@ export class CreateRealmDto {
   // User lifecycle
   @ApiPropertyOptional({
     default: 14,
-    description: 'Grace period in days before a soft-deleted user account is permanently removed',
+    description:
+      'Grace period in days before a soft-deleted user account is permanently removed',
   })
   @IsOptional()
   @IsInt()

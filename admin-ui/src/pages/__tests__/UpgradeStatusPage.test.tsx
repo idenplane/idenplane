@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { screen, waitFor, act } from '@testing-library/react';
+import { screen, waitFor, act, waitForElementToBeRemoved } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../test/mocks/server';
 import { render } from '../../test/utils';
@@ -62,7 +62,7 @@ describe('UpgradeStatusPage', () => {
     expect(await screen.findByText(/no active or recent upgrades/i)).toBeInTheDocument();
   });
 
-  it('shows loading state', () => {
+  it('shows loading state', async () => {
     server.use(
       http.get('/admin/upgrade/status', async () => {
         await new Promise((r) => setTimeout(r, 100));
@@ -71,6 +71,9 @@ describe('UpgradeStatusPage', () => {
     );
     renderUpgradeStatusPage();
     expect(screen.getByText(/loading/i)).toBeInTheDocument();
+    // Drain the delayed response before the test ends — see DashboardPage.test.tsx
+    // for why an in-flight request outliving the test breaks the whole run.
+    await waitForElementToBeRemoved(() => screen.queryByText(/loading/i));
   });
 
   it('displays failed status correctly', async () => {

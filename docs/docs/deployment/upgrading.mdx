@@ -1,0 +1,240 @@
+---
+id: upgrading
+title: Upgrading
+description: Apply a version upgrade to a running Idenplane instance, with a pre-upgrade backup and automatic rollback on failure
+---
+
+# Upgrading
+
+Idenplane can upgrade a running instance for you: it validates first, takes a full database backup, applies pending migrations, health-checks the result, and restores the backup automatically if anything fails.
+
+The endpoints that do this are **disabled by default**. Everything below is opt-in, because the data at risk is your user accounts and their credentials.
+
+:::warning
+Read [Before you enable it](#before-you-enable-it) first. The upgrade API refuses to run when it cannot guarantee a way back, and those refusals are the feature working — not an obstacle to route around.
+:::
+
+---
+
+## What an upgrade does
+
+Seven stages, in order. Any failure after `BACKUP` triggers a rollback.
+
+| Stage | What happens |
+|---|---|
+| `INITIALIZATION` | Records the attempt and locks out concurrent upgrades |
+| `PRE_VALIDATION` | Nine checks — see below. Stops here if any fail |
+| `BACKUP` | `pg_dump -Fc` of the whole database into `BACKUP_DIR` |
+| `CONFIG_CHECK` | Verifies configuration is compatible with the target version |
+| `DATABASE_MIGRATION` | `prisma migrate deploy` |
+| `POST_HEALTH_CHECK` | Connection, schema, migrations, data integrity, critical tables |
+| `COMPLETION` | Marks the upgrade successful |
+
+If `DATABASE_MIGRATION` or `POST_HEALTH_CHECK` fails, a `ROLLBACK` stage restores the backup taken in `BACKUP` and the upgrade is reported as failed.
+
+---
+
+## Before you enable it
+
+### 1. `pg_dump` and `pg_restore` must be on the server
+
+The upgrade shells out to them. If they are missing, pre-validation fails with:
+
+> Backup tooling is missing — an upgrade cannot be rolled back
+
+The official Docker image ships them. On bare metal, install the PostgreSQL client package.
+
+### 2. The client major version must equal the server major version
+
+A dump written by `pg_dump` 18 cannot be restored onto a PostgreSQL 16 server, and the reverse fails too. Pre-validation checks this and refuses on a mismatch:
+
+```
+pg client and server majors match (16)
+```
+
+Check yours:
+
+```bash
+pg_dump --version
+psql -c 'SHOW server_version'
+```
+
+### 3. `BACKUP_DIR` must point at durable storage
+
+```bash
+BACKUP_DIR=/var/lib/idenplane/backups
+```
+
+The default is `./backups`, which is fine locally. In a container it is not: **a backup on an ephemeral filesystem is not a backup.** Mount a volume.
+
+### 4. Scale to a single replica
+
+Rollback runs `pg_restore --clean`, which takes `ACCESS EXCLUSIVE` locks. Those conflict with any query another replica is running.
+
+---
+
+## Enabling it
+
+Two variables, gated separately on purpose.
+
+```bash
+# Enables POST /admin/upgrade and POST /admin/upgrade/rollback.
+# Both additionally require the super-admin role.
+UPGRADE_API_ENABLED=true
+
+# Allows a restore over the live database. Strictly harder than running
+# migrations, which is why it is a second switch.
+UPGRADE_ALLOW_LIVE_RESTORE=true
+```
+
+With `UPGRADE_API_ENABLED` unset, both endpoints return `503`.
+
+With `UPGRADE_ALLOW_LIVE_RESTORE` unset, an upgrade is refused before it touches anything:
+
+> Refusing to start: this upgrade could not be rolled back. Restoring a backup over the running database requires `UPGRADE_ALLOW_LIVE_RESTORE=true`, which is unset — so a failure after the migration would leave the database modified with no automatic recovery.
+
+That refusal is deliberate. Without it you can reach a state where the migration ran, the health check failed, and nothing can put the database back.
+
+---
+
+## Running an upgrade
+
+### Check readiness
+
+```bash
+curl -H "x-admin-api-key: $ADMIN_API_KEY" \
+  http://localhost:3000/admin/upgrade/health
+
+curl -H "x-admin-api-key: $ADMIN_API_KEY" \
+  "http://localhost:3000/admin/upgrade/pre-validation?toVersion=0.4.0"
+```
+
+`/health` reports `healthy`, `/pre-validation` reports `canProceed`. Both list every check with a `pass`, `warn` or `fail` status. Do not proceed while `canProceed` is `false`.
+
+### Dry run first
+
+```bash
+curl -X POST -H "x-admin-api-key: $ADMIN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"toVersion":"0.4.0","dryRun":true,"confirm":"0.4.0"}' \
+  http://localhost:3000/admin/upgrade
+```
+
+A dry run walks all seven stages and changes nothing.
+
+`confirm` is only required for a real run — a dry run writes nothing, and demanding a confirmation there would just train you to type past the prompt that matters.
+
+### Run it
+
+```bash
+curl -X POST -H "x-admin-api-key: $ADMIN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"toVersion":"0.4.0","dryRun":false,"confirm":"0.4.0"}' \
+  http://localhost:3000/admin/upgrade
+```
+
+:::note
+This call is synchronous — it does not return until the upgrade finishes or rolls back. On a large database that can take a while. Do not interrupt it.
+:::
+
+`confirm` must equal `toVersion` here, so a mis-click or a replayed request cannot start a migration against a live database.
+
+The response carries `success`, every stage with its outcome, and — if something failed — `rollbackTriggered` and `rollbackSucceeded`.
+
+### Request fields
+
+| Field | Required | Meaning |
+|---|---|---|
+| `toVersion` | yes | Target version, e.g. `"0.4.0"` |
+| `confirm` | for real runs | Must equal `toVersion` |
+| `dryRun` | no | Simulate only. Defaults to `false` |
+| `force` | no | Skip pre-validation. See below |
+| `note` | no | Free-text note recorded with the attempt |
+
+The identity recorded against the upgrade comes from the authenticated principal, never from the request body.
+
+:::danger
+`force: true` skips **all** of pre-validation — including the checks that confirm `pg_dump` exists and `BACKUP_DIR` is writable. An upgrade forced past those can run the migration with no usable backup behind it, which is precisely the state the rollback exists to prevent. It is logged at error level. Do not use it to get past a failing check; fix the check.
+:::
+
+### Or use the console
+
+`/console/upgrade` shows current status and health; `/console/upgrade/new` walks the same flow as a three-step wizard with the dry-run box ticked by default, and requires you to type the target version before a live run.
+
+---
+
+## When something fails
+
+A failed upgrade looks like this:
+
+```json
+{
+  "success": false,
+  "rollbackTriggered": true,
+  "rollbackSucceeded": true,
+  "stages": [
+    { "stage": "BACKUP",             "success": true },
+    { "stage": "DATABASE_MIGRATION", "success": false },
+    { "stage": "ROLLBACK",           "success": true }
+  ]
+}
+```
+
+`rollbackSucceeded: true` means the database is back to its pre-upgrade state. The instance stays usable and a new upgrade can be started.
+
+If `rollbackSucceeded` is `false`, restore by hand from the file named in the `BACKUP` stage:
+
+```bash
+pg_restore --clean --if-exists --no-owner --single-transaction --exit-on-error \
+  -d "$DATABASE_URL" /var/lib/idenplane/backups/idenplane-backup-....dump
+```
+
+### Only one upgrade at a time
+
+A second concurrent upgrade is refused with `409`:
+
+> An upgrade is already in progress. Refusing to start an upgrade concurrently — two migrations against one database can corrupt it.
+
+The lock expires after two hours. If an upgrade died and left its row behind, mark that row `FAILED` in `upgrade_audit_log`.
+
+---
+
+## Rehearse it first
+
+Do this once on a copy before you trust it with real data:
+
+1. Copy the database — `pg_dump -Fc "$DATABASE_URL" -f copy.dump`, then restore it into a scratch database
+2. Point a spare instance at the copy, with both variables set
+3. Dry run, and confirm nothing changed
+4. Real upgrade, and confirm your row counts still match
+5. **Break it on purpose** — add a migration that fails, run the upgrade, and confirm `rollbackSucceeded` is `true` and your data came back
+
+Step 5 is the one that matters. Stages 1–4 tell you the happy path works; only step 5 tells you the safety net does.
+
+---
+
+## History
+
+```bash
+curl -H "x-admin-api-key: $ADMIN_API_KEY" \
+  "http://localhost:3000/admin/upgrade/audit?limit=20"
+```
+
+Every attempt is recorded in `upgrade_audit_log` with its status, stages, and the backup it took. The rollback deliberately excludes this table from the restore, so a rollback does not erase the record of itself.
+
+---
+
+## Next steps
+
+<div className="row">
+
+[**Docker**](/deployment/docker)
+Running Idenplane in containers
+
+[**Kubernetes**](/deployment/kubernetes)
+Deploying to a cluster
+
+[**Environment Variables**](/configuration/environment-variables)
+Full configuration reference
+
+</div>

@@ -26,6 +26,11 @@ const sidebars: SidebarsConfig = {
           id: 'getting-started/configuration',
           label: 'Configuration',
         },
+        {
+          type: 'doc',
+          id: 'getting-started/admin-console',
+          label: 'Admin Console',
+        },
       ],
     },
     {
@@ -71,6 +76,11 @@ const sidebars: SidebarsConfig = {
       items: [
         {
           type: 'doc',
+          id: 'guides/sdks/javascript-sdk',
+          label: 'JavaScript',
+        },
+        {
+          type: 'doc',
           id: 'guides/sdks/react-sdk',
           label: 'React',
         },
@@ -105,6 +115,11 @@ const sidebars: SidebarsConfig = {
       type: 'category',
       label: 'Guides',
       items: [
+        {
+          type: 'doc',
+          id: 'guides/first-app',
+          label: 'Your First Application',
+        },
         {
           type: 'doc',
           id: 'guides/authentication',
@@ -156,6 +171,11 @@ const sidebars: SidebarsConfig = {
           type: 'doc',
           id: 'deployment/bare-metal',
           label: 'Bare Metal',
+        },
+        {
+          type: 'doc',
+          id: 'deployment/upgrading',
+          label: 'Upgrading',
         },
       ],
     },

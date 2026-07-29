@@ -2,8 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
-import * as zlib from 'zlib';
-import { PrismaClient } from '@prisma/client';
+import { createHash } from 'crypto';
 
 export interface BackupResult {
   success: boolean;
@@ -40,11 +39,9 @@ export interface BackupListing {
 @Injectable()
 export class DatabaseBackupService {
   private readonly logger = new Logger(DatabaseBackupService.name);
-  private readonly prisma: PrismaClient;
   private readonly backupDirectory: string;
 
   constructor() {
-    this.prisma = new PrismaClient();
     // Default backup directory within project
     this.backupDirectory = process.env.BACKUP_DIR || './backups';
   }
@@ -60,7 +57,12 @@ export class DatabaseBackupService {
     const timestamp = new Date();
     const timestampStr = timestamp.toISOString().replace(/[:.]/g, '-');
     const safeLabel = label ? `-${label.replace(/[^a-zA-Z0-9-_]/g, '')}` : '';
-    const backupFilename = `idenplane-backup-${timestampStr}${safeLabel}.sql.gz`;
+    // `.dump`, not `.sql.gz`: pg_dump is invoked with -Fc, which writes a
+    // PostgreSQL custom-format archive (magic bytes "PGDMP"), not gzipped SQL.
+    // The old name was a lie that restoreBackup then believed — it branched on
+    // the .gz suffix and ran gunzipSync, which throws on every archive this
+    // service has ever produced.
+    const backupFilename = `idenplane-backup-${timestampStr}${safeLabel}.dump`;
     const backupPath = path.join(this.backupDirectory, backupFilename);
 
     this.logger.log(`Starting database backup: ${backupFilename}`);
@@ -69,9 +71,8 @@ export class DatabaseBackupService {
       // Ensure backup directory exists
       this.ensureBackupDirectory();
 
-      // Get database name from Prisma
-      const databaseUrl = process.env.DATABASE_URL || '';
-      const dbName = this.extractDatabaseName(databaseUrl);
+      // Connection details come from DATABASE_URL (PG* override them).
+      const { database: dbName } = this.pgConnParams();
 
       // Build pg_dump argument vector and run it WITHOUT a shell. Passing args
       // as an array to execFileSync means no value is ever interpreted by a
@@ -139,33 +140,24 @@ export class DatabaseBackupService {
     }
 
     try {
-      // Get database name from connection string
-      const databaseUrl = process.env.DATABASE_URL || '';
-      const dbName = this.extractDatabaseName(databaseUrl);
+      const { database: dbName } = this.pgConnParams();
 
       // Run pg_restore WITHOUT a shell (arg array → no command injection).
-      // Compressed (.gz) backups are decompressed in-process with zlib and fed
-      // to pg_restore over stdin, replacing the previous `gunzip -c | pg_restore`
-      // shell pipe (CodeQL js/command-line-injection / shell-command-injection).
-      const restoreArgs = this.buildRestoreArgs(dbName);
-      const env = this.pgEnv();
+      // There is exactly one code path: pg_dump -Fc writes a custom-format
+      // archive and pg_restore reads it directly from the file. The previous
+      // zlib branch existed only to service the misleading .sql.gz name.
+      const restoreArgs = [...this.buildRestoreArgs(dbName), backupPath];
 
+      // Log the full vector including the archive. Logging buildRestoreArgs()
+      // alone omitted the one argument an operator debugging a failed rollback
+      // most needs to see — which archive was actually read.
       this.logger.debug(`Executing: pg_restore ${restoreArgs.join(' ')}`);
 
-      if (backupPath.endsWith('.gz')) {
-        const decompressed = zlib.gunzipSync(fs.readFileSync(backupPath));
-        execFileSync('pg_restore', restoreArgs, {
-          input: decompressed,
-          stdio: ['pipe', 'pipe', 'pipe'],
-          env,
-        });
-      } else {
-        execFileSync('pg_restore', [...restoreArgs, backupPath], {
-          encoding: 'utf-8',
-          stdio: ['pipe', 'pipe', 'pipe'],
-          env,
-        });
-      }
+      execFileSync('pg_restore', restoreArgs, {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+        env: this.pgEnv(),
+      });
 
       const duration = Date.now() - startTime;
 
@@ -213,7 +205,11 @@ export class DatabaseBackupService {
       const now = new Date();
 
       for (const file of files) {
-        if (!file.endsWith('.sql.gz') && !file.endsWith('.sql')) {
+        // Only custom-format archives this service can actually restore.
+        // Legacy .sql.gz files (which were never gzip despite the name) are
+        // deliberately excluded — listing one would offer the operator a
+        // rollback target that cannot be restored.
+        if (!file.endsWith('.dump')) {
           continue;
         }
 
@@ -292,39 +288,169 @@ export class DatabaseBackupService {
       }
 
       const stats = fs.statSync(backupPath);
-      // Minimum reasonable backup size (at least 1KB)
-      return stats.size > 1024;
-    } catch {
+      if (stats.size <= 1024) {
+        return false;
+      }
+
+      // A size check cannot distinguish a complete archive from one truncated
+      // by a full disk or a killed process — and this is called immediately
+      // before a rollback depends on it. `pg_restore --list` reads the archive's
+      // table of contents, which lives at the end of the file, so it fails on a
+      // truncated or wrong-format file without touching the database.
+      execFileSync('pg_restore', ['--list', backupPath], {
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+
+      return true;
+    } catch (err) {
+      this.logger.warn(
+        `Backup verification failed for ${backupPath}: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+      );
       return false;
     }
   }
 
   /**
-   * Extract database name from DATABASE_URL connection string.
+   * SHA-256 of a backup file, so a restore can confirm it is reading the same
+   * bytes that were written. BackupMetadata has always declared a `checksum`
+   * field; nothing ever populated it.
    */
-  private extractDatabaseName(databaseUrl: string): string {
-    // Handle postgresql://user:pass@host:5432/dbname format
-    const match = databaseUrl.match(/\/([^/?]+)(\?|$)/);
-    return match ? match[1] : 'default';
+  checksum(backupPath: string): string | undefined {
+    try {
+      return createHash('sha256')
+        .update(fs.readFileSync(backupPath))
+        .digest('hex');
+    } catch {
+      return undefined;
+    }
   }
 
   /**
-   * Build pg_dump command with appropriate options for backup.
+   * Connection parameters for the pg_* tools.
+   *
+   * Previously only the database *name* was taken from DATABASE_URL; host, port
+   * and user fell back to hardcoded defaults of localhost/5432/postgres. In the
+   * shipped Docker setup DATABASE_URL points at host `postgres`, so pg_dump
+   * dialled localhost and the backup failed — and none of PGHOST/PGPORT/PGUSER
+   * are set anywhere in docker-compose, the Dockerfile or the Helm chart.
+   *
+   * DATABASE_URL is now the source of truth and the PG* variables are
+   * *overrides*, for the case where the pg tools must reach the server by a
+   * different route than the app does (a sidecar, a bouncer, a socket path).
    */
-  /** Connection params for the pg_* tools, sourced from the environment. */
   private pgConnParams(): {
     host: string;
     port: string;
     user: string;
     password: string;
+    database: string;
   } {
     const env = process.env;
+    const parsed = this.parseDatabaseUrl(env.DATABASE_URL);
+
     return {
-      host: env.PGHOST || 'localhost',
-      port: env.PGPORT || '5432',
-      user: env.PGUSER || env.DATABASE_USERNAME || 'postgres',
-      password: env.PGPASSWORD || env.DATABASE_PASSWORD || '',
+      host: env.PGHOST || parsed.host,
+      port: env.PGPORT || parsed.port,
+      user: env.PGUSER || env.DATABASE_USERNAME || parsed.user,
+      password: env.PGPASSWORD || env.DATABASE_PASSWORD || parsed.password,
+      database: parsed.database,
     };
+  }
+
+  /**
+   * Parse a postgres connection URL into its components.
+   *
+   * Uses the URL parser rather than a regex so percent-encoded credentials are
+   * decoded correctly — a password containing '@' or '/' is encoded in the URL
+   * and must be decoded before it reaches PGPASSWORD, or authentication fails
+   * in a way that looks like a wrong password.
+   */
+  private parseDatabaseUrl(databaseUrl: string | undefined): {
+    host: string;
+    port: string;
+    user: string;
+    password: string;
+    database: string;
+  } {
+    const empty = {
+      host: 'localhost',
+      port: '5432',
+      user: 'postgres',
+      password: '',
+      database: 'postgres',
+    };
+
+    if (!databaseUrl) {
+      return empty;
+    }
+
+    try {
+      const url = new URL(databaseUrl);
+
+      if (!/^postgres(ql)?:$/.test(url.protocol)) {
+        throw new Error(
+          `Unsupported database protocol '${url.protocol}' — the upgrade ` +
+            'backup flow requires PostgreSQL.',
+        );
+      }
+
+      return {
+        host: url.hostname || empty.host,
+        port: url.port || empty.port,
+        user: url.username ? decodeURIComponent(url.username) : empty.user,
+        password: url.password ? decodeURIComponent(url.password) : '',
+        database: url.pathname.replace(/^\//, '') || empty.database,
+      };
+    } catch (err) {
+      // A malformed URL must not silently degrade to dumping the wrong
+      // database on localhost — surface it to the caller.
+      throw new Error(
+        `Could not parse DATABASE_URL: ${
+          err instanceof Error ? err.message : String(err)
+        }`,
+        { cause: err },
+      );
+    }
+  }
+
+  /**
+   * Whether the pg_dump / pg_restore binaries are reachable on PATH.
+   *
+   * The production image does not install postgresql-client today, so this
+   * returns false there and the pre-upgrade validator fails the run *before*
+   * anything touches the database — rather than at the backup stage, or worse,
+   * at rollback time when a backup is already needed.
+   */
+  pgToolsAvailable(): { available: boolean; detail: string } {
+    for (const tool of ['pg_dump', 'pg_restore'] as const) {
+      try {
+        execFileSync(tool, ['--version'], { stdio: ['pipe', 'pipe', 'pipe'] });
+      } catch {
+        return {
+          available: false,
+          detail: `${tool} was not found on PATH. Install postgresql-client matching the server's major version.`,
+        };
+      }
+    }
+    return { available: true, detail: 'pg_dump and pg_restore are available' };
+  }
+
+  /**
+   * Major version of the installed pg_dump, or null if it cannot be determined.
+   */
+  clientMajorVersion(): number | null {
+    try {
+      const out = execFileSync('pg_dump', ['--version'], {
+        encoding: 'utf-8',
+        stdio: ['pipe', 'pipe', 'pipe'],
+      });
+      const match = out.match(/(\d+)/);
+      return match ? parseInt(match[1], 10) : null;
+    } catch {
+      return null;
+    }
   }
 
   /**
@@ -338,7 +464,29 @@ export class DatabaseBackupService {
       : { ...process.env };
   }
 
-  /** pg_dump argument vector (no shell — passed straight to execFileSync). */
+  /**
+   * pg_dump argument vector (no shell — passed straight to execFileSync).
+   *
+   * upgrade_audit_log is deliberately excluded. It records upgrades; it is not
+   * application data that should be rewound by one. Including it meant a
+   * rollback destroyed the very record of the failure that triggered it:
+   *
+   *   1. INITIALIZATION writes the audit row (status IN_PROGRESS).
+   *   2. BACKUP dumps the database — capturing that row as IN_PROGRESS — and
+   *      then updates it with the archive path.
+   *   3. The migration fails; the rollback restores the archive, reverting the
+   *      table to step 2's contents.
+   *
+   * The result was a row stuck at IN_PROGRESS with no backupId, no failure
+   * reason and no rollback record — and, since #1199, a stale IN_PROGRESS row
+   * blocks every further upgrade for the two-hour TTL. Excluding the table
+   * leaves it untouched by the restore, so the audit trail survives the
+   * rollback. `--exclude-table` only affects the dump; pg_restore --clean drops
+   * what is in the archive, so a table that was never dumped is never dropped.
+   *
+   * Found by test/upgrade-failure-rollback.e2e-spec.ts, which is the first test
+   * to run a failing upgrade against a real database.
+   */
   private buildPgDumpArgs(databaseName: string, outputPath: string): string[] {
     const { host, port, user } = this.pgConnParams();
     return [
@@ -350,7 +498,8 @@ export class DatabaseBackupService {
       user,
       '-d',
       databaseName,
-      '-Fc', // Custom format for compression
+      '--exclude-table=upgrade_audit_log',
+      '-Fc', // Custom format — required for pg_restore's selective/parallel modes
       '-Z',
       '6', // Compression level 6
       '-f',
@@ -358,10 +507,41 @@ export class DatabaseBackupService {
     ];
   }
 
-  /** pg_restore argument vector (target db); the source is the file/stdin. */
+  /**
+   * pg_restore argument vector (target db); the archive path is appended by the
+   * caller.
+   *
+   * The flags matter for a rollback into a database that already has a schema,
+   * which is the only situation this is ever used in:
+   *
+   *   --clean --if-exists   drop each object before recreating it. Without this
+   *                         every restore into a populated database dies on
+   *                         "relation already exists".
+   *   --no-owner            do not reassign ownership; the app's role is rarely
+   *                         --no-privileges  the owner recorded in the dump.
+   *   --single-transaction  all-or-nothing. A rollback that half-applies is
+   *                         worse than one that fails cleanly.
+   *   --exit-on-error       stop at the first failure rather than continuing and
+   *                         reporting success at the end.
+   */
   private buildRestoreArgs(databaseName: string): string[] {
     const { host, port, user } = this.pgConnParams();
-    return ['-h', host, '-p', port, '-U', user, '-d', databaseName];
+    return [
+      '-h',
+      host,
+      '-p',
+      port,
+      '-U',
+      user,
+      '-d',
+      databaseName,
+      '--clean',
+      '--if-exists',
+      '--no-owner',
+      '--no-privileges',
+      '--single-transaction',
+      '--exit-on-error',
+    ];
   }
 
   /**
@@ -406,12 +586,5 @@ export class DatabaseBackupService {
     }
 
     return `${size.toFixed(1)} ${units[unitIndex]}`;
-  }
-
-  /**
-   * Clean up Prisma client connections.
-   */
-  async onModuleDestroy(): Promise<void> {
-    await this.prisma.$disconnect();
   }
 }

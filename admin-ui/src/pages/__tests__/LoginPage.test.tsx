@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, waitForElementToBeRemoved } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { render } from '../../test/utils';
@@ -53,6 +53,10 @@ describe('LoginPage – credentials mode', () => {
     await user.click(screen.getByRole('button', { name: /^sign in$/i }));
 
     expect(await screen.findByRole('button', { name: /verifying/i })).toBeInTheDocument();
+    // Let the delayed login response land before the test ends — see
+    // DashboardPage.test.tsx for why an in-flight request outliving the test
+    // breaks the whole run.
+    await waitForElementToBeRemoved(() => screen.queryByRole('button', { name: /verifying/i }));
   });
 
   it('shows an error message when credentials are wrong', async () => {

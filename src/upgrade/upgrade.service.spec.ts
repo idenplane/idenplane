@@ -16,11 +16,14 @@ jest.mock('@prisma/client', () => ({
   PrismaClient: jest.fn(() => mockPrisma),
 }));
 
-// Mock child_process execSync
+// runDatabaseMigration uses execFileSync (no shell); getCurrentVersion no
+// longer shells out at all.
 jest.mock('child_process', () => ({
   execSync: jest.fn(),
+  execFileSync: jest.fn(),
 }));
 
+import { ConflictException } from '@nestjs/common';
 import { UpgradeService, UpgradeStage } from './upgrade.service.js';
 import { PreUpgradeValidatorService } from './pre-upgrade-validator.service.js';
 import {
@@ -30,7 +33,9 @@ import {
 import { ConfigCompatibilityService } from './config-compatibility.service.js';
 import { RollbackService } from './rollback.service.js';
 import { UpgradeHealthService } from './upgrade-health.service.js';
-import { execSync } from 'child_process';
+import { execSync, execFileSync } from 'child_process';
+import { readFileSync } from 'fs';
+import { join } from 'path';
 
 describe('UpgradeService', () => {
   let upgradeService: UpgradeService;
@@ -67,6 +72,16 @@ describe('UpgradeService', () => {
     // Mock execSync for getCurrentVersion
     (execSync as jest.Mock).mockReturnValue('2.0.0');
 
+    // No upgrade in flight by default. jest.clearAllMocks() clears calls but
+    // NOT implementations, so without this a single-flight test that stubs an
+    // IN_PROGRESS row would leak that row into every test after it.
+    mockPrisma.upgradeAuditLog.findFirst.mockResolvedValue(null);
+
+    // A real upgrade now refuses to start unless it could be rolled back.
+    // These tests exercise the pipeline itself, so the precondition is
+    // satisfied; the tests that assert the refusal clear it explicitly.
+    process.env.UPGRADE_ALLOW_LIVE_RESTORE = 'true';
+
     upgradeService = new UpgradeService(
       mockPrisma as any,
       mockPreUpgradeValidator,
@@ -75,10 +90,6 @@ describe('UpgradeService', () => {
       mockRollbackService,
       mockUpgradeHealthService,
     );
-  });
-
-  afterEach(async () => {
-    await upgradeService.onModuleDestroy();
   });
 
   describe('upgrade', () => {
@@ -150,7 +161,7 @@ describe('UpgradeService', () => {
         // In dry-run, backup should NOT be called
         expect(mockDatabaseBackupService.createBackup).not.toHaveBeenCalled();
         // Migration step should be skipped
-        expect(execSync).not.toHaveBeenCalledWith(
+        expect(execFileSync).not.toHaveBeenCalledWith(
           expect.stringContaining('prisma migrate deploy'),
           expect.any(Object),
         );
@@ -227,6 +238,270 @@ describe('UpgradeService', () => {
             }),
           }),
         );
+      });
+    });
+
+    describe('refuses an upgrade it could not undo', () => {
+      // Found by rehearsing a failing upgrade against a real database: with
+      // only UPGRADE_API_ENABLED set, the upgrade migrated the database, failed
+      // its health check, and then could not roll back — because restoring over
+      // a live database is gated separately. Starting was strictly worse than
+      // refusing.
+      const savedFlag = process.env.UPGRADE_ALLOW_LIVE_RESTORE;
+
+      afterEach(() => {
+        if (savedFlag === undefined)
+          delete process.env.UPGRADE_ALLOW_LIVE_RESTORE;
+        else process.env.UPGRADE_ALLOW_LIVE_RESTORE = savedFlag;
+      });
+
+      it('refuses before touching anything when live restore is disabled', async () => {
+        delete process.env.UPGRADE_ALLOW_LIVE_RESTORE;
+
+        await expect(upgradeService.upgrade('2.1.0')).rejects.toThrow(
+          ConflictException,
+        );
+        expect(mockPrisma.upgradeAuditLog.create).not.toHaveBeenCalled();
+        expect(mockDatabaseBackupService.createBackup).not.toHaveBeenCalled();
+      });
+
+      it('names the variable to set, so the refusal is actionable', async () => {
+        delete process.env.UPGRADE_ALLOW_LIVE_RESTORE;
+
+        await expect(upgradeService.upgrade('2.1.0')).rejects.toThrow(
+          /UPGRADE_ALLOW_LIVE_RESTORE/,
+        );
+      });
+
+      it('does not block a dry run, which has nothing to undo', async () => {
+        delete process.env.UPGRADE_ALLOW_LIVE_RESTORE;
+        mockPreUpgradeValidator.validate.mockResolvedValue({
+          canProceed: true,
+          checks: [],
+          summary: { passed: 8, warnings: 0, failures: 0 },
+        });
+        mockConfigCompatibility.checkCompatibility.mockResolvedValue({
+          compatible: true,
+          version: '2.1.0',
+          issues: [],
+          summary: { errors: 0, warnings: 0 },
+        });
+        mockUpgradeHealthService.checkHealth.mockResolvedValue({
+          healthy: true,
+          version: '2.1.0',
+          checks: [],
+          summary: { passed: 7, warnings: 0, failures: 0 },
+        });
+        mockPrisma.upgradeAuditLog.create.mockResolvedValue({ id: 'upg-1' });
+        mockPrisma.upgradeAuditLog.update.mockResolvedValue({ id: 'upg-1' });
+
+        const result = await upgradeService.upgrade('2.1.0', { dryRun: true });
+
+        expect(result.success).toBe(true);
+      });
+
+      it('lets force through — the documented escape hatch', async () => {
+        delete process.env.UPGRADE_ALLOW_LIVE_RESTORE;
+        mockPreUpgradeValidator.validate.mockResolvedValue({
+          canProceed: false,
+          checks: [],
+          summary: { passed: 0, warnings: 0, failures: 1 },
+        });
+        mockPrisma.upgradeAuditLog.create.mockResolvedValue({ id: 'upg-1' });
+        mockPrisma.upgradeAuditLog.update.mockResolvedValue({ id: 'upg-1' });
+        mockPrisma.upgradeAuditLog.findFirst.mockResolvedValue(null);
+
+        // Reaches the pipeline rather than being refused outright.
+        await expect(
+          upgradeService.upgrade('2.1.0', { force: true }),
+        ).resolves.toBeDefined();
+        expect(mockPrisma.upgradeAuditLog.create).toHaveBeenCalled();
+      });
+    });
+
+    describe('single-flight', () => {
+      // Two processes running `prisma migrate deploy` against one database is a
+      // corruption scenario, not merely a race — and docker-compose.cluster.yml
+      // runs two app replicas, so this is a real configuration, not a theory.
+      const arrangeHealthyRun = () => {
+        mockPreUpgradeValidator.validate.mockResolvedValue({
+          canProceed: true,
+          checks: [],
+          summary: { passed: 8, warnings: 0, failures: 0 },
+        });
+        mockConfigCompatibility.checkCompatibility.mockResolvedValue({
+          compatible: true,
+          version: '2.1.0',
+          issues: [],
+          summary: { errors: 0, warnings: 0 },
+        });
+        mockUpgradeHealthService.checkHealth.mockResolvedValue({
+          healthy: true,
+          version: '2.1.0',
+          checks: [],
+          summary: { passed: 7, warnings: 0, failures: 0 },
+        });
+        mockDatabaseBackupService.createBackup.mockReturnValue({
+          success: true,
+          backupPath: '/backups/x.dump',
+          backupSize: '1 MB',
+          timestamp: new Date(),
+        } as BackupResult);
+        mockPrisma.upgradeAuditLog.create.mockResolvedValue({ id: 'upg-1' });
+        mockPrisma.upgradeAuditLog.update.mockResolvedValue({ id: 'upg-1' });
+        // runDatabaseMigration reads the child process output.
+        (execFileSync as jest.Mock).mockReturnValue('Migration applied');
+      };
+
+      it('refuses when another instance has an upgrade IN_PROGRESS', async () => {
+        arrangeHealthyRun();
+        mockPrisma.upgradeAuditLog.findFirst.mockResolvedValue({
+          id: 'upg-running',
+          toVersion: '2.1.0',
+          status: 'IN_PROGRESS',
+          startedAt: new Date(),
+        });
+
+        await expect(upgradeService.upgrade('2.1.0')).rejects.toThrow(
+          ConflictException,
+        );
+        expect(mockPrisma.upgradeAuditLog.create).not.toHaveBeenCalled();
+      });
+
+      it('ignores a stale IN_PROGRESS row past the TTL', async () => {
+        // A process killed mid-upgrade leaves its row IN_PROGRESS forever; a
+        // stale row must not wedge the endpoint permanently.
+        arrangeHealthyRun();
+        mockPrisma.upgradeAuditLog.findFirst.mockResolvedValue(null);
+
+        const result = await upgradeService.upgrade('2.1.0');
+
+        expect(result.success).toBe(true);
+        // The TTL is expressed as a startedAt lower bound in the query.
+        expect(mockPrisma.upgradeAuditLog.findFirst).toHaveBeenCalledWith(
+          expect.objectContaining({
+            where: expect.objectContaining({
+              status: 'IN_PROGRESS',
+              startedAt: { gte: expect.any(Date) },
+            }),
+          }),
+        );
+      });
+
+      it('releases the in-process lock after a failed run', async () => {
+        // If the flag leaked on the failure path, this instance would refuse
+        // every subsequent upgrade until it restarted.
+        arrangeHealthyRun();
+        mockPrisma.upgradeAuditLog.findFirst.mockResolvedValue(null);
+        mockDatabaseBackupService.createBackup.mockReturnValueOnce({
+          success: false,
+          error: 'disk full',
+          timestamp: new Date(),
+        } as BackupResult);
+
+        const first = await upgradeService.upgrade('2.1.0');
+        expect(first.success).toBe(false);
+
+        // Second attempt must be admitted, not rejected by a stuck flag.
+        const second = await upgradeService.upgrade('2.1.0');
+        expect(second.success).toBe(true);
+      });
+
+      it('exempts dry runs from the lock', async () => {
+        arrangeHealthyRun();
+        mockPrisma.upgradeAuditLog.findFirst.mockResolvedValue({
+          id: 'upg-running',
+          toVersion: '2.1.0',
+          status: 'IN_PROGRESS',
+          startedAt: new Date(),
+        });
+
+        const result = await upgradeService.upgrade('2.1.0', { dryRun: true });
+
+        expect(result.success).toBe(true);
+      });
+    });
+
+    describe('backup identity persistence', () => {
+      // Regression guard for the defect that made automatic rollback
+      // unreachable: backupId used to be recovered at COMPLETION by regexing
+      // the stage's own log message. An upgrade that fails never reaches
+      // completion, so the audit row still had backupId = null when
+      // attemptRollback() looked it up — and RollbackService refuses with
+      // "Upgrade does not have an associated backup for rollback".
+      const arrangeSuccessfulBackup = () => {
+        mockPreUpgradeValidator.validate.mockResolvedValue({
+          canProceed: true,
+          checks: [],
+          summary: { passed: 8, warnings: 0, failures: 0 },
+        });
+        mockConfigCompatibility.checkCompatibility.mockResolvedValue({
+          compatible: true,
+          version: '2.1.0',
+          issues: [],
+          summary: { errors: 0, warnings: 0 },
+        });
+        mockDatabaseBackupService.createBackup.mockReturnValue({
+          success: true,
+          backupPath: '/backups/idenplane-backup-x.dump',
+          backupSize: '12.5 MB',
+          timestamp: new Date(),
+        } as BackupResult);
+        mockPrisma.upgradeAuditLog.create.mockResolvedValue({ id: 'upg-123' });
+        mockPrisma.upgradeAuditLog.update.mockResolvedValue({ id: 'upg-123' });
+      };
+
+      it('persists the backup path on the audit row during the BACKUP stage', async () => {
+        arrangeSuccessfulBackup();
+        mockUpgradeHealthService.checkHealth.mockResolvedValue({
+          healthy: true,
+          version: '2.1.0',
+          checks: [],
+          summary: { passed: 7, warnings: 0, failures: 0 },
+        });
+
+        await upgradeService.upgrade('2.1.0');
+
+        expect(mockPrisma.upgradeAuditLog.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              backupId: '/backups/idenplane-backup-x.dump',
+              backupPath: '/backups/idenplane-backup-x.dump',
+              backupSize: '12.5 MB',
+            }),
+          }),
+        );
+      });
+
+      it('persists it even when a later stage fails — the rollback path depends on it', async () => {
+        arrangeSuccessfulBackup();
+        // Health check fails, so the upgrade never reaches completeUpgrade().
+        mockUpgradeHealthService.checkHealth.mockResolvedValue({
+          healthy: false,
+          version: '2.1.0',
+          checks: [
+            {
+              name: 'schema_integrity',
+              status: 'fail',
+              message: 'boom',
+            },
+          ],
+          summary: { passed: 0, warnings: 0, failures: 1 },
+        });
+        mockRollbackService.executeRollback.mockResolvedValue({
+          success: true,
+          timestamp: new Date(),
+        } as never);
+
+        const result = await upgradeService.upgrade('2.1.0');
+
+        expect(result.success).toBe(false);
+        const wroteBackupId = mockPrisma.upgradeAuditLog.update.mock.calls.some(
+          (call) =>
+            (call[0] as { data?: { backupId?: string } })?.data?.backupId ===
+            '/backups/idenplane-backup-x.dump',
+        );
+        expect(wroteBackupId).toBe(true);
       });
     });
 
@@ -319,7 +594,7 @@ describe('UpgradeService', () => {
           summary: { errors: 0, warnings: 0 },
         });
 
-        (execSync as jest.Mock).mockReturnValue('Database reset completed');
+        (execFileSync as jest.Mock).mockReturnValue('Database reset completed');
 
         mockUpgradeHealthService.checkHealth.mockResolvedValue({
           healthy: true,
@@ -396,7 +671,7 @@ describe('UpgradeService', () => {
           summary: { errors: 0, warnings: 0 },
         });
 
-        (execSync as jest.Mock).mockReturnValue('Migration applied');
+        (execFileSync as jest.Mock).mockReturnValue('Migration applied');
 
         mockUpgradeHealthService.checkHealth.mockResolvedValue({
           healthy: true,
@@ -519,7 +794,7 @@ describe('UpgradeService', () => {
           }),
         );
         // Migration should not be attempted
-        expect(execSync).not.toHaveBeenCalledWith(
+        expect(execFileSync).not.toHaveBeenCalledWith(
           expect.stringContaining('prisma migrate deploy'),
           expect.any(Object),
         );
@@ -631,7 +906,7 @@ describe('UpgradeService', () => {
           summary: { errors: 0, warnings: 0 },
         });
 
-        (execSync as jest.Mock).mockReturnValue('Migration applied');
+        (execFileSync as jest.Mock).mockReturnValue('Migration applied');
 
         // Health check fails
         mockUpgradeHealthService.checkHealth.mockResolvedValue({
@@ -769,22 +1044,29 @@ describe('UpgradeService', () => {
     });
 
     describe('getCurrentVersion', () => {
-      it('should return current version from package.json', async () => {
-        (execSync as jest.Mock).mockReturnValue('2.5.0');
+      // These used to assert against a mocked execSync return value, which is
+      // why the broken shell quoting in the old implementation went unnoticed:
+      // in production it threw every time and the catch returned 'unknown'.
+      // getCurrentVersion now returns APP_VERSION, read from package.json at
+      // module load, so assert against that real value.
+      it('should return the real application version', () => {
+        const pkg = JSON.parse(
+          readFileSync(join(__dirname, '..', '..', 'package.json'), 'utf-8'),
+        ) as { version: string };
 
-        const version = await upgradeService.getCurrentVersion();
-
-        expect(version).toBe('2.5.0');
+        expect(upgradeService.getCurrentVersion()).toBe(pkg.version);
       });
 
-      it('should return unknown if reading package.json fails', async () => {
-        (execSync as jest.Mock).mockImplementation(() => {
-          throw new Error('File not found');
-        });
+      it('should never return the placeholder the old implementation returned', () => {
+        expect(upgradeService.getCurrentVersion()).not.toBe('unknown');
+      });
 
-        const version = await upgradeService.getCurrentVersion();
+      it('should not shell out', () => {
+        (execSync as jest.Mock).mockClear();
 
-        expect(version).toBe('unknown');
+        upgradeService.getCurrentVersion();
+
+        expect(execSync).not.toHaveBeenCalled();
       });
     });
 
