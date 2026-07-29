@@ -54,7 +54,16 @@ export class RealmsService {
         smtpFrom: dto.smtpFrom,
         smtpSecure: dto.smtpSecure,
         emailProvider: dto.emailProvider,
-        emailProviderConfig: dto.emailProviderConfig as object | undefined,
+        // Cast to Prisma's own JSON input type, not to a bare `object`.
+        // A DTO class has no index signature, so it is not assignable to
+        // InputJsonObject and the build fails without a cast. The previous
+        // `as object | undefined` compiled, but @typescript-eslint's
+        // no-unnecessary-type-assertion judged it a no-op widening and
+        // `npm run lint --fix` deleted it — breaking the build on a command
+        // that is supposed to only check formatting. Naming the real target
+        // type states the intent and is not flagged.
+        emailProviderConfig: dto.emailProviderConfig as
+          Prisma.InputJsonValue | undefined,
         passwordMinLength: dto.passwordMinLength,
         passwordRequireUppercase: dto.passwordRequireUppercase,
         passwordRequireLowercase: dto.passwordRequireLowercase,

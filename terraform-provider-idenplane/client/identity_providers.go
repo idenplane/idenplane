@@ -134,7 +134,7 @@ func (c *IdentityProvidersClient) CreateIdentityProvider(ctx context.Context, re
 func (c *IdentityProvidersClient) ListIdentityProviders(ctx context.Context, realmName string) ([]IdentityProvider, error) {
 	var idps []IdentityProvider
 	path := fmt.Sprintf("/admin/realms/%s/identity-provider/instances", realmName)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &idps)
+	err := c.httpClient.GetJSON(ctx, path, nil, &idps)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list identity providers: %w", err)
 	}
@@ -145,7 +145,7 @@ func (c *IdentityProvidersClient) ListIdentityProviders(ctx context.Context, rea
 func (c *IdentityProvidersClient) GetIdentityProvider(ctx context.Context, realmName, alias string) (*IdentityProvider, error) {
 	var idp IdentityProvider
 	path := fmt.Sprintf("/admin/realms/%s/identity-provider/instances/%s", realmName, alias)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &idp)
+	err := c.httpClient.GetJSON(ctx, path, nil, &idp)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get identity provider %s: %w", alias, err)
 	}
@@ -201,7 +201,7 @@ func (c *IdentityProvidersClient) CreateMapper(ctx context.Context, realmName, a
 func (c *IdentityProvidersClient) ListMappers(ctx context.Context, realmName, alias string) ([]IdentityProviderMapper, error) {
 	var mappers []IdentityProviderMapper
 	path := fmt.Sprintf("/admin/realms/%s/identity-provider/instances/%s/mappers", realmName, alias)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &mappers)
+	err := c.httpClient.GetJSON(ctx, path, nil, &mappers)
 	if err != nil {
 		return nil, fmt.Errorf("failed to list identity provider mappers: %w", err)
 	}
@@ -212,7 +212,7 @@ func (c *IdentityProvidersClient) ListMappers(ctx context.Context, realmName, al
 func (c *IdentityProvidersClient) GetMapper(ctx context.Context, realmName, alias, mapperID string) (*IdentityProviderMapper, error) {
 	var mapper IdentityProviderMapper
 	path := fmt.Sprintf("/admin/realms/%s/identity-provider/instances/%s/mappers/%s", realmName, alias, mapperID)
-	err := c.httpClient.GetJSON(ctx, path, nil, nil, &mapper)
+	err := c.httpClient.GetJSON(ctx, path, nil, &mapper)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get identity provider mapper %s: %w", mapperID, err)
 	}

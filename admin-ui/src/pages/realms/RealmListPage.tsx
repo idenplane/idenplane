@@ -1,6 +1,6 @@
 import { useState, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { getAllRealms, importRealm } from '../../api/realms';
 import { getErrorMessage } from '../../utils/getErrorMessage';
 

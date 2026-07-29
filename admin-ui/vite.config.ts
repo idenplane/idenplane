@@ -45,7 +45,7 @@ export default defineConfig({
         // framework deps in a single `vendor` chunk for stable cache headers.
         manualChunks(id) {
           if (
-            /[\\/]node_modules[\\/](react|react-dom|react-router-dom|@tanstack[\\/]react-query)[\\/]/.test(
+            /[\\/]node_modules[\\/](react|react-dom|react-router|@tanstack[\\/]react-query)[\\/]/.test(
               id,
             )
           ) {

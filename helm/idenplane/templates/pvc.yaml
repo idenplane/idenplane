@@ -25,3 +25,34 @@ spec:
     {{- toYaml . | nindent 4 }}
   {{- end }}
 {{- end }}
+{{- if .Values.backups.enabled }}
+---
+# Separate claim from themes: pre-upgrade database dumps are large, written
+# rarely, and must outlive the pod. Sharing the themes volume would couple the
+# lifecycle of a rollback artefact to a UI asset store.
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: {{ include "idenplane.fullname" . }}-backups
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "idenplane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: backups-storage
+  {{- with .Values.backups.annotations }}
+  annotations:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+spec:
+  accessModes:
+    {{- toYaml .Values.backups.accessModes | nindent 4 }}
+  resources:
+    requests:
+      storage: {{ .Values.backups.size }}
+  {{- with .Values.backups.storageClass }}
+  storageClassName: {{ . | quote }}
+  {{- end }}
+  {{- with .Values.backups.selector }}
+  selector:
+    {{- toYaml . | nindent 4 }}
+  {{- end }}
+{{- end }}

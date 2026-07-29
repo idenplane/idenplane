@@ -1,11 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import {
-  NavLink,
-  Outlet,
-  useParams,
-  useNavigate,
-  useLocation,
-} from 'react-router-dom';
+import { NavLink, Outlet, useParams, useNavigate, useLocation } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { getAllRealms } from '../api/realms';
 import { useAuth } from '../hooks/useAuth';
@@ -213,6 +207,7 @@ export default function Layout() {
       icon: Icons.Server,
       end: false,
     },
+    { to: '/console/upgrade', label: 'Upgrade', icon: Icons.Upgrade, end: false },
   ];
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>

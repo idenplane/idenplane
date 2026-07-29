@@ -1,5 +1,5 @@
 import { useState, type FormEvent } from 'react';
-import { useParams, useNavigate, Link } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getClientById, updateClient, deleteClient, regenerateSecret, getServiceAccountUser } from '../../api/clients';
 import {

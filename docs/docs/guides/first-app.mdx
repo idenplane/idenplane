@@ -1,0 +1,186 @@
+---
+id: first-app
+title: Your First Application
+description: Register an OAuth client in Idenplane and sign a user in from your own app
+---
+
+# Your First Application
+
+This is the step between having Idenplane running and having it actually authenticate someone. By the end you will have a realm, a registered client, and a page that signs a user in and reads their claims.
+
+If you have not installed Idenplane yet, start with [Installation](/getting-started/installation).
+
+---
+
+## The fast path: the setup wizard
+
+A fresh instance serves a six-step wizard at **`/setup`** that does all of this for you:
+
+| Step | What it does |
+|---|---|
+| 1. Create Admin Account | Replaces the default `admin` / `admin` |
+| 2. Configure Realm Settings | Names the realm and sets its basics |
+| 3. Setup SMTP | Optional — skip it if you are not sending email yet |
+| 4. Create First Client | Registers a public OAuth client |
+| 5. SDK Integration | Shows the snippet for your framework |
+| 6. Test Authentication | Runs a login against what you just built |
+
+Step 6 is the part worth not skipping: it proves the whole chain works before you write any of your own code.
+
+The rest of this page is the same thing done by hand — useful if the wizard has already been completed, or if you are scripting a new environment.
+
+---
+
+## 1. Create a realm
+
+A realm is an isolated set of users, clients and roles. Applications that should not share accounts belong in different realms.
+
+In the console at `/console/realms`, click **Create Realm**. Or over the API:
+
+```bash
+curl -X POST http://localhost:3000/admin/realms \
+  -H "x-admin-api-key: $ADMIN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"name":"my-realm","displayName":"My Realm","enabled":true}'
+```
+
+---
+
+## 2. Register a client
+
+A **client** is one application. Browser and mobile apps are **public** clients — they cannot keep a secret, so they authenticate with PKCE instead.
+
+In the console, open your realm and go to **Clients → Create**. The fields that matter:
+
+| Field | Value for a browser app |
+|---|---|
+| Client ID | Anything stable, e.g. `my-web-app` |
+| Public client | **Yes** — a browser cannot hold a secret |
+| Standard flow | **Enabled** — this is Authorization Code + PKCE |
+| Redirect URIs | Exactly where Idenplane may send users back, e.g. `http://localhost:5173/callback` |
+| Web origins | Your app's origin, for CORS |
+
+:::warning
+Redirect URIs are matched exactly, and they are a security boundary — anything listed here can receive an authorization code. Do not add wildcards or origins you do not control.
+:::
+
+Over the API:
+
+```bash
+curl -X POST http://localhost:3000/admin/realms/my-realm/clients \
+  -H "x-admin-api-key: $ADMIN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "clientId": "my-web-app",
+    "name": "My Web App",
+    "publicClient": true,
+    "standardFlow": true,
+    "redirectUris": ["http://localhost:5173/callback"],
+    "webOrigins": ["http://localhost:5173"]
+  }'
+```
+
+---
+
+## 3. Create a user
+
+**Users → Create** in the console, or:
+
+```bash
+curl -X POST http://localhost:3000/admin/realms/my-realm/users \
+  -H "x-admin-api-key: $ADMIN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{"username":"alice","email":"alice@example.com","enabled":true}'
+```
+
+Set a password from the user's detail page, or via the credentials endpoint.
+
+---
+
+## 4. Wire it into your app
+
+Install the SDK:
+
+```bash
+npm install idenplane-sdk
+```
+
+Point it at the client you just registered:
+
+```typescript
+import { IdenplaneClient } from 'idenplane-sdk';
+
+export const auth = new IdenplaneClient({
+  url: 'http://localhost:3000',
+  realm: 'my-realm',
+  clientId: 'my-web-app',
+  redirectUri: `${window.location.origin}/callback`,
+});
+```
+
+On startup, restore any existing session and send the user to log in if there isn't one:
+
+```typescript
+const isAuthenticated = await auth.init();
+if (!isAuthenticated) {
+  await auth.login();
+}
+```
+
+On the `/callback` route — the URL you registered above — finish the exchange:
+
+```typescript
+const success = await auth.handleCallback();
+if (success) {
+  window.location.replace('/');
+}
+```
+
+Using React, Vue, Angular or Next.js? The framework packages wrap the same client — see the [SDK guides](/guides/sdks/javascript-sdk).
+
+---
+
+## 5. Confirm it worked
+
+Once `init()` returns `true`:
+
+```typescript
+const user = auth.getUserInfo();
+console.log(user?.preferred_username);   // alice
+
+const claims = auth.getTokenClaims();
+console.log(claims?.sub, claims?.exp);
+```
+
+If you get that far, the realm, the client, the redirect URI and the token exchange are all correct.
+
+---
+
+## When it doesn't work
+
+| Symptom | Usual cause |
+|---|---|
+| `invalid_redirect_uri` | The `redirectUri` in your config is not listed on the client, character for character |
+| CORS error in the console | Your app's origin is missing from the client's **Web origins** |
+| `unauthorized_client` | The client is not public, or standard flow is disabled |
+| Login succeeds, `init()` still returns false | `storage` is `memory` (the default) and you reloaded — expected, see [Choosing a storage type](/guides/sdks/javascript-sdk#choosing-a-storage-type) |
+| `invalid_client` | The `clientId` does not exist in the realm you named |
+
+Realm **Events** in the console records failed authentication attempts with a reason, which is usually faster than guessing.
+
+---
+
+## Next steps
+
+<div className="row">
+
+[**JavaScript SDK**](/guides/sdks/javascript-sdk)
+The full client API
+
+[**Authentication**](/guides/authentication)
+OAuth 2.0 flows in depth
+
+[**Authorization**](/guides/authorization)
+Roles, scopes and permissions
+
+</div>

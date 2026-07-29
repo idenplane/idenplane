@@ -18,7 +18,10 @@ export interface UpgradeResult {
   fromVersion?: string;
   toVersion: string;
   stages: UpgradeStageResult[];
+  /** A rollback was attempted. Read `rollbackSucceeded` for whether it worked. */
   rollbackTriggered: boolean;
+  /** Whether the attempted rollback completed. Absent if none was attempted. */
+  rollbackSucceeded?: boolean;
   duration: number;
   error?: string;
 }
@@ -32,6 +35,13 @@ export interface UpgradeAuditEntry {
   completedAt: Date | null;
   backupId: string | null;
   errorMessage: string | null;
+  /**
+   * Per-stage check results. The server has always returned this and the UI
+   * has always dropped it, even though it is the richest diagnostic available
+   * when an upgrade fails. Optional so existing call sites and test factories
+   * keep type-checking.
+   */
+  checksPassed?: Record<string, unknown> | null;
 }
 
 export interface UpgradeState {
@@ -123,7 +133,24 @@ export interface UpgradeRequest {
   toVersion: string;
   dryRun?: boolean;
   force?: boolean;
-  initiatedBy?: string;
+  /**
+   * Free-text note recorded with the upgrade. Note this is NOT the actor —
+   * the server derives that from the authenticated principal and ignores
+   * anything the client claims here.
+   */
+  note?: string;
+  /**
+   * Must equal `toVersion` for a real upgrade; the server rejects the request
+   * otherwise. Not required for a dry run, which writes nothing.
+   */
+  confirm?: string;
+}
+
+export interface SystemVersion {
+  version: string;
+  schemaVersion: string | null;
+  pendingMigrations: string[];
+  databaseUpToDate: boolean;
 }
 
 // ============================================================================
@@ -133,7 +160,9 @@ export interface UpgradeRequest {
 /**
  * Start a new upgrade to the target version.
  */
-export async function startUpgrade(request: UpgradeRequest): Promise<UpgradeResult> {
+export async function startUpgrade(
+  request: UpgradeRequest,
+): Promise<UpgradeResult> {
   const { data } = await apiClient.post<UpgradeResult>('/upgrade', request);
   return data;
 }
@@ -142,25 +171,36 @@ export async function startUpgrade(request: UpgradeRequest): Promise<UpgradeResu
  * Get the status of the most recent upgrade.
  */
 export async function getUpgradeStatus(): Promise<UpgradeAuditEntry | null> {
-  const { data } = await apiClient.get<UpgradeAuditEntry | null>('/upgrade/status');
+  const { data } = await apiClient.get<UpgradeAuditEntry | null>(
+    '/upgrade/status',
+  );
   return data;
 }
 
 /**
  * Get upgrade history for audit purposes.
  */
-export async function getUpgradeHistory(limit = 10): Promise<UpgradeAuditEntry[]> {
-  const { data } = await apiClient.get<UpgradeAuditEntry[]>('/upgrade/history', {
-    params: { limit },
-  });
+export async function getUpgradeHistory(
+  limit = 10,
+): Promise<UpgradeAuditEntry[]> {
+  const { data } = await apiClient.get<UpgradeAuditEntry[]>(
+    '/upgrade/history',
+    {
+      params: { limit },
+    },
+  );
   return data;
 }
 
 /**
  * Get the current state of a specific upgrade operation.
  */
-export async function getUpgradeState(upgradeId: string): Promise<UpgradeState | null> {
-  const { data } = await apiClient.get<UpgradeState | null>(`/upgrade/${upgradeId}`);
+export async function getUpgradeState(
+  upgradeId: string,
+): Promise<UpgradeState | null> {
+  const { data } = await apiClient.get<UpgradeState | null>(
+    `/upgrade/${upgradeId}`,
+  );
   return data;
 }
 
@@ -168,7 +208,9 @@ export async function getUpgradeState(upgradeId: string): Promise<UpgradeState |
  * Run pre-upgrade validation checks to verify the system is ready.
  */
 export async function runPreValidation(): Promise<PreUpgradeValidationResult> {
-  const { data } = await apiClient.get<PreUpgradeValidationResult>('/upgrade/pre-validation');
+  const { data } = await apiClient.get<PreUpgradeValidationResult>(
+    '/upgrade/pre-validation',
+  );
   return data;
 }
 
@@ -183,10 +225,15 @@ export async function runHealthCheck(): Promise<UpgradeHealthResult> {
 /**
  * Check configuration compatibility for a target version.
  */
-export async function checkConfigCompatibility(version?: string): Promise<ConfigCompatibilityResult> {
-  const { data } = await apiClient.get<ConfigCompatibilityResult>('/upgrade/config-compatibility', {
-    params: version ? { version } : undefined,
-  });
+export async function checkConfigCompatibility(
+  version?: string,
+): Promise<ConfigCompatibilityResult> {
+  const { data } = await apiClient.get<ConfigCompatibilityResult>(
+    '/upgrade/config-compatibility',
+    {
+      params: version ? { version } : undefined,
+    },
+  );
   return data;
 }
 
@@ -194,14 +241,50 @@ export async function checkConfigCompatibility(version?: string): Promise<Config
  * Check if rollback is possible.
  */
 export async function checkRollbackCapability(): Promise<RollbackCapability> {
-  const { data } = await apiClient.get<RollbackCapability>('/upgrade/rollback/capability');
+  const { data } = await apiClient.get<RollbackCapability>(
+    '/upgrade/rollback/capability',
+  );
   return data;
 }
 
 /**
  * Execute a rollback to the previous version.
  */
-export async function executeRollback(upgradeId?: string): Promise<RollbackResult> {
-  const { data } = await apiClient.post<RollbackResult>('/upgrade/rollback', { upgradeId });
+export async function executeRollback(
+  upgradeId?: string,
+): Promise<RollbackResult> {
+  // `confirm` is mandatory server-side: a rollback restores a dump over the
+  // live database and discards every write since that backup. The literal is
+  // sent here rather than threaded through the caller because the UI already
+  // gates this behind its own explicit confirmation dialog — the server check
+  // guards against a hand-written or replayed request, not against this page.
+  const { data } = await apiClient.post<RollbackResult>('/upgrade/rollback', {
+    upgradeId,
+    confirm: 'ROLLBACK',
+  });
+  return data;
+}
+
+/**
+ * Paginated audit entries. Prefer this over `getUpgradeHistory` when a caller
+ * needs more than a handful of rows: `/upgrade/audit` returns `{entries, total}`
+ * and clamps `limit` to 1..100 server-side.
+ */
+export async function getUpgradeAudit(
+  limit = 100,
+): Promise<{ entries: UpgradeAuditEntry[]; total: number }> {
+  const { data } = await apiClient.get<{
+    entries: UpgradeAuditEntry[];
+    total: number;
+  }>('/upgrade/audit', { params: { limit } });
+  return data;
+}
+
+/**
+ * Current application version and migration state. Lives here rather than in a
+ * new module because the upgrade wizard is its only consumer.
+ */
+export async function getSystemVersion(): Promise<SystemVersion> {
+  const { data } = await apiClient.get<SystemVersion>('/system/version');
   return data;
 }

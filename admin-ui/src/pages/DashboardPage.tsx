@@ -1,5 +1,5 @@
 import { useQuery } from '@tanstack/react-query';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { getAllRealms } from '../api/realms';
 import { getLoginEvents, getAdminEvents, type LoginEvent, type AdminEvent } from '../api/events';
 import { getRealmStats, getHealthStatus, type RealmStats } from '../api/stats';

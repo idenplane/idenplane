@@ -1,21 +1,33 @@
 import {
+  BadRequestException,
+  Body,
   Controller,
   Get,
-  Post,
-  Body,
+  Logger,
   Param,
+  Post,
   Query,
+  Req,
   UseGuards,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import {
   ApiTags,
   ApiOperation,
   ApiSecurity,
   ApiResponse,
   ApiParam,
+  ApiProperty,
+  ApiPropertyOptional,
   ApiQuery,
 } from '@nestjs/swagger';
 import { IsBoolean, IsOptional, IsString } from 'class-validator';
+import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
+
+/** Request shape after AdminApiKeyGuard has attached the principal. */
+type AdminRequest = Request & {
+  adminUser?: { userId: string; roles: string[] };
+};
 import {
   UpgradeService,
   UpgradeResult,
@@ -40,35 +52,76 @@ import {
   UpgradeHealthResult,
 } from './upgrade-health.service.js';
 import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
+import { AdminRolesGuard } from '../common/guards/admin-roles.guard.js';
+import { RequireAdminRoles } from '../common/decorators/require-admin-roles.decorator.js';
+import { UpgradeEnabledGuard } from './guards/upgrade-enabled.guard.js';
 
 class UpgradeRequestDto {
+  @ApiProperty({ description: 'Target version, e.g. "0.4.0"' })
   @IsString()
   toVersion!: string;
 
+  @ApiPropertyOptional({
+    description:
+      'Simulate only: skips the backup and the migration. Defaults to false.',
+  })
   @IsOptional()
   @IsBoolean()
   dryRun?: boolean;
 
+  @ApiPropertyOptional({
+    description:
+      'Proceed even if pre-validation fails. This skips the checks that ' +
+      'verify a backup can be taken at all, so an upgrade run with force may ' +
+      'be unrecoverable. Requires confirm.',
+  })
   @IsOptional()
   @IsBoolean()
   force?: boolean;
 
+  @ApiPropertyOptional({
+    description:
+      'Free-text note recorded alongside the upgrade. The acting identity is ' +
+      'taken from the authenticated principal, not from this field.',
+  })
   @IsOptional()
   @IsString()
-  initiatedBy?: string;
+  note?: string;
+
+  @ApiProperty({
+    description:
+      'Must equal toVersion. Guards against a mis-click or a replayed request ' +
+      'starting a migration against a live database. Not required for dryRun.',
+  })
+  @IsOptional()
+  @IsString()
+  confirm?: string;
 }
 
 class RollbackRequestDto {
+  @ApiPropertyOptional({
+    description: 'Upgrade to roll back. Defaults to the most recent one.',
+  })
   @IsOptional()
   @IsString()
   upgradeId?: string;
+
+  @ApiProperty({
+    description:
+      'Must be the literal string "ROLLBACK". This restores a database dump ' +
+      'over the live database; every write since the backup is lost.',
+  })
+  @IsString()
+  confirm!: string;
 }
 
 @ApiTags('Upgrade')
 @ApiSecurity('admin-api-key')
-@UseGuards(AdminApiKeyGuard)
+@UseGuards(AdminApiKeyGuard, AdminRolesGuard)
 @Controller('admin/upgrade')
 export class UpgradeController {
+  private readonly logger = new Logger(UpgradeController.name);
+
   constructor(
     private readonly upgradeService: UpgradeService,
     private readonly rollbackService: RollbackService,
@@ -85,6 +138,8 @@ export class UpgradeController {
    * migration, and post-upgrade health checks.
    */
   @Post()
+  @UseGuards(UpgradeEnabledGuard)
+  @RequireAdminRoles(['super-admin'])
   @ApiOperation({ summary: 'Start an upgrade to a target version' })
   @ApiResponse({
     status: 200,
@@ -98,12 +153,49 @@ export class UpgradeController {
     status: 401,
     description: 'Unauthorized — missing or invalid admin API key',
   })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires super-admin role',
+  })
   @ApiResponse({ status: 409, description: 'Upgrade already in progress' })
-  async startUpgrade(@Body() dto: UpgradeRequestDto): Promise<UpgradeResult> {
+  @ApiResponse({
+    status: 503,
+    description: 'Upgrade execution disabled — set UPGRADE_API_ENABLED=true',
+  })
+  async startUpgrade(
+    @Body() dto: UpgradeRequestDto,
+    @Req() req: AdminRequest,
+  ): Promise<UpgradeResult> {
+    const dryRun = dto.dryRun ?? false;
+
+    // A dry run writes nothing, so requiring a confirmation there would only
+    // train operators to type past the prompt that matters.
+    if (!dryRun && dto.confirm !== dto.toVersion) {
+      throw new BadRequestException(
+        'confirm must equal toVersion to start a real upgrade. This endpoint ' +
+          'runs database migrations against the live database.',
+      );
+    }
+
+    // force skips pre-validation — including the checks added in #1198 that
+    // verify pg_dump exists and BACKUP_DIR is writable. An upgrade forced past
+    // those may have no usable backup, so it is logged at error level.
+    if (dto.force) {
+      this.logger.error(
+        `Upgrade to ${dto.toVersion} started with force=true by ` +
+          `${req.adminUser?.userId ?? 'unknown'} — pre-validation, including ` +
+          'the backup-tooling checks, will be skipped.',
+      );
+    }
+
     return this.upgradeService.upgrade(dto.toVersion, {
-      dryRun: dto.dryRun ?? false,
+      dryRun,
       force: dto.force ?? false,
-      initiatedBy: dto.initiatedBy ?? 'API',
+      // Taken from the authenticated principal, never from the body: an audit
+      // trail a caller can write for itself is not an audit trail.
+      initiatedBy: req.adminUser?.userId ?? 'API',
+      note: dto.note,
+      ipAddress: resolveClientIp(req),
     });
   }
 
@@ -131,13 +223,23 @@ export class UpgradeController {
    */
   @Get('history')
   @ApiOperation({ summary: 'Get upgrade history' })
+  @ApiQuery({
+    name: 'limit',
+    required: false,
+    description: 'Maximum number of entries to return (1-100, default 10)',
+    type: Number,
+  })
   @ApiResponse({ status: 200, description: 'Array of upgrade audit entries' })
   @ApiResponse({
     status: 401,
     description: 'Unauthorized — missing or invalid admin API key',
   })
-  async getUpgradeHistory(): Promise<UpgradeAuditEntry[]> {
-    return this.rollbackService.getUpgradeHistory();
+  async getUpgradeHistory(
+    @Query('limit') limit?: string,
+  ): Promise<UpgradeAuditEntry[]> {
+    return this.rollbackService.getUpgradeHistory(
+      UpgradeController.parseLimit(limit, 10),
+    );
   }
 
   /**
@@ -168,9 +270,21 @@ export class UpgradeController {
     total: number;
   }> {
     const entries = await this.rollbackService.getUpgradeHistory(
-      limit ? Math.min(Math.max(parseInt(limit, 10), 1), 100) : 20,
+      UpgradeController.parseLimit(limit, 20),
     );
     return { entries, total: entries.length };
+  }
+
+  /**
+   * Clamp a caller-supplied ?limit into 1..100, falling back to `fallback`
+   * when absent or unparseable. `parseInt('abc')` is NaN, and NaN survives
+   * Math.min/Math.max — so the isNaN check is load-bearing, not defensive.
+   */
+  private static parseLimit(limit: string | undefined, fallback: number) {
+    if (limit === undefined) return fallback;
+    const parsed = parseInt(limit, 10);
+    if (Number.isNaN(parsed)) return fallback;
+    return Math.min(Math.max(parsed, 1), 100);
   }
 
   /**
@@ -197,11 +311,21 @@ export class UpgradeController {
    * rolls back the most recent successful upgrade.
    */
   @Post('rollback')
+  @UseGuards(UpgradeEnabledGuard)
+  @RequireAdminRoles(['super-admin'])
   @ApiOperation({ summary: 'Execute rollback to previous version' })
   @ApiResponse({ status: 200, description: 'Rollback result with outcome' })
   @ApiResponse({
     status: 401,
     description: 'Unauthorized — missing or invalid admin API key',
+  })
+  @ApiResponse({
+    status: 403,
+    description: 'Forbidden — requires super-admin role',
+  })
+  @ApiResponse({
+    status: 503,
+    description: 'Upgrade execution disabled — set UPGRADE_API_ENABLED=true',
   })
   @ApiResponse({ status: 404, description: 'No upgrade found to roll back' })
   @ApiResponse({
@@ -210,7 +334,21 @@ export class UpgradeController {
   })
   async executeRollback(
     @Body() dto: RollbackRequestDto,
+    @Req() req: AdminRequest,
   ): Promise<RollbackResult> {
+    if (dto.confirm !== 'ROLLBACK') {
+      throw new BadRequestException(
+        'confirm must be the literal string "ROLLBACK". This restores a ' +
+          'database dump over the live database and discards every write made ' +
+          'since that backup was taken.',
+      );
+    }
+
+    this.logger.warn(
+      `Rollback requested by ${req.adminUser?.userId ?? 'unknown'} from ` +
+        `${resolveClientIp(req)}${dto.upgradeId ? ` for ${dto.upgradeId}` : ''}`,
+    );
+
     return this.rollbackService.executeRollback(dto.upgradeId);
   }
 

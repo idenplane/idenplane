@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useState, type FormEvent } from 'react';
-import { Link, useNavigate, useParams } from 'react-router-dom';
+import { useParams, useNavigate, Link } from 'react-router';
 import { getClientScopes } from '../../api/clientScopes';
 import { getClients } from '../../api/clients';
 import { getGroups } from '../../api/groups';

@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { useParams, useNavigate } from 'react-router-dom';
+import { useParams, useNavigate } from 'react-router';
 import { getAuthFlows, createAuthFlow, deleteAuthFlow, type AuthFlow } from '../../api/authFlows';
 import { getErrorMessage } from '../../utils/getErrorMessage';
 import ConfirmDialog from '../../components/ConfirmDialog';

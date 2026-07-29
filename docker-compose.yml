@@ -46,9 +46,15 @@ services:
       THROTTLE_TTL: ${THROTTLE_TTL:-60000}
       THROTTLE_LIMIT: ${THROTTLE_LIMIT:-100}
       BASE_URL: ${BASE_URL:-http://localhost:3000}
+      # Where the upgrade flow writes pre-migration backups. Points at the
+      # `backups` volume below so a dump survives the container being replaced —
+      # a backup on the container filesystem is not a backup.
+      BACKUP_DIR: /var/lib/idenplane/backups
       # Uncomment to enable Redis cache (requires the redis service above):
       # REDIS_URL: redis://redis:6379
       # SESSION_STORE: ${SESSION_STORE:-database}
+    volumes:
+      - backups:/var/lib/idenplane/backups
     depends_on:
       db:
         condition: service_healthy
@@ -59,3 +65,4 @@ services:
 
 volumes:
   pgdata:
+  backups:

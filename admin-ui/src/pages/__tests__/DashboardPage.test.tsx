@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, waitForElementToBeRemoved } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../test/mocks/server';
 import { render } from '../../test/utils';
@@ -111,7 +111,7 @@ describe('DashboardPage', () => {
     expect(screen.getByText('View Logs')).toBeInTheDocument();
   });
 
-  it('shows loading state when realms are loading', () => {
+  it('shows loading state when realms are loading', async () => {
     // Delay the response
     server.use(
       http.get('/admin/realms', async () => {
@@ -121,6 +121,12 @@ describe('DashboardPage', () => {
     );
     renderDashboard();
     expect(screen.getByText(/loading/i)).toBeInTheDocument();
+    // Let the delayed response land before the test ends. Without this the
+    // request is still in flight when this file's jsdom environment is torn
+    // down, and MSW's XHR interceptor then fires its callback against a global
+    // that no longer has ProgressEvent — an unhandled rejection that fails the
+    // whole run even though every test passed.
+    await waitForElementToBeRemoved(() => screen.queryByText(/loading/i));
   });
 
   it('shows empty state when no realms exist', async () => {

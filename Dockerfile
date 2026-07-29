@@ -41,6 +41,35 @@ FROM node:22-alpine AS production
 WORKDIR /app
 
 # Copy the already-pruned (production-only) node_modules from the build stage.
+# pg_dump / pg_restore, used by the upgrade flow to take a backup before running
+# migrations and to restore it on rollback. Without these the upgrade endpoints
+# abort at pre-validation (by design — an upgrade that cannot be rolled back
+# should not start), so this is what makes UPGRADE_API_ENABLED usable at all.
+#
+# The client major must EQUAL the server major. An earlier revision of this file
+# claimed "client >= server is the supported direction"; that is true for taking
+# a dump and false for restoring one. Measured against a PostgreSQL 16 server:
+#
+#   pg_dump 18   → archive written fine
+#   pg_restore 18 → ERROR: unrecognized configuration parameter
+#                   "transaction_timeout"      (that GUC arrived in PG 17)
+#   pg_restore 16 on that same archive
+#                 → ERROR: unsupported version (1.16) in file header
+#
+# So a newer client produces backups that nothing can restore onto an older
+# server — the rollback is broken exactly when it is needed. An older client is
+# no better: pg_dump refuses to dump a newer server outright.
+#
+# Alpine's default postgresql-client tracks the newest release, so pinning is
+# required rather than optional. PG_MAJOR must match the PostgreSQL server this
+# image will be pointed at; docker-compose.yml ships postgres:16-alpine.
+# The application also verifies this at runtime (pre-validation check
+# `pg_client_version`) and refuses to upgrade on a mismatch, so a wrong value
+# here fails loudly rather than silently disabling rollback.
+ARG PG_MAJOR=16
+RUN apk add --no-cache "postgresql${PG_MAJOR}-client" \
+    && pg_dump --version \
+    && pg_restore --version
 COPY --from=build /app/node_modules ./node_modules
 COPY --from=build /app/dist ./dist
 COPY --from=build /app/prisma ./prisma
