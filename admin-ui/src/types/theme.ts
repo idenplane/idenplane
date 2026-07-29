@@ -22,7 +22,7 @@ export interface Theme {
   themeType: ThemeType;
   /** Whether this theme is a built-in (filesystem) theme. Not returned by the DB-backed API. */
   isBuiltIn?: boolean;
-  /** Whether this theme is the active theme for its type on its realm. Not returned by the DB-backed API. */
+  /** Whether this theme is currently used by its realm for its type. */
   isActive?: boolean;
   styles: ThemeStyles;
   components: ThemeComponent[];

@@ -1,6 +1,6 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useState } from 'react';
-import { useNavigate, useParams } from 'react-router-dom';
+import { useNavigate, useParams } from 'react-router';
 import {
     archiveTheme,
     createTheme,
@@ -16,6 +16,13 @@ import { getErrorMessage } from '../../utils/getErrorMessage';
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 function StatusBadge({ theme }: { theme: Theme }) {
+    if (theme.isActive) {
+        return (
+            <span className="inline-flex rounded-full bg-emerald-100 px-2 py-0.5 text-xs font-medium text-emerald-700">
+                Active
+            </span>
+        );
+    }
     if (theme.published) {
         return (
             <span className="inline-flex rounded-full px-2 py-0.5 text-xs font-medium bg-green-100 text-green-700">
@@ -290,7 +297,7 @@ export default function ThemeListPage() {
                                                 )}
 
                                                 {/* Activate (only published) */}
-                                                {theme.published && (
+                                                {theme.published && !theme.isActive && (
                                                     <button
                                                         onClick={() => activateMutation.mutate(theme.id)}
                                                         disabled={busy}
@@ -304,7 +311,8 @@ export default function ThemeListPage() {
                                                 {theme.published && (
                                                     <button
                                                         onClick={() => archiveMutation.mutate(theme.id)}
-                                                        disabled={busy}
+                                                        disabled={busy || theme.isActive}
+                                                        title={theme.isActive ? 'Activate another theme before archiving this one.' : undefined}
                                                         className="rounded px-2 py-1 text-xs font-medium text-gray-500 hover:bg-gray-100 disabled:opacity-40"
                                                     >
                                                         Archive
@@ -323,7 +331,8 @@ export default function ThemeListPage() {
                                                 {/* Delete */}
                                                 <button
                                                     onClick={() => setDeleteTarget(theme)}
-                                                    disabled={busy}
+                                                    disabled={busy || theme.isActive}
+                                                    title={theme.isActive ? 'Activate another theme before deleting this one.' : undefined}
                                                     className="rounded px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50 disabled:opacity-40"
                                                 >
                                                     Delete

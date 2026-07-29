@@ -1,8 +1,9 @@
 import {
-    Injectable,
-    Logger,
-    NotFoundException,
-    type OnModuleInit,
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+  type OnModuleInit,
 } from '@nestjs/common';
 import type { Prisma, Realm } from '@prisma/client';
 import { createHash } from 'crypto';
@@ -10,11 +11,11 @@ import { readdir, readFile } from 'fs/promises';
 import { join } from 'path';
 import { PrismaService } from '../prisma/prisma.service.js';
 import type {
-    ResolvedTheme,
-    ThemeColors,
-    ThemeDefinition,
-    ThemeInfo,
-    ThemeType,
+  ResolvedTheme,
+  ThemeColors,
+  ThemeDefinition,
+  ThemeInfo,
+  ThemeType,
 } from './theme.types.js';
 
 function darkenHex(hex: string, percent: number): string {
@@ -49,6 +50,43 @@ export class ThemeService implements OnModuleInit {
     inputBgColor: '#ffffff',
     mutedColor: '#6b7280',
   };
+
+  private isThemeActive(
+    theme: { name: string; themeType: string },
+    realm: Pick<Realm, 'loginTheme' | 'accountTheme' | 'emailTheme'>,
+  ): boolean {
+    switch (theme.themeType) {
+      case 'login':
+        return realm.loginTheme === theme.name;
+      case 'account':
+        return realm.accountTheme === theme.name;
+      case 'email':
+        return realm.emailTheme === theme.name;
+      case 'full':
+        return (
+          realm.loginTheme === theme.name ||
+          realm.accountTheme === theme.name ||
+          realm.emailTheme === theme.name
+        );
+      default:
+        return false;
+    }
+  }
+
+  private assertThemeIsNotActive(
+    theme: {
+      name: string;
+      themeType: string;
+      realm: Pick<Realm, 'loginTheme' | 'accountTheme' | 'emailTheme'>;
+    },
+    action: string,
+  ): void {
+    if (this.isThemeActive(theme, theme.realm)) {
+      throw new BadRequestException(
+        `Cannot ${action} active theme '${theme.name}'. Activate another theme first.`,
+      );
+    }
+  }
 
   async onModuleInit() {
     await this.loadThemes();
@@ -411,10 +449,34 @@ export class ThemeService implements OnModuleInit {
     } else if (filters?.status === 'draft') {
       where.published = false;
     }
-    return this.prisma.theme.findMany({
-      where,
-      orderBy: { updatedAt: 'desc' },
-    });
+    const [realm, themes] = await Promise.all([
+      this.prisma.realm.findUnique({
+        where: { id: realmId },
+        select: {
+          loginTheme: true,
+          accountTheme: true,
+          emailTheme: true,
+        },
+      }),
+      this.prisma.theme.findMany({
+        where,
+        orderBy: { updatedAt: 'desc' },
+      }),
+    ]);
+    if (!realm) {
+      throw new NotFoundException(`Realm with ID '${realmId}' not found`);
+    }
+
+    const themesWithActiveState = themes.map((theme) => ({
+      ...theme,
+      isActive: this.isThemeActive(theme, realm),
+    }));
+
+    return filters?.isActive === undefined
+      ? themesWithActiveState
+      : themesWithActiveState.filter(
+          (theme) => theme.isActive === filters.isActive,
+        );
   }
 
   async findById(themeId: string) {
@@ -460,6 +522,14 @@ export class ThemeService implements OnModuleInit {
   }
 
   async deleteTheme(themeId: string) {
+    const theme = await this.prisma.theme.findUnique({
+      where: { id: themeId },
+      include: { realm: true },
+    });
+    if (!theme) {
+      throw new NotFoundException(`Theme with ID '${themeId}' not found`);
+    }
+    this.assertThemeIsNotActive(theme, 'delete');
     return this.prisma.theme.delete({ where: { id: themeId } });
   }
 
@@ -552,10 +622,12 @@ export class ThemeService implements OnModuleInit {
   async archiveTheme(themeId: string) {
     const theme = await this.prisma.theme.findUnique({
       where: { id: themeId },
+      include: { realm: true },
     });
     if (!theme) {
       throw new NotFoundException(`Theme with ID '${themeId}' not found`);
     }
+    this.assertThemeIsNotActive(theme, 'archive');
     return this.prisma.theme.update({
       where: { id: themeId },
       data: { published: false },
@@ -630,10 +702,11 @@ export class ThemeService implements OnModuleInit {
       data: realmUpdate,
     });
 
-    return this.prisma.theme.update({
+    const updatedTheme = await this.prisma.theme.update({
       where: { id: themeId },
       data: { published: true },
     });
+    return { ...updatedTheme, isActive: true };
   }
 
   /**
@@ -672,7 +745,8 @@ export class ThemeService implements OnModuleInit {
     payload: Record<string, unknown>,
     options: { overwrite?: boolean; activate?: boolean } = {},
   ) {
-    const name = String(payload['name'] ?? '');
+    const name =
+      typeof payload['name'] === 'string' ? payload['name'].trim() : '';
     if (!name) {
       throw new Error('Import payload is missing a "name" field');
     }
