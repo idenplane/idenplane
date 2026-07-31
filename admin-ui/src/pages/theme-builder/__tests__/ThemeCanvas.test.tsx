@@ -125,7 +125,7 @@ describe('ThemeCanvas', () => {
     render(<ThemeCanvas components={[]} onChange={onChange} />);
 
     const paletteButton = screen.getByTestId('palette-component-input');
-    const canvas = document.querySelector('.overflow-auto.bg-white') as HTMLElement;
+    const canvas = document.querySelector('.overflow-auto.bg-surface') as HTMLElement;
 
     // Simulate drag and drop
     fireEvent.dragStart(paletteButton, {
