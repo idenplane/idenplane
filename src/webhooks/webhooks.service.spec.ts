@@ -1,8 +1,21 @@
-// Mock fetch globally before imports
-const mockFetch = jest.fn();
+// Webhook delivery goes through the SSRF-safe HTTP client, never raw fetch,
+// so that is what these tests mock. `SsrfBlockedError` is kept real via
+// requireActual so the service's `instanceof` check behaves as in production.
+const mockSafePost = jest.fn();
+jest.mock('../common/security/safe-http-client.js', () => ({
+  ...jest.requireActual('../common/security/safe-http-client.js'),
+  safePost: (...args: unknown[]) => mockSafePost(...args),
+}));
+
+// Any direct fetch() from the delivery path is a regression back to the
+// unprotected client, so fail loudly rather than silently allowing it.
+const mockFetch = jest.fn(() => {
+  throw new Error('webhook delivery must not call fetch() directly');
+});
 global.fetch = mockFetch as any;
 
 import { NotFoundException } from '@nestjs/common';
+import { SsrfBlockedError } from '../common/security/safe-http-client.js';
 import { WebhooksService } from './webhooks.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import {
@@ -329,7 +342,7 @@ describe('WebhooksService', () => {
         payload: {},
       });
 
-      expect(mockFetch).not.toHaveBeenCalled();
+      expect(mockSafePost).not.toHaveBeenCalled();
     });
   });
 
@@ -356,10 +369,7 @@ describe('WebhooksService', () => {
     });
 
     it('should succeed on first attempt', async () => {
-      mockFetch.mockResolvedValueOnce({
-        status: 200,
-        text: async () => 'OK',
-      });
+      mockSafePost.mockResolvedValueOnce({ statusCode: 200, body: 'OK' });
 
       const promise = (service as any).deliverWebhook(
         webhookRecord,
@@ -380,7 +390,7 @@ describe('WebhooksService', () => {
 
     it('should retry on failure and eventually mark as failed', async () => {
       // Fail all 4 attempts (initial + 3 retries)
-      mockFetch
+      mockSafePost
         .mockRejectedValueOnce(new Error('Connection refused'))
         .mockRejectedValueOnce(new Error('Connection refused'))
         .mockRejectedValueOnce(new Error('Connection refused'))
@@ -392,7 +402,7 @@ describe('WebhooksService', () => {
       await (service as any).deliverWebhook(webhookRecord, 'user.login', {});
 
       // Should have tried 4 times (1 + 3 retries)
-      expect(mockFetch).toHaveBeenCalledTimes(4);
+      expect(mockSafePost).toHaveBeenCalledTimes(4);
 
       expect(prisma.webhookDelivery.update).toHaveBeenLastCalledWith(
         expect.objectContaining({
@@ -402,18 +412,15 @@ describe('WebhooksService', () => {
     });
 
     it('should succeed on retry after initial failure', async () => {
-      mockFetch
+      mockSafePost
         .mockRejectedValueOnce(new Error('Timeout'))
-        .mockResolvedValueOnce({
-          status: 200,
-          text: async () => 'OK',
-        });
+        .mockResolvedValueOnce({ statusCode: 200, body: 'OK' });
 
       jest.spyOn(service as any, 'sleep').mockResolvedValue(undefined);
 
       await (service as any).deliverWebhook(webhookRecord, 'user.login', {});
 
-      expect(mockFetch).toHaveBeenCalledTimes(2);
+      expect(mockSafePost).toHaveBeenCalledTimes(2);
 
       expect(prisma.webhookDelivery.update).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -423,17 +430,14 @@ describe('WebhooksService', () => {
     });
 
     it('should mark as failed when endpoint returns non-2xx and all retries exhausted', async () => {
-      mockFetch.mockResolvedValue({
-        status: 500,
-        text: async () => 'Internal Server Error',
-      });
+      mockSafePost.mockResolvedValue({ statusCode: 500, body: 'Internal Server Error' });
 
       jest.spyOn(service as any, 'sleep').mockResolvedValue(undefined);
 
       await (service as any).deliverWebhook(webhookRecord, 'user.login', {});
 
       // Called 4 times: initial + 3 retries
-      expect(mockFetch).toHaveBeenCalledTimes(4);
+      expect(mockSafePost).toHaveBeenCalledTimes(4);
 
       // The final update should mark it as failed
       expect(prisma.webhookDelivery.update).toHaveBeenLastCalledWith(
@@ -444,10 +448,7 @@ describe('WebhooksService', () => {
     });
 
     it('should include HMAC signature header in request', async () => {
-      mockFetch.mockResolvedValueOnce({
-        status: 200,
-        text: async () => 'OK',
-      });
+      mockSafePost.mockResolvedValueOnce({ statusCode: 200, body: 'OK' });
 
       jest.spyOn(service as any, 'sleep').mockResolvedValue(undefined);
 
@@ -455,24 +456,17 @@ describe('WebhooksService', () => {
         userId: 'u1',
       });
 
-      expect(mockFetch).toHaveBeenCalledWith(
+      expect(mockSafePost).toHaveBeenCalledWith(
         webhookRecord.url,
+        expect.any(String),
         expect.objectContaining({
-          method: 'POST',
-          headers: expect.objectContaining({
-            'X-Webhook-Signature': expect.stringMatching(
-              /^sha256=[a-f0-9]{64}$/,
-            ),
-          }),
+          'X-Webhook-Signature': expect.stringMatching(/^sha256=[a-f0-9]{64}$/),
         }),
       );
     });
 
     it('should sign the payload with the decrypted secret, not the ciphertext', async () => {
-      mockFetch.mockResolvedValueOnce({
-        status: 200,
-        text: async () => 'OK',
-      });
+      mockSafePost.mockResolvedValueOnce({ statusCode: 200, body: 'OK' });
 
       jest.spyOn(service as any, 'sleep').mockResolvedValue(undefined);
 
@@ -491,13 +485,76 @@ describe('WebhooksService', () => {
       // We can't know the exact timestamp injected, but we can verify the
       // signature format and that it differs from one computed with the
       // raw ciphertext (which would be wrong).
-      const [, fetchOptions] = mockFetch.mock.calls[0] as [string, RequestInit];
-      const actualSig = (fetchOptions.headers as Record<string, string>)[
-        'X-Webhook-Signature'
+      const [, , sentHeaders] = mockSafePost.mock.calls[0] as [
+        string,
+        string,
+        Record<string, string>,
       ];
+      const actualSig = sentHeaders['X-Webhook-Signature'];
 
       const wrongSig = service.signPayload(webhookRecord.secret, body);
       expect(actualSig).not.toBe(wrongSig);
+    });
+  });
+
+  // ─── SSRF policy ───────────────────────────────────────
+
+  describe('deliverWebhook (SSRF policy)', () => {
+    const plaintextSecret = 'test-secret';
+    let webhookRecord: { id: string; url: string; secret: string };
+
+    beforeEach(() => {
+      webhookRecord = {
+        id: 'webhook-1',
+        // A hostname that is public at configuration time but resolves to an
+        // internal address at delivery time is exactly the case the DTO check
+        // cannot catch, so safePost is what rejects it.
+        url: 'https://rebound.example.com/hook',
+        secret: crypto.encrypt(plaintextSecret),
+      };
+      prisma.webhookDelivery.create.mockResolvedValue({ id: 'delivery-1' });
+      prisma.webhookDelivery.update.mockResolvedValue({});
+      jest.spyOn(service as any, 'sleep').mockResolvedValue(undefined);
+    });
+
+    it('should not retry a target rejected by SSRF policy', async () => {
+      mockSafePost.mockRejectedValue(new SsrfBlockedError());
+
+      await (service as any).deliverWebhook(webhookRecord, 'user.login', {});
+
+      // Exactly one attempt: re-running the same checks on the same URL can
+      // only be rejected again, so the retry tail is skipped entirely.
+      expect(mockSafePost).toHaveBeenCalledTimes(1);
+      expect(prisma.webhookDelivery.update).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ success: false, attempts: 1 }),
+        }),
+      );
+    });
+
+    it('should persist a message that does not leak the resolved address', async () => {
+      mockSafePost.mockRejectedValue(new SsrfBlockedError());
+
+      await (service as any).deliverWebhook(webhookRecord, 'user.login', {});
+
+      const lastUpdate = prisma.webhookDelivery.update.mock.calls.at(-1)![0] as {
+        data: { response?: string };
+      };
+      expect(lastUpdate.data.response).toBe(
+        'Delivery blocked: target address is not publicly routable',
+      );
+      expect(lastUpdate.data.response).not.toMatch(/\d+\.\d+\.\d+\.\d+/);
+      expect(lastUpdate.data.response).not.toContain('rebound.example.com');
+    });
+
+    it('should still retry ordinary network failures', async () => {
+      // Guards the early-break above from over-reaching: a plain transient
+      // error must keep the full retry tail.
+      mockSafePost.mockRejectedValue(new Error('ECONNRESET'));
+
+      await (service as any).deliverWebhook(webhookRecord, 'user.login', {});
+
+      expect(mockSafePost).toHaveBeenCalledTimes(4);
     });
   });
 

@@ -5,6 +5,10 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { CreateWebhookDto, UpdateWebhookDto } from './webhooks.dto.js';
+import {
+  safePost,
+  SsrfBlockedError,
+} from '../common/security/safe-http-client.js';
 
 export interface DispatchEventOptions {
   realmId: string;
@@ -279,8 +283,13 @@ export class WebhooksService {
     });
 
     let lastError: Error | null = null;
+    // Tracks how many attempts were actually made, which is no longer always
+    // the full retry tail now that an SSRF rejection breaks out early.
+    let attemptsMade = 0;
 
     for (let attempt = 0; attempt <= RETRY_DELAYS_MS.length; attempt++) {
+      attemptsMade = attempt + 1;
+
       if (attempt > 0) {
         const delay = RETRY_DELAYS_MS[attempt - 1];
         await this.sleep(delay);
@@ -310,15 +319,24 @@ export class WebhooksService {
         this.logger.warn(
           `Webhook delivery attempt ${attempt + 1} failed for ${webhook.url}: ${lastError.message}`,
         );
+
+        // An SSRF rejection is a policy decision about the target, not a
+        // transient fault: retrying the same URL re-runs the same checks and
+        // is rejected again. Stop immediately rather than burning the full
+        // retry tail (and holding the fire-and-forget task open for ~71s).
+        if (err instanceof SsrfBlockedError) {
+          break;
+        }
       }
     }
 
-    // All attempts exhausted
+    // Attempts exhausted, or stopped early because the target was rejected
+    // by SSRF policy.
     await this.prisma.webhookDelivery.update({
       where: { id: delivery.id },
       data: {
         success: false,
-        attempts: RETRY_DELAYS_MS.length + 1,
+        attempts: attemptsMade,
         lastAttempt: new Date(),
         response: lastError?.message?.slice(0, 2000),
       },
@@ -335,32 +353,25 @@ export class WebhooksService {
 
   // ─── HTTP POST ─────────────────────────────────────────
 
+  /**
+   * POST to a subscriber URL through the SSRF-safe client rather than
+   * `fetch`, so the destination is re-resolved and validated on every
+   * attempt and the connection is pinned to the validated address. A
+   * webhook URL that was public when it was configured can point at an
+   * internal address by delivery time, so validating here (not at
+   * configuration time) is what actually enforces the policy.
+   */
   private async doHttpPost(
     url: string,
     body: string,
     signature: string,
   ): Promise<{ statusCode: number; body: string }> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10_000);
-
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Webhook-Signature': signature,
-          'X-Webhook-Timestamp': new Date().toISOString(),
-          'User-Agent': 'Idenplane-Webhook/1.0',
-        },
-        body,
-        signal: controller.signal,
-      });
-
-      const text = await res.text();
-      return { statusCode: res.status, body: text };
-    } finally {
-      clearTimeout(timeout);
-    }
+    return safePost(url, body, {
+      'Content-Type': 'application/json',
+      'X-Webhook-Signature': signature,
+      'X-Webhook-Timestamp': new Date().toISOString(),
+      'User-Agent': 'Idenplane-Webhook/1.0',
+    });
   }
 
   private sleep(ms: number): Promise<void> {
