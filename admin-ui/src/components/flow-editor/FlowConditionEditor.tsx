@@ -70,20 +70,20 @@ export default function FlowConditionEditor({
           type="checkbox"
           checked={enabled}
           onChange={handleToggle}
-          className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+          className="rounded border-line-strong text-accent focus:ring-accent"
         />
-        <span className="text-sm font-medium text-gray-700">Enable condition</span>
+        <span className="text-sm font-medium text-muted">Enable condition</span>
       </label>
 
       {enabled && condition && (
-        <div className="ml-6 space-y-3 rounded-lg border border-amber-200 bg-amber-50 p-3">
-          <p className="text-xs text-amber-700">
+        <div className="ml-6 space-y-3 rounded-lg border border-warning-soft bg-warning-soft p-3">
+          <p className="text-xs text-warning-fg">
             This step is skipped when the condition does NOT match.
           </p>
 
           {/* Field */}
           <div>
-            <label htmlFor="condition-field" className="block text-xs font-medium text-gray-600 mb-1">
+            <label htmlFor="condition-field" className="block text-xs font-medium text-muted mb-1">
               Context field
             </label>
             <input
@@ -92,7 +92,7 @@ export default function FlowConditionEditor({
               value={condition.field}
               onChange={(e) => handleField(e.target.value)}
               placeholder="e.g. user.group"
-              className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="w-full rounded-md border border-line-strong px-3 py-1.5 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             />
             <datalist id="field-suggestions">
               {FIELD_SUGGESTIONS.map((f) => (
@@ -103,14 +103,14 @@ export default function FlowConditionEditor({
 
           {/* Operator */}
           <div>
-            <label htmlFor="condition-operator" className="block text-xs font-medium text-gray-600 mb-1">
+            <label htmlFor="condition-operator" className="block text-xs font-medium text-muted mb-1">
               Operator
             </label>
             <select
               id="condition-operator"
               value={condition.operator}
               onChange={(e) => handleOperator(e.target.value as ConditionOperator)}
-              className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="w-full rounded-md border border-line-strong px-3 py-1.5 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             >
               {OPERATORS.map((o) => (
                 <option key={o.value} value={o.value}>
@@ -123,10 +123,10 @@ export default function FlowConditionEditor({
           {/* Value (only when operator needs one) */}
           {op.hasValue && (
             <div>
-              <label htmlFor="condition-value" className="block text-xs font-medium text-gray-600 mb-1">
+              <label htmlFor="condition-value" className="block text-xs font-medium text-muted mb-1">
                 Value
                 {(condition.operator === 'in' || condition.operator === 'not_in') && (
-                  <span className="ml-1 text-gray-400">(comma-separated)</span>
+                  <span className="ml-1 text-subtle">(comma-separated)</span>
                 )}
               </label>
               <input
@@ -134,7 +134,7 @@ export default function FlowConditionEditor({
                 value={valueDisplay}
                 onChange={(e) => handleValue(e.target.value)}
                 placeholder="Enter value..."
-                className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="w-full rounded-md border border-line-strong px-3 py-1.5 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
               />
             </div>
           )}

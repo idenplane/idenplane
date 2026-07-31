@@ -186,13 +186,13 @@ export default function SdkIntegrationStep() {
     return (
       <div className="max-w-xl">
         <div className="mb-6">
-          <h2 className="text-xl font-semibold text-gray-900">SDK Integration</h2>
-          <p className="mt-1 text-sm text-gray-500">
+          <h2 className="text-xl font-semibold text-fg">SDK Integration</h2>
+          <p className="mt-1 text-sm text-subtle">
             Get integration code snippets for your application.
           </p>
         </div>
 
-        <div className="rounded-md bg-amber-50 p-4 text-sm text-amber-700">
+        <div className="rounded-md bg-warning-soft p-4 text-sm text-warning-fg">
           No client found. Please complete Step 4 (First Client) before continuing.
         </div>
       </div>
@@ -210,37 +210,37 @@ export default function SdkIntegrationStep() {
   return (
     <div className="max-w-4xl">
       <div className="mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">SDK Integration</h2>
-        <p className="mt-1 text-sm text-gray-500">
+        <h2 className="text-xl font-semibold text-fg">SDK Integration</h2>
+        <p className="mt-1 text-sm text-subtle">
           Copy the integration code for your preferred language or framework.
           All snippets are pre-configured with your client credentials.
         </p>
       </div>
 
       {/* Client Credentials Summary */}
-      <div className="mb-6 rounded-lg border border-gray-200 bg-gray-50 p-4">
-        <h3 className="mb-3 text-sm font-medium text-gray-700">Your Client Credentials</h3>
+      <div className="mb-6 rounded-lg border border-line bg-sunken p-4">
+        <h3 className="mb-3 text-sm font-medium text-muted">Your Client Credentials</h3>
         <div className="grid grid-cols-2 gap-4 text-sm">
           <div>
-            <span className="text-gray-500">Client ID:</span>{' '}
-            <code className="rounded bg-white px-2 py-0.5 font-mono text-gray-900">
+            <span className="text-subtle">Client ID:</span>{' '}
+            <code className="rounded bg-surface px-2 py-0.5 font-mono text-fg">
               {client.clientId}
             </code>
           </div>
           <div>
-            <span className="text-gray-500">Realm:</span>{' '}
-            <code className="rounded bg-white px-2 py-0.5 font-mono text-gray-900">
+            <span className="text-subtle">Realm:</span>{' '}
+            <code className="rounded bg-surface px-2 py-0.5 font-mono text-fg">
               {realmName}
             </code>
           </div>
         </div>
         {client.clientSecret && (
           <div className="mt-2 text-sm">
-            <span className="text-gray-500">Client Secret:</span>{' '}
-            <code className="rounded bg-white px-2 py-0.5 font-mono text-gray-900">
+            <span className="text-subtle">Client Secret:</span>{' '}
+            <code className="rounded bg-surface px-2 py-0.5 font-mono text-fg">
               {'•'.repeat(32)}
             </code>
-            <span className="ml-2 text-xs text-gray-400">(hidden for security)</span>
+            <span className="ml-2 text-xs text-subtle">(hidden for security)</span>
           </div>
         )}
       </div>
@@ -250,11 +250,11 @@ export default function SdkIntegrationStep() {
         {snippets.map((snippet) => (
           <div
             key={snippet.language}
-            className="rounded-lg border border-gray-200 bg-white overflow-hidden"
+            className="rounded-lg border border-line bg-surface overflow-hidden"
           >
             {/* Snippet Header */}
-            <div className="flex items-center justify-between border-b border-gray-200 bg-gray-50 px-4 py-2">
-              <span className="text-sm font-medium text-gray-700">
+            <div className="flex items-center justify-between border-b border-line bg-sunken px-4 py-2">
+              <span className="text-sm font-medium text-muted">
                 {snippet.label}
               </span>
               <button
@@ -263,8 +263,8 @@ export default function SdkIntegrationStep() {
                 disabled={copiedLanguage === snippet.language}
                 className={`flex items-center gap-1.5 rounded-md px-3 py-1.5 text-xs font-medium transition-colors ${
                   copiedLanguage === snippet.language
-                    ? 'bg-green-100 text-green-700'
-                    : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                    ? 'bg-success-soft text-success-fg'
+                    : 'bg-accent text-white hover:bg-accent-hover'
                 }`}
               >
                 {copiedLanguage === snippet.language ? (
@@ -299,7 +299,7 @@ export default function SdkIntegrationStep() {
           role="alert"
           aria-live="assertive"
           aria-atomic="true"
-          className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-700"
+          className="mt-4 rounded-md bg-danger-soft p-3 text-sm text-danger-fg"
         >
           {localError}
         </div>
@@ -311,7 +311,7 @@ export default function SdkIntegrationStep() {
           role="alert"
           aria-live="assertive"
           aria-atomic="true"
-          className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-700"
+          className="mt-4 rounded-md bg-danger-soft p-3 text-sm text-danger-fg"
         >
           {getErrorMessage(mutation.error, 'Failed to mark SDK step as complete.')}
         </div>
@@ -319,7 +319,7 @@ export default function SdkIntegrationStep() {
 
       {/* Success Message */}
       {sdkMarked && (
-        <div className="mt-4 rounded-md bg-green-50 p-3 text-sm text-green-700">
+        <div className="mt-4 rounded-md bg-success-soft p-3 text-sm text-success-fg">
           SDK integration marked as complete. You can continue to the next step.
         </div>
       )}

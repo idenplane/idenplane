@@ -4,17 +4,17 @@ import { getNhiIdentities } from '../../api/nhi';
 import type { NhiIdentityType, NhiLifecycleStatus } from '../../types';
 
 const identityTypeColors: Record<NhiIdentityType, string> = {
-  IOT_DEVICE: 'bg-blue-100 text-blue-700',
+  IOT_DEVICE: 'bg-info-soft text-info-fg',
   AI_AGENT: 'bg-purple-100 text-purple-700',
-  BOT: 'bg-amber-100 text-amber-700',
-  MACHINE_TO_MACHINE: 'bg-green-100 text-green-700',
+  BOT: 'bg-warning-soft text-warning-fg',
+  MACHINE_TO_MACHINE: 'bg-success-soft text-success-fg',
 };
 
 const statusColors: Record<NhiLifecycleStatus, string> = {
-  PROVISIONING: 'bg-yellow-100 text-yellow-700',
-  ACTIVE: 'bg-green-100 text-green-700',
-  SUSPENDED: 'bg-orange-100 text-orange-700',
-  DECOMMISSIONED: 'bg-gray-100 text-gray-700',
+  PROVISIONING: 'bg-warning-soft text-warning-fg',
+  ACTIVE: 'bg-success-soft text-success-fg',
+  SUSPENDED: 'bg-warning-soft text-warning-fg',
+  DECOMMISSIONED: 'bg-sunken text-muted',
 };
 
 export default function NhiListPage() {
@@ -30,14 +30,14 @@ export default function NhiListPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="text-gray-500">Loading non-human identities...</div>
+        <div className="text-subtle">Loading non-human identities...</div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
+      <div className="rounded-md bg-danger-soft p-4 text-sm text-danger-fg">
         Failed to load non-human identities.
       </div>
     );
@@ -47,44 +47,44 @@ export default function NhiListPage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Non-Human Identities</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-fg">Non-Human Identities</h1>
+          <p className="mt-1 text-sm text-subtle">
             Manage machine identities in <span className="font-medium">{name}</span>
           </p>
         </div>
         <button
           onClick={() => navigate(`/console/realms/${name}/nhi/new`)}
-          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
         >
           Create Identity
         </button>
       </div>
 
-      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-gray-200" aria-label="Non-Human Identities">
-          <thead className="bg-gray-50">
+      <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-sm">
+        <table className="min-w-full divide-y divide-line" aria-label="Non-Human Identities">
+          <thead className="bg-sunken">
             <tr>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Name
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Type
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Status
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Enabled
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Certificate
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Created
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody className="divide-y divide-line">
             {Array.isArray(identities) && identities.length > 0 ? (
               identities.map((identity) => (
                 <tr
@@ -99,9 +99,9 @@ export default function NhiListPage() {
                   tabIndex={0}
                   role="button"
                   aria-label={`View identity ${identity.name}`}
-                  className="cursor-pointer hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500"
+                  className="cursor-pointer hover:bg-hover focus:outline-none focus:ring-2 focus:ring-inset focus:ring-accent"
                 >
-                  <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-indigo-600">
+                  <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-accent">
                     {identity.name}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-sm">
@@ -126,28 +126,28 @@ export default function NhiListPage() {
                     <span
                       className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
                         identity.enabled
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-gray-100 text-gray-600'
+                          ? 'bg-success-soft text-success-fg'
+                          : 'bg-sunken text-muted'
                       }`}
                     >
                       {identity.enabled ? 'Yes' : 'No'}
                     </span>
                   </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                  <td className="whitespace-nowrap px-6 py-4 text-sm text-subtle">
                     {identity.certificateFingerprint ? (
-                      <span className="text-green-600">Active</span>
+                      <span className="text-success">Active</span>
                     ) : (
-                      <span className="text-gray-400">None</span>
+                      <span className="text-subtle">None</span>
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                  <td className="whitespace-nowrap px-6 py-4 text-sm text-subtle">
                     {new Date(identity.createdAt).toLocaleDateString()}
                   </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-sm text-gray-500">
+                <td colSpan={6} className="px-6 py-8 text-center text-sm text-subtle">
                   No non-human identities found in this realm.
                 </td>
               </tr>

@@ -323,14 +323,14 @@ export default function ThemeBuilderPage() {
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-gray-200 bg-white px-6 py-4">
+      <div className="flex items-center justify-between border-b border-line bg-surface px-6 py-4">
         <div className="flex items-center gap-4">
-          <h1 className="text-2xl font-bold text-gray-900">Theme Builder</h1>
-          <span className="rounded bg-gray-100 px-2 py-1 text-sm text-gray-600">
+          <h1 className="text-2xl font-bold text-fg">Theme Builder</h1>
+          <span className="rounded bg-sunken px-2 py-1 text-sm text-muted">
             Realm: {realmName}
           </span>
           {lastSaved && (
-            <span className="text-xs text-gray-400">
+            <span className="text-xs text-subtle">
               {hasUnsavedChanges ? 'Unsaved changes' : `Saved ${lastSaved.toLocaleTimeString()}`}
             </span>
           )}
@@ -345,12 +345,12 @@ export default function ThemeBuilderPage() {
           />
           <button
             onClick={() => fileInputRef.current?.click()}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-md border border-line-strong px-3 py-1.5 text-sm font-medium text-muted hover:bg-hover"
           >
             Import Theme
           </button>
           {importError && (
-            <span className="rounded bg-red-50 px-2 py-1 text-sm text-red-600">
+            <span className="rounded bg-danger-soft px-2 py-1 text-sm text-danger">
               {importError}
             </span>
           )}
@@ -373,7 +373,7 @@ export default function ThemeBuilderPage() {
               a.click();
               URL.revokeObjectURL(url);
             }}
-            className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-md border border-line-strong px-3 py-1.5 text-sm font-medium text-muted hover:bg-hover"
           >
             Export Theme
           </button>
@@ -381,11 +381,11 @@ export default function ThemeBuilderPage() {
           <button
             onClick={() => handleSave('manual')}
             disabled={isSaving || !hasUnsavedChanges}
-            className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md border border-line-strong bg-surface px-3 py-1.5 text-sm font-medium text-muted hover:bg-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isSaving ? (
               <span className="flex items-center gap-1.5">
-                <div className="h-4 w-4 animate-spin rounded-full border-2 border-gray-300 border-t-indigo-600" />
+                <div className="h-4 w-4 animate-spin rounded-full border-2 border-line-strong border-t-indigo-600" />
                 Saving...
               </span>
             ) : (
@@ -396,7 +396,7 @@ export default function ThemeBuilderPage() {
           <button
             onClick={handlePublish}
             disabled={isPublishing || isSaving}
-            className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+            className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isPublishing ? (
               <span className="flex items-center gap-1.5">
@@ -409,12 +409,12 @@ export default function ThemeBuilderPage() {
           </button>
           {/* Success/Error messages */}
           {saveError && (
-            <span className="rounded bg-red-50 px-2 py-1 text-sm text-red-600">
+            <span className="rounded bg-danger-soft px-2 py-1 text-sm text-danger">
               {saveError}
             </span>
           )}
           {publishSuccess && (
-            <span className="rounded bg-green-50 px-2 py-1 text-sm text-green-600">
+            <span className="rounded bg-success-soft px-2 py-1 text-sm text-success">
               {publishSuccess}
             </span>
           )}
@@ -422,8 +422,8 @@ export default function ThemeBuilderPage() {
             onClick={() => setActiveSection('canvas')}
             className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
               activeSection === 'canvas'
-                ? 'bg-indigo-100 text-indigo-700'
-                : 'text-gray-600 hover:bg-gray-100'
+                ? 'bg-accent-soft text-accent'
+                : 'text-muted hover:bg-hover'
             }`}
           >
             Editor
@@ -432,8 +432,8 @@ export default function ThemeBuilderPage() {
             onClick={() => setActiveSection('preview')}
             className={`rounded px-3 py-1.5 text-sm font-medium transition-colors ${
               activeSection === 'preview'
-                ? 'bg-indigo-100 text-indigo-700'
-                : 'text-gray-600 hover:bg-gray-100'
+                ? 'bg-accent-soft text-accent'
+                : 'text-muted hover:bg-hover'
             }`}
           >
             Preview Only
@@ -444,7 +444,7 @@ export default function ThemeBuilderPage() {
       {/* Main content area */}
       <div className="flex flex-1 overflow-hidden">
         {/* Left: Component palette */}
-        <div className="w-52 shrink-0 overflow-y-auto border-r border-gray-200 bg-gray-50 p-4">
+        <div className="w-52 shrink-0 overflow-y-auto border-r border-line bg-sunken p-4">
           <ComponentPalette onAddComponent={(type) => {
             // When adding from palette, create a new component and add to state
             const id = `${type}-${Date.now()}`;
@@ -463,13 +463,13 @@ export default function ThemeBuilderPage() {
         {/* Middle: Canvas or Live Preview */}
         <div className="flex flex-1 flex-col overflow-hidden">
           {/* Section tabs */}
-          <div className="flex border-b border-gray-200 bg-white px-4">
+          <div className="flex border-b border-line bg-surface px-4">
             <button
               onClick={() => setActiveSection('canvas')}
               className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
                 activeSection === 'canvas'
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  ? 'border-accent text-accent'
+                  : 'border-transparent text-subtle hover:text-fg'
               }`}
             >
               Canvas
@@ -478,8 +478,8 @@ export default function ThemeBuilderPage() {
               onClick={() => setActiveSection('preview')}
               className={`border-b-2 px-4 py-2 text-sm font-medium transition-colors ${
                 activeSection === 'preview'
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:text-gray-700'
+                  ? 'border-accent text-accent'
+                  : 'border-transparent text-subtle hover:text-fg'
               }`}
             >
               Preview
@@ -515,15 +515,15 @@ export default function ThemeBuilderPage() {
 
         {/* Right: Live Preview or Style Editor (always visible when in canvas mode) */}
         {activeSection === 'canvas' && (
-          <div className="w-[450px] shrink-0 flex flex-col border-l border-gray-200">
+          <div className="w-[450px] shrink-0 flex flex-col border-l border-line">
             {/* Panel tabs */}
-            <div className="flex border-b border-gray-200 bg-white">
+            <div className="flex border-b border-line bg-surface">
               <button
                 onClick={() => setEditorPanel('canvas')}
                 className={`flex-1 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
                   editorPanel === 'canvas'
-                    ? 'border-indigo-500 text-indigo-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                    ? 'border-accent text-accent'
+                    : 'border-transparent text-subtle hover:text-fg'
                 }`}
               >
                 Preview
@@ -532,8 +532,8 @@ export default function ThemeBuilderPage() {
                 onClick={() => setEditorPanel('styles')}
                 className={`flex-1 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
                   editorPanel === 'styles'
-                    ? 'border-indigo-500 text-indigo-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                    ? 'border-accent text-accent'
+                    : 'border-transparent text-subtle hover:text-fg'
                 }`}
               >
                 Styles
@@ -542,8 +542,8 @@ export default function ThemeBuilderPage() {
                 onClick={() => setEditorPanel('assets')}
                 className={`flex-1 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
                   editorPanel === 'assets'
-                    ? 'border-indigo-500 text-indigo-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                    ? 'border-accent text-accent'
+                    : 'border-transparent text-subtle hover:text-fg'
                 }`}
               >
                 Assets
@@ -552,8 +552,8 @@ export default function ThemeBuilderPage() {
                 onClick={() => setEditorPanel('templates')}
                 className={`flex-1 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
                   editorPanel === 'templates'
-                    ? 'border-indigo-500 text-indigo-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                    ? 'border-accent text-accent'
+                    : 'border-transparent text-subtle hover:text-fg'
                 }`}
               >
                 Templates
@@ -562,8 +562,8 @@ export default function ThemeBuilderPage() {
                 onClick={() => setEditorPanel('history')}
                 className={`flex-1 border-b-2 px-3 py-2.5 text-sm font-medium transition-colors ${
                   editorPanel === 'history'
-                    ? 'border-indigo-500 text-indigo-600'
-                    : 'border-transparent text-gray-500 hover:text-gray-700'
+                    ? 'border-accent text-accent'
+                    : 'border-transparent text-subtle hover:text-fg'
                 }`}
               >
                 History
@@ -600,13 +600,13 @@ export default function ThemeBuilderPage() {
                 />
                 {/* Rollback notifications */}
                 {rollbackError && (
-                  <div className="m-4 rounded-md bg-red-50 p-3">
-                    <p className="text-sm text-red-700">{rollbackError}</p>
+                  <div className="m-4 rounded-md bg-danger-soft p-3">
+                    <p className="text-sm text-danger-fg">{rollbackError}</p>
                   </div>
                 )}
                 {rollbackSuccess && (
-                  <div className="m-4 rounded-md bg-green-50 p-3">
-                    <p className="text-sm text-green-700">{rollbackSuccess}</p>
+                  <div className="m-4 rounded-md bg-success-soft p-3">
+                    <p className="text-sm text-success-fg">{rollbackSuccess}</p>
                   </div>
                 )}
               </div>

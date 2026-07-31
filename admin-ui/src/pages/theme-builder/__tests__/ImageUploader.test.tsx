@@ -204,7 +204,7 @@ describe('ImageUploader', () => {
       const uploadZone = screen.getByTestId('image-uploader-logo');
 
       fireEvent.dragEnter(uploadZone);
-      expect(uploadZone).toHaveClass('border-indigo-500', 'bg-indigo-50');
+      expect(uploadZone).toHaveClass('border-accent', 'bg-accent-soft');
 
       fireEvent.dragLeave(uploadZone);
     });

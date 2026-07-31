@@ -33,10 +33,10 @@ function StepIndicator({
   const baseClasses = 'flex items-start gap-3 p-3 rounded-lg transition-colors';
 
   const stateClasses = isCurrent
-    ? 'bg-indigo-50 border border-indigo-200'
+    ? 'bg-accent-soft border border-accent-soft'
     : isCompleted
-    ? 'bg-green-50 border border-green-200'
-    : 'bg-gray-50 border border-transparent hover:bg-gray-100';
+    ? 'bg-success-soft border border-success-soft'
+    : 'bg-sunken border border-transparent hover:bg-hover';
 
   const clickableClasses = isClickable && !isCurrent ? ' cursor-pointer' : '';
 
@@ -46,10 +46,10 @@ function StepIndicator({
       <div
         className={`flex h-8 w-8 flex-shrink-0 items-center justify-center rounded-full text-sm font-semibold ${
           isCompleted
-            ? 'bg-green-500 text-white'
+            ? 'bg-success text-white'
             : isCurrent
-            ? 'bg-indigo-600 text-white'
-            : 'bg-gray-300 text-gray-600'
+            ? 'bg-accent text-white'
+            : 'bg-active text-muted'
         }`}
         aria-hidden="true"
       >
@@ -66,14 +66,14 @@ function StepIndicator({
       <div className="min-w-0 flex-1">
         <p
           className={`text-sm font-medium ${
-            isCurrent ? 'text-indigo-900' : isCompleted ? 'text-green-900' : 'text-gray-700'
+            isCurrent ? 'text-accent' : isCompleted ? 'text-green-900' : 'text-muted'
           }`}
         >
           {name}
         </p>
         <p
           className={`mt-0.5 text-xs ${
-            isCurrent ? 'text-indigo-600' : isCompleted ? 'text-green-600' : 'text-gray-500'
+            isCurrent ? 'text-accent' : isCompleted ? 'text-success' : 'text-subtle'
           }`}
         >
           {description}
@@ -122,17 +122,17 @@ export default function SetupWizardProgress() {
   const progressPercentage = (currentStep / (steps.length - 1)) * 100;
 
   return (
-    <div className="rounded-lg bg-white p-4 shadow-sm" role="navigation" aria-label="Wizard progress">
+    <div className="rounded-lg bg-surface p-4 shadow-sm" role="navigation" aria-label="Wizard progress">
       {/* Progress bar */}
       <div className="mb-4">
         <div className="mb-1 flex items-center justify-between">
-          <span className="text-xs font-medium text-gray-600">Progress</span>
-          <span className="text-xs font-medium text-gray-600">
+          <span className="text-xs font-medium text-muted">Progress</span>
+          <span className="text-xs font-medium text-muted">
             Step {currentStep + 1} of {steps.length}
           </span>
         </div>
         <div
-          className="h-2 overflow-hidden rounded-full bg-gray-200"
+          className="h-2 overflow-hidden rounded-full bg-active"
           role="progressbar"
           aria-valuenow={currentStep + 1}
           aria-valuemin={1}
@@ -170,7 +170,7 @@ export default function SetupWizardProgress() {
       </ol>
 
       {/* Optional label */}
-      <p className="mt-4 text-center text-xs text-gray-500">
+      <p className="mt-4 text-center text-xs text-subtle">
         Click on completed steps to navigate back
       </p>
     </div>

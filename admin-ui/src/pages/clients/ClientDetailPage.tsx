@@ -161,14 +161,14 @@ export default function ClientDetailPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="text-gray-500">Loading client...</div>
+        <div className="text-subtle">Loading client...</div>
       </div>
     );
   }
 
   if (!client) {
     return (
-      <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
+      <div className="rounded-md bg-danger-soft p-4 text-sm text-danger-fg">
         Client not found.
       </div>
     );
@@ -185,14 +185,14 @@ export default function ClientDetailPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{client.clientId}</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-fg">{client.clientId}</h1>
+          <p className="mt-1 text-sm text-subtle">
             {client.name || 'No display name'} &middot;{' '}
             <span
               className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
                 client.clientType === 'CONFIDENTIAL'
                   ? 'bg-purple-100 text-purple-700'
-                  : 'bg-blue-100 text-blue-700'
+                  : 'bg-info-soft text-info-fg'
               }`}
             >
               {client.clientType}
@@ -201,63 +201,63 @@ export default function ClientDetailPage() {
         </div>
         <button
           onClick={() => setShowDelete(true)}
-          className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+          className="rounded-md border border-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger-soft"
         >
           Delete Client
         </button>
       </div>
 
       {/* Settings form */}
-      <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-gray-900">Settings</h2>
+      <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-line bg-surface p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-fg">Settings</h2>
 
         <div>
-          <label htmlFor="field-client-clientId" className="mb-1.5 block text-sm font-medium text-gray-700">Client ID</label>
+          <label htmlFor="field-client-clientId" className="mb-1.5 block text-sm font-medium text-muted">Client ID</label>
           <input
             id="field-client-clientId"
             type="text"
             value={client.clientId}
             disabled
-            className="w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500"
+            className="w-full rounded-md border border-line bg-sunken px-3 py-2 text-sm text-subtle"
           />
         </div>
 
         <div>
-          <label htmlFor="field-client-clientType" className="mb-1.5 block text-sm font-medium text-gray-700">Client Type</label>
+          <label htmlFor="field-client-clientType" className="mb-1.5 block text-sm font-medium text-muted">Client Type</label>
           <input
             id="field-client-clientType"
             type="text"
             value={client.clientType}
             disabled
-            className="w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500"
+            className="w-full rounded-md border border-line bg-sunken px-3 py-2 text-sm text-subtle"
           />
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label htmlFor="field-client-name" className="mb-1.5 block text-sm font-medium text-gray-700">Name</label>
+            <label htmlFor="field-client-name" className="mb-1.5 block text-sm font-medium text-muted">Name</label>
             <input
               id="field-client-name"
               type="text"
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
           <div>
-            <label htmlFor="field-client-description" className="mb-1.5 block text-sm font-medium text-gray-700">Description</label>
+            <label htmlFor="field-client-description" className="mb-1.5 block text-sm font-medium text-muted">Description</label>
             <input
               id="field-client-description"
               type="text"
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
         </div>
 
         <div>
-          <label htmlFor="field-client-redirectUris" className="mb-1.5 block text-sm font-medium text-gray-700">
+          <label htmlFor="field-client-redirectUris" className="mb-1.5 block text-sm font-medium text-muted">
             Redirect URIs (one per line)
           </label>
           <textarea
@@ -265,12 +265,12 @@ export default function ClientDetailPage() {
             value={form.redirectUris}
             onChange={(e) => setForm({ ...form, redirectUris: e.target.value })}
             rows={3}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+            className="w-full rounded-md border border-line-strong px-3 py-2 text-sm font-mono shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
           />
         </div>
 
         <div>
-          <label htmlFor="field-client-webOrigins" className="mb-1.5 block text-sm font-medium text-gray-700">
+          <label htmlFor="field-client-webOrigins" className="mb-1.5 block text-sm font-medium text-muted">
             Web Origins (one per line)
           </label>
           <textarea
@@ -278,12 +278,12 @@ export default function ClientDetailPage() {
             value={form.webOrigins}
             onChange={(e) => setForm({ ...form, webOrigins: e.target.value })}
             rows={2}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+            className="w-full rounded-md border border-line-strong px-3 py-2 text-sm font-mono shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
           />
         </div>
 
         <div>
-          <label htmlFor="field-client-grantTypes" className="mb-1.5 block text-sm font-medium text-gray-700">
+          <label htmlFor="field-client-grantTypes" className="mb-1.5 block text-sm font-medium text-muted">
             Grant Types (comma-separated)
           </label>
           <input
@@ -291,7 +291,7 @@ export default function ClientDetailPage() {
             type="text"
             value={form.grantTypes}
             onChange={(e) => setForm({ ...form, grantTypes: e.target.value })}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+            className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
           />
         </div>
 
@@ -302,9 +302,9 @@ export default function ClientDetailPage() {
               id="requireConsent"
               checked={form.requireConsent}
               onChange={(e) => setForm({ ...form, requireConsent: e.target.checked })}
-              className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
             />
-            <label htmlFor="requireConsent" className="text-sm font-medium text-gray-700">
+            <label htmlFor="requireConsent" className="text-sm font-medium text-muted">
               Require Consent
             </label>
           </div>
@@ -314,18 +314,18 @@ export default function ClientDetailPage() {
               id="enabled"
               checked={form.enabled}
               onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
-              className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
             />
-            <label htmlFor="enabled" className="text-sm font-medium text-gray-700">
+            <label htmlFor="enabled" className="text-sm font-medium text-muted">
               Enabled
             </label>
           </div>
         </div>
 
-        <div className="border-t border-gray-200 pt-4">
-          <h3 className="mb-3 text-sm font-semibold text-gray-900">Backchannel Logout</h3>
+        <div className="border-t border-line pt-4">
+          <h3 className="mb-3 text-sm font-semibold text-fg">Backchannel Logout</h3>
           <div>
-            <label htmlFor="field-client-backchannelLogoutUri" className="mb-1.5 block text-sm font-medium text-gray-700">
+            <label htmlFor="field-client-backchannelLogoutUri" className="mb-1.5 block text-sm font-medium text-muted">
               Backchannel Logout URI
             </label>
             <input
@@ -334,9 +334,9 @@ export default function ClientDetailPage() {
               value={form.backchannelLogoutUri}
               onChange={(e) => setForm({ ...form, backchannelLogoutUri: e.target.value })}
               placeholder="https://example.com/backchannel-logout"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
-            <p className="mt-1 text-xs text-gray-400">
+            <p className="mt-1 text-xs text-subtle">
               URL that will receive a logout token when the user logs out.
             </p>
           </div>
@@ -346,31 +346,31 @@ export default function ClientDetailPage() {
               id="backchannelLogoutSessionRequired"
               checked={form.backchannelLogoutSessionRequired}
               onChange={(e) => setForm({ ...form, backchannelLogoutSessionRequired: e.target.checked })}
-              className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
             />
-            <label htmlFor="backchannelLogoutSessionRequired" className="text-sm font-medium text-gray-700">
+            <label htmlFor="backchannelLogoutSessionRequired" className="text-sm font-medium text-muted">
               Include session ID in logout token
             </label>
           </div>
         </div>
 
         {updateMutation.isSuccess && (
-          <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">
+          <div className="rounded-md bg-success-soft p-3 text-sm text-success-fg">
             Client updated successfully.
           </div>
         )}
 
         {updateMutation.isError && (
-          <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+          <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
             Failed to update client.
           </div>
         )}
 
-        <div className="flex justify-end border-t border-gray-200 pt-4">
+        <div className="flex justify-end border-t border-line pt-4">
           <button
             type="submit"
             disabled={updateMutation.isPending}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
           </button>
@@ -379,24 +379,24 @@ export default function ClientDetailPage() {
 
       {/* Credentials section (only for CONFIDENTIAL) */}
       {client.clientType === 'CONFIDENTIAL' && (
-        <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-900">Credentials</h2>
-          <p className="text-sm text-gray-600">
+        <div className="space-y-4 rounded-lg border border-line bg-surface p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-fg">Credentials</h2>
+          <p className="text-sm text-muted">
             This is a confidential client. You can regenerate the client secret below.
           </p>
 
           {newSecret && (
-            <div className="rounded-md border border-green-200 bg-green-50 p-4">
-              <p className="mb-2 text-sm font-medium text-green-800">
+            <div className="rounded-md border border-success-soft bg-success-soft p-4">
+              <p className="mb-2 text-sm font-medium text-success-fg">
                 New secret generated. Save it now -- it will not be shown again.
               </p>
               <div className="flex items-center gap-2">
-                <code className="flex-1 rounded-md border border-green-300 bg-white px-3 py-2 text-sm font-mono text-gray-900">
+                <code className="flex-1 rounded-md border border-success-soft bg-surface px-3 py-2 text-sm font-mono text-fg">
                   {newSecret}
                 </code>
                 <button
                   onClick={() => navigator.clipboard.writeText(newSecret)}
-                  className="rounded-md border border-green-300 bg-white px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-50"
+                  className="rounded-md border border-success-soft bg-surface px-3 py-2 text-sm font-medium text-success-fg hover:bg-success-soft"
                 >
                   Copy
                 </button>
@@ -415,25 +415,25 @@ export default function ClientDetailPage() {
       )}
 
       {/* Client Scopes */}
-      <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-gray-900">Client Scopes</h2>
+      <div className="space-y-4 rounded-lg border border-line bg-surface p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-fg">Client Scopes</h2>
 
         {/* Default Scopes */}
         <div>
-          <h3 className="mb-2 text-sm font-medium text-gray-700">Default Scopes</h3>
-          <p className="mb-2 text-xs text-gray-400">Always included in token requests for this client.</p>
+          <h3 className="mb-2 text-sm font-medium text-muted">Default Scopes</h3>
+          <p className="mb-2 text-xs text-subtle">Always included in token requests for this client.</p>
           {defaultScopes && defaultScopes.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {defaultScopes.map((scope) => (
                 <span
                   key={scope.id}
-                  className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-3 py-1 text-sm font-medium text-indigo-700"
+                  className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-3 py-1 text-sm font-medium text-accent"
                 >
                   {scope.name}
                   <button
                     type="button"
                     onClick={() => removeDefaultScopeMutation.mutate(scope.id)}
-                    className="ml-1 text-indigo-400 hover:text-indigo-600"
+                    className="ml-1 text-accent hover:text-accent"
                   >
                     <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -443,19 +443,19 @@ export default function ClientDetailPage() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-gray-500">No default scopes assigned.</p>
+            <p className="text-sm text-subtle">No default scopes assigned.</p>
           )}
         </div>
 
         {availableForDefault.length > 0 && (
-          <div className="flex items-end gap-3 border-t border-gray-200 pt-4">
+          <div className="flex items-end gap-3 border-t border-line pt-4">
             <div className="flex-1">
-              <label htmlFor="field-client-addDefaultScope" className="mb-1.5 block text-sm font-medium text-gray-700">Add Default Scope</label>
+              <label htmlFor="field-client-addDefaultScope" className="mb-1.5 block text-sm font-medium text-muted">Add Default Scope</label>
               <select
                 id="field-client-addDefaultScope"
                 value={selectedDefaultScope}
                 onChange={(e) => setSelectedDefaultScope(e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               >
                 <option value="">Select a scope...</option>
                 {availableForDefault.map((s) => (
@@ -467,7 +467,7 @@ export default function ClientDetailPage() {
               type="button"
               onClick={() => selectedDefaultScope && addDefaultScopeMutation.mutate(selectedDefaultScope)}
               disabled={!selectedDefaultScope || addDefaultScopeMutation.isPending}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               Assign
             </button>
@@ -475,21 +475,21 @@ export default function ClientDetailPage() {
         )}
 
         {/* Optional Scopes */}
-        <div className="border-t border-gray-200 pt-4">
-          <h3 className="mb-2 text-sm font-medium text-gray-700">Optional Scopes</h3>
-          <p className="mb-2 text-xs text-gray-400">Included only when explicitly requested in the scope parameter.</p>
+        <div className="border-t border-line pt-4">
+          <h3 className="mb-2 text-sm font-medium text-muted">Optional Scopes</h3>
+          <p className="mb-2 text-xs text-subtle">Included only when explicitly requested in the scope parameter.</p>
           {optionalScopes && optionalScopes.length > 0 ? (
             <div className="flex flex-wrap gap-2">
               {optionalScopes.map((scope) => (
                 <span
                   key={scope.id}
-                  className="inline-flex items-center gap-1 rounded-full bg-amber-100 px-3 py-1 text-sm font-medium text-amber-700"
+                  className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-3 py-1 text-sm font-medium text-warning-fg"
                 >
                   {scope.name}
                   <button
                     type="button"
                     onClick={() => removeOptionalScopeMutation.mutate(scope.id)}
-                    className="ml-1 text-amber-400 hover:text-amber-600"
+                    className="ml-1 text-amber-400 hover:text-warning"
                   >
                     <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                       <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -499,19 +499,19 @@ export default function ClientDetailPage() {
               ))}
             </div>
           ) : (
-            <p className="text-sm text-gray-500">No optional scopes assigned.</p>
+            <p className="text-sm text-subtle">No optional scopes assigned.</p>
           )}
         </div>
 
         {availableForOptional.length > 0 && (
-          <div className="flex items-end gap-3 border-t border-gray-200 pt-4">
+          <div className="flex items-end gap-3 border-t border-line pt-4">
             <div className="flex-1">
-              <label htmlFor="field-client-addOptionalScope" className="mb-1.5 block text-sm font-medium text-gray-700">Add Optional Scope</label>
+              <label htmlFor="field-client-addOptionalScope" className="mb-1.5 block text-sm font-medium text-muted">Add Optional Scope</label>
               <select
                 id="field-client-addOptionalScope"
                 value={selectedOptionalScope}
                 onChange={(e) => setSelectedOptionalScope(e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               >
                 <option value="">Select a scope...</option>
                 {availableForOptional.map((s) => (
@@ -523,7 +523,7 @@ export default function ClientDetailPage() {
               type="button"
               onClick={() => selectedOptionalScope && addOptionalScopeMutation.mutate(selectedOptionalScope)}
               disabled={!selectedOptionalScope || addOptionalScopeMutation.isPending}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               Assign
             </button>
@@ -533,26 +533,26 @@ export default function ClientDetailPage() {
 
       {/* Service Account (only when client_credentials grant) */}
       {hasClientCredentials && (
-        <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-900">Service Account</h2>
-          <p className="text-sm text-gray-600">
+        <div className="space-y-4 rounded-lg border border-line bg-surface p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-fg">Service Account</h2>
+          <p className="text-sm text-muted">
             This client supports client_credentials grant. A service account user is linked to this client.
           </p>
           {serviceAccount ? (
             <div className="flex items-center gap-4">
               <div>
-                <p className="text-sm font-medium text-gray-900">{serviceAccount.username}</p>
-                <p className="text-xs text-gray-500">ID: {serviceAccount.id}</p>
+                <p className="text-sm font-medium text-fg">{serviceAccount.username}</p>
+                <p className="text-xs text-subtle">ID: {serviceAccount.id}</p>
               </div>
               <Link
                 to={`/console/realms/${name}/users/${serviceAccount.id}`}
-                className="rounded-md bg-indigo-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-indigo-700"
+                className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover"
               >
                 Manage Roles
               </Link>
             </div>
           ) : (
-            <p className="text-sm text-gray-500">No service account user found.</p>
+            <p className="text-sm text-subtle">No service account user found.</p>
           )}
         </div>
       )}

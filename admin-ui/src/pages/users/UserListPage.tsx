@@ -3,6 +3,7 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router';
 import { getUsers } from '../../api/users';
 import { getErrorMessage } from '../../utils/getErrorMessage';
+import { SectionHeader, Button, Card, Badge, Alert, EmptyState, Icons, cn } from '../../components/ui';
 
 const PAGE_SIZE = 20;
 
@@ -26,62 +27,58 @@ export default function UserListPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="text-gray-500">Loading users...</div>
+        <div className="text-subtle">Loading users...</div>
       </div>
     );
   }
 
   if (error) {
-    return (
-      <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
-        {getErrorMessage(error, 'Failed to load users.')}
-      </div>
-    );
+    return <Alert variant="danger">{getErrorMessage(error, 'Failed to load users.')}</Alert>;
   }
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Users</h1>
-          <p className="mt-1 text-sm text-gray-500">
+      <SectionHeader
+        title="Users"
+        hint={
+          <>
             Manage users in <span className="font-medium">{name}</span>
-            {total > 0 && (
-              <span className="ml-1 text-gray-400">({total} total)</span>
-            )}
-          </p>
-        </div>
-        <button
-          onClick={() => navigate(`/console/realms/${name}/users/create`)}
-          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-        >
-          Create User
-        </button>
-      </div>
+            {total > 0 && ` (${total} total)`}
+          </>
+        }
+        action={
+          <Button
+            icon={Icons.Plus}
+            onClick={() => navigate(`/console/realms/${name}/users/create`)}
+          >
+            Create User
+          </Button>
+        }
+      />
 
-      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-gray-200" aria-label="Users">
-          <thead className="bg-gray-50">
+      <Card padding="none">
+        <table className="min-w-full divide-y divide-line" aria-label="Users">
+          <thead className="bg-sunken">
             <tr>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Username
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Email
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Name
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Enabled
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Created
               </th>
             </tr>
           </thead>
           <tbody
-            className={`divide-y divide-gray-200${isPlaceholderData ? ' opacity-60' : ''}`}
+            className={cn('divide-y divide-line', isPlaceholderData && 'opacity-60')}
             aria-busy={isPlaceholderData}
           >
             {users.length > 0 ? (
@@ -98,37 +95,31 @@ export default function UserListPage() {
                   tabIndex={0}
                   role="button"
                   aria-label={`View user ${user.username}`}
-                  className="cursor-pointer hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500"
+                  className="cursor-pointer hover:bg-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
                 >
-                  <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-indigo-600">
+                  <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-accent">
                     {user.username}
                   </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-700">
+                  <td className="whitespace-nowrap px-6 py-4 text-sm text-muted">
                     {user.email}
                   </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-700">
+                  <td className="whitespace-nowrap px-6 py-4 text-sm text-muted">
                     {[user.firstName, user.lastName].filter(Boolean).join(' ') || '-'}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-sm">
-                    <span
-                      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                        user.enabled
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-gray-100 text-gray-600'
-                      }`}
-                    >
+                    <Badge variant={user.enabled ? 'success' : 'neutral'} size="sm">
                       {user.enabled ? 'Yes' : 'No'}
-                    </span>
+                    </Badge>
                   </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                  <td className="whitespace-nowrap px-6 py-4 text-sm text-subtle">
                     {new Date(user.createdAt).toLocaleDateString()}
                   </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={5} className="px-6 py-8 text-center text-sm text-gray-500">
-                  No users found in this realm.
+                <td colSpan={5} className="p-0">
+                  <EmptyState icon={Icons.Users} title="No users found in this realm." />
                 </td>
               </tr>
             )}
@@ -139,9 +130,9 @@ export default function UserListPage() {
         {totalPages > 1 && (
           <nav
             aria-label="Users pagination"
-            className="flex items-center justify-between border-t border-gray-200 bg-white px-6 py-3"
+            className="flex items-center justify-between border-t border-line px-6 py-3"
           >
-            <p className="text-sm text-gray-700" aria-live="polite" aria-atomic="true">
+            <p className="text-sm text-muted" aria-live="polite" aria-atomic="true">
               Showing{' '}
               <span className="font-medium">{(page - 1) * PAGE_SIZE + 1}</span>
               {' '}&ndash;{' '}
@@ -150,26 +141,28 @@ export default function UserListPage() {
               <span className="font-medium">{total}</span> users
             </p>
             <div className="flex gap-2">
-              <button
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => setPage((p) => Math.max(1, p - 1))}
                 disabled={page === 1}
                 aria-label="Previous page"
-                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Previous
-              </button>
-              <button
+              </Button>
+              <Button
+                variant="secondary"
+                size="sm"
                 onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
                 disabled={page >= totalPages}
                 aria-label="Next page"
-                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:cursor-not-allowed disabled:opacity-50"
               >
                 Next
-              </button>
+              </Button>
             </div>
           </nav>
         )}
-      </div>
+      </Card>
     </div>
   );
 }

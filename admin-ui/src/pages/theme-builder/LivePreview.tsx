@@ -594,17 +594,17 @@ export default function LivePreview({
   const viewportDimensions = VIEWPORT_DIMENSIONS[viewportSize] || VIEWPORT_DIMENSIONS.desktop;
 
   return (
-    <div className="flex h-full flex-col bg-gray-100">
+    <div className="flex h-full flex-col bg-sunken">
       {/* Viewport controls */}
-      <div className="flex items-center justify-between border-b border-gray-200 bg-white px-4 py-2">
-        <span className="text-sm font-medium text-gray-700">Preview</span>
+      <div className="flex items-center justify-between border-b border-line bg-surface px-4 py-2">
+        <span className="text-sm font-medium text-muted">Preview</span>
         <div className="flex items-center gap-1">
           <button
             onClick={() => onViewportChange?.('desktop')}
             className={`rounded p-1.5 transition-colors ${
               viewportSize === 'desktop'
-                ? 'bg-indigo-100 text-indigo-600'
-                : 'text-gray-500 hover:bg-gray-100'
+                ? 'bg-accent-soft text-accent'
+                : 'text-subtle hover:bg-hover'
             }`}
             title="Desktop view"
           >
@@ -616,8 +616,8 @@ export default function LivePreview({
             onClick={() => onViewportChange?.('tablet')}
             className={`rounded p-1.5 transition-colors ${
               viewportSize === 'tablet'
-                ? 'bg-indigo-100 text-indigo-600'
-                : 'text-gray-500 hover:bg-gray-100'
+                ? 'bg-accent-soft text-accent'
+                : 'text-subtle hover:bg-hover'
             }`}
             title="Tablet view"
           >
@@ -629,8 +629,8 @@ export default function LivePreview({
             onClick={() => onViewportChange?.('mobile')}
             className={`rounded p-1.5 transition-colors ${
               viewportSize === 'mobile'
-                ? 'bg-indigo-100 text-indigo-600'
-                : 'text-gray-500 hover:bg-gray-100'
+                ? 'bg-accent-soft text-accent'
+                : 'text-subtle hover:bg-hover'
             }`}
             title="Mobile view"
           >
@@ -645,7 +645,7 @@ export default function LivePreview({
       <div className="relative flex-1 overflow-auto p-4">
         <div className="mx-auto flex h-full items-start justify-center">
           <div
-            className="overflow-auto rounded-lg border border-gray-300 bg-white shadow-lg transition-all duration-200"
+            className="overflow-auto rounded-lg border border-line-strong bg-surface shadow-lg transition-all duration-200"
             style={{
               width: viewportDimensions.width,
               maxWidth: '100%',

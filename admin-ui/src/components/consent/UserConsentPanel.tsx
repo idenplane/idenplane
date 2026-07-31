@@ -29,7 +29,7 @@ export default function UserConsentPanel({ realmName, userId, username }: UserCo
   if (loadingConsents && loadingHistory) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="text-gray-500">Loading user consents...</div>
+        <div className="text-subtle">Loading user consents...</div>
       </div>
     );
   }
@@ -44,22 +44,22 @@ export default function UserConsentPanel({ realmName, userId, username }: UserCo
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">User Consents</h2>
-          <p className="mt-1 text-sm text-gray-500">
+          <h2 className="text-lg font-semibold text-fg">User Consents</h2>
+          <p className="mt-1 text-sm text-subtle">
             View and manage consent preferences for {username}
           </p>
         </div>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
+      <div className="border-b border-line">
         <nav className="-mb-px flex space-x-8">
           <button
             onClick={() => setActiveTab('current')}
             className={`border-b-2 px-1 pb-4 text-sm font-medium ${
               activeTab === 'current'
-                ? 'border-indigo-500 text-indigo-600'
-                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                ? 'border-accent text-accent'
+                : 'border-transparent text-subtle hover:border-line-strong hover:text-fg'
             }`}
           >
             Current Consents ({consents?.length ?? 0})
@@ -68,8 +68,8 @@ export default function UserConsentPanel({ realmName, userId, username }: UserCo
             onClick={() => setActiveTab('history')}
             className={`border-b-2 px-1 pb-4 text-sm font-medium ${
               activeTab === 'history'
-                ? 'border-indigo-500 text-indigo-600'
-                : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                ? 'border-accent text-accent'
+                : 'border-transparent text-subtle hover:border-line-strong hover:text-fg'
             }`}
           >
             Consent History
@@ -85,13 +85,13 @@ export default function UserConsentPanel({ realmName, userId, username }: UserCo
               {consents.map((consent: UserConsent) => (
                 <div
                   key={consent.id}
-                  className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm"
+                  className="rounded-lg border border-line bg-surface p-4 shadow-sm"
                 >
                   <div className="mb-3 flex items-center justify-between">
-                    <h3 className="text-base font-medium text-gray-900">
+                    <h3 className="text-base font-medium text-fg">
                       {consent.clientName}
                     </h3>
-                    <span className="inline-flex rounded-full bg-green-100 px-2.5 py-0.5 text-xs font-medium text-green-700">
+                    <span className="inline-flex rounded-full bg-success-soft px-2.5 py-0.5 text-xs font-medium text-success-fg">
                       Active
                     </span>
                   </div>
@@ -100,16 +100,16 @@ export default function UserConsentPanel({ realmName, userId, username }: UserCo
                       consent.scopes.map((scope) => (
                         <span
                           key={scope}
-                          className="inline-flex rounded-md bg-indigo-50 px-2 py-0.5 text-xs font-medium text-indigo-700"
+                          className="inline-flex rounded-md bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent"
                         >
                           {scope}
                         </span>
                       ))
                     ) : (
-                      <span className="text-xs text-gray-400">No scopes</span>
+                      <span className="text-xs text-subtle">No scopes</span>
                     )}
                   </div>
-                  <p className="mt-3 text-xs text-gray-500">
+                  <p className="mt-3 text-xs text-subtle">
                     Granted {formatDate(consent.createdAt)}
                   </p>
                 </div>
@@ -129,27 +129,27 @@ export default function UserConsentPanel({ realmName, userId, username }: UserCo
         <div className="space-y-4">
           {hasHistory ? (
             <>
-              <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-                <table className="min-w-full divide-y divide-gray-200">
-                  <thead className="bg-gray-50">
+              <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-sm">
+                <table className="min-w-full divide-y divide-line">
+                  <thead className="bg-sunken">
                     <tr>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                         Action
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                         Client
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                         Scopes
                       </th>
-                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                      <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                         Date
                       </th>
                     </tr>
                   </thead>
-                  <tbody className="divide-y divide-gray-200">
+                  <tbody className="divide-y divide-line">
                     {historyData.history.map((entry) => (
-                      <tr key={entry.id} className="hover:bg-gray-50">
+                      <tr key={entry.id} className="hover:bg-hover">
                         <td className="whitespace-nowrap px-4 py-3 text-sm">
                           <span
                             className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${actionClass(
@@ -159,13 +159,13 @@ export default function UserConsentPanel({ realmName, userId, username }: UserCo
                             {formatAction(entry.action)}
                           </span>
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-700">
+                        <td className="whitespace-nowrap px-4 py-3 text-sm text-muted">
                           {entry.clientName}
                         </td>
-                        <td className="px-4 py-3 text-sm text-gray-500">
+                        <td className="px-4 py-3 text-sm text-subtle">
                           {entry.scopes.length > 0 ? entry.scopes.join(', ') : '-'}
                         </td>
-                        <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
+                        <td className="whitespace-nowrap px-4 py-3 text-sm text-subtle">
                           {formatDate(entry.createdAt)}
                         </td>
                       </tr>
@@ -176,7 +176,7 @@ export default function UserConsentPanel({ realmName, userId, username }: UserCo
 
               {/* Pagination */}
               <div className="flex items-center justify-between">
-                <p className="text-sm text-gray-500">
+                <p className="text-sm text-subtle">
                   Showing {(historyPage - 1) * pageSize + 1} to{' '}
                   {Math.min(historyPage * pageSize, total)} of {total} entries
                 </p>
@@ -184,14 +184,14 @@ export default function UserConsentPanel({ realmName, userId, username }: UserCo
                   <button
                     onClick={() => setHistoryPage((p) => Math.max(1, p - 1))}
                     disabled={historyPage === 1}
-                    className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    className="rounded-md border border-line-strong bg-surface px-3 py-1.5 text-sm font-medium text-muted hover:bg-hover disabled:opacity-50"
                   >
                     Previous
                   </button>
                   <button
                     onClick={() => setHistoryPage((p) => p + 1)}
                     disabled={historyPage * pageSize >= total}
-                    className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                    className="rounded-md border border-line-strong bg-surface px-3 py-1.5 text-sm font-medium text-muted hover:bg-hover disabled:opacity-50"
                   >
                     Next
                   </button>
@@ -212,9 +212,9 @@ export default function UserConsentPanel({ realmName, userId, username }: UserCo
 
 function EmptyState({ title, message }: { title: string; message: string }) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-8 text-center shadow-sm">
-      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-gray-100">
-        <svg className="h-6 w-6 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+    <div className="rounded-lg border border-line bg-surface p-8 text-center shadow-sm">
+      <div className="mx-auto flex h-12 w-12 items-center justify-center rounded-full bg-sunken">
+        <svg className="h-6 w-6 text-subtle" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path
             strokeLinecap="round"
             strokeLinejoin="round"
@@ -223,17 +223,17 @@ function EmptyState({ title, message }: { title: string; message: string }) {
           />
         </svg>
       </div>
-      <h3 className="mt-4 text-sm font-medium text-gray-900">{title}</h3>
-      <p className="mt-1 text-sm text-gray-500">{message}</p>
+      <h3 className="mt-4 text-sm font-medium text-fg">{title}</h3>
+      <p className="mt-1 text-sm text-subtle">{message}</p>
     </div>
   );
 }
 
 function actionClass(action: string): string {
   const a = action.toLowerCase();
-  if (a === 'granted') return 'bg-green-100 text-green-700';
-  if (a === 'revoked') return 'bg-red-100 text-red-700';
-  return 'bg-blue-100 text-blue-700';
+  if (a === 'granted') return 'bg-success-soft text-success-fg';
+  if (a === 'revoked') return 'bg-danger-soft text-danger-fg';
+  return 'bg-info-soft text-info-fg';
 }
 
 function formatDate(dateString: string): string {

@@ -16,15 +16,15 @@ interface StatCardProps {
 
 function StatCard({ label, value, sublabel, colorClass, icon }: StatCardProps) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+    <div className="rounded-lg border border-line bg-surface p-5 shadow-sm">
       <div className="flex items-start gap-4">
         <div className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg ${colorClass}`}>
           {icon}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-gray-500">{label}</p>
-          <p className="text-2xl font-bold text-gray-900">{value}</p>
-          {sublabel && <p className="mt-0.5 text-xs text-gray-400">{sublabel}</p>}
+          <p className="truncate text-sm font-medium text-subtle">{label}</p>
+          <p className="text-2xl font-bold text-fg">{value}</p>
+          {sublabel && <p className="mt-0.5 text-xs text-subtle">{sublabel}</p>}
         </div>
       </div>
     </div>
@@ -51,10 +51,10 @@ function TypeDistribution({ identities }: TypeDistributionProps) {
 
   const total = identities.length || 1;
   const typeColors: Record<NhiIdentityType, string> = {
-    IOT_DEVICE: 'bg-blue-500',
+    IOT_DEVICE: 'bg-info',
     AI_AGENT: 'bg-purple-500',
-    BOT: 'bg-amber-500',
-    MACHINE_TO_MACHINE: 'bg-green-500',
+    BOT: 'bg-warning',
+    MACHINE_TO_MACHINE: 'bg-success',
   };
 
   const typeLabels: Record<NhiIdentityType, string> = {
@@ -71,10 +71,10 @@ function TypeDistribution({ identities }: TypeDistributionProps) {
         return (
           <div key={type}>
             <div className="mb-1 flex items-center justify-between text-sm">
-              <span className="font-medium text-gray-700">{typeLabels[type]}</span>
-              <span className="text-gray-500">{counts[type]} ({percentage}%)</span>
+              <span className="font-medium text-muted">{typeLabels[type]}</span>
+              <span className="text-subtle">{counts[type]} ({percentage}%)</span>
             </div>
-            <div className="h-2.5 w-full overflow-hidden rounded-full bg-gray-100">
+            <div className="h-2.5 w-full overflow-hidden rounded-full bg-sunken">
               <div
                 className={`h-full ${typeColors[type]}`}
                 style={{ width: `${percentage}%` }}
@@ -106,10 +106,10 @@ function StatusDistribution({ identities }: StatusDistributionProps) {
   });
 
   const statusColors: Record<NhiLifecycleStatus, string> = {
-    PROVISIONING: 'bg-yellow-100 text-yellow-700',
-    ACTIVE: 'bg-green-100 text-green-700',
-    SUSPENDED: 'bg-orange-100 text-orange-700',
-    DECOMMISSIONED: 'bg-gray-100 text-gray-700',
+    PROVISIONING: 'bg-warning-soft text-warning-fg',
+    ACTIVE: 'bg-success-soft text-success-fg',
+    SUSPENDED: 'bg-warning-soft text-warning-fg',
+    DECOMMISSIONED: 'bg-sunken text-muted',
   };
 
   return (
@@ -141,16 +141,16 @@ function BarChart({ data, maxValue }: BarChartProps) {
     <div className="space-y-2">
       {data.map((item) => (
         <div key={item.label} className="flex items-center gap-3">
-          <span className="w-32 truncate text-sm text-gray-600">{item.label}</span>
+          <span className="w-32 truncate text-sm text-muted">{item.label}</span>
           <div className="flex-1">
-            <div className="h-6 overflow-hidden rounded-full bg-gray-100">
+            <div className="h-6 overflow-hidden rounded-full bg-sunken">
               <div
                 className={`h-full ${item.color}`}
                 style={{ width: `${Math.round((item.value / max) * 100)}%` }}
               />
             </div>
           </div>
-          <span className="w-16 text-right text-sm font-medium text-gray-900">{item.value}</span>
+          <span className="w-16 text-right text-sm font-medium text-fg">{item.value}</span>
         </div>
       ))}
     </div>
@@ -169,24 +169,24 @@ interface RotationStatusCardProps {
 function RotationStatusCard({ total, requiring, recentlyRotated, atRisk }: RotationStatusCardProps) {
   const items = [
     { label: 'Total Credentials', value: total, color: 'bg-gray-500' },
-    { label: 'Requiring Rotation', value: requiring, color: 'bg-amber-500' },
-    { label: 'Recently Rotated', value: recentlyRotated, color: 'bg-blue-500' },
-    { label: 'At Risk', value: atRisk, color: 'bg-red-500' },
+    { label: 'Requiring Rotation', value: requiring, color: 'bg-warning' },
+    { label: 'Recently Rotated', value: recentlyRotated, color: 'bg-info' },
+    { label: 'At Risk', value: atRisk, color: 'bg-danger' },
   ];
 
   return (
     <div className="space-y-3">
       {items.map((item) => (
         <div key={item.label} className="flex items-center justify-between">
-          <span className="text-sm text-gray-600">{item.label}</span>
+          <span className="text-sm text-muted">{item.label}</span>
           <div className="flex items-center gap-2">
-            <div className="h-2 w-20 overflow-hidden rounded-full bg-gray-100">
+            <div className="h-2 w-20 overflow-hidden rounded-full bg-sunken">
               <div
                 className={`h-full ${item.color}`}
                 style={{ width: `${total > 0 ? Math.round((item.value / total) * 100) : 0}%` }}
               />
             </div>
-            <span className="w-12 text-right text-sm font-semibold text-gray-900">{item.value}</span>
+            <span className="w-12 text-right text-sm font-semibold text-fg">{item.value}</span>
           </div>
         </div>
       ))}
@@ -212,30 +212,30 @@ interface ActivityFeedProps {
 function ActivityFeed({ activities }: ActivityFeedProps) {
   if (activities.length === 0) {
     return (
-      <p className="py-6 text-center text-sm text-gray-500">No recent activity</p>
+      <p className="py-6 text-center text-sm text-subtle">No recent activity</p>
     );
   }
 
   return (
-    <div className="divide-y divide-gray-100">
+    <div className="divide-y divide-line">
       {activities.slice(0, 20).map((activity) => (
         <div key={activity.id} className="flex items-start gap-3 py-3">
           <span
             className={`mt-1 h-2 w-2 flex-shrink-0 rounded-full ${
-              activity.success ? 'bg-green-500' : 'bg-red-500'
+              activity.success ? 'bg-success' : 'bg-danger'
             }`}
           />
           <div className="min-w-0 flex-1">
-            <p className="text-sm font-medium text-gray-900">{activity.action}</p>
-            <p className="text-xs text-gray-500">
+            <p className="text-sm font-medium text-fg">{activity.action}</p>
+            <p className="text-xs text-subtle">
               {activity.ipAddress ?? '—'} · {new Date(activity.createdAt).toLocaleString()}
             </p>
           </div>
           <span
             className={`flex-shrink-0 rounded-full px-2 py-0.5 text-xs font-medium ${
               activity.success
-                ? 'bg-green-100 text-green-700'
-                : 'bg-red-100 text-red-700'
+                ? 'bg-success-soft text-success-fg'
+                : 'bg-danger-soft text-danger-fg'
             }`}
           >
             {activity.success ? 'Success' : 'Failed'}
@@ -281,7 +281,7 @@ export default function NhiAnalyticsPage() {
   if (identitiesLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="text-gray-500">Loading analytics...</div>
+        <div className="text-subtle">Loading analytics...</div>
       </div>
     );
   }
@@ -311,12 +311,12 @@ export default function NhiAnalyticsPage() {
     value: typeCounts[type],
     color:
       type === 'IOT_DEVICE'
-        ? 'bg-blue-500'
+        ? 'bg-info'
         : type === 'AI_AGENT'
         ? 'bg-purple-500'
         : type === 'BOT'
-        ? 'bg-amber-500'
-        : 'bg-green-500',
+        ? 'bg-warning'
+        : 'bg-success',
   }));
 
   // Filter audit logs
@@ -329,14 +329,14 @@ export default function NhiAnalyticsPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">NHI Analytics</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-fg">NHI Analytics</h1>
+          <p className="mt-1 text-sm text-subtle">
             Usage metrics for non-human identities in <span className="font-medium">{name}</span>
           </p>
         </div>
         <button
           onClick={() => navigate(`/console/realms/${name}/nhi`)}
-          className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          className="rounded-md border border-line-strong bg-surface px-4 py-2 text-sm font-medium text-muted hover:bg-hover"
         >
           View All Identities
         </button>
@@ -344,14 +344,14 @@ export default function NhiAnalyticsPage() {
 
       {/* Overview Stats */}
       <div>
-        <h2 className="mb-3 text-base font-semibold text-gray-900">Overview</h2>
+        <h2 className="mb-3 text-base font-semibold text-fg">Overview</h2>
         <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
           <StatCard
             label="Total Identities"
             value={totalIdentities}
-            colorClass="bg-indigo-100"
+            colorClass="bg-accent-soft"
             icon={
-              <svg className="h-5 w-5 text-indigo-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="h-5 w-5 text-accent" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 3H5a2 2 0 00-2 2v4m6-6h10a2 2 0 012 2v4M9 3v18m0 0h10a2 2 0 002-2V9M9 21H5a2 2 0 01-2-2V9m0 0h18" />
               </svg>
             }
@@ -360,9 +360,9 @@ export default function NhiAnalyticsPage() {
             label="Active Identities"
             value={activeCount}
             sublabel={`${suspendedCount} suspended, ${decommissionedCount} decommissioned`}
-            colorClass="bg-green-100"
+            colorClass="bg-success-soft"
             icon={
-              <svg className="h-5 w-5 text-green-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="h-5 w-5 text-success" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
               </svg>
             }
@@ -382,9 +382,9 @@ export default function NhiAnalyticsPage() {
             label="Enabled"
             value={enabledCount}
             sublabel={`${totalIdentities > 0 ? Math.round((enabledCount / totalIdentities) * 100) : 0}% enabled rate`}
-            colorClass="bg-blue-100"
+            colorClass="bg-info-soft"
             icon={
-              <svg className="h-5 w-5 text-blue-600" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+              <svg className="h-5 w-5 text-info" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                 <path strokeLinecap="round" strokeLinejoin="round" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M9 19l3 3m0 0l3-3m-3 3V10" />
               </svg>
             }
@@ -395,20 +395,20 @@ export default function NhiAnalyticsPage() {
       {/* Two column layout for charts */}
       <div className="grid gap-6 lg:grid-cols-2">
         {/* Identity Type Distribution */}
-        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-base font-semibold text-gray-900">Identity Type Distribution</h2>
+        <div className="rounded-lg border border-line bg-surface p-6 shadow-sm">
+          <h2 className="mb-4 text-base font-semibold text-fg">Identity Type Distribution</h2>
           {totalIdentities > 0 ? (
             <TypeDistribution identities={identities ?? []} />
           ) : (
-            <p className="py-6 text-center text-sm text-gray-500">No identities to display</p>
+            <p className="py-6 text-center text-sm text-subtle">No identities to display</p>
           )}
         </div>
 
         {/* Rotation Status */}
-        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="mb-4 text-base font-semibold text-gray-900">Credential Rotation Status</h2>
+        <div className="rounded-lg border border-line bg-surface p-6 shadow-sm">
+          <h2 className="mb-4 text-base font-semibold text-fg">Credential Rotation Status</h2>
           {rotationLoading ? (
-            <div className="h-24 animate-pulse rounded-lg bg-gray-100" />
+            <div className="h-24 animate-pulse rounded-lg bg-sunken" />
           ) : rotationStatus ? (
             <RotationStatusCard
               total={rotationStatus.totalCredentials}
@@ -417,32 +417,32 @@ export default function NhiAnalyticsPage() {
               atRisk={rotationStatus.credentialsAtRisk}
             />
           ) : (
-            <p className="py-6 text-center text-sm text-gray-500">Rotation data unavailable</p>
+            <p className="py-6 text-center text-sm text-subtle">Rotation data unavailable</p>
           )}
         </div>
       </div>
 
       {/* Identity Type Breakdown Chart */}
-      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="mb-4 text-base font-semibold text-gray-900">Identities by Type</h2>
+      <div className="rounded-lg border border-line bg-surface p-6 shadow-sm">
+        <h2 className="mb-4 text-base font-semibold text-fg">Identities by Type</h2>
         {totalIdentities > 0 ? (
           <BarChart data={typeChartData} />
         ) : (
-          <p className="py-6 text-center text-sm text-gray-500">No identities to display</p>
+          <p className="py-6 text-center text-sm text-subtle">No identities to display</p>
         )}
       </div>
 
       {/* Activity Summary */}
-      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <div className="rounded-lg border border-line bg-surface p-6 shadow-sm">
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-gray-900">Recent Activity</h2>
+          <h2 className="text-base font-semibold text-fg">Recent Activity</h2>
           <div className="flex items-center gap-2">
             <button
               onClick={() => setActivityFilter('all')}
               className={`rounded-md px-3 py-1.5 text-sm font-medium ${
                 activityFilter === 'all'
-                  ? 'bg-indigo-100 text-indigo-700'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? 'bg-accent-soft text-accent'
+                  : 'bg-sunken text-muted hover:bg-active'
               }`}
             >
               All
@@ -451,8 +451,8 @@ export default function NhiAnalyticsPage() {
               onClick={() => setActivityFilter('success')}
               className={`rounded-md px-3 py-1.5 text-sm font-medium ${
                 activityFilter === 'success'
-                  ? 'bg-green-100 text-green-700'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? 'bg-success-soft text-success-fg'
+                  : 'bg-sunken text-muted hover:bg-active'
               }`}
             >
               Success
@@ -461,8 +461,8 @@ export default function NhiAnalyticsPage() {
               onClick={() => setActivityFilter('failure')}
               className={`rounded-md px-3 py-1.5 text-sm font-medium ${
                 activityFilter === 'failure'
-                  ? 'bg-red-100 text-red-700'
-                  : 'bg-gray-100 text-gray-600 hover:bg-gray-200'
+                  ? 'bg-danger-soft text-danger-fg'
+                  : 'bg-sunken text-muted hover:bg-active'
               }`}
             >
               Failed
@@ -473,34 +473,34 @@ export default function NhiAnalyticsPage() {
         {/* Activity Stats */}
         <div className="mb-4 flex items-center gap-4">
           <div className="flex items-center gap-2">
-            <span className="h-3 w-3 rounded-full bg-green-500" />
-            <span className="text-sm text-gray-600">Success: {successCount}</span>
+            <span className="h-3 w-3 rounded-full bg-success" />
+            <span className="text-sm text-muted">Success: {successCount}</span>
           </div>
           <div className="flex items-center gap-2">
-            <span className="h-3 w-3 rounded-full bg-red-500" />
-            <span className="text-sm text-gray-600">Failed: {failureCount}</span>
+            <span className="h-3 w-3 rounded-full bg-danger" />
+            <span className="text-sm text-muted">Failed: {failureCount}</span>
           </div>
           {filteredLogs.length > 0 && (
-            <span className="text-sm text-gray-400">
+            <span className="text-sm text-subtle">
               ({Math.round((successCount / filteredLogs.length) * 100)}% success rate)
             </span>
           )}
         </div>
 
         {auditLoading ? (
-          <div className="h-40 animate-pulse rounded-lg bg-gray-100" />
+          <div className="h-40 animate-pulse rounded-lg bg-sunken" />
         ) : (
           <ActivityFeed activities={filteredLogs} />
         )}
       </div>
 
       {/* Status Distribution */}
-      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="mb-4 text-base font-semibold text-gray-900">Lifecycle Status Distribution</h2>
+      <div className="rounded-lg border border-line bg-surface p-6 shadow-sm">
+        <h2 className="mb-4 text-base font-semibold text-fg">Lifecycle Status Distribution</h2>
         {totalIdentities > 0 ? (
           <StatusDistribution identities={identities ?? []} />
         ) : (
-          <p className="py-6 text-center text-sm text-gray-500">No identities to display</p>
+          <p className="py-6 text-center text-sm text-subtle">No identities to display</p>
         )}
       </div>
     </div>

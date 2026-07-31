@@ -110,22 +110,22 @@ export default function PolicyDetailPage() {
   }
 
   if (isLoading) {
-    return <div className="text-gray-500">Loading policy...</div>;
+    return <div className="text-subtle">Loading policy...</div>;
   }
 
   if (!policy) {
     return (
-      <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">Policy not found.</div>
+      <div className="rounded-md bg-danger-soft p-4 text-sm text-danger-fg">Policy not found.</div>
     );
   }
 
   return (
     <div className="space-y-8">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">{policy.name}</h1>
+        <h1 className="text-2xl font-bold text-fg">{policy.name}</h1>
         <button
           onClick={() => setShowDelete(true)}
-          className="rounded-md border border-red-300 bg-white px-4 py-2 text-sm font-medium text-red-600 hover:bg-red-50"
+          className="rounded-md border border-danger-soft bg-surface px-4 py-2 text-sm font-medium text-danger hover:bg-danger-soft"
         >
           Delete Policy
         </button>
@@ -134,64 +134,64 @@ export default function PolicyDetailPage() {
       {/* Edit form */}
       <form
         onSubmit={handleSubmit}
-        className="space-y-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm"
+        className="space-y-6 rounded-lg border border-line bg-surface p-6 shadow-sm"
       >
-        <h2 className="text-lg font-semibold text-gray-900">Policy Settings</h2>
+        <h2 className="text-lg font-semibold text-fg">Policy Settings</h2>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label htmlFor="policy-name" className="mb-1.5 block text-sm font-medium text-gray-700">Name</label>
+            <label htmlFor="policy-name" className="mb-1.5 block text-sm font-medium text-muted">Name</label>
             <input
               id="policy-name"
               type="text"
               required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
           <div>
-            <label htmlFor="policy-description" className="mb-1.5 block text-sm font-medium text-gray-700">Description</label>
+            <label htmlFor="policy-description" className="mb-1.5 block text-sm font-medium text-muted">Description</label>
             <input
               id="policy-description"
               type="text"
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
         </div>
 
         <div>
-          <p className="mb-2 text-sm font-medium text-gray-700">Effect</p>
+          <p className="mb-2 text-sm font-medium text-muted">Effect</p>
           <div className="flex gap-6">
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
               <input
                 type="radio"
                 name="effect"
                 value="allow"
                 checked={form.effect === 'allow'}
                 onChange={() => setForm({ ...form, effect: 'allow' })}
-                className="text-indigo-600 focus:ring-indigo-500"
+                className="text-accent focus:ring-accent"
               />
-              <span className="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">Allow</span>
+              <span className="inline-flex rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success-fg">Allow</span>
             </label>
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
               <input
                 type="radio"
                 name="effect"
                 value="deny"
                 checked={form.effect === 'deny'}
                 onChange={() => setForm({ ...form, effect: 'deny' })}
-                className="text-indigo-600 focus:ring-indigo-500"
+                className="text-accent focus:ring-accent"
               />
-              <span className="inline-flex rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">Deny</span>
+              <span className="inline-flex rounded-full bg-danger-soft px-2 py-0.5 text-xs font-medium text-danger-fg">Deny</span>
             </label>
           </div>
         </div>
 
         <div>
-          <label htmlFor="policy-conditions" className="mb-1.5 block text-sm font-medium text-gray-700">
+          <label htmlFor="policy-conditions" className="mb-1.5 block text-sm font-medium text-muted">
             Conditions (JSON)
           </label>
           <textarea
@@ -203,33 +203,33 @@ export default function PolicyDetailPage() {
               if (conditionsError) validateConditions(e.target.value);
             }}
             onBlur={(e) => validateConditions(e.target.value)}
-            className={`w-full rounded-md border px-3 py-2 font-mono text-sm shadow-sm focus:ring-1 focus:outline-none ${conditionsError ? 'border-red-400 focus:border-red-400 focus:ring-red-400' : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500'}`}
+            className={`w-full rounded-md border px-3 py-2 font-mono text-sm shadow-sm focus:ring-1 focus:outline-none ${conditionsError ? 'border-danger focus:border-danger focus:ring-danger' : 'border-line-strong focus:border-accent focus:ring-accent'}`}
           />
           {conditionsError && (
-            <p className="mt-1 text-xs text-red-600">{conditionsError}</p>
+            <p className="mt-1 text-xs text-danger">{conditionsError}</p>
           )}
         </div>
 
         <div>
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
             <input
               type="checkbox"
               checked={form.enabled}
               onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
-              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              className="rounded border-line-strong text-accent focus:ring-accent"
             />
             Enabled
           </label>
         </div>
 
         {updateMutation.isError && (
-          <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+          <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
             {getErrorMessage(updateMutation.error, 'Failed to update policy.')}
           </div>
         )}
 
         {updateMutation.isSuccess && (
-          <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">
+          <div className="rounded-md bg-success-soft p-3 text-sm text-success-fg">
             Policy updated successfully.
           </div>
         )}
@@ -238,7 +238,7 @@ export default function PolicyDetailPage() {
           <button
             type="submit"
             disabled={updateMutation.isPending || !!conditionsError}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
           </button>
@@ -246,15 +246,15 @@ export default function PolicyDetailPage() {
       </form>
 
       {/* Test Policy section */}
-      <section className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm space-y-4">
-        <h2 className="text-lg font-semibold text-gray-900">Test Policy</h2>
-        <p className="text-sm text-gray-500">
+      <section className="rounded-lg border border-line bg-surface p-6 shadow-sm space-y-4">
+        <h2 className="text-lg font-semibold text-fg">Test Policy</h2>
+        <p className="text-sm text-subtle">
           Provide an evaluation context as JSON to test how this policy responds.
         </p>
 
         <form onSubmit={handleRunTest} className="space-y-4">
           <div>
-            <label htmlFor="test-context" className="mb-1.5 block text-sm font-medium text-gray-700">
+            <label htmlFor="test-context" className="mb-1.5 block text-sm font-medium text-muted">
               Context (JSON)
             </label>
             <textarea
@@ -266,15 +266,15 @@ export default function PolicyDetailPage() {
                 if (testInputError) validateTestInput(e.target.value);
               }}
               onBlur={(e) => validateTestInput(e.target.value)}
-              className={`w-full rounded-md border px-3 py-2 font-mono text-sm shadow-sm focus:ring-1 focus:outline-none ${testInputError ? 'border-red-400 focus:border-red-400 focus:ring-red-400' : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500'}`}
+              className={`w-full rounded-md border px-3 py-2 font-mono text-sm shadow-sm focus:ring-1 focus:outline-none ${testInputError ? 'border-danger focus:border-danger focus:ring-danger' : 'border-line-strong focus:border-accent focus:ring-accent'}`}
             />
             {testInputError && (
-              <p className="mt-1 text-xs text-red-600">{testInputError}</p>
+              <p className="mt-1 text-xs text-danger">{testInputError}</p>
             )}
           </div>
 
           {testMutation.isError && (
-            <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+            <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
               {getErrorMessage(testMutation.error, 'Test evaluation failed.')}
             </div>
           )}
@@ -282,16 +282,16 @@ export default function PolicyDetailPage() {
           <button
             type="submit"
             disabled={testMutation.isPending || !!testInputError}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {testMutation.isPending ? 'Running...' : 'Run Test'}
           </button>
         </form>
 
         {testResult !== null && (
-          <div className="rounded-md bg-gray-50 border border-gray-200 p-4">
-            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-gray-500">Result</p>
-            <pre className="overflow-auto font-mono text-sm text-gray-800">
+          <div className="rounded-md bg-sunken border border-line p-4">
+            <p className="mb-2 text-xs font-medium uppercase tracking-wider text-subtle">Result</p>
+            <pre className="overflow-auto font-mono text-sm text-fg">
               {JSON.stringify(testResult, null, 2)}
             </pre>
           </div>

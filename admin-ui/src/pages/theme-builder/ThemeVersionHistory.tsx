@@ -105,18 +105,18 @@ export default function ThemeVersionHistory({
 
   if (isLoading && versions.length === 0) {
     return (
-      <div className="flex h-full flex-col bg-white" data-testid="theme-version-history">
+      <div className="flex h-full flex-col bg-surface" data-testid="theme-version-history">
         {/* Header */}
-        <div className="border-b border-gray-200 px-4 py-3">
-          <h2 className="text-base font-semibold text-gray-900">Version History</h2>
-          <p className="mt-1 text-sm text-gray-500">
+        <div className="border-b border-line px-4 py-3">
+          <h2 className="text-base font-semibold text-fg">Version History</h2>
+          <p className="mt-1 text-sm text-subtle">
             View and restore previous versions
           </p>
         </div>
 
         {/* Loading state */}
         <div className="flex flex-1 items-center justify-center">
-          <div className="h-8 w-8 animate-spin rounded-full border-2 border-gray-200 border-t-indigo-600" />
+          <div className="h-8 w-8 animate-spin rounded-full border-2 border-line border-t-indigo-600" />
         </div>
       </div>
     );
@@ -124,18 +124,18 @@ export default function ThemeVersionHistory({
 
   if (error) {
     return (
-      <div className="flex h-full flex-col bg-white" data-testid="theme-version-history">
+      <div className="flex h-full flex-col bg-surface" data-testid="theme-version-history">
         {/* Header */}
-        <div className="border-b border-gray-200 px-4 py-3">
-          <h2 className="text-base font-semibold text-gray-900">Version History</h2>
-          <p className="mt-1 text-sm text-gray-500">
+        <div className="border-b border-line px-4 py-3">
+          <h2 className="text-base font-semibold text-fg">Version History</h2>
+          <p className="mt-1 text-sm text-subtle">
             View and restore previous versions
           </p>
         </div>
 
         {/* Error state */}
         <div className="flex flex-1 flex-col items-center justify-center p-4">
-          <div className="rounded-lg bg-red-50 p-4 text-center">
+          <div className="rounded-lg bg-danger-soft p-4 text-center">
             <svg
               className="mx-auto h-10 w-10 text-red-400"
               fill="none"
@@ -149,10 +149,10 @@ export default function ThemeVersionHistory({
                 d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"
               />
             </svg>
-            <p className="mt-2 text-sm text-red-600">{error}</p>
+            <p className="mt-2 text-sm text-danger">{error}</p>
             <button
               onClick={fetchVersions}
-              className="mt-3 rounded-md bg-red-100 px-3 py-1.5 text-sm font-medium text-red-700 hover:bg-red-200"
+              className="mt-3 rounded-md bg-danger-soft px-3 py-1.5 text-sm font-medium text-danger-fg hover:bg-red-200"
             >
               Try Again
             </button>
@@ -163,11 +163,11 @@ export default function ThemeVersionHistory({
   }
 
   return (
-    <div className="flex h-full flex-col bg-white" data-testid="theme-version-history">
+    <div className="flex h-full flex-col bg-surface" data-testid="theme-version-history">
       {/* Header */}
-      <div className="border-b border-gray-200 px-4 py-3">
-        <h2 className="text-base font-semibold text-gray-900">Version History</h2>
-        <p className="mt-1 text-sm text-gray-500">
+      <div className="border-b border-line px-4 py-3">
+        <h2 className="text-base font-semibold text-fg">Version History</h2>
+        <p className="mt-1 text-sm text-subtle">
           View and restore previous versions
         </p>
       </div>
@@ -189,13 +189,13 @@ export default function ThemeVersionHistory({
                 d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z"
               />
             </svg>
-            <p className="mt-2 text-sm text-gray-500">No version history yet</p>
-            <p className="mt-1 text-xs text-gray-400">
+            <p className="mt-2 text-sm text-subtle">No version history yet</p>
+            <p className="mt-1 text-xs text-subtle">
               Versions are created when you publish changes
             </p>
           </div>
         ) : (
-          <div className="divide-y divide-gray-100">
+          <div className="divide-y divide-line">
             {versions.map((version, index) => {
               const isCurrent = currentVersion !== undefined && version.version === currentVersion;
               const isRollingBack = rollingBackId === version.id;
@@ -204,7 +204,7 @@ export default function ThemeVersionHistory({
                 <div
                   key={version.id}
                   className={`p-4 transition-colors ${
-                    isCurrent ? 'bg-indigo-50' : 'hover:bg-gray-50'
+                    isCurrent ? 'bg-accent-soft' : 'hover:bg-hover'
                   }`}
                   data-testid={`version-item-${version.id}`}
                 >
@@ -215,8 +215,8 @@ export default function ThemeVersionHistory({
                         <div
                           className={`flex h-8 w-8 items-center justify-center rounded-full ${
                             isCurrent
-                              ? 'bg-indigo-600 text-white'
-                              : 'bg-gray-100 text-gray-600'
+                              ? 'bg-accent text-white'
+                              : 'bg-sunken text-muted'
                           }`}
                         >
                           <span className="text-sm font-semibold">
@@ -224,30 +224,30 @@ export default function ThemeVersionHistory({
                           </span>
                         </div>
                         {index < versions.length - 1 && (
-                          <div className="h-4 w-0.5 bg-gray-200" />
+                          <div className="h-4 w-0.5 bg-active" />
                         )}
                       </div>
 
                       {/* Version details */}
                       <div>
                         <div className="flex items-center gap-2">
-                          <h3 className="text-sm font-medium text-gray-900">
+                          <h3 className="text-sm font-medium text-fg">
                             Version {version.version}
                           </h3>
                           {isCurrent && (
-                            <span className="inline-flex items-center rounded-full bg-indigo-100 px-2 py-0.5 text-xs font-medium text-indigo-700">
+                            <span className="inline-flex items-center rounded-full bg-accent-soft px-2 py-0.5 text-xs font-medium text-accent">
                               Current
                             </span>
                           )}
                         </div>
 
                         {version.changes && (
-                          <p className="mt-1 text-sm text-gray-600">
+                          <p className="mt-1 text-sm text-muted">
                             {version.changes}
                           </p>
                         )}
 
-                        <div className="mt-2 flex items-center gap-3 text-xs text-gray-500">
+                        <div className="mt-2 flex items-center gap-3 text-xs text-subtle">
                           <span
                             className="flex items-center gap-1"
                             title={formatFullDate(version.createdAt)}
@@ -291,7 +291,7 @@ export default function ThemeVersionHistory({
                         {/* Changes summary */}
                         <div className="mt-2 flex flex-wrap gap-2">
                           <span
-                            className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600"
+                            className="inline-flex items-center rounded-full bg-sunken px-2 py-0.5 text-xs text-muted"
                             title="Styles changed"
                           >
                             <svg
@@ -310,7 +310,7 @@ export default function ThemeVersionHistory({
                             Styles
                           </span>
                           <span
-                            className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600"
+                            className="inline-flex items-center rounded-full bg-sunken px-2 py-0.5 text-xs text-muted"
                             title="Components changed"
                           >
                             <svg
@@ -329,7 +329,7 @@ export default function ThemeVersionHistory({
                             {version.components?.length || 0} components
                           </span>
                           <span
-                            className="inline-flex items-center rounded-full bg-gray-100 px-2 py-0.5 text-xs text-gray-600"
+                            className="inline-flex items-center rounded-full bg-sunken px-2 py-0.5 text-xs text-muted"
                             title="Settings changed"
                           >
                             <svg
@@ -364,8 +364,8 @@ export default function ThemeVersionHistory({
                         disabled={isRollingBack || rollingBackId !== null}
                         className={`mt-2 rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
                           isRollingBack
-                            ? 'bg-gray-100 text-gray-400'
-                            : 'bg-indigo-600 text-white hover:bg-indigo-700'
+                            ? 'bg-sunken text-subtle'
+                            : 'bg-accent text-white hover:bg-accent-hover'
                         } disabled:cursor-not-allowed`}
                         data-testid={`rollback-button-${version.id}`}
                       >
@@ -388,15 +388,15 @@ export default function ThemeVersionHistory({
       </div>
 
       {/* Footer with refresh */}
-      <div className="border-t border-gray-200 px-4 py-3">
+      <div className="border-t border-line px-4 py-3">
         <div className="flex items-center justify-between">
-          <p className="text-xs text-gray-500">
+          <p className="text-xs text-subtle">
             {versions.length} version{versions.length === 1 ? '' : 's'} saved
           </p>
           <button
             onClick={fetchVersions}
             disabled={loading}
-            className="flex items-center gap-1 rounded-md px-2 py-1 text-sm font-medium text-gray-600 hover:bg-gray-100 disabled:cursor-not-allowed disabled:opacity-50"
+            className="flex items-center gap-1 rounded-md px-2 py-1 text-sm font-medium text-muted hover:bg-hover disabled:cursor-not-allowed disabled:opacity-50"
             data-testid="refresh-versions"
           >
             <svg

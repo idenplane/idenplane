@@ -17,24 +17,24 @@ function PluginCard({
   isToggling: boolean;
 }) {
   return (
-    <div className="flex flex-col rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+    <div className="flex flex-col rounded-lg border border-line bg-surface p-6 shadow-sm">
       <div className="flex items-start justify-between gap-4">
         <div className="min-w-0 flex-1">
           <div className="flex items-center gap-2">
-            <h3 className="font-semibold text-gray-900">{plugin.name}</h3>
-            <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+            <h3 className="font-semibold text-fg">{plugin.name}</h3>
+            <span className="inline-flex rounded-full bg-sunken px-2 py-0.5 text-xs font-medium text-muted">
               v{plugin.version}
             </span>
           </div>
-          <p className="mt-1 text-sm text-gray-500">{plugin.description}</p>
-          <div className="mt-2 flex flex-wrap gap-3 text-xs text-gray-400">
+          <p className="mt-1 text-sm text-subtle">{plugin.description}</p>
+          <div className="mt-2 flex flex-wrap gap-3 text-xs text-subtle">
             {plugin.author && <span>by {plugin.author}</span>}
             {plugin.homepage && (
               <a
                 href={plugin.homepage}
                 target="_blank"
                 rel="noreferrer"
-                className="text-indigo-500 hover:text-indigo-700"
+                className="text-accent hover:text-accent"
               >
                 Homepage
               </a>
@@ -49,23 +49,23 @@ function PluginCard({
           aria-checked={plugin.enabled}
           disabled={isToggling}
           onClick={() => onToggle(plugin)}
-          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 focus:outline-none disabled:opacity-50 ${plugin.enabled ? 'bg-indigo-600' : 'bg-gray-200'}`}
+          className={`relative inline-flex h-6 w-11 shrink-0 cursor-pointer items-center rounded-full border-2 border-transparent transition-colors focus:ring-2 focus:ring-accent focus:ring-offset-2 focus:outline-none disabled:opacity-50 ${plugin.enabled ? 'bg-accent' : 'bg-active'}`}
         >
           <span
-            className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${plugin.enabled ? 'translate-x-5' : 'translate-x-0'}`}
+            className={`inline-block h-4 w-4 transform rounded-full bg-surface shadow transition-transform ${plugin.enabled ? 'translate-x-5' : 'translate-x-0'}`}
           />
         </button>
       </div>
 
       <div className="mt-4 flex items-center justify-between">
         <span
-          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${plugin.enabled ? 'bg-green-100 text-green-700' : 'bg-gray-100 text-gray-500'}`}
+          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${plugin.enabled ? 'bg-success-soft text-success-fg' : 'bg-sunken text-subtle'}`}
         >
           {plugin.enabled ? 'Enabled' : 'Disabled'}
         </span>
         <button
           onClick={() => onDelete(plugin)}
-          className="text-sm font-medium text-red-600 hover:text-red-800"
+          className="text-sm font-medium text-danger hover:text-danger-fg"
         >
           Delete
         </button>
@@ -110,12 +110,12 @@ export default function PluginsPage() {
   }
 
   if (isLoading) {
-    return <div className="text-gray-500">Loading plugins...</div>;
+    return <div className="text-subtle">Loading plugins...</div>;
   }
 
   if (error) {
     return (
-      <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
+      <div className="rounded-md bg-danger-soft p-4 text-sm text-danger-fg">
         {getErrorMessage(error, 'Failed to load plugins.')}
       </div>
     );
@@ -125,13 +125,13 @@ export default function PluginsPage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Plugins</h1>
-          <p className="mt-1 text-sm text-gray-500">Manage installed plugins across all realms.</p>
+          <h1 className="text-2xl font-bold text-fg">Plugins</h1>
+          <p className="mt-1 text-sm text-subtle">Manage installed plugins across all realms.</p>
         </div>
       </div>
 
       {(enableMutation.isError || disableMutation.isError || deleteMutation.isError) && (
-        <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
+        <div className="mb-4 rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
           {getErrorMessage(
             enableMutation.error ?? disableMutation.error ?? deleteMutation.error,
             'Operation failed.',
@@ -140,7 +140,7 @@ export default function PluginsPage() {
       )}
 
       {!plugins || plugins.length === 0 ? (
-        <div className="rounded-md border border-gray-200 bg-white p-8 text-center text-gray-500">
+        <div className="rounded-md border border-line bg-surface p-8 text-center text-subtle">
           No plugins installed.
         </div>
       ) : (

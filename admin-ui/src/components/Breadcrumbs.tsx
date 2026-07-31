@@ -148,7 +148,7 @@ export default function Breadcrumbs() {
   }
 
   return (
-    <nav aria-label="Breadcrumb" className="mb-4 flex items-center gap-1 text-sm text-gray-500">
+    <nav aria-label="Breadcrumb" className="mb-4 flex items-center gap-1 text-sm text-subtle">
       <ol className="flex items-center gap-1 list-none p-0 m-0">
         {crumbs.map((crumb, index) => {
           const isLast = index === crumbs.length - 1;
@@ -156,7 +156,7 @@ export default function Breadcrumbs() {
             <li key={index} className="flex items-center gap-1">
               {index > 0 && (
                 <svg
-                  className="h-4 w-4 flex-shrink-0 text-gray-400"
+                  className="h-4 w-4 flex-shrink-0 text-subtle"
                   fill="none"
                   viewBox="0 0 24 24"
                   stroke="currentColor"
@@ -167,7 +167,7 @@ export default function Breadcrumbs() {
               )}
               {isLast || !crumb.to ? (
                 <span
-                  className={isLast ? 'font-medium text-gray-900' : 'text-gray-500'}
+                  className={isLast ? 'font-medium text-fg' : 'text-subtle'}
                   aria-current={isLast ? 'page' : undefined}
                 >
                   {crumb.label}
@@ -175,7 +175,7 @@ export default function Breadcrumbs() {
               ) : (
                 <Link
                   to={crumb.to}
-                  className="hover:text-indigo-600 hover:underline"
+                  className="hover:text-accent hover:underline"
                 >
                   {crumb.label}
                 </Link>

@@ -37,26 +37,26 @@ export default function SamlSpCreatePage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Add SAML Service Provider</h1>
+      <h1 className="text-2xl font-bold text-fg">Add SAML Service Provider</h1>
 
-      <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-line bg-surface p-6 shadow-sm">
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-gray-900">General</h2>
+          <h2 className="text-lg font-semibold text-fg">General</h2>
 
           <div>
-            <label htmlFor="field-saml-name" className="mb-1.5 block text-sm font-medium text-gray-700">Name *</label>
+            <label htmlFor="field-saml-name" className="mb-1.5 block text-sm font-medium text-muted">Name *</label>
             <input
               id="field-saml-name"
               type="text"
               required
               value={form.name}
               onChange={(e) => set('name', e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
 
           <div>
-            <label htmlFor="field-saml-entityId" className="mb-1.5 block text-sm font-medium text-gray-700">Entity ID *</label>
+            <label htmlFor="field-saml-entityId" className="mb-1.5 block text-sm font-medium text-muted">Entity ID *</label>
             <input
               id="field-saml-entityId"
               type="text"
@@ -64,12 +64,12 @@ export default function SamlSpCreatePage() {
               value={form.entityId}
               onChange={(e) => set('entityId', e.target.value)}
               placeholder="https://sp.example.com/metadata"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
 
           <div>
-            <label htmlFor="field-saml-acsUrl" className="mb-1.5 block text-sm font-medium text-gray-700">ACS URL *</label>
+            <label htmlFor="field-saml-acsUrl" className="mb-1.5 block text-sm font-medium text-muted">ACS URL *</label>
             <input
               id="field-saml-acsUrl"
               type="url"
@@ -77,29 +77,29 @@ export default function SamlSpCreatePage() {
               value={form.acsUrl}
               onChange={(e) => set('acsUrl', e.target.value)}
               placeholder="https://sp.example.com/saml/acs"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
         </div>
 
         {mutation.isError && (
-          <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+          <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
             {(mutation.error as Error)?.message || 'Failed to create SAML service provider.'}
           </div>
         )}
 
-        <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
+        <div className="flex justify-end gap-3 border-t border-line pt-4">
           <button
             type="button"
             onClick={() => navigate(`/console/realms/${name}/saml-providers`)}
-            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-muted hover:bg-hover"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={mutation.isPending}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {mutation.isPending ? 'Creating...' : 'Create'}
           </button>

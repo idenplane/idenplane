@@ -142,64 +142,64 @@ export default function ServiceAccountDetailPage() {
     setKeyForm((f) => ({ ...f, [field]: value }));
 
   if (isLoading) {
-    return <div className="text-gray-500">Loading service account...</div>;
+    return <div className="text-subtle">Loading service account...</div>;
   }
 
   if (!account) {
-    return <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">Service account not found.</div>;
+    return <div className="rounded-md bg-danger-soft p-4 text-sm text-danger-fg">Service account not found.</div>;
   }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{account.name}</h1>
+          <h1 className="text-2xl font-bold text-fg">{account.name}</h1>
           {account.description && (
-            <p className="mt-1 text-sm text-gray-500">{account.description}</p>
+            <p className="mt-1 text-sm text-subtle">{account.description}</p>
           )}
         </div>
         <button
           onClick={() => setShowDelete(true)}
-          className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+          className="rounded-md border border-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger-soft"
         >
           Delete
         </button>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-line bg-surface p-6 shadow-sm">
         <div className="space-y-4">
           <div>
-            <label htmlFor="field-sa-name" className="mb-1.5 block text-sm font-medium text-gray-700">Name *</label>
+            <label htmlFor="field-sa-name" className="mb-1.5 block text-sm font-medium text-muted">Name *</label>
             <input
               id="field-sa-name"
               type="text"
               required
               value={form.name}
               onChange={(e) => set('name', e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
 
           <div>
-            <label htmlFor="field-sa-description" className="mb-1.5 block text-sm font-medium text-gray-700">Description</label>
+            <label htmlFor="field-sa-description" className="mb-1.5 block text-sm font-medium text-muted">Description</label>
             <input
               id="field-sa-description"
               type="text"
               value={form.description}
               onChange={(e) => set('description', e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
 
           <div>
-            <label htmlFor="field-sa-allowedIps" className="mb-1.5 block text-sm font-medium text-gray-700">Allowed IPs</label>
+            <label htmlFor="field-sa-allowedIps" className="mb-1.5 block text-sm font-medium text-muted">Allowed IPs</label>
             <textarea
               id="field-sa-allowedIps"
               rows={4}
               value={form.allowedIps}
               onChange={(e) => set('allowedIps', e.target.value)}
               placeholder="One IP or CIDR per line"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
 
@@ -209,28 +209,28 @@ export default function ServiceAccountDetailPage() {
               id="field-sa-enabled"
               checked={form.enabled}
               onChange={(e) => set('enabled', e.target.checked)}
-              className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
             />
-            <label htmlFor="field-sa-enabled" className="text-sm font-medium text-gray-700">Enabled</label>
+            <label htmlFor="field-sa-enabled" className="text-sm font-medium text-muted">Enabled</label>
           </div>
         </div>
 
         {updateMutation.isSuccess && (
-          <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">
+          <div className="rounded-md bg-success-soft p-3 text-sm text-success-fg">
             Service account updated successfully.
           </div>
         )}
         {updateMutation.isError && (
-          <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+          <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
             Failed to update service account.
           </div>
         )}
 
-        <div className="flex justify-end border-t border-gray-200 pt-4">
+        <div className="flex justify-end border-t border-line pt-4">
           <button
             type="submit"
             disabled={updateMutation.isPending}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
           </button>
@@ -238,20 +238,20 @@ export default function ServiceAccountDetailPage() {
       </form>
 
       {newKey && (
-        <div className="rounded-lg border border-yellow-200 bg-yellow-50 p-4 space-y-2">
-          <p className="text-sm font-semibold text-yellow-800">
+        <div className="rounded-lg border border-warning-soft bg-warning-soft p-4 space-y-2">
+          <p className="text-sm font-semibold text-warning-fg">
             Copy your API key now — it will not be shown again.
           </p>
           <div className="flex items-center gap-2">
             <input
               readOnly
               value={newKey.plainKey}
-              className="flex-1 rounded-md border border-yellow-300 bg-white px-3 py-2 font-mono text-sm text-gray-800 focus:outline-none"
+              className="flex-1 rounded-md border border-warning-soft bg-surface px-3 py-2 font-mono text-sm text-fg focus:outline-none"
             />
             <button
               type="button"
               onClick={handleCopy}
-              className="rounded-md border border-yellow-300 bg-white px-3 py-2 text-sm font-medium text-yellow-800 hover:bg-yellow-100"
+              className="rounded-md border border-warning-soft bg-surface px-3 py-2 text-sm font-medium text-warning-fg hover:bg-warning-soft"
             >
               {copied ? 'Copied!' : 'Copy'}
             </button>
@@ -259,7 +259,7 @@ export default function ServiceAccountDetailPage() {
           <button
             type="button"
             onClick={() => setNewKey(null)}
-            className="text-xs text-yellow-700 underline"
+            className="text-xs text-warning-fg underline"
           >
             Dismiss
           </button>
@@ -268,12 +268,12 @@ export default function ServiceAccountDetailPage() {
 
       <div className="space-y-3">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">API Keys</h2>
+          <h2 className="text-lg font-semibold text-fg">API Keys</h2>
           {!showKeyForm && (
             <button
               type="button"
               onClick={() => setShowKeyForm(true)}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
             >
               Generate API Key
             </button>
@@ -283,99 +283,99 @@ export default function ServiceAccountDetailPage() {
         {showKeyForm && (
           <form
             onSubmit={handleKeyFormSubmit}
-            className="space-y-4 rounded-lg border border-gray-200 bg-white p-6 shadow-sm"
+            className="space-y-4 rounded-lg border border-line bg-surface p-6 shadow-sm"
           >
-            <h3 className="text-base font-semibold text-gray-900">New API Key</h3>
+            <h3 className="text-base font-semibold text-fg">New API Key</h3>
 
             <div className="grid grid-cols-2 gap-4">
               <div>
-                <label htmlFor="field-key-name" className="mb-1.5 block text-sm font-medium text-gray-700">Name</label>
+                <label htmlFor="field-key-name" className="mb-1.5 block text-sm font-medium text-muted">Name</label>
                 <input
                   id="field-key-name"
                   type="text"
                   value={keyForm.name}
                   onChange={(e) => setKey('name', e.target.value)}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 />
               </div>
               <div>
-                <label htmlFor="field-key-scopes" className="mb-1.5 block text-sm font-medium text-gray-700">Scopes</label>
+                <label htmlFor="field-key-scopes" className="mb-1.5 block text-sm font-medium text-muted">Scopes</label>
                 <input
                   id="field-key-scopes"
                   type="text"
                   value={keyForm.scopes}
                   onChange={(e) => setKey('scopes', e.target.value)}
                   placeholder="Comma-separated"
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 />
               </div>
             </div>
 
             <div>
-              <label htmlFor="field-key-expiresAt" className="mb-1.5 block text-sm font-medium text-gray-700">Expires At</label>
+              <label htmlFor="field-key-expiresAt" className="mb-1.5 block text-sm font-medium text-muted">Expires At</label>
               <input
                 id="field-key-expiresAt"
                 type="date"
                 value={keyForm.expiresAt}
                 onChange={(e) => setKey('expiresAt', e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
             </div>
 
             <div className="grid grid-cols-3 gap-4">
               <div>
-                <label htmlFor="field-key-rpm" className="mb-1.5 block text-sm font-medium text-gray-700">Rate limit / min</label>
+                <label htmlFor="field-key-rpm" className="mb-1.5 block text-sm font-medium text-muted">Rate limit / min</label>
                 <input
                   id="field-key-rpm"
                   type="number"
                   min={1}
                   value={keyForm.rateLimitPerMinute}
                   onChange={(e) => setKey('rateLimitPerMinute', e.target.value)}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 />
               </div>
               <div>
-                <label htmlFor="field-key-rpd" className="mb-1.5 block text-sm font-medium text-gray-700">Max req / day</label>
+                <label htmlFor="field-key-rpd" className="mb-1.5 block text-sm font-medium text-muted">Max req / day</label>
                 <input
                   id="field-key-rpd"
                   type="number"
                   min={1}
                   value={keyForm.maxRequestsPerDay}
                   onChange={(e) => setKey('maxRequestsPerDay', e.target.value)}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 />
               </div>
               <div>
-                <label htmlFor="field-key-rpm2" className="mb-1.5 block text-sm font-medium text-gray-700">Max req / month</label>
+                <label htmlFor="field-key-rpm2" className="mb-1.5 block text-sm font-medium text-muted">Max req / month</label>
                 <input
                   id="field-key-rpm2"
                   type="number"
                   min={1}
                   value={keyForm.maxRequestsPerMonth}
                   onChange={(e) => setKey('maxRequestsPerMonth', e.target.value)}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 />
               </div>
             </div>
 
             {createKeyMutation.isError && (
-              <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+              <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
                 {(createKeyMutation.error as Error)?.message || 'Failed to generate API key.'}
               </div>
             )}
 
-            <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
+            <div className="flex justify-end gap-3 border-t border-line pt-4">
               <button
                 type="button"
                 onClick={() => setShowKeyForm(false)}
-                className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-muted hover:bg-hover"
               >
                 Cancel
               </button>
               <button
                 type="submit"
                 disabled={createKeyMutation.isPending}
-                className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
               >
                 {createKeyMutation.isPending ? 'Generating...' : 'Generate'}
               </button>
@@ -384,41 +384,41 @@ export default function ServiceAccountDetailPage() {
         )}
 
         {apiKeys && apiKeys.length > 0 && (
-          <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+          <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-sm">
+            <table className="min-w-full divide-y divide-line">
+              <thead className="bg-sunken">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Prefix</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Name</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Scopes</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Expires</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Actions</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Prefix</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Name</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Scopes</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Expires</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-line">
                 {apiKeys.map((key) => (
-                  <tr key={key.id} className="hover:bg-gray-50">
-                    <td className="whitespace-nowrap px-6 py-4 font-mono text-sm text-gray-700">
+                  <tr key={key.id} className="hover:bg-hover">
+                    <td className="whitespace-nowrap px-6 py-4 font-mono text-sm text-muted">
                       {key.keyPrefix ?? '-'}
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-700">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-muted">
                       {key.name ?? '-'}
                     </td>
-                    <td className="px-6 py-4 text-sm text-gray-500">
+                    <td className="px-6 py-4 text-sm text-subtle">
                       {key.scopes.length > 0 ? key.scopes.join(', ') : '-'}
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-subtle">
                       {key.expiresAt ? new Date(key.expiresAt).toLocaleDateString() : 'Never'}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm">
                       <span
                         className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
                           key.revoked
-                            ? 'bg-red-100 text-red-700'
+                            ? 'bg-danger-soft text-danger-fg'
                             : key.enabled
-                            ? 'bg-green-100 text-green-700'
-                            : 'bg-gray-100 text-gray-700'
+                            ? 'bg-success-soft text-success-fg'
+                            : 'bg-sunken text-muted'
                         }`}
                       >
                         {key.revoked ? 'Revoked' : key.enabled ? 'Active' : 'Disabled'}
@@ -431,7 +431,7 @@ export default function ServiceAccountDetailPage() {
                             type="button"
                             onClick={() => revokeMutation.mutate(key.id)}
                             disabled={revokeMutation.isPending}
-                            className="text-red-600 hover:text-red-800 disabled:opacity-50"
+                            className="text-danger hover:text-danger-fg disabled:opacity-50"
                           >
                             Revoke
                           </button>
@@ -441,7 +441,7 @@ export default function ServiceAccountDetailPage() {
                             type="button"
                             onClick={() => rotateMutation.mutate(key.id)}
                             disabled={rotateMutation.isPending}
-                            className="text-indigo-600 hover:text-indigo-800 disabled:opacity-50"
+                            className="text-accent hover:text-indigo-800 disabled:opacity-50"
                           >
                             Rotate
                           </button>
@@ -456,7 +456,7 @@ export default function ServiceAccountDetailPage() {
         )}
 
         {apiKeys && apiKeys.length === 0 && (
-          <div className="rounded-md border border-gray-200 bg-white p-6 text-center text-sm text-gray-500">
+          <div className="rounded-md border border-line bg-surface p-6 text-center text-sm text-subtle">
             No API keys yet.
           </div>
         )}

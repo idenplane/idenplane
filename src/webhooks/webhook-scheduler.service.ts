@@ -5,6 +5,7 @@ import { createHmac } from 'crypto';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
+import { safePost } from '../common/security/safe-http-client.js';
 
 /**
  * Retry back-off delays in milliseconds: 1 s → 10 s → 60 s → 10 min.
@@ -266,30 +267,22 @@ export class WebhookSchedulerService {
 
   // ─── HTTP POST ────────────────────────────────────────────────────────────
 
+  /**
+   * POST through the SSRF-safe client rather than `fetch`. The queue can hold
+   * an event for minutes before it is delivered, so the target must be
+   * re-resolved and re-validated at delivery time -- see
+   * `src/common/security/safe-http-client.ts`.
+   */
   private async doHttpPost(
     url: string,
     body: string,
     signature: string,
   ): Promise<{ statusCode: number; body: string }> {
-    const controller = new AbortController();
-    const timeout = setTimeout(() => controller.abort(), 10_000);
-
-    try {
-      const res = await fetch(url, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-Webhook-Signature': signature,
-          'X-Webhook-Timestamp': new Date().toISOString(),
-          'User-Agent': 'Idenplane-Webhook/1.0',
-        },
-        body,
-        signal: controller.signal,
-      });
-      const text = await res.text();
-      return { statusCode: res.status, body: text };
-    } finally {
-      clearTimeout(timeout);
-    }
+    return safePost(url, body, {
+      'Content-Type': 'application/json',
+      'X-Webhook-Signature': signature,
+      'X-Webhook-Timestamp': new Date().toISOString(),
+      'User-Agent': 'Idenplane-Webhook/1.0',
+    });
   }
 }

@@ -60,7 +60,7 @@ export default function CaptchaWidget({ provider, siteKey }: CaptchaWidgetProps)
           data-size="invisible"
           style={{ display: 'none' }}
         />
-        <p className="text-xs text-gray-500">
+        <p className="text-xs text-subtle">
           reCAPTCHA protection active
         </p>
       </div>

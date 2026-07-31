@@ -75,29 +75,29 @@ export default function RegistrationSettingsPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-32">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-indigo-600"></div>
+        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-accent"></div>
       </div>
     );
   }
 
   return (
     <div>
-      <h1 className="text-2xl font-bold text-gray-900 mb-6">Registration Settings</h1>
+      <h1 className="text-2xl font-bold text-fg mb-6">Registration Settings</h1>
 
-      <div className="bg-white shadow-sm rounded-lg border border-gray-200 p-6">
+      <div className="bg-surface shadow-sm rounded-lg border border-line p-6">
         <form onSubmit={handleSubmit} className="space-y-6">
           {/* Registration toggle */}
-          <div className="border-b border-gray-200 pb-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-4">Registration</h2>
+          <div className="border-b border-line pb-6">
+            <h2 className="text-lg font-medium text-fg mb-4">Registration</h2>
             <div className="space-y-4">
               <label className="flex items-center">
                 <input
                   type="checkbox"
                   checked={form.registrationAllowed}
                   onChange={(e) => setForm({ ...form, registrationAllowed: e.target.checked })}
-                  className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                  className="h-4 w-4 text-accent border-line-strong rounded focus:ring-accent"
                 />
-                <span className="ml-2 text-sm text-gray-700">Allow self-registration</span>
+                <span className="ml-2 text-sm text-muted">Allow self-registration</span>
               </label>
 
               <label className="flex items-center">
@@ -105,9 +105,9 @@ export default function RegistrationSettingsPage() {
                   type="checkbox"
                   checked={form.registrationApprovalRequired}
                   onChange={(e) => setForm({ ...form, registrationApprovalRequired: e.target.checked })}
-                  className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                  className="h-4 w-4 text-accent border-line-strong rounded focus:ring-accent"
                 />
-                <span className="ml-2 text-sm text-gray-700">Require admin approval</span>
+                <span className="ml-2 text-sm text-muted">Require admin approval</span>
               </label>
 
               <label className="flex items-center">
@@ -115,51 +115,51 @@ export default function RegistrationSettingsPage() {
                   type="checkbox"
                   checked={form.requireEmailVerification}
                   onChange={(e) => setForm({ ...form, requireEmailVerification: e.target.checked })}
-                  className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                  className="h-4 w-4 text-accent border-line-strong rounded focus:ring-accent"
                 />
-                <span className="ml-2 text-sm text-gray-700">Require email verification</span>
+                <span className="ml-2 text-sm text-muted">Require email verification</span>
               </label>
             </div>
           </div>
 
           {/* Email domain restrictions */}
-          <div className="border-b border-gray-200 pb-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-4">Email Domain Restrictions</h2>
+          <div className="border-b border-line pb-6">
+            <h2 className="text-lg font-medium text-fg mb-4">Email Domain Restrictions</h2>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-1">
+              <label className="block text-sm font-medium text-muted mb-1">
                 Allowed email domains (comma-separated, leave empty for all)
               </label>
               <input
                 type="text"
                 value={form.allowedEmailDomains}
                 onChange={(e) => setForm({ ...form, allowedEmailDomains: e.target.value })}
-                className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                className="w-full px-3 py-2 border border-line-strong rounded-md shadow-sm focus:outline-none focus:ring-accent focus:border-accent"
                 placeholder="example.com, company.org"
               />
             </div>
           </div>
 
           {/* Legal links */}
-          <div className="border-b border-gray-200 pb-6">
-            <h2 className="text-lg font-medium text-gray-900 mb-4">Legal</h2>
+          <div className="border-b border-line pb-6">
+            <h2 className="text-lg font-medium text-fg mb-4">Legal</h2>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Terms of Service URL</label>
+                <label className="block text-sm font-medium text-muted mb-1">Terms of Service URL</label>
                 <input
                   type="url"
                   value={form.termsOfServiceUrl}
                   onChange={(e) => setForm({ ...form, termsOfServiceUrl: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                  className="w-full px-3 py-2 border border-line-strong rounded-md shadow-sm focus:outline-none focus:ring-accent focus:border-accent"
                   placeholder="https://example.com/terms"
                 />
               </div>
               <div>
-                <label className="block text-sm font-medium text-gray-700 mb-1">Privacy Policy URL</label>
+                <label className="block text-sm font-medium text-muted mb-1">Privacy Policy URL</label>
                 <input
                   type="url"
                   value={form.privacyPolicyUrl}
                   onChange={(e) => setForm({ ...form, privacyPolicyUrl: e.target.value })}
-                  className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                  className="w-full px-3 py-2 border border-line-strong rounded-md shadow-sm focus:outline-none focus:ring-accent focus:border-accent"
                   placeholder="https://example.com/privacy"
                 />
               </div>
@@ -168,26 +168,26 @@ export default function RegistrationSettingsPage() {
 
           {/* CAPTCHA settings */}
           <div>
-            <h2 className="text-lg font-medium text-gray-900 mb-4">CAPTCHA Protection</h2>
+            <h2 className="text-lg font-medium text-fg mb-4">CAPTCHA Protection</h2>
             <div className="space-y-4">
               <label className="flex items-center">
                 <input
                   type="checkbox"
                   checked={form.captchaEnabled}
                   onChange={(e) => setForm({ ...form, captchaEnabled: e.target.checked })}
-                  className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                  className="h-4 w-4 text-accent border-line-strong rounded focus:ring-accent"
                 />
-                <span className="ml-2 text-sm text-gray-700">Enable CAPTCHA</span>
+                <span className="ml-2 text-sm text-muted">Enable CAPTCHA</span>
               </label>
 
               {form.captchaEnabled && (
                 <div className="pl-6 space-y-4">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 mb-1">Provider</label>
+                    <label className="block text-sm font-medium text-muted mb-1">Provider</label>
                     <select
                       value={form.captchaProvider}
                       onChange={(e) => setForm({ ...form, captchaProvider: e.target.value })}
-                      className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                      className="w-full px-3 py-2 border border-line-strong rounded-md shadow-sm focus:outline-none focus:ring-accent focus:border-accent"
                     >
                       <option value="recaptcha">reCAPTCHA v3</option>
                       <option value="hcaptcha">hCaptcha</option>
@@ -197,25 +197,25 @@ export default function RegistrationSettingsPage() {
                   {form.captchaProvider === 'recaptcha' ? (
                     <>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Site Key</label>
+                        <label className="block text-sm font-medium text-muted mb-1">Site Key</label>
                         <input
                           type="text"
                           value={form.recaptchaSiteKey}
                           onChange={(e) => setForm({ ...form, recaptchaSiteKey: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                          className="w-full px-3 py-2 border border-line-strong rounded-md shadow-sm focus:outline-none focus:ring-accent focus:border-accent"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Secret Key</label>
+                        <label className="block text-sm font-medium text-muted mb-1">Secret Key</label>
                         <input
                           type="password"
                           value={form.recaptchaSecretKey}
                           onChange={(e) => setForm({ ...form, recaptchaSecretKey: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                          className="w-full px-3 py-2 border border-line-strong rounded-md shadow-sm focus:outline-none focus:ring-accent focus:border-accent"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Score Threshold (0-1)</label>
+                        <label className="block text-sm font-medium text-muted mb-1">Score Threshold (0-1)</label>
                         <input
                           type="number"
                           step="0.1"
@@ -223,29 +223,29 @@ export default function RegistrationSettingsPage() {
                           max="1"
                           value={form.captchaScoreThreshold}
                           onChange={(e) => setForm({ ...form, captchaScoreThreshold: parseFloat(e.target.value) })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                          className="w-full px-3 py-2 border border-line-strong rounded-md shadow-sm focus:outline-none focus:ring-accent focus:border-accent"
                         />
-                        <p className="mt-1 text-xs text-gray-500">Lower values are more restrictive (default: 0.5)</p>
+                        <p className="mt-1 text-xs text-subtle">Lower values are more restrictive (default: 0.5)</p>
                       </div>
                     </>
                   ) : (
                     <>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Site Key</label>
+                        <label className="block text-sm font-medium text-muted mb-1">Site Key</label>
                         <input
                           type="text"
                           value={form.hcaptchaSiteKey}
                           onChange={(e) => setForm({ ...form, hcaptchaSiteKey: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                          className="w-full px-3 py-2 border border-line-strong rounded-md shadow-sm focus:outline-none focus:ring-accent focus:border-accent"
                         />
                       </div>
                       <div>
-                        <label className="block text-sm font-medium text-gray-700 mb-1">Secret Key</label>
+                        <label className="block text-sm font-medium text-muted mb-1">Secret Key</label>
                         <input
                           type="password"
                           value={form.hcaptchaSecretKey}
                           onChange={(e) => setForm({ ...form, hcaptchaSecretKey: e.target.value })}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                          className="w-full px-3 py-2 border border-line-strong rounded-md shadow-sm focus:outline-none focus:ring-accent focus:border-accent"
                         />
                       </div>
                     </>
@@ -259,7 +259,7 @@ export default function RegistrationSettingsPage() {
             <button
               type="submit"
               disabled={mutation.isPending}
-              className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 disabled:opacity-50"
+              className="px-4 py-2 bg-accent text-white rounded-md hover:bg-accent-hover disabled:opacity-50"
             >
               {mutation.isPending ? 'Saving...' : 'Save Changes'}
             </button>
