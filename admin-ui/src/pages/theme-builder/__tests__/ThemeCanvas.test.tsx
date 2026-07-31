@@ -105,8 +105,8 @@ describe('ThemeCanvas', () => {
       />,
     );
     const node = screen.getByTestId('theme-canvas-component-button-1');
-    expect(node.className).toContain('border-indigo-500');
-    expect(node.className).toContain('bg-indigo-50');
+    expect(node.className).toContain('border-accent');
+    expect(node.className).toContain('bg-accent-soft');
   });
 
   it('adds a component when palette item is clicked', () => {

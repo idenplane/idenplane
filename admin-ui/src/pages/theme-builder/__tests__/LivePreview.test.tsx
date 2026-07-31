@@ -46,8 +46,8 @@ describe('LivePreview', () => {
       />,
     );
     const desktopButton = screen.getByTitle('Desktop view');
-    expect(desktopButton).toHaveClass('bg-indigo-100');
-    expect(desktopButton).toHaveClass('text-indigo-600');
+    expect(desktopButton).toHaveClass('bg-accent-soft');
+    expect(desktopButton).toHaveClass('text-accent');
   });
 
   it('shows desktop button active when viewport is desktop', () => {
@@ -60,7 +60,7 @@ describe('LivePreview', () => {
         viewportSize="desktop"
       />,
     );
-    expect(screen.getByTitle('Desktop view')).toHaveClass('bg-indigo-100');
+    expect(screen.getByTitle('Desktop view')).toHaveClass('bg-accent-soft');
   });
 
   it('shows tablet button active when viewport is tablet', () => {
@@ -73,8 +73,8 @@ describe('LivePreview', () => {
         viewportSize="tablet"
       />,
     );
-    expect(screen.getByTitle('Tablet view')).toHaveClass('bg-indigo-100');
-    expect(screen.getByTitle('Desktop view')).not.toHaveClass('bg-indigo-100');
+    expect(screen.getByTitle('Tablet view')).toHaveClass('bg-accent-soft');
+    expect(screen.getByTitle('Desktop view')).not.toHaveClass('bg-accent-soft');
   });
 
   it('shows mobile button active when viewport is mobile', () => {
@@ -87,7 +87,7 @@ describe('LivePreview', () => {
         viewportSize="mobile"
       />,
     );
-    expect(screen.getByTitle('Mobile view')).toHaveClass('bg-indigo-100');
+    expect(screen.getByTitle('Mobile view')).toHaveClass('bg-accent-soft');
   });
 
   it('calls onViewportChange callback when desktop button clicked', () => {
@@ -268,7 +268,7 @@ describe('LivePreview', () => {
       />,
     );
 
-    const container = document.querySelector('.flex.h-full.flex-col.bg-gray-100');
+    const container = document.querySelector('.flex.h-full.flex-col.bg-sunken');
     expect(container).toBeInTheDocument();
   });
 
