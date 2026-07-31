@@ -24,9 +24,9 @@ function ColorField({
   return (
     <div className="flex items-center justify-between py-2">
       <div className="flex flex-col">
-        <label className="text-sm font-medium text-gray-700">{label}</label>
+        <label className="text-sm font-medium text-muted">{label}</label>
         {description && (
-          <span className="text-xs text-gray-500">{description}</span>
+          <span className="text-xs text-subtle">{description}</span>
         )}
       </div>
       <div className="flex items-center gap-2">
@@ -34,13 +34,13 @@ function ColorField({
           type="color"
           value={value}
           onChange={(e: ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
-          className="h-8 w-12 cursor-pointer rounded border border-gray-300 p-0.5"
+          className="h-8 w-12 cursor-pointer rounded border border-line-strong p-0.5"
         />
         <input
           type="text"
           value={value}
           onChange={(e: ChangeEvent<HTMLInputElement>) => onChange(e.target.value)}
-          className="w-24 rounded-md border border-gray-300 px-2 py-1 text-sm uppercase shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+          className="w-24 rounded-md border border-line-strong px-2 py-1 text-sm uppercase shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
         />
       </div>
     </div>
@@ -50,9 +50,9 @@ function ColorField({
 // Section header component
 function SectionHeader({ title, subtitle }: { title: string; subtitle?: string }) {
   return (
-    <div className="border-b border-gray-200 py-3">
-      <h3 className="text-sm font-semibold text-gray-900">{title}</h3>
-      {subtitle && <p className="text-xs text-gray-500">{subtitle}</p>}
+    <div className="border-b border-line py-3">
+      <h3 className="text-sm font-semibold text-fg">{title}</h3>
+      {subtitle && <p className="text-xs text-subtle">{subtitle}</p>}
     </div>
   );
 }
@@ -125,17 +125,17 @@ export default function StyleEditor({
   ];
 
   return (
-    <div className="flex h-full flex-col bg-white">
+    <div className="flex h-full flex-col bg-surface">
       {/* Tabs */}
-      <div className="flex border-b border-gray-200">
+      <div className="flex border-b border-line">
         {tabs.map((tab) => (
           <button
             key={tab.key}
             onClick={() => setActiveTab(tab.key)}
             className={`border-b-2 px-4 py-2.5 text-sm font-medium transition-colors ${
               activeTab === tab.key
-                ? 'border-indigo-500 text-indigo-600'
-                : 'border-transparent text-gray-500 hover:text-gray-700'
+                ? 'border-accent text-accent'
+                : 'border-transparent text-subtle hover:text-fg'
             }`}
           >
             {tab.label}
@@ -268,13 +268,13 @@ export default function StyleEditor({
               subtitle="Primary and fallback fonts"
             />
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label className="mb-1.5 block text-sm font-medium text-muted">
                 Primary Font
               </label>
               <select
                 value={styles.typography.fontFamily}
                 onChange={(e) => handleTypographyChange('fontFamily', e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               >
                 <option value="Inter, system-ui, -apple-system, sans-serif">Inter</option>
                 <option value="Roboto, system-ui, -apple-system, sans-serif">Roboto</option>
@@ -287,13 +287,13 @@ export default function StyleEditor({
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label className="mb-1.5 block text-sm font-medium text-muted">
                 Font Size Base
               </label>
               <select
                 value={styles.typography.fontSizeBase}
                 onChange={(e) => handleTypographyChange('fontSizeBase', e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               >
                 <option value="14px">14px</option>
                 <option value="15px">15px</option>
@@ -306,11 +306,11 @@ export default function StyleEditor({
             <SectionHeader title="Font Sizes" subtitle="Text size scale" />
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="mb-1.5 block text-xs text-gray-500">Small</label>
+                <label className="mb-1.5 block text-xs text-subtle">Small</label>
                 <select
                   value={styles.typography.fontSizeSmall}
                   onChange={(e) => handleTypographyChange('fontSizeSmall', e.target.value)}
-                  className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full rounded-md border border-line-strong px-2 py-1.5 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 >
                   <option value="12px">12px</option>
                   <option value="13px">13px</option>
@@ -319,11 +319,11 @@ export default function StyleEditor({
                 </select>
               </div>
               <div>
-                <label className="mb-1.5 block text-xs text-gray-500">Base</label>
+                <label className="mb-1.5 block text-xs text-subtle">Base</label>
                 <select
                   value={styles.typography.fontSizeBase}
                   onChange={(e) => handleTypographyChange('fontSizeBase', e.target.value)}
-                  className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full rounded-md border border-line-strong px-2 py-1.5 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 >
                   <option value="14px">14px</option>
                   <option value="15px">15px</option>
@@ -333,11 +333,11 @@ export default function StyleEditor({
                 </select>
               </div>
               <div>
-                <label className="mb-1.5 block text-xs text-gray-500">Large</label>
+                <label className="mb-1.5 block text-xs text-subtle">Large</label>
                 <select
                   value={styles.typography.fontSizeLarge}
                   onChange={(e) => handleTypographyChange('fontSizeLarge', e.target.value)}
-                  className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full rounded-md border border-line-strong px-2 py-1.5 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 >
                   <option value="16px">16px</option>
                   <option value="17px">17px</option>
@@ -351,11 +351,11 @@ export default function StyleEditor({
             <SectionHeader title="Font Weights" subtitle="Text weight options" />
             <div className="grid grid-cols-3 gap-3">
               <div>
-                <label className="mb-1.5 block text-xs text-gray-500">Normal</label>
+                <label className="mb-1.5 block text-xs text-subtle">Normal</label>
                 <select
                   value={styles.typography.fontWeightNormal}
                   onChange={(e) => handleTypographyChange('fontWeightNormal', Number(e.target.value))}
-                  className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full rounded-md border border-line-strong px-2 py-1.5 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 >
                   <option value="300">300 Light</option>
                   <option value="400">400 Regular</option>
@@ -363,11 +363,11 @@ export default function StyleEditor({
                 </select>
               </div>
               <div>
-                <label className="mb-1.5 block text-xs text-gray-500">Medium</label>
+                <label className="mb-1.5 block text-xs text-subtle">Medium</label>
                 <select
                   value={styles.typography.fontWeightMedium}
                   onChange={(e) => handleTypographyChange('fontWeightMedium', Number(e.target.value))}
-                  className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full rounded-md border border-line-strong px-2 py-1.5 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 >
                   <option value="400">400 Regular</option>
                   <option value="500">500 Medium</option>
@@ -375,11 +375,11 @@ export default function StyleEditor({
                 </select>
               </div>
               <div>
-                <label className="mb-1.5 block text-xs text-gray-500">Bold</label>
+                <label className="mb-1.5 block text-xs text-subtle">Bold</label>
                 <select
                   value={styles.typography.fontWeightBold}
                   onChange={(e) => handleTypographyChange('fontWeightBold', Number(e.target.value))}
-                  className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full rounded-md border border-line-strong px-2 py-1.5 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 >
                   <option value="600">600 Semi-Bold</option>
                   <option value="700">700 Bold</option>
@@ -390,13 +390,13 @@ export default function StyleEditor({
 
             <SectionHeader title="Line Height & Spacing" />
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label className="mb-1.5 block text-sm font-medium text-muted">
                 Line Height
               </label>
               <select
                 value={styles.typography.lineHeight}
                 onChange={(e) => handleTypographyChange('lineHeight', e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               >
                 <option value="1.25">1.25 (Tight)</option>
                 <option value="1.375">1.375</option>
@@ -408,13 +408,13 @@ export default function StyleEditor({
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label className="mb-1.5 block text-sm font-medium text-muted">
                 Letter Spacing
               </label>
               <select
                 value={styles.typography.letterSpacing}
                 onChange={(e) => handleTypographyChange('letterSpacing', e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               >
                 <option value="-0.02em">-0.02em (Tight)</option>
                 <option value="-0.01em">-0.01em</option>
@@ -444,11 +444,11 @@ export default function StyleEditor({
                 { key: 'spacing2xl', label: '2XL' },
               ].map(({ key, label }) => (
                 <div key={key}>
-                  <label className="mb-1.5 block text-xs text-gray-500">{label}</label>
+                  <label className="mb-1.5 block text-xs text-subtle">{label}</label>
                   <select
                     value={styles.spacing[key as keyof typeof styles.spacing]}
                     onChange={(e) => handleSpacingChange(key, e.target.value)}
-                    className="w-full rounded-md border border-gray-300 px-2 py-1.5 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full rounded-md border border-line-strong px-2 py-1.5 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                   >
                     <option value="2px">2px</option>
                     <option value="4px">4px</option>
@@ -470,13 +470,13 @@ export default function StyleEditor({
             />
             <div className="space-y-3">
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                <label className="mb-1.5 block text-sm font-medium text-muted">
                   Small Radius
                 </label>
                 <select
                   value={styles.spacing.borderRadiusSm}
                   onChange={(e) => handleSpacingChange('borderRadiusSm', e.target.value)}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 >
                   <option value="2px">2px</option>
                   <option value="4px">4px</option>
@@ -485,13 +485,13 @@ export default function StyleEditor({
                 </select>
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                <label className="mb-1.5 block text-sm font-medium text-muted">
                   Default Radius
                 </label>
                 <select
                   value={styles.spacing.borderRadius}
                   onChange={(e) => handleSpacingChange('borderRadius', e.target.value)}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 >
                   <option value="4px">4px</option>
                   <option value="6px">6px</option>
@@ -501,13 +501,13 @@ export default function StyleEditor({
                 </select>
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                <label className="mb-1.5 block text-sm font-medium text-muted">
                   Large Radius
                 </label>
                 <select
                   value={styles.spacing.borderRadiusLg}
                   onChange={(e) => handleSpacingChange('borderRadiusLg', e.target.value)}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 >
                   <option value="6px">6px</option>
                   <option value="8px">8px</option>
@@ -517,13 +517,13 @@ export default function StyleEditor({
                 </select>
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">
+                <label className="mb-1.5 block text-sm font-medium text-muted">
                   Full Radius (Pills)
                 </label>
                 <select
                   value={styles.spacing.borderRadiusFull}
                   onChange={(e) => handleSpacingChange('borderRadiusFull', e.target.value)}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 >
                   <option value="9998px">9998px</option>
                   <option value="9999px">9999px</option>
@@ -548,13 +548,13 @@ export default function StyleEditor({
               description="Default border color"
             />
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label className="mb-1.5 block text-sm font-medium text-muted">
                 Border Width
               </label>
               <select
                 value={styles.borders.borderWidth}
                 onChange={(e) => handleBorderChange('borderWidth', e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               >
                 <option value="0">None</option>
                 <option value="1px">1px</option>
@@ -573,13 +573,13 @@ export default function StyleEditor({
               description="Border color on focus"
             />
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label className="mb-1.5 block text-sm font-medium text-muted">
                 Focus Border Width
               </label>
               <select
                 value={styles.borders.borderWidthFocus}
                 onChange={(e) => handleBorderChange('borderWidthFocus', e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               >
                 <option value="1px">1px</option>
                 <option value="2px">2px</option>
@@ -598,13 +598,13 @@ export default function StyleEditor({
               description="Border color on error"
             />
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label className="mb-1.5 block text-sm font-medium text-muted">
                 Error Border Width
               </label>
               <select
                 value={styles.borders.borderWidthError}
                 onChange={(e) => handleBorderChange('borderWidthError', e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               >
                 <option value="1px">1px</option>
                 <option value="2px">2px</option>
@@ -628,10 +628,10 @@ export default function StyleEditor({
               { key: 'shadowLg', label: 'Large', description: 'Modal elevation' },
               { key: 'shadowXl', label: 'Extra Large', description: 'Popover elevation' },
             ].map(({ key, label, description }) => (
-              <div key={key} className="rounded-lg border border-gray-200 p-3">
+              <div key={key} className="rounded-lg border border-line p-3">
                 <div className="mb-2 flex items-center justify-between">
-                  <span className="text-sm font-medium text-gray-700">{label}</span>
-                  <span className="text-xs text-gray-500">{description}</span>
+                  <span className="text-sm font-medium text-muted">{label}</span>
+                  <span className="text-xs text-subtle">{description}</span>
                 </div>
                 <div
                   className="h-12 w-full rounded"
@@ -641,7 +641,7 @@ export default function StyleEditor({
                   type="text"
                   value={styles.shadows[key as keyof typeof styles.shadows]}
                   onChange={(e) => handleShadowChange(key, e.target.value)}
-                  className="mt-2 w-full rounded-md border border-gray-300 px-2 py-1 text-xs font-mono text-gray-600 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="mt-2 w-full rounded-md border border-line-strong px-2 py-1 text-xs font-mono text-muted focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 />
               </div>
             ))}
@@ -650,26 +650,26 @@ export default function StyleEditor({
               title="Special Shadows"
               subtitle="Shadows for specific use cases"
             />
-            <div className="rounded-lg border border-gray-200 p-3">
+            <div className="rounded-lg border border-line p-3">
               <div className="mb-2 flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700">Focus Shadow</span>
-                <span className="text-xs text-gray-500">Input focus ring</span>
+                <span className="text-sm font-medium text-muted">Focus Shadow</span>
+                <span className="text-xs text-subtle">Input focus ring</span>
               </div>
               <div
-                className="h-12 w-full rounded border-2 border-indigo-500"
+                className="h-12 w-full rounded border-2 border-accent"
                 style={{ boxShadow: styles.shadows.shadowFocus }}
               />
               <input
                 type="text"
                 value={styles.shadows.shadowFocus}
                 onChange={(e) => handleShadowChange('shadowFocus', e.target.value)}
-                className="mt-2 w-full rounded-md border border-gray-300 px-2 py-1 text-xs font-mono text-gray-600 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="mt-2 w-full rounded-md border border-line-strong px-2 py-1 text-xs font-mono text-muted focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
             </div>
-            <div className="rounded-lg border border-gray-200 p-3">
+            <div className="rounded-lg border border-line p-3">
               <div className="mb-2 flex items-center justify-between">
-                <span className="text-sm font-medium text-gray-700">Card Shadow</span>
-                <span className="text-xs text-gray-500">Login card</span>
+                <span className="text-sm font-medium text-muted">Card Shadow</span>
+                <span className="text-xs text-subtle">Login card</span>
               </div>
               <div
                 className="h-12 w-full rounded"
@@ -679,7 +679,7 @@ export default function StyleEditor({
                 type="text"
                 value={styles.shadows.shadowCard}
                 onChange={(e) => handleShadowChange('shadowCard', e.target.value)}
-                className="mt-2 w-full rounded-md border border-gray-300 px-2 py-1 text-xs font-mono text-gray-600 focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="mt-2 w-full rounded-md border border-line-strong px-2 py-1 text-xs font-mono text-muted focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
             </div>
           </div>
@@ -707,16 +707,16 @@ export default function StyleEditor({
               />
               <div className="space-y-3">
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-700">Small</span>
-                  <span className="text-xs text-gray-500">80px max width</span>
+                  <span className="text-sm text-muted">Small</span>
+                  <span className="text-xs text-subtle">80px max width</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-700">Medium</span>
-                  <span className="text-xs text-gray-500">120px max width</span>
+                  <span className="text-sm text-muted">Medium</span>
+                  <span className="text-xs text-subtle">120px max width</span>
                 </div>
                 <div className="flex items-center justify-between">
-                  <span className="text-sm text-gray-700">Large</span>
-                  <span className="text-xs text-gray-500">180px max width</span>
+                  <span className="text-sm text-muted">Large</span>
+                  <span className="text-xs text-subtle">180px max width</span>
                 </div>
               </div>
             </div>
@@ -725,7 +725,7 @@ export default function StyleEditor({
                 title="Logo Preview"
                 subtitle="See how your logo appears on the login page"
               />
-              <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+              <div className="rounded-lg border border-line bg-sunken p-4">
                 <div className="flex flex-col items-center gap-4">
                   {assets.logoUrl ? (
                     <img
@@ -734,11 +734,11 @@ export default function StyleEditor({
                       className="max-h-16 max-w-32 rounded object-contain"
                     />
                   ) : (
-                    <div className="flex h-16 w-32 items-center justify-center rounded bg-gray-200 text-sm text-gray-500">
+                    <div className="flex h-16 w-32 items-center justify-center rounded bg-active text-sm text-subtle">
                       No logo uploaded
                     </div>
                   )}
-                  <span className="text-xs text-gray-500">
+                  <span className="text-xs text-subtle">
                     {assets.logoUrl ? 'Logo displayed on login page' : 'Upload a logo to see preview'}
                   </span>
                 </div>

@@ -17,7 +17,7 @@ interface StatCardProps {
 
 function StatCard({ label, value, sublabel, colorClass, icon }: StatCardProps) {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-5 shadow-sm">
+    <div className="rounded-lg border border-line bg-surface p-5 shadow-sm">
       <div className="flex items-start gap-4">
         <div
           className={`flex h-11 w-11 flex-shrink-0 items-center justify-center rounded-lg ${colorClass}`}
@@ -25,9 +25,9 @@ function StatCard({ label, value, sublabel, colorClass, icon }: StatCardProps) {
           {icon}
         </div>
         <div className="min-w-0 flex-1">
-          <p className="truncate text-sm font-medium text-gray-500">{label}</p>
-          <p className="text-2xl font-bold text-gray-900">{value}</p>
-          {sublabel && <p className="mt-0.5 text-xs text-gray-400">{sublabel}</p>}
+          <p className="truncate text-sm font-medium text-subtle">{label}</p>
+          <p className="text-2xl font-bold text-fg">{value}</p>
+          {sublabel && <p className="mt-0.5 text-xs text-subtle">{sublabel}</p>}
         </div>
       </div>
     </div>
@@ -49,14 +49,14 @@ export default function ConsentStatisticsPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="text-gray-500">Loading consent statistics...</div>
+        <div className="text-subtle">Loading consent statistics...</div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
+      <div className="rounded-md bg-danger-soft p-4 text-sm text-danger-fg">
         Failed to load consent statistics.
       </div>
     );
@@ -66,8 +66,8 @@ export default function ConsentStatisticsPage() {
     <div>
       {/* Header */}
       <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Consent Statistics</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-fg">Consent Statistics</h1>
+        <p className="mt-1 text-sm text-subtle">
           GDPR consent analytics for{' '}
           <span className="font-medium">{name}</span>
         </p>
@@ -78,10 +78,10 @@ export default function ConsentStatisticsPage() {
         <StatCard
           label="Total Consents"
           value={stats?.totalConsents ?? 0}
-          colorClass="bg-indigo-100"
+          colorClass="bg-accent-soft"
           icon={
             <svg
-              className="h-5 w-5 text-indigo-600"
+              className="h-5 w-5 text-accent"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -99,10 +99,10 @@ export default function ConsentStatisticsPage() {
           label="Users with Consents (24h)"
           value={stats?.activeUsersWithConsents24h ?? 0}
           sublabel="Distinct users who acted on consent in last 24 hours"
-          colorClass="bg-green-100"
+          colorClass="bg-success-soft"
           icon={
             <svg
-              className="h-5 w-5 text-green-600"
+              className="h-5 w-5 text-success"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -120,10 +120,10 @@ export default function ConsentStatisticsPage() {
           label="Users with Consents (7d)"
           value={stats?.activeUsersWithConsents7d ?? 0}
           sublabel="Distinct users who acted on consent in last 7 days"
-          colorClass="bg-blue-100"
+          colorClass="bg-info-soft"
           icon={
             <svg
-              className="h-5 w-5 text-blue-600"
+              className="h-5 w-5 text-info"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -225,10 +225,10 @@ export default function ConsentStatisticsPage() {
           label="Pending Deletions"
           value={stats?.pendingDeletions ?? 0}
           sublabel="Data deletion requests awaiting processing"
-          colorClass="bg-orange-100"
+          colorClass="bg-warning-soft"
           icon={
             <svg
-              className="h-5 w-5 text-orange-600"
+              className="h-5 w-5 text-warning"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -246,36 +246,36 @@ export default function ConsentStatisticsPage() {
 
       {/* Consents by Category */}
       <div className="mt-8">
-        <h2 className="mb-3 text-base font-semibold text-gray-900">
+        <h2 className="mb-3 text-base font-semibold text-fg">
           Consents by Category
         </h2>
         {stats?.consentsByCategory && stats.consentsByCategory.length > 0 ? (
-          <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
+          <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-sm">
             <div className="overflow-x-auto">
-              <table className="min-w-full divide-y divide-gray-200 text-sm">
-                <thead className="bg-gray-50">
+              <table className="min-w-full divide-y divide-line text-sm">
+                <thead className="bg-sunken">
                   <tr>
                     <th
                       scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
+                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle"
                     >
                       Category
                     </th>
                     <th
                       scope="col"
-                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
+                      className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle"
                     >
                       Total Grants
                     </th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-100">
+                <tbody className="divide-y divide-line">
                   {stats.consentsByCategory.map((cat) => (
-                    <tr key={cat.categoryId} className="hover:bg-gray-50">
-                      <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
+                    <tr key={cat.categoryId} className="hover:bg-hover">
+                      <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-fg">
                         {cat.categoryName}
                       </td>
-                      <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-700">
+                      <td className="whitespace-nowrap px-6 py-4 text-sm text-muted">
                         {cat.totalGrants.toLocaleString()}
                       </td>
                     </tr>
@@ -285,7 +285,7 @@ export default function ConsentStatisticsPage() {
             </div>
           </div>
         ) : (
-          <div className="rounded-lg border border-gray-200 bg-white p-6 text-center text-sm text-gray-500">
+          <div className="rounded-lg border border-line bg-surface p-6 text-center text-sm text-subtle">
             No consent categories configured or no grants found yet.
           </div>
         )}

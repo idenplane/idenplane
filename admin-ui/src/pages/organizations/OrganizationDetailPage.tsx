@@ -20,8 +20,8 @@ type OrgRole = 'owner' | 'admin' | 'member';
 function RoleBadge({ role }: { role: OrgRole }) {
   const classes: Record<OrgRole, string> = {
     owner: 'bg-purple-100 text-purple-700',
-    admin: 'bg-blue-100 text-blue-700',
-    member: 'bg-gray-100 text-gray-700',
+    admin: 'bg-info-soft text-info-fg',
+    member: 'bg-sunken text-muted',
   };
   return (
     <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${classes[role]}`}>
@@ -31,10 +31,10 @@ function RoleBadge({ role }: { role: OrgRole }) {
 }
 
 const INPUT_CLS =
-  'w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none';
+  'w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none';
 
 const ROLE_SELECT_CLS =
-  'rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none';
+  'rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none';
 
 export default function OrganizationDetailPage() {
   const { name, slug } = useParams<{ name: string; slug: string }>();
@@ -177,12 +177,12 @@ export default function OrganizationDetailPage() {
     setForm((f) => ({ ...f, [field]: value }));
 
   if (isLoading) {
-    return <div className="text-gray-500">Loading organization...</div>;
+    return <div className="text-subtle">Loading organization...</div>;
   }
 
   if (!org) {
     return (
-      <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
+      <div className="rounded-md bg-danger-soft p-4 text-sm text-danger-fg">
         Organization not found.
       </div>
     );
@@ -194,36 +194,36 @@ export default function OrganizationDetailPage() {
     <div className="mx-auto max-w-4xl space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{org.name}</h1>
+          <h1 className="text-2xl font-bold text-fg">{org.name}</h1>
           {org.displayName && (
-            <p className="mt-1 text-sm text-gray-500">{org.displayName}</p>
+            <p className="mt-1 text-sm text-subtle">{org.displayName}</p>
           )}
         </div>
         <button
           onClick={() => setShowDelete(true)}
-          className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+          className="rounded-md border border-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger-soft"
         >
           Delete
         </button>
       </div>
 
       {/* Settings */}
-      <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-gray-900">Settings</h2>
+      <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-line bg-surface p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-fg">Settings</h2>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label htmlFor="field-org-slug" className="mb-1.5 block text-sm font-medium text-gray-700">Slug</label>
+            <label htmlFor="field-org-slug" className="mb-1.5 block text-sm font-medium text-muted">Slug</label>
             <input
               id="field-org-slug"
               type="text"
               value={org.slug}
               disabled
-              className="w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500"
+              className="w-full rounded-md border border-line bg-sunken px-3 py-2 text-sm text-subtle"
             />
           </div>
           <div>
-            <label htmlFor="field-org-name" className="mb-1.5 block text-sm font-medium text-gray-700">Name *</label>
+            <label htmlFor="field-org-name" className="mb-1.5 block text-sm font-medium text-muted">Name *</label>
             <input
               id="field-org-name"
               type="text"
@@ -237,7 +237,7 @@ export default function OrganizationDetailPage() {
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label htmlFor="field-org-displayName" className="mb-1.5 block text-sm font-medium text-gray-700">Display Name</label>
+            <label htmlFor="field-org-displayName" className="mb-1.5 block text-sm font-medium text-muted">Display Name</label>
             <input
               id="field-org-displayName"
               type="text"
@@ -247,7 +247,7 @@ export default function OrganizationDetailPage() {
             />
           </div>
           <div>
-            <label htmlFor="field-org-logoUrl" className="mb-1.5 block text-sm font-medium text-gray-700">Logo URL</label>
+            <label htmlFor="field-org-logoUrl" className="mb-1.5 block text-sm font-medium text-muted">Logo URL</label>
             <input
               id="field-org-logoUrl"
               type="url"
@@ -259,7 +259,7 @@ export default function OrganizationDetailPage() {
         </div>
 
         <div>
-          <label htmlFor="field-org-description" className="mb-1.5 block text-sm font-medium text-gray-700">Description</label>
+          <label htmlFor="field-org-description" className="mb-1.5 block text-sm font-medium text-muted">Description</label>
           <textarea
             id="field-org-description"
             rows={3}
@@ -271,13 +271,13 @@ export default function OrganizationDetailPage() {
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label htmlFor="field-org-primaryColor" className="mb-1.5 block text-sm font-medium text-gray-700">Primary Color</label>
+            <label htmlFor="field-org-primaryColor" className="mb-1.5 block text-sm font-medium text-muted">Primary Color</label>
             <input
               id="field-org-primaryColor"
               type="color"
               value={form.primaryColor}
               onChange={(e) => set('primaryColor', e.target.value)}
-              className="h-10 w-full cursor-pointer rounded-md border border-gray-300 px-1 py-1"
+              className="h-10 w-full cursor-pointer rounded-md border border-line-strong px-1 py-1"
             />
           </div>
           <div className="space-y-3 pt-6">
@@ -287,9 +287,9 @@ export default function OrganizationDetailPage() {
                 id="field-org-requireMfa"
                 checked={form.requireMfa}
                 onChange={(e) => set('requireMfa', e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
               />
-              <span className="text-sm font-medium text-gray-700">Require MFA</span>
+              <span className="text-sm font-medium text-muted">Require MFA</span>
             </label>
             <label className="flex items-center gap-2">
               <input
@@ -297,29 +297,29 @@ export default function OrganizationDetailPage() {
                 id="field-org-enabled"
                 checked={form.enabled}
                 onChange={(e) => set('enabled', e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
               />
-              <span className="text-sm font-medium text-gray-700">Enabled</span>
+              <span className="text-sm font-medium text-muted">Enabled</span>
             </label>
           </div>
         </div>
 
         {updateMutation.isSuccess && (
-          <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">
+          <div className="rounded-md bg-success-soft p-3 text-sm text-success-fg">
             Organization updated successfully.
           </div>
         )}
         {updateMutation.isError && (
-          <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+          <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
             Failed to update organization.
           </div>
         )}
 
-        <div className="flex justify-end border-t border-gray-200 pt-4">
+        <div className="flex justify-end border-t border-line pt-4">
           <button
             type="submit"
             disabled={updateMutation.isPending}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
           </button>
@@ -327,29 +327,29 @@ export default function OrganizationDetailPage() {
       </form>
 
       {/* Members */}
-      <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
-        <div className="border-b border-gray-200 px-6 py-4">
-          <h2 className="text-lg font-semibold text-gray-900">Members</h2>
+      <div className="rounded-lg border border-line bg-surface shadow-sm">
+        <div className="border-b border-line px-6 py-4">
+          <h2 className="text-lg font-semibold text-fg">Members</h2>
         </div>
 
         {members && members.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+            <table className="min-w-full divide-y divide-line">
+              <thead className="bg-sunken">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Username</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Email</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Role</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Actions</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Username</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Email</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Role</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Actions</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-line">
                 {members.map((member) => (
-                  <tr key={member.id} className="hover:bg-gray-50">
-                    <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
+                  <tr key={member.id} className="hover:bg-hover">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-fg">
                       {member.user?.username ?? member.userId}
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-subtle">
                       {member.user?.email ?? '-'}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm">
@@ -380,14 +380,14 @@ export default function OrganizationDetailPage() {
                             })
                           }
                           disabled={updateMemberMutation.isPending}
-                          className="rounded-md bg-indigo-600 px-2 py-1 text-xs font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                          className="rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
                         >
                           Update
                         </button>
                         <button
                           type="button"
                           onClick={() => setRemovingMemberId(member.userId)}
-                          className="rounded-md border border-red-300 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50"
+                          className="rounded-md border border-danger-soft px-2 py-1 text-xs font-medium text-danger-fg hover:bg-danger-soft"
                         >
                           Remove
                         </button>
@@ -399,14 +399,14 @@ export default function OrganizationDetailPage() {
             </table>
           </div>
         ) : (
-          <div className="px-6 py-8 text-center text-sm text-gray-500">No members yet.</div>
+          <div className="px-6 py-8 text-center text-sm text-subtle">No members yet.</div>
         )}
 
-        <div className="border-t border-gray-200 px-6 py-4">
-          <h3 className="mb-3 text-sm font-semibold text-gray-700">Add Member</h3>
+        <div className="border-t border-line px-6 py-4">
+          <h3 className="mb-3 text-sm font-semibold text-muted">Add Member</h3>
           <form onSubmit={handleAddMember} className="flex items-end gap-3">
             <div className="flex-1">
-              <label htmlFor="field-add-userId" className="mb-1 block text-xs font-medium text-gray-600">
+              <label htmlFor="field-add-userId" className="mb-1 block text-xs font-medium text-muted">
                 User ID
               </label>
               <input
@@ -419,7 +419,7 @@ export default function OrganizationDetailPage() {
               />
             </div>
             <div>
-              <label htmlFor="field-add-role" className="mb-1 block text-xs font-medium text-gray-600">
+              <label htmlFor="field-add-role" className="mb-1 block text-xs font-medium text-muted">
                 Role
               </label>
               <select
@@ -436,13 +436,13 @@ export default function OrganizationDetailPage() {
             <button
               type="submit"
               disabled={addMemberMutation.isPending}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               {addMemberMutation.isPending ? 'Adding...' : 'Add'}
             </button>
           </form>
           {addMemberMutation.isError && (
-            <div className="mt-2 rounded-md bg-red-50 p-2 text-xs text-red-700">
+            <div className="mt-2 rounded-md bg-danger-soft p-2 text-xs text-danger-fg">
               Failed to add member.
             </div>
           )}
@@ -450,41 +450,41 @@ export default function OrganizationDetailPage() {
       </div>
 
       {/* Invitations */}
-      <div className="rounded-lg border border-gray-200 bg-white shadow-sm">
-        <div className="border-b border-gray-200 px-6 py-4">
-          <h2 className="text-lg font-semibold text-gray-900">Invitations</h2>
+      <div className="rounded-lg border border-line bg-surface shadow-sm">
+        <div className="border-b border-line px-6 py-4">
+          <h2 className="text-lg font-semibold text-fg">Invitations</h2>
         </div>
 
         {invitations && invitations.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+            <table className="min-w-full divide-y divide-line">
+              <thead className="bg-sunken">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Email</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Role</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Created</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Email</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Role</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Created</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-line">
                 {invitations.map((inv) => (
-                  <tr key={inv.id} className="hover:bg-gray-50">
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">{inv.email}</td>
+                  <tr key={inv.id} className="hover:bg-hover">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-fg">{inv.email}</td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm">
                       <RoleBadge role={inv.role} />
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm">
                       {inv.acceptedAt ? (
-                        <span className="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                        <span className="inline-flex rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success-fg">
                           Accepted
                         </span>
                       ) : (
-                        <span className="inline-flex rounded-full bg-yellow-100 px-2 py-0.5 text-xs font-medium text-yellow-700">
+                        <span className="inline-flex rounded-full bg-warning-soft px-2 py-0.5 text-xs font-medium text-warning-fg">
                           Pending
                         </span>
                       )}
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-subtle">
                       {new Date(inv.createdAt).toLocaleDateString()}
                     </td>
                   </tr>
@@ -493,14 +493,14 @@ export default function OrganizationDetailPage() {
             </table>
           </div>
         ) : (
-          <div className="px-6 py-8 text-center text-sm text-gray-500">No invitations yet.</div>
+          <div className="px-6 py-8 text-center text-sm text-subtle">No invitations yet.</div>
         )}
 
-        <div className="border-t border-gray-200 px-6 py-4">
-          <h3 className="mb-3 text-sm font-semibold text-gray-700">Invite User</h3>
+        <div className="border-t border-line px-6 py-4">
+          <h3 className="mb-3 text-sm font-semibold text-muted">Invite User</h3>
           <form onSubmit={handleInvite} className="flex items-end gap-3">
             <div className="flex-1">
-              <label htmlFor="field-invite-email" className="mb-1 block text-xs font-medium text-gray-600">
+              <label htmlFor="field-invite-email" className="mb-1 block text-xs font-medium text-muted">
                 Email
               </label>
               <input
@@ -513,7 +513,7 @@ export default function OrganizationDetailPage() {
               />
             </div>
             <div>
-              <label htmlFor="field-invite-role" className="mb-1 block text-xs font-medium text-gray-600">
+              <label htmlFor="field-invite-role" className="mb-1 block text-xs font-medium text-muted">
                 Role
               </label>
               <select
@@ -530,13 +530,13 @@ export default function OrganizationDetailPage() {
             <button
               type="submit"
               disabled={inviteMutation.isPending}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               {inviteMutation.isPending ? 'Sending...' : 'Send'}
             </button>
           </form>
           {inviteMutation.isError && (
-            <div className="mt-2 rounded-md bg-red-50 p-2 text-xs text-red-700">
+            <div className="mt-2 rounded-md bg-danger-soft p-2 text-xs text-danger-fg">
               Failed to send invitation.
             </div>
           )}

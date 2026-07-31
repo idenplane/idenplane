@@ -11,19 +11,19 @@ function StatusBadge({ status }: { status: string }) {
   const isFailed = status === 'FAILED' || status === 'ERROR' || status === 'ROLLBACK';
 
   const colorClass = isSuccess
-    ? 'bg-green-100 text-green-700'
+    ? 'bg-success-soft text-success-fg'
     : isPending
-    ? 'bg-blue-100 text-blue-700'
+    ? 'bg-info-soft text-info-fg'
     : isFailed
-    ? 'bg-red-100 text-red-700'
-    : 'bg-gray-100 text-gray-700';
+    ? 'bg-danger-soft text-danger-fg'
+    : 'bg-sunken text-muted';
 
   const dotClass = isSuccess
-    ? 'bg-green-500'
+    ? 'bg-success'
     : isPending
-    ? 'bg-blue-500'
+    ? 'bg-info'
     : isFailed
-    ? 'bg-red-500'
+    ? 'bg-danger'
     : 'bg-gray-500';
 
   return (
@@ -54,17 +54,17 @@ function PaginationControls({
       <button
         onClick={() => onPageChange(page - 1)}
         disabled={!hasPrev}
-        className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:hover:bg-white"
+        className="rounded-md border border-line-strong bg-surface px-3 py-1.5 text-sm font-medium text-muted hover:bg-hover disabled:opacity-50 disabled:hover:bg-surface"
       >
         Previous
       </button>
-      <span className="text-sm text-gray-500">
+      <span className="text-sm text-subtle">
         Page {page + 1} of {totalPages}
       </span>
       <button
         onClick={() => onPageChange(page + 1)}
         disabled={!hasNext}
-        className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50 disabled:hover:bg-white"
+        className="rounded-md border border-line-strong bg-surface px-3 py-1.5 text-sm font-medium text-muted hover:bg-hover disabled:opacity-50 disabled:hover:bg-surface"
       >
         Next
       </button>
@@ -87,52 +87,52 @@ function MigrationHistoryTable({
   };
 
   return (
-    <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-      <table className="min-w-full divide-y divide-gray-200 text-sm" aria-label="Migration history">
-        <thead className="bg-gray-50">
+    <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-sm">
+      <table className="min-w-full divide-y divide-line text-sm" aria-label="Migration history">
+        <thead className="bg-sunken">
           <tr>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+            <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
               Started
             </th>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+            <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
               From Version
             </th>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+            <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
               To Version
             </th>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+            <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
               Status
             </th>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+            <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
               Completed
             </th>
-            <th scope="col" className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+            <th scope="col" className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-subtle">
               Actions
             </th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <tbody className="divide-y divide-line">
           {entries.map((entry) => (
-            <tr key={entry.id} className="hover:bg-gray-50">
-              <td className="whitespace-nowrap px-4 py-2.5 text-gray-700">
+            <tr key={entry.id} className="hover:bg-hover">
+              <td className="whitespace-nowrap px-4 py-2.5 text-muted">
                 {formatDate(entry.startedAt)}
               </td>
-              <td className="whitespace-nowrap px-4 py-2.5 font-mono text-sm text-gray-600">
+              <td className="whitespace-nowrap px-4 py-2.5 font-mono text-sm text-muted">
                 {entry.fromVersion}
               </td>
-              <td className="whitespace-nowrap px-4 py-2.5 font-mono text-sm text-gray-600">
+              <td className="whitespace-nowrap px-4 py-2.5 font-mono text-sm text-muted">
                 {entry.toVersion}
               </td>
               <td className="whitespace-nowrap px-4 py-2.5">
                 <StatusBadge status={entry.status} />
               </td>
-              <td className="whitespace-nowrap px-4 py-2.5 text-gray-500">
+              <td className="whitespace-nowrap px-4 py-2.5 text-subtle">
                 {formatDate(entry.completedAt)}
               </td>
               <td className="whitespace-nowrap px-4 py-2.5 text-right">
                 <button
                   onClick={() => onViewDetails(entry)}
-                  className="text-sm text-indigo-600 hover:text-indigo-800 hover:underline"
+                  className="text-sm text-accent hover:text-indigo-800 hover:underline"
                 >
                   View Details
                 </button>
@@ -161,13 +161,13 @@ function DetailModal({
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4">
-      <div className="w-full max-w-2xl rounded-lg bg-white shadow-xl">
-        <div className="flex items-center justify-between border-b border-gray-200 px-6 py-4">
-          <h2 className="text-lg font-semibold text-gray-900">Migration Details</h2>
+      <div className="w-full max-w-2xl rounded-lg bg-surface shadow-xl">
+        <div className="flex items-center justify-between border-b border-line px-6 py-4">
+          <h2 className="text-lg font-semibold text-fg">Migration Details</h2>
           <button
             onClick={onClose}
             data-testid="modal-close-icon-button"
-            className="text-gray-400 hover:text-gray-600"
+            className="text-subtle hover:text-muted"
             aria-label="Close"
           >
             <svg className="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
@@ -178,42 +178,42 @@ function DetailModal({
         <div className="space-y-4 px-6 py-4">
           <div className="grid gap-4 sm:grid-cols-2">
             <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-gray-500">Migration ID</p>
-              <p className="mt-1 font-mono text-sm text-gray-900">{entry.id}</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-subtle">Migration ID</p>
+              <p className="mt-1 font-mono text-sm text-fg">{entry.id}</p>
             </div>
             <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-gray-500">Status</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-subtle">Status</p>
               <div className="mt-1">
                 <StatusBadge status={entry.status} />
               </div>
             </div>
             <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-gray-500">From Version</p>
-              <p className="mt-1 font-mono text-sm text-gray-900">{entry.fromVersion}</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-subtle">From Version</p>
+              <p className="mt-1 font-mono text-sm text-fg">{entry.fromVersion}</p>
             </div>
             <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-gray-500">To Version</p>
-              <p className="mt-1 font-mono text-sm text-gray-900">{entry.toVersion}</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-subtle">To Version</p>
+              <p className="mt-1 font-mono text-sm text-fg">{entry.toVersion}</p>
             </div>
             <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-gray-500">Started</p>
-              <p className="mt-1 text-sm text-gray-700">{formatDate(entry.startedAt)}</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-subtle">Started</p>
+              <p className="mt-1 text-sm text-muted">{formatDate(entry.startedAt)}</p>
             </div>
             <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-gray-500">Completed</p>
-              <p className="mt-1 text-sm text-gray-700">{formatDate(entry.completedAt)}</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-subtle">Completed</p>
+              <p className="mt-1 text-sm text-muted">{formatDate(entry.completedAt)}</p>
             </div>
           </div>
           {entry.backupId && (
             <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-gray-500">Backup ID</p>
-              <p className="mt-1 font-mono text-sm text-gray-600">{entry.backupId}</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-subtle">Backup ID</p>
+              <p className="mt-1 font-mono text-sm text-muted">{entry.backupId}</p>
             </div>
           )}
           {entry.errorMessage && (
-            <div className="rounded-md border border-red-200 bg-red-50 p-3">
-              <p className="text-xs font-medium uppercase tracking-wider text-red-600">Error</p>
-              <p className="mt-1 text-sm text-red-700">{entry.errorMessage}</p>
+            <div className="rounded-md border border-danger-soft bg-danger-soft p-3">
+              <p className="text-xs font-medium uppercase tracking-wider text-danger">Error</p>
+              <p className="mt-1 text-sm text-danger-fg">{entry.errorMessage}</p>
             </div>
           )}
           {/* The per-stage check results. The server has always returned these
@@ -221,20 +221,20 @@ function DetailModal({
               upgrade they are the most useful thing on the record. */}
           {entry.checksPassed && (
             <details>
-              <summary className="cursor-pointer text-xs font-medium uppercase tracking-wider text-gray-500">
+              <summary className="cursor-pointer text-xs font-medium uppercase tracking-wider text-subtle">
                 Check results
               </summary>
-              <pre className="mt-2 max-h-64 overflow-auto rounded-md bg-gray-50 p-3 text-xs text-gray-700">
+              <pre className="mt-2 max-h-64 overflow-auto rounded-md bg-sunken p-3 text-xs text-muted">
                 {JSON.stringify(entry.checksPassed, null, 2)}
               </pre>
             </details>
           )}
         </div>
-        <div className="flex justify-end border-t border-gray-200 px-6 py-4">
+        <div className="flex justify-end border-t border-line px-6 py-4">
           <button
             onClick={onClose}
             data-testid="modal-close-button"
-            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-md border border-line-strong bg-surface px-4 py-2 text-sm font-medium text-muted hover:bg-hover"
           >
             Close
           </button>
@@ -248,12 +248,12 @@ function DetailModal({
 
 function EmptyState() {
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-12 text-center">
-      <svg className="mx-auto h-12 w-12 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
+    <div className="rounded-lg border border-line bg-surface p-12 text-center">
+      <svg className="mx-auto h-12 w-12 text-subtle" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={1.5}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" />
       </svg>
-      <h3 className="mt-4 text-sm font-medium text-gray-900">No migration history</h3>
-      <p className="mt-2 text-sm text-gray-500">Migration history will appear here once upgrades are performed.</p>
+      <h3 className="mt-4 text-sm font-medium text-fg">No migration history</h3>
+      <p className="mt-2 text-sm text-subtle">Migration history will appear here once upgrades are performed.</p>
     </div>
   );
 }
@@ -302,12 +302,12 @@ export default function MigrationHistoryPage() {
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Migration History</h1>
-          <p className="mt-1 text-sm text-gray-500">View past upgrade migrations and their status</p>
+          <h1 className="text-2xl font-bold text-fg">Migration History</h1>
+          <p className="mt-1 text-sm text-subtle">View past upgrade migrations and their status</p>
         </div>
         <button
           onClick={() => navigate('/console/upgrade')}
-          className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          className="rounded-md border border-line-strong bg-surface px-4 py-2 text-sm font-medium text-muted hover:bg-hover"
         >
           Back to Upgrade
         </button>
@@ -316,19 +316,19 @@ export default function MigrationHistoryPage() {
       {/* Stats Summary */}
       {!isLoading && !isError && total > 0 && (
         <div className="grid gap-4 sm:grid-cols-3">
-          <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-medium uppercase tracking-wider text-gray-500">Total Migrations</p>
-            <p className="mt-1 text-2xl font-bold text-gray-900">{total}</p>
+          <div className="rounded-lg border border-line bg-surface p-4 shadow-sm">
+            <p className="text-xs font-medium uppercase tracking-wider text-subtle">Total Migrations</p>
+            <p className="mt-1 text-2xl font-bold text-fg">{total}</p>
           </div>
-          <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-medium uppercase tracking-wider text-gray-500">Successful</p>
-            <p className="mt-1 text-2xl font-bold text-green-600">
+          <div className="rounded-lg border border-line bg-surface p-4 shadow-sm">
+            <p className="text-xs font-medium uppercase tracking-wider text-subtle">Successful</p>
+            <p className="mt-1 text-2xl font-bold text-success">
               {entries.filter(e => e.status === 'SUCCESS' || e.status === 'COMPLETED').length}
             </p>
           </div>
-          <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm">
-            <p className="text-xs font-medium uppercase tracking-wider text-gray-500">Failed</p>
-            <p className="mt-1 text-2xl font-bold text-red-600">
+          <div className="rounded-lg border border-line bg-surface p-4 shadow-sm">
+            <p className="text-xs font-medium uppercase tracking-wider text-subtle">Failed</p>
+            <p className="mt-1 text-2xl font-bold text-danger">
               {entries.filter(e => e.status === 'FAILED' || e.status === 'ERROR').length}
             </p>
           </div>
@@ -337,11 +337,11 @@ export default function MigrationHistoryPage() {
 
       {/* Content */}
       {isLoading ? (
-        <div className="flex items-center justify-center rounded-lg border border-gray-200 bg-white py-12">
-          <div className="text-gray-500">Loading migration history...</div>
+        <div className="flex items-center justify-center rounded-lg border border-line bg-surface py-12">
+          <div className="text-subtle">Loading migration history...</div>
         </div>
       ) : isError ? (
-        <div className="rounded-md border border-red-200 bg-red-50 p-8 text-center text-red-600">
+        <div className="rounded-md border border-danger-soft bg-danger-soft p-8 text-center text-danger">
           Failed to load migration history.{' '}
           {error instanceof Error ? error.message : 'An unexpected error occurred.'}
         </div>

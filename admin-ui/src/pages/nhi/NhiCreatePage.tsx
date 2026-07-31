@@ -62,17 +62,17 @@ export default function NhiCreatePage() {
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-gray-900">Create Non-Human Identity</h1>
-        <p className="mt-1 text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-fg">Create Non-Human Identity</h1>
+        <p className="mt-1 text-sm text-subtle">
           Provision a new machine identity in <span className="font-medium">{name}</span>
         </p>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-line bg-surface p-6 shadow-sm">
         <div className="space-y-4">
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label htmlFor="field-nhi-name" className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label htmlFor="field-nhi-name" className="mb-1.5 block text-sm font-medium text-muted">
                 Name *
               </label>
               <input
@@ -82,18 +82,18 @@ export default function NhiCreatePage() {
                 placeholder="e.g. billing-service"
                 value={form.name}
                 onChange={(e) => set('name', e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
             </div>
             <div>
-              <label htmlFor="field-nhi-type" className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label htmlFor="field-nhi-type" className="mb-1.5 block text-sm font-medium text-muted">
                 Identity Type
               </label>
               <select
                 id="field-nhi-type"
                 value={form.identityType}
                 onChange={(e) => set('identityType', e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               >
                 {IDENTITY_TYPES.map((t) => (
                   <option key={t.value} value={t.value}>
@@ -105,7 +105,7 @@ export default function NhiCreatePage() {
           </div>
 
           <div>
-            <label htmlFor="field-nhi-description" className="mb-1.5 block text-sm font-medium text-gray-700">
+            <label htmlFor="field-nhi-description" className="mb-1.5 block text-sm font-medium text-muted">
               Description
             </label>
             <textarea
@@ -113,13 +113,13 @@ export default function NhiCreatePage() {
               rows={2}
               value={form.description}
               onChange={(e) => set('description', e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
 
           {form.identityType === 'AI_AGENT' && (
             <div>
-              <label htmlFor="field-nhi-purpose" className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label htmlFor="field-nhi-purpose" className="mb-1.5 block text-sm font-medium text-muted">
                 Agent Purpose
               </label>
               <input
@@ -128,13 +128,13 @@ export default function NhiCreatePage() {
                 placeholder="What this agent is authorized to do"
                 value={form.agentPurpose}
                 onChange={(e) => set('agentPurpose', e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
             </div>
           )}
 
           <div>
-            <label htmlFor="field-nhi-scopes" className="mb-1.5 block text-sm font-medium text-gray-700">
+            <label htmlFor="field-nhi-scopes" className="mb-1.5 block text-sm font-medium text-muted">
               Permission Scopes
             </label>
             <input
@@ -143,13 +143,13 @@ export default function NhiCreatePage() {
               placeholder="scope-a, scope-b"
               value={form.permissionScopes}
               onChange={(e) => set('permissionScopes', e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
-            <p className="mt-1 text-xs text-gray-500">Comma-separated</p>
+            <p className="mt-1 text-xs text-subtle">Comma-separated</p>
           </div>
 
           <div>
-            <label htmlFor="field-nhi-tags" className="mb-1.5 block text-sm font-medium text-gray-700">
+            <label htmlFor="field-nhi-tags" className="mb-1.5 block text-sm font-medium text-muted">
               Tags
             </label>
             <input
@@ -158,29 +158,29 @@ export default function NhiCreatePage() {
               placeholder="prod, region-eu"
               value={form.tags}
               onChange={(e) => set('tags', e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
-            <p className="mt-1 text-xs text-gray-500">Comma-separated</p>
+            <p className="mt-1 text-xs text-subtle">Comma-separated</p>
           </div>
         </div>
 
         {mutation.isError && (
-          <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+          <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
             {(mutation.error as Error)?.message || 'Failed to create identity.'}
           </div>
         )}
 
-        <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
+        <div className="flex justify-end gap-3 border-t border-line pt-4">
           <Link
             to={`/console/realms/${name}/nhi`}
-            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-muted hover:bg-hover"
           >
             Cancel
           </Link>
           <button
             type="submit"
             disabled={mutation.isPending}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {mutation.isPending ? 'Creating...' : 'Create Identity'}
           </button>

@@ -62,16 +62,16 @@ export default function IdpCreatePage() {
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Add Identity Provider</h1>
+      <h1 className="text-2xl font-bold text-fg">Add Identity Provider</h1>
 
-      <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-line bg-surface p-6 shadow-sm">
         {/* General */}
         <div className="space-y-4">
-          <h2 className="text-lg font-semibold text-gray-900">General</h2>
+          <h2 className="text-lg font-semibold text-fg">General</h2>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label htmlFor="field-idp-alias" className="mb-1.5 block text-sm font-medium text-gray-700">Alias *</label>
+              <label htmlFor="field-idp-alias" className="mb-1.5 block text-sm font-medium text-muted">Alias *</label>
               <input
                 id="field-idp-alias"
                 type="text"
@@ -80,29 +80,29 @@ export default function IdpCreatePage() {
                 title="Lowercase alphanumeric with hyphens"
                 value={form.alias}
                 onChange={(e) => set('alias', e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
             </div>
             <div>
-              <label htmlFor="field-idp-displayName" className="mb-1.5 block text-sm font-medium text-gray-700">Display Name</label>
+              <label htmlFor="field-idp-displayName" className="mb-1.5 block text-sm font-medium text-muted">Display Name</label>
               <input
                 id="field-idp-displayName"
                 type="text"
                 value={form.displayName}
                 onChange={(e) => set('displayName', e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label htmlFor="field-idp-providerType" className="mb-1.5 block text-sm font-medium text-gray-700">Provider Type</label>
+              <label htmlFor="field-idp-providerType" className="mb-1.5 block text-sm font-medium text-muted">Provider Type</label>
               <select
                 id="field-idp-providerType"
                 value={form.providerType}
                 onChange={(e) => set('providerType', e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               >
                 <option value="oidc">OpenID Connect</option>
                 <option value="saml">SAML</option>
@@ -115,9 +115,9 @@ export default function IdpCreatePage() {
                 id="enabled"
                 checked={form.enabled}
                 onChange={(e) => set('enabled', e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
               />
-              <label htmlFor="enabled" className="text-sm font-medium text-gray-700">
+              <label htmlFor="enabled" className="text-sm font-medium text-muted">
                 Enabled
               </label>
             </div>
@@ -125,35 +125,35 @@ export default function IdpCreatePage() {
         </div>
 
         {/* OIDC Configuration */}
-        <div className="space-y-4 border-t border-gray-200 pt-4">
-          <h2 className="text-lg font-semibold text-gray-900">OIDC Configuration</h2>
+        <div className="space-y-4 border-t border-line pt-4">
+          <h2 className="text-lg font-semibold text-fg">OIDC Configuration</h2>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label htmlFor="field-idp-clientId" className="mb-1.5 block text-sm font-medium text-gray-700">Client ID *</label>
+              <label htmlFor="field-idp-clientId" className="mb-1.5 block text-sm font-medium text-muted">Client ID *</label>
               <input
                 id="field-idp-clientId"
                 type="text"
                 required
                 value={form.clientId}
                 onChange={(e) => set('clientId', e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
             </div>
             <div>
-              <label htmlFor="field-idp-clientSecret" className="mb-1.5 block text-sm font-medium text-gray-700">Client Secret *</label>
+              <label htmlFor="field-idp-clientSecret" className="mb-1.5 block text-sm font-medium text-muted">Client Secret *</label>
               <PasswordInput
                 id="field-idp-clientSecret"
                 required
                 value={form.clientSecret}
                 onChange={(e) => set('clientSecret', e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
             </div>
           </div>
 
           <div>
-            <label htmlFor="field-idp-authorizationUrl" className="mb-1.5 block text-sm font-medium text-gray-700">Authorization URL *</label>
+            <label htmlFor="field-idp-authorizationUrl" className="mb-1.5 block text-sm font-medium text-muted">Authorization URL *</label>
             <input
               id="field-idp-authorizationUrl"
               type="url"
@@ -161,12 +161,12 @@ export default function IdpCreatePage() {
               value={form.authorizationUrl}
               onChange={(e) => set('authorizationUrl', e.target.value)}
               placeholder="https://provider.com/authorize"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
 
           <div>
-            <label htmlFor="field-idp-tokenUrl" className="mb-1.5 block text-sm font-medium text-gray-700">Token URL *</label>
+            <label htmlFor="field-idp-tokenUrl" className="mb-1.5 block text-sm font-medium text-muted">Token URL *</label>
             <input
               id="field-idp-tokenUrl"
               type="url"
@@ -174,60 +174,60 @@ export default function IdpCreatePage() {
               value={form.tokenUrl}
               onChange={(e) => set('tokenUrl', e.target.value)}
               placeholder="https://provider.com/token"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label htmlFor="field-idp-userinfoUrl" className="mb-1.5 block text-sm font-medium text-gray-700">Userinfo URL</label>
+              <label htmlFor="field-idp-userinfoUrl" className="mb-1.5 block text-sm font-medium text-muted">Userinfo URL</label>
               <input
                 id="field-idp-userinfoUrl"
                 type="url"
                 value={form.userinfoUrl}
                 onChange={(e) => set('userinfoUrl', e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
             </div>
             <div>
-              <label htmlFor="field-idp-jwksUrl" className="mb-1.5 block text-sm font-medium text-gray-700">JWKS URL</label>
+              <label htmlFor="field-idp-jwksUrl" className="mb-1.5 block text-sm font-medium text-muted">JWKS URL</label>
               <input
                 id="field-idp-jwksUrl"
                 type="url"
                 value={form.jwksUrl}
                 onChange={(e) => set('jwksUrl', e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label htmlFor="field-idp-issuer" className="mb-1.5 block text-sm font-medium text-gray-700">Issuer</label>
+              <label htmlFor="field-idp-issuer" className="mb-1.5 block text-sm font-medium text-muted">Issuer</label>
               <input
                 id="field-idp-issuer"
                 type="text"
                 value={form.issuer}
                 onChange={(e) => set('issuer', e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
             </div>
             <div>
-              <label htmlFor="field-idp-defaultScopes" className="mb-1.5 block text-sm font-medium text-gray-700">Default Scopes</label>
+              <label htmlFor="field-idp-defaultScopes" className="mb-1.5 block text-sm font-medium text-muted">Default Scopes</label>
               <input
                 id="field-idp-defaultScopes"
                 type="text"
                 value={form.defaultScopes}
                 onChange={(e) => set('defaultScopes', e.target.value)}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
             </div>
           </div>
         </div>
 
         {/* Behavior */}
-        <div className="space-y-3 border-t border-gray-200 pt-4">
-          <h2 className="text-lg font-semibold text-gray-900">Behavior</h2>
+        <div className="space-y-3 border-t border-line pt-4">
+          <h2 className="text-lg font-semibold text-fg">Behavior</h2>
 
           <div className="space-y-2">
             <label className="flex items-center gap-2">
@@ -235,49 +235,49 @@ export default function IdpCreatePage() {
                 type="checkbox"
                 checked={form.trustEmail}
                 onChange={(e) => set('trustEmail', e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
               />
-              <span className="text-sm text-gray-700">Trust email from provider</span>
+              <span className="text-sm text-muted">Trust email from provider</span>
             </label>
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
                 checked={form.syncUserProfile}
                 onChange={(e) => set('syncUserProfile', e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
               />
-              <span className="text-sm text-gray-700">Sync user profile on login</span>
+              <span className="text-sm text-muted">Sync user profile on login</span>
             </label>
             <label className="flex items-center gap-2">
               <input
                 type="checkbox"
                 checked={form.linkOnly}
                 onChange={(e) => set('linkOnly', e.target.checked)}
-                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
               />
-              <span className="text-sm text-gray-700">Link only (don&apos;t create new users)</span>
+              <span className="text-sm text-muted">Link only (don&apos;t create new users)</span>
             </label>
           </div>
         </div>
 
         {mutation.isError && (
-          <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+          <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
             {(mutation.error as Error)?.message || 'Failed to create identity provider.'}
           </div>
         )}
 
-        <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
+        <div className="flex justify-end gap-3 border-t border-line pt-4">
           <button
             type="button"
             onClick={() => navigate(`/console/realms/${name}/identity-providers`)}
-            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-muted hover:bg-hover"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={mutation.isPending}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {mutation.isPending ? 'Creating...' : 'Create'}
           </button>

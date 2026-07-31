@@ -183,7 +183,7 @@ const PROVIDERS: ProviderOption[] = [
 // ── Field helpers ──────────────────────────────────────────────────────────
 
 const inputClass =
-  'w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none';
+  'w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none';
 
 function Field({
   label,
@@ -196,9 +196,9 @@ function Field({
 }) {
   return (
     <div>
-      <label className="mb-1.5 block text-sm font-medium text-gray-700">{label}</label>
+      <label className="mb-1.5 block text-sm font-medium text-muted">{label}</label>
       {children}
-      {hint && <p className="mt-1 text-xs text-gray-400">{hint}</p>}
+      {hint && <p className="mt-1 text-xs text-subtle">{hint}</p>}
     </div>
   );
 }
@@ -271,10 +271,10 @@ function SmtpFields({
           type="checkbox"
           checked={form.smtpSecure}
           onChange={(e) => setForm((f) => ({ ...f, smtpSecure: e.target.checked }))}
-          className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+          className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
         />
-        <span className="text-sm font-medium text-gray-700">Use SSL/TLS</span>
-        <span className="text-xs text-gray-400">(enable for port 465)</span>
+        <span className="text-sm font-medium text-muted">Use SSL/TLS</span>
+        <span className="text-xs text-subtle">(enable for port 465)</span>
       </label>
     </div>
   );
@@ -471,10 +471,10 @@ export default function EmailProviderForm({ realm }: EmailProviderFormProps) {
   return (
     <div className="space-y-6">
       {/* Provider selector */}
-      <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-line bg-surface p-6 shadow-sm">
         <div>
-          <h2 className="text-lg font-semibold text-gray-900">Email Provider</h2>
-          <p className="mt-1 text-sm text-gray-500">
+          <h2 className="text-lg font-semibold text-fg">Email Provider</h2>
+          <p className="mt-1 text-sm text-subtle">
             Choose how Idenplane delivers email for this realm — password resets, verification links, and notifications.
           </p>
         </div>
@@ -489,22 +489,22 @@ export default function EmailProviderForm({ realm }: EmailProviderFormProps) {
                 type="button"
                 onClick={() => setForm((f) => ({ ...f, emailProvider: p.value }))}
                 className={[
-                  'relative flex flex-col gap-1.5 rounded-lg border-2 p-4 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500',
+                  'relative flex flex-col gap-1.5 rounded-lg border-2 p-4 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
                   selected
-                    ? 'border-indigo-600 bg-indigo-50'
-                    : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50',
+                    ? 'border-accent bg-accent-soft'
+                    : 'border-line bg-surface hover:border-line-strong hover:bg-hover',
                 ].join(' ')}
                 aria-pressed={selected}
               >
                 {p.badge && (
-                  <span className="absolute right-2 top-2 rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-700">
+                  <span className="absolute right-2 top-2 rounded-full bg-accent-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
                     {p.badge}
                   </span>
                 )}
                 <span
                   className={[
                     'flex h-8 w-8 items-center justify-center rounded-md',
-                    selected ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-500',
+                    selected ? 'bg-accent text-white' : 'bg-sunken text-subtle',
                   ].join(' ')}
                 >
                   {p.icon}
@@ -512,12 +512,12 @@ export default function EmailProviderForm({ realm }: EmailProviderFormProps) {
                 <span
                   className={[
                     'text-sm font-semibold',
-                    selected ? 'text-indigo-700' : 'text-gray-900',
+                    selected ? 'text-accent' : 'text-fg',
                   ].join(' ')}
                 >
                   {p.label}
                 </span>
-                <span className="text-xs leading-snug text-gray-500">{p.description}</span>
+                <span className="text-xs leading-snug text-subtle">{p.description}</span>
               </button>
             );
           })}
@@ -525,8 +525,8 @@ export default function EmailProviderForm({ realm }: EmailProviderFormProps) {
 
         {/* Provider-specific fields */}
         {hasConfig && (
-          <div className="rounded-lg border border-gray-200 bg-gray-50 p-5">
-            <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-gray-400">
+          <div className="rounded-lg border border-line bg-sunken p-5">
+            <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-subtle">
               {activeProvider?.label} Configuration
             </p>
             <ProviderFields form={form} setForm={setForm} />
@@ -535,21 +535,21 @@ export default function EmailProviderForm({ realm }: EmailProviderFormProps) {
 
         {/* Status banners */}
         {updateMutation.isSuccess && (
-          <div role="status" className="rounded-md bg-green-50 p-3 text-sm text-green-700">
+          <div role="status" className="rounded-md bg-success-soft p-3 text-sm text-success-fg">
             Email settings saved successfully.
           </div>
         )}
         {updateMutation.isError && (
-          <div role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+          <div role="alert" className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
             {getErrorMessage(updateMutation.error, 'Failed to save email settings.')}
           </div>
         )}
 
-        <div className="flex justify-end border-t border-gray-200 pt-4">
+        <div className="flex justify-end border-t border-line pt-4">
           <button
             type="submit"
             disabled={updateMutation.isPending}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {updateMutation.isPending ? 'Saving…' : 'Save Changes'}
           </button>
@@ -558,14 +558,14 @@ export default function EmailProviderForm({ realm }: EmailProviderFormProps) {
 
       {/* Test email */}
       {hasConfig && (
-        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-          <h3 className="text-sm font-semibold text-gray-900">Send a Test Email</h3>
-          <p className="mt-1 text-xs text-gray-500">
+        <div className="rounded-lg border border-line bg-surface p-6 shadow-sm">
+          <h3 className="text-sm font-semibold text-fg">Send a Test Email</h3>
+          <p className="mt-1 text-xs text-subtle">
             Save your settings above first, then send a test to verify delivery.
           </p>
           <div className="mt-4 flex items-end gap-3">
             <div className="flex-1">
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Recipient</label>
+              <label className="mb-1.5 block text-sm font-medium text-muted">Recipient</label>
               <input
                 type="email"
                 value={testEmailTo}
@@ -584,12 +584,12 @@ export default function EmailProviderForm({ realm }: EmailProviderFormProps) {
             </button>
           </div>
           {testMutation.isSuccess && (
-            <p role="status" className="mt-3 text-sm text-green-700">
+            <p role="status" className="mt-3 text-sm text-success-fg">
               ✓ Test email sent successfully!
             </p>
           )}
           {testMutation.isError && (
-            <p role="alert" className="mt-3 text-sm text-red-700">
+            <p role="alert" className="mt-3 text-sm text-danger-fg">
               {getErrorMessage(testMutation.error, 'Failed to send test email. Check your settings.')}
             </p>
           )}
@@ -598,9 +598,9 @@ export default function EmailProviderForm({ realm }: EmailProviderFormProps) {
 
       {/* Test connection */}
       {hasConfig && (
-        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-          <h3 className="text-sm font-semibold text-gray-900">Test Connection</h3>
-          <p className="mt-1 text-xs text-gray-500">
+        <div className="rounded-lg border border-line bg-surface p-6 shadow-sm">
+          <h3 className="text-sm font-semibold text-fg">Test Connection</h3>
+          <p className="mt-1 text-xs text-subtle">
             Verify that the saved email provider settings can connect and send. No message is delivered to a real recipient.
           </p>
           <div className="mt-4">
@@ -608,23 +608,23 @@ export default function EmailProviderForm({ realm }: EmailProviderFormProps) {
               type="button"
               onClick={() => { smtpTestMutation.reset(); smtpTestMutation.mutate(); }}
               disabled={smtpTestMutation.isPending}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               {smtpTestMutation.isPending ? 'Testing…' : 'Test Connection'}
             </button>
           </div>
           {smtpTestMutation.isSuccess && smtpTestMutation.data.success && (
-            <p role="status" className="mt-3 text-sm text-green-700">
+            <p role="status" className="mt-3 text-sm text-success-fg">
               ✓ Connection successful — email provider is reachable.
             </p>
           )}
           {smtpTestMutation.isSuccess && !smtpTestMutation.data.success && (
-            <p role="alert" className="mt-3 text-sm text-red-700">
+            <p role="alert" className="mt-3 text-sm text-danger-fg">
               Connection failed: {smtpTestMutation.data.error ?? 'Unknown error. Check your provider settings.'}
             </p>
           )}
           {smtpTestMutation.isError && (
-            <p role="alert" className="mt-3 text-sm text-red-700">
+            <p role="alert" className="mt-3 text-sm text-danger-fg">
               {getErrorMessage(smtpTestMutation.error, 'Connection test failed. Check your provider settings.')}
             </p>
           )}

@@ -113,15 +113,15 @@ function AttributeForm({
   return (
     <form
       onSubmit={onSubmit}
-      className="mb-6 space-y-4 rounded-lg border border-gray-200 bg-white p-6 shadow-sm"
+      className="mb-6 space-y-4 rounded-lg border border-line bg-surface p-6 shadow-sm"
     >
-      <h2 className="text-lg font-semibold text-gray-900">
+      <h2 className="text-lg font-semibold text-fg">
         {editingName ? 'Edit Attribute' : 'New Attribute'}
       </h2>
 
       <div className="grid grid-cols-2 gap-4">
         <div>
-          <label htmlFor="attr-name" className="mb-1.5 block text-sm font-medium text-gray-700">
+          <label htmlFor="attr-name" className="mb-1.5 block text-sm font-medium text-muted">
             Name
           </label>
           <input
@@ -132,12 +132,12 @@ function AttributeForm({
             value={form.name}
             onChange={(e) => set({ name: e.target.value })}
             placeholder="e.g. department"
-            className={`w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none ${editingName ? 'bg-gray-50 text-gray-500' : ''}`}
+            className={`w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none ${editingName ? 'bg-sunken text-subtle' : ''}`}
           />
         </div>
 
         <div>
-          <label htmlFor="attr-display-name" className="mb-1.5 block text-sm font-medium text-gray-700">
+          <label htmlFor="attr-display-name" className="mb-1.5 block text-sm font-medium text-muted">
             Display Name
           </label>
           <input
@@ -147,20 +147,20 @@ function AttributeForm({
             value={form.displayName}
             onChange={(e) => set({ displayName: e.target.value })}
             placeholder="e.g. Department"
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+            className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
           />
         </div>
       </div>
 
       <div>
-        <label htmlFor="attr-type" className="mb-1.5 block text-sm font-medium text-gray-700">
+        <label htmlFor="attr-type" className="mb-1.5 block text-sm font-medium text-muted">
           Type
         </label>
         <select
           id="attr-type"
           value={form.type}
           onChange={(e) => set({ type: e.target.value as AttributeType })}
-          className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+          className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
         >
           {ATTRIBUTE_TYPES.map((t) => (
             <option key={t} value={t}>
@@ -172,7 +172,7 @@ function AttributeForm({
 
       {NEEDS_OPTIONS.includes(form.type) && (
         <div>
-          <label htmlFor="attr-options" className="mb-1.5 block text-sm font-medium text-gray-700">
+          <label htmlFor="attr-options" className="mb-1.5 block text-sm font-medium text-muted">
             Options (comma-separated)
           </label>
           <textarea
@@ -181,7 +181,7 @@ function AttributeForm({
             value={form.options}
             onChange={(e) => set({ options: e.target.value })}
             placeholder="e.g. Engineering, Marketing, Sales"
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+            className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
           />
         </div>
       )}
@@ -189,7 +189,7 @@ function AttributeForm({
       {NEEDS_LENGTH.includes(form.type) && (
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label htmlFor="attr-min-length" className="mb-1.5 block text-sm font-medium text-gray-700">
+            <label htmlFor="attr-min-length" className="mb-1.5 block text-sm font-medium text-muted">
               Min Length
             </label>
             <input
@@ -198,11 +198,11 @@ function AttributeForm({
               min={0}
               value={form.minLength}
               onChange={(e) => set({ minLength: e.target.value })}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
           <div>
-            <label htmlFor="attr-max-length" className="mb-1.5 block text-sm font-medium text-gray-700">
+            <label htmlFor="attr-max-length" className="mb-1.5 block text-sm font-medium text-muted">
               Max Length
             </label>
             <input
@@ -211,7 +211,7 @@ function AttributeForm({
               min={0}
               value={form.maxLength}
               onChange={(e) => set({ maxLength: e.target.value })}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
         </div>
@@ -220,7 +220,7 @@ function AttributeForm({
       {NEEDS_RANGE.includes(form.type) && (
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label htmlFor="attr-min" className="mb-1.5 block text-sm font-medium text-gray-700">
+            <label htmlFor="attr-min" className="mb-1.5 block text-sm font-medium text-muted">
               Min
             </label>
             <input
@@ -228,11 +228,11 @@ function AttributeForm({
               type="number"
               value={form.min}
               onChange={(e) => set({ min: e.target.value })}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
           <div>
-            <label htmlFor="attr-max" className="mb-1.5 block text-sm font-medium text-gray-700">
+            <label htmlFor="attr-max" className="mb-1.5 block text-sm font-medium text-muted">
               Max
             </label>
             <input
@@ -240,44 +240,44 @@ function AttributeForm({
               type="number"
               value={form.max}
               onChange={(e) => set({ max: e.target.value })}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
         </div>
       )}
 
       <div className="flex flex-wrap gap-6">
-        <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
           <input
             type="checkbox"
             checked={form.required}
             onChange={(e) => set({ required: e.target.checked })}
-            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+            className="rounded border-line-strong text-accent focus:ring-accent"
           />
           Required
         </label>
-        <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
           <input
             type="checkbox"
             checked={form.showOnRegistration}
             onChange={(e) => set({ showOnRegistration: e.target.checked })}
-            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+            className="rounded border-line-strong text-accent focus:ring-accent"
           />
           Show on Registration
         </label>
-        <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+        <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
           <input
             type="checkbox"
             checked={form.showOnProfile}
             onChange={(e) => set({ showOnProfile: e.target.checked })}
-            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+            className="rounded border-line-strong text-accent focus:ring-accent"
           />
           Show on Profile
         </label>
       </div>
 
       {error != null && (
-        <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+        <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
           {getErrorMessage(error, 'Failed to save attribute.')}
         </div>
       )}
@@ -286,14 +286,14 @@ function AttributeForm({
         <button
           type="button"
           onClick={onCancel}
-          className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+          className="rounded-md border border-line-strong bg-surface px-4 py-2 text-sm font-medium text-muted hover:bg-hover"
         >
           Cancel
         </button>
         <button
           type="submit"
           disabled={isPending}
-          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
         >
           {isPending ? 'Saving...' : 'Save'}
         </button>
@@ -356,12 +356,12 @@ export default function CustomAttributesPage() {
   }
 
   if (isLoading) {
-    return <div className="text-gray-500">Loading custom attributes...</div>;
+    return <div className="text-subtle">Loading custom attributes...</div>;
   }
 
   if (error) {
     return (
-      <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
+      <div className="rounded-md bg-danger-soft p-4 text-sm text-danger-fg">
         {getErrorMessage(error, 'Failed to load custom attributes.')}
       </div>
     );
@@ -370,14 +370,14 @@ export default function CustomAttributesPage() {
   return (
     <div>
       <div className="mb-6 flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Custom Attributes</h1>
+        <h1 className="text-2xl font-bold text-fg">Custom Attributes</h1>
         <button
           onClick={() => {
             setEditingId(null);
             setCreateForm(emptyForm);
             setShowCreate(true);
           }}
-          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
         >
           Add Attribute
         </button>
@@ -408,68 +408,68 @@ export default function CustomAttributesPage() {
       )}
 
       {!attributes || attributes.length === 0 ? (
-        <div className="rounded-md border border-gray-200 bg-white p-8 text-center text-gray-500">
+        <div className="rounded-md border border-line bg-surface p-8 text-center text-subtle">
           No custom attributes defined for this realm.
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+        <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-sm">
+          <table className="min-w-full divide-y divide-line">
+            <thead className="bg-sunken">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Display Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Type</th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Required</th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Registration</th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Profile</th>
-                <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">Actions</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Name</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Display Name</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Type</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Required</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Registration</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Profile</th>
+                <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-subtle">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-line">
               {attributes.map((attr) => (
-                <tr key={attr.id} className="hover:bg-gray-50">
+                <tr key={attr.id} className="hover:bg-hover">
                   <td className="whitespace-nowrap px-6 py-4">
-                    <code className="rounded bg-gray-100 px-1.5 py-0.5 font-mono text-xs text-gray-800">
+                    <code className="rounded bg-sunken px-1.5 py-0.5 font-mono text-xs text-fg">
                       {attr.name}
                     </code>
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-700">{attr.displayName}</td>
+                  <td className="px-6 py-4 text-sm text-muted">{attr.displayName}</td>
                   <td className="whitespace-nowrap px-6 py-4 text-sm">
-                    <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-700">
+                    <span className="inline-flex rounded-full bg-sunken px-2 py-0.5 text-xs font-medium text-muted">
                       {attr.type}
                     </span>
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-sm">
                     {attr.required ? (
-                      <span className="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">Yes</span>
+                      <span className="inline-flex rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success-fg">Yes</span>
                     ) : (
-                      <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">No</span>
+                      <span className="inline-flex rounded-full bg-sunken px-2 py-0.5 text-xs font-medium text-subtle">No</span>
                     )}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-sm">
                     {attr.showOnRegistration ? (
-                      <span className="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">Yes</span>
+                      <span className="inline-flex rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success-fg">Yes</span>
                     ) : (
-                      <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">No</span>
+                      <span className="inline-flex rounded-full bg-sunken px-2 py-0.5 text-xs font-medium text-subtle">No</span>
                     )}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-sm">
                     {attr.showOnProfile ? (
-                      <span className="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">Yes</span>
+                      <span className="inline-flex rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success-fg">Yes</span>
                     ) : (
-                      <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-500">No</span>
+                      <span className="inline-flex rounded-full bg-sunken px-2 py-0.5 text-xs font-medium text-subtle">No</span>
                     )}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-right">
                     <button
                       onClick={() => startEdit(attr)}
-                      className="mr-4 text-sm font-medium text-indigo-600 hover:text-indigo-900"
+                      className="mr-4 text-sm font-medium text-accent hover:text-accent"
                     >
                       Edit
                     </button>
                     <button
                       onClick={() => setDeleteTarget(attr)}
-                      className="text-sm font-medium text-red-600 hover:text-red-800"
+                      className="text-sm font-medium text-danger hover:text-danger-fg"
                     >
                       Delete
                     </button>
@@ -482,7 +482,7 @@ export default function CustomAttributesPage() {
       )}
 
       {deleteMutation.isError && (
-        <div className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
+        <div className="mt-4 rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
           {getErrorMessage(deleteMutation.error, 'Failed to delete attribute.')}
         </div>
       )}

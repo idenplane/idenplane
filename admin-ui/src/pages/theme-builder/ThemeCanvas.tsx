@@ -168,7 +168,7 @@ export default function ThemeCanvas({
     <div className="flex h-full gap-0">
       {/* Palette — hidden in preview mode */}
       {!isPreview && (
-        <div className="w-52 shrink-0 overflow-y-auto border-r border-gray-200 bg-gray-50 p-4">
+        <div className="w-52 shrink-0 overflow-y-auto border-r border-line bg-sunken p-4">
           <ComponentPalette onAddComponent={addComponent} />
         </div>
       )}
@@ -176,14 +176,14 @@ export default function ThemeCanvas({
       {/* Canvas */}
       <div
         ref={canvasRef}
-        className={`relative flex-1 overflow-auto bg-white ${
-          !isPreview ? 'border-r border-gray-200' : ''
+        className={`relative flex-1 overflow-auto bg-surface ${
+          !isPreview ? 'border-r border-line' : ''
         }`}
         onDragOver={handleCanvasDragOver}
         onDrop={handleCanvasDrop}
       >
         {sorted.length === 0 ? (
-          <div className="flex h-full min-h-[240px] flex-col items-center justify-center text-gray-400">
+          <div className="flex h-full min-h-[240px] flex-col items-center justify-center text-subtle">
             <svg className="mb-3 h-12 w-12 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
             </svg>
@@ -220,10 +220,10 @@ export default function ThemeCanvas({
                   onClick={() => !isPreview && onSelectComponent?.(component)}
                   className={`cursor-pointer rounded-lg border-2 p-4 transition-all ${
                     selectedComponentId === component.id
-                      ? 'border-indigo-500 bg-indigo-50 shadow-md'
+                      ? 'border-accent bg-accent-soft shadow-md'
                       : dragOverIndex === index && draggingId !== component.id
-                        ? 'border-indigo-300 bg-indigo-50 opacity-75'
-                        : 'border-gray-200 bg-white hover:border-indigo-300 hover:shadow-md'
+                        ? 'border-accent-soft bg-accent-soft opacity-75'
+                        : 'border-line bg-surface hover:border-accent-soft hover:shadow-md'
                   }`}
                   data-testid={`theme-canvas-component-${component.id}`}
                 >
@@ -233,8 +233,8 @@ export default function ThemeCanvas({
                       <span className="text-lg" role="img" aria-label={component.label}>
                         {getComponentIcon(component.type)}
                       </span>
-                      <span className="font-medium text-gray-900">{component.label}</span>
-                      <span className="rounded bg-gray-100 px-2 py-0.5 text-xs text-gray-600">
+                      <span className="font-medium text-fg">{component.label}</span>
+                      <span className="rounded bg-sunken px-2 py-0.5 text-xs text-muted">
                         {component.type}
                       </span>
                     </div>
@@ -247,7 +247,7 @@ export default function ThemeCanvas({
                             moveComponent(index, -1);
                           }}
                           disabled={index === 0}
-                          className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-30"
+                          className="rounded p-1 text-subtle hover:bg-hover hover:text-muted disabled:cursor-not-allowed disabled:opacity-30"
                           aria-label="Move component up"
                           data-testid={`move-up-${component.id}`}
                         >
@@ -266,7 +266,7 @@ export default function ThemeCanvas({
                             moveComponent(index, 1);
                           }}
                           disabled={index === sorted.length - 1}
-                          className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600 disabled:cursor-not-allowed disabled:opacity-30"
+                          className="rounded p-1 text-subtle hover:bg-hover hover:text-muted disabled:cursor-not-allowed disabled:opacity-30"
                           aria-label="Move component down"
                           data-testid={`move-down-${component.id}`}
                         >
@@ -284,7 +284,7 @@ export default function ThemeCanvas({
                             e.stopPropagation();
                             removeComponent(component.id);
                           }}
-                          className="rounded p-1 text-gray-400 hover:bg-red-100 hover:text-red-600"
+                          className="rounded p-1 text-subtle hover:bg-danger-soft hover:text-danger"
                           aria-label="Remove component"
                           data-testid={`remove-${component.id}`}
                         >
@@ -301,7 +301,7 @@ export default function ThemeCanvas({
                   </div>
 
                   {/* Component preview content */}
-                  <div className="text-sm text-gray-500">
+                  <div className="text-sm text-subtle">
                     {renderComponentPreview(component)}
                   </div>
                 </div>
@@ -309,7 +309,7 @@ export default function ThemeCanvas({
 
               {/* "Add component" placeholder at the bottom */}
               {!isPreview && (
-                <div className="flex items-center justify-center gap-1 rounded-lg border-2 border-dashed border-gray-300 py-4 text-sm text-gray-400 hover:border-indigo-300 hover:text-indigo-500"
+                <div className="flex items-center justify-center gap-1 rounded-lg border-2 border-dashed border-line-strong py-4 text-sm text-subtle hover:border-accent-soft hover:text-accent"
                   style={{ width: NODE_WIDTH }}
                   title="Drag a component from the palette or click to add it"
                   data-testid="add-component-placeholder"
@@ -363,7 +363,7 @@ function renderComponentPreview(component: ThemeComponent): React.ReactNode {
     case 'button':
       return (
         <div className="flex justify-center">
-          <button className="rounded bg-indigo-600 px-4 py-2 text-sm font-medium text-white">
+          <button className="rounded bg-accent px-4 py-2 text-sm font-medium text-white">
             {(component.props as { label?: string }).label ?? 'Button'}
           </button>
         </div>
@@ -371,13 +371,13 @@ function renderComponentPreview(component: ThemeComponent): React.ReactNode {
     case 'input':
       return (
         <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-700">
+          <label className="text-xs font-medium text-muted">
             {(component.props as { label?: string }).label ?? 'Input'}
           </label>
           <input
             type="text"
             placeholder="Enter value..."
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded-md border border-line-strong px-3 py-2 text-sm"
             disabled
           />
         </div>
@@ -385,20 +385,20 @@ function renderComponentPreview(component: ThemeComponent): React.ReactNode {
     case 'passwordInput':
       return (
         <div className="space-y-1">
-          <label className="text-xs font-medium text-gray-700">
+          <label className="text-xs font-medium text-muted">
             {(component.props as { label?: string }).label ?? 'Password'}
           </label>
           <input
             type="password"
             placeholder="Enter password..."
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm"
+            className="w-full rounded-md border border-line-strong px-3 py-2 text-sm"
             disabled
           />
         </div>
       );
     case 'alert':
       return (
-        <div className="rounded border border-red-200 bg-red-50 p-2 text-xs text-red-700">
+        <div className="rounded border border-danger-soft bg-danger-soft p-2 text-xs text-danger-fg">
           {(component.props as { message?: string }).message ?? 'Alert message'}
         </div>
       );
@@ -416,37 +416,37 @@ function renderComponentPreview(component: ThemeComponent): React.ReactNode {
       );
     case 'link':
       return (
-        <div className="text-center text-sm text-indigo-600 underline">
+        <div className="text-center text-sm text-accent underline">
           {(component.props as { text?: string }).text ?? 'Link'}
         </div>
       );
     case 'divider':
-      return <div className="border-t border-gray-300" />;
+      return <div className="border-t border-line-strong" />;
     case 'spacer':
       return (
-        <div className="bg-gray-100 text-center text-xs text-gray-400">
+        <div className="bg-sunken text-center text-xs text-subtle">
           Spacer: {(component.props as { height?: number }).height ?? 16}px
         </div>
       );
     case 'card':
       return (
-        <div className="rounded-lg border border-gray-200 bg-gray-50 p-3 text-center text-xs text-gray-500">
+        <div className="rounded-lg border border-line bg-sunken p-3 text-center text-xs text-subtle">
           Card container
         </div>
       );
     case 'form':
       return (
-        <div className="space-y-2 rounded border border-gray-200 bg-gray-50 p-3">
-          <div className="h-6 rounded bg-gray-200" />
-          <div className="h-6 rounded bg-gray-200" />
+        <div className="space-y-2 rounded border border-line bg-sunken p-3">
+          <div className="h-6 rounded bg-active" />
+          <div className="h-6 rounded bg-active" />
           <div className="h-8 rounded bg-indigo-200" />
         </div>
       );
     case 'socialButton':
       return (
         <div className="flex justify-center gap-2">
-          <div className="h-8 w-24 rounded bg-gray-200" />
-          <div className="h-8 w-24 rounded bg-gray-200" />
+          <div className="h-8 w-24 rounded bg-active" />
+          <div className="h-8 w-24 rounded bg-active" />
         </div>
       );
     case 'checkbox':
@@ -465,43 +465,43 @@ function renderComponentPreview(component: ThemeComponent): React.ReactNode {
       );
     case 'forgotPassword':
       return (
-        <div className="text-right text-sm text-indigo-600">
+        <div className="text-right text-sm text-accent">
           Forgot password?
         </div>
       );
     case 'registrationLink':
       return (
-        <div className="text-center text-sm text-gray-600">
+        <div className="text-center text-sm text-muted">
           {(component.props as { text?: string }).text ?? "Don't have an account? Sign up"}
         </div>
       );
     case 'logo':
       return (
         <div className="flex justify-center">
-          <div className="h-12 w-32 rounded bg-gray-200" />
+          <div className="h-12 w-32 rounded bg-active" />
         </div>
       );
     case 'header':
       return (
-        <div className="rounded bg-gray-100 p-2 text-center text-sm font-medium">
+        <div className="rounded bg-sunken p-2 text-center text-sm font-medium">
           {(component.props as { title?: string }).title ?? 'Header'}
         </div>
       );
     case 'footer':
       return (
-        <div className="rounded bg-gray-100 p-2 text-center text-xs text-gray-500">
+        <div className="rounded bg-sunken p-2 text-center text-xs text-subtle">
           Footer content
         </div>
       );
     case 'image':
       return (
         <div className="flex justify-center">
-          <div className="h-24 w-full rounded bg-gray-200" />
+          <div className="h-24 w-full rounded bg-active" />
         </div>
       );
     case 'select':
       return (
-        <select className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm" disabled>
+        <select className="w-full rounded-md border border-line-strong px-3 py-2 text-sm" disabled>
           <option>Select option</option>
         </select>
       );
@@ -519,6 +519,6 @@ function renderComponentPreview(component: ThemeComponent): React.ReactNode {
         </div>
       );
     default:
-      return <span className="text-xs text-gray-400">No preview available</span>;
+      return <span className="text-xs text-subtle">No preview available</span>;
   }
 }

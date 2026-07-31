@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createUser } from '../../api/users';
 import { getErrorMessage } from '../../utils/getErrorMessage';
 import PasswordInput from '../../components/PasswordInput';
+import { SectionHeader, Card, Input, Switch, Button, Alert } from '../../components/ui';
 
 export default function UserCreatePage() {
   const { name } = useParams<{ name: string }>();
@@ -42,128 +43,96 @@ export default function UserCreatePage() {
 
   return (
     <div className="mx-auto max-w-2xl">
-      <div className="mb-6">
-        <h1 className="text-2xl font-bold text-gray-900">Create User</h1>
-        <p className="mt-1 text-sm text-gray-500">
-          Add a new user to <span className="font-medium">{name}</span>
-        </p>
-      </div>
+      <SectionHeader
+        title="Create User"
+        hint={
+          <>
+            Add a new user to <span className="font-medium">{name}</span>
+          </>
+        }
+      />
 
-      <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="username" className="mb-1.5 block text-sm font-medium text-gray-700">
-              Username
-            </label>
-            <input
+      <Card padding="lg">
+        <form onSubmit={handleSubmit} className="space-y-6">
+          <div className="grid grid-cols-2 gap-4">
+            <Input
               id="username"
               name="username"
+              label="Username"
               type="text"
               required
               value={form.username}
               onChange={(e) => setForm({ ...form, username: e.target.value })}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
             />
-          </div>
-          <div>
-            <label htmlFor="email" className="mb-1.5 block text-sm font-medium text-gray-700">
-              Email
-            </label>
-            <input
+            <Input
               id="email"
               name="email"
+              label="Email"
               type="email"
               value={form.email}
               onChange={(e) => setForm({ ...form, email: e.target.value })}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
             />
           </div>
-        </div>
 
-        <div className="grid grid-cols-2 gap-4">
-          <div>
-            <label htmlFor="firstName" className="mb-1.5 block text-sm font-medium text-gray-700">
-              First Name
-            </label>
-            <input
+          <div className="grid grid-cols-2 gap-4">
+            <Input
               id="firstName"
               name="firstName"
+              label="First Name"
               type="text"
               value={form.firstName}
               onChange={(e) => setForm({ ...form, firstName: e.target.value })}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
             />
-          </div>
-          <div>
-            <label htmlFor="lastName" className="mb-1.5 block text-sm font-medium text-gray-700">
-              Last Name
-            </label>
-            <input
+            <Input
               id="lastName"
               name="lastName"
+              label="Last Name"
               type="text"
               value={form.lastName}
               onChange={(e) => setForm({ ...form, lastName: e.target.value })}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
             />
           </div>
-        </div>
 
-        <div>
-          <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-gray-700">
-            Password
-          </label>
-          <PasswordInput
-            id="password"
-            name="password"
-            required
-            value={form.password}
-            onChange={(e) => setForm({ ...form, password: e.target.value })}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
-          />
-        </div>
-
-        <div className="flex items-center gap-2">
-          <input
-            type="checkbox"
-            id="enabled"
-            checked={form.enabled}
-            onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
-            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-          />
-          <label htmlFor="enabled" className="text-sm font-medium text-gray-700">
-            Enabled
-          </label>
-        </div>
-
-        {mutation.isError && (
-          <div
-            role="alert"
-            aria-live="assertive"
-            aria-atomic="true"
-            className="rounded-md bg-red-50 p-3 text-sm text-red-700"
-          >
-            {getErrorMessage(mutation.error, 'Failed to create user.')}
+          <div>
+            <label htmlFor="password" className="mb-1.5 block text-sm font-medium text-fg">
+              Password
+            </label>
+            <PasswordInput
+              id="password"
+              name="password"
+              required
+              value={form.password}
+              onChange={(e) => setForm({ ...form, password: e.target.value })}
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm text-fg outline-none focus:border-accent"
+            />
           </div>
-        )}
 
-        <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
-          <button
-            type="button"
-            onClick={() => navigate(`/console/realms/${name}/users`)}
-            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Cancel
-          </button>
-          <button
-            type="submit"
-            disabled={mutation.isPending}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
-          >
-            {mutation.isPending ? 'Creating...' : 'Create User'}
-          </button>
-        </div>
-      </form>
+          <Switch
+            checked={form.enabled}
+            onChange={(enabled) => setForm({ ...form, enabled })}
+            label="Enabled"
+          />
+
+          {mutation.isError && (
+            <Alert variant="danger" aria-live="assertive" aria-atomic="true">
+              {getErrorMessage(mutation.error, 'Failed to create user.')}
+            </Alert>
+          )}
+
+          <div className="flex justify-end gap-3 border-t border-line pt-4">
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => navigate(`/console/realms/${name}/users`)}
+            >
+              Cancel
+            </Button>
+            <Button type="submit" disabled={mutation.isPending}>
+              {mutation.isPending ? 'Creating...' : 'Create User'}
+            </Button>
+          </div>
+        </form>
+      </Card>
     </div>
   );
 }

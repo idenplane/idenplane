@@ -88,18 +88,18 @@ export default function SmtpConfigStep() {
   return (
     <div className="max-w-xl">
       <div className="mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">Configure Email (Optional)</h2>
-        <p className="mt-1 text-sm text-gray-500">
+        <h2 className="text-xl font-semibold text-fg">Configure Email (Optional)</h2>
+        <p className="mt-1 text-sm text-subtle">
           Set up SMTP for password resets, email verification, and admin notifications.
           You can skip this step and configure it later from the realm settings.
         </p>
-        <div className="mt-3 flex items-start gap-2 rounded-md border border-indigo-100 bg-indigo-50 px-3 py-2.5">
-          <svg className="mt-0.5 h-4 w-4 shrink-0 text-indigo-500" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
+        <div className="mt-3 flex items-start gap-2 rounded-md border border-indigo-100 bg-accent-soft px-3 py-2.5">
+          <svg className="mt-0.5 h-4 w-4 shrink-0 text-accent" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={2} strokeLinecap="round" strokeLinejoin="round">
             <circle cx="12" cy="12" r="10" />
             <line x1="12" y1="8" x2="12" y2="12" />
             <line x1="12" y1="16" x2="12.01" y2="16" />
           </svg>
-          <p className="text-xs text-indigo-700">
+          <p className="text-xs text-accent">
             <span className="font-semibold">More providers available.</span> After setup, go to{' '}
             <span className="font-medium">Realm Settings › Email</span> to switch to Resend, SendGrid,
             Mailgun, or Postmark.
@@ -109,7 +109,7 @@ export default function SmtpConfigStep() {
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
-          <label htmlFor="smtpHost" className="mb-1.5 block text-sm font-medium text-gray-700">
+          <label htmlFor="smtpHost" className="mb-1.5 block text-sm font-medium text-muted">
             SMTP Host
           </label>
           <input
@@ -119,15 +119,15 @@ export default function SmtpConfigStep() {
             value={form.host}
             onChange={(e) => setForm({ ...form, host: e.target.value })}
             placeholder="smtp.example.com"
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+            className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
           />
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-subtle">
             The hostname of your SMTP server.
           </p>
         </div>
 
         <div>
-          <label htmlFor="smtpPort" className="mb-1.5 block text-sm font-medium text-gray-700">
+          <label htmlFor="smtpPort" className="mb-1.5 block text-sm font-medium text-muted">
             Port
           </label>
           <input
@@ -138,15 +138,15 @@ export default function SmtpConfigStep() {
             max={65535}
             value={form.port}
             onChange={(e) => setForm({ ...form, port: Number(e.target.value) })}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+            className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
           />
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-subtle">
             Common ports: 587 (STARTTLS), 465 (SSL/TLS), 25 (unencrypted)
           </p>
         </div>
 
         <div>
-          <label htmlFor="smtpFrom" className="mb-1.5 block text-sm font-medium text-gray-700">
+          <label htmlFor="smtpFrom" className="mb-1.5 block text-sm font-medium text-muted">
             Sender Email
           </label>
           <input
@@ -156,16 +156,16 @@ export default function SmtpConfigStep() {
             value={form.from}
             onChange={(e) => setForm({ ...form, from: e.target.value })}
             placeholder="noreply@example.com"
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+            className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
           />
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-subtle">
             The email address that appears in the &quot;From&quot; field of sent emails.
           </p>
         </div>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label htmlFor="smtpUser" className="mb-1.5 block text-sm font-medium text-gray-700">
+            <label htmlFor="smtpUser" className="mb-1.5 block text-sm font-medium text-muted">
               Username
             </label>
             <input
@@ -175,11 +175,11 @@ export default function SmtpConfigStep() {
               value={form.user || ''}
               onChange={(e) => setForm({ ...form, user: e.target.value || undefined })}
               placeholder="Optional"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
           <div>
-            <label htmlFor="smtpPassword" className="mb-1.5 block text-sm font-medium text-gray-700">
+            <label htmlFor="smtpPassword" className="mb-1.5 block text-sm font-medium text-muted">
               Password
             </label>
             <PasswordInput
@@ -188,7 +188,7 @@ export default function SmtpConfigStep() {
               value={form.password || ''}
               onChange={(e) => setForm({ ...form, password: e.target.value || undefined })}
               placeholder="Optional"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
         </div>
@@ -199,12 +199,12 @@ export default function SmtpConfigStep() {
             id="smtpSecure"
             checked={form.secure ?? false}
             onChange={(e) => setForm({ ...form, secure: e.target.checked })}
-            className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+            className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
           />
-          <label htmlFor="smtpSecure" className="text-sm font-medium text-gray-700">
+          <label htmlFor="smtpSecure" className="text-sm font-medium text-muted">
             Use SSL/TLS
           </label>
-          <span className="text-xs text-gray-400">(Enable for port 465, disable for STARTTLS on port 587)</span>
+          <span className="text-xs text-subtle">(Enable for port 465, disable for STARTTLS on port 587)</span>
         </div>
 
         {localError && (
@@ -212,7 +212,7 @@ export default function SmtpConfigStep() {
             role="alert"
             aria-live="assertive"
             aria-atomic="true"
-            className="rounded-md bg-red-50 p-3 text-sm text-red-700"
+            className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg"
           >
             {localError}
           </div>
@@ -223,7 +223,7 @@ export default function SmtpConfigStep() {
             role="alert"
             aria-live="assertive"
             aria-atomic="true"
-            className="rounded-md bg-red-50 p-3 text-sm text-red-700"
+            className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg"
           >
             {getErrorMessage(mutation.error, 'Failed to save SMTP configuration.')}
           </div>
@@ -233,21 +233,21 @@ export default function SmtpConfigStep() {
           <div
             role="status"
             aria-live="polite"
-            className="rounded-md bg-green-50 p-3 text-sm text-green-700"
+            className="rounded-md bg-success-soft p-3 text-sm text-success-fg"
           >
             SMTP configuration saved successfully.
           </div>
         )}
 
         {/* Test Email Section */}
-        <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
-          <h3 className="text-sm font-semibold text-gray-900">Send Test Email</h3>
-          <p className="mt-1 text-xs text-gray-500">
+        <div className="rounded-lg border border-line bg-sunken p-4">
+          <h3 className="text-sm font-semibold text-fg">Send Test Email</h3>
+          <p className="mt-1 text-xs text-subtle">
             After saving your SMTP settings, send a test email to verify the configuration.
           </p>
           <div className="mt-3 flex items-end gap-3">
             <div className="flex-1">
-              <label htmlFor="testEmailTo" className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label htmlFor="testEmailTo" className="mb-1.5 block text-sm font-medium text-muted">
                 Recipient
               </label>
               <input
@@ -256,7 +256,7 @@ export default function SmtpConfigStep() {
                 value={testEmailTo}
                 onChange={(e) => setTestEmailTo(e.target.value)}
                 placeholder="test@example.com"
-                className="w-full rounded-md border border-gray-300 bg-white px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong bg-surface px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
             </div>
             <button
@@ -279,29 +279,29 @@ export default function SmtpConfigStep() {
             </button>
           </div>
           {testSuccess && (
-            <div className="mt-3 rounded-md bg-green-50 p-3 text-sm text-green-700">
+            <div className="mt-3 rounded-md bg-success-soft p-3 text-sm text-success-fg">
               Test email sent successfully!
             </div>
           )}
           {testEmailMutation.isError && (
-            <div className="mt-3 rounded-md bg-red-50 p-3 text-sm text-red-700">
+            <div className="mt-3 rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
               {getErrorMessage(testEmailMutation.error, 'Failed to send test email. Check your SMTP settings.')}
             </div>
           )}
         </div>
 
-        <div className="flex justify-end gap-3 border-t border-gray-200 pt-4">
+        <div className="flex justify-end gap-3 border-t border-line pt-4">
           <button
             type="button"
             onClick={handleSkip}
-            className="rounded-md border border-gray-300 bg-white px-4 py-2.5 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-md border border-line-strong bg-surface px-4 py-2.5 text-sm font-medium text-muted hover:bg-hover"
           >
             Skip for now
           </button>
           <button
             type="submit"
             disabled={mutation.isPending}
-            className="flex items-center gap-2 rounded-md bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-md bg-accent px-5 py-2.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {mutation.isPending ? (
               <>

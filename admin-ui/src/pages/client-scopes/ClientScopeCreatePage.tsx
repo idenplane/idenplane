@@ -61,25 +61,25 @@ export default function ClientScopeCreatePage() {
   };
 
   return (
-    <div className="min-h-screen bg-gray-50 py-12 px-4 sm:px-6 lg:px-8">
+    <div className="min-h-screen bg-sunken py-12 px-4 sm:px-6 lg:px-8">
       <div className="mx-auto max-w-md w-full">
         <div className="mb-8">
-          <h1 className="text-3xl font-bold text-gray-900">Create Client Scope</h1>
-          <p className="mt-2 text-sm text-gray-600">
+          <h1 className="text-3xl font-bold text-fg">Create Client Scope</h1>
+          <p className="mt-2 text-sm text-muted">
             Add a new client scope to your realm
           </p>
         </div>
 
         {error && (
-          <div className="mb-4 rounded-md bg-red-50 p-4">
-            <p className="text-sm font-medium text-red-800">{error}</p>
+          <div className="mb-4 rounded-md bg-danger-soft p-4">
+            <p className="text-sm font-medium text-danger-fg">{error}</p>
           </div>
         )}
 
         <form onSubmit={handleSubmit} className="space-y-6">
           <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700">
-              Name <span className="text-red-600">*</span>
+            <label htmlFor="name" className="block text-sm font-medium text-muted">
+              Name <span className="text-danger">*</span>
             </label>
             <input
               id="name"
@@ -89,12 +89,12 @@ export default function ClientScopeCreatePage() {
               onChange={handleInputChange}
               placeholder="Enter scope name"
               required
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              className="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-fg placeholder-gray-400 focus:border-accent focus:ring-accent sm:text-sm"
             />
           </div>
 
           <div>
-            <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="description" className="block text-sm font-medium text-muted">
               Description
             </label>
             <textarea
@@ -104,12 +104,12 @@ export default function ClientScopeCreatePage() {
               onChange={handleInputChange}
               placeholder="Enter scope description (optional)"
               rows={3}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 placeholder-gray-400 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              className="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-fg placeholder-gray-400 focus:border-accent focus:ring-accent sm:text-sm"
             />
           </div>
 
           <div>
-            <label htmlFor="protocol" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="protocol" className="block text-sm font-medium text-muted">
               Protocol
             </label>
             <select
@@ -117,7 +117,7 @@ export default function ClientScopeCreatePage() {
               name="protocol"
               value={formData.protocol}
               onChange={handleInputChange}
-              className="mt-1 block w-full rounded-md border border-gray-300 px-3 py-2 text-gray-900 focus:border-indigo-500 focus:ring-indigo-500 sm:text-sm"
+              className="mt-1 block w-full rounded-md border border-line-strong px-3 py-2 text-fg focus:border-accent focus:ring-accent sm:text-sm"
             >
               <option value="openid-connect">OpenID Connect</option>
             </select>
@@ -127,14 +127,14 @@ export default function ClientScopeCreatePage() {
             <button
               type="button"
               onClick={() => navigate(`/console/realms/${name}/client-scopes`)}
-              className="flex-1 rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="flex-1 rounded-md border border-line-strong bg-surface px-4 py-2 text-sm font-medium text-muted hover:bg-hover"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={mutation.isPending}
-              className="flex-1 rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="flex-1 rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               {mutation.isPending ? 'Creating...' : 'Create Scope'}
             </button>

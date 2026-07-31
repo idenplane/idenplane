@@ -14,64 +14,64 @@ export default function SamlSpListPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">SAML Service Providers</h1>
+        <h1 className="text-2xl font-bold text-fg">SAML Service Providers</h1>
         <Link
           to={`/console/realms/${name}/saml-providers/create`}
-          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
         >
           Add Service Provider
         </Link>
       </div>
 
       {error && (
-        <div role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">
+        <div role="alert" className="rounded-md bg-danger-soft p-4 text-sm text-danger-fg">
           Failed to load data: {error.message}
         </div>
       )}
 
       {isLoading ? (
-        <div className="text-gray-500">Loading service providers...</div>
+        <div className="text-subtle">Loading service providers...</div>
       ) : !providers || providers.length === 0 ? (
-        <div className="rounded-md border border-gray-200 bg-white p-8 text-center text-gray-500">
+        <div className="rounded-md border border-line bg-surface p-8 text-center text-subtle">
           No SAML service providers configured.
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-          <table className="min-w-full divide-y divide-gray-200">
-            <thead className="bg-gray-50">
+        <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-sm">
+          <table className="min-w-full divide-y divide-line">
+            <thead className="bg-sunken">
               <tr>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Name</th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Entity ID</th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Enabled</th>
-                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">ACS URL</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Name</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Entity ID</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Enabled</th>
+                <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">ACS URL</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-line">
               {providers.map((sp) => (
-                <tr key={sp.id} className="hover:bg-gray-50">
+                <tr key={sp.id} className="hover:bg-hover">
                   <td className="whitespace-nowrap px-6 py-4">
                     <Link
                       to={`/console/realms/${name}/saml-providers/${sp.id}`}
-                      className="font-medium text-indigo-600 hover:text-indigo-900"
+                      className="font-medium text-accent hover:text-accent"
                     >
                       {sp.name}
                     </Link>
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-500">
+                  <td className="px-6 py-4 text-sm text-subtle">
                     {sp.entityId}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-sm">
                     <span
                       className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
                         sp.enabled
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-red-100 text-red-700'
+                          ? 'bg-success-soft text-success-fg'
+                          : 'bg-danger-soft text-danger-fg'
                       }`}
                     >
                       {sp.enabled ? 'Enabled' : 'Disabled'}
                     </span>
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-500 truncate max-w-xs">
+                  <td className="px-6 py-4 text-sm text-subtle truncate max-w-xs">
                     {sp.acsUrl}
                   </td>
                 </tr>

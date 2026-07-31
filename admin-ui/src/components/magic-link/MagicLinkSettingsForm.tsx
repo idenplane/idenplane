@@ -63,10 +63,10 @@ export default function MagicLinkSettingsForm({ realm }: MagicLinkSettingsFormPr
   }
 
   return (
-    <form onSubmit={handleSubmit} className="space-y-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+    <form onSubmit={handleSubmit} className="space-y-8 rounded-lg border border-line bg-surface p-6 shadow-sm">
       <div>
-        <h2 className="text-lg font-semibold text-gray-900">Magic Link Settings</h2>
-        <p className="mt-1 text-sm text-gray-500">
+        <h2 className="text-lg font-semibold text-fg">Magic Link Settings</h2>
+        <p className="mt-1 text-sm text-subtle">
           Configure passwordless authentication using magic links sent via email.
         </p>
       </div>
@@ -77,19 +77,19 @@ export default function MagicLinkSettingsForm({ realm }: MagicLinkSettingsFormPr
           id="magicLinkEnabled"
           checked={form.enabled}
           onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
-          className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+          className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
         />
-        <label htmlFor="magicLinkEnabled" className="text-sm font-medium text-gray-700">
+        <label htmlFor="magicLinkEnabled" className="text-sm font-medium text-muted">
           Enable Magic Link Authentication
         </label>
       </div>
-      <p className="ml-6 -mt-4 text-xs text-gray-400">
+      <p className="ml-6 -mt-4 text-xs text-subtle">
         When enabled, users can sign in by requesting a magic link sent to their email instead of using a password.
       </p>
 
       <div className="space-y-6">
         <div>
-          <label htmlFor="expirySeconds" className="mb-1.5 block text-sm font-medium text-gray-700">
+          <label htmlFor="expirySeconds" className="mb-1.5 block text-sm font-medium text-muted">
             Link Expiry Duration
           </label>
           <div className="flex items-center gap-3">
@@ -99,20 +99,20 @@ export default function MagicLinkSettingsForm({ realm }: MagicLinkSettingsFormPr
               min={60}
               value={form.expirySeconds}
               onChange={(e) => setForm({ ...form, expirySeconds: Number(e.target.value) })}
-              className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-40 rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
-            <span className="text-sm text-gray-500">seconds</span>
-            <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">
+            <span className="text-sm text-subtle">seconds</span>
+            <span className="rounded-full bg-sunken px-2.5 py-0.5 text-xs font-medium text-muted">
               {formatDuration(form.expirySeconds)}
             </span>
           </div>
-          <p className="mt-1 text-xs text-gray-400">
+          <p className="mt-1 text-xs text-subtle">
             How long a magic link remains valid. Default: 5 minutes (300s). Minimum: 60 seconds.
           </p>
         </div>
 
         <div>
-          <label htmlFor="rateLimitPerEmail" className="mb-1.5 block text-sm font-medium text-gray-700">
+          <label htmlFor="rateLimitPerEmail" className="mb-1.5 block text-sm font-medium text-muted">
             Rate Limit - Max Requests Per Email
           </label>
           <input
@@ -122,15 +122,15 @@ export default function MagicLinkSettingsForm({ realm }: MagicLinkSettingsFormPr
             max={20}
             value={form.rateLimitPerEmail}
             onChange={(e) => setForm({ ...form, rateLimitPerEmail: Number(e.target.value) })}
-            className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+            className="w-40 rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
           />
-          <p className="mt-1 text-xs text-gray-400">
+          <p className="mt-1 text-xs text-subtle">
             Maximum number of magic link requests allowed per email address within the rate limit window.
           </p>
         </div>
 
         <div>
-          <label htmlFor="rateLimitWindowSeconds" className="mb-1.5 block text-sm font-medium text-gray-700">
+          <label htmlFor="rateLimitWindowSeconds" className="mb-1.5 block text-sm font-medium text-muted">
             Rate Limit Window
           </label>
           <div className="flex items-center gap-3">
@@ -140,29 +140,29 @@ export default function MagicLinkSettingsForm({ realm }: MagicLinkSettingsFormPr
               min={60}
               value={form.rateLimitWindowSeconds}
               onChange={(e) => setForm({ ...form, rateLimitWindowSeconds: Number(e.target.value) })}
-              className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-40 rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
-            <span className="text-sm text-gray-500">seconds</span>
-            <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">
+            <span className="text-sm text-subtle">seconds</span>
+            <span className="rounded-full bg-sunken px-2.5 py-0.5 text-xs font-medium text-muted">
               {formatDuration(form.rateLimitWindowSeconds)}
             </span>
           </div>
-          <p className="mt-1 text-xs text-gray-400">
+          <p className="mt-1 text-xs text-subtle">
             Time window for rate limiting. Default: 15 minutes (900s).
           </p>
         </div>
       </div>
 
-      <div className="space-y-4 border-t border-gray-200 pt-6">
+      <div className="space-y-4 border-t border-line pt-6">
         <div>
-          <h3 className="text-sm font-semibold text-gray-700">Email Customization</h3>
-          <p className="mt-1 text-xs text-gray-500">
+          <h3 className="text-sm font-semibold text-muted">Email Customization</h3>
+          <p className="mt-1 text-xs text-subtle">
             Customize the magic link email sent to users. Leave blank to use default template.
           </p>
         </div>
 
         <div>
-          <label htmlFor="emailSubject" className="mb-1.5 block text-sm font-medium text-gray-700">
+          <label htmlFor="emailSubject" className="mb-1.5 block text-sm font-medium text-muted">
             Email Subject Line
           </label>
           <input
@@ -171,15 +171,15 @@ export default function MagicLinkSettingsForm({ realm }: MagicLinkSettingsFormPr
             value={form.emailSubject ?? ''}
             onChange={(e) => setForm({ ...form, emailSubject: e.target.value || null })}
             placeholder="Your sign-in link"
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+            className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
           />
-          <p className="mt-1 text-xs text-gray-400">
+          <p className="mt-1 text-xs text-subtle">
             Subject line for the magic link email. Leave blank to use default.
           </p>
         </div>
 
         <div>
-          <label htmlFor="emailTemplate" className="mb-1.5 block text-sm font-medium text-gray-700">
+          <label htmlFor="emailTemplate" className="mb-1.5 block text-sm font-medium text-muted">
             Custom Email Template
           </label>
           <textarea
@@ -188,9 +188,9 @@ export default function MagicLinkSettingsForm({ realm }: MagicLinkSettingsFormPr
             onChange={(e) => setForm({ ...form, emailTemplate: e.target.value || null })}
             placeholder="Use {{magicLinkUrl}} to insert the magic link..."
             rows={6}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+            className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
           />
-          <p className="mt-1 text-xs text-gray-400">
+          <p className="mt-1 text-xs text-subtle">
             Custom email body template. Use {'{{magicLinkUrl}}'} to insert the magic link URL.
             Leave blank to use the default template from realm theme.
           </p>
@@ -198,21 +198,21 @@ export default function MagicLinkSettingsForm({ realm }: MagicLinkSettingsFormPr
       </div>
 
       {updateMutation.isSuccess && (
-        <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">
+        <div className="rounded-md bg-success-soft p-3 text-sm text-success-fg">
           Magic link settings updated successfully.
         </div>
       )}
       {updateMutation.isError && (
-        <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+        <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
           Failed to update magic link settings.
         </div>
       )}
 
-      <div className="flex justify-end border-t border-gray-200 pt-4">
+      <div className="flex justify-end border-t border-line pt-4">
         <button
           type="submit"
           disabled={updateMutation.isPending}
-          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
         >
           {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
         </button>

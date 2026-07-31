@@ -22,19 +22,19 @@ function StatusBadge({ status }: { status: string }) {
   const isFailed = status === 'FAILED' || status === 'ERROR' || status === 'ROLLBACK';
 
   const colorClass = isSuccess
-    ? 'bg-green-100 text-green-700'
+    ? 'bg-success-soft text-success-fg'
     : isPending
-    ? 'bg-blue-100 text-blue-700'
+    ? 'bg-info-soft text-info-fg'
     : isFailed
-    ? 'bg-red-100 text-red-700'
-    : 'bg-gray-100 text-gray-700';
+    ? 'bg-danger-soft text-danger-fg'
+    : 'bg-sunken text-muted';
 
   const dotClass = isSuccess
-    ? 'bg-green-500'
+    ? 'bg-success'
     : isPending
-    ? 'bg-blue-500'
+    ? 'bg-info'
     : isFailed
-    ? 'bg-red-500'
+    ? 'bg-danger'
     : 'bg-gray-500';
 
   return (
@@ -52,16 +52,16 @@ function CheckRow({ name, status, message }: { name: string; status: string; mes
   const isWarn = status === 'warn';
 
   const bgClass = isPass
-    ? 'bg-green-50 border-green-100'
+    ? 'bg-success-soft border-green-100'
     : isWarn
-    ? 'bg-yellow-50 border-yellow-100'
-    : 'bg-red-50 border-red-100';
+    ? 'bg-warning-soft border-yellow-100'
+    : 'bg-danger-soft border-red-100';
 
   const iconClass = isPass
     ? 'text-green-500'
     : isWarn
     ? 'text-yellow-500'
-    : 'text-red-500';
+    : 'text-danger';
 
   return (
     <div className={`flex items-start gap-3 rounded-lg border p-3 ${bgClass}`}>
@@ -75,8 +75,8 @@ function CheckRow({ name, status, message }: { name: string; status: string; mes
         )}
       </svg>
       <div className="min-w-0 flex-1">
-        <p className="text-sm font-medium text-gray-900">{name}</p>
-        <p className="mt-0.5 text-xs text-gray-600">{message}</p>
+        <p className="text-sm font-medium text-fg">{name}</p>
+        <p className="mt-0.5 text-xs text-muted">{message}</p>
       </div>
     </div>
   );
@@ -91,33 +91,33 @@ function UpgradeHistoryTable({ entries }: { entries: UpgradeAuditEntry[] }) {
   };
 
   return (
-    <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-      <table className="min-w-full divide-y divide-gray-200 text-sm" aria-label="Upgrade history">
-        <thead className="bg-gray-50">
+    <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-sm">
+      <table className="min-w-full divide-y divide-line text-sm" aria-label="Upgrade history">
+        <thead className="bg-sunken">
           <tr>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Started</th>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">From</th>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">To</th>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Status</th>
-            <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Completed</th>
+            <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Started</th>
+            <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">From</th>
+            <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">To</th>
+            <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Status</th>
+            <th scope="col" className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Completed</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-gray-100">
+        <tbody className="divide-y divide-line">
           {entries.map((entry) => (
-            <tr key={entry.id} className="hover:bg-gray-50">
-              <td className="whitespace-nowrap px-4 py-2.5 text-gray-700">
+            <tr key={entry.id} className="hover:bg-hover">
+              <td className="whitespace-nowrap px-4 py-2.5 text-muted">
                 {formatDate(entry.startedAt)}
               </td>
-              <td className="whitespace-nowrap px-4 py-2.5 font-mono text-gray-600">
+              <td className="whitespace-nowrap px-4 py-2.5 font-mono text-muted">
                 {entry.fromVersion}
               </td>
-              <td className="whitespace-nowrap px-4 py-2.5 font-mono text-gray-600">
+              <td className="whitespace-nowrap px-4 py-2.5 font-mono text-muted">
                 {entry.toVersion}
               </td>
               <td className="whitespace-nowrap px-4 py-2.5">
                 <StatusBadge status={entry.status} />
               </td>
-              <td className="whitespace-nowrap px-4 py-2.5 text-gray-500">
+              <td className="whitespace-nowrap px-4 py-2.5 text-subtle">
                 {formatDate(entry.completedAt)}
               </td>
             </tr>
@@ -157,13 +157,13 @@ function ValidationSection() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div>
-          <h3 className="text-base font-semibold text-gray-900">Pre-Upgrade Validation</h3>
-          <p className="text-sm text-gray-500">Run checks before starting an upgrade</p>
+          <h3 className="text-base font-semibold text-fg">Pre-Upgrade Validation</h3>
+          <p className="text-sm text-subtle">Run checks before starting an upgrade</p>
         </div>
         <button
           onClick={handleRunChecks}
           disabled={preLoading || healthLoading}
-          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2 disabled:opacity-50"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2 disabled:opacity-50"
         >
           {preLoading || healthLoading ? 'Running...' : 'Run Checks'}
         </button>
@@ -171,19 +171,19 @@ function ValidationSection() {
 
       {hasRunChecks && preValidation && (
         <div className="space-y-3">
-          <div className="rounded-lg border border-gray-200 bg-gray-50 p-4">
+          <div className="rounded-lg border border-line bg-sunken p-4">
             <div className="flex gap-6">
               <div>
-                <p className="text-xs font-medium text-gray-500">Passed</p>
-                <p className="text-lg font-bold text-green-600">{preValidation.summary.passed}</p>
+                <p className="text-xs font-medium text-subtle">Passed</p>
+                <p className="text-lg font-bold text-success">{preValidation.summary.passed}</p>
               </div>
               <div>
-                <p className="text-xs font-medium text-gray-500">Warnings</p>
-                <p className="text-lg font-bold text-yellow-600">{preValidation.summary.warnings}</p>
+                <p className="text-xs font-medium text-subtle">Warnings</p>
+                <p className="text-lg font-bold text-warning">{preValidation.summary.warnings}</p>
               </div>
               <div>
-                <p className="text-xs font-medium text-gray-500">Failures</p>
-                <p className="text-lg font-bold text-red-600">{preValidation.summary.failures}</p>
+                <p className="text-xs font-medium text-subtle">Failures</p>
+                <p className="text-lg font-bold text-danger">{preValidation.summary.failures}</p>
               </div>
             </div>
           </div>
@@ -196,17 +196,17 @@ function ValidationSection() {
       {hasRunHealth && healthCheck && (
         <div className="space-y-3">
           <div className="flex items-center gap-2">
-            <h4 className="text-sm font-medium text-gray-900">Post-Upgrade Health Check</h4>
+            <h4 className="text-sm font-medium text-fg">Post-Upgrade Health Check</h4>
             <span
               className={`inline-flex items-center gap-1 rounded-full px-2 py-0.5 text-xs font-medium ${
-                healthCheck.healthy ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                healthCheck.healthy ? 'bg-success-soft text-success-fg' : 'bg-danger-soft text-danger-fg'
               }`}
             >
               {healthCheck.healthy ? 'Healthy' : 'Unhealthy'}
             </span>
           </div>
           {healthCheck.version && (
-            <p className="text-sm text-gray-500">Current version: <span className="font-mono">{healthCheck.version}</span></p>
+            <p className="text-sm text-subtle">Current version: <span className="font-mono">{healthCheck.version}</span></p>
           )}
           {healthCheck.checks.map((check) => (
             <CheckRow key={check.name} name={check.name} status={check.status} message={check.message} />
@@ -240,8 +240,8 @@ function RollbackSection({ onRollbackSuccess }: { onRollbackSuccess: () => void 
 
   if (isLoading) {
     return (
-      <div className="animate-pulse rounded-lg border border-gray-200 bg-gray-100 p-4">
-        <div className="h-4 w-32 rounded bg-gray-200" />
+      <div className="animate-pulse rounded-lg border border-line bg-sunken p-4">
+        <div className="h-4 w-32 rounded bg-active" />
       </div>
     );
   }
@@ -249,17 +249,17 @@ function RollbackSection({ onRollbackSuccess }: { onRollbackSuccess: () => void 
   const canRollback = rollbackCap?.canRollback ?? false;
 
   return (
-    <div className="rounded-lg border border-gray-200 bg-white p-5">
+    <div className="rounded-lg border border-line bg-surface p-5">
       <div className="flex items-start justify-between">
         <div>
-          <h3 className="text-base font-semibold text-gray-900">Rollback</h3>
-          <p className="mt-1 text-sm text-gray-500">
+          <h3 className="text-base font-semibold text-fg">Rollback</h3>
+          <p className="mt-1 text-sm text-subtle">
             {canRollback && rollbackCap?.lastSuccessfulUpgrade
               ? `Restore from backup to version ${rollbackCap.lastSuccessfulUpgrade.fromVersion}`
               : rollbackCap?.reason ?? 'Rollback is not available'}
           </p>
           {canRollback && rollbackCap?.lastSuccessfulUpgrade && (
-            <p className="mt-2 text-xs text-gray-400">
+            <p className="mt-2 text-xs text-subtle">
               Last successful: {rollbackCap.lastSuccessfulUpgrade.fromVersion} →{' '}
               {rollbackCap.lastSuccessfulUpgrade.toVersion} (
               {new Date(rollbackCap.lastSuccessfulUpgrade.completedAt).toLocaleString()})
@@ -272,13 +272,13 @@ function RollbackSection({ onRollbackSuccess }: { onRollbackSuccess: () => void 
               <button
                 onClick={() => rollbackMutation.mutate()}
                 disabled={rollbackMutation.isPending}
-                className="rounded-md bg-red-600 px-3 py-1.5 text-sm font-medium text-white hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:opacity-50"
+                className="rounded-md bg-danger px-3 py-1.5 text-sm font-medium text-white hover:bg-danger focus:outline-none focus:ring-2 focus:ring-danger focus:ring-offset-2 disabled:opacity-50"
               >
                 {rollbackMutation.isPending ? 'Rolling back...' : 'Confirm Rollback'}
               </button>
               <button
                 onClick={() => setShowConfirm(false)}
-                className="rounded-md border border-gray-300 bg-white px-3 py-1.5 text-sm font-medium text-gray-700 hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+                className="rounded-md border border-line-strong bg-surface px-3 py-1.5 text-sm font-medium text-muted hover:bg-hover focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2"
               >
                 Cancel
               </button>
@@ -286,13 +286,13 @@ function RollbackSection({ onRollbackSuccess }: { onRollbackSuccess: () => void 
           ) : (
             <button
               onClick={() => setShowConfirm(true)}
-              className="rounded-md border border-red-200 bg-red-50 px-3 py-1.5 text-sm font-medium text-red-600 hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2"
+              className="rounded-md border border-danger-soft bg-danger-soft px-3 py-1.5 text-sm font-medium text-danger hover:bg-danger-soft focus:outline-none focus:ring-2 focus:ring-danger focus:ring-offset-2"
             >
               Initiate Rollback
             </button>
           )
         ) : (
-          <span className="inline-flex items-center rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-500">
+          <span className="inline-flex items-center rounded-full bg-sunken px-2.5 py-0.5 text-xs font-medium text-subtle">
             Not Available
           </span>
         )}
@@ -325,7 +325,7 @@ export default function UpgradeStatusPage() {
   if (statusLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="text-gray-500">Loading upgrade status...</div>
+        <div className="text-subtle">Loading upgrade status...</div>
       </div>
     );
   }
@@ -335,60 +335,60 @@ export default function UpgradeStatusPage() {
       {/* Header */}
       <div className="flex flex-wrap items-start justify-between gap-3">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Upgrade Status</h1>
-          <p className="mt-1 text-sm text-gray-500">Monitor upgrades and rollback if needed</p>
+          <h1 className="text-2xl font-bold text-fg">Upgrade Status</h1>
+          <p className="mt-1 text-sm text-subtle">Monitor upgrades and rollback if needed</p>
         </div>
         <button
           onClick={() => navigate('/console/upgrade/new')}
-          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover focus:outline-none focus:ring-2 focus:ring-accent focus:ring-offset-2"
         >
           Start New Upgrade
         </button>
       </div>
 
       {/* Current Status Card */}
-      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="text-base font-semibold text-gray-900">Current Status</h2>
+      <div className="rounded-lg border border-line bg-surface p-6 shadow-sm">
+        <h2 className="text-base font-semibold text-fg">Current Status</h2>
         {currentStatus ? (
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-gray-500">Status</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-subtle">Status</p>
               <div className="mt-1">
                 <StatusBadge status={currentStatus.status} />
               </div>
             </div>
             <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-gray-500">From Version</p>
-              <p className="mt-1 font-mono text-sm text-gray-900">{currentStatus.fromVersion}</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-subtle">From Version</p>
+              <p className="mt-1 font-mono text-sm text-fg">{currentStatus.fromVersion}</p>
             </div>
             <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-gray-500">To Version</p>
-              <p className="mt-1 font-mono text-sm text-gray-900">{currentStatus.toVersion}</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-subtle">To Version</p>
+              <p className="mt-1 font-mono text-sm text-fg">{currentStatus.toVersion}</p>
             </div>
             <div>
-              <p className="text-xs font-medium uppercase tracking-wider text-gray-500">Started</p>
-              <p className="mt-1 text-sm text-gray-700">{formatDate(currentStatus.startedAt)}</p>
+              <p className="text-xs font-medium uppercase tracking-wider text-subtle">Started</p>
+              <p className="mt-1 text-sm text-muted">{formatDate(currentStatus.startedAt)}</p>
             </div>
             {currentStatus.errorMessage && (
               <div className="sm:col-span-2 lg:col-span-4">
-                <p className="text-xs font-medium uppercase tracking-wider text-red-500">Error</p>
-                <p className="mt-1 text-sm text-red-600">{currentStatus.errorMessage}</p>
+                <p className="text-xs font-medium uppercase tracking-wider text-danger">Error</p>
+                <p className="mt-1 text-sm text-danger">{currentStatus.errorMessage}</p>
               </div>
             )}
             {currentStatus.backupId && (
               <div className="sm:col-span-2">
-                <p className="text-xs font-medium uppercase tracking-wider text-gray-500">Backup ID</p>
-                <p className="mt-1 font-mono text-xs text-gray-600">{currentStatus.backupId}</p>
+                <p className="text-xs font-medium uppercase tracking-wider text-subtle">Backup ID</p>
+                <p className="mt-1 font-mono text-xs text-muted">{currentStatus.backupId}</p>
               </div>
             )}
           </div>
         ) : (
-          <p className="mt-3 text-sm text-gray-500">No active or recent upgrades.</p>
+          <p className="mt-3 text-sm text-subtle">No active or recent upgrades.</p>
         )}
       </div>
 
       {/* Validation Section */}
-      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <div className="rounded-lg border border-line bg-surface p-6 shadow-sm">
         <ValidationSection />
       </div>
 
@@ -398,24 +398,24 @@ export default function UpgradeStatusPage() {
       {/* Upgrade History */}
       <div>
         <div className="mb-4 flex items-center justify-between">
-          <h2 className="text-base font-semibold text-gray-900">Upgrade History</h2>
+          <h2 className="text-base font-semibold text-fg">Upgrade History</h2>
           {/* The table below is a recent-activity preview; the history page is
               the paginated deep dive. Nothing linked forward to it before. */}
           <Link
             to="/console/upgrade/history"
-            className="text-sm text-indigo-600 hover:underline"
+            className="text-sm text-accent hover:underline"
           >
             View full history
           </Link>
         </div>
         {historyLoading ? (
-          <div className="animate-pulse rounded-lg border border-gray-200 bg-gray-100 p-8">
-            <div className="h-4 w-32 rounded bg-gray-200" />
+          <div className="animate-pulse rounded-lg border border-line bg-sunken p-8">
+            <div className="h-4 w-32 rounded bg-active" />
           </div>
         ) : history && history.length > 0 ? (
           <UpgradeHistoryTable entries={history} />
         ) : (
-          <div className="rounded-lg border border-gray-200 bg-white p-8 text-center text-sm text-gray-500">
+          <div className="rounded-lg border border-line bg-surface p-8 text-center text-sm text-subtle">
             No upgrade history available.
           </div>
         )}

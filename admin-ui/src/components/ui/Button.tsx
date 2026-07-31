@@ -1,4 +1,4 @@
-import type { ButtonHTMLAttributes } from 'react';
+import { forwardRef, type ButtonHTMLAttributes } from 'react';
 import { cn } from './cn';
 import type { IconProps } from './icons';
 
@@ -43,20 +43,24 @@ const variantClasses: Record<ButtonVariant, string> = {
     'bg-emerald text-white border border-emerald hover:-translate-y-px hover:shadow-pop disabled:hover:translate-y-0',
 };
 
-export function Button({
-  variant = 'primary',
-  size = 'md',
-  icon: Icon,
-  iconRight: IconRight,
-  full,
-  type = 'button',
-  className,
-  children,
-  ...rest
-}: ButtonProps) {
+export const Button = forwardRef<HTMLButtonElement, ButtonProps>(function Button(
+  {
+    variant = 'primary',
+    size = 'md',
+    icon: Icon,
+    iconRight: IconRight,
+    full,
+    type = 'button',
+    className,
+    children,
+    ...rest
+  },
+  ref,
+) {
   const iconCls = iconSizeClasses[size];
   return (
     <button
+      ref={ref}
       type={type}
       className={cn(
         'items-center justify-center rounded-lg font-medium leading-none tracking-[-0.005em] whitespace-nowrap transition-all duration-150',
@@ -74,4 +78,4 @@ export function Button({
       {IconRight && <IconRight className={iconCls} />}
     </button>
   );
-}
+});

@@ -30,13 +30,13 @@ function ComponentRow({ name, status, message }: ComponentRowProps) {
 function OverallStatusBanner({ health }: { health: HealthStatus }) {
   const isHealthy = health.status === 'ok';
   return (
-    <Card padding="sm" className={isHealthy ? 'border-green-200 bg-green-50' : 'border-red-200 bg-red-50'}>
+    <Card padding="sm" className={isHealthy ? 'border-success-soft bg-success-soft' : 'border-danger-soft bg-danger-soft'}>
       <div className="flex items-center gap-3">
-        <div className={`h-3 w-3 rounded-full ${isHealthy ? 'bg-green-500' : 'bg-red-500'}`} />
+        <div className={`h-3 w-3 rounded-full ${isHealthy ? 'bg-success' : 'bg-danger'}`} />
         <Icons.Server
-          className={`h-5 w-5 ${isHealthy ? 'text-green-700' : 'text-red-700'}`}
+          className={`h-5 w-5 ${isHealthy ? 'text-success-fg' : 'text-danger-fg'}`}
         />
-        <h2 className={`text-base font-semibold ${isHealthy ? 'text-green-800' : 'text-red-800'}`}>
+        <h2 className={`text-base font-semibold ${isHealthy ? 'text-success-fg' : 'text-danger-fg'}`}>
           {isHealthy ? 'All Systems Operational' : 'Service Degraded'}
         </h2>
       </div>
@@ -120,10 +120,10 @@ export default function SystemStatusPage() {
 
       {/* Error — server unreachable */}
       {error && !isLoading && (
-        <Card padding="sm" className="border-red-200 bg-red-50">
+        <Card padding="sm" className="border-danger-soft bg-danger-soft">
           <div className="flex items-start gap-3">
-            <Icons.Alert className="mt-0.5 h-4 w-4 shrink-0 text-red-600" />
-            <p className="text-sm text-red-700">
+            <Icons.Alert className="mt-0.5 h-4 w-4 shrink-0 text-danger" />
+            <p className="text-sm text-danger-fg">
               Unable to reach the health endpoint. The server may be unavailable.
             </p>
           </div>

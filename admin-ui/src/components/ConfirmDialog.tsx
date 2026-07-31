@@ -1,4 +1,5 @@
 import { useEffect, useMemo, useRef } from 'react';
+import { Button } from './ui';
 
 interface ConfirmDialogProps {
   isOpen?: boolean;
@@ -104,25 +105,27 @@ export default function ConfirmDialog({
         aria-modal="true"
         aria-labelledby={titleId}
         aria-describedby={descId}
-        className="relative z-10 w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
+        className="relative z-10 w-full max-w-md rounded-lg bg-surface p-6 shadow-lift"
       >
-        <h3 id={titleId} className="text-lg font-semibold text-gray-900">{title}</h3>
-        <p id={descId} className="mt-2 text-sm text-gray-600">{message}</p>
+        <h3 id={titleId} className="text-lg font-semibold text-fg">{title}</h3>
+        <p id={descId} className="mt-2 text-sm text-muted">{message}</p>
         <div className="mt-6 flex justify-end gap-3">
-          <button
+          <Button
             ref={cancelRef}
+            type="button"
+            variant="secondary"
             onClick={handleClose}
-            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
           >
             Cancel
-          </button>
-          <button
+          </Button>
+          <Button
+            type="button"
+            variant="dangerSolid"
             onClick={onConfirm}
             disabled={confirmDisabled}
-            className="rounded-md bg-red-600 px-4 py-2 text-sm font-medium text-white hover:bg-red-700 disabled:opacity-50"
           >
             {confirmText ?? 'Confirm'}
-          </button>
+          </Button>
         </div>
       </div>
     </div>

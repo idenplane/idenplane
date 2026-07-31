@@ -18,7 +18,7 @@ const ALL_STEP_TYPES: StepType[] = [
 export default function FlowStepPalette({ onAddStep }: FlowStepPaletteProps) {
   return (
     <div className="flex flex-col gap-2">
-      <p className="text-xs font-semibold uppercase tracking-wider text-gray-500 mb-1">
+      <p className="text-xs font-semibold uppercase tracking-wider text-subtle mb-1">
         Step Types
       </p>
       {ALL_STEP_TYPES.map((type) => {
@@ -38,7 +38,7 @@ export default function FlowStepPalette({ onAddStep }: FlowStepPaletteProps) {
             <span role="img" aria-label={meta.label} className="text-lg">
               {meta.icon}
             </span>
-            <span className="text-gray-700">{meta.label}</span>
+            <span className="text-muted">{meta.label}</span>
           </button>
         );
       })}

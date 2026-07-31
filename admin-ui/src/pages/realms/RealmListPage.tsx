@@ -3,6 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { getAllRealms, importRealm } from '../../api/realms';
 import { getErrorMessage } from '../../utils/getErrorMessage';
+import { SectionHeader, Button, Card, Badge, Alert, EmptyState, Icons } from '../../components/ui';
 
 export default function RealmListPage() {
   const navigate = useNavigate();
@@ -35,83 +36,77 @@ export default function RealmListPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="text-gray-500">Loading realms...</div>
+        <div className="text-subtle">Loading realms...</div>
       </div>
     );
   }
 
   if (error) {
-    return (
-      <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
-        Failed to load realms. Please try again.
-      </div>
-    );
+    return <Alert variant="danger">Failed to load realms. Please try again.</Alert>;
   }
 
   return (
     <div>
-      <div className="mb-6 flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-gray-900">Realms</h1>
-          <p className="mt-1 text-sm text-gray-500">
-            Manage your identity realms
-          </p>
-        </div>
-        <div className="flex items-center gap-3">
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept=".json"
-            onChange={handleImportFile}
-            aria-label="Import realm JSON file"
-            className="hidden"
-          />
-          <button
-            onClick={() => fileInputRef.current?.click()}
-            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
-          >
-            Import Realm
-          </button>
-          <button
-            onClick={() => navigate('/console/realms/create')}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
-          >
-            Create Realm
-          </button>
-        </div>
-      </div>
+      <SectionHeader
+        title="Realms"
+        hint="Manage your identity realms"
+        action={
+          <div className="flex items-center gap-3">
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept=".json"
+              onChange={handleImportFile}
+              aria-label="Import realm JSON file"
+              className="hidden"
+            />
+            <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>
+              Import Realm
+            </Button>
+            <Button icon={Icons.Plus} onClick={() => navigate('/console/realms/create')}>
+              Create Realm
+            </Button>
+          </div>
+        }
+      />
 
       {importStatus && (
-        <div
-          role="alert"
+        <Alert
+          variant={importStatus.type === 'success' ? 'success' : 'danger'}
           aria-live={importStatus.type === 'error' ? 'assertive' : 'polite'}
           aria-atomic="true"
-          className={`mb-4 rounded-md p-3 text-sm ${importStatus.type === 'success' ? 'bg-green-50 text-green-700' : 'bg-red-50 text-red-700'}`}
+          className="mb-4"
         >
           {importStatus.message}
-          <button onClick={() => setImportStatus(null)} aria-label="Dismiss notification" className="ml-2 underline">dismiss</button>
-        </div>
+          <button
+            onClick={() => setImportStatus(null)}
+            aria-label="Dismiss notification"
+            className="ml-2 underline"
+          >
+            dismiss
+          </button>
+        </Alert>
       )}
 
-      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-gray-200" aria-label="Realms">
-          <thead className="bg-gray-50">
+      <Card padding="none">
+        <table className="min-w-full divide-y divide-line" aria-label="Realms">
+          <thead className="bg-sunken">
             <tr>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Name
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Display Name
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Enabled
               </th>
-              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Created
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody className="divide-y divide-line">
             {realms && realms.length > 0 ? (
               realms.map((realm) => (
                 <tr
@@ -126,40 +121,34 @@ export default function RealmListPage() {
                   tabIndex={0}
                   role="button"
                   aria-label={`View realm ${realm.displayName || realm.name}`}
-                  className="cursor-pointer hover:bg-gray-50 focus:outline-none focus:ring-2 focus:ring-inset focus:ring-indigo-500"
+                  className="cursor-pointer hover:bg-hover focus:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-accent"
                 >
-                  <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-indigo-600">
+                  <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-accent">
                     {realm.name}
                   </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-700">
+                  <td className="whitespace-nowrap px-6 py-4 text-sm text-muted">
                     {realm.displayName}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-sm">
-                    <span
-                      className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                        realm.enabled
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-gray-100 text-gray-600'
-                      }`}
-                    >
+                    <Badge variant={realm.enabled ? 'success' : 'neutral'} size="sm">
                       {realm.enabled ? 'Yes' : 'No'}
-                    </span>
+                    </Badge>
                   </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                  <td className="whitespace-nowrap px-6 py-4 text-sm text-subtle">
                     {new Date(realm.createdAt).toLocaleDateString()}
                   </td>
                 </tr>
               ))
             ) : (
               <tr>
-                <td colSpan={4} className="px-6 py-8 text-center text-sm text-gray-500">
-                  No realms found. Create your first realm to get started.
+                <td colSpan={4} className="p-0">
+                  <EmptyState icon={Icons.Realms} title="No realms found. Create your first realm to get started." />
                 </td>
               </tr>
             )}
           </tbody>
         </table>
-      </div>
+      </Card>
     </div>
   );
 }
