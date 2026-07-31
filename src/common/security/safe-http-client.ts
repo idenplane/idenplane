@@ -36,6 +36,24 @@ const SSRF_BLOCKED_MESSAGE =
   'Delivery blocked: target address is not publicly routable';
 
 /**
+ * Escape hatch for deployments that legitimately deliver webhooks to hosts on
+ * their own network -- a self-hosted install POSTing to an internal service,
+ * or a test harness with a loopback receiver.
+ *
+ * Off unless `WEBHOOK_ALLOW_PRIVATE_TARGETS` is exactly `'true'`, so the
+ * protection is the default and disabling it is a deliberate, auditable
+ * choice. Read per call rather than at module load so it can be toggled in
+ * tests without re-importing the module.
+ *
+ * Note this only relaxes *which addresses* are permitted. The protocol
+ * allowlist, the redirect cap, and DNS pinning still apply, so a delivery can
+ * never be redirected somewhere the operator did not point it.
+ */
+export function privateTargetsAllowed(): boolean {
+  return process.env['WEBHOOK_ALLOW_PRIVATE_TARGETS'] === 'true';
+}
+
+/**
  * Thrown by `resolveSafeTarget`/`safePost` whenever a delivery target (or a
  * redirect hop) is rejected by SSRF policy -- as opposed to an ordinary
  * network/timeout/DNS failure, which is surfaced as a plain `Error`
@@ -114,8 +132,9 @@ export async function resolveSafeTarget(rawUrl: string): Promise<SafeTarget> {
   // literal (e.g. "http://[::1]/" -> hostname "::1"), so no extra
   // unwrapping is needed here.
   const hostname = url.hostname;
+  const allowPrivate = privateTargetsAllowed();
 
-  if (isBlockedHostnameLiteral(hostname)) {
+  if (!allowPrivate && isBlockedHostnameLiteral(hostname)) {
     throw new SsrfBlockedError();
   }
 
@@ -142,7 +161,9 @@ export async function resolveSafeTarget(rawUrl: string): Promise<SafeTarget> {
     throw new Error('Delivery blocked: DNS resolution returned no addresses');
   }
 
-  const safeRecord = records.find((record) => !isBlockedIp(record.address));
+  const safeRecord = allowPrivate
+    ? records[0]
+    : records.find((record) => !isBlockedIp(record.address));
   if (!safeRecord) {
     throw new SsrfBlockedError();
   }

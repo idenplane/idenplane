@@ -36,3 +36,11 @@ process.env['ADMIN_IP_RL_PER_HOUR'] =
 // retries for the test run so a failed delivery terminates immediately.
 process.env['WEBHOOK_RETRY_DELAYS_MS'] =
   process.env['WEBHOOK_RETRY_DELAYS_MS'] ?? '[]';
+
+// The webhook specs point at a loopback receiver (http://localhost:19999),
+// which SSRF policy blocks by default. Opt this run into private targets, the
+// same switch a self-hosted operator would use to deliver to an internal
+// service. Both states of the switch are covered by unit tests; the E2E suite
+// exercises the delivery pipeline, not the blocklist.
+process.env['WEBHOOK_ALLOW_PRIVATE_TARGETS'] =
+  process.env['WEBHOOK_ALLOW_PRIVATE_TARGETS'] ?? 'true';

@@ -1,5 +1,41 @@
 import { isSafeWebhookUrl } from './is-safe-webhook-url.validator.js';
 
+describe('WEBHOOK_ALLOW_PRIVATE_TARGETS', () => {
+  const OLD = process.env['WEBHOOK_ALLOW_PRIVATE_TARGETS'];
+
+  afterEach(() => {
+    if (OLD === undefined) {
+      delete process.env['WEBHOOK_ALLOW_PRIVATE_TARGETS'];
+    } else {
+      process.env['WEBHOOK_ALLOW_PRIVATE_TARGETS'] = OLD;
+    }
+  });
+
+  it('blocks private targets when unset (secure by default)', () => {
+    delete process.env['WEBHOOK_ALLOW_PRIVATE_TARGETS'];
+    expect(isSafeWebhookUrl('http://127.0.0.1/hook')).toBe(false);
+  });
+
+  it('permits private targets only for the exact string "true"', () => {
+    process.env['WEBHOOK_ALLOW_PRIVATE_TARGETS'] = 'true';
+    expect(isSafeWebhookUrl('http://127.0.0.1/hook')).toBe(true);
+    expect(isSafeWebhookUrl('http://localhost:19999/receiver')).toBe(true);
+
+    // Anything else leaves the protection on, so a typo or a truthy-looking
+    // value cannot silently disable it.
+    for (const v of ['1', 'yes', 'TRUE', 'on', '']) {
+      process.env['WEBHOOK_ALLOW_PRIVATE_TARGETS'] = v;
+      expect([v, isSafeWebhookUrl('http://127.0.0.1/hook')]).toEqual([v, false]);
+    }
+  });
+
+  it('still rejects non-http(s) protocols even when private targets are allowed', () => {
+    process.env['WEBHOOK_ALLOW_PRIVATE_TARGETS'] = 'true';
+    expect(isSafeWebhookUrl('file:///etc/passwd')).toBe(false);
+    expect(isSafeWebhookUrl('not a url')).toBe(false);
+  });
+});
+
 describe('isSafeWebhookUrl', () => {
   it('accepts ordinary public http(s) URLs', () => {
     expect(isSafeWebhookUrl('https://example.com/hook')).toBe(true);

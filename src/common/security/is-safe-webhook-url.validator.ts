@@ -22,6 +22,7 @@ import {
   type ValidationOptions,
 } from 'class-validator';
 import { isBlockedHostnameLiteral } from './ip-range-guard.js';
+import { privateTargetsAllowed } from './safe-http-client.js';
 
 /**
  * Returns true when `value` is a syntactically valid http(s) URL whose host is
@@ -43,6 +44,12 @@ export function isSafeWebhookUrl(value: unknown): boolean {
 
   if (url.protocol !== 'http:' && url.protocol !== 'https:') {
     return false;
+  }
+
+  // Deployments that opt into internal targets must be able to configure them
+  // too, not just deliver to them -- otherwise the escape hatch is unusable.
+  if (privateTargetsAllowed()) {
+    return true;
   }
 
   return !isBlockedHostnameLiteral(url.hostname);
