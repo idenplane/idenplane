@@ -7,6 +7,8 @@ export { IconButton } from './IconButton';
 export type { IconButtonProps, IconButtonSize } from './IconButton';
 export { Badge } from './Badge';
 export type { BadgeProps, BadgeVariant, BadgeSize } from './Badge';
+export { Alert } from './Alert';
+export type { AlertProps, AlertVariant } from './Alert';
 export { Card } from './Card';
 export type { CardProps, CardPadding } from './Card';
 export { Input } from './Input';
