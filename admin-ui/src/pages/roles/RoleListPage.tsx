@@ -44,14 +44,14 @@ export default function RoleListPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="text-gray-500">Loading roles...</div>
+        <div className="text-subtle">Loading roles...</div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
+      <div className="rounded-md bg-danger-soft p-4 text-sm text-danger-fg">
         {getErrorMessage(error, 'Failed to load roles.')}
       </div>
     );
@@ -61,14 +61,14 @@ export default function RoleListPage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Roles</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-fg">Roles</h1>
+          <p className="mt-1 text-sm text-subtle">
             Manage realm roles for <span className="font-medium">{name}</span>
           </p>
         </div>
         <button
           onClick={() => setShowCreate(true)}
-          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
         >
           Create Role
         </button>
@@ -78,12 +78,12 @@ export default function RoleListPage() {
       {showCreate && (
         <form
           onSubmit={handleCreateSubmit}
-          className="mb-6 space-y-4 rounded-lg border border-gray-200 bg-white p-6 shadow-sm"
+          className="mb-6 space-y-4 rounded-lg border border-line bg-surface p-6 shadow-sm"
         >
-          <h2 className="text-lg font-semibold text-gray-900">New Role</h2>
+          <h2 className="text-lg font-semibold text-fg">New Role</h2>
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label htmlFor="new-role-name" className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label htmlFor="new-role-name" className="mb-1.5 block text-sm font-medium text-muted">
                 Role Name
               </label>
               <input
@@ -93,11 +93,11 @@ export default function RoleListPage() {
                 value={newRole.name}
                 onChange={(e) => setNewRole({ ...newRole, name: e.target.value })}
                 placeholder="e.g. admin"
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
             </div>
             <div>
-              <label htmlFor="new-role-description" className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label htmlFor="new-role-description" className="mb-1.5 block text-sm font-medium text-muted">
                 Description
               </label>
               <input
@@ -106,13 +106,13 @@ export default function RoleListPage() {
                 value={newRole.description}
                 onChange={(e) => setNewRole({ ...newRole, description: e.target.value })}
                 placeholder="Optional description"
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
             </div>
           </div>
 
           {createMutation.isError && (
-            <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+            <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
               {getErrorMessage(createMutation.error, 'Failed to create role.')}
             </div>
           )}
@@ -124,14 +124,14 @@ export default function RoleListPage() {
                 setShowCreate(false);
                 setNewRole({ name: '', description: '' });
               }}
-              className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-md border border-line-strong bg-surface px-4 py-2 text-sm font-medium text-muted hover:bg-hover"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={createMutation.isPending}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               {createMutation.isPending ? 'Creating...' : 'Create'}
             </button>
@@ -140,41 +140,41 @@ export default function RoleListPage() {
       )}
 
       {/* Role table */}
-      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-        <table aria-label="Roles list" className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+      <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-sm">
+        <table aria-label="Roles list" className="min-w-full divide-y divide-line">
+          <thead className="bg-sunken">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Name
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Description
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Created
               </th>
-              <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-subtle">
                 Actions
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody className="divide-y divide-line">
             {roles && roles.length > 0 ? (
               roles.map((role) => (
-                <tr key={role.id} className="hover:bg-gray-50">
-                  <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-gray-900">
+                <tr key={role.id} className="hover:bg-hover">
+                  <td className="whitespace-nowrap px-6 py-4 text-sm font-medium text-fg">
                     {role.name}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-700">
+                  <td className="px-6 py-4 text-sm text-muted">
                     {role.description || '-'}
                   </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                  <td className="whitespace-nowrap px-6 py-4 text-sm text-subtle">
                     {new Date(role.createdAt).toLocaleDateString()}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-right">
                     <button
                       onClick={() => setDeleteTarget(role.name)}
-                      className="text-sm font-medium text-red-600 hover:text-red-800"
+                      className="text-sm font-medium text-danger hover:text-danger-fg"
                     >
                       Delete
                     </button>
@@ -183,7 +183,7 @@ export default function RoleListPage() {
               ))
             ) : (
               <tr>
-                <td colSpan={4} className="px-6 py-8 text-center text-sm text-gray-500">
+                <td colSpan={4} className="px-6 py-8 text-center text-sm text-subtle">
                   No roles found in this realm.
                 </td>
               </tr>
@@ -193,7 +193,7 @@ export default function RoleListPage() {
       </div>
 
       {deleteMutation.isError && (
-          <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
+          <div className="mb-4 rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
             {getErrorMessage(deleteMutation.error, 'Failed to delete role.')}
           </div>
         )}

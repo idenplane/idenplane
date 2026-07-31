@@ -75,14 +75,14 @@ export default function AuthFlowListPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="text-gray-500">Loading authentication flows...</div>
+        <div className="text-subtle">Loading authentication flows...</div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
+      <div className="rounded-md bg-danger-soft p-4 text-sm text-danger-fg">
         Failed to load authentication flows.
       </div>
     );
@@ -92,8 +92,8 @@ export default function AuthFlowListPage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Authentication Flows</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-fg">Authentication Flows</h1>
+          <p className="mt-1 text-sm text-subtle">
             Design and manage authentication flows for{' '}
             <span className="font-medium">{name}</span>
           </p>
@@ -101,89 +101,89 @@ export default function AuthFlowListPage() {
         <button
           onClick={handleCreate}
           disabled={createMutation.isPending}
-          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-60"
         >
           {createMutation.isPending ? 'Creating...' : 'Create Flow'}
         </button>
       </div>
 
       {createError && (
-        <div className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700">
+        <div className="mb-4 rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
           {createError}
         </div>
       )}
 
-      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+      <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-sm">
+        <table className="min-w-full divide-y divide-line">
+          <thead className="bg-sunken">
             <tr>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Name
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Description
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Steps
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Default
               </th>
-              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Last Modified
               </th>
               <th className="px-6 py-3" />
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody className="divide-y divide-line">
             {flows && flows.length > 0 ? (
               flows.map((flow) => (
                 <tr
                   key={flow.id}
-                  className="hover:bg-gray-50"
+                  className="hover:bg-hover"
                 >
                   <td className="whitespace-nowrap px-6 py-4">
                     <button
                       onClick={() => navigate(`/console/realms/${name}/auth-flows/${flow.id}`)}
-                      className="text-sm font-medium text-indigo-600 hover:text-indigo-900"
+                      className="text-sm font-medium text-accent hover:text-accent"
                     >
                       {flow.name}
                     </button>
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-500 max-w-xs truncate">
+                  <td className="px-6 py-4 text-sm text-subtle max-w-xs truncate">
                     {flow.description || '-'}
                   </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-700">
+                  <td className="whitespace-nowrap px-6 py-4 text-sm text-muted">
                     {flow.steps.length}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-sm">
                     {flow.isDefault && (
-                      <span className="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                      <span className="inline-flex rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success-fg">
                         Default
                       </span>
                     )}
                   </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                  <td className="whitespace-nowrap px-6 py-4 text-sm text-subtle">
                     {new Date(flow.updatedAt).toLocaleDateString()}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-right text-sm">
                     <div className="flex justify-end gap-2">
                       <button
                         onClick={() => navigate(`/console/realms/${name}/auth-flows/${flow.id}`)}
-                        className="rounded px-2 py-1 text-xs font-medium text-indigo-600 hover:bg-indigo-50"
+                        className="rounded px-2 py-1 text-xs font-medium text-accent hover:bg-accent-soft"
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => duplicateMutation.mutate(flow)}
                         disabled={duplicateMutation.isPending}
-                        className="rounded px-2 py-1 text-xs font-medium text-gray-600 hover:bg-gray-100"
+                        className="rounded px-2 py-1 text-xs font-medium text-muted hover:bg-hover"
                       >
                         Duplicate
                       </button>
                       <button
                         onClick={() => setDeleteTarget(flow)}
-                        className="rounded px-2 py-1 text-xs font-medium text-red-600 hover:bg-red-50"
+                        className="rounded px-2 py-1 text-xs font-medium text-danger hover:bg-danger-soft"
                       >
                         Delete
                       </button>
@@ -193,7 +193,7 @@ export default function AuthFlowListPage() {
               ))
             ) : (
               <tr>
-                <td colSpan={6} className="px-6 py-8 text-center text-sm text-gray-500">
+                <td colSpan={6} className="px-6 py-8 text-center text-sm text-subtle">
                   No authentication flows found. Create one to get started.
                 </td>
               </tr>
@@ -221,13 +221,13 @@ export default function AuthFlowListPage() {
             role="dialog"
             aria-modal="true"
             aria-labelledby="create-flow-dialog-title"
-            className="relative z-10 w-full max-w-md rounded-lg bg-white p-6 shadow-xl"
+            className="relative z-10 w-full max-w-md rounded-lg bg-surface p-6 shadow-xl"
           >
-            <h3 id="create-flow-dialog-title" className="text-lg font-semibold text-gray-900">
+            <h3 id="create-flow-dialog-title" className="text-lg font-semibold text-fg">
               Create Authentication Flow
             </h3>
             <div className="mt-4">
-              <label htmlFor="new-flow-name" className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label htmlFor="new-flow-name" className="mb-1.5 block text-sm font-medium text-muted">
                 Flow Name
               </label>
               <input
@@ -238,17 +238,17 @@ export default function AuthFlowListPage() {
                 onKeyDown={(e) => e.key === 'Enter' && handleCreateConfirm()}
                 autoFocus
                 placeholder="e.g. browser-flow"
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
             </div>
             {createError && (
-              <p className="mt-2 text-sm text-red-600">{createError}</p>
+              <p className="mt-2 text-sm text-danger">{createError}</p>
             )}
             <div className="mt-6 flex justify-end gap-3">
               <button
                 type="button"
                 onClick={() => setShowCreateModal(false)}
-                className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                className="rounded-md border border-line-strong bg-surface px-4 py-2 text-sm font-medium text-muted hover:bg-hover"
               >
                 Cancel
               </button>
@@ -256,7 +256,7 @@ export default function AuthFlowListPage() {
                 type="button"
                 onClick={handleCreateConfirm}
                 disabled={!newFlowName.trim() || createMutation.isPending}
-                className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-60"
+                className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-60"
               >
                 {createMutation.isPending ? 'Creating...' : 'Create'}
               </button>

@@ -166,15 +166,15 @@ function RealmStatsSection({ realmName }: { realmName: string }) {
               label="Active Users (24h)"
               value={stats?.activeUsers24h ?? 0}
               sublabel="Distinct logins in last 24 hours"
-              colorClass="bg-indigo-100"
-              icon={<Icons.Users className="h-5 w-5 text-indigo-600" />}
+              colorClass="bg-accent-soft"
+              icon={<Icons.Users className="h-5 w-5 text-accent" />}
             />
             <StatCard
               label="Active Users (7d)"
               value={stats?.activeUsers7d ?? 0}
               sublabel="Distinct logins in last 7 days"
-              colorClass="bg-blue-100"
-              icon={<Icons.Groups className="h-5 w-5 text-blue-600" />}
+              colorClass="bg-info-soft"
+              icon={<Icons.Groups className="h-5 w-5 text-info" />}
             />
             <StatCard
               label="Active Users (30d)"
@@ -187,22 +187,22 @@ function RealmStatsSection({ realmName }: { realmName: string }) {
               label="Login Successes (24h)"
               value={stats?.loginSuccessCount ?? 0}
               sublabel={successRate !== null ? `${successRate}% success rate` : undefined}
-              colorClass="bg-green-100"
-              icon={<Icons.CheckCircle className="h-5 w-5 text-green-600" />}
+              colorClass="bg-success-soft"
+              icon={<Icons.CheckCircle className="h-5 w-5 text-success" />}
             />
             <StatCard
               label="Login Failures (24h)"
               value={stats?.loginFailureCount ?? 0}
               sublabel={successRate !== null ? `${100 - successRate}% failure rate` : undefined}
-              colorClass="bg-red-100"
-              icon={<Icons.XCircle className="h-5 w-5 text-red-600" />}
+              colorClass="bg-danger-soft"
+              icon={<Icons.XCircle className="h-5 w-5 text-danger" />}
             />
             <StatCard
               label="Active Sessions"
               value={stats?.activeSessionCount ?? 0}
               sublabel="OAuth + SSO sessions"
-              colorClass="bg-yellow-100"
-              icon={<Icons.Sessions className="h-5 w-5 text-yellow-600" />}
+              colorClass="bg-warning-soft"
+              icon={<Icons.Sessions className="h-5 w-5 text-warning" />}
             />
           </div>
         )}
@@ -347,20 +347,20 @@ export default function DashboardPage() {
         <StatCard
           label="Total Realms"
           value={realms?.length ?? 0}
-          colorClass="bg-indigo-100"
-          icon={<Icons.Realms className="h-5 w-5 text-indigo-600" />}
+          colorClass="bg-accent-soft"
+          icon={<Icons.Realms className="h-5 w-5 text-accent" />}
         />
         <StatCard
           label="Enabled Realms"
           value={enabledCount}
-          colorClass="bg-green-100"
-          icon={<Icons.CheckCircle className="h-5 w-5 text-green-600" />}
+          colorClass="bg-success-soft"
+          icon={<Icons.CheckCircle className="h-5 w-5 text-success" />}
         />
         <StatCard
           label="Disabled Realms"
           value={disabledCount}
-          colorClass="bg-gray-100"
-          icon={<Icons.XCircle className="h-5 w-5 text-gray-600" />}
+          colorClass="bg-sunken"
+          icon={<Icons.XCircle className="h-5 w-5 text-muted" />}
         />
       </div>
 

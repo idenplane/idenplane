@@ -114,20 +114,20 @@ export default function WebhookDetailPage() {
     setForm((f) => ({ ...f, [field]: value }));
 
   if (isLoading) {
-    return <div className="text-gray-500">Loading webhook...</div>;
+    return <div className="text-subtle">Loading webhook...</div>;
   }
 
   if (!webhook) {
-    return <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">Webhook not found.</div>;
+    return <div className="rounded-md bg-danger-soft p-4 text-sm text-danger-fg">Webhook not found.</div>;
   }
 
   return (
     <div className="mx-auto max-w-2xl space-y-6">
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900 break-all">{webhook.url}</h1>
+          <h1 className="text-2xl font-bold text-fg break-all">{webhook.url}</h1>
           {webhook.description && (
-            <p className="mt-1 text-sm text-gray-500">{webhook.description}</p>
+            <p className="mt-1 text-sm text-subtle">{webhook.description}</p>
           )}
         </div>
         <div className="flex items-center gap-2">
@@ -138,13 +138,13 @@ export default function WebhookDetailPage() {
               testMutation.mutate();
             }}
             disabled={testMutation.isPending}
-            className="rounded-md border border-indigo-300 px-4 py-2 text-sm font-medium text-indigo-700 hover:bg-indigo-50 disabled:opacity-50"
+            className="rounded-md border border-accent-soft px-4 py-2 text-sm font-medium text-accent hover:bg-accent-soft disabled:opacity-50"
           >
             {testMutation.isPending ? 'Testing...' : 'Test Webhook'}
           </button>
           <button
             onClick={() => setShowDelete(true)}
-            className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+            className="rounded-md border border-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger-soft"
           >
             Delete
           </button>
@@ -152,49 +152,49 @@ export default function WebhookDetailPage() {
       </div>
 
       {testResult === 'success' && (
-        <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">
+        <div className="rounded-md bg-success-soft p-3 text-sm text-success-fg">
           Test delivery sent successfully.
         </div>
       )}
       {testResult === 'error' && (
-        <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+        <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
           Test delivery failed. Check deliveries below for details.
         </div>
       )}
 
-      <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-line bg-surface p-6 shadow-sm">
         <div className="space-y-4">
           <div>
-            <label htmlFor="field-wh-url" className="mb-1.5 block text-sm font-medium text-gray-700">URL *</label>
+            <label htmlFor="field-wh-url" className="mb-1.5 block text-sm font-medium text-muted">URL *</label>
             <input
               id="field-wh-url"
               type="url"
               required
               value={form.url}
               onChange={(e) => set('url', e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
 
           <div>
-            <label htmlFor="field-wh-secret" className="mb-1.5 block text-sm font-medium text-gray-700">Secret</label>
+            <label htmlFor="field-wh-secret" className="mb-1.5 block text-sm font-medium text-muted">Secret</label>
             <PasswordInput
               id="field-wh-secret"
               value={form.secret}
               onChange={(e) => set('secret', e.target.value)}
               placeholder="Leave blank to keep current"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
 
           <div>
-            <label htmlFor="field-wh-description" className="mb-1.5 block text-sm font-medium text-gray-700">Description</label>
+            <label htmlFor="field-wh-description" className="mb-1.5 block text-sm font-medium text-muted">Description</label>
             <input
               id="field-wh-description"
               type="text"
               value={form.description}
               onChange={(e) => set('description', e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
 
@@ -204,14 +204,14 @@ export default function WebhookDetailPage() {
               id="field-wh-enabled"
               checked={form.enabled}
               onChange={(e) => set('enabled', e.target.checked)}
-              className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
             />
-            <label htmlFor="field-wh-enabled" className="text-sm font-medium text-gray-700">Enabled</label>
+            <label htmlFor="field-wh-enabled" className="text-sm font-medium text-muted">Enabled</label>
           </div>
         </div>
 
-        <div className="space-y-3 border-t border-gray-200 pt-4">
-          <h2 className="text-lg font-semibold text-gray-900">Event Types</h2>
+        <div className="space-y-3 border-t border-line pt-4">
+          <h2 className="text-lg font-semibold text-fg">Event Types</h2>
           <div className="grid grid-cols-2 gap-2">
             {EVENT_TYPES.map((et) => (
               <label key={et} className="flex items-center gap-2">
@@ -219,30 +219,30 @@ export default function WebhookDetailPage() {
                   type="checkbox"
                   checked={form.eventTypes.includes(et)}
                   onChange={() => toggleEventType(et)}
-                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
                 />
-                <span className="text-sm text-gray-700">{et}</span>
+                <span className="text-sm text-muted">{et}</span>
               </label>
             ))}
           </div>
         </div>
 
         {updateMutation.isSuccess && (
-          <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">
+          <div className="rounded-md bg-success-soft p-3 text-sm text-success-fg">
             Webhook updated successfully.
           </div>
         )}
         {updateMutation.isError && (
-          <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+          <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
             Failed to update webhook.
           </div>
         )}
 
-        <div className="flex justify-end border-t border-gray-200 pt-4">
+        <div className="flex justify-end border-t border-line pt-4">
           <button
             type="submit"
             disabled={updateMutation.isPending}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
           </button>
@@ -251,38 +251,38 @@ export default function WebhookDetailPage() {
 
       {deliveries && deliveries.length > 0 && (
         <div className="space-y-3">
-          <h2 className="text-lg font-semibold text-gray-900">Recent Deliveries</h2>
-          <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+          <h2 className="text-lg font-semibold text-fg">Recent Deliveries</h2>
+          <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-sm">
+            <table className="min-w-full divide-y divide-line">
+              <thead className="bg-sunken">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Event</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Status</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Result</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Duration</th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Time</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Event</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Status</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Result</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Duration</th>
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Time</th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200">
+              <tbody className="divide-y divide-line">
                 {deliveries.map((d) => (
-                  <tr key={d.id} className="hover:bg-gray-50">
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-700">{d.eventType}</td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                  <tr key={d.id} className="hover:bg-hover">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-muted">{d.eventType}</td>
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-subtle">
                       {d.statusCode ?? '-'}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm">
                       <span
                         className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
-                          d.success ? 'bg-green-100 text-green-700' : 'bg-red-100 text-red-700'
+                          d.success ? 'bg-success-soft text-success-fg' : 'bg-danger-soft text-danger-fg'
                         }`}
                       >
                         {d.success ? 'Success' : 'Failed'}
                       </span>
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-subtle">
                       {d.duration != null ? `${d.duration}ms` : '-'}
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-subtle">
                       {new Date(d.createdAt).toLocaleString()}
                     </td>
                   </tr>

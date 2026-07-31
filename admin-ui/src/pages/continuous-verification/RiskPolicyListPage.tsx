@@ -105,12 +105,12 @@ async function toggleRiskPolicy(
 
 function ActionBadge({ action }: { action: string }) {
   const config: Record<string, { bg: string; text: string; label: string }> = {
-    NO_ACTION: { bg: 'bg-gray-100', text: 'text-gray-600', label: 'No Action' },
-    STEP_UP: { bg: 'bg-orange-100', text: 'text-orange-700', label: 'Step-up' },
-    TERMINATE: { bg: 'bg-red-100', text: 'text-red-700', label: 'Terminate' },
-    NOTIFY: { bg: 'bg-blue-100', text: 'text-blue-700', label: 'Notify' },
+    NO_ACTION: { bg: 'bg-sunken', text: 'text-muted', label: 'No Action' },
+    STEP_UP: { bg: 'bg-warning-soft', text: 'text-warning-fg', label: 'Step-up' },
+    TERMINATE: { bg: 'bg-danger-soft', text: 'text-danger-fg', label: 'Terminate' },
+    NOTIFY: { bg: 'bg-info-soft', text: 'text-info-fg', label: 'Notify' },
   };
-  const c = config[action] ?? { bg: 'bg-gray-100', text: 'text-gray-600', label: action };
+  const c = config[action] ?? { bg: 'bg-sunken', text: 'text-muted', label: action };
   return (
     <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${c.bg} ${c.text}`}>
       {c.label}
@@ -235,14 +235,14 @@ export default function RiskPolicyListPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="text-gray-500">Loading risk policies...</div>
+        <div className="text-subtle">Loading risk policies...</div>
       </div>
     );
   }
 
   if (error) {
     return (
-      <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
+      <div className="rounded-md bg-danger-soft p-4 text-sm text-danger-fg">
         Failed to load risk policies.
       </div>
     );
@@ -252,8 +252,8 @@ export default function RiskPolicyListPage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Risk Policies</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-fg">Risk Policies</h1>
+          <p className="mt-1 text-sm text-subtle">
             Configure continuous session verification policies for{' '}
             <span className="font-medium">{realmName}</span>
           </p>
@@ -261,13 +261,13 @@ export default function RiskPolicyListPage() {
         <div className="flex gap-3">
           <Link
             to={`/console/realms/${realmName}/risk-dashboard`}
-            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-md border border-line-strong bg-surface px-4 py-2 text-sm font-medium text-muted hover:bg-hover"
           >
             Dashboard
           </Link>
           <button
             onClick={() => setShowCreate(true)}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
           >
             Create Policy
           </button>
@@ -278,14 +278,14 @@ export default function RiskPolicyListPage() {
       {showCreate && (
         <form
           onSubmit={handleCreateSubmit}
-          className="mb-6 space-y-4 rounded-lg border border-gray-200 bg-white p-6 shadow-sm"
+          className="mb-6 space-y-4 rounded-lg border border-line bg-surface p-6 shadow-sm"
         >
-          <h2 className="text-lg font-semibold text-gray-900">New Risk Policy</h2>
+          <h2 className="text-lg font-semibold text-fg">New Risk Policy</h2>
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label htmlFor="policy-name" className="mb-1.5 block text-sm font-medium text-gray-700">
-                Policy Name <span className="text-red-500">*</span>
+              <label htmlFor="policy-name" className="mb-1.5 block text-sm font-medium text-muted">
+                Policy Name <span className="text-danger">*</span>
               </label>
               <input
                 id="policy-name"
@@ -294,18 +294,18 @@ export default function RiskPolicyListPage() {
                 value={newPolicy.name}
                 onChange={(e) => setNewPolicy({ ...newPolicy, name: e.target.value })}
                 placeholder="e.g. Unencrypted Device Block"
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
             </div>
             <div>
-              <label htmlFor="policy-action" className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label htmlFor="policy-action" className="mb-1.5 block text-sm font-medium text-muted">
                 Action
               </label>
               <select
                 id="policy-action"
                 value={newPolicy.action}
                 onChange={(e) => setNewPolicy({ ...newPolicy, action: e.target.value as CreatePolicyDto['action'] })}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               >
                 <option value="NO_ACTION">No Action</option>
                 <option value="NOTIFY">Notify</option>
@@ -317,7 +317,7 @@ export default function RiskPolicyListPage() {
 
           <div className="grid grid-cols-2 gap-4">
             <div>
-              <label htmlFor="policy-description" className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label htmlFor="policy-description" className="mb-1.5 block text-sm font-medium text-muted">
                 Description
               </label>
               <input
@@ -326,11 +326,11 @@ export default function RiskPolicyListPage() {
                 value={newPolicy.description ?? ''}
                 onChange={(e) => setNewPolicy({ ...newPolicy, description: e.target.value })}
                 placeholder="Optional description"
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
             </div>
             <div>
-              <label htmlFor="policy-client" className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label htmlFor="policy-client" className="mb-1.5 block text-sm font-medium text-muted">
                 Client ID (optional)
               </label>
               <input
@@ -339,14 +339,14 @@ export default function RiskPolicyListPage() {
                 value={newPolicy.clientId ?? ''}
                 onChange={(e) => setNewPolicy({ ...newPolicy, clientId: e.target.value || undefined })}
                 placeholder="Leave empty for realm-wide"
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
             </div>
           </div>
 
           <div className="grid grid-cols-3 gap-4">
             <div>
-              <label htmlFor="policy-priority" className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label htmlFor="policy-priority" className="mb-1.5 block text-sm font-medium text-muted">
                 Priority
               </label>
               <input
@@ -354,11 +354,11 @@ export default function RiskPolicyListPage() {
                 type="number"
                 value={newPolicy.priority ?? 0}
                 onChange={(e) => setNewPolicy({ ...newPolicy, priority: parseInt(e.target.value, 10) || 0 })}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
             </div>
             <div>
-              <label htmlFor="policy-risk-contribution" className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label htmlFor="policy-risk-contribution" className="mb-1.5 block text-sm font-medium text-muted">
                 Risk Score Contribution
               </label>
               <input
@@ -369,11 +369,11 @@ export default function RiskPolicyListPage() {
                 min="0"
                 max="100"
                 step="0.1"
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
             </div>
             <div>
-              <label htmlFor="policy-cooldown" className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label htmlFor="policy-cooldown" className="mb-1.5 block text-sm font-medium text-muted">
                 Cooldown (seconds)
               </label>
               <input
@@ -382,13 +382,13 @@ export default function RiskPolicyListPage() {
                 value={newPolicy.cooldownSeconds ?? 300}
                 onChange={(e) => setNewPolicy({ ...newPolicy, cooldownSeconds: parseInt(e.target.value, 10) || 300 })}
                 min="0"
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
             </div>
           </div>
 
           {formError && showCreate && (
-            <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+            <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
               {formError}
             </div>
           )}
@@ -400,14 +400,14 @@ export default function RiskPolicyListPage() {
                 setShowCreate(false);
                 setFormError(null);
               }}
-              className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+              className="rounded-md border border-line-strong bg-surface px-4 py-2 text-sm font-medium text-muted hover:bg-hover"
             >
               Cancel
             </button>
             <button
               type="submit"
               disabled={createMutation.isPending}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               {createMutation.isPending ? 'Creating...' : 'Create'}
             </button>
@@ -416,56 +416,56 @@ export default function RiskPolicyListPage() {
       )}
 
       {/* Policy table */}
-      <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-        <table className="min-w-full divide-y divide-gray-200">
-          <thead className="bg-gray-50">
+      <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-sm">
+        <table className="min-w-full divide-y divide-line">
+          <thead className="bg-sunken">
             <tr>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Name
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Action
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Priority
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Risk Score
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Cooldown
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Enabled
               </th>
-              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Updated
               </th>
-              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+              <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-subtle">
                 Actions
               </th>
             </tr>
           </thead>
-          <tbody className="divide-y divide-gray-200">
+          <tbody className="divide-y divide-line">
             {policies && policies.length > 0 ? (
               policies.map((policy) => (
-                <tr key={policy.id} className="hover:bg-gray-50">
+                <tr key={policy.id} className="hover:bg-hover">
                   <td className="px-4 py-4">
-                    <div className="text-sm font-medium text-gray-900">{policy.name}</div>
+                    <div className="text-sm font-medium text-fg">{policy.name}</div>
                     {policy.description && (
-                      <div className="text-xs text-gray-500">{policy.description}</div>
+                      <div className="text-xs text-subtle">{policy.description}</div>
                     )}
                   </td>
                   <td className="whitespace-nowrap px-4 py-4">
                     <ActionBadge action={policy.action} />
                   </td>
-                  <td className="whitespace-nowrap px-4 py-4 text-sm text-gray-700">
+                  <td className="whitespace-nowrap px-4 py-4 text-sm text-muted">
                     {policy.priority}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-4 text-sm text-gray-700">
+                  <td className="whitespace-nowrap px-4 py-4 text-sm text-muted">
                     {policy.riskScoreContribution}
                   </td>
-                  <td className="whitespace-nowrap px-4 py-4 text-sm text-gray-700">
+                  <td className="whitespace-nowrap px-4 py-4 text-sm text-muted">
                     {policy.cooldownSeconds}s
                   </td>
                   <td className="whitespace-nowrap px-4 py-4">
@@ -474,27 +474,27 @@ export default function RiskPolicyListPage() {
                       disabled={toggleMutation.isPending}
                       className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
                         policy.enabled
-                          ? 'bg-green-100 text-green-700'
-                          : 'bg-gray-100 text-gray-500'
+                          ? 'bg-success-soft text-success-fg'
+                          : 'bg-sunken text-subtle'
                       }`}
                     >
                       {policy.enabled ? 'Enabled' : 'Disabled'}
                     </button>
                   </td>
-                  <td className="whitespace-nowrap px-4 py-4 text-sm text-gray-500">
+                  <td className="whitespace-nowrap px-4 py-4 text-sm text-subtle">
                     {new Date(policy.updatedAt).toLocaleDateString()}
                   </td>
                   <td className="whitespace-nowrap px-4 py-4 text-right">
                     <div className="flex justify-end gap-3">
                       <button
                         onClick={() => startEditing(policy)}
-                        className="text-sm font-medium text-indigo-600 hover:text-indigo-900"
+                        className="text-sm font-medium text-accent hover:text-accent"
                       >
                         Edit
                       </button>
                       <button
                         onClick={() => setDeleteTarget(policy)}
-                        className="text-sm font-medium text-red-600 hover:text-red-800"
+                        className="text-sm font-medium text-danger hover:text-danger-fg"
                       >
                         Delete
                       </button>
@@ -504,7 +504,7 @@ export default function RiskPolicyListPage() {
               ))
             ) : (
               <tr>
-                <td colSpan={8} className="px-6 py-8 text-center text-sm text-gray-500">
+                <td colSpan={8} className="px-6 py-8 text-center text-sm text-subtle">
                   No risk policies found in this realm.
                 </td>
               </tr>
@@ -516,13 +516,13 @@ export default function RiskPolicyListPage() {
       {/* Edit policy modal */}
       {editingId && (
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
-          <div className="w-full max-w-lg rounded-lg bg-white p-6 shadow-xl">
-            <h2 className="mb-4 text-lg font-semibold text-gray-900">Edit Risk Policy</h2>
+          <div className="w-full max-w-lg rounded-lg bg-surface p-6 shadow-xl">
+            <h2 className="mb-4 text-lg font-semibold text-fg">Edit Risk Policy</h2>
             <form onSubmit={handleEditSubmit} className="space-y-4">
               <div className="grid grid-cols-2 gap-4">
                 <div>
-                  <label htmlFor="edit-name" className="mb-1.5 block text-sm font-medium text-gray-700">
-                    Policy Name <span className="text-red-500">*</span>
+                  <label htmlFor="edit-name" className="mb-1.5 block text-sm font-medium text-muted">
+                    Policy Name <span className="text-danger">*</span>
                   </label>
                   <input
                     id="edit-name"
@@ -530,18 +530,18 @@ export default function RiskPolicyListPage() {
                     required
                     value={editPolicy.name ?? ''}
                     onChange={(e) => setEditPolicy({ ...editPolicy, name: e.target.value })}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label htmlFor="edit-action" className="mb-1.5 block text-sm font-medium text-gray-700">
+                  <label htmlFor="edit-action" className="mb-1.5 block text-sm font-medium text-muted">
                     Action
                   </label>
                   <select
                     id="edit-action"
                     value={editPolicy.action ?? 'NO_ACTION'}
                     onChange={(e) => setEditPolicy({ ...editPolicy, action: e.target.value as UpdatePolicyDto['action'] })}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                   >
                     <option value="NO_ACTION">No Action</option>
                     <option value="NOTIFY">Notify</option>
@@ -552,7 +552,7 @@ export default function RiskPolicyListPage() {
               </div>
 
               <div>
-                <label htmlFor="edit-description" className="mb-1.5 block text-sm font-medium text-gray-700">
+                <label htmlFor="edit-description" className="mb-1.5 block text-sm font-medium text-muted">
                   Description
                 </label>
                 <input
@@ -560,13 +560,13 @@ export default function RiskPolicyListPage() {
                   type="text"
                   value={editPolicy.description ?? ''}
                   onChange={(e) => setEditPolicy({ ...editPolicy, description: e.target.value })}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 />
               </div>
 
               <div className="grid grid-cols-3 gap-4">
                 <div>
-                  <label htmlFor="edit-priority" className="mb-1.5 block text-sm font-medium text-gray-700">
+                  <label htmlFor="edit-priority" className="mb-1.5 block text-sm font-medium text-muted">
                     Priority
                   </label>
                   <input
@@ -574,11 +574,11 @@ export default function RiskPolicyListPage() {
                     type="number"
                     value={editPolicy.priority ?? 0}
                     onChange={(e) => setEditPolicy({ ...editPolicy, priority: parseInt(e.target.value, 10) || 0 })}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label htmlFor="edit-risk" className="mb-1.5 block text-sm font-medium text-gray-700">
+                  <label htmlFor="edit-risk" className="mb-1.5 block text-sm font-medium text-muted">
                     Risk Score
                   </label>
                   <input
@@ -589,11 +589,11 @@ export default function RiskPolicyListPage() {
                     min="0"
                     max="100"
                     step="0.1"
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                   />
                 </div>
                 <div>
-                  <label htmlFor="edit-cooldown" className="mb-1.5 block text-sm font-medium text-gray-700">
+                  <label htmlFor="edit-cooldown" className="mb-1.5 block text-sm font-medium text-muted">
                     Cooldown (s)
                   </label>
                   <input
@@ -602,13 +602,13 @@ export default function RiskPolicyListPage() {
                     value={editPolicy.cooldownSeconds ?? 300}
                     onChange={(e) => setEditPolicy({ ...editPolicy, cooldownSeconds: parseInt(e.target.value, 10) || 300 })}
                     min="0"
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                   />
                 </div>
               </div>
 
               {formError && editingId && (
-                <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+                <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
                   {formError}
                 </div>
               )}
@@ -617,14 +617,14 @@ export default function RiskPolicyListPage() {
                 <button
                   type="button"
                   onClick={cancelEdit}
-                  className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  className="rounded-md border border-line-strong bg-surface px-4 py-2 text-sm font-medium text-muted hover:bg-hover"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={updateMutation.isPending}
-                  className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                  className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
                 >
                   {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
                 </button>

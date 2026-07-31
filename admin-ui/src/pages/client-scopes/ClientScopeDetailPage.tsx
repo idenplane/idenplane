@@ -132,7 +132,7 @@ export default function ClientScopeDetailPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="text-gray-500">Loading...</div>
+        <div className="text-subtle">Loading...</div>
       </div>
     )
   }
@@ -140,7 +140,7 @@ export default function ClientScopeDetailPage() {
   if (!scope) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="text-gray-500">Client scope not found</div>
+        <div className="text-subtle">Client scope not found</div>
       </div>
     )
   }
@@ -150,9 +150,9 @@ export default function ClientScopeDetailPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div className="flex items-center gap-3">
-          <h1 className="text-2xl font-bold text-gray-900">{scope.name}</h1>
+          <h1 className="text-2xl font-bold text-fg">{scope.name}</h1>
           {scope.builtIn && (
-            <span className="rounded-full bg-green-100 px-3 py-1 text-xs font-medium text-green-800">
+            <span className="rounded-full bg-success-soft px-3 py-1 text-xs font-medium text-success-fg">
               Built-in
             </span>
           )}
@@ -160,7 +160,7 @@ export default function ClientScopeDetailPage() {
         <button
           onClick={() => setShowDeleteDialog(true)}
           disabled={scope.builtIn}
-          className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+          className="rounded-md border border-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger-soft disabled:opacity-50"
         >
           Delete
         </button>
@@ -168,22 +168,22 @@ export default function ClientScopeDetailPage() {
 
       {/* Success/Error Messages */}
       {successMessage && (
-        <div className="rounded-md bg-green-50 p-4">
-          <p className="text-sm text-green-800">{successMessage}</p>
+        <div className="rounded-md bg-success-soft p-4">
+          <p className="text-sm text-success-fg">{successMessage}</p>
         </div>
       )}
       {errorMessage && (
-        <div className="rounded-md bg-red-50 p-4">
-          <p className="text-sm text-red-800">{errorMessage}</p>
+        <div className="rounded-md bg-danger-soft p-4">
+          <p className="text-sm text-danger-fg">{errorMessage}</p>
         </div>
       )}
 
       {/* Settings Form */}
-      <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-gray-900">Settings</h2>
+      <div className="space-y-4 rounded-lg border border-line bg-surface p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-fg">Settings</h2>
         <form onSubmit={handleSubmit} className="space-y-4">
           <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="name" className="block text-sm font-medium text-muted">
               Name
             </label>
             <input
@@ -192,11 +192,11 @@ export default function ClientScopeDetailPage() {
               disabled={scope.builtIn}
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none disabled:opacity-50"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none disabled:opacity-50"
             />
           </div>
           <div>
-            <label htmlFor="description" className="block text-sm font-medium text-gray-700">
+            <label htmlFor="description" className="block text-sm font-medium text-muted">
               Description
             </label>
             <textarea
@@ -204,14 +204,14 @@ export default function ClientScopeDetailPage() {
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               rows={3}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
           <div>
             <button
               type="submit"
               disabled={updateMutation.isPending}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               {updateMutation.isPending ? 'Saving...' : 'Save'}
             </button>
@@ -220,39 +220,39 @@ export default function ClientScopeDetailPage() {
       </div>
 
       {/* Protocol Mappers Section */}
-      <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-gray-900">Protocol Mappers</h2>
+      <div className="space-y-4 rounded-lg border border-line bg-surface p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-fg">Protocol Mappers</h2>
 
         {/* Existing Mappers Table */}
         {scope.protocolMappers && scope.protocolMappers.length > 0 ? (
           <div className="overflow-x-auto">
-            <table className="min-w-full divide-y divide-gray-200">
-              <thead className="bg-gray-50">
+            <table className="min-w-full divide-y divide-line">
+              <thead className="bg-sunken">
                 <tr>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                     Name
                   </th>
-                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">
+                  <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                     Type
                   </th>
-                  <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">
+                  <th className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-subtle">
                     Actions
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
+              <tbody className="divide-y divide-line bg-surface">
                 {scope.protocolMappers.map((mapper) => (
                   <tr key={mapper.id}>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-900">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-fg">
                       {mapper.name}
                     </td>
-                    <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                    <td className="whitespace-nowrap px-6 py-4 text-sm text-subtle">
                       {mapper.mapperType}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-right text-sm">
                       <button
                         onClick={() => handleDeleteMapper(mapper.id)}
-                        className="text-red-600 hover:text-red-900"
+                        className="text-danger hover:text-danger-fg"
                       >
                         Delete
                       </button>
@@ -263,15 +263,15 @@ export default function ClientScopeDetailPage() {
             </table>
           </div>
         ) : (
-          <p className="text-sm text-gray-500">No protocol mappers configured</p>
+          <p className="text-sm text-subtle">No protocol mappers configured</p>
         )}
 
         {/* Add Mapper Form */}
-        <div className="border-t border-gray-200 pt-4">
-          <h3 className="mb-4 text-base font-medium text-gray-900">Add Mapper</h3>
+        <div className="border-t border-line pt-4">
+          <h3 className="mb-4 text-base font-medium text-fg">Add Mapper</h3>
           <form onSubmit={handleAddMapper} className="space-y-4">
             <div>
-              <label htmlFor="mapperName" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="mapperName" className="block text-sm font-medium text-muted">
                 Name
               </label>
               <input
@@ -280,18 +280,18 @@ export default function ClientScopeDetailPage() {
                 value={mapperForm.name}
                 onChange={(e) => setMapperForm({ ...mapperForm, name: e.target.value })}
                 required
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
             </div>
             <div>
-              <label htmlFor="mapperType" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="mapperType" className="block text-sm font-medium text-muted">
                 Mapper Type
               </label>
               <select
                 id="mapperType"
                 value={mapperForm.mapperType}
                 onChange={(e) => setMapperForm({ ...mapperForm, mapperType: e.target.value })}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               >
                 <option value="oidc-usermodel-attribute-mapper">oidc-usermodel-attribute-mapper</option>
                 <option value="oidc-hardcoded-claim-mapper">oidc-hardcoded-claim-mapper</option>
@@ -301,7 +301,7 @@ export default function ClientScopeDetailPage() {
               </select>
             </div>
             <div>
-              <label htmlFor="mapperConfig" className="block text-sm font-medium text-gray-700">
+              <label htmlFor="mapperConfig" className="block text-sm font-medium text-muted">
                 Config (JSON)
               </label>
               <textarea
@@ -309,14 +309,14 @@ export default function ClientScopeDetailPage() {
                 value={mapperForm.config}
                 onChange={(e) => setMapperForm({ ...mapperForm, config: e.target.value })}
                 rows={4}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm font-mono shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
             </div>
             <div>
               <button
                 type="submit"
                 disabled={addMapperMutation.isPending}
-                className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
               >
                 {addMapperMutation.isPending ? 'Adding...' : 'Add Mapper'}
               </button>

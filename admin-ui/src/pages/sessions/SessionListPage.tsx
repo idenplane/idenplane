@@ -35,45 +35,45 @@ export default function SessionListPage() {
   return (
     <div className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-bold text-gray-900">Sessions</h1>
-        <span className="text-sm text-gray-500">
+        <h1 className="text-2xl font-bold text-fg">Sessions</h1>
+        <span className="text-sm text-subtle">
           {sessions?.length ?? 0} active session{sessions?.length !== 1 ? 's' : ''}
         </span>
       </div>
 
       {error && (
-        <div role="alert" className="rounded-md bg-red-50 p-4 text-sm text-red-700">
+        <div role="alert" className="rounded-md bg-danger-soft p-4 text-sm text-danger-fg">
           Failed to load data: {error.message}
         </div>
       )}
 
       {isLoading ? (
-        <div className="text-gray-500">Loading sessions...</div>
+        <div className="text-subtle">Loading sessions...</div>
       ) : !sessions || sessions.length === 0 ? (
-        <div className="rounded-md border border-gray-200 bg-white p-8 text-center text-gray-500">
+        <div className="rounded-md border border-line bg-surface p-8 text-center text-subtle">
           No active sessions.
         </div>
       ) : (
-        <div className="overflow-hidden rounded-lg border border-gray-200 bg-white shadow-sm">
-          <table className="min-w-full divide-y divide-gray-200" aria-label="Active sessions">
-            <thead className="bg-gray-50">
+        <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-sm">
+          <table className="min-w-full divide-y divide-line" aria-label="Active sessions">
+            <thead className="bg-sunken">
               <tr>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">User</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Type</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">IP Address</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">User Agent</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Started</th>
-                <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Expires</th>
-                <th scope="col" className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">Actions</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">User</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Type</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">IP Address</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">User Agent</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Started</th>
+                <th scope="col" className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Expires</th>
+                <th scope="col" className="px-6 py-3 text-right text-xs font-medium uppercase tracking-wider text-subtle">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-gray-200">
+            <tbody className="divide-y divide-line">
               {sessions.map((session) => (
-                <tr key={`${session.type}-${session.id}`} className="hover:bg-gray-50">
+                <tr key={`${session.type}-${session.id}`} className="hover:bg-hover">
                   <td className="whitespace-nowrap px-6 py-4 text-sm">
                     <Link
                       to={`/console/realms/${name}/users/${session.userId}`}
-                      className="font-medium text-indigo-600 hover:text-indigo-900"
+                      className="font-medium text-accent hover:text-accent"
                     >
                       {session.username}
                     </Link>
@@ -83,22 +83,22 @@ export default function SessionListPage() {
                       className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
                         session.type === 'sso'
                           ? 'bg-purple-100 text-purple-700'
-                          : 'bg-blue-100 text-blue-700'
+                          : 'bg-info-soft text-info-fg'
                       }`}
                     >
                       {session.type === 'sso' ? 'SSO' : 'OAuth'}
                     </span>
                   </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                  <td className="whitespace-nowrap px-6 py-4 text-sm text-subtle">
                     {session.ipAddress || '-'}
                   </td>
-                  <td className="px-6 py-4 text-sm text-gray-500" title={session.userAgent || undefined}>
+                  <td className="px-6 py-4 text-sm text-subtle" title={session.userAgent || undefined}>
                     {parseUserAgent(session.userAgent)}
                   </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                  <td className="whitespace-nowrap px-6 py-4 text-sm text-subtle">
                     {formatDate(session.createdAt)}
                   </td>
-                  <td className="whitespace-nowrap px-6 py-4 text-sm text-gray-500">
+                  <td className="whitespace-nowrap px-6 py-4 text-sm text-subtle">
                     {formatDate(session.expiresAt)}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-right">
@@ -111,7 +111,7 @@ export default function SessionListPage() {
                       }
                       disabled={revokeMutation.isPending}
                       aria-label={`Revoke session for ${session.username}`}
-                      className="text-sm text-red-600 hover:text-red-800 disabled:opacity-50"
+                      className="text-sm text-danger hover:text-danger-fg disabled:opacity-50"
                     >
                       Revoke
                     </button>

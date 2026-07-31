@@ -231,7 +231,7 @@ export default function FlowCanvas({ steps, onChange, isPreview = false }: FlowC
     <div className="flex h-full gap-0">
       {/* Palette — hidden in preview mode */}
       {!isPreview && (
-        <div className="w-52 shrink-0 overflow-y-auto border-r border-gray-200 bg-gray-50 p-4">
+        <div className="w-52 shrink-0 overflow-y-auto border-r border-line bg-sunken p-4">
           <FlowStepPalette onAddStep={addStep} />
         </div>
       )}
@@ -239,17 +239,17 @@ export default function FlowCanvas({ steps, onChange, isPreview = false }: FlowC
       {/* Canvas */}
       <div
         ref={canvasRef}
-        className={`relative flex-1 overflow-auto bg-white ${
-          !isPreview ? 'border-r border-gray-200' : ''
+        className={`relative flex-1 overflow-auto bg-surface ${
+          !isPreview ? 'border-r border-line' : ''
         }`}
         onDragOver={handleCanvasDragOver}
         onDrop={handleCanvasDrop}
       >
         {/* Validation warnings */}
         {warnings.length > 0 && (
-          <div className="sticky top-0 z-10 border-b border-amber-200 bg-amber-50 px-4 py-2">
+          <div className="sticky top-0 z-10 border-b border-warning-soft bg-warning-soft px-4 py-2">
             {warnings.map((w, i) => (
-              <p key={i} className="text-xs text-amber-700">
+              <p key={i} className="text-xs text-warning-fg">
                 <span className="mr-1">&#9888;</span>
                 {w.message}
               </p>
@@ -258,7 +258,7 @@ export default function FlowCanvas({ steps, onChange, isPreview = false }: FlowC
         )}
 
         {sorted.length === 0 ? (
-          <div className="flex h-full min-h-[240px] flex-col items-center justify-center text-gray-400">
+          <div className="flex h-full min-h-[240px] flex-col items-center justify-center text-subtle">
             <svg className="mb-3 h-12 w-12 opacity-40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M12 4v16m8-8H4" />
             </svg>
@@ -316,7 +316,7 @@ export default function FlowCanvas({ steps, onChange, isPreview = false }: FlowC
               {!isPreview && (
                 <button
                   onClick={() => {}}
-                  className="flex items-center justify-center gap-1 rounded-lg border-2 border-dashed border-gray-300 py-3 text-sm text-gray-400 hover:border-indigo-300 hover:text-indigo-500"
+                  className="flex items-center justify-center gap-1 rounded-lg border-2 border-dashed border-line-strong py-3 text-sm text-subtle hover:border-accent-soft hover:text-accent"
                   style={{ width: NODE_WIDTH }}
                   title="Drag a step from the palette or click a type on the left"
                 >
@@ -333,7 +333,7 @@ export default function FlowCanvas({ steps, onChange, isPreview = false }: FlowC
 
       {/* Step editor side panel */}
       {!isPreview && selectedStep && (
-        <div className="w-72 shrink-0 overflow-y-auto border-l border-gray-200 bg-white">
+        <div className="w-72 shrink-0 overflow-y-auto border-l border-line bg-surface">
           <FlowStepEditor
             step={selectedStep}
             allSteps={sorted}

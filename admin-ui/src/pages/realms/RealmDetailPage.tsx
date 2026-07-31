@@ -250,14 +250,14 @@ export default function RealmDetailPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="text-gray-500">Loading realm...</div>
+        <div className="text-subtle">Loading realm...</div>
       </div>
     );
   }
 
   if (!realm) {
     return (
-      <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
+      <div className="rounded-md bg-danger-soft p-4 text-sm text-danger-fg">
         Realm not found.
       </div>
     );
@@ -290,8 +290,8 @@ export default function RealmDetailPage() {
       {/* Header */}
       <div className="mb-6 flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{realm.name}</h1>
-          <p className="mt-1 text-sm text-gray-500">
+          <h1 className="text-2xl font-bold text-fg">{realm.name}</h1>
+          <p className="mt-1 text-sm text-subtle">
             {realm.displayName || 'Realm settings and overview'}
           </p>
         </div>
@@ -307,13 +307,13 @@ export default function RealmDetailPage() {
               a.click();
               URL.revokeObjectURL(url);
             }}
-            className="rounded-md border border-gray-300 px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-muted hover:bg-hover"
           >
             Export Realm
           </button>
           <button
             onClick={() => setShowDelete(true)}
-            className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+            className="rounded-md border border-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger-soft"
           >
             Delete Realm
           </button>
@@ -321,7 +321,7 @@ export default function RealmDetailPage() {
       </div>
 
       {/* Tabs */}
-      <div className="mb-6 border-b border-gray-200">
+      <div className="mb-6 border-b border-line">
         <nav className="-mb-px flex gap-6">
           {tabs.map((tab) => (
             <button
@@ -329,8 +329,8 @@ export default function RealmDetailPage() {
               onClick={() => setActiveTab(tab.key)}
               className={`border-b-2 py-3 text-sm font-medium ${
                 activeTab === tab.key
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                  ? 'border-accent text-accent'
+                  : 'border-transparent text-subtle hover:border-line-strong hover:text-fg'
               }`}
             >
               {tab.label}
@@ -348,15 +348,15 @@ export default function RealmDetailPage() {
               <Link
                 key={link.to}
                 to={link.to}
-                className="flex items-center justify-between rounded-lg border border-gray-200 bg-white p-4 shadow-sm hover:shadow-md transition-shadow"
+                className="flex items-center justify-between rounded-lg border border-line bg-surface p-4 shadow-sm hover:shadow-md transition-shadow"
               >
                 <div>
-                  <p className="text-sm font-medium text-gray-500">{link.label}</p>
-                  <p className="text-2xl font-bold text-gray-900">
+                  <p className="text-sm font-medium text-subtle">{link.label}</p>
+                  <p className="text-2xl font-bold text-fg">
                     {link.count !== undefined ? link.count : '-'}
                   </p>
                 </div>
-                <svg className="h-5 w-5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <svg className="h-5 w-5 text-subtle" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                   <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
                 </svg>
               </Link>
@@ -364,29 +364,29 @@ export default function RealmDetailPage() {
           </div>
 
           {/* General settings form */}
-          <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-            <h2 className="text-lg font-semibold text-gray-900">General Settings</h2>
+          <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-line bg-surface p-6 shadow-sm">
+            <h2 className="text-lg font-semibold text-fg">General Settings</h2>
 
             <div>
-              <label htmlFor="realm-name" className="mb-1.5 block text-sm font-medium text-gray-700">Name</label>
+              <label htmlFor="realm-name" className="mb-1.5 block text-sm font-medium text-muted">Name</label>
               <input
                 id="realm-name"
                 type="text"
                 value={realm.name}
                 disabled
-                className="w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-2 text-sm text-gray-500"
+                className="w-full rounded-md border border-line bg-sunken px-3 py-2 text-sm text-subtle"
               />
-              <p className="mt-1 text-xs text-gray-400">Realm name cannot be changed</p>
+              <p className="mt-1 text-xs text-subtle">Realm name cannot be changed</p>
             </div>
 
             <div>
-              <label htmlFor="realm-display-name" className="mb-1.5 block text-sm font-medium text-gray-700">Display Name</label>
+              <label htmlFor="realm-display-name" className="mb-1.5 block text-sm font-medium text-muted">Display Name</label>
               <input
                 id="realm-display-name"
                 type="text"
                 value={form.displayName}
                 onChange={(e) => setForm({ ...form, displayName: e.target.value })}
-                className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
             </div>
 
@@ -396,9 +396,9 @@ export default function RealmDetailPage() {
                 id="enabled"
                 checked={form.enabled}
                 onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
-                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
               />
-              <label htmlFor="enabled" className="text-sm font-medium text-gray-700">
+              <label htmlFor="enabled" className="text-sm font-medium text-muted">
                 Enabled
               </label>
             </div>
@@ -410,31 +410,31 @@ export default function RealmDetailPage() {
                   id="registrationAllowed"
                   checked={form.registrationAllowed}
                   onChange={(e) => setForm({ ...form, registrationAllowed: e.target.checked })}
-                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
                 />
-                <label htmlFor="registrationAllowed" className="text-sm font-medium text-gray-700">
+                <label htmlFor="registrationAllowed" className="text-sm font-medium text-muted">
                   User Registration
                 </label>
               </div>
-              <p className="mt-1 ml-6 text-xs text-gray-400">When disabled, users cannot self-register. Only admins can create accounts.</p>
+              <p className="mt-1 ml-6 text-xs text-subtle">When disabled, users cannot self-register. Only admins can create accounts.</p>
             </div>
 
             {updateMutation.isSuccess && (
-              <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">
+              <div className="rounded-md bg-success-soft p-3 text-sm text-success-fg">
                 Realm updated successfully.
               </div>
             )}
             {updateMutation.isError && (
-              <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+              <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
                 Failed to update realm.
               </div>
             )}
 
-            <div className="flex justify-end border-t border-gray-200 pt-4">
+            <div className="flex justify-end border-t border-line pt-4">
               <button
                 type="submit"
                 disabled={updateMutation.isPending}
-                className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
               >
                 {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
               </button>
@@ -445,15 +445,15 @@ export default function RealmDetailPage() {
 
       {/* Tokens Tab */}
       {activeTab === 'tokens' && (
-        <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-900">Token Lifespans</h2>
-          <p className="text-sm text-gray-500">
+        <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-line bg-surface p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-fg">Token Lifespans</h2>
+          <p className="text-sm text-subtle">
             Configure how long access and refresh tokens remain valid.
           </p>
 
           <div className="space-y-6">
             <div>
-              <label htmlFor="access-token-lifespan" className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label htmlFor="access-token-lifespan" className="mb-1.5 block text-sm font-medium text-muted">
                 Access Token Lifespan
               </label>
               <div className="flex items-center gap-3">
@@ -465,20 +465,20 @@ export default function RealmDetailPage() {
                   onChange={(e) =>
                     setForm({ ...form, accessTokenLifespan: Number(e.target.value) })
                   }
-                  className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-40 rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 />
-                <span className="text-sm text-gray-500">seconds</span>
-                <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">
+                <span className="text-sm text-subtle">seconds</span>
+                <span className="rounded-full bg-sunken px-2.5 py-0.5 text-xs font-medium text-muted">
                   {formatDuration(form.accessTokenLifespan)}
                 </span>
               </div>
-              <p className="mt-1 text-xs text-gray-400">
+              <p className="mt-1 text-xs text-subtle">
                 How long an access token is valid before it must be refreshed.
               </p>
             </div>
 
             <div>
-              <label htmlFor="refresh-token-lifespan" className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label htmlFor="refresh-token-lifespan" className="mb-1.5 block text-sm font-medium text-muted">
                 Refresh Token Lifespan
               </label>
               <div className="flex items-center gap-3">
@@ -490,20 +490,20 @@ export default function RealmDetailPage() {
                   onChange={(e) =>
                     setForm({ ...form, refreshTokenLifespan: Number(e.target.value) })
                   }
-                  className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-40 rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 />
-                <span className="text-sm text-gray-500">seconds</span>
-                <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">
+                <span className="text-sm text-subtle">seconds</span>
+                <span className="rounded-full bg-sunken px-2.5 py-0.5 text-xs font-medium text-muted">
                   {formatDuration(form.refreshTokenLifespan)}
                 </span>
               </div>
-              <p className="mt-1 text-xs text-gray-400">
+              <p className="mt-1 text-xs text-subtle">
                 How long a refresh token is valid. This also controls session duration.
               </p>
             </div>
 
             <div>
-              <label htmlFor="offline-token-lifespan" className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label htmlFor="offline-token-lifespan" className="mb-1.5 block text-sm font-medium text-muted">
                 Offline Token Lifespan
               </label>
               <div className="flex items-center gap-3">
@@ -515,35 +515,35 @@ export default function RealmDetailPage() {
                   onChange={(e) =>
                     setForm({ ...form, offlineTokenLifespan: Number(e.target.value) })
                   }
-                  className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-40 rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 />
-                <span className="text-sm text-gray-500">seconds</span>
-                <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">
+                <span className="text-sm text-subtle">seconds</span>
+                <span className="rounded-full bg-sunken px-2.5 py-0.5 text-xs font-medium text-muted">
                   {formatDuration(form.offlineTokenLifespan)}
                 </span>
               </div>
-              <p className="mt-1 text-xs text-gray-400">
+              <p className="mt-1 text-xs text-subtle">
                 How long offline refresh tokens are valid. These survive session logout. Default: 30 days.
               </p>
             </div>
           </div>
 
           {updateMutation.isSuccess && (
-            <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">
+            <div className="rounded-md bg-success-soft p-3 text-sm text-success-fg">
               Token settings updated successfully.
             </div>
           )}
           {updateMutation.isError && (
-            <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+            <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
               Failed to update token settings.
             </div>
           )}
 
-          <div className="flex justify-end border-t border-gray-200 pt-4">
+          <div className="flex justify-end border-t border-line pt-4">
             <button
               type="submit"
               disabled={updateMutation.isPending}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
             </button>
@@ -559,18 +559,18 @@ export default function RealmDetailPage() {
 
       {/* Security Tab */}
       {activeTab === 'security' && (
-        <form onSubmit={handleSubmit} className="space-y-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+        <form onSubmit={handleSubmit} className="space-y-8 rounded-lg border border-line bg-surface p-6 shadow-sm">
           {/* Password Policy */}
           <div className="space-y-6">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Password Policy</h2>
-              <p className="mt-1 text-sm text-gray-500">
+              <h2 className="text-lg font-semibold text-fg">Password Policy</h2>
+              <p className="mt-1 text-sm text-subtle">
                 Define password complexity and rotation requirements for users in this realm.
               </p>
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label className="mb-1.5 block text-sm font-medium text-muted">
                 Minimum Password Length
               </label>
               <input
@@ -580,7 +580,7 @@ export default function RealmDetailPage() {
                 onChange={(e) =>
                   setForm({ ...form, passwordMinLength: Number(e.target.value) })
                 }
-                className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-40 rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
             </div>
 
@@ -593,9 +593,9 @@ export default function RealmDetailPage() {
                   onChange={(e) =>
                     setForm({ ...form, passwordRequireUppercase: e.target.checked })
                   }
-                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
                 />
-                <label htmlFor="passwordRequireUppercase" className="text-sm font-medium text-gray-700">
+                <label htmlFor="passwordRequireUppercase" className="text-sm font-medium text-muted">
                   Require uppercase letters
                 </label>
               </div>
@@ -608,9 +608,9 @@ export default function RealmDetailPage() {
                   onChange={(e) =>
                     setForm({ ...form, passwordRequireLowercase: e.target.checked })
                   }
-                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
                 />
-                <label htmlFor="passwordRequireLowercase" className="text-sm font-medium text-gray-700">
+                <label htmlFor="passwordRequireLowercase" className="text-sm font-medium text-muted">
                   Require lowercase letters
                 </label>
               </div>
@@ -623,9 +623,9 @@ export default function RealmDetailPage() {
                   onChange={(e) =>
                     setForm({ ...form, passwordRequireDigits: e.target.checked })
                   }
-                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
                 />
-                <label htmlFor="passwordRequireDigits" className="text-sm font-medium text-gray-700">
+                <label htmlFor="passwordRequireDigits" className="text-sm font-medium text-muted">
                   Require digits
                 </label>
               </div>
@@ -638,16 +638,16 @@ export default function RealmDetailPage() {
                   onChange={(e) =>
                     setForm({ ...form, passwordRequireSpecialChars: e.target.checked })
                   }
-                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
                 />
-                <label htmlFor="passwordRequireSpecialChars" className="text-sm font-medium text-gray-700">
+                <label htmlFor="passwordRequireSpecialChars" className="text-sm font-medium text-muted">
                   Require special characters
                 </label>
               </div>
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label className="mb-1.5 block text-sm font-medium text-muted">
                 Password History Count
               </label>
               <input
@@ -657,15 +657,15 @@ export default function RealmDetailPage() {
                 onChange={(e) =>
                   setForm({ ...form, passwordHistoryCount: Number(e.target.value) })
                 }
-                className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-40 rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
-              <p className="mt-1 text-xs text-gray-400">
+              <p className="mt-1 text-xs text-subtle">
                 Number of previous passwords to remember. Users cannot reuse these.
               </p>
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label className="mb-1.5 block text-sm font-medium text-muted">
                 Password Max Age (days)
               </label>
               <input
@@ -675,19 +675,19 @@ export default function RealmDetailPage() {
                 onChange={(e) =>
                   setForm({ ...form, passwordMaxAgeDays: Number(e.target.value) })
                 }
-                className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-40 rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
-              <p className="mt-1 text-xs text-gray-400">
+              <p className="mt-1 text-xs text-subtle">
                 0 = no expiry. Users will be required to change their password after this many days.
               </p>
             </div>
           </div>
 
           {/* Brute Force Protection */}
-          <div className="space-y-6 border-t border-gray-200 pt-6">
+          <div className="space-y-6 border-t border-line pt-6">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Brute Force Protection</h2>
-              <p className="mt-1 text-sm text-gray-500">
+              <h2 className="text-lg font-semibold text-fg">Brute Force Protection</h2>
+              <p className="mt-1 text-sm text-subtle">
                 Protect user accounts from brute force login attacks.
               </p>
             </div>
@@ -700,15 +700,15 @@ export default function RealmDetailPage() {
                 onChange={(e) =>
                   setForm({ ...form, bruteForceEnabled: e.target.checked })
                 }
-                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
               />
-              <label htmlFor="bruteForceEnabled" className="text-sm font-medium text-gray-700">
+              <label htmlFor="bruteForceEnabled" className="text-sm font-medium text-muted">
                 Enable brute force protection
               </label>
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label className="mb-1.5 block text-sm font-medium text-muted">
                 Max Login Failures
               </label>
               <input
@@ -718,15 +718,15 @@ export default function RealmDetailPage() {
                 onChange={(e) =>
                   setForm({ ...form, maxLoginFailures: Number(e.target.value) })
                 }
-                className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-40 rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
-              <p className="mt-1 text-xs text-gray-400">
+              <p className="mt-1 text-xs text-subtle">
                 Number of consecutive login failures before the account is locked.
               </p>
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label className="mb-1.5 block text-sm font-medium text-muted">
                 Lockout Duration (seconds)
               </label>
               <div className="flex items-center gap-3">
@@ -737,19 +737,19 @@ export default function RealmDetailPage() {
                   onChange={(e) =>
                     setForm({ ...form, lockoutDuration: Number(e.target.value) })
                   }
-                  className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-40 rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 />
-                <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">
+                <span className="rounded-full bg-sunken px-2.5 py-0.5 text-xs font-medium text-muted">
                   {formatDuration(form.lockoutDuration)}
                 </span>
               </div>
-              <p className="mt-1 text-xs text-gray-400">
+              <p className="mt-1 text-xs text-subtle">
                 How long an account is locked after exceeding max failures.
               </p>
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label className="mb-1.5 block text-sm font-medium text-muted">
                 Failure Reset Time (seconds)
               </label>
               <div className="flex items-center gap-3">
@@ -760,19 +760,19 @@ export default function RealmDetailPage() {
                   onChange={(e) =>
                     setForm({ ...form, failureResetTime: Number(e.target.value) })
                   }
-                  className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-40 rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 />
-                <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">
+                <span className="rounded-full bg-sunken px-2.5 py-0.5 text-xs font-medium text-muted">
                   {formatDuration(form.failureResetTime)}
                 </span>
               </div>
-              <p className="mt-1 text-xs text-gray-400">
+              <p className="mt-1 text-xs text-subtle">
                 Time after which the failure counter is reset if no new failures occur.
               </p>
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label className="mb-1.5 block text-sm font-medium text-muted">
                 Permanent Lockout After
               </label>
               <input
@@ -782,19 +782,19 @@ export default function RealmDetailPage() {
                 onChange={(e) =>
                   setForm({ ...form, permanentLockoutAfter: Number(e.target.value) })
                 }
-                className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-40 rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
-              <p className="mt-1 text-xs text-gray-400">
+              <p className="mt-1 text-xs text-subtle">
                 0 = disabled. Number of temporary lockouts before the account is permanently locked.
               </p>
             </div>
           </div>
 
           {/* MFA */}
-          <div className="space-y-6 border-t border-gray-200 pt-6">
+          <div className="space-y-6 border-t border-line pt-6">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Multi-Factor Authentication</h2>
-              <p className="mt-1 text-sm text-gray-500">
+              <h2 className="text-lg font-semibold text-fg">Multi-Factor Authentication</h2>
+              <p className="mt-1 text-sm text-subtle">
                 Configure MFA requirements for this realm.
               </p>
             </div>
@@ -807,108 +807,108 @@ export default function RealmDetailPage() {
                 onChange={(e) =>
                   setForm({ ...form, mfaRequired: e.target.checked })
                 }
-                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
               />
-              <label htmlFor="mfaRequired" className="text-sm font-medium text-gray-700">
+              <label htmlFor="mfaRequired" className="text-sm font-medium text-muted">
                 Require all users to set up TOTP
               </label>
             </div>
           </div>
 
           {/* WebAuthn */}
-          <div className="space-y-6 border-t border-gray-200 pt-6">
+          <div className="space-y-6 border-t border-line pt-6">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">WebAuthn / Passkeys</h2>
-              <p className="mt-1 text-sm text-gray-500">
+              <h2 className="text-lg font-semibold text-fg">WebAuthn / Passkeys</h2>
+              <p className="mt-1 text-sm text-subtle">
                 Allow users to authenticate with hardware security keys and passkeys.
               </p>
             </div>
             <div className="flex items-center gap-2">
               <input type="checkbox" id="webAuthnEnabled" checked={form.webAuthnEnabled}
                 onChange={(e) => setForm({ ...form, webAuthnEnabled: e.target.checked })}
-                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-              <label htmlFor="webAuthnEnabled" className="text-sm font-medium text-gray-700">Enable WebAuthn</label>
+                className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent" />
+              <label htmlFor="webAuthnEnabled" className="text-sm font-medium text-muted">Enable WebAuthn</label>
             </div>
             {form.webAuthnEnabled && (
               <div className="space-y-4 pl-6">
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Relying Party Name</label>
+                  <label className="mb-1.5 block text-sm font-medium text-muted">Relying Party Name</label>
                   <input type="text" value={form.webAuthnRpName}
                     onChange={(e) => setForm({ ...form, webAuthnRpName: e.target.value })}
                     placeholder="My App"
-                    className="w-full max-w-md rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
-                  <p className="mt-1 text-xs text-gray-400">Display name shown to users during passkey registration</p>
+                    className="w-full max-w-md rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none" />
+                  <p className="mt-1 text-xs text-subtle">Display name shown to users during passkey registration</p>
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Relying Party ID (domain)</label>
+                  <label className="mb-1.5 block text-sm font-medium text-muted">Relying Party ID (domain)</label>
                   <input type="text" value={form.webAuthnRpId}
                     onChange={(e) => setForm({ ...form, webAuthnRpId: e.target.value })}
                     placeholder="example.com"
-                    className="w-full max-w-md rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
-                  <p className="mt-1 text-xs text-gray-400">Must match your domain. Credentials registered here only work on this domain.</p>
+                    className="w-full max-w-md rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none" />
+                  <p className="mt-1 text-xs text-subtle">Must match your domain. Credentials registered here only work on this domain.</p>
                 </div>
                 <div className="flex items-center gap-2">
                   <input type="checkbox" id="webAuthnUserVerificationRequired" checked={form.webAuthnUserVerificationRequired}
                     onChange={(e) => setForm({ ...form, webAuthnUserVerificationRequired: e.target.checked })}
-                    className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-                  <label htmlFor="webAuthnUserVerificationRequired" className="text-sm font-medium text-gray-700">Require user verification (biometric/PIN)</label>
+                    className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent" />
+                  <label htmlFor="webAuthnUserVerificationRequired" className="text-sm font-medium text-muted">Require user verification (biometric/PIN)</label>
                 </div>
               </div>
             )}
           </div>
 
           {/* Rate Limiting */}
-          <div className="space-y-6 border-t border-gray-200 pt-6">
+          <div className="space-y-6 border-t border-line pt-6">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Rate Limiting</h2>
-              <p className="mt-1 text-sm text-gray-500">
+              <h2 className="text-lg font-semibold text-fg">Rate Limiting</h2>
+              <p className="mt-1 text-sm text-subtle">
                 Throttle authentication requests to prevent abuse.
               </p>
             </div>
             <div className="flex items-center gap-2">
               <input type="checkbox" id="rateLimitEnabled" checked={form.rateLimitEnabled}
                 onChange={(e) => setForm({ ...form, rateLimitEnabled: e.target.checked })}
-                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-              <label htmlFor="rateLimitEnabled" className="text-sm font-medium text-gray-700">Enable rate limiting</label>
+                className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent" />
+              <label htmlFor="rateLimitEnabled" className="text-sm font-medium text-muted">Enable rate limiting</label>
             </div>
             {form.rateLimitEnabled && (
               <div className="space-y-4 pl-6">
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700">Client req/min</label>
+                    <label className="mb-1.5 block text-sm font-medium text-muted">Client req/min</label>
                     <input type="number" min={1} value={form.clientRateLimitPerMinute}
                       onChange={(e) => setForm({ ...form, clientRateLimitPerMinute: Number(e.target.value) })}
-                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
+                      className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none" />
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700">Client req/hour</label>
+                    <label className="mb-1.5 block text-sm font-medium text-muted">Client req/hour</label>
                     <input type="number" min={1} value={form.clientRateLimitPerHour}
                       onChange={(e) => setForm({ ...form, clientRateLimitPerHour: Number(e.target.value) })}
-                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
+                      className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none" />
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700">User req/min</label>
+                    <label className="mb-1.5 block text-sm font-medium text-muted">User req/min</label>
                     <input type="number" min={1} value={form.userRateLimitPerMinute}
                       onChange={(e) => setForm({ ...form, userRateLimitPerMinute: Number(e.target.value) })}
-                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
+                      className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none" />
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700">User req/hour</label>
+                    <label className="mb-1.5 block text-sm font-medium text-muted">User req/hour</label>
                     <input type="number" min={1} value={form.userRateLimitPerHour}
                       onChange={(e) => setForm({ ...form, userRateLimitPerHour: Number(e.target.value) })}
-                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
+                      className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none" />
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700">IP req/min</label>
+                    <label className="mb-1.5 block text-sm font-medium text-muted">IP req/min</label>
                     <input type="number" min={1} value={form.ipRateLimitPerMinute}
                       onChange={(e) => setForm({ ...form, ipRateLimitPerMinute: Number(e.target.value) })}
-                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
+                      className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none" />
                   </div>
                   <div>
-                    <label className="mb-1.5 block text-sm font-medium text-gray-700">IP req/hour</label>
+                    <label className="mb-1.5 block text-sm font-medium text-muted">IP req/hour</label>
                     <input type="number" min={1} value={form.ipRateLimitPerHour}
                       onChange={(e) => setForm({ ...form, ipRateLimitPerHour: Number(e.target.value) })}
-                      className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
+                      className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none" />
                   </div>
                 </div>
               </div>
@@ -916,75 +916,75 @@ export default function RealmDetailPage() {
           </div>
 
           {/* Impersonation */}
-          <div className="space-y-6 border-t border-gray-200 pt-6">
+          <div className="space-y-6 border-t border-line pt-6">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Impersonation</h2>
-              <p className="mt-1 text-sm text-gray-500">
+              <h2 className="text-lg font-semibold text-fg">Impersonation</h2>
+              <p className="mt-1 text-sm text-subtle">
                 Allow admins to impersonate users for debugging and support.
               </p>
             </div>
             <div className="flex items-center gap-2">
               <input type="checkbox" id="impersonationEnabled" checked={form.impersonationEnabled}
                 onChange={(e) => setForm({ ...form, impersonationEnabled: e.target.checked })}
-                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500" />
-              <label htmlFor="impersonationEnabled" className="text-sm font-medium text-gray-700">Allow admin impersonation</label>
+                className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent" />
+              <label htmlFor="impersonationEnabled" className="text-sm font-medium text-muted">Allow admin impersonation</label>
             </div>
             {form.impersonationEnabled && (
               <div className="pl-6">
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">Max impersonation duration (seconds)</label>
+                <label className="mb-1.5 block text-sm font-medium text-muted">Max impersonation duration (seconds)</label>
                 <div className="flex items-center gap-3">
                   <input type="number" min={60} value={form.impersonationMaxDuration}
                     onChange={(e) => setForm({ ...form, impersonationMaxDuration: Number(e.target.value) })}
-                    className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
-                  <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">
+                    className="w-40 rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none" />
+                  <span className="rounded-full bg-sunken px-2.5 py-0.5 text-xs font-medium text-muted">
                     {formatDuration(form.impersonationMaxDuration)}
                   </span>
                 </div>
-                <p className="mt-1 text-xs text-gray-400">Default: 30 minutes. Impersonation tokens expire after this duration.</p>
+                <p className="mt-1 text-xs text-subtle">Default: 30 minutes. Impersonation tokens expire after this duration.</p>
               </div>
             )}
           </div>
 
           {/* Risk Thresholds */}
-          <div className="space-y-6 border-t border-gray-200 pt-6">
+          <div className="space-y-6 border-t border-line pt-6">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Risk Thresholds</h2>
-              <p className="mt-1 text-sm text-gray-500">
+              <h2 className="text-lg font-semibold text-fg">Risk Thresholds</h2>
+              <p className="mt-1 text-sm text-subtle">
                 Score boundaries (0–100) that trigger step-up authentication or session block.
               </p>
             </div>
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">Step-up threshold</label>
+                <label className="mb-1.5 block text-sm font-medium text-muted">Step-up threshold</label>
                 <input type="number" min={0} max={100} value={form.riskThresholdStepUp}
                   onChange={(e) => setForm({ ...form, riskThresholdStepUp: Number(e.target.value) })}
-                  className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
-                <p className="mt-1 text-xs text-gray-400">Risk score ≥ this value triggers MFA step-up. Default: 50.</p>
+                  className="w-40 rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none" />
+                <p className="mt-1 text-xs text-subtle">Risk score ≥ this value triggers MFA step-up. Default: 50.</p>
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">Block threshold</label>
+                <label className="mb-1.5 block text-sm font-medium text-muted">Block threshold</label>
                 <input type="number" min={0} max={100} value={form.riskThresholdBlock}
                   onChange={(e) => setForm({ ...form, riskThresholdBlock: Number(e.target.value) })}
-                  className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
-                <p className="mt-1 text-xs text-gray-400">Risk score ≥ this value blocks the session entirely. Default: 80.</p>
+                  className="w-40 rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none" />
+                <p className="mt-1 text-xs text-subtle">Risk score ≥ this value blocks the session entirely. Default: 80.</p>
               </div>
             </div>
           </div>
 
           {/* Session Limits */}
-          <div className="space-y-6 border-t border-gray-200 pt-6">
+          <div className="space-y-6 border-t border-line pt-6">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Session Limits</h2>
-              <p className="mt-1 text-sm text-gray-500">
+              <h2 className="text-lg font-semibold text-fg">Session Limits</h2>
+              <p className="mt-1 text-sm text-subtle">
                 Limit the number of concurrent active sessions per user.
               </p>
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Max sessions per user</label>
+              <label className="mb-1.5 block text-sm font-medium text-muted">Max sessions per user</label>
               <input type="number" min={0} value={form.maxSessionsPerUser}
                 onChange={(e) => setForm({ ...form, maxSessionsPerUser: Number(e.target.value) })}
-                className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
-              <p className="mt-1 text-xs text-gray-400">
+                className="w-40 rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none" />
+              <p className="mt-1 text-xs text-subtle">
                 Maximum concurrent active sessions per user. When the limit is reached the oldest session is evicted.
                 Set to 0 for unlimited.
               </p>
@@ -992,10 +992,10 @@ export default function RealmDetailPage() {
           </div>
 
           {/* Adaptive Authentication */}
-          <div className="space-y-6 border-t border-gray-200 pt-6">
+          <div className="space-y-6 border-t border-line pt-6">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Adaptive Authentication</h2>
-              <p className="mt-1 text-sm text-gray-500">
+              <h2 className="text-lg font-semibold text-fg">Adaptive Authentication</h2>
+              <p className="mt-1 text-sm text-subtle">
                 Enable AI-powered risk scoring to dynamically adjust authentication requirements.
               </p>
             </div>
@@ -1005,34 +1005,34 @@ export default function RealmDetailPage() {
                 id="adaptiveAuthEnabled"
                 checked={form.adaptiveAuthEnabled}
                 onChange={(e) => setForm({ ...form, adaptiveAuthEnabled: e.target.checked })}
-                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
               />
-              <label htmlFor="adaptiveAuthEnabled" className="text-sm font-medium text-gray-700">
+              <label htmlFor="adaptiveAuthEnabled" className="text-sm font-medium text-muted">
                 Enable adaptive authentication
               </label>
             </div>
-            <p className="ml-6 -mt-4 text-xs text-gray-400">
+            <p className="ml-6 -mt-4 text-xs text-subtle">
               When enabled, each login attempt is scored for risk. High-risk logins trigger step-up MFA or are
               blocked based on the thresholds above.
             </p>
           </div>
 
           {updateMutation.isSuccess && (
-            <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">
+            <div className="rounded-md bg-success-soft p-3 text-sm text-success-fg">
               Security settings updated successfully.
             </div>
           )}
           {updateMutation.isError && (
-            <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+            <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
               Failed to update security settings.
             </div>
           )}
 
-          <div className="flex justify-end border-t border-gray-200 pt-4">
+          <div className="flex justify-end border-t border-line pt-4">
             <button
               type="submit"
               disabled={updateMutation.isPending}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
             </button>
@@ -1042,10 +1042,10 @@ export default function RealmDetailPage() {
 
       {/* Events Tab */}
       {activeTab === 'events' && (
-        <form onSubmit={handleSubmit} className="space-y-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+        <form onSubmit={handleSubmit} className="space-y-8 rounded-lg border border-line bg-surface p-6 shadow-sm">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Event Configuration</h2>
-            <p className="mt-1 text-sm text-gray-500">
+            <h2 className="text-lg font-semibold text-fg">Event Configuration</h2>
+            <p className="mt-1 text-sm text-subtle">
               Control whether login and admin events are recorded for this realm.
             </p>
           </div>
@@ -1057,13 +1057,13 @@ export default function RealmDetailPage() {
                 id="eventsEnabled"
                 checked={form.eventsEnabled}
                 onChange={(e) => setForm({ ...form, eventsEnabled: e.target.checked })}
-                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
               />
-              <label htmlFor="eventsEnabled" className="text-sm font-medium text-gray-700">
+              <label htmlFor="eventsEnabled" className="text-sm font-medium text-muted">
                 Enable login events
               </label>
             </div>
-            <p className="ml-6 -mt-4 text-xs text-gray-400">
+            <p className="ml-6 -mt-4 text-xs text-subtle">
               Records login, logout, token refresh, and authentication error events.
             </p>
 
@@ -1073,18 +1073,18 @@ export default function RealmDetailPage() {
                 id="adminEventsEnabled"
                 checked={form.adminEventsEnabled}
                 onChange={(e) => setForm({ ...form, adminEventsEnabled: e.target.checked })}
-                className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
               />
-              <label htmlFor="adminEventsEnabled" className="text-sm font-medium text-gray-700">
+              <label htmlFor="adminEventsEnabled" className="text-sm font-medium text-muted">
                 Enable admin events
               </label>
             </div>
-            <p className="ml-6 -mt-4 text-xs text-gray-400">
+            <p className="ml-6 -mt-4 text-xs text-subtle">
               Records create, update, and delete operations performed through the admin API.
             </p>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">
+              <label className="mb-1.5 block text-sm font-medium text-muted">
                 Events Expiration (seconds)
               </label>
               <div className="flex items-center gap-3">
@@ -1095,80 +1095,80 @@ export default function RealmDetailPage() {
                   onChange={(e) =>
                     setForm({ ...form, eventsExpiration: Number(e.target.value) })
                   }
-                  className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-40 rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 />
-                <span className="text-sm text-gray-500">seconds</span>
-                <span className="rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">
+                <span className="text-sm text-subtle">seconds</span>
+                <span className="rounded-full bg-sunken px-2.5 py-0.5 text-xs font-medium text-muted">
                   {formatDuration(form.eventsExpiration)}
                 </span>
               </div>
-              <p className="mt-1 text-xs text-gray-400">
+              <p className="mt-1 text-xs text-subtle">
                 How long events are kept before automatic cleanup. Default: 7 days (604800s).
               </p>
             </div>
           </div>
 
           {/* Event Retention */}
-          <div className="space-y-6 border-t border-gray-200 pt-6">
+          <div className="space-y-6 border-t border-line pt-6">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">Event Retention</h2>
-              <p className="mt-1 text-sm text-gray-500">
+              <h2 className="text-lg font-semibold text-fg">Event Retention</h2>
+              <p className="mt-1 text-sm text-subtle">
                 How many days event records are retained in the database before being purged.
               </p>
             </div>
             <div className="grid grid-cols-1 gap-6 sm:grid-cols-2">
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">Login event retention (days)</label>
+                <label className="mb-1.5 block text-sm font-medium text-muted">Login event retention (days)</label>
                 <input type="number" min={1} value={form.loginEventRetentionDays}
                   onChange={(e) => setForm({ ...form, loginEventRetentionDays: Number(e.target.value) })}
-                  className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
-                <p className="mt-1 text-xs text-gray-400">Days to keep login/auth event records. Default: 30.</p>
+                  className="w-40 rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none" />
+                <p className="mt-1 text-xs text-subtle">Days to keep login/auth event records. Default: 30.</p>
               </div>
               <div>
-                <label className="mb-1.5 block text-sm font-medium text-gray-700">Admin event retention (days)</label>
+                <label className="mb-1.5 block text-sm font-medium text-muted">Admin event retention (days)</label>
                 <input type="number" min={1} value={form.adminEventRetentionDays}
                   onChange={(e) => setForm({ ...form, adminEventRetentionDays: Number(e.target.value) })}
-                  className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
-                <p className="mt-1 text-xs text-gray-400">Days to keep admin audit event records. Default: 90.</p>
+                  className="w-40 rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none" />
+                <p className="mt-1 text-xs text-subtle">Days to keep admin audit event records. Default: 90.</p>
               </div>
             </div>
           </div>
 
           {/* User Lifecycle */}
-          <div className="space-y-6 border-t border-gray-200 pt-6">
+          <div className="space-y-6 border-t border-line pt-6">
             <div>
-              <h2 className="text-lg font-semibold text-gray-900">User Lifecycle</h2>
-              <p className="mt-1 text-sm text-gray-500">
+              <h2 className="text-lg font-semibold text-fg">User Lifecycle</h2>
+              <p className="mt-1 text-sm text-subtle">
                 Configure how long deleted user accounts are retained before permanent removal.
               </p>
             </div>
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Deletion grace period (days)</label>
+              <label className="mb-1.5 block text-sm font-medium text-muted">Deletion grace period (days)</label>
               <input type="number" min={0} value={form.deletionGracePeriodDays}
                 onChange={(e) => setForm({ ...form, deletionGracePeriodDays: Number(e.target.value) })}
-                className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none" />
-              <p className="mt-1 text-xs text-gray-400">
+                className="w-40 rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none" />
+              <p className="mt-1 text-xs text-subtle">
                 Days before a soft-deleted account is permanently purged. Set to 0 to disable soft-deletion. Default: 14.
               </p>
             </div>
           </div>
 
           {updateMutation.isSuccess && (
-            <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">
+            <div className="rounded-md bg-success-soft p-3 text-sm text-success-fg">
               Event settings updated successfully.
             </div>
           )}
           {updateMutation.isError && (
-            <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+            <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
               Failed to update event settings.
             </div>
           )}
 
-          <div className="flex justify-end border-t border-gray-200 pt-4">
+          <div className="flex justify-end border-t border-line pt-4">
             <button
               type="submit"
               disabled={updateMutation.isPending}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
             </button>
@@ -1178,10 +1178,10 @@ export default function RealmDetailPage() {
 
       {/* Theme Tab */}
       {activeTab === 'theme' && (
-        <form onSubmit={handleSubmit} className="space-y-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+        <form onSubmit={handleSubmit} className="space-y-8 rounded-lg border border-line bg-surface p-6 shadow-sm">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Theme Settings</h2>
-            <p className="mt-1 text-sm text-gray-500">
+            <h2 className="text-lg font-semibold text-fg">Theme Settings</h2>
+            <p className="mt-1 text-sm text-subtle">
               Assign themes per page type and customize colors for this realm.
             </p>
           </div>
@@ -1189,67 +1189,67 @@ export default function RealmDetailPage() {
           {/* Per-Type Theme Selectors */}
           {themes && themes.length > 0 && (
             <div className="space-y-4">
-              <h3 className="text-sm font-semibold uppercase tracking-wider text-gray-500">Theme Assignment</h3>
+              <h3 className="text-sm font-semibold uppercase tracking-wider text-subtle">Theme Assignment</h3>
               <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Login Theme</label>
+                  <label className="mb-1.5 block text-sm font-medium text-muted">Login Theme</label>
                   <select
                     value={form.loginTheme}
                     onChange={(e) => setForm({ ...form, loginTheme: e.target.value, themeName: e.target.value })}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                   >
                     {themes.map((t: ThemeInfo) => (
                       <option key={t.name} value={t.name}>{t.displayName}</option>
                     ))}
                   </select>
-                  <p className="mt-1 text-xs text-gray-400">Applied to login, register, consent, and other auth pages</p>
+                  <p className="mt-1 text-xs text-subtle">Applied to login, register, consent, and other auth pages</p>
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Account Theme</label>
+                  <label className="mb-1.5 block text-sm font-medium text-muted">Account Theme</label>
                   <select
                     value={form.accountTheme}
                     onChange={(e) => setForm({ ...form, accountTheme: e.target.value })}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                   >
                     {themes.map((t: ThemeInfo) => (
                       <option key={t.name} value={t.name}>{t.displayName}</option>
                     ))}
                   </select>
-                  <p className="mt-1 text-xs text-gray-400">Applied to account management and TOTP setup pages</p>
+                  <p className="mt-1 text-xs text-subtle">Applied to account management and TOTP setup pages</p>
                 </div>
                 <div>
-                  <label className="mb-1.5 block text-sm font-medium text-gray-700">Email Theme</label>
+                  <label className="mb-1.5 block text-sm font-medium text-muted">Email Theme</label>
                   <select
                     value={form.emailTheme}
                     onChange={(e) => setForm({ ...form, emailTheme: e.target.value })}
-                    className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                    className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                   >
                     {themes.map((t: ThemeInfo) => (
                       <option key={t.name} value={t.name}>{t.displayName}</option>
                     ))}
                   </select>
-                  <p className="mt-1 text-xs text-gray-400">Applied to verification and password reset emails</p>
+                  <p className="mt-1 text-xs text-subtle">Applied to verification and password reset emails</p>
                 </div>
               </div>
             </div>
           )}
 
           {updateMutation.isSuccess && (
-            <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">
+            <div className="rounded-md bg-success-soft p-3 text-sm text-success-fg">
               Theme settings updated successfully.
             </div>
           )}
           {updateMutation.isError && (
-            <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+            <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
               Failed to update theme settings.
             </div>
           )}
 
-          <div className="flex justify-end border-t border-gray-200 pt-4">
+          <div className="flex justify-end border-t border-line pt-4">
             <button
               type="submit"
               disabled={updateMutation.isPending}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
             </button>
@@ -1264,31 +1264,31 @@ export default function RealmDetailPage() {
 
       {/* Locale Tab */}
       {activeTab === 'locale' && (
-        <form onSubmit={handleSubmit} className="space-y-8 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+        <form onSubmit={handleSubmit} className="space-y-8 rounded-lg border border-line bg-surface p-6 shadow-sm">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">Locale &amp; Internationalization</h2>
-            <p className="mt-1 text-sm text-gray-500">
+            <h2 className="text-lg font-semibold text-fg">Locale &amp; Internationalization</h2>
+            <p className="mt-1 text-sm text-subtle">
               Configure the default language and supported locales for this realm.
             </p>
           </div>
 
           <div className="space-y-6">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Default Locale</label>
+              <label className="mb-1.5 block text-sm font-medium text-muted">Default Locale</label>
               <input
                 type="text"
                 value={form.defaultLocale}
                 onChange={(e) => setForm({ ...form, defaultLocale: e.target.value })}
                 placeholder="en"
-                className="w-48 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-48 rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
-              <p className="mt-1 text-xs text-gray-400">
+              <p className="mt-1 text-xs text-subtle">
                 BCP 47 language tag (e.g. en, en-US, fr, de, ar). Used when no user preference is set.
               </p>
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-gray-700">Supported Locales</label>
+              <label className="mb-1.5 block text-sm font-medium text-muted">Supported Locales</label>
               <input
                 type="text"
                 value={form.supportedLocales.join(', ')}
@@ -1302,30 +1302,30 @@ export default function RealmDetailPage() {
                   })
                 }
                 placeholder="en, fr, de, ar"
-                className="w-full max-w-md rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                className="w-full max-w-md rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               />
-              <p className="mt-1 text-xs text-gray-400">
+              <p className="mt-1 text-xs text-subtle">
                 Comma-separated list of supported locale codes. Users can switch between these in the account UI.
               </p>
             </div>
           </div>
 
           {updateMutation.isSuccess && (
-            <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">
+            <div className="rounded-md bg-success-soft p-3 text-sm text-success-fg">
               Locale settings updated successfully.
             </div>
           )}
           {updateMutation.isError && (
-            <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+            <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
               Failed to update locale settings.
             </div>
           )}
 
-          <div className="flex justify-end border-t border-gray-200 pt-4">
+          <div className="flex justify-end border-t border-line pt-4">
             <button
               type="submit"
               disabled={updateMutation.isPending}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
             </button>

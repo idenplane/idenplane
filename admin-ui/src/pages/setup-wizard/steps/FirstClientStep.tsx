@@ -82,25 +82,25 @@ export default function FirstClientStep() {
     return (
       <div className="max-w-xl">
         <div className="mb-6">
-          <h2 className="text-xl font-semibold text-gray-900">Client Created Successfully</h2>
-          <p className="mt-1 text-sm text-gray-500">
+          <h2 className="text-xl font-semibold text-fg">Client Created Successfully</h2>
+          <p className="mt-1 text-sm text-subtle">
             Your first client application has been created. Save the client secret below — it will not be shown again.
           </p>
         </div>
 
-        <div className="rounded-lg border border-green-200 bg-green-50 p-6">
+        <div className="rounded-lg border border-success-soft bg-success-soft p-6">
           <div className="space-y-4">
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-green-800">
+              <label className="mb-1.5 block text-sm font-medium text-success-fg">
                 Client ID
               </label>
               <div className="flex items-center gap-2">
-                <code className="flex-1 rounded-md border border-green-300 bg-white px-3 py-2 text-sm font-mono text-gray-900">
+                <code className="flex-1 rounded-md border border-success-soft bg-surface px-3 py-2 text-sm font-mono text-fg">
                   {createdClient.clientId}
                 </code>
                 <button
                   onClick={() => copyToClipboard(createdClient.clientId)}
-                  className="rounded-md border border-green-300 bg-white px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-50"
+                  className="rounded-md border border-success-soft bg-surface px-3 py-2 text-sm font-medium text-success-fg hover:bg-success-soft"
                 >
                   Copy
                 </button>
@@ -108,38 +108,38 @@ export default function FirstClientStep() {
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-green-800">
+              <label className="mb-1.5 block text-sm font-medium text-success-fg">
                 Client Secret
               </label>
               <div className="flex items-center gap-2">
-                <code className={`flex-1 rounded-md border border-green-300 bg-white px-3 py-2 text-sm font-mono text-gray-900 ${!showSecret ? 'blur-sm' : ''}`}>
+                <code className={`flex-1 rounded-md border border-success-soft bg-surface px-3 py-2 text-sm font-mono text-fg ${!showSecret ? 'blur-sm' : ''}`}>
                   {createdClient.clientSecret}
                 </code>
                 <button
                   onClick={() => setShowSecret(!showSecret)}
-                  className="rounded-md border border-green-300 bg-white px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-50"
+                  className="rounded-md border border-success-soft bg-surface px-3 py-2 text-sm font-medium text-success-fg hover:bg-success-soft"
                 >
                   {showSecret ? 'Hide' : 'Show'}
                 </button>
                 <button
                   onClick={() => copyToClipboard(createdClient.clientSecret!)}
-                  className="rounded-md border border-green-300 bg-white px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-50"
+                  className="rounded-md border border-success-soft bg-surface px-3 py-2 text-sm font-medium text-success-fg hover:bg-success-soft"
                 >
                   Copy
                 </button>
               </div>
-              <p className="mt-1.5 text-xs text-green-700">
+              <p className="mt-1.5 text-xs text-success-fg">
                 Store this secret securely. It will not be displayed again.
               </p>
             </div>
 
             <div>
-              <label className="mb-1.5 block text-sm font-medium text-green-800">
+              <label className="mb-1.5 block text-sm font-medium text-success-fg">
                 Redirect URIs
               </label>
               <div className="space-y-1">
                 {createdClient.redirectUris.map((uri, index) => (
-                  <code key={index} className="block rounded-md border border-green-300 bg-white px-3 py-1.5 text-sm font-mono text-gray-900">
+                  <code key={index} className="block rounded-md border border-success-soft bg-surface px-3 py-1.5 text-sm font-mono text-fg">
                     {uri}
                   </code>
                 ))}
@@ -147,11 +147,11 @@ export default function FirstClientStep() {
             </div>
           </div>
 
-          <div className="mt-6 flex justify-end border-t border-green-200 pt-4">
+          <div className="mt-6 flex justify-end border-t border-success-soft pt-4">
             <button
               type="button"
               onClick={() => mutation.reset()}
-              className="flex items-center gap-2 rounded-md bg-green-700 px-5 py-2.5 text-sm font-medium text-white hover:bg-green-800"
+              className="flex items-center gap-2 rounded-md bg-success px-5 py-2.5 text-sm font-medium text-white hover:bg-green-800"
             >
               Continue to Next Step
               <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -167,15 +167,15 @@ export default function FirstClientStep() {
   return (
     <div className="max-w-xl">
       <div className="mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">Create First Client Application</h2>
-        <p className="mt-1 text-sm text-gray-500">
+        <h2 className="text-xl font-semibold text-fg">Create First Client Application</h2>
+        <p className="mt-1 text-sm text-subtle">
           Set up your first client application to enable authentication for your app. Clients are applications that can request authentication.
         </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
-          <label htmlFor="clientId" className="mb-1.5 block text-sm font-medium text-gray-700">
+          <label htmlFor="clientId" className="mb-1.5 block text-sm font-medium text-muted">
             Client ID
           </label>
           <input
@@ -186,15 +186,15 @@ export default function FirstClientStep() {
             value={form.clientId}
             onChange={(e) => setForm({ ...form, clientId: e.target.value })}
             placeholder="e.g. my-web-app"
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+            className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
           />
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-subtle">
             A unique identifier for your client application. Use lowercase letters, numbers, and hyphens.
           </p>
         </div>
 
         <div>
-          <label htmlFor="redirectUris" className="mb-1.5 block text-sm font-medium text-gray-700">
+          <label htmlFor="redirectUris" className="mb-1.5 block text-sm font-medium text-muted">
             Redirect URIs
           </label>
           <textarea
@@ -205,9 +205,9 @@ export default function FirstClientStep() {
             onChange={(e) => setRedirectUrisText(e.target.value)}
             rows={4}
             placeholder={"https://app.example.com/callback\nhttp://localhost:3000/callback"}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm font-mono shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+            className="w-full rounded-md border border-line-strong px-3 py-2 text-sm font-mono shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
           />
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-subtle">
             URLs where the authorization server will redirect after successful authentication. Enter one per line.
           </p>
         </div>
@@ -217,7 +217,7 @@ export default function FirstClientStep() {
             role="alert"
             aria-live="assertive"
             aria-atomic="true"
-            className="rounded-md bg-red-50 p-3 text-sm text-red-700"
+            className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg"
           >
             {localError}
           </div>
@@ -228,17 +228,17 @@ export default function FirstClientStep() {
             role="alert"
             aria-live="assertive"
             aria-atomic="true"
-            className="rounded-md bg-red-50 p-3 text-sm text-red-700"
+            className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg"
           >
             {getErrorMessage(mutation.error, 'Failed to create client.')}
           </div>
         )}
 
-        <div className="flex justify-end border-t border-gray-200 pt-4">
+        <div className="flex justify-end border-t border-line pt-4">
           <button
             type="submit"
             disabled={mutation.isPending}
-            className="flex items-center gap-2 rounded-md bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-md bg-accent px-5 py-2.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {mutation.isPending ? (
               <>

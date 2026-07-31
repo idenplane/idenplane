@@ -345,25 +345,25 @@ export default function ThemeTemplates({
   ];
 
   return (
-    <div className="flex h-full flex-col bg-white" data-testid="theme-templates">
+    <div className="flex h-full flex-col bg-surface" data-testid="theme-templates">
       {/* Header */}
-      <div className="border-b border-gray-200 px-4 py-3">
-        <h2 className="text-base font-semibold text-gray-900">Theme Templates</h2>
-        <p className="mt-1 text-sm text-gray-500">
+      <div className="border-b border-line px-4 py-3">
+        <h2 className="text-base font-semibold text-fg">Theme Templates</h2>
+        <p className="mt-1 text-sm text-subtle">
           Choose a pre-built template to start with
         </p>
       </div>
 
       {/* Category filters */}
-      <div className="flex gap-1 border-b border-gray-200 px-4 py-2">
+      <div className="flex gap-1 border-b border-line px-4 py-2">
         {categories.map((cat) => (
           <button
             key={cat.key}
             onClick={() => setSelectedCategory(cat.key)}
             className={`rounded-md px-3 py-1.5 text-sm font-medium transition-colors ${
               selectedCategory === cat.key
-                ? 'bg-indigo-100 text-indigo-700'
-                : 'text-gray-600 hover:bg-gray-100'
+                ? 'bg-accent-soft text-accent'
+                : 'text-muted hover:bg-hover'
             }`}
             data-testid={`template-category-${cat.key}`}
           >
@@ -380,10 +380,10 @@ export default function ThemeTemplates({
               key={template.id}
               onClick={() => handleApplyTemplate(template)}
               disabled={applyingTemplateId !== null}
-              className={`group relative overflow-hidden rounded-xl border-2 bg-white p-0 text-left transition-all hover:border-indigo-300 hover:shadow-md ${
+              className={`group relative overflow-hidden rounded-xl border-2 bg-surface p-0 text-left transition-all hover:border-accent-soft hover:shadow-md ${
                 currentTemplateId === template.id
-                  ? 'border-indigo-500 ring-2 ring-indigo-200'
-                  : 'border-gray-200'
+                  ? 'border-accent ring-2 ring-indigo-200'
+                  : 'border-line'
               } ${
                 applyingTemplateId === template.id ? 'opacity-70' : ''
               }`}
@@ -393,16 +393,16 @@ export default function ThemeTemplates({
               <div className={`h-32 bg-gradient-to-br ${template.previewGradient} flex items-center justify-center`}>
                 <div className="flex flex-col items-center gap-2">
                   {/* Mini preview of form elements */}
-                  <div className="h-6 w-24 rounded bg-white/20" />
-                  <div className="h-8 w-32 rounded bg-white/20" />
-                  <div className="h-8 w-24 rounded bg-white" />
+                  <div className="h-6 w-24 rounded bg-surface/20" />
+                  <div className="h-8 w-32 rounded bg-surface/20" />
+                  <div className="h-8 w-24 rounded bg-surface" />
                 </div>
               </div>
 
               {/* Template info */}
               <div className="p-3">
                 <div className="flex items-center justify-between">
-                  <h3 className="font-medium text-gray-900">{template.name}</h3>
+                  <h3 className="font-medium text-fg">{template.name}</h3>
                   <span
                     className="inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium text-white"
                     style={{ backgroundColor: template.accentColor }}
@@ -410,7 +410,7 @@ export default function ThemeTemplates({
                     {template.category}
                   </span>
                 </div>
-                <p className="mt-1 text-sm text-gray-500">{template.description}</p>
+                <p className="mt-1 text-sm text-subtle">{template.description}</p>
 
                 {/* Color preview dots */}
                 <div className="mt-3 flex items-center gap-1">
@@ -430,7 +430,7 @@ export default function ThemeTemplates({
                     className="h-4 w-4 rounded-full border border-white shadow-sm"
                     style={{ backgroundColor: template.styles.colors.textColor }}
                   />
-                  <span className="ml-1 text-xs text-gray-400">
+                  <span className="ml-1 text-xs text-subtle">
                     {template.components.length} components
                   </span>
                 </div>
@@ -438,21 +438,21 @@ export default function ThemeTemplates({
 
               {/* Apply indicator */}
               {applyingTemplateId === template.id && (
-                <div className="absolute inset-0 flex items-center justify-center bg-white/80">
-                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-indigo-200 border-t-indigo-600" />
+                <div className="absolute inset-0 flex items-center justify-center bg-surface/80">
+                  <div className="h-6 w-6 animate-spin rounded-full border-2 border-accent-soft border-t-indigo-600" />
                 </div>
               )}
 
               {/* Hover overlay */}
               <div className="absolute inset-0 flex items-center justify-center bg-black/0 transition-colors group-hover:bg-black/5">
-                <span className="rounded-lg bg-white px-4 py-2 text-sm font-medium text-gray-900 shadow-lg opacity-0 transition-opacity group-hover:opacity-100">
+                <span className="rounded-lg bg-surface px-4 py-2 text-sm font-medium text-fg shadow-lg opacity-0 transition-opacity group-hover:opacity-100">
                   Apply Template
                 </span>
               </div>
 
               {/* Current indicator */}
               {currentTemplateId === template.id && (
-                <div className="absolute right-2 top-2 rounded-full bg-indigo-600 p-1">
+                <div className="absolute right-2 top-2 rounded-full bg-accent p-1">
                   <svg className="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                     <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={3} d="M5 13l4 4L19 7" />
                   </svg>
@@ -478,14 +478,14 @@ export default function ThemeTemplates({
                 d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10"
               />
             </svg>
-            <p className="mt-2 text-sm text-gray-500">No templates in this category</p>
+            <p className="mt-2 text-sm text-subtle">No templates in this category</p>
           </div>
         )}
       </div>
 
       {/* Footer hint */}
-      <div className="border-t border-gray-200 px-4 py-3">
-        <p className="text-xs text-gray-500">
+      <div className="border-t border-line px-4 py-3">
+        <p className="text-xs text-subtle">
           Tip: You can customize the template after applying it using the Style Editor and Canvas
         </p>
       </div>

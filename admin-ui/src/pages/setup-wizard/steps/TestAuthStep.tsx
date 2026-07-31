@@ -95,8 +95,8 @@ export default function TestAuthStep() {
   return (
     <div className="max-w-xl">
       <div className="mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">Test Authentication</h2>
-        <p className="mt-1 text-sm text-gray-500">
+        <h2 className="text-xl font-semibold text-fg">Test Authentication</h2>
+        <p className="mt-1 text-sm text-subtle">
           Test your authentication flow by signing in with your admin credentials.
           This verifies that your realm is properly configured.
         </p>
@@ -104,10 +104,10 @@ export default function TestAuthStep() {
 
       {/* Realm Info Card */}
       {realmSettings && (
-        <div className="mb-6 rounded-lg border border-green-200 bg-green-50 p-4">
+        <div className="mb-6 rounded-lg border border-success-soft bg-success-soft p-4">
           <div className="flex items-center gap-2">
             <svg
-              className="h-5 w-5 text-green-600"
+              className="h-5 w-5 text-success"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -119,12 +119,12 @@ export default function TestAuthStep() {
                 d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z"
               />
             </svg>
-            <span className="text-sm font-medium text-green-800">
+            <span className="text-sm font-medium text-success-fg">
               Realm "{realmSettings.name}" is ready for authentication
             </span>
           </div>
           {realmSettings.displayName && (
-            <p className="mt-1 text-xs text-green-600">
+            <p className="mt-1 text-xs text-success">
               Display name: {realmSettings.displayName}
             </p>
           )}
@@ -132,11 +132,11 @@ export default function TestAuthStep() {
       )}
 
       {/* Demo Login Form */}
-      <div className="rounded-lg bg-white p-6 shadow-sm border border-gray-200">
+      <div className="rounded-lg bg-surface p-6 shadow-sm border border-line">
         <div className="mb-6 text-center">
-          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-indigo-100">
+          <div className="mx-auto mb-3 flex h-12 w-12 items-center justify-center rounded-full bg-accent-soft">
             <svg
-              className="h-6 w-6 text-indigo-600"
+              className="h-6 w-6 text-accent"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -149,8 +149,8 @@ export default function TestAuthStep() {
               />
             </svg>
           </div>
-          <h3 className="text-lg font-medium text-gray-900">Demo Login</h3>
-          <p className="mt-1 text-sm text-gray-500">
+          <h3 className="text-lg font-medium text-fg">Demo Login</h3>
+          <p className="mt-1 text-sm text-subtle">
             Sign in with the admin account created in Step 1
           </p>
         </div>
@@ -159,7 +159,7 @@ export default function TestAuthStep() {
           <div className="mb-4">
             <label
               htmlFor="test-username"
-              className="mb-1.5 block text-sm font-medium text-gray-700"
+              className="mb-1.5 block text-sm font-medium text-muted"
             >
               Username
             </label>
@@ -170,14 +170,14 @@ export default function TestAuthStep() {
               onChange={(e) => setUsername(e.target.value)}
               required
               placeholder="Enter your username"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
 
           <div className="mb-6">
             <label
               htmlFor="test-password"
-              className="mb-1.5 block text-sm font-medium text-gray-700"
+              className="mb-1.5 block text-sm font-medium text-muted"
             >
               Password
             </label>
@@ -187,7 +187,7 @@ export default function TestAuthStep() {
               onChange={(e) => setPassword(e.target.value)}
               required
               placeholder="Enter your password"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
 
@@ -196,7 +196,7 @@ export default function TestAuthStep() {
               role="alert"
               aria-live="assertive"
               aria-atomic="true"
-              className="mb-4 rounded-md bg-red-50 p-3 text-sm text-red-700"
+              className="mb-4 rounded-md bg-danger-soft p-3 text-sm text-danger-fg"
             >
               {localError}
             </div>
@@ -207,7 +207,7 @@ export default function TestAuthStep() {
               role="alert"
               aria-live="polite"
               aria-atomic="true"
-              className="mb-4 rounded-md bg-green-50 p-3 text-sm text-green-700"
+              className="mb-4 rounded-md bg-success-soft p-3 text-sm text-success-fg"
             >
               Authentication successful! Your admin account is working correctly.
             </div>
@@ -217,7 +217,7 @@ export default function TestAuthStep() {
             <button
               type="submit"
               disabled={!username || !password}
-              className="flex-1 rounded-md bg-indigo-600 px-4 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:cursor-not-allowed disabled:opacity-50"
+              className="flex-1 rounded-md bg-accent px-4 py-2.5 text-sm font-medium text-white hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
             >
               Test Sign In
             </button>
@@ -231,7 +231,7 @@ export default function TestAuthStep() {
           role="alert"
           aria-live="assertive"
           aria-atomic="true"
-          className="mt-4 rounded-md bg-red-50 p-3 text-sm text-red-700"
+          className="mt-4 rounded-md bg-danger-soft p-3 text-sm text-danger-fg"
         >
           {getErrorMessage(completeMutation.error, 'Failed to complete wizard.')}
         </div>
@@ -239,7 +239,7 @@ export default function TestAuthStep() {
 
       {/* Navigation Buttons */}
       <div className="mt-6 flex items-center justify-between">
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-subtle">
           {!testSuccess
             ? 'Test your authentication credentials above, then finish the wizard.'
             : 'Authentication verified! You can complete the wizard setup.'}
@@ -251,7 +251,7 @@ export default function TestAuthStep() {
           type="button"
           onClick={handleFinishWizard}
           disabled={completeMutation.isPending}
-          className="flex items-center gap-2 rounded-md bg-green-600 px-6 py-2.5 text-sm font-medium text-white hover:bg-green-700 disabled:cursor-not-allowed disabled:opacity-50"
+          className="flex items-center gap-2 rounded-md bg-success px-6 py-2.5 text-sm font-medium text-white hover:bg-success disabled:cursor-not-allowed disabled:opacity-50"
         >
           {completeMutation.isPending ? (
             <>

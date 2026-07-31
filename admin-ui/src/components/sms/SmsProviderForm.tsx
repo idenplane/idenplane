@@ -171,7 +171,7 @@ const PROVIDERS: ProviderOption[] = [
 // ── Field helpers ──────────────────────────────────────────────────────────
 
 const inputClass =
-  'w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none';
+  'w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none';
 
 function Field({
   label,
@@ -184,9 +184,9 @@ function Field({
 }) {
   return (
     <div>
-      <label className="mb-1.5 block text-sm font-medium text-gray-700">{label}</label>
+      <label className="mb-1.5 block text-sm font-medium text-muted">{label}</label>
       {children}
-      {hint && <p className="mt-1 text-xs text-gray-400">{hint}</p>}
+      {hint && <p className="mt-1 text-xs text-subtle">{hint}</p>}
     </div>
   );
 }
@@ -341,7 +341,7 @@ function WebhookFields({
           max={60000}
           value={form.webhookTimeout}
           onChange={(e) => setForm((f) => ({ ...f, webhookTimeout: Number(e.target.value) }))}
-          className="w-40 rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+          className="w-40 rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
         />
       </Field>
     </div>
@@ -410,11 +410,11 @@ export default function SmsProviderForm({ realm }: SmsProviderFormProps) {
   return (
     <form onSubmit={handleSubmit} className="space-y-6">
       {/* Enable SMS MFA toggle */}
-      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <div className="rounded-lg border border-line bg-surface p-6 shadow-sm">
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-gray-900">SMS Multi-Factor Authentication</h2>
-            <p className="mt-1 text-sm text-gray-500">
+            <h2 className="text-lg font-semibold text-fg">SMS Multi-Factor Authentication</h2>
+            <p className="mt-1 text-sm text-subtle">
               Users receive a one-time code via SMS as a second factor during login.
               Requires a configured SMS provider below.
             </p>
@@ -425,13 +425,13 @@ export default function SmsProviderForm({ realm }: SmsProviderFormProps) {
             aria-checked={form.smsMfaEnabled}
             onClick={() => setForm((f) => ({ ...f, smsMfaEnabled: !f.smsMfaEnabled }))}
             className={[
-              'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500 focus-visible:ring-offset-2',
-              form.smsMfaEnabled ? 'bg-indigo-600' : 'bg-gray-200',
+              'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2',
+              form.smsMfaEnabled ? 'bg-accent' : 'bg-active',
             ].join(' ')}
           >
             <span
               className={[
-                'inline-block h-5 w-5 transform rounded-full bg-white shadow ring-0 transition-transform',
+                'inline-block h-5 w-5 transform rounded-full bg-surface shadow ring-0 transition-transform',
                 form.smsMfaEnabled ? 'translate-x-5' : 'translate-x-0',
               ].join(' ')}
             />
@@ -440,10 +440,10 @@ export default function SmsProviderForm({ realm }: SmsProviderFormProps) {
       </div>
 
       {/* Provider selector */}
-      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <div className="rounded-lg border border-line bg-surface p-6 shadow-sm">
         <div className="mb-4">
-          <h3 className="text-base font-semibold text-gray-900">SMS Provider</h3>
-          <p className="mt-1 text-sm text-gray-500">
+          <h3 className="text-base font-semibold text-fg">SMS Provider</h3>
+          <p className="mt-1 text-sm text-subtle">
             Choose the service that delivers SMS messages for this realm.
           </p>
         </div>
@@ -457,22 +457,22 @@ export default function SmsProviderForm({ realm }: SmsProviderFormProps) {
                 type="button"
                 onClick={() => setForm((f) => ({ ...f, smsProvider: p.value }))}
                 className={[
-                  'relative flex flex-col gap-1.5 rounded-lg border-2 p-4 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-indigo-500',
+                  'relative flex flex-col gap-1.5 rounded-lg border-2 p-4 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
                   selected
-                    ? 'border-indigo-600 bg-indigo-50'
-                    : 'border-gray-200 bg-white hover:border-gray-300 hover:bg-gray-50',
+                    ? 'border-accent bg-accent-soft'
+                    : 'border-line bg-surface hover:border-line-strong hover:bg-hover',
                 ].join(' ')}
                 aria-pressed={selected}
               >
                 {p.badge && (
-                  <span className="absolute right-2 top-2 rounded-full bg-indigo-100 px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-indigo-700">
+                  <span className="absolute right-2 top-2 rounded-full bg-accent-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
                     {p.badge}
                   </span>
                 )}
                 <span
                   className={[
                     'flex h-8 w-8 items-center justify-center rounded-md',
-                    selected ? 'bg-indigo-600 text-white' : 'bg-gray-100 text-gray-500',
+                    selected ? 'bg-accent text-white' : 'bg-sunken text-subtle',
                   ].join(' ')}
                 >
                   {p.icon}
@@ -480,12 +480,12 @@ export default function SmsProviderForm({ realm }: SmsProviderFormProps) {
                 <span
                   className={[
                     'text-sm font-semibold',
-                    selected ? 'text-indigo-700' : 'text-gray-900',
+                    selected ? 'text-accent' : 'text-fg',
                   ].join(' ')}
                 >
                   {p.label}
                 </span>
-                <span className="text-xs leading-snug text-gray-500">{p.description}</span>
+                <span className="text-xs leading-snug text-subtle">{p.description}</span>
               </button>
             );
           })}
@@ -495,8 +495,8 @@ export default function SmsProviderForm({ realm }: SmsProviderFormProps) {
         {hasProvider && (
           <div className="mt-5 space-y-5">
             {/* Sender number (shared across all providers) */}
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-5">
-              <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-gray-400">
+            <div className="rounded-lg border border-line bg-sunken p-5">
+              <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-subtle">
                 Sender
               </p>
               <Field
@@ -514,8 +514,8 @@ export default function SmsProviderForm({ realm }: SmsProviderFormProps) {
             </div>
 
             {/* Provider credentials */}
-            <div className="rounded-lg border border-gray-200 bg-gray-50 p-5">
-              <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-gray-400">
+            <div className="rounded-lg border border-line bg-sunken p-5">
+              <p className="mb-4 text-xs font-semibold uppercase tracking-wide text-subtle">
                 {activeProvider?.label} Configuration
               </p>
               <ProviderFields form={form} setForm={setForm} />
@@ -526,9 +526,9 @@ export default function SmsProviderForm({ realm }: SmsProviderFormProps) {
 
       {/* OTP Settings */}
       {hasProvider && (
-        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-          <h3 className="text-base font-semibold text-gray-900">OTP Settings</h3>
-          <p className="mt-1 text-xs text-gray-500">
+        <div className="rounded-lg border border-line bg-surface p-6 shadow-sm">
+          <h3 className="text-base font-semibold text-fg">OTP Settings</h3>
+          <p className="mt-1 text-xs text-subtle">
             Configure the one-time password format and expiration window.
           </p>
           <div className="mt-4 grid grid-cols-2 gap-4">
@@ -553,7 +553,7 @@ export default function SmsProviderForm({ realm }: SmsProviderFormProps) {
                   onChange={(e) => setForm((f) => ({ ...f, otpExpirySeconds: Number(e.target.value) }))}
                   className={inputClass}
                 />
-                <span className="shrink-0 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">
+                <span className="shrink-0 rounded-full bg-sunken px-2.5 py-0.5 text-xs font-medium text-muted">
                   {formatDuration(form.otpExpirySeconds)}
                 </span>
               </div>
@@ -564,9 +564,9 @@ export default function SmsProviderForm({ realm }: SmsProviderFormProps) {
 
       {/* Rate Limiting */}
       {hasProvider && (
-        <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-          <h3 className="text-base font-semibold text-gray-900">Rate Limiting</h3>
-          <p className="mt-1 text-xs text-gray-500">
+        <div className="rounded-lg border border-line bg-surface p-6 shadow-sm">
+          <h3 className="text-base font-semibold text-fg">Rate Limiting</h3>
+          <p className="mt-1 text-xs text-subtle">
             Prevent abuse by capping how many SMS OTP requests a user can make.
           </p>
           <div className="mt-4 grid grid-cols-2 gap-4">
@@ -596,7 +596,7 @@ export default function SmsProviderForm({ realm }: SmsProviderFormProps) {
                   onChange={(e) => setForm((f) => ({ ...f, smsRateLimitWindow: Number(e.target.value) }))}
                   className={inputClass}
                 />
-                <span className="shrink-0 rounded-full bg-gray-100 px-2.5 py-0.5 text-xs font-medium text-gray-600">
+                <span className="shrink-0 rounded-full bg-sunken px-2.5 py-0.5 text-xs font-medium text-muted">
                   {formatDuration(form.smsRateLimitWindow)}
                 </span>
               </div>
@@ -607,12 +607,12 @@ export default function SmsProviderForm({ realm }: SmsProviderFormProps) {
 
       {/* Status banners */}
       {updateMutation.isSuccess && (
-        <div role="status" className="rounded-md bg-green-50 p-3 text-sm text-green-700">
+        <div role="status" className="rounded-md bg-success-soft p-3 text-sm text-success-fg">
           SMS settings saved successfully.
         </div>
       )}
       {updateMutation.isError && (
-        <div role="alert" className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+        <div role="alert" className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
           {getErrorMessage(updateMutation.error, 'Failed to save SMS settings.')}
         </div>
       )}
@@ -621,7 +621,7 @@ export default function SmsProviderForm({ realm }: SmsProviderFormProps) {
         <button
           type="submit"
           disabled={updateMutation.isPending}
-          className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
         >
           {updateMutation.isPending ? 'Saving…' : 'Save Changes'}
         </button>

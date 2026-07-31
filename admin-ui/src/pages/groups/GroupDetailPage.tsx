@@ -112,11 +112,11 @@ export default function GroupDetailPage() {
   }
 
   if (isLoading) {
-    return <div className="text-gray-500">Loading group...</div>;
+    return <div className="text-subtle">Loading group...</div>;
   }
 
   if (!group) {
-    return <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">Group not found.</div>;
+    return <div className="rounded-md bg-danger-soft p-4 text-sm text-danger-fg">Group not found.</div>;
   }
 
   // Filter out self and descendants for parent selector
@@ -135,21 +135,21 @@ export default function GroupDetailPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">{group.name}</h1>
+          <h1 className="text-2xl font-bold text-fg">{group.name}</h1>
           {group.description && (
-            <p className="mt-1 text-sm text-gray-500">{group.description}</p>
+            <p className="mt-1 text-sm text-subtle">{group.description}</p>
           )}
         </div>
         <button
           onClick={() => setShowDelete(true)}
-          className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+          className="rounded-md border border-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger-soft"
         >
           Delete Group
         </button>
       </div>
 
       {/* Tabs */}
-      <div className="border-b border-gray-200">
+      <div className="border-b border-line">
         <nav className="-mb-px flex gap-6">
           {tabs.map((tab) => (
             <button
@@ -157,8 +157,8 @@ export default function GroupDetailPage() {
               onClick={() => setActiveTab(tab.key)}
               className={`border-b-2 py-3 text-sm font-medium ${
                 activeTab === tab.key
-                  ? 'border-indigo-500 text-indigo-600'
-                  : 'border-transparent text-gray-500 hover:border-gray-300 hover:text-gray-700'
+                  ? 'border-accent text-accent'
+                  : 'border-transparent text-subtle hover:border-line-strong hover:text-fg'
               }`}
             >
               {tab.label}
@@ -169,37 +169,37 @@ export default function GroupDetailPage() {
 
       {/* Settings Tab */}
       {activeTab === 'settings' && (
-        <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+        <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-line bg-surface p-6 shadow-sm">
           <div>
-            <label htmlFor="field-group-name" className="mb-1.5 block text-sm font-medium text-gray-700">Group Name</label>
+            <label htmlFor="field-group-name" className="mb-1.5 block text-sm font-medium text-muted">Group Name</label>
             <input
               id="field-group-name"
               type="text"
               required
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
 
           <div>
-            <label htmlFor="field-group-description" className="mb-1.5 block text-sm font-medium text-gray-700">Description</label>
+            <label htmlFor="field-group-description" className="mb-1.5 block text-sm font-medium text-muted">Description</label>
             <textarea
               id="field-group-description"
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
               rows={3}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
 
           <div>
-            <label htmlFor="field-group-parentId" className="mb-1.5 block text-sm font-medium text-gray-700">Parent Group</label>
+            <label htmlFor="field-group-parentId" className="mb-1.5 block text-sm font-medium text-muted">Parent Group</label>
             <select
               id="field-group-parentId"
               value={form.parentId}
               onChange={(e) => setForm({ ...form, parentId: e.target.value })}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             >
               <option value="">None (top-level)</option>
               {availableParents.map((g) => (
@@ -211,17 +211,17 @@ export default function GroupDetailPage() {
           </div>
 
           {updateMutation.isSuccess && (
-            <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">Group updated successfully.</div>
+            <div className="rounded-md bg-success-soft p-3 text-sm text-success-fg">Group updated successfully.</div>
           )}
           {updateMutation.isError && (
-            <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">Failed to update group.</div>
+            <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">Failed to update group.</div>
           )}
 
-          <div className="flex justify-end border-t border-gray-200 pt-4">
+          <div className="flex justify-end border-t border-line pt-4">
             <button
               type="submit"
               disabled={updateMutation.isPending}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
             </button>
@@ -231,34 +231,34 @@ export default function GroupDetailPage() {
 
       {/* Members Tab */}
       {activeTab === 'members' && (
-        <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-900">Members</h2>
+        <div className="space-y-4 rounded-lg border border-line bg-surface p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-fg">Members</h2>
           {members && members.length > 0 ? (
-            <div className="overflow-hidden rounded-md border border-gray-200">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
+            <div className="overflow-hidden rounded-md border border-line">
+              <table className="min-w-full divide-y divide-line">
+                <thead className="bg-sunken">
                   <tr>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Username</th>
-                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500">Email</th>
-                    <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-gray-500">Actions</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Username</th>
+                    <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">Email</th>
+                    <th className="px-4 py-3 text-right text-xs font-medium uppercase tracking-wider text-subtle">Actions</th>
                   </tr>
                 </thead>
-                <tbody className="divide-y divide-gray-200">
+                <tbody className="divide-y divide-line">
                   {members.map((user) => (
-                    <tr key={user.id} className="hover:bg-gray-50">
+                    <tr key={user.id} className="hover:bg-hover">
                       <td className="px-4 py-3 text-sm">
                         <Link
                           to={`/console/realms/${name}/users/${user.id}`}
-                          className="font-medium text-indigo-600 hover:text-indigo-900"
+                          className="font-medium text-accent hover:text-accent"
                         >
                           {user.username}
                         </Link>
                       </td>
-                      <td className="px-4 py-3 text-sm text-gray-500">{user.email || '-'}</td>
+                      <td className="px-4 py-3 text-sm text-subtle">{user.email || '-'}</td>
                       <td className="px-4 py-3 text-right">
                         <button
                           onClick={() => removeMemberMutation.mutate(user.id)}
-                          className="text-sm text-red-600 hover:text-red-800"
+                          className="text-sm text-danger hover:text-danger-fg"
                         >
                           Remove
                         </button>
@@ -269,9 +269,9 @@ export default function GroupDetailPage() {
               </table>
             </div>
           ) : (
-            <p className="text-sm text-gray-500">No members in this group.</p>
+            <p className="text-sm text-subtle">No members in this group.</p>
           )}
-          <p className="text-xs text-gray-400">
+          <p className="text-xs text-subtle">
             To add users to this group, go to a user's detail page.
           </p>
         </div>
@@ -279,27 +279,27 @@ export default function GroupDetailPage() {
 
       {/* Roles Tab */}
       {activeTab === 'roles' && (
-        <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-900">Role Mappings</h2>
-          <p className="text-sm text-gray-500">
+        <div className="space-y-4 rounded-lg border border-line bg-surface p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-fg">Role Mappings</h2>
+          <p className="text-sm text-subtle">
             Roles assigned to this group are inherited by all members.
           </p>
 
           {/* Assigned roles */}
           <div>
-            <h3 className="mb-2 text-sm font-medium text-gray-700">Assigned Roles</h3>
+            <h3 className="mb-2 text-sm font-medium text-muted">Assigned Roles</h3>
             {groupRoles && groupRoles.length > 0 ? (
               <div className="flex flex-wrap gap-2">
                 {groupRoles.map((role) => (
                   <span
                     key={role.id}
-                    className="inline-flex items-center gap-1 rounded-full bg-indigo-100 px-3 py-1 text-sm font-medium text-indigo-700"
+                    className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-3 py-1 text-sm font-medium text-accent"
                   >
                     {role.name}
                     <button
                       type="button"
                       onClick={() => removeRoleMutation.mutate(role.name)}
-                      className="ml-1 text-indigo-400 hover:text-indigo-600"
+                      className="ml-1 text-accent hover:text-accent"
                     >
                       <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
                         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
@@ -309,20 +309,20 @@ export default function GroupDetailPage() {
                 ))}
               </div>
             ) : (
-              <p className="text-sm text-gray-500">No roles assigned.</p>
+              <p className="text-sm text-subtle">No roles assigned.</p>
             )}
           </div>
 
           {/* Add role */}
           {availableRoles.length > 0 && (
-            <div className="flex items-end gap-3 border-t border-gray-200 pt-4">
+            <div className="flex items-end gap-3 border-t border-line pt-4">
               <div className="flex-1">
-                <label htmlFor="field-group-addRole" className="mb-1.5 block text-sm font-medium text-gray-700">Add Role</label>
+                <label htmlFor="field-group-addRole" className="mb-1.5 block text-sm font-medium text-muted">Add Role</label>
                 <select
                   id="field-group-addRole"
                   value={selectedRole}
                   onChange={(e) => setSelectedRole(e.target.value)}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 >
                   <option value="">Select a role...</option>
                   {availableRoles.map((role) => (
@@ -336,7 +336,7 @@ export default function GroupDetailPage() {
                 type="button"
                 onClick={() => selectedRole && assignRoleMutation.mutate(selectedRole)}
                 disabled={!selectedRole || assignRoleMutation.isPending}
-                className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
               >
                 Assign
               </button>
@@ -347,14 +347,14 @@ export default function GroupDetailPage() {
 
       {/* Children */}
       {group.children && group.children.length > 0 && (
-        <div className="space-y-3 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-900">Sub-Groups</h2>
+        <div className="space-y-3 rounded-lg border border-line bg-surface p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-fg">Sub-Groups</h2>
           <div className="space-y-1">
             {group.children.map((child) => (
               <Link
                 key={child.id}
                 to={`/console/realms/${name}/groups/${child.id}`}
-                className="block rounded-md px-3 py-2 text-sm font-medium text-indigo-600 hover:bg-gray-50"
+                className="block rounded-md px-3 py-2 text-sm font-medium text-accent hover:bg-hover"
               >
                 {child.name}
               </Link>

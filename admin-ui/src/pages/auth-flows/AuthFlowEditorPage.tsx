@@ -99,14 +99,14 @@ export default function AuthFlowEditorPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="text-gray-500">Loading flow...</div>
+        <div className="text-subtle">Loading flow...</div>
       </div>
     );
   }
 
   if (error || !remoteFlow) {
     return (
-      <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
+      <div className="rounded-md bg-danger-soft p-4 text-sm text-danger-fg">
         Failed to load authentication flow.
       </div>
     );
@@ -117,11 +117,11 @@ export default function AuthFlowEditorPage() {
   return (
     <div className="flex h-[calc(100vh-8rem)] flex-col">
       {/* Toolbar */}
-      <div className="flex shrink-0 items-center gap-3 border-b border-gray-200 bg-white px-4 py-3">
+      <div className="flex shrink-0 items-center gap-3 border-b border-line bg-surface px-4 py-3">
         {/* Back */}
         <button
           onClick={() => navigate(`/console/realms/${name}/auth-flows`)}
-          className="flex items-center gap-1 rounded px-2 py-1.5 text-sm text-gray-500 hover:bg-gray-100 hover:text-gray-800"
+          className="flex items-center gap-1 rounded px-2 py-1.5 text-sm text-subtle hover:bg-hover hover:text-fg"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
@@ -129,24 +129,24 @@ export default function AuthFlowEditorPage() {
           Flows
         </button>
 
-        <div className="h-5 w-px bg-gray-200" />
+        <div className="h-5 w-px bg-active" />
 
         {/* Flow name */}
         <input
           value={draftName}
           onChange={(e) => handleNameChange(e.target.value)}
-          className="rounded-md border border-gray-300 px-3 py-1.5 text-sm font-medium text-gray-900 focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+          className="rounded-md border border-line-strong px-3 py-1.5 text-sm font-medium text-fg focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
           placeholder="Flow name"
           aria-label="Flow name"
         />
 
         {/* Default badge toggle */}
-        <label className="flex cursor-pointer items-center gap-1.5 text-sm text-gray-600 select-none">
+        <label className="flex cursor-pointer items-center gap-1.5 text-sm text-muted select-none">
           <input
             type="checkbox"
             checked={draftIsDefault}
             onChange={(e) => handleIsDefaultChange(e.target.checked)}
-            className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+            className="rounded border-line-strong text-accent focus:ring-accent"
           />
           Default flow
         </label>
@@ -155,7 +155,7 @@ export default function AuthFlowEditorPage() {
 
         {/* Dirty indicator */}
         {isDirty && (
-          <span className="text-xs text-amber-600">Unsaved changes</span>
+          <span className="text-xs text-warning">Unsaved changes</span>
         )}
 
         {/* Preview toggle */}
@@ -163,8 +163,8 @@ export default function AuthFlowEditorPage() {
           onClick={() => setIsPreview(!isPreview)}
           className={`rounded-md border px-3 py-1.5 text-sm font-medium transition-colors ${
             isPreview
-              ? 'border-indigo-300 bg-indigo-50 text-indigo-700'
-              : 'border-gray-300 bg-white text-gray-700 hover:bg-gray-50'
+              ? 'border-accent-soft bg-accent-soft text-accent'
+              : 'border-line-strong bg-surface text-muted hover:bg-hover'
           }`}
         >
           {isPreview ? 'Exit Preview' : 'Preview'}
@@ -175,7 +175,7 @@ export default function AuthFlowEditorPage() {
           <button
             onClick={handleSave}
             disabled={saveMutation.isPending || !isDirty}
-            className="rounded-md bg-indigo-600 px-4 py-1.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {saveMutation.isPending ? 'Saving...' : 'Save'}
           </button>
@@ -184,12 +184,12 @@ export default function AuthFlowEditorPage() {
 
       {/* Description row */}
       {!isPreview && (
-        <div className="shrink-0 border-b border-gray-100 bg-gray-50 px-4 py-2">
+        <div className="shrink-0 border-b border-line bg-sunken px-4 py-2">
           <input
             value={draftDescription}
             onChange={(e) => handleDescriptionChange(e.target.value)}
             placeholder="Add a description (optional)..."
-            className="w-full bg-transparent text-sm text-gray-600 placeholder-gray-400 focus:outline-none"
+            className="w-full bg-transparent text-sm text-muted placeholder-gray-400 focus:outline-none"
             aria-label="Flow description"
           />
         </div>
@@ -197,7 +197,7 @@ export default function AuthFlowEditorPage() {
 
       {/* Error banner */}
       {saveError && (
-        <div className="shrink-0 border-b border-red-200 bg-red-50 px-4 py-2 text-sm text-red-700">
+        <div className="shrink-0 border-b border-danger-soft bg-danger-soft px-4 py-2 text-sm text-danger-fg">
           {saveError}
         </div>
       )}
@@ -213,8 +213,8 @@ export default function AuthFlowEditorPage() {
 
       {/* Preview footer */}
       {isPreview && (
-        <div className="shrink-0 border-t border-gray-200 bg-gray-50 px-4 py-3">
-          <p className="text-xs text-gray-500">
+        <div className="shrink-0 border-t border-line bg-sunken px-4 py-3">
+          <p className="text-xs text-subtle">
             Preview mode — showing how the flow executes top to bottom.
             Dashed red lines indicate fallback paths.
           </p>

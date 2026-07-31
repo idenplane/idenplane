@@ -38,19 +38,19 @@ export default function FlowStepEditor({
   return (
     <div className="flex h-full flex-col">
       {/* Header */}
-      <div className="flex items-center justify-between border-b border-gray-200 px-4 py-3">
+      <div className="flex items-center justify-between border-b border-line px-4 py-3">
         <div className="flex items-center gap-2">
           <span className="text-lg" role="img" aria-label={STEP_TYPE_META[step.type].label}>
             {STEP_TYPE_META[step.type].icon}
           </span>
-          <h3 className="text-sm font-semibold text-gray-900">
+          <h3 className="text-sm font-semibold text-fg">
             Edit Step
           </h3>
         </div>
         <button
           onClick={onClose}
           aria-label="Close step editor"
-          className="rounded p-1 text-gray-400 hover:bg-gray-100 hover:text-gray-600"
+          className="rounded p-1 text-subtle hover:bg-hover hover:text-muted"
         >
           <svg className="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" />
@@ -59,15 +59,15 @@ export default function FlowStepEditor({
       </div>
 
       {/* Tabs */}
-      <div className="flex border-b border-gray-200 px-4">
+      <div className="flex border-b border-line px-4">
         {(['general', 'condition', 'config'] as const).map((tab) => (
           <button
             key={tab}
             onClick={() => setActiveTab(tab)}
             className={`px-3 py-2 text-xs font-medium capitalize transition-colors ${
               activeTab === tab
-                ? 'border-b-2 border-indigo-500 text-indigo-600'
-                : 'text-gray-500 hover:text-gray-700'
+                ? 'border-b-2 border-accent text-accent'
+                : 'text-subtle hover:text-fg'
             }`}
           >
             {tab}
@@ -81,27 +81,27 @@ export default function FlowStepEditor({
           <>
             {/* Step ID (read-only) */}
             <div>
-              <label htmlFor="step-id" className="block text-xs font-medium text-gray-600 mb-1">
+              <label htmlFor="step-id" className="block text-xs font-medium text-muted mb-1">
                 Step ID
               </label>
               <input
                 id="step-id"
                 readOnly
                 value={step.id}
-                className="w-full rounded-md border border-gray-200 bg-gray-50 px-3 py-1.5 text-sm text-gray-500 font-mono"
+                className="w-full rounded-md border border-line bg-sunken px-3 py-1.5 text-sm text-subtle font-mono"
               />
             </div>
 
             {/* Type */}
             <div>
-              <label htmlFor="step-type" className="block text-xs font-medium text-gray-600 mb-1">
+              <label htmlFor="step-type" className="block text-xs font-medium text-muted mb-1">
                 Type
               </label>
               <select
                 id="step-type"
                 value={step.type}
                 onChange={(e) => update({ type: e.target.value as StepType })}
-                className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="w-full rounded-md border border-line-strong px-3 py-1.5 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
               >
                 {ALL_STEP_TYPES.map((t) => (
                   <option key={t} value={t}>
@@ -117,21 +117,21 @@ export default function FlowStepEditor({
                 type="checkbox"
                 checked={step.required}
                 onChange={(e) => update({ required: e.target.checked })}
-                className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                className="rounded border-line-strong text-accent focus:ring-accent"
               />
-              <span className="text-sm font-medium text-gray-700">Required</span>
+              <span className="text-sm font-medium text-muted">Required</span>
             </label>
 
             {/* Fallback step */}
             <div>
-              <label htmlFor="step-fallback" className="block text-xs font-medium text-gray-600 mb-1">
+              <label htmlFor="step-fallback" className="block text-xs font-medium text-muted mb-1">
                 Fallback step on failure
               </label>
               <select
                 id="step-fallback"
                 value={step.fallbackStepId ?? ''}
                 onChange={(e) => update({ fallbackStepId: e.target.value || null })}
-                className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                className="w-full rounded-md border border-line-strong px-3 py-1.5 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
               >
                 <option value="">— None —</option>
                 {fallbackCandidates.map((s) => (
@@ -185,14 +185,14 @@ function StepConfigEditor({ type, config, onChange }: StepConfigEditorProps) {
               value={String(config.issuer ?? '')}
               onChange={(e) => set('issuer', e.target.value)}
               placeholder="e.g. MyApp"
-              className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="w-full rounded-md border border-line-strong px-3 py-1.5 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             />
           </ConfigField>
           <ConfigField label="Digits">
             <select
               value={String(config.digits ?? '6')}
               onChange={(e) => set('digits', Number(e.target.value))}
-              className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="w-full rounded-md border border-line-strong px-3 py-1.5 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             >
               <option value="6">6</option>
               <option value="8">8</option>
@@ -202,7 +202,7 @@ function StepConfigEditor({ type, config, onChange }: StepConfigEditorProps) {
             <select
               value={String(config.algorithm ?? 'SHA1')}
               onChange={(e) => set('algorithm', e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="w-full rounded-md border border-line-strong px-3 py-1.5 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             >
               {['SHA1', 'SHA256', 'SHA512'].map((a) => (
                 <option key={a} value={a}>{a}</option>
@@ -220,14 +220,14 @@ function StepConfigEditor({ type, config, onChange }: StepConfigEditorProps) {
               value={String(config.rpName ?? '')}
               onChange={(e) => set('rpName', e.target.value)}
               placeholder="e.g. My Application"
-              className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="w-full rounded-md border border-line-strong px-3 py-1.5 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             />
           </ConfigField>
           <ConfigField label="User Verification">
             <select
               value={String(config.userVerification ?? 'preferred')}
               onChange={(e) => set('userVerification', e.target.value)}
-              className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="w-full rounded-md border border-line-strong px-3 py-1.5 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             >
               {['required', 'preferred', 'discouraged'].map((v) => (
                 <option key={v} value={v}>{v}</option>
@@ -245,7 +245,7 @@ function StepConfigEditor({ type, config, onChange }: StepConfigEditorProps) {
               value={String(config.providerAlias ?? '')}
               onChange={(e) => set('providerAlias', e.target.value)}
               placeholder="e.g. google"
-              className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="w-full rounded-md border border-line-strong px-3 py-1.5 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             />
           </ConfigField>
         </div>
@@ -259,7 +259,7 @@ function StepConfigEditor({ type, config, onChange }: StepConfigEditorProps) {
               value={String(config.federationProviderId ?? '')}
               onChange={(e) => set('federationProviderId', e.target.value)}
               placeholder="UUID of the user-federation entry"
-              className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm font-mono focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="w-full rounded-md border border-line-strong px-3 py-1.5 text-sm font-mono focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             />
           </ConfigField>
         </div>
@@ -272,7 +272,7 @@ function StepConfigEditor({ type, config, onChange }: StepConfigEditorProps) {
             <select
               value={String(config.otpLength ?? '6')}
               onChange={(e) => set('otpLength', Number(e.target.value))}
-              className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="w-full rounded-md border border-line-strong px-3 py-1.5 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             >
               {[4, 6, 8].map((n) => (
                 <option key={n} value={n}>{n}</option>
@@ -285,7 +285,7 @@ function StepConfigEditor({ type, config, onChange }: StepConfigEditorProps) {
               min={60}
               value={Number(config.expirySeconds ?? 300)}
               onChange={(e) => set('expirySeconds', Number(e.target.value))}
-              className="w-full rounded-md border border-gray-300 px-3 py-1.5 text-sm focus:border-indigo-500 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+              className="w-full rounded-md border border-line-strong px-3 py-1.5 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             />
           </ConfigField>
         </div>
@@ -293,7 +293,7 @@ function StepConfigEditor({ type, config, onChange }: StepConfigEditorProps) {
 
     default:
       return (
-        <p className="text-sm text-gray-500">
+        <p className="text-sm text-subtle">
           No additional configuration for this step type.
         </p>
       );
@@ -309,7 +309,7 @@ function ConfigField({
 }) {
   return (
     <div>
-      <label className="block text-xs font-medium text-gray-600 mb-1">{label}</label>
+      <label className="block text-xs font-medium text-muted mb-1">{label}</label>
       {children}
     </div>
   );

@@ -132,7 +132,7 @@ export default function Layout() {
             aria-haspopup="listbox"
             aria-expanded={realmDropdownOpen}
             aria-label={currentRealm ? `Current realm: ${currentRealm}. Switch realm` : 'Select realm'}
-            className="flex w-full items-center gap-2.5 rounded-lg border border-white/10 bg-white/[0.03] px-2.5 py-2 text-left transition-colors hover:bg-white/[0.06] focus-visible:outline-none focus-visible:shadow-[var(--shadow-focus)]"
+            className="flex w-full items-center gap-2.5 rounded-lg border border-white/10 bg-surface/[0.03] px-2.5 py-2 text-left transition-colors hover:bg-surface/[0.06] focus-visible:outline-none focus-visible:shadow-[var(--shadow-focus)]"
           >
             <span className="flex h-[22px] w-[22px] items-center justify-center rounded-md bg-gradient-to-br from-cyan-500 to-violet-600 text-[10px] font-bold text-white">
               {(currentRealm || 'R')[0].toUpperCase()}

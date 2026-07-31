@@ -19,21 +19,21 @@ import ConfirmDialog from '../../components/ConfirmDialog';
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
 const identityTypeColors: Record<NhiIdentityType, string> = {
-  IOT_DEVICE: 'bg-blue-100 text-blue-700',
+  IOT_DEVICE: 'bg-info-soft text-info-fg',
   AI_AGENT: 'bg-purple-100 text-purple-700',
-  BOT: 'bg-amber-100 text-amber-700',
-  MACHINE_TO_MACHINE: 'bg-green-100 text-green-700',
+  BOT: 'bg-warning-soft text-warning-fg',
+  MACHINE_TO_MACHINE: 'bg-success-soft text-success-fg',
 };
 
 const statusColors: Record<NhiLifecycleStatus, string> = {
-  PROVISIONING: 'bg-yellow-100 text-yellow-700',
-  ACTIVE: 'bg-green-100 text-green-700',
-  SUSPENDED: 'bg-orange-100 text-orange-700',
-  DECOMMISSIONED: 'bg-gray-100 text-gray-700',
+  PROVISIONING: 'bg-warning-soft text-warning-fg',
+  ACTIVE: 'bg-success-soft text-success-fg',
+  SUSPENDED: 'bg-warning-soft text-warning-fg',
+  DECOMMISSIONED: 'bg-sunken text-muted',
 };
 
 const credentialTypeColors: Record<NhiCredentialType, string> = {
-  API_KEY: 'bg-indigo-100 text-indigo-700',
+  API_KEY: 'bg-accent-soft text-accent',
   CERTIFICATE: 'bg-emerald-100 text-emerald-700',
   JWT_BEARER: 'bg-rose-100 text-rose-700',
 };
@@ -176,14 +176,14 @@ export default function NhiDetailPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center py-12">
-        <div className="text-gray-500">Loading identity...</div>
+        <div className="text-subtle">Loading identity...</div>
       </div>
     );
   }
 
   if (!identity) {
     return (
-      <div className="rounded-md bg-red-50 p-4 text-sm text-red-700">
+      <div className="rounded-md bg-danger-soft p-4 text-sm text-danger-fg">
         Identity not found.
       </div>
     );
@@ -199,7 +199,7 @@ export default function NhiDetailPage() {
       <div className="flex items-center justify-between">
         <div>
           <div className="flex items-center gap-3">
-            <h1 className="text-2xl font-bold text-gray-900">{identity.name}</h1>
+            <h1 className="text-2xl font-bold text-fg">{identity.name}</h1>
             <span
               className={`inline-flex rounded-full px-2.5 py-0.5 text-xs font-medium ${
                 identityTypeColors[identity.identityType]
@@ -215,10 +215,10 @@ export default function NhiDetailPage() {
               {identity.lifecycleStatus}
             </span>
           </div>
-          <p className="mt-1 text-sm text-gray-500">
+          <p className="mt-1 text-sm text-subtle">
             {identity.description || 'No description'}
             {identity.certificateFingerprint && (
-              <span className="ml-2 text-green-600">· Certificate active</span>
+              <span className="ml-2 text-success">· Certificate active</span>
             )}
           </p>
         </div>
@@ -230,7 +230,7 @@ export default function NhiDetailPage() {
                 <button
                   onClick={() => suspendMutation.mutate()}
                   disabled={suspendMutation.isPending}
-                  className="rounded-md border border-orange-300 px-4 py-2 text-sm font-medium text-orange-700 hover:bg-orange-50 disabled:opacity-50"
+                  className="rounded-md border border-warning-soft px-4 py-2 text-sm font-medium text-warning-fg hover:bg-warning-soft disabled:opacity-50"
                 >
                   {suspendMutation.isPending ? 'Suspending...' : 'Suspend'}
                 </button>
@@ -239,7 +239,7 @@ export default function NhiDetailPage() {
                 <button
                   onClick={() => reactivateMutation.mutate()}
                   disabled={reactivateMutation.isPending}
-                  className="rounded-md border border-green-300 px-4 py-2 text-sm font-medium text-green-700 hover:bg-green-50 disabled:opacity-50"
+                  className="rounded-md border border-success-soft px-4 py-2 text-sm font-medium text-success-fg hover:bg-success-soft disabled:opacity-50"
                 >
                   {reactivateMutation.isPending ? 'Reactivating...' : 'Reactivate'}
                 </button>
@@ -247,7 +247,7 @@ export default function NhiDetailPage() {
               <button
                 onClick={() => decommissionMutation.mutate()}
                 disabled={decommissionMutation.isPending}
-                className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50 disabled:opacity-50"
+                className="rounded-md border border-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger-soft disabled:opacity-50"
               >
                 {decommissionMutation.isPending ? 'Decommissioning...' : 'Decommission'}
               </button>
@@ -256,7 +256,7 @@ export default function NhiDetailPage() {
           {!isDecommissioned && (
             <button
               onClick={() => setShowDelete(true)}
-              className="rounded-md border border-red-300 px-4 py-2 text-sm font-medium text-red-700 hover:bg-red-50"
+              className="rounded-md border border-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger-soft"
             >
               Delete
             </button>
@@ -267,15 +267,15 @@ export default function NhiDetailPage() {
       {/* Settings form */}
       <form
         onSubmit={handleSubmit}
-        className="space-y-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm"
+        className="space-y-6 rounded-lg border border-line bg-surface p-6 shadow-sm"
       >
-        <h2 className="text-lg font-semibold text-gray-900">Settings</h2>
+        <h2 className="text-lg font-semibold text-fg">Settings</h2>
 
         <div className="grid grid-cols-2 gap-4">
           <div>
             <label
               htmlFor="field-nhi-name"
-              className="mb-1.5 block text-sm font-medium text-gray-700"
+              className="mb-1.5 block text-sm font-medium text-muted"
             >
               Name
             </label>
@@ -285,13 +285,13 @@ export default function NhiDetailPage() {
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               disabled={isDecommissioned}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none disabled:cursor-not-allowed disabled:bg-sunken disabled:text-subtle"
             />
           </div>
           <div>
             <label
               htmlFor="field-nhi-agentPurpose"
-              className="mb-1.5 block text-sm font-medium text-gray-700"
+              className="mb-1.5 block text-sm font-medium text-muted"
             >
               Agent Purpose
             </label>
@@ -302,7 +302,7 @@ export default function NhiDetailPage() {
               onChange={(e) => setForm({ ...form, agentPurpose: e.target.value })}
               disabled={isDecommissioned}
               placeholder="e.g., data pipeline, monitoring"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none disabled:cursor-not-allowed disabled:bg-sunken disabled:text-subtle"
             />
           </div>
         </div>
@@ -310,7 +310,7 @@ export default function NhiDetailPage() {
         <div>
           <label
             htmlFor="field-nhi-description"
-            className="mb-1.5 block text-sm font-medium text-gray-700"
+            className="mb-1.5 block text-sm font-medium text-muted"
           >
             Description
           </label>
@@ -320,7 +320,7 @@ export default function NhiDetailPage() {
             onChange={(e) => setForm({ ...form, description: e.target.value })}
             disabled={isDecommissioned}
             rows={2}
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none disabled:cursor-not-allowed disabled:bg-gray-50 disabled:text-gray-500"
+            className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none disabled:cursor-not-allowed disabled:bg-sunken disabled:text-subtle"
           />
         </div>
 
@@ -332,11 +332,11 @@ export default function NhiDetailPage() {
               checked={form.enabled}
               onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
               disabled={isDecommissioned}
-              className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500 disabled:cursor-not-allowed"
+              className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent disabled:cursor-not-allowed"
             />
             <label
               htmlFor="nhi-enabled"
-              className="text-sm font-medium text-gray-700"
+              className="text-sm font-medium text-muted"
             >
               Enabled
             </label>
@@ -345,13 +345,13 @@ export default function NhiDetailPage() {
 
         {/* Permission Scopes */}
         {identity.permissionScopes && identity.permissionScopes.length > 0 && (
-          <div className="border-t border-gray-200 pt-4">
-            <h3 className="mb-2 text-sm font-medium text-gray-900">Permission Scopes</h3>
+          <div className="border-t border-line pt-4">
+            <h3 className="mb-2 text-sm font-medium text-fg">Permission Scopes</h3>
             <div className="flex flex-wrap gap-2">
               {identity.permissionScopes.map((scope) => (
                 <span
                   key={scope}
-                  className="inline-flex items-center rounded-full bg-gray-100 px-3 py-1 text-sm font-medium text-gray-700"
+                  className="inline-flex items-center rounded-full bg-sunken px-3 py-1 text-sm font-medium text-muted"
                 >
                   {scope}
                 </span>
@@ -362,8 +362,8 @@ export default function NhiDetailPage() {
 
         {/* Tags */}
         {identity.tags && identity.tags.length > 0 && (
-          <div className="border-t border-gray-200 pt-4">
-            <h3 className="mb-2 text-sm font-medium text-gray-900">Tags</h3>
+          <div className="border-t border-line pt-4">
+            <h3 className="mb-2 text-sm font-medium text-fg">Tags</h3>
             <div className="flex flex-wrap gap-2">
               {identity.tags.map((tag) => (
                 <span
@@ -378,22 +378,22 @@ export default function NhiDetailPage() {
         )}
 
         {updateMutation.isSuccess && (
-          <div className="rounded-md bg-green-50 p-3 text-sm text-green-700">
+          <div className="rounded-md bg-success-soft p-3 text-sm text-success-fg">
             Identity updated successfully.
           </div>
         )}
 
         {updateMutation.isError && (
-          <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+          <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
             Failed to update identity.
           </div>
         )}
 
-        <div className="flex justify-end border-t border-gray-200 pt-4">
+        <div className="flex justify-end border-t border-line pt-4">
           <button
             type="submit"
             disabled={updateMutation.isPending || isDecommissioned}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
           </button>
@@ -402,33 +402,33 @@ export default function NhiDetailPage() {
 
       {/* Certificate info */}
       {identity.certificateFingerprint && (
-        <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-          <h2 className="text-lg font-semibold text-gray-900">Certificate</h2>
+        <div className="space-y-4 rounded-lg border border-line bg-surface p-6 shadow-sm">
+          <h2 className="text-lg font-semibold text-fg">Certificate</h2>
           <dl className="grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
             <div>
-              <dt className="text-gray-500">Fingerprint</dt>
-              <dd className="mt-0.5 font-mono text-gray-900 break-all">
+              <dt className="text-subtle">Fingerprint</dt>
+              <dd className="mt-0.5 font-mono text-fg break-all">
                 {identity.certificateFingerprint}
               </dd>
             </div>
             {identity.certificateSubject && (
               <div>
-                <dt className="text-gray-500">Subject</dt>
-                <dd className="mt-0.5 font-mono text-gray-900">{identity.certificateSubject}</dd>
+                <dt className="text-subtle">Subject</dt>
+                <dd className="mt-0.5 font-mono text-fg">{identity.certificateSubject}</dd>
               </div>
             )}
             {identity.certificateNotBefore && (
               <div>
-                <dt className="text-gray-500">Valid From</dt>
-                <dd className="mt-0.5 text-gray-900">
+                <dt className="text-subtle">Valid From</dt>
+                <dd className="mt-0.5 text-fg">
                   {new Date(identity.certificateNotBefore).toLocaleString()}
                 </dd>
               </div>
             )}
             {identity.certificateNotAfter && (
               <div>
-                <dt className="text-gray-500">Valid Until</dt>
-                <dd className="mt-0.5 text-gray-900">
+                <dt className="text-subtle">Valid Until</dt>
+                <dd className="mt-0.5 text-fg">
                   {new Date(identity.certificateNotAfter).toLocaleString()}
                 </dd>
               </div>
@@ -438,13 +438,13 @@ export default function NhiDetailPage() {
       )}
 
       {/* Credentials section */}
-      <div className="space-y-4 rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
+      <div className="space-y-4 rounded-lg border border-line bg-surface p-6 shadow-sm">
         <div className="flex items-center justify-between">
-          <h2 className="text-lg font-semibold text-gray-900">Credentials</h2>
+          <h2 className="text-lg font-semibold text-fg">Credentials</h2>
           {!isDecommissioned && (
             <button
               onClick={() => setShowCreateCredential(true)}
-              className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700"
+              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
             >
               Create Credential
             </button>
@@ -452,43 +452,43 @@ export default function NhiDetailPage() {
         </div>
 
         {credentials && credentials.length > 0 ? (
-          <div className="overflow-hidden rounded-lg border border-gray-200">
-            <table className="min-w-full divide-y divide-gray-200" aria-label="Credentials">
-              <thead className="bg-gray-50">
+          <div className="overflow-hidden rounded-lg border border-line">
+            <table className="min-w-full divide-y divide-line" aria-label="Credentials">
+              <thead className="bg-sunken">
                 <tr>
                   <th
                     scope="col"
-                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
+                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle"
                   >
                     Name
                   </th>
                   <th
                     scope="col"
-                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
+                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle"
                   >
                     Type
                   </th>
                   <th
                     scope="col"
-                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
+                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle"
                   >
                     Key Prefix
                   </th>
                   <th
                     scope="col"
-                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
+                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle"
                   >
                     Expires
                   </th>
                   <th
                     scope="col"
-                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
+                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle"
                   >
                     Status
                   </th>
                   <th
                     scope="col"
-                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-gray-500"
+                    className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle"
                   >
                     Rotation
                   </th>
@@ -497,10 +497,10 @@ export default function NhiDetailPage() {
                   </th>
                 </tr>
               </thead>
-              <tbody className="divide-y divide-gray-200 bg-white">
+              <tbody className="divide-y divide-line bg-surface">
                 {credentials.map((cred) => (
                   <tr key={cred.id}>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-gray-900">
+                    <td className="whitespace-nowrap px-4 py-3 text-sm font-medium text-fg">
                       {cred.name}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-sm">
@@ -512,34 +512,34 @@ export default function NhiDetailPage() {
                         {cred.credentialType.replace(/_/g, ' ')}
                       </span>
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm font-mono text-gray-500">
+                    <td className="whitespace-nowrap px-4 py-3 text-sm font-mono text-subtle">
                       {cred.keyPrefix ?? '—'}
                     </td>
-                    <td className="whitespace-nowrap px-4 py-3 text-sm text-gray-500">
+                    <td className="whitespace-nowrap px-4 py-3 text-sm text-subtle">
                       {cred.expiresAt
                         ? new Date(cred.expiresAt).toLocaleDateString()
                         : 'Never'}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-sm">
                       {cred.revoked ? (
-                        <span className="inline-flex rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">
+                        <span className="inline-flex rounded-full bg-danger-soft px-2 py-0.5 text-xs font-medium text-danger-fg">
                           Revoked
                         </span>
                       ) : cred.enabled ? (
-                        <span className="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">
+                        <span className="inline-flex rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success-fg">
                           Active
                         </span>
                       ) : (
-                        <span className="inline-flex rounded-full bg-gray-100 px-2 py-0.5 text-xs font-medium text-gray-600">
+                        <span className="inline-flex rounded-full bg-sunken px-2 py-0.5 text-xs font-medium text-muted">
                           Disabled
                         </span>
                       )}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-sm">
                       {cred.rotationRequired ? (
-                        <span className="text-amber-600">Required</span>
+                        <span className="text-warning">Required</span>
                       ) : (
-                        <span className="text-gray-400">Optional</span>
+                        <span className="text-subtle">Optional</span>
                       )}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right text-sm">
@@ -548,13 +548,13 @@ export default function NhiDetailPage() {
                           <button
                             onClick={() => rotateCredentialMutation.mutate(cred.id)}
                             disabled={rotateCredentialMutation.isPending}
-                            className="rounded-md border border-gray-300 px-2 py-1 text-xs font-medium text-gray-700 hover:bg-gray-50 disabled:opacity-50"
+                            className="rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-muted hover:bg-hover disabled:opacity-50"
                           >
                             Rotate
                           </button>
                           <button
                             onClick={() => setSelectedCredentialId(cred.id)}
-                            className="rounded-md border border-red-300 px-2 py-1 text-xs font-medium text-red-700 hover:bg-red-50"
+                            className="rounded-md border border-danger-soft px-2 py-1 text-xs font-medium text-danger-fg hover:bg-danger-soft"
                           >
                             Revoke
                           </button>
@@ -567,40 +567,40 @@ export default function NhiDetailPage() {
             </table>
           </div>
         ) : (
-          <p className="py-4 text-center text-sm text-gray-500">No credentials created yet.</p>
+          <p className="py-4 text-center text-sm text-subtle">No credentials created yet.</p>
         )}
       </div>
 
       {/* Metadata */}
-      <div className="rounded-lg border border-gray-200 bg-white p-6 shadow-sm">
-        <h2 className="text-lg font-semibold text-gray-900">Metadata</h2>
+      <div className="rounded-lg border border-line bg-surface p-6 shadow-sm">
+        <h2 className="text-lg font-semibold text-fg">Metadata</h2>
         <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-3 text-sm">
           <div>
-            <dt className="text-gray-500">ID</dt>
-            <dd className="mt-0.5 font-mono text-gray-900 break-all">{identity.id}</dd>
+            <dt className="text-subtle">ID</dt>
+            <dd className="mt-0.5 font-mono text-fg break-all">{identity.id}</dd>
           </div>
           <div>
-            <dt className="text-gray-500">Realm ID</dt>
-            <dd className="mt-0.5 font-mono text-gray-900 break-all">{identity.realmId}</dd>
+            <dt className="text-subtle">Realm ID</dt>
+            <dd className="mt-0.5 font-mono text-fg break-all">{identity.realmId}</dd>
           </div>
           <div>
-            <dt className="text-gray-500">Created</dt>
-            <dd className="mt-0.5 text-gray-900">{new Date(identity.createdAt).toLocaleString()}</dd>
+            <dt className="text-subtle">Created</dt>
+            <dd className="mt-0.5 text-fg">{new Date(identity.createdAt).toLocaleString()}</dd>
           </div>
           <div>
-            <dt className="text-gray-500">Last Updated</dt>
-            <dd className="mt-0.5 text-gray-900">{new Date(identity.updatedAt).toLocaleString()}</dd>
+            <dt className="text-subtle">Last Updated</dt>
+            <dd className="mt-0.5 text-fg">{new Date(identity.updatedAt).toLocaleString()}</dd>
           </div>
           {identity.suspendedAt && (
             <div>
-              <dt className="text-gray-500">Suspended At</dt>
-              <dd className="mt-0.5 text-gray-900">{new Date(identity.suspendedAt).toLocaleString()}</dd>
+              <dt className="text-subtle">Suspended At</dt>
+              <dd className="mt-0.5 text-fg">{new Date(identity.suspendedAt).toLocaleString()}</dd>
             </div>
           )}
           {identity.decommissionedAt && (
             <div>
-              <dt className="text-gray-500">Decommissioned At</dt>
-              <dd className="mt-0.5 text-gray-900">{new Date(identity.decommissionedAt).toLocaleString()}</dd>
+              <dt className="text-subtle">Decommissioned At</dt>
+              <dd className="mt-0.5 text-fg">{new Date(identity.decommissionedAt).toLocaleString()}</dd>
             </div>
           )}
         </dl>
@@ -608,23 +608,23 @@ export default function NhiDetailPage() {
 
       {/* New credential result banner */}
       {newCredentialResult && (
-        <div className="rounded-md border border-green-200 bg-green-50 p-4">
-          <p className="mb-2 text-sm font-medium text-green-800">
+        <div className="rounded-md border border-success-soft bg-success-soft p-4">
+          <p className="mb-2 text-sm font-medium text-success-fg">
             New credential created. Save the key now — it will not be shown again.
           </p>
           <div className="flex items-center gap-2">
-            <code className="flex-1 rounded-md border border-green-300 bg-white px-3 py-2 text-sm font-mono text-gray-900">
+            <code className="flex-1 rounded-md border border-success-soft bg-surface px-3 py-2 text-sm font-mono text-fg">
               {newCredentialResult.key}
             </code>
             <button
               onClick={() => navigator.clipboard.writeText(newCredentialResult.key)}
-              className="rounded-md border border-green-300 bg-white px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-50"
+              className="rounded-md border border-success-soft bg-surface px-3 py-2 text-sm font-medium text-success-fg hover:bg-success-soft"
             >
               Copy
             </button>
             <button
               onClick={() => setNewCredentialResult(null)}
-              className="rounded-md border border-green-300 bg-white px-3 py-2 text-sm font-medium text-green-700 hover:bg-green-50"
+              className="rounded-md border border-success-soft bg-surface px-3 py-2 text-sm font-medium text-success-fg hover:bg-success-soft"
             >
               Dismiss
             </button>
@@ -636,8 +636,8 @@ export default function NhiDetailPage() {
       {showCreateCredential && (
         <div className="fixed inset-0 z-50 flex items-center justify-center">
           <div className="fixed inset-0 bg-black/50" onClick={() => setShowCreateCredential(false)} />
-          <div className="relative z-10 w-full max-w-md rounded-lg bg-white p-6 shadow-xl">
-            <h3 className="text-lg font-semibold text-gray-900">Create Credential</h3>
+          <div className="relative z-10 w-full max-w-md rounded-lg bg-surface p-6 shadow-xl">
+            <h3 className="text-lg font-semibold text-fg">Create Credential</h3>
             <form
               onSubmit={(e) => {
                 e.preventDefault();
@@ -648,7 +648,7 @@ export default function NhiDetailPage() {
               <div>
                 <label
                   htmlFor="field-cred-type"
-                  className="mb-1.5 block text-sm font-medium text-gray-700"
+                  className="mb-1.5 block text-sm font-medium text-muted"
                 >
                   Credential Type
                 </label>
@@ -658,7 +658,7 @@ export default function NhiDetailPage() {
                   onChange={(e) =>
                     setCredForm({ ...credForm, credentialType: e.target.value as NhiCredentialType })
                   }
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 >
                   <option value="API_KEY">API Key</option>
                   <option value="CERTIFICATE">Certificate</option>
@@ -669,7 +669,7 @@ export default function NhiDetailPage() {
               <div>
                 <label
                   htmlFor="field-cred-name"
-                  className="mb-1.5 block text-sm font-medium text-gray-700"
+                  className="mb-1.5 block text-sm font-medium text-muted"
                 >
                   Name
                 </label>
@@ -680,14 +680,14 @@ export default function NhiDetailPage() {
                   onChange={(e) => setCredForm({ ...credForm, name: e.target.value })}
                   required
                   placeholder="e.g., production key"
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 />
               </div>
 
               <div>
                 <label
                   htmlFor="field-cred-expires"
-                  className="mb-1.5 block text-sm font-medium text-gray-700"
+                  className="mb-1.5 block text-sm font-medium text-muted"
                 >
                   Expires At (optional)
                 </label>
@@ -696,7 +696,7 @@ export default function NhiDetailPage() {
                   type="date"
                   value={credForm.expiresAt}
                   onChange={(e) => setCredForm({ ...credForm, expiresAt: e.target.value })}
-                  className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+                  className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 />
               </div>
 
@@ -706,15 +706,15 @@ export default function NhiDetailPage() {
                   id="field-cred-rotation"
                   checked={credForm.rotationRequired}
                   onChange={(e) => setCredForm({ ...credForm, rotationRequired: e.target.checked })}
-                  className="h-4 w-4 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                  className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
                 />
-                <label htmlFor="field-cred-rotation" className="text-sm font-medium text-gray-700">
+                <label htmlFor="field-cred-rotation" className="text-sm font-medium text-muted">
                   Require periodic rotation
                 </label>
               </div>
 
               {createCredentialMutation.isError && (
-                <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+                <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
                   Failed to create credential.
                 </div>
               )}
@@ -723,14 +723,14 @@ export default function NhiDetailPage() {
                 <button
                   type="button"
                   onClick={() => setShowCreateCredential(false)}
-                  className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+                  className="rounded-md border border-line-strong bg-surface px-4 py-2 text-sm font-medium text-muted hover:bg-hover"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
                   disabled={createCredentialMutation.isPending}
-                  className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+                  className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
                 >
                   {createCredentialMutation.isPending ? 'Creating...' : 'Create'}
                 </button>

@@ -154,7 +154,7 @@ export default function ImageUploader({
   return (
     <div className="flex flex-col gap-2">
       {label && (
-        <label className="text-sm font-medium text-gray-700">{label}</label>
+        <label className="text-sm font-medium text-muted">{label}</label>
       )}
 
       {/* Upload Zone */}
@@ -167,8 +167,8 @@ export default function ImageUploader({
         onDrop={handleDrop}
         className={`
           relative flex flex-col items-center justify-center rounded-lg border-2 border-dashed p-6 transition-all cursor-pointer
-          ${isDragging ? 'border-indigo-500 bg-indigo-50' : 'border-gray-300 hover:border-indigo-400 hover:bg-gray-50'}
-          ${previewUrl ? 'border-solid border-indigo-200 bg-indigo-50/50' : ''}
+          ${isDragging ? 'border-accent bg-accent-soft' : 'border-line-strong hover:border-indigo-400 hover:bg-hover'}
+          ${previewUrl ? 'border-solid border-accent-soft bg-accent-soft/50' : ''}
         `}
       >
         <input
@@ -182,8 +182,8 @@ export default function ImageUploader({
 
         {isUploading ? (
           <div className="flex flex-col items-center gap-2">
-            <div className="h-8 w-8 animate-spin rounded-full border-4 border-indigo-200 border-t-indigo-600" />
-            <p className="text-sm text-gray-500">Uploading...</p>
+            <div className="h-8 w-8 animate-spin rounded-full border-4 border-accent-soft border-t-indigo-600" />
+            <p className="text-sm text-subtle">Uploading...</p>
           </div>
         ) : previewUrl ? (
           <div className="flex flex-col items-center gap-4">
@@ -195,12 +195,12 @@ export default function ImageUploader({
                 data-testid={`image-uploader-preview-${uploadType}`}
               />
             </div>
-            <p className="text-xs text-gray-500">Click or drop to replace</p>
+            <p className="text-xs text-subtle">Click or drop to replace</p>
           </div>
         ) : (
           <div className="flex flex-col items-center gap-2">
             <svg
-              className="h-12 w-12 text-gray-400"
+              className="h-12 w-12 text-subtle"
               fill="none"
               viewBox="0 0 24 24"
               stroke="currentColor"
@@ -213,8 +213,8 @@ export default function ImageUploader({
               />
             </svg>
             <div className="text-center">
-              <p className="text-sm font-medium text-gray-700">{description}</p>
-              <p className="text-xs text-gray-500 mt-1">
+              <p className="text-sm font-medium text-muted">{description}</p>
+              <p className="text-xs text-subtle mt-1">
                 PNG, JPG, GIF, SVG, WebP (max {maxSizeMB}MB)
               </p>
             </div>
@@ -224,7 +224,7 @@ export default function ImageUploader({
 
       {/* Error Message */}
       {error && (
-        <p className="text-sm text-red-600" data-testid={`image-uploader-error-${uploadType}`}>
+        <p className="text-sm text-danger" data-testid={`image-uploader-error-${uploadType}`}>
           {error}
         </p>
       )}
@@ -237,7 +237,7 @@ export default function ImageUploader({
             e.stopPropagation();
             handleRemove();
           }}
-          className="text-sm text-red-600 hover:text-red-800"
+          className="text-sm text-danger hover:text-danger-fg"
           data-testid={`image-uploader-remove-${uploadType}`}
         >
           Remove image

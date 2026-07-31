@@ -69,15 +69,15 @@ export default function RealmSettingsStep() {
   return (
     <div className="max-w-xl">
       <div className="mb-6">
-        <h2 className="text-xl font-semibold text-gray-900">Configure Master Realm</h2>
-        <p className="mt-1 text-sm text-gray-500">
+        <h2 className="text-xl font-semibold text-fg">Configure Master Realm</h2>
+        <p className="mt-1 text-sm text-subtle">
           Set up your master realm, which manages all other realms and global settings.
         </p>
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6">
         <div>
-          <label htmlFor="realmName" className="mb-1.5 block text-sm font-medium text-gray-700">
+          <label htmlFor="realmName" className="mb-1.5 block text-sm font-medium text-muted">
             Realm Name
           </label>
           <input
@@ -88,19 +88,19 @@ export default function RealmSettingsStep() {
             value={form.name}
             onChange={(e) => setForm({ ...form, name: e.target.value.toLowerCase() })}
             placeholder="master"
-            className={`w-full rounded-md border px-3 py-2 text-sm shadow-sm focus:ring-1 focus:outline-none ${realmNameError ? 'border-red-500 focus:border-red-500 focus:ring-red-500' : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500'}`}
+            className={`w-full rounded-md border px-3 py-2 text-sm shadow-sm focus:ring-1 focus:outline-none ${realmNameError ? 'border-danger focus:border-danger focus:ring-danger' : 'border-line-strong focus:border-accent focus:ring-accent'}`}
           />
           {realmNameError ? (
-            <p className="mt-1 text-xs text-red-600">{realmNameError}</p>
+            <p className="mt-1 text-xs text-danger">{realmNameError}</p>
           ) : (
-            <p className="mt-1 text-xs text-gray-500">
+            <p className="mt-1 text-xs text-subtle">
               Unique identifier: lowercase letters, numbers, and hyphens only. Must start with a letter.
             </p>
           )}
         </div>
 
         <div>
-          <label htmlFor="displayName" className="mb-1.5 block text-sm font-medium text-gray-900">
+          <label htmlFor="displayName" className="mb-1.5 block text-sm font-medium text-fg">
             Display Name
           </label>
           <input
@@ -110,9 +110,9 @@ export default function RealmSettingsStep() {
             value={form.displayName}
             onChange={(e) => setForm({ ...form, displayName: e.target.value })}
             placeholder="Master Realm"
-            className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+            className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
           />
-          <p className="mt-1 text-xs text-gray-500">
+          <p className="mt-1 text-xs text-subtle">
             A human-readable name shown in the admin console. Optional.
           </p>
         </div>
@@ -122,7 +122,7 @@ export default function RealmSettingsStep() {
             role="alert"
             aria-live="assertive"
             aria-atomic="true"
-            className="rounded-md bg-red-50 p-3 text-sm text-red-700"
+            className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg"
           >
             {localError}
           </div>
@@ -133,17 +133,17 @@ export default function RealmSettingsStep() {
             role="alert"
             aria-live="assertive"
             aria-atomic="true"
-            className="rounded-md bg-red-50 p-3 text-sm text-red-700"
+            className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg"
           >
             {getErrorMessage(mutation.error, 'Failed to save realm settings.')}
           </div>
         )}
 
-        <div className="flex justify-end border-t border-gray-200 pt-4">
+        <div className="flex justify-end border-t border-line pt-4">
           <button
             type="submit"
             disabled={mutation.isPending || !isFormValid}
-            className="flex items-center gap-2 rounded-md bg-indigo-600 px-5 py-2.5 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="flex items-center gap-2 rounded-md bg-accent px-5 py-2.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {mutation.isPending ? (
               <>

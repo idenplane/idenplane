@@ -54,15 +54,15 @@ export default function PolicyCreatePage() {
 
   return (
     <div className="space-y-6">
-      <h1 className="text-2xl font-bold text-gray-900">Create Policy</h1>
+      <h1 className="text-2xl font-bold text-fg">Create Policy</h1>
 
       <form
         onSubmit={handleSubmit}
-        className="space-y-6 rounded-lg border border-gray-200 bg-white p-6 shadow-sm"
+        className="space-y-6 rounded-lg border border-line bg-surface p-6 shadow-sm"
       >
         <div className="grid grid-cols-2 gap-4">
           <div>
-            <label htmlFor="policy-name" className="mb-1.5 block text-sm font-medium text-gray-700">Name</label>
+            <label htmlFor="policy-name" className="mb-1.5 block text-sm font-medium text-muted">Name</label>
             <input
               id="policy-name"
               type="text"
@@ -70,51 +70,51 @@ export default function PolicyCreatePage() {
               value={form.name}
               onChange={(e) => setForm({ ...form, name: e.target.value })}
               placeholder="e.g. require-mfa-for-admin"
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
           <div>
-            <label htmlFor="policy-description" className="mb-1.5 block text-sm font-medium text-gray-700">Description</label>
+            <label htmlFor="policy-description" className="mb-1.5 block text-sm font-medium text-muted">Description</label>
             <input
               id="policy-description"
               type="text"
               value={form.description}
               onChange={(e) => setForm({ ...form, description: e.target.value })}
-              className="w-full rounded-md border border-gray-300 px-3 py-2 text-sm shadow-sm focus:border-indigo-500 focus:ring-1 focus:ring-indigo-500 focus:outline-none"
+              className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
         </div>
 
         <div>
-          <p className="mb-2 text-sm font-medium text-gray-700">Effect</p>
+          <p className="mb-2 text-sm font-medium text-muted">Effect</p>
           <div className="flex gap-6">
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
               <input
                 type="radio"
                 name="effect"
                 value="allow"
                 checked={form.effect === 'allow'}
                 onChange={() => setForm({ ...form, effect: 'allow' })}
-                className="text-indigo-600 focus:ring-indigo-500"
+                className="text-accent focus:ring-accent"
               />
-              <span className="inline-flex rounded-full bg-green-100 px-2 py-0.5 text-xs font-medium text-green-700">Allow</span>
+              <span className="inline-flex rounded-full bg-success-soft px-2 py-0.5 text-xs font-medium text-success-fg">Allow</span>
             </label>
-            <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+            <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
               <input
                 type="radio"
                 name="effect"
                 value="deny"
                 checked={form.effect === 'deny'}
                 onChange={() => setForm({ ...form, effect: 'deny' })}
-                className="text-indigo-600 focus:ring-indigo-500"
+                className="text-accent focus:ring-accent"
               />
-              <span className="inline-flex rounded-full bg-red-100 px-2 py-0.5 text-xs font-medium text-red-700">Deny</span>
+              <span className="inline-flex rounded-full bg-danger-soft px-2 py-0.5 text-xs font-medium text-danger-fg">Deny</span>
             </label>
           </div>
         </div>
 
         <div>
-          <label htmlFor="policy-conditions" className="mb-1.5 block text-sm font-medium text-gray-700">
+          <label htmlFor="policy-conditions" className="mb-1.5 block text-sm font-medium text-muted">
             Conditions (JSON)
           </label>
           <textarea
@@ -126,27 +126,27 @@ export default function PolicyCreatePage() {
               if (conditionsError) validateConditions(e.target.value);
             }}
             onBlur={(e) => validateConditions(e.target.value)}
-            className={`w-full rounded-md border px-3 py-2 font-mono text-sm shadow-sm focus:ring-1 focus:outline-none ${conditionsError ? 'border-red-400 focus:border-red-400 focus:ring-red-400' : 'border-gray-300 focus:border-indigo-500 focus:ring-indigo-500'}`}
+            className={`w-full rounded-md border px-3 py-2 font-mono text-sm shadow-sm focus:ring-1 focus:outline-none ${conditionsError ? 'border-danger focus:border-danger focus:ring-danger' : 'border-line-strong focus:border-accent focus:ring-accent'}`}
           />
           {conditionsError && (
-            <p className="mt-1 text-xs text-red-600">{conditionsError}</p>
+            <p className="mt-1 text-xs text-danger">{conditionsError}</p>
           )}
         </div>
 
         <div>
-          <label className="flex cursor-pointer items-center gap-2 text-sm text-gray-700">
+          <label className="flex cursor-pointer items-center gap-2 text-sm text-muted">
             <input
               type="checkbox"
               checked={form.enabled}
               onChange={(e) => setForm({ ...form, enabled: e.target.checked })}
-              className="rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+              className="rounded border-line-strong text-accent focus:ring-accent"
             />
             Enabled
           </label>
         </div>
 
         {createMutation.isError && (
-          <div className="rounded-md bg-red-50 p-3 text-sm text-red-700">
+          <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
             {getErrorMessage(createMutation.error, 'Failed to create policy.')}
           </div>
         )}
@@ -155,14 +155,14 @@ export default function PolicyCreatePage() {
           <button
             type="button"
             onClick={() => navigate(`/console/realms/${name}/authorization-policies`)}
-            className="rounded-md border border-gray-300 bg-white px-4 py-2 text-sm font-medium text-gray-700 hover:bg-gray-50"
+            className="rounded-md border border-line-strong bg-surface px-4 py-2 text-sm font-medium text-muted hover:bg-hover"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={createMutation.isPending || !!conditionsError}
-            className="rounded-md bg-indigo-600 px-4 py-2 text-sm font-medium text-white hover:bg-indigo-700 disabled:opacity-50"
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {createMutation.isPending ? 'Creating...' : 'Create Policy'}
           </button>
