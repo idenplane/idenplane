@@ -1,8 +1,20 @@
-// Mock fetch globally before imports
-const mockFetch = jest.fn();
+// Scheduled delivery goes through the SSRF-safe HTTP client, never raw fetch,
+// so that is what these tests mock.
+const mockSafePost = jest.fn();
+jest.mock('../common/security/safe-http-client.js', () => ({
+  ...jest.requireActual('../common/security/safe-http-client.js'),
+  safePost: (...args: unknown[]) => mockSafePost(...args),
+}));
+
+// Any direct fetch() from the delivery path is a regression back to the
+// unprotected client, so fail loudly rather than silently allowing it.
+const mockFetch = jest.fn(() => {
+  throw new Error('webhook delivery must not call fetch() directly');
+});
 global.fetch = mockFetch as any;
 
 import { WebhookSchedulerService } from './webhook-scheduler.service.js';
+import { SsrfBlockedError } from '../common/security/safe-http-client.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import {
   createMockPrismaService,
@@ -133,10 +145,7 @@ describe('WebhookSchedulerService', () => {
       prisma.webhookDelivery.update.mockResolvedValue({});
       prisma.webhookEvent.update.mockResolvedValue({});
 
-      mockFetch.mockResolvedValueOnce({
-        status: 200,
-        text: async () => 'OK',
-      });
+      mockSafePost.mockResolvedValueOnce({ statusCode: 200, body: 'OK' });
 
       await service.processQueue();
 
@@ -156,7 +165,7 @@ describe('WebhookSchedulerService', () => {
       prisma.webhookDelivery.update.mockResolvedValue({});
       prisma.webhookEvent.update.mockResolvedValue({});
 
-      mockFetch.mockRejectedValueOnce(new Error('Connection refused'));
+      mockSafePost.mockRejectedValueOnce(new Error('Connection refused'));
 
       await service.processQueue();
 
@@ -181,7 +190,7 @@ describe('WebhookSchedulerService', () => {
       prisma.webhookDelivery.update.mockResolvedValue({});
       prisma.webhookEvent.update.mockResolvedValue({});
 
-      mockFetch.mockRejectedValueOnce(new Error('Still down'));
+      mockSafePost.mockRejectedValueOnce(new Error('Still down'));
 
       await service.processQueue();
 
@@ -199,10 +208,7 @@ describe('WebhookSchedulerService', () => {
       prisma.webhookDelivery.update.mockResolvedValue({});
       prisma.webhookEvent.update.mockResolvedValue({});
 
-      mockFetch.mockResolvedValueOnce({
-        status: 200,
-        text: async () => 'OK',
-      });
+      mockSafePost.mockResolvedValueOnce({ statusCode: 200, body: 'OK' });
 
       await service.processQueue();
 
@@ -224,17 +230,16 @@ describe('WebhookSchedulerService', () => {
       prisma.webhookDelivery.update.mockResolvedValue({});
       prisma.webhookEvent.update.mockResolvedValue({});
 
-      mockFetch.mockResolvedValueOnce({
-        status: 200,
-        text: async () => 'OK',
-      });
+      mockSafePost.mockResolvedValueOnce({ statusCode: 200, body: 'OK' });
 
       await service.processQueue();
 
-      const [, fetchOptions] = mockFetch.mock.calls[0] as [string, RequestInit];
-      const sig = (fetchOptions.headers as Record<string, string>)[
-        'X-Webhook-Signature'
+      const [, , sentHeaders] = mockSafePost.mock.calls[0] as [
+        string,
+        string,
+        Record<string, string>,
       ];
+      const sig = sentHeaders['X-Webhook-Signature'];
       expect(sig).toMatch(/^sha256=[a-f0-9]{64}$/);
 
       // The signature should differ from one computed with the ciphertext directly
@@ -243,6 +248,36 @@ describe('WebhookSchedulerService', () => {
         JSON.stringify(pendingEvent.payload),
       );
       expect(sig).not.toBe(wrongSig);
+    });
+
+    it('should fail the event without leaking the target when SSRF policy blocks delivery', async () => {
+      prisma.webhookEvent.findMany.mockResolvedValue([pendingEvent]);
+      prisma.webhookEvent.updateMany.mockResolvedValue({ count: 1 });
+      prisma.webhook.findMany.mockResolvedValue([mockWebhook]);
+      prisma.webhookDelivery.create.mockResolvedValue({ id: 'del-1' });
+      prisma.webhookDelivery.update.mockResolvedValue({});
+      prisma.webhookEvent.update.mockResolvedValue({});
+
+      mockSafePost.mockRejectedValueOnce(new SsrfBlockedError());
+
+      await service.processQueue();
+
+      // The event is never marked DELIVERED for a blocked target...
+      const eventUpdate = prisma.webhookEvent.update.mock.calls[0][0] as {
+        data: { status: string; lastError?: string | null };
+      };
+      expect(eventUpdate.data.status).toBe('FAILED');
+
+      // ...and neither the event nor the delivery row records anything about
+      // the address that was rejected.
+      expect(eventUpdate.data.lastError).toBe(
+        'Delivery blocked: target address is not publicly routable',
+      );
+      const deliveryUpdate = prisma.webhookDelivery.update.mock.calls[0][0] as {
+        data: { success: boolean; response?: string };
+      };
+      expect(deliveryUpdate.data.success).toBe(false);
+      expect(deliveryUpdate.data.response).not.toMatch(/\d+\.\d+\.\d+\.\d+/);
     });
   });
 

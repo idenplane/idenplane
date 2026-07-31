@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SmsProvider } from './sms-provider.interface.js';
+import { safePost } from '../../common/security/safe-http-client.js';
 
 interface WebhookHeader {
   name: string;
@@ -74,28 +75,26 @@ export class WebhookSmsProvider implements SmsProvider {
       timestamp: new Date().toISOString(),
     };
 
-    const controller = new AbortController();
-    const timeoutId = setTimeout(() => controller.abort(), this.timeoutMs);
-
     try {
-      const response = await fetch(this.webhookUrl, {
-        method: 'POST',
-        headers: requestHeaders,
-        body: JSON.stringify(requestBody),
-        signal: controller.signal,
-      });
+      // Delivered through the SSRF-safe client (same guard as the event
+      // webhooks): SMS_WEBHOOK_URL is operator-supplied configuration, so
+      // without this the provider would happily POST to a loopback or
+      // cloud-metadata address.
+      const response = await safePost(
+        this.webhookUrl,
+        JSON.stringify(requestBody),
+        requestHeaders,
+        { timeoutMs: this.timeoutMs },
+      );
 
-      clearTimeout(timeoutId);
-
-      if (!response.ok) {
-        const errorBody = await response.text();
-        throw new Error(`Webhook API error: ${response.status} ${errorBody}`);
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw new Error(
+          `Webhook API error: ${response.statusCode} ${response.body}`,
+        );
       }
 
       this.logger.log(`SMS sent via webhook to ${to}`);
     } catch (error) {
-      clearTimeout(timeoutId);
-
       if (error instanceof Error) {
         if (error.name === 'AbortError') {
           throw new Error(

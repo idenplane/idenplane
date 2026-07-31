@@ -8,6 +8,7 @@ import {
   ArrayNotEmpty,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { IsSafeWebhookUrl } from '../common/security/is-safe-webhook-url.validator.js';
 
 export class CreateWebhookDto {
   @ApiProperty({ example: 'https://example.com/webhook' })
@@ -15,6 +16,7 @@ export class CreateWebhookDto {
     { require_tld: false, require_protocol: true },
     { message: 'url must be a valid URL' },
   )
+  @IsSafeWebhookUrl()
   url!: string;
 
   @ApiProperty({ example: 'my-signing-secret', minLength: 8 })
@@ -62,6 +64,7 @@ export class UpdateWebhookDto {
     { require_tld: false, require_protocol: true },
     { message: 'url must be a valid URL' },
   )
+  @IsSafeWebhookUrl()
   url?: string;
 
   @ApiPropertyOptional({ example: 'new-signing-secret', minLength: 8 })
