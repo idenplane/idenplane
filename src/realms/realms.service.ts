@@ -7,11 +7,13 @@ import {
 import { Prisma, type Realm } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { JwkService } from '../crypto/jwk.service.js';
+import { CryptoService } from '../crypto/crypto.service.js';
 import { ScopeSeedService } from '../scopes/scope-seed.service.js';
 import { ThemeService } from '../theme/theme.service.js';
 import { CacheService } from '../cache/cache.service.js';
 import { CreateRealmDto } from './dto/create-realm.dto.js';
 import { UpdateRealmDto } from './dto/update-realm.dto.js';
+import { encryptEmailProviderConfig } from './realm-secrets.util.js';
 
 @Injectable()
 export class RealmsService {
@@ -21,6 +23,7 @@ export class RealmsService {
     private readonly scopeSeedService: ScopeSeedService,
     private readonly themeService: ThemeService,
     private readonly cache: CacheService,
+    private readonly crypto: CryptoService,
   ) {}
 
   private redactSmtpPassword(realm: Record<string, unknown> | null) {
@@ -50,7 +53,7 @@ export class RealmsService {
         smtpHost: dto.smtpHost,
         smtpPort: dto.smtpPort,
         smtpUser: dto.smtpUser,
-        smtpPassword: dto.smtpPassword,
+        smtpPassword: this.crypto.encryptSecret(dto.smtpPassword),
         smtpFrom: dto.smtpFrom,
         smtpSecure: dto.smtpSecure,
         emailProvider: dto.emailProvider,
@@ -62,8 +65,10 @@ export class RealmsService {
         // `npm run lint --fix` deleted it — breaking the build on a command
         // that is supposed to only check formatting. Naming the real target
         // type states the intent and is not flagged.
-        emailProviderConfig: dto.emailProviderConfig as
-          Prisma.InputJsonValue | undefined,
+        emailProviderConfig: encryptEmailProviderConfig(
+          this.crypto,
+          dto.emailProviderConfig,
+        ) as Prisma.InputJsonValue | undefined,
         passwordMinLength: dto.passwordMinLength,
         passwordRequireUppercase: dto.passwordRequireUppercase,
         passwordRequireLowercase: dto.passwordRequireLowercase,
@@ -132,9 +137,9 @@ export class RealmsService {
         captchaEnabled: dto.captchaEnabled,
         captchaProvider: dto.captchaProvider,
         recaptchaSiteKey: dto.recaptchaSiteKey,
-        recaptchaSecretKey: dto.recaptchaSecretKey,
+        recaptchaSecretKey: this.crypto.encryptSecret(dto.recaptchaSecretKey),
         hcaptchaSiteKey: dto.hcaptchaSiteKey,
-        hcaptchaSecretKey: dto.hcaptchaSecretKey,
+        hcaptchaSecretKey: this.crypto.encryptSecret(dto.hcaptchaSecretKey),
         captchaScoreThreshold: dto.captchaScoreThreshold,
         // SCIM provisioning
         scimEnabled: dto.scimEnabled,
@@ -236,7 +241,10 @@ export class RealmsService {
       smtpFrom: dto.smtpFrom,
       smtpSecure: dto.smtpSecure,
       emailProvider: dto.emailProvider,
-      emailProviderConfig: dto.emailProviderConfig,
+      emailProviderConfig: encryptEmailProviderConfig(
+        this.crypto,
+        dto.emailProviderConfig,
+      ),
       passwordMinLength: dto.passwordMinLength,
       passwordRequireUppercase: dto.passwordRequireUppercase,
       passwordRequireLowercase: dto.passwordRequireLowercase,
@@ -302,9 +310,9 @@ export class RealmsService {
       captchaEnabled: dto.captchaEnabled,
       captchaProvider: dto.captchaProvider,
       recaptchaSiteKey: dto.recaptchaSiteKey,
-      recaptchaSecretKey: dto.recaptchaSecretKey,
+      recaptchaSecretKey: this.crypto.encryptSecret(dto.recaptchaSecretKey),
       hcaptchaSiteKey: dto.hcaptchaSiteKey,
-      hcaptchaSecretKey: dto.hcaptchaSecretKey,
+      hcaptchaSecretKey: this.crypto.encryptSecret(dto.hcaptchaSecretKey),
       captchaScoreThreshold: dto.captchaScoreThreshold,
       // SCIM provisioning
       scimEnabled: dto.scimEnabled,
@@ -319,7 +327,7 @@ export class RealmsService {
 
     // Only update password if a real value is provided (not the redacted placeholder)
     if (dto.smtpPassword && dto.smtpPassword !== '••••••') {
-      data.smtpPassword = dto.smtpPassword;
+      data.smtpPassword = this.crypto.encryptSecret(dto.smtpPassword);
     }
 
     const realm = await this.prisma.realm.update({

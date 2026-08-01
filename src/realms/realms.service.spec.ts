@@ -6,6 +6,7 @@ jest.mock('../crypto/jwk.service.js', () => ({
 }));
 
 import { RealmsService } from './realms.service.js';
+import { CryptoService } from '../crypto/crypto.service.js';
 import {
   createMockPrismaService,
   MockPrismaService,
@@ -80,6 +81,7 @@ describe('RealmsService', () => {
       scopeSeedService as any,
       themeService as any,
       cacheService as any,
+      new CryptoService(),
     );
   });
 
@@ -121,6 +123,87 @@ describe('RealmsService', () => {
       await expect(service.create({ name: 'test-realm' })).rejects.toThrow(
         ConflictException,
       );
+    });
+  });
+
+  describe('secret encryption', () => {
+    const crypto = new CryptoService();
+
+    beforeEach(() => {
+      prisma.realm.findUnique.mockResolvedValue(null);
+      jwkService.generateRsaKeyPair.mockResolvedValue(mockKeyPair);
+      prisma.realm.create.mockImplementation(({ data }: any) =>
+        Promise.resolve({ ...mockRealm, ...data }),
+      );
+    });
+
+    it('should encrypt smtpPassword, recaptchaSecretKey, and hcaptchaSecretKey on create', async () => {
+      await service.create({
+        name: 'test-realm',
+        smtpPassword: 'plain-smtp-pass',
+        recaptchaSecretKey: 'plain-recaptcha-secret',
+        hcaptchaSecretKey: 'plain-hcaptcha-secret',
+      });
+
+      const { data } = prisma.realm.create.mock.calls[0][0];
+      expect(data.smtpPassword).not.toBe('plain-smtp-pass');
+      expect(crypto.decrypt(data.smtpPassword)).toBe('plain-smtp-pass');
+      expect(data.recaptchaSecretKey).not.toBe('plain-recaptcha-secret');
+      expect(crypto.decrypt(data.recaptchaSecretKey)).toBe(
+        'plain-recaptcha-secret',
+      );
+      expect(data.hcaptchaSecretKey).not.toBe('plain-hcaptcha-secret');
+      expect(crypto.decrypt(data.hcaptchaSecretKey)).toBe(
+        'plain-hcaptcha-secret',
+      );
+    });
+
+    it('should encrypt nested emailProviderConfig secrets but not the from/domain/region fields', async () => {
+      await service.create({
+        name: 'test-realm',
+        emailProviderConfig: {
+          resend: { apiKey: 're_plain', from: 'hello@example.com' },
+          postmark: { serverToken: 'tok_plain', from: 'hello@example.com' },
+        },
+      });
+
+      const { data } = prisma.realm.create.mock.calls[0][0];
+      const config = data.emailProviderConfig as any;
+      expect(config.resend.apiKey).not.toBe('re_plain');
+      expect(crypto.decrypt(config.resend.apiKey)).toBe('re_plain');
+      expect(config.resend.from).toBe('hello@example.com');
+      expect(config.postmark.serverToken).not.toBe('tok_plain');
+      expect(crypto.decrypt(config.postmark.serverToken)).toBe('tok_plain');
+      expect(config.postmark.from).toBe('hello@example.com');
+    });
+
+    it('should not double-encrypt a smtpPassword that round-trips through update unchanged', async () => {
+      const encryptedOnce = crypto.encrypt('plain-smtp-pass');
+      prisma.realm.findUnique.mockResolvedValue({
+        ...mockRealm,
+        smtpPassword: encryptedOnce,
+      });
+      prisma.realm.update.mockImplementation(({ data }: any) =>
+        Promise.resolve({ ...mockRealm, ...data }),
+      );
+
+      await service.update('test-realm', { smtpPassword: encryptedOnce });
+
+      const { data } = prisma.realm.update.mock.calls[0][0];
+      expect(data.smtpPassword).toBe(encryptedOnce);
+      expect(crypto.decrypt(data.smtpPassword)).toBe('plain-smtp-pass');
+    });
+
+    it('should not touch smtpPassword on update when the redacted placeholder is sent back', async () => {
+      prisma.realm.findUnique.mockResolvedValue(mockRealm);
+      prisma.realm.update.mockImplementation(({ data }: any) =>
+        Promise.resolve({ ...mockRealm, ...data }),
+      );
+
+      await service.update('test-realm', { smtpPassword: '••••••' });
+
+      const { data } = prisma.realm.update.mock.calls[0][0];
+      expect(data.smtpPassword).toBeUndefined();
     });
   });
 
