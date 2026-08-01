@@ -4,6 +4,12 @@ import type { Realm, EmailProviderType, EmailProviderConfig } from '../../types'
 import { updateRealm, sendTestEmail, testRealmSmtp } from '../../api/realms';
 import PasswordInput from '../PasswordInput';
 import { getErrorMessage } from '../../utils/getErrorMessage';
+import {
+  Icons,
+  ProviderSelectorGrid,
+  MutationStatusBanner,
+  type ProviderOption,
+} from '../ui';
 
 type EmailProviderFormProps = {
   realm: Realm;
@@ -73,14 +79,6 @@ function buildProviderConfig(form: EmailFormState): EmailProviderConfig {
 
 // ── Provider option cards ──────────────────────────────────────────────────
 
-type ProviderOption = {
-  value: EmailProviderType;
-  label: string;
-  description: string;
-  badge?: string;
-  icon: React.ReactNode;
-};
-
 function ServerIcon({ className }: { className?: string }) {
   return (
     <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
@@ -88,23 +86,6 @@ function ServerIcon({ className }: { className?: string }) {
       <rect x="2" y="14" width="20" height="8" rx="2" />
       <line x1="6" y1="6" x2="6.01" y2="6" />
       <line x1="6" y1="18" x2="6.01" y2="18" />
-    </svg>
-  );
-}
-
-function BanIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10" />
-      <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
-    </svg>
-  );
-}
-
-function ZapIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" />
     </svg>
   );
 }
@@ -140,12 +121,12 @@ function StampIcon({ className }: { className?: string }) {
   );
 }
 
-const PROVIDERS: ProviderOption[] = [
+const PROVIDERS: ProviderOption<EmailProviderType>[] = [
   {
     value: 'none',
     label: 'Disabled',
     description: 'Email delivery is turned off for this realm.',
-    icon: <BanIcon className="h-5 w-5" />,
+    icon: <Icons.Ban className="h-5 w-5" />,
   },
   {
     value: 'smtp',
@@ -158,7 +139,7 @@ const PROVIDERS: ProviderOption[] = [
     label: 'Resend',
     description: 'Modern email API built for developers.',
     badge: 'Popular',
-    icon: <ZapIcon className="h-5 w-5" />,
+    icon: <Icons.Zap className="h-5 w-5" />,
   },
   {
     value: 'sendgrid',
@@ -480,48 +461,11 @@ export default function EmailProviderForm({ realm }: EmailProviderFormProps) {
         </div>
 
         {/* Provider grid */}
-        <div className="grid grid-cols-3 gap-3">
-          {PROVIDERS.map((p) => {
-            const selected = form.emailProvider === p.value;
-            return (
-              <button
-                key={p.value}
-                type="button"
-                onClick={() => setForm((f) => ({ ...f, emailProvider: p.value }))}
-                className={[
-                  'relative flex flex-col gap-1.5 rounded-lg border-2 p-4 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
-                  selected
-                    ? 'border-accent bg-accent-soft'
-                    : 'border-line bg-surface hover:border-line-strong hover:bg-hover',
-                ].join(' ')}
-                aria-pressed={selected}
-              >
-                {p.badge && (
-                  <span className="absolute right-2 top-2 rounded-full bg-accent-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
-                    {p.badge}
-                  </span>
-                )}
-                <span
-                  className={[
-                    'flex h-8 w-8 items-center justify-center rounded-md',
-                    selected ? 'bg-accent text-white' : 'bg-sunken text-subtle',
-                  ].join(' ')}
-                >
-                  {p.icon}
-                </span>
-                <span
-                  className={[
-                    'text-sm font-semibold',
-                    selected ? 'text-accent' : 'text-fg',
-                  ].join(' ')}
-                >
-                  {p.label}
-                </span>
-                <span className="text-xs leading-snug text-subtle">{p.description}</span>
-              </button>
-            );
-          })}
-        </div>
+        <ProviderSelectorGrid
+          options={PROVIDERS}
+          value={form.emailProvider}
+          onChange={(v) => setForm((f) => ({ ...f, emailProvider: v }))}
+        />
 
         {/* Provider-specific fields */}
         {hasConfig && (
@@ -533,17 +477,12 @@ export default function EmailProviderForm({ realm }: EmailProviderFormProps) {
           </div>
         )}
 
-        {/* Status banners */}
-        {updateMutation.isSuccess && (
-          <div role="status" className="rounded-md bg-success-soft p-3 text-sm text-success-fg">
-            Email settings saved successfully.
-          </div>
-        )}
-        {updateMutation.isError && (
-          <div role="alert" className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
-            {getErrorMessage(updateMutation.error, 'Failed to save email settings.')}
-          </div>
-        )}
+        {/* Status banner */}
+        <MutationStatusBanner
+          mutation={updateMutation}
+          successMessage="Email settings saved successfully."
+          errorFallback="Failed to save email settings."
+        />
 
         <div className="flex justify-end border-t border-line pt-4">
           <button
