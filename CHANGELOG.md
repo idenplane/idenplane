@@ -10,7 +10,7 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 ## [Unreleased]
 
 ### Added
-- `@idenplane/mcp` — first-party stdio MCP server for AI agent integration
+- `idenplane-mcp` — first-party stdio MCP server for AI agent integration
 - Multi-provider email abstraction (Resend, SendGrid, Mailgun, Postmark, SMTP)
 - SMS provider configuration UI with card-grid selector
 - Admin UI: webhooks, service accounts, organizations, custom attributes, SCIM, authorization policies, plugins, impersonation, and risk-assessment routing pages

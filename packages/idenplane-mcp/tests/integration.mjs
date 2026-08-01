@@ -1,5 +1,5 @@
 /**
- * Integration tests for @idenplane/mcp — exercises all tool calls over the MCP protocol.
+ * Integration tests for idenplane-mcp — exercises all tool calls over the MCP protocol.
  *
  * Prerequisites:
  *   docker compose up db -d && npm run start:dev   (from repo root)

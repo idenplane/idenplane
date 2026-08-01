@@ -1,4 +1,4 @@
-# @idenplane/mcp
+# idenplane-mcp
 
 First-party MCP (Model Context Protocol) server for [Idenplane](https://idenplane.com) — manage identity in natural language from Claude Desktop, Claude Code, or Cursor.
 
@@ -44,7 +44,7 @@ Add this to `~/Library/Application Support/Claude/claude_desktop_config.json` (m
   "mcpServers": {
     "idenplane": {
       "command": "npx",
-      "args": ["-y", "@idenplane/mcp"],
+      "args": ["-y", "idenplane-mcp"],
       "env": {
         "IDENPLANE_URL": "http://localhost:3000",
         "IDENPLANE_ADMIN_TOKEN": "your-admin-api-key"
@@ -62,7 +62,7 @@ Run once to register the server for this project:
 claude mcp add idenplane \
   -e IDENPLANE_URL=http://localhost:3000 \
   -e IDENPLANE_ADMIN_TOKEN=your-admin-api-key \
-  -- npx -y @idenplane/mcp
+  -- npx -y idenplane-mcp
 ```
 
 Or add it globally (available in all projects):
@@ -71,7 +71,7 @@ Or add it globally (available in all projects):
 claude mcp add --scope user idenplane \
   -e IDENPLANE_URL=http://localhost:3000 \
   -e IDENPLANE_ADMIN_TOKEN=your-admin-api-key \
-  -- npx -y @idenplane/mcp
+  -- npx -y idenplane-mcp
 ```
 
 ## Cursor
@@ -83,7 +83,7 @@ Add to `.cursor/mcp.json` in your project root:
   "mcpServers": {
     "idenplane": {
       "command": "npx",
-      "args": ["-y", "@idenplane/mcp"],
+      "args": ["-y", "idenplane-mcp"],
       "env": {
         "IDENPLANE_URL": "http://localhost:3000",
         "IDENPLANE_ADMIN_TOKEN": "your-admin-api-key"

@@ -1,9 +1,10 @@
-name: Publish @idenplane/mcp
+name: Publish idenplane-mcp
 
-# Publishes packages/idenplane-mcp to npm as @idenplane/mcp, so the README's
-# documented `npx -y @idenplane/mcp` actually resolves (idenplane#1243 —
-# package.json was already fully configured for publishing: name, bin,
-# files, publishConfig.access — but nothing ever published it).
+# Publishes packages/idenplane-mcp to npm as idenplane-mcp (unscoped — the
+# @idenplane npm organization doesn't exist, and creating one is a manual
+# account/billing action on npmjs.com, not something a publish token can do;
+# publishing unscoped avoids that dependency entirely), so the README's
+# documented `npx -y idenplane-mcp` actually resolves (idenplane#1243).
 #
 #   - every mcp-v* git tag -> publishes, after checking the tag version
 #     matches packages/idenplane-mcp/package.json (same safety check
@@ -14,8 +15,8 @@ name: Publish @idenplane/mcp
 #
 # Requires one repo secret:
 #   NPM_TOKEN - an npm access token (Automation type recommended so it
-#               isn't tied to 2FA prompts) with publish rights to the
-#               @idenplane org/scope.
+#               isn't tied to 2FA prompts) with publish rights for this
+#               package under the token owner's npm account.
 on:
   push:
     tags: ['mcp-v*']
@@ -86,6 +87,6 @@ jobs:
 
       - name: Publish to npm
         working-directory: packages/idenplane-mcp
-        run: npm publish --access public
+        run: npm publish
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
