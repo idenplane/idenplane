@@ -10,13 +10,9 @@ export function parseJwt(token: string): TokenClaims {
     throw new Error('Invalid JWT format');
   }
   const payload = parts[1];
-  const padded = payload.replace(/-/g, '+').replace(/_/g, '/');
-  const json = decodeURIComponent(
-    atob(padded)
-      .split('')
-      .map((c) => '%' + ('00' + c.charCodeAt(0).toString(16)).slice(-2))
-      .join(''),
-  );
+  const base64 = payload.replace(/-/g, '+').replace(/_/g, '/');
+  const bytes = Uint8Array.from(atob(base64), (char) => char.charCodeAt(0));
+  const json = new TextDecoder().decode(bytes);
   return JSON.parse(json);
 }
 

@@ -315,6 +315,27 @@ describe('IdenplaneClient', () => {
       expect(claims?.sub).toBe('user-123');
       expect(claims?.email).toBe('test@example.com');
     });
+
+    it('reuses the parsed claims object across calls for the same token', () => {
+      const client = new IdenplaneClient(BASE_CONFIG);
+      (client as any).storage.set('access_token', makeValidAccessToken());
+      const first = client.getTokenClaims();
+      const second = client.getTokenClaims();
+      // Same reference => the second call hit the cache instead of re-parsing.
+      expect(second).toBe(first);
+    });
+
+    it('re-parses when the access token in storage changes', () => {
+      const client = new IdenplaneClient(BASE_CONFIG);
+      (client as any).storage.set('access_token', makeValidAccessToken());
+      const first = client.getTokenClaims();
+
+      (client as any).storage.set('access_token', makeValidAccessToken({ sub: 'user-456' }));
+      const second = client.getTokenClaims();
+
+      expect(second).not.toBe(first);
+      expect(second?.sub).toBe('user-456');
+    });
   });
 
   // ── Role helpers ──────────────────────────────────────────────
