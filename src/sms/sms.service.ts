@@ -1,7 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { SmsProvider } from './providers/sms-provider.interface.js';
-import { TwilioSmsProvider } from './providers/twilio.provider.js';
 import { VonageSmsProvider } from './providers/vonage.provider.js';
 import { AwsSnsProvider } from './providers/aws-sns.provider.js';
 import { WebhookSmsProvider } from './providers/webhook.provider.js';
@@ -35,17 +34,31 @@ export class SmsService {
       return null;
     }
 
-    const provider = this.createProvider(realm.smsProvider as SmsProviderType);
+    const provider = await this.createProvider(
+      realm.smsProvider as SmsProviderType,
+    );
     this.logger.debug(
       `SMS provider "${realm.smsProvider}" requested for realm "${realmName}"`,
     );
     return provider;
   }
 
-  private createProvider(providerType: SmsProviderType): SmsProvider | null {
+  /**
+   * The `twilio` SDK is a large (~40MB) dependency that only realms actually
+   * using Twilio need. SmsModule is registered globally, so a static import
+   * would load it into every server process at startup regardless of
+   * config — imported dynamically here so it's only pulled in when a realm
+   * is actually configured for Twilio.
+   */
+  private async createProvider(
+    providerType: SmsProviderType,
+  ): Promise<SmsProvider | null> {
     switch (providerType) {
-      case SmsProviderType.TWILIO:
+      case SmsProviderType.TWILIO: {
+        const { TwilioSmsProvider } =
+          await import('./providers/twilio.provider.js');
         return new TwilioSmsProvider();
+      }
       case SmsProviderType.VONAGE:
         return new VonageSmsProvider();
       case SmsProviderType.AWS_SNS:
@@ -75,7 +88,9 @@ export class SmsService {
       return;
     }
 
-    const provider = this.createProvider(realm.smsProvider as SmsProviderType);
+    const provider = await this.createProvider(
+      realm.smsProvider as SmsProviderType,
+    );
     if (!provider) {
       this.logger.error(
         `Failed to create SMS provider for realm "${realmName}"`,
