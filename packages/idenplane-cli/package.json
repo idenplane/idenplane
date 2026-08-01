@@ -21,7 +21,8 @@
   "devDependencies": {
     "tsup": "^8.4.0",
     "typescript": "^5.7.0",
-    "@types/node": "^22.10.7"
+    "@types/node": "^22.10.7",
+    "@idenplane/http-internal": "file:../idenplane-http-internal"
   },
   "files": [
     "dist",

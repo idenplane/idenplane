@@ -1,4 +1,5 @@
 import chalk from 'chalk';
+import { buildUrlWithQuery, extractErrorMessage, rawRequest } from '@idenplane/http-internal';
 import { requireAuth } from './config.js';
 import type { CliConfig } from './types.js';
 
@@ -7,76 +8,42 @@ export class HttpClient {
   private headers: Record<string, string>;
 
   constructor(config?: { serverUrl: string; headers?: Record<string, string> }) {
-    if (config) {
-      this.serverUrl = config.serverUrl.replace(/\/$/, '');
-      this.headers = {
-        'Content-Type': 'application/json',
-        ...config.headers,
-      };
-    } else {
-      const auth = requireAuth();
-      this.serverUrl = auth.serverUrl.replace(/\/$/, '');
-      this.headers = {
-        'Content-Type': 'application/json',
-        ...auth.headers,
-      };
-    }
-  }
-
-  private url(path: string): string {
-    return `${this.serverUrl}${path}`;
+    const { serverUrl, headers } = config ?? requireAuth();
+    this.serverUrl = serverUrl.replace(/\/$/, '');
+    this.headers = {
+      'Content-Type': 'application/json',
+      ...headers,
+    };
   }
 
   async get<T>(path: string, query?: Record<string, string>): Promise<T> {
-    const url = new URL(this.url(path));
-    if (query) {
-      for (const [k, v] of Object.entries(query)) {
-        if (v !== undefined) url.searchParams.set(k, v);
-      }
-    }
-    return this.request<T>('GET', url.toString());
+    return this.request<T>('GET', buildUrlWithQuery(this.serverUrl, path, query));
   }
 
   async post<T>(path: string, body?: unknown, query?: Record<string, string>): Promise<T> {
-    let fullUrl = this.url(path);
-    if (query) {
-      const url = new URL(fullUrl);
-      for (const [k, v] of Object.entries(query)) {
-        if (v !== undefined) url.searchParams.set(k, v);
-      }
-      fullUrl = url.toString();
-    }
-    return this.request<T>('POST', fullUrl, body);
+    return this.request<T>('POST', buildUrlWithQuery(this.serverUrl, path, query), body);
   }
 
   async put<T>(path: string, body?: unknown): Promise<T> {
-    return this.request<T>('PUT', this.url(path), body);
+    return this.request<T>('PUT', buildUrlWithQuery(this.serverUrl, path), body);
   }
 
   async delete<T>(path: string, body?: unknown): Promise<T | void> {
-    return this.request<T>('DELETE', this.url(path), body);
+    return this.request<T>('DELETE', buildUrlWithQuery(this.serverUrl, path), body);
   }
 
   private async request<T>(method: string, url: string, body?: unknown): Promise<T> {
-    const res = await fetch(url, {
-      method,
-      headers: this.headers,
-      body: body ? JSON.stringify(body) : undefined,
-    });
+    const response = await rawRequest({ method, url, headers: this.headers, body });
 
-    if (res.status === 204) return undefined as T;
+    if (response.status === 204) return undefined as T;
 
-    const json = (await res.json().catch(() => null)) as Record<string, unknown> | null;
-
-    if (!res.ok) {
-      const msg = (json?.message ?? json?.error ?? res.statusText) as unknown;
-      const display = Array.isArray(msg) ? msg.join(', ') : msg;
-      const error = new Error(`Error ${res.status}: ${display}`);
+    if (!response.ok) {
+      const error = new Error(`Error ${response.status}: ${extractErrorMessage(response)}`);
       error.message = chalk.red(error.message);
       throw error;
     }
 
-    return json as T;
+    return response.json as T;
   }
 }
 

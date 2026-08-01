@@ -1,3 +1,5 @@
+import { buildUrlWithQuery, extractErrorMessage, rawRequest } from '@idenplane/http-internal';
+
 export interface ClientConfig {
   serverUrl: string;
   adminToken: string;
@@ -30,41 +32,27 @@ export class IdenplaneClient {
   }
 
   async get<T>(path: string, query?: Record<string, string | undefined>): Promise<T> {
-    const url = new URL(`${this.baseUrl}${path}`);
-    if (query) {
-      for (const [k, v] of Object.entries(query)) {
-        if (v !== undefined) url.searchParams.set(k, v);
-      }
-    }
-    return this.request<T>('GET', url.toString());
+    return this.request<T>('GET', buildUrlWithQuery(this.baseUrl, path, query));
   }
 
   async post<T>(path: string, body?: unknown): Promise<T> {
-    return this.request<T>('POST', `${this.baseUrl}${path}`, body);
+    return this.request<T>('POST', buildUrlWithQuery(this.baseUrl, path), body);
   }
 
   async delete<T>(path: string, body?: unknown): Promise<T | undefined> {
-    return this.request<T>('DELETE', `${this.baseUrl}${path}`, body);
+    return this.request<T>('DELETE', buildUrlWithQuery(this.baseUrl, path), body);
   }
 
   private async request<T>(method: string, url: string, body?: unknown): Promise<T> {
-    const res = await fetch(url, {
-      method,
-      headers: this.headers,
-      body: body !== undefined ? JSON.stringify(body) : undefined,
-    });
+    const response = await rawRequest({ method, url, headers: this.headers, body });
 
-    if (res.status === 204) return undefined as T;
+    if (response.status === 204) return undefined as T;
 
-    const json = (await res.json().catch(() => null)) as Record<string, unknown> | null;
-
-    if (!res.ok) {
-      const msg = json?.['message'] ?? json?.['error'] ?? res.statusText;
-      const display = Array.isArray(msg) ? (msg as unknown[]).join(', ') : String(msg);
-      throw new ApiError(res.status, display);
+    if (!response.ok) {
+      throw new ApiError(response.status, extractErrorMessage(response));
     }
 
-    return json as T;
+    return response.json as T;
   }
 }
 
