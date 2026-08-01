@@ -1,7 +1,16 @@
 /** Configuration for creating an IdenplaneClient instance. */
 export interface IdenplaneConfig {
-  /** Base URL of the Idenplane server (e.g. "http://localhost:3000") */
+  /** Base URL of the Idenplane server (e.g. "https://auth.example.com") */
   url: string;
+  /**
+   * Allow `url` to use `http://` for a non-loopback host (default: false).
+   * Loopback hosts (localhost, 127.0.0.1, ::1) are always permitted over
+   * `http://` since local development has no TLS to offer. Anywhere else,
+   * plaintext HTTP would send access tokens, refresh tokens, and PKCE
+   * verifiers over the wire unencrypted, so the constructor throws unless
+   * this is explicitly set.
+   */
+  allowInsecureHttp?: boolean;
   /** Realm name to authenticate against */
   realm: string;
   /** OAuth2 client ID (must be registered in Idenplane as a PUBLIC client) */

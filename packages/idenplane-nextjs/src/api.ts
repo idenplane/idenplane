@@ -7,7 +7,7 @@
  * import { withAuth } from '@idenplane/nextjs/api';
  *
  * export default withAuth(
- *   { serverUrl: 'http://localhost:3000', realm: 'my-realm' },
+ *   { serverUrl: 'https://auth.example.com', realm: 'my-realm' },
  *   (req, res) => {
  *     res.json({ user: req.authUser });
  *   },
@@ -20,13 +20,14 @@
  * import { withAuthHandler } from '@idenplane/nextjs/api';
  *
  * export const GET = withAuthHandler(
- *   { serverUrl: 'http://localhost:3000', realm: 'my-realm' },
+ *   { serverUrl: 'https://auth.example.com', realm: 'my-realm' },
  *   (req, user) => Response.json({ user }),
  * );
  * ```
  */
 
 import type { TokenPayload } from './server.js';
+import { assertSecureServerUrl } from './internal/url-validation.js';
 
 // ── Shared types ─────────────────────────────────────────────────
 
@@ -37,6 +38,11 @@ export interface ApiAuthConfig {
   realm: string;
   /** Required realm roles (user must have ALL of them) */
   requiredRoles?: string[];
+  /**
+   * Allow `serverUrl` to use `http://` for a non-loopback host (default: false).
+   * See {@link assertSecureServerUrl}.
+   */
+  allowInsecureHttp?: boolean;
 }
 
 // ── Pages Router ─────────────────────────────────────────────────
@@ -95,6 +101,8 @@ export function withAuth(
   config: ApiAuthConfig,
   handler: AuthenticatedHandler,
 ): NextApiHandler {
+  assertSecureServerUrl(config.serverUrl, config.allowInsecureHttp);
+
   return async (req, res) => {
     const token = extractBearer(req.headers);
 
@@ -137,6 +145,8 @@ export function withAuthHandler(
   config: ApiAuthConfig,
   handler: AppRouterHandler,
 ): (req: Request) => Promise<Response> {
+  assertSecureServerUrl(config.serverUrl, config.allowInsecureHttp);
+
   return async (req: Request) => {
     const authHeader = req.headers.get('authorization');
     const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;

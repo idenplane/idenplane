@@ -122,6 +122,31 @@ describe('IdenplaneClient', () => {
       expect(client).toBeDefined();
     });
 
+    it('allows http:// for loopback hosts without an opt-out', () => {
+      expect(() => new IdenplaneClient({ ...BASE_CONFIG, url: 'http://localhost:3000' })).not.toThrow();
+      expect(() => new IdenplaneClient({ ...BASE_CONFIG, url: 'http://127.0.0.1:3000' })).not.toThrow();
+    });
+
+    it('accepts https:// URLs', () => {
+      expect(() => new IdenplaneClient({ ...BASE_CONFIG, url: 'https://auth.example.com' })).not.toThrow();
+    });
+
+    it('rejects http:// for a non-loopback host', () => {
+      expect(() => new IdenplaneClient({ ...BASE_CONFIG, url: 'http://auth.example.com' })).toThrow(
+        /insecure/i,
+      );
+    });
+
+    it('allows http:// for a non-loopback host with allowInsecureHttp: true', () => {
+      expect(
+        () => new IdenplaneClient({ ...BASE_CONFIG, url: 'http://auth.example.com', allowInsecureHttp: true }),
+      ).not.toThrow();
+    });
+
+    it('rejects an unparsable server URL', () => {
+      expect(() => new IdenplaneClient({ ...BASE_CONFIG, url: 'not-a-url' })).toThrow(/invalid server url/i);
+    });
+
     it('accepts refreshStrategy option', () => {
       const client = new IdenplaneClient({ ...BASE_CONFIG, refreshStrategy: 'eager' });
       expect(client).toBeDefined();

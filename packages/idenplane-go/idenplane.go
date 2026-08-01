@@ -5,7 +5,9 @@ package idenplane
 import (
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
+	"net/url"
 	"strings"
 	"time"
 )
@@ -91,6 +93,14 @@ type Config struct {
 
 	// HTTPTimeout is the timeout for HTTP requests. Default: 30 seconds.
 	HTTPTimeout time.Duration
+
+	// AllowInsecureHTTP permits ServerURL to use "http://" for a non-loopback
+	// host (default: false). Loopback hosts (localhost, 127.0.0.1, ::1) are
+	// always permitted over "http://" since local development has no TLS to
+	// offer. Anywhere else, plaintext HTTP would send the admin token and
+	// discovery responses over the wire unencrypted, so Validate rejects it
+	// unless this is set.
+	AllowInsecureHTTP bool
 }
 
 // Validate checks that the config has all required fields and returns an error if not.
@@ -105,7 +115,41 @@ func (c Config) Validate() error {
 	if c.ClientID == "" {
 		return ErrInvalidConfig("ClientID is required")
 	}
+	if err := validateServerURLScheme(c.ServerURL, c.AllowInsecureHTTP); err != nil {
+		return err
+	}
 	return nil
+}
+
+// validateServerURLScheme rejects non-HTTPS server URLs unless the host is a
+// loopback address or the caller has explicitly opted into insecure HTTP.
+func validateServerURLScheme(serverURL string, allowInsecureHTTP bool) error {
+	u, err := url.Parse(serverURL)
+	if err != nil {
+		return ErrInvalidConfig(fmt.Sprintf("ServerURL is invalid: %v", err))
+	}
+	switch u.Scheme {
+	case "https":
+		return nil
+	case "http":
+		if allowInsecureHTTP || isLoopbackHost(u.Hostname()) {
+			return nil
+		}
+		return ErrInvalidConfig(
+			`ServerURL uses insecure "http://"; use "https://" or set AllowInsecureHTTP if this is intentional`,
+		)
+	default:
+		return ErrInvalidConfig(fmt.Sprintf(`ServerURL must use "https://" (got %q)`, u.Scheme))
+	}
+}
+
+// isLoopbackHost reports whether host is localhost or a loopback IP literal.
+func isLoopbackHost(host string) bool {
+	if host == "localhost" {
+		return true
+	}
+	ip := net.ParseIP(host)
+	return ip != nil && ip.IsLoopback()
 }
 
 // discoveryURL returns the OIDC discovery URL for this configuration.
