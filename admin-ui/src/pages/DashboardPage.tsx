@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { useNavigate } from 'react-router';
 import { getAllRealms } from '../api/realms';
@@ -111,28 +112,32 @@ function RealmStatsSection({ realmName }: { realmName: string }) {
     staleTime: 60_000,
   });
 
-  const recentEvents = [
-    ...(loginEvents ?? []).map((e) => ({
-      id: e.id,
-      kind: 'login' as const,
-      type: e.type,
-      detail: e.userId ? `User: ${e.userId}` : e.clientId ? `Client: ${e.clientId}` : '—',
-      ip: e.ipAddress,
-      error: e.error,
-      createdAt: e.createdAt,
-    })),
-    ...(adminEvents ?? []).map((e) => ({
-      id: e.id,
-      kind: 'admin' as const,
-      type: `${e.operationType} ${e.resourceType}`,
-      detail: e.resourcePath,
-      ip: e.ipAddress,
-      error: null,
-      createdAt: e.createdAt,
-    })),
-  ]
-    .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
-    .slice(0, 20);
+  const recentEvents = useMemo(
+    () =>
+      [
+        ...(loginEvents ?? []).map((e) => ({
+          id: e.id,
+          kind: 'login' as const,
+          type: e.type,
+          detail: e.userId ? `User: ${e.userId}` : e.clientId ? `Client: ${e.clientId}` : '—',
+          ip: e.ipAddress,
+          error: e.error,
+          createdAt: e.createdAt,
+        })),
+        ...(adminEvents ?? []).map((e) => ({
+          id: e.id,
+          kind: 'admin' as const,
+          type: `${e.operationType} ${e.resourceType}`,
+          detail: e.resourcePath,
+          ip: e.ipAddress,
+          error: null,
+          createdAt: e.createdAt,
+        })),
+      ]
+        .sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime())
+        .slice(0, 20),
+    [loginEvents, adminEvents],
+  );
 
   const totalRate = (stats?.loginSuccessCount ?? 0) + (stats?.loginFailureCount ?? 0);
   const successRate =
@@ -213,7 +218,7 @@ function RealmStatsSection({ realmName }: { realmName: string }) {
         <div className="mb-3 flex items-center justify-between">
           <h2 className="text-base font-semibold text-fg">Recent Events</h2>
           <span className="text-xs text-subtle" aria-live="polite" aria-atomic="true">
-            Auto-refreshes every 30s
+            Auto-refreshes every 60s
           </span>
         </div>
         {eventsLoading ? (
