@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { IdenplaneClient } from '../client.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { pathSegment } from '../schemas.js';
 
 const RealmSchema = z.object({
   id: z.string(),
@@ -34,7 +35,7 @@ export function registerRealmTools(server: McpServer, client: IdenplaneClient): 
       description:
         'Get details for a specific realm by name. Returns the full realm configuration.',
       inputSchema: {
-        realmName: z.string().describe('The realm name (slug, not display name)'),
+        realmName: pathSegment('The realm name (slug, not display name)'),
       },
     },
     async ({ realmName }) => {
