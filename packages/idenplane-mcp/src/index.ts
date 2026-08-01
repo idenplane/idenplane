@@ -13,7 +13,7 @@ async function main(): Promise<void> {
   const apiClient = new IdenplaneClient(config);
 
   const server = new McpServer({
-    name: '@idenplane/mcp',
+    name: 'idenplane-mcp',
     version: '0.1.0',
   });
 
