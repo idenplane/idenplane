@@ -82,9 +82,9 @@ describe('PasswordInput', () => {
     expect(input.className).toContain('pr-10');
   });
 
-  it('the toggle button has tabIndex -1 so it is skipped during keyboard navigation', () => {
+  it('the toggle button does not have tabIndex -1 so it is reachable during keyboard navigation', () => {
     render(<PasswordInput />);
     const toggleBtn = screen.getByRole('button', { name: /show password/i });
-    expect(toggleBtn).toHaveAttribute('tabIndex', '-1');
+    expect(toggleBtn).not.toHaveAttribute('tabIndex', '-1');
   });
 });
