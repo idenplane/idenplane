@@ -1,4 +1,28 @@
+import * as argon2 from 'argon2';
 import { CryptoService } from './crypto.service.js';
+
+// argon2's native bindings export non-configurable properties, so
+// jest.spyOn (which redefines the property) can't wrap them directly.
+// Mocking the module and wrapping each export in jest.fn(actual) keeps the
+// real implementation as the default behavior (so the round-trip tests
+// below are unaffected) while letting specific tests override return
+// values with mockReturnValueOnce.
+jest.mock('argon2', () => {
+  const actual = jest.requireActual('argon2') as typeof argon2;
+  return {
+    ...actual,
+    hash: jest.fn(actual.hash),
+    verify: jest.fn(actual.verify),
+  };
+});
+
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  const promise = new Promise<T>((res) => {
+    resolve = res;
+  });
+  return { promise, resolve };
+}
 
 describe('CryptoService', () => {
   let service: CryptoService;
@@ -130,6 +154,86 @@ describe('CryptoService', () => {
       expect(service.decryptSecret(null)).toBeNull();
       expect(service.decryptSecret(undefined)).toBeUndefined();
       expect(service.decryptSecret('')).toBe('');
+    });
+  });
+
+  describe('Argon2 concurrency limiting', () => {
+    const originalEnv = process.env['ARGON2_MAX_CONCURRENCY'];
+    const hashMock = argon2.hash as jest.MockedFunction<typeof argon2.hash>;
+    const verifyMock = argon2.verify as jest.MockedFunction<
+      typeof argon2.verify
+    >;
+
+    beforeEach(() => {
+      hashMock.mockClear();
+      verifyMock.mockClear();
+    });
+
+    afterEach(() => {
+      if (originalEnv === undefined) {
+        delete process.env['ARGON2_MAX_CONCURRENCY'];
+      } else {
+        process.env['ARGON2_MAX_CONCURRENCY'] = originalEnv;
+      }
+    });
+
+    it('should queue a second hashPassword call until the first completes when concurrency is 1', async () => {
+      process.env['ARGON2_MAX_CONCURRENCY'] = '1';
+      const limitedService = new CryptoService();
+
+      const first = deferred<string>();
+      const second = deferred<string>();
+      hashMock
+        .mockReturnValueOnce(first.promise as Promise<string>)
+        .mockReturnValueOnce(second.promise as Promise<string>);
+
+      const call1 = limitedService.hashPassword('password-one');
+      const call2 = limitedService.hashPassword('password-two');
+
+      // Only the first call should have reached argon2.hash so far — the
+      // second is queued behind the concurrency-1 limit.
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(hashMock).toHaveBeenCalledTimes(1);
+
+      first.resolve('hash-one');
+      await call1;
+
+      // Releasing the first call lets the queued second call through.
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(hashMock).toHaveBeenCalledTimes(2);
+
+      second.resolve('hash-two');
+      expect(await call2).toBe('hash-two');
+    });
+
+    it('should route verifyPassword through the same concurrency limiter', async () => {
+      process.env['ARGON2_MAX_CONCURRENCY'] = '1';
+      const limitedService = new CryptoService();
+
+      const first = deferred<boolean>();
+      const second = deferred<boolean>();
+      verifyMock
+        .mockReturnValueOnce(first.promise as Promise<boolean>)
+        .mockReturnValueOnce(second.promise as Promise<boolean>);
+
+      const call1 = limitedService.verifyPassword('hash-one', 'password-one');
+      const call2 = limitedService.verifyPassword('hash-two', 'password-two');
+
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(verifyMock).toHaveBeenCalledTimes(1);
+
+      first.resolve(true);
+      await call1;
+
+      await Promise.resolve();
+      await Promise.resolve();
+      expect(verifyMock).toHaveBeenCalledTimes(2);
+
+      second.resolve(false);
+      expect(await call2).toBe(false);
     });
   });
 });
