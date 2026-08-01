@@ -18,13 +18,23 @@ function createMockExecutionContext(
   } as any;
 }
 
+function createMockCacheService() {
+  return {
+    getCachedRealmByName: jest.fn().mockResolvedValue(null),
+    cacheRealmByName: jest.fn().mockResolvedValue(undefined),
+    cacheRealmConfig: jest.fn().mockResolvedValue(undefined),
+  };
+}
+
 describe('RealmGuard', () => {
   let guard: RealmGuard;
   let prisma: MockPrismaService;
+  let cache: ReturnType<typeof createMockCacheService>;
 
   beforeEach(() => {
     prisma = createMockPrismaService();
-    guard = new RealmGuard(prisma as any);
+    cache = createMockCacheService();
+    guard = new RealmGuard(prisma as any, cache as any);
   });
 
   it('should pass through when no realm param is present', async () => {
@@ -144,5 +154,50 @@ describe('RealmGuard', () => {
     expect(result).toBe(true);
     const request = ctx.switchToHttp().getRequest();
     expect(request.realm).toEqual(disabledRealm);
+  });
+
+  describe('caching', () => {
+    it('should use the cached realm and skip the Postgres lookup on a cache hit', async () => {
+      const cachedRealm = { id: '1', name: 'my-realm', enabled: true };
+      cache.getCachedRealmByName.mockResolvedValue(cachedRealm);
+      const ctx = createMockExecutionContext({ realmName: 'my-realm' });
+
+      const result = await guard.canActivate(ctx);
+
+      expect(result).toBe(true);
+      expect(cache.getCachedRealmByName).toHaveBeenCalledWith('my-realm');
+      expect(prisma.realm.findUnique).not.toHaveBeenCalled();
+      const request = ctx.switchToHttp().getRequest();
+      expect(request.realm).toEqual(cachedRealm);
+    });
+
+    it('should populate the cache after a Postgres lookup on a cache miss', async () => {
+      const fakeRealm = { id: '1', name: 'my-realm', enabled: true };
+      cache.getCachedRealmByName.mockResolvedValue(null);
+      prisma.realm.findUnique.mockResolvedValue(fakeRealm);
+      const ctx = createMockExecutionContext({ realmName: 'my-realm' });
+
+      await guard.canActivate(ctx);
+
+      expect(prisma.realm.findUnique).toHaveBeenCalledWith({
+        where: { name: 'my-realm' },
+      });
+      expect(cache.cacheRealmByName).toHaveBeenCalledWith(
+        'my-realm',
+        fakeRealm,
+      );
+      expect(cache.cacheRealmConfig).toHaveBeenCalledWith('1', fakeRealm);
+    });
+
+    it('should not populate the cache when the realm does not exist', async () => {
+      cache.getCachedRealmByName.mockResolvedValue(null);
+      prisma.realm.findUnique.mockResolvedValue(null);
+      const ctx = createMockExecutionContext({ realmName: 'nonexistent' });
+
+      await expect(guard.canActivate(ctx)).rejects.toThrow(NotFoundException);
+
+      expect(cache.cacheRealmByName).not.toHaveBeenCalled();
+      expect(cache.cacheRealmConfig).not.toHaveBeenCalled();
+    });
   });
 });
