@@ -29,3 +29,7 @@ export { Sparkline } from './Sparkline';
 export type { SparklineProps } from './Sparkline';
 export { Tooltip } from './Tooltip';
 export type { TooltipProps } from './Tooltip';
+export { ProviderSelectorGrid } from './ProviderSelectorGrid';
+export type { ProviderSelectorGridProps, ProviderOption } from './ProviderSelectorGrid';
+export { MutationStatusBanner } from './MutationStatusBanner';
+export type { MutationStatusBannerProps } from './MutationStatusBanner';
