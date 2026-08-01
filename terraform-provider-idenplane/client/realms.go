@@ -78,9 +78,13 @@ type Realm struct {
 	UpdatedAt string `json:"updatedAt,omitempty"`
 }
 
-// CreateRealmRequest represents the request body for creating a realm
-type CreateRealmRequest struct {
-	Name                          string                 `json:"name"`
+// RealmRequestFields holds the realm settings shared by CreateRealmRequest
+// and UpdateRealmRequest. The two request bodies have an identical field
+// set (Create has one extra top-level Name field, since a realm's name
+// can't change after creation) -- extracting the shared fields here lets
+// the Terraform resource map a plan onto either request type with a single
+// function instead of keeping two ~215-line copies in lockstep by hand.
+type RealmRequestFields struct {
 	DisplayName                   string                 `json:"displayName,omitempty"`
 	Enabled                       *bool                  `json:"enabled,omitempty"`
 	AccessTokenLifespan           int                    `json:"accessTokenLifespan,omitempty"`
@@ -146,72 +150,18 @@ type CreateRealmRequest struct {
 	AllowedEmailDomains           []string `json:"allowedEmailDomains,omitempty"`
 }
 
-// UpdateRealmRequest represents the request body for updating a realm
-type UpdateRealmRequest struct {
-	DisplayName                   string                 `json:"displayName,omitempty"`
-	Enabled                       *bool                  `json:"enabled,omitempty"`
-	AccessTokenLifespan           int                    `json:"accessTokenLifespan,omitempty"`
-	RefreshTokenLifespan          int                    `json:"refreshTokenLifespan,omitempty"`
-	SMTPHost                      string                 `json:"smtpHost,omitempty"`
-	SMTPPort                      int                    `json:"smtpPort,omitempty"`
-	SMTPUser                      string                 `json:"smtpUser,omitempty"`
-	SMTPPassword                 string                 `json:"smtpPassword,omitempty"`
-	SMTPFrom                      string                 `json:"smtpFrom,omitempty"`
-	SMTPSecure                    *bool                  `json:"smtpSecure,omitempty"`
-	PasswordMinLength             int                    `json:"passwordMinLength,omitempty"`
-	PasswordRequireUppercase      *bool                  `json:"passwordRequireUppercase,omitempty"`
-	PasswordRequireLowercase       *bool                  `json:"passwordRequireLowercase,omitempty"`
-	PasswordRequireDigits          *bool                  `json:"passwordRequireDigits,omitempty"`
-	PasswordRequireSpecialChars    *bool                  `json:"passwordRequireSpecialChars,omitempty"`
-	PasswordHistoryCount           int                    `json:"passwordHistoryCount,omitempty"`
-	PasswordMaxAgeDays             int                    `json:"passwordMaxAgeDays,omitempty"`
-	BruteForceEnabled              *bool                  `json:"bruteForceEnabled,omitempty"`
-	MaxLoginFailures               int                    `json:"maxLoginFailures,omitempty"`
-	LockoutDuration                int                    `json:"lockoutDuration,omitempty"`
-	FailureResetTime               int                    `json:"failureResetTime,omitempty"`
-	PermanentLockoutAfter          int                    `json:"permanentLockoutAfter,omitempty"`
-	RegistrationAllowed           *bool                  `json:"registrationAllowed,omitempty"`
-	RequireEmailVerification       *bool                  `json:"requireEmailVerification,omitempty"`
-	MFARequired                   *bool                  `json:"mfaRequired,omitempty"`
-	OfflineTokenLifespan           int                    `json:"offlineTokenLifespan,omitempty"`
-	EventsEnabled                 *bool                  `json:"eventsEnabled,omitempty"`
-	EventsExpiration               int                    `json:"eventsExpiration,omitempty"`
-	AdminEventsEnabled            *bool                  `json:"adminEventsEnabled,omitempty"`
-	// Rate limiting
-	RateLimitEnabled        *bool `json:"rateLimitEnabled,omitempty"`
-	ClientRateLimitPerMinute int  `json:"clientRateLimitPerMinute,omitempty"`
-	ClientRateLimitPerHour   int  `json:"clientRateLimitPerHour,omitempty"`
-	UserRateLimitPerMinute   int  `json:"userRateLimitPerMinute,omitempty"`
-	UserRateLimitPerHour     int  `json:"userRateLimitPerHour,omitempty"`
-	IPRateLimitPerMinute     int  `json:"ipRateLimitPerMinute,omitempty"`
-	IPRateLimitPerHour       int  `json:"ipRateLimitPerHour,omitempty"`
-	// Session management
-	MaxSessionsPerUser int `json:"maxSessionsPerUser,omitempty"`
-	// Theming
-	ThemeName    string                  `json:"themeName,omitempty"`
-	Theme        map[string]interface{} `json:"theme,omitempty"`
-	LoginTheme   string                  `json:"loginTheme,omitempty"`
-	AccountTheme string                  `json:"accountTheme,omitempty"`
-	EmailTheme   string                  `json:"emailTheme,omitempty"`
-	// Impersonation
-	ImpersonationEnabled    *bool `json:"impersonationEnabled,omitempty"`
-	ImpersonationMaxDuration int  `json:"impersonationMaxDuration,omitempty"`
-	// WebAuthn / passkeys
-	WebAuthnEnabled *bool  `json:"webAuthnEnabled,omitempty"`
-	WebAuthnRpName  string `json:"webAuthnRpName,omitempty"`
-	WebAuthnRpID    string `json:"webAuthnRpId,omitempty"`
-	// Adaptive authentication
-	AdaptiveAuthEnabled *bool `json:"adaptiveAuthEnabled,omitempty"`
-	RiskThresholdStepUp  int   `json:"riskThresholdStepUp,omitempty"`
-	RiskThresholdBlock    int   `json:"riskThresholdBlock,omitempty"`
-	// Localisation
-	DefaultLocale    string   `json:"defaultLocale,omitempty"`
-	SupportedLocales []string `json:"supportedLocales,omitempty"`
-	// Legal / registration controls
-	TermsOfServiceURL             string   `json:"termsOfServiceUrl,omitempty"`
-	RegistrationApprovalRequired *bool    `json:"registrationApprovalRequired,omitempty"`
-	AllowedEmailDomains           []string `json:"allowedEmailDomains,omitempty"`
+// CreateRealmRequest represents the request body for creating a realm
+type CreateRealmRequest struct {
+	Name string `json:"name"`
+	RealmRequestFields
 }
+
+// UpdateRealmRequest represents the request body for updating a realm.
+// An update request has no fields beyond the shared set, so this is a type
+// alias rather than a wrapper -- existing keyed struct literals such as
+// UpdateRealmRequest{DisplayName: "..."} keep working unchanged, since
+// DisplayName is a direct (not promoted) field of RealmRequestFields.
+type UpdateRealmRequest = RealmRequestFields
 
 // Theme represents an available theme
 type Theme struct {

@@ -416,11 +416,9 @@ func (r *RealmResource) Create(ctx context.Context, req resource.CreateRequest, 
 
 	// Build the create request
 	createReq := client.CreateRealmRequest{
-		Name: plan.Name.ValueString(),
+		Name:               plan.Name.ValueString(),
+		RealmRequestFields: mapRealmPlanToRequestFields(ctx, plan),
 	}
-
-	// Map optional fields from the plan
-	mapRealmPlanToCreateRequest(ctx, plan, &createReq)
 
 	// Create the realms client and call the API
 	realmsClient := client.NewRealmsClient(r.httpClient)
@@ -519,10 +517,7 @@ func (r *RealmResource) Update(ctx context.Context, req resource.UpdateRequest, 
 	realmName := state.Name.ValueString()
 
 	// Build the update request
-	updateReq := client.UpdateRealmRequest{}
-
-	// Map optional fields from the plan
-	mapRealmPlanToUpdateRequest(ctx, plan, &updateReq)
+	updateReq := mapRealmPlanToRequestFields(ctx, plan)
 
 	// Create the realms client and call the API
 	realmsClient := client.NewRealmsClient(r.httpClient)
@@ -632,8 +627,15 @@ func (r *RealmResource) ImportState(ctx context.Context, req resource.ImportStat
 	})
 }
 
-// mapRealmPlanToCreateRequest maps the Terraform plan to the create request
-func mapRealmPlanToCreateRequest(ctx context.Context, plan RealmResourceModel, req *client.CreateRealmRequest) {
+// mapRealmPlanToRequestFields maps the Terraform plan onto the realm
+// settings fields shared by CreateRealmRequest and UpdateRealmRequest.
+// Both request types have an identical field set (Create has one extra
+// top-level Name field, set separately by the caller), so this single
+// function serves both -- replacing what used to be two ~215-line
+// functions that had to be kept in lockstep by hand for every new field.
+func mapRealmPlanToRequestFields(ctx context.Context, plan RealmResourceModel) client.RealmRequestFields {
+	var req client.RealmRequestFields
+
 	if !plan.DisplayName.IsNull() {
 		req.DisplayName = plan.DisplayName.ValueString()
 	}
@@ -847,223 +849,8 @@ func mapRealmPlanToCreateRequest(ctx context.Context, plan RealmResourceModel, r
 		plan.AllowedEmailDomains.ElementsAs(ctx, &domains, false)
 		req.AllowedEmailDomains = domains
 	}
-}
 
-// mapRealmPlanToUpdateRequest maps the Terraform plan to the update request
-func mapRealmPlanToUpdateRequest(ctx context.Context, plan RealmResourceModel, req *client.UpdateRealmRequest) {
-	if !plan.DisplayName.IsNull() {
-		req.DisplayName = plan.DisplayName.ValueString()
-	}
-
-	if !plan.Enabled.IsNull() {
-		enabled := plan.Enabled.ValueBool()
-		req.Enabled = &enabled
-	}
-
-	if !plan.AccessTokenLifespan.IsNull() {
-		req.AccessTokenLifespan = int(plan.AccessTokenLifespan.ValueInt64())
-	}
-
-	if !plan.RefreshTokenLifespan.IsNull() {
-		req.RefreshTokenLifespan = int(plan.RefreshTokenLifespan.ValueInt64())
-	}
-
-	if !plan.OfflineTokenLifespan.IsNull() {
-		req.OfflineTokenLifespan = int(plan.OfflineTokenLifespan.ValueInt64())
-	}
-
-	// SMTP settings
-	if !plan.SMTPHost.IsNull() {
-		req.SMTPHost = plan.SMTPHost.ValueString()
-	}
-	if !plan.SMTPPort.IsNull() {
-		req.SMTPPort = int(plan.SMTPPort.ValueInt64())
-	}
-	if !plan.SMTPUser.IsNull() {
-		req.SMTPUser = plan.SMTPUser.ValueString()
-	}
-	if !plan.SMTPPassword.IsNull() && plan.SMTPPassword.ValueString() != "" {
-		req.SMTPPassword = plan.SMTPPassword.ValueString()
-	}
-	if !plan.SMTPFrom.IsNull() {
-		req.SMTPFrom = plan.SMTPFrom.ValueString()
-	}
-	if !plan.SMTPSecure.IsNull() {
-		secure := plan.SMTPSecure.ValueBool()
-		req.SMTPSecure = &secure
-	}
-
-	// Password settings
-	if !plan.PasswordMinLength.IsNull() {
-		req.PasswordMinLength = int(plan.PasswordMinLength.ValueInt64())
-	}
-	if !plan.PasswordRequireUppercase.IsNull() {
-		val := plan.PasswordRequireUppercase.ValueBool()
-		req.PasswordRequireUppercase = &val
-	}
-	if !plan.PasswordRequireLowercase.IsNull() {
-		val := plan.PasswordRequireLowercase.ValueBool()
-		req.PasswordRequireLowercase = &val
-	}
-	if !plan.PasswordRequireDigits.IsNull() {
-		val := plan.PasswordRequireDigits.ValueBool()
-		req.PasswordRequireDigits = &val
-	}
-	if !plan.PasswordRequireSpecial.IsNull() {
-		val := plan.PasswordRequireSpecial.ValueBool()
-		req.PasswordRequireSpecialChars = &val
-	}
-	if !plan.PasswordHistoryCount.IsNull() {
-		req.PasswordHistoryCount = int(plan.PasswordHistoryCount.ValueInt64())
-	}
-	if !plan.PasswordMaxAgeDays.IsNull() {
-		req.PasswordMaxAgeDays = int(plan.PasswordMaxAgeDays.ValueInt64())
-	}
-
-	// Brute force protection
-	if !plan.BruteForceEnabled.IsNull() {
-		val := plan.BruteForceEnabled.ValueBool()
-		req.BruteForceEnabled = &val
-	}
-	if !plan.MaxLoginFailures.IsNull() {
-		req.MaxLoginFailures = int(plan.MaxLoginFailures.ValueInt64())
-	}
-	if !plan.LockoutDuration.IsNull() {
-		req.LockoutDuration = int(plan.LockoutDuration.ValueInt64())
-	}
-	if !plan.FailureResetTime.IsNull() {
-		req.FailureResetTime = int(plan.FailureResetTime.ValueInt64())
-	}
-	if !plan.PermanentLockoutAfter.IsNull() {
-		req.PermanentLockoutAfter = int(plan.PermanentLockoutAfter.ValueInt64())
-	}
-
-	// Registration settings
-	if !plan.RegistrationAllowed.IsNull() {
-		val := plan.RegistrationAllowed.ValueBool()
-		req.RegistrationAllowed = &val
-	}
-	if !plan.RequireEmailVerification.IsNull() {
-		val := plan.RequireEmailVerification.ValueBool()
-		req.RequireEmailVerification = &val
-	}
-	if !plan.MFARequired.IsNull() {
-		val := plan.MFARequired.ValueBool()
-		req.MFARequired = &val
-	}
-
-	// Event settings
-	if !plan.EventsEnabled.IsNull() {
-		val := plan.EventsEnabled.ValueBool()
-		req.EventsEnabled = &val
-	}
-	if !plan.EventsExpiration.IsNull() {
-		req.EventsExpiration = int(plan.EventsExpiration.ValueInt64())
-	}
-	if !plan.AdminEventsEnabled.IsNull() {
-		val := plan.AdminEventsEnabled.ValueBool()
-		req.AdminEventsEnabled = &val
-	}
-
-	// Rate limiting
-	if !plan.RateLimitEnabled.IsNull() {
-		val := plan.RateLimitEnabled.ValueBool()
-		req.RateLimitEnabled = &val
-	}
-	if !plan.ClientRateLimitPerMinute.IsNull() {
-		req.ClientRateLimitPerMinute = int(plan.ClientRateLimitPerMinute.ValueInt64())
-	}
-	if !plan.ClientRateLimitPerHour.IsNull() {
-		req.ClientRateLimitPerHour = int(plan.ClientRateLimitPerHour.ValueInt64())
-	}
-	if !plan.UserRateLimitPerMinute.IsNull() {
-		req.UserRateLimitPerMinute = int(plan.UserRateLimitPerMinute.ValueInt64())
-	}
-	if !plan.UserRateLimitPerHour.IsNull() {
-		req.UserRateLimitPerHour = int(plan.UserRateLimitPerHour.ValueInt64())
-	}
-	if !plan.IPRateLimitPerMinute.IsNull() {
-		req.IPRateLimitPerMinute = int(plan.IPRateLimitPerMinute.ValueInt64())
-	}
-	if !plan.IPRateLimitPerHour.IsNull() {
-		req.IPRateLimitPerHour = int(plan.IPRateLimitPerHour.ValueInt64())
-	}
-
-	// Session management
-	if !plan.MaxSessionsPerUser.IsNull() {
-		req.MaxSessionsPerUser = int(plan.MaxSessionsPerUser.ValueInt64())
-	}
-
-	// Theme settings
-	if !plan.ThemeName.IsNull() {
-		req.ThemeName = plan.ThemeName.ValueString()
-	}
-	if !plan.LoginTheme.IsNull() {
-		req.LoginTheme = plan.LoginTheme.ValueString()
-	}
-	if !plan.AccountTheme.IsNull() {
-		req.AccountTheme = plan.AccountTheme.ValueString()
-	}
-	if !plan.EmailTheme.IsNull() {
-		req.EmailTheme = plan.EmailTheme.ValueString()
-	}
-
-	// Impersonation
-	if !plan.ImpersonationEnabled.IsNull() {
-		val := plan.ImpersonationEnabled.ValueBool()
-		req.ImpersonationEnabled = &val
-	}
-	if !plan.ImpersonationMaxDuration.IsNull() {
-		req.ImpersonationMaxDuration = int(plan.ImpersonationMaxDuration.ValueInt64())
-	}
-
-	// WebAuthn
-	if !plan.WebAuthnEnabled.IsNull() {
-		val := plan.WebAuthnEnabled.ValueBool()
-		req.WebAuthnEnabled = &val
-	}
-	if !plan.WebAuthnRpName.IsNull() {
-		req.WebAuthnRpName = plan.WebAuthnRpName.ValueString()
-	}
-	if !plan.WebAuthnRpID.IsNull() {
-		req.WebAuthnRpID = plan.WebAuthnRpID.ValueString()
-	}
-
-	// Adaptive auth
-	if !plan.AdaptiveAuthEnabled.IsNull() {
-		val := plan.AdaptiveAuthEnabled.ValueBool()
-		req.AdaptiveAuthEnabled = &val
-	}
-	if !plan.RiskThresholdStepUp.IsNull() {
-		req.RiskThresholdStepUp = int(plan.RiskThresholdStepUp.ValueInt64())
-	}
-	if !plan.RiskThresholdBlock.IsNull() {
-		req.RiskThresholdBlock = int(plan.RiskThresholdBlock.ValueInt64())
-	}
-
-	// Locale settings
-	if !plan.DefaultLocale.IsNull() {
-		req.DefaultLocale = plan.DefaultLocale.ValueString()
-	}
-	if !plan.SupportedLocales.IsNull() {
-		var locales []string
-		plan.SupportedLocales.ElementsAs(ctx, &locales, false)
-		req.SupportedLocales = locales
-	}
-
-	// Legal / registration controls
-	if !plan.TermsOfServiceURL.IsNull() {
-		req.TermsOfServiceURL = plan.TermsOfServiceURL.ValueString()
-	}
-	if !plan.RegistrationApprovalRequired.IsNull() {
-		val := plan.RegistrationApprovalRequired.ValueBool()
-		req.RegistrationApprovalRequired = &val
-	}
-	if !plan.AllowedEmailDomains.IsNull() {
-		var domains []string
-		plan.AllowedEmailDomains.ElementsAs(ctx, &domains, false)
-		req.AllowedEmailDomains = domains
-	}
+	return req
 }
 
 // mapRealmToState maps the API realm response to the Terraform state
