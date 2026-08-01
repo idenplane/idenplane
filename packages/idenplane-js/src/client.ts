@@ -38,6 +38,34 @@ const EAGER_REFRESH_MULTIPLIER = 2;
  * search params and posts them to the parent window via `postMessage`.
  * It is a no-op outside of a browser iframe context.
  */
+/**
+ * Reject non-HTTPS server URLs, since they would send access tokens, refresh
+ * tokens, and PKCE verifiers over the wire in plaintext. Loopback hosts
+ * (localhost, 127.0.0.1, ::1) are always exempt because local development
+ * has no TLS to offer; anywhere else, opt in explicitly with
+ * `allowInsecureHttp: true` if plaintext HTTP is genuinely intended (e.g. an
+ * internal network).
+ */
+function assertSecureServerUrl(url: string, allowInsecureHttp: boolean | undefined): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Idenplane: invalid server URL "${url}"`);
+  }
+  if (parsed.protocol === 'https:') return;
+  if (parsed.protocol === 'http:') {
+    const isLoopback =
+      parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname === '::1';
+    if (isLoopback || allowInsecureHttp) return;
+    throw new Error(
+      `Idenplane: refusing insecure "http://" server URL "${url}". ` +
+        `Use "https://", or pass allowInsecureHttp: true if this is intentional.`,
+    );
+  }
+  throw new Error(`Idenplane: server URL must use "https://" (got "${parsed.protocol}//" in "${url}")`);
+}
+
 export function handleSilentCallback(): void {
   if (typeof window === 'undefined') return;
   // Only act when running inside an iframe
@@ -98,6 +126,7 @@ export class IdenplaneClient {
   private silentRefreshIframe: HTMLIFrameElement | null = null;
 
   constructor(config: IdenplaneConfig) {
+    assertSecureServerUrl(config.url, config.allowInsecureHttp);
     this.config = {
       url: config.url.replace(/\/$/, ''),
       realm: config.realm,

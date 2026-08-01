@@ -11,7 +11,7 @@
  * import { createAuthMiddleware } from '@idenplane/nextjs/middleware';
  *
  * const authMiddleware = createAuthMiddleware({
- *   serverUrl: 'http://localhost:3000',
+ *   serverUrl: 'https://auth.example.com',
  *   realm: 'my-realm',
  *   clientId: 'my-app',
  *   protectedPaths: ['/dashboard', '/api/protected'],
@@ -28,8 +28,10 @@
  * ```
  */
 
+import { assertSecureServerUrl } from './internal/url-validation.js';
+
 export interface AuthMiddlewareConfig {
-  /** Idenplane server base URL (e.g. "http://localhost:3000") */
+  /** Idenplane server base URL (e.g. "https://auth.example.com") */
   serverUrl: string;
   /** Realm name */
   realm: string;
@@ -41,6 +43,11 @@ export interface AuthMiddlewareConfig {
   loginPath?: string;
   /** Cookie name that holds the access token (default: "idenplane_access_token") */
   cookieName?: string;
+  /**
+   * Allow `serverUrl` to use `http://` for a non-loopback host (default: false).
+   * See {@link assertSecureServerUrl}.
+   */
+  allowInsecureHttp?: boolean;
 }
 
 /**
@@ -110,6 +117,8 @@ function isTokenExpiredLocally(token: string): boolean {
  * when the user is not authenticated.
  */
 export function createAuthMiddleware(config: AuthMiddlewareConfig) {
+  assertSecureServerUrl(config.serverUrl, config.allowInsecureHttp);
+
   const {
     protectedPaths = [],
     loginPath = '/login',
