@@ -12,6 +12,8 @@ import {
   createDecipheriv,
   scryptSync,
 } from 'crypto';
+import { cpus } from 'os';
+import { createConcurrencyLimiter } from '../common/utils/concurrency-limiter.util.js';
 
 /** Maximum password length accepted by hashPassword / verifyPassword.
  *  Argon2 has no built-in length limit; feeding it a multi-megabyte string
@@ -19,6 +21,16 @@ import {
  *  limit that covers every legitimate password while bounding hashing time.
  */
 const MAX_PASSWORD_LENGTH = 1024;
+
+/**
+ * Argon2id with memoryCost: 65536 (64 MiB) allocates real memory per call.
+ * With no cap, a burst of concurrent logins/registrations can drive
+ * unbounded memory/CPU pressure. One in-flight hash per CPU core keeps the
+ * server responsive under load; excess calls queue instead of piling on.
+ * Overridable via ARGON2_MAX_CONCURRENCY for environments that need to tune
+ * it (e.g. containers with a CPU limit below the host's core count).
+ */
+const DEFAULT_ARGON2_MAX_CONCURRENCY = cpus().length;
 
 // Algorithm constants for AES-256-GCM symmetric encryption.
 const ALGORITHM = 'aes-256-gcm';
@@ -49,6 +61,15 @@ export class CryptoService implements OnModuleInit {
       process.env['WEBHOOK_ENCRYPTION_SALT'] ?? DEFAULT_WEBHOOK_ENCRYPTION_SALT;
     return scryptSync(raw, salt, 32);
   })();
+
+  /** Bounds concurrent Argon2 hash/verify calls; see DEFAULT_ARGON2_MAX_CONCURRENCY. */
+  private readonly limitArgon2Concurrency = createConcurrencyLimiter(
+    parseInt(
+      process.env['ARGON2_MAX_CONCURRENCY'] ??
+        String(DEFAULT_ARGON2_MAX_CONCURRENCY),
+      10,
+    ),
+  );
 
   onModuleInit(): void {
     const key = process.env['WEBHOOK_SECRET_KEY'];
@@ -97,12 +118,14 @@ export class CryptoService implements OnModuleInit {
         `Password must not exceed ${MAX_PASSWORD_LENGTH} characters.`,
       );
     }
-    return argon2.hash(password, {
-      type: argon2.argon2id,
-      memoryCost: 65536,
-      timeCost: 3,
-      parallelism: 4,
-    });
+    return this.limitArgon2Concurrency(() =>
+      argon2.hash(password, {
+        type: argon2.argon2id,
+        memoryCost: 65536,
+        timeCost: 3,
+        parallelism: 4,
+      }),
+    );
   }
 
   async verifyPassword(hash: string, password: string): Promise<boolean> {
@@ -113,7 +136,7 @@ export class CryptoService implements OnModuleInit {
       // beyond the normal "invalid credentials" response).
       return false;
     }
-    return argon2.verify(hash, password);
+    return this.limitArgon2Concurrency(() => argon2.verify(hash, password));
   }
 
   generateSecret(bytes = 32): string {
