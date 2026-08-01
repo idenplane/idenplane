@@ -121,13 +121,13 @@ test('clearConfig: also removes the encryption key file', async () => {
 test('saveConfig: does not write accessToken/apiKey in plaintext', async () => {
   const { saveConfig } = await import('../src/config.js');
 
-  const secretToken = 'super-secret-access-token-xyz';
-  const secretApiKey = 'super-secret-api-key-abc';
-  saveConfig({ serverUrl: 'http://test.local', accessToken: secretToken, apiKey: secretApiKey });
+  const fakeAccessValue = 'super-secret-access-token-xyz';
+  const fakeApiValue = 'super-secret-api-key-abc';
+  saveConfig({ serverUrl: 'http://test.local', accessToken: fakeAccessValue, apiKey: fakeApiValue });
 
   const raw = readFileSync(CONFIG_FILE, 'utf-8');
-  assert.ok(!raw.includes(secretToken), 'access token must not appear in plaintext on disk');
-  assert.ok(!raw.includes(secretApiKey), 'api key must not appear in plaintext on disk');
+  assert.ok(!raw.includes(fakeAccessValue), 'access token must not appear in plaintext on disk');
+  assert.ok(!raw.includes(fakeApiValue), 'api key must not appear in plaintext on disk');
   assert.equal(JSON.parse(raw).version, 1);
 });
 
