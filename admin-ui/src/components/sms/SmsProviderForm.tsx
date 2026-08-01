@@ -4,6 +4,7 @@ import type { Realm, SmsProviderType, SmsProviderConfig } from '../../types';
 import { updateRealm } from '../../api/realms';
 import PasswordInput from '../PasswordInput';
 import { getErrorMessage } from '../../utils/getErrorMessage';
+import { formatDuration } from '../../utils/formatDuration';
 
 type SmsProviderFormProps = {
   realm: Realm;
@@ -71,12 +72,6 @@ function buildProviderConfig(form: SmsFormState): SmsProviderConfig {
     webhookHeaders: form.webhookHeaders || undefined,
     webhookTimeout: form.webhookTimeout,
   };
-}
-
-function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-  return `${Math.floor(seconds / 3600)}h`;
 }
 
 // ── Icons ──────────────────────────────────────────────────────────────────

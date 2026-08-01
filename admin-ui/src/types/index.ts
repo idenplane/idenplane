@@ -67,6 +67,10 @@ export interface Realm {
   hcaptchaSecretKey: string;
   captchaScoreThreshold: number;
   mfaRequired: boolean;
+  webAuthnEnabled: boolean;
+  webAuthnRpName: string | null;
+  webAuthnRpId: string | null;
+  webAuthnUserVerificationRequired: boolean;
   smsMfaEnabled?: boolean;
   smsProvider?: SmsProviderType;
   smsFrom?: string;
@@ -86,6 +90,17 @@ export interface Realm {
   adaptiveAuthEnabled?: boolean;
   riskThresholdStepUp?: number;
   riskThresholdBlock?: number;
+  rateLimitEnabled: boolean;
+  clientRateLimitPerMinute: number;
+  clientRateLimitPerHour: number;
+  userRateLimitPerMinute: number;
+  userRateLimitPerHour: number;
+  ipRateLimitPerMinute: number;
+  ipRateLimitPerHour: number;
+  impersonationEnabled: boolean;
+  impersonationMaxDuration: number;
+  defaultLocale: string;
+  supportedLocales: string[];
   scimUserAutocreate?: boolean;
   scimGroupSyncEnabled?: boolean;
   themeName: string;
