@@ -7,6 +7,10 @@ export default defineConfig([
     dts: true,
     clean: true,
     target: 'node18',
+    // @idenplane/http-internal is an unpublished, monorepo-local package —
+    // inline it into the bundle rather than leaving a require/import that
+    // wouldn't resolve for a real npm install of idenplane-cli.
+    noExternal: ['@idenplane/http-internal'],
     banner: {
       js: '#!/usr/bin/env node',
     },
@@ -19,5 +23,6 @@ export default defineConfig([
     clean: false,
     target: 'node18',
     sourcemap: true,
+    noExternal: ['@idenplane/http-internal'],
   },
 ]);
