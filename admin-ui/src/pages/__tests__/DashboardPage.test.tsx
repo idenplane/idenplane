@@ -104,6 +104,11 @@ describe('DashboardPage', () => {
     });
   });
 
+  it('shows the correct auto-refresh interval for the events feed (matches the 60s refetchInterval)', async () => {
+    renderDashboard();
+    expect(await screen.findByText('Auto-refreshes every 60s')).toBeInTheDocument();
+  });
+
   it('renders quick action buttons', async () => {
     renderDashboard();
     expect(await screen.findByText('Create User')).toBeInTheDocument();

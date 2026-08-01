@@ -62,6 +62,28 @@ function makeNextResponse() {
 
 // ── Tests ─────────────────────────────────────────────────────────
 
+describe('createAuthMiddleware config validation', () => {
+  const base = { realm: 'test', clientId: 'test-app' };
+
+  it('allows http:// for localhost', () => {
+    expect(() => createAuthMiddleware({ ...base, serverUrl: 'http://localhost:3000' })).not.toThrow();
+  });
+
+  it('accepts https:// URLs', () => {
+    expect(() => createAuthMiddleware({ ...base, serverUrl: 'https://auth.example.com' })).not.toThrow();
+  });
+
+  it('rejects http:// for a non-loopback host', () => {
+    expect(() => createAuthMiddleware({ ...base, serverUrl: 'http://auth.example.com' })).toThrow(/insecure/i);
+  });
+
+  it('allows http:// for a non-loopback host with allowInsecureHttp: true', () => {
+    expect(() =>
+      createAuthMiddleware({ ...base, serverUrl: 'http://auth.example.com', allowInsecureHttp: true }),
+    ).not.toThrow();
+  });
+});
+
 describe('createAuthMiddleware', () => {
   const config = {
     serverUrl: 'http://localhost:3000',

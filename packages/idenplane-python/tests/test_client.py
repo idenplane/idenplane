@@ -36,6 +36,26 @@ class TestConfig:
         with pytest.raises(ValueError, match="timeout"):
             Config(base_url="https://a", realm="r", timeout_seconds=0)
 
+    def test_allows_http_for_localhost(self) -> None:
+        cfg = Config(base_url="http://localhost:3000", realm="r")
+        assert cfg.base_url == "http://localhost:3000"
+
+    def test_allows_http_for_loopback_ip(self) -> None:
+        cfg = Config(base_url="http://127.0.0.1:3000", realm="r")
+        assert cfg.base_url == "http://127.0.0.1:3000"
+
+    def test_rejects_http_for_non_loopback_host(self) -> None:
+        with pytest.raises(ValueError, match="insecure"):
+            Config(base_url="http://auth.example.com", realm="r")
+
+    def test_allows_http_for_non_loopback_host_with_opt_out(self) -> None:
+        cfg = Config(base_url="http://auth.example.com", realm="r", allow_insecure_http=True)
+        assert cfg.base_url == "http://auth.example.com"
+
+    def test_rejects_non_http_scheme(self) -> None:
+        with pytest.raises(ValueError, match="https"):
+            Config(base_url="ftp://auth.example.com", realm="r")
+
     def test_base_url_normalized_strips_trailing_slash(self) -> None:
         cfg = Config(base_url="https://auth.example.com/", realm="r")
         assert cfg.base_url_normalized() == "https://auth.example.com"

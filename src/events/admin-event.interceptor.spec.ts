@@ -303,6 +303,36 @@ describe('AdminEventInterceptor', () => {
       });
     });
 
+    it('should redact realm-config secrets (CAPTCHA/SMS/email provider), including nested objects wholesale', (done) => {
+      const context = createContext({
+        method: 'PUT',
+        path: '/admin/realms/test',
+        body: {
+          displayName: 'Test Realm',
+          confirmPassword: 'new',
+          recaptchaSecretKey: 'recaptcha-secret',
+          hcaptchaSecretKey: 'hcaptcha-secret',
+          emailProviderConfig: { resend: { apiKey: 're_live_secret' } },
+          smsProviderConfig: { twilio: { authToken: 'twilio-secret' } },
+        },
+      });
+
+      interceptor.intercept(context as any, nextHandler).subscribe({
+        complete: () => {
+          const call = eventsService.recordAdminEvent.mock.calls[0][0];
+          expect(call.representation).toEqual({
+            displayName: 'Test Realm',
+            confirmPassword: '[REDACTED]',
+            recaptchaSecretKey: '[REDACTED]',
+            hcaptchaSecretKey: '[REDACTED]',
+            emailProviderConfig: '[REDACTED]',
+            smsProviderConfig: '[REDACTED]',
+          });
+          done();
+        },
+      });
+    });
+
     it('should handle null body gracefully', (done) => {
       const context = createContext({
         method: 'POST',

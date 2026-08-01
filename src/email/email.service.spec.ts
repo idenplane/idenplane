@@ -17,6 +17,7 @@ global.fetch = mockFetch as unknown as typeof fetch;
 
 import * as nodemailer from 'nodemailer';
 import { EmailService } from './email.service.js';
+import { CryptoService } from '../crypto/crypto.service.js';
 import {
   createMockPrismaService,
   MockPrismaService,
@@ -41,7 +42,10 @@ describe('EmailService', () => {
     jest.clearAllMocks();
     mockFetch.mockResolvedValue({ ok: true, text: async () => '' });
     prisma = createMockPrismaService();
-    service = new EmailService(prisma as any);
+    // A real CryptoService (not a mock): its decryptSecret() tolerantly
+    // falls back to the raw value for legacy plaintext, which is exactly
+    // what these fixtures represent (secrets as stored before this fix).
+    service = new EmailService(prisma as any, new CryptoService());
   });
 
   // ─── isConfigured ──────────────────────────────────────────
@@ -218,6 +222,22 @@ describe('EmailService', () => {
         }),
       );
     });
+
+    it('should decrypt an encrypted smtpPassword before use', async () => {
+      const crypto = new CryptoService();
+      prisma.realm.findUnique.mockResolvedValue({
+        ...fullSmtpRealm,
+        smtpPassword: crypto.encrypt('secret'),
+      });
+
+      await service.sendEmail('my-realm', 'to@test.com', 'Test', '<p>Test</p>');
+
+      expect(nodemailer.createTransport).toHaveBeenCalledWith(
+        expect.objectContaining({
+          auth: { user: 'user@example.com', pass: 'secret' },
+        }),
+      );
+    });
   });
 
   // ─── sendEmail (Resend) ───────────────────────────────────
@@ -225,7 +245,9 @@ describe('EmailService', () => {
   describe('sendEmail via Resend', () => {
     const resendRealm = {
       emailProvider: 'resend',
-      emailProviderConfig: { resend: { apiKey: 're_test123', from: 'hello@example.com' } },
+      emailProviderConfig: {
+        resend: { apiKey: 're_test123', from: 'hello@example.com' },
+      },
       smtpHost: null,
       smtpPort: null,
       smtpUser: null,
@@ -259,7 +281,11 @@ describe('EmailService', () => {
 
     it('should throw when Resend API returns non-ok response', async () => {
       prisma.realm.findUnique.mockResolvedValue(resendRealm);
-      mockFetch.mockResolvedValue({ ok: false, status: 422, text: async () => 'Invalid' });
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 422,
+        text: async () => 'Invalid',
+      });
 
       await expect(
         service.sendEmail('my-realm', 'to@test.com', 'Hi', '<p>Hello</p>'),
@@ -273,6 +299,30 @@ describe('EmailService', () => {
 
       expect(nodemailer.createTransport).not.toHaveBeenCalled();
     });
+
+    it('should decrypt an encrypted Resend apiKey before use', async () => {
+      const crypto = new CryptoService();
+      prisma.realm.findUnique.mockResolvedValue({
+        ...resendRealm,
+        emailProviderConfig: {
+          resend: {
+            apiKey: crypto.encrypt('re_test123'),
+            from: 'hello@example.com',
+          },
+        },
+      });
+
+      await service.sendEmail('my-realm', 'to@test.com', 'Hi', '<p>Hello</p>');
+
+      expect(mockFetch).toHaveBeenCalledWith(
+        'https://api.resend.com/emails',
+        expect.objectContaining({
+          headers: expect.objectContaining({
+            Authorization: 'Bearer re_test123',
+          }),
+        }),
+      );
+    });
   });
 
   // ─── sendEmail (SendGrid) ─────────────────────────────────
@@ -280,7 +330,9 @@ describe('EmailService', () => {
   describe('sendEmail via SendGrid', () => {
     const sendgridRealm = {
       emailProvider: 'sendgrid',
-      emailProviderConfig: { sendgrid: { apiKey: 'SG.test', from: 'hello@example.com' } },
+      emailProviderConfig: {
+        sendgrid: { apiKey: 'SG.test', from: 'hello@example.com' },
+      },
       smtpHost: null,
       smtpPort: null,
       smtpUser: null,
@@ -313,7 +365,12 @@ describe('EmailService', () => {
     const mailgunRealm = {
       emailProvider: 'mailgun',
       emailProviderConfig: {
-        mailgun: { apiKey: 'key-abc', domain: 'mg.example.com', from: 'hello@mg.example.com', region: 'us' },
+        mailgun: {
+          apiKey: 'key-abc',
+          domain: 'mg.example.com',
+          from: 'hello@mg.example.com',
+          region: 'us',
+        },
       },
       smtpHost: null,
       smtpPort: null,
@@ -338,7 +395,12 @@ describe('EmailService', () => {
       prisma.realm.findUnique.mockResolvedValue({
         ...mailgunRealm,
         emailProviderConfig: {
-          mailgun: { apiKey: 'key-abc', domain: 'mg.example.com', from: 'hello@mg.example.com', region: 'eu' },
+          mailgun: {
+            apiKey: 'key-abc',
+            domain: 'mg.example.com',
+            from: 'hello@mg.example.com',
+            region: 'eu',
+          },
         },
       });
 
@@ -356,7 +418,9 @@ describe('EmailService', () => {
   describe('sendEmail via Postmark', () => {
     const postmarkRealm = {
       emailProvider: 'postmark',
-      emailProviderConfig: { postmark: { serverToken: 'tok-abc', from: 'hello@example.com' } },
+      emailProviderConfig: {
+        postmark: { serverToken: 'tok-abc', from: 'hello@example.com' },
+      },
       smtpHost: null,
       smtpPort: null,
       smtpUser: null,
@@ -426,7 +490,9 @@ describe('EmailService', () => {
     it('should return success when Resend email sends successfully', async () => {
       prisma.realm.findUnique.mockResolvedValue({
         emailProvider: 'resend',
-        emailProviderConfig: { resend: { apiKey: 're_test123', from: 'hello@example.com' } },
+        emailProviderConfig: {
+          resend: { apiKey: 're_test123', from: 'hello@example.com' },
+        },
         smtpHost: null,
         smtpPort: null,
         smtpUser: null,

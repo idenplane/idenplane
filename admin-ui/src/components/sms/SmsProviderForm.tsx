@@ -3,7 +3,13 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Realm, SmsProviderType, SmsProviderConfig } from '../../types';
 import { updateRealm } from '../../api/realms';
 import PasswordInput from '../PasswordInput';
-import { getErrorMessage } from '../../utils/getErrorMessage';
+import { formatDuration } from '../../utils/formatDuration';
+import {
+  Icons,
+  ProviderSelectorGrid,
+  MutationStatusBanner,
+  type ProviderOption,
+} from '../ui';
 
 type SmsProviderFormProps = {
   realm: Realm;
@@ -73,22 +79,7 @@ function buildProviderConfig(form: SmsFormState): SmsProviderConfig {
   };
 }
 
-function formatDuration(seconds: number): string {
-  if (seconds < 60) return `${seconds}s`;
-  if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-  return `${Math.floor(seconds / 3600)}h`;
-}
-
 // ── Icons ──────────────────────────────────────────────────────────────────
-
-function BanIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
-      <circle cx="12" cy="12" r="10" />
-      <line x1="4.93" y1="4.93" x2="19.07" y2="19.07" />
-    </svg>
-  );
-}
 
 function PhoneIcon({ className }: { className?: string }) {
   return (
@@ -116,30 +107,14 @@ function GlobeIcon({ className }: { className?: string }) {
   );
 }
 
-function ZapIcon({ className }: { className?: string }) {
-  return (
-    <svg className={className} viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth={1.75} strokeLinecap="round" strokeLinejoin="round">
-      <path d="M13 2 3 14h9l-1 8 10-12h-9l1-8z" />
-    </svg>
-  );
-}
-
 // ── Provider options ───────────────────────────────────────────────────────
 
-type ProviderOption = {
-  value: SmsProviderType;
-  label: string;
-  description: string;
-  badge?: string;
-  icon: React.ReactNode;
-};
-
-const PROVIDERS: ProviderOption[] = [
+const PROVIDERS: ProviderOption<SmsProviderType>[] = [
   {
     value: 'none',
     label: 'Disabled',
     description: 'SMS delivery is turned off for this realm.',
-    icon: <BanIcon className="h-5 w-5" />,
+    icon: <Icons.Ban className="h-5 w-5" />,
   },
   {
     value: 'twilio',
@@ -152,7 +127,7 @@ const PROVIDERS: ProviderOption[] = [
     value: 'vonage',
     label: 'Vonage',
     description: 'Reliable SMS API (formerly Nexmo).',
-    icon: <ZapIcon className="h-5 w-5" />,
+    icon: <Icons.Zap className="h-5 w-5" />,
   },
   {
     value: 'aws-sns',
@@ -448,48 +423,12 @@ export default function SmsProviderForm({ realm }: SmsProviderFormProps) {
           </p>
         </div>
 
-        <div className="grid grid-cols-3 gap-3 sm:grid-cols-5">
-          {PROVIDERS.map((p) => {
-            const selected = form.smsProvider === p.value;
-            return (
-              <button
-                key={p.value}
-                type="button"
-                onClick={() => setForm((f) => ({ ...f, smsProvider: p.value }))}
-                className={[
-                  'relative flex flex-col gap-1.5 rounded-lg border-2 p-4 text-left transition-all focus:outline-none focus-visible:ring-2 focus-visible:ring-accent',
-                  selected
-                    ? 'border-accent bg-accent-soft'
-                    : 'border-line bg-surface hover:border-line-strong hover:bg-hover',
-                ].join(' ')}
-                aria-pressed={selected}
-              >
-                {p.badge && (
-                  <span className="absolute right-2 top-2 rounded-full bg-accent-soft px-1.5 py-0.5 text-[10px] font-semibold uppercase tracking-wide text-accent">
-                    {p.badge}
-                  </span>
-                )}
-                <span
-                  className={[
-                    'flex h-8 w-8 items-center justify-center rounded-md',
-                    selected ? 'bg-accent text-white' : 'bg-sunken text-subtle',
-                  ].join(' ')}
-                >
-                  {p.icon}
-                </span>
-                <span
-                  className={[
-                    'text-sm font-semibold',
-                    selected ? 'text-accent' : 'text-fg',
-                  ].join(' ')}
-                >
-                  {p.label}
-                </span>
-                <span className="text-xs leading-snug text-subtle">{p.description}</span>
-              </button>
-            );
-          })}
-        </div>
+        <ProviderSelectorGrid
+          options={PROVIDERS}
+          value={form.smsProvider}
+          onChange={(v) => setForm((f) => ({ ...f, smsProvider: v }))}
+          columnsClassName="grid-cols-3 sm:grid-cols-5"
+        />
 
         {/* Sender / provider fields */}
         {hasProvider && (
@@ -605,17 +544,12 @@ export default function SmsProviderForm({ realm }: SmsProviderFormProps) {
         </div>
       )}
 
-      {/* Status banners */}
-      {updateMutation.isSuccess && (
-        <div role="status" className="rounded-md bg-success-soft p-3 text-sm text-success-fg">
-          SMS settings saved successfully.
-        </div>
-      )}
-      {updateMutation.isError && (
-        <div role="alert" className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
-          {getErrorMessage(updateMutation.error, 'Failed to save SMS settings.')}
-        </div>
-      )}
+      {/* Status banner */}
+      <MutationStatusBanner
+        mutation={updateMutation}
+        successMessage="SMS settings saved successfully."
+        errorFallback="Failed to save SMS settings."
+      />
 
       <div className="flex justify-end">
         <button

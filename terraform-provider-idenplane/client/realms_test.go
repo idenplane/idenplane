@@ -44,8 +44,10 @@ func TestRealmsClient_CreateRealm(t *testing.T) {
 
 	realmsClient := NewRealmsClient(client)
 	req := CreateRealmRequest{
-		Name:        "test-realm",
-		DisplayName: "Test Realm",
+		Name: "test-realm",
+		RealmRequestFields: RealmRequestFields{
+			DisplayName: "Test Realm",
+		},
 	}
 
 	realm, err := realmsClient.CreateRealm(context.Background(), req)

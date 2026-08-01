@@ -7,6 +7,7 @@ import {
 import { PrismaClient } from '@prisma/client';
 import type { SqlDriverAdapterFactory } from '@prisma/driver-adapter-utils';
 import { DatabaseProvider, detectProvider } from './database-provider.js';
+import { getPgPoolConfig } from './pg-pool-config.js';
 
 /**
  * DatabaseService wraps PrismaClient and adds provider-aware initialisation.
@@ -41,11 +42,13 @@ export class DatabaseService
       // eslint-disable-next-line @typescript-eslint/no-require-imports
       const { PrismaPg } = require('@prisma/adapter-pg') as {
         PrismaPg: {
-          new (config: { connectionString: string }): SqlDriverAdapterFactory;
+          new (
+            config: ReturnType<typeof getPgPoolConfig>,
+          ): SqlDriverAdapterFactory;
         };
       };
 
-      const adapter = new PrismaPg({ connectionString: url });
+      const adapter = new PrismaPg(getPgPoolConfig(url));
       super({ adapter });
     } else {
       // MySQL and SQLite use Prisma's built-in drivers — no adapter needed.

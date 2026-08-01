@@ -177,6 +177,16 @@ jobs:
           npm ci
           npm run build
 
+      # mcp consumes @idenplane/http-internal through
+      # `file:../idenplane-http-internal`, and its dist/ is gitignored — so on
+      # a fresh checkout it has no compiled output to resolve. Build it first.
+      - name: Build the local idenplane-http-internal dependency
+        if: matrix.package == 'idenplane-mcp'
+        working-directory: packages/idenplane-http-internal
+        run: |
+          npm ci
+          npm run build
+
       - name: Install dependencies
         run: npm ci
 

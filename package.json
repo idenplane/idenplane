@@ -26,7 +26,8 @@
     "prisma:generate": "npx prisma generate",
     "prisma:migrate": "npx prisma migrate dev",
     "prisma:seed": "npx ts-node prisma/seed.ts",
-    "db:setup": "npx prisma migrate dev && npx ts-node prisma/seed.ts"
+    "db:setup": "npx prisma migrate dev && npx ts-node prisma/seed.ts",
+    "backfill:encrypt-realm-secrets": "npx ts-node prisma/backfill-encrypt-realm-secrets.ts"
   },
   "dependencies": {
     "@apollo/server": "^5.0.0",

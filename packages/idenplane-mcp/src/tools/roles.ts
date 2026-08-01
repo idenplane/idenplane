@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { IdenplaneClient } from '../client.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { pathSegment } from '../schemas.js';
 
 const RoleSchema = z.object({
   id: z.string().optional(),
@@ -17,7 +18,7 @@ export function registerRoleTools(server: McpServer, client: IdenplaneClient): v
     {
       description: 'List all realm roles defined in a realm.',
       inputSchema: {
-        realmName: z.string().describe('Realm to list roles from'),
+        realmName: pathSegment('Realm to list roles from'),
       },
     },
     async ({ realmName }) => {
@@ -34,8 +35,8 @@ export function registerRoleTools(server: McpServer, client: IdenplaneClient): v
       description:
         '[WRITE] Assign one or more realm roles to a user. Roles are additive — existing assignments are preserved.',
       inputSchema: {
-        realmName: z.string().describe('Realm the user and roles belong to'),
-        userId: z.string().describe('User ID (UUID)'),
+        realmName: pathSegment('Realm the user and roles belong to'),
+        userId: pathSegment('User ID (UUID)'),
         roleNames: z.array(z.string()).min(1).describe('One or more role names to assign'),
       },
     },

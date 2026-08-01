@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { CryptoService } from '../crypto/crypto.service.js';
 import sanitizeHtml from 'sanitize-html';
 import { EmailProvider } from './providers/email-provider.interface.js';
 import { SmtpEmailProvider } from './providers/smtp.provider.js';
@@ -34,7 +35,10 @@ type RealmEmailData = {
 export class EmailService {
   private readonly logger = new Logger(EmailService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly crypto: CryptoService,
+  ) {}
 
   async isConfigured(realmName: string): Promise<boolean> {
     const realm = await this.prisma.realm.findUnique({
@@ -157,7 +161,7 @@ export class EmailService {
           host: realm.smtpHost ?? '',
           port: realm.smtpPort ?? 587,
           user: realm.smtpUser ?? undefined,
-          password: realm.smtpPassword ?? undefined,
+          password: this.crypto.decryptSecret(realm.smtpPassword) ?? undefined,
           from: realm.smtpFrom ?? '',
           secure: realm.smtpSecure ?? false,
         });
@@ -166,7 +170,7 @@ export class EmailService {
         const rc =
           (config['resend'] as Record<string, unknown> | undefined) ?? config;
         return new ResendEmailProvider({
-          apiKey: (rc['apiKey'] as string) ?? '',
+          apiKey: this.crypto.decryptSecret(rc['apiKey'] as string) ?? '',
           from: (rc['from'] as string) ?? '',
         });
       }
@@ -175,7 +179,7 @@ export class EmailService {
         const sc =
           (config['sendgrid'] as Record<string, unknown> | undefined) ?? config;
         return new SendGridEmailProvider({
-          apiKey: (sc['apiKey'] as string) ?? '',
+          apiKey: this.crypto.decryptSecret(sc['apiKey'] as string) ?? '',
           from: (sc['from'] as string) ?? '',
         });
       }
@@ -184,7 +188,7 @@ export class EmailService {
         const mc =
           (config['mailgun'] as Record<string, unknown> | undefined) ?? config;
         return new MailgunEmailProvider({
-          apiKey: (mc['apiKey'] as string) ?? '',
+          apiKey: this.crypto.decryptSecret(mc['apiKey'] as string) ?? '',
           domain: (mc['domain'] as string) ?? '',
           from: (mc['from'] as string) ?? '',
           region: (mc['region'] as string) ?? 'us',
@@ -195,7 +199,8 @@ export class EmailService {
         const pc =
           (config['postmark'] as Record<string, unknown> | undefined) ?? config;
         return new PostmarkEmailProvider({
-          serverToken: (pc['serverToken'] as string) ?? '',
+          serverToken:
+            this.crypto.decryptSecret(pc['serverToken'] as string) ?? '',
           from: (pc['from'] as string) ?? '',
         });
       }

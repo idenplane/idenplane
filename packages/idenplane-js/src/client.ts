@@ -7,14 +7,42 @@ import type {
   UserInfo,
 } from './types.js';
 import { generateCodeChallenge, generateCodeVerifier, generateState } from './pkce.js';
-import { getTokenExpiresIn, isTokenExpired, parseJwt } from './token.js';
+import { isTokenExpired, parseJwt } from './token.js';
 import { createStorage, type TokenStorage } from './storage.js';
 import { EventEmitter } from './events.js';
+import { DiscoveryClient } from './discovery.js';
+import { TokenRefresher } from './token-refresh.js';
 
 const DEFAULT_SCOPES = ['openid', 'profile', 'email'];
 const DEFAULT_REFRESH_BUFFER = 30; // seconds before expiry to trigger refresh
-// For "eager" strategy, refresh this much earlier than the normal buffer
-const EAGER_REFRESH_MULTIPLIER = 2;
+
+/**
+ * Reject non-HTTPS server URLs, since they would send access tokens, refresh
+ * tokens, and PKCE verifiers over the wire in plaintext. Loopback hosts
+ * (localhost, 127.0.0.1, ::1) are always exempt because local development
+ * has no TLS to offer; anywhere else, opt in explicitly with
+ * `allowInsecureHttp: true` if plaintext HTTP is genuinely intended (e.g. an
+ * internal network).
+ */
+function assertSecureServerUrl(url: string, allowInsecureHttp: boolean | undefined): void {
+  let parsed: URL;
+  try {
+    parsed = new URL(url);
+  } catch {
+    throw new Error(`Idenplane: invalid server URL "${url}"`);
+  }
+  if (parsed.protocol === 'https:') return;
+  if (parsed.protocol === 'http:') {
+    const isLoopback =
+      parsed.hostname === 'localhost' || parsed.hostname === '127.0.0.1' || parsed.hostname === '::1';
+    if (isLoopback || allowInsecureHttp) return;
+    throw new Error(
+      `Idenplane: refusing insecure "http://" server URL "${url}". ` +
+        `Use "https://", or pass allowInsecureHttp: true if this is intentional.`,
+    );
+  }
+  throw new Error(`Idenplane: server URL must use "https://" (got "${parsed.protocol}//" in "${url}")`);
+}
 
 /**
  * Call this function on the page that serves as the silent-refresh redirect URI.
@@ -78,26 +106,22 @@ export class IdenplaneClient {
 
   private storage: TokenStorage;
   private events = new EventEmitter<IdenplaneEventMap>();
-  private oidcConfig: OpenIDConfiguration | null = null;
-  // Bug #438-2 fix: the discovery document was cached forever.  If the IdP
-  // returns an error (e.g. 5xx) and `oidcConfig` somehow already held a stale
-  // value, that stale config would be served indefinitely.  More practically,
-  // key-rotation events (IdP JWKS changes) would go undetected.
-  // Fix: record the fetch timestamp and evict the cache after 1 hour so the
-  // discovery document is periodically re-fetched.
-  private oidcConfigFetchedAt: number | null = null;
-  private static readonly DISCOVERY_TTL_MS = 60 * 60 * 1000; // 1 hour
-  private refreshTimer: ReturnType<typeof setTimeout> | null = null;
+  private discoveryClient: DiscoveryClient;
+  private tokenRefresher: TokenRefresher;
   private cachedUserInfo: UserInfo | null = null;
+  // Keyed by the raw token string, so a token change (refresh, login, logout)
+  // naturally invalidates the cache without needing to hook into every
+  // storage mutation site.
+  private cachedTokenClaims: { token: string; claims: TokenClaims } | null = null;
   private initialized = false;
   // Bug #4 fix: guard against concurrent calls to init() (e.g. React StrictMode
   // double-mount, multiple components calling init simultaneously).
   private _initializing = false;
   private _initPromise: Promise<boolean> | null = null;
   private callbackPromise: Promise<boolean> | null = null;
-  private silentRefreshIframe: HTMLIFrameElement | null = null;
 
   constructor(config: IdenplaneConfig) {
+    assertSecureServerUrl(config.url, config.allowInsecureHttp);
     this.config = {
       url: config.url.replace(/\/$/, ''),
       realm: config.realm,
@@ -118,6 +142,22 @@ export class IdenplaneClient {
     // sessionStorage/localStorage are accessible to any JS on the page.
     // Users can opt-in to persistent storage if they accept the risk.
     this.storage = createStorage(config.storage ?? 'memory');
+
+    this.discoveryClient = new DiscoveryClient(this.config.url, this.config.realm);
+    this.tokenRefresher = new TokenRefresher({
+      storage: this.storage,
+      events: this.events,
+      getOidcConfig: () => this.discoveryClient.getConfig(),
+      storeTokens: (tokens) => this.storeTokens(tokens),
+      clearTokens: () => this.clearTokens(),
+      clientId: this.config.clientId,
+      scopes: this.config.scopes,
+      redirectUri: this.config.redirectUri,
+      silentRedirectUri: this.config.silentRedirectUri,
+      refreshStrategy: this.config.refreshStrategy,
+      refreshBuffer: this.config.refreshBuffer,
+      autoRefresh: this.config.autoRefresh,
+    });
 
     // Wire up callback-style config options to the event system
     if (config.onLogin) {
@@ -154,14 +194,14 @@ export class IdenplaneClient {
   }
 
   private async _init(): Promise<boolean> {
-    await this.fetchDiscovery();
+    await this.discoveryClient.fetchDiscovery();
 
     const accessToken = this.storage.get('access_token');
     if (accessToken) {
       try {
         const claims = parseJwt(accessToken);
         if (!isTokenExpired(claims)) {
-          this.scheduleRefresh();
+          this.tokenRefresher.scheduleRefresh();
           this.initialized = true;
           this.events.emit('ready', true);
           return true;
@@ -189,7 +229,7 @@ export class IdenplaneClient {
     // Attempt silent auth if strategy is 'silent'
     if (this.config.refreshStrategy === 'silent' && typeof window !== 'undefined') {
       try {
-        const silentSuccess = await this.silentAuthenticate();
+        const silentSuccess = await this.tokenRefresher.silentAuthenticate();
         this.initialized = true;
         this.events.emit('ready', silentSuccess);
         return silentSuccess;
@@ -305,7 +345,7 @@ export class IdenplaneClient {
 
     const tokens: TokenResponse = await response.json();
     this.storeTokens(tokens);
-    this.scheduleRefresh();
+    this.tokenRefresher.scheduleRefresh();
 
     // Clean up PKCE state
     this.storage.remove('pkce_verifier');
@@ -386,8 +426,14 @@ export class IdenplaneClient {
     const token = this.storage.get('access_token');
     if (!token) return null;
 
+    if (this.cachedTokenClaims?.token === token) {
+      return this.cachedTokenClaims.claims;
+    }
+
     try {
-      return parseJwt(token);
+      const claims = parseJwt(token);
+      this.cachedTokenClaims = { token, claims };
+      return claims;
     } catch {
       return null;
     }
@@ -495,223 +541,7 @@ export class IdenplaneClient {
    * This is called automatically when autoRefresh is enabled.
    */
   async refreshTokens(): Promise<TokenResponse> {
-    const strategy = this.config.refreshStrategy;
-
-    if (strategy === 'silent') {
-      return this.silentRefresh();
-    }
-
-    return this.rotationRefresh();
-  }
-
-  /**
-   * Refresh tokens using the rotation (refresh_token grant) strategy.
-   */
-  private async rotationRefresh(): Promise<TokenResponse> {
-    const refreshToken = this.storage.get('refresh_token');
-    if (!refreshToken) {
-      throw new Error('No refresh token available');
-    }
-
-    const config = await this.getOidcConfig();
-    const body = new URLSearchParams({
-      grant_type: 'refresh_token',
-      refresh_token: refreshToken,
-      client_id: this.config.clientId,
-    });
-
-    const response = await fetch(config.token_endpoint, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-      body: body.toString(),
-    });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({ error: 'refresh_failed' }));
-      // Bug #2 fix: only discard stored tokens when the server definitively rejects
-      // the refresh token (4xx — e.g. invalid_grant, token revoked).  On 5xx
-      // (server errors, network hiccups) the tokens may still be valid; clearing
-      // them would silently log the user out due to a transient server problem.
-      if (response.status >= 400 && response.status < 500) {
-        this.clearTokens();
-      }
-      throw new Error(err.error_description ?? err.error);
-    }
-
-    const tokens: TokenResponse = await response.json();
-    this.storeTokens(tokens);
-    this.scheduleRefresh();
-    this.events.emit('tokenRefresh', tokens);
-    // Backward compatibility alias
-    this.events.emit('tokenRefreshed', tokens);
-    return tokens;
-  }
-
-  /**
-   * Attempt silent authentication using a hidden iframe.
-   * The iframe will go through the authorization flow with prompt=none,
-   * which succeeds only if the user has an active session at the IdP.
-   */
-  private async silentAuthenticate(): Promise<boolean> {
-    if (typeof window === 'undefined') return false;
-
-    try {
-      const tokens = await this.silentRefresh();
-      return !!tokens;
-    } catch {
-      return false;
-    }
-  }
-
-  /**
-   * Perform a silent token refresh via hidden iframe.
-   * Requires the server to support prompt=none and check_session_iframe.
-   */
-  private silentRefresh(): Promise<TokenResponse> {
-    // Fall back to rotation if not in a browser environment or no session endpoint
-    if (typeof window === 'undefined') {
-      return this.rotationRefresh();
-    }
-
-    return this._silentRefreshAsync();
-  }
-
-  private async _silentRefreshAsync(): Promise<TokenResponse> {
-    const oidcConfig = await this.getOidcConfig();
-    const verifier = generateCodeVerifier();
-    const challenge = await generateCodeChallenge(verifier);
-    const state = generateState();
-    const nonce = generateState();
-
-    // Store PKCE state for callback
-    this.storage.set('silent_pkce_verifier', verifier);
-    this.storage.set('silent_auth_state', state);
-
-    // Resolve the redirect URI for the silent-refresh iframe.  A dedicated
-    // silentRedirectUri (pointing at a page that calls handleSilentCallback)
-    // is strongly recommended.  Falling back to the main redirectUri works
-    // only if that page also posts the idenplane:silent_callback message.
-    let silentRedirectUri: string;
-    if (this.config.silentRedirectUri) {
-      silentRedirectUri = this.config.silentRedirectUri;
-    } else {
-      console.warn(
-        '[idenplane] silentRedirectUri is not set. ' +
-          'Falling back to redirectUri for the silent-refresh iframe. ' +
-          'Set silentRedirectUri to a dedicated page that calls handleSilentCallback().',
-      );
-      silentRedirectUri = this.config.redirectUri;
-    }
-
-    const params = new URLSearchParams({
-      response_type: 'code',
-      client_id: this.config.clientId,
-      redirect_uri: silentRedirectUri,
-      scope: this.config.scopes.join(' '),
-      state,
-      nonce,
-      code_challenge: challenge,
-      code_challenge_method: 'S256',
-      prompt: 'none',
-    });
-
-    const authUrl = `${oidcConfig.authorization_endpoint}?${params.toString()}`;
-
-    // Remove old iframe if present
-    if (this.silentRefreshIframe) {
-      document.body.removeChild(this.silentRefreshIframe);
-      this.silentRefreshIframe = null;
-    }
-
-    const iframe = document.createElement('iframe');
-    iframe.style.display = 'none';
-    iframe.style.width = '0';
-    iframe.style.height = '0';
-    this.silentRefreshIframe = iframe;
-
-    return new Promise<TokenResponse>((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        cleanup();
-        reject(new Error('Silent refresh timed out'));
-      }, 10000);
-
-      const onMessage = async (event: MessageEvent) => {
-        if (event.origin !== window.location.origin) return;
-        if (!event.data?.type || event.data.type !== 'idenplane:silent_callback') return;
-
-        cleanup();
-
-        const { code, state: returnedState, error } = event.data;
-
-        if (error) {
-          reject(new Error(error));
-          return;
-        }
-
-        const storedState = this.storage.get('silent_auth_state');
-        if (!storedState || returnedState !== storedState) {
-          reject(new Error('Silent refresh state mismatch'));
-          return;
-        }
-
-        const storedVerifier = this.storage.get('silent_pkce_verifier');
-        if (!storedVerifier || !code) {
-          reject(new Error('Missing silent refresh PKCE data'));
-          return;
-        }
-
-        this.storage.remove('silent_pkce_verifier');
-        this.storage.remove('silent_auth_state');
-
-        try {
-          const body = new URLSearchParams({
-            grant_type: 'authorization_code',
-            code,
-            redirect_uri: silentRedirectUri,
-            client_id: this.config.clientId,
-            code_verifier: storedVerifier,
-          });
-
-          const response = await fetch(oidcConfig.token_endpoint, {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
-            body: body.toString(),
-          });
-
-          if (!response.ok) {
-            const err = await response.json().catch(() => ({ error: 'silent_refresh_failed' }));
-            reject(new Error(err.error_description ?? err.error));
-            return;
-          }
-
-          const tokens: TokenResponse = await response.json();
-          this.storeTokens(tokens);
-          this.scheduleRefresh();
-          this.events.emit('tokenRefresh', tokens);
-          this.events.emit('tokenRefreshed', tokens);
-          resolve(tokens);
-        } catch (err) {
-          reject(err);
-        }
-      };
-
-      const cleanup = () => {
-        clearTimeout(timeout);
-        window.removeEventListener('message', onMessage);
-        if (this.silentRefreshIframe) {
-          try {
-            document.body.removeChild(this.silentRefreshIframe);
-          } catch {
-            // Ignore
-          }
-          this.silentRefreshIframe = null;
-        }
-      };
-
-      window.addEventListener('message', onMessage);
-      document.body.appendChild(iframe);
-      iframe.src = authUrl;
-    });
+    return this.tokenRefresher.refresh();
   }
 
   // ── Events ──────────────────────────────────────────────────────
@@ -767,30 +597,8 @@ export class IdenplaneClient {
 
   // ── Internal ────────────────────────────────────────────────────
 
-  private async fetchDiscovery(): Promise<void> {
-    // SSR-safe: skip if no fetch available (edge case)
-    const url = `${this.config.url}/realms/${this.config.realm}/.well-known/openid-configuration`;
-    const response = await fetch(url);
-    if (!response.ok) {
-      // On error, evict any stale cached config so the next call retries.
-      this.oidcConfig = null;
-      this.oidcConfigFetchedAt = null;
-      throw new Error(`Failed to fetch OIDC discovery document from ${url}`);
-    }
-    this.oidcConfig = await response.json();
-    this.oidcConfigFetchedAt = Date.now();
-  }
-
   private async getOidcConfig(): Promise<OpenIDConfiguration> {
-    const now = Date.now();
-    const isExpired =
-      this.oidcConfigFetchedAt === null ||
-      now - this.oidcConfigFetchedAt > IdenplaneClient.DISCOVERY_TTL_MS;
-
-    if (!this.oidcConfig || isExpired) {
-      await this.fetchDiscovery();
-    }
-    return this.oidcConfig!;
+    return this.discoveryClient.getConfig();
   }
 
   private storeTokens(tokens: TokenResponse): void {
@@ -806,46 +614,8 @@ export class IdenplaneClient {
   }
 
   private clearTokens(): void {
-    this.cancelRefreshTimer();
+    this.tokenRefresher.cancelRefreshTimer();
     this.storage.clear();
     this.cachedUserInfo = null;
-  }
-
-  private scheduleRefresh(): void {
-    if (!this.config.autoRefresh) return;
-    this.cancelRefreshTimer();
-
-    const token = this.storage.get('access_token');
-    if (!token) return;
-
-    try {
-      const claims = parseJwt(token);
-      const expiresIn = getTokenExpiresIn(claims);
-
-      // For eager strategy, refresh even sooner (2x the buffer)
-      const buffer =
-        this.config.refreshStrategy === 'eager'
-          ? this.config.refreshBuffer * EAGER_REFRESH_MULTIPLIER
-          : this.config.refreshBuffer;
-
-      const refreshIn = Math.max(0, expiresIn - buffer) * 1000;
-
-      this.refreshTimer = setTimeout(async () => {
-        try {
-          await this.refreshTokens();
-        } catch (err) {
-          this.events.emit('error', err instanceof Error ? err : new Error(String(err)));
-        }
-      }, refreshIn);
-    } catch {
-      // Token parse failure — don't schedule
-    }
-  }
-
-  private cancelRefreshTimer(): void {
-    if (this.refreshTimer) {
-      clearTimeout(this.refreshTimer);
-      this.refreshTimer = null;
-    }
   }
 }

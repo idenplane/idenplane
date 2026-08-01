@@ -105,6 +105,8 @@ export const Icons = {
   CheckCircle: makeIcon(['M22 11.08V12a10 10 0 1 1-5.93-9.14', 'm22 4-10 10.01-3-3']),
   X: makeIcon(['M18 6 6 18', 'm6 6 12 12']),
   XCircle: makeIcon(['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z', 'M15 9 9 15', 'M9 9l6 6']),
+  // Circle-slash "disabled/none" glyph — distinct from XCircle (an X mark).
+  Ban: makeIcon(['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z', 'M4.93 4.93l14.14 14.14']),
   Info: makeIcon(['M12 22a10 10 0 1 0 0-20 10 10 0 0 0 0 20z', 'M12 16v-4', 'M12 8h.01']),
   Alert: makeIcon(['M10.29 3.86 1.82 18a2 2 0 0 0 1.71 3h16.94a2 2 0 0 0 1.71-3L13.71 3.86a2 2 0 0 0-3.42 0z', 'M12 9v4', 'M12 17h.01']),
   Shield: makeIcon('M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z'),

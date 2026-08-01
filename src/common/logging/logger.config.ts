@@ -1,5 +1,6 @@
 import type { Params } from 'nestjs-pino';
 import { randomUUID } from 'crypto';
+import { SENSITIVE_BODY_FIELDS } from '../security/sensitive-body-fields.js';
 
 export function createLoggerConfig(): Params {
   const isProduction = process.env['NODE_ENV'] === 'production';
@@ -19,12 +20,7 @@ export function createLoggerConfig(): Params {
         paths: [
           'req.headers.authorization',
           'req.headers["x-admin-api-key"]',
-          'req.body.password',
-          'req.body.client_secret',
-          'req.body.smtpPassword',
-          'req.body.currentPassword',
-          'req.body.newPassword',
-          'req.body.confirmPassword',
+          ...SENSITIVE_BODY_FIELDS.map((field) => `req.body.${field}`),
         ],
         censor: '[REDACTED]',
       },

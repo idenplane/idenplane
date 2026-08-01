@@ -1,0 +1,41 @@
+{
+  "name": "@idenplane/http-internal",
+  "version": "0.1.0",
+  "description": "Shared fetch-wrapper internals for idenplane-cli and idenplane-mcp (not published standalone)",
+  "type": "module",
+  "private": true,
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "exports": {
+    ".": {
+      "types": "./dist/index.d.ts",
+      "default": "./dist/index.js"
+    }
+  },
+  "scripts": {
+    "build": "tsup && node scripts/fix-node-imports.mjs",
+    "dev": "tsup --watch",
+    "typecheck": "tsc --noEmit",
+    "test": "npm run build && node --test dist/tests/*.test.js"
+  },
+  "devDependencies": {
+    "tsup": "^8.4.0",
+    "typescript": "^5.7.0",
+    "@types/node": "^22.10.7"
+  },
+  "files": [
+    "dist"
+  ],
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "overrides": {
+    "esbuild": "^0.28.1"
+  },
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/idenplane/idenplane.git",
+    "directory": "packages/idenplane-http-internal"
+  }
+}

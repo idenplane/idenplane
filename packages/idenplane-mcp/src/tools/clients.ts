@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { IdenplaneClient } from '../client.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { pathSegment } from '../schemas.js';
 
 const ClientSchema = z.object({
   id: z.string(),
@@ -22,7 +23,7 @@ export function registerClientTools(server: McpServer, client: IdenplaneClient):
       description:
         'List all OAuth2/OIDC clients registered in a realm. Returns client IDs, names, and configuration.',
       inputSchema: {
-        realmName: z.string().describe('Realm name to list clients from'),
+        realmName: pathSegment('Realm name to list clients from'),
       },
     },
     async ({ realmName }) => {
@@ -39,10 +40,8 @@ export function registerClientTools(server: McpServer, client: IdenplaneClient):
       description:
         '[WRITE] Register a new OAuth2/OIDC client in a realm. Clients represent applications that delegate authentication to Idenplane.',
       inputSchema: {
-        realmName: z.string().describe('Realm to create the client in'),
-        clientId: z
-          .string()
-          .describe('Unique client identifier (e.g. "my-app", "backend-service")'),
+        realmName: pathSegment('Realm to create the client in'),
+        clientId: pathSegment('Unique client identifier (e.g. "my-app", "backend-service")'),
         name: z.string().optional().describe('Human-readable client name'),
         description: z.string().optional().describe('Optional description'),
         publicClient: z

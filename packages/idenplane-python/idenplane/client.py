@@ -8,10 +8,12 @@ lazily instantiated on first access.
 
 from __future__ import annotations
 
+import ipaddress
 import os
 from dataclasses import dataclass, field
 from types import TracebackType
 from typing import TYPE_CHECKING, Optional
+from urllib.parse import urlparse
 
 import requests
 
@@ -21,6 +23,18 @@ if TYPE_CHECKING:
 
 _USER_AGENT = "idenplane-python/0.3.0"
 _DEFAULT_TIMEOUT_SECONDS = 30.0
+
+
+def _is_loopback_host(host: Optional[str]) -> bool:
+    """Return whether host is localhost or a loopback IP literal."""
+    if host is None:
+        return False
+    if host == "localhost":
+        return True
+    try:
+        return ipaddress.ip_address(host).is_loopback
+    except ValueError:
+        return False
 
 
 @dataclass(frozen=True)
@@ -35,6 +49,12 @@ class Config:
             ``Authorization`` header is omitted (useful for public discovery).
         timeout_seconds: HTTP request timeout in seconds. Defaults to 30s.
         user_agent: Value sent in the ``User-Agent`` header.
+        allow_insecure_http: Allow ``base_url`` to use ``http://`` for a
+            non-loopback host (default: ``False``). Loopback hosts
+            (``localhost``, ``127.0.0.1``, ``::1``) are always permitted over
+            ``http://`` since local development has no TLS to offer.
+            Anywhere else, plaintext HTTP would send the admin token over the
+            wire unencrypted, so construction fails unless this is set.
     """
 
     base_url: str
@@ -43,6 +63,7 @@ class Config:
     timeout_seconds: float = _DEFAULT_TIMEOUT_SECONDS
     user_agent: str = _USER_AGENT
     extra_headers: dict[str, str] = field(default_factory=dict)
+    allow_insecure_http: bool = False
 
     def __post_init__(self) -> None:
         if not self.base_url:
@@ -51,6 +72,22 @@ class Config:
             raise ValueError("Config.realm is required")
         if self.timeout_seconds <= 0:
             raise ValueError("Config.timeout_seconds must be positive")
+        self._validate_url_scheme()
+
+    def _validate_url_scheme(self) -> None:
+        parsed = urlparse(self.base_url)
+        if parsed.scheme == "https":
+            return
+        if parsed.scheme == "http":
+            if self.allow_insecure_http or _is_loopback_host(parsed.hostname):
+                return
+            raise ValueError(
+                'Config.base_url uses insecure "http://"; use "https://" or '
+                "set allow_insecure_http=True if this is intentional"
+            )
+        raise ValueError(
+            f'Config.base_url must use "https://" (got "{parsed.scheme}://" in {self.base_url!r})'
+        )
 
     @classmethod
     def from_env(cls) -> Config:

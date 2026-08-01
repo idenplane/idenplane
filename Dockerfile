@@ -61,20 +61,28 @@ RUN apk add --no-cache "postgresql${PG_MAJOR}-client" \
     && pg_dump --version \
     && pg_restore --version
 
-COPY --from=build /app/node_modules ./node_modules
-COPY --from=build /app/dist ./dist
-COPY --from=build /app/prisma ./prisma
-COPY --from=build /app/themes ./themes
+# Manifests + prisma schema/config first, so `npm ci`'s postinstall
+# (`prisma generate`) has what it needs; then a clean production-only
+# install directly in this stage, rather than copying the build stage's
+# full node_modules (including devDependencies) and pruning afterward —
+# simpler, and doesn't depend on npm's prune graph-pruning being exactly
+# right.
 COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/package-lock.json ./package-lock.json
+COPY --from=build /app/prisma.config.ts ./prisma.config.ts
+COPY --from=build /app/prisma ./prisma
+RUN npm ci --omit=dev
 
-# prisma.config.ts is TypeScript and cannot be executed directly by Node in the
-# production image (no compiler present).  migrate deploy only needs the schema
-# file, which is already present under ./prisma/schema.prisma — the --schema flag
-# is passed explicitly in docker-entrypoint.sh instead.
+# prisma.config.ts is TypeScript and cannot be executed directly by Node in
+# this image (no compiler present) — it was only needed above, for
+# `prisma generate` during the npm ci postinstall step. `migrate deploy`
+# only needs the schema file (already present under ./prisma/schema.prisma —
+# the --schema flag is passed explicitly in docker-entrypoint.sh instead),
+# so drop it rather than ship a file nothing here can run.
+RUN rm prisma.config.ts
 
-# Remove dev dependencies in production stage (not build stage)
-RUN npm prune --omit=dev
+COPY --from=build /app/dist ./dist
+COPY --from=build /app/themes ./themes
 
 # Use the existing 'node' user (UID 1000, GID 1000) from the base image
 # instead of creating a new group/user that conflicts with the pre-existing GID
