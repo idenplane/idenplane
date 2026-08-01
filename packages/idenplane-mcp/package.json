@@ -13,8 +13,8 @@
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "test": "node --test tests/integration.mjs",
-    "test:smoke": "node --test tests/smoke.mjs",
-    "test:all": "node --test tests/smoke.mjs tests/integration.mjs"
+    "test:smoke": "node --test tests/smoke.mjs tests/path-traversal.mjs",
+    "test:all": "node --test tests/smoke.mjs tests/path-traversal.mjs tests/integration.mjs"
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.15.0",

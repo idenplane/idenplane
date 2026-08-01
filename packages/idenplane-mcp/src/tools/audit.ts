@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { IdenplaneClient } from '../client.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { pathSegment } from '../schemas.js';
 
 const LoginEventSchema = z.object({
   id: z.string().optional(),
@@ -34,7 +35,7 @@ export function registerAuditTools(server: McpServer, client: IdenplaneClient): 
       description:
         'Query audit/event logs for a realm. Supports filtering by user, event type, and time window. Returns both user-facing login events and admin operation events.',
       inputSchema: {
-        realmName: z.string().describe('Realm to query events from'),
+        realmName: pathSegment('Realm to query events from'),
         kind: z
           .enum(['login', 'admin', 'both'])
           .optional()

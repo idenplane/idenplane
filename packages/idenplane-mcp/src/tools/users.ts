@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { IdenplaneClient } from '../client.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { pathSegment } from '../schemas.js';
 
 const UserSchema = z.object({
   id: z.string(),
@@ -27,7 +28,7 @@ export function registerUserTools(server: McpServer, client: IdenplaneClient): v
       description:
         'List users in a realm with optional search and pagination. Returns an array of user objects.',
       inputSchema: {
-        realmName: z.string().describe('Realm to list users from'),
+        realmName: pathSegment('Realm to list users from'),
         search: z.string().optional().describe('Search by username or email (partial match)'),
         limit: z
           .number()
@@ -60,8 +61,8 @@ export function registerUserTools(server: McpServer, client: IdenplaneClient): v
     {
       description: 'Get full details for a specific user by their ID.',
       inputSchema: {
-        realmName: z.string().describe('Realm the user belongs to'),
-        userId: z.string().describe('User ID (UUID)'),
+        realmName: pathSegment('Realm the user belongs to'),
+        userId: pathSegment('User ID (UUID)'),
       },
     },
     async ({ realmName, userId }) => {
@@ -78,7 +79,7 @@ export function registerUserTools(server: McpServer, client: IdenplaneClient): v
       description:
         '[WRITE] Create a new user in a realm. Username is required; all other fields are optional.',
       inputSchema: {
-        realmName: z.string().describe('Realm to create the user in'),
+        realmName: pathSegment('Realm to create the user in'),
         username: z.string().describe('Unique username within the realm'),
         email: z.string().email().optional().describe('User email address'),
         firstName: z.string().optional().describe("User's first name"),
@@ -111,8 +112,8 @@ export function registerUserTools(server: McpServer, client: IdenplaneClient): v
       description:
         '[WRITE] Replace the complete set of realm roles for a user. Removes all existing role assignments and adds the specified roles. Pass an empty array to strip all roles.',
       inputSchema: {
-        realmName: z.string().describe('Realm the user belongs to'),
-        userId: z.string().describe('User ID (UUID)'),
+        realmName: pathSegment('Realm the user belongs to'),
+        userId: pathSegment('User ID (UUID)'),
         roleNames: z
           .array(z.string())
           .describe('Complete list of role names to assign (replaces existing assignments)'),

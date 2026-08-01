@@ -1,6 +1,7 @@
 import { z } from 'zod';
 import type { IdenplaneClient } from '../client.js';
 import type { McpServer } from '@modelcontextprotocol/sdk/server/mcp.js';
+import { pathSegment } from '../schemas.js';
 
 const SessionSchema = z.object({
   id: z.string(),
@@ -21,8 +22,8 @@ export function registerSessionTools(server: McpServer, client: IdenplaneClient)
       description:
         'List all active login sessions in a realm. Optionally filter to sessions for a specific user.',
       inputSchema: {
-        realmName: z.string().describe('Realm to query sessions from'),
-        userId: z.string().optional().describe('If set, only return sessions for this user ID'),
+        realmName: pathSegment('Realm to query sessions from'),
+        userId: pathSegment('If set, only return sessions for this user ID').optional(),
       },
     },
     async ({ realmName, userId }) => {
@@ -43,8 +44,8 @@ export function registerSessionTools(server: McpServer, client: IdenplaneClient)
       description:
         '[DESTRUCTIVE] Revoke (terminate) a specific active session by its session ID. The user will be logged out of that session immediately.',
       inputSchema: {
-        realmName: z.string().describe('Realm the session belongs to'),
-        sessionId: z.string().describe('Session ID to revoke'),
+        realmName: pathSegment('Realm the session belongs to'),
+        sessionId: pathSegment('Session ID to revoke'),
       },
     },
     async ({ realmName, sessionId }) => {
