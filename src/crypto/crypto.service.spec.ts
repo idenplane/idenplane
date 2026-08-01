@@ -103,4 +103,33 @@ describe('CryptoService', () => {
       expect(service.decrypt(ciphertext)).toBe(plaintext);
     });
   });
+
+  describe('encryptSecret / decryptSecret', () => {
+    it('should encrypt a plaintext value and decrypt it back', () => {
+      const encrypted = service.encryptSecret('smtp-password-123');
+      expect(encrypted).not.toBe('smtp-password-123');
+      expect(service.decryptSecret(encrypted)).toBe('smtp-password-123');
+    });
+
+    it('should not re-encrypt a value that is already an encrypted envelope', () => {
+      const once = service.encryptSecret('smtp-password-123');
+      const twice = service.encryptSecret(once);
+      expect(twice).toBe(once);
+      expect(service.decryptSecret(twice)).toBe('smtp-password-123');
+    });
+
+    it('should treat pre-existing legacy plaintext as already-decrypted on read', () => {
+      const legacyPlaintext = 'plaintext-password-from-before-this-fix';
+      expect(service.decryptSecret(legacyPlaintext)).toBe(legacyPlaintext);
+    });
+
+    it('should pass through null, undefined, and empty string unchanged', () => {
+      expect(service.encryptSecret(null)).toBeNull();
+      expect(service.encryptSecret(undefined)).toBeUndefined();
+      expect(service.encryptSecret('')).toBe('');
+      expect(service.decryptSecret(null)).toBeNull();
+      expect(service.decryptSecret(undefined)).toBeUndefined();
+      expect(service.decryptSecret('')).toBe('');
+    });
+  });
 });

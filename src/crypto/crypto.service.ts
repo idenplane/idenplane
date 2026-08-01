@@ -158,4 +158,47 @@ export class CryptoService implements OnModuleInit {
     decipher.setAuthTag(tag);
     return decipher.update(encrypted).toString('utf8') + decipher.final('utf8');
   }
+
+  /**
+   * True if `value` is ciphertext this service can decrypt. GCM's auth tag
+   * makes this reliable in both directions: real ciphertext always decrypts,
+   * and plaintext can only fail to decrypt (a false-positive would require
+   * forging the tag), so this doubles as a "not already encrypted" check.
+   */
+  private isEncrypted(value: string): boolean {
+    try {
+      this.decrypt(value);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Encrypt a secret before writing it to the database, unless it is already
+   * an encrypted envelope — e.g. a value round-tripped unchanged through a
+   * GET followed by a PATCH of the same realm. Nullish/empty values pass
+   * through so "field omitted" and "clear the field" both behave as before.
+   */
+  encryptSecret<T extends string | null | undefined>(value: T): T {
+    if (!value) return value;
+    if (this.isEncrypted(value)) return value;
+    return this.encrypt(value) as T;
+  }
+
+  /**
+   * Decrypt a secret read from the database. Realms written before this
+   * field was encrypted still hold plaintext; decrypt() can only fail closed
+   * on those (it can't mistake plaintext for a valid ciphertext+tag), so
+   * falling back to the raw value on failure is safe and lets old rows keep
+   * working until they're next written (encryptSecret then encrypts them).
+   */
+  decryptSecret<T extends string | null | undefined>(value: T): T {
+    if (!value) return value;
+    try {
+      return this.decrypt(value) as T;
+    } catch {
+      return value;
+    }
+  }
 }
