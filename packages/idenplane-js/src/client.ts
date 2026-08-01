@@ -117,6 +117,10 @@ export class IdenplaneClient {
   private static readonly DISCOVERY_TTL_MS = 60 * 60 * 1000; // 1 hour
   private refreshTimer: ReturnType<typeof setTimeout> | null = null;
   private cachedUserInfo: UserInfo | null = null;
+  // Keyed by the raw token string, so a token change (refresh, login, logout)
+  // naturally invalidates the cache without needing to hook into every
+  // storage mutation site.
+  private cachedTokenClaims: { token: string; claims: TokenClaims } | null = null;
   private initialized = false;
   // Bug #4 fix: guard against concurrent calls to init() (e.g. React StrictMode
   // double-mount, multiple components calling init simultaneously).
@@ -415,8 +419,14 @@ export class IdenplaneClient {
     const token = this.storage.get('access_token');
     if (!token) return null;
 
+    if (this.cachedTokenClaims?.token === token) {
+      return this.cachedTokenClaims.claims;
+    }
+
     try {
-      return parseJwt(token);
+      const claims = parseJwt(token);
+      this.cachedTokenClaims = { token, claims };
+      return claims;
     } catch {
       return null;
     }
