@@ -9,6 +9,7 @@ import type { Request } from 'express';
 import { EventsService } from './events.service.js';
 import { ResourceType, OperationType } from './event-types.js';
 import type { OperationTypeValue, ResourceTypeValue } from './event-types.js';
+import { SENSITIVE_BODY_FIELDS } from '../common/security/sensitive-body-fields.js';
 
 const RESOURCE_TYPE_MAP: Array<{ pattern: RegExp; type: ResourceTypeValue }> = [
   // More-specific patterns must come before broader ones to avoid mis-classification.
@@ -114,15 +115,7 @@ export class AdminEventInterceptor implements NestInterceptor {
     const redacted: Record<string, unknown> = {
       ...(body as Record<string, unknown>),
     };
-    const sensitiveKeys = [
-      'password',
-      'clientSecret',
-      'smtpPassword',
-      'client_secret',
-      'currentPassword',
-      'newPassword',
-    ];
-    for (const key of sensitiveKeys) {
+    for (const key of SENSITIVE_BODY_FIELDS) {
       if (key in redacted) redacted[key] = '[REDACTED]';
     }
     return redacted;
