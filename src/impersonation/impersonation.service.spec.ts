@@ -312,7 +312,7 @@ describe('ImpersonationService', () => {
       ).rejects.toThrow(ForbiddenException);
     });
 
-    it('throws BadRequestException when session is already ended', async () => {
+    it('returns successfully and does nothing when session is already ended', async () => {
       (prisma as any).impersonationSession.findUnique.mockResolvedValue({
         ...impersonationSession,
         active: false,
@@ -320,7 +320,7 @@ describe('ImpersonationService', () => {
 
       await expect(
         service.endImpersonation(realm, 'imp-session-1', 'admin-1'),
-      ).rejects.toThrow(BadRequestException);
+      ).resolves.toBeUndefined();
     });
 
     it('records IMPERSONATION_END login event', async () => {

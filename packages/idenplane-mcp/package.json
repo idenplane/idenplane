@@ -1,5 +1,5 @@
 {
-  "name": "@idenplane/mcp",
+  "name": "idenplane-mcp",
   "version": "0.1.0",
   "description": "MCP server for Idenplane IAM — manage identities in natural language",
   "type": "module",
@@ -51,8 +51,5 @@
     "type": "git",
     "url": "git+https://github.com/idenplane/idenplane.git",
     "directory": "packages/idenplane-mcp"
-  },
-  "publishConfig": {
-    "access": "public"
   }
 }

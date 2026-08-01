@@ -197,7 +197,7 @@ export class ImpersonationService {
     }
 
     if (!impSession.active) {
-      throw new BadRequestException('Impersonation session is already ended');
+      return;
     }
 
     // Revoke all refresh tokens for the underlying OAuth session

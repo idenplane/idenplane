@@ -1,0 +1,92 @@
+name: Publish idenplane-mcp
+
+# Publishes packages/idenplane-mcp to npm as idenplane-mcp (unscoped — the
+# @idenplane npm organization doesn't exist, and creating one is a manual
+# account/billing action on npmjs.com, not something a publish token can do;
+# publishing unscoped avoids that dependency entirely), so the README's
+# documented `npx -y idenplane-mcp` actually resolves (idenplane#1243).
+#
+#   - every mcp-v* git tag -> publishes, after checking the tag version
+#     matches packages/idenplane-mcp/package.json (same safety check
+#     release-version-check.yml does for root v* tags, scoped to this
+#     package instead)
+#   - manual dispatch       -> on demand, e.g. for the very first release,
+#     since there's no mcp-v* tag history yet to trigger off of
+#
+# Requires one repo secret:
+#   NPM_TOKEN - an npm access token (Automation type recommended so it
+#               isn't tied to 2FA prompts) with publish rights for this
+#               package under the token owner's npm account.
+on:
+  push:
+    tags: ['mcp-v*']
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-mcp-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build & publish
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: packages/idenplane-mcp/package-lock.json
+          registry-url: 'https://registry.npmjs.org'
+
+      # idenplane-mcp consumes @idenplane/http-internal through
+      # `file:../idenplane-http-internal`, and its dist/ is gitignored — so on
+      # a fresh checkout it has no compiled output to resolve. Build it first
+      # (mirrors the identical step in ci.yml's SDK matrix job).
+      - name: Build the local idenplane-http-internal dependency
+        working-directory: packages/idenplane-http-internal
+        run: |
+          npm ci
+          npm run build
+
+      - name: Verify tag matches package.json version
+        if: startsWith(github.ref, 'refs/tags/')
+        working-directory: packages/idenplane-mcp
+        run: |
+          set -e
+          TAG_VERSION="${GITHUB_REF_NAME#mcp-v}"
+          PKG_VERSION=$(node -p "require('./package.json').version")
+
+          echo "Tag:          ${GITHUB_REF_NAME} (${TAG_VERSION})"
+          echo "package.json: ${PKG_VERSION}"
+
+          if [ "${TAG_VERSION}" != "${PKG_VERSION}" ]; then
+            echo "::error::Tag version (${TAG_VERSION}) does not match packages/idenplane-mcp/package.json version (${PKG_VERSION})"
+            exit 1
+          fi
+
+      - name: Install dependencies
+        working-directory: packages/idenplane-mcp
+        run: npm ci
+
+      - name: Build
+        working-directory: packages/idenplane-mcp
+        run: npm run build
+
+      - name: Test
+        working-directory: packages/idenplane-mcp
+        run: npm run test:all
+
+      - name: Verify package contents
+        working-directory: packages/idenplane-mcp
+        run: npm pack --dry-run
+
+      - name: Publish to npm
+        working-directory: packages/idenplane-mcp
+        run: npm publish
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}
