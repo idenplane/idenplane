@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Realm } from '../../types';
 import type { MagicLinkSettings } from '../../types';
 import { updateRealm } from '../../api/realms';
+import { formatDuration } from '../../utils/formatDuration';
 
 type MagicLinkSettingsFormProps = {
   realm: Realm;
@@ -53,13 +54,6 @@ export default function MagicLinkSettingsForm({ realm }: MagicLinkSettingsFormPr
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
     updateMutation.mutate();
-  }
-
-  function formatDuration(seconds: number): string {
-    if (seconds < 60) return `${seconds}s`;
-    if (seconds < 3600) return `${Math.floor(seconds / 60)}m`;
-    if (seconds < 86400) return `${Math.floor(seconds / 3600)}h`;
-    return `${Math.floor(seconds / 86400)}d`;
   }
 
   return (
