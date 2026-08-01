@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { useParams } from 'react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import {
@@ -53,13 +53,13 @@ export default function ScimConfigPage() {
     enabled: !!name,
   });
 
-  useEffect(() => {
-    if (realm !== undefined) {
-      setScimEnabledToggle(realm.scimEnabled ?? false);
-      setScimUserAutocreate(realm.scimUserAutocreate ?? true);
-      setScimGroupSyncEnabled(realm.scimGroupSyncEnabled ?? true);
-    }
-  }, [realm]);
+  const [prevRealm, setPrevRealm] = useState<typeof realm | null>(null);
+  if (realm && realm !== prevRealm) {
+    setPrevRealm(realm);
+    setScimEnabledToggle(realm.scimEnabled ?? false);
+    setScimUserAutocreate(realm.scimUserAutocreate ?? true);
+    setScimGroupSyncEnabled(realm.scimGroupSyncEnabled ?? true);
+  }
 
   const updateRealmMutation = useMutation({
     mutationFn: (payload: { scimEnabled: boolean; scimUserAutocreate: boolean; scimGroupSyncEnabled: boolean }) =>

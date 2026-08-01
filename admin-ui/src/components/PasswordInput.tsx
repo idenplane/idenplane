@@ -10,9 +10,8 @@ export default function PasswordInput(props: PasswordInputProps) {
       <input {...props} type={visible ? 'text' : 'password'} className={`${props.className ?? ''} pr-10`} />
       <button
         type="button"
-        tabIndex={-1}
         onClick={() => setVisible(!visible)}
-        className="absolute inset-y-0 right-0 flex items-center pr-3 text-subtle hover:text-muted"
+        className="absolute right-2 top-1/2 -translate-y-1/2 flex h-7 w-7 items-center justify-center rounded-md text-subtle hover:text-muted focus-visible:text-accent focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent transition-all duration-150"
         aria-label={visible ? 'Hide password' : 'Show password'}
       >
         {visible ? (
