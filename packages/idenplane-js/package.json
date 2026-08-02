@@ -36,6 +36,16 @@
         "types": "./dist/server.d.cts",
         "default": "./dist/server.cjs"
       }
+    },
+    "./token": {
+      "import": {
+        "types": "./dist/token.d.ts",
+        "default": "./dist/token.js"
+      },
+      "require": {
+        "types": "./dist/token.d.cts",
+        "default": "./dist/token.cjs"
+      }
     }
   },
   "peerDependencies": {

@@ -73,24 +73,12 @@ export type NextApiHandler = (
 ) => void | Promise<void>;
 
 /**
- * Verify a Bearer token via idenplane-sdk/server (JWKS).
+ * Load the auth helpers from idenplane-sdk/server dynamically. Deferred to
+ * call time (rather than a static import) so this module doesn't force
+ * `jose` into a caller's bundle unless a request is actually handled.
  */
-async function verifyBearerToken(
-  token: string,
-  config: ApiAuthConfig,
-): Promise<TokenPayload> {
-  const { verifyToken } = await import('idenplane-sdk/server');
-  return verifyToken(token, {
-    issuerUrl: config.serverUrl,
-    realm: config.realm,
-  }) as Promise<TokenPayload>;
-}
-
-function extractBearer(headers: Record<string, string | string[] | undefined>): string | null {
-  const raw = headers['authorization'] ?? headers['Authorization'];
-  const header = Array.isArray(raw) ? raw[0] : raw;
-  if (!header?.startsWith('Bearer ')) return null;
-  return header.slice(7);
+async function loadAuthHelpers() {
+  return import('idenplane-sdk/server');
 }
 
 /**
@@ -104,7 +92,8 @@ export function withAuth(
   assertSecureServerUrl(config.serverUrl, config.allowInsecureHttp);
 
   return async (req, res) => {
-    const token = extractBearer(req.headers);
+    const { extractBearerToken, verifyToken, hasRealmRoles } = await loadAuthHelpers();
+    const token = extractBearerToken(req.headers['authorization'] ?? req.headers['Authorization']);
 
     if (!token) {
       return res.status(401).json({ error: 'unauthorized', message: 'Missing Bearer token' });
@@ -112,17 +101,16 @@ export function withAuth(
 
     let payload: TokenPayload;
     try {
-      payload = await verifyBearerToken(token, config);
+      payload = (await verifyToken(token, {
+        issuerUrl: config.serverUrl,
+        realm: config.realm,
+      })) as TokenPayload;
     } catch {
       return res.status(401).json({ error: 'unauthorized', message: 'Invalid or expired token' });
     }
 
-    if (config.requiredRoles?.length) {
-      const userRoles = payload.realm_access?.roles ?? [];
-      const hasAll = config.requiredRoles.every((r) => userRoles.includes(r));
-      if (!hasAll) {
-        return res.status(403).json({ error: 'forbidden', message: 'Insufficient roles' });
-      }
+    if (config.requiredRoles?.length && !hasRealmRoles(payload, config.requiredRoles)) {
+      return res.status(403).json({ error: 'forbidden', message: 'Insufficient roles' });
     }
 
     req.authUser = payload;
@@ -148,8 +136,8 @@ export function withAuthHandler(
   assertSecureServerUrl(config.serverUrl, config.allowInsecureHttp);
 
   return async (req: Request) => {
-    const authHeader = req.headers.get('authorization');
-    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    const { extractBearerToken, verifyToken, hasRealmRoles } = await loadAuthHelpers();
+    const token = extractBearerToken(req.headers.get('authorization'));
 
     if (!token) {
       return Response.json(
@@ -160,7 +148,10 @@ export function withAuthHandler(
 
     let payload: TokenPayload;
     try {
-      payload = await verifyBearerToken(token, config);
+      payload = (await verifyToken(token, {
+        issuerUrl: config.serverUrl,
+        realm: config.realm,
+      })) as TokenPayload;
     } catch {
       return Response.json(
         { error: 'unauthorized', message: 'Invalid or expired token' },
@@ -168,15 +159,11 @@ export function withAuthHandler(
       );
     }
 
-    if (config.requiredRoles?.length) {
-      const userRoles = payload.realm_access?.roles ?? [];
-      const hasAll = config.requiredRoles.every((r) => userRoles.includes(r));
-      if (!hasAll) {
-        return Response.json(
-          { error: 'forbidden', message: 'Insufficient roles' },
-          { status: 403 },
-        );
-      }
+    if (config.requiredRoles?.length && !hasRealmRoles(payload, config.requiredRoles)) {
+      return Response.json(
+        { error: 'forbidden', message: 'Insufficient roles' },
+        { status: 403 },
+      );
     }
 
     return handler(req, payload);

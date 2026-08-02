@@ -28,6 +28,7 @@
  * ```
  */
 
+import { decodeJwtPayload, extractBearerToken } from 'idenplane-sdk/token';
 import { assertSecureServerUrl } from './internal/url-validation.js';
 
 export interface AuthMiddlewareConfig {
@@ -73,42 +74,29 @@ interface NextResponseStatic {
 }
 
 /**
- * Decode a JWT payload without cryptographic signature verification.
+ * Check whether a token is expired, without cryptographic signature
+ * verification.
  *
- * SECURITY NOTE (#10): This function only checks the token's expiry claim
- * (`exp`) and validates that the token is structurally well-formed (three
- * dot-separated parts, valid base64url encoding).  It does NOT verify the
- * signature.  A tampered or forged token with a future `exp` will pass this
- * check.
+ * SECURITY NOTE (#10): This only checks the token's expiry claim (`exp`) via
+ * `decodeJwtPayload` from `idenplane-sdk/token` (a structural decode — three
+ * dot-separated parts, valid base64url encoding, valid JSON). It does NOT
+ * verify the signature. A tampered or forged token with a future `exp` will
+ * pass this check.
  *
  * This is intentional for Edge Middleware: signature verification requires the
  * JWKS public key and an async network fetch, which adds latency on every
- * request.  The authoritative verification MUST be performed server-side via
+ * request. The authoritative verification MUST be performed server-side via
  * `verifyToken` (JWKS) before acting on any token claims for authorization
- * decisions.  Middleware should only be used as a first-pass redirect guard,
+ * decisions. Middleware should only be used as a first-pass redirect guard,
  * not as a security boundary by itself.
+ *
+ * `idenplane-sdk/token` has zero runtime dependencies (no `jose`), so
+ * importing it here doesn't add anything to the Edge Middleware bundle.
  */
 function isTokenExpiredLocally(token: string): boolean {
-  try {
-    const parts = token.split('.');
-    // Structural validation: a well-formed JWT has exactly three parts.
-    if (parts.length !== 3) return true;
-
-    const [, payloadB64] = parts;
-    // Validate the payload segment contains only valid base64url characters.
-    if (!/^[A-Za-z0-9_-]+$/.test(payloadB64)) return true;
-
-    const paddedPayload = payloadB64.padEnd(
-      payloadB64.length + (4 - (payloadB64.length % 4)) % 4,
-      '=',
-    );
-    const json = atob(paddedPayload.replace(/-/g, '+').replace(/_/g, '/'));
-    const payload = JSON.parse(json) as { exp?: number };
-    if (payload.exp === undefined) return true;
-    return Date.now() / 1000 > payload.exp;
-  } catch {
-    return true;
-  }
+  const payload = decodeJwtPayload(token);
+  if (!payload || typeof payload['exp'] !== 'number') return true;
+  return Date.now() / 1000 > payload['exp'];
 }
 
 /**
@@ -141,10 +129,7 @@ export function createAuthMiddleware(config: AuthMiddlewareConfig) {
     if (pathname.startsWith(loginPath)) return NextResponse.next();
 
     // 1. Try Authorization header (Bearer token)
-    const authHeader = request.headers.get('authorization');
-    const bearerToken = authHeader?.startsWith('Bearer ')
-      ? authHeader.slice(7)
-      : null;
+    const bearerToken = extractBearerToken(request.headers.get('authorization'));
 
     if (bearerToken && !isTokenExpiredLocally(bearerToken)) {
       return NextResponse.next();
