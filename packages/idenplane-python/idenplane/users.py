@@ -15,7 +15,7 @@ from urllib.parse import quote
 import requests
 from typing_extensions import NotRequired, TypedDict
 
-from idenplane.exceptions import IdenplaneError, _raise_for_status
+from idenplane.exceptions import IdenplaneError
 
 if TYPE_CHECKING:
     from idenplane.client import Client
@@ -150,33 +150,17 @@ class UserService:
     ) -> requests.Response:
         """Build, authenticate, and dispatch an admin API request.
 
-        Always attaches ``Accept`` and ``User-Agent``. Adds
-        ``Content-Type: application/json`` when a body is supplied. Attaches
-        ``Authorization`` when the client has an admin token configured.
-        Non-2xx responses raise the appropriate :class:`IdenplaneError`
-        subclass.
+        Delegates to :meth:`Client._do_request`, which sets ``Accept`` and
+        ``User-Agent`` on every call, adds ``Content-Type: application/json``
+        when a body is supplied, attaches ``Authorization`` when the client
+        has an admin token configured, and raises the appropriate
+        :class:`IdenplaneError` subclass for non-2xx responses. Kept as a
+        method here (rather than calling ``self._client._do_request``
+        directly at each call site) so ``RoleService``/``GroupService`` and
+        this class share one implementation while every service still reads
+        ``self._do_request(...)``.
         """
-        headers = self._client.default_headers()
-        if json is not None:
-            headers["Content-Type"] = "application/json"
-        auth = self._client.auth_header()
-        if auth:
-            headers["Authorization"] = auth
-
-        try:
-            resp = self._client.session.request(
-                method=method,
-                url=url,
-                json=json,
-                params=params,
-                headers=headers,
-                timeout=self._client.config.timeout_seconds,
-            )
-        except requests.RequestException as exc:
-            raise IdenplaneError(f"HTTP request failed: {exc}") from exc
-
-        _raise_for_status(resp)
-        return resp
+        return self._client._do_request(method, url, json=json, params=params)
 
     @staticmethod
     def _extract_id_from_location(location: str) -> str:
