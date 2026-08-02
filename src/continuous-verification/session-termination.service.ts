@@ -3,6 +3,8 @@ import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { SessionsService } from '../sessions/sessions.service.js';
 import { SessionEventsGateway } from '../realtime/session-events.gateway.js';
+import { EmailService } from '../email/email.service.js';
+import { escapeHtml } from '../common/utils/html-escape.util.js';
 
 /**
  * SessionTerminationService
@@ -22,6 +24,7 @@ export class SessionTerminationService {
     private readonly prisma: PrismaService,
     private readonly sessionsService: SessionsService,
     private readonly sessionEvents: SessionEventsGateway,
+    private readonly emailService: EmailService,
   ) {}
 
   /**
@@ -228,7 +231,60 @@ export class SessionTerminationService {
       timestamp: now.toISOString(),
     });
 
-    // TODO: Send notification to user about session termination
-    // await this.emailService.sendSessionTerminationNotice(session.user.email, session.user.username);
+    // Notify the user by email, if they have one on file.
+    if (session.user?.email) {
+      await this.sendTerminationEmail(
+        session.realmId,
+        session.user.email,
+        session.user.username,
+        terminationReason,
+        now,
+      );
+    }
+  }
+
+  private async sendTerminationEmail(
+    realmId: string,
+    userEmail: string,
+    username: string,
+    reason: string,
+    timestamp: Date,
+  ): Promise<void> {
+    const realm = await this.prisma.realm.findUnique({
+      where: { id: realmId },
+      select: { name: true },
+    });
+    if (!realm) return;
+
+    const time = escapeHtml(timestamp.toUTCString());
+    const safeReason = escapeHtml(reason);
+    const safeUsername = escapeHtml(username);
+
+    const html = `
+      <h2>Session Ended</h2>
+      <p>Hi ${safeUsername},</p>
+      <p>One of your sessions was ended by Idenplane's security monitoring.</p>
+      <table style="border-collapse:collapse;margin-top:12px">
+        <tr><td style="padding:4px 12px 4px 0;font-weight:bold">Time</td><td>${time}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;font-weight:bold">Reason</td><td>${safeReason}</td></tr>
+      </table>
+      <p style="margin-top:16px">
+        If you're still signed in elsewhere, you may need to sign in again on the device where this session was active.
+        If you don't recognize this activity, please contact your administrator.
+      </p>
+    `;
+
+    try {
+      await this.emailService.sendEmail(
+        realm.name,
+        userEmail,
+        'Your session was ended',
+        html,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Failed to send session-termination email to ${userEmail}: ${(err as Error).message}`,
+      );
+    }
   }
 }
