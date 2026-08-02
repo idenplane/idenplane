@@ -2,6 +2,7 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { SessionsService } from '../sessions/sessions.service.js';
+import { SessionEventsGateway } from '../realtime/session-events.gateway.js';
 
 /**
  * SessionTerminationService
@@ -20,6 +21,7 @@ export class SessionTerminationService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly sessionsService: SessionsService,
+    private readonly sessionEvents: SessionEventsGateway,
   ) {}
 
   /**
@@ -220,8 +222,11 @@ export class SessionTerminationService {
     });
 
     // Emit termination event for real-time notification
-    // TODO: Emit event for WebSocket/push notification to client application
-    // this.eventEmitter.emit('session.terminated', { sessionId, reason: terminationReason });
+    this.sessionEvents.emitSessionTerminated(session.userId, {
+      sessionId: profile.sessionId,
+      reason: terminationReason,
+      timestamp: now.toISOString(),
+    });
 
     // TODO: Send notification to user about session termination
     // await this.emailService.sendSessionTerminationNotice(session.user.email, session.user.username);
