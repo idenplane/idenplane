@@ -170,9 +170,9 @@ export class WebhookSchedulerService {
 
     // At least one delivery failed.  Schedule a retry or give up.
     const retriesLeft = (event.maxAttempts ?? MAX_ATTEMPTS) - newAttemptCount;
-    if (retriesLeft > 0 && newAttemptCount < RETRY_DELAYS_MS.length) {
+    if (retriesLeft > 0 && newAttemptCount <= RETRY_DELAYS_MS.length) {
       const delayMs =
-        RETRY_DELAYS_MS[newAttemptCount] ??
+        RETRY_DELAYS_MS[newAttemptCount - 1] ??
         RETRY_DELAYS_MS[RETRY_DELAYS_MS.length - 1];
       const nextRetry = new Date(Date.now() + delayMs);
       await this.db.webhookEvent.update({
