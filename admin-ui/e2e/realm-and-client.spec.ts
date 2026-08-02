@@ -20,8 +20,9 @@ test('creates a realm, then creates a client from the Grafana template', async (
   await expect(page).toHaveURL(/\/console\/realms\/?$/);
   // Scoped to <td> rather than getByText: the row itself also carries the
   // realm name in its aria-label, and matching loose text risks resolving
-  // to both the row and the cell.
-  await expect(page.locator('td', { hasText: realmName })).toBeVisible();
+  // to both the row and the cell. Anchored exactly so it can't also match
+  // a longer cell value that happens to contain this string.
+  await expect(page.locator('td', { hasText: new RegExp(`^${realmName}$`) })).toBeVisible();
 
   await page.goto(`/console/realms/${realmName}/clients/new`);
   await page.getByLabel('Start from a template').selectOption({ label: 'Grafana' });
@@ -37,5 +38,7 @@ test('creates a realm, then creates a client from the Grafana template', async (
 
   await page.getByRole('button', { name: 'Go to Clients' }).click();
   await expect(page).toHaveURL(new RegExp(`/console/realms/${realmName}/clients/?$`));
-  await expect(page.locator('td', { hasText: 'grafana' })).toBeVisible();
+  // Exact + anchored: the template's Name column renders "Grafana", which
+  // would otherwise also match a case-insensitive substring filter.
+  await expect(page.locator('td', { hasText: /^grafana$/ })).toBeVisible();
 });
