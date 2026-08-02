@@ -1,0 +1,225 @@
+---
+id: go-sdk
+title: Go SDK
+description: Integrate Idenplane admin management (users, roles, groups) and OIDC discovery into a Go backend using the official Go SDK
+---
+
+# Go SDK
+
+`idenplane-go` is the official server-side Go SDK for Idenplane. It wraps the admin-management REST API (users, roles, groups) and OIDC discovery in an idiomatic, context-aware Go client with no third-party runtime dependencies.
+
+## Requirements
+
+| Requirement | Version |
+|---|---|
+| Go | 1.24+ |
+
+---
+
+## Installation
+
+```bash
+go get github.com/idenplane/idenplane/packages/idenplane-go
+```
+
+---
+
+## Quick start
+
+```go
+package main
+
+import (
+	"context"
+	"fmt"
+	"log"
+
+	idenplane "github.com/idenplane/idenplane/packages/idenplane-go"
+)
+
+func main() {
+	client := idenplane.NewClient(idenplane.Config{
+		ServerURL:  "https://auth.example.com",
+		Realm:      "my-realm",
+		ClientID:   "my-app",
+		AdminToken: "eyJ...", // service-account token with the realm-management role
+	})
+
+	ctx := context.Background()
+
+	user, err := client.Users.Create(ctx, idenplane.CreateUserRequest{
+		Username: "alice",
+		Email:    "alice@example.com",
+		Enabled:  true,
+	})
+	if err != nil {
+		log.Fatal(err)
+	}
+	fmt.Println("created user", user.ID)
+}
+```
+
+`NewClientWithDefaults(serverURL, realm, clientID)` is a shorthand for the common case where you don't need to override `Scopes`, `HTTPClient`, `DiscoveryTTL`, or `HTTPTimeout`.
+
+`Config.ServerURL` must be `https://` unless the host is a loopback address (`localhost`, `127.0.0.1`, `::1`) or `Config.AllowInsecureHTTP` is explicitly set — plaintext HTTP would otherwise send `AdminToken` over the wire unencrypted.
+
+---
+
+## Authentication
+
+Every admin-API call (`Users`, `Roles`, `Groups`) is authenticated with `Config.AdminToken`, sent as `Authorization: Bearer <token>`. Typically this is obtained via the OAuth 2.0 client-credentials flow against a service account that holds the `realm-management` role. If `AdminToken` is empty, the `Authorization` header is simply omitted — useful for discovery-only usage.
+
+---
+
+## User management
+
+```go
+// Get
+user, err := client.Users.Get(ctx, "user-id-123")
+
+// List with filters and pagination (page is 1-based, limit defaults to 20)
+users, total, err := client.Users.List(ctx, idenplane.ListUsersParams{
+	Search: "alice",
+	Page:   1,
+	Limit:  25,
+})
+
+// Update (returns error only; fetch again with Get if you need the updated record)
+newEmail := "new@example.com"
+err = client.Users.Update(ctx, "user-id-123", idenplane.UpdateUserRequest{
+	Email: &newEmail,
+})
+
+// Reset password
+err = client.Users.ResetPassword(ctx, "user-id-123", "S3cret!", true /* temporary */)
+
+// Delete
+err = client.Users.Delete(ctx, "user-id-123")
+```
+
+`Create` follows the admin API's `201` + `Location` header response with a `GET` to populate the full record, unless the `POST` body already carried one.
+
+---
+
+## Role management
+
+Realm roles are addressed by **name**, not by ID:
+
+```go
+role, err := client.Roles.Create(ctx, idenplane.CreateRoleRequest{
+	Name:        "billing-admin",
+	Description: "Can manage billing settings",
+})
+
+role, err = client.Roles.Get(ctx, "billing-admin")
+
+roles, err := client.Roles.List(ctx)
+
+desc := "Updated description"
+role, err = client.Roles.Update(ctx, "billing-admin", idenplane.UpdateRoleRequest{
+	Description: &desc,
+})
+
+err = client.Roles.Delete(ctx, "billing-admin")
+```
+
+---
+
+## Group management
+
+Groups are addressed by ID and support nesting via `ParentID`:
+
+```go
+parent, err := client.Groups.Create(ctx, idenplane.CreateGroupRequest{Name: "engineering"})
+
+child, err := client.Groups.Create(ctx, idenplane.CreateGroupRequest{
+	Name:     "platform-team",
+	ParentID: parent.ID,
+})
+
+group, err := client.Groups.Get(ctx, child.ID)
+
+groups, err := client.Groups.List(ctx)
+
+newName := "platform-infra"
+group, err = client.Groups.Update(ctx, child.ID, idenplane.UpdateGroupRequest{Name: &newName})
+
+err = client.Groups.Delete(ctx, child.ID)
+```
+
+---
+
+## OIDC discovery
+
+```go
+discovery := idenplane.NewDiscoveryClient(idenplane.Config{
+	ServerURL: "https://auth.example.com",
+	Realm:     "my-realm",
+	ClientID:  "my-app",
+})
+
+oidc, err := discovery.Get(ctx) // cached for Config.DiscoveryTTL (default 1 hour)
+fmt.Println(oidc.TokenEndpoint)
+
+oidc, err = discovery.Refresh(ctx) // force a refetch, bypassing the cache
+```
+
+---
+
+## Error handling
+
+All SDK errors are `*idenplane.Error`, carrying a stable `Code`:
+
+```go
+user, err := client.Users.Get(ctx, "missing-id")
+var idenplaneErr *idenplane.Error
+if errors.As(err, &idenplaneErr) && idenplaneErr.Code == idenplane.ErrCodeUserNotFound {
+	// handle not-found
+}
+
+if idenplane.IsRetryable(err) {
+	// network error or 5xx — safe to retry
+}
+```
+
+| Code | Meaning |
+|---|---|
+| `ErrCodeInvalidConfig` | Missing or invalid `Config` field |
+| `ErrCodeNotAuthenticated` | No valid session |
+| `ErrCodeTokenExpired` | Access token has expired |
+| `ErrCodeServerError` | Non-2xx response from the Idenplane server |
+| `ErrCodeNetworkError` | HTTP / IO error |
+| `ErrCodeDiscoveryFailed` | OIDC discovery document fetch failed |
+| `ErrCodeJWTError` | JWT parsing/validation error |
+| `ErrCodeUserNotFound` | `Users.Get`/`Update`/`Delete` for an unknown ID |
+| `ErrCodeRoleNotFound` | `Roles.Get`/`Update`/`Delete` for an unknown name |
+| `ErrCodeGroupNotFound` | `Groups.Get`/`Update`/`Delete` for an unknown ID |
+| `ErrCodeInvalidToken` | Malformed or invalid token |
+
+---
+
+## Next Steps
+
+<div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
+
+[**Python SDK**](/guides/sdks/python-sdk)
+Server-side Python SDK for the same admin API
+
+[**CLI**](/guides/sdks/cli)
+Manage the same resources from the terminal
+
+[**API Reference**](/api)
+Complete REST API documentation
+
+[**Configuration**](/getting-started/configuration)
+Learn about all configuration options
+
+</div>
+
+---
+
+<p align="center">
+  <a href="https://idenplane.com">idenplane.com</a> &middot;
+  <a href="https://github.com/idenplane/idenplane">GitHub</a> &middot;
+  <a href="https://discord.gg/idenplane">Discord</a>
+</p>

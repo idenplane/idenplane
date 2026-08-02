@@ -109,6 +109,21 @@ const sidebars: SidebarsConfig = {
           id: 'guides/sdks/ios-sdk',
           label: 'iOS',
         },
+        {
+          type: 'doc',
+          id: 'guides/sdks/go-sdk',
+          label: 'Go',
+        },
+        {
+          type: 'doc',
+          id: 'guides/sdks/python-sdk',
+          label: 'Python',
+        },
+        {
+          type: 'doc',
+          id: 'guides/sdks/cli',
+          label: 'CLI',
+        },
       ],
     },
     {
