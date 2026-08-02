@@ -230,6 +230,11 @@ const sidebars: SidebarsConfig = {
       id: 'troubleshooting',
       label: 'Troubleshooting & FAQ',
     },
+    {
+      type: 'doc',
+      id: 'contributing/architecture',
+      label: 'Architecture Overview',
+    },
   ],
 };
 
