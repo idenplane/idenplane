@@ -108,6 +108,7 @@ func (p *IdenplaneProvider) Resources(ctx context.Context) []func() resource.Res
 		NewUserResource,
 		NewIdentityProviderResource,
 		NewAuthFlowResource,
+		NewUserFederationResource,
 	}
 }
 
@@ -122,6 +123,7 @@ func (p *IdenplaneProvider) DataSources(ctx context.Context) []func() datasource
 		NewIdentityProviderDataSource,
 		NewAuthFlowDataSource,
 		NewOrganizationDataSource,
+		NewUserFederationDataSource,
 	}
 }
 
