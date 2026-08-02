@@ -77,7 +77,14 @@ export class AdminEventInterceptor implements NestInterceptor {
     const realm = adminReq.realm;
     const adminUser = adminReq.adminUser;
 
-    if (!realm || !adminUser) return next.handle();
+    // POST /admin/realms (creating a realm) has no :realmName param for
+    // RealmGuard to resolve, so `realm` is never set for it — the one admin
+    // write with no pre-existing realm to attach the event to. Special-case
+    // it: the new realm's id is in the response body once creation succeeds.
+    const isRealmCreation =
+      method === 'POST' && request.path === '/admin/realms';
+
+    if ((!realm && !isRealmCreation) || !adminUser) return next.handle();
 
     const operationType = METHOD_TO_OPERATION[method];
     if (!operationType) return next.handle();
@@ -89,9 +96,12 @@ export class AdminEventInterceptor implements NestInterceptor {
       method !== 'DELETE' ? this.redactBody(request.body) : undefined;
 
     return next.handle().pipe(
-      tap(() => {
+      tap((response: unknown) => {
+        const realmId = realm?.id ?? this.extractRealmId(response);
+        if (!realmId) return;
+
         void this.eventsService.recordAdminEvent({
-          realmId: realm.id,
+          realmId,
           adminUserId: adminUser.userId ?? adminUser.id ?? 'api-key',
           operationType,
           resourceType,
@@ -101,6 +111,16 @@ export class AdminEventInterceptor implements NestInterceptor {
         });
       }),
     );
+  }
+
+  /** Reads `id` off a successful creation response (used only when the
+   * request itself had no realm to resolve — see isRealmCreation above). */
+  private extractRealmId(response: unknown): string | null {
+    if (response && typeof response === 'object' && 'id' in response) {
+      const id = (response as { id?: unknown }).id;
+      return typeof id === 'string' ? id : null;
+    }
+    return null;
   }
 
   private resolveResourceType(path: string): ResourceTypeValue | null {
