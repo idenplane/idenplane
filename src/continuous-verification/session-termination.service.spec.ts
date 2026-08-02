@@ -5,6 +5,7 @@ describe('SessionTerminationService', () => {
   let prisma: any;
   let sessionsService: { revokeSession: jest.Mock };
   let sessionEvents: { emitSessionTerminated: jest.Mock };
+  let emailService: { sendEmail: jest.Mock };
 
   const mockProfile = {
     sessionId: 'sess-1',
@@ -30,14 +31,19 @@ describe('SessionTerminationService', () => {
       continuousRiskEvent: {
         create: jest.fn().mockResolvedValue({}),
       },
+      realm: {
+        findUnique: jest.fn().mockResolvedValue({ name: 'test-realm' }),
+      },
     };
     sessionsService = { revokeSession: jest.fn().mockResolvedValue(undefined) };
     sessionEvents = { emitSessionTerminated: jest.fn() };
+    emailService = { sendEmail: jest.fn().mockResolvedValue(undefined) };
 
     service = new SessionTerminationService(
       prisma,
       sessionsService as any,
       sessionEvents as any,
+      emailService as any,
     );
   });
 
@@ -86,6 +92,66 @@ describe('SessionTerminationService', () => {
         'sess-1',
         'oauth',
       );
+    });
+
+    it('emails the affected user with the realm name resolved from realmId', async () => {
+      await service.terminateSessionById('sess-1', 'Impossible travel detected');
+
+      expect(prisma.realm.findUnique).toHaveBeenCalledWith({
+        where: { id: 'realm-1' },
+        select: { name: true },
+      });
+      expect(emailService.sendEmail).toHaveBeenCalledWith(
+        'test-realm',
+        'alice@example.com',
+        'Your session was ended',
+        expect.stringContaining('Impossible travel detected'),
+      );
+    });
+
+    it('escapes the username and reason in the email body', async () => {
+      prisma.sessionRiskProfile.findUnique.mockResolvedValue({
+        ...mockProfile,
+        session: {
+          ...mockProfile.session,
+          user: { username: '<script>alert(1)</script>', email: 'alice@example.com' },
+        },
+      });
+
+      await service.terminateSessionById('sess-1', '<img src=x onerror=alert(1)>');
+
+      const html = emailService.sendEmail.mock.calls[0][3] as string;
+      expect(html).not.toContain('<script>');
+      expect(html).not.toContain('<img src=x onerror=alert(1)>');
+      expect(html).toContain('&lt;script&gt;');
+    });
+
+    it('does not email when the user has no email on file', async () => {
+      prisma.sessionRiskProfile.findUnique.mockResolvedValue({
+        ...mockProfile,
+        session: {
+          ...mockProfile.session,
+          user: { username: 'alice', email: null },
+        },
+      });
+
+      await service.terminateSessionById('sess-1');
+
+      expect(emailService.sendEmail).not.toHaveBeenCalled();
+    });
+
+    it('does not throw and still completes termination when the email send fails', async () => {
+      emailService.sendEmail.mockRejectedValue(new Error('SMTP down'));
+
+      await expect(service.terminateSessionById('sess-1')).resolves.toBeUndefined();
+      expect(sessionEvents.emitSessionTerminated).toHaveBeenCalled();
+    });
+
+    it('skips the email silently if the realm cannot be resolved', async () => {
+      prisma.realm.findUnique.mockResolvedValue(null);
+
+      await expect(service.terminateSessionById('sess-1')).resolves.toBeUndefined();
+      expect(emailService.sendEmail).not.toHaveBeenCalled();
     });
   });
 });
