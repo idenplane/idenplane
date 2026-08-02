@@ -39,6 +39,10 @@ export class IdenplaneClient {
     return this.request<T>('POST', buildUrlWithQuery(this.baseUrl, path), body);
   }
 
+  async put<T>(path: string, body?: unknown): Promise<T> {
+    return this.request<T>('PUT', buildUrlWithQuery(this.baseUrl, path), body);
+  }
+
   async delete<T>(path: string, body?: unknown): Promise<T | undefined> {
     return this.request<T>('DELETE', buildUrlWithQuery(this.baseUrl, path), body);
   }

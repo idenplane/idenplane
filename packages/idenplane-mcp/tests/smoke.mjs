@@ -1,5 +1,5 @@
 /**
- * Smoke test: spawns the MCP server and verifies all 14 tools are listed.
+ * Smoke test: spawns the MCP server and verifies all 21 tools are listed.
  * Does NOT require a running Idenplane instance — uses dummy env vars.
  * tools/list does not invoke handlers, so no network calls are made.
  *
@@ -28,13 +28,20 @@ const EXPECTED_TOOLS = [
   'set_user_roles',
   'list_roles',
   'assign_role',
+  'list_groups',
+  'get_group',
+  'create_group',
+  'update_group',
+  'delete_group',
+  'add_group_member',
+  'remove_group_member',
   'list_active_sessions',
   'revoke_session',
   'query_audit_events',
 ];
 
 describe('MCP server smoke test', () => {
-  it('lists all 14 expected tools without a live Idenplane instance', async () => {
+  it('lists all 21 expected tools without a live Idenplane instance', async () => {
     const transport = new StdioClientTransport({
       command: 'node',
       args: [serverPath],

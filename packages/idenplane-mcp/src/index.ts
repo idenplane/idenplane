@@ -5,6 +5,7 @@ import { registerRealmTools } from './tools/realms.js';
 import { registerClientTools } from './tools/clients.js';
 import { registerUserTools } from './tools/users.js';
 import { registerRoleTools } from './tools/roles.js';
+import { registerGroupTools } from './tools/groups.js';
 import { registerSessionTools } from './tools/sessions.js';
 import { registerAuditTools } from './tools/audit.js';
 
@@ -21,6 +22,7 @@ async function main(): Promise<void> {
   registerClientTools(server, apiClient);
   registerUserTools(server, apiClient);
   registerRoleTools(server, apiClient);
+  registerGroupTools(server, apiClient);
   registerSessionTools(server, apiClient);
   registerAuditTools(server, apiClient);
 
