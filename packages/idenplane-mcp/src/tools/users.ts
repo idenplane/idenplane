@@ -18,9 +18,20 @@ const UserListResponseSchema = z.object({
   total: z.number(),
 });
 
+/** A user, inferred from {@link UserSchema}. */
 export type User = z.infer<typeof UserSchema>;
+/** A paginated user list response, inferred from {@link UserListResponseSchema}. */
 export type UserListResponse = z.infer<typeof UserListResponseSchema>;
 
+/**
+ * Registers user MCP tools on `server`:
+ *
+ * - `list_users` (read-only) — List users in a realm with optional search and pagination.
+ * - `get_user` (read-only) — Get full details for a specific user by ID.
+ * - `create_user` (`[WRITE]`) — Create a new user in a realm.
+ * - `set_user_roles` (`[WRITE]`) — Replace a user's complete set of realm roles,
+ *   removing existing assignments not in the given list (an empty array strips all roles).
+ */
 export function registerUserTools(server: McpServer, client: IdenplaneClient): void {
   server.registerTool(
     'list_users',

@@ -10,8 +10,16 @@ const RoleSchema = z.object({
   composite: z.boolean().optional(),
 });
 
+/** A realm role, inferred from {@link RoleSchema}. */
 export type Role = z.infer<typeof RoleSchema>;
 
+/**
+ * Registers role MCP tools on `server`:
+ *
+ * - `list_roles` (read-only) — List all realm roles defined in a realm.
+ * - `assign_role` (`[WRITE]`) — Assign one or more realm roles to a user, additively
+ *   (existing role assignments are preserved).
+ */
 export function registerRoleTools(server: McpServer, client: IdenplaneClient): void {
   server.registerTool(
     'list_roles',

@@ -4,6 +4,11 @@ import { loadConfig } from '../config.js';
 import { HttpClient } from '../http.js';
 import { printResult, success } from '../output.js';
 
+/**
+ * Registers `idenplane config show|validate` subcommands for inspecting the
+ * saved CLI configuration (credentials masked) and checking that the
+ * configured server is reachable with valid credentials.
+ */
 export function registerConfigCommands(program: Command): void {
   const cfg = program.command('config').description('Manage CLI configuration');
 

@@ -3,6 +3,10 @@ import { HttpClient } from '../http.js';
 import { printResult, success } from '../output.js';
 import { confirm } from '../prompt.js';
 
+/**
+ * Registers `idenplane client list|create|get|update|delete|rotate-secret`
+ * subcommands for managing OAuth2/OIDC clients within a realm.
+ */
 export function registerClientCommands(program: Command): void {
   const client = program.command('client').description('Manage clients');
 

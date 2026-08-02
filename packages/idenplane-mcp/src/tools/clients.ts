@@ -14,8 +14,15 @@ const ClientSchema = z.object({
   redirectUris: z.array(z.string()).optional(),
 });
 
+/** An OAuth2/OIDC client, inferred from {@link ClientSchema}. */
 export type OidcClient = z.infer<typeof ClientSchema>;
 
+/**
+ * Registers OAuth2/OIDC client MCP tools on `server`:
+ *
+ * - `list_clients` (read-only) — List all clients registered in a realm.
+ * - `create_client` (`[WRITE]`) — Register a new OAuth2/OIDC client in a realm.
+ */
 export function registerClientTools(server: McpServer, client: IdenplaneClient): void {
   server.registerTool(
     'list_clients',

@@ -26,6 +26,14 @@ function redactCredentials<T>(data: T): T {
   return data;
 }
 
+/**
+ * Print a command result to stdout, either as pretty JSON (`opts.json`), an
+ * aligned table (array of objects), key/value lines (a single object), or a
+ * bare scalar. Stored credential fields (`apiKey`, `accessToken`) are
+ * recursively redacted before printing; other secrets returned directly from
+ * an API call (e.g. `clientSecret` from `client rotate-secret`) are left
+ * intact since the user explicitly requested them.
+ */
 export function printResult(data: unknown, opts: { json?: boolean }): void {
   const safe = redactCredentials(data);
 
@@ -79,10 +87,12 @@ function isComplexValue(val: unknown): boolean {
   return typeof val === 'object' && val !== null && !Array.isArray(val);
 }
 
+/** Print a green `OK <msg>` line to stdout. */
 export function success(msg: string): void {
   console.log(chalk.green('OK') + ' ' + msg);
 }
 
+/** Print a yellow `WARN <msg>` line to stdout. */
 export function warn(msg: string): void {
   console.log(chalk.yellow('WARN') + ' ' + msg);
 }

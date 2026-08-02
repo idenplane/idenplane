@@ -11,8 +11,17 @@ const RealmSchema = z.object({
   createdAt: z.string().optional(),
 });
 
+/** A realm, inferred from {@link RealmSchema}. */
 export type Realm = z.infer<typeof RealmSchema>;
 
+/**
+ * Registers realm MCP tools on `server`:
+ *
+ * - `list_realms` (read-only) — List all realms on this Idenplane instance.
+ * - `get_realm` (read-only) — Get the full configuration for a specific realm by name.
+ * - `create_realm` (`[WRITE]`) — Create a new realm (an isolated tenant namespace
+ *   for users, clients, and roles).
+ */
 export function registerRealmTools(server: McpServer, client: IdenplaneClient): void {
   server.registerTool(
     'list_realms',

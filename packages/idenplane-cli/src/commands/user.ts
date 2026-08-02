@@ -7,6 +7,11 @@ import { confirm, askPassword } from '../prompt.js';
 import type { UserListResponse, BulkUserInput, BulkImportResult } from '../types.js';
 import { parseCsv } from '../csv.js';
 
+/**
+ * Registers `idenplane user list|create|get|update|delete|set-password|bulk-import`
+ * subcommands for managing users within a realm, including CSV/JSON
+ * bulk-import with per-row validation and a `--dry-run` preview mode.
+ */
 export function registerUserCommands(program: Command): void {
   const user = program.command('user').description('Manage users');
 

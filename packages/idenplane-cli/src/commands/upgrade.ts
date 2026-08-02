@@ -75,6 +75,16 @@ interface HealthCheckResult {
   };
 }
 
+/**
+ * Registers `idenplane upgrade`, which runs pre-flight checks (server
+ * connectivity, backup status, pending migrations, pre-upgrade validation,
+ * config compatibility) and then applies pending database migrations via
+ * `prisma migrate deploy`, followed by a post-upgrade health check. Supports
+ * `--dry-run` (preview only), `--yes` (skip confirmations), `--json`, and
+ * `--rollback` (roll back the last applied migration via
+ * `prisma migrate resolve --rolled-back`). On a failed migration, attempts
+ * an automatic restore from the last known backup.
+ */
 export function registerUpgradeCommand(program: Command): void {
   program
     .command('upgrade')
