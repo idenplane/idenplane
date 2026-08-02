@@ -101,6 +101,7 @@ export interface MigrationReport {
   dryRun: boolean;
   startedAt: string;
   completedAt: string;
+  /** Keyed by entity type (e.g. "users", "realms", "clients"). */
   summary: Record<string, MigrationEntityStats>;
   errors: MigrationError[];
   warnings: MigrationWarning[];

@@ -18,6 +18,11 @@ interface UpgradeAuditResponse {
   total: number;
 }
 
+/**
+ * Registers `idenplane upgrade:status`, which checks server connectivity and
+ * then prints the upgrade audit history (or `--json`) as a table of past
+ * upgrade/rollback attempts, honoring `--limit` (default 20, capped to 100).
+ */
 export function registerUpgradeStatusCommand(program: Command): void {
   program
     .command('upgrade:status')

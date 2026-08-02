@@ -13,8 +13,17 @@ const SessionSchema = z.object({
   lastAccess: z.number().optional(),
 });
 
+/** An active login session, inferred from {@link SessionSchema}. */
 export type Session = z.infer<typeof SessionSchema>;
 
+/**
+ * Registers session MCP tools on `server`:
+ *
+ * - `list_active_sessions` (read-only) — List active login sessions in a realm,
+ *   optionally filtered to a specific user.
+ * - `revoke_session` (`[DESTRUCTIVE]`) — Revoke (terminate) a specific active
+ *   session by ID, logging that user out immediately.
+ */
 export function registerSessionTools(server: McpServer, client: IdenplaneClient): void {
   server.registerTool(
     'list_active_sessions',

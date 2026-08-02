@@ -3,6 +3,12 @@ import { HttpClient } from '../http.js';
 import { printResult, success } from '../output.js';
 import { confirm } from '../prompt.js';
 
+/**
+ * Registers `idenplane role list|create|get|update|delete|assign|unassign`
+ * subcommands for realm-role management, including assigning/removing a
+ * role on a user. `remove` is also registered as a back-compat alias for
+ * `unassign`.
+ */
 export function registerRoleCommands(program: Command): void {
   const role = program.command('role').description('Manage roles');
 

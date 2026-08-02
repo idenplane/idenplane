@@ -3,6 +3,10 @@ import { HttpClient } from '../http.js';
 import { printResult, success } from '../output.js';
 import { confirm } from '../prompt.js';
 
+/**
+ * Registers `idenplane group list|create|get|update|delete` subcommands for
+ * managing groups (including nested groups via `--parent`) within a realm.
+ */
 export function registerGroupCommands(program: Command): void {
   const group = program.command('group').description('Manage groups');
 

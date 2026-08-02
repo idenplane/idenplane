@@ -6,6 +6,12 @@ import { printResult, success } from '../output.js';
 import { HttpClient } from '../http.js';
 import type { LoginResponse } from '../types.js';
 
+/**
+ * Registers the top-level `idenplane login|logout|whoami` commands for
+ * authenticating the CLI against an Idenplane server (username/password or
+ * a static `--api-key`), clearing saved credentials, and inspecting the
+ * currently authenticated identity.
+ */
 export function registerAuthCommands(program: Command): void {
   program
     .command('login')

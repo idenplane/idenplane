@@ -6,6 +6,11 @@ import { ask, askPassword, confirm, select } from '../prompt.js';
 import { printResult, success } from '../output.js';
 import type { LoginResponse } from '../types.js';
 
+/**
+ * Registers `idenplane init`, an interactive setup wizard that walks through
+ * connecting to a server (username/password or API key), then optionally
+ * creating a realm, a client, and default `admin`/`user` roles.
+ */
 export function registerInitCommand(program: Command): void {
   program
     .command('init')

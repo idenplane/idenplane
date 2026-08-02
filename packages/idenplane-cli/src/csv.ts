@@ -1,6 +1,10 @@
 /**
  * Minimal CSV parser that handles quoted fields.
  * Returns an array of objects keyed by the header row.
+ *
+ * @param raw - Raw CSV text, with the first line treated as the header row.
+ * @returns One object per data row, with all values trimmed. Returns `[]`
+ * if there are fewer than two non-blank lines (no header, or header only).
  */
 export function parseCsv(raw: string): Record<string, string>[] {
   const lines = raw.split(/\r?\n/).filter((l) => l.trim() !== '');

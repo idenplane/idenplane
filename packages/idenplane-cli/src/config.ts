@@ -88,6 +88,18 @@ function decryptSecrets(envelope: EncryptedEnvelope): Secrets {
   return JSON.parse(plaintext.toString('utf-8')) as Secrets;
 }
 
+/**
+ * Load the CLI config from `~/.idenplane/config.json`, falling back to the
+ * legacy `~/.authme/config.json` path if the new one doesn't exist.
+ *
+ * This has a write side effect: if the loaded file is the legacy path, or is
+ * a pre-existing plaintext (unencrypted) config, the config is immediately
+ * re-saved to the current on-disk format (`saveConfig`) and a notice is
+ * printed via `console.warn`.
+ *
+ * @returns The config, or `null` if no config file exists at either path.
+ * @throws {Error} If the config file exists but contains invalid JSON.
+ */
 export function loadConfig(): CliConfig | null {
   const file = existsSync(CONFIG_FILE)
     ? CONFIG_FILE
@@ -128,6 +140,12 @@ export function loadConfig(): CliConfig | null {
   return config;
 }
 
+/**
+ * Persist the CLI config to `~/.idenplane/config.json`, encrypting
+ * `accessToken`/`apiKey` at rest (AES-256-GCM) so they aren't sitting in
+ * plaintext JSON on disk. `serverUrl` and `defaultRealm` are stored in the
+ * clear.
+ */
 export function saveConfig(config: CliConfig): void {
   if (!existsSync(CONFIG_DIR)) {
     mkdirSync(CONFIG_DIR, { recursive: true });
@@ -141,6 +159,7 @@ export function saveConfig(config: CliConfig): void {
   writeFileSync(CONFIG_FILE, JSON.stringify(envelope, null, 2), { mode: 0o600 });
 }
 
+/** Remove the saved config file and its encryption key file, if present (used by `idenplane logout`). */
 export function clearConfig(): void {
   if (existsSync(CONFIG_FILE)) {
     unlinkSync(CONFIG_FILE);
@@ -168,6 +187,17 @@ function readEnv(...names: string[]): string | undefined {
   return undefined;
 }
 
+/**
+ * Resolve the server URL and auth header to use for API requests.
+ *
+ * Checks env vars first (`IDENPLANE_SERVER_URL`/`AUTHME_SERVER_URL` paired
+ * with either `ADMIN_API_KEY` or `IDENPLANE_TOKEN`/`AUTHME_TOKEN`) — a server
+ * URL alone is not enough, it must be paired with a credential or this falls
+ * through to the saved config. Falls back to `loadConfig()` if no complete
+ * env var pair is set.
+ *
+ * @throws {Error} If neither a complete env var pair nor a saved config is available.
+ */
 export function requireAuth(): { serverUrl: string; headers: Record<string, string> } {
   const envUrl = readEnv('IDENPLANE_SERVER_URL', 'AUTHME_SERVER_URL');
   const envApiKey = process.env['ADMIN_API_KEY'];

@@ -10,8 +10,20 @@ const GroupSchema = z.object({
   parentId: z.string().optional(),
 });
 
+/** A group, inferred from {@link GroupSchema}. */
 export type Group = z.infer<typeof GroupSchema>;
 
+/**
+ * Registers group MCP tools on `server`:
+ *
+ * - `list_groups` (read-only) — List all groups defined in a realm.
+ * - `get_group` (read-only) — Get full details for a specific group by ID.
+ * - `create_group` (`[WRITE]`) — Create a new group, optionally nested under a parent group.
+ * - `update_group` (`[WRITE]`) — Update a group's mutable fields; omitted fields are left as-is.
+ * - `delete_group` (`[WRITE]`) — Delete a group. Cannot be undone.
+ * - `add_group_member` (`[WRITE]`) — Add a user to a group.
+ * - `remove_group_member` (`[WRITE]`) — Remove a user from a group.
+ */
 export function registerGroupTools(server: McpServer, client: IdenplaneClient): void {
   server.registerTool(
     'list_groups',
