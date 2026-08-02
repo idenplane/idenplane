@@ -11,7 +11,7 @@ The Idenplane Vue SDK provides Vue 3-specific bindings for the idenplane-sdk, in
 ## Installation
 
 ```bash
-npm install @idenplane/vue idenplane-sdk vue
+npm install idenplane-vue idenplane-sdk vue
 ```
 
 ---
@@ -23,7 +23,7 @@ npm install @idenplane/vue idenplane-sdk vue
 ```typescript
 // main.ts
 import { createApp } from 'vue';
-import { IdenplanePlugin } from '@idenplane/vue';
+import { IdenplanePlugin } from 'idenplane-vue';
 import App from './App.vue';
 
 const app = createApp(App);
@@ -42,7 +42,7 @@ app.mount('#app');
 
 ```vue
 <script setup lang="ts">
-import { useAuth } from '@idenplane/vue';
+import { useAuth } from 'idenplane-vue';
 
 const { isAuthenticated, user, login, logout, isLoading } = useAuth();
 </script>
@@ -64,7 +64,7 @@ const { isAuthenticated, user, login, logout, isLoading } = useAuth();
 ```typescript
 // router/index.ts
 import { createRouter, createWebHistory } from 'vue-router';
-import { createAuthGuard } from '@idenplane/vue';
+import { createAuthGuard } from 'idenplane-vue';
 import { IdenplaneClient } from 'idenplane-sdk';
 
 const authClient = new IdenplaneClient({
@@ -123,7 +123,7 @@ The `IdenplanePlugin` is a Vue 3 plugin that initializes authentication and prov
 ```typescript
 // main.ts
 import { createApp } from 'vue';
-import { IdenplanePlugin } from '@idenplane/vue';
+import { IdenplanePlugin } from 'idenplane-vue';
 import App from './App.vue';
 
 const app = createApp(App);
@@ -155,7 +155,7 @@ For more control over the client configuration:
 ```typescript
 // main.ts
 import { createApp } from 'vue';
-import { IdenplanePlugin } from '@idenplane/vue';
+import { IdenplanePlugin } from 'idenplane-vue';
 import { IdenplaneClient } from 'idenplane-sdk';
 import App from './App.vue';
 
@@ -198,7 +198,7 @@ const {
 
 ```vue
 <script setup lang="ts">
-import { useAuth } from '@idenplane/vue';
+import { useAuth } from 'idenplane-vue';
 
 const { isAuthenticated, isLoading, login, logout } = useAuth();
 
@@ -226,7 +226,7 @@ const handleLogin = async () => {
 
 ```vue
 <script setup lang="ts">
-import { useAuth } from '@idenplane/vue';
+import { useAuth } from 'idenplane-vue';
 
 const { getToken, isAuthenticated } = useAuth();
 
@@ -245,7 +245,7 @@ const token = getToken();
 
 ```vue
 <script setup lang="ts">
-import { useAuth } from '@idenplane/vue';
+import { useAuth } from 'idenplane-vue';
 
 const { login } = useAuth();
 
@@ -291,7 +291,7 @@ interface UserInfo {
 
 ```vue
 <script setup lang="ts">
-import { useUser } from '@idenplane/vue';
+import { useUser } from 'idenplane-vue';
 
 const user = useUser();
 </script>
@@ -336,7 +336,7 @@ const {
 
 ```vue
 <script setup lang="ts">
-import { usePermissions } from '@idenplane/vue';
+import { usePermissions } from 'idenplane-vue';
 
 const { hasRole, hasPermission, roles } = usePermissions();
 </script>
@@ -375,7 +375,7 @@ const { hasRole, hasPermission, roles } = usePermissions();
 
 ```vue
 <script setup lang="ts">
-import { usePermissions } from '@idenplane/vue';
+import { usePermissions } from 'idenplane-vue';
 
 const { hasAllRoles } = usePermissions();
 
@@ -416,7 +416,7 @@ const guard = createAuthGuard(options?, authClient?);
 ```typescript
 // router/index.ts
 import { createRouter, createWebHistory } from 'vue-router';
-import { createAuthGuard } from '@idenplane/vue';
+import { createAuthGuard } from 'idenplane-vue';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -441,7 +441,7 @@ export default router;
 ```typescript
 // router/index.ts
 import { createRouter, createWebHistory } from 'vue-router';
-import { createAuthGuard } from '@idenplane/vue';
+import { createAuthGuard } from 'idenplane-vue';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -476,7 +476,7 @@ export default router;
 ```typescript
 // router/index.ts
 import { createRouter, createWebHistory } from 'vue-router';
-import { createAuthGuard } from '@idenplane/vue';
+import { createAuthGuard } from 'idenplane-vue';
 import { IdenplaneClient } from 'idenplane-sdk';
 
 const authClient = new IdenplaneClient({
@@ -523,7 +523,7 @@ The `AuthProvider` component provides scoped authentication context to a compone
 </template>
 
 <script setup lang="ts">
-import { AuthProvider } from '@idenplane/vue';
+import { AuthProvider } from 'idenplane-vue';
 </script>
 ```
 
@@ -552,7 +552,7 @@ import { AuthProvider } from '@idenplane/vue';
 </template>
 
 <script setup lang="ts">
-import { AuthProvider } from '@idenplane/vue';
+import { AuthProvider } from 'idenplane-vue';
 import { IdenplaneClient } from 'idenplane-sdk';
 
 const authClient = new IdenplaneClient({
@@ -652,7 +652,7 @@ import {
   usePermissions,
   AuthProvider,
   createAuthGuard,
-} from '@idenplane/vue';
+} from 'idenplane-vue';
 
 // All composables are fully typed
 function MyComponent() {

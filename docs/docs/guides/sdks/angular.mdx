@@ -11,7 +11,7 @@ The Idenplane Angular SDK provides Angular-specific bindings for the idenplane-s
 ## Installation
 
 ```bash
-npm install @idenplane/angular idenplane-sdk rxjs
+npm install idenplane-angular idenplane-sdk rxjs
 ```
 
 ---
@@ -24,7 +24,7 @@ npm install @idenplane/angular idenplane-sdk rxjs
 // app.module.ts
 import { NgModule } from '@angular/core';
 import { HttpClientModule } from '@angular/common/http';
-import { IdenplaneModule } from '@idenplane/angular';
+import { IdenplaneModule } from 'idenplane-angular';
 
 @NgModule({
   imports: [
@@ -45,7 +45,7 @@ export class AppModule {}
 
 ```typescript
 import { Component } from '@angular/core';
-import { AuthService } from '@idenplane/angular';
+import { AuthService } from 'idenplane-angular';
 
 @Component({
   selector: 'app-nav',
@@ -74,7 +74,7 @@ export class NavComponent {
 ```typescript
 // app.routes.ts
 import { Routes } from '@angular/router';
-import { AuthGuard } from '@idenplane/angular';
+import { AuthGuard } from 'idenplane-angular';
 
 export const routes: Routes = [
   { path: '', component: HomeComponent },
@@ -102,7 +102,7 @@ For standalone / functional interceptor style (Angular 15+):
 // app.config.ts
 import { ApplicationConfig } from '@angular/core';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
-import { authInterceptor } from '@idenplane/angular';
+import { authInterceptor } from 'idenplane-angular';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -135,7 +135,7 @@ The `IdenplaneModule.forRoot()` method registers all providers including `AuthSe
 ```typescript
 // app.module.ts
 import { NgModule } from '@angular/core';
-import { IdenplaneModule } from '@idenplane/angular';
+import { IdenplaneModule } from 'idenplane-angular';
 
 @NgModule({
   imports: [
@@ -191,7 +191,7 @@ The `AuthService` is an injectable service that provides reactive authentication
 ```typescript
 import { Component, OnInit } from '@angular/core';
 import { CommonModule } from '@angular/common';
-import { AuthService } from '@idenplane/angular';
+import { AuthService } from 'idenplane-angular';
 
 @Component({
   selector: 'app-user-profile',
@@ -229,7 +229,7 @@ export class UserProfileComponent {
 
 ```typescript
 import { Component } from '@angular/core';
-import { AuthService } from '@idenplane/angular';
+import { AuthService } from 'idenplane-angular';
 
 @Component({
   selector: 'app-admin-panel',
@@ -258,7 +258,7 @@ export class AdminPanelComponent {
 
 ```typescript
 import { Component } from '@angular/core';
-import { AuthService } from '@idenplane/angular';
+import { AuthService } from 'idenplane-angular';
 
 @Component({
   selector: 'app-token-display',
@@ -285,7 +285,7 @@ The `AuthGuard` is a route guard implementing `CanActivate` that protects routes
 ```typescript
 // app.routes.ts
 import { Routes } from '@angular/router';
-import { AuthGuard } from '@idenplane/angular';
+import { AuthGuard } from 'idenplane-angular';
 
 export const routes: Routes = [
   { path: '', component: HomeComponent },
@@ -351,7 +351,7 @@ For manual registration:
 ```typescript
 // app.module.ts
 import { NgModule } from '@angular/core';
-import { IdenplaneModule, AuthInterceptor } from '@idenplane/angular';
+import { IdenplaneModule, AuthInterceptor } from 'idenplane-angular';
 import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
 
 @NgModule({
@@ -381,7 +381,7 @@ export class AppModule {}
 // app.config.ts
 import { ApplicationConfig } from '@angular/core';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
-import { authInterceptor } from '@idenplane/angular';
+import { authInterceptor } from 'idenplane-angular';
 
 export const appConfig: ApplicationConfig = {
   providers: [
@@ -395,7 +395,7 @@ export const appConfig: ApplicationConfig = {
 ```typescript
 import { Component, OnInit } from '@angular/core';
 import { HttpClient } from '@angular/common/http';
-import { AuthService } from '@idenplane/angular';
+import { AuthService } from 'idenplane-angular';
 import { catchError, of } from 'rxjs';
 
 @Component({
@@ -458,7 +458,7 @@ interface UserInfo {
 
 ```typescript
 import { Component } from '@angular/core';
-import { AuthService } from '@idenplane/angular';
+import { AuthService } from 'idenplane-angular';
 
 @Component({
   selector: 'app-user-card',
@@ -488,7 +488,7 @@ export class UserCardComponent {
 The SDK is written in TypeScript and provides full type definitions:
 
 ```typescript
-import { AuthService, IdenplaneModule, AuthGuard, authInterceptor } from '@idenplane/angular';
+import { AuthService, IdenplaneModule, AuthGuard, authInterceptor } from 'idenplane-angular';
 import type { IdenplaneConfig, UserInfo, TokenResponse } from 'idenplane-sdk';
 
 // AuthService is fully typed
