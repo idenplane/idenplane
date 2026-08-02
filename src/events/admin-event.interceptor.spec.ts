@@ -367,6 +367,63 @@ describe('AdminEventInterceptor', () => {
       });
     });
 
+    // ─── Realm creation (issue #1346) ────────────────
+
+    it('should record REALM CREATE for POST /admin/realms using the id from the response body', (done) => {
+      const context = createContext({
+        method: 'POST',
+        path: '/admin/realms',
+        realm: null,
+      });
+      const handler = { handle: () => of({ id: 'new-realm-id', name: 'new-realm' }) };
+
+      interceptor.intercept(context as any, handler).subscribe({
+        complete: () => {
+          expect(eventsService.recordAdminEvent).toHaveBeenCalledWith({
+            realmId: 'new-realm-id',
+            adminUserId: 'admin-1',
+            operationType: OperationType.CREATE,
+            resourceType: ResourceType.REALM,
+            resourcePath: '/admin/realms',
+            representation: {},
+            ipAddress: '127.0.0.1',
+          });
+          done();
+        },
+      });
+    });
+
+    it('should not record for POST /admin/realms if the response has no id', (done) => {
+      const context = createContext({
+        method: 'POST',
+        path: '/admin/realms',
+        realm: null,
+      });
+      const handler = { handle: () => of({ message: 'unexpected shape' }) };
+
+      interceptor.intercept(context as any, handler).subscribe({
+        complete: () => {
+          expect(eventsService.recordAdminEvent).not.toHaveBeenCalled();
+          done();
+        },
+      });
+    });
+
+    it('should still skip other realm-scoped paths with no realm set (not just the create-realm route)', (done) => {
+      const context = createContext({
+        method: 'POST',
+        path: '/admin/realms/test/roles',
+        realm: null,
+      });
+
+      interceptor.intercept(context as any, nextHandler).subscribe({
+        complete: () => {
+          expect(eventsService.recordAdminEvent).not.toHaveBeenCalled();
+          done();
+        },
+      });
+    });
+
     it('should use "api-key" when adminUser has no userId or id', (done) => {
       const context = createContext({
         method: 'POST',
