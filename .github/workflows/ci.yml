@@ -139,6 +139,112 @@ jobs:
           path: admin-ui/coverage/
           retention-days: 14
 
+  admin-ui-e2e:
+    # The existing "E2E Tests" job drives the NestJS app in-process via
+    # supertest — it never listens on a real port, so it can't catch bugs in
+    # the admin console's own UI (routing, forms, the vite dev proxy). This
+    # job boots a real backend and a real browser against it.
+    name: Admin UI E2E Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: idenplane_test
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: idenplane_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://idenplane_test:test_password@localhost:5432/idenplane_test
+      ADMIN_API_KEY: test-admin-key
+      NODE_ENV: test
+      PORT: '3000'
+      DEMO_MODE: 'true'
+      ADMIN_USER: admin
+      ADMIN_PASSWORD: e2e-test-admin-password
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      - name: Build backend
+        run: npm run build
+
+      # AdminSeedService creates the master realm + ADMIN_USER/ADMIN_PASSWORD
+      # on first boot (src/admin-auth/admin-seed.service.ts), and DEMO_MODE
+      # makes the login page prefill those same credentials — no manual seed
+      # step needed.
+      - name: Start backend
+        run: |
+          node dist/main.js > backend.log 2>&1 &
+          echo "Waiting for backend on :3000/health..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/health > /dev/null; then
+              echo "Backend is up."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Backend did not become healthy in time."
+          cat backend.log
+          exit 1
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: admin-ui/package-lock.json
+
+      - name: Install admin-ui dependencies
+        working-directory: admin-ui
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: admin-ui
+        run: npx playwright install --with-deps chromium
+
+      - name: Start admin-ui dev server
+        working-directory: admin-ui
+        run: |
+          npm run dev > vite.log 2>&1 &
+          echo "Waiting for admin-ui on :5173..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:5173/console/login > /dev/null; then
+              echo "admin-ui is up."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "admin-ui did not become healthy in time."
+          cat vite.log
+          exit 1
+
+      - name: Run Playwright tests
+        working-directory: admin-ui
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: admin-ui/playwright-report/
+          retention-days: 14
+
   sdk-packages:
     # Nothing built or tested these until now, so breakage sat unnoticed:
     # idenplane-angular had not compiled since Angular went ESM-only, and a
