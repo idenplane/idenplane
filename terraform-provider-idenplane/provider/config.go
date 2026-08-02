@@ -106,10 +106,7 @@ func (p *IdenplaneProvider) Resources(ctx context.Context) []func() resource.Res
 		NewRoleResource,
 		NewGroupResource,
 		NewUserResource,
-		// No NewIdentityProviderResource: identity providers are readable
-		// through their data source but cannot be managed from Terraform yet.
-		// This list referenced a constructor that was never written, which is
-		// one of the two reasons this package did not compile.
+		NewIdentityProviderResource,
 		NewAuthFlowResource,
 	}
 }
