@@ -5,8 +5,13 @@ import org.junit.Assert.assertFalse
 import org.junit.Assert.assertNotEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
-import java.util.Base64
+import org.junit.runner.RunWith
+import org.robolectric.RobolectricTestRunner
 
+// PKCEHelper calls android.util.Base64, which on a plain JVM unit test run
+// is a stub that throws "not mocked" for every method — Robolectric provides
+// a real, correct implementation of it instead.
+@RunWith(RobolectricTestRunner::class)
 class PKCEHelperTest {
 
     @Test

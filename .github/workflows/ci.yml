@@ -427,6 +427,31 @@ jobs:
       - name: Test
         run: go test ./...
 
+  android-sdk:
+    # packages/idenplane-android had real Kotlin source but no
+    # settings.gradle.kts or Gradle wrapper, so it had never been compiled by
+    # anything — not CI, not a local machine. (#1347/#1325)
+    name: Android SDK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/idenplane-android
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest --stacktrace
+
+      - name: Assemble (debug + release AAR)
+        run: ./gradlew assembleDebug assembleRelease --stacktrace
+
   docs-build:
     # The docs site had been failing to build and nothing noticed, because no
     # job ever built it. Its dependency tree is separate from the root one, so
