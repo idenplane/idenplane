@@ -1,6 +1,6 @@
 import type { Realm, User, Client, Role, NhiIdentity, ConsentCategory } from '../../types';
 import type { LoginEvent, AdminEvent } from '../../api/events';
-import type { RealmStats } from '../../api/stats';
+import type { RealmStats, FailedLoginHeatmap } from '../../api/stats';
 import type { AuthFlow } from '../../api/authFlows';
 import type { UpgradeAuditEntry, PreUpgradeValidationResult, UpgradeHealthResult, RollbackCapability } from '../../api/upgrade';
 import type { NhiIdentityType, NhiLifecycleStatus } from '../../api/nhi';
@@ -153,6 +153,17 @@ export function makeStats(overrides: Partial<RealmStats> = {}): RealmStats {
     loginSuccessCount: 42,
     loginFailureCount: 3,
     activeSessionCount: 12,
+    ...overrides,
+  };
+}
+
+export function makeFailedLoginHeatmap(
+  overrides: Partial<FailedLoginHeatmap> = {},
+): FailedLoginHeatmap {
+  return {
+    windowDays: 30,
+    totalFailures: 0,
+    heatmap: Array.from({ length: 7 }, () => new Array<number>(24).fill(0)),
     ...overrides,
   };
 }
