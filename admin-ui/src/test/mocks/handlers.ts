@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw';
-import { makeRealm, makeUser, makeClient, makeLoginEvent, makeAdminEvent, makeStats, makeAuthFlow, makeUpgradeAuditEntry, makePreUpgradeValidationResult, makeUpgradeHealthResult, makeRollbackCapability, makeNhiIdentity, makeConsentCategory } from './data';
+import { makeRealm, makeUser, makeClient, makeLoginEvent, makeAdminEvent, makeStats, makeFailedLoginHeatmap, makeAuthFlow, makeUpgradeAuditEntry, makePreUpgradeValidationResult, makeUpgradeHealthResult, makeRollbackCapability, makeNhiIdentity, makeConsentCategory } from './data';
 
 const BASE = '/admin';
 
@@ -140,6 +140,10 @@ export const handlers = [
   // Stats
   http.get(`${BASE}/realms/:name/stats`, () => {
     return HttpResponse.json(makeStats());
+  }),
+
+  http.get(`${BASE}/realms/:name/stats/failed-login-heatmap`, () => {
+    return HttpResponse.json(makeFailedLoginHeatmap());
   }),
 
   // Events (for dashboard)

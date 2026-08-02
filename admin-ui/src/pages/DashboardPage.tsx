@@ -6,6 +6,7 @@ import { getLoginEvents, getAdminEvents, type LoginEvent, type AdminEvent } from
 import { getRealmStats, getHealthStatus, type RealmStats } from '../api/stats';
 import { getErrorMessage } from '../utils/getErrorMessage';
 import { Card, Badge, Icons } from '../components/ui';
+import FailedLoginHeatmap from '../components/dashboard/FailedLoginHeatmap';
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 
@@ -212,6 +213,9 @@ function RealmStatsSection({ realmName }: { realmName: string }) {
           </div>
         )}
       </div>
+
+      {/* Failed-login heatmap */}
+      <FailedLoginHeatmap realmName={realmName} />
 
       {/* Recent events feed */}
       <div>

@@ -42,4 +42,14 @@ export class StatsController {
   getConsentStats(@CurrentRealm() realm: Realm) {
     return this.consentStatsService.getRealmConsentStats(realm);
   }
+
+  @Get('stats/failed-login-heatmap')
+  @ApiOperation({
+    summary: 'Get a day-of-week x hour heatmap of failed logins for a realm',
+  })
+  @ApiResponse({ status: 200, description: 'Failed-login heatmap' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  getFailedLoginHeatmap(@CurrentRealm() realm: Realm) {
+    return this.statsService.getFailedLoginHeatmap(realm);
+  }
 }
