@@ -38,6 +38,7 @@ import AdminEventsPage from './pages/events/AdminEventsPage';
 import AuthFlowListPage from './pages/auth-flows/AuthFlowListPage';
 import AuthFlowEditorPage from './pages/auth-flows/AuthFlowEditorPage';
 import SetupWizardPage from './pages/setup-wizard/SetupWizardPage';
+import MigrationWizardPage from './pages/migration/MigrationWizardPage';
 import PendingRegistrationsPage from './pages/registration/PendingRegistrationsPage';
 import RegistrationFieldsPage from './pages/registration/RegistrationFieldsPage';
 import RegistrationSettingsPage from './pages/registration/RegistrationSettingsPage';
@@ -124,6 +125,7 @@ export default function App() {
           <Route path="/console/realms/:name/clients" element={<ClientListPage />} />
           <Route path="/console/realms/:name/clients/new" element={<ClientCreatePage />} />
           <Route path="/console/realms/:name/clients/:id" element={<ClientDetailPage />} />
+          <Route path="/console/realms/:name/migration" element={<MigrationWizardPage />} />
           <Route path="/console/realms/:name/roles" element={<RoleListPage />} />
           <Route path="/console/realms/:name/groups" element={<GroupListPage />} />
           <Route path="/console/realms/:name/groups/create" element={<GroupCreatePage />} />
