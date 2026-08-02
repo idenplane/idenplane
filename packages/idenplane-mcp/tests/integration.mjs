@@ -130,6 +130,21 @@ describe('Idenplane MCP integration (over protocol)', { skip: await skipReason()
   describe('User + Audit tools', () => {
     let createdUserId;
 
+    // Admin event logging is opt-in per realm (Realm.adminEventsEnabled
+    // defaults to false — new realms record no admin events at all until
+    // this is turned on), and create_realm doesn't expose the flag. Enable
+    // it directly via REST before relying on query_audit_events below.
+    before(async () => {
+      await fetch(`${IDENPLANE_URL}/admin/realms/${TEST_REALM}`, {
+        method: 'PATCH',
+        headers: {
+          'content-type': 'application/json',
+          'x-admin-api-key': IDENPLANE_ADMIN_TOKEN,
+        },
+        body: JSON.stringify({ adminEventsEnabled: true }),
+      });
+    });
+
     it('create_user creates a user and get_user retrieves them', async () => {
       const user = await callTool('create_user', {
         realmName: TEST_REALM,
