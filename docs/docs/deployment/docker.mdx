@@ -147,6 +147,32 @@ docker compose logs -f app
 
 ---
 
+## Production with TLS (Traefik + Redis)
+
+The example above expects you to put your own TLS-terminating reverse proxy in front of it. If you'd rather have a complete, ready-to-run stack — automatic Let's Encrypt certificates via [Traefik](https://traefik.io/), plus Redis for the cache/session layer — use [`docker-compose.production.yml`](https://github.com/idenplane/idenplane/blob/dev/docker-compose.production.yml) from the repo root instead.
+
+This requires a real domain name already pointed at the host, since Traefik's ACME TLS challenge must be reachable on port 443 from the public internet.
+
+```bash
+DOMAIN=auth.example.com \
+ACME_EMAIL=you@example.com \
+POSTGRES_PASSWORD=$(openssl rand -hex 16) \
+ADMIN_API_KEY=$(openssl rand -hex 32) \
+ADMIN_PASSWORD=$(openssl rand -hex 16) \
+WEBHOOK_SECRET_KEY=$(openssl rand -hex 32) \
+WEBHOOK_ENCRYPTION_SALT=$(openssl rand -hex 16) \
+docker compose -f docker-compose.production.yml up -d
+```
+
+What it sets up beyond the basic production example:
+
+- **Traefik** terminates TLS on `:443` (redirecting `:80` to it) and requests/renews a Let's Encrypt certificate for `$DOMAIN` automatically — no manual certbot steps.
+- **Redis** is enabled out of the box (`REDIS_URL`, `SESSION_STORE=redis` are already set on the `app` service — you don't need to uncomment anything).
+- `db` and `redis` have no published ports — only the `app` and `traefik` containers can reach them, reducing the attack surface versus the basic example's `127.0.0.1:5432` binding.
+- `TRUSTED_PROXIES=*` is set on `app` since Traefik is the only thing that can reach it directly within the compose network — safe here, but don't copy this value into a setup where the app is also directly reachable from elsewhere.
+
+---
+
 ## Development Deployment
 
 The development configuration builds from source, enabling hot-reload for active development.
