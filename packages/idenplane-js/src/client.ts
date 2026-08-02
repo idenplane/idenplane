@@ -7,7 +7,7 @@ import type {
   UserInfo,
 } from './types.js';
 import { generateCodeChallenge, generateCodeVerifier, generateState } from './pkce.js';
-import { isTokenExpired, parseJwt } from './token.js';
+import { getRolesFromToken, isTokenExpired, parseJwt } from './token.js';
 import { createStorage, type TokenStorage } from './storage.js';
 import { EventEmitter } from './events.js';
 import { DiscoveryClient } from './discovery.js';
@@ -504,26 +504,22 @@ export class IdenplaneClient {
 
   /** Check if the user has a specific realm role. */
   hasRealmRole(role: string): boolean {
-    const claims = this.getTokenClaims();
-    return claims?.realm_access?.roles?.includes(role) ?? false;
+    return getRolesFromToken(this.getTokenClaims()).includes(role);
   }
 
   /** Check if the user has a specific client role. */
   hasClientRole(clientId: string, role: string): boolean {
-    const claims = this.getTokenClaims();
-    return claims?.resource_access?.[clientId]?.roles?.includes(role) ?? false;
+    return getRolesFromToken(this.getTokenClaims(), clientId).includes(role);
   }
 
   /** Get all realm roles for the current user. */
   getRealmRoles(): string[] {
-    const claims = this.getTokenClaims();
-    return claims?.realm_access?.roles ?? [];
+    return getRolesFromToken(this.getTokenClaims());
   }
 
   /** Get all client roles for a specific client. */
   getClientRoles(clientId: string): string[] {
-    const claims = this.getTokenClaims();
-    return claims?.resource_access?.[clientId]?.roles ?? [];
+    return getRolesFromToken(this.getTokenClaims(), clientId);
   }
 
   /**

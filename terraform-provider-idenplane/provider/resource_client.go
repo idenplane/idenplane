@@ -3,10 +3,10 @@ package provider
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
+	"github.com/hashicorp/terraform-plugin-framework/diag"
 	"github.com/hashicorp/terraform-plugin-framework/path"
 	"github.com/hashicorp/terraform-plugin-framework/resource"
 	"github.com/hashicorp/terraform-plugin-framework/resource/schema"
@@ -27,8 +27,7 @@ var (
 
 // ClientResource implements the client resource
 type ClientResource struct {
-	// httpClient is the internal HTTP client
-	httpClient *client.HTTPClient
+	baseResource
 }
 
 // ClientResourceModel represents the Terraform model for client resource
@@ -160,26 +159,6 @@ func (r *ClientResource) Schema(ctx context.Context, req resource.SchemaRequest,
 	}
 }
 
-// Configure configures the resource
-func (r *ClientResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	// Retrieve provider config from terraform configuration
-	if req.ProviderData == nil {
-		return
-	}
-
-	// Type assert to get the HTTP client
-	httpClient, ok := req.ProviderData.(*client.HTTPClient)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *client.HTTPClient, got: %T", req.ProviderData),
-		)
-		return
-	}
-
-	r.httpClient = httpClient
-}
-
 // Create creates the client resource
 func (r *ClientResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	tflog.Debug(ctx, "Creating client resource")
@@ -197,7 +176,10 @@ func (r *ClientResource) Create(ctx context.Context, req resource.CreateRequest,
 	}
 
 	// Map optional fields from the plan
-	mapClientPlanToCreateRequest(ctx, plan, &createReq)
+	resp.Diagnostics.Append(mapClientPlanToCreateRequest(ctx, plan, &createReq)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
 	// Create the clients client and call the API
 	clientsClient := client.NewClientsClient(r.httpClient)
@@ -205,10 +187,7 @@ func (r *ClientResource) Create(ctx context.Context, req resource.CreateRequest,
 
 	clientData, err := clientsClient.CreateClient(ctx, realmName, createReq)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Creating Client",
-			fmt.Sprintf("Unable to create client %s in realm %s: %v", plan.ClientID.ValueString(), realmName, err),
-		)
+		addAPIError(&resp.Diagnostics, "Error Creating Client", "Unable to create client %s in realm %s: %v", plan.ClientID.ValueString(), realmName, err)
 		return
 	}
 
@@ -257,10 +236,7 @@ func (r *ClientResource) Read(ctx context.Context, req resource.ReadRequest, res
 	clientData, err := clientsClient.GetClient(ctx, realmName, clientID)
 	if err != nil {
 		// Check if the client was deleted
-		resp.Diagnostics.AddError(
-			"Error Reading Client",
-			fmt.Sprintf("Unable to read client %s in realm %s: %v", clientID, realmName, err),
-		)
+		addAPIError(&resp.Diagnostics, "Error Reading Client", "Unable to read client %s in realm %s: %v", clientID, realmName, err)
 		return
 	}
 
@@ -304,17 +280,17 @@ func (r *ClientResource) Update(ctx context.Context, req resource.UpdateRequest,
 	updateReq := client.UpdateClientRequest{}
 
 	// Map optional fields from the plan
-	mapClientPlanToUpdateRequest(ctx, plan, &updateReq)
+	resp.Diagnostics.Append(mapClientPlanToUpdateRequest(ctx, plan, &updateReq)...)
+	if resp.Diagnostics.HasError() {
+		return
+	}
 
 	// Create the clients client and call the API
 	clientsClient := client.NewClientsClient(r.httpClient)
 
 	clientData, err := clientsClient.UpdateClient(ctx, realmName, clientID, updateReq)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Updating Client",
-			fmt.Sprintf("Unable to update client %s in realm %s: %v", clientID, realmName, err),
-		)
+		addAPIError(&resp.Diagnostics, "Error Updating Client", "Unable to update client %s in realm %s: %v", clientID, realmName, err)
 		return
 	}
 
@@ -365,10 +341,7 @@ func (r *ClientResource) Delete(ctx context.Context, req resource.DeleteRequest,
 
 	err := clientsClient.DeleteClient(ctx, realmName, clientID)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Deleting Client",
-			fmt.Sprintf("Unable to delete client %s in realm %s: %v", clientID, realmName, err),
-		)
+		addAPIError(&resp.Diagnostics, "Error Deleting Client", "Unable to delete client %s in realm %s: %v", clientID, realmName, err)
 		return
 	}
 
@@ -416,10 +389,7 @@ func (r *ClientResource) ImportState(ctx context.Context, req resource.ImportSta
 
 	clientData, err := clientsClient.GetClient(ctx, realmName, clientID)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Importing Client",
-			fmt.Sprintf("Unable to import client %s in realm %s: %v", clientID, realmName, err),
-		)
+		addAPIError(&resp.Diagnostics, "Error Importing Client", "Unable to import client %s in realm %s: %v", clientID, realmName, err)
 		return
 	}
 
@@ -443,8 +413,11 @@ func (r *ClientResource) ImportState(ctx context.Context, req resource.ImportSta
 	})
 }
 
-// mapClientPlanToCreateRequest maps the Terraform plan to the create request
-func mapClientPlanToCreateRequest(ctx context.Context, plan ClientResourceModel, req *client.CreateClientRequest) {
+// mapClientPlanToCreateRequest maps the Terraform plan to the create request,
+// returning diagnostics from any list-to-slice conversion that failed.
+func mapClientPlanToCreateRequest(ctx context.Context, plan ClientResourceModel, req *client.CreateClientRequest) diag.Diagnostics {
+	var diags diag.Diagnostics
+
 	if !plan.ClientType.IsNull() {
 		req.ClientType = plan.ClientType.ValueString()
 	}
@@ -464,19 +437,19 @@ func mapClientPlanToCreateRequest(ctx context.Context, plan ClientResourceModel,
 
 	if !plan.RedirectUris.IsNull() {
 		var uris []string
-		plan.RedirectUris.ElementsAs(ctx, &uris, false)
+		diags.Append(plan.RedirectUris.ElementsAs(ctx, &uris, false)...)
 		req.RedirectUris = uris
 	}
 
 	if !plan.WebOrigins.IsNull() {
 		var origins []string
-		plan.WebOrigins.ElementsAs(ctx, &origins, false)
+		diags.Append(plan.WebOrigins.ElementsAs(ctx, &origins, false)...)
 		req.WebOrigins = origins
 	}
 
 	if !plan.GrantTypes.IsNull() {
 		var grantTypes []string
-		plan.GrantTypes.ElementsAs(ctx, &grantTypes, false)
+		diags.Append(plan.GrantTypes.ElementsAs(ctx, &grantTypes, false)...)
 		req.GrantTypes = grantTypes
 	}
 
@@ -493,10 +466,15 @@ func mapClientPlanToCreateRequest(ctx context.Context, plan ClientResourceModel,
 		val := plan.BackchannelLogoutSessionRequired.ValueBool()
 		req.BackchannelLogoutSessionRequired = &val
 	}
+
+	return diags
 }
 
-// mapClientPlanToUpdateRequest maps the Terraform plan to the update request
-func mapClientPlanToUpdateRequest(ctx context.Context, plan ClientResourceModel, req *client.UpdateClientRequest) {
+// mapClientPlanToUpdateRequest maps the Terraform plan to the update request,
+// returning diagnostics from any list-to-slice conversion that failed.
+func mapClientPlanToUpdateRequest(ctx context.Context, plan ClientResourceModel, req *client.UpdateClientRequest) diag.Diagnostics {
+	var diags diag.Diagnostics
+
 	if !plan.ClientType.IsNull() {
 		req.ClientType = plan.ClientType.ValueString()
 	}
@@ -516,19 +494,19 @@ func mapClientPlanToUpdateRequest(ctx context.Context, plan ClientResourceModel,
 
 	if !plan.RedirectUris.IsNull() {
 		var uris []string
-		plan.RedirectUris.ElementsAs(ctx, &uris, false)
+		diags.Append(plan.RedirectUris.ElementsAs(ctx, &uris, false)...)
 		req.RedirectUris = uris
 	}
 
 	if !plan.WebOrigins.IsNull() {
 		var origins []string
-		plan.WebOrigins.ElementsAs(ctx, &origins, false)
+		diags.Append(plan.WebOrigins.ElementsAs(ctx, &origins, false)...)
 		req.WebOrigins = origins
 	}
 
 	if !plan.GrantTypes.IsNull() {
 		var grantTypes []string
-		plan.GrantTypes.ElementsAs(ctx, &grantTypes, false)
+		diags.Append(plan.GrantTypes.ElementsAs(ctx, &grantTypes, false)...)
 		req.GrantTypes = grantTypes
 	}
 
@@ -545,6 +523,8 @@ func mapClientPlanToUpdateRequest(ctx context.Context, plan ClientResourceModel,
 		val := plan.BackchannelLogoutSessionRequired.ValueBool()
 		req.BackchannelLogoutSessionRequired = &val
 	}
+
+	return diags
 }
 
 // mapClientToState maps the API client response to the Terraform state

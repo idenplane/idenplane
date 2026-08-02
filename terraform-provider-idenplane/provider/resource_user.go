@@ -3,7 +3,6 @@ package provider
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -27,8 +26,7 @@ var (
 
 // UserResource implements the user resource
 type UserResource struct {
-	// httpClient is the internal HTTP client
-	httpClient *client.HTTPClient
+	baseResource
 }
 
 // UserResourceModel represents the Terraform model for user resource
@@ -123,26 +121,6 @@ func (r *UserResource) Schema(ctx context.Context, req resource.SchemaRequest, r
 	}
 }
 
-// Configure configures the resource
-func (r *UserResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	// Retrieve provider config from terraform configuration
-	if req.ProviderData == nil {
-		return
-	}
-
-	// Type assert to get the HTTP client
-	httpClient, ok := req.ProviderData.(*client.HTTPClient)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *client.HTTPClient, got: %T", req.ProviderData),
-		)
-		return
-	}
-
-	r.httpClient = httpClient
-}
-
 // Create creates the user resource
 func (r *UserResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	tflog.Debug(ctx, "Creating user resource")
@@ -168,10 +146,7 @@ func (r *UserResource) Create(ctx context.Context, req resource.CreateRequest, r
 
 	user, err := usersClient.CreateUser(ctx, realmName, createReq)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Creating User",
-			fmt.Sprintf("Unable to create user %s in realm %s: %v", plan.Username.ValueString(), realmName, err),
-		)
+		addAPIError(&resp.Diagnostics, "Error Creating User", "Unable to create user %s in realm %s: %v", plan.Username.ValueString(), realmName, err)
 		return
 	}
 
@@ -183,10 +158,7 @@ func (r *UserResource) Create(ctx context.Context, req resource.CreateRequest, r
 			Value:     plan.Password.ValueString(),
 		}
 		if err := usersClient.ResetUserPassword(ctx, realmName, user.ID, passwordReq); err != nil {
-			resp.Diagnostics.AddError(
-				"Error Setting User Password",
-				fmt.Sprintf("Unable to set password for user %s: %v", user.ID, err),
-			)
+			addAPIError(&resp.Diagnostics, "Error Setting User Password", "Unable to set password for user %s: %v", user.ID, err)
 			return
 		}
 	}
@@ -238,10 +210,7 @@ func (r *UserResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 
 	user, err := usersClient.GetUser(ctx, realmName, userID)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Reading User",
-			fmt.Sprintf("Unable to read user %s in realm %s: %v", userID, realmName, err),
-		)
+		addAPIError(&resp.Diagnostics, "Error Reading User", "Unable to read user %s in realm %s: %v", userID, realmName, err)
 		return
 	}
 
@@ -293,10 +262,7 @@ func (r *UserResource) Update(ctx context.Context, req resource.UpdateRequest, r
 
 	user, err := usersClient.UpdateUser(ctx, realmName, userID, updateReq)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Updating User",
-			fmt.Sprintf("Unable to update user %s in realm %s: %v", userID, realmName, err),
-		)
+		addAPIError(&resp.Diagnostics, "Error Updating User", "Unable to update user %s in realm %s: %v", userID, realmName, err)
 		return
 	}
 
@@ -308,10 +274,7 @@ func (r *UserResource) Update(ctx context.Context, req resource.UpdateRequest, r
 			Value:     plan.Password.ValueString(),
 		}
 		if err := usersClient.ResetUserPassword(ctx, realmName, user.ID, passwordReq); err != nil {
-			resp.Diagnostics.AddError(
-				"Error Setting User Password",
-				fmt.Sprintf("Unable to set password for user %s: %v", user.ID, err),
-			)
+			addAPIError(&resp.Diagnostics, "Error Setting User Password", "Unable to set password for user %s: %v", user.ID, err)
 			return
 		}
 	}
@@ -363,10 +326,7 @@ func (r *UserResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 
 	err := usersClient.DeleteUser(ctx, realmName, userID)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Deleting User",
-			fmt.Sprintf("Unable to delete user %s in realm %s: %v", userID, realmName, err),
-		)
+		addAPIError(&resp.Diagnostics, "Error Deleting User", "Unable to delete user %s in realm %s: %v", userID, realmName, err)
 		return
 	}
 
@@ -414,10 +374,7 @@ func (r *UserResource) ImportState(ctx context.Context, req resource.ImportState
 
 	user, err := usersClient.GetUser(ctx, realmName, userID)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Importing User",
-			fmt.Sprintf("Unable to import user %s in realm %s: %v", userID, realmName, err),
-		)
+		addAPIError(&resp.Diagnostics, "Error Importing User", "Unable to import user %s in realm %s: %v", userID, realmName, err)
 		return
 	}
 

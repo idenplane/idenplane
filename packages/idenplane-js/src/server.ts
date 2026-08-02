@@ -20,6 +20,9 @@
  */
 
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
+import { extractBearerToken, getRolesFromToken } from './token.js';
+
+export { extractBearerToken, getRolesFromToken } from './token.js';
 
 export interface IdenplaneServerConfig {
   /** Idenplane server base URL (e.g., 'http://localhost:3000') */
@@ -68,23 +71,13 @@ export async function verifyToken(
 }
 
 /**
- * Extract the Bearer token from an Authorization header value.
- * Returns null if the header is missing or not a Bearer token.
- */
-export function extractBearerToken(authHeader: string | string[] | undefined): string | null {
-  const header = Array.isArray(authHeader) ? authHeader[0] : authHeader;
-  if (!header?.startsWith('Bearer ')) return null;
-  return header.slice(7);
-}
-
-/**
  * Check if a token payload has the required realm roles.
  */
 export function hasRealmRoles(
   payload: IdenplaneTokenPayload,
   requiredRoles: string[],
 ): boolean {
-  const userRoles = payload.realm_access?.roles ?? [];
+  const userRoles = getRolesFromToken(payload);
   return requiredRoles.every((role) => userRoles.includes(role));
 }
 
@@ -96,7 +89,7 @@ export function hasClientRoles(
   clientId: string,
   requiredRoles: string[],
 ): boolean {
-  const userRoles = payload.resource_access?.[clientId]?.roles ?? [];
+  const userRoles = getRolesFromToken(payload, clientId);
   return requiredRoles.every((role) => userRoles.includes(role));
 }
 
@@ -231,19 +224,6 @@ export function createIdenplaneGuard(config: IdenplaneServerConfig) {
   };
 }
 
-/**
- * Helper to extract roles from an Idenplane token payload.
- */
-export function getRolesFromToken(
-  payload: IdenplaneTokenPayload,
-  clientId?: string,
-): string[] {
-  if (clientId) {
-    return payload.resource_access?.[clientId]?.roles ?? [];
-  }
-  return payload.realm_access?.roles ?? [];
-}
-
 // ─── Next.js Helpers ──────────────────────────────────────
 
 export interface NextRequest {
@@ -366,8 +346,7 @@ export function createNextMiddleware(middlewareConfig: NextMiddlewareConfig) {
     const isProtected = protectedPaths.some((path) => pathname.startsWith(path));
     if (!isProtected) return null; // Let Next.js continue
 
-    const authHeader = request.headers.get('authorization');
-    const token = authHeader?.startsWith('Bearer ') ? authHeader.slice(7) : null;
+    const token = extractBearerToken(request.headers.get('authorization'));
 
     if (!token) {
       // Return redirect info — the caller uses NextResponse.redirect

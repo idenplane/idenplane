@@ -109,6 +109,21 @@ const sidebars: SidebarsConfig = {
           id: 'guides/sdks/ios-sdk',
           label: 'iOS',
         },
+        {
+          type: 'doc',
+          id: 'guides/sdks/go-sdk',
+          label: 'Go',
+        },
+        {
+          type: 'doc',
+          id: 'guides/sdks/python-sdk',
+          label: 'Python',
+        },
+        {
+          type: 'doc',
+          id: 'guides/sdks/cli',
+          label: 'CLI',
+        },
       ],
     },
     {
@@ -134,6 +149,21 @@ const sidebars: SidebarsConfig = {
           type: 'doc',
           id: 'guides/mfa',
           label: 'Multi-Factor Authentication',
+        },
+        {
+          type: 'doc',
+          id: 'guides/auth-flows',
+          label: 'Custom Auth Flows',
+        },
+        {
+          type: 'doc',
+          id: 'guides/webhooks',
+          label: 'Webhooks',
+        },
+        {
+          type: 'doc',
+          id: 'guides/scim',
+          label: 'SCIM 2.0 Provisioning',
         },
       ],
     },
@@ -194,6 +224,11 @@ const sidebars: SidebarsConfig = {
           label: 'From Auth0',
         },
       ],
+    },
+    {
+      type: 'doc',
+      id: 'troubleshooting',
+      label: 'Troubleshooting & FAQ',
     },
   ],
 };

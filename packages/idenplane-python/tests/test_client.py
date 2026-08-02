@@ -133,6 +133,24 @@ class TestClient:
         finally:
             client.close()
 
+    def test_roles_property_is_lazy_and_cached(self) -> None:
+        client = Client(Config(base_url="https://a", realm="r"))
+        try:
+            first = client.roles
+            second = client.roles
+            assert first is second
+        finally:
+            client.close()
+
+    def test_groups_property_is_lazy_and_cached(self) -> None:
+        client = Client(Config(base_url="https://a", realm="r"))
+        try:
+            first = client.groups
+            second = client.groups
+            assert first is second
+        finally:
+            client.close()
+
     def test_close_is_idempotent(self) -> None:
         client = Client(Config(base_url="https://a", realm="r"))
         client.close()

@@ -24,6 +24,8 @@
  * ```
  */
 
+import { decodeJwtPayload as decodeJwtPayloadCore } from 'idenplane-sdk/token';
+
 // ── Shared types ─────────────────────────────────────────────────
 
 export interface ServerAuthConfig {
@@ -98,19 +100,13 @@ export interface ReadonlyRequestCookies {
  * If you are making access-control decisions based on the returned claims,
  * you MUST verify the token first with `verifyToken` from `idenplane-sdk/server`
  * (which performs full JWKS signature verification).
+ *
+ * Delegates to `idenplane-sdk/token`'s `decodeJwtPayload` (the shared,
+ * dependency-free implementation also used by `@idenplane/nextjs/middleware`)
+ * rather than maintaining a separate base64url decode here.
  */
 function decodeJwtPayload(token: string): TokenPayload | null {
-  try {
-    const [, payloadB64] = token.split('.');
-    if (!payloadB64) return null;
-    const json = Buffer.from(
-      payloadB64.replace(/-/g, '+').replace(/_/g, '/'),
-      'base64',
-    ).toString('utf8');
-    return JSON.parse(json) as TokenPayload;
-  } catch {
-    return null;
-  }
+  return decodeJwtPayloadCore(token) as TokenPayload | null;
 }
 
 function isExpired(payload: TokenPayload): boolean {

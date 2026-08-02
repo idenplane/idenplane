@@ -1,0 +1,163 @@
+---
+id: cli
+title: CLI
+description: Manage realms, clients, users, roles, and groups on an Idenplane server from the terminal using the official CLI
+---
+
+# CLI
+
+`idenplane-cli` is the official command-line tool for administering an Idenplane server — realms, clients, users, roles, and groups — without touching the admin console or the raw REST API.
+
+## Requirements
+
+| Requirement | Version |
+|---|---|
+| Node.js | 18+ |
+
+---
+
+## Installation
+
+```bash
+npm install -g idenplane-cli
+```
+
+Installs a single `idenplane` binary.
+
+---
+
+## Authenticate
+
+```bash
+idenplane login --server https://auth.example.com
+```
+
+Prompts for username/password (or pass `--username`/`--password`), or authenticate with a static admin API key instead:
+
+```bash
+idenplane login --server https://auth.example.com --api-key <admin-api-key>
+```
+
+Credentials are saved to `~/.idenplane/config.json`, encrypted at rest (AES-256-GCM). Inspect or verify the saved config:
+
+```bash
+idenplane config show       # server URL and masked credentials
+idenplane config validate   # checks the server is reachable and credentials are valid
+idenplane whoami            # current authenticated identity
+idenplane logout            # clear saved credentials
+```
+
+### Environment variables (CI / scripting)
+
+As an alternative to `idenplane login`, set a server URL together with either an API key or a bearer token — no config file is written:
+
+```bash
+export IDENPLANE_SERVER_URL=https://auth.example.com
+export ADMIN_API_KEY=<admin-api-key>
+# — or —
+export IDENPLANE_TOKEN=<bearer-token>
+```
+
+Every command accepts `--json` to print machine-readable output instead of a table.
+
+---
+
+## Command reference
+
+### Realms
+
+| Command | Description |
+|---|---|
+| `realm list` | List all realms |
+| `realm create <name>` | Create a new realm |
+| `realm get <name>` | Get realm details |
+| `realm update <name>` | Update a realm |
+| `realm delete <name>` | Delete a realm |
+| `realm export <name>` | Export a realm to a JSON file |
+| `realm import <file>` | Import a realm from a JSON file |
+
+### Clients
+
+| Command | Description |
+|---|---|
+| `client list --realm <realm>` | List clients in a realm |
+| `client create <clientId>` | Create a client |
+| `client get <clientId>` | Get client details |
+| `client update <clientId>` | Update a client |
+| `client delete <clientId>` | Delete a client |
+| `client rotate-secret <clientId>` | Rotate the client secret for a CONFIDENTIAL client |
+
+### Users
+
+| Command | Description |
+|---|---|
+| `user list --realm <realm>` | List users in a realm |
+| `user create <username>` | Create a user |
+| `user get <id>` | Get a user by ID |
+| `user update <id>` | Update a user |
+| `user delete <id>` | Delete a user |
+| `user set-password <id>` | Set a user's password |
+| `user bulk-import` | Import users from a CSV or JSON file |
+
+### Roles
+
+| Command | Description |
+|---|---|
+| `role list --realm <realm>` | List realm roles |
+| `role create <name>` | Create a realm role |
+| `role get <name>` | Get role details |
+| `role update <name>` | Update a realm role |
+| `role delete <name>` | Delete a realm role |
+| `role assign <userId> <roleName>` | Assign a realm role to a user |
+| `role unassign <userId> <roleName>` | Remove a realm role from a user (`role remove` is an alias) |
+
+### Groups
+
+| Command | Description |
+|---|---|
+| `group list --realm <realm>` | List groups in a realm |
+| `group create <name>` | Create a group |
+| `group get <id>` | Get group details |
+| `group update <id>` | Update a group |
+| `group delete <id>` | Delete a group |
+
+### Other commands
+
+| Command | Description |
+|---|---|
+| `init` | Interactive setup: connect, create a realm, client, and roles |
+| `migrate keycloak` | Import from a Keycloak realm export JSON |
+| `migrate auth0` | Import from an Auth0 Management API export |
+| `upgrade` | Run pre-flight checks then apply database migrations |
+| `upgrade:status` | View upgrade audit history |
+| `completion <shell>` | Output a shell completion script (bash, zsh, fish) |
+
+Run `idenplane <command> --help` for the full option list of any command.
+
+---
+
+## Next Steps
+
+<div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
+
+[**Go SDK**](/guides/sdks/go-sdk)
+Server-side Go SDK for the same admin API
+
+[**Python SDK**](/guides/sdks/python-sdk)
+Server-side Python SDK for the same admin API
+
+[**API Reference**](/api)
+Complete REST API documentation
+
+[**Configuration**](/getting-started/configuration)
+Learn about all configuration options
+
+</div>
+
+---
+
+<p align="center">
+  <a href="https://idenplane.com">idenplane.com</a> &middot;
+  <a href="https://github.com/idenplane/idenplane">GitHub</a> &middot;
+  <a href="https://discord.gg/idenplane">Discord</a>
+</p>

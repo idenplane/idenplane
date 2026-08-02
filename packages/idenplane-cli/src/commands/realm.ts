@@ -4,6 +4,11 @@ import { HttpClient } from '../http.js';
 import { printResult, success } from '../output.js';
 import { confirm } from '../prompt.js';
 
+/**
+ * Registers `idenplane realm list|create|get|update|delete|export|import`
+ * subcommands for managing realms, including exporting a realm to (or
+ * importing one from) a JSON file.
+ */
 export function registerRealmCommands(program: Command): void {
   const realm = program.command('realm').description('Manage realms');
 

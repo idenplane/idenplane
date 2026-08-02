@@ -42,6 +42,11 @@ function printReport(report: MigrationReport): void {
   console.log(chalk.bold(`\nTotal: ${chalk.green(totalCreated + ' created')}, ${chalk.red(totalFailed + ' failed')}`));
 }
 
+/**
+ * Registers `idenplane migrate keycloak|auth0` subcommands for importing
+ * users and configuration from a Keycloak realm export or an Auth0
+ * Management API export, printing a formatted (or `--json`) migration report.
+ */
 export function registerMigrateCommand(program: Command): void {
   const migrate = program.command('migrate').description('Migrate from other IAM providers');
 

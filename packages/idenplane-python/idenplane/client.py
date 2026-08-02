@@ -2,7 +2,7 @@
 
 The :class:`Client` is the entry point. It holds an immutable :class:`Config`
 and a single ``requests.Session`` that is reused across services for
-keep-alive performance. Service objects (``users``, ``discovery``) are
+keep-alive performance. Service objects (``users``, ``discovery``, ``roles``, ``groups``) are
 lazily instantiated on first access.
 """
 
@@ -12,13 +12,17 @@ import ipaddress
 import os
 from dataclasses import dataclass, field
 from types import TracebackType
-from typing import TYPE_CHECKING, Optional
+from typing import TYPE_CHECKING, Any, Optional
 from urllib.parse import urlparse
 
 import requests
 
+from idenplane.exceptions import IdenplaneError, _raise_for_status
+
 if TYPE_CHECKING:
     from idenplane.discovery import DiscoveryService
+    from idenplane.groups import GroupService
+    from idenplane.roles import RoleService
     from idenplane.users import UserService
 
 _USER_AGENT = "idenplane-python/0.3.0"
@@ -142,6 +146,8 @@ class Client:
         self._session = session if session is not None else requests.Session()
         self._users: Optional[UserService] = None
         self._discovery: Optional[DiscoveryService] = None
+        self._roles: Optional[RoleService] = None
+        self._groups: Optional[GroupService] = None
         self._closed = False
 
     @property
@@ -172,6 +178,24 @@ class Client:
             self._discovery = DiscoveryService(self)
         return self._discovery
 
+    @property
+    def roles(self) -> RoleService:
+        """Return the lazily-instantiated :class:`RoleService`."""
+        if self._roles is None:
+            from idenplane.roles import RoleService
+
+            self._roles = RoleService(self)
+        return self._roles
+
+    @property
+    def groups(self) -> GroupService:
+        """Return the lazily-instantiated :class:`GroupService`."""
+        if self._groups is None:
+            from idenplane.groups import GroupService
+
+            self._groups = GroupService(self)
+        return self._groups
+
     def auth_header(self) -> str:
         """Return the ``Authorization`` header value.
 
@@ -193,6 +217,46 @@ class Client:
         if self._config.extra_headers:
             headers.update(self._config.extra_headers)
         return headers
+
+    def _do_request(
+        self,
+        method: str,
+        url: str,
+        *,
+        json: Optional[Any] = None,
+        params: Optional[dict[str, str]] = None,
+    ) -> requests.Response:
+        """Build, authenticate, and dispatch an admin API request.
+
+        Shared by every service (``users``, ``roles``, ``groups``, ...) so
+        the header/auth/timeout/error-mapping logic lives in exactly one
+        place. Always attaches ``Accept`` and ``User-Agent``. Adds
+        ``Content-Type: application/json`` when a body is supplied. Attaches
+        ``Authorization`` when the client has an admin token configured.
+        Non-2xx responses raise the appropriate :class:`IdenplaneError`
+        subclass.
+        """
+        headers = self.default_headers()
+        if json is not None:
+            headers["Content-Type"] = "application/json"
+        auth = self.auth_header()
+        if auth:
+            headers["Authorization"] = auth
+
+        try:
+            resp = self._session.request(
+                method=method,
+                url=url,
+                json=json,
+                params=params,
+                headers=headers,
+                timeout=self._config.timeout_seconds,
+            )
+        except requests.RequestException as exc:
+            raise IdenplaneError(f"HTTP request failed: {exc}") from exc
+
+        _raise_for_status(resp)
+        return resp
 
     def close(self) -> None:
         """Close the underlying HTTP session.

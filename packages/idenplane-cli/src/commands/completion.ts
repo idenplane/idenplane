@@ -156,6 +156,11 @@ const INSTALL_HINTS: Record<string, string> = {
   fish: `# Save to your fish completions directory:\n# idenplane completion fish > ~/.config/fish/completions/idenplane.fish`,
 };
 
+/**
+ * Registers `idenplane completion <shell>`, which prints a shell completion
+ * script for `bash`, `zsh`, or `fish` to stdout (plus an install hint when
+ * run in a TTY).
+ */
 export function registerCompletionCommand(program: Command): void {
   program
     .command('completion <shell>')

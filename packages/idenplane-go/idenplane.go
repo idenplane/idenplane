@@ -3,8 +3,12 @@
 package idenplane
 
 import (
+	"bytes"
+	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
 	"net"
 	"net/http"
 	"net/url"
@@ -174,6 +178,10 @@ type Client struct {
 	config Config
 	// Users exposes admin-API user management.
 	Users *UserService
+	// Roles exposes admin-API realm role management.
+	Roles *RoleService
+	// Groups exposes admin-API realm group management.
+	Groups *GroupService
 }
 
 // NewClient creates a new Idenplane client with the given configuration.
@@ -183,6 +191,8 @@ type Client struct {
 func NewClient(config Config) *Client {
 	c := &Client{config: config}
 	c.Users = &UserService{client: c}
+	c.Roles = &RoleService{client: c}
+	c.Groups = &GroupService{client: c}
 	return c
 }
 
@@ -212,6 +222,40 @@ func (c *Client) authHeader() string {
 	return "Bearer " + c.config.AdminToken
 }
 
+// doRequest builds, authenticates, and dispatches an admin API request.
+// When body is non-nil it is JSON-encoded and the Content-Type header set.
+// When the client has an AdminToken configured, the Authorization header is
+// attached so admin endpoints don't return 401.
+//
+// This is shared by UserService, RoleService, and GroupService, all of which
+// speak the same admin-API conventions (JSON in/out, bearer auth).
+func (c *Client) doRequest(ctx context.Context, method, path string, body any) (*http.Response, error) {
+	var reader io.Reader
+	if body != nil {
+		raw, err := json.Marshal(body)
+		if err != nil {
+			return nil, ErrServerError("marshal request body: " + err.Error())
+		}
+		reader = bytes.NewReader(raw)
+	}
+	req, err := http.NewRequestWithContext(ctx, method, path, reader)
+	if err != nil {
+		return nil, ErrNetworkError("build request", err)
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+	req.Header.Set("Accept", "application/json")
+	if auth := c.authHeader(); auth != "" {
+		req.Header.Set("Authorization", auth)
+	}
+	resp, err := c.config.httpClient().Do(req)
+	if err != nil {
+		return nil, ErrNetworkError("request failed", err)
+	}
+	return resp, nil
+}
+
 // Error is the base error type for Idenplane errors.
 type Error struct {
 	// Code is the error code.
@@ -227,7 +271,7 @@ type ErrorCode string
 
 // Error codes.
 const (
-	ErrCodeInvalidConfig     ErrorCode = "invalid_config"
+	ErrCodeInvalidConfig    ErrorCode = "invalid_config"
 	ErrCodeNotAuthenticated ErrorCode = "not_authenticated"
 	ErrCodeTokenExpired     ErrorCode = "token_expired"
 	ErrCodeServerError      ErrorCode = "server_error"
@@ -236,6 +280,8 @@ const (
 	ErrCodeJWTError         ErrorCode = "jwt_error"
 	ErrCodeUserNotFound     ErrorCode = "user_not_found"
 	ErrCodeInvalidToken     ErrorCode = "invalid_token"
+	ErrCodeRoleNotFound     ErrorCode = "role_not_found"
+	ErrCodeGroupNotFound    ErrorCode = "group_not_found"
 )
 
 // Error returns the error message.
@@ -302,6 +348,16 @@ func ErrUserNotFound(userID string) *Error {
 // ErrInvalidToken creates an invalid token error.
 func ErrInvalidToken(message string) *Error {
 	return &Error{Code: ErrCodeInvalidToken, Message: message}
+}
+
+// ErrRoleNotFound creates a role not found error.
+func ErrRoleNotFound(name string) *Error {
+	return &Error{Code: ErrCodeRoleNotFound, Message: fmt.Sprintf("Role not found: %s", name)}
+}
+
+// ErrGroupNotFound creates a group not found error.
+func ErrGroupNotFound(id string) *Error {
+	return &Error{Code: ErrCodeGroupNotFound, Message: fmt.Sprintf("Group not found: %s", id)}
 }
 
 // IsRetryable returns true if the error is retryable (network error or server error).

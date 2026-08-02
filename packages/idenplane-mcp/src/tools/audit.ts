@@ -25,9 +25,18 @@ const AdminEventSchema = z.object({
   error: z.string().optional(),
 });
 
+/** A user-facing login/auth event, inferred from {@link LoginEventSchema}. */
 export type LoginEvent = z.infer<typeof LoginEventSchema>;
+/** An admin API operation event, inferred from {@link AdminEventSchema}. */
 export type AdminEvent = z.infer<typeof AdminEventSchema>;
 
+/**
+ * Registers audit/event-log MCP tools on `server`:
+ *
+ * - `query_audit_events` (read-only) — Query a realm's login events and/or
+ *   admin operation events, with optional filtering by user ID, event type,
+ *   and time window.
+ */
 export function registerAuditTools(server: McpServer, client: IdenplaneClient): void {
   server.registerTool(
     'query_audit_events',

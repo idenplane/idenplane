@@ -169,6 +169,43 @@ export class ContinuousVerification {
     this.realm = client.getConfig().realm;
   }
 
+  /**
+   * POST `body` to `{baseUrl}/realms/{realm}{path}` with the current access
+   * token, JSON-encoding the body and decoding the JSON response.
+   *
+   * @param path - Path appended to the realm base URL (e.g. `/continuous-verification/device-posture`)
+   * @param body - JSON-serializable request body
+   * @param errorContext - Fallback error message used when the failure response has no JSON `message`
+   * @throws {Error} If not authenticated, or the request fails
+   */
+  private async authenticatedPost<T>(
+    path: string,
+    body: Record<string, unknown>,
+    errorContext: string,
+  ): Promise<T> {
+    const token = this.client.getAccessToken();
+    if (!token) {
+      throw new Error('Not authenticated — call client.init() first');
+    }
+
+    const url = `${this.baseUrl}/realms/${this.realm}${path}`;
+    const response = await fetch(url, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Authorization: `Bearer ${token}`,
+      },
+      body: JSON.stringify(body),
+    });
+
+    if (!response.ok) {
+      const err = await response.json().catch(() => ({ message: errorContext }));
+      throw new Error((err as { message?: string }).message ?? errorContext);
+    }
+
+    return response.json() as Promise<T>;
+  }
+
   // ─── Device Posture ─────────────────────────────────────────────────────────
 
   /**
@@ -195,12 +232,6 @@ export class ContinuousVerification {
    * ```
    */
   async reportDevicePosture(posture: DevicePostureInput): Promise<DevicePostureResponse> {
-    const token = this.client.getAccessToken();
-    if (!token) {
-      throw new Error('Not authenticated — call client.init() first');
-    }
-
-    const url = `${this.baseUrl}/realms/${this.realm}/continuous-verification/device-posture`;
     const body: Record<string, unknown> = {
       osType: posture.osType ?? null,
       osVersion: posture.osVersion ?? null,
@@ -222,21 +253,11 @@ export class ContinuousVerification {
       complianceDetails: posture.complianceDetails ?? null,
     };
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({ message: 'Failed to report device posture' }));
-      throw new Error((err as { message?: string }).message ?? 'Failed to report device posture');
-    }
-
-    return response.json() as Promise<DevicePostureResponse>;
+    return this.authenticatedPost<DevicePostureResponse>(
+      '/continuous-verification/device-posture',
+      body,
+      'Failed to report device posture',
+    );
   }
 
   // ─── Behavioral Biometrics ───────────────────────────────────────────────────
@@ -273,12 +294,6 @@ export class ContinuousVerification {
   async recordBehavioralSample(
     sample: BehavioralSampleInput,
   ): Promise<BehavioralSamplesResponse> {
-    const token = this.client.getAccessToken();
-    if (!token) {
-      throw new Error('Not authenticated — call client.init() first');
-    }
-
-    const url = `${this.baseUrl}/realms/${this.realm}/continuous-verification/behavioral/samples`;
     const body: Record<string, unknown> = {
       sessionId: sample.sessionId,
       samples: [
@@ -296,21 +311,11 @@ export class ContinuousVerification {
       ],
     };
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({ message: 'Failed to record behavioral sample' }));
-      throw new Error((err as { message?: string }).message ?? 'Failed to record behavioral sample');
-    }
-
-    return response.json() as Promise<BehavioralSamplesResponse>;
+    return this.authenticatedPost<BehavioralSamplesResponse>(
+      '/continuous-verification/behavioral/samples',
+      body,
+      'Failed to record behavioral sample',
+    );
   }
 
   /**
@@ -337,12 +342,6 @@ export class ContinuousVerification {
   async recordBehavioralSamplesBatch(
     batch: BehavioralSampleBatchInput,
   ): Promise<BehavioralSamplesResponse> {
-    const token = this.client.getAccessToken();
-    if (!token) {
-      throw new Error('Not authenticated — call client.init() first');
-    }
-
-    const url = `${this.baseUrl}/realms/${this.realm}/continuous-verification/behavioral/samples`;
     const body: Record<string, unknown> = {
       sessionId: batch.sessionId,
       samples: batch.samples.map((s) => ({
@@ -358,21 +357,11 @@ export class ContinuousVerification {
       })),
     };
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({ message: 'Failed to record behavioral samples' }));
-      throw new Error((err as { message?: string }).message ?? 'Failed to record behavioral samples');
-    }
-
-    return response.json() as Promise<BehavioralSamplesResponse>;
+    return this.authenticatedPost<BehavioralSamplesResponse>(
+      '/continuous-verification/behavioral/samples',
+      body,
+      'Failed to record behavioral samples',
+    );
   }
 
   // ─── Network Context ─────────────────────────────────────────────────────────
@@ -398,12 +387,6 @@ export class ContinuousVerification {
    * ```
    */
   async reportNetworkContext(context: NetworkContextInput): Promise<{ success: boolean; recordedAt: string }> {
-    const token = this.client.getAccessToken();
-    if (!token) {
-      throw new Error('Not authenticated — call client.init() first');
-    }
-
-    const url = `${this.baseUrl}/realms/${this.realm}/continuous-verification/network-context`;
     const body: Record<string, unknown> = {
       ipAddress: context.ipAddress ?? null,
       isp: context.isp ?? null,
@@ -418,20 +401,10 @@ export class ContinuousVerification {
       longitude: context.longitude ?? null,
     };
 
-    const response = await fetch(url, {
-      method: 'POST',
-      headers: {
-        'Content-Type': 'application/json',
-        Authorization: `Bearer ${token}`,
-      },
-      body: JSON.stringify(body),
-    });
-
-    if (!response.ok) {
-      const err = await response.json().catch(() => ({ message: 'Failed to report network context' }));
-      throw new Error((err as { message?: string }).message ?? 'Failed to report network context');
-    }
-
-    return response.json() as Promise<{ success: boolean; recordedAt: string }>;
+    return this.authenticatedPost<{ success: boolean; recordedAt: string }>(
+      '/continuous-verification/network-context',
+      body,
+      'Failed to report network context',
+    );
   }
 }

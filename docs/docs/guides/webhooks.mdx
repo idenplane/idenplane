@@ -1,0 +1,265 @@
+---
+id: webhooks
+title: Webhooks
+description: Subscribe to Idenplane realm events over HTTP — payload format, HMAC-SHA256 signature verification, delivery retries, and the Admin API for managing webhooks.
+---
+
+# Webhooks
+
+A webhook is a per-realm subscription: a URL, a signing secret, and a list of event type strings. When a matching event happens, Idenplane `POST`s a signed JSON payload to that URL. The secret is encrypted at rest with AES-256-GCM and is returned in plaintext exactly once, in the response body of the create (or secret-rotating update) call — it cannot be retrieved again afterward.
+
+This page covers setup, the payload format, and retries. For deep debugging — SSRF protection details, the exact retry-path differences, and "my webhook stopped firing" checks — see [Troubleshooting → Webhooks](/troubleshooting#webhooks).
+
+---
+
+## Concepts
+
+### Event Types
+
+`eventTypes` is a plain array of strings; there's no fixed enum enforced server-side, and a webhook only fires for events where `eventTypes` contains the *exact* string the server dispatches. The events Idenplane actually emits today are:
+
+| Event type | Emitted when |
+|---|---|
+| `user.login` | Successful login |
+| `user.login_error` | Failed login attempt |
+| `user.logout` | Logout |
+| `user.register` | Direct registration event (see also `user.registered` below) |
+| `user.token_refresh` / `user.token_refresh_error` | Refresh token grant success/failure |
+| `user.code_to_token` / `user.code_to_token_error` | Authorization code exchange success/failure |
+| `user.client_login` / `user.client_login_error` | Client-credentials grant success/failure |
+| `user.federated_login` | Login via LDAP/social federation |
+| `user.mfa_challenge` / `user.mfa_verify` / `user.mfa_verify_error` | MFA challenge issued / verified / failed |
+| `user.password_reset` | Password reset completed |
+| `user.device_code_to_token` | Device-code grant completion |
+| `user.impersonation_start` / `user.impersonation_end` | Admin impersonation session start/end |
+| `user.approval_pending` | Self-registration created but awaiting admin approval |
+| `user.registered` | Self-registration completed (no approval required) |
+| `user.approved` / `user.rejected` | An admin approved/rejected a pending registration |
+
+Everything above `user.approval_pending` comes from the realm's login-event stream (they fire only if `eventsEnabled` is on for the realm — the event is skipped, and no webhook dispatch happens, while it's off); the last four (`user.approval_pending`, `user.registered`, `user.approved`, `user.rejected`) come from the registration flow directly and aren't gated by `eventsEnabled`. The admin console's webhook form shows a curated checkbox list that doesn't cover every string above — to subscribe to an event not shown there (e.g. `user.registered`), create or update the webhook through the Admin API with the exact string.
+
+### Delivery
+
+Real events go through a durable outbox: a `WebhookEvent` row is written first, then a scheduler picks it up (see [Retries](#retries)). Test deliveries (the **Test Webhook** button, or `POST .../webhooks/{id}/test`) fire inline instead, so you get a faster signal when you're wiring up a receiver.
+
+---
+
+## Setting Up
+
+### Admin Console
+
+**Webhooks**, under the realm's *Operations* section:
+
+- **URL** — your HTTPS endpoint
+- **Secret** — minimum 8 characters, write-only (shown once at creation, left blank on edit to keep the current value)
+- **Description** — optional label
+- **Enabled** — toggle delivery on/off without deleting the webhook
+- **Event Types** — multi-select (see the note above about strings not covered by the console's list)
+
+The detail page has a **Test Webhook** button and a delivery log (event type, status code, success/failure, timestamp) for the most recent 100 deliveries.
+
+### Admin API
+
+Base path: `/admin/realms/{realm}/webhooks`, protected by the admin API key and per-IP rate limiting.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/admin/realms/{realm}/webhooks` | Create — returns the plaintext `secret` once |
+| `GET` | `/admin/realms/{realm}/webhooks` | List |
+| `GET` | `/admin/realms/{realm}/webhooks/{id}` | Get one |
+| `PUT` / `PATCH` | `/admin/realms/{realm}/webhooks/{id}` | Update; include `secret` to rotate it (returned once again) |
+| `DELETE` | `/admin/realms/{realm}/webhooks/{id}` | Delete |
+| `POST` | `/admin/realms/{realm}/webhooks/{id}/test` | Fire a test delivery — returns `{ "status": "queued" }` immediately |
+| `GET` | `/admin/realms/{realm}/webhooks/{id}/deliveries` | Most recent 100 delivery attempts |
+
+```bash
+curl -X POST http://localhost:3000/admin/realms/my-realm/webhooks \
+  -H "x-admin-api-key: $ADMIN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "url": "https://example.com/webhooks/idenplane",
+    "secret": "a-long-random-signing-secret",
+    "eventTypes": ["user.login", "user.registered", "user.approved"],
+    "description": "Sync new users into our CRM",
+    "enabled": true
+  }'
+```
+
+**Response** (the `secret` field here is the one and only time the plaintext value is returned):
+
+```json
+{
+  "id": "wh_...",
+  "realmId": "...",
+  "url": "https://example.com/webhooks/idenplane",
+  "enabled": true,
+  "eventTypes": ["user.login", "user.registered", "user.approved"],
+  "description": "Sync new users into our CRM",
+  "createdAt": "2026-01-01T00:00:00.000Z",
+  "updatedAt": "2026-01-01T00:00:00.000Z",
+  "secret": "a-long-random-signing-secret",
+  "secretWarning": "Store this secret securely. It will not be shown again."
+}
+```
+
+`eventTypes` also accepts the alias `events` in the create body for clients that send that field name instead.
+
+For the realm-level `url`/`secret`/`enabled` property reference (as opposed to the event dispatch behavior on this page), see [Configuration Options → Webhook Configuration](/configuration/options#webhook-configuration).
+
+---
+
+## Payload Format
+
+There's no wrapper envelope — the event type, timestamp, and realm are spread directly alongside the event-specific fields:
+
+```typescript
+{
+  eventType: string;   // e.g. "user.login"
+  timestamp: string;   // ISO 8601, set at dispatch time
+  realmId: string;
+  // ...event-specific fields, spread at the top level
+}
+```
+
+A `user.login` delivery looks like:
+
+```json
+{
+  "eventType": "user.login",
+  "timestamp": "2026-08-02T10:15:00.000Z",
+  "realmId": "3f1b2c4d-...",
+  "userId": "6a9e...",
+  "sessionId": "sess_...",
+  "clientId": "my-app",
+  "ipAddress": "203.0.113.4"
+}
+```
+
+(`error` and `details` are also part of this payload, but are only present when they have a value — e.g. on a `user.login_error` delivery. A field with no value is omitted from the JSON entirely rather than sent as `null`.)
+
+A `user.registered` delivery looks like:
+
+```json
+{
+  "eventType": "user.registered",
+  "timestamp": "2026-08-02T10:16:00.000Z",
+  "realmId": "3f1b2c4d-...",
+  "userId": "7b0f...",
+  "username": "jsmith",
+  "email": "jsmith@example.com",
+  "firstName": "Jamie",
+  "lastName": "Smith",
+  "createdAt": "2026-08-02T10:16:00.000Z"
+}
+```
+
+The **Test Webhook** payload is fixed, regardless of which `eventTypes` the webhook subscribes to:
+
+```json
+{
+  "eventType": "webhook.test",
+  "timestamp": "2026-08-02T10:17:00.000Z",
+  "realmId": "3f1b2c4d-...",
+  "webhookId": "wh_...",
+  "test": true
+}
+```
+
+### Request Headers
+
+Every delivery — test or real — carries:
+
+| Header | Value |
+|---|---|
+| `Content-Type` | `application/json` |
+| `X-Webhook-Signature` | `sha256=<hex>` — `HMAC-SHA256(secret, raw_request_body)` |
+| `X-Webhook-Timestamp` | ISO 8601, set at send time |
+| `User-Agent` | `Idenplane-Webhook/1.0` |
+
+### Verifying the Signature
+
+Compute the HMAC over the *raw* request body bytes — not a re-serialized version of the parsed JSON, since key ordering or whitespace differences will break the comparison. Here's a minimal Express receiver:
+
+```typescript
+import express from 'express';
+import { createHmac, timingSafeEqual } from 'crypto';
+
+const app = express();
+
+// Capture the raw body before any JSON parsing touches it.
+app.use('/webhooks/idenplane', express.raw({ type: 'application/json' }));
+
+app.post('/webhooks/idenplane', (req, res) => {
+  const signatureHeader = req.header('X-Webhook-Signature') ?? '';
+  const rawBody = req.body as Buffer; // Buffer, thanks to express.raw()
+
+  const expected =
+    'sha256=' + createHmac('sha256', process.env.WEBHOOK_SIGNING_SECRET!)
+      .update(rawBody)
+      .digest('hex');
+
+  const signatureBuf = Buffer.from(signatureHeader);
+  const expectedBuf = Buffer.from(expected);
+
+  if (
+    signatureBuf.length !== expectedBuf.length ||
+    !timingSafeEqual(signatureBuf, expectedBuf)
+  ) {
+    return res.status(401).send('invalid signature');
+  }
+
+  const event = JSON.parse(rawBody.toString('utf8'));
+  // ...handle event.eventType
+
+  res.status(200).send('ok');
+});
+```
+
+`timingSafeEqual` throws if the two buffers are different lengths, so check the length first (as above) rather than letting a length mismatch propagate as an unhandled exception.
+
+---
+
+## Retries
+
+Test deliveries and real events take genuinely different code paths, with different backoff schedules:
+
+| | Test delivery | Real events |
+|---|---|---|
+| Trigger | `POST .../webhooks/{id}/test` | An event matching `eventTypes` |
+| Delivery mechanism | Inline, fire-and-forget from the request handler | Durable `WebhookEvent` outbox row, polled by a scheduler tick every 10 seconds |
+| Attempts | Up to 4 (`1s → 10s → 60s` backoff) | Up to 4 (`10s → 60s → 600s` backoff) |
+| Backoff override | `WEBHOOK_RETRY_DELAYS_MS` (JSON array of milliseconds) | Fixed in code; does not read that variable |
+
+The real-event scheduler's backoff array is defined as `[1s, 10s, 60s, 600s]`, and its own code comment describes the schedule as "1s → 10s → 60s → 10 min." In practice the first entry is never used — the retry delay is looked up by the *new* attempt count (which is already 1 after the first failure), so the first retry fires at the second array entry, 10s, not the first. Effectively real events get **4 attempts total** with **10s → 60s → 600s** between them; the 1s entry and the fifth (would-be) attempt implied by the comment don't happen. If you're correlating delivery timestamps in your own logs against the documented schedule, use the numbers above rather than the source comment.
+
+A delivery blocked by SSRF protection (destination resolves to a private/loopback/link-local address) stops retrying immediately rather than burning the full backoff — it's a policy rejection, not a transient failure, and retrying would just re-run the same check against the same result. Every attempt (and every redirect hop) re-resolves DNS at send time, so a URL that was public when you configured it can still be rejected later if it now resolves internally. See [Troubleshooting → Test deliveries and real events use two different retry paths](/troubleshooting#test-deliveries-and-real-events-use-two-different-retry-paths) and [→ Delivery silently fails with "target address is not publicly routable"](/troubleshooting#delivery-silently-fails-with-target-address-is-not-publicly-routable) for the full detail, including the `WEBHOOK_ALLOW_PRIVATE_TARGETS` escape hatch for self-hosted receivers.
+
+Check delivery outcomes — status code, truncated response body, attempt count — via `GET .../webhooks/{id}/deliveries` or the console's delivery log. If a webhook has simply stopped firing, see [Troubleshooting → A webhook stopped firing but the config looks right](/troubleshooting#a-webhook-stopped-firing-but-the-config-looks-right).
+
+---
+
+## Next Steps
+
+<div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
+
+[**Custom Auth Flows**](/guides/auth-flows)
+Multi-step authentication with conditional branching
+
+[**SCIM 2.0 Provisioning**](/guides/scim)
+Automate user lifecycle from Okta or Azure AD
+
+[**Troubleshooting & FAQ**](/troubleshooting#webhooks)
+SSRF protection, retry paths, and delivery debugging
+
+[**Configuration Options**](/configuration/options#webhook-configuration)
+Realm-level webhook property reference
+
+</div>
+
+---
+
+<p align="center">
+  <a href="https://idenplane.com">idenplane.com</a> &middot;
+  <a href="https://github.com/idenplane/idenplane">GitHub</a> &middot;
+  <a href="https://discord.gg/idenplane">Discord</a>
+</p>
