@@ -1,0 +1,288 @@
+---
+id: troubleshooting
+title: Troubleshooting & FAQ
+description: Diagnose and fix common Idenplane errors — OAuth invalid_grant, redirect_uri/CORS mismatches, SAML, WebAuthn, LDAP, webhooks, and email delivery — grounded in the actual server behavior.
+---
+
+# Troubleshooting & FAQ
+
+This page covers protocol-level and integration errors you'll hit when wiring up Idenplane: OAuth token exchange failures, `redirect_uri`/CORS mismatches, SAML assertion problems, WebAuthn registration issues, LDAP federation, webhook delivery, and email.
+
+For infrastructure issues (container won't start, database connection, health checks), see the [Quickstart Troubleshooting section](/quickstart#troubleshooting) instead.
+
+Every behavior described below reflects what the server code actually does — not generic IAM advice — so you can match your symptom to the exact check that's failing.
+
+---
+
+## OAuth Errors & Token Exchange
+
+The token endpoint (`/realms/{realm}/protocol/openid-connect/token`) returns [RFC 6749 §5.2](https://www.rfc-editor.org/rfc/rfc6749#section-5.2)-shaped errors: `{ "error": "<code>", "error_description": "<detail>" }`. Most failures are `invalid_grant` with a 400 status, but a failed `invalid_client` check returns 401 with a `WWW-Authenticate: Basic realm="<realm>", error="invalid_client"` header.
+
+### `invalid_grant`: what each cause means
+
+`invalid_grant` is thrown from many different checks, and the `error_description` is the fastest way to tell which one fired. The table below is the exact set of descriptions the server returns.
+
+| `error_description` | Grant / context | What actually happened | What to check |
+|---|---|---|---|
+| `Invalid credentials` | `password` | Username/password didn't match, the user is disabled, or (for a federated user) the LDAP bind failed — this also covers a user that doesn't exist locally yet: the server attempts an import-on-first-login federation bind before giving up | Verify the password; check the user's `enabled` flag; if the user has (or should have) a `federationLink`, test the LDAP connection (see [LDAP section](#ldap--user-federation)) — including for a brand-new user who should be auto-imported on first login but isn't (check `importEnabled` on the federation) |
+| `Account is temporarily locked. Please try again later.` | `password`, `authorization_code` | Brute-force protection tripped: too many failures inside the lockout window | Wait out `lockoutDuration`, or unlock via the admin API (below) |
+| `Password has expired. Please change your password.` | `password` | The realm's password policy marks this user's password as expired | Have the user complete the password-reset flow |
+| `MFA setup required. Please set up two-factor authentication.` | `password` | The realm requires MFA for this user, but they have no TOTP enrolled yet | Enroll TOTP via `POST /realms/{realm}/mfa/setup` before retrying login |
+| `Invalid or expired MFA token, or too many failed attempts` | `mfa_otp` | The `mfa_token` is expired/unknown, **or** it was issued for a different realm, **or** for a different client | All three cases return identical wording by design (no oracle for attackers) — check the server logs, which log the realm/client mismatch cases distinctly (`MFA cross-realm token use attempt` / `MFA cross-client token use attempt`) |
+| `Invalid OTP code` | `mfa_otp` | The submitted code failed both TOTP verification and recovery-code verification | Check device clock drift (`totpPeriod`); try a recovery code |
+| `User not found` | `mfa_otp`, `authorization_code`, `device_code` | The user backing the challenge/code/device grant no longer exists | Re-authenticate from scratch |
+| `Invalid or expired refresh token` | `refresh_token` | Token not found, already revoked, or past `expiresAt` | See [refresh token rotation](#refresh-token-rotation-and-reuse) below — a *revoked* token here usually means reuse was detected |
+| `This refresh token predates client binding. Please log in again.` | `refresh_token` | The stored token has no `clientId` (issued before client-binding was added) | One-time re-login resolves it permanently |
+| `Refresh token was not issued to this client` | `refresh_token` | The `client_id` in the request doesn't match the `clientId` the token was issued to | Use the same `client_id` that originally requested the token |
+| `Invalid or expired authorization code` | `authorization_code` | The code doesn't exist, was already consumed, expired (60s TTL), or belongs to a different client | Codes are single-use via an atomic conditional update — a second concurrent request for the same code always gets this error |
+| `redirect_uri mismatch` | `authorization_code` | The `redirect_uri` sent to `/token` isn't byte-identical to the one stored on the code at `/authorize` time | See [redirect_uri exactness at token exchange](#redirect_uri-exactness-at-token-exchange) |
+| `Invalid code_verifier` | `authorization_code` | SHA-256(`code_verifier`) doesn't match the stored `code_challenge` | Check base64url encoding (no padding) and that you're hashing the verifier, not sending it raw as the challenge |
+| `MFA verification required. Device code grant does not support MFA...` | `device_code` | The user has MFA enabled, but the device-code flow has no interactive step to complete it | Use `authorization_code` (with PKCE) for any user that has MFA enabled |
+| `MFA setup required. Use authorization_code grant to complete MFA setup.` | `device_code` | The realm requires MFA and the user hasn't enrolled it | Same fix — switch that user's onboarding to `authorization_code` |
+
+:::note `mfa_required` is not `invalid_grant`
+When a `password` grant succeeds but MFA must be completed, the server returns a plain `401` with `{ "error": "mfa_required", "error_description": "...", "mfa_token": "..." }` — a distinct response shape, not an `OAuthTokenError`. Submit `mfa_token` and the user's OTP to the `mfa_otp` grant to finish the flow.
+:::
+
+### Refresh token rotation and reuse
+
+Idenplane rotates refresh tokens on every use — each one is single-use, and a new one is issued alongside new access/ID tokens. If a refresh token is presented a second time (`storedToken.revoked` is already `true`), the server doesn't just reject that one request: it **revokes every refresh token on that session**, then returns `Invalid or expired refresh token`. This is deliberate reuse-detection (a stolen-and-replayed token is assumed to mean the session is compromised), but it means a client-side bug that re-sends the same refresh token (e.g. a race between two tabs refreshing concurrently) can silently log a user out entirely.
+
+### `redirect_uri` exactness at token exchange
+
+There are two different `redirect_uri` checks, and they are not equally strict:
+
+1. **At `/authorize`** — `redirect_uri` is checked with `matchesRedirectUri()` against the client's registered `redirectUris`. This allows a trailing-wildcard pattern: a registered `https://app.example.com/*` matches any path under that origin (and the bare origin itself).
+2. **At `/token`** — the `redirect_uri` you send must be **byte-identical** to the exact string that was submitted at `/authorize` (stored on the authorization code). No wildcard matching happens here.
+
+So it's possible to pass authorization with a wildcard-registered URI and then fail token exchange with `redirect_uri mismatch` simply because the two requests used a different exact string (different path, trailing slash, query string, or scheme). Always send the identical `redirect_uri` value to both endpoints.
+
+### `invalid_client` / `unauthorized_client`
+
+- `invalid_client` (401): missing `client_id`, unknown/disabled client, missing `client_secret` for a confidential client, or a secret that doesn't verify.
+- `unauthorized_client` (400): the client exists and authenticated, but its `grantTypes` list doesn't include the grant type you're requesting (e.g. calling `client_credentials` on a client that only has `authorization_code` enabled).
+
+---
+
+## `redirect_uri`, CORS, and Origin Mismatches
+
+### Exact vs. wildcard matching
+
+`redirectUris` on a client are matched with `matchesRedirectUri()`:
+
+- A plain entry (no `/*` suffix) must match **exactly** — different port, scheme, or trailing slash all fail.
+- An entry ending in `/*` matches the bare origin and anything under that path prefix. For example, `http://localhost:4000/*` matches both `http://localhost:4000` and `http://localhost:4000/callback`.
+
+### Why a `redirect_uri` change takes effect immediately but a CORS (`webOrigins`) change might not
+
+These are two independent mechanisms with different freshness guarantees — don't assume they behave the same way:
+
+- **`redirect_uri` validation** reads `client.redirectUris` straight from the database on every `/authorize` request. There is no cache. A change takes effect on the very next request.
+- **CORS `webOrigins` validation** goes through `CorsOriginService`, which caches the full set of allowed origins in two layers: an in-process `Set` (5-minute TTL) backed by Redis (5-minute TTL), which is only consulted when the in-process cache misses.
+
+When you update a client's `webOrigins` (or its `enabled` flag) through the Admin API, the instance that handled that request immediately clears **its own** in-process cache and the shared Redis entry. If you're running a single instance, the change is effectively immediate. If you're running multiple instances behind a load balancer, only the instance that processed the write is refreshed right away — every other instance keeps serving its own stale in-process `Set` until that instance's 5-minute TTL naturally expires. In practice: a CORS origin change can take **up to 5 minutes** to reach all instances in a horizontally-scaled deployment.
+
+:::tip
+If you just added an origin and requests from your new frontend are still being blocked by CORS in a multi-instance deployment, wait a few minutes before assuming the configuration is wrong.
+:::
+
+---
+
+## SAML SSO
+
+Idenplane's SAML module (`src/saml/`) implements Idenplane **as an Identity Provider (IdP)** issuing assertions to registered Service Providers — it does not consume assertions from an external IdP. (Delegating login to an external OIDC provider is the separate Identity Providers feature; LDAP is separate again, under User Federation.)
+
+### `Unknown or disabled SAML service provider`
+
+The inbound `AuthnRequest`'s `Issuer` must match a `SamlServiceProvider.entityId` registered in this realm, and that SP must have `enabled: true`. Register the SP first via `POST /admin/realms/{realm}/saml-service-providers` with a matching `entityId`.
+
+### `ACS URL in AuthnRequest does not match any registered endpoint`
+
+If the `AuthnRequest` specifies an `AssertionConsumerServiceURL`, it's checked against an allow-list: the SP's primary `acsUrl` plus anything in `validRedirectUris`. This is a strict equality check (no wildcard), and it exists specifically to stop an attacker crafting a request that redirects the signed assertion to a URL they control. If your SP sends a different ACS URL than what's registered (e.g. it varies by tenant subdomain), add every valid variant to `validRedirectUris` on that SP.
+
+### `AuthnRequest is not signed` / signature validation failures
+
+Signature verification only happens **if the SP has a `certificate` configured**. If no certificate is set on the `SamlServiceProvider` record, `AuthnRequest` signatures are not checked at all — anyone who can reach the SSO endpoint can initiate a login for that SP. If you've configured a certificate and still get a signature failure, confirm the SP is actually signing with the matching private key and that the certificate on file is current (a rotated SP signing cert with a stale certificate registered on Idenplane's side is a common cause).
+
+### Assertion rejected by the Service Provider (clock skew)
+
+When Idenplane issues a SAML response, the assertion's validity window is generated relative to the server's own clock:
+
+- `NotBefore`: 1 minute before issuance
+- `NotOnOrAfter`: 5 minutes after issuance
+- `SessionNotOnOrAfter`: 8 hours after issuance
+
+If the **Service Provider's** clock is skewed relative to Idenplane's, the SP may reject the assertion as "not yet valid" or "expired" even though Idenplane considers it perfectly fresh — this is a failure on the SP side interpreting a valid assertion, not an error Idenplane will report. Sync both systems to NTP if you see intermittent SAML login failures that "just start working" a few minutes later.
+
+### `SAMLRequest exceeds maximum allowed size`
+
+Inbound `AuthnRequest` XML (after base64-decoding and inflating) is capped at 256 KB to prevent decompression-bomb attacks. A legitimate SP will never hit this; if you do, something upstream is malformed or malicious.
+
+---
+
+## WebAuthn (Passkeys)
+
+### Origin / RP ID mismatch — the most common cause of registration failures
+
+The expected origin for a WebAuthn ceremony is derived, not configured directly: `getOrigin()` builds it from **`BASE_URL`'s protocol and port** combined with **`realm.webAuthnRpId`'s hostname**. If those two settings disagree — for example `BASE_URL=https://auth.example.com` but `webAuthnRpId` is left at its default of `localhost` — the server expects `https://localhost` while the browser reports its real origin, and every registration and authentication ceremony fails signature/origin verification. Set `webAuthnRpId` to the actual hostname portion of your public `BASE_URL` (no scheme, no port).
+
+### `Registration challenge expired or not found. Please try again.` / `Authentication challenge expired or not found.`
+
+Challenges are single-use and stored with a 5-minute TTL. If the user takes longer than 5 minutes to complete the authenticator prompt, or resubmits after already consuming the challenge once, request a fresh set of options (`POST .../webauthn/register/options` or `.../authenticate/options`) and retry.
+
+### `This passkey is already registered`
+
+The credential ID returned by the authenticator already exists in the database (globally unique, not just per-user). This normally means the same physical key/passkey was registered previously — check existing credentials via `GET .../account/webauthn/credentials` before assuming it's a bug.
+
+### `Counter rollback detected`
+
+Every WebAuthn credential carries a signature counter that must strictly increase between authentications. If a new assertion's counter is not greater than the stored value, the server rejects it — this is a real signal of a cloned authenticator (or, more commonly in practice, a device that was restored from an old backup/snapshot). There's no recovery path other than re-registering the credential.
+
+### Repeated failures lock the account, not just the passkey
+
+Failed WebAuthn verifications call the same brute-force tracking used for passwords (`recordWebAuthnFailure`), counted against the realm's `maxLoginFailures`/`failureResetTime` window. Enough failed passkey attempts will lock the user's account the same way repeated password failures do — see the [`invalid_grant` lockout row](#invalid_grant-what-each-cause-means) for how to clear it.
+
+:::note Attestation is not verified
+Registration uses `attestationType: 'none'`, so "attestation failures" are not a failure mode you'll encounter here — the server does not request or validate authenticator attestation statements.
+:::
+
+---
+
+## LDAP / User Federation
+
+### Always run test-connection before troubleshooting a sync
+
+`POST /admin/realms/{realm}/user-federation/{id}/test-connection` performs a real LDAP bind with the configured `bindDn`/`bindCredential` and returns `{ success: false, error: "<raw LDAP client error>" }` on failure — this is the only endpoint that surfaces the actual LDAP error message (wrong bind DN, bad credentials, unreachable host, etc.). Run this first whenever federation isn't behaving as expected.
+
+### A sync that reports `0` synced users is not proof the directory is empty
+
+This is the single most important thing to know about the sync path: `syncUsers()` calls `searchAllUsers()`, and that method (along with `searchUser()` and `authenticate()`) **swallows all exceptions** and returns `[]` / `null` / `false` on any failure — a bad bind, a wrong `usersDn`, or a malformed `searchFilter` all look identical to "the directory has no matching users." The sync result and `lastSyncStatus` will cheerfully report `Synced 0 new users (0 total in LDAP)` with no error surfaced anywhere. If a sync returns 0 total unexpectedly, don't trust it — run test-connection, then double check `usersDn`, `userObjectClass`, and `searchFilter` are correct for your directory.
+
+### Sync only creates users — it never updates them
+
+`syncUsers()` imports any LDAP entry with no matching local user (`realmId` + `username`), and increments the counter only for those. Existing users linked via `federationLink` are **not** refreshed by a sync — attribute changes made in LDAP after the initial import won't reappear until the user logs in again (login-time federation re-resolves the user via `authenticateViaFederation`).
+
+### `Import is disabled for this federation`
+
+If `importEnabled` is `false` on the federation record, `syncUsers()` returns immediately with `{ synced: 0, message: 'Import is disabled for this federation' }` without touching LDAP at all. This is expected behavior for federations configured purely for pass-through authentication, not user provisioning — check `importEnabled` before assuming sync is broken.
+
+### `startTls` does not validate the LDAP server's certificate
+
+When `startTls` is enabled, the LDAP client connects with `rejectUnauthorized: false`. TLS is used for transport encryption, but the server's certificate is not validated against a CA — a self-signed or mismatched certificate on the LDAP side will not cause a connection failure. This is worth knowing if you're debugging what looks like a successful-but-suspicious TLS handshake.
+
+---
+
+## Webhooks
+
+### Verifying the signature
+
+Every delivery includes an `X-Webhook-Signature: sha256=<hex>` header, computed as `HMAC-SHA256(secret, raw_json_body)` over the exact request body bytes (verify against the raw body, not a re-serialized version of the parsed JSON — key ordering or whitespace differences will break the comparison). An `X-Webhook-Timestamp` header (ISO 8601) and `User-Agent: Idenplane-Webhook/1.0` are also sent.
+
+```typescript
+import crypto from 'crypto';
+
+function verifyWebhookSignature(rawBody: string, signatureHeader: string, secret: string): boolean {
+  const expected = 'sha256=' + crypto.createHmac('sha256', secret).update(rawBody).digest('hex');
+  return crypto.timingSafeEqual(Buffer.from(signatureHeader), Buffer.from(expected));
+}
+```
+
+The plaintext secret is shown exactly once, in the response body of the create/rotate call — it's stored encrypted at rest (`WEBHOOK_SECRET_KEY`/`WEBHOOK_ENCRYPTION_SALT`) and cannot be retrieved again afterward, so if you've lost it, rotate it via update rather than trying to recover it.
+
+### Test deliveries and real events use two different retry paths
+
+This asymmetry explains a common "it worked in the test button but not in production" (or vice versa) report:
+
+| | Test delivery (`POST .../webhooks/{id}/test`) | Real events (login, user created, etc.) |
+|---|---|---|
+| Delivery path | Inline, fire-and-forget from the request handler | Durable outbox: a `WebhookEvent` row is written first, then picked up by a scheduler tick every 10 seconds |
+| Retry backoff | `1s → 10s → 60s` (4 attempts total) | `1s → 10s → 60s → 600s` (5 attempts total) |
+| On SSRF rejection | Retry loop stops immediately (no point retrying a policy rejection) | Same — but still logged as a `WebhookDelivery` row |
+| Where to check the result | `GET .../webhooks/{id}/deliveries` (the test call itself just returns `{ status: 'queued' }`) | Same endpoint — one `WebhookDelivery` row per delivery attempt, not one row with an incrementing counter |
+
+The inline test-delivery schedule can be overridden via `WEBHOOK_RETRY_DELAYS_MS` (a JSON array of milliseconds) — mainly useful for shortening retries in CI. The durable queue's schedule is fixed in code and does not read that variable.
+
+### Delivery silently fails with "target address is not publicly routable"
+
+Every delivery attempt (and every redirect hop, up to 3) re-resolves the destination hostname via DNS and re-validates the resulting IP before connecting — a webhook URL that pointed somewhere public when you configured it can still be rejected at delivery time if DNS now resolves it to a private/loopback/link-local address, or if it redirects there. This is deliberate SSRF protection, not a bug, and the stored delivery response is intentionally generic (it never reveals the blocked hostname or IP). If you're intentionally delivering to an internal receiver (e.g. a self-hosted install), set `WEBHOOK_ALLOW_PRIVATE_TARGETS=true`.
+
+### A webhook stopped firing but the config looks right
+
+Check, in order: the webhook's `enabled` flag; whether the event type you expect is actually in its `eventTypes` list (delivery only happens for webhooks where `eventTypes` has the exact event string); and the delivery log for that webhook, which records `statusCode`, a truncated response body, and `attempts` for every try.
+
+---
+
+## SMTP / Email Delivery
+
+Idenplane supports five email providers per realm: SMTP, Resend, SendGrid, Mailgun, and Postmark, selected via the realm's `emailProvider` field (`emailProviderConfig` holds provider-specific settings like `apiKey`/`domain`/`from`; SMTP instead uses the legacy `smtpHost`/`smtpPort`/`smtpUser`/`smtpPassword`/`smtpFrom`/`smtpSecure` fields directly on the realm).
+
+### `Email provider not configured for this realm`
+
+`isConfigured()` is provider-specific: for `SMTP` it just checks that `smtpHost` is set; for every other provider it's considered configured as long as a provider is selected (a missing API key inside `emailProviderConfig` will fail at send time, not at the configured-check). If emails are silently not sending, check the server log first — `sendEmail()` logs a warning and returns without throwing when no provider is configured, rather than failing the calling request.
+
+### Testing your configuration
+
+Two dedicated endpoints exist:
+
+- `POST /admin/realms/{realm}/smtp/test` — sends a fixed test message using the realm's configured provider and returns `{ success, error? }` with the raw provider error on failure.
+- `POST /admin/realms/{realm}/email/test` with body `{ "to": "user@example.com" }` — renders the realm's actual `test-email` theme template and sends it to the given address.
+
+### Common SMTP misconfigurations
+
+The SMTP provider (`nodemailer` under the hood) only treats itself as configured when `smtpHost` is non-empty. Double check `smtpPort` (587 for STARTTLS, 465 for implicit SSL) matches `smtpSecure`. Authentication is only attempted if `smtpUser` is set; leaving it blank sends unauthenticated, which most providers other than an internal relay will reject.
+
+---
+
+## FAQ
+
+**Why did my `redirect_uri` change take effect immediately, but my CORS `webOrigins` change didn't?**
+They're validated by two different code paths with different freshness guarantees. `redirect_uri` is checked live against the database on every request. `webOrigins` (CORS) goes through a two-level cache with a 5-minute TTL per instance — see [redirect_uri, CORS, and Origin Mismatches](#redirect_uri-cors-and-origin-mismatches).
+
+**Why does my authorization request succeed but the token exchange fails with `redirect_uri mismatch`?**
+`/authorize` allows wildcard-registered redirect URIs (`https://app.example.com/*`); `/token` requires the exact string you sent to `/authorize`, byte-for-byte. See [redirect_uri exactness at token exchange](#redirect_uri-exactness-at-token-exchange).
+
+**My refresh token suddenly stopped working and now the whole session is dead — why?**
+You (or a concurrent request from the same client) reused an already-rotated refresh token. Reuse detection revokes every refresh token on that session as a compromise precaution, not just the one that was reused. See [Refresh token rotation and reuse](#refresh-token-rotation-and-reuse).
+
+**My LDAP sync says `0 users synced` — is my directory actually empty?**
+Not necessarily. Failed binds, a wrong `usersDn`, or a bad `searchFilter` are swallowed silently by the sync path and also report `0`. Always run test-connection first. See [A sync that reports 0 synced users is not proof the directory is empty](#a-sync-that-reports-0-synced-users-is-not-proof-the-directory-is-empty).
+
+**WebAuthn registration fails immediately with an origin/verification error — what's wrong?**
+Almost always a mismatch between `BASE_URL`'s host/port and the realm's `webAuthnRpId`. The expected origin is built from `BASE_URL`'s scheme/port plus `webAuthnRpId`'s hostname — if `webAuthnRpId` is still `localhost` in a deployed environment, every ceremony will fail. See [Origin / RP ID mismatch](#origin--rp-id-mismatch--the-most-common-cause-of-registration-failures).
+
+**Why did my test webhook succeed (or fail) differently than the same event in production?**
+The test button delivers inline with up to 4 attempts (`1s/10s/60s` backoff); real events go through a durable queue with up to 5 attempts (`1s/10s/60s/600s` backoff) on a 10-second scheduler tick. They're genuinely different code paths. See [Test deliveries and real events use two different retry paths](#test-deliveries-and-real-events-use-two-different-retry-paths).
+
+**My webhook receiver is on my internal network and deliveries keep failing — why?**
+Every delivery attempt re-resolves DNS and blocks private/loopback/link-local targets by default (SSRF protection), even if the URL was public when you first configured it. Set `WEBHOOK_ALLOW_PRIVATE_TARGETS=true` if that's an intentional, self-hosted setup.
+
+**Why do I get `mfa_required` sometimes and `invalid_grant` with "MFA setup required" other times?**
+`mfa_required` (401, with an `mfa_token`) means the user already has MFA enrolled and needs to complete the challenge. `invalid_grant` / "MFA setup required" means the realm requires MFA but this user hasn't enrolled a TOTP device yet — different problems, different fixes.
+
+---
+
+## Next Steps
+
+<div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
+
+[**Authentication Guide**](/guides/authentication)
+OAuth 2.0 and OIDC flows, error handling, and identity providers
+
+[**Configuration Options**](/configuration/options)
+Realm, client, and provider settings referenced throughout this page
+
+[**Environment Variables**](/configuration/environment-variables)
+`WEBHOOK_SECRET_KEY`, `REDIS_URL`, and other settings referenced above
+
+[**API Reference**](/api)
+Complete REST API documentation
+
+</div>
+
+---
+
+<p align="center">
+  <a href="https://idenplane.com">idenplane.com</a> &middot;
+  <a href="https://github.com/idenplane/idenplane">GitHub</a> &middot;
+  <a href="https://discord.gg/idenplane">Discord</a>
+</p>

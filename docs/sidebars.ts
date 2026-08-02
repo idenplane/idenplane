@@ -210,6 +210,11 @@ const sidebars: SidebarsConfig = {
         },
       ],
     },
+    {
+      type: 'doc',
+      id: 'troubleshooting',
+      label: 'Troubleshooting & FAQ',
+    },
   ],
 };
 
