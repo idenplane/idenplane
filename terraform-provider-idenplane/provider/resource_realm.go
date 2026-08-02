@@ -3,7 +3,6 @@ package provider
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
 	"github.com/hashicorp/terraform-plugin-framework/path"
@@ -26,8 +25,7 @@ var (
 
 // RealmResource implements the realm resource
 type RealmResource struct {
-	// httpClient is the internal HTTP client
-	httpClient *client.HTTPClient
+	baseResource
 }
 
 // RealmResourceModel represents the Terraform model for realm resource
@@ -383,26 +381,6 @@ func (r *RealmResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 	}
 }
 
-// Configure configures the resource
-func (r *RealmResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	// Retrieve provider config from terraform configuration
-	if req.ProviderData == nil {
-		return
-	}
-
-	// Type assert to get the HTTP client
-	httpClient, ok := req.ProviderData.(*client.HTTPClient)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *client.HTTPClient, got: %T", req.ProviderData),
-		)
-		return
-	}
-
-	r.httpClient = httpClient
-}
-
 // Create creates the realm resource
 func (r *RealmResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	tflog.Debug(ctx, "Creating realm resource")
@@ -425,10 +403,7 @@ func (r *RealmResource) Create(ctx context.Context, req resource.CreateRequest, 
 
 	realm, err := realmsClient.CreateRealm(ctx, createReq)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Creating Realm",
-			fmt.Sprintf("Unable to create realm %s: %v", plan.Name.ValueString(), err),
-		)
+		addAPIError(&resp.Diagnostics, "Error Creating Realm", "Unable to create realm %s: %v", plan.Name.ValueString(), err)
 		return
 	}
 
@@ -474,10 +449,7 @@ func (r *RealmResource) Read(ctx context.Context, req resource.ReadRequest, resp
 	realm, err := realmsClient.GetRealm(ctx, realmName)
 	if err != nil {
 		// Check if the realm was deleted
-		resp.Diagnostics.AddError(
-			"Error Reading Realm",
-			fmt.Sprintf("Unable to read realm %s: %v", realmName, err),
-		)
+		addAPIError(&resp.Diagnostics, "Error Reading Realm", "Unable to read realm %s: %v", realmName, err)
 		return
 	}
 
@@ -524,10 +496,7 @@ func (r *RealmResource) Update(ctx context.Context, req resource.UpdateRequest, 
 
 	realm, err := realmsClient.UpdateRealm(ctx, realmName, updateReq)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Updating Realm",
-			fmt.Sprintf("Unable to update realm %s: %v", realmName, err),
-		)
+		addAPIError(&resp.Diagnostics, "Error Updating Realm", "Unable to update realm %s: %v", realmName, err)
 		return
 	}
 
@@ -572,10 +541,7 @@ func (r *RealmResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 
 	err := realmsClient.DeleteRealm(ctx, realmName)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Deleting Realm",
-			fmt.Sprintf("Unable to delete realm %s: %v", realmName, err),
-		)
+		addAPIError(&resp.Diagnostics, "Error Deleting Realm", "Unable to delete realm %s: %v", realmName, err)
 		return
 	}
 
@@ -601,10 +567,7 @@ func (r *RealmResource) ImportState(ctx context.Context, req resource.ImportStat
 
 	realm, err := realmsClient.GetRealm(ctx, realmName)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Importing Realm",
-			fmt.Sprintf("Unable to import realm %s: %v", realmName, err),
-		)
+		addAPIError(&resp.Diagnostics, "Error Importing Realm", "Unable to import realm %s: %v", realmName, err)
 		return
 	}
 

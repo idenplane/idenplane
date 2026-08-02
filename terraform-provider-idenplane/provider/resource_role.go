@@ -3,7 +3,6 @@ package provider
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -27,8 +26,7 @@ var (
 
 // RoleResource implements the role resource
 type RoleResource struct {
-	// httpClient is the internal HTTP client
-	httpClient *client.HTTPClient
+	baseResource
 }
 
 // RoleResourceModel represents the Terraform model for role resource
@@ -115,26 +113,6 @@ func (r *RoleResource) Schema(ctx context.Context, req resource.SchemaRequest, r
 	}
 }
 
-// Configure configures the resource
-func (r *RoleResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	// Retrieve provider config from terraform configuration
-	if req.ProviderData == nil {
-		return
-	}
-
-	// Type assert to get the HTTP client
-	httpClient, ok := req.ProviderData.(*client.HTTPClient)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *client.HTTPClient, got: %T", req.ProviderData),
-		)
-		return
-	}
-
-	r.httpClient = httpClient
-}
-
 // Create creates the role resource
 func (r *RoleResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	tflog.Debug(ctx, "Creating role resource")
@@ -166,20 +144,14 @@ func (r *RoleResource) Create(ctx context.Context, req resource.CreateRequest, r
 		// Client role
 		role, err = rolesClient.CreateClientRole(ctx, realmName, clientID, createReq)
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error Creating Client Role",
-				fmt.Sprintf("Unable to create client role %s for client %s in realm %s: %v", plan.Name.ValueString(), clientID, realmName, err),
-			)
+			addAPIError(&resp.Diagnostics, "Error Creating Client Role", "Unable to create client role %s for client %s in realm %s: %v", plan.Name.ValueString(), clientID, realmName, err)
 			return
 		}
 	} else {
 		// Realm role
 		role, err = rolesClient.CreateRealmRole(ctx, realmName, createReq)
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error Creating Realm Role",
-				fmt.Sprintf("Unable to create realm role %s in realm %s: %v", plan.Name.ValueString(), realmName, err),
-			)
+			addAPIError(&resp.Diagnostics, "Error Creating Realm Role", "Unable to create realm role %s in realm %s: %v", plan.Name.ValueString(), realmName, err)
 			return
 		}
 	}
@@ -239,20 +211,14 @@ func (r *RoleResource) Read(ctx context.Context, req resource.ReadRequest, resp 
 		// Client role
 		role, err = rolesClient.GetClientRole(ctx, realmName, clientID, roleName)
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error Reading Client Role",
-				fmt.Sprintf("Unable to read client role %s for client %s: %v", roleName, clientID, err),
-			)
+			addAPIError(&resp.Diagnostics, "Error Reading Client Role", "Unable to read client role %s for client %s: %v", roleName, clientID, err)
 			return
 		}
 	} else {
 		// Realm role
 		role, err = rolesClient.GetRealmRole(ctx, realmName, roleName)
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error Reading Realm Role",
-				fmt.Sprintf("Unable to read realm role %s: %v", roleName, err),
-			)
+			addAPIError(&resp.Diagnostics, "Error Reading Realm Role", "Unable to read realm role %s: %v", roleName, err)
 			return
 		}
 	}
@@ -316,20 +282,14 @@ func (r *RoleResource) Update(ctx context.Context, req resource.UpdateRequest, r
 		// Client role
 		role, err = rolesClient.UpdateClientRole(ctx, realmName, clientID, roleName, updateReq)
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error Updating Client Role",
-				fmt.Sprintf("Unable to update client role %s for client %s in realm %s: %v", roleName, clientID, realmName, err),
-			)
+			addAPIError(&resp.Diagnostics, "Error Updating Client Role", "Unable to update client role %s for client %s in realm %s: %v", roleName, clientID, realmName, err)
 			return
 		}
 	} else {
 		// Realm role
 		role, err = rolesClient.UpdateRealmRole(ctx, realmName, roleName, updateReq)
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error Updating Realm Role",
-				fmt.Sprintf("Unable to update realm role %s in realm %s: %v", roleName, realmName, err),
-			)
+			addAPIError(&resp.Diagnostics, "Error Updating Realm Role", "Unable to update realm role %s in realm %s: %v", roleName, realmName, err)
 			return
 		}
 	}
@@ -389,20 +349,14 @@ func (r *RoleResource) Delete(ctx context.Context, req resource.DeleteRequest, r
 		// Client role
 		err = rolesClient.DeleteClientRole(ctx, realmName, clientID, roleName)
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error Deleting Client Role",
-				fmt.Sprintf("Unable to delete client role %s for client %s in realm %s: %v", roleName, clientID, realmName, err),
-			)
+			addAPIError(&resp.Diagnostics, "Error Deleting Client Role", "Unable to delete client role %s for client %s in realm %s: %v", roleName, clientID, realmName, err)
 			return
 		}
 	} else {
 		// Realm role
 		err = rolesClient.DeleteRealmRole(ctx, realmName, roleName)
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error Deleting Realm Role",
-				fmt.Sprintf("Unable to delete realm role %s in realm %s: %v", roleName, realmName, err),
-			)
+			addAPIError(&resp.Diagnostics, "Error Deleting Realm Role", "Unable to delete realm role %s in realm %s: %v", roleName, realmName, err)
 			return
 		}
 	}
@@ -465,20 +419,14 @@ func (r *RoleResource) ImportState(ctx context.Context, req resource.ImportState
 		// Client role
 		role, err = rolesClient.GetClientRole(ctx, realmName, clientID, roleName)
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error Importing Client Role",
-				fmt.Sprintf("Unable to import client role %s for client %s in realm %s: %v", roleName, clientID, realmName, err),
-			)
+			addAPIError(&resp.Diagnostics, "Error Importing Client Role", "Unable to import client role %s for client %s in realm %s: %v", roleName, clientID, realmName, err)
 			return
 		}
 	} else {
 		// Realm role
 		role, err = rolesClient.GetRealmRole(ctx, realmName, roleName)
 		if err != nil {
-			resp.Diagnostics.AddError(
-				"Error Importing Realm Role",
-				fmt.Sprintf("Unable to import realm role %s in realm %s: %v", roleName, realmName, err),
-			)
+			addAPIError(&resp.Diagnostics, "Error Importing Realm Role", "Unable to import realm role %s in realm %s: %v", roleName, realmName, err)
 			return
 		}
 	}
