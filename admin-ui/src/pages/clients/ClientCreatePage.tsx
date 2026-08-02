@@ -3,6 +3,9 @@ import { useParams, useNavigate } from 'react-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createClient } from '../../api/clients';
 import { getErrorMessage } from '../../utils/getErrorMessage';
+import { CLIENT_TEMPLATES, type ClientTemplate } from '../../data/clientTemplates';
+
+const TEMPLATE_CATEGORIES = Array.from(new Set(CLIENT_TEMPLATES.map((t) => t.category)));
 
 export default function ClientCreatePage() {
   const { name } = useParams<{ name: string }>();
@@ -22,6 +25,25 @@ export default function ClientCreatePage() {
   });
 
   const [createdSecret, setCreatedSecret] = useState<string | null>(null);
+  const [selectedTemplateId, setSelectedTemplateId] = useState('');
+  const selectedTemplate = CLIENT_TEMPLATES.find((t) => t.id === selectedTemplateId) ?? null;
+
+  function applyTemplate(template: ClientTemplate | null) {
+    if (!template) {
+      setSelectedTemplateId('');
+      return;
+    }
+    setSelectedTemplateId(template.id);
+    setForm((prev) => ({
+      ...prev,
+      clientId: prev.clientId || template.id,
+      name: template.name,
+      description: template.description,
+      clientType: template.clientType,
+      redirectUris: template.redirectUriPattern,
+      grantTypes: template.grantTypes.join(', '),
+    }));
+  }
 
   const mutation = useMutation({
     mutationFn: () =>
@@ -102,6 +124,49 @@ export default function ClientCreatePage() {
         <p className="mt-1 text-sm text-subtle">
           Register a new client application in <span className="font-medium">{name}</span>
         </p>
+      </div>
+
+      <div className="mb-6 rounded-lg border border-line bg-surface p-6 shadow-sm">
+        <label htmlFor="template" className="mb-1.5 block text-sm font-medium text-muted">
+          Start from a template
+        </label>
+        <select
+          id="template"
+          value={selectedTemplateId}
+          onChange={(e) =>
+            applyTemplate(CLIENT_TEMPLATES.find((t) => t.id === e.target.value) ?? null)
+          }
+          className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
+        >
+          <option value="">— None (start from scratch) —</option>
+          {TEMPLATE_CATEGORIES.map((category) => (
+            <optgroup key={category} label={category}>
+              {CLIENT_TEMPLATES.filter((t) => t.category === category).map((t) => (
+                <option key={t.id} value={t.id}>
+                  {t.name}
+                </option>
+              ))}
+            </optgroup>
+          ))}
+        </select>
+
+        {selectedTemplate && (
+          <div className="mt-4 rounded-md border border-info-soft bg-info-soft p-4 text-sm">
+            <p className="font-medium text-info-fg">
+              Redirect URI pattern: <code>{selectedTemplate.redirectUriPattern}</code>
+            </p>
+            <p className="mt-1 text-info-fg">
+              Replace <code>{'{baseUrl}'}</code> with {selectedTemplate.name}&apos;s own URL, then update the
+              Redirect URIs field below before saving.
+            </p>
+            <p className="mt-3 font-medium text-info-fg">Setup on the {selectedTemplate.name} side:</p>
+            <ol className="mt-1 list-decimal space-y-1 pl-5 text-info-fg">
+              {selectedTemplate.setupInstructions.map((step, i) => (
+                <li key={i}>{step}</li>
+              ))}
+            </ol>
+          </div>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-line bg-surface p-6 shadow-sm">
