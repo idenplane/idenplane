@@ -1,7 +1,6 @@
 package idenplane
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
@@ -106,31 +105,11 @@ func (us *UserService) usersURL() string {
 // When body is non-nil it is JSON-encoded and the Content-Type header set.
 // When the client has an AdminToken configured, the Authorization header is
 // attached so admin endpoints don't return 401.
+//
+// This delegates to Client.doRequest, which is shared across UserService,
+// RoleService, and GroupService.
 func (us *UserService) doRequest(ctx context.Context, method, path string, body any) (*http.Response, error) {
-	var reader io.Reader
-	if body != nil {
-		raw, err := json.Marshal(body)
-		if err != nil {
-			return nil, ErrServerError("marshal request body: " + err.Error())
-		}
-		reader = bytes.NewReader(raw)
-	}
-	req, err := http.NewRequestWithContext(ctx, method, path, reader)
-	if err != nil {
-		return nil, ErrNetworkError("build request", err)
-	}
-	if body != nil {
-		req.Header.Set("Content-Type", "application/json")
-	}
-	req.Header.Set("Accept", "application/json")
-	if auth := us.client.authHeader(); auth != "" {
-		req.Header.Set("Authorization", auth)
-	}
-	resp, err := us.client.config.httpClient().Do(req)
-	if err != nil {
-		return nil, ErrNetworkError("request failed", err)
-	}
-	return resp, nil
+	return us.client.doRequest(ctx, method, path, body)
 }
 
 // Create creates a user and returns the resulting record. Idenplane's admin
