@@ -150,6 +150,21 @@ const sidebars: SidebarsConfig = {
           id: 'guides/mfa',
           label: 'Multi-Factor Authentication',
         },
+        {
+          type: 'doc',
+          id: 'guides/auth-flows',
+          label: 'Custom Auth Flows',
+        },
+        {
+          type: 'doc',
+          id: 'guides/webhooks',
+          label: 'Webhooks',
+        },
+        {
+          type: 'doc',
+          id: 'guides/scim',
+          label: 'SCIM 2.0 Provisioning',
+        },
       ],
     },
     {

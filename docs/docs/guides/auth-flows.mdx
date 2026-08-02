@@ -1,0 +1,192 @@
+---
+id: auth-flows
+title: Custom Auth Flows
+description: Define multi-step authentication flows with conditional branching and fallback logic, and manage them from the Admin API or the visual flow editor.
+---
+
+# Custom Auth Flows
+
+An authentication flow is an ordered list of steps stored on an `AuthenticationFlow` record. Each step has a type (`password`, `totp`, `webauthn`, ...), whether it's required, a position in the sequence, an optional condition that decides whether the step applies, and an optional fallback step to jump to if it fails. Flows are created and edited per realm, either through the Admin API or the visual flow editor in the admin console, and can be assigned to individual clients.
+
+:::note What's live today
+Everything on this page — creating flows, the step/condition/fallback model, assigning a flow to a client, the visual editor — is implemented and reachable over the Admin API. The step-execution engine described below (`FlowExecutorService`) contains the logic to walk a flow's steps, evaluate conditions, and dispatch each step type, but it is not currently invoked by any HTTP endpoint or by the hosted `/protocol/openid-connect/auth` login page. Today, defining and assigning flows is a real, working feature; driving an end-user login through one requires your own integration against the types this module exports.
+:::
+
+---
+
+## The Flow Model
+
+A flow is a `name`, an optional `description`, an `isDefault` flag, and an ordered array of steps:
+
+```typescript
+interface FlowStep {
+  id: string;                       // unique within the flow
+  type: 'password' | 'totp' | 'webauthn' | 'social' | 'ldap' | 'email_otp' | 'consent';
+  required: boolean;
+  order: number;                    // lower runs first
+  condition?: {
+    field: string;                  // dot-path into the execution context, e.g. "user.group"
+    operator: 'eq' | 'neq' | 'in' | 'not_in' | 'exists' | 'not_exists';
+    value?: unknown;
+  } | null;
+  fallbackStepId?: string | null;   // step to jump to if this one fails
+  config?: Record<string, unknown>; // step-type-specific settings
+}
+```
+
+### Step Types
+
+| Type | What it dispatches to |
+|---|---|
+| `password` | Username/password verification via the login service (also used for LDAP-federated users) |
+| `totp` | TOTP or recovery-code verification via the MFA service |
+| `webauthn` | Accepts an assertion result already placed on the execution context by the WebAuthn ceremony |
+| `ldap` | Routed through the same password-verification path as `password` |
+| `social`, `email_otp`, `consent` | Marked as "pending" — these require an external redirect or UI step that a dedicated controller completes |
+
+These seven are the only step types the Admin API accepts (`CreateAuthFlowDto` validates `type` against this exact list). The internal `FlowStep` type also recognizes a `magic_link` step, and the executor has a branch for it, but it isn't in the accepted list — a flow containing a `magic_link` step is rejected by the API today.
+
+### Conditions
+
+A condition gates whether a step applies. `field` is a dot-path resolved against the execution context (e.g. `user.group` reads `context.user.group`); `operator` is one of `eq`, `neq`, `in`, `not_in`, `exists`, `not_exists`; `value` is the comparand for everything except `exists`/`not_exists`. A non-required step whose condition isn't met is skipped automatically; a required step whose condition isn't met is still surfaced so the caller can decide what to do.
+
+### Fallbacks
+
+`fallbackStepId` points at another step in the same flow. The server validates that the ID actually exists in the flow — creating or updating a flow with a fallback that points nowhere is rejected with a 400.
+
+### Server-Side Validation
+
+`POST`/`PUT` on a flow enforces:
+
+- At least one step
+- Step `id` values unique within the flow
+- Step `order` values unique within the flow
+- Every `fallbackStepId` resolves to a step in the same flow
+
+---
+
+## Assigning a Flow
+
+A client can be pinned to a specific flow via `client.authFlowId`. Resolution order when a caller asks "which flow applies to this client":
+
+1. The flow referenced by `client.authFlowId`, if it still exists
+2. Otherwise, the realm's flow with `isDefault: true`
+3. Otherwise, the oldest flow in the realm
+4. If the realm has no flows at all, a 404
+
+### Default Flows
+
+`POST .../auth-flows/seed-defaults` seeds three built-in flows for a realm (skipping any that already exist by name):
+
+| Name | Steps | Default? |
+|---|---|---|
+| Simple Login | `password` | Yes |
+| MFA Required | `password` → `totp` | No |
+| Passwordless | `webauthn` | No |
+
+---
+
+## Admin API
+
+Base path: `/admin/realms/{realm}/auth-flows`, protected by the admin API key. `{realm}` accepts either the realm's UUID or its name.
+
+| Method | Path | Purpose |
+|---|---|---|
+| `POST` | `/admin/realms/{realm}/auth-flows` | Create a flow |
+| `GET` | `/admin/realms/{realm}/auth-flows` | List flows (default flow first, then oldest to newest) |
+| `GET` | `/admin/realms/{realm}/auth-flows/{id}` | Get one flow |
+| `PUT` | `/admin/realms/{realm}/auth-flows/{id}` | Update a flow |
+| `DELETE` | `/admin/realms/{realm}/auth-flows/{id}` | Delete a flow |
+| `PUT` | `/admin/realms/{realm}/auth-flows/{id}/assign-client/{clientId}` | Assign (or clear, with `authFlowId: null`) a flow on a client |
+| `POST` | `/admin/realms/{realm}/auth-flows/seed-defaults` | Seed the three built-in flows |
+
+### Create a Flow
+
+```bash
+curl -X POST http://localhost:3000/admin/realms/my-realm/auth-flows \
+  -H "x-admin-api-key: $ADMIN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "name": "MFA with WebAuthn Fallback",
+    "description": "Password + TOTP, falling back to WebAuthn if TOTP fails",
+    "steps": [
+      {
+        "id": "step-password",
+        "type": "password",
+        "required": true,
+        "order": 1,
+        "fallbackStepId": null
+      },
+      {
+        "id": "step-totp",
+        "type": "totp",
+        "required": true,
+        "order": 2,
+        "condition": {
+          "field": "user.group",
+          "operator": "in",
+          "value": ["employees", "contractors"]
+        },
+        "fallbackStepId": "step-webauthn"
+      },
+      {
+        "id": "step-webauthn",
+        "type": "webauthn",
+        "required": false,
+        "order": 3
+      }
+    ]
+  }'
+```
+
+### Assign the Flow to a Client
+
+```bash
+curl -X PUT http://localhost:3000/admin/realms/my-realm/auth-flows/{flowId}/assign-client/{clientId} \
+  -H "x-admin-api-key: $ADMIN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{ "authFlowId": "{flowId}" }'
+```
+
+Send `{ "authFlowId": null }` to clear the assignment and fall back to the realm default.
+
+---
+
+## Admin Console
+
+**Auth Flows**, under the realm's *Sign-in behaviour* section, opens a canvas-based editor:
+
+- A step palette (password, TOTP, WebAuthn, social, LDAP, email OTP, consent) — drag a step onto the canvas or click to append it
+- Fallback connections render as dashed lines between steps
+- A **Preview** mode that walks the flow top to bottom the way the executor would
+- Client-side warnings while editing: a fallback pointing at a step that no longer exists, no credential step (`password`/`webauthn`/`social`/`ldap`) present in the flow, or every step being conditional (so the flow could be entirely skipped)
+
+These editor warnings are advisory and run in the browser; the server-side checks described above (unique IDs/order, valid fallback references) are what's actually enforced when you save.
+
+---
+
+## Next Steps
+
+<div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
+
+[**Webhooks**](/guides/webhooks)
+Get notified when users log in, register, or fail authentication
+
+[**SCIM 2.0 Provisioning**](/guides/scim)
+Automate user lifecycle from Okta or Azure AD
+
+[**MFA Guide**](/guides/mfa)
+TOTP setup and verification, used by the `totp` step type
+
+[**API Reference**](/api)
+Complete REST API documentation
+
+</div>
+
+---
+
+<p align="center">
+  <a href="https://idenplane.com">idenplane.com</a> &middot;
+  <a href="https://github.com/idenplane/idenplane">GitHub</a> &middot;
+  <a href="https://discord.gg/idenplane">Discord</a>
+</p>

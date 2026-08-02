@@ -196,11 +196,13 @@ This asymmetry explains a common "it worked in the test button but not in produc
 | | Test delivery (`POST .../webhooks/{id}/test`) | Real events (login, user created, etc.) |
 |---|---|---|
 | Delivery path | Inline, fire-and-forget from the request handler | Durable outbox: a `WebhookEvent` row is written first, then picked up by a scheduler tick every 10 seconds |
-| Retry backoff | `1s → 10s → 60s` (4 attempts total) | `1s → 10s → 60s → 600s` (5 attempts total) |
+| Retry backoff | `1s → 10s → 60s` (4 attempts total) | `10s → 60s → 600s` (4 attempts total) |
 | On SSRF rejection | Retry loop stops immediately (no point retrying a policy rejection) | Same — but still logged as a `WebhookDelivery` row |
 | Where to check the result | `GET .../webhooks/{id}/deliveries` (the test call itself just returns `{ status: 'queued' }`) | Same endpoint — one `WebhookDelivery` row per delivery attempt, not one row with an incrementing counter |
 
 The inline test-delivery schedule can be overridden via `WEBHOOK_RETRY_DELAYS_MS` (a JSON array of milliseconds) — mainly useful for shortening retries in CI. The durable queue's schedule is fixed in code and does not read that variable.
+
+The durable queue's backoff array is `[1s, 10s, 60s, 600s]`, and its own code comment claims a "1s → 10s → 60s → 10 min" / 5-attempt schedule — but the retry delay is indexed by the attempt count *after* incrementing (already 1 on the first failure), so the `1s` entry is never actually used and the loop's own bound cuts it off one attempt earlier than the comment implies. If a delivery log's timestamps don't match "1s → 10s → 60s → 600s," this is why — go by the table above, not the source comment.
 
 ### Delivery silently fails with "target address is not publicly routable"
 
@@ -251,7 +253,7 @@ Not necessarily. Failed binds, a wrong `usersDn`, or a bad `searchFilter` are sw
 Almost always a mismatch between `BASE_URL`'s host/port and the realm's `webAuthnRpId`. The expected origin is built from `BASE_URL`'s scheme/port plus `webAuthnRpId`'s hostname — if `webAuthnRpId` is still `localhost` in a deployed environment, every ceremony will fail. See [Origin / RP ID mismatch](#origin--rp-id-mismatch--the-most-common-cause-of-registration-failures).
 
 **Why did my test webhook succeed (or fail) differently than the same event in production?**
-The test button delivers inline with up to 4 attempts (`1s/10s/60s` backoff); real events go through a durable queue with up to 5 attempts (`1s/10s/60s/600s` backoff) on a 10-second scheduler tick. They're genuinely different code paths. See [Test deliveries and real events use two different retry paths](#test-deliveries-and-real-events-use-two-different-retry-paths).
+The test button delivers inline with up to 4 attempts (`1s/10s/60s` backoff); real events go through a durable queue with up to 4 attempts (`10s/60s/600s` backoff) on a 10-second scheduler tick. They're genuinely different code paths. See [Test deliveries and real events use two different retry paths](#test-deliveries-and-real-events-use-two-different-retry-paths).
 
 **My webhook receiver is on my internal network and deliveries keep failing — why?**
 Every delivery attempt re-resolves DNS and blocks private/loopback/link-local targets by default (SSRF protection), even if the URL was public when you first configured it. Set `WEBHOOK_ALLOW_PRIVATE_TARGETS=true` if that's an intentional, self-hosted setup.
