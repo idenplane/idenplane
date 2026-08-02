@@ -97,7 +97,7 @@ export interface MigrationWarning {
 }
 
 export interface MigrationReport {
-  source: 'keycloak' | 'auth0';
+  source: 'keycloak' | 'auth0' | 'zitadel';
   dryRun: boolean;
   startedAt: string;
   completedAt: string;
