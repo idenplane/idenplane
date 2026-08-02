@@ -146,6 +146,24 @@ export const handlers = [
     return HttpResponse.json(makeFailedLoginHeatmap());
   }),
 
+  // Migration
+  http.post(`${BASE}/migration/:source`, async ({ request, params }) => {
+    const body = (await request.json()) as { dryRun?: boolean };
+    return HttpResponse.json({
+      source: params.source,
+      dryRun: body.dryRun ?? false,
+      startedAt: '2026-01-01T00:00:00.000Z',
+      completedAt: '2026-01-01T00:00:01.000Z',
+      summary: {
+        users: { created: 2, skipped: 0, failed: 0 },
+        clients: { created: 1, skipped: 0, failed: 0 },
+        roles: { created: 0, skipped: 0, failed: 0 },
+      },
+      errors: [],
+      warnings: [],
+    });
+  }),
+
   // Events (for dashboard)
   http.get(`${BASE}/realms/:name/events`, () => {
     return HttpResponse.json([

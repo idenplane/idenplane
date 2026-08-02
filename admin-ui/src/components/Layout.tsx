@@ -69,6 +69,7 @@ export default function Layout() {
         { to: `/console/realms/${currentRealm}/authorization-policies`, label: 'Authorization', icon: Icons.Roles },
         { to: `/console/realms/${currentRealm}/theme-builder`, label: 'Theme Builder', icon: Icons.Sun },
         { to: `/console/realms/${currentRealm}/nhi`, label: 'Non-Human Identity', icon: Icons.Server },
+        { to: `/console/realms/${currentRealm}/migration`, label: 'Migration Wizard', icon: Icons.Download },
       ]
     : [];
 
