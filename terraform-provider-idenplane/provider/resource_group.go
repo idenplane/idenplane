@@ -3,7 +3,6 @@ package provider
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -27,8 +26,7 @@ var (
 
 // GroupResource implements the group resource
 type GroupResource struct {
-	// httpClient is the internal HTTP client
-	httpClient *client.HTTPClient
+	baseResource
 }
 
 // GroupResourceModel represents the Terraform model for group resource
@@ -110,26 +108,6 @@ func (r *GroupResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 	}
 }
 
-// Configure configures the resource
-func (r *GroupResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	// Retrieve provider config from terraform configuration
-	if req.ProviderData == nil {
-		return
-	}
-
-	// Type assert to get the HTTP client
-	httpClient, ok := req.ProviderData.(*client.HTTPClient)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *client.HTTPClient, got: %T", req.ProviderData),
-		)
-		return
-	}
-
-	r.httpClient = httpClient
-}
-
 // Create creates the group resource
 func (r *GroupResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	tflog.Debug(ctx, "Creating group resource")
@@ -155,10 +133,7 @@ func (r *GroupResource) Create(ctx context.Context, req resource.CreateRequest, 
 
 	group, err := groupsClient.CreateGroup(ctx, realmName, createReq)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Creating Group",
-			fmt.Sprintf("Unable to create group %s in realm %s: %v", plan.Name.ValueString(), realmName, err),
-		)
+		addAPIError(&resp.Diagnostics, "Error Creating Group", "Unable to create group %s in realm %s: %v", plan.Name.ValueString(), realmName, err)
 		return
 	}
 
@@ -209,10 +184,7 @@ func (r *GroupResource) Read(ctx context.Context, req resource.ReadRequest, resp
 
 	group, err := groupsClient.GetGroup(ctx, realmName, groupID)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Reading Group",
-			fmt.Sprintf("Unable to read group %s in realm %s: %v", groupID, realmName, err),
-		)
+		addAPIError(&resp.Diagnostics, "Error Reading Group", "Unable to read group %s in realm %s: %v", groupID, realmName, err)
 		return
 	}
 
@@ -264,10 +236,7 @@ func (r *GroupResource) Update(ctx context.Context, req resource.UpdateRequest, 
 
 	group, err := groupsClient.UpdateGroup(ctx, realmName, groupID, updateReq)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Updating Group",
-			fmt.Sprintf("Unable to update group %s in realm %s: %v", groupID, realmName, err),
-		)
+		addAPIError(&resp.Diagnostics, "Error Updating Group", "Unable to update group %s in realm %s: %v", groupID, realmName, err)
 		return
 	}
 
@@ -318,10 +287,7 @@ func (r *GroupResource) Delete(ctx context.Context, req resource.DeleteRequest, 
 
 	err := groupsClient.DeleteGroup(ctx, realmName, groupID)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Deleting Group",
-			fmt.Sprintf("Unable to delete group %s in realm %s: %v", groupID, realmName, err),
-		)
+		addAPIError(&resp.Diagnostics, "Error Deleting Group", "Unable to delete group %s in realm %s: %v", groupID, realmName, err)
 		return
 	}
 
@@ -369,10 +335,7 @@ func (r *GroupResource) ImportState(ctx context.Context, req resource.ImportStat
 
 	group, err := groupsClient.GetGroup(ctx, realmName, groupID)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Importing Group",
-			fmt.Sprintf("Unable to import group %s in realm %s: %v", groupID, realmName, err),
-		)
+		addAPIError(&resp.Diagnostics, "Error Importing Group", "Unable to import group %s in realm %s: %v", groupID, realmName, err)
 		return
 	}
 

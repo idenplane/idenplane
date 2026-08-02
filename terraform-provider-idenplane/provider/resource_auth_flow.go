@@ -3,7 +3,6 @@ package provider
 
 import (
 	"context"
-	"fmt"
 	"strings"
 
 	"github.com/hashicorp/terraform-plugin-framework-validators/stringvalidator"
@@ -28,8 +27,7 @@ var (
 
 // AuthFlowResource implements the auth flow resource
 type AuthFlowResource struct {
-	// httpClient is the internal HTTP client
-	httpClient *client.HTTPClient
+	baseResource
 }
 
 // AuthFlowResourceModel represents the Terraform model for auth flow resource
@@ -170,26 +168,6 @@ func (r *AuthFlowResource) Schema(ctx context.Context, req resource.SchemaReques
 	}
 }
 
-// Configure configures the resource
-func (r *AuthFlowResource) Configure(ctx context.Context, req resource.ConfigureRequest, resp *resource.ConfigureResponse) {
-	// Retrieve provider config from terraform configuration
-	if req.ProviderData == nil {
-		return
-	}
-
-	// Type assert to get the HTTP client
-	httpClient, ok := req.ProviderData.(*client.HTTPClient)
-	if !ok {
-		resp.Diagnostics.AddError(
-			"Unexpected Resource Configure Type",
-			fmt.Sprintf("Expected *client.HTTPClient, got: %T", req.ProviderData),
-		)
-		return
-	}
-
-	r.httpClient = httpClient
-}
-
 // Create creates the auth flow resource
 func (r *AuthFlowResource) Create(ctx context.Context, req resource.CreateRequest, resp *resource.CreateResponse) {
 	tflog.Debug(ctx, "Creating auth flow resource")
@@ -215,10 +193,7 @@ func (r *AuthFlowResource) Create(ctx context.Context, req resource.CreateReques
 
 	flow, err := flowsClient.CreateAuthFlow(ctx, realmName, createReq)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Creating Auth Flow",
-			fmt.Sprintf("Unable to create auth flow %s in realm %s: %v", plan.Alias.ValueString(), realmName, err),
-		)
+		addAPIError(&resp.Diagnostics, "Error Creating Auth Flow", "Unable to create auth flow %s in realm %s: %v", plan.Alias.ValueString(), realmName, err)
 		return
 	}
 
@@ -267,20 +242,14 @@ func (r *AuthFlowResource) Read(ctx context.Context, req resource.ReadRequest, r
 
 	flow, err := flowsClient.GetAuthFlowByAlias(ctx, realmName, alias)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Reading Auth Flow",
-			fmt.Sprintf("Unable to read auth flow %s in realm %s: %v", alias, realmName, err),
-		)
+		addAPIError(&resp.Diagnostics, "Error Reading Auth Flow", "Unable to read auth flow %s in realm %s: %v", alias, realmName, err)
 		return
 	}
 
 	// Fetch executions for the flow
 	executions, err := flowsClient.GetExecutions(ctx, realmName, flow.ID)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Reading Auth Flow Executions",
-			fmt.Sprintf("Unable to read executions for auth flow %s: %v", alias, err),
-		)
+		addAPIError(&resp.Diagnostics, "Error Reading Auth Flow Executions", "Unable to read executions for auth flow %s: %v", alias, err)
 		return
 	}
 
@@ -372,10 +341,7 @@ func (r *AuthFlowResource) Update(ctx context.Context, req resource.UpdateReques
 
 	flow, err := flowsClient.UpdateAuthFlow(ctx, realmName, flowID, updateReq)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Updating Auth Flow",
-			fmt.Sprintf("Unable to update auth flow %s in realm %s: %v", alias, realmName, err),
-		)
+		addAPIError(&resp.Diagnostics, "Error Updating Auth Flow", "Unable to update auth flow %s in realm %s: %v", alias, realmName, err)
 		return
 	}
 
@@ -445,10 +411,7 @@ func (r *AuthFlowResource) Delete(ctx context.Context, req resource.DeleteReques
 
 	err := flowsClient.DeleteAuthFlow(ctx, realmName, flowID)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Deleting Auth Flow",
-			fmt.Sprintf("Unable to delete auth flow %s in realm %s: %v", alias, realmName, err),
-		)
+		addAPIError(&resp.Diagnostics, "Error Deleting Auth Flow", "Unable to delete auth flow %s in realm %s: %v", alias, realmName, err)
 		return
 	}
 
@@ -497,10 +460,7 @@ func (r *AuthFlowResource) ImportState(ctx context.Context, req resource.ImportS
 	// Fetch the auth flow to ensure it exists and get its data
 	flow, err := flowsClient.GetAuthFlowByAlias(ctx, realmName, alias)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Importing Auth Flow",
-			fmt.Sprintf("Unable to import auth flow %s in realm %s: %v", alias, realmName, err),
-		)
+		addAPIError(&resp.Diagnostics, "Error Importing Auth Flow", "Unable to import auth flow %s in realm %s: %v", alias, realmName, err)
 		return
 	}
 
@@ -512,10 +472,7 @@ func (r *AuthFlowResource) ImportState(ctx context.Context, req resource.ImportS
 	// Fetch executions for the flow
 	executions, err := flowsClient.GetExecutions(ctx, realmName, flow.ID)
 	if err != nil {
-		resp.Diagnostics.AddError(
-			"Error Importing Auth Flow Executions",
-			fmt.Sprintf("Unable to read executions for auth flow %s: %v", alias, err),
-		)
+		addAPIError(&resp.Diagnostics, "Error Importing Auth Flow Executions", "Unable to read executions for auth flow %s: %v", alias, err)
 		return
 	}
 
