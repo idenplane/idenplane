@@ -175,6 +175,58 @@ describe('WebhookSchedulerService', () => {
       expect(updateCall.data.nextRetryAt.getTime()).toBeGreaterThan(Date.now());
     });
 
+    // Pins the documented 1s -> 10s -> 60s -> 10min backoff (issue #1332:
+    // the scheduler previously indexed RETRY_DELAYS_MS by the new attempt
+    // count instead of new attempt count - 1, so the 1s entry was never
+    // reachable and the schedule was actually 10s -> 60s -> 600s over only
+    // 4 total attempts instead of 5).
+    it.each([
+      [0, 1_000],
+      [1, 10_000],
+      [2, 60_000],
+      [3, 600_000],
+    ])(
+      'schedules a %dms-old event\'s retry after %dms',
+      async (attemptsBefore, expectedDelayMs) => {
+        const event = { ...pendingEvent, attempts: attemptsBefore, maxAttempts: 5 };
+        prisma.webhookEvent.findMany.mockResolvedValue([event]);
+        prisma.webhookEvent.updateMany.mockResolvedValue({ count: 1 });
+        prisma.webhook.findMany.mockResolvedValue([mockWebhook]);
+        prisma.webhookDelivery.create.mockResolvedValue({ id: 'del-1' });
+        prisma.webhookDelivery.update.mockResolvedValue({});
+        prisma.webhookEvent.update.mockResolvedValue({});
+
+        mockSafePost.mockRejectedValueOnce(new Error('Connection refused'));
+
+        const before = Date.now();
+        await service.processQueue();
+
+        const updateCall = prisma.webhookEvent.update.mock.calls[0][0];
+        expect(updateCall.data.status).toBe('FAILED');
+        const actualDelayMs = updateCall.data.nextRetryAt.getTime() - before;
+        expect(actualDelayMs).toBeGreaterThanOrEqual(expectedDelayMs);
+        expect(actualDelayMs).toBeLessThan(expectedDelayMs + 2_000);
+      },
+    );
+
+    it('permanently fails after the 5th attempt, not the 4th', async () => {
+      const event = { ...pendingEvent, attempts: 4, maxAttempts: 5 };
+      prisma.webhookEvent.findMany.mockResolvedValue([event]);
+      prisma.webhookEvent.updateMany.mockResolvedValue({ count: 1 });
+      prisma.webhook.findMany.mockResolvedValue([mockWebhook]);
+      prisma.webhookDelivery.create.mockResolvedValue({ id: 'del-1' });
+      prisma.webhookDelivery.update.mockResolvedValue({});
+      prisma.webhookEvent.update.mockResolvedValue({});
+
+      mockSafePost.mockRejectedValueOnce(new Error('Still down'));
+
+      await service.processQueue();
+
+      const updateCall = prisma.webhookEvent.update.mock.calls[0][0];
+      expect(updateCall.data.status).toBe('FAILED');
+      expect(updateCall.data.nextRetryAt).toBeUndefined();
+    });
+
     it('should mark event terminally FAILED when all attempts are exhausted', async () => {
       const exhaustedEvent = {
         ...pendingEvent,
