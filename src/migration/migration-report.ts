@@ -16,7 +16,7 @@ export interface MigrationWarning {
 }
 
 export interface MigrationReport {
-  source: 'keycloak' | 'auth0';
+  source: 'keycloak' | 'auth0' | 'zitadel';
   dryRun: boolean;
   startedAt: Date;
   completedAt: Date;
@@ -34,7 +34,7 @@ export interface MigrationReport {
 }
 
 export function createEmptyReport(
-  source: 'keycloak' | 'auth0',
+  source: 'keycloak' | 'auth0' | 'zitadel',
   dryRun: boolean,
 ): MigrationReport {
   const zero = (): MigrationEntityStats => ({

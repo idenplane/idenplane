@@ -43,9 +43,10 @@ function printReport(report: MigrationReport): void {
 }
 
 /**
- * Registers `idenplane migrate keycloak|auth0` subcommands for importing
- * users and configuration from a Keycloak realm export or an Auth0
- * Management API export, printing a formatted (or `--json`) migration report.
+ * Registers `idenplane migrate keycloak|auth0|zitadel` subcommands for
+ * importing users and configuration from a Keycloak realm export, an Auth0
+ * Management API export, or a hand-assembled Zitadel Management API export,
+ * printing a formatted (or `--json`) migration report.
  */
 export function registerMigrateCommand(program: Command): void {
   const migrate = program.command('migrate').description('Migrate from other IAM providers');
@@ -110,6 +111,42 @@ export function registerMigrateCommand(program: Command): void {
       try {
         const http = createHttpClient(config);
         const report = await http.post<MigrationReport>('/admin/migration/auth0', {
+          data, dryRun: opts.dryRun, targetRealm: opts.realm,
+        });
+        if (opts.json) {
+          console.log(JSON.stringify(report, null, 2));
+        } else {
+          printReport(report);
+        }
+      } catch (error) {
+        handleApiError(error);
+      }
+    });
+
+  migrate
+    .command('zitadel')
+    .description('Import from a hand-assembled Zitadel Management API export (see docs)')
+    .requiredOption('--file <path>', 'Path to Zitadel export JSON file')
+    .requiredOption('--realm <name>', 'Target realm name')
+    .option('--dry-run', 'Preview import without making changes', false)
+    .option('--json', 'Output as JSON', false)
+    .action(async (opts) => {
+      const config = loadConfig();
+      if (!config) { console.error(chalk.red('Not configured. Run: idenplane init')); process.exit(1); }
+
+      let data: any;
+      try {
+        data = JSON.parse(readFileSync(opts.file, 'utf-8'));
+      } catch (e: any) {
+        console.error(chalk.red(`Failed to read file: ${e.message}`));
+        process.exit(1);
+      }
+
+      console.log(chalk.blue(`Importing Zitadel data into realm '${opts.realm}'${opts.dryRun ? ' (dry run)' : ''}...`));
+
+      try {
+        const http = createHttpClient(config);
+        const report = await http.post<MigrationReport>('/admin/migration/zitadel', {
           data, dryRun: opts.dryRun, targetRealm: opts.realm,
         });
         if (opts.json) {
