@@ -9,6 +9,7 @@ import { IsBoolean, IsObject, IsOptional, IsString } from 'class-validator';
 import { KeycloakImporterService } from './keycloak-importer.service.js';
 import { Auth0ImporterService } from './auth0-importer.service.js';
 import { ZitadelImporterService } from './zitadel-importer.service.js';
+import { AuthentikImporterService } from './authentik-importer.service.js';
 import type { MigrationReport } from './migration-report.js';
 import type { KeycloakRealmExport } from './keycloak-types.js';
 import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
@@ -50,6 +51,18 @@ class ZitadelImportDto {
   targetRealm!: string;
 }
 
+class AuthentikImportDto {
+  @IsObject()
+  data!: Record<string, unknown>;
+
+  @IsOptional()
+  @IsBoolean()
+  dryRun?: boolean;
+
+  @IsString()
+  targetRealm!: string;
+}
+
 // Issue #461 — API limitation notes:
 //
 // 1. Both import endpoints process the entire payload synchronously in a single
@@ -75,6 +88,14 @@ class ZitadelImportDto {
 //    responses (see zitadel-types.ts). Only bcrypt password hashes, OIDC apps,
 //    and generic OIDC IdPs are imported; machine (service-account) users,
 //    SAML apps, and non-OIDC IdPs are skipped with a warning per entity.
+//
+// 5. Authentik also has no single export endpoint — the input to
+//    POST /admin/migration/authentik is hand-assembled from the REST API's
+//    /core/users/, /core/groups/, /providers/oauth2/, and /sources/oauth/
+//    responses (see authentik-types.ts). Passwords hashed with Django's
+//    default PBKDF2 or Argon2 hashers are translated into a form Idenplane
+//    can verify; any other hasher is imported without a password (reset
+//    required on first login). Only generic OIDC sources are imported.
 
 @ApiTags('Migration')
 @ApiSecurity('admin-api-key')
@@ -85,6 +106,7 @@ export class MigrationController {
     private readonly keycloakImporter: KeycloakImporterService,
     private readonly auth0Importer: Auth0ImporterService,
     private readonly zitadelImporter: ZitadelImporterService,
+    private readonly authentikImporter: AuthentikImporterService,
   ) {}
 
   @Post('keycloak')
@@ -155,6 +177,32 @@ export class MigrationController {
   })
   async importZitadel(@Body() dto: ZitadelImportDto): Promise<MigrationReport> {
     return this.zitadelImporter.importData(dto.data, {
+      dryRun: dto.dryRun ?? false,
+      targetRealm: dto.targetRealm,
+    });
+  }
+
+  @Post('authentik')
+  @HttpCode(200)
+  @ApiOperation({
+    summary: 'Import from a hand-assembled Authentik REST API export',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Migration report with counts of imported/skipped entities',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'Bad request — invalid payload or missing targetRealm',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized — missing or invalid admin API key',
+  })
+  async importAuthentik(
+    @Body() dto: AuthentikImportDto,
+  ): Promise<MigrationReport> {
+    return this.authentikImporter.importData(dto.data, {
       dryRun: dto.dryRun ?? false,
       targetRealm: dto.targetRealm,
     });
