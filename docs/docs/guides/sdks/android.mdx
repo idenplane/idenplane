@@ -21,23 +21,15 @@ The Idenplane Android SDK provides native Kotlin bindings for the Idenplane Iden
 
 ## Installation
 
-Add JitPack to your project-level `settings.gradle.kts`:
+:::note
+This SDK isn't published to Maven Central yet. The coordinates below are what it will resolve to once released — check the [GitHub releases page](https://github.com/idenplane/idenplane/releases) before using them in a real project.
+:::
 
-```kotlin
-dependencyResolutionManagement {
-    repositories {
-        google()
-        mavenCentral()
-        maven { url = uri("https://jitpack.io") }
-    }
-}
-```
-
-Add the dependency to your app or library module `build.gradle.kts`:
+`mavenCentral()` is part of the default Gradle repositories — no extra repository setup is needed:
 
 ```kotlin
 dependencies {
-    implementation("com.github.Islamawad132:Idenplane:0.3.0")
+    implementation("com.idenplane:idenplane-android:1.0.0")
 }
 ```
 
