@@ -23,6 +23,11 @@ const SOURCES: { id: MigrationSource; name: string; description: string }[] = [
     name: 'Zitadel',
     description: 'Import from a hand-assembled Zitadel Management API export (Users/Projects/Roles/Apps/IDPs).',
   },
+  {
+    id: 'authentik',
+    name: 'Authentik',
+    description: 'Import from a hand-assembled Authentik REST API export (Users/Groups/Providers/Sources).',
+  },
 ];
 
 const STEPS = ['source', 'upload', 'preview', 'done'] as const;
