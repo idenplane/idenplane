@@ -15,25 +15,16 @@ Implements the **OAuth 2.0 Authorization Code flow with PKCE** (RFC 7636) using 
 
 ## Installation
 
+> [!NOTE]
+> This SDK isn't published to Maven Central yet. The coordinates below are what it will resolve to once released — check the [GitHub releases page](https://github.com/idenplane/idenplane/releases) before using them in a real project.
+
 ### Gradle (Kotlin DSL)
 
-Add JitPack to your project-level `settings.gradle.kts`:
-
-```kotlin
-dependencyResolutionManagement {
-    repositories {
-        google()
-        mavenCentral()
-        maven { url = uri("https://jitpack.io") }
-    }
-}
-```
-
-Add the dependency to your app or library module `build.gradle.kts`:
+`mavenCentral()` is part of the default Gradle repositories — no extra repository setup is needed:
 
 ```kotlin
 dependencies {
-    implementation("com.github.Islamawad132:Idenplane:1.0.0")
+    implementation("com.idenplane:idenplane-android:1.0.0")
 }
 ```
 
