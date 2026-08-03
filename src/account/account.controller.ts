@@ -7,6 +7,7 @@ import {
   Body,
   Req,
   Res,
+  Logger,
 } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
@@ -28,12 +29,17 @@ import { WebAuthnService } from '../webauthn/webauthn.service.js';
 import { DataExportService } from './data-export.service.js';
 import { AccountDeletionService } from './account-deletion.service.js';
 import { CsrfService } from '../common/csrf/csrf.service.js';
+import { EmailService } from '../email/email.service.js';
+import { escapeHtml } from '../common/utils/html-escape.util.js';
+import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 
 @ApiExcludeController()
 @Controller('realms/:realmName/account')
 @UseGuards(RealmGuard)
 @Public()
 export class AccountController {
+  private readonly logger = new Logger(AccountController.name);
+
   constructor(
     private readonly loginService: LoginService,
     private readonly prisma: PrismaService,
@@ -45,6 +51,7 @@ export class AccountController {
     private readonly dataExportService: DataExportService,
     private readonly accountDeletionService: AccountDeletionService,
     private readonly csrfService: CsrfService,
+    private readonly emailService: EmailService,
   ) {}
 
   /** Set a fresh CSRF cookie and return the token for embedding in the form. */
@@ -296,9 +303,55 @@ export class AccountController {
       realm.passwordHistoryCount,
     );
 
+    void this.sendPasswordChangedEmail(realm.name, user, req);
+
     res.redirect(
       `/realms/${realm.name}/account?success=${encodeURIComponent('Password changed successfully.')}`,
     );
+  }
+
+  /**
+   * Best-effort security alert so the account holder can catch an
+   * unauthorized password change — never blocks the change itself on
+   * email delivery, matching sendBlockedLoginEmail's fire-and-forget shape.
+   */
+  private async sendPasswordChangedEmail(
+    realmName: string,
+    user: { email: string | null; username: string },
+    req: Request,
+  ): Promise<void> {
+    if (!user.email) return;
+
+    const time = escapeHtml(new Date().toUTCString());
+    const ip = escapeHtml(resolveClientIp(req));
+    const device = escapeHtml(req.headers?.['user-agent'] ?? 'Unknown');
+
+    const html = `
+      <h2>Your Password Was Changed</h2>
+      <p>The password for account "${escapeHtml(user.username)}" was just changed.</p>
+      <table style="border-collapse:collapse;margin-top:12px">
+        <tr><td style="padding:4px 12px 4px 0;font-weight:bold">Time</td><td>${time}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;font-weight:bold">IP Address</td><td>${ip}</td></tr>
+        <tr><td style="padding:4px 12px 4px 0;font-weight:bold">Device</td><td>${device}</td></tr>
+      </table>
+      <p style="margin-top:16px">
+        If this was you, no action is required.<br/>
+        If you did not make this change, contact your administrator immediately.
+      </p>
+    `;
+
+    try {
+      await this.emailService.sendEmail(
+        realmName,
+        user.email,
+        'Your Password Was Changed',
+        html,
+      );
+    } catch (err) {
+      this.logger.warn(
+        `Failed to send password-changed email to ${user.email}: ${(err as Error).message}`,
+      );
+    }
   }
 
   // ─── TOTP SETUP ─────────────────────────────────────────
