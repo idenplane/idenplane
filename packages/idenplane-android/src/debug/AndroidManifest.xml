@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Debug-only manifest, never part of the published release AAR (see the release publishing
+    config in build.gradle.kts, which only publishes the "release" variant).
+
+    Declares the host activity that Compose UI testing's createComposeRule() launches via
+    ActivityScenarioRule. As a library module, this module's own manifest is what Robolectric's
+    unit tests resolve against — dependency manifests (e.g. from the debugImplementation
+    androidx.compose.ui:ui-test-manifest dependency) are only merged into a final application's
+    manifest, not into this library's own, so without this the activity lookup fails with
+    "Unable to resolve activity for Intent { ... cmp=.../androidx.activity.ComponentActivity }".
+-->
+<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+    <application>
+        <activity
+            android:name="androidx.activity.ComponentActivity"
+            android:exported="false" />
+    </application>
+</manifest>

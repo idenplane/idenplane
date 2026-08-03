@@ -11,6 +11,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -102,6 +105,19 @@ class IdenplaneClient internal constructor(
     /** `true` if a valid (non-expired) access token is in storage. */
     val isAuthenticated: Boolean
         get() = storage.accessToken?.let { !isTokenExpired(it) } ?: false
+
+    private val _authState = MutableStateFlow(isAuthenticated)
+
+    /**
+     * Reactive view of [isAuthenticated], for UI layers that need to react to auth changes
+     * instead of polling (e.g. Compose's `collectAsState()` — see [collectAuthStateAsState]).
+     *
+     * This emits on login, logout, and refresh outcomes — it does *not* emit purely from time
+     * passing, so a token that silently expires between those events won't flip this to `false`
+     * on its own. Callers that need up-to-the-second accuracy should still consult
+     * [isAuthenticated] or [getAccessToken] directly.
+     */
+    val authState: StateFlow<Boolean> = _authState.asStateFlow()
 
     // -----------------------------------------------------------------------
     // Login
@@ -199,6 +215,7 @@ class IdenplaneClient internal constructor(
         storage.store(tokens)
         storage.pkceVerifier = null
         storage.authState    = null
+        _authState.value = true
 
         scheduleAutoRefresh()
         return true
@@ -233,6 +250,7 @@ class IdenplaneClient internal constructor(
 
         cancelAutoRefresh()
         storage.clear()
+        _authState.value = false
     }
 
     // -----------------------------------------------------------------------
@@ -301,12 +319,14 @@ class IdenplaneClient internal constructor(
             ) {
                 cancelAutoRefresh()
                 storage.clear()
+                _authState.value = false
             }
             throw e
         }
 
         val tokens = json.decodeFromString<TokenResponse>(responseBody)
         storage.store(tokens)
+        _authState.value = true
         scheduleAutoRefresh()
     }
 

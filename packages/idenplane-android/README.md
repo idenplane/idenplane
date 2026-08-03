@@ -346,6 +346,32 @@ class AuthViewModel(private val authMe: IdenplaneClient) : ViewModel() {
 }
 ```
 
+## Jetpack Compose
+
+Compose support is optional — `Compose.kt`'s dependencies are `compileOnly`, so plain View-based apps don't pull in the Compose runtime. To use it, add Compose to your own app:
+
+```kotlin
+dependencies {
+    implementation(platform("androidx.compose:compose-bom:2024.02.00"))
+    implementation("androidx.compose.runtime:runtime")
+}
+```
+
+```kotlin
+import com.idenplane.sdk.rememberIdenplaneClient
+import com.idenplane.sdk.collectAuthStateAsState
+
+@Composable
+fun App(config: AuthConfig) {
+    val authMe = rememberIdenplaneClient(LocalContext.current, config)
+    val isAuthenticated by authMe.collectAuthStateAsState()
+
+    if (isAuthenticated) HomeScreen() else LoginScreen(authMe)
+}
+```
+
+`rememberIdenplaneClient` scopes the client to the composition and calls `destroy()` when it leaves. `collectAuthStateAsState` reacts to login/logout/refresh outcomes — see the `authState` doc comment on `IdenplaneClient` for exactly what it does and doesn't cover (it does not poll for token expiry on its own).
+
 ## License
 
 MIT — see the [LICENSE](./LICENSE) file.
