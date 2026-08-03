@@ -83,6 +83,11 @@ dependencies {
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.2.1")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
+    // com.sun.net.httpserver.HttpServer (used for this kind of real-local-server test in the
+    // plain-JVM Java SDK modules) isn't resolvable from Android's unit-test compilation
+    // classpath — MockWebServer is the standard substitute for exercising real HTTP/JSON
+    // handling in Android JVM unit tests.
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
     // Plain JVM unit tests run against a stub android.jar whose methods throw
     // ("not mocked") rather than doing anything — Robolectric swaps in real
     // framework-class implementations (needed here for android.util.Base64).

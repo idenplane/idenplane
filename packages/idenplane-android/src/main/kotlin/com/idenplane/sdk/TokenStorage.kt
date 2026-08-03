@@ -12,7 +12,10 @@ import androidx.security.crypto.MasterKey
  * Android Keystore. The preference file is scoped to the realm + clientId
  * combination so multiple Idenplane realms can coexist without key collisions.
  */
-internal class TokenStorage(context: Context, realm: String, clientId: String) {
+internal class TokenStorage(private val prefs: SharedPreferences) {
+
+    constructor(context: Context, realm: String, clientId: String) :
+        this(createEncryptedPreferences(context, realm, clientId))
 
     // -----------------------------------------------------------------------
     // Keys
@@ -26,26 +29,34 @@ internal class TokenStorage(context: Context, realm: String, clientId: String) {
         const val AUTH_STATE    = "auth_state"
     }
 
-    // -----------------------------------------------------------------------
-    // Encrypted prefs
-    // -----------------------------------------------------------------------
+    companion object {
+        // AndroidKeyStore-backed crypto has no Robolectric shadow and cannot run in a plain
+        // JVM unit test — only a real device/emulator instrumentation test can exercise this
+        // factory. The primary constructor above takes a plain SharedPreferences directly so
+        // TokenStorageTest can exercise the actual field-mapping/store()/clear() logic (the part
+        // this SDK owns and that has previously had real bugs, e.g. #438-6) against a real
+        // Robolectric-backed SharedPreferences, without needing a real Keystore to do it.
+        private fun createEncryptedPreferences(
+            context: Context,
+            realm: String,
+            clientId: String,
+        ): SharedPreferences {
+            val masterKey = MasterKey.Builder(context)
+                .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
+                .build()
 
-    private val prefs: SharedPreferences
+            return EncryptedSharedPreferences.create(
+                context,
+                preferencesFileName(realm, clientId),
+                masterKey,
+                EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
+                EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
+            )
+        }
 
-    init {
-        val masterKey = MasterKey.Builder(context)
-            .setKeyScheme(MasterKey.KeyScheme.AES256_GCM)
-            .build()
-
-        val fileName = "idenplane_${realm}_${clientId}".replace(Regex("[^a-zA-Z0-9_]"), "_")
-
-        prefs = EncryptedSharedPreferences.create(
-            context,
-            fileName,
-            masterKey,
-            EncryptedSharedPreferences.PrefKeyEncryptionScheme.AES256_SIV,
-            EncryptedSharedPreferences.PrefValueEncryptionScheme.AES256_GCM,
-        )
+        /** Extracted so the realm/clientId scoping itself is unit-testable without a Keystore. */
+        internal fun preferencesFileName(realm: String, clientId: String): String =
+            "idenplane_${realm}_${clientId}".replace(Regex("[^a-zA-Z0-9_]"), "_")
     }
 
     // -----------------------------------------------------------------------
