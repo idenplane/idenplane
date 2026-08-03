@@ -199,4 +199,19 @@ describe('MigrationWizardPage', () => {
     await user.click(screen.getByRole('button', { name: /^back$/i }));
     expect(screen.getByText(/where are you migrating from/i)).toBeInTheDocument();
   });
+
+  it('offers Authentik as a source and can preview an import from it', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByText('Authentik'));
+    await user.click(screen.getByRole('button', { name: /^next$/i }));
+    expect(screen.getByText(/upload your authentik export/i)).toBeInTheDocument();
+
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(input, makeJsonFile({ users: [] }));
+    await user.click(screen.getByRole('button', { name: /preview import/i }));
+
+    expect(await screen.findByText(/nothing has been imported yet/i)).toBeInTheDocument();
+  });
 });

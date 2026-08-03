@@ -1,0 +1,64 @@
+# Quickstart-only stack: Idenplane server + Postgres + a one-shot seed job
+# that creates a demo realm/client/user + this static site, served after
+# `npm install` pulls down idenplane-sdk (there's no build step otherwise).
+#
+# The fixed secrets below are for local, throwaway use only — never reuse
+# them for anything internet-facing. See the root docker-compose.yml for a
+# production-oriented setup.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: idenplane
+      POSTGRES_PASSWORD: idenplane
+      POSTGRES_DB: idenplane
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U idenplane"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  idenplane:
+    image: islamawad/idenplane:latest
+    ports:
+      - "3000:3000"
+    environment:
+      DATABASE_URL: postgresql://idenplane:idenplane@db:5432/idenplane
+      PORT: "3000"
+      NODE_ENV: production
+      ADMIN_API_KEY: quickstart-dev-admin-key-do-not-use-in-production
+      WEBHOOK_SECRET_KEY: 0000000000000000000000000000000000000000000000000000000000000000
+      WEBHOOK_ENCRYPTION_SALT: 00000000000000000000000000000000
+      BASE_URL: http://localhost:3000
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://localhost:3000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  seed:
+    image: curlimages/curl:8.11.1
+    depends_on:
+      idenplane:
+        condition: service_healthy
+    volumes:
+      - ./seed.sh:/seed.sh:ro
+    entrypoint: ["sh", "/seed.sh"]
+    environment:
+      IDENPLANE_URL: http://idenplane:3000
+      ADMIN_API_KEY: quickstart-dev-admin-key-do-not-use-in-production
+
+  web:
+    image: node:22-alpine
+    working_dir: /app
+    ports:
+      - "3002:3002"
+    volumes:
+      - ./:/app
+    command: sh -c "npm install && npx --yes serve -l 3002 ."
+    depends_on:
+      seed:
+        condition: service_completed_successfully
