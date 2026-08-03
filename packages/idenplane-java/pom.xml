@@ -134,11 +134,39 @@
                 <version>6.5.11</version>
             </dependency>
 
+            <dependency>
+                <groupId>org.springframework.security</groupId>
+                <artifactId>spring-security-oauth2-jose</artifactId>
+                <version>6.5.10</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.springframework.security</groupId>
+                <artifactId>spring-security-oauth2-resource-server</artifactId>
+                <version>6.5.10</version>
+            </dependency>
+
             <!-- Spring Boot Auto-configuration -->
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-autoconfigure</artifactId>
                 <version>3.5.4</version>
+            </dependency>
+
+            <!-- Test support for exercising @AutoConfiguration classes via
+                 ApplicationContextRunner, without a full Spring Boot app -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-test</artifactId>
+                <version>3.5.4</version>
+                <scope>test</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-test-autoconfigure</artifactId>
+                <version>3.5.4</version>
+                <scope>test</scope>
             </dependency>
 
             <!-- Spring Boot Configuration Processor -->
