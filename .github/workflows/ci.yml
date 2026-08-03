@@ -143,11 +143,11 @@ jobs:
     # idenplane-mcp already had a real integration suite
     # (packages/idenplane-mcp/tests/integration.mjs) that probes for a live
     # Idenplane instance and silently skips itself when one isn't reachable —
-    # which meant it had never actually run in CI. idenplane-js had no
-    # server-facing integration coverage at all: its unit suite mocks `jose`
-    # entirely, so nothing ever checked that verifyToken() can validate a
-    # token this server actually issues. This job boots a real backend and
-    # runs both against it.
+    # which meant it had never actually run in CI. idenplane-js and
+    # idenplane-go had no server-facing integration coverage at all: their
+    # unit suites mock every HTTP call, so nothing ever checked that a
+    # request either SDK builds actually matches what this server expects.
+    # This job boots a real backend and runs all three against it.
     name: SDK Integration Tests
     runs-on: ubuntu-latest
     services:
@@ -171,6 +171,10 @@ jobs:
       PORT: '3000'
       IDENPLANE_URL: http://localhost:3000
       IDENPLANE_ADMIN_TOKEN: dev-admin-key
+      IDENPLANE_ADMIN_USER: admin
+      IDENPLANE_ADMIN_PASSWORD: e2e-test-admin-password
+      ADMIN_USER: admin
+      ADMIN_PASSWORD: e2e-test-admin-password
 
     steps:
       - uses: actions/checkout@v7
@@ -223,6 +227,15 @@ jobs:
         run: |
           npm ci
           npm run test:integration
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: packages/idenplane-go/go.mod
+          cache: false
+
+      - name: idenplane-go integration suite
+        working-directory: packages/idenplane-go
+        run: go test -tags=integration -v ./...
 
   admin-ui-e2e:
     # The existing "E2E Tests" job drives the NestJS app in-process via
