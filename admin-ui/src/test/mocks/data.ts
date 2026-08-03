@@ -1,6 +1,7 @@
 import type { Realm, User, Client, Role, NhiIdentity, ConsentCategory } from '../../types';
 import type { LoginEvent, AdminEvent } from '../../api/events';
 import type { RealmStats, FailedLoginHeatmap } from '../../api/stats';
+import type { LockedUser } from '../../api/bruteForce';
 import type { AuthFlow } from '../../api/authFlows';
 import type { UpgradeAuditEntry, PreUpgradeValidationResult, UpgradeHealthResult, RollbackCapability } from '../../api/upgrade';
 import type { NhiIdentityType, NhiLifecycleStatus } from '../../api/nhi';
@@ -164,6 +165,16 @@ export function makeFailedLoginHeatmap(
     windowDays: 30,
     totalFailures: 0,
     heatmap: Array.from({ length: 7 }, () => new Array<number>(24).fill(0)),
+    ...overrides,
+  };
+}
+
+export function makeLockedUser(overrides: Partial<LockedUser> = {}): LockedUser {
+  return {
+    id: 'user-locked-1',
+    username: 'locked.user',
+    email: 'locked.user@example.com',
+    lockedUntil: new Date(Date.now() + 10 * 60_000).toISOString(),
     ...overrides,
   };
 }
