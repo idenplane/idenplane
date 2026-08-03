@@ -263,7 +263,16 @@ if (biometric.isBiometricAvailable) {
 ```kotlin
 lifecycleScope.launch {
     authMe.logout()
-    // Tokens are cleared; server session is terminated
+    // Tokens are cleared locally and the refresh token is revoked server-side.
+    redirectToLogin()
+}
+```
+
+Passing the current `Activity` also clears the browser-side session (a silent back-channel call alone can't touch cookies set during login) — requires that a valid ID token was stored from a prior login, and opens a Custom Tab showing a blank response the user has to dismiss (deliberately not redirected back to the app, to avoid it being misread as a login callback):
+
+```kotlin
+lifecycleScope.launch {
+    authMe.logout(this@MainActivity)
     redirectToLogin()
 }
 ```

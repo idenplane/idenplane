@@ -3,6 +3,7 @@ package com.idenplane.sdk
 import android.content.Context
 import android.content.Intent
 import android.net.Uri
+import androidx.fragment.app.FragmentActivity
 import kotlinx.coroutines.test.runTest
 import org.json.JSONObject
 import org.junit.After
@@ -15,8 +16,10 @@ import org.junit.Assert.fail
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
+import org.robolectric.Robolectric
 import org.robolectric.RobolectricTestRunner
 import org.robolectric.RuntimeEnvironment
+import org.robolectric.Shadows.shadowOf
 import java.util.Base64
 
 /**
@@ -298,6 +301,48 @@ class IdenplaneClientTest {
 
         assertNull(storage.accessToken)
         assertNull(storage.refreshToken)
+    }
+
+    @Test
+    fun `logout launches a Custom Tab when an activity and idToken are both available`() = runTest {
+        storage.accessToken = fakeJwt(expiresInSeconds = 300)
+        storage.idToken = "stored-id-token"
+        val activity = Robolectric.buildActivity(FragmentActivity::class.java).setup().get()
+
+        client.logout(activity)
+
+        assertNotNull(
+            "Expected logout(activity) to start a Custom Tab activity to clear the browser session",
+            shadowOf(activity).nextStartedActivity,
+        )
+    }
+
+    @Test
+    fun `logout does not launch a Custom Tab without a stored idToken`() = runTest {
+        storage.accessToken = fakeJwt(expiresInSeconds = 300)
+        val activity = Robolectric.buildActivity(FragmentActivity::class.java).setup().get()
+
+        client.logout(activity)
+
+        assertNull(
+            "Without an idToken the server can't honor id_token_hint, so no Custom Tab should launch",
+            shadowOf(activity).nextStartedActivity,
+        )
+    }
+
+    @Test
+    fun `buildEndSessionUri appends only id_token_hint`() {
+        val uri = IdenplaneClient.buildEndSessionUri(
+            endSessionEndpoint = "https://auth.example.com/realms/test/protocol/openid-connect/logout",
+            idToken = "the-id-token",
+        )
+
+        assertEquals("the-id-token", uri.getQueryParameter("id_token_hint"))
+        assertNull(
+            "post_logout_redirect_uri is deliberately omitted — see logout()'s doc comment",
+            uri.getQueryParameter("post_logout_redirect_uri"),
+        )
+        assertNull(uri.getQueryParameter("client_id"))
     }
 
     // -------------------------------------------------------------------
