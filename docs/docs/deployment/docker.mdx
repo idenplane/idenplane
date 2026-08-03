@@ -173,6 +173,32 @@ What it sets up beyond the basic production example:
 
 ---
 
+## Production with TLS (Nginx + Redis)
+
+Prefer Nginx over Traefik? [`docker-compose.nginx.yml`](https://github.com/idenplane/idenplane/blob/dev/docker-compose.nginx.yml) sets up the same stack — Postgres, Redis, automatic Let's Encrypt TLS — using [nginx-proxy](https://github.com/nginx-proxy/nginx-proxy) and its [acme-companion](https://github.com/nginx-proxy/acme-companion) instead. They watch the Docker socket and generate Nginx's vhost config and certificates automatically from labels on the `app` service — there's no Nginx config file to hand-write or certbot cron job to set up.
+
+This also requires a real domain name already pointed at the host, since the ACME HTTP-01 challenge must be reachable on port 80 from the public internet.
+
+```bash
+DOMAIN=auth.example.com \
+ACME_EMAIL=you@example.com \
+POSTGRES_PASSWORD=$(openssl rand -hex 16) \
+ADMIN_API_KEY=$(openssl rand -hex 32) \
+ADMIN_PASSWORD=$(openssl rand -hex 16) \
+WEBHOOK_SECRET_KEY=$(openssl rand -hex 32) \
+WEBHOOK_ENCRYPTION_SALT=$(openssl rand -hex 16) \
+docker compose -f docker-compose.nginx.yml up -d
+```
+
+What it sets up, same as the Traefik version above:
+
+- **nginx-proxy** terminates TLS on `:443` and reverse-proxies to `app` based on the `VIRTUAL_HOST`/`VIRTUAL_PORT` labels set on it — no vhost file to write by hand.
+- **acme-companion** requests and renews the Let's Encrypt certificate for `$DOMAIN` automatically, triggered by the `LETSENCRYPT_HOST` label.
+- **Redis** is enabled out of the box, same as the Traefik template.
+- `db` and `redis` have no published ports; `TRUSTED_PROXIES=*` is set on `app` for the same reason as the Traefik version — nginx-proxy is the only thing that can reach it directly within the compose network.
+
+---
+
 ## Development Deployment
 
 The development configuration builds from source, enabling hot-reload for active development.

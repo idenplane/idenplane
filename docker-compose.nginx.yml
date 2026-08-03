@@ -1,0 +1,117 @@
+# Production template: Idenplane + PostgreSQL + Redis + Nginx with automatic
+# Let's Encrypt TLS, for anyone who'd rather run Nginx than Traefik (see
+# docker-compose.production.yml for the Traefik version — same app/db/redis
+# services, different reverse proxy).
+#
+# Uses nginx-proxy + acme-companion: they watch the Docker socket and
+# generate Nginx vhost config + certificates automatically based on the
+# VIRTUAL_HOST / LETSENCRYPT_HOST labels on the app service below — no Nginx
+# config file to hand-write or certbot cron job to set up.
+#
+# Requires a real domain name pointed at this host (the ACME HTTP-01
+# challenge needs to be publicly reachable on port 80).
+#
+# Usage:
+#   DOMAIN=auth.example.com ACME_EMAIL=you@example.com \
+#   ADMIN_API_KEY=$(openssl rand -hex 32) \
+#   WEBHOOK_SECRET_KEY=$(openssl rand -hex 32) \
+#   WEBHOOK_ENCRYPTION_SALT=$(openssl rand -hex 16) \
+#   ADMIN_PASSWORD=$(openssl rand -hex 16) \
+#   docker compose -f docker-compose.nginx.yml up -d
+services:
+  nginx-proxy:
+    image: nginxproxy/nginx-proxy:1.6
+    ports:
+      - "80:80"
+      - "443:443"
+    volumes:
+      - "/var/run/docker.sock:/tmp/docker.sock:ro"
+      - certs:/etc/nginx/certs
+      - vhost:/etc/nginx/vhost.d
+      - html:/usr/share/nginx/html
+    restart: unless-stopped
+
+  acme-companion:
+    image: nginxproxy/acme-companion:2.4
+    environment:
+      DEFAULT_EMAIL: ${ACME_EMAIL:?Set ACME_EMAIL to an address Let's Encrypt can contact}
+    volumes:
+      - "/var/run/docker.sock:/var/run/docker.sock:ro"
+      - certs:/etc/nginx/certs
+      - vhost:/etc/nginx/vhost.d
+      - html:/usr/share/nginx/html
+      - acme:/etc/acme.sh
+    depends_on:
+      - nginx-proxy
+    restart: unless-stopped
+
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: idenplane
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}
+      POSTGRES_DB: idenplane
+    # No published port — only reachable from other containers on this network.
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U idenplane"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  redis:
+    image: redis:7-alpine
+    command: ["redis-server", "--save", "3600", "1", "--appendonly", "yes"]
+    volumes:
+      - redisdata:/data
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+    restart: unless-stopped
+
+  app:
+    image: islamawad/idenplane:latest
+    environment:
+      DATABASE_URL: postgresql://idenplane:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/idenplane
+      PORT: "3000"
+      NODE_ENV: production
+      ADMIN_API_KEY: ${ADMIN_API_KEY:?Set ADMIN_API_KEY (openssl rand -hex 32)}
+      ADMIN_USER: ${ADMIN_USER:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD}
+      WEBHOOK_SECRET_KEY: ${WEBHOOK_SECRET_KEY:?Set WEBHOOK_SECRET_KEY (openssl rand -hex 32)}
+      WEBHOOK_ENCRYPTION_SALT: ${WEBHOOK_ENCRYPTION_SALT:?Set WEBHOOK_ENCRYPTION_SALT (openssl rand -hex 16)}
+      THROTTLE_TTL: ${THROTTLE_TTL:-60000}
+      THROTTLE_LIMIT: ${THROTTLE_LIMIT:-100}
+      BASE_URL: https://${DOMAIN:?Set DOMAIN to your public hostname}
+      REDIS_URL: redis://redis:6379
+      SESSION_STORE: redis
+      # nginx-proxy is the only thing forwarding requests here — trust its
+      # X-Forwarded-For unconditionally within this compose network.
+      TRUSTED_PROXIES: "*"
+      BACKUP_DIR: /var/lib/idenplane/backups
+      # nginx-proxy/acme-companion read these two to generate the vhost and
+      # request the certificate — no separate Nginx config or router rule.
+      VIRTUAL_HOST: ${DOMAIN:?Set DOMAIN to your public hostname}
+      VIRTUAL_PORT: "3000"
+      LETSENCRYPT_HOST: ${DOMAIN:?Set DOMAIN to your public hostname}
+    volumes:
+      - backups:/var/lib/idenplane/backups
+    depends_on:
+      db:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    restart: unless-stopped
+
+volumes:
+  pgdata:
+  redisdata:
+  certs:
+  vhost:
+  html:
+  acme:
+  backups:
