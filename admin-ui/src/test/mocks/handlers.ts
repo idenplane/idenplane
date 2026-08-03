@@ -146,6 +146,10 @@ export const handlers = [
     return HttpResponse.json(makeFailedLoginHeatmap());
   }),
 
+  http.get(`${BASE}/realms/:name/brute-force/locked-users`, () => {
+    return HttpResponse.json([]);
+  }),
+
   // Migration
   http.post(`${BASE}/migration/:source`, async ({ request, params }) => {
     const body = (await request.json()) as { dryRun?: boolean };
