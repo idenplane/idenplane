@@ -50,10 +50,9 @@ jobs:
         run: ./gradlew publishAllPublicationsToMavenCentralRepository --dry-run --stacktrace
 
       # Publishes to the Central Portal and automatically triggers the release
-      # of the resulting deployment. Requires the com.idenplane namespace to
-      # already be verified on https://central.sonatype.com (one-time manual
-      # reverse-DNS step) — without it, this step fails with a namespace
-      # ownership error rather than a credentials error.
+      # of the resulting deployment. The com.idenplane namespace is already
+      # verified on central.sonatype.com (see #1325), so this only needs the
+      # secrets below to succeed.
       - name: Publish to Maven Central
         run: ./gradlew publishAndReleaseToMavenCentral --no-configuration-cache --stacktrace
         env:

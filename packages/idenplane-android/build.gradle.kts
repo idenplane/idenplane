@@ -99,12 +99,11 @@ dependencies {
 // with no such properties set fails safely at the credentials step; it
 // does not silently publish or fall back to anything.
 //
-// IMPORTANT — before the first real publish can succeed, the com.idenplane
-// namespace must already be verified on https://central.sonatype.com
-// (reverse-DNS domain verification for idenplane.com). That's a one-time
-// manual step in the Sonatype account, not something this config or the
-// workflow can do — if it hasn't happened yet, the upload step will fail
-// with a namespace/ownership error, not a credentials error.
+// The com.idenplane namespace is already verified on central.sonatype.com
+// (RSA 4096 signing key 00A90144FEAC6870, on keyserver.ubuntu.com — see
+// #1325). No further Sonatype-side setup is needed; the only remaining gate
+// on an actual publish is triggering publish-android.yml (tag push or
+// workflow_dispatch), which nothing in this change does.
 mavenPublishing {
     coordinates("com.idenplane", "idenplane-android", "1.0.0")
 
