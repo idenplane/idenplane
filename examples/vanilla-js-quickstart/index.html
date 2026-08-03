@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <title>idenplane-sdk — Vanilla JS Quickstart</title>
+    <!--
+      No bundler here on purpose — this import map is what lets a plain
+      <script type="module"> resolve the bare "idenplane-sdk" specifier
+      straight from node_modules, the same way a bundler would. Run
+      `npm install` once before `npm start`.
+    -->
+    <script type="importmap">
+      { "imports": { "idenplane-sdk": "./node_modules/idenplane-sdk/dist/index.js" } }
+    </script>
+    <style>
+      body { font-family: system-ui, sans-serif; max-width: 640px; margin: 4rem auto; padding: 0 1rem; }
+      button { font-size: 1rem; padding: 0.5rem 1rem; cursor: pointer; }
+      pre { background: #f4f4f4; padding: 1rem; border-radius: 6px; overflow-x: auto; }
+    </style>
+  </head>
+  <body>
+    <h1>idenplane-sdk — Vanilla JS Quickstart</h1>
+    <p>No React, no build step — just <code>idenplane-sdk</code> imported directly in the browser.</p>
+
+    <button id="login-btn" hidden>Sign In</button>
+    <button id="logout-btn" hidden>Sign Out</button>
+
+    <div id="authenticated-view" hidden>
+      <h2>Welcome!</h2>
+      <p>Your user info from the ID token:</p>
+      <pre id="profile"></pre>
+    </div>
+
+    <script type="module" src="./main.js"></script>
+  </body>
+</html>
