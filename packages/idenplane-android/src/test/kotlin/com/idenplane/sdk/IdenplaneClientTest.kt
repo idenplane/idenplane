@@ -301,6 +301,97 @@ class IdenplaneClientTest {
     }
 
     // -------------------------------------------------------------------
+    // authState
+    // -------------------------------------------------------------------
+
+    @Test
+    fun `authState starts false when no token is stored`() {
+        assertFalse(client.authState.value)
+    }
+
+    @Test
+    fun `authState starts true when a valid token is already stored`() {
+        val prefs = RuntimeEnvironment.getApplication()
+            .getSharedPreferences("client-test-prefs-preauth", Context.MODE_PRIVATE)
+        val preAuthedStorage = TokenStorage(prefs)
+        preAuthedStorage.accessToken = fakeJwt(expiresInSeconds = 300)
+        val config = AuthConfig(
+            serverUrl = server.baseUrl,
+            realm = server.realm,
+            clientId = "test-client",
+            redirectUri = redirectUri,
+            autoRefresh = false,
+        )
+        val preAuthedClient = IdenplaneClient(RuntimeEnvironment.getApplication(), config, preAuthedStorage)
+
+        assertTrue(preAuthedClient.authState.value)
+    }
+
+    @Test
+    fun `authState flips to true after a successful redirect handling`() = runTest {
+        storage.authState = "expected-state"
+        storage.pkceVerifier = "verifier-123"
+        server.tokenBody = """{"access_token":"at-new","token_type":"Bearer","expires_in":300}"""
+        val intent = Intent().apply { data = Uri.parse("$redirectUri?code=auth-code-1&state=expected-state") }
+
+        assertFalse(client.authState.value)
+        client.handleRedirectIntent(intent)
+        assertTrue(client.authState.value)
+    }
+
+    @Test
+    fun `authState flips to false after logout`() = runTest {
+        storage.accessToken = fakeJwt(expiresInSeconds = 300)
+        client = IdenplaneClient(RuntimeEnvironment.getApplication(), AuthConfig(
+            serverUrl = server.baseUrl,
+            realm = server.realm,
+            clientId = "test-client",
+            redirectUri = redirectUri,
+            autoRefresh = false,
+        ), storage)
+        assertTrue(client.authState.value)
+
+        client.logout()
+
+        assertFalse(client.authState.value)
+    }
+
+    @Test
+    fun `authState flips to false when refresh is rejected with invalid_grant`() = runTest {
+        storage.accessToken = fakeJwt(expiresInSeconds = 300)
+        storage.refreshToken = "revoked-refresh-token"
+        client = IdenplaneClient(RuntimeEnvironment.getApplication(), AuthConfig(
+            serverUrl = server.baseUrl,
+            realm = server.realm,
+            clientId = "test-client",
+            redirectUri = redirectUri,
+            autoRefresh = false,
+        ), storage)
+        server.tokenStatus = 400
+        server.tokenBody = """{"error":"invalid_grant","error_description":"Token is not active"}"""
+        assertTrue(client.authState.value)
+
+        try {
+            client.refreshToken()
+            fail("Expected ServerError")
+        } catch (e: IdenplaneException.ServerError) {
+            // expected
+        }
+
+        assertFalse(client.authState.value)
+    }
+
+    @Test
+    fun `authState stays true after a successful refresh`() = runTest {
+        storage.refreshToken = "old-refresh-token"
+        server.tokenBody = """{"access_token":"at-refreshed","token_type":"Bearer","expires_in":300}"""
+
+        client.refreshToken()
+
+        assertTrue(client.authState.value)
+    }
+
+    // -------------------------------------------------------------------
     // Discovery caching
     // -------------------------------------------------------------------
 

@@ -51,6 +51,17 @@ android {
         )
     }
 
+    buildFeatures {
+        compose = true
+    }
+
+    // 1.5.10 is the newest Compose Compiler release compatible with this module's Kotlin
+    // 1.9.22 (1.5.11+ requires Kotlin 1.9.23+) — see
+    // developer.android.com/jetpack/androidx/releases/compose-kotlin.
+    composeOptions {
+        kotlinCompilerExtensionVersion = "1.5.10"
+    }
+
     // No android.publishing.singleVariant block here: com.vanniktech.maven.publish
     // registers the "release" component itself (see AndroidSingleVariantLibrary in
     // mavenPublishing below). Declaring singleVariant("release") in both places trips
@@ -79,7 +90,27 @@ dependencies {
     // Lifecycle
     implementation("androidx.lifecycle:lifecycle-runtime-ktx:2.7.0")
 
+    // Compose integration (Compose.kt) is optional — compileOnly so apps that don't use
+    // Compose aren't forced to pull the runtime in transitively. Apps that call
+    // rememberIdenplaneClient()/collectAuthStateAsState() must add their own Compose
+    // dependency (e.g. the Compose BOM + androidx.compose.runtime:runtime).
+    compileOnly(platform("androidx.compose:compose-bom:2024.02.00"))
+    compileOnly("androidx.compose.runtime:runtime")
+
     // Test
+    // AGP does not add a variant's compileOnly dependencies to its unit-test compile
+    // classpath — without this, compiling the test source set fails the Compose compiler's
+    // own version check (IncompatibleComposeRuntimeVersionException) because Compose.kt is
+    // part of the module being compiled but the runtime it needs isn't visible to that task.
+    testImplementation(platform("androidx.compose:compose-bom:2024.02.00"))
+    testImplementation("androidx.compose.runtime:runtime")
+    testImplementation("androidx.compose.ui:ui-test-junit4")
+    // createComposeRule() launches a ComponentActivity via ActivityScenarioRule; without this
+    // it isn't in the (Robolectric-resolved) manifest and startActivity fails with
+    // "Unable to resolve activity". debugImplementation (not testImplementation) because this
+    // works by manifest merging into the debug variant — it never reaches the published release AAR.
+    debugImplementation(platform("androidx.compose:compose-bom:2024.02.00"))
+    debugImplementation("androidx.compose.ui:ui-test-manifest")
     testImplementation("junit:junit:4.13.2")
     testImplementation("org.mockito.kotlin:mockito-kotlin:5.2.1")
     testImplementation("org.jetbrains.kotlinx:kotlinx-coroutines-test:1.7.3")
