@@ -35,6 +35,17 @@
         </dependency>
 
         <!-- Testing -->
+        <!-- jakarta.ws.rs-api is interfaces only; a real JAX-RS runtime (Jersey, RESTEasy...)
+             normally supplies the RuntimeDelegate implementation that Response.status(...)
+             needs. Consuming applications provide their own, so this stays test-scoped only —
+             it's not something this library ships or depends on at runtime. -->
+        <dependency>
+            <groupId>org.glassfish.jersey.core</groupId>
+            <artifactId>jersey-common</artifactId>
+            <version>3.1.12</version>
+            <scope>test</scope>
+        </dependency>
+
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
