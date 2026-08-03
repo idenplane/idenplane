@@ -13,6 +13,30 @@
     <description>Java SDK for the Idenplane Identity and Access Management Server</description>
     <url>https://github.com/idenplane/idenplane</url>
 
+    <!-- Client SDK license, distinct from the AGPL-3.0-or-later server this SDK talks to —
+         matches the convention already used for the Android/npm SDK packages, since forcing
+         AGPL's copyleft onto every downstream consumer of a client library would make it
+         unusable in most commercial contexts. Required by Maven Central for POM validation. -->
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>https://opensource.org/licenses/MIT</url>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <name>Idenplane</name>
+            <url>https://github.com/idenplane</url>
+        </developer>
+    </developers>
+
+    <scm>
+        <url>https://github.com/idenplane/idenplane</url>
+        <connection>scm:git:https://github.com/idenplane/idenplane.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/idenplane/idenplane.git</developerConnection>
+    </scm>
+
     <modules>
         <module>idenplane-java-core</module>
         <module>idenplane-java-reactive</module>
@@ -84,6 +108,13 @@
                 <groupId>io.projectreactor</groupId>
                 <artifactId>reactor-core</artifactId>
                 <version>3.7.3</version>
+            </dependency>
+
+            <dependency>
+                <groupId>io.projectreactor</groupId>
+                <artifactId>reactor-test</artifactId>
+                <version>3.7.3</version>
+                <scope>test</scope>
             </dependency>
 
             <!-- Spring Security — bumped from 6.2.2 to 6.5.7 to address two
@@ -195,6 +226,53 @@
                             </goals>
                         </execution>
                     </executions>
+                </plugin>
+
+                <!-- Real Maven Central publishing via the Central Portal (the old OSSRH Nexus
+                     host is retired). Declared here in pluginManagement only — not every module
+                     activates these, only idenplane-java-core does today, since it's the only
+                     module with real source to publish. Credentials and the GPG key are never
+                     hardcoded: central-publishing-maven-plugin reads settings.xml server
+                     credentials (populated from env vars by actions/setup-java in CI), and
+                     maven-gpg-plugin reads the MAVEN_GPG_PASSPHRASE env var directly (the
+                     modern, non-interactive way — see MGPG-105/MGPG-108). Running `mvn verify`
+                     locally with no such setup fails safely at the signing step with no GPG key
+                     available; it does not silently publish or fall back to anything. -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-gpg-plugin</artifactId>
+                    <version>3.2.8</version>
+                    <configuration>
+                        <!-- Disables gpg-agent interactive prompts; the passphrase comes from
+                             the MAVEN_GPG_PASSPHRASE environment variable instead. -->
+                        <useAgent>false</useAgent>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <id>sign-artifacts</id>
+                            <phase>verify</phase>
+                            <goals>
+                                <goal>sign</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+
+                <plugin>
+                    <groupId>org.sonatype.central</groupId>
+                    <artifactId>central-publishing-maven-plugin</artifactId>
+                    <version>0.11.0</version>
+                    <extensions>true</extensions>
+                    <configuration>
+                        <publishingServerId>central</publishingServerId>
+                        <deploymentName>idenplane-java-core</deploymentName>
+                        <!-- Default is false; stated explicitly since it's the property that
+                             makes `mvn deploy` land as a reviewable, still-reversible "validated"
+                             deployment in the Central Portal instead of auto-releasing it. Actual
+                             release is then a separate, explicit action in the Portal UI (or a
+                             deliberate autoPublish=true override), never a side effect of deploy. -->
+                        <autoPublish>false</autoPublish>
+                    </configuration>
                 </plugin>
 
                 <plugin>

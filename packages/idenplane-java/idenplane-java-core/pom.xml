@@ -74,4 +74,57 @@
         </plugins>
     </build>
 
+    <profiles>
+        <!-- Everything Maven Central publishing needs: sources + javadoc jars, GPG signing,
+             and the Central Portal upload. Deliberately NOT part of the default build — plain
+             `mvn verify` (what CI runs on every PR) must stay fast and must not require a GPG
+             key. Only publish-java.yml activates this profile (`-Pcentral-publish`), and nothing
+             in this change invokes that workflow. -->
+        <profile>
+            <id>central-publish</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                    </plugin>
+
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                    </plugin>
+
+                    <plugin>
+                        <groupId>org.sonatype.central</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <!-- Declared explicitly rather than relying on inheriting this from
+                             pluginManagement. Note: `mvn help:describe -Dcmd=deploy -Pcentral-publish`
+                             reports `deploy` as still bound to the stock maven-deploy-plugin even
+                             with this — that's help:describe not simulating a profile-injected
+                             extension correctly, not a real problem. Verified against an actual
+                             `mvn -Pcentral-publish deploy` run instead: the log shows
+                             `central-publishing:0.11.0:publish (injected-central-publishing)`
+                             executing, which then failed on a 401 against the Central Portal —
+                             i.e. it reached real auth with no credentials configured, exactly
+                             the safe failure mode this dormant config is meant to have. -->
+                        <extensions>true</extensions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
+
 </project>

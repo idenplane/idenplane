@@ -465,6 +465,28 @@ jobs:
       - name: Assemble (debug + release AAR)
         run: ./gradlew assembleDebug assembleRelease --stacktrace
 
+  java-sdk:
+    # packages/idenplane-java had real Java source (data models) but no CI job ever ran `mvn`
+    # against it, so the multi-module reactor build had never actually been exercised — it
+    # couldn't even resolve its POMs (idenplane-java-reactive referenced reactor-test with no
+    # version). (#1326)
+    name: Java SDK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/idenplane-java
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Verify (build, test, coverage gate)
+        run: mvn -B verify
+
   examples-build:
     # Nothing ever built these — examples/nextjs-quickstart was silently
     # broken from the moment idenplane-sdk/idenplane-nextjs were published
