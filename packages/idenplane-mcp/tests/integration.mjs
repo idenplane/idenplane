@@ -56,6 +56,22 @@ async function callTool(name, args) {
   return JSON.parse(text);
 }
 
+/**
+ * Retries `fn` while it throws, up to `attempts` times with `delayMs` between tries. For
+ * polling an intentionally-eventually-consistent read (e.g. #1372's fire-and-forget admin
+ * event writes) rather than asserting on the very next read after a write.
+ */
+async function waitFor(fn, { attempts = 5, delayMs = 300 } = {}) {
+  for (let attempt = 1; ; attempt++) {
+    try {
+      return await fn();
+    } catch (err) {
+      if (attempt >= attempts) throw err;
+      await new Promise((resolve) => setTimeout(resolve, delayMs));
+    }
+  }
+}
+
 describe('Idenplane MCP integration (over protocol)', { skip: await skipReason() }, () => {
   before(async () => {
     const transport = new StdioClientTransport({
@@ -167,23 +183,28 @@ describe('Idenplane MCP integration (over protocol)', { skip: await skipReason()
     it('query_audit_events returns a USER CREATE admin event via MCP tool', async () => {
       assert.ok(createdUserId, 'Requires user to be created first');
 
-      const result = await callTool('query_audit_events', {
-        realmName: TEST_REALM,
-        kind: 'admin',
-        limit: 20,
+      // AdminEventInterceptor records admin events fire-and-forget (see #1345's discussion),
+      // so the write isn't guaranteed to have landed yet immediately after create_user
+      // returns. Poll briefly instead of asserting on the very first read (#1372).
+      await waitFor(async () => {
+        const result = await callTool('query_audit_events', {
+          realmName: TEST_REALM,
+          kind: 'admin',
+          limit: 20,
+        });
+
+        const events = result.adminEvents ?? [];
+        const userCreation = events.find(
+          (e) => e.resourceType === 'USER' && e.operationType === 'CREATE',
+        );
+
+        assert.ok(
+          userCreation !== undefined,
+          `Expected USER/CREATE admin event. Got: ${JSON.stringify(
+            events.map((e) => ({ rt: e.resourceType, op: e.operationType })),
+          )}`,
+        );
       });
-
-      const events = result.adminEvents ?? [];
-      const userCreation = events.find(
-        (e) => e.resourceType === 'USER' && e.operationType === 'CREATE',
-      );
-
-      assert.ok(
-        userCreation !== undefined,
-        `Expected USER/CREATE admin event. Got: ${JSON.stringify(
-          events.map((e) => ({ rt: e.resourceType, op: e.operationType })),
-        )}`,
-      );
     });
   });
 });
