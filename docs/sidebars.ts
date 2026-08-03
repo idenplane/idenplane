@@ -116,6 +116,11 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'doc',
+          id: 'guides/sdks/java-sdk',
+          label: 'Java',
+        },
+        {
+          type: 'doc',
           id: 'guides/sdks/python-sdk',
           label: 'Python',
         },
