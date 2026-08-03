@@ -13,6 +13,13 @@ export interface SessionTerminatedEvent {
   timestamp: string;
 }
 
+export interface StepUpRequiredEvent {
+  sessionId: string;
+  requiredAcr: string;
+  reason: string;
+  timestamp: string;
+}
+
 /**
  * Real-time push for session lifecycle events, replacing the polling-based
  * "did my session get revoked?" pattern. A client connects to
@@ -70,10 +77,27 @@ export class SessionEventsGateway {
 
   /** Push a session-termination event to every connection for this user. */
   emitSessionTerminated(userId: string, event: SessionTerminatedEvent): void {
+    this.broadcast(userId, 'session.terminated', event);
+  }
+
+  /**
+   * Push a step-up-required event to every connection for this user, so a
+   * client application can prompt for re-authentication immediately instead
+   * of only discovering the requirement on its next API call.
+   */
+  emitStepUpRequired(userId: string, event: StepUpRequiredEvent): void {
+    this.broadcast(userId, 'session.stepup_required', event);
+  }
+
+  private broadcast<T extends object>(
+    userId: string,
+    type: string,
+    event: T,
+  ): void {
     const sockets = this.connections.get(userId);
     if (!sockets || sockets.size === 0) return;
 
-    const payload = JSON.stringify({ type: 'session.terminated', ...event });
+    const payload = JSON.stringify({ type, ...event });
     for (const ws of sockets) {
       if (ws.readyState === WebSocket.OPEN) {
         ws.send(payload);
