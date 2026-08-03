@@ -1,6 +1,6 @@
 import apiClient from './client';
 
-export type MigrationSource = 'keycloak' | 'auth0' | 'zitadel';
+export type MigrationSource = 'keycloak' | 'auth0' | 'zitadel' | 'authentik';
 
 export interface MigrationEntityStats {
   created: number;
