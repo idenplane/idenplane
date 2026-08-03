@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -81,9 +81,64 @@ describe('MigrationWizardPage', () => {
     expect(screen.getByText(/2 created/)).toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: /^run import$/i }));
+    expect(screen.getByText(/run this import for real/i)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: /^yes, run import$/i }));
 
     expect(await screen.findByText(/import complete/i)).toBeInTheDocument();
     expect(screen.getByRole('button', { name: /import another file/i })).toBeInTheDocument();
+  });
+
+  it('cancels the confirmation dialog without running the import', async () => {
+    const user = userEvent.setup();
+    renderPage();
+
+    await user.click(screen.getByText('Keycloak'));
+    await user.click(screen.getByRole('button', { name: /^next$/i }));
+    const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+    await user.upload(input, makeJsonFile({ users: [] }));
+    await user.click(screen.getByRole('button', { name: /preview import/i }));
+    await screen.findByText(/nothing has been imported yet/i);
+
+    await user.click(screen.getByRole('button', { name: /^run import$/i }));
+    await user.click(screen.getByRole('button', { name: /^cancel$/i }));
+
+    expect(screen.queryByText(/run this import for real/i)).not.toBeInTheDocument();
+    expect(screen.getByText(/nothing has been imported yet/i)).toBeInTheDocument();
+  });
+
+  it('lets you download the completed migration report', async () => {
+    const user = userEvent.setup();
+    // Patch only these two methods (jsdom doesn't implement them) rather than
+    // stubbing the whole URL global — replacing URL itself breaks `new URL()`,
+    // which MSW's request matching relies on for every subsequent test.
+    const originalCreateObjectURL = URL.createObjectURL;
+    const originalRevokeObjectURL = URL.revokeObjectURL;
+    const createObjectURL = vi.fn(() => 'blob:mock-url');
+    const revokeObjectURL = vi.fn();
+    URL.createObjectURL = createObjectURL;
+    URL.revokeObjectURL = revokeObjectURL;
+
+    try {
+      renderPage();
+
+      await user.click(screen.getByText('Keycloak'));
+      await user.click(screen.getByRole('button', { name: /^next$/i }));
+      const input = document.querySelector('input[type="file"]') as HTMLInputElement;
+      await user.upload(input, makeJsonFile({ users: [] }));
+      await user.click(screen.getByRole('button', { name: /preview import/i }));
+      await screen.findByText(/nothing has been imported yet/i);
+      await user.click(screen.getByRole('button', { name: /^run import$/i }));
+      await user.click(screen.getByRole('button', { name: /^yes, run import$/i }));
+      await screen.findByText(/import complete/i);
+
+      await user.click(screen.getByRole('button', { name: /download report/i }));
+
+      expect(createObjectURL).toHaveBeenCalledTimes(1);
+      expect(revokeObjectURL).toHaveBeenCalledWith('blob:mock-url');
+    } finally {
+      URL.createObjectURL = originalCreateObjectURL;
+      URL.revokeObjectURL = originalRevokeObjectURL;
+    }
   });
 
   it('shows warnings and errors from the migration report', async () => {

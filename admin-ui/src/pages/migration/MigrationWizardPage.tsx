@@ -3,6 +3,17 @@ import { useParams, useNavigate } from 'react-router';
 import { runMigration, type MigrationReport, type MigrationSource } from '../../api/migration';
 import { getErrorMessage } from '../../utils/getErrorMessage';
 import { Icons } from '../../components/ui';
+import ConfirmDialog from '../../components/ConfirmDialog';
+
+function downloadReport(report: MigrationReport, realmName: string) {
+  const blob = new Blob([JSON.stringify(report, null, 2)], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `${realmName}-${report.source}-migration-report.json`;
+  a.click();
+  URL.revokeObjectURL(url);
+}
 
 const SOURCES: { id: MigrationSource; name: string; description: string }[] = [
   { id: 'keycloak', name: 'Keycloak', description: 'Import from a Keycloak realm export JSON file.' },
@@ -91,6 +102,7 @@ export default function MigrationWizardPage() {
   const [finalReport, setFinalReport] = useState<MigrationReport | null>(null);
   const [isRunning, setIsRunning] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [showRunConfirm, setShowRunConfirm] = useState(false);
 
   async function handleFileChange(e: ChangeEvent<HTMLInputElement>) {
     const file = e.target.files?.[0];
@@ -268,7 +280,7 @@ export default function MigrationWizardPage() {
               <button
                 type="button"
                 disabled={isRunning}
-                onClick={handleImport}
+                onClick={() => setShowRunConfirm(true)}
                 className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
               >
                 {isRunning ? 'Importing...' : 'Run Import'}
@@ -281,7 +293,7 @@ export default function MigrationWizardPage() {
           <div>
             <h2 className="mb-3 text-lg font-semibold text-fg">Import complete</h2>
             <MigrationReportSummary report={finalReport} />
-            <div className="mt-6 flex justify-between">
+            <div className="mt-6 flex items-center justify-between">
               <button
                 type="button"
                 onClick={startOver}
@@ -289,17 +301,39 @@ export default function MigrationWizardPage() {
               >
                 Import Another File
               </button>
-              <button
-                type="button"
-                onClick={() => navigate(`/console/realms/${name}/users`)}
-                className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
-              >
-                View Users
-              </button>
+              <div className="flex items-center gap-3">
+                <button
+                  type="button"
+                  onClick={() => downloadReport(finalReport, name!)}
+                  className="rounded-md border border-line-strong bg-surface px-4 py-2 text-sm font-medium text-muted hover:bg-hover"
+                >
+                  Download Report
+                </button>
+                <button
+                  type="button"
+                  onClick={() => navigate(`/console/realms/${name}/users`)}
+                  className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
+                >
+                  View Users
+                </button>
+              </div>
             </div>
           </div>
         )}
       </div>
+
+      <ConfirmDialog
+        isOpen={showRunConfirm}
+        title="Run this import for real?"
+        message="This will create the users, clients, roles, and identity providers shown in the preview above. This cannot be undone from here — you would need to remove them individually afterward."
+        confirmText={isRunning ? 'Importing...' : 'Yes, Run Import'}
+        confirmDisabled={isRunning}
+        onConfirm={() => {
+          setShowRunConfirm(false);
+          void handleImport();
+        }}
+        onCancel={() => setShowRunConfirm(false)}
+      />
     </div>
   );
 }
