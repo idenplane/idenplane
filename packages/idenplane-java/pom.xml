@@ -13,7 +13,7 @@
     <description>Java SDK for the Idenplane Identity and Access Management Server</description>
     <url>https://github.com/idenplane/idenplane</url>
 
-    <!-- Client SDK license, distinct from the AGPL-3.0-or-later server this SDK talks to —
+    <!-- Client SDK license, distinct from the AGPL-3.0-only server this SDK talks to —
          matches the convention already used for the Android/npm SDK packages, since forcing
          AGPL's copyleft onto every downstream consumer of a client library would make it
          unusable in most commercial contexts. Required by Maven Central for POM validation. -->
