@@ -49,12 +49,14 @@ jobs:
       - name: Verify the publish task graph resolves (no upload)
         run: ./gradlew publishAllPublicationsToMavenCentralRepository --dry-run --stacktrace
 
-      # Publishes to the Central Portal and automatically triggers the release
-      # of the resulting deployment. The com.idenplane namespace is already
-      # verified on central.sonatype.com (see #1325), so this only needs the
-      # secrets below to succeed.
+      # Uploads to the Central Portal as a "validated" pending deployment — it deliberately
+      # does NOT use publishAndReleaseToMavenCentral, which would auto-release it and make it
+      # public immediately with no further gate. Actually releasing the deployment is a
+      # separate, explicit action in the Central Portal UI. The com.idenplane namespace is
+      # already verified on central.sonatype.com (see #1325), so this only needs the secrets
+      # below to succeed.
       - name: Publish to Maven Central
-        run: ./gradlew publishAndReleaseToMavenCentral --no-configuration-cache --stacktrace
+        run: ./gradlew publishToMavenCentral --no-configuration-cache --stacktrace
         env:
           ORG_GRADLE_PROJECT_mavenCentralUsername: ${{ secrets.MAVEN_CENTRAL_USERNAME }}
           ORG_GRADLE_PROJECT_mavenCentralPassword: ${{ secrets.MAVEN_CENTRAL_PASSWORD }}
