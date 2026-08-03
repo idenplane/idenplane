@@ -43,16 +43,25 @@ import java.util.Base64
  * authMe.handleRedirectIntent(intent)
  * ```
  */
-class IdenplaneClient(
+class IdenplaneClient internal constructor(
     private val context: Context,
     private val config: AuthConfig,
+    private val storage: TokenStorage,
 ) {
+
+    /**
+     * Public constructor — builds the real AndroidKeyStore-backed [TokenStorage]. The
+     * three-arg primary constructor above is `internal` so tests can inject a plain
+     * (non-encrypted) [TokenStorage] instead, since AndroidKeyStore has no Robolectric shadow
+     * and cannot run outside a real device/emulator.
+     */
+    constructor(context: Context, config: AuthConfig) :
+        this(context, config, TokenStorage(context, config.realm, config.clientId))
 
     // -----------------------------------------------------------------------
     // Internal state
     // -----------------------------------------------------------------------
 
-    private val storage     = TokenStorage(context, config.realm, config.clientId)
     private val json        = Json { ignoreUnknownKeys = true }
     private val scope       = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     @Volatile private var oidcConfig  : OIDCConfiguration? = null
