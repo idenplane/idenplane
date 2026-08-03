@@ -226,16 +226,23 @@ class IdenplaneClient internal constructor(
     // -----------------------------------------------------------------------
 
     /**
-     * Clear local tokens and attempt server-side session termination.
+     * Clear local tokens and revoke the server-side session.
      *
-     * Optionally launches a Custom Tab to the end-session endpoint if the
-     * server requires user interaction for logout.
+     * Always sends a silent back-channel request to revoke the refresh token. That alone
+     * cannot clear a browser-side session cookie set during [login] — a back-channel call from
+     * the app's own HTTP client isn't the browser — so pass [activity] to additionally open the
+     * end-session endpoint in a Custom Tab, which does clear it. That request is not given a
+     * redirect back to the app: deliberately, since one would land in [handleRedirectIntent] and
+     * be misread as a failed login callback (no `code`, no `error`). The tab is left showing a
+     * blank response for the user to dismiss. This requires a stored ID token (`id_token_hint`);
+     * if none is available, [activity] is ignored and this falls back to back-channel-only logout.
      *
-     * @param activity Pass a [FragmentActivity] to open the end-session URL
-     *                 in a Custom Tab, or `null` for a silent back-channel logout.
+     * @param activity Pass a [FragmentActivity] to also clear the browser-side session via a
+     *                 Custom Tab, or `null` for a silent, no-UI logout.
      */
     suspend fun logout(activity: FragmentActivity? = null) {
         val refreshToken = storage.refreshToken
+        val idToken      = storage.idToken
         val oidc         = runCatching { fetchDiscovery() }.getOrNull()
 
         if (refreshToken != null && oidc?.endSessionEndpoint != null) {
@@ -245,6 +252,13 @@ class IdenplaneClient internal constructor(
                     body = "refresh_token=${Uri.encode(refreshToken)}&client_id=${Uri.encode(config.clientId)}",
                     contentType = "application/x-www-form-urlencoded",
                 )
+            }
+        }
+
+        if (activity != null && idToken != null && oidc?.endSessionEndpoint != null) {
+            runCatching {
+                CustomTabsIntent.Builder().build()
+                    .launchUrl(activity, buildEndSessionUri(oidc.endSessionEndpoint, idToken))
             }
         }
 
@@ -556,4 +570,16 @@ class IdenplaneClient internal constructor(
         joinToString("&") { (k, v) ->
             "${Uri.encode(k)}=${Uri.encode(v)}"
         }
+
+    companion object {
+        /**
+         * Extracted so the logout Custom Tab's URI is unit-testable without needing a real
+         * Activity/CustomTabsIntent. Deliberately omits `post_logout_redirect_uri` — see
+         * [logout]'s doc comment for why.
+         */
+        internal fun buildEndSessionUri(endSessionEndpoint: String, idToken: String): Uri =
+            Uri.parse(endSessionEndpoint).buildUpon()
+                .appendQueryParameter("id_token_hint", idToken)
+                .build()
+    }
 }

@@ -113,7 +113,14 @@ private fun QuickstartApp(authMe: IdenplaneClient, pendingRedirect: MutableState
                         }
                     }) { Text("Verify with biometrics") }
                     Spacer(modifier = Modifier.height(8.dp))
-                    Button(onClick = { scope.launch { authMe.logout() } }) { Text("Sign out") }
+                    Button(onClick = {
+                        scope.launch {
+                            // Passing the activity also clears the browser-side session via a
+                            // Custom Tab (blank response, dismissed manually) — a no-argument
+                            // logout() only revokes the refresh token, silently.
+                            authMe.logout(activity)
+                        }
+                    }) { Text("Sign out") }
                 } else {
                     Button(onClick = {
                         scope.launch {
