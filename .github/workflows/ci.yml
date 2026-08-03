@@ -465,6 +465,50 @@ jobs:
       - name: Assemble (debug + release AAR)
         run: ./gradlew assembleDebug assembleRelease --stacktrace
 
+  examples-build:
+    # Nothing ever built these — examples/nextjs-quickstart was silently
+    # broken from the moment idenplane-sdk/idenplane-nextjs were published
+    # without dist/ (#1343): its own package-lock.json kept resolving the
+    # broken 1.0.1 even after 1.0.2 fixed the registry, and `npm run build`
+    # failed outright with "Module not found". Found while investigating
+    # unrelated Dependabot security alerts for this same example.
+    name: Examples — ${{ matrix.example }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example:
+          - nextjs-quickstart
+          - vanilla-js-quickstart
+    defaults:
+      run:
+        working-directory: examples/${{ matrix.example }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: examples/${{ matrix.example }}/package-lock.json
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Audit for known-vulnerable dependencies
+        run: npm audit --audit-level=moderate
+
+      # nextjs-quickstart has a real Next.js build; vanilla-js-quickstart has
+      # no build step at all (that's the point of it), so just confirm the
+      # SDK it depends on actually resolves to something with a dist/ in it.
+      - name: Build (nextjs-quickstart only)
+        if: matrix.example == 'nextjs-quickstart'
+        run: npm run build
+
+      - name: Verify the SDK resolved with a real dist/ (vanilla-js-quickstart only)
+        if: matrix.example == 'vanilla-js-quickstart'
+        run: test -f node_modules/idenplane-sdk/dist/index.js
+
   docs-build:
     # The docs site had been failing to build and nothing noticed, because no
     # job ever built it. Its dependency tree is separate from the root one, so
