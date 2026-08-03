@@ -1,8 +1,20 @@
+import com.vanniktech.maven.publish.AndroidSingleVariantLibrary
+
 plugins {
     id("com.android.library") version "8.2.2"
     id("org.jetbrains.kotlin.android") version "1.9.22"
     kotlin("plugin.serialization") version "1.9.22"
-    id("maven-publish")
+    // Handles Central Portal upload + GPG signing in one step, replacing the
+    // raw maven-publish setup this used to have (which was actually pointed
+    // at JitPack's groupId convention, com.github.<user>, not real Maven
+    // Central — see the coordinates() call below for the real ones).
+    // Pinned to 0.34.0: 0.35.0+ raises the plugin's minimum required AGP to
+    // 8.2.2 with Gradle 8.13, and 0.36.0+ raises AGP further to 8.13 — both
+    // higher than this module's AGP 8.2.2 / Gradle 8.5. 0.34.0 is the newest
+    // release whose stated minimums (AGP 8.0.0, Gradle 8.5) this module
+    // actually satisfies; a newer plugin version fails at configuration time
+    // with an IllegalAccessError, not a clean version-mismatch message.
+    id("com.vanniktech.maven.publish") version "0.34.0"
 }
 
 android {
@@ -39,12 +51,10 @@ android {
         )
     }
 
-    publishing {
-        singleVariant("release") {
-            withSourcesJar()
-            withJavadocJar()
-        }
-    }
+    // No android.publishing.singleVariant block here: com.vanniktech.maven.publish
+    // registers the "release" component itself (see AndroidSingleVariantLibrary in
+    // mavenPublishing below). Declaring singleVariant("release") in both places trips
+    // AGP's "publishing DSL multiple times ... not allowed" error.
 }
 
 dependencies {
@@ -81,28 +91,57 @@ dependencies {
     androidTestImplementation("androidx.test.espresso:espresso-core:3.5.1")
 }
 
-afterEvaluate {
-    publishing {
-        publications {
-            create<MavenPublication>("release") {
-                from(components["release"])
+// Real Maven Central publishing via the Central Portal (the old OSSRH
+// Nexus host is retired). Credentials and the GPG signing key are never
+// hardcoded here — the plugin reads them from Gradle properties, which
+// publish-android.yml supplies as ORG_GRADLE_PROJECT_* environment
+// variables sourced from repo secrets. Running `./gradlew publish` locally
+// with no such properties set fails safely at the credentials step; it
+// does not silently publish or fall back to anything.
+//
+// The com.idenplane namespace is already verified on central.sonatype.com
+// (RSA 4096 signing key 00A90144FEAC6870, on keyserver.ubuntu.com — see
+// #1325). No further Sonatype-side setup is needed; the only remaining gate
+// on an actual publish is triggering publish-android.yml (tag push or
+// workflow_dispatch), which nothing in this change does.
+mavenPublishing {
+    coordinates("com.idenplane", "idenplane-android", "1.0.0")
 
-                groupId    = "com.github.Islamawad132"
-                artifactId = "idenplane-android"
-                version    = "1.0.0"
+    // Explicit rather than relying on the plugin's auto-detected default for
+    // com.android.library — this is the "release" component, with sources
+    // and javadoc jars, matching what the old manual singleVariant() block
+    // above used to declare directly.
+    configure(
+        AndroidSingleVariantLibrary(
+            variant = "release",
+            sourcesJar = true,
+            publishJavadocJar = true,
+        )
+    )
 
-                pom {
-                    name.set("Idenplane Android SDK")
-                    description.set("Android SDK for the Idenplane Identity and Access Management Server")
-                    url.set("https://github.com/idenplane/idenplane")
-                    licenses {
-                        license {
-                            name.set("MIT License")
-                            url.set("https://opensource.org/licenses/MIT")
-                        }
-                    }
-                }
+    pom {
+        name.set("Idenplane Android SDK")
+        description.set("Android SDK for the Idenplane Identity and Access Management Server")
+        url.set("https://github.com/idenplane/idenplane")
+        licenses {
+            license {
+                name.set("MIT License")
+                url.set("https://opensource.org/licenses/MIT")
             }
         }
+        developers {
+            developer {
+                name.set("Idenplane")
+                url.set("https://github.com/idenplane")
+            }
+        }
+        scm {
+            url.set("https://github.com/idenplane/idenplane")
+            connection.set("scm:git:https://github.com/idenplane/idenplane.git")
+            developerConnection.set("scm:git:ssh://git@github.com/idenplane/idenplane.git")
+        }
     }
+
+    publishToMavenCentral()
+    signAllPublications()
 }
