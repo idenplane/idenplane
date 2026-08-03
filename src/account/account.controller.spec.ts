@@ -27,6 +27,7 @@ describe('AccountController', () => {
   };
   let themeRender: { render: jest.Mock };
   let webAuthnService: { getUserCredentials: jest.Mock };
+  let emailService: { sendEmail: jest.Mock };
 
   const realm = {
     id: 'realm-1',
@@ -75,6 +76,7 @@ describe('AccountController', () => {
     };
     themeRender = { render: jest.fn() };
     webAuthnService = { getUserCredentials: jest.fn().mockResolvedValue([]) };
+    emailService = { sendEmail: jest.fn().mockResolvedValue(undefined) };
     const csrfService = {
       validate: jest.fn().mockReturnValue(true),
       generateToken: jest.fn().mockReturnValue('csrf-token-test'),
@@ -92,12 +94,15 @@ describe('AccountController', () => {
       undefined as any, // dataExportService — not exercised in these tests
       undefined as any, // accountDeletionService — not exercised in these tests
       csrfService as any,
+      emailService as any,
     );
 
     mockRes = { redirect: jest.fn(), cookie: jest.fn(), clearCookie: jest.fn() };
     mockReqWithSession = {
       cookies: { IDENPLANE_SESSION: 'valid-token' },
       query: {},
+      headers: { 'user-agent': 'jest-test-agent' },
+      socket: { remoteAddress: '127.0.0.1' },
     };
     mockReqNoSession = { cookies: {} };
 
@@ -356,6 +361,86 @@ describe('AccountController', () => {
       expect(mockRes.redirect).toHaveBeenCalledWith(
         expect.stringContaining('success='),
       );
+    });
+
+    it('should send a password-changed security email to the account holder', async () => {
+      passwordPolicyService.validate.mockReturnValue({ valid: true, errors: [] });
+      crypto.verifyPassword.mockResolvedValue(true);
+      passwordPolicyService.checkHistory.mockResolvedValue(false);
+      crypto.hashPassword.mockResolvedValue('new-hash');
+      prisma.user.update.mockResolvedValue({});
+
+      await controller.changePassword(
+        realm,
+        {
+          currentPassword: 'old',
+          newPassword: 'newpass',
+          confirmPassword: 'newpass',
+        },
+        mockReqWithSession,
+        mockRes as any,
+      );
+
+      // The email is fire-and-forget (`void ...`), so let its promise settle.
+      await new Promise(process.nextTick);
+
+      expect(emailService.sendEmail).toHaveBeenCalledWith(
+        'test-realm',
+        'test@example.com',
+        'Your Password Was Changed',
+        expect.stringContaining('Your Password Was Changed'),
+      );
+    });
+
+    it('should not fail the password change if the notification email fails to send', async () => {
+      passwordPolicyService.validate.mockReturnValue({ valid: true, errors: [] });
+      crypto.verifyPassword.mockResolvedValue(true);
+      passwordPolicyService.checkHistory.mockResolvedValue(false);
+      crypto.hashPassword.mockResolvedValue('new-hash');
+      prisma.user.update.mockResolvedValue({});
+      emailService.sendEmail.mockRejectedValue(new Error('SMTP down'));
+
+      await controller.changePassword(
+        realm,
+        {
+          currentPassword: 'old',
+          newPassword: 'newpass',
+          confirmPassword: 'newpass',
+        },
+        mockReqWithSession,
+        mockRes as any,
+      );
+      await new Promise(process.nextTick);
+
+      expect(mockRes.redirect).toHaveBeenCalledWith(
+        expect.stringContaining('success='),
+      );
+    });
+
+    it('should not attempt to send an email when the account has no email address', async () => {
+      loginService.validateLoginSession.mockResolvedValue({
+        ...sessionUser,
+        email: null,
+      });
+      passwordPolicyService.validate.mockReturnValue({ valid: true, errors: [] });
+      crypto.verifyPassword.mockResolvedValue(true);
+      passwordPolicyService.checkHistory.mockResolvedValue(false);
+      crypto.hashPassword.mockResolvedValue('new-hash');
+      prisma.user.update.mockResolvedValue({});
+
+      await controller.changePassword(
+        realm,
+        {
+          currentPassword: 'old',
+          newPassword: 'newpass',
+          confirmPassword: 'newpass',
+        },
+        mockReqWithSession,
+        mockRes as any,
+      );
+      await new Promise(process.nextTick);
+
+      expect(emailService.sendEmail).not.toHaveBeenCalled();
     });
   });
 
