@@ -164,5 +164,29 @@ describe('ClientCreatePage', () => {
 
       expect(screen.queryByText(/setup on the/i)).not.toBeInTheDocument();
     });
+
+    it('includes templates from the newer Media and Communication categories', async () => {
+      const user = userEvent.setup();
+      renderPage();
+
+      await user.selectOptions(screen.getByLabelText(/start from a template/i), 'immich');
+      expect(screen.getByRole('textbox', { name: /^name$/i })).toHaveValue('Immich');
+      expect(screen.getByLabelText(/^client type$/i)).toHaveValue('PUBLIC');
+
+      await user.selectOptions(screen.getByLabelText(/start from a template/i), 'rocketchat');
+      expect(screen.getByRole('textbox', { name: /^name$/i })).toHaveValue('Rocket.Chat');
+      expect(screen.getByLabelText(/^redirect uris/i)).toHaveValue('{baseUrl}/_oauth/idenplane');
+    });
+
+    it('warns in the setup steps when a template needs a plugin or a specific edition', async () => {
+      const user = userEvent.setup();
+      renderPage();
+
+      await user.selectOptions(screen.getByLabelText(/start from a template/i), 'jellyfin');
+      expect(screen.getByText(/no built-in oidc support/i)).toBeInTheDocument();
+
+      await user.selectOptions(screen.getByLabelText(/start from a template/i), 'n8n');
+      expect(screen.getByText(/enterprise-tier n8n feature/i)).toBeInTheDocument();
+    });
   });
 });
