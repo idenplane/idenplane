@@ -229,15 +229,21 @@ func (us *UserService) List(ctx context.Context, params ListUsersParams) ([]*Use
 		return nil, 0, ErrServerError(fmt.Sprintf("list users: status %d", resp.StatusCode))
 	}
 
-	var reps []UserRepresentation
-	if err := json.NewDecoder(resp.Body).Decode(&reps); err != nil {
+	// The server wraps the page in {users, total} rather than returning a
+	// bare array — total reflects the full matching count across all pages,
+	// not just len(users) for the page just fetched.
+	var listResp struct {
+		Users []UserRepresentation `json:"users"`
+		Total int                  `json:"total"`
+	}
+	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
 		return nil, 0, ErrServerError("invalid list payload: " + err.Error())
 	}
-	users := make([]*User, len(reps))
-	for i := range reps {
-		users[i] = reps[i].toUser()
+	users := make([]*User, len(listResp.Users))
+	for i := range listResp.Users {
+		users[i] = listResp.Users[i].toUser()
 	}
-	return users, len(users), nil
+	return users, listResp.Total, nil
 }
 
 // Update applies a partial update to the user with the given ID.

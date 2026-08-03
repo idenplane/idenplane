@@ -280,12 +280,21 @@ func TestUserServiceList(t *testing.T) {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			users := []map[string]any{
-				{"id": "user-1", "username": "user1", "enabled": true},
-				{"id": "user-2", "username": "user2", "enabled": true},
-				{"id": "user-3", "username": "user3", "enabled": false},
-			}
-			json.NewEncoder(w).Encode(users)
+			// The server wraps the page in {users, total} — total is the full
+			// matching count across all pages, deliberately different from
+			// len(users) here to pin that List() must report it, not
+			// len(users) for the page it just fetched (see #1306/#1355: the
+			// SDK originally decoded a bare array and returned len(users) as
+			// the total, which also meant it failed outright against the
+			// real wrapped shape).
+			json.NewEncoder(w).Encode(map[string]any{
+				"total": 37,
+				"users": []map[string]any{
+					{"id": "user-1", "username": "user1", "enabled": true},
+					{"id": "user-2", "username": "user2", "enabled": true},
+					{"id": "user-3", "username": "user3", "enabled": false},
+				},
+			})
 		},
 	})
 	defer server.Close()
@@ -312,8 +321,8 @@ func TestUserServiceList(t *testing.T) {
 		t.Errorf("Expected 3 users, got %d", len(users))
 	}
 
-	if count != 3 {
-		t.Errorf("Expected count 3, got %d", count)
+	if count != 37 {
+		t.Errorf("Expected count 37 (the server's total, not len(users)), got %d", count)
 	}
 }
 
@@ -331,7 +340,7 @@ func TestUserServiceListDefaultPagination(t *testing.T) {
 				t.Errorf("Expected default limit='20', got '%s'", limit)
 			}
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode([]map[string]any{})
+			json.NewEncoder(w).Encode(map[string]any{"users": []map[string]any{}, "total": 0})
 		},
 	})
 	defer server.Close()
@@ -355,16 +364,19 @@ func TestUserServiceListISOTimestamps(t *testing.T) {
 	server := mockUsersServer(map[string]func(w http.ResponseWriter, r *http.Request){
 		"GET /admin/realms/test-realm/users": func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode([]map[string]any{
-				{
-					"id":            "u-1",
-					"username":      "alice",
-					"email":         "a@example.com",
-					"firstName":     "Alice",
-					"enabled":       true,
-					"emailVerified": true,
-					"createdAt":     "2026-05-22T08:30:00.000Z",
-					"updatedAt":     "2026-05-22T09:00:00.000Z",
+			json.NewEncoder(w).Encode(map[string]any{
+				"total": 1,
+				"users": []map[string]any{
+					{
+						"id":            "u-1",
+						"username":      "alice",
+						"email":         "a@example.com",
+						"firstName":     "Alice",
+						"enabled":       true,
+						"emailVerified": true,
+						"createdAt":     "2026-05-22T08:30:00.000Z",
+						"updatedAt":     "2026-05-22T09:00:00.000Z",
+					},
 				},
 			})
 		},
@@ -416,8 +428,11 @@ func TestUserServiceListWithFilters(t *testing.T) {
 			}
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode([]map[string]any{
-				{"id": "user-1", "username": "johndoe", "enabled": true},
+			json.NewEncoder(w).Encode(map[string]any{
+				"total": 1,
+				"users": []map[string]any{
+					{"id": "user-1", "username": "johndoe", "enabled": true},
+				},
 			})
 		},
 	})
@@ -456,7 +471,7 @@ func TestUserServiceListEmpty(t *testing.T) {
 	server := mockUsersServer(map[string]func(w http.ResponseWriter, r *http.Request){
 		"GET /admin/realms/test-realm/users": func(w http.ResponseWriter, r *http.Request) {
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode([]map[string]any{})
+			json.NewEncoder(w).Encode(map[string]any{"users": []map[string]any{}, "total": 0})
 		},
 	})
 	defer server.Close()
@@ -761,8 +776,11 @@ func TestUserServiceConcurrency(t *testing.T) {
 			mu.Unlock()
 
 			w.Header().Set("Content-Type", "application/json")
-			json.NewEncoder(w).Encode([]map[string]any{
-				{"id": "user-1", "username": "user1", "enabled": true},
+			json.NewEncoder(w).Encode(map[string]any{
+				"total": 1,
+				"users": []map[string]any{
+					{"id": "user-1", "username": "user1", "enabled": true},
+				},
 			})
 		},
 	})
