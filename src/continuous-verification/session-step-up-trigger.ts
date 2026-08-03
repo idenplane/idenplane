@@ -6,6 +6,7 @@ import {
   ACR_MFA,
   ACR_WEBAUTHN,
 } from '../step-up/step-up.service.js';
+import { SessionEventsGateway } from '../realtime/session-events.gateway.js';
 
 /**
  * SessionStepUpTrigger
@@ -25,6 +26,7 @@ export class SessionStepUpTrigger {
   constructor(
     private readonly prisma: PrismaService,
     private readonly stepUpService: StepUpService,
+    private readonly sessionEvents: SessionEventsGateway,
   ) {}
 
   /**
@@ -236,13 +238,18 @@ export class SessionStepUpTrigger {
       },
     });
 
-    // Emit a step-up event for real-time notification (could use EventEmitter2)
+    // Emit a step-up event for real-time notification
     this.logger.log(
       `Step-up authentication required for session ${profile.sessionId} ` +
         `(user: ${session.user?.username ?? 'unknown'}, risk: ${profile.riskScore}, level: ${profile.riskLevel})`,
     );
 
-    // TODO: Emit event for WebSocket/push notification to client application
-    // this.eventEmitter.emit('session.stepup.required', { sessionId, requiredAcr, reason });
+    this.sessionEvents.emitStepUpRequired(session.userId, {
+      sessionId: profile.sessionId,
+      requiredAcr,
+      reason:
+        overrideReason ?? profile.stepUpReason ?? 'Risk threshold exceeded',
+      timestamp: now.toISOString(),
+    });
   }
 }

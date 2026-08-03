@@ -168,4 +168,58 @@ describe('SessionEventsGateway', () => {
       expect(socket.send).not.toHaveBeenCalled();
     });
   });
+
+  describe('emitStepUpRequired', () => {
+    it('does nothing when the user has no open connections', () => {
+      expect(() =>
+        service.emitStepUpRequired('user-1', {
+          sessionId: 'sess-1',
+          requiredAcr: 'urn:idenplane:acr:mfa',
+          reason: 'Risk threshold exceeded',
+          timestamp: new Date().toISOString(),
+        }),
+      ).not.toThrow();
+    });
+
+    it('sends a session.stepup_required event to every OPEN socket for the user', () => {
+      const openSocket = makeFakeSocket(WebSocket.OPEN);
+      const closedSocket = makeFakeSocket(WebSocket.CLOSED);
+      (service as any).connections.set(
+        'user-1',
+        new Set([openSocket, closedSocket]),
+      );
+
+      service.emitStepUpRequired('user-1', {
+        sessionId: 'sess-1',
+        requiredAcr: 'urn:idenplane:acr:mfa',
+        reason: 'Risk threshold exceeded',
+        timestamp: '2026-08-02T00:00:00.000Z',
+      });
+
+      expect(openSocket.send).toHaveBeenCalledWith(
+        JSON.stringify({
+          type: 'session.stepup_required',
+          sessionId: 'sess-1',
+          requiredAcr: 'urn:idenplane:acr:mfa',
+          reason: 'Risk threshold exceeded',
+          timestamp: '2026-08-02T00:00:00.000Z',
+        }),
+      );
+      expect(closedSocket.send).not.toHaveBeenCalled();
+    });
+
+    it('does not deliver to a different user', () => {
+      const socket = makeFakeSocket(WebSocket.OPEN);
+      (service as any).connections.set('user-1', new Set([socket]));
+
+      service.emitStepUpRequired('user-2', {
+        sessionId: 'sess-1',
+        requiredAcr: 'urn:idenplane:acr:mfa',
+        reason: 'Risk threshold exceeded',
+        timestamp: new Date().toISOString(),
+      });
+
+      expect(socket.send).not.toHaveBeenCalled();
+    });
+  });
 });
