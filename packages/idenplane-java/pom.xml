@@ -42,6 +42,9 @@
         <module>idenplane-java-reactive</module>
         <module>idenplane-java-spring</module>
         <module>idenplane-java-jakarta</module>
+        <!-- A runnable demo, not a library — never published (publish-java.yml only ever
+             targets idenplane-java-core). -->
+        <module>idenplane-java-spring-sample</module>
     </modules>
 
     <properties>
@@ -82,11 +85,35 @@
                 <version>${project.version}</version>
             </dependency>
 
-            <!-- HTTP Client -->
+            <!-- HTTP Client. Bumped from 5.3 — Spring Boot 3.5.x's HttpClientAutoConfiguration
+                 unconditionally tries to build an Apache HttpClient5-based
+                 ClientHttpRequestFactoryBuilder bean whenever httpclient5 is on the classpath
+                 (regardless of whether the app actually uses RestTemplate/RestClient), and 5.3
+                 predates TlsSocketStrategy, breaking application context startup for any Spring
+                 Boot app depending on this SDK — found via idenplane-java-spring-sample's own
+                 context failing to start, not a hypothetical. -->
             <dependency>
                 <groupId>org.apache.httpcomponents.client5</groupId>
                 <artifactId>httpclient5</artifactId>
-                <version>5.3</version>
+                <version>5.6.3</version>
+            </dependency>
+
+            <!-- httpclient5's own pom.xml doesn't hardcode a httpcore5 version — it delegates
+                 to httpclient5-parent's ${httpcore.version} property (5.4.3 for httpclient5
+                 5.6.3). Without pinning this explicitly, it resolves to whatever version wins
+                 dependency mediation elsewhere (here, an older 5.3.4 via Spring Boot's own BOM),
+                 which is missing APIs httpclient5 5.6.3 actually calls at runtime
+                 (NoSuchMethodError on MessageSupport.parseHeaders). -->
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5</artifactId>
+                <version>5.4.3</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5-h2</artifactId>
+                <version>5.4.3</version>
             </dependency>
 
             <!-- JSON Processing -->
