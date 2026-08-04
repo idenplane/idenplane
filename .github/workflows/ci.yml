@@ -139,6 +139,210 @@ jobs:
           path: admin-ui/coverage/
           retention-days: 14
 
+  sdk-integration-tests:
+    # idenplane-mcp already had a real integration suite
+    # (packages/idenplane-mcp/tests/integration.mjs) that probes for a live
+    # Idenplane instance and silently skips itself when one isn't reachable —
+    # which meant it had never actually run in CI. idenplane-js and
+    # idenplane-go had no server-facing integration coverage at all: their
+    # unit suites mock every HTTP call, so nothing ever checked that a
+    # request either SDK builds actually matches what this server expects.
+    # This job boots a real backend and runs all three against it.
+    name: SDK Integration Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: idenplane_test
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: idenplane_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://idenplane_test:test_password@localhost:5432/idenplane_test
+      ADMIN_API_KEY: dev-admin-key
+      NODE_ENV: test
+      PORT: '3000'
+      IDENPLANE_URL: http://localhost:3000
+      IDENPLANE_ADMIN_TOKEN: dev-admin-key
+      IDENPLANE_ADMIN_USER: admin
+      IDENPLANE_ADMIN_PASSWORD: e2e-test-admin-password
+      ADMIN_USER: admin
+      ADMIN_PASSWORD: e2e-test-admin-password
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      - name: Build backend
+        run: npm run build
+
+      - name: Start backend
+        run: |
+          node dist/main.js > backend.log 2>&1 &
+          echo "Waiting for backend on :3000/health..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/health > /dev/null; then
+              echo "Backend is up."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Backend did not become healthy in time."
+          cat backend.log
+          exit 1
+
+      # mcp consumes @idenplane/http-internal through
+      # `file:../idenplane-http-internal`, and its dist/ is gitignored — so on
+      # a fresh checkout it has no compiled output to resolve. Build it first
+      # (mirrors the same step in the sdk-packages job).
+      - name: Build the local idenplane-http-internal dependency
+        working-directory: packages/idenplane-http-internal
+        run: |
+          npm ci
+          npm run build
+
+      - name: idenplane-mcp integration suite
+        working-directory: packages/idenplane-mcp
+        run: |
+          npm ci
+          npm run build
+          npm run test:all
+
+      - name: idenplane-js integration suite
+        working-directory: packages/idenplane-js
+        run: |
+          npm ci
+          npm run test:integration
+
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: packages/idenplane-go/go.mod
+          cache: false
+
+      - name: idenplane-go integration suite
+        working-directory: packages/idenplane-go
+        run: go test -tags=integration -v ./...
+
+  admin-ui-e2e:
+    # The existing "E2E Tests" job drives the NestJS app in-process via
+    # supertest — it never listens on a real port, so it can't catch bugs in
+    # the admin console's own UI (routing, forms, the vite dev proxy). This
+    # job boots a real backend and a real browser against it.
+    name: Admin UI E2E Tests
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:16-alpine
+        env:
+          POSTGRES_USER: idenplane_test
+          POSTGRES_PASSWORD: test_password
+          POSTGRES_DB: idenplane_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd pg_isready
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      DATABASE_URL: postgresql://idenplane_test:test_password@localhost:5432/idenplane_test
+      ADMIN_API_KEY: test-admin-key
+      NODE_ENV: test
+      PORT: '3000'
+      DEMO_MODE: 'true'
+      ADMIN_USER: admin
+      ADMIN_PASSWORD: e2e-test-admin-password
+
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+
+      - run: npm ci
+
+      - run: npx prisma generate
+      - run: npx prisma migrate deploy
+      - name: Build backend
+        run: npm run build
+
+      # AdminSeedService creates the master realm + ADMIN_USER/ADMIN_PASSWORD
+      # on first boot (src/admin-auth/admin-seed.service.ts), and DEMO_MODE
+      # makes the login page prefill those same credentials — no manual seed
+      # step needed.
+      - name: Start backend
+        run: |
+          node dist/main.js > backend.log 2>&1 &
+          echo "Waiting for backend on :3000/health..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:3000/health > /dev/null; then
+              echo "Backend is up."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "Backend did not become healthy in time."
+          cat backend.log
+          exit 1
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: admin-ui/package-lock.json
+
+      - name: Install admin-ui dependencies
+        working-directory: admin-ui
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: admin-ui
+        run: npx playwright install --with-deps chromium
+
+      - name: Start admin-ui dev server
+        working-directory: admin-ui
+        run: |
+          npm run dev > vite.log 2>&1 &
+          echo "Waiting for admin-ui on :5173..."
+          for i in $(seq 1 30); do
+            if curl -sf http://localhost:5173/console/login > /dev/null; then
+              echo "admin-ui is up."
+              exit 0
+            fi
+            sleep 2
+          done
+          echo "admin-ui did not become healthy in time."
+          cat vite.log
+          exit 1
+
+      - name: Run Playwright tests
+        working-directory: admin-ui
+        run: npm run test:e2e
+
+      - name: Upload Playwright report
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: playwright-report
+          path: admin-ui/playwright-report/
+          retention-days: 14
+
   sdk-packages:
     # Nothing built or tested these until now, so breakage sat unnoticed:
     # idenplane-angular had not compiled since Angular went ESM-only, and a
@@ -235,6 +439,120 @@ jobs:
 
       - name: Test
         run: go test ./...
+
+  android-sdk:
+    # packages/idenplane-android had real Kotlin source but no
+    # settings.gradle.kts or Gradle wrapper, so it had never been compiled by
+    # anything — not CI, not a local machine. (#1347/#1325)
+    name: Android SDK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/idenplane-android
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest --stacktrace
+
+      - name: Assemble (debug + release AAR)
+        run: ./gradlew assembleDebug assembleRelease --stacktrace
+
+  android-quickstart:
+    # examples/android-quickstart depends on packages/idenplane-android via a composite build
+    # (includeBuild + dependency substitution) since the SDK isn't published to Maven Central
+    # yet — this job is what actually proves the example still compiles against the real SDK
+    # source as it evolves, not just that it compiled once locally.
+    name: Examples — android-quickstart
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: examples/android-quickstart
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - uses: android-actions/setup-android@v3
+
+      - name: Assemble (debug + release APK)
+        run: ./gradlew :app:assembleDebug :app:assembleRelease --stacktrace
+
+  java-sdk:
+    # packages/idenplane-java had real Java source (data models) but no CI job ever ran `mvn`
+    # against it, so the multi-module reactor build had never actually been exercised — it
+    # couldn't even resolve its POMs (idenplane-java-reactive referenced reactor-test with no
+    # version). (#1326)
+    name: Java SDK
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: packages/idenplane-java
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+          cache: maven
+
+      - name: Verify (build, test, coverage gate)
+        run: mvn -B verify
+
+  examples-build:
+    # Nothing ever built these — examples/nextjs-quickstart was silently
+    # broken from the moment idenplane-sdk/idenplane-nextjs were published
+    # without dist/ (#1343): its own package-lock.json kept resolving the
+    # broken 1.0.1 even after 1.0.2 fixed the registry, and `npm run build`
+    # failed outright with "Module not found". Found while investigating
+    # unrelated Dependabot security alerts for this same example.
+    name: Examples — ${{ matrix.example }}
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        example:
+          - nextjs-quickstart
+          - vanilla-js-quickstart
+    defaults:
+      run:
+        working-directory: examples/${{ matrix.example }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: examples/${{ matrix.example }}/package-lock.json
+
+      - name: Install dependencies
+        run: npm install
+
+      - name: Audit for known-vulnerable dependencies
+        run: npm audit --audit-level=moderate
+
+      # nextjs-quickstart has a real Next.js build; vanilla-js-quickstart has
+      # no build step at all (that's the point of it), so just confirm the
+      # SDK it depends on actually resolves to something with a dist/ in it.
+      - name: Build (nextjs-quickstart only)
+        if: matrix.example == 'nextjs-quickstart'
+        run: npm run build
+
+      - name: Verify the SDK resolved with a real dist/ (vanilla-js-quickstart only)
+        if: matrix.example == 'vanilla-js-quickstart'
+        run: test -f node_modules/idenplane-sdk/dist/index.js
 
   docs-build:
     # The docs site had been failing to build and nothing noticed, because no

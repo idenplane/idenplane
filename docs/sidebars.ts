@@ -116,6 +116,11 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'doc',
+          id: 'guides/sdks/java-sdk',
+          label: 'Java',
+        },
+        {
+          type: 'doc',
           id: 'guides/sdks/python-sdk',
           label: 'Python',
         },
@@ -229,6 +234,22 @@ const sidebars: SidebarsConfig = {
       type: 'doc',
       id: 'troubleshooting',
       label: 'Troubleshooting & FAQ',
+    },
+    {
+      type: 'category',
+      label: 'Contributing',
+      items: [
+        {
+          type: 'doc',
+          id: 'contributing/architecture',
+          label: 'Architecture Overview',
+        },
+        {
+          type: 'doc',
+          id: 'contributing/adrs',
+          label: 'Architecture Decision Records',
+        },
+      ],
     },
   ],
 };

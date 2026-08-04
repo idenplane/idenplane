@@ -22,7 +22,18 @@ import kotlinx.coroutines.suspendCancellableCoroutine
  * val token = client.getAccessToken()
  * ```
  */
-class BiometricAuth(private val activity: FragmentActivity) {
+class BiometricAuth internal constructor(
+    private val activity: FragmentActivity,
+    private val biometricManager: BiometricManager,
+) {
+
+    /**
+     * Public constructor — builds the real [BiometricManager] for [activity]. The two-arg
+     * primary constructor above is `internal` purely so tests can inject a mocked
+     * [BiometricManager], since there's no Robolectric shadow for it to drive real
+     * hardware/enrollment states from a JVM unit test.
+     */
+    constructor(activity: FragmentActivity) : this(activity, BiometricManager.from(activity))
 
     // -----------------------------------------------------------------------
     // Availability
@@ -33,12 +44,9 @@ class BiometricAuth(private val activity: FragmentActivity) {
      * user has enrolled at least one biometric credential.
      */
     val isBiometricAvailable: Boolean
-        get() {
-            val manager = BiometricManager.from(activity)
-            return manager.canAuthenticate(
-                Authenticators.BIOMETRIC_STRONG or Authenticators.BIOMETRIC_WEAK
-            ) == BiometricManager.BIOMETRIC_SUCCESS
-        }
+        get() = biometricManager.canAuthenticate(
+            Authenticators.BIOMETRIC_STRONG or Authenticators.BIOMETRIC_WEAK
+        ) == BiometricManager.BIOMETRIC_SUCCESS
 
     /**
      * Returns a human-readable description of the biometric type available,
@@ -46,13 +54,22 @@ class BiometricAuth(private val activity: FragmentActivity) {
      */
     fun getBiometricType(context: Context): String? {
         val manager = BiometricManager.from(context)
-        return when (manager.canAuthenticate(Authenticators.BIOMETRIC_STRONG)) {
-            BiometricManager.BIOMETRIC_SUCCESS -> "Strong biometrics (fingerprint / face / iris)"
-            else -> when (manager.canAuthenticate(Authenticators.BIOMETRIC_WEAK)) {
-                BiometricManager.BIOMETRIC_SUCCESS -> "Weak biometrics"
-                else -> null
+        return describeBiometricType(
+            strongResult = manager.canAuthenticate(Authenticators.BIOMETRIC_STRONG),
+            weakResult = manager.canAuthenticate(Authenticators.BIOMETRIC_WEAK),
+        )
+    }
+
+    companion object {
+        /** Extracted so this mapping is unit-testable without needing a real BiometricManager. */
+        internal fun describeBiometricType(strongResult: Int, weakResult: Int): String? =
+            when (strongResult) {
+                BiometricManager.BIOMETRIC_SUCCESS -> "Strong biometrics (fingerprint / face / iris)"
+                else -> when (weakResult) {
+                    BiometricManager.BIOMETRIC_SUCCESS -> "Weak biometrics"
+                    else -> null
+                }
             }
-        }
     }
 
     // -----------------------------------------------------------------------

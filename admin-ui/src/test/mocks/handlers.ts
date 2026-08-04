@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw';
-import { makeRealm, makeUser, makeClient, makeLoginEvent, makeAdminEvent, makeStats, makeAuthFlow, makeUpgradeAuditEntry, makePreUpgradeValidationResult, makeUpgradeHealthResult, makeRollbackCapability, makeNhiIdentity, makeConsentCategory } from './data';
+import { makeRealm, makeUser, makeClient, makeLoginEvent, makeAdminEvent, makeStats, makeFailedLoginHeatmap, makeAuthFlow, makeUpgradeAuditEntry, makePreUpgradeValidationResult, makeUpgradeHealthResult, makeRollbackCapability, makeNhiIdentity, makeConsentCategory } from './data';
 
 const BASE = '/admin';
 
@@ -140,6 +140,32 @@ export const handlers = [
   // Stats
   http.get(`${BASE}/realms/:name/stats`, () => {
     return HttpResponse.json(makeStats());
+  }),
+
+  http.get(`${BASE}/realms/:name/stats/failed-login-heatmap`, () => {
+    return HttpResponse.json(makeFailedLoginHeatmap());
+  }),
+
+  http.get(`${BASE}/realms/:name/brute-force/locked-users`, () => {
+    return HttpResponse.json([]);
+  }),
+
+  // Migration
+  http.post(`${BASE}/migration/:source`, async ({ request, params }) => {
+    const body = (await request.json()) as { dryRun?: boolean };
+    return HttpResponse.json({
+      source: params.source,
+      dryRun: body.dryRun ?? false,
+      startedAt: '2026-01-01T00:00:00.000Z',
+      completedAt: '2026-01-01T00:00:01.000Z',
+      summary: {
+        users: { created: 2, skipped: 0, failed: 0 },
+        clients: { created: 1, skipped: 0, failed: 0 },
+        roles: { created: 0, skipped: 0, failed: 0 },
+      },
+      errors: [],
+      warnings: [],
+    });
   }),
 
   // Events (for dashboard)

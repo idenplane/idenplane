@@ -1,6 +1,6 @@
 {
   "name": "idenplane-nextjs",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "Next.js SDK for Idenplane Identity and Access Management Server",
   "type": "module",
   "main": "./dist/index.cjs",
@@ -66,7 +66,8 @@
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
-    "test:watch": "vitest"
+    "test:watch": "vitest",
+    "prepublishOnly": "npm run build"
   },
   "devDependencies": {
     "@types/node": "^22.10.7",

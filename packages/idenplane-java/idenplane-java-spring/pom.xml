@@ -5,9 +5,9 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.idenplane</groupId>
+        <groupId>com.idenplane</groupId>
         <artifactId>idenplane-java</artifactId>
-        <version>1.0.0-SNAPSHOT</version>
+        <version>1.0.0</version>
     </parent>
 
     <artifactId>idenplane-java-spring</artifactId>
@@ -19,7 +19,7 @@
     <dependencies>
         <!-- Idenplane Core Module -->
         <dependency>
-            <groupId>io.idenplane</groupId>
+            <groupId>com.idenplane</groupId>
             <artifactId>idenplane-java-core</artifactId>
         </dependency>
 
@@ -32,6 +32,18 @@
         <dependency>
             <groupId>org.springframework.security</groupId>
             <artifactId>spring-security-web</artifactId>
+        </dependency>
+
+        <!-- JWT decoding/validation support for the OAuth2 Resource Server integration
+             (NimbusJwtDecoder, JwtValidators, JwtAuthenticationConverter) -->
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-oauth2-jose</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-oauth2-resource-server</artifactId>
         </dependency>
 
         <!-- Spring Boot Auto-configuration -->
@@ -51,6 +63,18 @@
         <dependency>
             <groupId>org.junit.jupiter</groupId>
             <artifactId>junit-jupiter</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-test-autoconfigure</artifactId>
             <scope>test</scope>
         </dependency>
 

@@ -15,25 +15,16 @@ Implements the **OAuth 2.0 Authorization Code flow with PKCE** (RFC 7636) using 
 
 ## Installation
 
+> [!NOTE]
+> This SDK isn't published to Maven Central yet. The coordinates below are what it will resolve to once released — check the [GitHub releases page](https://github.com/idenplane/idenplane/releases) before using them in a real project.
+
 ### Gradle (Kotlin DSL)
 
-Add JitPack to your project-level `settings.gradle.kts`:
-
-```kotlin
-dependencyResolutionManagement {
-    repositories {
-        google()
-        mavenCentral()
-        maven { url = uri("https://jitpack.io") }
-    }
-}
-```
-
-Add the dependency to your app or library module `build.gradle.kts`:
+`mavenCentral()` is part of the default Gradle repositories — no extra repository setup is needed:
 
 ```kotlin
 dependencies {
-    implementation("com.github.Islamawad132:Idenplane:1.0.0")
+    implementation("com.idenplane:idenplane-android:1.0.0")
 }
 ```
 
@@ -251,7 +242,16 @@ if (biometric.isBiometricAvailable) {
 ```kotlin
 lifecycleScope.launch {
     authMe.logout()
-    // Tokens are cleared; server session is terminated
+    // Tokens are cleared locally and the refresh token is revoked server-side.
+    redirectToLogin()
+}
+```
+
+Passing the current `Activity` also clears the browser-side session (a silent back-channel call alone can't touch cookies set during [login](#login-flow)) — requires that a valid ID token was stored from a prior login, and opens a Custom Tab showing a blank response the user has to dismiss (deliberately not redirected back to the app, to avoid it being misread as a login callback):
+
+```kotlin
+lifecycleScope.launch {
+    authMe.logout(this@MainActivity)
     redirectToLogin()
 }
 ```
@@ -346,6 +346,32 @@ class AuthViewModel(private val authMe: IdenplaneClient) : ViewModel() {
 }
 ```
 
+## Jetpack Compose
+
+Compose support is optional — `Compose.kt`'s dependencies are `compileOnly`, so plain View-based apps don't pull in the Compose runtime. To use it, add Compose to your own app:
+
+```kotlin
+dependencies {
+    implementation(platform("androidx.compose:compose-bom:2024.02.00"))
+    implementation("androidx.compose.runtime:runtime")
+}
+```
+
+```kotlin
+import com.idenplane.sdk.rememberIdenplaneClient
+import com.idenplane.sdk.collectAuthStateAsState
+
+@Composable
+fun App(config: AuthConfig) {
+    val authMe = rememberIdenplaneClient(LocalContext.current, config)
+    val isAuthenticated by authMe.collectAuthStateAsState()
+
+    if (isAuthenticated) HomeScreen() else LoginScreen(authMe)
+}
+```
+
+`rememberIdenplaneClient` scopes the client to the composition and calls `destroy()` when it leaves. `collectAuthStateAsState` reacts to login/logout/refresh outcomes — see the `authState` doc comment on `IdenplaneClient` for exactly what it does and doesn't cover (it does not poll for token expiry on its own).
+
 ## License
 
-MIT — see the root [LICENSE](../../LICENSE) file.
+MIT — see the [LICENSE](./LICENSE) file.

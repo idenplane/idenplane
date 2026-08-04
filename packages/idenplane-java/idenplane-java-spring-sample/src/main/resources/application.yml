@@ -1,0 +1,9 @@
+# Point these at a real Idenplane realm before running this sample — without idenplane.issuer-uri
+# set, idenplane-java-spring's auto-configuration never activates and every request to /api/me
+# will fail (no JwtDecoder bean exists).
+idenplane:
+  issuer-uri: ${IDENPLANE_ISSUER_URI:https://idenplane.example.com/realms/my-realm}
+  client-id: ${IDENPLANE_CLIENT_ID:my-spring-app}
+
+server:
+  port: 8080

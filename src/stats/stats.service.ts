@@ -15,6 +15,18 @@ export interface RealmStats {
   activeSessionCount: number;
 }
 
+export interface FailedLoginHeatmap {
+  windowDays: number;
+  totalFailures: number;
+  /**
+   * 7x24 grid of failed-login counts: heatmap[dayOfWeek][hour].
+   * dayOfWeek 0 = Sunday. Bucketed in UTC, independent of server timezone.
+   */
+  heatmap: number[][];
+}
+
+const HEATMAP_WINDOW_DAYS = 30;
+
 const LOGIN_SUCCESS_TYPES = [
   'LOGIN',
   'TOKEN_REFRESH',
@@ -134,6 +146,42 @@ export class StatsService {
       loginSuccessCount,
       loginFailureCount,
       activeSessionCount: oauthSessionCount + ssoSessionCount,
+    };
+  }
+
+  /**
+   * Buckets failed-login events into a 7 (day-of-week) x 24 (hour) grid over
+   * the last HEATMAP_WINDOW_DAYS, for the "when do failed logins happen"
+   * dashboard chart.
+   */
+  async getFailedLoginHeatmap(realm: Realm): Promise<FailedLoginHeatmap> {
+    const cutoff = new Date(
+      Date.now() - HEATMAP_WINDOW_DAYS * 24 * 60 * 60 * 1000,
+    );
+
+    const events = await this.prisma.loginEvent.findMany({
+      where: {
+        realmId: realm.id,
+        type: { in: LOGIN_FAILURE_TYPES },
+        createdAt: { gte: cutoff },
+      },
+      select: { createdAt: true },
+    });
+
+    const heatmap: number[][] = Array.from({ length: 7 }, () =>
+      new Array<number>(24).fill(0),
+    );
+
+    for (const event of events) {
+      const day = event.createdAt.getUTCDay();
+      const hour = event.createdAt.getUTCHours();
+      heatmap[day][hour]++;
+    }
+
+    return {
+      windowDays: HEATMAP_WINDOW_DAYS,
+      totalFailures: events.length,
+      heatmap,
     };
   }
 }

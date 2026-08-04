@@ -287,4 +287,4 @@ struct ContentView: View {
 
 ## License
 
-MIT — see the root [LICENSE](../../LICENSE) file.
+MIT — see the [LICENSE](./LICENSE) file.

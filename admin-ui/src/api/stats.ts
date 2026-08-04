@@ -14,6 +14,20 @@ export async function getRealmStats(realmName: string): Promise<RealmStats> {
   return data;
 }
 
+export interface FailedLoginHeatmap {
+  windowDays: number;
+  totalFailures: number;
+  /** 7x24 grid: heatmap[dayOfWeek][hour], dayOfWeek 0 = Sunday, bucketed in UTC. */
+  heatmap: number[][];
+}
+
+export async function getFailedLoginHeatmap(realmName: string): Promise<FailedLoginHeatmap> {
+  const { data } = await apiClient.get<FailedLoginHeatmap>(
+    `/realms/${realmName}/stats/failed-login-heatmap`,
+  );
+  return data;
+}
+
 export interface HealthStatus {
   status: string;
   info?: Record<string, { status: string }>;

@@ -17,6 +17,7 @@ import { ImpossibleTravelService } from '../risk-assessment/impossible-travel.se
 import { SessionsModule } from '../sessions/sessions.module.js';
 import { StepUpModule } from '../step-up/step-up.module.js';
 import { CacheModule } from '../cache/cache.module.js';
+import { RealtimeModule } from '../realtime/realtime.module.js';
 
 @Module({
   imports: [
@@ -25,6 +26,7 @@ import { CacheModule } from '../cache/cache.module.js';
     SessionsModule,
     StepUpModule,
     CacheModule,
+    RealtimeModule,
   ],
   providers: [
     ContinuousRiskAssessmentService,

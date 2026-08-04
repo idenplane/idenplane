@@ -11,6 +11,7 @@ import { GlobalExceptionFilter } from './common/filters/http-exception.filter.js
 import { registerHandlebarsHelpers } from './theme/handlebars-helpers.js';
 import { CorsOriginService } from './cors/cors-origin.service.js';
 import { NormalizeRoleBodyPipe } from './roles/pipes/normalize-role-body.pipe.js';
+import { SessionEventsGateway } from './realtime/session-events.gateway.js';
 
 /** Known-insecure / placeholder values that must never reach production. */
 const INSECURE_ADMIN_API_KEY_VALUES = new Set([
@@ -296,6 +297,8 @@ async function bootstrap() {
 
   // Preload CORS origin cache before accepting requests
   await corsOriginService.preloadCache();
+
+  app.get(SessionEventsGateway).attach(app.getHttpServer());
 
   const port = process.env['PORT'] ?? 3000;
   await app.listen(port);

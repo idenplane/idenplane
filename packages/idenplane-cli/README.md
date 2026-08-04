@@ -129,6 +129,7 @@ Every command accepts `--json` to print machine-readable output instead of a tab
 | `init` | Interactive setup: connect, create a realm, client, and roles |
 | `migrate keycloak` | Import from a Keycloak realm export JSON |
 | `migrate auth0` | Import from an Auth0 Management API export |
+| `migrate zitadel` | Import from a hand-assembled Zitadel Management API export |
 | `upgrade` | Run pre-flight checks then apply database migrations |
 | `upgrade:status` | View upgrade audit history |
 | `completion <shell>` | Output a shell completion script (bash, zsh, fish) |
@@ -152,4 +153,4 @@ npm test
 
 ## License
 
-MIT. See [LICENSE](../../LICENSE).
+MIT. See [LICENSE](./LICENSE).

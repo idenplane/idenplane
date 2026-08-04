@@ -11,6 +11,9 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.cancel
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
@@ -43,16 +46,25 @@ import java.util.Base64
  * authMe.handleRedirectIntent(intent)
  * ```
  */
-class IdenplaneClient(
+class IdenplaneClient internal constructor(
     private val context: Context,
     private val config: AuthConfig,
+    private val storage: TokenStorage,
 ) {
+
+    /**
+     * Public constructor — builds the real AndroidKeyStore-backed [TokenStorage]. The
+     * three-arg primary constructor above is `internal` so tests can inject a plain
+     * (non-encrypted) [TokenStorage] instead, since AndroidKeyStore has no Robolectric shadow
+     * and cannot run outside a real device/emulator.
+     */
+    constructor(context: Context, config: AuthConfig) :
+        this(context, config, TokenStorage(context, config.realm, config.clientId))
 
     // -----------------------------------------------------------------------
     // Internal state
     // -----------------------------------------------------------------------
 
-    private val storage     = TokenStorage(context, config.realm, config.clientId)
     private val json        = Json { ignoreUnknownKeys = true }
     private val scope       = CoroutineScope(SupervisorJob() + Dispatchers.IO)
     @Volatile private var oidcConfig  : OIDCConfiguration? = null
@@ -93,6 +105,19 @@ class IdenplaneClient(
     /** `true` if a valid (non-expired) access token is in storage. */
     val isAuthenticated: Boolean
         get() = storage.accessToken?.let { !isTokenExpired(it) } ?: false
+
+    private val _authState = MutableStateFlow(isAuthenticated)
+
+    /**
+     * Reactive view of [isAuthenticated], for UI layers that need to react to auth changes
+     * instead of polling (e.g. Compose's `collectAsState()` — see [collectAuthStateAsState]).
+     *
+     * This emits on login, logout, and refresh outcomes — it does *not* emit purely from time
+     * passing, so a token that silently expires between those events won't flip this to `false`
+     * on its own. Callers that need up-to-the-second accuracy should still consult
+     * [isAuthenticated] or [getAccessToken] directly.
+     */
+    val authState: StateFlow<Boolean> = _authState.asStateFlow()
 
     // -----------------------------------------------------------------------
     // Login
@@ -190,6 +215,7 @@ class IdenplaneClient(
         storage.store(tokens)
         storage.pkceVerifier = null
         storage.authState    = null
+        _authState.value = true
 
         scheduleAutoRefresh()
         return true
@@ -200,16 +226,23 @@ class IdenplaneClient(
     // -----------------------------------------------------------------------
 
     /**
-     * Clear local tokens and attempt server-side session termination.
+     * Clear local tokens and revoke the server-side session.
      *
-     * Optionally launches a Custom Tab to the end-session endpoint if the
-     * server requires user interaction for logout.
+     * Always sends a silent back-channel request to revoke the refresh token. That alone
+     * cannot clear a browser-side session cookie set during [login] — a back-channel call from
+     * the app's own HTTP client isn't the browser — so pass [activity] to additionally open the
+     * end-session endpoint in a Custom Tab, which does clear it. That request is not given a
+     * redirect back to the app: deliberately, since one would land in [handleRedirectIntent] and
+     * be misread as a failed login callback (no `code`, no `error`). The tab is left showing a
+     * blank response for the user to dismiss. This requires a stored ID token (`id_token_hint`);
+     * if none is available, [activity] is ignored and this falls back to back-channel-only logout.
      *
-     * @param activity Pass a [FragmentActivity] to open the end-session URL
-     *                 in a Custom Tab, or `null` for a silent back-channel logout.
+     * @param activity Pass a [FragmentActivity] to also clear the browser-side session via a
+     *                 Custom Tab, or `null` for a silent, no-UI logout.
      */
     suspend fun logout(activity: FragmentActivity? = null) {
         val refreshToken = storage.refreshToken
+        val idToken      = storage.idToken
         val oidc         = runCatching { fetchDiscovery() }.getOrNull()
 
         if (refreshToken != null && oidc?.endSessionEndpoint != null) {
@@ -222,8 +255,16 @@ class IdenplaneClient(
             }
         }
 
+        if (activity != null && idToken != null && oidc?.endSessionEndpoint != null) {
+            runCatching {
+                CustomTabsIntent.Builder().build()
+                    .launchUrl(activity, buildEndSessionUri(oidc.endSessionEndpoint, idToken))
+            }
+        }
+
         cancelAutoRefresh()
         storage.clear()
+        _authState.value = false
     }
 
     // -----------------------------------------------------------------------
@@ -292,12 +333,14 @@ class IdenplaneClient(
             ) {
                 cancelAutoRefresh()
                 storage.clear()
+                _authState.value = false
             }
             throw e
         }
 
         val tokens = json.decodeFromString<TokenResponse>(responseBody)
         storage.store(tokens)
+        _authState.value = true
         scheduleAutoRefresh()
     }
 
@@ -527,4 +570,16 @@ class IdenplaneClient(
         joinToString("&") { (k, v) ->
             "${Uri.encode(k)}=${Uri.encode(v)}"
         }
+
+    companion object {
+        /**
+         * Extracted so the logout Custom Tab's URI is unit-testable without needing a real
+         * Activity/CustomTabsIntent. Deliberately omits `post_logout_redirect_uri` — see
+         * [logout]'s doc comment for why.
+         */
+        internal fun buildEndSessionUri(endSessionEndpoint: String, idToken: String): Uri =
+            Uri.parse(endSessionEndpoint).buildUpon()
+                .appendQueryParameter("id_token_hint", idToken)
+                .build()
+    }
 }

@@ -1,6 +1,6 @@
 {
   "name": "idenplane-cli",
-  "version": "1.0.1",
+  "version": "1.0.2",
   "description": "CLI tool for managing an Idenplane IAM server",
   "type": "module",
   "bin": {
@@ -12,7 +12,8 @@
     "build": "tsup && node scripts/fix-node-imports.mjs",
     "dev": "tsup --watch",
     "typecheck": "tsc --noEmit",
-    "test": "npm run build && node --test dist/tests/*.test.js"
+    "test": "npm run build && node --test dist/tests/*.test.js",
+    "prepublishOnly": "npm run build"
   },
   "dependencies": {
     "commander": "^13.0.0",

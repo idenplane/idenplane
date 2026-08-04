@@ -116,4 +116,77 @@ describe('ClientCreatePage', () => {
     // for why an in-flight request outliving the test breaks the whole run.
     await waitForElementToBeRemoved(() => screen.queryByRole('button', { name: /creating/i }));
   });
+
+  describe('application templates', () => {
+    it('renders the template picker with no template selected by default', () => {
+      renderPage();
+      expect(screen.getByLabelText(/start from a template/i)).toHaveValue('');
+    });
+
+    it('prefills the form when a template is selected', async () => {
+      const user = userEvent.setup();
+      renderPage();
+
+      await user.selectOptions(screen.getByLabelText(/start from a template/i), 'grafana');
+
+      expect(screen.getByRole('textbox', { name: /^name$/i })).toHaveValue('Grafana');
+      expect(screen.getByLabelText(/^client type$/i)).toHaveValue('CONFIDENTIAL');
+      expect(screen.getByLabelText(/^redirect uris/i)).toHaveValue('{baseUrl}/login/generic_oauth');
+      expect(screen.getByLabelText(/^grant types/i)).toHaveValue('authorization_code, refresh_token');
+    });
+
+    it('shows setup instructions for the selected template', async () => {
+      const user = userEvent.setup();
+      renderPage();
+
+      await user.selectOptions(screen.getByLabelText(/start from a template/i), 'argocd');
+
+      expect(screen.getByText(/setup on the argo cd side/i)).toBeInTheDocument();
+      expect(screen.getByText(/argocd-cm configmap/i)).toBeInTheDocument();
+    });
+
+    it('does not overwrite a client ID the user already typed', async () => {
+      const user = userEvent.setup();
+      renderPage();
+
+      await user.type(screen.getByLabelText(/^client id$/i), 'my-custom-id');
+      await user.selectOptions(screen.getByLabelText(/start from a template/i), 'outline');
+
+      expect(screen.getByLabelText(/^client id$/i)).toHaveValue('my-custom-id');
+    });
+
+    it('reverts to a blank state when switching back to "None"', async () => {
+      const user = userEvent.setup();
+      renderPage();
+
+      await user.selectOptions(screen.getByLabelText(/start from a template/i), 'nextcloud');
+      await user.selectOptions(screen.getByLabelText(/start from a template/i), '');
+
+      expect(screen.queryByText(/setup on the/i)).not.toBeInTheDocument();
+    });
+
+    it('includes templates from the newer Media and Communication categories', async () => {
+      const user = userEvent.setup();
+      renderPage();
+
+      await user.selectOptions(screen.getByLabelText(/start from a template/i), 'immich');
+      expect(screen.getByRole('textbox', { name: /^name$/i })).toHaveValue('Immich');
+      expect(screen.getByLabelText(/^client type$/i)).toHaveValue('PUBLIC');
+
+      await user.selectOptions(screen.getByLabelText(/start from a template/i), 'rocketchat');
+      expect(screen.getByRole('textbox', { name: /^name$/i })).toHaveValue('Rocket.Chat');
+      expect(screen.getByLabelText(/^redirect uris/i)).toHaveValue('{baseUrl}/_oauth/idenplane');
+    });
+
+    it('warns in the setup steps when a template needs a plugin or a specific edition', async () => {
+      const user = userEvent.setup();
+      renderPage();
+
+      await user.selectOptions(screen.getByLabelText(/start from a template/i), 'jellyfin');
+      expect(screen.getByText(/no built-in oidc support/i)).toBeInTheDocument();
+
+      await user.selectOptions(screen.getByLabelText(/start from a template/i), 'n8n');
+      expect(screen.getByText(/enterprise-tier n8n feature/i)).toBeInTheDocument();
+    });
+  });
 });

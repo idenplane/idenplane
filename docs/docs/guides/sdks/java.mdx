@@ -1,0 +1,232 @@
+---
+id: java-sdk
+title: Java SDK
+description: Validate tokens, run the Authorization Code + PKCE flow, and integrate Spring Boot or Jakarta EE apps with Idenplane using the official Java SDK
+---
+
+# Java SDK
+
+The Idenplane Java SDK is a multi-module Maven project built around `idenplane-java-core`: OIDC discovery, JWKS-backed RS256 token validation, the Authorization Code + PKCE flow, token refresh, userinfo, and logout — with framework integrations layered on top for Spring Boot, Jakarta EE, and reactive (Project Reactor) applications.
+
+:::note
+These modules aren't published to Maven Central yet. The coordinates below are what they'll resolve to once released — check the [GitHub releases page](https://github.com/idenplane/idenplane/releases) before using them in a real project.
+:::
+
+| Module | Purpose |
+|---|---|
+| `idenplane-java-core` | Token validation, discovery, PKCE, the OIDC client — everything else depends on this |
+| `idenplane-java-spring` | Spring Boot auto-configuration for OAuth2 Resource Server |
+| `idenplane-java-jakarta` | Servlet `Filter` and JAX-RS `ContainerRequestFilter` for non-Spring apps |
+| `idenplane-java-reactive` | Project Reactor (`Mono`-based) wrapper around `idenplane-java-core` |
+
+## Requirements
+
+| Requirement | Version |
+|---|---|
+| Java | 17+ |
+| Maven | 3.8+ |
+
+---
+
+## Installation
+
+```xml
+<dependency>
+    <groupId>com.idenplane</groupId>
+    <artifactId>idenplane-java-core</artifactId>
+    <version>1.0.0</version>
+</dependency>
+```
+
+---
+
+## Core client
+
+```java
+import com.idenplane.sdk.IdenplaneClient;
+
+IdenplaneClient client = IdenplaneClient.builder(
+        "https://idenplane.example.com/realms/my-realm", "my-client-id")
+    .build();
+```
+
+For confidential clients (server-side apps with a client secret), add `.clientSecret("...")`. Public/native clients should omit it and rely on PKCE alone.
+
+### Validating tokens
+
+```java
+import com.idenplane.sdk.TokenValidationException;
+import com.idenplane.sdk.models.TokenClaims;
+
+try {
+    TokenClaims claims = client.validateAccessToken(accessToken);
+    System.out.println(claims.getSub());
+    System.out.println(claims.getRealmRoles());          // List<String>
+    System.out.println(claims.getResourceRoles("my-client-id"));
+} catch (TokenValidationException e) {
+    // Bad, expired, wrong-issuer/audience, or wrong-algorithm token — reject the request.
+}
+```
+
+`validateIdToken(String)` works the same way, and rejects a token whose `typ` claim isn't `ID` — so an access token can't be replayed where an ID token is expected, or vice versa.
+
+:::note
+The JWKS used to verify signatures is cached and refreshed automatically (including once, on demand, if a token references a `kid` the cache doesn't have yet — covering key rotation). You don't need to manage this yourself.
+:::
+
+### Authorization Code + PKCE flow
+
+```java
+import com.idenplane.sdk.PkceUtil;
+import com.idenplane.sdk.models.TokenResponse;
+
+String verifier = PkceUtil.generateCodeVerifier();
+String challenge = PkceUtil.deriveCodeChallenge(verifier);
+String state = /* your own random, per-request CSRF value */;
+
+String authorizeUrl = client.buildAuthorizationUrl(
+        redirectUri, state, challenge, List.of("profile", "email"));
+// Redirect the user to authorizeUrl, store `verifier` and `state` for this session.
+
+// ... on the callback, after verifying the returned `state` matches ...
+TokenResponse tokens = client.exchangeAuthorizationCode(code, redirectUri, verifier);
+TokenClaims idClaims = client.validateIdToken(tokens.getIdToken());
+```
+
+### Refresh, userinfo, logout
+
+```java
+TokenResponse refreshed = client.refreshToken(tokens.getRefreshToken());
+
+UserInfo user = client.getUserInfo(tokens.getAccessToken());
+
+String logoutUrl = client.buildLogoutUrl(tokens.getIdToken(), postLogoutRedirectUri);
+```
+
+### Error handling
+
+`IdenplaneClient` throws two distinct unchecked exceptions — distinguishing them matters for how you respond:
+
+| Exception | Meaning | Typical response |
+|---|---|---|
+| `TokenValidationException` | The token itself is bad: malformed, expired, wrong issuer/audience/algorithm, unknown signing key | `401 Unauthorized` |
+| `IdenplaneClientException` | Something else failed: network error, the realm's discovery/JWKS endpoint is unreachable, an unexpected HTTP status | `500`/`502`/`503` — this isn't the caller's fault |
+
+---
+
+## Spring Boot integration
+
+Add `idenplane-java-spring` and configure the realm:
+
+```yaml
+# application.yml
+idenplane:
+  issuer-uri: https://idenplane.example.com/realms/my-realm
+  client-id: my-spring-app
+```
+
+The auto-configuration activates once `idenplane.issuer-uri` is set, providing a `JwtDecoder` (issuer + audience validated — not just signature), a `JwtAuthenticationConverter` that maps realm/resource roles to `ROLE_...` authorities, and an `IdenplaneClient` bean:
+
+```java
+@Configuration
+@EnableWebSecurity
+public class SecurityConfig {
+
+    @Bean
+    public SecurityFilterChain securityFilterChain(HttpSecurity http) throws Exception {
+        http.authorizeHttpRequests(authorize -> authorize
+                        .requestMatchers("/public").permitAll()
+                        .anyRequest().authenticated())
+                .oauth2ResourceServer(oauth2 -> oauth2.jwt(Customizer.withDefaults()));
+        return http.build();
+    }
+}
+```
+
+```java
+@GetMapping("/api/me")
+public Map<String, Object> me(@AuthenticationPrincipal Jwt jwt, Authentication authentication) {
+    return Map.of(
+        "sub", jwt.getSubject(),
+        "authorities", authentication.getAuthorities()
+    );
+}
+```
+
+Any bean you define yourself (`JwtDecoder`, `JwtAuthenticationConverter`, `IdenplaneClient`) takes priority — the auto-configuration only fills in what's missing.
+
+---
+
+## Jakarta EE / Servlet integration
+
+For apps not using Spring, `idenplane-java-jakarta` provides a `Filter` and a JAX-RS `ContainerRequestFilter` that both validate `Authorization: Bearer <token>` and reject with `401` before your code runs.
+
+### Servlet filter
+
+```java
+IdenplaneClient client = IdenplaneClient.builder(issuerUri, clientId).build();
+FilterRegistration.Dynamic filter = servletContext.addFilter(
+        "idenplane-auth", new IdenplaneAuthenticationFilter(client));
+filter.addMappingForUrlPatterns(null, false, "/api/*");
+```
+
+```java
+TokenClaims claims = IdenplaneRequestAttributes.getClaims(request);
+```
+
+Registering via `web.xml` instead? Omit the constructor argument and supply `issuer-uri`/`client-id` as filter `<init-param>`s — `init(FilterConfig)` builds the client itself.
+
+### JAX-RS filter
+
+```java
+resourceConfig.register(new IdenplaneContainerRequestFilter(client));
+```
+
+```java
+TokenClaims claims = IdenplaneContainerRequestFilter.getClaims(requestContext);
+```
+
+---
+
+## Reactive (Project Reactor)
+
+`idenplane-java-core` is synchronous — `idenplane-java-reactive` wraps it so a WebFlux app doesn't block an event-loop thread:
+
+```java
+import com.idenplane.sdk.reactive.ReactiveIdenplaneClient;
+import reactor.core.publisher.Mono;
+
+ReactiveIdenplaneClient reactiveClient = ReactiveIdenplaneClient.wrap(client);
+
+Mono<TokenClaims> claims = reactiveClient.validateAccessToken(accessToken);
+```
+
+Every method that can perform I/O — including `buildAuthorizationUrl`/`buildLogoutUrl`, which can trigger a blocking discovery fetch on a cold cache — runs on `Schedulers.boundedElastic()` by default.
+
+---
+
+## Next Steps
+
+<div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
+
+[**Android SDK**](/guides/sdks/android-sdk)
+Native Kotlin bindings for Android apps
+
+[**Go SDK**](/guides/sdks/go-sdk)
+Server-side Go SDK for the admin-management API
+
+[**API Reference**](/api)
+Complete REST API documentation
+
+[**Configuration**](/getting-started/configuration)
+Learn about all configuration options
+
+</div>
+
+---
+
+<p align="center">
+  <a href="https://idenplane.com">idenplane.com</a> &middot;
+  <a href="https://github.com/idenplane/idenplane">GitHub</a> &middot;
+  <a href="https://discord.gg/idenplane">Discord</a>
+</p>

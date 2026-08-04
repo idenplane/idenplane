@@ -4,20 +4,47 @@
          xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
     <modelVersion>4.0.0</modelVersion>
 
-    <groupId>io.idenplane</groupId>
+    <groupId>com.idenplane</groupId>
     <artifactId>idenplane-java</artifactId>
-    <version>1.0.0-SNAPSHOT</version>
+    <version>1.0.0</version>
     <packaging>pom</packaging>
 
     <name>Idenplane Java SDK</name>
     <description>Java SDK for the Idenplane Identity and Access Management Server</description>
     <url>https://github.com/idenplane/idenplane</url>
 
+    <!-- Client SDK license, distinct from the AGPL-3.0-only server this SDK talks to —
+         matches the convention already used for the Android/npm SDK packages, since forcing
+         AGPL's copyleft onto every downstream consumer of a client library would make it
+         unusable in most commercial contexts. Required by Maven Central for POM validation. -->
+    <licenses>
+        <license>
+            <name>MIT License</name>
+            <url>https://opensource.org/licenses/MIT</url>
+        </license>
+    </licenses>
+
+    <developers>
+        <developer>
+            <name>Idenplane</name>
+            <url>https://github.com/idenplane</url>
+        </developer>
+    </developers>
+
+    <scm>
+        <url>https://github.com/idenplane/idenplane</url>
+        <connection>scm:git:https://github.com/idenplane/idenplane.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/idenplane/idenplane.git</developerConnection>
+    </scm>
+
     <modules>
         <module>idenplane-java-core</module>
         <module>idenplane-java-reactive</module>
         <module>idenplane-java-spring</module>
         <module>idenplane-java-jakarta</module>
+        <!-- A runnable demo, not a library — never published (publish-java.yml only ever
+             targets idenplane-java-core). -->
+        <module>idenplane-java-spring-sample</module>
     </modules>
 
     <properties>
@@ -32,37 +59,61 @@
         <dependencies>
             <!-- Idenplane Core Module -->
             <dependency>
-                <groupId>io.idenplane</groupId>
+                <groupId>com.idenplane</groupId>
                 <artifactId>idenplane-java-core</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <!-- Idenplane Reactive Module -->
             <dependency>
-                <groupId>io.idenplane</groupId>
+                <groupId>com.idenplane</groupId>
                 <artifactId>idenplane-java-reactive</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <!-- Idenplane Spring Module -->
             <dependency>
-                <groupId>io.idenplane</groupId>
+                <groupId>com.idenplane</groupId>
                 <artifactId>idenplane-java-spring</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
             <!-- Idenplane Jakarta Module -->
             <dependency>
-                <groupId>io.idenplane</groupId>
+                <groupId>com.idenplane</groupId>
                 <artifactId>idenplane-java-jakarta</artifactId>
                 <version>${project.version}</version>
             </dependency>
 
-            <!-- HTTP Client -->
+            <!-- HTTP Client. Bumped from 5.3 — Spring Boot 3.5.x's HttpClientAutoConfiguration
+                 unconditionally tries to build an Apache HttpClient5-based
+                 ClientHttpRequestFactoryBuilder bean whenever httpclient5 is on the classpath
+                 (regardless of whether the app actually uses RestTemplate/RestClient), and 5.3
+                 predates TlsSocketStrategy, breaking application context startup for any Spring
+                 Boot app depending on this SDK — found via idenplane-java-spring-sample's own
+                 context failing to start, not a hypothetical. -->
             <dependency>
                 <groupId>org.apache.httpcomponents.client5</groupId>
                 <artifactId>httpclient5</artifactId>
-                <version>5.3</version>
+                <version>5.6.3</version>
+            </dependency>
+
+            <!-- httpclient5's own pom.xml doesn't hardcode a httpcore5 version — it delegates
+                 to httpclient5-parent's ${httpcore.version} property (5.4.3 for httpclient5
+                 5.6.3). Without pinning this explicitly, it resolves to whatever version wins
+                 dependency mediation elsewhere (here, an older 5.3.4 via Spring Boot's own BOM),
+                 which is missing APIs httpclient5 5.6.3 actually calls at runtime
+                 (NoSuchMethodError on MessageSupport.parseHeaders). -->
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5</artifactId>
+                <version>5.4.3</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.apache.httpcomponents.core5</groupId>
+                <artifactId>httpcore5-h2</artifactId>
+                <version>5.4.3</version>
             </dependency>
 
             <!-- JSON Processing -->
@@ -86,6 +137,13 @@
                 <version>3.7.3</version>
             </dependency>
 
+            <dependency>
+                <groupId>io.projectreactor</groupId>
+                <artifactId>reactor-test</artifactId>
+                <version>3.7.3</version>
+                <scope>test</scope>
+            </dependency>
+
             <!-- Spring Security — bumped from 6.2.2 to 6.5.7 to address two
                  critical advisories on spring-security-web (HTTP headers not
                  written under some conditions, authorization bypass of static
@@ -103,11 +161,39 @@
                 <version>6.5.11</version>
             </dependency>
 
+            <dependency>
+                <groupId>org.springframework.security</groupId>
+                <artifactId>spring-security-oauth2-jose</artifactId>
+                <version>6.5.10</version>
+            </dependency>
+
+            <dependency>
+                <groupId>org.springframework.security</groupId>
+                <artifactId>spring-security-oauth2-resource-server</artifactId>
+                <version>6.5.10</version>
+            </dependency>
+
             <!-- Spring Boot Auto-configuration -->
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-autoconfigure</artifactId>
                 <version>3.5.4</version>
+            </dependency>
+
+            <!-- Test support for exercising @AutoConfiguration classes via
+                 ApplicationContextRunner, without a full Spring Boot app -->
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-test</artifactId>
+                <version>3.5.4</version>
+                <scope>test</scope>
+            </dependency>
+
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-test-autoconfigure</artifactId>
+                <version>3.5.4</version>
+                <scope>test</scope>
             </dependency>
 
             <!-- Spring Boot Configuration Processor -->
@@ -195,6 +281,60 @@
                             </goals>
                         </execution>
                     </executions>
+                </plugin>
+
+                <!-- Real Maven Central publishing via the Central Portal (the old OSSRH Nexus
+                     host is retired). Declared here in pluginManagement only — not every module
+                     activates these, only idenplane-java-core does today, since it's the only
+                     module with real source to publish. Credentials and the GPG key are never
+                     hardcoded: central-publishing-maven-plugin reads settings.xml server
+                     credentials (populated from env vars by actions/setup-java in CI), and
+                     maven-gpg-plugin reads the MAVEN_GPG_PASSPHRASE env var directly (the
+                     modern, non-interactive way — see MGPG-105/MGPG-108). Running `mvn verify`
+                     locally with no such setup fails safely at the signing step with no GPG key
+                     available; it does not silently publish or fall back to anything. -->
+                <plugin>
+                    <groupId>org.apache.maven.plugins</groupId>
+                    <artifactId>maven-gpg-plugin</artifactId>
+                    <version>3.2.8</version>
+                    <configuration>
+                        <!-- Disables gpg-agent interactive prompts; the passphrase comes from
+                             the MAVEN_GPG_PASSPHRASE environment variable instead. -->
+                        <useAgent>false</useAgent>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <id>sign-artifacts</id>
+                            <phase>verify</phase>
+                            <goals>
+                                <goal>sign</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+
+                <!-- org.sonatype.central:central-publishing-maven-plugin (last released 0.11.0)
+                     rejects real uploads with a bare 401 even with fresh, verified-valid
+                     credentials — confirmed by hitting the Central Portal API directly with the
+                     same token, which got past auth (500 on the deliberately-empty body sent,
+                     not 401). Its own SCM went private/inaccessible, and io.github.mavenplugins
+                     is the actively maintained community fork of the same plugin (same
+                     configuration shape, only the groupId and version differ). -->
+                <plugin>
+                    <groupId>io.github.mavenplugins</groupId>
+                    <artifactId>central-publishing-maven-plugin</artifactId>
+                    <version>1.3.0</version>
+                    <extensions>true</extensions>
+                    <configuration>
+                        <publishingServerId>central</publishingServerId>
+                        <deploymentName>idenplane-java-core</deploymentName>
+                        <!-- Default is false; stated explicitly since it's the property that
+                             makes `mvn deploy` land as a reviewable, still-reversible "validated"
+                             deployment in the Central Portal instead of auto-releasing it. Actual
+                             release is then a separate, explicit action in the Portal UI (or a
+                             deliberate autoPublish=true override), never a side effect of deploy. -->
+                        <autoPublish>false</autoPublish>
+                    </configuration>
                 </plugin>
 
                 <plugin>

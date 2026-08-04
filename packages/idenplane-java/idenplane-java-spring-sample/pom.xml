@@ -1,0 +1,100 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project xmlns="http://maven.apache.org/POM/4.0.0"
+         xmlns:xsi="http://www.w3.org/2001/XMLSchema-instance"
+         xsi:schemaLocation="http://maven.apache.org/POM/4.0.0 http://maven.apache.org/xsd/maven-4.0.0.xsd">
+    <modelVersion>4.0.0</modelVersion>
+
+    <parent>
+        <groupId>com.idenplane</groupId>
+        <artifactId>idenplane-java</artifactId>
+        <version>1.0.0</version>
+    </parent>
+
+    <artifactId>idenplane-java-spring-sample</artifactId>
+    <packaging>jar</packaging>
+
+    <name>Idenplane Java SDK - Spring Boot Sample</name>
+    <description>Runnable Spring Boot app demonstrating idenplane-java-spring's OAuth2 Resource Server auto-configuration</description>
+
+    <!-- This module needs its own parent (idenplane-java, for reactor resolution of
+         idenplane-java-spring by source, since it isn't published to Maven Central yet) — so it
+         can't also extend spring-boot-starter-parent. Importing the Spring Boot BOM here gets
+         the same managed dependency versions without a second parent. -->
+    <dependencyManagement>
+        <dependencies>
+            <dependency>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-dependencies</artifactId>
+                <version>3.5.4</version>
+                <type>pom</type>
+                <scope>import</scope>
+            </dependency>
+
+            <!-- idenplane-java-core directly pins jackson-databind:2.22.1, which wins over
+                 spring-boot-dependencies' older jackson-databind — but that BOM's
+                 jackson-annotations/jackson-core versions (2.19.2) still win for those two
+                 artifacts since core doesn't declare them directly, leaving jackson-databind
+                 paired with mismatched sibling jars (ObjectMapper fails at class-init:
+                 "Could not initialize class ... JsonSerializeAs missing"). Pin all three
+                 together explicitly rather than relying on either BOM alone. -->
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-annotations</artifactId>
+                <version>2.22</version>
+            </dependency>
+
+            <dependency>
+                <groupId>com.fasterxml.jackson.core</groupId>
+                <artifactId>jackson-core</artifactId>
+                <version>2.22.1</version>
+            </dependency>
+        </dependencies>
+    </dependencyManagement>
+
+    <dependencies>
+        <dependency>
+            <groupId>com.idenplane</groupId>
+            <artifactId>idenplane-java-spring</artifactId>
+            <version>${project.version}</version>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-web</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-security</artifactId>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <dependency>
+            <groupId>org.springframework.security</groupId>
+            <artifactId>spring-security-test</artifactId>
+            <scope>test</scope>
+        </dependency>
+    </dependencies>
+
+    <!-- No jacoco here deliberately: this is a runnable demo, not a library, and the parent
+         reactor's 80%-line-coverage gate doesn't make sense for illustrative wiring code. -->
+    <build>
+        <plugins>
+            <plugin>
+                <groupId>org.springframework.boot</groupId>
+                <artifactId>spring-boot-maven-plugin</artifactId>
+                <!-- spring-boot-dependencies (imported above) manages regular <dependencies>
+                     versions only, not plugin versions — that's spring-boot-starter-parent's
+                     job, which this module can't also extend (see the dependencyManagement
+                     comment above). Version pinned explicitly instead. -->
+                <version>3.5.4</version>
+            </plugin>
+        </plugins>
+    </build>
+
+</project>

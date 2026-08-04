@@ -5,9 +5,9 @@
     <modelVersion>4.0.0</modelVersion>
 
     <parent>
-        <groupId>io.idenplane</groupId>
+        <groupId>com.idenplane</groupId>
         <artifactId>idenplane-java</artifactId>
-        <version>1.0.0-SNAPSHOT</version>
+        <version>1.0.0</version>
     </parent>
 
     <artifactId>idenplane-java-core</artifactId>
@@ -73,5 +73,56 @@
             </plugin>
         </plugins>
     </build>
+
+    <profiles>
+        <!-- Everything Maven Central publishing needs: sources + javadoc jars, GPG signing,
+             and the Central Portal upload. Deliberately NOT part of the default build — plain
+             `mvn verify` (what CI runs on every PR) must stay fast and must not require a GPG
+             key. Only publish-java.yml activates this profile (`-Pcentral-publish`), and nothing
+             in this change invokes that workflow. -->
+        <profile>
+            <id>central-publish</id>
+            <build>
+                <plugins>
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-source-plugin</artifactId>
+                    </plugin>
+
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-javadoc-plugin</artifactId>
+                        <executions>
+                            <execution>
+                                <id>attach-javadocs</id>
+                                <goals>
+                                    <goal>jar</goal>
+                                </goals>
+                            </execution>
+                        </executions>
+                    </plugin>
+
+                    <plugin>
+                        <groupId>org.apache.maven.plugins</groupId>
+                        <artifactId>maven-gpg-plugin</artifactId>
+                    </plugin>
+
+                    <plugin>
+                        <groupId>io.github.mavenplugins</groupId>
+                        <artifactId>central-publishing-maven-plugin</artifactId>
+                        <!-- Declared explicitly rather than relying on inheriting this from
+                             pluginManagement. Note: `mvn help:describe -Dcmd=deploy -Pcentral-publish`
+                             reports `deploy` as still bound to the stock maven-deploy-plugin even
+                             with this — that's help:describe not simulating a profile-injected
+                             extension correctly, not a real problem. groupId must match the
+                             parent pluginManagement entry exactly (Maven resolves plugin config
+                             by groupId+artifactId) — see that entry for why it's
+                             io.github.mavenplugins and not org.sonatype.central. -->
+                        <extensions>true</extensions>
+                    </plugin>
+                </plugins>
+            </build>
+        </profile>
+    </profiles>
 
 </project>

@@ -11,7 +11,7 @@ The Idenplane Next.js SDK provides seamless integration with Next.js application
 ## Installation
 
 ```bash
-npm install @idenplane/nextjs idenplane-sdk
+npm install idenplane-nextjs idenplane-sdk
 ```
 
 ---
@@ -23,7 +23,7 @@ npm install @idenplane/nextjs idenplane-sdk
 ```tsx
 // app/layout.tsx
 'use client';
-import { AuthProvider } from '@idenplane/nextjs';
+import { AuthProvider } from 'idenplane-nextjs';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -47,7 +47,7 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
 ```tsx
 'use client';
-import { useAuth } from '@idenplane/nextjs';
+import { useAuth } from 'idenplane-nextjs';
 
 export function NavBar() {
   const { isAuthenticated, user, login, logout, isLoading } = useAuth();
@@ -69,7 +69,7 @@ export function NavBar() {
 // middleware.ts
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { createAuthMiddleware } from '@idenplane/nextjs/middleware';
+import { createAuthMiddleware } from 'idenplane-nextjs/middleware';
 
 const authMiddleware = createAuthMiddleware({
   serverUrl: 'http://localhost:3000',
@@ -93,7 +93,7 @@ export const config = {
 ```tsx
 // app/dashboard/page.tsx
 import { cookies } from 'next/headers';
-import { getServerUser } from '@idenplane/nextjs/server';
+import { getServerUser } from 'idenplane-nextjs/server';
 import { redirect } from 'next/navigation';
 
 export default async function DashboardPage() {
@@ -139,7 +139,7 @@ The `AuthProvider` wraps your Next.js application and provides authentication st
 ```tsx
 // app/layout.tsx
 'use client';
-import { AuthProvider } from '@idenplane/nextjs';
+import { AuthProvider } from 'idenplane-nextjs';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
@@ -172,7 +172,7 @@ For more control over the client configuration:
 // app/providers.tsx
 'use client';
 import { IdenplaneClient } from 'idenplane-sdk';
-import { AuthProvider } from '@idenplane/nextjs';
+import { AuthProvider } from 'idenplane-nextjs';
 
 const client = new IdenplaneClient({
   url: 'http://localhost:3000',
@@ -231,7 +231,7 @@ const {
 
 ```tsx
 'use client';
-import { useAuth } from '@idenplane/nextjs';
+import { useAuth } from 'idenplane-nextjs';
 
 export function Navigation() {
   const { isAuthenticated, user, login, logout, isLoading } = useAuth();
@@ -262,7 +262,7 @@ export function Navigation() {
 
 ```tsx
 'use client';
-import { useAuth } from '@idenplane/nextjs';
+import { useAuth } from 'idenplane-nextjs';
 
 export function SignInButton() {
   const { login, isLoading } = useAuth();
@@ -287,7 +287,7 @@ export function SignInButton() {
 
 ```tsx
 'use client';
-import { useAuth } from '@idenplane/nextjs';
+import { useAuth } from 'idenplane-nextjs';
 
 export function TokenDisplay() {
   const { getToken, isAuthenticated } = useAuth();
@@ -317,7 +317,7 @@ Protect your routes at the edge with the `createAuthMiddleware` function:
 // middleware.ts
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { createAuthMiddleware } from '@idenplane/nextjs/middleware';
+import { createAuthMiddleware } from 'idenplane-nextjs/middleware';
 
 const authMiddleware = createAuthMiddleware({
   serverUrl: 'http://localhost:3000',
@@ -354,7 +354,7 @@ export const config = {
 // middleware.ts
 import { NextResponse } from 'next/server';
 import type { NextRequest } from 'next/server';
-import { createAuthMiddleware } from '@idenplane/nextjs/middleware';
+import { createAuthMiddleware } from 'idenplane-nextjs/middleware';
 
 const authMiddleware = createAuthMiddleware({
   serverUrl: 'http://localhost:3000',
@@ -393,7 +393,7 @@ Access authentication state in Server Components using the `getServerUser` funct
 ```tsx
 // app/dashboard/page.tsx
 import { cookies } from 'next/headers';
-import { getServerUser } from '@idenplane/nextjs/server';
+import { getServerUser } from 'idenplane-nextjs/server';
 import { redirect } from 'next/navigation';
 
 export default async function DashboardPage() {
@@ -421,7 +421,7 @@ export default async function DashboardPage() {
 ```tsx
 // app/profile/page.tsx
 import { cookies } from 'next/headers';
-import { getServerAuth } from '@idenplane/nextjs/server';
+import { getServerAuth } from 'idenplane-nextjs/server';
 
 export default async function ProfilePage() {
   const cookieStore = cookies();
@@ -453,7 +453,7 @@ export default async function ProfilePage() {
 ```tsx
 // app/admin/page.tsx
 import { cookies } from 'next/headers';
-import { getServerUser } from '@idenplane/nextjs/server';
+import { getServerUser } from 'idenplane-nextjs/server';
 import { redirect } from 'next/navigation';
 
 export default async function AdminPage() {
@@ -495,7 +495,7 @@ Protect Pages Router API routes with the `withAuth` helper:
 
 ```typescript
 // pages/api/profile.ts
-import { withAuth } from '@idenplane/nextjs/api';
+import { withAuth } from 'idenplane-nextjs/api';
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 export default withAuth(
@@ -514,7 +514,7 @@ export default withAuth(
 
 ```typescript
 // pages/api/user-info.ts
-import { withAuth } from '@idenplane/nextjs/api';
+import { withAuth } from 'idenplane-nextjs/api';
 import type { NextApiRequest, NextApiResponse } from 'next';
 
 export default withAuth(
@@ -540,7 +540,7 @@ Protect App Router Route Handlers with the `withAuthHandler` helper:
 
 ```typescript
 // app/api/profile/route.ts
-import { withAuthHandler } from '@idenplane/nextjs/api';
+import { withAuthHandler } from 'idenplane-nextjs/api';
 
 export const GET = withAuthHandler(
   { serverUrl: 'http://localhost:3000', realm: 'my-realm' },
@@ -560,7 +560,7 @@ export const GET = withAuthHandler(
 
 ```typescript
 // app/api/profile/route.ts
-import { withAuthHandler } from '@idenplane/nextjs/api';
+import { withAuthHandler } from 'idenplane-nextjs/api';
 
 export const GET = withAuthHandler(
   { serverUrl: 'http://localhost:3000', realm: 'my-realm' },
@@ -591,7 +591,7 @@ export const DELETE = withAuthHandler(
 
 ```typescript
 // app/api/data/route.ts
-import { withAuthHandler } from '@idenplane/nextjs/api';
+import { withAuthHandler } from 'idenplane-nextjs/api';
 
 export async function GET(req: Request) {
   try {
@@ -620,7 +620,7 @@ export async function GET(req: Request) {
 
 ## API Reference
 
-### `@idenplane/nextjs` (default export)
+### `idenplane-nextjs` (default export)
 
 Re-exports from `idenplane-sdk/react`:
 
@@ -633,7 +633,7 @@ Re-exports from `idenplane-sdk/react`:
 | `ProtectedRoute` | Render-gate component for route protection |
 | `IdenplaneClient` | Raw client class |
 
-### `@idenplane/nextjs/middleware`
+### `idenplane-nextjs/middleware`
 
 | Export | Description |
 |--------|-------------|
@@ -653,14 +653,14 @@ interface AuthMiddlewareConfig {
 }
 ```
 
-### `@idenplane/nextjs/server`
+### `idenplane-nextjs/server`
 
 | Export | Description |
 |--------|-------------|
 | `getServerAuth(cookies, config?)` | Returns `AuthSession | null` |
 | `getServerUser(cookies, config?)` | Returns `User | null` |
 
-### `@idenplane/nextjs/api`
+### `idenplane-nextjs/api`
 
 | Export | Description |
 |--------|-------------|
@@ -683,18 +683,18 @@ import type {
 } from 'idenplane-sdk';
 
 // Server functions
-import { getServerUser, getServerAuth } from '@idenplane/nextjs/server';
+import { getServerUser, getServerAuth } from 'idenplane-nextjs/server';
 import type { User } from 'idenplane-sdk';
 
 // Middleware
-import { createAuthMiddleware } from '@idenplane/nextjs/middleware';
-import type { AuthMiddlewareConfig } from '@idenplane/nextjs/middleware';
+import { createAuthMiddleware } from 'idenplane-nextjs/middleware';
+import type { AuthMiddlewareConfig } from 'idenplane-nextjs/middleware';
 
 // API helpers
-import { withAuth, withAuthHandler } from '@idenplane/nextjs/api';
+import { withAuth, withAuthHandler } from 'idenplane-nextjs/api';
 
 // Client hooks
-import { useAuth, useUser, usePermissions } from '@idenplane/nextjs';
+import { useAuth, useUser, usePermissions } from 'idenplane-nextjs';
 ```
 
 ---
@@ -705,6 +705,9 @@ import { useAuth, useUser, usePermissions } from '@idenplane/nextjs';
 
 [**Quickstart**](/quickstart)
 Set up Idenplane and create your first authenticated Next.js app
+
+[**Next.js Quickstart Template**](https://github.com/idenplane/idenplane/tree/dev/examples/nextjs-quickstart)
+A complete, working App Router app (login, protected route, profile, logout) runnable with `docker compose up`
 
 [**React SDK**](/guides/sdks/react-sdk)
 React-specific hooks and components

@@ -135,4 +135,66 @@ describe('StatsService', () => {
       });
     });
   });
+
+  describe('getFailedLoginHeatmap', () => {
+    beforeEach(() => {
+      prisma.loginEvent.findMany = jest.fn();
+    });
+
+    it('returns an all-zero 7x24 grid when there are no failures', async () => {
+      prisma.loginEvent.findMany.mockResolvedValue([]);
+
+      const result = await service.getFailedLoginHeatmap(mockRealm);
+
+      expect(result.totalFailures).toBe(0);
+      expect(result.windowDays).toBe(30);
+      expect(result.heatmap).toHaveLength(7);
+      for (const row of result.heatmap) {
+        expect(row).toHaveLength(24);
+        expect(row.every((c) => c === 0)).toBe(true);
+      }
+    });
+
+    it('buckets events by UTC day-of-week and hour', async () => {
+      // 2026-01-04 is a Sunday. 14:30 UTC -> day 0, hour 14.
+      prisma.loginEvent.findMany.mockResolvedValue([
+        { createdAt: new Date('2026-01-04T14:30:00.000Z') },
+        { createdAt: new Date('2026-01-04T14:45:00.000Z') },
+        // 2026-01-05 is a Monday. 09:00 UTC -> day 1, hour 9.
+        { createdAt: new Date('2026-01-05T09:00:00.000Z') },
+      ]);
+
+      const result = await service.getFailedLoginHeatmap(mockRealm);
+
+      expect(result.totalFailures).toBe(3);
+      expect(result.heatmap[0][14]).toBe(2);
+      expect(result.heatmap[1][9]).toBe(1);
+      expect(
+        result.heatmap.flat().reduce((sum, c) => sum + c, 0),
+      ).toBe(3);
+    });
+
+    it('filters by realmId and the failure event types within the window', async () => {
+      prisma.loginEvent.findMany.mockResolvedValue([]);
+
+      await service.getFailedLoginHeatmap(mockRealm);
+
+      expect(prisma.loginEvent.findMany).toHaveBeenCalledWith({
+        where: {
+          realmId: 'realm-1',
+          type: {
+            in: [
+              'LOGIN_ERROR',
+              'TOKEN_REFRESH_ERROR',
+              'MFA_VERIFY_ERROR',
+              'CODE_TO_TOKEN_ERROR',
+              'CLIENT_LOGIN_ERROR',
+            ],
+          },
+          createdAt: { gte: expect.any(Date) },
+        },
+        select: { createdAt: true },
+      });
+    });
+  });
 });

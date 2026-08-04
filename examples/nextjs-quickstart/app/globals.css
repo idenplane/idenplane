@@ -1,0 +1,37 @@
+:root {
+  color-scheme: light dark;
+}
+
+body {
+  font-family: system-ui, -apple-system, sans-serif;
+  max-width: 640px;
+  margin: 4rem auto;
+  padding: 0 1.5rem;
+  line-height: 1.6;
+}
+
+button {
+  font: inherit;
+  padding: 0.5rem 1rem;
+  border-radius: 6px;
+  border: 1px solid #888;
+  background: transparent;
+  cursor: pointer;
+}
+
+button:hover {
+  background: rgba(128, 128, 128, 0.1);
+}
+
+a {
+  color: inherit;
+}
+
+nav {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2rem;
+  padding-bottom: 1rem;
+  border-bottom: 1px solid rgba(128, 128, 128, 0.3);
+}
