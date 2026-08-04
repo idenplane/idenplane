@@ -9,14 +9,38 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-08-04
+
+Native Java and Android SDKs reach Maven Central, `idenplane-mcp` ships, and the admin console rounds out webhooks, organizations, SCIM, and plugin management.
+
 ### Added
-- `idenplane-mcp` — first-party stdio MCP server for AI agent integration
+- Native Java SDK (`idenplane-java`) — OIDC token validation, Spring Boot auto-configuration starter, Jakarta EE Servlet/JAX-RS filters, a Project Reactor wrapper, and a runnable sample app ([#1326](https://github.com/idenplane/idenplane/issues/1326))
+- Android SDK reaches Maven Central — buildable with CI, unit-tested, Jetpack Compose helpers, a Compose quickstart demo app ([#1325](https://github.com/idenplane/idenplane/issues/1325))
+- `idenplane-mcp` — first-party stdio MCP server for AI agent integration, including group-management tools
+- `idenplane-go` and `idenplane-python` — Role and Group admin services
+- Terraform provider — Identity Provider and User Federation resources
 - Multi-provider email abstraction (Resend, SendGrid, Mailgun, Postmark, SMTP)
 - SMS provider configuration UI with card-grid selector
-- Admin UI: webhooks, service accounts, organizations, custom attributes, SCIM, authorization policies, plugins, impersonation, and risk-assessment routing pages
+- Admin UI: webhooks, service accounts, organizations, custom attributes, SCIM, authorization policies, plugins, impersonation, risk-assessment routing, an interactive migration wizard, a locked-out-accounts dashboard panel, a failed-login heatmap, and an expanded client template catalog (8 → 23 apps)
+- Zitadel and Authentik migration importers, alongside the existing Keycloak/Auth0 tooling
+- Real-time WebSocket push for session termination and step-up-required events
+- Security email sent when a user changes their password; email notification when a session is terminated by continuous verification
+- Production Docker Compose templates with Traefik+TLS and Nginx+TLS (Redis included)
+- Next.js and framework-free vanilla JS quickstart examples; real-browser E2E test suite for the admin console
+- Architecture Decision Records and a contributor architecture overview, published under docs/Contributing
+
+### Changed
+- Corrected the Java SDK's Maven groupId from `io.idenplane` to `com.idenplane`, matching the domains the project actually owns ([#1326](https://github.com/idenplane/idenplane/issues/1326))
+- Split licensing: the server/core stays AGPL-3.0, every SDK/client package is MIT
+- Centralized SDK bearer-token extraction, JWT decoding, and role resolution instead of duplicating it per-SDK
+
+### Fixed
+- Android SDK: `logout(activity)` now actually clears the browser-side session via a Custom Tab, matching what its doc comment always promised
+- Off-by-one in the webhook durable-queue retry backoff
+- Realm creation no longer skips its admin audit event
 
 ### Security
-- Fixed all outstanding Dependabot vulnerability alerts via npm overrides
+- Patched all outstanding Dependabot vulnerability alerts across the server, admin-ui, docs, and SDK packages
 
 ## [0.3.0] - 2026-05-21
 
