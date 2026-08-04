@@ -236,9 +236,20 @@ const sidebars: SidebarsConfig = {
       label: 'Troubleshooting & FAQ',
     },
     {
-      type: 'doc',
-      id: 'contributing/architecture',
-      label: 'Architecture Overview',
+      type: 'category',
+      label: 'Contributing',
+      items: [
+        {
+          type: 'doc',
+          id: 'contributing/architecture',
+          label: 'Architecture Overview',
+        },
+        {
+          type: 'doc',
+          id: 'contributing/adrs',
+          label: 'Architecture Decision Records',
+        },
+      ],
     },
   ],
 };

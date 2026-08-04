@@ -4,48 +4,60 @@ Thank you for your interest in contributing to Idenplane!
 
 ## Getting Started
 
-### Development Setup
+### Fork and clone
 
-1. **Clone the repository**
+1. **Fork the repository** on GitHub (the "Fork" button at the top of [idenplane/idenplane](https://github.com/idenplane/idenplane)).
+
+2. **Clone your fork** and add the upstream repo as a remote:
 ```bash
-git clone https://github.com/idenplane/idenplane.git
-cd Idenplane
+git clone https://github.com/<your-username>/idenplane.git
+cd idenplane
+git remote add upstream https://github.com/idenplane/idenplane.git
 ```
 
-2. **Install dependencies**
+3. **Keep your fork in sync** before starting new work:
+```bash
+git fetch upstream
+git checkout dev
+git merge upstream/dev
+```
+
+### Development Setup
+
+1. **Install dependencies**
 ```bash
 npm install
 ```
 
-3. **Set up environment**
+2. **Set up environment**
 ```bash
 cp .env.example .env
 # Edit .env with your database credentials
 ```
 
-4. **Start development database**
+3. **Start development database**
 ```bash
 docker compose up -d
 ```
 
-5. **Run database migrations**
+4. **Run database migrations**
 ```bash
 npm run db:migrate
 ```
 
-6. **Seed development data**
+5. **Seed development data**
 ```bash
 npm run db:seed
 ```
 
-7. **Start development server**
+6. **Start development server**
 ```bash
 npm run start:dev
 ```
 
 ### Required Tools
 
-- Node.js 20+
+- Node.js 22+
 - npm 10+
 - Docker & Docker Compose
 - Git
@@ -136,6 +148,15 @@ When submitting a PR:
    - One feature or fix per PR
    - Smaller PRs are reviewed faster
 
+### 5. Review Process
+
+Idenplane currently has a single maintainer, so review turnaround depends on their availability rather than a formal rotation — there's no assigned-reviewer system or required approval count beyond that.
+
+- All required CI checks (build, lint, tests) must be green before a PR is merged; a red check is treated as "not ready," not "waiting for an override."
+- The maintainer may ask for changes directly on the PR — respond with new commits rather than force-pushing over review comments, so the diff stays reviewable.
+- Approved PRs are squash-merged, so write your PR title/description as you'd want the resulting commit message to read; the individual commits within a PR don't need to be clean or atomic.
+- There's no fixed SLA on review time. For anything time-sensitive (a security fix, a broken build), say so explicitly in the PR description.
+
 ## Code Standards
 
 ### TypeScript
@@ -166,27 +187,24 @@ When submitting a PR:
 
 ## Project Structure
 
+The backend has around 60 NestJS modules under `src/`, each self-contained (its own controllers/services/DTOs) — too many to keep an accurate list here without it going stale. A representative sample:
+
 ```
 src/
-├── auth/           # Authentication logic
-├── admin-auth/     # Admin authentication
-├── clients/         # Client management
-├── groups/          # Group management
-├── roles/          # Role-based access control
-├── users/           # User management
-├── tokens/          # Token issuance & validation
-├── login/           # Login flows
-├── mfa/             # Multi-factor authentication
-├── oauth/           # OAuth 2.0 implementation
-├── saml/            # SAML 2.0 implementation
-├── webauthn/        # WebAuthn/FIDO2
-├── realms/          # Realm management
-├── common/          # Shared utilities
-├── crypto/          # Cryptographic operations
-├── prisma/          # Database service
-├── rate-limit/      # Rate limiting
+├── auth/              # Authentication logic
+├── admin-auth/        # Admin authentication
+├── oauth/             # OAuth 2.0 implementation
+├── saml/              # SAML 2.0 implementation
+├── webauthn/          # WebAuthn/FIDO2
+├── realms/            # Realm management
+├── users/, groups/, roles/, clients/  # Core identity model
+├── plugins/           # Plugin loading & integrity verification
+├── prisma/            # Database service
+├── common/            # Shared utilities
 └── ...
 ```
+
+For the full module map, grouped by concern, with a system diagram, see the [Architecture Overview](/contributing/architecture) on the docs site.
 
 ## Database Guidelines
 
