@@ -2,6 +2,8 @@
 
 This document records important architectural and technical decisions made during Idenplane development.
 
+The subset of these with the broadest relevance for contributors is written up as formal ADRs (Context/Decision/Consequences, with links to source commits and PRs) on the [docs site](https://idenplane.com/docs/contributing/adrs).
+
 ---
 
 ## 2026-05-04: Security Issues Resolution

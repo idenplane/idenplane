@@ -1,0 +1,166 @@
+---
+id: adrs
+title: Architecture Decision Records
+description: Documented rationale behind Idenplane's key technical decisions — sourced from commit history, DECISIONS.md, and maintainer PR discussion, not reconstructed after the fact.
+---
+
+# Architecture Decision Records
+
+Each entry below is sourced from an actual commit, PR description, or the project's [`DECISIONS.md`](https://github.com/idenplane/idenplane/blob/dev/DECISIONS.md) log — linked inline so you can read the original reasoning yourself. A decision only appears here if the *why*, not just the *what*, is on the record somewhere; several commonly-asked "why X" questions (framework choice, templating engine, per-language vs. generated SDKs) don't have a documented answer yet and are listed at the bottom instead of being guessed at.
+
+---
+
+## ADR-001: AGPL-3.0 for the server, MIT for SDKs and clients
+
+**Status**: Accepted
+
+**Context**: Idenplane's server is a full IAM engine competing with both open-source (Keycloak) and commercial (Auth0, Okta) identity providers. A permissive license risks the code being absorbed into a closed-source SaaS competitor with no contribution back; a fully proprietary license would undercut the "open" part of open-source IAM.
+
+**Decision**: The server/core stays AGPL-3.0 — if you run a modified version as a network service, you must publish the complete source of your modifications. Every SDK and client package (Java, Android, JS, Python, Go, iOS, CLI, Terraform provider) is MIT, so applications that merely *talk to* Idenplane over its API aren't dragged under AGPL's copyleft.
+
+**Consequences**:
+- Self-hosting and modifying the server for internal use is unrestricted; offering a modified server as a hosted service requires open-sourcing the modifications, or a commercial license for organizations that can't comply.
+- SDK consumers (a Spring Boot app, an Android app, a Terraform config) can adopt any Idenplane client library without their own codebase inheriting AGPL obligations — this was a deliberate split, not an oversight.
+
+**References**: README.md § License; PR #874 ("AGPL-3.0 keeps the project genuinely open while leaving room for a dual-licensing offer"); PR #1377 ("the server/core is the IAM engine and stays AGPL-3.0, but every SDK/client package should be MIT"); issue #1326 maintainer discussion.
+
+---
+
+## ADR-002: Maven Central groupId is `com.idenplane`, not `io.idenplane`
+
+**Status**: Accepted (correcting an earlier mistake)
+
+**Context**: The Java SDK was initially going to publish under `io.idenplane`. `io.idenplane` reverse-domain-notates to `idenplane.io`, a domain the project does not own or control — the owned domains are `idenplane.com`, `.org`, and `.cloud`. Every Java package inside the module already lives under `com.idenplane.sdk`, matching the Android SDK's namespace.
+
+**Decision**: Publish the Java SDK to Maven Central under groupId `com.idenplane`.
+
+**Consequences**: Consistent Maven coordinate space across the whole SDK family (Java and Android share `com.idenplane`); avoids publishing under a domain the project doesn't control, which Maven Central's namespace verification would reject or which would misrepresent ownership to consumers.
+
+**References**: Issue #1326; PR #1331 ("Publishing under the mismatched groupId would fragment the Maven coordinate space from the rest of the SDK family").
+
+---
+
+## ADR-003: Prisma over raw SQL or a query builder
+
+**Status**: Accepted — 2026-01-15
+
+**Context**: The backend needs to support PostgreSQL, MySQL, and SQLite from the same codebase, with a migration story that doesn't require hand-written SQL per database dialect.
+
+**Decision**: Use Prisma ORM instead of raw SQL or a lower-level query builder.
+
+**Rationale** (from `DECISIONS.md`): type-safe queries; built-in migration management; easy database switching across PostgreSQL, MySQL, and SQLite.
+
+**References**: `DECISIONS.md` § Architecture Decisions.
+
+---
+
+## ADR-004: Argon2id for password hashing
+
+**Status**: Accepted — 2025-11-20
+
+**Context**: Password hashing needs to resist offline brute-force attacks, including GPU/ASIC-accelerated ones, better than older algorithms.
+
+**Decision**: Use Argon2id (RFC 9106) for password hashing.
+
+**Rationale** (from `DECISIONS.md`): memory-hard function resistant to GPU attacks; better suited to modern security requirements than bcrypt.
+
+**References**: `DECISIONS.md` § Architecture Decisions.
+
+---
+
+## ADR-005: JWT signing with RS256
+
+**Status**: Accepted — 2025-10-05
+
+**Context**: Access and ID tokens need a signing scheme that works across multiple services and clients without sharing a secret.
+
+**Decision**: Sign JWTs with RS256 (RSA + SHA-256) rather than a symmetric algorithm like HS256.
+
+**Rationale** (from `DECISIONS.md`): asymmetric signing means the private key signs and only the public key is needed to verify — better suited to multi-service architectures than HS256, where every verifier would need the same shared secret as the signer.
+
+**References**: `DECISIONS.md` § Architecture Decisions.
+
+---
+
+## ADR-006: Redis as an optional cache/session layer, not a hard dependency
+
+**Status**: Accepted — 2025-08-12
+
+**Context**: Caching and session storage benefit from a shared, fast store, but requiring Redis for every deployment (including single-instance, low-traffic ones) raises the bar for self-hosting.
+
+**Decision**: Use Redis as an optional layer for caching and session sharing, with a graceful in-memory fallback when it isn't configured.
+
+**Rationale** (from `DECISIONS.md`): improves performance for frequent lookups; enables horizontal scaling via shared session state; falls back gracefully when Redis is unavailable.
+
+**Consequences**: Documented tradeoff — the in-memory fallback is per-instance, so distributed (multi-instance) deployments need Redis for *consistent* rate limiting and session behavior across instances; a single instance works fine without it.
+
+**References**: `DECISIONS.md` § Architecture Decisions; `DECISIONS.md` § "In-Memory Rate Limiting" (2026-04-13, issue #581).
+
+---
+
+## ADR-007: Plugins are denied by default in production without a verified integrity hash
+
+**Status**: Accepted, after a security regression
+
+**Context**: The plugin system allows third-party code to run inside the server process (auth providers, token enrichment, event listeners, custom themes). An early version of the integrity check was opt-in, meaning production deployments could silently run unverified plugin code — reported as issue #465 after a related regression (#430/#448) let a previously-fixed integrity issue reopen.
+
+**Decision**: In production (`NODE_ENV === 'production'`), the plugin loader computes a SHA-256 hash of the plugin file and refuses to load it if there's no matching manifest hash to verify against. Outside production, a missing hash only logs a warning.
+
+**Consequences**: A plugin author must generate a manifest hash (`idenplane plugins hash`) before a plugin will load in production — friction that's deliberate, not accidental. Development stays low-friction (warn, don't block) so local plugin iteration isn't blocked on re-hashing after every change.
+
+**References**: Issues #400, #430, #448, #465; commit `0f4f541` ("Plugin loader denies unverified plugins in production (#465)"); `src/plugins/plugin-loader.service.ts`.
+
+---
+
+## ADR-008: TypeScript/Node over a JVM stack for the server
+
+**Status**: Accepted
+
+**Context**: The identity-provider space is dominated by JVM-based incumbents (Keycloak) that are powerful but heavy to self-host and unfamiliar to a large share of potential contributors.
+
+**Decision**: Build the server on TypeScript/NestJS rather than Java or another JVM stack.
+
+**Rationale**: README.md's comparison table frames this directly against Keycloak-class competitors: "Most identity solutions are either too complex to self-host (Keycloak — 1GB+ RAM, Java)... Modern stack — TypeScript, NestJS, React, PostgreSQL. No Java, no XML." The project roadmap makes the contributor-facing angle explicit: the TypeScript/NestJS stack is "a contributor-friendliness advantage over Java/Go competitors," which matters directly because of the project's single-maintainer bus-factor risk.
+
+**References**: README.md § Comparison; `.auto-claude/roadmap/roadmap.json`, `feature-20` rationale.
+
+---
+
+## ADR-009: Terraform only for infrastructure-as-code — the Pulumi provider was abandoned, not chosen against upfront
+
+**Status**: Accepted (by removal)
+
+**Context**: A Pulumi provider and example usages existed alongside the Terraform provider, but were never in a working state: the Pulumi Go SDK it depended on (`github.com/idenplane/pulumi-idenplane`) was never published, the provider's own `go.mod` pointed at an unpublished module with no `replace` directive and no `go.sum`, and nothing in CI, the Makefile, or the docs referenced it. It also carried unfixable Dependabot alerts, since Dependabot cannot resolve a dependency graph rooted in a module that doesn't exist.
+
+**Decision**: Remove the Pulumi provider, its Go/C# examples, and the orphaned Terraform scaffolding that documented a provider schema (`base_url`, `auth_method`, `admin_user`, `admin_pass`) that no longer matches the real provider's schema (`url`, `api_key`). Keep `terraform-provider-idenplane` as the one supported IaC path.
+
+**Consequences**: One IaC integration to maintain and document instead of two, one of which never worked. This is a decision made honestly by removing broken, unreferenced code rather than by patching versions to silence security alerts on code nobody could compile or run.
+
+**References**: PRs #1195, #1227, #1233.
+
+---
+
+## ADR-010: Native `fetch`, not vendor SDKs, for third-party email provider integrations
+
+**Status**: Accepted
+
+**Context**: Adding multi-provider email support (Resend, SendGrid, Mailgun, Postmark, alongside existing SMTP) could have pulled in each provider's official Node SDK as a dependency.
+
+**Decision**: Implement each provider as a small adapter against its HTTP API using native `fetch`, with no additional SDK dependencies.
+
+**Consequences**: Five provider integrations add zero new runtime dependencies between them, keeping the dependency-security surface (and Dependabot's workload) smaller than one SDK per provider would.
+
+**References**: PR #1067 ("5 concrete implementations using native fetch (no extra SDK deps)").
+
+---
+
+## Known gaps — not written up because the rationale isn't documented
+
+These are commonly-asked "why X" questions where only the choice, not the reasoning behind it, could be found in the repo. Writing an ADR for any of these would mean inventing a justification after the fact rather than recording one that was actually made — so they're listed here as open gaps instead:
+
+- **Why NestJS specifically, over Express or another Node framework** — the codebase uses NestJS throughout and README's comparison covers TypeScript/Node vs. a JVM stack (see ADR-008), but no commit, PR, or doc compares NestJS against alternative Node frameworks.
+- **Why Handlebars for templates** — commits describe *what* the template engine does (inheritance, i18n) and fix a packaging bug, but none compare Handlebars to EJS, Pug, or another templating approach.
+- **Why hand-written per-language SDKs instead of one client generated from the OpenAPI spec** — the SDK family's shape (Java, Android, JS, Python, Go, iOS, CLI, Terraform) is well documented, but not why that shape was chosen over codegen.
+- **Why the plugin system's specific architecture** (4 plugin types, 2 discovery sources) — its existence and purpose are documented (issue #274, commit `a591186`), but not why this shape was chosen over alternatives.
+
+If you have context on any of these — even a Slack thread or a design doc that didn't make it into a commit message — opening a PR to fill in the gap is welcome.
