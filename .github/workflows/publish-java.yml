@@ -75,6 +75,18 @@ jobs:
             exit 1
           fi
 
+      # Temporary — remove once the flatten-maven-plugin fix (added to fix Central Portal's
+      # "Failed to get coordinates from pom file" validation failure on deployment
+      # c8a4c343-d5d6-4b08-9adb-0d11848eca58) has been confirmed correct on a real run. Runs
+      # before the actual publish step so a workflow_dispatch run can be cancelled here if the
+      # flattened POM looks wrong, without creating another FAILED Central Portal deployment.
+      - name: Print flattened POM for verification
+        run: |
+          mvn -B -pl idenplane-java-core -Pcentral-publish process-resources
+          echo "::group::Flattened POM (idenplane-java-core/.flattened-pom.xml)"
+          cat idenplane-java-core/.flattened-pom.xml
+          echo "::endgroup::"
+
       - name: Publish idenplane-java-core to Maven Central
         run: mvn -B -pl idenplane-java-core deploy -Pcentral-publish -DskipTests
         env:
