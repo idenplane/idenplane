@@ -107,6 +107,16 @@
                         <artifactId>maven-gpg-plugin</artifactId>
                     </plugin>
 
+                    <!-- Rewrites the deployed POM to be self-contained (no <parent>, every
+                         inherited field inlined) — see the pluginManagement entry in the parent
+                         pom.xml for why Central Portal's validator needs this. Scoped to this
+                         profile only, like the other publish-only plugins above: plain `mvn
+                         verify` (what CI runs on every PR) doesn't need a flattened pom. -->
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>flatten-maven-plugin</artifactId>
+                    </plugin>
+
                     <plugin>
                         <groupId>io.github.mavenplugins</groupId>
                         <artifactId>central-publishing-maven-plugin</artifactId>

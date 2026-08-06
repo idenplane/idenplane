@@ -337,6 +337,44 @@
                     </configuration>
                 </plugin>
 
+                <!-- Central Portal validates each uploaded POM file in isolation — it does not
+                     walk Maven's <parent> inheritance chain the way a real build does. Without
+                     this, idenplane-java-core's deploy was rejected: "Failed to get coordinates
+                     from pom file" and cascading "Failed to associate file with coordinates" for
+                     every artifact, plus "missing" project URL/license/developers/SCM and
+                     dependency versions — all of which are genuinely declared here in the parent,
+                     just not visible to a validator reading the child POM standalone. flatten
+                     rewrites the deployed POM with every inherited element inlined and the
+                     <parent> block removed, so the published POM is self-contained (this also
+                     avoids consumers' resolvers 404ing trying to fetch a never-published parent
+                     POM). flattenMode must stay "ossrh": the plugin's default mode strips
+                     <developers>/<scm>/<url>/<name> as a "minimal" simplification, which would
+                     reproduce the exact validation failure this exists to fix. -->
+                <plugin>
+                    <groupId>org.codehaus.mojo</groupId>
+                    <artifactId>flatten-maven-plugin</artifactId>
+                    <version>1.6.0</version>
+                    <configuration>
+                        <flattenMode>ossrh</flattenMode>
+                    </configuration>
+                    <executions>
+                        <execution>
+                            <id>flatten</id>
+                            <phase>process-resources</phase>
+                            <goals>
+                                <goal>flatten</goal>
+                            </goals>
+                        </execution>
+                        <execution>
+                            <id>flatten-clean</id>
+                            <phase>clean</phase>
+                            <goals>
+                                <goal>clean</goal>
+                            </goals>
+                        </execution>
+                    </executions>
+                </plugin>
+
                 <plugin>
                     <groupId>org.jacoco</groupId>
                     <artifactId>jacoco-maven-plugin</artifactId>
