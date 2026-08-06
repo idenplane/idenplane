@@ -22,14 +22,25 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
+      # server-username/server-password take the NAME of an env var (populated in the
+      # "Publish" step below), not the secret itself — actions/setup-java has no
+      # "-env-var"-suffixed variant of these inputs. An earlier version of this workflow
+      # used server-username-env-var/server-password-env-var, which don't exist: the
+      # action silently ignored them (a warning, not a failure) and fell back to its
+      # GitHub Packages default of GITHUB_ACTOR/GITHUB_TOKEN. That sent our own GitHub
+      # username and the literal unresolved string "${env.GITHUB_TOKEN}" to Central
+      # Portal as credentials — a real Maven Central token was never actually sent,
+      # which is why every plugin swap and token regeneration during that investigation
+      # kept hitting an identical 401 (confirmed by Sonatype support reading their
+      # server-side logs).
       - uses: actions/setup-java@v4
         with:
           distribution: temurin
           java-version: '17'
           cache: maven
           server-id: central
-          server-username-env-var: MAVEN_CENTRAL_USERNAME
-          server-password-env-var: MAVEN_CENTRAL_PASSWORD
+          server-username: MAVEN_CENTRAL_USERNAME
+          server-password: MAVEN_CENTRAL_PASSWORD
           gpg-private-key: ${{ secrets.GPG_PRIVATE_KEY }}
 
       - name: Verify tag matches idenplane-java-core's project version
