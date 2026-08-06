@@ -51,16 +51,17 @@ jobs:
           # Scan only ADDED lines (skip context, the +++ header and @@ hunk
           # headers) so a match must be introduced by this PR, and skip committed
           # templates whose placeholders (e.g. REPLACE_ME...) are not real secrets.
-          # Excludes matches whose value is a bare UPPER_SNAKE_CASE identifier
-          # (e.g. `server-password: MAVEN_CENTRAL_PASSWORD`) — that's the documented
-          # actions/setup-java pattern for naming an env var to read a secret from
-          # later, not the secret value itself; real leaked tokens/keys are never
-          # pure-uppercase identifiers with no lowercase or mixed-case characters.
+          # Excludes matches whose value is a bare UPPER_SNAKE_CASE identifier, e.g.
+          # naming an env var for actions/setup-java to read a real secret from
+          # later rather than the secret value itself — real leaked tokens/keys are
+          # never pure-uppercase with no lowercase or mixed-case characters. Matched
+          # without anchoring to end-of-line, since trailing punctuation (closing
+          # backtick/paren, a comment continuing past it) shouldn't defeat this.
           HITS=$(git diff origin/main...HEAD \
               -- . ':(exclude)*.example' ':(exclude)*.sample' ':(exclude)*.template' ':(exclude)*.dist' \
             | grep -E '^\+[^+]' \
             | grep -iE '(api[_-]?key|secret|password|token|bearer)[^A-Za-z]*[:=][^A-Za-z]*[A-Za-z0-9_-]{20,}' \
-            | grep -vE '[:=][[:space:]]*"?[A-Z][A-Z0-9_]{19,}"?[[:space:]]*$' || true)
+            | grep -vE '[:=][[:space:]]*"?[A-Z][A-Z0-9_]{19,}("?([^a-zA-Z]|$))' || true)
           if [ -n "$HITS" ]; then
             echo "::error::Possible secret leaked in diff:"
             echo "$HITS"
