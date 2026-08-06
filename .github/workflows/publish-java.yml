@@ -33,7 +33,7 @@ jobs:
       # which is why every plugin swap and token regeneration during that investigation
       # kept hitting an identical 401 (confirmed by Sonatype support reading their
       # server-side logs).
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'

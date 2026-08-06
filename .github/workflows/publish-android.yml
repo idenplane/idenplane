@@ -22,12 +22,12 @@ jobs:
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@v5
         with:
           distribution: temurin
           java-version: '17'
 
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
 
       - name: Verify tag matches the coordinates() version in build.gradle.kts
         if: startsWith(github.ref, 'refs/tags/')
