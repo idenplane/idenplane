@@ -16,6 +16,18 @@
     <name>Idenplane Java SDK - Core</name>
     <description>Core module of the Idenplane Java SDK providing token validation and user management API</description>
 
+    <!-- Overrides Maven's default child-URL inheritance, which would otherwise append this
+         module's artifactId onto the parent's repo-root url/scm.url (e.g.
+         .../idenplane/idenplane-java-core) — not a real path, since this module actually lives
+         at packages/idenplane-java/idenplane-java-core in the monorepo. connection and
+         developerConnection are left inherited as-is: it's the same git repo either way. -->
+    <url>https://github.com/idenplane/idenplane/tree/main/packages/idenplane-java/idenplane-java-core</url>
+    <scm>
+        <connection>scm:git:https://github.com/idenplane/idenplane.git</connection>
+        <developerConnection>scm:git:ssh://git@github.com/idenplane/idenplane.git</developerConnection>
+        <url>https://github.com/idenplane/idenplane/tree/main/packages/idenplane-java/idenplane-java-core</url>
+    </scm>
+
     <dependencies>
         <!-- HTTP Client -->
         <dependency>
@@ -105,6 +117,16 @@
                     <plugin>
                         <groupId>org.apache.maven.plugins</groupId>
                         <artifactId>maven-gpg-plugin</artifactId>
+                    </plugin>
+
+                    <!-- Rewrites the deployed POM to be self-contained (no <parent>, every
+                         inherited field inlined) — see the pluginManagement entry in the parent
+                         pom.xml for why Central Portal's validator needs this. Scoped to this
+                         profile only, like the other publish-only plugins above: plain `mvn
+                         verify` (what CI runs on every PR) doesn't need a flattened pom. -->
+                    <plugin>
+                        <groupId>org.codehaus.mojo</groupId>
+                        <artifactId>flatten-maven-plugin</artifactId>
                     </plugin>
 
                     <plugin>
