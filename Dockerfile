@@ -1,5 +1,14 @@
+# node:25-alpine (and node:25-slim) breaks `prisma generate` under QEMU arm64
+# emulation with a nonsensical "does not start with any known Prisma schema
+# keyword" error — actually a JSON-parsing bug in Prisma's engine on that
+# combination, unrelated to schema content. amd64 is unaffected; this only
+# surfaced because docker-publish.yml's actual tag-generation bug (fixed
+# separately) had been silently preventing this stage from ever running on a
+# push to main. Tracked upstream: https://github.com/prisma/prisma/issues/29464.
+# Pinned to 22 (not just reverted) to match what CI's actions/setup-node already
+# tests against everywhere else in this repo — re-bump once that issue closes.
 # Stage 1: Dependencies
-FROM node:25-alpine AS deps
+FROM node:22-alpine AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 # --ignore-scripts: the root "postinstall" runs `prisma generate`, which needs
@@ -8,13 +17,13 @@ COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
 
 # Stage 1b: Admin UI dependencies
-FROM node:25-alpine AS admin-deps
+FROM node:22-alpine AS admin-deps
 WORKDIR /app/admin-ui
 COPY admin-ui/package.json admin-ui/package-lock.json ./
 RUN npm ci
 
 # Stage 2: Build
-FROM node:25-alpine AS build
+FROM node:22-alpine AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=admin-deps /app/admin-ui/node_modules ./admin-ui/node_modules
@@ -28,7 +37,7 @@ RUN npm run build
 RUN cp -r admin-ui/dist dist/admin-ui
 
 # Stage 3: Production
-FROM node:25-alpine AS production
+FROM node:22-alpine AS production
 WORKDIR /app
 
 # pg_dump / pg_restore, used by the upgrade flow to take a backup before running
