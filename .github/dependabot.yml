@@ -83,6 +83,14 @@ updates:
     labels:
       - dependencies
       - docker
+    ignore:
+      # node:25 breaks `prisma generate` under QEMU arm64 emulation (this repo
+      # builds linux/arm64 in docker-publish.yml) — see the Dockerfile comment
+      # and https://github.com/prisma/prisma/issues/29464. Remove once that's
+      # fixed upstream and re-bump deliberately (with an arm64 build actually
+      # verified, not just amd64 CI).
+      - dependency-name: "node"
+        versions: ["25.x", "25"]
 
   # Documentation site (was unmonitored — a transitive uuid advisory sat here
   # with no fix PR because Dependabot wasn't watching this directory).
