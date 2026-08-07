@@ -21,5 +21,9 @@ module.exports = {
   collectCoverageFrom: ['**/*.(t|j)s'],
   coverageDirectory: '../coverage',
   testEnvironment: 'node',
-  transformIgnorePatterns: ['node_modules/(?!jose)'],
+  // jose: ships ESM only. htmlparser2 (sanitize-html's parser, bumped in its
+  // 2.17.6 release): also ESM-only as of its own recent bump. Both need
+  // ts-jest to actually transform them instead of Jest's default of treating
+  // everything under node_modules as already-CommonJS.
+  transformIgnorePatterns: ['node_modules/(?!jose|htmlparser2)'],
 };
