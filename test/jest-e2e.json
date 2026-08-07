@@ -30,7 +30,7 @@
     "^(\\.{1,2}/.*)\\.js$": "$1"
   },
   "transformIgnorePatterns": [
-    "node_modules/(?!jose)"
+    "^(?!.*node_modules/(jose|sanitize-html/node_modules)/).*node_modules/.*$"
   ],
   "globalSetup": "./global-setup.ts"
 }

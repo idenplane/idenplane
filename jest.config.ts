@@ -21,5 +21,21 @@ module.exports = {
   collectCoverageFrom: ['**/*.(t|j)s'],
   coverageDirectory: '../coverage',
   testEnvironment: 'node',
-  transformIgnorePatterns: ['node_modules/(?!jose)'],
+  // jose: ships ESM only. sanitize-html's HTML parser (bumped as of its
+  // 2.17.6 release) pulls in a whole nested ESM-only tree — htmlparser2,
+  // domutils, domhandler, domelementtype, entities, all under
+  // node_modules/sanitize-html/node_modules/* — that all need ts-jest to
+  // actually transform them instead of Jest's default of treating everything
+  // under node_modules as already-CommonJS.
+  //
+  // A simple `node_modules/(?!jose|htmlparser2)` doesn't work: Jest matches
+  // this pattern against the whole path, and the first "node_modules/"
+  // segment here is followed by "sanitize-html", not "htmlparser2", so the
+  // negative lookahead succeeds and Jest ignores the file anyway. Instead,
+  // exclude anything under sanitize-html's OWN node_modules wholesale, so
+  // new transitive ESM deps added there later don't silently break tests
+  // again the same way.
+  transformIgnorePatterns: [
+    '^(?!.*node_modules/(jose|sanitize-html/node_modules)/).*node_modules/.*$',
+  ],
 };

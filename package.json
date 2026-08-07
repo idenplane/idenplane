@@ -58,8 +58,8 @@
     "handlebars": "^4.7.8",
     "hbs": "^4.2.0",
     "helmet": "^8.3.0",
-    "ioredis": "^5.11.1",
-    "jose": "^6.2.5",
+    "ioredis": "^6.0.0",
+    "jose": "^6.2.8",
     "ldapts": "^9.0.0",
     "nestjs-pino": "^4.5.0",
     "nodemailer": "^9.0.3",
@@ -72,7 +72,7 @@
     "qrcode": "^1.5.4",
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
-    "sanitize-html": "^2.17.5",
+    "sanitize-html": "^2.17.6",
     "twilio": "^6.0.2",
     "xml-crypto": "^6.1.2"
   },
@@ -95,7 +95,7 @@
     "eslint": "^10.8.0",
     "eslint-config-prettier": "^10.0.1",
     "eslint-plugin-prettier": "^5.5.6",
-    "globals": "^17.8.0",
+    "globals": "^17.9.0",
     "jest": "^30.0.0",
     "prettier": "^3.9.6",
     "source-map-support": "^0.5.21",
@@ -105,7 +105,7 @@
     "ts-node": "^10.9.2",
     "tsconfig-paths": "^4.2.0",
     "typescript": "^6.0.3",
-    "typescript-eslint": "^8.65.0"
+    "typescript-eslint": "^8.66.0"
   },
   "overrides": {
     "hono": "^4.12.7",
