@@ -58,9 +58,13 @@ jobs:
         uses: docker/metadata-action@v6
         with:
           images: islamawad/idenplane
+          # {{is_default_branch}} checks the repo's configured GitHub default branch,
+          # which is dev here, not main — so it never matched a push to main and every
+          # such push failed with "tag is needed when pushing to registry" (no tags
+          # generated at all). Check the actual ref pushed to instead.
           tags: |
-            type=raw,value=latest,enable={{is_default_branch}}
-            type=sha,prefix=main-,enable={{is_default_branch}}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
+            type=sha,prefix=main-,enable=${{ github.ref == 'refs/heads/main' }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
 
