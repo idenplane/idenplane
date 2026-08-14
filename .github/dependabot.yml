@@ -31,6 +31,12 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # TypeScript majors are repository-wide migrations: the backend, admin UI,
+      # docs, SDKs, ts-jest, and lint parser must move together. Keep routine
+      # Dependabot runs focused on updates that can be validated independently.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
 
   # Admin UI
   - package-ecosystem: npm
@@ -59,6 +65,25 @@ updates:
         patterns:
           - "vitest"
           - "@vitest/*"
+      frontend-dev-tooling:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+        patterns:
+          - "vite"
+          - "@vitejs/*"
+          - "typescript-eslint"
+          - "eslint*"
+    ignore:
+      # Coordinate TypeScript majors with the rest of the monorepo rather than
+      # allowing backend and admin-ui compiler versions to drift independently.
+      - dependency-name: "typescript"
+        update-types: ["version-update:semver-major"]
+      # jsdom majors can change browser emulation and test timing. Upgrade them
+      # deliberately after proving the existing UI suite is green.
+      - dependency-name: "jsdom"
+        update-types: ["version-update:semver-major"]
 
   # GitHub Actions
   - package-ecosystem: github-actions
