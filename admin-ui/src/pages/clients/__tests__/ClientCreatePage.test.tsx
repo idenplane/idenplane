@@ -116,8 +116,13 @@ describe('ClientCreatePage', () => {
     await user.type(screen.getByLabelText(/^client id$/i), 'slow-client');
     await user.click(screen.getByRole('button', { name: /^create client$/i }));
 
-    expect(await screen.findByRole('button', { name: /creating/i })).toBeInTheDocument();
-    completeRequest();
+    try {
+      expect(await screen.findByRole('button', { name: /creating/i })).toBeInTheDocument();
+    } finally {
+      // Always release the MSW handler, including when the assertion fails, so
+      // a failure cannot strand an open request and hang the remaining suite.
+      completeRequest();
+    }
     // Let the response land before the test ends — an in-flight request that
     // outlives the test can leak work into the rest of the suite.
     await waitForElementToBeRemoved(() => screen.queryByRole('button', { name: /creating/i }));
