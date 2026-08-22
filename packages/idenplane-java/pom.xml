@@ -177,7 +177,7 @@
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-autoconfigure</artifactId>
-                <version>3.5.4</version>
+                <version>3.5.15</version>
             </dependency>
 
             <!-- Test support for exercising @AutoConfiguration classes via
@@ -185,14 +185,14 @@
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-test</artifactId>
-                <version>3.5.4</version>
+                <version>3.5.15</version>
                 <scope>test</scope>
             </dependency>
 
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-test-autoconfigure</artifactId>
-                <version>3.5.4</version>
+                <version>3.5.15</version>
                 <scope>test</scope>
             </dependency>
 
@@ -200,7 +200,7 @@
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-configuration-processor</artifactId>
-                <version>3.5.4</version>
+                <version>3.5.15</version>
             </dependency>
 
             <!-- Jakarta EE -->
