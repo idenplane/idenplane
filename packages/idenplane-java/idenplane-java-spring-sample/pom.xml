@@ -25,7 +25,7 @@
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
-                <version>3.5.4</version>
+                <version>3.5.15</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -92,7 +92,7 @@
                      versions only, not plugin versions — that's spring-boot-starter-parent's
                      job, which this module can't also extend (see the dependencyManagement
                      comment above). Version pinned explicitly instead. -->
-                <version>3.5.4</version>
+                <version>3.5.15</version>
             </plugin>
         </plugins>
     </build>
