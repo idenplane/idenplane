@@ -109,6 +109,10 @@ describe('AdminAuthService', () => {
     );
   });
 
+  afterEach(() => {
+    service.onModuleDestroy();
+  });
+
   // ─── login ─────────────────────────────────────────────
 
   describe('login', () => {
