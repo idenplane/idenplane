@@ -73,7 +73,7 @@
     "reflect-metadata": "^0.2.2",
     "rxjs": "^7.8.1",
     "sanitize-html": "^2.17.7",
-    "twilio": "^6.0.2",
+    "twilio": "^6.1.0",
     "xml-crypto": "^6.1.2"
   },
   "devDependencies": {
