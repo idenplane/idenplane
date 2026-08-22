@@ -401,6 +401,56 @@ describe('ProxyAuthService', () => {
     });
   });
 
+  // ─── signOutDestination ───────────────────────────────────
+
+  describe('signOutDestination', () => {
+    const realm = { name: 'master' } as never;
+
+    it('prefers a concrete allowed URI over a wildcard one', () => {
+      expect(
+        service.signOutDestination(
+          realm,
+          app({
+            allowedRedirectUris: [
+              'https://grafana.example.com/*',
+              'https://grafana.example.com/login',
+            ],
+          }),
+        ),
+      ).toBe('https://grafana.example.com/login');
+    });
+
+    it('strips a trailing wildcard when that is all there is', () => {
+      expect(
+        service.signOutDestination(
+          realm,
+          app({ allowedRedirectUris: ['https://grafana.example.com/*'] }),
+        ),
+      ).toBe('https://grafana.example.com/');
+    });
+
+    it('falls back to the account console when nothing is configured', () => {
+      expect(
+        service.signOutDestination(realm, app({ allowedRedirectUris: [] })),
+      ).toBe('/realms/master/account');
+    });
+
+    // The point of the whole helper: sign-out takes no rd parameter, so no
+    // request-supplied value can reach res.redirect. Everything it can return
+    // is admin-configured.
+    it('only ever returns admin-configured values', () => {
+      const configured = ['https://grafana.example.com/*'];
+      const result = service.signOutDestination(
+        realm,
+        app({ allowedRedirectUris: configured }),
+      );
+
+      expect(
+        configured.some((u) => result === u || result === u.slice(0, -1)),
+      ).toBe(true);
+    });
+  });
+
   // ─── callbackUrl ──────────────────────────────────────────
 
   describe('callbackUrl', () => {

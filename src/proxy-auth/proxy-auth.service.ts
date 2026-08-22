@@ -147,6 +147,29 @@ export class ProxyAuthService {
     return `${baseUrl}/realms/${realmName}/proxy/${slug}/callback`;
   }
 
+  /**
+   * Where to send the browser after signing out of a proxied application.
+   *
+   * Derived entirely from the application's own configuration — deliberately
+   * NOT from a `rd` query parameter. Preserving a deep link across a logout is
+   * worth almost nothing, while an endpoint that 302s to a URL from the query
+   * string is an open-redirect shape that a reviewer has to re-audit every time
+   * the allowlist changes. `callback` genuinely needs its return URL, and pays
+   * for it with the encrypted state; sign-out does not, so it does not.
+   *
+   * Prefers a concrete allowed URI, mirroring how magic-link picks one; falls
+   * back to stripping a trailing wildcard, then to the account console.
+   */
+  signOutDestination(realm: Realm, app: ProxyApplication): string {
+    const concrete = app.allowedRedirectUris.find((u) => !u.endsWith('/*'));
+    if (concrete) return concrete;
+
+    const wildcard = app.allowedRedirectUris[0];
+    if (wildcard?.endsWith('/*')) return wildcard.slice(0, -1);
+
+    return `/realms/${realm.name}/account`;
+  }
+
   // ─── Handshake state ──────────────────────────────────────
 
   encodeState(app: ProxyApplication, returnUrl: string): string {

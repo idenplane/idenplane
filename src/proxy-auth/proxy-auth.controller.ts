@@ -233,14 +233,19 @@ export class ProxyAuthController {
     res.redirect(302, returnUrl);
   }
 
-  /** Drop the proxy session. Does not touch the SSO session. */
+  /**
+   * Drop the proxy session. Does not touch the SSO session.
+   *
+   * Takes no return-URL parameter on purpose: see
+   * ProxyAuthService.signOutDestination. Nothing from the request reaches the
+   * redirect.
+   */
   @Get('sign-out')
   @Public()
   @RateLimitByIp()
   async signOut(
     @CurrentRealm() realm: Realm,
     @Param('slug') slug: string,
-    @Query('rd') rd: string | undefined,
     @Req() req: Request,
     @Res() res: Response,
   ): Promise<void> {
@@ -258,8 +263,7 @@ export class ProxyAuthController {
       path: '/',
     });
 
-    const returnUrl = this.proxyAuth.resolveReturnUrl(app, rd ?? null);
-    res.redirect(302, returnUrl ?? `/realms/${realm.name}/account`);
+    res.redirect(302, this.proxyAuth.signOutDestination(realm, app));
   }
 
   // ─── helpers ──────────────────────────────────────────────
