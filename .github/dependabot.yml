@@ -111,3 +111,53 @@ updates:
         update-types:
           - minor
           - patch
+
+  # Examples — these are the copy-paste starting point we hand new users, so a
+  # stale lockfile here is a vulnerable dependency we actively ship. Neither
+  # directory was watched until #1441: nanoid sat at 3.3.16 with no version
+  # update PR, and because ci.yml gated on `npm audit` the resulting advisory
+  # turned 11 of 13 open PRs red without a line of code changing.
+  - package-ecosystem: npm
+    directory: "/examples/nextjs-quickstart"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: "Africa/Cairo"
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - examples
+    groups:
+      example-dev-dependencies:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: npm
+    directory: "/examples/vanilla-js-quickstart"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: "Africa/Cairo"
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - examples
+
+  # Java SDK — Dependabot's security updates already opened PRs here (they need
+  # no config), so the module only ever moved when an advisory forced it. This
+  # adds the routine version updates that keep it from drifting in between.
+  - package-ecosystem: maven
+    directory: "/packages/idenplane-java"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: "Africa/Cairo"
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - java
