@@ -32,6 +32,7 @@ describe('SessionsCleanupService', () => {
       prisma.impersonationSession.deleteMany.mockResolvedValue({
         count: 0,
       });
+      prisma.proxySession.deleteMany.mockResolvedValue({ count: 0 });
 
       const before = new Date();
       await service.cleanupExpiredSessions();
@@ -64,6 +65,13 @@ describe('SessionsCleanupService', () => {
       expect(prisma.impersonationSession.deleteMany).toHaveBeenCalledWith({
         where: { expiresAt: { lt: expect.any(Date) } },
       });
+
+      // Proxy (forward-auth) sessions are swept here too. Nothing else prunes
+      // them: the proxy only re-checks a session when its cookie expires, so a
+      // missing sweep grows proxy_sessions for the life of the deployment.
+      expect(prisma.proxySession.deleteMany).toHaveBeenCalledWith({
+        where: { expiresAt: { lt: expect.any(Date) } },
+      });
     });
 
     it('should not throw when all tables return zero deleted rows', async () => {
@@ -78,6 +86,7 @@ describe('SessionsCleanupService', () => {
       prisma.impersonationSession.deleteMany.mockResolvedValue({
         count: 0,
       });
+      prisma.proxySession.deleteMany.mockResolvedValue({ count: 0 });
 
       await expect(service.cleanupExpiredSessions()).resolves.toBeUndefined();
     });
@@ -97,6 +106,7 @@ describe('SessionsCleanupService', () => {
       prisma.impersonationSession.deleteMany.mockResolvedValue({
         count: 1,
       });
+      prisma.proxySession.deleteMany.mockResolvedValue({ count: 1 });
 
       await service.cleanupExpiredSessions();
 
@@ -107,9 +117,10 @@ describe('SessionsCleanupService', () => {
         prisma.authorizationCode.deleteMany.mock.calls[0][0].where.expiresAt.lt,
         prisma.impersonationSession.deleteMany.mock.calls[0][0].where.expiresAt
           .lt,
+        prisma.proxySession.deleteMany.mock.calls[0][0].where.expiresAt.lt,
       ];
 
-      // All five calls must use the exact same Date instance / value
+      // All six calls must use the exact same Date instance / value
       const referenceTime = timestamps[0].getTime();
       for (const ts of timestamps) {
         expect(ts.getTime()).toBe(referenceTime);

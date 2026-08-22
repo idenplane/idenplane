@@ -34,6 +34,13 @@ export class SessionsCleanupService {
       where: { expiresAt: { lt: now } },
     });
 
+    // Delete expired proxy (forward-auth) sessions. Nothing else prunes these:
+    // the proxy only re-checks a session when its cookie expires, so without
+    // this the table grows for the lifetime of the deployment.
+    const proxyResult = await this.prisma.proxySession.deleteMany({
+      where: { expiresAt: { lt: now } },
+    });
+
     // Delete expired impersonation sessions.
     const impersonationResult =
       await this.prisma.impersonationSession.deleteMany({
@@ -45,6 +52,7 @@ export class SessionsCleanupService {
       ssoResult.count +
       refreshResult.count +
       authCodeResult.count +
+      proxyResult.count +
       impersonationResult.count;
 
     if (total > 0) {
@@ -53,6 +61,7 @@ export class SessionsCleanupService {
           `${ssoResult.count} SSO session(s), ` +
           `${refreshResult.count} refresh token(s), ` +
           `${authCodeResult.count} authorization code(s), ` +
+          `${proxyResult.count} proxy session(s), ` +
           `${impersonationResult.count} impersonation session(s)`,
       );
     }

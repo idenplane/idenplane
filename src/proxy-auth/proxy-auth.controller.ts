@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiExcludeController } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
-import type { ProxyApplication, Realm, User } from '@prisma/client';
+import type { Realm, User } from '@prisma/client';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
@@ -27,6 +27,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import {
   ProxyAuthService,
   PROXY_SESSION_COOKIE,
+  type ProxyApplicationWithClient,
 } from './proxy-auth.service.js';
 
 /**
@@ -40,11 +41,25 @@ import {
  * through the ordinary token grant, so MFA, step-up, SSO, consent, brute-force
  * protection and risk assessment all apply exactly as they do for any other
  * client — without this module knowing they exist.
+ *
+ * Rate limiting is applied PER METHOD, not on the class, and `verify` is
+ * deliberately left out of it.
+ *
+ * `verify` is called by the proxy on every single request to the protected
+ * application, and the IP the guard sees is the proxy's — with TRUSTED_PROXIES
+ * unset, resolveClientIp returns the socket address, which is the same for all
+ * of that traffic. ipRateLimitPerMinute defaults to 20, so a class-level
+ * @RateLimitByIp() would throttle the entire protected application to 20
+ * requests a minute: an outage, not a defence. Loading one dashboard makes more
+ * requests than that.
+ *
+ * The login-flow endpoints are a different shape — a handful of requests per
+ * user per session — so they keep the per-IP limit. Volume control for `verify`
+ * belongs at the proxy, which is the only layer that still sees real client IPs.
  */
 @ApiExcludeController()
 @Controller('realms/:realmName/proxy/:slug')
 @UseGuards(RealmGuard, RateLimitGuard)
-@RateLimitByIp()
 export class ProxyAuthController {
   private readonly logger = new Logger(ProxyAuthController.name);
 
@@ -105,6 +120,7 @@ export class ProxyAuthController {
    */
   @Get('start')
   @Public()
+  @RateLimitByIp()
   async start(
     @CurrentRealm() realm: Realm,
     @Param('slug') slug: string,
@@ -128,16 +144,8 @@ export class ProxyAuthController {
       );
     }
 
-    const client = await this.prisma.client.findUnique({
-      where: { id: app.clientId },
-      select: { clientId: true },
-    });
-    if (!client) {
-      throw new NotFoundException('Proxy application client no longer exists');
-    }
-
     const params = new URLSearchParams({
-      client_id: client.clientId,
+      client_id: app.client.clientId,
       redirect_uri: this.proxyAuth.callbackUrl(realm.name, app.slug),
       response_type: 'code',
       scope: 'openid profile email',
@@ -153,6 +161,7 @@ export class ProxyAuthController {
    */
   @Get('callback')
   @Public()
+  @RateLimitByIp()
   async callback(
     @CurrentRealm() realm: Realm,
     @Param('slug') slug: string,
@@ -174,14 +183,6 @@ export class ProxyAuthController {
       throw new BadRequestException('Missing authorization code');
     }
 
-    const client = await this.prisma.client.findUnique({
-      where: { id: app.clientId },
-      select: { clientId: true, clientSecret: true },
-    });
-    if (!client) {
-      throw new NotFoundException('Proxy application client no longer exists');
-    }
-
     const ip = resolveClientIp(req);
     const userAgent = req.headers['user-agent'];
 
@@ -192,8 +193,10 @@ export class ProxyAuthController {
       {
         grant_type: 'authorization_code',
         code,
-        client_id: client.clientId,
-        ...(client.clientSecret ? { client_secret: client.clientSecret } : {}),
+        client_id: app.client.clientId,
+        ...(app.client.clientSecret
+          ? { client_secret: app.client.clientSecret }
+          : {}),
         redirect_uri: this.proxyAuth.callbackUrl(realm.name, app.slug),
       },
       ip,
@@ -233,6 +236,7 @@ export class ProxyAuthController {
   /** Drop the proxy session. Does not touch the SSO session. */
   @Get('sign-out')
   @Public()
+  @RateLimitByIp()
   async signOut(
     @CurrentRealm() realm: Realm,
     @Param('slug') slug: string,
@@ -263,7 +267,7 @@ export class ProxyAuthController {
   private async requireApp(
     realm: Realm,
     slug: string,
-  ): Promise<ProxyApplication> {
+  ): Promise<ProxyApplicationWithClient> {
     const app = await this.proxyAuth.findBySlug(realm, slug);
     if (!app || !app.enabled) {
       throw new NotFoundException(`Proxy application '${slug}' not found`);

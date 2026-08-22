@@ -32,6 +32,16 @@ interface ProxyAuthState {
   e: number;
 }
 
+/**
+ * An application together with the OAuth client it authenticates through.
+ * Carried around as one object because every caller that needs the
+ * application also needs the client — fetching them separately meant two
+ * extra queries on the login path for data already in hand.
+ */
+export type ProxyApplicationWithClient = ProxyApplication & {
+  client: { clientId: string; clientSecret: string | null };
+};
+
 export interface ProxyIdentityHeaders {
   [header: string]: string;
 }
@@ -48,10 +58,12 @@ export class ProxyAuthService {
   async findBySlug(
     realm: Realm,
     slug: string,
-  ): Promise<(ProxyApplication & { client: { clientId: string } }) | null> {
+  ): Promise<ProxyApplicationWithClient | null> {
     return this.prisma.proxyApplication.findUnique({
       where: { realmId_slug: { realmId: realm.id, slug } },
-      include: { client: { select: { clientId: true } } },
+      include: {
+        client: { select: { clientId: true, clientSecret: true } },
+      },
     });
   }
 
@@ -233,7 +245,13 @@ export class ProxyAuthService {
       });
   }
 
-  /** Drop expired proxy sessions. Called by the sessions cleanup job. */
+  /**
+   * Drop expired proxy sessions.
+   *
+   * The hourly SessionsCleanupService sweeps proxy_sessions directly, alongside
+   * every other expiring table; this exists for an admin-triggered sweep and
+   * for tests. Kept here rather than duplicating the predicate at a call site.
+   */
   async deleteExpiredSessions(): Promise<number> {
     const { count } = await this.prisma.proxySession.deleteMany({
       where: { expiresAt: { lt: new Date() } },
