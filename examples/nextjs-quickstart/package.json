@@ -11,7 +11,7 @@
   "dependencies": {
     "idenplane-sdk": "^1.0.1",
     "idenplane-nextjs": "^1.0.1",
-    "jose": "^5.9.6",
+    "jose": "^6.2.9",
     "next": "^15.0.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0"
