@@ -182,3 +182,30 @@ updates:
     labels:
       - dependencies
       - java
+    # Every artifact below is pinned individually in pom.xml rather than
+    # inherited from a Spring BOM, so ungrouped Dependabot proposes them one at
+    # a time — and a single artifact moving alone leaves the family skewed. The
+    # first week of watching this directory produced exactly that:
+    #   #1448 spring-boot-configuration-processor 3.5.4 -> 4.1.0, while
+    #         autoconfigure / test / test-autoconfigure stay on 3.5.4
+    #   #1445 spring-security-oauth2-resource-server 6.5.10 -> 7.1.0, while
+    #         core / web / oauth2-jose stay on 6.5.x
+    #   #1447 reactor-test 3.7.3 -> 3.8.6, while reactor-core stays 3.7.3
+    # Split majors across one BOM are how you get a NoSuchMethodError that no
+    # compile step catches. Grouping makes each family move as a unit — and
+    # makes a major upgrade one reviewable PR instead of four that are only
+    # correct together.
+    groups:
+      spring-boot:
+        patterns:
+          - "org.springframework.boot:*"
+      spring-security:
+        patterns:
+          - "org.springframework.security:*"
+      reactor:
+        patterns:
+          - "io.projectreactor:*"
+      httpcomponents:
+        patterns:
+          - "org.apache.httpcomponents.client5:*"
+          - "org.apache.httpcomponents.core5:*"
