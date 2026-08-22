@@ -121,7 +121,8 @@
     "@nestjs/swagger": {
       "js-yaml": "^5.2.2"
     },
-    "@babel/core": "^7.29.6"
+    "@babel/core": "^7.29.6",
+    "deepmerge-ts": "^8.0.2"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
