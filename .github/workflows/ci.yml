@@ -540,7 +540,22 @@ jobs:
       - name: Install dependencies
         run: npm install
 
+      # Reported, not enforced. `npm audit` resolves against the advisory
+      # database at run time, so a newly published advisory against any
+      # transitive dep fails this step on every open PR at once — with no
+      # code change and nothing the PR author can do about it. That is not
+      # hypothetical: GHSA-2v37-7h3g-55p8 (nanoid, a postcss transitive) put
+      # 11 of the 13 then-open PRs red on this step and nothing else, and
+      # because it runs before `npm run build`, that build had never once
+      # executed here (#1441).
+      #
+      # Enforcement belongs to Dependabot: it alerts on these lockfiles, and
+      # now that examples/* are listed in dependabot.yml it also opens the
+      # update PRs that stop them going stale to begin with. What this job
+      # uniquely proves is that the example still *builds* — so let it get
+      # that far.
       - name: Audit for known-vulnerable dependencies
+        continue-on-error: true
         run: npm audit --audit-level=moderate
 
       # nextjs-quickstart has a real Next.js build; vanilla-js-quickstart has
