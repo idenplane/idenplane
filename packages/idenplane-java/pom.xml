@@ -200,7 +200,7 @@
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-configuration-processor</artifactId>
-                <version>3.5.4</version>
+                <version>4.1.0</version>
             </dependency>
 
             <!-- Jakarta EE -->
