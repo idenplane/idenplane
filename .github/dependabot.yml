@@ -31,6 +31,17 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # TypeScript 7 cannot install here at all: ts-jest's peer range is
+      # `>=4.3 <7` and 29.4.12 is its latest release, so `npm ci` dies with
+      # ERESOLVE before a single test runs. That is what killed #1369 — not
+      # our code. Re-proposing the same major every week just re-runs the
+      # whole matrix to fail identically.
+      # Remove this once ts-jest ships a release accepting TypeScript 7, and
+      # do that bump deliberately with the toolchain moved in the same PR.
+      - dependency-name: "typescript"
+        update-types:
+          - version-update:semver-major
 
   # Admin UI
   - package-ecosystem: npm
@@ -59,6 +70,16 @@ updates:
         patterns:
           - "vitest"
           - "@vitest/*"
+    ignore:
+      # Same wall as the root, different package holding it up: typescript-eslint
+      # 8.67.0 (its latest) peers on `>=4.8.4 <6.1.0`, so TypeScript 7 fails
+      # `npm ci` with ERESOLVE here too — that is what killed #1362. Note the
+      # ceiling is 6.1, not 7: even a TypeScript 6.1 minor would trip it, so
+      # revisit this pin rather than assuming only majors are affected.
+      # Remove once typescript-eslint widens its peer range.
+      - dependency-name: "typescript"
+        update-types:
+          - version-update:semver-major
 
   # GitHub Actions
   - package-ecosystem: github-actions
