@@ -177,7 +177,7 @@
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-autoconfigure</artifactId>
-                <version>3.5.4</version>
+                <version>3.5.15</version>
             </dependency>
 
             <!-- Test support for exercising @AutoConfiguration classes via
