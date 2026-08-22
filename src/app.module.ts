@@ -65,6 +65,7 @@ import { ScimModule } from './scim/scim.module.js';
 import { NhiModule } from './nhi/nhi.module.js';
 import { ContinuousVerificationModule } from './continuous-verification/continuous-verification.module.js';
 import { UpgradeModule } from './upgrade/upgrade.module.js';
+import { ProxyAuthModule } from './proxy-auth/proxy-auth.module.js';
 import { AdminApiKeyGuard } from './common/guards/admin-api-key.guard.js';
 import { AdminEventInterceptor } from './events/admin-event.interceptor.js';
 import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
@@ -142,6 +143,7 @@ import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
     NhiModule,
     ContinuousVerificationModule,
     UpgradeModule,
+    ProxyAuthModule,
   ],
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
