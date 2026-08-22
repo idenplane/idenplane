@@ -170,7 +170,7 @@
             <dependency>
                 <groupId>org.springframework.security</groupId>
                 <artifactId>spring-security-oauth2-resource-server</artifactId>
-                <version>6.5.10</version>
+                <version>7.1.0</version>
             </dependency>
 
             <!-- Spring Boot Auto-configuration -->
