@@ -1,0 +1,100 @@
+# A complete forward-auth stack: Idenplane + Postgres + Traefik + a protected
+# app that knows nothing about OIDC.
+#
+# The "app" here is a plain whoami container. That is the point of the demo —
+# it echoes back the headers it received, so you can see the identity Idenplane
+# injected without anything in the application cooperating.
+#
+# Everything runs on *.localhost, which resolves to 127.0.0.1 in every modern
+# browser. Idenplane and the app are therefore siblings under `.localhost`,
+# which is what lets one cookie reach both.
+#
+# The fixed secrets below are for local, throwaway use only — never reuse them
+# for anything internet-facing.
+services:
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: idenplane
+      POSTGRES_PASSWORD: idenplane
+      POSTGRES_DB: idenplane
+    healthcheck:
+      test: ['CMD-SHELL', 'pg_isready -U idenplane']
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  traefik:
+    image: traefik:v3.3
+    command:
+      - --providers.docker=true
+      - --providers.docker.exposedbydefault=false
+      - --entrypoints.web.address=:80
+    ports:
+      - '80:80'
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+
+  idenplane:
+    image: islamawad/idenplane:latest
+    environment:
+      DATABASE_URL: postgresql://idenplane:idenplane@db:5432/idenplane
+      PORT: '3000'
+      NODE_ENV: production
+      ADMIN_API_KEY: forward-auth-demo-admin-key-do-not-use-in-production
+      WEBHOOK_SECRET_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
+      WEBHOOK_ENCRYPTION_SALT: '00000000000000000000000000000000'
+      # Must match the URL the BROWSER uses, not the internal service name:
+      # it is what the proxy callback URL is built from, and the token exchange
+      # compares that value between the two hops.
+      BASE_URL: http://auth.localhost
+    depends_on:
+      db:
+        condition: service_healthy
+    healthcheck:
+      test:
+        [
+          'CMD',
+          'node',
+          '-e',
+          "fetch('http://localhost:3000/health/ready').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))",
+        ]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.idenplane.rule=Host(`auth.localhost`)'
+      - 'traefik.http.services.idenplane.loadbalancer.server.port=3000'
+
+  seed:
+    image: curlimages/curl:8.11.1
+    depends_on:
+      idenplane:
+        condition: service_healthy
+    volumes:
+      - ./seed.sh:/seed.sh:ro
+    entrypoint: ['sh', '/seed.sh']
+    environment:
+      IDENPLANE_URL: http://idenplane:3000
+      ADMIN_API_KEY: forward-auth-demo-admin-key-do-not-use-in-production
+      CALLBACK_URL: http://auth.localhost/realms/demo/proxy/whoami/callback
+
+  # The protected application. No SDK, no config, no awareness of Idenplane —
+  # it just prints whatever headers arrive.
+  app:
+    image: traefik/whoami:v1.10
+    depends_on:
+      seed:
+        condition: service_completed_successfully
+    labels:
+      - 'traefik.enable=true'
+      - 'traefik.http.routers.app.rule=Host(`app.localhost`)'
+      - 'traefik.http.routers.app.middlewares=idenplane-auth'
+      - 'traefik.http.services.app.loadbalancer.server.port=80'
+
+      - 'traefik.http.middlewares.idenplane-auth.forwardauth.address=http://idenplane:3000/realms/demo/proxy/whoami/verify'
+      # Without authResponseHeaders, Traefik discards the identity: it only
+      # copies headers named here from the auth response onto the upstream
+      # request. Miss this and the app authenticates fine and sees nobody.
+      - 'traefik.http.middlewares.idenplane-auth.forwardauth.authResponseHeaders=X-Forwarded-User,X-Forwarded-Email,X-Forwarded-Preferred-Username,X-Forwarded-Groups'
