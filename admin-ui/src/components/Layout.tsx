@@ -44,6 +44,7 @@ export default function Layout() {
         { to: `/console/realms/${currentRealm}`, label: 'Overview', icon: Icons.Activity },
         { to: `/console/realms/${currentRealm}/users`, label: 'Users', icon: Icons.Users },
         { to: `/console/realms/${currentRealm}/clients`, label: 'Clients', icon: Icons.Clients },
+        { to: `/console/realms/${currentRealm}/proxy-applications`, label: 'Proxy Applications', icon: Icons.Globe },
         { to: `/console/realms/${currentRealm}/roles`, label: 'Roles', icon: Icons.Roles },
         { to: `/console/realms/${currentRealm}/groups`, label: 'Groups', icon: Icons.Groups },
         { to: `/console/realms/${currentRealm}/client-scopes`, label: 'Client Scopes', icon: Icons.Code },

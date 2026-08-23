@@ -1,4 +1,7 @@
-import type { Realm, User, Client, Role, NhiIdentity, ConsentCategory } from '../../types';
+import type { Realm, User, Client, Role, NhiIdentity, ConsentCategory,
+  ProxyApplication,
+  ProxyApplicationView,
+} from '../../types';
 import type { LoginEvent, AdminEvent } from '../../api/events';
 import type { RealmStats, FailedLoginHeatmap } from '../../api/stats';
 import type { LockedUser } from '../../api/bruteForce';
@@ -299,6 +302,41 @@ export function makeConsentCategory(
     scopes: [],
     createdAt: '2024-01-01T00:00:00.000Z',
     updatedAt: '2024-01-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+export function makeProxyApplication(
+  overrides: Partial<ProxyApplication> = {},
+): ProxyApplication {
+  return {
+    id: 'proxy-app-1',
+    realmId: 'realm-1',
+    slug: 'grafana',
+    name: 'Grafana',
+    enabled: true,
+    clientId: 'grafana-proxy',
+    allowedRedirectUris: ['https://grafana.example.com/*'],
+    cookieDomain: '.example.com',
+    cookieTtl: 28800,
+    userHeader: 'X-Forwarded-User',
+    emailHeader: 'X-Forwarded-Email',
+    nameHeader: 'X-Forwarded-Preferred-Username',
+    groupsHeader: 'X-Forwarded-Groups',
+    createdAt: '2024-01-01T00:00:00.000Z',
+    updatedAt: '2024-01-01T00:00:00.000Z',
+    ...overrides,
+  };
+}
+
+export function makeProxyApplicationView(
+  overrides: Partial<ProxyApplicationView> = {},
+): ProxyApplicationView {
+  const application = overrides.application ?? makeProxyApplication();
+  return {
+    application,
+    callbackUrl: `https://auth.example.com/realms/test-realm/proxy/${application.slug}/callback`,
+    callbackRegistered: true,
     ...overrides,
   };
 }

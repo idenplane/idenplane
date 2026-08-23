@@ -164,6 +164,61 @@ export interface Client {
   updatedAt: string;
 }
 
+/**
+ * An application Idenplane protects at the reverse proxy rather than inside the
+ * application's own code. See src/proxy-auth on the server.
+ */
+export interface ProxyApplication {
+  id: string;
+  realmId: string;
+  slug: string;
+  name: string;
+  enabled: boolean;
+  clientId: string;
+  allowedRedirectUris: string[];
+  cookieDomain: string;
+  cookieTtl: number;
+  userHeader: string;
+  emailHeader: string;
+  nameHeader: string;
+  groupsHeader: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+/**
+ * What the admin API returns for a proxy application. `callbackUrl` has to be
+ * registered on the OAuth client for login to complete, and
+ * `callbackRegistered` says whether it currently is — without surfacing that,
+ * the first symptom of a missed step is a redirect_uri mismatch at the end of a
+ * login the admin has already gone through.
+ */
+export interface ProxyApplicationView {
+  application: ProxyApplication;
+  callbackUrl: string;
+  callbackRegistered: boolean;
+}
+
+export interface CreateProxyApplicationInput {
+  slug: string;
+  name: string;
+  /** The `clientId` of the OAuth client, not its database id. */
+  clientId: string;
+  allowedRedirectUris: string[];
+  cookieDomain: string;
+  cookieTtl?: number;
+  enabled?: boolean;
+  userHeader?: string;
+  emailHeader?: string;
+  nameHeader?: string;
+  groupsHeader?: string;
+}
+
+/** Everything except `slug`, which is immutable: it is baked into the proxy config. */
+export type UpdateProxyApplicationInput = Partial<
+  Omit<CreateProxyApplicationInput, 'slug'>
+>;
+
 export interface Role {
   id: string;
   realmId: string;
