@@ -89,8 +89,8 @@ model Realm {
   smtpFrom     String? @map("smtp_from")
   smtpSecure   Boolean @default(false) @map("smtp_secure")
 
-  emailProvider       String  @default("smtp") @map("email_provider")
-  emailProviderConfig Json?   @map("email_provider_config")
+  emailProvider       String @default("smtp") @map("email_provider")
+  emailProviderConfig Json?  @map("email_provider_config")
 
   // Magic link / passwordless authentication
   magicLinkEnabled                Boolean @default(false) @map("magic_link_enabled")
@@ -139,9 +139,9 @@ model Realm {
   mfaRequired Boolean @default(false) @map("mfa_required")
 
   // WebAuthn / FIDO2
-  webAuthnEnabled               Boolean @default(false) @map("webauthn_enabled")
-  webAuthnRpName                String? @map("webauthn_rp_name")
-  webAuthnRpId                  String? @map("webauthn_rp_id")
+  webAuthnEnabled                  Boolean @default(false) @map("webauthn_enabled")
+  webAuthnRpName                   String? @map("webauthn_rp_name")
+  webAuthnRpId                     String? @map("webauthn_rp_id")
   webAuthnUserVerificationRequired Boolean @default(false) @map("webauthn_user_verification_required")
 
   // SMS provider configuration
@@ -225,9 +225,9 @@ model Realm {
   userFederations             UserFederation[]
   samlServiceProviders        SamlServiceProvider[]
   webhooks                    Webhook[]
-  webAuthnFailureTracking    WebAuthnFailureTracking[]
-  webAuthnCredentials       WebAuthnCredential[]
-  smsDeliveryLogs            SmsDeliveryLog[]
+  webAuthnFailureTracking     WebAuthnFailureTracking[]
+  webAuthnCredentials         WebAuthnCredential[]
+  smsDeliveryLogs             SmsDeliveryLog[]
   otpAttempts                 OtpAttempt[]
   auditLogStreams             AuditLogStream[]
   impersonationSessions       ImpersonationSession[]
@@ -250,6 +250,7 @@ model Realm {
   nhiAuditLogs                NhiAuditLog[]
   consentCategories           ConsentCategory[]
   themes                      Theme[]
+  proxyApplications           ProxyApplication[]
 
   @@map("realms")
 }
@@ -302,6 +303,7 @@ model User {
   behavioralBiometricProfile BehavioralBiometricProfile?
   consentHistory             UserConsentHistory[]
   pendingDeletion            PendingDeletion?
+  proxySessions              ProxySession[]
 
   @@unique([realmId, username])
   @@unique([realmId, email])
@@ -357,6 +359,8 @@ model Client {
   consentHistory UserConsentHistory[]
   defaultScopes  ClientDefaultScope[]
   optionalScopes ClientOptionalScope[]
+
+  proxyApplications ProxyApplication[]
 
   @@unique([realmId, clientId])
   @@map("clients")
@@ -448,14 +452,14 @@ model RefreshToken {
 // ─── AUTHORIZATION CODES ──────────────────────────────────
 
 model AuthorizationCode {
-  id                  String  @id @default(uuid())
-  code                String  @unique
-  clientId            String  @map("client_id")
-  userId              String  @map("user_id")
-  redirectUri         String  @map("redirect_uri")
+  id                  String   @id @default(uuid())
+  code                String   @unique
+  clientId            String   @map("client_id")
+  userId              String   @map("user_id")
+  redirectUri         String   @map("redirect_uri")
   scope               String?
-  codeChallenge       String? @map("code_challenge")
-  codeChallengeMethod String? @map("code_challenge_method")
+  codeChallenge       String?  @map("code_challenge")
+  codeChallengeMethod String?  @map("code_challenge_method")
   nonce               String?
   /// The ACR value(s) *requested* by the client at authorization time.
   acrValues           String?  @map("acr_values")
@@ -1879,16 +1883,16 @@ model ScimProvisioningToken {
 }
 
 model ScimAttributeMapping {
-  id              String   @id @default(uuid())
-  realmId         String   @map("realm_id")
-  realm           Realm    @relation(fields: [realmId], references: [id], onDelete: Cascade)
-  resourceType    String // "User" | "Group"
-  scimAttribute   String   @map("scim_attribute")
+  id                 String   @id @default(uuid())
+  realmId            String   @map("realm_id")
+  realm              Realm    @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  resourceType       String // "User" | "Group"
+  scimAttribute      String   @map("scim_attribute")
   idenplaneAttribute String   @map("idenplane_attribute")
-  enabled         Boolean  @default(true)
-  direction       String   @default("inbound") // "inbound" | "outbound" | "bidirectional"
-  createdAt       DateTime @default(now()) @map("created_at")
-  updatedAt       DateTime @updatedAt @map("updated_at")
+  enabled            Boolean  @default(true)
+  direction          String   @default("inbound") // "inbound" | "outbound" | "bidirectional"
+  createdAt          DateTime @default(now()) @map("created_at")
+  updatedAt          DateTime @updatedAt @map("updated_at")
 
   @@unique([realmId, resourceType, scimAttribute])
   @@index([realmId, resourceType])
@@ -2061,19 +2065,19 @@ model NhiAuditLog {
 }
 
 model NhiUsageStats {
-  id            String    @id @default(uuid())
-  nhiIdentityId String    @unique @map("nhi_identity_id")
-  totalRequests Int       @default(0) @map("total_requests")
-  lastActiveAt  DateTime? @map("last_active_at")
-  successCount  Int       @default(0) @map("success_count")
-  errorCount    Int       @default(0) @map("error_count")
-  lastSuccessfulAt DateTime? @map("last_successful_at")
-  lastFailedAt      DateTime? @map("last_failed_at")
-  oldestCredentialAgeDays Int? @map("oldest_credential_age_days")
-  newestCredentialAgeDays Int? @map("newest_credential_age_days")
-  credentialsExpiringSoon Int @default(0) @map("credentials_expiring_soon")
-  createdAt     DateTime  @default(now()) @map("created_at")
-  updatedAt     DateTime  @updatedAt @map("updated_at")
+  id                      String    @id @default(uuid())
+  nhiIdentityId           String    @unique @map("nhi_identity_id")
+  totalRequests           Int       @default(0) @map("total_requests")
+  lastActiveAt            DateTime? @map("last_active_at")
+  successCount            Int       @default(0) @map("success_count")
+  errorCount              Int       @default(0) @map("error_count")
+  lastSuccessfulAt        DateTime? @map("last_successful_at")
+  lastFailedAt            DateTime? @map("last_failed_at")
+  oldestCredentialAgeDays Int?      @map("oldest_credential_age_days")
+  newestCredentialAgeDays Int?      @map("newest_credential_age_days")
+  credentialsExpiringSoon Int       @default(0) @map("credentials_expiring_soon")
+  createdAt               DateTime  @default(now()) @map("created_at")
+  updatedAt               DateTime  @updatedAt @map("updated_at")
 
   nhiIdentity NhiIdentity @relation(fields: [nhiIdentityId], references: [id], onDelete: Cascade)
 
@@ -2250,17 +2254,106 @@ model UpgradeAuditLog {
 // ─── RATE LIMIT ENTRIES (cluster-safe fallback) ────────────────
 
 model RateLimitEntry {
-  id        String   @id @default(uuid())
-  key       String   @unique @map("key")
-  minuteCount      Int      @default(0) @map("minute_count")
+  id                String   @id @default(uuid())
+  key               String   @unique @map("key")
+  minuteCount       Int      @default(0) @map("minute_count")
   minuteWindowStart DateTime @default(now()) @map("minute_window_start")
-  hourCount        Int      @default(0) @map("hour_count")
+  hourCount         Int      @default(0) @map("hour_count")
   hourWindowStart   DateTime @default(now()) @map("hour_window_start")
-  createdAt DateTime @default(now()) @map("created_at")
-  updatedAt DateTime @updatedAt @map("updated_at")
+  createdAt         DateTime @default(now()) @map("created_at")
+  updatedAt         DateTime @updatedAt @map("updated_at")
 
   @@index([key])
   @@index([minuteWindowStart])
   @@index([hourWindowStart])
   @@map("rate_limit_entries")
+}
+
+/// A web application that Idenplane protects at the reverse proxy instead of
+/// inside the application's own code — Traefik `forwardAuth`, nginx
+/// `auth_request`, Caddy `forward_auth`. The proxy calls the verify endpoint
+/// before every request; Idenplane answers 200 (with the identity in headers),
+/// 401, or a redirect into the normal login flow.
+///
+/// Authentication itself is NOT reimplemented here: each proxy application
+/// authenticates through an ordinary OAuth client (`clientId` below), so MFA,
+/// step-up, SSO, consent, brute-force protection and risk assessment all apply
+/// unchanged.
+model ProxyApplication {
+  id      String  @id @default(uuid())
+  realmId String  @map("realm_id")
+  /// URL-safe identifier used in the proxy endpoints and in the proxy's own
+  /// config, e.g. /realms/<realm>/proxy/<slug>/verify.
+  slug    String
+  name    String
+  enabled Boolean @default(true)
+
+  /// The OAuth client this application authenticates through. Its
+  /// `redirectUris` must contain this application's callback URL — that
+  /// allowlist is what stops an attacker steering the post-login redirect.
+  clientId String @map("client_id")
+
+  /// Origins this application is served from. A forward-auth request's
+  /// reconstructed URL must match one of these before we will send a browser
+  /// back to it. Same wildcard semantics — and the same matcher — as OAuth
+  /// redirect_uri; see common/redirect-uri.utils.ts.
+  allowedRedirectUris String[] @map("allowed_redirect_uris")
+
+  /// Scope of the proxy session cookie, e.g. ".example.com". This is a
+  /// SEPARATE cookie from the IDENPLANE_SESSION SSO cookie, which is
+  /// deliberately pinned to `path=/realms/<realm>` and `SameSite=Strict`.
+  /// The proxy cookie has to travel to a different host, so it needs a wider
+  /// scope — widening the SSO cookie instead would loosen OAuth, SAML, MFA
+  /// and step-up along with it.
+  cookieDomain String @map("cookie_domain")
+  /// Proxy session lifetime in seconds. Independent of the SSO session:
+  /// revoking one must not silently revoke the other.
+  cookieTtl    Int    @default(28800) @map("cookie_ttl")
+
+  /// Names of the headers the verify endpoint sets on a 200. Configurable
+  /// because the de-facto names differ per stack: Traefik/oauth2-proxy
+  /// deployments expect `X-Forwarded-*`, while many nginx `auth_request` and
+  /// Authentik setups expect `X-Auth-Request-*`.
+  userHeader   String @default("X-Forwarded-User") @map("user_header")
+  emailHeader  String @default("X-Forwarded-Email") @map("email_header")
+  nameHeader   String @default("X-Forwarded-Preferred-Username") @map("name_header")
+  groupsHeader String @default("X-Forwarded-Groups") @map("groups_header")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  realm    Realm          @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  client   Client         @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  sessions ProxySession[]
+
+  @@unique([realmId, slug])
+  @@index([clientId])
+  @@map("proxy_applications")
+}
+
+/// Browser session for a proxy-protected application. Deliberately a separate
+/// credential from LoginSession: the two live in different cookies with
+/// different scopes and lifetimes, and a proxy cookie must never be usable as
+/// an SSO cookie (or the reverse).
+model ProxySession {
+  id                 String @id @default(uuid())
+  proxyApplicationId String @map("proxy_application_id")
+  userId             String @map("user_id")
+  /// SHA-256 of the cookie value. The raw token is never stored, matching how
+  /// LoginSession handles its own token.
+  tokenHash          String @unique @map("token_hash")
+
+  ipAddress String? @map("ip_address")
+  userAgent String? @map("user_agent")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  expiresAt DateTime @map("expires_at")
+
+  application ProxyApplication @relation(fields: [proxyApplicationId], references: [id], onDelete: Cascade)
+  user        User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([proxyApplicationId])
+  @@index([expiresAt])
+  @@map("proxy_sessions")
 }
