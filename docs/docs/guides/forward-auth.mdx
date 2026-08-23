@@ -1,0 +1,258 @@
+---
+id: forward-auth
+title: Reverse Proxy / Forward Auth
+description: Protect any web application with Idenplane at the reverse proxy — Traefik, nginx and Caddy configs, identity headers, and the two failure modes that produce no error message.
+---
+
+# Reverse Proxy / Forward Auth
+
+Some applications cannot be taught OIDC. They predate it, they're closed source, or nobody wants to touch them. Forward auth puts Idenplane in front of them at the reverse proxy instead: the proxy asks Idenplane about every request, Idenplane answers `200` with the user's identity in headers or sends the browser to log in, and the application never learns any of it happened.
+
+Authentication itself is not special-cased. Each protected application authenticates through an ordinary OAuth client, so **MFA, step-up, SSO, consent, brute-force protection and risk assessment all apply exactly as they do everywhere else.**
+
+## How it fits together
+
+```
+        ┌──────────┐   1. GET /dashboard    ┌───────────┐
+Browser │          │ ─────────────────────► │   Proxy   │
+        │          │                        └─────┬─────┘
+        │          │                              │ 2. is this allowed?
+        │          │                              ▼
+        │          │                        ┌───────────────────────┐
+        │          │                        │ Idenplane             │
+        │          │                        │ /proxy/<slug>/verify  │
+        │          │                        └─────┬─────────────────┘
+        │          │  3a. 302 to login  ◄─────────┤  no session
+        │          │  3b. 200 + headers ──────────┘  valid session
+        └──────────┘                              │
+                                                  ▼
+                                          ┌───────────────┐
+                                          │ Your app,     │
+                                          │ unmodified    │
+                                          └───────────────┘
+```
+
+`verify` answers:
+
+| | when |
+|---|---|
+| `200` + identity headers | the proxy session is valid |
+| `302` to login | no session, and the request is a browser navigation |
+| `401` | no session, and the request is not (XHR, fetch, an API client) |
+
+The `401` matters: a background request should get a status its caller can act on, not an HTML login page.
+
+## 1. Create the OAuth client
+
+Forward auth needs a normal client to authenticate through. In the console, **Clients → Create Client**, or:
+
+```bash
+curl -X POST https://auth.example.com/admin/realms/master/clients \
+  -H "X-API-Key: $ADMIN_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "clientId": "grafana-proxy",
+    "clientType": "CONFIDENTIAL",
+    "redirectUris": []
+  }'
+```
+
+Leave `redirectUris` empty for now — step 2 tells you exactly what to put there.
+
+## 2. Register the application
+
+**Proxy Applications → Add Application** in the console, or:
+
+```bash
+curl -X POST https://auth.example.com/admin/realms/master/proxy-applications \
+  -H "X-API-Key: $ADMIN_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "slug": "grafana",
+    "name": "Grafana",
+    "clientId": "grafana-proxy",
+    "allowedRedirectUris": ["https://grafana.example.com/*"],
+    "cookieDomain": ".example.com"
+  }'
+```
+
+The response tells you the one thing you still have to do:
+
+```json
+{
+  "application": { "slug": "grafana", "...": "..." },
+  "callbackUrl": "https://auth.example.com/realms/master/proxy/grafana/callback",
+  "callbackRegistered": false
+}
+```
+
+## 3. Register the callback URL on the client
+
+:::danger This is the step people miss
+`callbackRegistered: false` means login will fail — **at the very last redirect**, after the user has already typed their password and passed MFA — with a `redirect_uri` mismatch that names nothing useful.
+
+Add the `callbackUrl` above to the client's `redirectUris` and it becomes `true`. The console shows this as a warning banner on the application, and as a **Not registered** badge in the list.
+:::
+
+```bash
+curl -X PUT https://auth.example.com/admin/realms/master/clients/grafana-proxy \
+  -H "X-API-Key: $ADMIN_API_KEY" \
+  -H 'Content-Type: application/json' \
+  -d '{
+    "redirectUris": ["https://auth.example.com/realms/master/proxy/grafana/callback"]
+  }'
+```
+
+## 4. Point your proxy at it
+
+<details open>
+<summary><strong>Traefik</strong></summary>
+
+```yaml
+# docker-compose.yml labels on the protected service
+labels:
+  - "traefik.http.routers.grafana.rule=Host(`grafana.example.com`)"
+  - "traefik.http.routers.grafana.middlewares=idenplane-auth"
+
+  - "traefik.http.middlewares.idenplane-auth.forwardauth.address=http://idenplane:3000/realms/master/proxy/grafana/verify"
+  # Without this, the identity never reaches the application: Traefik only
+  # copies headers you name here from the auth response to the upstream request.
+  - "traefik.http.middlewares.idenplane-auth.forwardauth.authResponseHeaders=X-Forwarded-User,X-Forwarded-Email,X-Forwarded-Preferred-Username,X-Forwarded-Groups"
+```
+
+Traefik sends `X-Forwarded-Proto`, `X-Forwarded-Host` and `X-Forwarded-Uri` on its own, which is how Idenplane knows where to send the user back to.
+
+</details>
+
+<details>
+<summary><strong>nginx</strong></summary>
+
+```nginx
+server {
+    server_name grafana.example.com;
+
+    location / {
+        auth_request /idenplane-auth;
+
+        # Lift the identity out of the auth response and forward it upstream.
+        auth_request_set $user   $upstream_http_x_forwarded_user;
+        auth_request_set $email  $upstream_http_x_forwarded_email;
+        auth_request_set $groups $upstream_http_x_forwarded_groups;
+        proxy_set_header X-Forwarded-User   $user;
+        proxy_set_header X-Forwarded-Email  $email;
+        proxy_set_header X-Forwarded-Groups $groups;
+
+        proxy_pass http://grafana:3000;
+    }
+
+    location = /idenplane-auth {
+        internal;
+        proxy_pass http://idenplane:3000/realms/master/proxy/grafana/verify;
+
+        # auth_request strips the body and, by default, tells Idenplane nothing
+        # about the original request. X-Original-URL is what it reads instead.
+        proxy_pass_request_body off;
+        proxy_set_header Content-Length "";
+        proxy_set_header X-Original-URL $scheme://$http_host$request_uri;
+    }
+
+    # auth_request only understands 2xx / 401 / 403 — it will not follow a
+    # redirect. Turn the 401 into one here.
+    error_page 401 = @idenplane_login;
+    location @idenplane_login {
+        return 302 http://idenplane:3000/realms/master/proxy/grafana/start?rd=$scheme://$http_host$request_uri;
+    }
+}
+```
+
+</details>
+
+<details>
+<summary><strong>Caddy</strong></summary>
+
+```caddyfile
+grafana.example.com {
+    forward_auth idenplane:3000 {
+        uri /realms/master/proxy/grafana/verify
+        # Copy the identity from the auth response onto the upstream request.
+        copy_headers X-Forwarded-User X-Forwarded-Email X-Forwarded-Preferred-Username X-Forwarded-Groups
+    }
+
+    reverse_proxy grafana:3000
+}
+```
+
+Caddy sets `X-Forwarded-Method`, `X-Forwarded-Uri`, `X-Forwarded-Proto` and `X-Forwarded-Host` for you.
+
+</details>
+
+## Identity headers
+
+Set on every `200`. The names are configurable per application, because the de-facto convention differs by stack — Traefik and oauth2-proxy deployments expect `X-Forwarded-*`, while many nginx `auth_request` and Authentik setups expect `X-Auth-Request-*`.
+
+| default name | value |
+|---|---|
+| `X-Forwarded-User` | username |
+| `X-Forwarded-Email` | email |
+| `X-Forwarded-Preferred-Username` | display name, falling back to username |
+| `X-Forwarded-Groups` | comma-separated group names |
+
+Every configured header is sent on every `200`, **even when the value is empty**. That is deliberate: an omitted header would let a value from an earlier request — or one a client sent itself, through a misconfigured proxy — survive into the upstream. An explicit empty header overwrites it.
+
+:::warning Strip these at the edge
+Your proxy must remove `X-Forwarded-User` and friends from *incoming* client requests. Otherwise anyone can set them and impersonate anyone. Idenplane sets them on its own response; the proxy decides what reaches the application.
+:::
+
+## The two failures that produce no error
+
+Everything else here announces itself. These two do not.
+
+### The callback URL is not registered
+
+Login runs to completion — password, MFA, everything — and then dies on the last redirect. Covered in step 3 above; the console shows it, and the API returns `callbackRegistered`.
+
+### The cookie domain does not cover the application
+
+The proxy session cookie is scoped to `cookieDomain`. If that is not a parent of the application's host, **the browser simply never sends it**. Idenplane sees no session, redirects to login, login succeeds, the browser returns, Idenplane still sees no session — forever, with nothing in any log.
+
+```
+cookieDomain: .example.com    app: grafana.example.com     ✅
+cookieDomain: .example.com    app: grafana.other.test      ❌ infinite loop
+cookieDomain: .example.com    app: notexample.com          ❌ infinite loop
+```
+
+Idenplane rejects the combination when you create or update the application, and the console suggests a domain from your first redirect URI, so you should never actually reach the loop. If you do, this is why.
+
+## Signing out
+
+```
+GET /realms/<realm>/proxy/<slug>/sign-out
+```
+
+Revokes the proxy session and clears its cookie. It does **not** touch the SSO session — the user stays signed in to Idenplane and to any other application. It takes no return-URL parameter; the destination comes from the application's own configuration.
+
+To revoke everyone at once, use **Revoke all sessions** on the application, or:
+
+```bash
+curl -X POST https://auth.example.com/admin/realms/master/proxy-applications/grafana/revoke-sessions \
+  -H "X-API-Key: $ADMIN_API_KEY"
+```
+
+## Session lifetime
+
+`cookieTtl` (default 8 hours, max 24). The proxy re-checks with Idenplane on every request, but the *session* is only re-evaluated when the cookie expires — so a disabled user keeps access to a protected application until then, unless you revoke the sessions explicitly. Shorten `cookieTtl` if that window matters to you.
+
+## Try it
+
+`examples/forward-auth-traefik/` runs a complete stack — Idenplane, Postgres, Traefik and a small protected app — with `docker compose up`.
+
+## Endpoint reference
+
+| endpoint | who calls it |
+|---|---|
+| `GET /realms/<realm>/proxy/<slug>/verify` | your proxy, on every request |
+| `GET /realms/<realm>/proxy/<slug>/start` | the browser, when there is no session |
+| `GET /realms/<realm>/proxy/<slug>/callback` | the browser, after login |
+| `GET /realms/<realm>/proxy/<slug>/sign-out` | the browser, on sign-out |
+
+Admin endpoints live under `/admin/realms/<realm>/proxy-applications`.
