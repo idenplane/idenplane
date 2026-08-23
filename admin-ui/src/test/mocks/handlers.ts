@@ -1,5 +1,8 @@
 import { http, HttpResponse } from 'msw';
-import { makeRealm, makeUser, makeClient, makeLoginEvent, makeAdminEvent, makeStats, makeFailedLoginHeatmap, makeAuthFlow, makeUpgradeAuditEntry, makePreUpgradeValidationResult, makeUpgradeHealthResult, makeRollbackCapability, makeNhiIdentity, makeConsentCategory } from './data';
+import { makeRealm, makeUser, makeClient, makeLoginEvent, makeAdminEvent, makeStats, makeFailedLoginHeatmap, makeAuthFlow, makeUpgradeAuditEntry, makePreUpgradeValidationResult, makeUpgradeHealthResult, makeRollbackCapability, makeNhiIdentity, makeConsentCategory,
+  makeProxyApplication,
+  makeProxyApplicationView,
+} from './data';
 
 const BASE = '/admin';
 
@@ -113,6 +116,58 @@ export const handlers = [
 
   http.delete(`${BASE}/realms/:name/clients/:id`, () => {
     return new HttpResponse(null, { status: 204 });
+  }),
+
+  // Proxy applications (forward-auth)
+  http.get(`${BASE}/realms/:name/proxy-applications`, () => {
+    return HttpResponse.json([
+      makeProxyApplicationView(),
+      makeProxyApplicationView({
+        application: makeProxyApplication({
+          id: 'proxy-app-2',
+          slug: 'wiki',
+          name: 'Wiki',
+          enabled: false,
+        }),
+        callbackRegistered: false,
+      }),
+    ]);
+  }),
+
+  http.get(`${BASE}/realms/:name/proxy-applications/:slug`, ({ params }) => {
+    return HttpResponse.json(
+      makeProxyApplicationView({
+        application: makeProxyApplication({ slug: params.slug as string }),
+      }),
+    );
+  }),
+
+  http.post(`${BASE}/realms/:name/proxy-applications`, async ({ request }) => {
+    const body = (await request.json()) as Partial<ReturnType<typeof makeProxyApplication>>;
+    return HttpResponse.json(
+      makeProxyApplicationView({
+        application: makeProxyApplication({ ...body, id: 'new-proxy-app-1' }),
+        callbackRegistered: false,
+      }),
+      { status: 201 },
+    );
+  }),
+
+  http.put(`${BASE}/realms/:name/proxy-applications/:slug`, async ({ params, request }) => {
+    const body = (await request.json()) as Partial<ReturnType<typeof makeProxyApplication>>;
+    return HttpResponse.json(
+      makeProxyApplicationView({
+        application: makeProxyApplication({ slug: params.slug as string, ...body }),
+      }),
+    );
+  }),
+
+  http.delete(`${BASE}/realms/:name/proxy-applications/:slug`, () => {
+    return new HttpResponse(null, { status: 204 });
+  }),
+
+  http.post(`${BASE}/realms/:name/proxy-applications/:slug/revoke-sessions`, () => {
+    return HttpResponse.json({ revoked: 2 });
   }),
 
   // Non-Human Identities
