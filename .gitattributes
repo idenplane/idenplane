@@ -1,0 +1,12 @@
+# Shell scripts must keep LF regardless of the checkout platform.
+#
+# On Windows, core.autocrlf rewrites checked-out text files to CRLF. A shell
+# script that reaches a Linux CI runner with CRLF line endings fails with
+# `bad interpreter: no such file or directory` — the \r becomes part of the
+# interpreter path. This matters most for mvnw, which every Java CI job and
+# the Maven Central publish workflow now invoke.
+*.sh    text eol=lf
+mvnw    text eol=lf
+
+# The Windows counterpart of the wrapper genuinely wants CRLF.
+mvnw.cmd text eol=crlf
