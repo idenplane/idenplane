@@ -95,7 +95,7 @@
             <dependency>
                 <groupId>org.apache.httpcomponents.client5</groupId>
                 <artifactId>httpclient5</artifactId>
-                <version>5.6.3</version>
+                <version>5.6.4</version>
             </dependency>
 
             <!-- httpclient5's own pom.xml doesn't hardcode a httpcore5 version — it delegates
@@ -134,13 +134,13 @@
             <dependency>
                 <groupId>io.projectreactor</groupId>
                 <artifactId>reactor-core</artifactId>
-                <version>3.7.3</version>
+                <version>3.8.7</version>
             </dependency>
 
             <dependency>
                 <groupId>io.projectreactor</groupId>
                 <artifactId>reactor-test</artifactId>
-                <version>3.7.3</version>
+                <version>3.8.7</version>
                 <scope>test</scope>
             </dependency>
 
@@ -152,32 +152,49 @@
             <dependency>
                 <groupId>org.springframework.security</groupId>
                 <artifactId>spring-security-core</artifactId>
-                <version>6.5.10</version>
+                <version>7.1.1</version>
             </dependency>
 
             <dependency>
                 <groupId>org.springframework.security</groupId>
                 <artifactId>spring-security-web</artifactId>
-                <version>6.5.11</version>
+                <version>7.1.1</version>
             </dependency>
 
             <dependency>
                 <groupId>org.springframework.security</groupId>
                 <artifactId>spring-security-oauth2-jose</artifactId>
-                <version>6.5.10</version>
+                <version>7.1.1</version>
             </dependency>
 
             <dependency>
                 <groupId>org.springframework.security</groupId>
                 <artifactId>spring-security-oauth2-resource-server</artifactId>
-                <version>6.5.10</version>
+                <version>7.1.1</version>
+            </dependency>
+
+            <!-- Not a direct dependency of any module here: it arrives in the sample through
+                 the spring-boot-dependencies BOM that module imports. Pinned anyway, and this
+                 is load-bearing — while it was unpinned, Dependabot's spring-security group
+                 moved the four artifacts above and left this one wherever the Boot BOM put it.
+                 The result (#1464) was spring-security-config 6.5.2 against
+                 spring-security-web 7.x, and since 7 removed
+                 HandlerMappingIntrospectorRequestTransformer from -web, the old config module
+                 looked for a class that no longer existed and NO ApplicationContext started
+                 at all. Same trap as the jackson comment in the sample's own pom: pin the
+                 whole family, or the half you did not pin drifts.
+                 Keep this version identical to its four siblings. -->
+            <dependency>
+                <groupId>org.springframework.security</groupId>
+                <artifactId>spring-security-config</artifactId>
+                <version>7.1.1</version>
             </dependency>
 
             <!-- Spring Boot Auto-configuration -->
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-autoconfigure</artifactId>
-                <version>3.5.4</version>
+                <version>4.1.1</version>
             </dependency>
 
             <!-- Test support for exercising @AutoConfiguration classes via
@@ -185,14 +202,14 @@
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-test</artifactId>
-                <version>3.5.4</version>
+                <version>4.1.1</version>
                 <scope>test</scope>
             </dependency>
 
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-test-autoconfigure</artifactId>
-                <version>3.5.4</version>
+                <version>4.1.1</version>
                 <scope>test</scope>
             </dependency>
 
@@ -200,7 +217,7 @@
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-configuration-processor</artifactId>
-                <version>3.5.4</version>
+                <version>4.1.1</version>
             </dependency>
 
             <!-- Jakarta EE -->
@@ -213,21 +230,21 @@
             <dependency>
                 <groupId>jakarta.servlet</groupId>
                 <artifactId>jakarta.servlet-api</artifactId>
-                <version>6.0.0</version>
+                <version>6.1.0</version>
             </dependency>
 
             <!-- Testing -->
             <dependency>
                 <groupId>org.junit.jupiter</groupId>
                 <artifactId>junit-jupiter</artifactId>
-                <version>5.10.1</version>
+                <version>6.1.3</version>
                 <scope>test</scope>
             </dependency>
 
             <dependency>
                 <groupId>org.mockito</groupId>
                 <artifactId>mockito-core</artifactId>
-                <version>5.8.0</version>
+                <version>5.23.0</version>
                 <scope>test</scope>
             </dependency>
 
@@ -246,7 +263,7 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-compiler-plugin</artifactId>
-                    <version>3.12.1</version>
+                    <version>3.15.0</version>
                     <configuration>
                         <source>17</source>
                         <target>17</target>
@@ -256,13 +273,13 @@
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-surefire-plugin</artifactId>
-                    <version>3.2.3</version>
+                    <version>3.5.6</version>
                 </plugin>
 
                 <plugin>
                     <groupId>org.apache.maven.plugins</groupId>
                     <artifactId>maven-javadoc-plugin</artifactId>
-                    <version>3.6.3</version>
+                    <version>3.12.0</version>
                     <configuration>
                         <source>17</source>
                         <quiet>true</quiet>
@@ -353,7 +370,7 @@
                 <plugin>
                     <groupId>org.codehaus.mojo</groupId>
                     <artifactId>flatten-maven-plugin</artifactId>
-                    <version>1.6.0</version>
+                    <version>1.8.0</version>
                     <configuration>
                         <flattenMode>ossrh</flattenMode>
                     </configuration>
@@ -378,7 +395,7 @@
                 <plugin>
                     <groupId>org.jacoco</groupId>
                     <artifactId>jacoco-maven-plugin</artifactId>
-                    <version>0.8.11</version>
+                    <version>0.8.15</version>
                     <executions>
                         <execution>
                             <id>prepare-agent</id>

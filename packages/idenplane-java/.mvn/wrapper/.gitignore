@@ -1,0 +1,5 @@
+# The wrapper script downloads this jar on first use (see the wrapperUrl logic
+# in ../../mvnw) and verifies it against Maven Central. Committing a 63 KB
+# binary that every checkout can fetch for itself is not worth it — and a
+# committed jar is a supply-chain artifact nobody re-reviews.
+maven-wrapper.jar

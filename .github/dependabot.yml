@@ -31,6 +31,17 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # TypeScript 7 cannot install here at all: ts-jest's peer range is
+      # `>=4.3 <7` and 29.4.12 is its latest release, so `npm ci` dies with
+      # ERESOLVE before a single test runs. That is what killed #1369 — not
+      # our code. Re-proposing the same major every week just re-runs the
+      # whole matrix to fail identically.
+      # Remove this once ts-jest ships a release accepting TypeScript 7, and
+      # do that bump deliberately with the toolchain moved in the same PR.
+      - dependency-name: "typescript"
+        update-types:
+          - version-update:semver-major
 
   # Admin UI
   - package-ecosystem: npm
@@ -59,6 +70,28 @@ updates:
         patterns:
           - "vitest"
           - "@vitest/*"
+      # The root and /docs entries both have this catch-all; admin-ui never
+      # did, so every dev-tooling patch arrived as its own PR — #1470
+      # (@testing-library/jest-dom 7.0.0->7.0.1), #1471
+      # (eslint-plugin-react-refresh 0.5.3->0.5.4), #1472
+      # (@fontsource-variable/jetbrains-mono) and #1473 (eslint 10.8.0->10.8.1)
+      # all opened in the same Monday run, four full CI matrices for four
+      # patch bumps. Named groups above still win for anything they match.
+      dev-dependencies:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+    ignore:
+      # Same wall as the root, different package holding it up: typescript-eslint
+      # 8.67.0 (its latest) peers on `>=4.8.4 <6.1.0`, so TypeScript 7 fails
+      # `npm ci` with ERESOLVE here too — that is what killed #1362. Note the
+      # ceiling is 6.1, not 7: even a TypeScript 6.1 minor would trip it, so
+      # revisit this pin rather than assuming only majors are affected.
+      # Remove once typescript-eslint widens its peer range.
+      - dependency-name: "typescript"
+        update-types:
+          - version-update:semver-major
 
   # GitHub Actions
   - package-ecosystem: github-actions
@@ -111,3 +144,80 @@ updates:
         update-types:
           - minor
           - patch
+
+  # Examples — these are the copy-paste starting point we hand new users, so a
+  # stale lockfile here is a vulnerable dependency we actively ship. Neither
+  # directory was watched until #1441: nanoid sat at 3.3.16 with no version
+  # update PR, and because ci.yml gated on `npm audit` the resulting advisory
+  # turned 11 of 13 open PRs red without a line of code changing.
+  - package-ecosystem: npm
+    directory: "/examples/nextjs-quickstart"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: "Africa/Cairo"
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - examples
+    groups:
+      example-dev-dependencies:
+        dependency-type: development
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: npm
+    directory: "/examples/vanilla-js-quickstart"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: "Africa/Cairo"
+    open-pull-requests-limit: 3
+    labels:
+      - dependencies
+      - examples
+
+  # Java SDK — Dependabot's security updates already opened PRs here (they need
+  # no config), so the module only ever moved when an advisory forced it. This
+  # adds the routine version updates that keep it from drifting in between.
+  - package-ecosystem: maven
+    directory: "/packages/idenplane-java"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: "Africa/Cairo"
+    open-pull-requests-limit: 5
+    labels:
+      - dependencies
+      - java
+    # Every artifact below is pinned individually in pom.xml rather than
+    # inherited from a Spring BOM, so ungrouped Dependabot proposes them one at
+    # a time — and a single artifact moving alone leaves the family skewed. The
+    # first week of watching this directory produced exactly that:
+    #   #1448 spring-boot-configuration-processor 3.5.4 -> 4.1.0, while
+    #         autoconfigure / test / test-autoconfigure stay on 3.5.4
+    #   #1445 spring-security-oauth2-resource-server 6.5.10 -> 7.1.0, while
+    #         core / web / oauth2-jose stay on 6.5.x
+    #   #1447 reactor-test 3.7.3 -> 3.8.6, while reactor-core stays 3.7.3
+    # Split majors across one BOM are how you get a NoSuchMethodError that no
+    # compile step catches. Grouping makes each family move as a unit — and
+    # makes a major upgrade one reviewable PR instead of four that are only
+    # correct together.
+    groups:
+      spring-boot:
+        patterns:
+          - "org.springframework.boot:*"
+      spring-security:
+        patterns:
+          - "org.springframework.security:*"
+      reactor:
+        patterns:
+          - "io.projectreactor:*"
+      httpcomponents:
+        patterns:
+          - "org.apache.httpcomponents.client5:*"
+          - "org.apache.httpcomponents.core5:*"

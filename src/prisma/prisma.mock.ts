@@ -301,6 +301,21 @@ export function createMockPrismaService(): MockPrismaService {
       update: jest.fn(),
       delete: jest.fn(),
     },
+    proxyApplication: {
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+      create: jest.fn(),
+      update: jest.fn(),
+      delete: jest.fn(),
+      deleteMany: jest.fn(),
+    },
+    proxySession: {
+      findUnique: jest.fn(),
+      findMany: jest.fn(),
+      create: jest.fn(),
+      delete: jest.fn(),
+      deleteMany: jest.fn(),
+    },
     auditLogStream: {
       findFirst: jest.fn(),
       findMany: jest.fn(),

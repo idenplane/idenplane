@@ -25,7 +25,7 @@
             <dependency>
                 <groupId>org.springframework.boot</groupId>
                 <artifactId>spring-boot-dependencies</artifactId>
-                <version>3.5.4</version>
+                <version>4.1.1</version>
                 <type>pom</type>
                 <scope>import</scope>
             </dependency>
@@ -46,7 +46,7 @@
             <dependency>
                 <groupId>com.fasterxml.jackson.core</groupId>
                 <artifactId>jackson-core</artifactId>
-                <version>2.22.1</version>
+                <version>2.22.2</version>
             </dependency>
         </dependencies>
     </dependencyManagement>
@@ -79,6 +79,22 @@
             <artifactId>spring-security-test</artifactId>
             <scope>test</scope>
         </dependency>
+
+        <!-- Boot 4 no longer contributes a web test client from @SpringBootTest alone;
+             RestTestClient (the replacement Spring recommends over TestRestTemplate) lives
+             here and needs @AutoConfigureRestTestClient on the test class. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-resttestclient</artifactId>
+            <scope>test</scope>
+        </dependency>
+
+        <!-- The underlying RestClient the test client drives. -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-restclient</artifactId>
+            <scope>runtime</scope>
+        </dependency>
     </dependencies>
 
     <!-- No jacoco here deliberately: this is a runnable demo, not a library, and the parent
@@ -92,7 +108,7 @@
                      versions only, not plugin versions — that's spring-boot-starter-parent's
                      job, which this module can't also extend (see the dependencyManagement
                      comment above). Version pinned explicitly instead. -->
-                <version>3.5.4</version>
+                <version>4.1.1</version>
             </plugin>
         </plugins>
     </build>

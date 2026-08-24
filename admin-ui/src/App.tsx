@@ -13,6 +13,9 @@ import UserDetailPage from './pages/users/UserDetailPage';
 import ClientListPage from './pages/clients/ClientListPage';
 import ClientCreatePage from './pages/clients/ClientCreatePage';
 import ClientDetailPage from './pages/clients/ClientDetailPage';
+import ProxyApplicationListPage from './pages/proxy-applications/ProxyApplicationListPage';
+import ProxyApplicationCreatePage from './pages/proxy-applications/ProxyApplicationCreatePage';
+import ProxyApplicationDetailPage from './pages/proxy-applications/ProxyApplicationDetailPage';
 import RoleListPage from './pages/roles/RoleListPage';
 import GroupListPage from './pages/groups/GroupListPage';
 import GroupCreatePage from './pages/groups/GroupCreatePage';
@@ -125,6 +128,9 @@ export default function App() {
           <Route path="/console/realms/:name/clients" element={<ClientListPage />} />
           <Route path="/console/realms/:name/clients/new" element={<ClientCreatePage />} />
           <Route path="/console/realms/:name/clients/:id" element={<ClientDetailPage />} />
+          <Route path="/console/realms/:name/proxy-applications" element={<ProxyApplicationListPage />} />
+          <Route path="/console/realms/:name/proxy-applications/new" element={<ProxyApplicationCreatePage />} />
+          <Route path="/console/realms/:name/proxy-applications/:slug" element={<ProxyApplicationDetailPage />} />
           <Route path="/console/realms/:name/migration" element={<MigrationWizardPage />} />
           <Route path="/console/realms/:name/roles" element={<RoleListPage />} />
           <Route path="/console/realms/:name/groups" element={<GroupListPage />} />

@@ -93,7 +93,23 @@ jobs:
           EOF
 
       - name: Checkout base branch
-        run: git checkout origin/${{ github.base_ref }} -- .
+        # Switch the whole working tree to the base ref, rather than
+        # `git checkout <ref> -- .`.
+        #
+        # That pathspec form only overwrites files that EXIST in the ref, so
+        # files added by the PR survive it. The base build then compiles
+        # brand-new source against the base branch's schema, and fails for
+        # reasons that have nothing to do with the API surface — #1495 died on
+        # "Module '@prisma/client' has no exported member 'ProxyApplication'"
+        # because src/proxy-auth/ (added in #1486) stayed behind.
+        #
+        # #1508 tried to fix this with `git clean -fdx`, which does not work:
+        # clean removes UNTRACKED files, and those files are tracked on the PR
+        # branch. Nothing short of moving HEAD actually reshapes the tree.
+        #
+        # -f discards the current-branch worktree, which is intentional: the
+        # spec for it was already generated two steps ago.
+        run: git checkout -f origin/${{ github.base_ref }}
 
       - name: Install dependencies (base)
         run: npm ci

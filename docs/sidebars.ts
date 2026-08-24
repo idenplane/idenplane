@@ -162,6 +162,11 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'doc',
+          id: 'guides/forward-auth',
+          label: 'Reverse Proxy / Forward Auth',
+        },
+        {
+          type: 'doc',
           id: 'guides/webhooks',
           label: 'Webhooks',
         },

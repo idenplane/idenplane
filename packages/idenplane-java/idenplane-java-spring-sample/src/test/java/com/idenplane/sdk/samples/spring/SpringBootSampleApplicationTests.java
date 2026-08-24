@@ -3,16 +3,13 @@ package com.idenplane.sdk.samples.spring;
 import com.nimbusds.jwt.JWTClaimsSet;
 import org.junit.jupiter.api.AfterAll;
 import org.junit.jupiter.api.Test;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.boot.resttestclient.autoconfigure.AutoConfigureRestTestClient;
 import org.springframework.boot.test.context.SpringBootTest;
-import org.springframework.boot.test.web.client.TestRestTemplate;
-import org.springframework.boot.test.web.server.LocalServerPort;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpHeaders;
-import org.springframework.http.HttpMethod;
 import org.springframework.http.HttpStatus;
-import org.springframework.http.ResponseEntity;
 import org.springframework.test.context.DynamicPropertyRegistry;
 import org.springframework.test.context.DynamicPropertySource;
+import org.springframework.test.web.servlet.client.RestTestClient;
 
 import java.io.IOException;
 import java.time.Instant;
@@ -26,8 +23,14 @@ import static org.assertj.core.api.Assertions.assertThat;
  * End-to-end smoke test: a real embedded servlet container, the real Spring Security filter
  * chain, and a real local OIDC server — proving idenplane-java-spring's auto-configuration
  * actually protects an endpoint and maps roles, not just that the app context loads.
+ *
+ * <p>Uses {@link RestTestClient} rather than {@code TestRestTemplate}: Spring Boot 4 no longer
+ * contributes a web test client from {@code @SpringBootTest} alone, and points at
+ * {@code RestTestClient} as the replacement. It is bound to the running server by
+ * {@link AutoConfigureRestTestClient}, so there is no port to inject or URL to assemble here.
  */
 @SpringBootTest(webEnvironment = SpringBootTest.WebEnvironment.RANDOM_PORT)
+@AutoConfigureRestTestClient
 class SpringBootSampleApplicationTests {
 
     private static final String CLIENT_ID = "my-spring-app";
@@ -48,23 +51,23 @@ class SpringBootSampleApplicationTests {
         oidc.close();
     }
 
-    @LocalServerPort
-    private int port;
-
-    private final TestRestTemplate restTemplate = new TestRestTemplate();
+    @Autowired
+    private RestTestClient restTestClient;
 
     @Test
     void publicEndpoint_isAccessibleWithoutAuthentication() {
-        ResponseEntity<String> response = restTemplate.getForEntity(url("/public"), String.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
+        restTestClient.get()
+                .uri("/public")
+                .exchange()
+                .expectStatus().isEqualTo(HttpStatus.OK);
     }
 
     @Test
     void meEndpoint_rejectsRequestsWithNoToken() {
-        ResponseEntity<String> response = restTemplate.getForEntity(url("/api/me"), String.class);
-
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.UNAUTHORIZED);
+        restTestClient.get()
+                .uri("/api/me")
+                .exchange()
+                .expectStatus().isEqualTo(HttpStatus.UNAUTHORIZED);
     }
 
     @Test
@@ -80,18 +83,18 @@ class SpringBootSampleApplicationTests {
                 .expirationTime(Date.from(Instant.now().plusSeconds(300)))
                 .build();
         String token = tokens.sign(claims);
-        HttpHeaders headers = new HttpHeaders();
-        headers.setBearerAuth(token);
 
-        ResponseEntity<Map> response =
-                restTemplate.exchange(url("/api/me"), HttpMethod.GET, new HttpEntity<>(headers), Map.class);
+        Map<String, Object> body = restTestClient.get()
+                .uri("/api/me")
+                .headers(headers -> headers.setBearerAuth(token))
+                .exchange()
+                .expectStatus().isEqualTo(HttpStatus.OK)
+                .expectBody(Map.class)
+                .returnResult()
+                .getResponseBody();
 
-        assertThat(response.getStatusCode()).isEqualTo(HttpStatus.OK);
-        assertThat(response.getBody().get("sub")).isEqualTo("user-123");
-        assertThat((List<String>) response.getBody().get("authorities")).contains("ROLE_user");
-    }
-
-    private String url(String path) {
-        return "http://localhost:" + port + path;
+        assertThat(body).isNotNull();
+        assertThat(body.get("sub")).isEqualTo("user-123");
+        assertThat((List<String>) body.get("authorities")).contains("ROLE_user");
     }
 }
