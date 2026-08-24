@@ -173,6 +173,23 @@
                 <version>6.5.11</version>
             </dependency>
 
+            <!-- Not a direct dependency of any module here: it arrives in the sample through
+                 the spring-boot-dependencies BOM that module imports. Pinned anyway, and this
+                 is load-bearing — while it was unpinned, Dependabot's spring-security group
+                 moved the four artifacts above and left this one wherever the Boot BOM put it.
+                 The result (#1464) was spring-security-config 6.5.2 against
+                 spring-security-web 7.x, and since 7 removed
+                 HandlerMappingIntrospectorRequestTransformer from -web, the old config module
+                 looked for a class that no longer existed and NO ApplicationContext started
+                 at all. Same trap as the jackson comment in the sample's own pom: pin the
+                 whole family, or the half you did not pin drifts.
+                 Keep this version identical to its four siblings. -->
+            <dependency>
+                <groupId>org.springframework.security</groupId>
+                <artifactId>spring-security-config</artifactId>
+                <version>6.5.11</version>
+            </dependency>
+
             <!-- Spring Boot Auto-configuration -->
             <dependency>
                 <groupId>org.springframework.boot</groupId>
