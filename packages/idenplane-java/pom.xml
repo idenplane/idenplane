@@ -152,25 +152,25 @@
             <dependency>
                 <groupId>org.springframework.security</groupId>
                 <artifactId>spring-security-core</artifactId>
-                <version>6.5.11</version>
+                <version>7.1.0</version>
             </dependency>
 
             <dependency>
                 <groupId>org.springframework.security</groupId>
                 <artifactId>spring-security-web</artifactId>
-                <version>6.5.11</version>
+                <version>7.1.0</version>
             </dependency>
 
             <dependency>
                 <groupId>org.springframework.security</groupId>
                 <artifactId>spring-security-oauth2-jose</artifactId>
-                <version>6.5.11</version>
+                <version>7.1.0</version>
             </dependency>
 
             <dependency>
                 <groupId>org.springframework.security</groupId>
                 <artifactId>spring-security-oauth2-resource-server</artifactId>
-                <version>6.5.11</version>
+                <version>7.1.0</version>
             </dependency>
 
             <!-- Not a direct dependency of any module here: it arrives in the sample through
@@ -187,7 +187,7 @@
             <dependency>
                 <groupId>org.springframework.security</groupId>
                 <artifactId>spring-security-config</artifactId>
-                <version>6.5.11</version>
+                <version>7.1.0</version>
             </dependency>
 
             <!-- Spring Boot Auto-configuration -->
