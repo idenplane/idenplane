@@ -93,7 +93,22 @@ jobs:
           EOF
 
       - name: Checkout base branch
-        run: git checkout origin/${{ github.base_ref }} -- .
+        # `git checkout <ref> -- .` only overwrites files that exist in the ref.
+        # Files ADDED by this PR survive it, so the base build ends up compiling
+        # new source against the base branch's schema and dependencies — which
+        # fails for reasons that have nothing to do with the API surface.
+        #
+        # #1495 hit exactly that: src/proxy-auth/ (added in #1486) stayed behind
+        # and the base build died with "Module '@prisma/client' has no exported
+        # member 'ProxyApplication'". The check was reporting a broken base,
+        # not a breaking change.
+        #
+        # `git clean` afterwards removes the leftovers. -d for directories, -x
+        # so ignored files go too — but node_modules is re-installed on the very
+        # next step, and keeping it would be the only reason to omit -x.
+        run: |
+          git checkout origin/${{ github.base_ref }} -- .
+          git clean -fdx -e node_modules
 
       - name: Install dependencies (base)
         run: npm ci

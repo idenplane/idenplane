@@ -57,11 +57,20 @@ jobs:
           # never pure-uppercase with no lowercase or mixed-case characters. Matched
           # without anchoring to end-of-line, since trailing punctuation (closing
           # backtick/paren, a comment continuing past it) shouldn't defeat this.
+          #
+          # Also excludes values that say in themselves that they are throwaway —
+          # `...-do-not-use-in-production`, `demo`, `example`, and friends. The
+          # runnable examples need working credentials in their compose files, and
+          # #1495 failed on examples/forward-auth-traefik's. This filters on the
+          # VALUE, deliberately, not on the path: excluding examples/ wholesale
+          # would hide a genuine leak committed there, which is exactly the kind
+          # of place one gets committed.
           HITS=$(git diff origin/main...HEAD \
               -- . ':(exclude)*.example' ':(exclude)*.sample' ':(exclude)*.template' ':(exclude)*.dist' \
             | grep -E '^\+[^+]' \
             | grep -iE '(api[_-]?key|secret|password|token|bearer)[^A-Za-z]*[:=][^A-Za-z]*[A-Za-z0-9_-]{20,}' \
-            | grep -vE '[:=][[:space:]]*"?[A-Z][A-Z0-9_]{19,}("?([^a-zA-Z]|$))' || true)
+            | grep -vE '[:=][[:space:]]*"?[A-Z][A-Z0-9_]{19,}("?([^a-zA-Z]|$))' \
+            | grep -vE '(^|[^a-zA-Z])(demo|example|sample|dummy|placeholder|do-not-use-in-production|change-in-production|quickstart-dev)([^a-zA-Z]|$)' || true)
           if [ -n "$HITS" ]; then
             echo "::error::Possible secret leaked in diff:"
             echo "$HITS"
