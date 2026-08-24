@@ -40,14 +40,16 @@ cp .env.example .env
 docker compose up -d
 ```
 
-4. **Run database migrations**
+4. **Run migrations and seed development data**
 ```bash
-npm run db:migrate
+npm run db:setup
 ```
 
-5. **Seed development data**
+Or separately, if you only want one of them:
+
 ```bash
-npm run db:seed
+npm run prisma:migrate   # apply migrations
+npm run prisma:seed      # seed development data
 ```
 
 6. **Start development server**
@@ -219,13 +221,13 @@ For the full module map, grouped by concern, with a system diagram, see the [Arc
 
 ```bash
 # Create a new migration
-npm run db:migrate:create -- --name add_new_table
+npm run prisma:migrate -- --name add_new_table
 
 # Apply migrations
-npm run db:migrate
+npm run prisma:migrate
 
-# Reset database (development only)
-npm run db:reset
+# Reset database (development only) — drops, re-migrates and re-seeds
+npx prisma migrate reset
 ```
 
 ## Reporting Issues

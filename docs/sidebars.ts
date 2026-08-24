@@ -246,8 +246,18 @@ const sidebars: SidebarsConfig = {
       items: [
         {
           type: 'doc',
+          id: 'contributing/development-setup',
+          label: 'Development Setup',
+        },
+        {
+          type: 'doc',
           id: 'contributing/architecture',
           label: 'Architecture Overview',
+        },
+        {
+          type: 'doc',
+          id: 'contributing/coding-standards',
+          label: 'Coding Standards',
         },
         {
           type: 'doc',
