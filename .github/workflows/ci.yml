@@ -507,8 +507,11 @@ jobs:
           java-version: '17'
           cache: maven
 
+      # ./mvnw, not mvn: the wrapper pins the Maven version (.mvn/wrapper/
+      # maven-wrapper.properties) so CI and local builds are the same build,
+      # rather than whatever Maven the runner image happens to ship.
       - name: Verify (build, test, coverage gate)
-        run: mvn -B verify
+        run: ./mvnw -B verify
 
   examples-build:
     # Nothing ever built these — examples/nextjs-quickstart was silently
