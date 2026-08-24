@@ -6,7 +6,7 @@
 
     <groupId>com.idenplane</groupId>
     <artifactId>idenplane-java</artifactId>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
     <packaging>pom</packaging>
 
     <name>Idenplane Java SDK</name>
