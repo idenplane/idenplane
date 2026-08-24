@@ -1,0 +1,131 @@
+---
+id: coding-standards
+title: Coding Standards
+description: What a change to Idenplane is expected to look like — naming, module structure, testing expectations, and the PR checklist, as the tooling actually enforces them.
+---
+
+# Coding Standards
+
+Written from what the repo enforces and what its existing code does, not from what would be nice. Where the tooling doesn't enforce something, that's said plainly, because a rule nobody checks is a rule that drifts.
+
+## What the tooling actually enforces
+
+Run before pushing. CI runs all of these:
+
+```bash
+npm run lint         # eslint + prettier, errors fail the build
+npm test             # jest
+npm run build        # tsc via nest build
+```
+
+**ESLint** (`eslint.config.mjs`):
+
+| rule | level |
+|---|---|
+| `prettier/prettier` | **error** — formatting is not a matter of taste here |
+| `@typescript-eslint/no-unused-vars` | **error**, `_`-prefixed names exempt |
+| `@typescript-eslint/no-floating-promises` | warn |
+| `@typescript-eslint/no-unsafe-argument` | warn |
+| `@typescript-eslint/no-explicit-any` | **off** |
+
+**TypeScript** (`tsconfig.json`): `strictNullChecks` and `noImplicitAny` are on. Full `strict` is not.
+
+:::note `any` is allowed, and used
+`CONTRIBUTING.md` says "no `any`". The linter disagrees — the rule is off, and there are ~22 explicit `any` annotations in `src/`. Treat it as: **don't reach for `any` first**, and don't add one where a real type is obvious. But you will find it in the codebase, mostly at boundaries where a third-party type is wrong or missing, and adding one there isn't a review failure.
+
+`noImplicitAny` *is* on, so an *accidental* `any` from an un-annotated parameter is still a build error. That's the line the tooling draws.
+:::
+
+## Backend module structure
+
+`src/` has ~60 NestJS modules. A new one follows the same shape as its neighbours:
+
+```
+src/<feature>/
+  <feature>.module.ts        wires it up; imports what it needs
+  <feature>.controller.ts    HTTP layer — no business logic
+  <feature>.service.ts       business logic; where Prisma is called
+  <feature>.service.spec.ts  unit tests, colocated
+  dto/
+    create-<feature>.dto.ts  class-validator decorators
+    update-<feature>.dto.ts  usually PartialType(OmitType(Create..., [...]))
+```
+
+Then register it in `src/app.module.ts`.
+
+Conventions worth copying rather than re-deriving:
+
+- **Controllers stay thin.** Guards, decorators, Swagger annotations, delegate to the service. If a controller has an `if` that isn't a guard clause, it probably belongs in the service.
+- **Realm scoping is a guard, not a parameter you check.** `@UseGuards(RealmGuard)` plus `@CurrentRealm() realm: Realm`. Never read `realmName` from params yourself.
+- **Admin endpoints** live under `admin/realms/:realmName/<feature>` with `AdminApiKeyGuard`. Public ones live under `realms/:realmName/<feature>` with `@Public()`.
+- **Rate limiting is per-method where it matters.** A class-level `@RateLimitByIp()` covers every route, which is wrong for anything a proxy or a poller calls on every request — see the comment in `src/proxy-auth/proxy-auth.controller.ts` for a case where it would have throttled an entire application.
+- **DTO validation is not optional.** Every request body goes through a class-validator DTO. The global `ValidationPipe` strips unknown properties; a field you forget to declare is a field that silently disappears.
+
+## Prisma
+
+- `prisma/schema.prisma` is the single source of truth. Never hand-edit generated client code.
+- After changing the schema: `npm run prisma:generate`. `Property 'x' does not exist on type 'PrismaService'` almost always means you skipped it.
+- **Migrations are additive.** Adding a column or table is routine. Dropping or renaming one needs a plan for deployed instances — say so in the PR rather than leaving the reviewer to notice.
+- Name migrations for what they do: `add_proxy_applications`, not `update_schema`.
+- Store secrets as hashes, not plaintext. Session tokens use SHA-256 (`CryptoService.sha256`); passwords use Argon2id. Anything needing to be read back later uses `CryptoService.encrypt` (AES-256-GCM).
+
+## Admin console
+
+- React Query for server state — `useQuery` / `useMutation`, keyed by `[resource, realmName]`. No `useEffect` fetching.
+- Semantic Tailwind tokens (`bg-surface`, `text-fg`, `bg-danger-soft`), never raw colours. Dark mode comes free; a hardcoded `bg-white` breaks it.
+- Every route in `App.tsx` needs a nav entry in `Layout.tsx` — `src/__tests__/routes.test.ts` enforces this and will fail the build otherwise. Detail pages and `/new` pages are exempt by existing rules.
+- Don't export a helper from a page component file. It breaks React Fast Refresh (`react-refresh/only-export-components`); put it in `src/utils/`.
+
+## Testing
+
+| suite | command | needs |
+|---|---|---|
+| backend unit | `npm test` | nothing |
+| backend e2e | `npm run test:e2e` | Postgres running |
+| admin console | `cd admin-ui && npm test` | nothing (MSW mocks the API) |
+| Java SDK | `cd packages/idenplane-java && ./mvnw verify` | Java 17 |
+
+**Coverage gates:** only the Java SDK has one — jacoco, 80% line coverage, enforced in `pom.xml`. TypeScript coverage is collected but not gated. That's not permission to skip tests; it means review is the only thing catching an untested change.
+
+What's expected:
+
+- **New service method → unit test.** Mock Prisma, assert the behaviour, not the implementation.
+- **New endpoint → controller test or e2e**, depending on whether the interesting part is the wiring or the flow.
+- **Bug fix → a test that fails without the fix.** Otherwise nothing stops it coming back.
+- **Security-adjacent code → test the refusals**, not just the happy path. A session validator needs a test proving it rejects an expired session, one from a different application, and one belonging to a disabled user — the passing case is the easy half.
+
+Use the shared Prisma mock (`src/prisma/prisma.mock.ts`) rather than hand-rolling one, and add your model to it if it's missing.
+
+## Commits and PRs
+
+Conventional commits, as `CONTRIBUTING.md` describes:
+
+```
+type(scope): short description
+```
+
+The body is worth more than the subject. **Say why, not what** — the diff already shows what. If you rejected an alternative approach, one line about why saves the next person from trying it.
+
+Before opening a PR:
+
+- [ ] `npm run lint` clean
+- [ ] `npm test` passes
+- [ ] `npm run build` passes
+- [ ] Touched admin-ui? `cd admin-ui && npm run lint && npm test`
+- [ ] Touched Java? `cd packages/idenplane-java && ./mvnw verify`
+- [ ] Schema change? Migration committed, and it's additive (or the PR explains the plan)
+- [ ] New env var? Added to `.env.example` **and** the config docs
+- [ ] Behaviour change? Docs updated in the same PR
+
+PRs target `dev`, not `main`.
+
+## Security
+
+This is an identity server. Some things are not stylistic:
+
+- **Never log a token, password, secret or session identifier** — not even truncated, not even in development.
+- **Validate redirect targets against an allowlist.** `matchesRedirectUri` in `src/common/redirect-uri.utils.ts` is the one implementation; don't write a second.
+- **Cookies:** `httpOnly`, `secure`, and the narrowest `sameSite` and `path` the flow permits. Widening an existing cookie's scope affects every flow that reads it — add a new one instead.
+- **A wrong authorisation decision still returns 200.** Tests are the only thing standing between a broken permission check and a green build.
+
+Suspected vulnerability? [`SECURITY.md`](https://github.com/idenplane/idenplane/blob/main/SECURITY.md), not a public issue.

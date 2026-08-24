@@ -1,0 +1,130 @@
+---
+id: development-setup
+title: Development Environment Setup
+description: Get Idenplane running locally on macOS, Linux or Windows (WSL) — prerequisites, the three services you can run, and the failures people actually hit.
+---
+
+# Development Environment Setup
+
+[`CONTRIBUTING.md`](https://github.com/idenplane/idenplane/blob/main/CONTRIBUTING.md) has the six-command version. This page is for when one of those commands doesn't do what it says.
+
+## Prerequisites
+
+| | version | why that one |
+|---|---|---|
+| Node.js | **22+** | what CI runs (`.github/workflows/ci.yml`). 20 mostly works; nothing verifies it |
+| npm | 10+ | ships with Node 22 |
+| Docker + Compose | any current | only used for Postgres, unless you have your own |
+| Git | any current | |
+| Java 17 + | | **only** if you touch `packages/idenplane-java` — Maven comes from the wrapper |
+
+You do **not** need Maven installed. `packages/idenplane-java/mvnw` downloads a pinned version on first use.
+
+## macOS / Linux / Windows
+
+The commands below are identical on all three — with one condition on Windows.
+
+:::warning Windows: use WSL 2, not PowerShell
+The repo has shell scripts (`seed.sh`, `mvnw`, `docker-entrypoint.sh`) and `.gitattributes` forcing LF on them. Under native Windows git they still check out fine, but running them needs a POSIX shell.
+
+Clone **inside** the WSL filesystem (`~/code/idenplane`), not under `/mnt/c/`. Node's file watching across the Windows/Linux boundary is slow enough to make `start:dev` feel broken.
+:::
+
+## The three things you can run
+
+They're independent. Most changes need only one.
+
+### Backend (NestJS, port 3000)
+
+```bash
+npm install
+cp .env.example .env        # then edit — see below
+docker compose up -d db     # Postgres on 127.0.0.1:5432
+npm run db:setup            # migrate + seed
+npm run start:dev
+```
+
+`db:setup` is `prisma migrate dev && ts-node prisma/seed.ts`. To run them separately use `npm run prisma:migrate` and `npm run prisma:seed`.
+
+### Admin console (React + Vite)
+
+```bash
+cd admin-ui
+npm install
+npm run dev
+```
+
+It proxies to the backend on 3000, so run that first, or you'll get a console full of network errors and a login page that never accepts anything.
+
+### Docs site (Docusaurus)
+
+```bash
+cd docs
+npm install
+npm start
+```
+
+Independent of everything else — no backend, no database.
+
+## What actually needs setting in `.env`
+
+`cp .env.example .env` leaves four `REPLACE_ME_...` placeholders. For local development:
+
+```bash
+ADMIN_API_KEY=$(openssl rand -hex 32)
+ADMIN_PASSWORD=whatever-you-will-remember
+WEBHOOK_SECRET_KEY=$(openssl rand -hex 32)
+WEBHOOK_ENCRYPTION_SALT=$(openssl rand -hex 16)
+```
+
+`DATABASE_URL` already matches what `docker compose` starts, so leave it unless you're using your own Postgres.
+
+`ADMIN_API_KEY` is refused at startup in production if it's a known placeholder or under 32 characters (`src/main.ts`). In development it only warns — but generate a real one anyway, since it's the same value you'll paste into API calls.
+
+## Running the tests
+
+```bash
+npm test                    # backend unit — no database needed
+npm run test:e2e            # backend e2e — needs Postgres running
+cd admin-ui && npm test     # console, vitest + MSW, fully mocked
+cd packages/idenplane-java && ./mvnw verify   # Java SDK
+```
+
+Only `test:e2e` needs the database up. The rest are self-contained.
+
+## Failures people actually hit
+
+**`Can't reach database server at localhost:5432`**
+Postgres isn't up, or it's up in another container from another project holding the port. `docker compose ps` to check, `docker compose up -d db` to start it.
+
+**`Unique constraint failed` when seeding**
+The seed is not idempotent. Either you've already seeded, or a previous run half-completed. `npx prisma migrate reset` drops, re-migrates and re-seeds in one step.
+
+**`@prisma/client did not initialize yet`**
+The generated client is missing — it isn't committed, and it isn't regenerated automatically after a schema change. `npm run prisma:generate`. This is also what `Property 'x' does not exist on type 'PrismaService'` means after you edit `schema.prisma`.
+
+**Admin console loads but every request fails**
+The backend isn't running on 3000. Vite serves the console fine on its own; nothing about the page tells you the API is absent.
+
+**`bad interpreter: /bin/sh^M`**
+A shell script checked out with CRLF. `.gitattributes` prevents this for tracked scripts — if you see it, you're on a checkout older than that file, or an editor rewrote the line endings. `git checkout -- <file>` restores it.
+
+**Java build can't find Maven**
+It shouldn't need to. Run `./mvnw` from `packages/idenplane-java`, not `mvn`.
+
+## Where things live
+
+```
+src/                    NestJS backend, ~60 self-contained modules
+admin-ui/               React admin console
+docs/                   this site
+packages/idenplane-*/   published SDKs (JS, Go, Java, MCP, CLI)
+examples/               runnable quickstarts
+prisma/schema.prisma    the single source of truth for the data model
+```
+
+See [Architecture](./architecture.mdx) for how the backend modules relate, and [Coding Standards](./coding-standards.mdx) for what a change is expected to look like.
+
+## Still stuck
+
+Open a [discussion](https://github.com/idenplane/idenplane/discussions) — and if the fix belongs on this page, say so, because it means someone else will hit it too.
