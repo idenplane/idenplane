@@ -1,0 +1,101 @@
+---
+id: releasing
+title: Releasing
+description: How each Idenplane artifact is published — the tags that trigger it, what each one reaches, and the one step that is deliberately manual.
+---
+
+# Releasing
+
+Five artifacts publish to four registries, each from its own tag. Nothing publishes from a branch push except the Docker `latest` image.
+
+## What publishes, and from what
+
+| artifact | registry | trigger |
+|---|---|---|
+| Docker image `:latest` | Docker Hub | **push to `main`** |
+| Docker image `:x.y.z` | Docker Hub | tag `v*` |
+| `idenplane-java-core` | Maven Central | tag `java-v*` |
+| `idenplane-mcp` | npm | tag `mcp-v*` |
+| Android SDK | Maven Central | tag `android-v*` |
+
+Merging `dev` → `main` therefore **does** update the Docker `latest` tag that the quickstart docs tell people to pull. It does **not** touch Maven Central or npm — those need an explicit tag.
+
+## Server release (`v*`)
+
+`release-version-check.yml` refuses the tag unless three things agree, so do them first:
+
+1. Bump `version` in `package.json`.
+2. Add the matching `CHANGELOG.md` entry.
+3. Merge to `main`.
+
+```bash
+git checkout main && git pull
+git tag -a v0.4.1 -m "0.4.1"
+git push origin v0.4.1
+```
+
+A mismatch between the tag, `package.json` and the changelog fails the check before the image builds, rather than after.
+
+## Java SDK release (`java-v*`)
+
+```bash
+# 1. bump the version across all six poms — not by hand
+cd packages/idenplane-java
+./mvnw versions:set -DnewVersion=1.1.0 -DgenerateBackupPoms=false
+./mvnw clean verify
+
+# 2. merge that to main, then:
+git checkout main && git pull
+git tag -a java-v1.1.0 -m "idenplane-java 1.1.0"
+git push origin java-v1.1.0
+```
+
+`versions:set` rather than editing by hand: there are six poms (the parent and five modules) and the publish workflow compares the tag against `idenplane-java-core`'s resolved `project.version`. Hand-editing five of six is a failed release.
+
+### The tag does not finish the release
+
+:::warning One deliberate manual step
+`autoPublish` is **`false`** in `idenplane-java-core/pom.xml`. The tag builds, signs and uploads the bundle, and it lands in the Central Portal as a **validated** deployment — not a public one.
+
+Someone then has to press Publish at **[central.sonatype.com/publishing/deployments](https://central.sonatype.com/publishing/deployments)**.
+
+Until that happens, `maven-metadata.xml` still lists the previous version and the new jar 404s. That is not a sync delay; nothing has been released yet.
+:::
+
+This is on purpose. **Maven Central has no unpublish** — a wrong version number or a bad artifact is permanent, and every consumer's build can resolve it forever. The validated stage is the last point at which a mistake costs nothing: Drop it in the Portal and re-tag.
+
+Setting `autoPublish=true` would remove that stage and make `git push --tags` immediately irreversible. Don't, unless you have decided that trade deliberately — the comments in `pom.xml` and `publish-java.yml` explain the reasoning at the point where someone would change it.
+
+### Which modules actually publish
+
+Only **`idenplane-java-core`**. `idenplane-java-spring`, `-reactive`, `-jakarta` and `-spring-sample` build and test in the reactor but are not deployed.
+
+Worth knowing when judging a version bump: a change confined to `-spring` — the Spring Boot 4 / Security 7 migration, for instance — does not reach any Maven Central consumer at all.
+
+## MCP server (`mcp-v*`)
+
+```bash
+cd packages/idenplane-mcp
+npm version 1.2.0        # updates package.json and creates a commit
+# merge to main, then:
+git tag -a mcp-v1.2.0 -m "idenplane-mcp 1.2.0"
+git push origin mcp-v1.2.0
+```
+
+Publishes straight to npm — **no validated stage**, no second chance. npm allows unpublishing within 72 hours, and only if nothing depends on the version yet.
+
+## Choosing a version number
+
+The published artifact's *own* code is not the whole story. Its dependency tree reaches consumers too.
+
+The 1.1.0 Java release is the example: `idenplane-java-core`'s source had not changed at all since 1.0.0, but its managed `nimbus-jose-jwt` moved 10.0.2 → 10.9.1 — the library doing JWT signature verification for every consumer. That is a minor, not a patch, even with a zero-line source diff.
+
+- **patch** — bug fix, or a dependency bump nobody's build behaviour depends on
+- **minor** — new API, or a dependency move consumers inherit
+- **major** — a break consumers of *that artifact* will actually experience. A break in a module nobody publishes is not a major.
+
+## After a release
+
+- Check the workflow finished, not just that it started. A publish job going red halfway leaves the previous version live and the new one absent.
+- For Java, check the Portal — a green workflow means "uploaded and validated", not "released".
+- Confirm the artifact resolves. `curl -sI https://repo.maven.apache.org/maven2/com/idenplane/idenplane-java-core/<version>/idenplane-java-core-<version>.jar` should be 200, though Central sync can lag a few minutes after Publish.

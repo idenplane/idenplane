@@ -349,7 +349,10 @@
                              makes `mvn deploy` land as a reviewable, still-reversible "validated"
                              deployment in the Central Portal instead of auto-releasing it. Actual
                              release is then a separate, explicit action in the Portal UI (or a
-                             deliberate autoPublish=true override), never a side effect of deploy. -->
+                             deliberate autoPublish=true override), never a side effect of deploy.
+                             Maven Central has no unpublish, so the validated stage is the last
+                             point at which a wrong version costs nothing. Full release process:
+                             docs/docs/contributing/releasing.mdx -->
                         <autoPublish>false</autoPublish>
                     </configuration>
                 </plugin>
