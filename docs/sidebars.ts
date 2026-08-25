@@ -264,6 +264,11 @@ const sidebars: SidebarsConfig = {
           id: 'contributing/adrs',
           label: 'Architecture Decision Records',
         },
+        {
+          type: 'doc',
+          id: 'contributing/releasing',
+          label: 'Releasing',
+        },
       ],
     },
   ],
