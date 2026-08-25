@@ -77,6 +77,36 @@ jobs:
             exit 1
           fi
 
+          # Second detector, for the shape the first one structurally cannot see.
+          #
+          # The pattern above requires a ':' or '=' immediately before the value.
+          # In an Authorization header the value follows the SCHEME and a space —
+          # `Authorization: Bearer <token>` — so the token itself never sits after
+          # a delimiter, and no amount of tuning that pattern reaches it. The
+          # `bearer` keyword has been in it since the beginning, which suggests
+          # header-form secrets were always meant to be covered; the delimiter
+          # requirement just prevented it from ever matching one. (#1509)
+          #
+          # Kept as its own grep rather than widened into the first: accepting
+          # whitespace as a delimiter there was measured against six months of
+          # this repo's history and added 24 false positives — ordinary code like
+          # `if (bearerToken && !isTokenExpiredLocally(bearerToken))`, SQL
+          # `CREATE USER ... WITH PASSWORD`, and Go env-var defaults. This
+          # narrower form matched ZERO false positives across the entire history.
+          #
+          # The '...' exclusion keeps documentation quiet: every truncated example
+          # in docs/ writes the token elided, and a real leak never is.
+          HEADER_HITS=$(git diff origin/main...HEAD \
+              -- . ':(exclude)*.example' ':(exclude)*.sample' ':(exclude)*.template' ':(exclude)*.dist' \
+            | grep -E '^\+[^+]' \
+            | grep -E '[Aa]uthorization[^A-Za-z]*:[^A-Za-z]*(Bearer|Basic|Token)[[:space:]]+[A-Za-z0-9_.=-]{20,}' \
+            | grep -vE '\.\.\.' || true)
+          if [ -n "$HEADER_HITS" ]; then
+            echo "::error::Possible secret leaked in an Authorization header:"
+            echo "$HEADER_HITS"
+            exit 1
+          fi
+
       - name: Size limits for automated PRs
         run: |
           set -e
