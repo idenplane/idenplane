@@ -732,3 +732,6 @@ See the [LICENSE](LICENSE) file for the full AGPL-3.0 text.
   <a href="https://idenplane.com">idenplane.com</a> &middot;
   Built with NestJS, React, and PostgreSQL
 </p>
+
+
+<!-- Security scan triggered at 2026-09-04 13:02:28 -->
