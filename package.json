@@ -122,7 +122,8 @@
       "js-yaml": "^5.2.2"
     },
     "@babel/core": "^7.29.6",
-    "deepmerge-ts": "^8.0.2"
+    "deepmerge-ts": "^8.0.2",
+    "mysql2": "^3.23.1"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
