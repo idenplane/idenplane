@@ -39,7 +39,7 @@
     "@nestjs/platform-express": "^11.2.1",
     "@nestjs/schedule": "^6.1.1",
     "@nestjs/serve-static": "^5.0.4",
-    "@nestjs/swagger": "^11.4.7",
+    "@nestjs/swagger": "^12.0.2",
     "@nestjs/terminus": "^11.0.0",
     "@nestjs/throttler": "^6.5.0",
     "@node-saml/node-saml": "^5.1.0",
