@@ -35,7 +35,7 @@
     "@nestjs/common": "^11.2.1",
     "@nestjs/config": "^4.0.3",
     "@nestjs/core": "^11.2.1",
-    "@nestjs/graphql": "^13.4.5",
+    "@nestjs/graphql": "^14.1.0",
     "@nestjs/platform-express": "^11.2.1",
     "@nestjs/schedule": "^6.1.1",
     "@nestjs/serve-static": "^5.0.4",
