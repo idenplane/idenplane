@@ -113,7 +113,7 @@
     "effect": "^3.21.0",
     "lodash": "^4.17.23",
     "ws": "^8.21.0",
-    "multer": "^2.2.0",
+    "multer": "^2.5.0",
     "@prisma/dev": {
       "find-my-way": "^9.7.0",
       "valibot": "^1.4.2"
