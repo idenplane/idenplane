@@ -52,6 +52,6 @@
     "http-proxy-middleware": "^2.0.10",
     "joi": "^17.13.4",
     "browserslist": "^4.28.8",
-    "qs": "^6.16.0"
+    "qs": "^6.17.1"
   }
 }
