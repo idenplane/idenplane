@@ -78,6 +78,9 @@ export class Realm {
   webAuthnRpId: string | null;
 
   @Field()
+  webAuthnUserVerificationRequired: boolean;
+
+  @Field()
   impersonationEnabled: boolean;
 
   @Field(() => Int, { nullable: true })
