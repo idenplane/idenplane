@@ -144,6 +144,10 @@ model Realm {
   webAuthnRpId                     String? @map("webauthn_rp_id")
   webAuthnUserVerificationRequired Boolean @default(false) @map("webauthn_user_verification_required")
 
+  // SMS MFA. Enrollment and the login challenge land in a follow-up; until
+  // then the admin UI keeps this switch read-only.
+  smsMfaEnabled Boolean @default(false) @map("sms_mfa_enabled")
+
   // SMS provider configuration
   smsProvider       String  @default("none") @map("sms_provider")
   smsProviderConfig Json?   @default("{}") @map("sms_provider_config")

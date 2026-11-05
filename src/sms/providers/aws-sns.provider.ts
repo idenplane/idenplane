@@ -2,6 +2,14 @@ import { Injectable, Logger } from '@nestjs/common';
 import { XMLParser } from 'fast-xml-parser';
 import { SmsProvider } from './sms-provider.interface.js';
 
+/** Per-realm settings; any field left empty falls back to the AWS_* env. */
+export interface AwsSnsOptions {
+  accessKeyId?: string | null;
+  secretAccessKey?: string | null;
+  region?: string | null;
+  from?: string | null;
+}
+
 @Injectable()
 export class AwsSnsProvider implements SmsProvider {
   readonly name = 'aws-sns';
@@ -12,15 +20,18 @@ export class AwsSnsProvider implements SmsProvider {
   private fromNumber: string | null = null;
   private readonly xmlParser = new XMLParser();
 
-  constructor() {
-    this.initializeClient();
+  constructor(options: AwsSnsOptions = {}) {
+    this.initializeClient(options);
   }
 
-  private initializeClient(): void {
-    this.accessKeyId = process.env['AWS_ACCESS_KEY_ID'] ?? null;
-    this.secretAccessKey = process.env['AWS_SECRET_ACCESS_KEY'] ?? null;
-    this.region = process.env['AWS_REGION'] ?? null;
-    this.fromNumber = process.env['AWS_SNS_FROM_NUMBER'] ?? null;
+  private initializeClient(options: AwsSnsOptions): void {
+    this.accessKeyId =
+      options.accessKeyId || process.env['AWS_ACCESS_KEY_ID'] || null;
+    this.secretAccessKey =
+      options.secretAccessKey || process.env['AWS_SECRET_ACCESS_KEY'] || null;
+    this.region = options.region || process.env['AWS_REGION'] || null;
+    this.fromNumber =
+      options.from || process.env['AWS_SNS_FROM_NUMBER'] || null;
 
     if (this.accessKeyId && this.secretAccessKey && this.region) {
       this.logger.log('AWS SNS SMS provider initialized');

@@ -296,7 +296,7 @@ function WebhookFields({
       </Field>
       <Field
         label="Custom Headers (JSON)"
-        hint='Optional request headers, e.g. {"Authorization": "Bearer token"}. Must be valid JSON.'
+        hint='Optional request headers, e.g. {"Authorization": "Bearer token"}. Must be valid JSON. Saved headers are hidden; leave •••••• to keep them.'
       >
         <textarea
           value={form.webhookHeaders}
@@ -388,19 +388,29 @@ export default function SmsProviderForm({ realm }: SmsProviderFormProps) {
       <div className="rounded-lg border border-line bg-surface p-6 shadow-sm">
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="text-lg font-semibold text-fg">SMS Multi-Factor Authentication</h2>
+            <h2 className="flex items-center gap-2 text-lg font-semibold text-fg">
+              SMS Multi-Factor Authentication
+              <span className="rounded-full bg-active px-2 py-0.5 text-xs font-medium text-muted">
+                Coming soon
+              </span>
+            </h2>
             <p className="mt-1 text-sm text-subtle">
-              Users receive a one-time code via SMS as a second factor during login.
-              Requires a configured SMS provider below.
+              Users will receive a one-time code via SMS as a second factor during login.
+              The login step isn&apos;t available yet, so this can&apos;t be switched on.
+              You can already configure and save the SMS provider below.
             </p>
           </div>
+          {/* Read-only until SMS enrollment + the login challenge ship: switching
+              it on today would promise a second factor that is never asked for. */}
           <button
             type="button"
             role="switch"
             aria-checked={form.smsMfaEnabled}
-            onClick={() => setForm((f) => ({ ...f, smsMfaEnabled: !f.smsMfaEnabled }))}
+            aria-label="Enable SMS multi-factor authentication"
+            disabled
+            title="Coming soon"
             className={[
-              'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent focus-visible:ring-offset-2',
+              'relative inline-flex h-6 w-11 shrink-0 cursor-not-allowed rounded-full border-2 border-transparent opacity-50 transition-colors focus:outline-none',
               form.smsMfaEnabled ? 'bg-accent' : 'bg-active',
             ].join(' ')}
           >

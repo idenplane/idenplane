@@ -19,6 +19,8 @@ import {
   EmailProviderType,
   EmailProviderConfigDto,
 } from '../../email/dto/email-config.dto.js';
+import { SmsProviderType } from '../../sms/dto/sms-config.dto.js';
+import { RealmSmsProviderConfigDto } from './sms-config.dto.js';
 
 export class CreateRealmDto {
   @ApiProperty({ example: 'my-app' })
@@ -429,6 +431,72 @@ export class CreateRealmDto {
   @IsOptional()
   @IsBoolean()
   webAuthnUserVerificationRequired?: boolean;
+
+  // SMS provider + OTP (the admin UI's SMS tab)
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      'Offer SMS one-time codes as an MFA method. Not yet enforced at login.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  smsMfaEnabled?: boolean;
+
+  @ApiPropertyOptional({ enum: SmsProviderType, default: SmsProviderType.NONE })
+  @IsOptional()
+  @IsEnum(SmsProviderType)
+  smsProvider?: SmsProviderType;
+
+  @ApiPropertyOptional({
+    description:
+      "Sender ID or phone number. Falls back to the provider's env variable.",
+  })
+  @IsOptional()
+  @IsString()
+  smsFrom?: string;
+
+  @ApiPropertyOptional({ type: () => RealmSmsProviderConfigDto })
+  @IsOptional()
+  @ValidateNested()
+  @Type(() => RealmSmsProviderConfigDto)
+  smsProviderConfig?: RealmSmsProviderConfigDto;
+
+  @ApiPropertyOptional({ description: 'OTP code length (digits)', default: 6 })
+  @IsOptional()
+  @IsInt()
+  @Min(4)
+  @Max(8)
+  otpLength?: number;
+
+  @ApiPropertyOptional({
+    description: 'OTP code lifetime in seconds',
+    default: 300,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(30)
+  @Max(600)
+  otpExpirySeconds?: number;
+
+  @ApiPropertyOptional({
+    description: 'Maximum SMS codes a user can request per rate-limit window',
+    default: 3,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(1)
+  @Max(10)
+  smsMaxRequestsPerUser?: number;
+
+  @ApiPropertyOptional({
+    description: 'SMS rate-limit window in seconds',
+    default: 900,
+  })
+  @IsOptional()
+  @IsInt()
+  @Min(60)
+  @Max(3600)
+  smsRateLimitWindow?: number;
 
   // Adaptive authentication
   @ApiPropertyOptional({
