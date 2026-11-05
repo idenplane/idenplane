@@ -31,6 +31,18 @@ updates:
         update-types:
           - minor
           - patch
+      # Security updates ignore every group above (groups default to
+      # version updates), so each advisory opened its own PR — mostly
+      # transitive, lockfile-only bumps. In Nov 2026 that was 46 of the 79
+      # open Dependabot PRs. This folds them into one PR per run. Majors
+      # still come separately so they can't hold the patches hostage.
+      security-updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
     ignore:
       # TypeScript 7 cannot install here at all: ts-jest's peer range is
       # `>=4.3 <7` and 29.4.12 is its latest release, so `npm ci` dies with
@@ -79,6 +91,14 @@ updates:
       # patch bumps. Named groups above still win for anything they match.
       dev-dependencies:
         dependency-type: development
+        update-types:
+          - minor
+          - patch
+      # Fold security updates into one PR per run (see the root entry).
+      security-updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
         update-types:
           - minor
           - patch
@@ -144,6 +164,14 @@ updates:
         update-types:
           - minor
           - patch
+      # Fold security updates into one PR per run (see the root entry).
+      security-updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
 
   # Examples — these are the copy-paste starting point we hand new users, so a
   # stale lockfile here is a vulnerable dependency we actively ship. Neither
@@ -167,6 +195,14 @@ updates:
         update-types:
           - minor
           - patch
+      # Fold security updates into one PR per run (see the root entry).
+      security-updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
 
   - package-ecosystem: npm
     directory: "/examples/vanilla-js-quickstart"
@@ -179,6 +215,15 @@ updates:
     labels:
       - dependencies
       - examples
+    groups:
+      # Fold security updates into one PR per run (see the root entry).
+      security-updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
 
   # Java SDK — Dependabot's security updates already opened PRs here (they need
   # no config), so the module only ever moved when an advisory forced it. This
@@ -221,3 +266,89 @@ updates:
         patterns:
           - "org.apache.httpcomponents.client5:*"
           - "org.apache.httpcomponents.core5:*"
+      # Fold security updates into one PR per run (see the root entry).
+      security-updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  # Directories with no version-update entry still get Dependabot security
+  # updates (those need no config), one PR per advisory per directory. The SDK
+  # packages alone produced 21 of the 79 open PRs in Nov 2026, e.g. vite 8.3.5
+  # arriving as four identical PRs (#1623, #1627, #1628, #1629). These entries
+  # keep version updates off (open-pull-requests-limit: 0) and exist only to
+  # group the security updates: with `directories`, one grouped PR covers
+  # every listed directory.
+  - package-ecosystem: npm
+    directories:
+      - "/packages/idenplane-js"
+      - "/packages/idenplane-mcp"
+      - "/packages/idenplane-vue"
+      - "/packages/idenplane-angular"
+      - "/packages/idenplane-nextjs"
+      - "/packages/idenplane-cli"
+      - "/packages/idenplane-http-internal"
+      - "/packages/idenplane-android"
+      - "/packages/idenplane-ios"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: "Africa/Cairo"
+    open-pull-requests-limit: 0
+    labels:
+      - dependencies
+      - sdk
+    groups:
+      sdk-security-updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: maven
+    directory: "/packages/idenplane-java/idenplane-java-spring-sample"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: "Africa/Cairo"
+    open-pull-requests-limit: 0
+    labels:
+      - dependencies
+      - java
+    groups:
+      security-updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
+
+  - package-ecosystem: gomod
+    directories:
+      - "/packages/idenplane-go"
+      - "/terraform-provider-idenplane"
+    schedule:
+      interval: weekly
+      day: monday
+      time: "08:00"
+      timezone: "Africa/Cairo"
+    open-pull-requests-limit: 0
+    labels:
+      - dependencies
+      - go
+    groups:
+      go-security-updates:
+        applies-to: security-updates
+        patterns:
+          - "*"
+        update-types:
+          - minor
+          - patch
