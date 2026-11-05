@@ -32,7 +32,7 @@ URL.createObjectURL = () => `blob:test/${++objectUrlCounter}`;
 URL.revokeObjectURL = () => {};
 
 // Start MSW server before all tests
-beforeAll(() => server.listen({ onUnhandledRequest: 'warn' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'warn' }));
 
 // Reset handlers after each test to avoid state leaking between tests
 afterEach(() => server.resetHandlers());
