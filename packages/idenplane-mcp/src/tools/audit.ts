@@ -11,7 +11,7 @@ const LoginEventSchema = z.object({
   userId: z.string().optional(),
   ipAddress: z.string().optional(),
   time: z.number().optional(),
-  details: z.record(z.string()).optional(),
+  details: z.record(z.string(), z.string()).optional(),
 });
 
 const AdminEventSchema = z.object({
