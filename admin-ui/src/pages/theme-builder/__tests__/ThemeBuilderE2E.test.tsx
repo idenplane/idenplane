@@ -552,16 +552,41 @@ describe('ThemeBuilderPage E2E Tests', () => {
     it('export generates valid JSON', async () => {
       const user = userEvent.setup();
 
-      // Create a download link mock
+      // jsdom has no blob-URL support, and the shim vitest installs reaches
+      // into jsdom internals that changed in jsdom 30.1 — so stub the URL
+      // API and capture the Blob instead of relying on either of them.
+      let exported: Blob | undefined;
+      const createObjectURL = vi.spyOn(URL, 'createObjectURL').mockImplementation((blob) => {
+        exported = blob as Blob;
+        return 'blob:theme-export';
+      });
+      const revokeObjectURL = vi.spyOn(URL, 'revokeObjectURL').mockImplementation(() => {});
+      const click = vi.spyOn(HTMLAnchorElement.prototype, 'click').mockImplementation(() => {});
       const createElementSpy = vi.spyOn(document, 'createElement');
 
-      renderThemeBuilder();
+      try {
+        renderThemeBuilder();
 
-      const exportButton = screen.getByText('Export Theme');
-      await user.click(exportButton);
+        const exportButton = screen.getByText('Export Theme');
+        await user.click(exportButton);
 
-      // Verify that an anchor element was created
-      expect(createElementSpy).toHaveBeenCalledWith('a');
+        // A download link was created and clicked, then its URL released
+        expect(createElementSpy).toHaveBeenCalledWith('a');
+        expect(click).toHaveBeenCalledTimes(1);
+        expect(revokeObjectURL).toHaveBeenCalledWith('blob:theme-export');
+
+        // ...and what it downloads is valid theme JSON
+        expect(exported?.type).toBe('application/json');
+        const data = JSON.parse(await exported!.text());
+        expect(data).toMatchObject({ version: '1.0' });
+        expect(data).toHaveProperty('styles');
+        expect(data).toHaveProperty('components');
+      } finally {
+        createObjectURL.mockRestore();
+        revokeObjectURL.mockRestore();
+        click.mockRestore();
+        createElementSpy.mockRestore();
+      }
     });
   });
 
