@@ -282,6 +282,27 @@ describe('RealmsService', () => {
         service.update('nonexistent', { displayName: 'X' }),
       ).rejects.toThrow(NotFoundException);
     });
+
+    // idenplane#1558: the flag was accepted nowhere, so it could never be saved.
+    it('should persist the WebAuthn settings, including user verification', async () => {
+      prisma.realm.findUnique.mockResolvedValue(mockRealm);
+      prisma.realm.update.mockResolvedValue(mockRealm);
+
+      await service.update('test-realm', {
+        webAuthnEnabled: true,
+        webAuthnRpName: 'Homelab',
+        webAuthnRpId: 'auth.example.com',
+        webAuthnUserVerificationRequired: true,
+      });
+
+      const { data } = prisma.realm.update.mock.calls[0][0];
+      expect(data).toMatchObject({
+        webAuthnEnabled: true,
+        webAuthnRpName: 'Homelab',
+        webAuthnRpId: 'auth.example.com',
+        webAuthnUserVerificationRequired: true,
+      });
+    });
   });
 
   describe('remove', () => {
