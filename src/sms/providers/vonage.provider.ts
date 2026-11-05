@@ -1,6 +1,13 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { SmsProvider } from './sms-provider.interface.js';
 
+/** Per-realm settings; any field left empty falls back to the VONAGE_* env. */
+export interface VonageSmsOptions {
+  apiKey?: string | null;
+  apiSecret?: string | null;
+  from?: string | null;
+}
+
 @Injectable()
 export class VonageSmsProvider implements SmsProvider {
   readonly name = 'vonage';
@@ -9,14 +16,16 @@ export class VonageSmsProvider implements SmsProvider {
   private apiSecret: string | null = null;
   private fromNumber: string | null = null;
 
-  constructor() {
-    this.initializeClient();
+  constructor(options: VonageSmsOptions = {}) {
+    this.initializeClient(options);
   }
 
-  private initializeClient(): void {
-    this.apiKey = process.env['VONAGE_API_KEY'] ?? null;
-    this.apiSecret = process.env['VONAGE_API_SECRET'] ?? null;
-    this.fromNumber = process.env['VONAGE_PHONE_NUMBER'] ?? null;
+  private initializeClient(options: VonageSmsOptions): void {
+    this.apiKey = options.apiKey || process.env['VONAGE_API_KEY'] || null;
+    this.apiSecret =
+      options.apiSecret || process.env['VONAGE_API_SECRET'] || null;
+    this.fromNumber =
+      options.from || process.env['VONAGE_PHONE_NUMBER'] || null;
 
     if (this.apiKey && this.apiSecret) {
       this.logger.log('Vonage SMS provider initialized');

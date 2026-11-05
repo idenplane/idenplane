@@ -4,6 +4,13 @@ import { SmsProvider } from './sms-provider.interface.js';
 
 type TwilioClient = ReturnType<typeof twilio>;
 
+/** Per-realm settings; any field left empty falls back to the TWILIO_* env. */
+export interface TwilioSmsOptions {
+  accountSid?: string | null;
+  authToken?: string | null;
+  from?: string | null;
+}
+
 @Injectable()
 export class TwilioSmsProvider implements SmsProvider {
   readonly name = 'twilio';
@@ -11,14 +18,15 @@ export class TwilioSmsProvider implements SmsProvider {
   private client: TwilioClient | null = null;
   private fromNumber: string | null = null;
 
-  constructor() {
-    this.initializeClient();
+  constructor(options: TwilioSmsOptions = {}) {
+    this.initializeClient(options);
   }
 
-  private initializeClient(): void {
-    const accountSid = process.env['TWILIO_ACCOUNT_SID'];
-    const authToken = process.env['TWILIO_AUTH_TOKEN'];
-    this.fromNumber = process.env['TWILIO_PHONE_NUMBER'] ?? null;
+  private initializeClient(options: TwilioSmsOptions): void {
+    const accountSid = options.accountSid || process.env['TWILIO_ACCOUNT_SID'];
+    const authToken = options.authToken || process.env['TWILIO_AUTH_TOKEN'];
+    this.fromNumber =
+      options.from || process.env['TWILIO_PHONE_NUMBER'] || null;
 
     if (accountSid && authToken) {
       this.client = twilio(accountSid, authToken);
