@@ -89,7 +89,7 @@
     "@types/node": "^26.6.5",
     "@types/nodemailer": "^8.0.1",
     "@types/qrcode": "^1.5.6",
-    "@types/sanitize-html": "^2.16.1",
+    "@types/sanitize-html": "^2.16.2",
     "@types/supertest": "^7.2.1",
     "@types/ws": "^8.18.2",
     "eslint": "^10.12.0",
