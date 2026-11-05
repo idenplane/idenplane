@@ -1,31 +1,32 @@
 import { Injectable } from '@nestjs/common';
 import {
-  HealthIndicator,
   HealthIndicatorResult,
-  HealthCheckError,
+  HealthIndicatorService,
 } from '@nestjs/terminus';
 import { RedisService } from './redis.service.js';
 
 @Injectable()
-export class RedisHealthIndicator extends HealthIndicator {
-  constructor(private readonly redis: RedisService) {
-    super();
-  }
+export class RedisHealthIndicator {
+  constructor(
+    private readonly redis: RedisService,
+    private readonly healthIndicatorService: HealthIndicatorService,
+  ) {}
 
   async isHealthy(key: string): Promise<HealthIndicatorResult> {
+    const indicator = this.healthIndicatorService.check(key);
+
     if (!this.redis.isAvailable()) {
-      // Redis is optional — report degraded but don't fail readiness
-      return this.getStatus(key, true, { status: 'disabled' });
+      // Redis is optional, so its absence must not fail readiness or flip the
+      // overall status away from 'ok' (the Docker HEALTHCHECK and the admin
+      // dashboard both key off it). Report it as up and say it is disabled.
+      return indicator.up({ enabled: false });
     }
 
     const alive = await this.redis.ping();
     if (alive) {
-      return this.getStatus(key, true);
+      return indicator.up();
     }
 
-    throw new HealthCheckError(
-      'Redis ping failed',
-      this.getStatus(key, false, { message: 'ping returned false' }),
-    );
+    return indicator.down({ message: 'ping returned false' });
   }
 }
