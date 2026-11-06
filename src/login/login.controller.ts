@@ -15,12 +15,9 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { ApiExcludeController } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
-import { Prisma, type Realm, type User } from '@prisma/client';
-import type {
-  AuthorizeParams,
-  SatisfiedAuthContext,
-} from '../oauth/oauth.service.js';
-import { ACR_PASSWORD, ACR_MFA } from '../step-up/step-up.service.js';
+import { Prisma, type Realm } from '@prisma/client';
+import type { AuthorizeParams } from '../oauth/oauth.service.js';
+import { ACR_MFA } from '../step-up/step-up.service.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
@@ -29,6 +26,7 @@ import {
   RateLimitByIp,
 } from '../rate-limit/rate-limit.guard.js';
 import { LoginService } from './login.service.js';
+import { LoginFlowService } from './login-flow.service.js';
 import { OAuthService } from '../oauth/oauth.service.js';
 import { ConsentService } from '../consent/consent.service.js';
 import { VerificationService } from '../verification/verification.service.js';
@@ -36,11 +34,7 @@ import { EmailService } from '../email/email.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { PasswordPolicyService } from '../password-policy/password-policy.service.js';
-import {
-  MfaService,
-  MFA_ENROLLMENT_COOKIE,
-  MFA_ENROLLMENT_TTL_SECONDS,
-} from '../mfa/mfa.service.js';
+import { MfaService, MFA_ENROLLMENT_COOKIE } from '../mfa/mfa.service.js';
 import { ThemeRenderService } from '../theme/theme-render.service.js';
 import { ThemeEmailService } from '../theme/theme-email.service.js';
 import { EventsService } from '../events/events.service.js';
@@ -89,6 +83,7 @@ export class LoginController {
     private readonly customAttributesService: CustomAttributesService,
     private readonly csrfService: CsrfService,
     private readonly bruteForceService: BruteForceService,
+    private readonly loginFlow: LoginFlowService,
     @Optional() private readonly riskAssessmentService?: RiskAssessmentService,
   ) {}
 
@@ -374,60 +369,16 @@ export class LoginController {
         );
       }
 
-      // Check MFA
-      const mfaRequired = await this.mfaService.isMfaRequired(realm, user.id);
-      const mfaEnabled = await this.mfaService.isMfaEnabled(user.id);
-
-      if (mfaEnabled) {
-        // User has TOTP set up — require verification
-        const challengeToken = await this.mfaService.createMfaChallenge(
-          user.id,
-          realm.id,
-          oauthParams,
-        );
-
-        res.cookie('IDENPLANE_MFA_CHALLENGE', challengeToken, {
-          httpOnly: true,
-          secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
-          sameSite: 'strict',
-          maxAge: 5 * 60 * 1000,
-          path: `/realms/${realm.name}`,
-        });
-
-        return res.redirect(`/realms/${realm.name}/totp`);
-      }
-
-      if (mfaRequired && !mfaEnabled) {
-        // The realm requires MFA and this user has not enrolled yet. Issuing
-        // an SSO session here would hand out a password-only session that
-        // /authorize and SAML accept, defeating the requirement. Instead the
-        // user gets a short-lived enrolment token that only unlocks the TOTP
-        // setup page; the session is created after enrolment, at the MFA level.
-        const enrollmentToken = await this.mfaService.createMfaEnrollment({
-          userId: user.id,
-          realmId: realm.id,
-          oauthParams,
-          rememberMe: !!b['rememberMe'],
-        });
-
-        res.cookie(MFA_ENROLLMENT_COOKIE, enrollmentToken, {
-          httpOnly: true,
-          secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
-          sameSite: 'strict',
-          maxAge: MFA_ENROLLMENT_TTL_SECONDS * 1000,
-          path: `/realms/${realm.name}`,
-        });
-
-        return res.redirect(
-          `/realms/${realm.name}/account/totp-setup?info=${encodeURIComponent('Two-factor authentication is required. Please set it up now.')}`,
-        );
-      }
-
-      // No MFA needed — proceed to create session (password-only auth)
-      return await this.completeLogin(realm, user, b, oauthParams, req, res, {
-        acr: ACR_PASSWORD,
-        amr: ['pwd'],
-      });
+      // Second factor / required enrolment / session — shared with every
+      // other first-factor path (see LoginFlowService).
+      return await this.loginFlow.continueAfterPrimaryAuth(
+        realm,
+        user,
+        oauthParams,
+        { primaryAmr: ['pwd'], rememberMe: !!b['rememberMe'] },
+        req,
+        res,
+      );
     } catch (err: unknown) {
       const errMessage =
         err instanceof Error ? err.message : 'Invalid credentials';
@@ -455,91 +406,6 @@ export class LoginController {
       }
       res.redirect(`/realms/${realm.name}/login?${params.toString()}`);
     }
-  }
-
-  private async completeLogin(
-    realm: Realm,
-    user: User,
-    body: Record<string, unknown>,
-    oauthParams: Record<string, string>,
-    req: Request,
-    res: Response,
-    authContext: SatisfiedAuthContext = {},
-  ) {
-    // Validate OAuth request (including redirect_uri) BEFORE creating session
-    let client;
-    if (oauthParams['client_id']) {
-      client = await this.oauthService.validateAuthRequest(
-        realm,
-        oauthParams as unknown as AuthorizeParams,
-      );
-    }
-
-    const sessionToken = await this.loginService.createLoginSession(
-      realm,
-      user,
-      resolveClientIp(req),
-      req.headers['user-agent'],
-      req.cookies?.['IDENPLANE_SESSION'] as string | undefined,
-      // Recorded on the session so silent SSO later reports the real acr/amr
-      // (and an MFA-required realm accepts the session).
-      authContext,
-    );
-
-    res.cookie('IDENPLANE_SESSION', sessionToken, {
-      httpOnly: true,
-      secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
-      sameSite: 'strict',
-      maxAge: body['rememberMe'] ? 30 * 24 * 60 * 60 * 1000 : undefined,
-      path: `/realms/${realm.name}`,
-    });
-
-    void this.eventsService.recordLoginEvent({
-      realmId: realm.id,
-      type: LoginEventType.LOGIN,
-      userId: user.id,
-      clientId: oauthParams['client_id'],
-      ipAddress: resolveClientIp(req),
-    });
-
-    if (!client) {
-      return res.redirect(302, `/realms/${realm.name}/account`);
-    }
-
-    if (client.requireConsent) {
-      const scopes = (oauthParams['scope'] ?? 'openid')
-        .split(' ')
-        .filter(Boolean);
-      const hasConsent = await this.consentService.hasConsent(
-        user.id,
-        client.id,
-        scopes,
-      );
-
-      if (!hasConsent) {
-        const reqId = await this.consentService.storeConsentRequest({
-          userId: user.id,
-          clientId: client.id,
-          clientName: client.name ?? client.clientId,
-          realmName: realm.name,
-          scopes,
-          oauthParams,
-          // Carry the satisfied auth context across the consent round-trip so
-          // the code issued after consent reflects the real acr/amr.
-          satisfiedAcr: authContext.acr,
-          amr: authContext.amr,
-        });
-        return res.redirect(302, `/realms/${realm.name}/consent?req=${reqId}`);
-      }
-    }
-
-    const result = await this.oauthService.authorizeWithUser(
-      realm,
-      user,
-      oauthParams as unknown as AuthorizeParams,
-      authContext,
-    );
-    res.redirect(302, result.redirectUrl);
   }
 
   // ─── MFA / TOTP ───────────────────────────────────────────
@@ -682,15 +548,17 @@ export class LoginController {
       );
     }
 
-    // Password + TOTP completed — second factor satisfied (RFC 8176).
-    return await this.completeLogin(
+    // First factor + TOTP completed — second factor satisfied (RFC 8176).
+    return await this.loginFlow.completeLogin(
       realm,
       user,
-      body as unknown as Record<string, unknown>,
       challenge.oauthParams ?? {},
       req,
       res,
-      { acr: ACR_MFA, amr: ['pwd', 'otp'] },
+      {
+        acr: ACR_MFA,
+        amr: LoginFlowService.amrWithOtp(challenge.primaryAmr),
+      },
     );
   }
 
@@ -737,14 +605,17 @@ export class LoginController {
     }
 
     res.clearCookie(MFA_ENROLLMENT_COOKIE, { path: `/realms/${realm.name}` });
-    return await this.completeLogin(
+    return await this.loginFlow.completeLogin(
       realm,
       user,
-      { rememberMe: enrollment.rememberMe },
       enrollment.oauthParams ?? {},
       req,
       res,
-      { acr: ACR_MFA, amr: ['pwd', 'otp'] },
+      {
+        acr: ACR_MFA,
+        amr: LoginFlowService.amrWithOtp(enrollment.primaryAmr),
+      },
+      { rememberMe: enrollment.rememberMe },
     );
   }
 

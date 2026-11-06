@@ -9,6 +9,7 @@ describe('BrokerController', () => {
     handleCallback: jest.Mock;
   };
   let themeRender: { render: jest.Mock };
+  let loginFlow: { continueAfterPrimaryAuth: jest.Mock };
 
   const realm = { id: 'realm-1', name: 'test-realm' } as Realm;
 
@@ -18,9 +19,11 @@ describe('BrokerController', () => {
       handleCallback: jest.fn(),
     };
     themeRender = { render: jest.fn() };
+    loginFlow = { continueAfterPrimaryAuth: jest.fn() };
     controller = new BrokerController(
       brokerService as any,
       themeRender as any,
+      loginFlow as any,
     );
   });
 
@@ -72,10 +75,15 @@ describe('BrokerController', () => {
   });
 
   describe('callback', () => {
-    it('should handle callback and redirect to result URL', async () => {
-      brokerService.handleCallback.mockResolvedValue({
-        redirectUrl: 'http://localhost/callback?code=authcode&state=abc',
-      });
+    const oauthParams = {
+      response_type: 'code',
+      client_id: 'my-app',
+      redirect_uri: 'http://localhost/callback',
+    };
+
+    it('finishes the federated sign-in through the shared login flow', async () => {
+      const user = { id: 'user-1', enabled: true };
+      brokerService.handleCallback.mockResolvedValue({ user, oauthParams });
 
       const req = {};
       const res = { redirect: jest.fn(), status: jest.fn().mockReturnThis() };
@@ -95,11 +103,47 @@ describe('BrokerController', () => {
         'ext-code',
         'state-123',
       );
-      expect(res.redirect).toHaveBeenCalledWith(
-        302,
-        'http://localhost/callback?code=authcode&state=abc',
+      // Same path as a password sign-in, so MFA policy, session, consent and
+      // the code are all applied; the external methods are not known.
+      expect(loginFlow.continueAfterPrimaryAuth).toHaveBeenCalledWith(
+        realm,
+        user,
+        oauthParams,
+        { primaryAmr: [] },
+        req,
+        res,
       );
       expect(themeRender.render).not.toHaveBeenCalled();
+    });
+
+    it('refuses a disabled account', async () => {
+      brokerService.handleCallback.mockResolvedValue({
+        user: { id: 'user-1', enabled: false },
+        oauthParams,
+      });
+
+      const req = {};
+      const res = { redirect: jest.fn(), status: jest.fn().mockReturnThis() };
+
+      await controller.callback(
+        realm,
+        'google',
+        'ext-code',
+        'state-123',
+        req as any,
+        res as any,
+      );
+
+      expect(loginFlow.continueAfterPrimaryAuth).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(403);
+      expect(themeRender.render).toHaveBeenCalledWith(
+        res,
+        realm,
+        'login',
+        'error',
+        expect.objectContaining({ errorMessage: 'This account is disabled.' }),
+        req,
+      );
     });
 
     it('should render a themed error page (not raw JSON) when federation fails', async () => {
