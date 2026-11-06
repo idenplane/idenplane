@@ -4,8 +4,7 @@ import {
   BadRequestException,
   UnauthorizedException,
 } from '@nestjs/common';
-import { randomBytes } from 'crypto';
-import type { Realm, IdentityProvider } from '@prisma/client';
+import type { Realm, IdentityProvider, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { JwkService } from '../crypto/jwk.service.js';
 import { IdentityProvidersService } from '../identity-providers/identity-providers.service.js';
@@ -157,7 +156,7 @@ export class BrokerService {
     alias: string,
     code: string,
     stateJwt: string,
-  ): Promise<{ redirectUrl: string }> {
+  ): Promise<{ user: User; oauthParams: Record<string, string> }> {
     // Verify broker state
     const signingKey = await this.getActiveSigningKey(realm.id);
     let brokerState: BrokerState;
@@ -192,40 +191,28 @@ export class BrokerService {
     // Link or create local user
     const user = await this.linkOrCreateUser(realm, idp, externalUser);
 
-    // Issue Idenplane authorization code
-    const client = await this.prisma.client.findUnique({
-      where: {
-        realmId_clientId: { realmId: realm.id, clientId: brokerState.clientId },
-      },
-    });
-    if (!client) {
-      throw new BadRequestException('Client not found');
+    // The external provider has authenticated the user; the rest of the
+    // sign-in (account status, MFA policy, session, consent, code) is the
+    // same as after a password and is done by the caller via LoginFlowService.
+    // The original OAuth request travels with it.
+    const oauthParams: Record<string, string> = {
+      response_type: 'code',
+      client_id: brokerState.clientId,
+      redirect_uri: brokerState.redirectUri,
+    };
+    if (brokerState.scope) oauthParams['scope'] = brokerState.scope;
+    if (brokerState.state) oauthParams['state'] = brokerState.state;
+    if (brokerState.nonce) oauthParams['nonce'] = brokerState.nonce;
+    // PKCE from the original client request, so the code→token exchange
+    // still enforces it.
+    if (brokerState.codeChallenge) {
+      oauthParams['code_challenge'] = brokerState.codeChallenge;
+    }
+    if (brokerState.codeChallengeMethod) {
+      oauthParams['code_challenge_method'] = brokerState.codeChallengeMethod;
     }
 
-    const authCode = randomBytes(32).toString('hex');
-    await this.prisma.authorizationCode.create({
-      data: {
-        code: authCode,
-        clientId: client.id,
-        userId: user.id,
-        redirectUri: brokerState.redirectUri,
-        scope: brokerState.scope,
-        nonce: brokerState.nonce,
-        // Carry PKCE from the original client request through the broker so the
-        // subsequent code→token exchange enforces it for public clients.
-        codeChallenge: brokerState.codeChallenge,
-        codeChallengeMethod: brokerState.codeChallengeMethod,
-        expiresAt: new Date(Date.now() + 60 * 1000),
-      },
-    });
-
-    const redirectUrl = new URL(brokerState.redirectUri);
-    redirectUrl.searchParams.set('code', authCode);
-    if (brokerState.state) {
-      redirectUrl.searchParams.set('state', brokerState.state);
-    }
-
-    return { redirectUrl: redirectUrl.toString() };
+    return { user, oauthParams };
   }
 
   private async exchangeCode(
@@ -426,8 +413,10 @@ export class BrokerService {
       return existingLink.user;
     }
 
-    // Case B: Match by email
-    if (external.email && idp.trustEmail) {
+    // Case B: Match by email. Only an address the provider says it verified
+    // may claim an existing account — otherwise anyone could register the
+    // victim's address at the provider and sign in as them here.
+    if (external.email && idp.trustEmail && external.emailVerified === true) {
       const existingUser = await this.prisma.user.findFirst({
         where: { realmId: realm.id, email: external.email },
       });

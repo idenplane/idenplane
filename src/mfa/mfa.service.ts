@@ -16,6 +16,8 @@ interface MfaChallengeData {
   clientId?: string;
   oauthParams?: Record<string, string>;
   attempts: number;
+  /** RFC 8176 methods of the first factor; absent means a password. */
+  primaryAmr?: string[];
 }
 
 /**
@@ -29,6 +31,8 @@ export interface MfaEnrollmentData {
   realmId: string;
   oauthParams?: Record<string, string>;
   rememberMe?: boolean;
+  /** RFC 8176 methods of the first factor; absent means a password. */
+  primaryAmr?: string[];
   /** Set once the user has activated TOTP with this enrolment. */
   verified?: boolean;
 }
@@ -288,6 +292,7 @@ export class MfaService {
     realmId: string,
     oauthParams?: Record<string, string>,
     clientId?: string,
+    primaryAmr?: string[],
   ): Promise<string> {
     const windowStart = new Date(
       Date.now() - MFA_CHALLENGE_RATE_LIMIT_WINDOW_SECONDS * 1000,
@@ -315,6 +320,7 @@ export class MfaService {
       clientId,
       oauthParams,
       attempts: 0,
+      primaryAmr,
     };
     await this.prisma.pendingAction.create({
       data: {
@@ -333,6 +339,7 @@ export class MfaService {
     realmId: string;
     clientId?: string;
     oauthParams?: Record<string, string>;
+    primaryAmr?: string[];
   } | null> {
     const tokenHash = this.crypto.sha256(challengeToken);
 
@@ -355,6 +362,7 @@ export class MfaService {
       realmId: data.realmId,
       clientId: data.clientId,
       oauthParams: data.oauthParams,
+      primaryAmr: data.primaryAmr,
     };
   }
 
@@ -367,6 +375,7 @@ export class MfaService {
     realmId: string;
     clientId?: string;
     oauthParams?: Record<string, string>;
+    primaryAmr?: string[];
   } | null> {
     const tokenHash = this.crypto.sha256(challengeToken);
 
@@ -404,6 +413,7 @@ export class MfaService {
       realmId: data.realmId,
       clientId: data.clientId,
       oauthParams: data.oauthParams,
+      primaryAmr: data.primaryAmr,
     };
   }
 

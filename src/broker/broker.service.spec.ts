@@ -293,22 +293,25 @@ describe('BrokerService', () => {
         'state-jwt',
       );
 
-      expect(result.redirectUrl).toContain('https://example.com/callback');
-      expect(result.redirectUrl).toContain('code=');
-      expect(result.redirectUrl).toContain('state=client-state');
-      expect(prisma.authorizationCode.create).toHaveBeenCalledWith({
-        data: expect.objectContaining({
-          clientId: 'client-uuid-1',
-          userId: 'user-1',
-          redirectUri: 'https://example.com/callback',
+      // The broker no longer mints a code itself: it hands the user and the
+      // original OAuth request to the shared login flow, which applies the
+      // realm's MFA policy, consent and session like any other sign-in.
+      expect(result).toEqual({
+        user: mockUser,
+        oauthParams: {
+          response_type: 'code',
+          client_id: 'my-app',
+          redirect_uri: 'https://example.com/callback',
           scope: 'openid',
+          state: 'client-state',
           nonce: 'client-nonce',
           // Finding #15: PKCE carried through the broker so the code→token
           // exchange can enforce it for public clients.
-          codeChallenge: 'challenge-abc',
-          codeChallengeMethod: 'S256',
-        }),
+          code_challenge: 'challenge-abc',
+          code_challenge_method: 'S256',
+        },
       });
+      expect(prisma.authorizationCode.create).not.toHaveBeenCalled();
     });
 
     it('should sync user profile when syncUserProfile is enabled', async () => {
@@ -368,7 +371,7 @@ describe('BrokerService', () => {
         'state-jwt',
       );
 
-      expect(result.redirectUrl).toContain('https://example.com/callback');
+      expect(result.user.id).toBe('new-user-1');
       expect(prisma.user.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           realmId: 'realm-1',
@@ -408,7 +411,7 @@ describe('BrokerService', () => {
         'state-jwt',
       );
 
-      expect(result.redirectUrl).toContain('https://example.com/callback');
+      expect(result.user).toBe(mockUser);
       expect(prisma.user.findFirst).toHaveBeenCalledWith({
         where: { realmId: 'realm-1', email: 'test@example.com' },
       });
@@ -506,27 +509,46 @@ describe('BrokerService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should throw BadRequestException when client is not found after callback', async () => {
+    it('does not link an existing account by an email the provider has not verified', async () => {
       prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
       jwkService.verifyJwt.mockResolvedValue(brokerState);
-      idpService.findByAlias.mockResolvedValue(mockIdp);
-      setupFetchMocks();
-
-      prisma.federatedIdentity.findUnique.mockResolvedValue({
-        userId: 'user-1',
-        identityProviderId: 'idp-1',
-        externalUserId: 'ext-user-123',
-        user: mockUser,
+      idpService.findByAlias.mockResolvedValue({
+        ...mockIdp,
+        trustEmail: true,
       });
-      prisma.user.update.mockResolvedValue(mockUser);
-      prisma.client.findUnique.mockResolvedValue(null);
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: jest
+            .fn()
+            .mockResolvedValue({ access_token: 'ext-access-token' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: jest
+            .fn()
+            .mockResolvedValue({ ...externalUserInfo, email_verified: false }),
+        });
 
-      await expect(
-        service.handleCallback(mockRealm, 'google', 'auth-code', 'state-jwt'),
-      ).rejects.toThrow(BadRequestException);
+      prisma.federatedIdentity.findUnique.mockResolvedValue(null);
+      prisma.user.findFirst.mockResolvedValue(mockUser);
+      prisma.user.create.mockResolvedValue({ ...mockUser, id: 'new-user-9' });
+      prisma.federatedIdentity.create.mockResolvedValue({});
+
+      const result = await service.handleCallback(
+        mockRealm,
+        'google',
+        'auth-code',
+        'state-jwt',
+      );
+
+      // Not the existing account: registering someone else's address at the
+      // provider must not be enough to sign in as them here.
+      expect(prisma.user.findFirst).not.toHaveBeenCalled();
+      expect(result.user.id).toBe('new-user-9');
     });
 
-    it('should not include state param in redirect when broker state has no state', async () => {
+    it('should not carry a state param when broker state has no state', async () => {
       const stateWithoutClientState = { ...brokerState, state: undefined };
       prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
       jwkService.verifyJwt.mockResolvedValue(stateWithoutClientState);
@@ -550,9 +572,8 @@ describe('BrokerService', () => {
         'state-jwt',
       );
 
-      const url = new URL(result.redirectUrl);
-      expect(url.searchParams.has('state')).toBe(false);
-      expect(url.searchParams.has('code')).toBe(true);
+      expect(result.oauthParams).not.toHaveProperty('state');
+      expect(result.oauthParams['client_id']).toBe('my-app');
     });
 
     it('should use fallback username when preferredUsername and email are absent', async () => {
@@ -678,13 +699,18 @@ describe('BrokerService', () => {
       const githubState = { ...brokerState, alias: 'github' };
       prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
       jwkService.verifyJwt.mockResolvedValue(githubState);
-      idpService.findByAlias.mockResolvedValue({ ...githubIdp, trustEmail: true });
+      idpService.findByAlias.mockResolvedValue({
+        ...githubIdp,
+        trustEmail: true,
+      });
 
       (global.fetch as jest.Mock)
         // 1. token exchange
         .mockResolvedValueOnce({
           ok: true,
-          json: jest.fn().mockResolvedValue({ access_token: 'gh-access-token' }),
+          json: jest
+            .fn()
+            .mockResolvedValue({ access_token: 'gh-access-token' }),
         })
         // 2. /user (private email → null)
         .mockResolvedValueOnce({
@@ -744,7 +770,9 @@ describe('BrokerService', () => {
       (global.fetch as jest.Mock)
         .mockResolvedValueOnce({
           ok: true,
-          json: jest.fn().mockResolvedValue({ access_token: 'gh-access-token' }),
+          json: jest
+            .fn()
+            .mockResolvedValue({ access_token: 'gh-access-token' }),
         })
         .mockResolvedValueOnce({
           ok: true,
@@ -783,7 +811,9 @@ describe('BrokerService', () => {
       (global.fetch as jest.Mock)
         .mockResolvedValueOnce({
           ok: true,
-          json: jest.fn().mockResolvedValue({ access_token: 'gh-access-token' }),
+          json: jest
+            .fn()
+            .mockResolvedValue({ access_token: 'gh-access-token' }),
         })
         .mockResolvedValueOnce({
           ok: true,
