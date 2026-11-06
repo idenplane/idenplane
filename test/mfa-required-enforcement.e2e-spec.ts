@@ -215,7 +215,8 @@ describe('Required MFA enforcement (e2e)', () => {
         _csrf: csrfFrom(setupPage.text),
       },
     );
-    expect(activated.status).toBe(200);
+    // A rendered POST response keeps Nest's default 201.
+    expect(activated.status).toBe(201);
     expect(activated.text).toContain(
       `action="/realms/${REALM}/mfa-enrollment/continue"`,
     );
