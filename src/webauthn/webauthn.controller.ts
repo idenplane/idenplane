@@ -193,6 +193,10 @@ export class WebAuthnController {
       if (typeof val === 'string' && val) oauthParams[key] = val;
     }
 
+    // Passwordless WebAuthn assertion: the hardware authenticator is the sole
+    // factor, so amr is `['hwk']` (RFC 8176). ACR reflects the WebAuthn level.
+    const authContext = { acr: ACR_WEBAUTHN, amr: ['hwk'] };
+
     // Create session (invalidating any pre-existing cookie to prevent session fixation)
     const sessionToken = await this.loginService.createLoginSession(
       realm,
@@ -200,6 +204,7 @@ export class WebAuthnController {
       resolveClientIp(req),
       req.headers['user-agent'],
       req.cookies?.['IDENPLANE_SESSION'] as string | undefined,
+      authContext,
     );
 
     res.cookie('IDENPLANE_SESSION', sessionToken, {
@@ -213,10 +218,6 @@ export class WebAuthnController {
     if (!oauthParams['client_id']) {
       return res.json({ redirectUrl: `/realms/${realm.name}/account` });
     }
-
-    // Passwordless WebAuthn assertion: the hardware authenticator is the sole
-    // factor, so amr is `['hwk']` (RFC 8176). ACR reflects the WebAuthn level.
-    const authContext = { acr: ACR_WEBAUTHN, amr: ['hwk'] };
 
     try {
       const client = await this.oauthService.validateAuthRequest(

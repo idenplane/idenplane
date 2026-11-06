@@ -18,6 +18,24 @@ interface MfaChallengeData {
   attempts: number;
 }
 
+/**
+ * A password-verified sign-in that is waiting for the user to enrol TOTP
+ * because the realm requires MFA. It is deliberately *not* an SSO session:
+ * it only unlocks the TOTP setup page, and the real session is created once
+ * enrolment succeeds.
+ */
+export interface MfaEnrollmentData {
+  userId: string;
+  realmId: string;
+  oauthParams?: Record<string, string>;
+  rememberMe?: boolean;
+  /** Set once the user has activated TOTP with this enrolment. */
+  verified?: boolean;
+}
+
+export const MFA_ENROLLMENT_COOKIE = 'IDENPLANE_MFA_ENROLLMENT';
+export const MFA_ENROLLMENT_TTL_SECONDS = 15 * 60;
+
 /** TTL in seconds for a used TOTP code entry — covers the full ±1-step window (3 periods × 30s). */
 const TOTP_USED_CODE_TTL_SECONDS = 90;
 
@@ -399,10 +417,73 @@ export class MfaService {
       .catch(() => {});
   }
 
+  // ── Required-MFA enrolment ────────────────────────────────
+
+  async createMfaEnrollment(
+    data: Omit<MfaEnrollmentData, 'verified'>,
+  ): Promise<string> {
+    const token = this.crypto.generateSecret(32);
+    await this.prisma.pendingAction.create({
+      data: {
+        tokenHash: this.crypto.sha256(token),
+        type: 'mfa_enrollment',
+        data: { ...data, verified: false },
+        expiresAt: new Date(Date.now() + MFA_ENROLLMENT_TTL_SECONDS * 1000),
+      },
+    });
+    return token;
+  }
+
+  /** The pending enrolment for `token`, or null if unknown or expired. */
+  async getMfaEnrollment(token: string): Promise<MfaEnrollmentData | null> {
+    const action = await this.prisma.pendingAction.findUnique({
+      where: { tokenHash: this.crypto.sha256(token) },
+    });
+    if (!action || action.type !== 'mfa_enrollment') return null;
+    if (action.expiresAt < new Date()) return null;
+    return action.data as unknown as MfaEnrollmentData;
+  }
+
+  /** Record that TOTP was activated through this enrolment. */
+  async markMfaEnrollmentVerified(token: string): Promise<void> {
+    const tokenHash = this.crypto.sha256(token);
+    const action = await this.prisma.pendingAction.findUnique({
+      where: { tokenHash },
+    });
+    if (!action || action.type !== 'mfa_enrollment') return;
+    const data = action.data as unknown as MfaEnrollmentData;
+    await this.prisma.pendingAction.update({
+      where: { id: action.id },
+      data: {
+        data: { ...data, verified: true },
+      },
+    });
+  }
+
+  /**
+   * Single-use: delete the enrolment and return it, but only if TOTP was
+   * activated through it and it has not expired. The delete is the claim, so
+   * two concurrent requests cannot both complete the sign-in.
+   */
+  async consumeVerifiedMfaEnrollment(
+    token: string,
+  ): Promise<MfaEnrollmentData | null> {
+    const action = await this.prisma.pendingAction
+      .delete({ where: { tokenHash: this.crypto.sha256(token) } })
+      .catch(() => null);
+    if (!action || action.type !== 'mfa_enrollment') return null;
+    if (action.expiresAt < new Date()) return null;
+    const data = action.data as unknown as MfaEnrollmentData;
+    return data.verified ? data : null;
+  }
+
   @Interval(60_000)
   async cleanupExpiredActions(): Promise<void> {
     const { count } = await this.prisma.pendingAction.deleteMany({
-      where: { type: 'mfa_challenge', expiresAt: { lt: new Date() } },
+      where: {
+        type: { in: ['mfa_challenge', 'mfa_enrollment'] },
+        expiresAt: { lt: new Date() },
+      },
     });
     if (count > 0) {
       this.logger.debug(`Cleaned up ${count} expired MFA challenges`);

@@ -4,6 +4,7 @@ import {
   ACR_PASSWORD,
   ACR_MFA,
   ACR_WEBAUTHN,
+  strongestAcr,
 } from './step-up.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
@@ -90,6 +91,45 @@ describe('StepUpService', () => {
 
     it('returns false for unknown candidate against a known required', () => {
       expect(service.satisfiesAcr('urn:unknown', ACR_PASSWORD)).toBe(false);
+    });
+  });
+
+  describe('strongestAcr()', () => {
+    it('picks the strongest known level and ignores unknown or missing ones', () => {
+      expect(strongestAcr(null, ACR_MFA, 'urn:other', undefined)).toBe(ACR_MFA);
+      expect(strongestAcr(ACR_WEBAUTHN, ACR_MFA)).toBe(ACR_WEBAUTHN);
+      expect(strongestAcr()).toBe(ACR_PASSWORD);
+    });
+  });
+
+  // ── getLoginSessionAcr ────────────────────────────────────────────────────
+
+  describe('getLoginSessionAcr()', () => {
+    it('keeps the level the SSO session was signed in at', async () => {
+      mockStepUpRecordFindMany.mockResolvedValue([]);
+      await expect(
+        service.getLoginSessionAcr({ id: 'session-1', satisfiedAcr: ACR_MFA }),
+      ).resolves.toBe(ACR_MFA);
+    });
+
+    it('is raised by an active step-up', async () => {
+      mockStepUpRecordFindMany.mockResolvedValue([
+        {
+          sessionId: 'session-1',
+          acrLevel: ACR_WEBAUTHN,
+          expiresAt: futureDate(600),
+        },
+      ]);
+      await expect(
+        service.getLoginSessionAcr({ id: 'session-1', satisfiedAcr: ACR_MFA }),
+      ).resolves.toBe(ACR_WEBAUTHN);
+    });
+
+    it('treats a session with no recorded level as password-only', async () => {
+      mockStepUpRecordFindMany.mockResolvedValue([]);
+      await expect(
+        service.getLoginSessionAcr({ id: 'session-1', satisfiedAcr: null }),
+      ).resolves.toBe(ACR_PASSWORD);
     });
   });
 

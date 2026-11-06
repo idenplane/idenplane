@@ -36,7 +36,11 @@ import { EmailService } from '../email/email.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { PasswordPolicyService } from '../password-policy/password-policy.service.js';
-import { MfaService } from '../mfa/mfa.service.js';
+import {
+  MfaService,
+  MFA_ENROLLMENT_COOKIE,
+  MFA_ENROLLMENT_TTL_SECONDS,
+} from '../mfa/mfa.service.js';
 import { ThemeRenderService } from '../theme/theme-render.service.js';
 import { ThemeEmailService } from '../theme/theme-email.service.js';
 import { EventsService } from '../events/events.service.js';
@@ -394,20 +398,23 @@ export class LoginController {
       }
 
       if (mfaRequired && !mfaEnabled) {
-        // Realm requires MFA but user hasn't set it up yet
-        // Create session first so they can set up TOTP
-        const sessionToken = await this.loginService.createLoginSession(
-          realm,
-          user,
-          resolveClientIp(req),
-          req.headers['user-agent'],
-          req.cookies?.['IDENPLANE_SESSION'] as string | undefined,
-        );
+        // The realm requires MFA and this user has not enrolled yet. Issuing
+        // an SSO session here would hand out a password-only session that
+        // /authorize and SAML accept, defeating the requirement. Instead the
+        // user gets a short-lived enrolment token that only unlocks the TOTP
+        // setup page; the session is created after enrolment, at the MFA level.
+        const enrollmentToken = await this.mfaService.createMfaEnrollment({
+          userId: user.id,
+          realmId: realm.id,
+          oauthParams,
+          rememberMe: !!b['rememberMe'],
+        });
 
-        res.cookie('IDENPLANE_SESSION', sessionToken, {
+        res.cookie(MFA_ENROLLMENT_COOKIE, enrollmentToken, {
           httpOnly: true,
           secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
           sameSite: 'strict',
+          maxAge: MFA_ENROLLMENT_TTL_SECONDS * 1000,
           path: `/realms/${realm.name}`,
         });
 
@@ -474,6 +481,9 @@ export class LoginController {
       resolveClientIp(req),
       req.headers['user-agent'],
       req.cookies?.['IDENPLANE_SESSION'] as string | undefined,
+      // Recorded on the session so silent SSO later reports the real acr/amr
+      // (and an MFA-required realm accepts the session).
+      authContext,
     );
 
     res.cookie('IDENPLANE_SESSION', sessionToken, {
@@ -678,6 +688,60 @@ export class LoginController {
       user,
       body as unknown as Record<string, unknown>,
       challenge.oauthParams ?? {},
+      req,
+      res,
+      { acr: ACR_MFA, amr: ['pwd', 'otp'] },
+    );
+  }
+
+  /**
+   * Finish a sign-in that was paused for required-MFA enrolment. Reached from
+   * the "Continue" button on the recovery-codes page once TOTP is active: the
+   * user has now proven the password and the new authenticator, so the SSO
+   * session is created at the MFA level and the original OAuth request resumes.
+   */
+  @Post('mfa-enrollment/continue')
+  @UseGuards(RateLimitGuard)
+  @RateLimitByIp()
+  async continueAfterMfaEnrollment(
+    @CurrentRealm() realm: Realm,
+    @Body() body: Record<string, string>,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    this.validateCsrf(realm, body, req);
+    const loginAgain = (message: string) => {
+      res.clearCookie(MFA_ENROLLMENT_COOKIE, { path: `/realms/${realm.name}` });
+      return res.redirect(
+        `/realms/${realm.name}/login?error=${encodeURIComponent(message)}`,
+      );
+    };
+
+    const token = (req.cookies as Record<string, string | undefined>)?.[
+      MFA_ENROLLMENT_COOKIE
+    ];
+    const enrollment = token
+      ? await this.mfaService.consumeVerifiedMfaEnrollment(token)
+      : null;
+    if (!enrollment || enrollment.realmId !== realm.id) {
+      return loginAgain('Your sign-in expired. Please sign in again.');
+    }
+
+    const user = await this.loginService.findUserById(enrollment.userId);
+    if (
+      !user ||
+      !user.enabled ||
+      !(await this.mfaService.isMfaEnabled(user.id))
+    ) {
+      return loginAgain('Please sign in again.');
+    }
+
+    res.clearCookie(MFA_ENROLLMENT_COOKIE, { path: `/realms/${realm.name}` });
+    return await this.completeLogin(
+      realm,
+      user,
+      { rememberMe: enrollment.rememberMe },
+      enrollment.oauthParams ?? {},
       req,
       res,
       { acr: ACR_MFA, amr: ['pwd', 'otp'] },

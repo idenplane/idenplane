@@ -29,6 +29,22 @@ const ACR_LEVEL_STRENGTH: Record<string, number> = {
   [ACR_WEBAUTHN]: 3,
 };
 
+/** Numeric strength of an ACR value; unknown values (and null) count as 0. */
+export function acrStrength(acr: string | null | undefined): number {
+  return (acr && ACR_LEVEL_STRENGTH[acr]) || 0;
+}
+
+/** The strongest of the given ACR values, or `ACR_PASSWORD` if none is known. */
+export function strongestAcr(
+  ...candidates: Array<string | null | undefined>
+): string {
+  let best: string = ACR_PASSWORD;
+  for (const acr of candidates) {
+    if (acr && acrStrength(acr) > acrStrength(best)) best = acr;
+  }
+  return best;
+}
+
 // ─── Service ─────────────────────────────────────────────────────────────────
 
 @Injectable()
@@ -44,7 +60,7 @@ export class StepUpService {
    * Unknown values default to 0 (no assurance).
    */
   getAcrStrength(acr: string): number {
-    return ACR_LEVEL_STRENGTH[acr] ?? 0;
+    return acrStrength(acr);
   }
 
   /**
@@ -81,6 +97,24 @@ export class StepUpService {
       }
     }
     return best;
+  }
+
+  /**
+   * The ACR an SSO login session carries when it is used to issue tokens: the
+   * level it was established at, raised by any active step-up.
+   *
+   * Sensitive actions that need a *recent* second factor (admin MFA reset,
+   * unlocking a user) deliberately keep using `getSessionAcr`, which only
+   * counts the short-lived step-up records.
+   */
+  async getLoginSessionAcr(session: {
+    id: string;
+    satisfiedAcr: string | null;
+  }): Promise<string> {
+    return strongestAcr(
+      session.satisfiedAcr,
+      await this.getSessionAcr(session.id),
+    );
   }
 
   // ── Step-up requirement ────────────────────────────────────────────────────

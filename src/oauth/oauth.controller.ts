@@ -124,7 +124,7 @@ export class OAuthController {
         // ACR_PASSWORD when there is no step-up record / login session.
         const loginSession = await this.getLoginSessionByToken(sessionCookie);
         const sessionAcr = loginSession
-          ? await this.stepUpService.getSessionAcr(loginSession.id)
+          ? await this.stepUpService.getLoginSessionAcr(loginSession)
           : ACR_PASSWORD;
 
         // ── Step-up ACR check ────────────────────────────────────────────────
@@ -176,9 +176,15 @@ export class OAuthController {
         // Derive the satisfied auth context for any code issued via silent SSO.
         // The session ACR is authoritative; the amr is derived from it: an
         // MFA-or-stronger session implies the second factor was performed.
+        // When the session is still at the level it was established with, the
+        // methods recorded at sign-in are exact; otherwise derive them.
         const ssoAuthContext = {
           acr: sessionAcr,
-          amr: this.amrForSessionAcr(sessionAcr),
+          amr:
+            loginSession?.amr?.length &&
+            loginSession.satisfiedAcr === sessionAcr
+              ? loginSession.amr
+              : this.amrForSessionAcr(sessionAcr),
         };
 
         // Check if client requires consent

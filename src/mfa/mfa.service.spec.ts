@@ -888,10 +888,106 @@ describe('MfaService', () => {
   });
 
   // ────────────────────────────────────────────────────────────────────
+  // Required-MFA enrolment
+  // ────────────────────────────────────────────────────────────────────
+  describe('required-MFA enrolment', () => {
+    const future = () => new Date(Date.now() + 60_000);
+    const enrollmentAction = (
+      data: Record<string, unknown>,
+      expiresAt = future(),
+    ) =>
+      ({
+        id: 'pa-1',
+        type: 'mfa_enrollment',
+        tokenHash: 'hashed_tok',
+        data,
+        expiresAt,
+      }) as any;
+
+    it('stores a hashed, unverified enrolment and returns the raw token', async () => {
+      prisma.pendingAction.create.mockResolvedValue({} as any);
+
+      const token = await service.createMfaEnrollment({
+        userId: 'u1',
+        realmId: 'r1',
+        oauthParams: { client_id: 'app' },
+        rememberMe: true,
+      });
+
+      expect(token).toBe('ABCD1234');
+      expect(prisma.pendingAction.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          tokenHash: 'hashed_ABCD1234',
+          type: 'mfa_enrollment',
+          data: {
+            userId: 'u1',
+            realmId: 'r1',
+            oauthParams: { client_id: 'app' },
+            rememberMe: true,
+            verified: false,
+          },
+        }),
+      });
+    });
+
+    it('does not return an expired enrolment or another kind of pending action', async () => {
+      prisma.pendingAction.findUnique.mockResolvedValueOnce(
+        enrollmentAction({ userId: 'u1' }, new Date(Date.now() - 1000)),
+      );
+      await expect(service.getMfaEnrollment('tok')).resolves.toBeNull();
+
+      prisma.pendingAction.findUnique.mockResolvedValueOnce({
+        ...enrollmentAction({ userId: 'u1' }),
+        type: 'mfa_challenge',
+      });
+      await expect(service.getMfaEnrollment('tok')).resolves.toBeNull();
+    });
+
+    it('marks the enrolment verified', async () => {
+      prisma.pendingAction.findUnique.mockResolvedValue(
+        enrollmentAction({ userId: 'u1', verified: false }),
+      );
+      prisma.pendingAction.update.mockResolvedValue({} as any);
+
+      await service.markMfaEnrollmentVerified('tok');
+
+      expect(prisma.pendingAction.update).toHaveBeenCalledWith({
+        where: { id: 'pa-1' },
+        data: { data: { userId: 'u1', verified: true } },
+      });
+    });
+
+    it('consumes a verified enrolment exactly once', async () => {
+      prisma.pendingAction.delete
+        .mockResolvedValueOnce(
+          enrollmentAction({ userId: 'u1', realmId: 'r1', verified: true }),
+        )
+        .mockRejectedValueOnce(new Error('Record not found'));
+
+      await expect(
+        service.consumeVerifiedMfaEnrollment('tok'),
+      ).resolves.toMatchObject({ userId: 'u1', verified: true });
+      await expect(
+        service.consumeVerifiedMfaEnrollment('tok'),
+      ).resolves.toBeNull();
+    });
+
+    it('refuses to complete an enrolment that never activated TOTP', async () => {
+      prisma.pendingAction.delete.mockResolvedValue(
+        enrollmentAction({ userId: 'u1', verified: false }),
+      );
+
+      await expect(
+        service.consumeVerifiedMfaEnrollment('tok'),
+      ).resolves.toBeNull();
+    });
+  });
+
+  // ────────────────────────────────────────────────────────────────────
   // cleanupExpiredActions
   // ────────────────────────────────────────────────────────────────────
   describe('cleanupExpiredActions', () => {
-    it('should delete expired mfa_challenge pending actions', async () => {
+    it('should delete expired MFA challenge and enrolment pending actions', async () => {
       prisma.pendingAction.deleteMany.mockResolvedValue({ count: 3 });
       (prisma as any).usedTotpCode.deleteMany.mockResolvedValue({ count: 0 });
 
@@ -899,7 +995,7 @@ describe('MfaService', () => {
 
       expect(prisma.pendingAction.deleteMany).toHaveBeenCalledWith({
         where: {
-          type: 'mfa_challenge',
+          type: { in: ['mfa_challenge', 'mfa_enrollment'] },
           expiresAt: { lt: expect.any(Date) },
         },
       });
