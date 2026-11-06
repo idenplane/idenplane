@@ -531,11 +531,17 @@ export class LoginController {
       );
     }
 
-    // MFA verified — consume the challenge and clear the cookie
-    await this.mfaService.consumeMfaChallenge(challengeToken);
+    // MFA verified — claim the challenge and clear the cookie. Losing the
+    // claim means a parallel request with the same code already signed in.
+    const claimed = await this.mfaService.consumeMfaChallenge(challengeToken);
     res.clearCookie('IDENPLANE_MFA_CHALLENGE', {
       path: `/realms/${realm.name}`,
     });
+    if (!claimed) {
+      return res.redirect(
+        `/realms/${realm.name}/login?error=${encodeURIComponent('MFA session expired. Please login again.')}`,
+      );
+    }
 
     // Reset TOTP failure tracking on successful verification
     await this.bruteForceService.resetTotpFailures(realm.id, challenge.userId);

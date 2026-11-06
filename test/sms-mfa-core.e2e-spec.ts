@@ -243,6 +243,38 @@ describe('SMS MFA core (e2e)', () => {
     expect(result).toEqual({ ok: true, phone: NEW_PHONE });
   });
 
+  it('holds the per-user send limit against a parallel burst', async () => {
+    await ctx.prisma.smsDeliveryLog.deleteMany({
+      where: { realmId: seeded.realm.id },
+    });
+    await ctx.prisma.realm.update({
+      where: { name: REALM_NAME },
+      data: { smsMaxRequestsPerUser: 3 },
+    });
+    const before = sent.length;
+    const r = await realm();
+
+    const results = await Promise.allSettled(
+      Array.from({ length: 8 }, (_, i) =>
+        smsOtp.sendCode({
+          realm: r,
+          userId: seeded.user.id,
+          purpose: 'login',
+          binding: `burst-${i}`,
+        }),
+      ),
+    );
+
+    expect(sent.length - before).toBeLessThanOrEqual(3);
+    expect(results.filter((x) => x.status === 'fulfilled').length).toBe(
+      sent.length - before,
+    );
+    await ctx.prisma.realm.update({
+      where: { name: REALM_NAME },
+      data: { smsMaxRequestsPerUser: 100 },
+    });
+  });
+
   it('keeps recovery codes when the app is removed but the phone remains', async () => {
     await ctx.prisma.userCredential.create({
       data: {

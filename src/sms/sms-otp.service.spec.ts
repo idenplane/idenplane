@@ -128,6 +128,26 @@ describe('SmsOtpService', () => {
       expect(smsService.sendSms).not.toHaveBeenCalled();
     });
 
+    it('does not text a phone it cannot decrypt', async () => {
+      prisma.userCredential.findUnique.mockResolvedValue({
+        phoneNumber: 'garbage',
+        verified: true,
+      } as any);
+      crypto.decrypt.mockImplementationOnce(() => {
+        throw new Error('bad tag');
+      });
+
+      await expect(
+        service.sendCode({
+          realm: realm as any,
+          userId: 'user-1',
+          purpose: 'login',
+          binding: 'challenge',
+        }),
+      ).rejects.toMatchObject({ code: 'unavailable' });
+      expect(smsService.sendSms).not.toHaveBeenCalled();
+    });
+
     it('still sends sign-in codes to enrolled users when the switch is off', async () => {
       prisma.userCredential.findUnique.mockResolvedValue({
         phoneNumber: 'enc(+201012345678)',
@@ -243,17 +263,47 @@ describe('SmsOtpService', () => {
       await expect(enrol()).rejects.toMatchObject({ code: 'unavailable' });
     });
 
+    // Counts include the send's own (already logged) row.
     it.each([
-      ['user', [3, 0, 0, 0]],
-      ['phone', [0, 3, 0, 0]],
-      ['ip', [0, 0, 10, 0]],
-      ['realm', [0, 0, 0, 1000]],
+      ['user', [4, 1, 1, 1]],
+      ['phone', [1, 4, 1, 1]],
+      ['ip', [1, 1, 11, 1]],
+      ['realm', [1, 1, 1, 1001]],
     ])('enforces the per-%s send limit', async (_label, counts) => {
       const c = (prisma as any).smsDeliveryLog.count;
       for (const n of counts) c.mockResolvedValueOnce(n);
 
       await expect(enrol()).rejects.toMatchObject({ code: 'rate_limited' });
       expect(smsService.sendSms).not.toHaveBeenCalled();
+      // No code is stored for a refused send, and the refusal is logged.
+      expect((prisma as any).otpAttempt.create).not.toHaveBeenCalled();
+      expect((prisma as any).smsDeliveryLog.update).toHaveBeenCalledWith({
+        where: { id: 'log-1' },
+        data: { status: 'REJECTED', errorMessage: 'rate_limited' },
+      });
+    });
+
+    it('allows the send that reaches the limit exactly', async () => {
+      const c = (prisma as any).smsDeliveryLog.count;
+      for (const n of [3, 3, 1, 1]) c.mockResolvedValueOnce(n);
+
+      await expect(enrol()).resolves.toBeDefined();
+    });
+
+    it('logs the send before counting, so a parallel burst sees itself', async () => {
+      const order: string[] = [];
+      (prisma as any).smsDeliveryLog.create.mockImplementation(async () => {
+        order.push('log');
+        return { id: 'log-1' };
+      });
+      (prisma as any).smsDeliveryLog.count.mockImplementation(async () => {
+        order.push('count');
+        return 1;
+      });
+
+      await enrol();
+
+      expect(order[0]).toBe('log');
     });
 
     it('treats a concurrent first send as a cooldown', async () => {

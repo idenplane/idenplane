@@ -969,22 +969,23 @@ describe('MfaService', () => {
   // consumeMfaChallenge
   // ────────────────────────────────────────────────────────────────────
   describe('consumeMfaChallenge', () => {
-    it('should delete the pending action by tokenHash', async () => {
-      prisma.pendingAction.delete.mockResolvedValue({} as any);
+    it('claims the challenge by tokenHash and reports the win', async () => {
+      prisma.pendingAction.deleteMany.mockResolvedValue({ count: 1 });
 
-      await service.consumeMfaChallenge('some-token');
-
-      expect(prisma.pendingAction.delete).toHaveBeenCalledWith({
-        where: { tokenHash: 'hashed_some-token' },
+      await expect(service.consumeMfaChallenge('some-token')).resolves.toBe(
+        true,
+      );
+      expect(prisma.pendingAction.deleteMany).toHaveBeenCalledWith({
+        where: { tokenHash: 'hashed_some-token', type: 'mfa_challenge' },
       });
     });
 
-    it('should not throw when action does not exist', async () => {
-      prisma.pendingAction.delete.mockRejectedValue(new Error('Not found'));
+    it('reports false when another request already claimed it', async () => {
+      prisma.pendingAction.deleteMany.mockResolvedValue({ count: 0 });
 
-      await expect(
-        service.consumeMfaChallenge('nonexistent'),
-      ).resolves.toBeUndefined();
+      await expect(service.consumeMfaChallenge('nonexistent')).resolves.toBe(
+        false,
+      );
     });
   });
 

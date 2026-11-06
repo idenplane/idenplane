@@ -392,8 +392,14 @@ export class AuthService {
       );
     }
 
-    // MFA verified — consume the challenge
-    await this.mfaService.consumeMfaChallenge(mfa_token);
+    // MFA verified — claim the challenge (one token per verified challenge)
+    if (!(await this.mfaService.consumeMfaChallenge(mfa_token))) {
+      throw new OAuthTokenError(
+        'invalid_grant',
+        'Invalid or expired MFA token, or too many failed attempts',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
 
     const user = await this.prisma.user.findUnique({
       where: { id: challenge.userId },

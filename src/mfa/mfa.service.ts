@@ -551,11 +551,17 @@ export class MfaService {
   /**
    * Consumes (deletes) a challenge token after successful verification.
    */
-  async consumeMfaChallenge(challengeToken: string): Promise<void> {
+  /**
+   * Claims the challenge after a correct answer. Returns false when another
+   * request already claimed it (e.g. the same code submitted twice at once),
+   * in which case the caller must not complete the sign-in a second time.
+   */
+  async consumeMfaChallenge(challengeToken: string): Promise<boolean> {
     const tokenHash = this.crypto.sha256(challengeToken);
-    await this.prisma.pendingAction
-      .delete({ where: { tokenHash } })
-      .catch(() => {});
+    const { count } = await this.prisma.pendingAction.deleteMany({
+      where: { tokenHash, type: 'mfa_challenge' },
+    });
+    return count === 1;
   }
 
   // ── Required-MFA enrolment ────────────────────────────────

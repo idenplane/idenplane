@@ -178,7 +178,15 @@ export class SmsOtpService {
       select: { phoneNumber: true, verified: true },
     });
     if (!credential?.verified || !credential.phoneNumber) return null;
-    return this.crypto.decryptSecret(credential.phoneNumber);
+    // Strict decrypt: if the key changed, fail rather than text the ciphertext.
+    try {
+      return SmsOtpService.normalizePhone(
+        this.crypto.decrypt(credential.phoneNumber),
+      );
+    } catch {
+      this.logger.error(`Could not decrypt the SMS phone of user ${userId}`);
+      return null;
+    }
   }
 
   /** Record `phone` as the user's SMS factor (replacing any previous number). */
@@ -304,7 +312,36 @@ export class SmsOtpService {
       }
     }
 
-    await this.assertWithinSendLimits(realm, userId, phoneHash, ipHash, now);
+    // Reserve the send in the delivery log *before* counting. Every
+    // concurrent request then sees at least its own row and those committed
+    // before it, so a parallel burst can't all pass a count taken first.
+    // Refused sends stay in the log as REJECTED and keep counting.
+    const log = await this.prisma.smsDeliveryLog.create({
+      data: {
+        realmId: realm.id,
+        userId,
+        phoneHash,
+        ipHash,
+        provider: realm.smsProvider,
+        status: 'PENDING',
+      },
+    });
+    const reject = async (error: SmsOtpError): Promise<never> => {
+      await this.prisma.smsDeliveryLog.update({
+        where: { id: log.id },
+        data: { status: 'REJECTED', errorMessage: error.code },
+      });
+      throw error;
+    };
+
+    const limitError = await this.checkSendLimits(
+      realm,
+      userId,
+      phoneHash,
+      ipHash,
+      now,
+    );
+    if (limitError) await reject(limitError);
 
     const length = SmsOtpService.clamp(
       realm.otpLength,
@@ -345,10 +382,12 @@ export class SmsOtpService {
         data: { ...fields, sendCount: { increment: 1 } },
       });
       if (count === 0) {
-        throw new SmsOtpError(
-          'cooldown',
-          `Please wait ${SMS_OTP_RESEND_COOLDOWN_SECONDS} seconds before requesting another code.`,
-          SMS_OTP_RESEND_COOLDOWN_SECONDS,
+        await reject(
+          new SmsOtpError(
+            'cooldown',
+            `Please wait ${SMS_OTP_RESEND_COOLDOWN_SECONDS} seconds before requesting another code.`,
+            SMS_OTP_RESEND_COOLDOWN_SECONDS,
+          ),
         );
       }
     } else {
@@ -362,26 +401,17 @@ export class SmsOtpService {
           err.code === 'P2002'
         ) {
           // A concurrent first send for the same challenge won the race.
-          throw new SmsOtpError(
-            'cooldown',
-            `Please wait ${SMS_OTP_RESEND_COOLDOWN_SECONDS} seconds before requesting another code.`,
-            SMS_OTP_RESEND_COOLDOWN_SECONDS,
+          await reject(
+            new SmsOtpError(
+              'cooldown',
+              `Please wait ${SMS_OTP_RESEND_COOLDOWN_SECONDS} seconds before requesting another code.`,
+              SMS_OTP_RESEND_COOLDOWN_SECONDS,
+            ),
           );
         }
         throw err;
       }
     }
-
-    const log = await this.prisma.smsDeliveryLog.create({
-      data: {
-        realmId: realm.id,
-        userId,
-        phoneHash,
-        ipHash,
-        provider: realm.smsProvider,
-        status: 'PENDING',
-      },
-    });
 
     const minutes = Math.max(1, Math.round(expirySeconds / 60));
     const appName = realm.displayName || realm.name;
@@ -419,15 +449,16 @@ export class SmsOtpService {
 
   /**
    * Per-user, per-phone, per-IP and realm-wide caps, counted from the
-   * delivery log in the database so they hold across server instances.
+   * delivery log in the database so they hold across server instances. The
+   * caller has already logged this send, so the counts include it.
    */
-  private async assertWithinSendLimits(
+  private async checkSendLimits(
     realm: RealmSmsSettings,
     userId: string,
     phoneHash: string,
     ipHash: string | null,
     now: Date,
-  ): Promise<void> {
+  ): Promise<SmsOtpError | null> {
     const maxPerWindow = SmsOtpService.clamp(
       realm.smsMaxRequestsPerUser,
       1,
@@ -467,20 +498,22 @@ export class SmsOtpService {
       }),
     ]);
 
-    if (byRealm >= realmHourlyLimit) {
+    // Each count includes this send's own row, hence "greater than".
+    if (byRealm > realmHourlyLimit) {
       this.logger.warn(`Realm-wide SMS limit reached for realm ${realm.name}`);
     }
     if (
-      byUser >= maxPerWindow ||
-      byPhone >= maxPerWindow ||
-      byIp >= SMS_OTP_MAX_SENDS_PER_IP ||
-      byRealm >= realmHourlyLimit
+      byUser > maxPerWindow ||
+      byPhone > maxPerWindow ||
+      byIp > SMS_OTP_MAX_SENDS_PER_IP ||
+      byRealm > realmHourlyLimit
     ) {
-      throw new SmsOtpError(
+      return new SmsOtpError(
         'rate_limited',
         'Too many text messages were requested. Please try again later.',
       );
     }
+    return null;
   }
 
   // ── Verifying ─────────────────────────────────────────────
