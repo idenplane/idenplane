@@ -6,9 +6,21 @@ import {
   IsEnum,
   ValidateNested,
   IsObject,
+  NotContains,
+  ValidateIf,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
 import { Type } from 'class-transformer';
+import {
+  PLACEHOLDER_TYPED_OVER,
+  SECRET_PLACEHOLDER,
+} from '../../realms/secret-placeholder.js';
+
+/**
+ * A stored secret comes back from the API as SECRET_PLACEHOLDER; sending that
+ * back unchanged keeps it. Anything else must be a real value.
+ */
+const keepsStoredSecret = (value: unknown) => value !== SECRET_PLACEHOLDER;
 
 export enum EmailProviderType {
   NONE = 'none',
@@ -37,7 +49,9 @@ export class SmtpEmailConfigDto {
 
   @ApiPropertyOptional({ description: 'SMTP password' })
   @IsOptional()
+  @ValidateIf((o: Record<string, unknown>) => keepsStoredSecret(o['password']))
   @IsString()
+  @NotContains(SECRET_PLACEHOLDER, { message: PLACEHOLDER_TYPED_OVER })
   password?: string;
 
   @ApiPropertyOptional({ description: 'From address' })
@@ -54,7 +68,9 @@ export class SmtpEmailConfigDto {
 export class ResendEmailConfigDto {
   @ApiPropertyOptional({ description: 'Resend API key (re_...)' })
   @IsOptional()
+  @ValidateIf((o: Record<string, unknown>) => keepsStoredSecret(o['apiKey']))
   @IsString()
+  @NotContains(SECRET_PLACEHOLDER, { message: PLACEHOLDER_TYPED_OVER })
   apiKey?: string;
 
   @ApiPropertyOptional({
@@ -68,7 +84,9 @@ export class ResendEmailConfigDto {
 export class SendGridEmailConfigDto {
   @ApiPropertyOptional({ description: 'SendGrid API key (SG....)' })
   @IsOptional()
+  @ValidateIf((o: Record<string, unknown>) => keepsStoredSecret(o['apiKey']))
   @IsString()
+  @NotContains(SECRET_PLACEHOLDER, { message: PLACEHOLDER_TYPED_OVER })
   apiKey?: string;
 
   @ApiPropertyOptional({
@@ -82,7 +100,9 @@ export class SendGridEmailConfigDto {
 export class MailgunEmailConfigDto {
   @ApiPropertyOptional({ description: 'Mailgun API key' })
   @IsOptional()
+  @ValidateIf((o: Record<string, unknown>) => keepsStoredSecret(o['apiKey']))
   @IsString()
+  @NotContains(SECRET_PLACEHOLDER, { message: PLACEHOLDER_TYPED_OVER })
   apiKey?: string;
 
   @ApiPropertyOptional({ description: 'Mailgun sending domain' })
@@ -108,7 +128,11 @@ export class MailgunEmailConfigDto {
 export class PostmarkEmailConfigDto {
   @ApiPropertyOptional({ description: 'Postmark Server Token' })
   @IsOptional()
+  @ValidateIf((o: Record<string, unknown>) =>
+    keepsStoredSecret(o['serverToken']),
+  )
   @IsString()
+  @NotContains(SECRET_PLACEHOLDER, { message: PLACEHOLDER_TYPED_OVER })
   serverToken?: string;
 
   @ApiPropertyOptional({

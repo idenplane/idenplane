@@ -1,7 +1,8 @@
 import { describe, it, expect } from 'vitest';
+import { useState } from 'react';
 import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import PasswordInput from '../PasswordInput';
+import PasswordInput, { SECRET_PLACEHOLDER } from '../PasswordInput';
 
 describe('PasswordInput', () => {
   it('renders as a password field by default', () => {
@@ -86,5 +87,26 @@ describe('PasswordInput', () => {
     render(<PasswordInput />);
     const toggleBtn = screen.getByRole('button', { name: /show password/i });
     expect(toggleBtn).not.toHaveAttribute('tabIndex', '-1');
+  });
+
+  it('replaces a saved-secret marker instead of appending to it', async () => {
+    function Controlled() {
+      const [value, setValue] = useState(SECRET_PLACEHOLDER);
+      return (
+        <PasswordInput
+          placeholder="API key"
+          value={value}
+          onChange={(e) => setValue(e.target.value)}
+        />
+      );
+    }
+    const user = userEvent.setup();
+    render(<Controlled />);
+    const input = screen.getByPlaceholderText('API key');
+
+    await user.click(input);
+    await user.keyboard('new-key');
+
+    expect(input).toHaveValue('new-key');
   });
 });

@@ -15,6 +15,7 @@ import { CreateRealmDto } from './dto/create-realm.dto.js';
 import { UpdateRealmDto } from './dto/update-realm.dto.js';
 import {
   encryptEmailProviderConfig,
+  redactEmailProviderConfig,
   encryptSmsProviderConfig,
   redactSmsProviderConfig,
   SECRET_PLACEHOLDER,
@@ -43,6 +44,11 @@ export class RealmsService {
     if ('smsProviderConfig' in out) {
       out['smsProviderConfig'] = redactSmsProviderConfig(
         out['smsProviderConfig'],
+      );
+    }
+    if ('emailProviderConfig' in out) {
+      out['emailProviderConfig'] = redactEmailProviderConfig(
+        out['emailProviderConfig'],
       );
     }
     return out;
@@ -273,6 +279,7 @@ export class RealmsService {
       emailProviderConfig: encryptEmailProviderConfig(
         this.crypto,
         dto.emailProviderConfig,
+        existing.emailProviderConfig,
       ),
       passwordMinLength: dto.passwordMinLength,
       passwordRequireUppercase: dto.passwordRequireUppercase,

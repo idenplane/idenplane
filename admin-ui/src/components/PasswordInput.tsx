@@ -2,12 +2,26 @@ import { useState, type InputHTMLAttributes } from 'react';
 
 type PasswordInputProps = Omit<InputHTMLAttributes<HTMLInputElement>, 'type'>;
 
+/** What the API returns in place of a stored secret (and accepts back as "keep"). */
+export const SECRET_PLACEHOLDER = '••••••';
+
 export default function PasswordInput(props: PasswordInputProps) {
   const [visible, setVisible] = useState(false);
 
   return (
     <div className="relative">
-      <input {...props} type={visible ? 'text' : 'password'} className={`${props.className ?? ''} pr-10`} />
+      <input
+        {...props}
+        type={visible ? 'text' : 'password'}
+        className={`${props.className ?? ''} pr-10`}
+        onFocus={(e) => {
+          // A saved secret shows as the hidden-value marker. Select it on
+          // focus so typing a new value replaces it instead of being appended
+          // to it (which the API rejects).
+          if (e.currentTarget.value === SECRET_PLACEHOLDER) e.currentTarget.select();
+          props.onFocus?.(e);
+        }}
+      />
       <button
         type="button"
         onClick={() => setVisible(!visible)}
