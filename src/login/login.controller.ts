@@ -495,15 +495,15 @@ export class LoginController {
     const code = body.code;
     const recoveryCode = body.recoveryCode;
 
-    let verified = false;
-    if (code) {
-      verified = await this.mfaService.verifyTotp(challenge.userId, code);
-    } else if (recoveryCode) {
-      verified = await this.mfaService.verifyRecoveryCode(
-        challenge.userId,
-        recoveryCode,
-      );
-    }
+    const { verified } = code
+      ? await this.mfaService.verifySecondFactor(challenge.userId, {
+          method: 'totp',
+          code,
+        })
+      : await this.mfaService.verifySecondFactor(challenge.userId, {
+          method: 'recovery',
+          code: recoveryCode ?? '',
+        });
 
     if (!verified) {
       await this.bruteForceService.recordTotpFailure(

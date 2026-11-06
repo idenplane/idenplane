@@ -425,9 +425,12 @@ curl -X GET "http://localhost:3000/admin/realms/my-realm/users/${USER_ID}/mfa/st
 
 ```json
 {
-  "enabled": true
+  "enabled": true,
+  "methods": ["totp", "sms"]
 }
 ```
+
+`methods` lists the user's verified second factors (`totp` for an authenticator app, `sms` for a phone). `enabled` is true when there is at least one.
 
 ---
 
@@ -449,6 +452,8 @@ curl -X DELETE "http://localhost:3000/admin/realms/my-realm/users/${USER_ID}/mfa
   -H "Authorization: Bearer ${ADMIN_ACCESS_TOKEN}" \
   -H "Cookie: IDENPLANE_SESSION=${ADMIN_SESSION_TOKEN}"
 ```
+
+This removes every second factor (authenticator app and SMS phone) and the recovery codes. To remove only one factor, use `DELETE .../mfa/totp` or `DELETE .../mfa/sms`; the recovery codes are kept while the user still has another factor.
 
 :::caution MFA Step-Up Required
 This operation requires the administrator to have MFA-verified session. API key authentication is not permitted for disabling user MFA.

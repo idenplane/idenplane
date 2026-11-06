@@ -127,7 +127,8 @@ export class AccountController {
     }
 
     const query = req.query as Record<string, string>;
-    const mfaEnabled = await this.mfaService.isMfaEnabled(user.id);
+    // The account page's two-factor card is about the authenticator app.
+    const mfaEnabled = await this.mfaService.isTotpEnabled(user.id);
     const webAuthnEnabled = realm.webAuthnEnabled ?? false;
 
     let webAuthnCredentials: Array<{
@@ -399,8 +400,8 @@ export class AccountController {
     const { user, enrollmentToken, enrollmentVerified } = setupUser;
 
     const query = req.query as Record<string, string>;
-    const mfaEnabled = await this.mfaService.isMfaEnabled(user.id);
-    if (enrollmentToken && mfaEnabled) {
+    const totpEnabled = await this.mfaService.isTotpEnabled(user.id);
+    if (enrollmentToken && totpEnabled) {
       if (!enrollmentVerified) {
         // Enrolled somewhere else meanwhile: sign in normally with the code.
         res.clearCookie(MFA_ENROLLMENT_COOKIE, {
@@ -424,7 +425,7 @@ export class AccountController {
         req,
       );
     }
-    if (mfaEnabled) {
+    if (totpEnabled) {
       return res.redirect(
         `/realms/${realm.name}/account?info=${encodeURIComponent('Two-factor authentication is already enabled.')}`,
       );
@@ -535,10 +536,17 @@ export class AccountController {
       return res.redirect(`/realms/${realm.name}/login`);
     }
 
+    // A realm that requires MFA may not be left without a second factor;
+    // removing the app is fine while another factor (SMS) remains.
     if (realm.mfaRequired) {
-      return res.redirect(
-        `/realms/${realm.name}/account?error=${encodeURIComponent('Two-factor authentication is required in this realm and cannot be turned off.')}`,
+      const others = (await this.mfaService.getEnrolledFactors(user.id)).filter(
+        (f) => f !== 'totp',
       );
+      if (others.length === 0) {
+        return res.redirect(
+          `/realms/${realm.name}/account?error=${encodeURIComponent('Two-factor authentication is required in this realm and cannot be turned off.')}`,
+        );
+      }
     }
 
     const currentPassword = body['currentPassword'];

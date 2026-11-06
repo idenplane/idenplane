@@ -372,27 +372,24 @@ export class AuthService {
       );
     }
 
-    const verified = await this.mfaService.verifyTotp(challenge.userId, otp);
+    // Authenticator code, then recovery code.
+    const { verified } = await this.mfaService.verifySecondFactor(
+      challenge.userId,
+      { method: 'otp', code: otp },
+    );
     if (!verified) {
-      // Try as recovery code
-      const recoveryVerified = await this.mfaService.verifyRecoveryCode(
-        challenge.userId,
-        otp,
+      void this.eventsService.recordLoginEvent({
+        realmId: realm.id,
+        type: LoginEventType.MFA_VERIFY_ERROR,
+        userId: challenge.userId,
+        ipAddress: ip,
+        error: 'Invalid OTP code',
+      });
+      throw new OAuthTokenError(
+        'invalid_grant',
+        'Invalid OTP code',
+        HttpStatus.BAD_REQUEST,
       );
-      if (!recoveryVerified) {
-        void this.eventsService.recordLoginEvent({
-          realmId: realm.id,
-          type: LoginEventType.MFA_VERIFY_ERROR,
-          userId: challenge.userId,
-          ipAddress: ip,
-          error: 'Invalid OTP code',
-        });
-        throw new OAuthTokenError(
-          'invalid_grant',
-          'Invalid OTP code',
-          HttpStatus.BAD_REQUEST,
-        );
-      }
     }
 
     // MFA verified — consume the challenge

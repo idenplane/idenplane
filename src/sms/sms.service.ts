@@ -8,6 +8,11 @@ import { AwsSnsProvider } from './providers/aws-sns.provider.js';
 import { WebhookSmsProvider } from './providers/webhook.provider.js';
 import { SmsProviderType } from './dto/sms-config.dto.js';
 
+/** Phone numbers are personal data; logs keep only the last two digits. */
+function maskForLog(phone: string): string {
+  return phone.length > 2 ? `…${phone.slice(-2)}` : '…';
+}
+
 @Injectable()
 export class SmsService {
   private readonly logger = new Logger(SmsService.name);
@@ -120,10 +125,9 @@ export class SmsService {
     });
 
     if (!realm?.smsProvider || realm.smsProvider === 'none') {
-      this.logger.warn(
-        `SMS not configured for realm "${realmName}", skipping SMS to ${to}`,
-      );
-      return;
+      // Fail loudly: callers send one-time codes, and silently dropping one
+      // would leave the user waiting for a message that never arrives.
+      throw new Error(`SMS is not configured for realm "${realmName}"`);
     }
 
     const provider = await this.createProvider(realm);
@@ -139,13 +143,13 @@ export class SmsService {
     try {
       await provider.sendSms(to, message);
       this.logger.log(
-        `SMS sent to ${to} (realm: ${realmName}, provider: ${realm.smsProvider})`,
+        `SMS sent to ${maskForLog(to)} (realm: ${realmName}, provider: ${realm.smsProvider})`,
       );
     } catch (error) {
       const errorMessage =
         error instanceof Error ? error.message : 'Unknown error';
       this.logger.error(
-        `Failed to send SMS to ${to} (realm: ${realmName}): ${errorMessage}`,
+        `Failed to send SMS to ${maskForLog(to)} (realm: ${realmName}): ${errorMessage}`,
       );
       throw error;
     }

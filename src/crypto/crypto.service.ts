@@ -10,6 +10,8 @@ import {
   createHash,
   createCipheriv,
   createDecipheriv,
+  createHmac,
+  hkdfSync,
   scryptSync,
 } from 'crypto';
 import { cpus } from 'os';
@@ -145,6 +147,33 @@ export class CryptoService implements OnModuleInit {
 
   sha256(data: string): string {
     return createHash('sha256').update(data).digest('hex');
+  }
+
+  /** Per-purpose HMAC keys, derived once from the encryption key. */
+  private readonly hmacKeys = new Map<string, Buffer>();
+
+  /**
+   * Keyed hash for low-entropy values (one-time codes, phone numbers) that a
+   * plain sha256 would not protect: anyone holding a database dump can hash
+   * every 6-digit code or phone number and match. The key never leaves this
+   * service and is derived with HKDF under `purpose`, so a hash made for one
+   * purpose can't be replayed as another. Hex output, fixed length.
+   */
+  hmac(purpose: string, data: string): string {
+    let key = this.hmacKeys.get(purpose);
+    if (!key) {
+      key = Buffer.from(
+        hkdfSync(
+          'sha256',
+          this.encryptionKey,
+          Buffer.alloc(0),
+          `idenplane:hmac:${purpose}`,
+          32,
+        ),
+      );
+      this.hmacKeys.set(purpose, key);
+    }
+    return createHmac('sha256', key).update(data, 'utf8').digest('hex');
   }
 
   /**

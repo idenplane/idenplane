@@ -226,11 +226,29 @@ describe('MfaService', () => {
 
       await service.verifyAndActivateTotp('user-1', '123456');
 
-      // generateRecoveryCodes should delete existing + create 10 new
+      // No unused codes yet: delete any used ones and create 10 new
       expect((prisma.recoveryCode as any).deleteMany).toHaveBeenCalledWith({
         where: { userId: 'user-1' },
       });
       expect((prisma.recoveryCode as any).create).toHaveBeenCalledTimes(10);
+    });
+
+    it('keeps the existing recovery codes when another factor already issued them', async () => {
+      prisma.userCredential.findUnique.mockResolvedValue(
+        unverifiedCredential as any,
+      );
+      prisma.userCredential.update.mockResolvedValue({} as any);
+      (prisma.recoveryCode as any).count.mockResolvedValue(7);
+      (OTPAuth.TOTP as jest.Mock).mockImplementationOnce(() => ({
+        toString: jest.fn(),
+        validate: jest.fn(() => 0),
+      }));
+
+      const result = await service.verifyAndActivateTotp('user-1', '123456');
+
+      expect(result).toEqual([]);
+      expect((prisma.recoveryCode as any).deleteMany).not.toHaveBeenCalled();
+      expect((prisma.recoveryCode as any).create).not.toHaveBeenCalled();
     });
 
     it('should look up credential by userId_type compound key', async () => {
@@ -354,7 +372,7 @@ describe('MfaService', () => {
   // ────────────────────────────────────────────────────────────────────
   describe('verifyRecoveryCode', () => {
     it('should return false when no matching unused code is found', async () => {
-      (prisma.recoveryCode as any).findFirst.mockResolvedValue(null);
+      (prisma.recoveryCode as any).updateMany.mockResolvedValue({ count: 0 });
 
       const result = await service.verifyRecoveryCode('user-1', 'ABCD1234');
 
@@ -362,49 +380,42 @@ describe('MfaService', () => {
     });
 
     it('should hash the code (lowercased, no spaces) before lookup', async () => {
-      (prisma.recoveryCode as any).findFirst.mockResolvedValue(null);
-
       await service.verifyRecoveryCode('user-1', '  AB CD  12 34  ');
 
       expect(crypto.sha256).toHaveBeenCalledWith('abcd1234');
     });
 
-    it('should look up by userId, codeHash, and used=false', async () => {
-      (prisma.recoveryCode as any).findFirst.mockResolvedValue(null);
+    it('claims the code with one conditional update (no read-then-write race)', async () => {
+      (prisma.recoveryCode as any).updateMany.mockResolvedValue({ count: 1 });
 
-      await service.verifyRecoveryCode('user-1', 'ABCD1234');
+      const result = await service.verifyRecoveryCode('user-1', 'ABCD1234');
 
-      expect((prisma.recoveryCode as any).findFirst).toHaveBeenCalledWith({
+      expect(result).toBe(true);
+      expect((prisma.recoveryCode as any).updateMany).toHaveBeenCalledWith({
         where: {
           userId: 'user-1',
           codeHash: 'hashed_abcd1234',
           used: false,
         },
-      });
-    });
-
-    it('should mark the recovery code as used and return true', async () => {
-      const mockCode = {
-        id: 'rc-1',
-        userId: 'user-1',
-        codeHash: 'hashed_abcd1234',
-        used: false,
-      };
-      (prisma.recoveryCode as any).findFirst.mockResolvedValue(mockCode as any);
-      prisma.recoveryCode.update.mockResolvedValue({} as any);
-
-      const result = await service.verifyRecoveryCode('user-1', 'ABCD1234');
-
-      expect(result).toBe(true);
-      expect(prisma.recoveryCode.update).toHaveBeenCalledWith({
-        where: { id: 'rc-1' },
         data: { used: true },
       });
+      expect(prisma.recoveryCode.update).not.toHaveBeenCalled();
+    });
+
+    it('lets only one of two concurrent uses of the same code succeed', async () => {
+      (prisma.recoveryCode as any).updateMany
+        .mockResolvedValueOnce({ count: 1 })
+        .mockResolvedValueOnce({ count: 0 });
+
+      const results = await Promise.all([
+        service.verifyRecoveryCode('user-1', 'ABCD1234'),
+        service.verifyRecoveryCode('user-1', 'ABCD1234'),
+      ]);
+
+      expect(results.filter(Boolean)).toHaveLength(1);
     });
 
     it('should handle uppercase input by lowering before hash', async () => {
-      (prisma.recoveryCode as any).findFirst.mockResolvedValue(null);
-
       await service.verifyRecoveryCode('user-1', 'XYZW9876');
 
       expect(crypto.sha256).toHaveBeenCalledWith('xyzw9876');
@@ -478,10 +489,12 @@ describe('MfaService', () => {
   // disableTotp
   // ────────────────────────────────────────────────────────────────────
   describe('disableTotp', () => {
-    it('should delete all TOTP credentials for the user', async () => {
+    beforeEach(() => {
       (prisma.userCredential as any).deleteMany.mockResolvedValue({ count: 1 });
       (prisma.recoveryCode as any).deleteMany.mockResolvedValue({ count: 5 });
+    });
 
+    it('should delete all TOTP credentials for the user', async () => {
       await service.disableTotp('user-1');
 
       expect((prisma.userCredential as any).deleteMany).toHaveBeenCalledWith({
@@ -489,12 +502,52 @@ describe('MfaService', () => {
       });
     });
 
-    it('should delete all recovery codes for the user', async () => {
-      (prisma.userCredential as any).deleteMany.mockResolvedValue({ count: 1 });
-      (prisma.recoveryCode as any).deleteMany.mockResolvedValue({ count: 5 });
+    it('deletes the recovery codes when TOTP was the last factor', async () => {
+      (prisma.userCredential as any).findMany.mockResolvedValue([]);
 
       await service.disableTotp('user-1');
 
+      expect((prisma.recoveryCode as any).deleteMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1' },
+      });
+    });
+
+    it('keeps the recovery codes while an SMS phone remains', async () => {
+      (prisma.userCredential as any).findMany.mockResolvedValue([
+        { type: 'sms' },
+      ]);
+
+      await service.disableTotp('user-1');
+
+      expect((prisma.recoveryCode as any).deleteMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('disableSms', () => {
+    it('removes the phone and pending codes, keeping recovery codes while TOTP remains', async () => {
+      (prisma.userCredential as any).findMany.mockResolvedValue([
+        { type: 'totp' },
+      ]);
+
+      await service.disableSms('user-1');
+
+      expect((prisma.userCredential as any).deleteMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1', type: 'sms' },
+      });
+      expect((prisma as any).otpAttempt.deleteMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1' },
+      });
+      expect((prisma.recoveryCode as any).deleteMany).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('disableAllFactors', () => {
+    it('removes every second factor and the recovery codes', async () => {
+      await service.disableAllFactors('user-1');
+
+      expect((prisma.userCredential as any).deleteMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1', type: { in: ['totp', 'sms'] } },
+      });
       expect((prisma.recoveryCode as any).deleteMany).toHaveBeenCalledWith({
         where: { userId: 'user-1' },
       });
@@ -505,44 +558,130 @@ describe('MfaService', () => {
   // isMfaEnabled
   // ────────────────────────────────────────────────────────────────────
   describe('isMfaEnabled', () => {
-    it('should return true when a verified TOTP credential exists', async () => {
+    it('is true for a verified authenticator app', async () => {
+      (prisma.userCredential as any).findMany.mockResolvedValue([
+        { type: 'totp' },
+      ]);
+
+      expect(await service.isMfaEnabled('user-1')).toBe(true);
+    });
+
+    it('is true for a user whose only factor is SMS (fail closed)', async () => {
+      (prisma.userCredential as any).findMany.mockResolvedValue([
+        { type: 'sms' },
+      ]);
+
+      expect(await service.isMfaEnabled('user-1')).toBe(true);
+    });
+
+    it('is false without verified factors', async () => {
+      (prisma.userCredential as any).findMany.mockResolvedValue([]);
+
+      expect(await service.isMfaEnabled('user-1')).toBe(false);
+    });
+
+    it('only counts verified second-factor credentials', async () => {
+      await service.isMfaEnabled('user-1');
+
+      expect((prisma.userCredential as any).findMany).toHaveBeenCalledWith({
+        where: {
+          userId: 'user-1',
+          verified: true,
+          type: { in: ['totp', 'sms'] },
+        },
+        select: { type: true },
+      });
+    });
+  });
+
+  describe('isTotpEnabled', () => {
+    it('looks only at the TOTP credential', async () => {
       prisma.userCredential.findUnique.mockResolvedValue({
-        id: 'cred-1',
         verified: true,
       } as any);
 
-      const result = await service.isMfaEnabled('user-1');
-
-      expect(result).toBe(true);
-    });
-
-    it('should return false when no credential exists', async () => {
-      prisma.userCredential.findUnique.mockResolvedValue(null);
-
-      const result = await service.isMfaEnabled('user-1');
-
-      expect(result).toBe(false);
-    });
-
-    it('should return false when credential exists but is not verified', async () => {
-      prisma.userCredential.findUnique.mockResolvedValue({
-        id: 'cred-1',
-        verified: false,
-      } as any);
-
-      const result = await service.isMfaEnabled('user-1');
-
-      expect(result).toBe(false);
-    });
-
-    it('should look up by userId_type compound key', async () => {
-      prisma.userCredential.findUnique.mockResolvedValue(null);
-
-      await service.isMfaEnabled('user-1');
-
+      expect(await service.isTotpEnabled('user-1')).toBe(true);
       expect(prisma.userCredential.findUnique).toHaveBeenCalledWith({
         where: { userId_type: { userId: 'user-1', type: 'totp' } },
       });
+    });
+  });
+
+  describe('verifySecondFactor', () => {
+    it('rejects an empty code without touching any factor', async () => {
+      const spy = jest.spyOn(service, 'verifyTotp');
+
+      expect(
+        await service.verifySecondFactor('user-1', { method: 'otp', code: ' ' }),
+      ).toEqual({ verified: false });
+      expect(spy).not.toHaveBeenCalled();
+    });
+
+    it('"otp" tries the authenticator, then a recovery code', async () => {
+      jest.spyOn(service, 'verifyTotp').mockResolvedValue(false);
+      jest.spyOn(service, 'verifyRecoveryCode').mockResolvedValue(true);
+
+      expect(
+        await service.verifySecondFactor('user-1', {
+          method: 'otp',
+          code: 'abcd1234',
+        }),
+      ).toEqual({ verified: true, factor: 'recovery' });
+    });
+
+    it('"totp" never falls back to recovery codes', async () => {
+      jest.spyOn(service, 'verifyTotp').mockResolvedValue(false);
+      const recovery = jest.spyOn(service, 'verifyRecoveryCode');
+
+      expect(
+        await service.verifySecondFactor('user-1', {
+          method: 'totp',
+          code: '123456',
+        }),
+      ).toEqual({ verified: false });
+      expect(recovery).not.toHaveBeenCalled();
+    });
+
+    it('"sms" checks the code against the challenge it was sent for', async () => {
+      const smsOtp = {
+        verifyCode: jest.fn().mockResolvedValue({ ok: true, phone: '+201' }),
+      };
+      const svc = new MfaService(
+        prisma as any,
+        crypto as any,
+        undefined,
+        undefined,
+        smsOtp as any,
+      );
+
+      expect(
+        await svc.verifySecondFactor('user-1', {
+          method: 'sms',
+          code: '123456',
+          realmId: 'realm-1',
+          purpose: 'login',
+          binding: 'challenge-token',
+        }),
+      ).toEqual({ verified: true, factor: 'sms' });
+      expect(smsOtp.verifyCode).toHaveBeenCalledWith({
+        realmId: 'realm-1',
+        userId: 'user-1',
+        purpose: 'login',
+        binding: 'challenge-token',
+        code: '123456',
+      });
+    });
+
+    it('"sms" fails closed when the SMS service is not available', async () => {
+      expect(
+        await service.verifySecondFactor('user-1', {
+          method: 'sms',
+          code: '123456',
+          realmId: 'realm-1',
+          purpose: 'login',
+          binding: 'challenge-token',
+        }),
+      ).toEqual({ verified: false });
     });
   });
 
@@ -557,40 +696,23 @@ describe('MfaService', () => {
 
       expect(result).toBe(true);
       // Should short-circuit, no DB lookup needed
-      expect(prisma.userCredential.findUnique).not.toHaveBeenCalled();
+      expect((prisma.userCredential as any).findMany).not.toHaveBeenCalled();
     });
 
-    it('should return true when realm does not require MFA but user has MFA enabled', async () => {
+    it('should return true when realm does not require MFA but user has a factor', async () => {
       const realm = { id: 'realm-1', mfaRequired: false } as Realm;
-      prisma.userCredential.findUnique.mockResolvedValue({
-        id: 'cred-1',
-        verified: true,
-      } as any);
+      (prisma.userCredential as any).findMany.mockResolvedValue([
+        { type: 'totp' },
+      ]);
 
-      const result = await service.isMfaRequired(realm, 'user-1');
-
-      expect(result).toBe(true);
+      expect(await service.isMfaRequired(realm, 'user-1')).toBe(true);
     });
 
-    it('should return false when neither realm requires MFA nor user has MFA', async () => {
+    it('should return false when neither realm requires MFA nor user has a factor', async () => {
       const realm = { id: 'realm-1', mfaRequired: false } as Realm;
-      prisma.userCredential.findUnique.mockResolvedValue(null);
+      (prisma.userCredential as any).findMany.mockResolvedValue([]);
 
-      const result = await service.isMfaRequired(realm, 'user-1');
-
-      expect(result).toBe(false);
-    });
-
-    it('should return false when realm does not require MFA and user credential is unverified', async () => {
-      const realm = { id: 'realm-1', mfaRequired: false } as Realm;
-      prisma.userCredential.findUnique.mockResolvedValue({
-        id: 'cred-1',
-        verified: false,
-      } as any);
-
-      const result = await service.isMfaRequired(realm, 'user-1');
-
-      expect(result).toBe(false);
+      expect(await service.isMfaRequired(realm, 'user-1')).toBe(false);
     });
   });
 
@@ -613,7 +735,7 @@ describe('MfaService', () => {
       });
     });
 
-    it('should store userId, realmId, oauthParams, and attempts=0 in data field', async () => {
+    it('should store userId, realmId and oauthParams in data field', async () => {
       const oauthParams = { redirect_uri: 'http://localhost', state: 'abc' };
 
       await service.createMfaChallenge('user-1', 'realm-1', oauthParams);
@@ -624,7 +746,6 @@ describe('MfaService', () => {
             userId: 'user-1',
             realmId: 'realm-1',
             oauthParams,
-            attempts: 0,
           },
         }),
       });
@@ -670,7 +791,6 @@ describe('MfaService', () => {
             userId: 'user-1',
             realmId: 'realm-1',
             oauthParams: undefined,
-            attempts: 0,
           },
         }),
       });
@@ -779,41 +899,16 @@ describe('MfaService', () => {
   // validateMfaChallengeWithAttemptCheck
   // ────────────────────────────────────────────────────────────────────
   describe('validateMfaChallengeWithAttemptCheck', () => {
-    it('should return null when no action is found', async () => {
-      prisma.pendingAction.findUnique.mockResolvedValue(null);
+    const live = {
+      id: 'action-1',
+      type: 'mfa_challenge',
+      data: { userId: 'user-1', realmId: 'realm-1' },
+      expiresAt: new Date(Date.now() + 60_000),
+    };
 
-      const result =
-        await service.validateMfaChallengeWithAttemptCheck('some-token');
-
-      expect(result).toBeNull();
-    });
-
-    it('should return null and delete when expired', async () => {
-      prisma.pendingAction.findUnique.mockResolvedValue({
-        id: 'action-1',
-        type: 'mfa_challenge',
-        data: { userId: 'user-1', realmId: 'realm-1', attempts: 0 },
-        expiresAt: new Date(Date.now() - 60_000),
-      } as any);
-      prisma.pendingAction.delete.mockResolvedValue({} as any);
-
-      const result =
-        await service.validateMfaChallengeWithAttemptCheck('some-token');
-
-      expect(result).toBeNull();
-      expect(prisma.pendingAction.delete).toHaveBeenCalledWith({
-        where: { id: 'action-1' },
-      });
-    });
-
-    it('should increment attempt counter and return challenge data', async () => {
-      prisma.pendingAction.findUnique.mockResolvedValue({
-        id: 'action-1',
-        type: 'mfa_challenge',
-        data: { userId: 'user-1', realmId: 'realm-1', attempts: 2 },
-        expiresAt: new Date(Date.now() + 60_000),
-      } as any);
-      prisma.pendingAction.update.mockResolvedValue({} as any);
+    it('spends an attempt atomically, only on a live challenge under the limit', async () => {
+      prisma.pendingAction.updateMany.mockResolvedValue({ count: 1 });
+      prisma.pendingAction.findUnique.mockResolvedValue(live as any);
 
       const result =
         await service.validateMfaChallengeWithAttemptCheck('some-token');
@@ -821,46 +916,52 @@ describe('MfaService', () => {
       expect(result).toEqual({
         userId: 'user-1',
         realmId: 'realm-1',
+        clientId: undefined,
         oauthParams: undefined,
+        primaryAmr: undefined,
       });
-      expect(prisma.pendingAction.update).toHaveBeenCalledWith({
-        where: { id: 'action-1' },
-        data: { data: { userId: 'user-1', realmId: 'realm-1', attempts: 3 } },
+      expect(prisma.pendingAction.updateMany).toHaveBeenCalledWith({
+        where: {
+          tokenHash: 'hashed_some-token',
+          type: 'mfa_challenge',
+          expiresAt: { gt: expect.any(Date) },
+          attempts: { lt: 5 },
+        },
+        data: { attempts: { increment: 1 } },
       });
     });
 
-    it('should return null and delete when attempts exceed max (5)', async () => {
-      prisma.pendingAction.findUnique.mockResolvedValue({
-        id: 'action-1',
-        type: 'mfa_challenge',
-        data: { userId: 'user-1', realmId: 'realm-1', attempts: 5 },
-        expiresAt: new Date(Date.now() + 60_000),
-      } as any);
-      prisma.pendingAction.delete.mockResolvedValue({} as any);
+    it('returns null and discards the challenge when it is unknown, expired or out of attempts', async () => {
+      prisma.pendingAction.updateMany.mockResolvedValue({ count: 0 });
+      prisma.pendingAction.deleteMany.mockResolvedValue({ count: 1 });
 
       const result =
         await service.validateMfaChallengeWithAttemptCheck('some-token');
 
       expect(result).toBeNull();
-      expect(prisma.pendingAction.delete).toHaveBeenCalledWith({
-        where: { id: 'action-1' },
+      expect(prisma.pendingAction.deleteMany).toHaveBeenCalledWith({
+        where: { tokenHash: 'hashed_some-token', type: 'mfa_challenge' },
       });
+      expect(prisma.pendingAction.findUnique).not.toHaveBeenCalled();
     });
 
-    it('should allow up to 5 attempts (attempt 5 succeeds, 6 fails)', async () => {
-      // Attempt 5 (incremented from 4 to 5) should still work
-      prisma.pendingAction.findUnique.mockResolvedValue({
-        id: 'action-1',
-        type: 'mfa_challenge',
-        data: { userId: 'user-1', realmId: 'realm-1', attempts: 4 },
-        expiresAt: new Date(Date.now() + 60_000),
-      } as any);
-      prisma.pendingAction.update.mockResolvedValue({} as any);
+    it('lets no more than 5 of many parallel guesses through', async () => {
+      let attempts = 0;
+      prisma.pendingAction.updateMany.mockImplementation(async () => {
+        if (attempts >= 5) return { count: 0 };
+        attempts++;
+        return { count: 1 };
+      });
+      prisma.pendingAction.findUnique.mockResolvedValue(live as any);
+      prisma.pendingAction.deleteMany.mockResolvedValue({ count: 1 });
 
-      const result =
-        await service.validateMfaChallengeWithAttemptCheck('some-token');
+      const results = await Promise.all(
+        Array.from({ length: 12 }, () =>
+          service.validateMfaChallengeWithAttemptCheck('some-token'),
+        ),
+      );
 
-      expect(result).not.toBeNull();
+      expect(results.filter((r) => r !== null)).toHaveLength(5);
     });
   });
 

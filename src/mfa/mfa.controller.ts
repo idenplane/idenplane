@@ -68,8 +68,8 @@ export class MfaController {
     @Param('userId') userId: string,
   ) {
     await this.assertUserInRealm(userId, realm);
-    const enabled = await this.mfaService.isMfaEnabled(userId);
-    return { enabled };
+    const methods = await this.mfaService.getEnrolledFactors(userId);
+    return { enabled: methods.length > 0, methods };
   }
 
   @Delete()
@@ -85,7 +85,7 @@ export class MfaController {
   ) {
     await this.assertUserInRealm(userId, realm);
     await this.requireAdminMfaStepUp(realm, req);
-    await this.mfaService.disableTotp(userId);
+    await this.mfaService.disableAllFactors(userId);
   }
 
   @Delete('totp')
@@ -109,6 +109,26 @@ export class MfaController {
     // rejected because the key cannot prove interactive MFA verification.
     await this.requireAdminMfaStepUp(realm, req);
     await this.mfaService.disableTotp(userId);
+  }
+
+  @Delete('sms')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({ summary: "Remove a user's SMS phone (second factor)" })
+  @ApiResponse({ status: 204, description: 'SMS factor removed' })
+  @ApiResponse({
+    status: 401,
+    description: 'Unauthorized – MFA step-up required',
+  })
+  @ApiResponse({ status: 404, description: 'Not found' })
+  async resetSms(
+    @CurrentRealm() realm: Realm,
+    @Param('userId') userId: string,
+    @Req() req: Request,
+  ) {
+    await this.assertUserInRealm(userId, realm);
+    // Same bar as a TOTP reset: it removes one of the user's second factors.
+    await this.requireAdminMfaStepUp(realm, req);
+    await this.mfaService.disableSms(userId);
   }
 
   private async requireAdminMfaStepUp(

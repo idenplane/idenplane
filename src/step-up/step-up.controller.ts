@@ -303,20 +303,17 @@ export class StepUpController {
         );
       }
 
-      const verified = await this.mfaService.verifyTotp(challenge.userId, otp);
+      const { verified } = await this.mfaService.verifySecondFactor(
+        challenge.userId,
+        { method: 'otp', code: otp },
+      );
       if (!verified) {
-        const recoveryVerified = await this.mfaService.verifyRecoveryCode(
+        await this.bruteForceService.recordTotpFailure(
+          realm,
           challenge.userId,
-          otp,
+          resolveClientIp(req),
         );
-        if (!recoveryVerified) {
-          await this.bruteForceService.recordTotpFailure(
-            realm,
-            challenge.userId,
-            resolveClientIp(req),
-          );
-          throw new UnauthorizedException('Invalid OTP code');
-        }
+        throw new UnauthorizedException('Invalid OTP code');
       }
 
       // Consume the MFA challenge
