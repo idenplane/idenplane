@@ -144,8 +144,9 @@ model Realm {
   webAuthnRpId                     String? @map("webauthn_rp_id")
   webAuthnUserVerificationRequired Boolean @default(false) @map("webauthn_user_verification_required")
 
-  // SMS MFA. Enrollment and the login challenge land in a follow-up; until
-  // then the admin UI keeps this switch read-only.
+  // SMS MFA. Turning it off stops new enrolments; users who already
+  // enrolled a phone keep signing in with it. The account and login screens
+  // land in a follow-up; until then the admin UI keeps this switch read-only.
   smsMfaEnabled Boolean @default(false) @map("sms_mfa_enabled")
 
   // SMS provider configuration
@@ -275,6 +276,7 @@ model User {
 
   federationLink String? @map("federation_link")
 
+  /// type "sms" only: the verified number, encrypted at rest.
   phoneNumber String? @map("phone_number")
 
   passwordChangedAt DateTime? @map("password_changed_at")
@@ -1047,8 +1049,10 @@ model UserFederationMapper {
 model PendingAction {
   id        String   @id @default(uuid())
   tokenHash String   @unique @map("token_hash")
-  type      String // "mfa_challenge" | "consent_request"
+  type      String // "mfa_challenge" | "mfa_enrollment" | "consent_request"
   data      Json
+  /// Failed second-factor guesses against an MFA challenge (atomic counter).
+  attempts  Int      @default(0)
   expiresAt DateTime @map("expires_at")
   createdAt DateTime @default(now()) @map("created_at")
 
@@ -1813,30 +1817,45 @@ model SmsDeliveryLog {
   providerMessageId String?  @map("provider_message_id")
   errorCode         String?
   errorMessage      String?
+  /// Keyed hash of the requesting IP, for per-IP send limits.
+  ipHash            String?  @map("ip_hash")
   createdAt         DateTime @default(now()) @map("created_at")
 
   @@index([realmId, userId, createdAt])
   @@index([realmId, createdAt])
+  @@index([realmId, phoneHash, createdAt])
+  @@index([realmId, ipHash, createdAt])
   @@map("sms_delivery_logs")
 }
 
 // ─── OTP ATTEMPTS ─────────────────────────────────────────
 
+/// One SMS code challenge. A row is bound to the flow that asked for it
+/// (purpose + keyed hash of that flow's token), so a code sent for one sign-in
+/// or enrolment is useless anywhere else. Resending replaces the code but keeps
+/// `attempts`, so the guess budget belongs to the challenge, not the code.
 model OtpAttempt {
-  id             String    @id @default(uuid())
-  realmId        String    @map("realm_id")
-  realm          Realm     @relation(fields: [realmId], references: [id], onDelete: Cascade)
-  userId         String    @map("user_id")
-  phoneHash      String    @map("phone_hash")
-  codeHash       String    @map("code_hash")
-  verified       Boolean   @default(false)
-  failedAttempts Int       @default(0) @map("failed_attempts")
-  expiresAt      DateTime  @map("expires_at")
-  verifiedAt     DateTime? @map("verified_at")
-  createdAt      DateTime  @default(now()) @map("created_at")
+  id             String   @id @default(uuid())
+  realmId        String   @map("realm_id")
+  realm          Realm    @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  userId         String   @map("user_id")
+  /// "enroll" | "login" | "step_up"
+  purpose        String
+  bindingHash    String   @map("binding_hash")
+  phoneHash      String   @map("phone_hash")
+  /// The number being enrolled (encrypted); only set for purpose "enroll".
+  phoneEncrypted String?  @map("phone_encrypted")
+  codeHash       String   @map("code_hash")
+  /// Guesses made against this challenge (each is counted before it is checked).
+  attempts       Int      @default(0)
+  sendCount      Int      @default(1) @map("send_count")
+  lastSentAt     DateTime @default(now()) @map("last_sent_at")
+  expiresAt      DateTime @map("expires_at")
+  createdAt      DateTime @default(now()) @map("created_at")
 
-  @@index([realmId, userId, expiresAt])
-  @@index([realmId, phoneHash, expiresAt])
+  @@unique([purpose, bindingHash])
+  @@index([realmId, userId])
+  @@index([expiresAt])
   @@map("otp_attempts")
 }
 

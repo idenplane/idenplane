@@ -77,18 +77,18 @@ describe('SmsService', () => {
   });
 
   describe('sendSms', () => {
-    it('should skip sending when smsProvider is "none"', async () => {
+    it('should refuse to send when smsProvider is "none"', async () => {
       prisma.realm.findUnique.mockResolvedValue({ smsProvider: 'none' });
       await expect(
         service.sendSms('my-realm', '+15550100', 'hello'),
-      ).resolves.toBeUndefined();
+      ).rejects.toThrow('not configured');
     });
 
-    it('should skip sending when the realm is not found', async () => {
+    it('should refuse to send when the realm is not found', async () => {
       prisma.realm.findUnique.mockResolvedValue(null);
       await expect(
         service.sendSms('missing', '+15550100', 'hello'),
-      ).resolves.toBeUndefined();
+      ).rejects.toThrow('not configured');
     });
 
     it('should throw when the provider cannot be instantiated', async () => {

@@ -21,6 +21,8 @@ describe('AccountController', () => {
   };
   let mfaService: {
     isMfaEnabled: jest.Mock;
+    isTotpEnabled: jest.Mock;
+    getEnrolledFactors: jest.Mock;
     setupTotp: jest.Mock;
     verifyAndActivateTotp: jest.Mock;
     disableTotp: jest.Mock;
@@ -70,6 +72,8 @@ describe('AccountController', () => {
     };
     mfaService = {
       isMfaEnabled: jest.fn(),
+      isTotpEnabled: jest.fn(),
+      getEnrolledFactors: jest.fn().mockResolvedValue([]),
       setupTotp: jest.fn(),
       verifyAndActivateTotp: jest.fn(),
       disableTotp: jest.fn(),
@@ -123,7 +127,7 @@ describe('AccountController', () => {
     });
 
     it('should render account page for authenticated user', async () => {
-      mfaService.isMfaEnabled.mockResolvedValue(false);
+      mfaService.isTotpEnabled.mockResolvedValue(false);
 
       await controller.showAccount(realm, mockReqWithSession, mockRes as any);
 
@@ -490,7 +494,7 @@ describe('AccountController', () => {
     });
 
     it('should redirect to account if MFA already enabled', async () => {
-      mfaService.isMfaEnabled.mockResolvedValue(true);
+      mfaService.isTotpEnabled.mockResolvedValue(true);
 
       await controller.showTotpSetup(realm, mockReqWithSession, mockRes as any);
 
@@ -500,7 +504,7 @@ describe('AccountController', () => {
     });
 
     it('should render TOTP setup page', async () => {
-      mfaService.isMfaEnabled.mockResolvedValue(false);
+      mfaService.isTotpEnabled.mockResolvedValue(false);
       mfaService.setupTotp.mockResolvedValue({
         qrCodeDataUrl: 'data:image/png;base64,abc',
         secret: 'JBSWY3DPEHPK3PXP',
@@ -604,7 +608,7 @@ describe('AccountController', () => {
     });
 
     it('shows the setup page for the enrolling user, cancelling back to login', async () => {
-      mfaService.isMfaEnabled.mockResolvedValue(false);
+      mfaService.isTotpEnabled.mockResolvedValue(false);
       mfaService.setupTotp.mockResolvedValue({
         qrCodeDataUrl: 'data:qr',
         secret: 'SECRET',
@@ -687,7 +691,7 @@ describe('AccountController', () => {
     });
 
     it('sends the user back to sign in if TOTP was enabled elsewhere meanwhile', async () => {
-      mfaService.isMfaEnabled.mockResolvedValue(true);
+      mfaService.isTotpEnabled.mockResolvedValue(true);
 
       await controller.showTotpSetup(realm, reqEnrolling, mockRes as any);
 
@@ -714,6 +718,20 @@ describe('AccountController', () => {
       expect(mockRes.redirect).toHaveBeenCalledWith(
         expect.stringContaining('error='),
       );
+    });
+
+    it('allows removing the app in a realm that requires MFA while an SMS phone remains', async () => {
+      crypto.verifyPassword.mockResolvedValue(true);
+      mfaService.getEnrolledFactors.mockResolvedValue(['totp', 'sms']);
+
+      await controller.handleTotpDisable(
+        { ...realm, mfaRequired: true } as Realm,
+        { currentPassword: 'right' },
+        mockReqWithSession,
+        mockRes as any,
+      );
+
+      expect(mfaService.disableTotp).toHaveBeenCalledWith('user-1');
     });
 
     it('should redirect with error if no password provided', async () => {

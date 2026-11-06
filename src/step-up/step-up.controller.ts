@@ -303,24 +303,23 @@ export class StepUpController {
         );
       }
 
-      const verified = await this.mfaService.verifyTotp(challenge.userId, otp);
+      const { verified } = await this.mfaService.verifySecondFactor(
+        challenge.userId,
+        { method: 'otp', code: otp },
+      );
       if (!verified) {
-        const recoveryVerified = await this.mfaService.verifyRecoveryCode(
+        await this.bruteForceService.recordTotpFailure(
+          realm,
           challenge.userId,
-          otp,
+          resolveClientIp(req),
         );
-        if (!recoveryVerified) {
-          await this.bruteForceService.recordTotpFailure(
-            realm,
-            challenge.userId,
-            resolveClientIp(req),
-          );
-          throw new UnauthorizedException('Invalid OTP code');
-        }
+        throw new UnauthorizedException('Invalid OTP code');
       }
 
-      // Consume the MFA challenge
-      await this.mfaService.consumeMfaChallenge(mfa_token);
+      // Claim the MFA challenge; a parallel request may have won it
+      if (!(await this.mfaService.consumeMfaChallenge(mfa_token))) {
+        throw new UnauthorizedException('Invalid or expired MFA token');
+      }
 
       // Reset TOTP failure tracking on successful verification
       await this.bruteForceService.resetTotpFailures(
