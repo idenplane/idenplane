@@ -89,7 +89,9 @@ describe('ThemeRenderService', () => {
       const [template, data] = mockRes.render.mock.calls[0];
 
       // Template should be relative to themes dir
-      expect(template).toMatch(/idenplane[/\\]login[/\\]templates[/\\]login\.hbs/);
+      expect(template).toMatch(
+        /idenplane[/\\]login[/\\]templates[/\\]login\.hbs/,
+      );
 
       // Data should include merged colors, messages, and page data
       expect(data.formAction).toBe('/login');
@@ -153,6 +155,45 @@ describe('ThemeRenderService', () => {
 
       const [, data] = mockRes.render.mock.calls[0];
       expect(data.layout).toMatch(/layouts[/\\]main\.hbs/);
+    });
+
+    // hbs reads these render locals as engine configuration (CVE-2021-32822):
+    // page data must never be able to set them.
+    it('drops reserved render locals from page data and keeps its own layout', () => {
+      service.render(
+        mockRes as any,
+        mockRealm,
+        'login',
+        'login',
+        {
+          formAction: '/login',
+          layout: '../../../../etc/passwd',
+          settings: { views: '/' },
+          cache: false,
+          _locals: { layout: '/etc/passwd' },
+        },
+        mockReq as any,
+      );
+
+      const [, data] = mockRes.render.mock.calls[0];
+      expect(data.layout).toMatch(/layouts[/\\]main\.hbs/);
+      expect(data).not.toHaveProperty('settings');
+      expect(data).not.toHaveProperty('cache');
+      expect(data).not.toHaveProperty('_locals');
+      expect(data.formAction).toBe('/login');
+    });
+
+    it('drops reserved render locals coming from theme colors too', () => {
+      themeService.resolveColors.mockReturnValue({
+        primaryColor: '#2563eb',
+        layout: '/etc/passwd',
+      });
+
+      service.render(mockRes as any, mockRealm, 'login', 'login', {});
+
+      const [, data] = mockRes.render.mock.calls[0];
+      expect(data.layout).toMatch(/layouts[/\\]main\.hbs/);
+      expect(data.primaryColor).toBe('#2563eb');
     });
 
     it('should use data.realmName over realm.name when provided', () => {
