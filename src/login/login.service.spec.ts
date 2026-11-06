@@ -646,6 +646,26 @@ describe('LoginService', () => {
       });
     });
 
+    it('records how the session was established', async () => {
+      prisma.loginSession.create.mockResolvedValue({ id: 'session-1' });
+
+      await service.createLoginSession(
+        realm,
+        dbUser,
+        undefined,
+        undefined,
+        undefined,
+        { acr: 'urn:idenplane:acr:mfa', amr: ['pwd', 'otp'] },
+      );
+
+      expect(prisma.loginSession.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          satisfiedAcr: 'urn:idenplane:acr:mfa',
+          amr: ['pwd', 'otp'],
+        }),
+      });
+    });
+
     it('should set expiresAt based on realm.refreshTokenLifespan', async () => {
       prisma.loginSession.create.mockResolvedValue({ id: 'session-1' });
 
@@ -768,6 +788,78 @@ describe('LoginService', () => {
       );
 
       expect(result).toBeNull();
+    });
+
+    // A realm that requires MFA only accepts sessions with a second factor
+    // behind them — this is what keeps a password-only session (made before
+    // enrolment, before this check existed, or before the realm turned MFA on)
+    // from being used for silent SSO, SAML or the account pages.
+    describe('in a realm that requires MFA', () => {
+      const mfaRealm = { ...realm, mfaRequired: true } as typeof realm;
+
+      beforeEach(() => {
+        (prisma as any).stepUpRecord = { findMany: jest.fn() };
+      });
+
+      it('rejects a password-only session', async () => {
+        prisma.loginSession.findUnique.mockResolvedValue({
+          ...validSession,
+          satisfiedAcr: 'urn:idenplane:acr:password',
+        });
+        (prisma as any).stepUpRecord.findMany.mockResolvedValue([]);
+
+        await expect(
+          service.validateLoginSession(mfaRealm, 'raw-session-token'),
+        ).resolves.toBeNull();
+      });
+
+      it('rejects a session with no recorded level (created before it was tracked)', async () => {
+        prisma.loginSession.findUnique.mockResolvedValue({
+          ...validSession,
+          satisfiedAcr: null,
+        });
+        (prisma as any).stepUpRecord.findMany.mockResolvedValue([]);
+
+        await expect(
+          service.validateLoginSession(mfaRealm, 'raw-session-token'),
+        ).resolves.toBeNull();
+      });
+
+      it.each(['urn:idenplane:acr:mfa', 'urn:idenplane:acr:webauthn'])(
+        'accepts a session established at %s without a step-up lookup',
+        async (acr) => {
+          prisma.loginSession.findUnique.mockResolvedValue({
+            ...validSession,
+            satisfiedAcr: acr,
+          });
+
+          await expect(
+            service.validateLoginSession(mfaRealm, 'raw-session-token'),
+          ).resolves.toEqual(dbUser);
+          expect((prisma as any).stepUpRecord.findMany).not.toHaveBeenCalled();
+        },
+      );
+
+      it('accepts a password session that an active MFA step-up has raised', async () => {
+        prisma.loginSession.findUnique.mockResolvedValue({
+          ...validSession,
+          satisfiedAcr: 'urn:idenplane:acr:password',
+        });
+        (prisma as any).stepUpRecord.findMany.mockResolvedValue([
+          { acrLevel: 'urn:idenplane:acr:mfa' },
+        ]);
+
+        await expect(
+          service.validateLoginSession(mfaRealm, 'raw-session-token'),
+        ).resolves.toEqual(dbUser);
+        expect((prisma as any).stepUpRecord.findMany).toHaveBeenCalledWith({
+          where: {
+            sessionId: 'session-1',
+            expiresAt: { gt: expect.any(Date) },
+          },
+          select: { acrLevel: true },
+        });
+      });
     });
   });
 

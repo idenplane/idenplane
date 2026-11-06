@@ -97,7 +97,11 @@ describe('AccountController', () => {
       emailService as any,
     );
 
-    mockRes = { redirect: jest.fn(), cookie: jest.fn(), clearCookie: jest.fn() };
+    mockRes = {
+      redirect: jest.fn(),
+      cookie: jest.fn(),
+      clearCookie: jest.fn(),
+    };
     mockReqWithSession = {
       cookies: { IDENPLANE_SESSION: 'valid-token' },
       query: {},
@@ -151,8 +155,7 @@ describe('AccountController', () => {
       });
       expect(mockRes.cookie).not.toHaveBeenCalled();
       expect(
-        (mockRes as { clearCookie?: jest.Mock }).clearCookie ??
-          jest.fn(),
+        (mockRes as { clearCookie?: jest.Mock }).clearCookie ?? jest.fn(),
       ).toBeDefined(); // tolerate absence in older mocks
       expect(mockRes.redirect).toHaveBeenCalledWith(
         '/realms/test-realm/login?signedOut=1',
@@ -331,6 +334,30 @@ describe('AccountController', () => {
       );
     });
 
+    it('still lets users change their password in a realm that requires MFA', async () => {
+      passwordPolicyService.validate.mockReturnValue({
+        valid: true,
+        errors: [],
+      });
+      crypto.verifyPassword.mockResolvedValue(true);
+      passwordPolicyService.checkHistory.mockResolvedValue(false);
+      crypto.hashPassword.mockResolvedValue('new-hash');
+      prisma.user.update.mockResolvedValue({});
+
+      await controller.changePassword(
+        { ...realm, mfaRequired: true } as Realm,
+        {
+          currentPassword: 'old',
+          newPassword: 'newpass',
+          confirmPassword: 'newpass',
+        },
+        mockReqWithSession,
+        mockRes as any,
+      );
+
+      expect(crypto.hashPassword).toHaveBeenCalledWith('newpass');
+    });
+
     it('should change password successfully', async () => {
       passwordPolicyService.validate.mockReturnValue({
         valid: true,
@@ -364,7 +391,10 @@ describe('AccountController', () => {
     });
 
     it('should send a password-changed security email to the account holder', async () => {
-      passwordPolicyService.validate.mockReturnValue({ valid: true, errors: [] });
+      passwordPolicyService.validate.mockReturnValue({
+        valid: true,
+        errors: [],
+      });
       crypto.verifyPassword.mockResolvedValue(true);
       passwordPolicyService.checkHistory.mockResolvedValue(false);
       crypto.hashPassword.mockResolvedValue('new-hash');
@@ -393,7 +423,10 @@ describe('AccountController', () => {
     });
 
     it('should not fail the password change if the notification email fails to send', async () => {
-      passwordPolicyService.validate.mockReturnValue({ valid: true, errors: [] });
+      passwordPolicyService.validate.mockReturnValue({
+        valid: true,
+        errors: [],
+      });
       crypto.verifyPassword.mockResolvedValue(true);
       passwordPolicyService.checkHistory.mockResolvedValue(false);
       crypto.hashPassword.mockResolvedValue('new-hash');
@@ -422,7 +455,10 @@ describe('AccountController', () => {
         ...sessionUser,
         email: null,
       });
-      passwordPolicyService.validate.mockReturnValue({ valid: true, errors: [] });
+      passwordPolicyService.validate.mockReturnValue({
+        valid: true,
+        errors: [],
+      });
       crypto.verifyPassword.mockResolvedValue(true);
       passwordPolicyService.checkHistory.mockResolvedValue(false);
       crypto.hashPassword.mockResolvedValue('new-hash');
@@ -540,7 +576,146 @@ describe('AccountController', () => {
     });
   });
 
+  // A sign-in paused because the realm requires MFA: no SSO session, only the
+  // enrolment cookie, which unlocks this page and nothing else.
+  describe('required-MFA enrolment', () => {
+    const enrollingUser = { ...sessionUser, id: 'user-2', enabled: true };
+    let reqEnrolling: any;
+
+    beforeEach(() => {
+      (loginService as any).findUserById = jest
+        .fn()
+        .mockResolvedValue(enrollingUser);
+      (mfaService as any).getMfaEnrollment = jest.fn().mockResolvedValue({
+        userId: 'user-2',
+        realmId: 'realm-1',
+        verified: false,
+      });
+      (mfaService as any).markMfaEnrollmentVerified = jest.fn();
+      reqEnrolling = {
+        // A leftover session for someone else must not be what gets enrolled.
+        cookies: {
+          IDENPLANE_MFA_ENROLLMENT: 'enrol-token',
+          IDENPLANE_SESSION: 'valid-token',
+        },
+        query: {},
+        headers: {},
+      };
+    });
+
+    it('shows the setup page for the enrolling user, cancelling back to login', async () => {
+      mfaService.isMfaEnabled.mockResolvedValue(false);
+      mfaService.setupTotp.mockResolvedValue({
+        qrCodeDataUrl: 'data:qr',
+        secret: 'SECRET',
+      });
+
+      await controller.showTotpSetup(realm, reqEnrolling, mockRes as any);
+
+      expect(mfaService.setupTotp).toHaveBeenCalledWith(
+        'user-2',
+        'test-realm',
+        'testuser',
+      );
+      expect(themeRender.render).toHaveBeenCalledWith(
+        mockRes,
+        realm,
+        'account',
+        'totp-setup',
+        expect.objectContaining({ cancelUrl: '/realms/test-realm/login' }),
+        reqEnrolling,
+      );
+    });
+
+    it('ignores an enrolment from another realm', async () => {
+      (mfaService as any).getMfaEnrollment.mockResolvedValue({
+        userId: 'user-2',
+        realmId: 'other-realm',
+      });
+      loginService.validateLoginSession.mockResolvedValue(null);
+
+      await controller.showTotpSetup(realm, reqEnrolling, mockRes as any);
+
+      expect(mockRes.redirect).toHaveBeenCalledWith('/realms/test-realm/login');
+    });
+
+    it('activates TOTP, marks the enrolment verified and offers to continue the sign-in', async () => {
+      mfaService.verifyAndActivateTotp.mockResolvedValue(['R1', 'R2']);
+
+      await controller.handleTotpSetup(
+        realm,
+        { code: '123456' },
+        reqEnrolling,
+        mockRes as any,
+      );
+
+      expect(mfaService.verifyAndActivateTotp).toHaveBeenCalledWith(
+        'user-2',
+        '123456',
+      );
+      expect(
+        (mfaService as any).markMfaEnrollmentVerified,
+      ).toHaveBeenCalledWith('enrol-token');
+      expect(themeRender.render).toHaveBeenCalledWith(
+        mockRes,
+        realm,
+        'account',
+        'totp-setup',
+        expect.objectContaining({
+          activated: true,
+          recoveryCodes: ['R1', 'R2'],
+          continueAction: '/realms/test-realm/mfa-enrollment/continue',
+          csrfToken: 'csrf-token-test',
+        }),
+        reqEnrolling,
+      );
+    });
+
+    it('does not mark the enrolment verified when the code is wrong', async () => {
+      mfaService.verifyAndActivateTotp.mockResolvedValue(null);
+
+      await controller.handleTotpSetup(
+        realm,
+        { code: '000000' },
+        reqEnrolling,
+        mockRes as any,
+      );
+
+      expect(
+        (mfaService as any).markMfaEnrollmentVerified,
+      ).not.toHaveBeenCalled();
+    });
+
+    it('sends the user back to sign in if TOTP was enabled elsewhere meanwhile', async () => {
+      mfaService.isMfaEnabled.mockResolvedValue(true);
+
+      await controller.showTotpSetup(realm, reqEnrolling, mockRes as any);
+
+      expect(mockRes.clearCookie).toHaveBeenCalledWith(
+        'IDENPLANE_MFA_ENROLLMENT',
+        { path: '/realms/test-realm' },
+      );
+      expect(mockRes.redirect).toHaveBeenCalledWith('/realms/test-realm/login');
+    });
+  });
+
   describe('handleTotpDisable', () => {
+    it('refuses to turn off TOTP in a realm that requires MFA', async () => {
+      crypto.verifyPassword.mockResolvedValue(true);
+
+      await controller.handleTotpDisable(
+        { ...realm, mfaRequired: true } as Realm,
+        { currentPassword: 'right' },
+        mockReqWithSession,
+        mockRes as any,
+      );
+
+      expect(mfaService.disableTotp).not.toHaveBeenCalled();
+      expect(mockRes.redirect).toHaveBeenCalledWith(
+        expect.stringContaining('error='),
+      );
+    });
+
     it('should redirect with error if no password provided', async () => {
       await controller.handleTotpDisable(
         realm,

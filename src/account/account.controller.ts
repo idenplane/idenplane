@@ -23,7 +23,7 @@ import { LoginService } from '../login/login.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { PasswordPolicyService } from '../password-policy/password-policy.service.js';
-import { MfaService } from '../mfa/mfa.service.js';
+import { MfaService, MFA_ENROLLMENT_COOKIE } from '../mfa/mfa.service.js';
 import { ThemeRenderService } from '../theme/theme-render.service.js';
 import { WebAuthnService } from '../webauthn/webauthn.service.js';
 import { DataExportService } from './data-export.service.js';
@@ -83,6 +83,36 @@ export class AccountController {
       string | undefined;
     if (!sessionToken) return null;
     return this.loginService.validateLoginSession(realm, sessionToken);
+  }
+
+  /**
+   * Who is setting up TOTP: either a signed-in user, or a user whose sign-in
+   * is paused because the realm requires MFA and they have not enrolled yet
+   * (`enrollmentToken` set). The enrolment is checked first so a stale SSO
+   * cookie for another account can never be what gets enrolled.
+   */
+  private async getTotpSetupUser(realm: Realm, req: Request) {
+    const enrollmentToken = (
+      req.cookies as Record<string, string | undefined>
+    )?.[MFA_ENROLLMENT_COOKIE];
+    if (enrollmentToken) {
+      const enrollment =
+        await this.mfaService.getMfaEnrollment(enrollmentToken);
+      if (enrollment && enrollment.realmId === realm.id) {
+        const user = await this.loginService.findUserById(enrollment.userId);
+        if (user?.enabled) {
+          return {
+            user,
+            enrollmentToken,
+            enrollmentVerified: !!enrollment.verified,
+          };
+        }
+      }
+    }
+    const user = await this.getSessionUser(realm, req);
+    return user
+      ? { user, enrollmentToken: undefined, enrollmentVerified: false }
+      : null;
   }
 
   @Get()
@@ -362,13 +392,38 @@ export class AccountController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    const user = await this.getSessionUser(realm, req);
-    if (!user) {
+    const setupUser = await this.getTotpSetupUser(realm, req);
+    if (!setupUser) {
       return res.redirect(`/realms/${realm.name}/login`);
     }
+    const { user, enrollmentToken, enrollmentVerified } = setupUser;
 
     const query = req.query as Record<string, string>;
     const mfaEnabled = await this.mfaService.isMfaEnabled(user.id);
+    if (enrollmentToken && mfaEnabled) {
+      if (!enrollmentVerified) {
+        // Enrolled somewhere else meanwhile: sign in normally with the code.
+        res.clearCookie(MFA_ENROLLMENT_COOKIE, {
+          path: `/realms/${realm.name}`,
+        });
+        return res.redirect(`/realms/${realm.name}/login`);
+      }
+      // Activated here but the page was reloaded before "Continue".
+      const csrfToken = this.setCsrfCookie(realm, res);
+      return this.themeRender.render(
+        res,
+        realm,
+        'account',
+        'totp-setup',
+        {
+          pageTitle: 'Two-Factor Authentication Enabled',
+          activated: true,
+          continueAction: this.enrollmentContinueAction(realm),
+          csrfToken,
+        },
+        req,
+      );
+    }
     if (mfaEnabled) {
       return res.redirect(
         `/realms/${realm.name}/account?info=${encodeURIComponent('Two-factor authentication is already enabled.')}`,
@@ -394,6 +449,10 @@ export class AccountController {
         error: query['error'] ?? '',
         info: query['info'] ?? '',
         csrfToken,
+        // During required enrolment there is no account to go back to.
+        cancelUrl: enrollmentToken
+          ? `/realms/${realm.name}/login`
+          : `/realms/${realm.name}/account`,
       },
       req,
     );
@@ -409,10 +468,11 @@ export class AccountController {
     @Res() res: Response,
   ) {
     this.validateCsrf(realm, body, req);
-    const user = await this.getSessionUser(realm, req);
-    if (!user) {
+    const setupUser = await this.getTotpSetupUser(realm, req);
+    if (!setupUser) {
       return res.redirect(`/realms/${realm.name}/login`);
     }
+    const { user, enrollmentToken } = setupUser;
 
     const code = body['code'];
     if (!code) {
@@ -431,6 +491,13 @@ export class AccountController {
       );
     }
 
+    if (enrollmentToken) {
+      await this.mfaService.markMfaEnrollmentVerified(enrollmentToken);
+    }
+
+    // After required enrolment the "Done" button finishes the paused sign-in
+    // (a POST, so it carries a fresh CSRF token).
+    const csrfToken = enrollmentToken ? this.setCsrfCookie(realm, res) : '';
     this.themeRender.render(
       res,
       realm,
@@ -440,9 +507,17 @@ export class AccountController {
         pageTitle: 'Two-Factor Authentication Enabled',
         activated: true,
         recoveryCodes,
+        continueAction: enrollmentToken
+          ? this.enrollmentContinueAction(realm)
+          : '',
+        csrfToken,
       },
       req,
     );
+  }
+
+  private enrollmentContinueAction(realm: Realm): string {
+    return `/realms/${realm.name}/mfa-enrollment/continue`;
   }
 
   @Post('totp-disable')
@@ -458,6 +533,12 @@ export class AccountController {
     const user = await this.getSessionUser(realm, req);
     if (!user) {
       return res.redirect(`/realms/${realm.name}/login`);
+    }
+
+    if (realm.mfaRequired) {
+      return res.redirect(
+        `/realms/${realm.name}/account?error=${encodeURIComponent('Two-factor authentication is required in this realm and cannot be turned off.')}`,
+      );
     }
 
     const currentPassword = body['currentPassword'];
