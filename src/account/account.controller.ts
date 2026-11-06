@@ -685,19 +685,32 @@ export class AccountController {
           'Enter the number in international format, for example +201012345678.',
         );
       }
-      if (!enrollmentToken && user.passwordHash) {
-        const valid =
-          !!body['currentPassword'] &&
-          (await this.crypto.verifyPassword(
-            user.passwordHash,
-            body['currentPassword'],
-          ));
-        if (!valid) {
+      if (!enrollmentToken) {
+        if (user.passwordHash) {
+          const valid =
+            !!body['currentPassword'] &&
+            (await this.crypto.verifyPassword(
+              user.passwordHash,
+              body['currentPassword'],
+            ));
+          if (!valid) {
+            return this.smsSetupRedirect(
+              realm,
+              res,
+              'error',
+              'Password is incorrect.',
+            );
+          }
+        } else if (
+          (await this.mfaService.getEnrolledFactors(user.id)).length > 0
+        ) {
+          // No password to confirm with: a session alone must not be able to
+          // swap or add a factor next to an existing one.
           return this.smsSetupRedirect(
             realm,
             res,
             'error',
-            'Password is incorrect.',
+            'Your second factor can only be changed by an administrator for this account.',
           );
         }
       }
@@ -751,6 +764,13 @@ export class AccountController {
       return res.redirect(`/realms/${realm.name}/login`);
     }
     const { user, enrollmentToken } = setupUser;
+    // New phones can't be enrolled once an admin turned SMS MFA off, even if
+    // the code was sent before.
+    if (!SmsOtpService.canEnroll(realm)) {
+      return res.redirect(
+        `/realms/${realm.name}/account?error=${encodeURIComponent('Text message verification is not available.')}`,
+      );
+    }
     const pending = await this.getSmsEnrollment(realm, req, user.id);
     if (!pending) {
       return this.smsSetupRedirect(
@@ -853,15 +873,19 @@ export class AccountController {
       }
     }
 
-    if (user.passwordHash) {
-      const valid =
-        !!body['currentPassword'] &&
-        (await this.crypto.verifyPassword(
-          user.passwordHash,
-          body['currentPassword'],
-        ));
-      if (!valid) return accountError('Password is incorrect.');
+    // Same bar as turning off the authenticator app: a password is required.
+    if (!user.passwordHash) {
+      return accountError(
+        'Your second factor can only be changed by an administrator for this account.',
+      );
     }
+    const valid =
+      !!body['currentPassword'] &&
+      (await this.crypto.verifyPassword(
+        user.passwordHash,
+        body['currentPassword'],
+      ));
+    if (!valid) return accountError('Password is incorrect.');
 
     await this.mfaService.disableSms(user.id);
     return res.redirect(

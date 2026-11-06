@@ -137,7 +137,7 @@ export class StepUpController {
         status: 'challenge_required',
         // Kept for existing clients: the preferred factor. `methods` lists
         // every factor the user can answer with ('sms' needs POST /sms first).
-        challenge_type: methods.includes('totp') ? 'totp' : 'sms',
+        challenge_type: methods[0],
         methods,
         acr: requiredAcr,
         mfa_token: mfaToken,

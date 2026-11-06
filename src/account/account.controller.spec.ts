@@ -899,6 +899,74 @@ describe('AccountController', () => {
       expect(smsOtp.verifyCode).not.toHaveBeenCalled();
     });
 
+    it('refuses to add a phone next to an existing factor for a user without a password', async () => {
+      loginService.validateLoginSession.mockResolvedValue({
+        ...sessionUser,
+        passwordHash: null,
+      });
+      mfaService.getEnrolledFactors.mockResolvedValue(['totp']);
+
+      await controller.sendSmsSetupCode(
+        smsRealm,
+        { phone: '+201012345678' },
+        mockReqWithSession,
+        mockRes as any,
+      );
+
+      expect(smsOtp.startEnrollment).not.toHaveBeenCalled();
+      expect(smsOtp.sendCode).not.toHaveBeenCalled();
+    });
+
+    it('lets a user without a password enrol a first factor', async () => {
+      loginService.validateLoginSession.mockResolvedValue({
+        ...sessionUser,
+        passwordHash: null,
+      });
+      mfaService.getEnrolledFactors.mockResolvedValue([]);
+
+      await controller.sendSmsSetupCode(
+        smsRealm,
+        { phone: '+201012345678' },
+        mockReqWithSession,
+        mockRes as any,
+      );
+
+      expect(smsOtp.sendCode).toHaveBeenCalled();
+    });
+
+    it('refuses to remove the phone of a user without a password', async () => {
+      loginService.validateLoginSession.mockResolvedValue({
+        ...sessionUser,
+        passwordHash: null,
+      });
+
+      await controller.handleSmsDisable(
+        smsRealm,
+        {},
+        mockReqWithSession,
+        mockRes as any,
+      );
+
+      expect((mfaService as any).disableSms).not.toHaveBeenCalled();
+    });
+
+    it('does not enrol a phone after an admin turned SMS MFA off', async () => {
+      const req = {
+        ...mockReqWithSession,
+        cookies: { ...mockReqWithSession.cookies, IDENPLANE_SMS_ENROLL: 'enrol-token' },
+      };
+
+      await controller.verifySmsSetupCode(
+        { ...smsRealm, smsMfaEnabled: false } as Realm,
+        { code: '123456' },
+        req,
+        mockRes as any,
+      );
+
+      expect(smsOtp.verifyCode).not.toHaveBeenCalled();
+      expect(smsOtp.saveEnrolledPhone).not.toHaveBeenCalled();
+    });
+
     it('refuses to turn SMS off when it is the last factor in a realm that requires MFA', async () => {
       mfaService.getEnrolledFactors.mockResolvedValue(['sms']);
 
