@@ -17,6 +17,7 @@ import {
 import { BruteForceService } from '../brute-force/brute-force.service.js';
 import { PasswordPolicyService } from '../password-policy/password-policy.service.js';
 import { MfaService } from '../mfa/mfa.service.js';
+import { SmsOtpService, SmsOtpError } from '../sms/sms-otp.service.js';
 import { EventsService } from '../events/events.service.js';
 import { MetricsService } from '../metrics/metrics.service.js';
 import { LoginEventType } from '../events/event-types.js';
@@ -65,6 +66,7 @@ export class AuthService {
     private readonly userFederationService: UserFederationService,
     @Optional() private readonly stepUpService?: StepUpService,
     @Optional() private readonly pluginManager?: PluginManagerService,
+    @Optional() private readonly smsOtp?: SmsOtpService,
   ) {}
 
   async handleTokenRequest(
@@ -251,6 +253,10 @@ export class AuthService {
           error_description:
             'MFA verification is required to complete authentication',
           mfa_token: mfaToken,
+          // Factors the user can answer with. For 'sms', request a code via
+          // POST .../protocol/openid-connect/mfa/sms, then send it with
+          // mfa_method=sms on the mfa_otp grant.
+          mfa_methods: await this.availableMfaMethods(realm, user.id),
         },
         HttpStatus.UNAUTHORIZED,
       );
@@ -315,6 +321,7 @@ export class AuthService {
     userAgent?: string,
   ): Promise<TokenResponse> {
     const { client_id, client_secret, mfa_token, otp, scope } = body;
+    const smsMethod = body['mfa_method'] === 'sms';
 
     // The MFA OTP grant is a custom extension — pass the registered grant-type
     // URN so that clients configured with `urn:ietf:params:oauth:grant-type:mfa-otp`
@@ -372,10 +379,18 @@ export class AuthService {
       );
     }
 
-    // Authenticator code, then recovery code.
-    const { verified } = await this.mfaService.verifySecondFactor(
+    // A texted code (mfa_method=sms), or an authenticator then recovery code.
+    const { verified, factor } = await this.mfaService.verifySecondFactor(
       challenge.userId,
-      { method: 'otp', code: otp },
+      smsMethod
+        ? {
+            method: 'sms',
+            code: otp,
+            realmId: realm.id,
+            purpose: 'login',
+            binding: mfa_token,
+          }
+        : { method: 'otp', code: otp },
     );
     if (!verified) {
       void this.eventsService.recordLoginEvent({
@@ -421,7 +436,7 @@ export class AuthService {
         userAgent,
         // Persist so a later refresh preserves the MFA-level context.
         satisfiedAcr: ACR_MFA,
-        amr: ['pwd', 'otp'],
+        amr: ['pwd', factor === 'sms' ? 'sms' : 'otp'],
         expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
       },
     });
@@ -999,6 +1014,104 @@ export class AuthService {
       undefined,
       new Date(),
     );
+  }
+
+  /** Second factors a user can answer an API MFA challenge with. */
+  private async availableMfaMethods(
+    realm: Realm,
+    userId: string,
+  ): Promise<string[]> {
+    const factors = await this.mfaService.getEnrolledFactors(userId);
+    const methods: string[] = [];
+    if (factors.includes('totp')) methods.push('totp');
+    if (factors.includes('sms') && SmsOtpService.canDeliver(realm)) {
+      methods.push('sms');
+    }
+    methods.push('recovery');
+    return methods;
+  }
+
+  /**
+   * Text a code for an API MFA challenge (from the password grant's
+   * `mfa_required` response) to the user's enrolled phone. The client must
+   * authenticate as for the mfa_otp grant, and the code only answers that
+   * challenge.
+   */
+  async sendMfaSms(
+    realm: Realm,
+    body: Record<string, string>,
+    ip?: string,
+  ): Promise<{
+    masked_phone: string;
+    expires_in: number;
+    resend_after: number;
+  }> {
+    const { client_id, client_secret, mfa_token } = body;
+    await this.validateClient(
+      realm,
+      client_id,
+      client_secret,
+      'urn:ietf:params:oauth:grant-type:mfa-otp',
+    );
+    if (!mfa_token) {
+      throw new OAuthTokenError(
+        'invalid_request',
+        'mfa_token is required',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    const challenge = await this.mfaService.getMfaChallenge(mfa_token);
+    if (
+      !challenge ||
+      challenge.realmId !== realm.id ||
+      (challenge.clientId && challenge.clientId !== client_id)
+    ) {
+      throw new OAuthTokenError(
+        'invalid_grant',
+        'Invalid or expired MFA token, or too many failed attempts',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    if (!this.smsOtp) {
+      throw new OAuthTokenError(
+        'invalid_request',
+        'Text message verification is not available.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+    try {
+      const sent = await this.smsOtp.sendCode({
+        realm,
+        userId: challenge.userId,
+        purpose: 'login',
+        binding: mfa_token,
+        ip,
+      });
+      const now = Date.now();
+      return {
+        masked_phone: sent.maskedPhone,
+        expires_in: Math.round((sent.expiresAt.getTime() - now) / 1000),
+        resend_after: Math.max(
+          0,
+          Math.round((sent.resendAvailableAt.getTime() - now) / 1000),
+        ),
+      };
+    } catch (err) {
+      if (err instanceof SmsOtpError) {
+        throw new OAuthTokenError(
+          err.code === 'cooldown' || err.code === 'rate_limited'
+            ? 'slow_down'
+            : 'invalid_request',
+          err.message,
+          err.code === 'send_failed'
+            ? HttpStatus.SERVICE_UNAVAILABLE
+            : err.code === 'cooldown' || err.code === 'rate_limited'
+              ? HttpStatus.TOO_MANY_REQUESTS
+              : HttpStatus.BAD_REQUEST,
+        );
+      }
+      throw err;
+    }
   }
 
   private async validateClient(

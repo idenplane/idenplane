@@ -21,6 +21,7 @@ import {
 } from './step-up.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { MfaService } from '../mfa/mfa.service.js';
+import { SmsOtpService, SmsOtpError } from '../sms/sms-otp.service.js';
 import { LoginService } from '../login/login.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { WebAuthnService } from '../webauthn/webauthn.service.js';
@@ -45,6 +46,7 @@ export class StepUpController {
     private readonly crypto: CryptoService,
     private readonly webAuthnService: WebAuthnService,
     private readonly bruteForceService: BruteForceService,
+    private readonly smsOtp: SmsOtpService,
   ) {}
 
   /**
@@ -130,9 +132,13 @@ export class StepUpController {
         user.id,
         realm.id,
       );
+      const methods = await this.availableMethods(realm, user.id);
       return {
         status: 'challenge_required',
-        challenge_type: 'totp',
+        // Kept for existing clients: the preferred factor. `methods` lists
+        // every factor the user can answer with ('sms' needs POST /sms first).
+        challenge_type: methods.includes('totp') ? 'totp' : 'sms',
+        methods,
         acr: requiredAcr,
         mfa_token: mfaToken,
       };
@@ -177,6 +183,96 @@ export class StepUpController {
   }
 
   /**
+   * POST /realms/:realm/step-up/sms
+   *
+   * Texts a code for an MFA step-up challenge to the session user's enrolled
+   * phone. The code only answers that challenge (`mfa_token`).
+   */
+  @Post('sms')
+  @ApiOperation({ summary: 'Send an SMS code for an MFA step-up challenge' })
+  @ApiResponse({
+    status: 201,
+    description: 'Code sent; returns the masked number',
+  })
+  @ApiResponse({
+    status: 400,
+    description: 'SMS not available, or too many codes requested',
+  })
+  @ApiResponse({ status: 401, description: 'Invalid session or MFA token' })
+  async sendSms(
+    @CurrentRealm() realm: Realm,
+    @Body() body: { mfa_token?: string },
+    @Req() req: Request,
+  ) {
+    // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-member-access -- express Request.cookies typed as any
+    const sessionToken: string | undefined = (req as any).cookies
+      ?.IDENPLANE_SESSION;
+    const mfaToken = body?.mfa_token;
+    if (!sessionToken || !mfaToken) {
+      throw new BadRequestException(
+        'mfa_token is required; session must be provided via the IDENPLANE_SESSION cookie',
+      );
+    }
+    const user = await this.loginService.validateLoginSession(
+      realm,
+      sessionToken,
+    );
+    if (!user) {
+      throw new UnauthorizedException('Invalid or expired session');
+    }
+    const challenge = await this.mfaService.getMfaChallenge(mfaToken);
+    if (
+      !challenge ||
+      challenge.userId !== user.id ||
+      challenge.realmId !== realm.id
+    ) {
+      throw new UnauthorizedException('Invalid or expired MFA token');
+    }
+
+    try {
+      const sent = await this.smsOtp.sendCode({
+        realm,
+        userId: user.id,
+        purpose: 'step_up',
+        binding: mfaToken,
+        ip: resolveClientIp(req),
+      });
+      return {
+        status: 'sent',
+        masked_phone: sent.maskedPhone,
+        expires_at: sent.expiresAt.toISOString(),
+        resend_available_at: sent.resendAvailableAt.toISOString(),
+      };
+    } catch (err) {
+      if (err instanceof SmsOtpError) {
+        throw new BadRequestException({
+          error: err.code,
+          message: err.message,
+          ...(err.retryAfterSeconds
+            ? { retry_after: err.retryAfterSeconds }
+            : {}),
+        });
+      }
+      throw err;
+    }
+  }
+
+  /** Second factors the user can answer a challenge with right now. */
+  private async availableMethods(
+    realm: Realm,
+    userId: string,
+  ): Promise<string[]> {
+    const factors = await this.mfaService.getEnrolledFactors(userId);
+    const methods: string[] = [];
+    if (factors.includes('totp')) methods.push('totp');
+    if (factors.includes('sms') && SmsOtpService.canDeliver(realm)) {
+      methods.push('sms');
+    }
+    methods.push('recovery');
+    return methods;
+  }
+
+  /**
    * POST /realms/:realm/step-up/verify
    *
    * Completes a step-up verification.  Accepts TOTP/OTP codes for MFA
@@ -206,6 +302,8 @@ export class StepUpController {
       client_id: string;
       mfa_token?: string;
       otp?: string;
+      /** 'sms' when `otp` is a texted code; otherwise authenticator/recovery. */
+      method?: string;
       password?: string;
       // WebAuthn assertion fields (AuthenticationResponseJSON shape)
       id?: string;
@@ -303,9 +401,17 @@ export class StepUpController {
         );
       }
 
-      const { verified } = await this.mfaService.verifySecondFactor(
+      const { verified, factor } = await this.mfaService.verifySecondFactor(
         challenge.userId,
-        { method: 'otp', code: otp },
+        body.method === 'sms'
+          ? {
+              method: 'sms',
+              code: otp,
+              realmId: realm.id,
+              purpose: 'step_up',
+              binding: mfa_token,
+            }
+          : { method: 'otp', code: otp },
       );
       if (!verified) {
         await this.bruteForceService.recordTotpFailure(
@@ -337,9 +443,10 @@ export class StepUpController {
       return {
         status: 'success',
         acr: ACR_MFA,
-        // RFC 8176 vocabulary: 'otp' (matches the mfa-otp token grant). The
-        // session already proved 'pwd', so a completed TOTP step-up is pwd+otp.
-        amr: ['pwd', 'otp'],
+        // RFC 8176 vocabulary: 'otp' for an authenticator or recovery code
+        // (matches the mfa-otp token grant), 'sms' for a texted code. The
+        // session already proved 'pwd'.
+        amr: ['pwd', factor === 'sms' ? 'sms' : 'otp'],
       };
     }
 

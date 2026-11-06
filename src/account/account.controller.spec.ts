@@ -6,6 +6,7 @@ import {
 } from '../prisma/prisma.mock.js';
 
 describe('AccountController', () => {
+  let smsOtp: Record<string, jest.Mock>;
   let controller: AccountController;
   let loginService: { validateLoginSession: jest.Mock };
   let prisma: MockPrismaService;
@@ -87,6 +88,18 @@ describe('AccountController', () => {
       cookieName: jest.fn().mockReturnValue('XSRF-TOKEN-test'),
     };
 
+    smsOtp = {
+      getEnrolledPhone: jest.fn().mockResolvedValue(null),
+      getEnrollment: jest.fn().mockResolvedValue(null),
+      startEnrollment: jest.fn().mockResolvedValue('enrol-token'),
+      setEnrollmentPhone: jest.fn(),
+      endEnrollment: jest.fn(),
+      enrollmentPhone: jest.fn(),
+      sendCode: jest.fn().mockResolvedValue({ maskedPhone: '+20••••••5678' }),
+      verifyCode: jest.fn(),
+      saveEnrolledPhone: jest.fn(),
+    };
+
     controller = new AccountController(
       loginService as any,
       prisma as any,
@@ -99,6 +112,7 @@ describe('AccountController', () => {
       undefined as any, // accountDeletionService — not exercised in these tests
       csrfService as any,
       emailService as any,
+      smsOtp as any,
     );
 
     mockRes = {
@@ -700,6 +714,215 @@ describe('AccountController', () => {
         { path: '/realms/test-realm' },
       );
       expect(mockRes.redirect).toHaveBeenCalledWith('/realms/test-realm/login');
+    });
+  });
+
+  describe('SMS phone enrolment', () => {
+    const smsRealm = {
+      ...realm,
+      smsMfaEnabled: true,
+      smsProvider: 'twilio',
+    } as any as Realm;
+
+    beforeEach(() => {
+      (mfaService as any).ensureRecoveryCodes = jest
+        .fn()
+        .mockResolvedValue(['R1']);
+      (mfaService as any).markMfaEnrollmentVerified = jest.fn();
+      (mfaService as any).disableSms = jest.fn();
+    });
+
+    it('refuses the setup page when SMS MFA is off', async () => {
+      await controller.showSmsSetup(
+        { ...smsRealm, smsMfaEnabled: false } as Realm,
+        mockReqWithSession,
+        mockRes as any,
+      );
+
+      expect(mockRes.redirect).toHaveBeenCalledWith(
+        expect.stringContaining('/account?error='),
+      );
+      expect(themeRender.render).not.toHaveBeenCalled();
+    });
+
+    it('asks a signed-in user for their password', async () => {
+      await controller.showSmsSetup(smsRealm, mockReqWithSession, mockRes as any);
+
+      expect(themeRender.render).toHaveBeenCalledWith(
+        mockRes,
+        smsRealm,
+        'account',
+        'sms-setup',
+        expect.objectContaining({ requirePassword: true, verifyStep: false }),
+        mockReqWithSession,
+      );
+    });
+
+    it('does not text anything when the password is wrong', async () => {
+      crypto.verifyPassword.mockResolvedValue(false);
+
+      await controller.sendSmsSetupCode(
+        smsRealm,
+        { phone: '+201012345678', currentPassword: 'wrong' },
+        mockReqWithSession,
+        mockRes as any,
+      );
+
+      expect(smsOtp.sendCode).not.toHaveBeenCalled();
+      expect(smsOtp.startEnrollment).not.toHaveBeenCalled();
+    });
+
+    it('rejects a malformed number before anything is sent', async () => {
+      await controller.sendSmsSetupCode(
+        smsRealm,
+        { phone: '0101', currentPassword: 'right' },
+        mockReqWithSession,
+        mockRes as any,
+      );
+
+      expect(smsOtp.sendCode).not.toHaveBeenCalled();
+      expect(mockRes.redirect).toHaveBeenCalledWith(
+        expect.stringContaining('sms-setup?error='),
+      );
+    });
+
+    it('starts a fresh enrolment and texts the normalised number', async () => {
+      crypto.verifyPassword.mockResolvedValue(true);
+
+      await controller.sendSmsSetupCode(
+        smsRealm,
+        { phone: '+20 101 234 5678', currentPassword: 'right' },
+        mockReqWithSession,
+        mockRes as any,
+      );
+
+      expect(smsOtp.startEnrollment).toHaveBeenCalledWith('user-1', 'realm-1');
+      expect(mockRes.cookie).toHaveBeenCalledWith(
+        'IDENPLANE_SMS_ENROLL',
+        'enrol-token',
+        expect.objectContaining({ httpOnly: true, secure: true }),
+      );
+      expect(smsOtp.sendCode).toHaveBeenCalledWith(
+        expect.objectContaining({
+          purpose: 'enroll',
+          binding: 'enrol-token',
+          phone: '+201012345678',
+          userId: 'user-1',
+        }),
+      );
+      expect(smsOtp.setEnrollmentPhone).toHaveBeenCalledWith(
+        'enrol-token',
+        '+201012345678',
+      );
+    });
+
+    it('enrols the phone only after the code is confirmed', async () => {
+      smsOtp.getEnrollment.mockResolvedValue({
+        userId: 'user-1',
+        realmId: 'realm-1',
+        maskedPhone: '+20••••••5678',
+      });
+      smsOtp.verifyCode.mockResolvedValue({ ok: true, phone: '+201012345678' });
+      const req = {
+        ...mockReqWithSession,
+        cookies: { ...mockReqWithSession.cookies, IDENPLANE_SMS_ENROLL: 'enrol-token' },
+      };
+
+      await controller.verifySmsSetupCode(
+        smsRealm,
+        { code: '123456' },
+        req,
+        mockRes as any,
+      );
+
+      expect(smsOtp.verifyCode).toHaveBeenCalledWith(
+        expect.objectContaining({ purpose: 'enroll', binding: 'enrol-token' }),
+      );
+      expect(smsOtp.saveEnrolledPhone).toHaveBeenCalledWith(
+        'user-1',
+        '+201012345678',
+      );
+      expect(smsOtp.endEnrollment).toHaveBeenCalledWith('enrol-token');
+      expect(themeRender.render).toHaveBeenCalledWith(
+        mockRes,
+        smsRealm,
+        'account',
+        'sms-setup',
+        expect.objectContaining({ activated: true, recoveryCodes: ['R1'] }),
+        req,
+      );
+    });
+
+    it('keeps the old number when the code is wrong', async () => {
+      smsOtp.getEnrollment.mockResolvedValue({
+        userId: 'user-1',
+        realmId: 'realm-1',
+      });
+      smsOtp.verifyCode.mockResolvedValue({
+        ok: false,
+        reason: 'invalid',
+        remainingAttempts: 4,
+      });
+      const req = {
+        ...mockReqWithSession,
+        cookies: { ...mockReqWithSession.cookies, IDENPLANE_SMS_ENROLL: 'enrol-token' },
+      };
+
+      await controller.verifySmsSetupCode(
+        smsRealm,
+        { code: '000000' },
+        req,
+        mockRes as any,
+      );
+
+      expect(smsOtp.saveEnrolledPhone).not.toHaveBeenCalled();
+      expect(smsOtp.endEnrollment).not.toHaveBeenCalled();
+    });
+
+    it("ignores another user's enrolment cookie", async () => {
+      smsOtp.getEnrollment.mockResolvedValue({
+        userId: 'someone-else',
+        realmId: 'realm-1',
+      });
+      const req = {
+        ...mockReqWithSession,
+        cookies: { ...mockReqWithSession.cookies, IDENPLANE_SMS_ENROLL: 'enrol-token' },
+      };
+
+      await controller.verifySmsSetupCode(
+        smsRealm,
+        { code: '123456' },
+        req,
+        mockRes as any,
+      );
+
+      expect(smsOtp.verifyCode).not.toHaveBeenCalled();
+    });
+
+    it('refuses to turn SMS off when it is the last factor in a realm that requires MFA', async () => {
+      mfaService.getEnrolledFactors.mockResolvedValue(['sms']);
+
+      await controller.handleSmsDisable(
+        { ...smsRealm, mfaRequired: true } as Realm,
+        { currentPassword: 'right' },
+        mockReqWithSession,
+        mockRes as any,
+      );
+
+      expect((mfaService as any).disableSms).not.toHaveBeenCalled();
+    });
+
+    it('turns SMS off after the password is confirmed', async () => {
+      crypto.verifyPassword.mockResolvedValue(true);
+
+      await controller.handleSmsDisable(
+        smsRealm,
+        { currentPassword: 'right' },
+        mockReqWithSession,
+        mockRes as any,
+      );
+
+      expect((mfaService as any).disableSms).toHaveBeenCalledWith('user-1');
     });
   });
 

@@ -1055,7 +1055,7 @@ describe('MfaService', () => {
 
       expect(prisma.pendingAction.update).toHaveBeenCalledWith({
         where: { id: 'pa-1' },
-        data: { data: { userId: 'u1', verified: true } },
+        data: { data: { userId: 'u1', verified: true, factor: 'totp' } },
       });
     });
 
@@ -1097,7 +1097,7 @@ describe('MfaService', () => {
 
       expect(prisma.pendingAction.deleteMany).toHaveBeenCalledWith({
         where: {
-          type: { in: ['mfa_challenge', 'mfa_enrollment'] },
+          type: { in: ['mfa_challenge', 'mfa_enrollment', 'sms_enrollment'] },
           expiresAt: { lt: expect.any(Date) },
         },
       });

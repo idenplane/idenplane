@@ -55,6 +55,12 @@
   <button type="submit" class="btn-primary">{{msg "totpSetupVerifyActivate"}}</button>
 </form>
 
+{{#if smsSetupUrl}}
+<div style="margin-top: 1rem; text-align: center;">
+  <a href="{{smsSetupUrl}}" style="color: #2563eb; font-size: 0.85rem;">{{msg "totpSetupUseSms"}}</a>
+</div>
+{{/if}}
+
 <div style="margin-top: 1rem; text-align: center;">
   <a href="{{#if cancelUrl}}{{cancelUrl}}{{else}}/realms/{{realmName}}/account{{/if}}" style="color: #6b7280; font-size: 0.85rem;">{{msg "totpSetupCancel"}}</a>
 </div>

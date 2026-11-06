@@ -20,6 +20,28 @@ export const SMS_OTP_RESEND_COOLDOWN_SECONDS = 30;
 export const SMS_OTP_MAX_SENDS_PER_IP = 10;
 /** Realm-wide sends per hour; caps the cost of an SMS-pumping attack. */
 const DEFAULT_REALM_HOURLY_LIMIT = 1000;
+/**
+ * Spent or expired codes are kept this long before cleanup. It must outlive
+ * every flow token a code can be bound to (sign-in challenge 5 min, phone
+ * enrolment 10 min); otherwise deleting the row would hand an attacker a
+ * fresh guess budget for the same challenge.
+ */
+const OTP_ROW_RETENTION_MS = 30 * 60 * 1000;
+
+/** Cookie holding the token of an in-progress phone enrolment. */
+export const SMS_ENROLLMENT_COOKIE = 'IDENPLANE_SMS_ENROLL';
+export const SMS_ENROLLMENT_TTL_SECONDS = 10 * 60;
+
+/** A phone being added or changed on the account page. */
+export interface SmsEnrollmentData {
+  userId: string;
+  realmId: string;
+  /** Set once a code was sent: where it went, for the "enter the code" page. */
+  maskedPhone?: string;
+  /** The number being added, encrypted; lets "send again" reuse it. */
+  phoneEncrypted?: string;
+}
+
 /** Delivery logs older than this are deleted. */
 const DELIVERY_LOG_RETENTION_DAYS = 90;
 
@@ -211,6 +233,67 @@ export class SmsOtpService {
       where: { userId, type: 'sms' },
     });
     await this.prisma.otpAttempt.deleteMany({ where: { userId } });
+  }
+
+  // ── Phone enrolment session ───────────────────────────────
+
+  /**
+   * Start adding or changing a phone. The returned token is the binding for
+   * its codes; it is short-lived and single-purpose, so the guess budget of
+   * an enrolment can't be refreshed by reusing a long-lived session.
+   */
+  async startEnrollment(userId: string, realmId: string): Promise<string> {
+    const token = this.crypto.generateSecret(32);
+    const data: SmsEnrollmentData = { userId, realmId };
+    await this.prisma.pendingAction.create({
+      data: {
+        tokenHash: this.crypto.sha256(token),
+        type: 'sms_enrollment',
+        data: data as unknown as Prisma.InputJsonValue,
+        expiresAt: new Date(Date.now() + SMS_ENROLLMENT_TTL_SECONDS * 1000),
+      },
+    });
+    return token;
+  }
+
+  async getEnrollment(token: string): Promise<SmsEnrollmentData | null> {
+    const action = await this.prisma.pendingAction.findUnique({
+      where: { tokenHash: this.crypto.sha256(token) },
+    });
+    if (!action || action.type !== 'sms_enrollment') return null;
+    if (action.expiresAt < new Date()) return null;
+    return action.data as unknown as SmsEnrollmentData;
+  }
+
+  /** Remember which (normalised) number this enrolment is texting. */
+  async setEnrollmentPhone(token: string, phone: string): Promise<void> {
+    const enrollment = await this.getEnrollment(token);
+    if (!enrollment) return;
+    const data: SmsEnrollmentData = {
+      ...enrollment,
+      maskedPhone: SmsOtpService.maskPhone(phone),
+      phoneEncrypted: this.crypto.encrypt(phone),
+    };
+    await this.prisma.pendingAction.update({
+      where: { tokenHash: this.crypto.sha256(token) },
+      data: { data: data as unknown as Prisma.InputJsonValue },
+    });
+  }
+
+  /** The number an enrolment is texting, or null if none was sent yet. */
+  enrollmentPhone(enrollment: SmsEnrollmentData): string | null {
+    if (!enrollment.phoneEncrypted) return null;
+    try {
+      return this.crypto.decrypt(enrollment.phoneEncrypted);
+    } catch {
+      return null;
+    }
+  }
+
+  async endEnrollment(token: string): Promise<void> {
+    await this.prisma.pendingAction.deleteMany({
+      where: { tokenHash: this.crypto.sha256(token), type: 'sms_enrollment' },
+    });
   }
 
   // ── Sending ───────────────────────────────────────────────
@@ -594,7 +677,7 @@ export class SmsOtpService {
   @Interval(300_000)
   async cleanup(): Promise<void> {
     const { count } = await this.prisma.otpAttempt.deleteMany({
-      where: { expiresAt: { lt: new Date() } },
+      where: { expiresAt: { lt: new Date(Date.now() - OTP_ROW_RETENTION_MS) } },
     });
     if (count > 0) this.logger.debug(`Removed ${count} expired SMS codes`);
 

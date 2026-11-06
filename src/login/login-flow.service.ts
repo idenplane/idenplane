@@ -16,6 +16,7 @@ import {
   MFA_ENROLLMENT_TTL_SECONDS,
 } from '../mfa/mfa.service.js';
 import { ACR_PASSWORD } from '../step-up/step-up.service.js';
+import type { VerifiedFactor } from '../mfa/mfa.service.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 
 export const MFA_CHALLENGE_COOKIE = 'IDENPLANE_MFA_CHALLENGE';
@@ -203,5 +204,16 @@ export class LoginFlowService {
   /** The methods to record once TOTP completes a sign-in (RFC 8176). */
   static amrWithOtp(primaryAmr: string[] | undefined): string[] {
     return [...(primaryAmr ?? ['pwd']), 'otp'];
+  }
+
+  /**
+   * RFC 8176 methods after a second factor: `sms` for a texted code, `otp`
+   * for an authenticator or recovery code.
+   */
+  static amrForFactor(
+    primaryAmr: string[] | undefined,
+    factor: VerifiedFactor | undefined,
+  ): string[] {
+    return [...(primaryAmr ?? ['pwd']), factor === 'sms' ? 'sms' : 'otp'];
   }
 }

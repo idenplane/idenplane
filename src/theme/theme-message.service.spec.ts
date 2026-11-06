@@ -91,6 +91,21 @@ describe('ThemeMessageService', () => {
       expect(messages['url']).toBe('https://example.com?a=1&b=2');
     });
 
+    it('fills keys the locale has not translated from English', () => {
+      themeService.getInheritanceChain.mockReturnValue(['base']);
+
+      // 'de' file exists with one key; the 'en' file has two.
+      mockedExistsSync.mockReturnValue(true);
+      mockedReadFileSync
+        .mockReturnValueOnce('greeting=Hallo')
+        .mockReturnValueOnce('greeting=Hello\nfarewell=Goodbye');
+
+      const messages = service.getMessages('base', 'login', 'de');
+
+      expect(messages['greeting']).toBe('Hallo');
+      expect(messages['farewell']).toBe('Goodbye');
+    });
+
     it('should fall back to English when locale has no messages', () => {
       themeService.getInheritanceChain.mockReturnValue(['base']);
 

@@ -388,29 +388,33 @@ export default function SmsProviderForm({ realm }: SmsProviderFormProps) {
       <div className="rounded-lg border border-line bg-surface p-6 shadow-sm">
         <div className="flex items-start justify-between">
           <div>
-            <h2 className="flex items-center gap-2 text-lg font-semibold text-fg">
+            <h2 className="text-lg font-semibold text-fg">
               SMS Multi-Factor Authentication
-              <span className="rounded-full bg-active px-2 py-0.5 text-xs font-medium text-muted">
-                Coming soon
-              </span>
             </h2>
             <p className="mt-1 text-sm text-subtle">
-              Users will receive a one-time code via SMS as a second factor during login.
-              The login step isn&apos;t available yet, so this can&apos;t be switched on.
-              You can already configure and save the SMS provider below.
+              Users can add a phone number in their account settings and receive a
+              one-time code by text message as a second factor when they sign in.
+              Turning this off stops new phones from being added; users who already
+              added one keep signing in with it.
             </p>
+            {!hasProvider && (
+              <p className="mt-2 text-sm text-warning-fg">
+                Choose an SMS provider below before turning this on.
+              </p>
+            )}
           </div>
-          {/* Read-only until SMS enrollment + the login challenge ship: switching
-              it on today would promise a second factor that is never asked for. */}
           <button
             type="button"
             role="switch"
             aria-checked={form.smsMfaEnabled}
             aria-label="Enable SMS multi-factor authentication"
-            disabled
-            title="Coming soon"
+            // Codes need a provider to be delivered; it can always be turned off.
+            disabled={!hasProvider && !form.smsMfaEnabled}
+            onClick={() =>
+              setForm((f) => ({ ...f, smsMfaEnabled: !f.smsMfaEnabled }))
+            }
             className={[
-              'relative inline-flex h-6 w-11 shrink-0 cursor-not-allowed rounded-full border-2 border-transparent opacity-50 transition-colors focus:outline-none',
+              'relative inline-flex h-6 w-11 shrink-0 cursor-pointer rounded-full border-2 border-transparent transition-colors focus:outline-none focus-visible:ring-2 focus-visible:ring-accent disabled:cursor-not-allowed disabled:opacity-50',
               form.smsMfaEnabled ? 'bg-accent' : 'bg-active',
             ].join(' ')}
           >
@@ -436,7 +440,14 @@ export default function SmsProviderForm({ realm }: SmsProviderFormProps) {
         <ProviderSelectorGrid
           options={PROVIDERS}
           value={form.smsProvider}
-          onChange={(v) => setForm((f) => ({ ...f, smsProvider: v }))}
+          onChange={(v) =>
+            setForm((f) => ({
+              ...f,
+              smsProvider: v,
+              // Without a provider no code can be delivered.
+              smsMfaEnabled: v === 'none' ? false : f.smsMfaEnabled,
+            }))
+          }
           columnsClassName="grid-cols-3 sm:grid-cols-5"
         />
 
