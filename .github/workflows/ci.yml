@@ -568,6 +568,13 @@ jobs:
         if: matrix.example == 'nextjs-quickstart'
         run: npm run build
 
+      # Lint had been broken here unnoticed (the removed `next lint`, then a
+      # TypeScript major typescript-eslint did not support) because nothing
+      # ran it.
+      - name: Lint (nextjs-quickstart only)
+        if: matrix.example == 'nextjs-quickstart'
+        run: npm run lint
+
       - name: Verify the SDK resolved with a real dist/ (vanilla-js-quickstart only)
         if: matrix.example == 'vanilla-js-quickstart'
         run: test -f node_modules/idenplane-sdk/dist/index.js
