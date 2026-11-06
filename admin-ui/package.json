@@ -48,7 +48,8 @@
     "vitest": "^5.1.0"
   },
   "overrides": {
-    "@babel/core": "^7.29.6"
+    "@babel/core": "^7.29.6",
+    "minimatch@^10": "^11.0.1"
   },
   "engines": {
     "node": ">=22.22.0"

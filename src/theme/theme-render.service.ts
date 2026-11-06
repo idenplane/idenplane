@@ -38,6 +38,26 @@ export function sanitizeCss(css: string): string {
   return out;
 }
 
+/**
+ * Render locals that Express and hbs read as engine configuration rather than
+ * template data: `layout` picks the layout file, `settings` carries the views
+ * directory, `cache` toggles template caching and `_locals` is merged into the
+ * options by Express. Letting page data set any of them is the hbs file
+ * disclosure (CVE-2021-32822, unpatched upstream), so they are removed from
+ * everything a caller passes in and only set by this service.
+ */
+const RESERVED_RENDER_LOCALS = ['layout', 'settings', 'cache', '_locals'];
+
+function withoutReservedLocals(
+  data: Record<string, unknown>,
+): Record<string, unknown> {
+  const clean: Record<string, unknown> = {};
+  for (const [key, value] of Object.entries(data)) {
+    if (!RESERVED_RENDER_LOCALS.includes(key)) clean[key] = value;
+  }
+  return clean;
+}
+
 @Injectable()
 export class ThemeRenderService {
   constructor(
@@ -134,9 +154,8 @@ export class ThemeRenderService {
     );
 
     res.render(relativeTemplate, {
-      layout: relativeLayout,
-      ...data,
-      ...sanitizedColors,
+      ...withoutReservedLocals(data),
+      ...withoutReservedLocals(sanitizedColors),
       _messages: messages,
       themeCssFiles: cssFiles,
       realmName: data.realmName ?? realm.name,
@@ -150,6 +169,8 @@ export class ThemeRenderService {
       currentLangLabel: this.getLocaleLabel(locale),
       // CSP nonce for inline <script> blocks in theme templates
       scriptNonce,
+      // Last, so nothing above can replace the layout this service resolved.
+      layout: relativeLayout,
     });
   }
 
