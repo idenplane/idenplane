@@ -10,7 +10,10 @@ import {
   ValidateIf,
 } from 'class-validator';
 import { ApiPropertyOptional } from '@nestjs/swagger';
-import { SECRET_PLACEHOLDER } from '../secret-placeholder.js';
+import {
+  PLACEHOLDER_TYPED_OVER,
+  SECRET_PLACEHOLDER,
+} from '../secret-placeholder.js';
 
 /**
  * Per-realm SMS provider credentials, in the flat shape the admin UI's SMS tab
@@ -29,9 +32,6 @@ import { SECRET_PLACEHOLDER } from '../secret-placeholder.js';
  * field first sends the placeholder glued to it ('••••••AC9f…'), which would be
  * saved as a credential that can never work, so that is rejected instead.
  */
-const PLACEHOLDER_TYPED_OVER =
-  '$property still contains the hidden-value marker; clear the field before entering a new value';
-
 const keepsStoredSecret =
   (field: keyof RealmSmsProviderConfigDto) => (o: RealmSmsProviderConfigDto) =>
     o[field] !== SECRET_PLACEHOLDER;

@@ -3,57 +3,69 @@ import type { EmailProviderConfigDto } from '../email/dto/email-config.dto.js';
 import { SMS_SECRET_FIELDS } from './dto/sms-config.dto.js';
 import { SECRET_PLACEHOLDER } from './secret-placeholder.js';
 
+/** The secret field of each email provider section. */
+const EMAIL_SECRET_FIELDS: Record<string, string> = {
+  smtp: 'password',
+  resend: 'apiKey',
+  sendgrid: 'apiKey',
+  mailgun: 'apiKey',
+  postmark: 'serverToken',
+};
+
 /**
- * Encrypt the API-key/token sub-fields of a per-provider email config before
- * it's persisted. `from`/`domain`/`region` stay plaintext — they're not
- * secrets and admins need to see them back in the API response.
+ * Build the `emailProviderConfig` to persist from what the client sent.
  *
- * Idempotent: `crypto.encryptSecret` leaves an already-encrypted value
- * untouched, so re-running this (e.g. on a config round-tripped unchanged
- * through a GET+PATCH, or from the one-shot backfill script) is safe.
+ * The client sends the whole config, so it replaces the stored one — except
+ * that a secret still holding SECRET_PLACEHOLDER (what the API handed out on
+ * read) keeps the stored ciphertext. Every other secret is encrypted;
+ * `encryptSecret` is idempotent, so ciphertext is left alone.
  */
 export function encryptEmailProviderConfig(
   crypto: CryptoService,
   config: EmailProviderConfigDto | Record<string, unknown> | undefined | null,
+  stored?: unknown,
 ): Record<string, unknown> | undefined {
   if (!config) return undefined;
 
-  const cfg = config as Record<string, Record<string, unknown> | undefined>;
-  const encrypted: Record<string, unknown> = { ...cfg };
+  const incoming = config as Record<string, unknown>;
+  const previous = isRecord(stored) ? stored : {};
+  const out: Record<string, unknown> = { ...incoming };
 
-  if (cfg['resend']) {
-    encrypted['resend'] = {
-      ...cfg['resend'],
-      apiKey: crypto.encryptSecret(
-        cfg['resend']['apiKey'] as string | undefined,
-      ),
-    };
+  for (const [section, field] of Object.entries(EMAIL_SECRET_FIELDS)) {
+    const values = incoming[section];
+    if (!isRecord(values)) continue;
+    const next: Record<string, unknown> = { ...values };
+    const value = next[field];
+
+    if (value === SECRET_PLACEHOLDER) {
+      const prev = previous[section];
+      const kept = isRecord(prev) ? prev[field] : undefined;
+      if (typeof kept === 'string' && kept) {
+        next[field] = crypto.encryptSecret(kept);
+      } else {
+        delete next[field];
+      }
+    } else if (typeof value === 'string' && value) {
+      next[field] = crypto.encryptSecret(value);
+    } else {
+      delete next[field];
+    }
+    out[section] = next;
   }
-  if (cfg['sendgrid']) {
-    encrypted['sendgrid'] = {
-      ...cfg['sendgrid'],
-      apiKey: crypto.encryptSecret(
-        cfg['sendgrid']['apiKey'] as string | undefined,
-      ),
-    };
+  return out;
+}
+
+/** Replace each stored email provider secret with SECRET_PLACEHOLDER. */
+export function redactEmailProviderConfig(config: unknown): unknown {
+  if (!isRecord(config)) return config;
+  const out: Record<string, unknown> = { ...config };
+  for (const [section, field] of Object.entries(EMAIL_SECRET_FIELDS)) {
+    const values = out[section];
+    if (isRecord(values) && values[field]) {
+      out[section] = { ...values, [field]: SECRET_PLACEHOLDER };
+    }
   }
-  if (cfg['mailgun']) {
-    encrypted['mailgun'] = {
-      ...cfg['mailgun'],
-      apiKey: crypto.encryptSecret(
-        cfg['mailgun']['apiKey'] as string | undefined,
-      ),
-    };
-  }
-  if (cfg['postmark']) {
-    encrypted['postmark'] = {
-      ...cfg['postmark'],
-      serverToken: crypto.encryptSecret(
-        cfg['postmark']['serverToken'] as string | undefined,
-      ),
-    };
-  }
-  return encrypted;
+  return out;
 }
 
 export { SECRET_PLACEHOLDER };

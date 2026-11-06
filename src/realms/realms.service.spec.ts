@@ -310,6 +310,52 @@ describe('RealmsService', () => {
         twilioAuthToken: SECRET_PLACEHOLDER,
       });
     });
+
+    it('should keep the stored email API key when the placeholder is sent back, and never return it', async () => {
+      const stored = crypto.encrypt('SG.original');
+      prisma.realm.findUnique.mockResolvedValue({
+        ...mockRealm,
+        emailProviderConfig: {
+          sendgrid: { apiKey: stored, from: 'old@x.test' },
+        },
+      });
+      prisma.realm.update.mockImplementation(({ data }: any) =>
+        Promise.resolve({ ...mockRealm, ...data }),
+      );
+
+      const result = (await service.update('test-realm', {
+        emailProviderConfig: {
+          sendgrid: { apiKey: SECRET_PLACEHOLDER, from: 'new@x.test' },
+        },
+      })) as any;
+
+      const { data } = prisma.realm.update.mock.calls[0][0];
+      expect(data.emailProviderConfig.sendgrid).toEqual({
+        apiKey: stored,
+        from: 'new@x.test',
+      });
+      expect(result.emailProviderConfig.sendgrid).toEqual({
+        apiKey: SECRET_PLACEHOLDER,
+        from: 'new@x.test',
+      });
+    });
+
+    it('should never return email provider secrets from findByName', async () => {
+      cacheService.getCachedRealmByName.mockResolvedValue(null);
+      prisma.realm.findUnique.mockResolvedValue({
+        ...mockRealm,
+        emailProviderConfig: {
+          postmark: { serverToken: crypto.encrypt('pm'), from: 'a@x.test' },
+        },
+      });
+
+      const realm = (await service.findByName('test-realm')) as any;
+
+      expect(realm.emailProviderConfig.postmark).toEqual({
+        serverToken: SECRET_PLACEHOLDER,
+        from: 'a@x.test',
+      });
+    });
   });
 
   describe('findAll', () => {
