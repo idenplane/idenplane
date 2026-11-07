@@ -1,6 +1,11 @@
 import { useState, type FormEvent } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getMfaStatus, resetMfa, resetPassword } from '../../api/users';
+import {
+  getMfaStatus,
+  resetMfa,
+  resetSmsMfa,
+  resetPassword,
+} from '../../api/users';
 import ConfirmDialog from '../ConfirmDialog';
 import PasswordInput from '../PasswordInput';
 
@@ -13,6 +18,7 @@ type UserSecuritySectionProps = {
 export default function UserSecuritySection({ realmName, userId, username }: UserSecuritySectionProps) {
   const queryClient = useQueryClient();
   const [showResetMfa, setShowResetMfa] = useState(false);
+  const [showResetSms, setShowResetSms] = useState(false);
   const [newPassword, setNewPassword] = useState('');
   const [passwordMsg, setPasswordMsg] = useState('');
 
@@ -39,6 +45,20 @@ export default function UserSecuritySection({ realmName, userId, username }: Use
       setShowResetMfa(false);
     },
   });
+
+  const resetSmsMutation = useMutation({
+    mutationFn: () => resetSmsMfa(realmName, userId),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['mfaStatus', realmName, userId] });
+      setShowResetSms(false);
+    },
+  });
+
+  const methods = mfaStatus?.methods ?? [];
+  const METHOD_LABELS: Record<string, string> = {
+    totp: 'Authenticator app',
+    sms: 'Text message',
+  };
 
   function handleResetPassword(e: FormEvent) {
     e.preventDefault();
@@ -98,6 +118,23 @@ export default function UserSecuritySection({ realmName, userId, username }: Use
                 <span className="inline-flex rounded-full bg-success-soft px-2.5 py-0.5 text-xs font-medium text-success-fg">
                   Enabled
                 </span>
+                {methods.map((m) => (
+                  <span
+                    key={m}
+                    className="inline-flex rounded-full bg-active px-2.5 py-0.5 text-xs font-medium text-muted"
+                  >
+                    {METHOD_LABELS[m] ?? m}
+                  </span>
+                ))}
+                {methods.includes('sms') && methods.length > 1 && (
+                  <button
+                    type="button"
+                    onClick={() => setShowResetSms(true)}
+                    className="rounded-md border border-line px-3 py-1.5 text-sm font-medium text-muted hover:bg-active"
+                  >
+                    Remove phone
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setShowResetMfa(true)}
@@ -124,14 +161,32 @@ export default function UserSecuritySection({ realmName, userId, username }: Use
             Failed to reset MFA.
           </div>
         )}
+        {resetSmsMutation.isSuccess && (
+          <div className="rounded-md bg-success-soft p-3 text-sm text-success-fg">
+            The phone number has been removed.
+          </div>
+        )}
+        {resetSmsMutation.isError && (
+          <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
+            Failed to remove the phone number.
+          </div>
+        )}
       </div>
 
       <ConfirmDialog
         isOpen={showResetMfa}
         title="Reset MFA"
-        message={`Are you sure you want to reset MFA for user "${username}"? They will need to set up TOTP again on their next login.`}
+        message={`Are you sure you want to reset MFA for user "${username}"? This removes every second factor (authenticator app and phone) and their recovery codes.`}
         onConfirm={() => resetMfaMutation.mutate()}
         onCancel={() => setShowResetMfa(false)}
+      />
+
+      <ConfirmDialog
+        isOpen={showResetSms}
+        title="Remove phone"
+        message={`Remove the SMS phone number of user "${username}"? Their authenticator app keeps working.`}
+        onConfirm={() => resetSmsMutation.mutate()}
+        onCancel={() => setShowResetSms(false)}
       />
     </>
   );

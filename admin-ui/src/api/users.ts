@@ -73,14 +73,25 @@ export async function unlockUser(
   );
 }
 
+export type MfaMethod = 'totp' | 'sms';
+
 export async function getMfaStatus(
   realmName: string,
   userId: string,
-): Promise<{ enabled: boolean }> {
-  const { data } = await apiClient.get<{ enabled: boolean }>(
-    `/realms/${realmName}/users/${userId}/mfa/status`,
-  );
+): Promise<{ enabled: boolean; methods?: MfaMethod[] }> {
+  const { data } = await apiClient.get<{
+    enabled: boolean;
+    methods?: MfaMethod[];
+  }>(`/realms/${realmName}/users/${userId}/mfa/status`);
   return data;
+}
+
+/** Remove only the user's SMS phone (keeps an authenticator app). */
+export async function resetSmsMfa(
+  realmName: string,
+  userId: string,
+): Promise<void> {
+  await apiClient.delete(`/realms/${realmName}/users/${userId}/mfa/sms`);
 }
 
 export async function resetMfa(

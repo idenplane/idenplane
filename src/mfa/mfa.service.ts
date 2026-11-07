@@ -57,8 +57,10 @@ export interface MfaEnrollmentData {
   rememberMe?: boolean;
   /** RFC 8176 methods of the first factor; absent means a password. */
   primaryAmr?: string[];
-  /** Set once the user has activated TOTP with this enrolment. */
+  /** Set once the user has activated a second factor with this enrolment. */
   verified?: boolean;
+  /** Which factor was enrolled (absent on older rows: TOTP). */
+  factor?: SecondFactorType;
 }
 
 export const MFA_ENROLLMENT_COOKIE = 'IDENPLANE_MFA_ENROLLMENT';
@@ -495,6 +497,29 @@ export class MfaService {
   }
 
   /**
+   * Reads a live challenge without spending an attempt — for showing the
+   * second-factor page or sending an SMS code, never for accepting an answer.
+   */
+  async getMfaChallenge(challengeToken: string): Promise<{
+    userId: string;
+    realmId: string;
+    clientId?: string;
+  } | null> {
+    const action = await this.prisma.pendingAction.findUnique({
+      where: { tokenHash: this.crypto.sha256(challengeToken) },
+    });
+    if (!action || action.type !== 'mfa_challenge') return null;
+    if (action.expiresAt < new Date()) return null;
+    if (action.attempts >= MfaService.MAX_MFA_ATTEMPTS) return null;
+    const data = action.data as unknown as MfaChallengeData;
+    return {
+      userId: data.userId,
+      realmId: data.realmId,
+      clientId: data.clientId,
+    };
+  }
+
+  /**
    * Validates the challenge without consuming it, increments attempt counter.
    * Returns null if challenge is invalid, expired, or max attempts exceeded.
    */
@@ -591,8 +616,11 @@ export class MfaService {
     return action.data as unknown as MfaEnrollmentData;
   }
 
-  /** Record that TOTP was activated through this enrolment. */
-  async markMfaEnrollmentVerified(token: string): Promise<void> {
+  /** Record that a second factor was activated through this enrolment. */
+  async markMfaEnrollmentVerified(
+    token: string,
+    factor: SecondFactorType = 'totp',
+  ): Promise<void> {
     const tokenHash = this.crypto.sha256(token);
     const action = await this.prisma.pendingAction.findUnique({
       where: { tokenHash },
@@ -602,7 +630,7 @@ export class MfaService {
     await this.prisma.pendingAction.update({
       where: { id: action.id },
       data: {
-        data: { ...data, verified: true },
+        data: { ...data, verified: true, factor },
       },
     });
   }
@@ -628,7 +656,7 @@ export class MfaService {
   async cleanupExpiredActions(): Promise<void> {
     const { count } = await this.prisma.pendingAction.deleteMany({
       where: {
-        type: { in: ['mfa_challenge', 'mfa_enrollment'] },
+        type: { in: ['mfa_challenge', 'mfa_enrollment', 'sms_enrollment'] },
         expiresAt: { lt: new Date() },
       },
     });

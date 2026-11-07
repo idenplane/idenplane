@@ -35,6 +35,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { PasswordPolicyService } from '../password-policy/password-policy.service.js';
 import { MfaService, MFA_ENROLLMENT_COOKIE } from '../mfa/mfa.service.js';
+import { SmsOtpService, SmsOtpError } from '../sms/sms-otp.service.js';
 import { ThemeRenderService } from '../theme/theme-render.service.js';
 import { ThemeEmailService } from '../theme/theme-email.service.js';
 import { EventsService } from '../events/events.service.js';
@@ -84,6 +85,7 @@ export class LoginController {
     private readonly csrfService: CsrfService,
     private readonly bruteForceService: BruteForceService,
     private readonly loginFlow: LoginFlowService,
+    private readonly smsOtp: SmsOtpService,
     @Optional() private readonly riskAssessmentService?: RiskAssessmentService,
   ) {}
 
@@ -411,12 +413,40 @@ export class LoginController {
   // ─── MFA / TOTP ───────────────────────────────────────────
 
   @Get('totp')
-  showTotpForm(
+  async showTotpForm(
     @CurrentRealm() realm: Realm,
     @Query('error') error: string,
     @Req() req: Request,
     @Res() res: Response,
+    @Query('info') info?: string,
+    @Query('method') method?: string,
   ) {
+    const challengeToken = (
+      req.cookies as Record<string, string | undefined>
+    )?.['IDENPLANE_MFA_CHALLENGE'];
+    const challenge = challengeToken
+      ? await this.mfaService.getMfaChallenge(challengeToken)
+      : null;
+
+    // Offer the factors this user actually has. SMS needs a provider to be
+    // deliverable; without one, an SMS-only user falls back to recovery codes.
+    let hasTotp = true;
+    let hasSms = false;
+    let maskedPhone = '';
+    if (challenge && challenge.realmId === realm.id) {
+      const factors = await this.mfaService.getEnrolledFactors(
+        challenge.userId,
+      );
+      hasTotp = factors.includes('totp');
+      if (factors.includes('sms') && SmsOtpService.canDeliver(realm)) {
+        const phone = await this.smsOtp.getEnrolledPhone(challenge.userId);
+        if (phone) {
+          hasSms = true;
+          maskedPhone = SmsOtpService.maskPhone(phone);
+        }
+      }
+    }
+
     const csrfToken = this.setCsrfCookie(realm, res);
     this.themeRender.render(
       res,
@@ -426,10 +456,70 @@ export class LoginController {
       {
         pageTitle: 'Two-Factor Authentication',
         error: error ?? '',
+        info: info ?? '',
         csrfToken,
+        hasTotp,
+        hasSms,
+        smsMode: hasSms && (method === 'sms' || !hasTotp),
+        recoveryOnly: !hasTotp && !hasSms,
+        maskedPhone,
       },
       req,
     );
+  }
+
+  /**
+   * Text a sign-in code to the user's enrolled phone. A POST (with CSRF),
+   * never a page load, so prefetching or reloading can't send messages; the
+   * code is bound to this sign-in's challenge.
+   */
+  @Post('totp/sms')
+  @UseGuards(RateLimitGuard)
+  @RateLimitByIp()
+  async sendTotpSms(
+    @CurrentRealm() realm: Realm,
+    @Body() body: Record<string, string>,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    this.validateCsrf(realm, body, req);
+    const challengeToken = (
+      req.cookies as Record<string, string | undefined>
+    )?.['IDENPLANE_MFA_CHALLENGE'];
+    const challenge = challengeToken
+      ? await this.mfaService.getMfaChallenge(challengeToken)
+      : null;
+    if (!challengeToken || !challenge || challenge.realmId !== realm.id) {
+      return res.redirect(
+        `/realms/${realm.name}/login?error=${encodeURIComponent('MFA session expired. Please login again.')}`,
+      );
+    }
+
+    try {
+      const sent = await this.smsOtp.sendCode({
+        realm,
+        userId: challenge.userId,
+        purpose: 'login',
+        binding: challengeToken,
+        ip: resolveClientIp(req),
+      });
+      void this.eventsService.recordLoginEvent({
+        realmId: realm.id,
+        type: LoginEventType.MFA_CHALLENGE,
+        userId: challenge.userId,
+        ipAddress: resolveClientIp(req),
+      });
+      return res.redirect(
+        `/realms/${realm.name}/totp?method=sms&info=${encodeURIComponent(`We sent a code to ${sent.maskedPhone}.`)}`,
+      );
+    } catch (err) {
+      if (err instanceof SmsOtpError) {
+        return res.redirect(
+          `/realms/${realm.name}/totp?method=sms&error=${encodeURIComponent(err.message)}`,
+        );
+      }
+      throw err;
+    }
   }
 
   @Post('totp')
@@ -494,16 +584,27 @@ export class LoginController {
 
     const code = body.code;
     const recoveryCode = body.recoveryCode;
+    const smsCode = body.smsCode;
+    // Keep the user on the SMS form after a wrong SMS code.
+    const retryMethod = smsCode ? '&method=sms' : '';
 
-    const { verified } = code
+    const { verified, factor } = smsCode
       ? await this.mfaService.verifySecondFactor(challenge.userId, {
-          method: 'totp',
-          code,
+          method: 'sms',
+          code: smsCode,
+          realmId: realm.id,
+          purpose: 'login',
+          binding: challengeToken,
         })
-      : await this.mfaService.verifySecondFactor(challenge.userId, {
-          method: 'recovery',
-          code: recoveryCode ?? '',
-        });
+      : code
+        ? await this.mfaService.verifySecondFactor(challenge.userId, {
+            method: 'totp',
+            code,
+          })
+        : await this.mfaService.verifySecondFactor(challenge.userId, {
+            method: 'recovery',
+            code: recoveryCode ?? '',
+          });
 
     if (!verified) {
       await this.bruteForceService.recordTotpFailure(
@@ -527,7 +628,7 @@ export class LoginController {
           ? 'Too many failed attempts. Please try again later.'
           : 'Invalid code. Please try again.';
       return res.redirect(
-        `/realms/${realm.name}/totp?error=${encodeURIComponent(errorMsg)}`,
+        `/realms/${realm.name}/totp?error=${encodeURIComponent(errorMsg)}${retryMethod}`,
       );
     }
 
@@ -563,7 +664,7 @@ export class LoginController {
       res,
       {
         acr: ACR_MFA,
-        amr: LoginFlowService.amrWithOtp(challenge.primaryAmr),
+        amr: LoginFlowService.amrForFactor(challenge.primaryAmr, factor),
       },
     );
   }
@@ -619,7 +720,10 @@ export class LoginController {
       res,
       {
         acr: ACR_MFA,
-        amr: LoginFlowService.amrWithOtp(enrollment.primaryAmr),
+        amr: LoginFlowService.amrForFactor(
+          enrollment.primaryAmr,
+          enrollment.factor,
+        ),
       },
       { rememberMe: enrollment.rememberMe },
     );

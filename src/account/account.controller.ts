@@ -24,6 +24,13 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { PasswordPolicyService } from '../password-policy/password-policy.service.js';
 import { MfaService, MFA_ENROLLMENT_COOKIE } from '../mfa/mfa.service.js';
+import {
+  SmsOtpService,
+  SmsOtpError,
+  SMS_ENROLLMENT_COOKIE,
+  SMS_ENROLLMENT_TTL_SECONDS,
+  type SmsEnrollmentData,
+} from '../sms/sms-otp.service.js';
 import { ThemeRenderService } from '../theme/theme-render.service.js';
 import { WebAuthnService } from '../webauthn/webauthn.service.js';
 import { DataExportService } from './data-export.service.js';
@@ -52,6 +59,7 @@ export class AccountController {
     private readonly accountDeletionService: AccountDeletionService,
     private readonly csrfService: CsrfService,
     private readonly emailService: EmailService,
+    private readonly smsOtp: SmsOtpService,
   ) {}
 
   /** Set a fresh CSRF cookie and return the token for embedding in the form. */
@@ -155,6 +163,11 @@ export class AccountController {
       }));
     }
 
+    // Text-message factor: shown when it can be added, or when the user has
+    // one (it keeps working after an admin turns new enrolments off).
+    const smsPhone = await this.smsOtp.getEnrolledPhone(user.id);
+    const smsAvailable = SmsOtpService.canEnroll(realm);
+
     const csrfToken = this.setCsrfCookie(realm, res);
     this.themeRender.render(
       res,
@@ -162,6 +175,10 @@ export class AccountController {
       'account',
       'account',
       {
+        smsSection: smsAvailable || !!smsPhone,
+        smsAvailable,
+        smsEnabled: !!smsPhone,
+        smsPhone: smsPhone ? SmsOtpService.maskPhone(smsPhone) : '',
         pageTitle: 'My Account',
         username: user.username,
         email: user.email ?? '',
@@ -454,6 +471,9 @@ export class AccountController {
         cancelUrl: enrollmentToken
           ? `/realms/${realm.name}/login`
           : `/realms/${realm.name}/account`,
+        smsSetupUrl: SmsOtpService.canEnroll(realm)
+          ? `/realms/${realm.name}/account/sms-setup`
+          : '',
       },
       req,
     );
@@ -514,6 +534,362 @@ export class AccountController {
         csrfToken,
       },
       req,
+    );
+  }
+
+  // ─── SMS (text message) second factor ─────────────────────
+
+  /** The phone enrolment in progress for `userId`, from its cookie. */
+  private async getSmsEnrollment(
+    realm: Realm,
+    req: Request,
+    userId: string,
+  ): Promise<{ token: string; data: SmsEnrollmentData } | null> {
+    const token = (req.cookies as Record<string, string | undefined>)?.[
+      SMS_ENROLLMENT_COOKIE
+    ];
+    if (!token) return null;
+    const data = await this.smsOtp.getEnrollment(token);
+    if (!data || data.userId !== userId || data.realmId !== realm.id) {
+      return null;
+    }
+    return { token, data };
+  }
+
+  private clearSmsEnrollmentCookie(realm: Realm, res: Response) {
+    res.clearCookie(SMS_ENROLLMENT_COOKIE, { path: `/realms/${realm.name}` });
+  }
+
+  private smsSetupRedirect(
+    realm: Realm,
+    res: Response,
+    kind: 'error' | 'info',
+    message: string,
+  ) {
+    return res.redirect(
+      `/realms/${realm.name}/account/sms-setup?${kind}=${encodeURIComponent(message)}`,
+    );
+  }
+
+  @Get('sms-setup')
+  async showSmsSetup(
+    @CurrentRealm() realm: Realm,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const setupUser = await this.getTotpSetupUser(realm, req);
+    if (!setupUser) {
+      return res.redirect(`/realms/${realm.name}/login`);
+    }
+    const { user, enrollmentToken, enrollmentVerified } = setupUser;
+    const query = req.query as Record<string, string>;
+    const csrfToken = this.setCsrfCookie(realm, res);
+
+    if (enrollmentToken && enrollmentVerified) {
+      // Activated here but the page was reloaded before "Continue".
+      return this.themeRender.render(
+        res,
+        realm,
+        'account',
+        'sms-setup',
+        {
+          pageTitle: 'Text Message Verification Enabled',
+          activated: true,
+          continueAction: this.enrollmentContinueAction(realm),
+          csrfToken,
+        },
+        req,
+      );
+    }
+
+    if (!SmsOtpService.canEnroll(realm)) {
+      return res.redirect(
+        `/realms/${realm.name}/account?error=${encodeURIComponent('Text message verification is not available.')}`,
+      );
+    }
+
+    const pending = await this.getSmsEnrollment(realm, req, user.id);
+    const currentPhone = await this.smsOtp.getEnrolledPhone(user.id);
+    this.themeRender.render(
+      res,
+      realm,
+      'account',
+      'sms-setup',
+      {
+        pageTitle: 'Text Message Verification',
+        verifyStep: !!pending?.data.maskedPhone,
+        maskedPhone: pending?.data.maskedPhone ?? '',
+        currentPhone: currentPhone ? SmsOtpService.maskPhone(currentPhone) : '',
+        // Signed-in users confirm their password before adding or changing
+        // a phone, so a hijacked session can't plant its own second factor.
+        requirePassword: !enrollmentToken && !!user.passwordHash,
+        error: query['error'] ?? '',
+        info: query['info'] ?? '',
+        csrfToken,
+        totpSetupUrl: `/realms/${realm.name}/account/totp-setup`,
+        cancelUrl: enrollmentToken
+          ? `/realms/${realm.name}/login`
+          : `/realms/${realm.name}/account`,
+      },
+      req,
+    );
+  }
+
+  /**
+   * Text a code to the number being added. With `resend` set, texts the
+   * number of the enrolment in progress again; otherwise starts a new one
+   * (fresh token, so its own guess budget) for the submitted number.
+   */
+  @Post('sms-setup/send')
+  @UseGuards(RateLimitGuard)
+  @RateLimitByIp()
+  async sendSmsSetupCode(
+    @CurrentRealm() realm: Realm,
+    @Body() body: Record<string, string>,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    this.validateCsrf(realm, body, req);
+    const setupUser = await this.getTotpSetupUser(realm, req);
+    if (!setupUser) {
+      return res.redirect(`/realms/${realm.name}/login`);
+    }
+    const { user, enrollmentToken } = setupUser;
+    if (!SmsOtpService.canEnroll(realm)) {
+      return res.redirect(
+        `/realms/${realm.name}/account?error=${encodeURIComponent('Text message verification is not available.')}`,
+      );
+    }
+
+    let token: string;
+    let phone: string | null;
+    const pending = await this.getSmsEnrollment(realm, req, user.id);
+    if (body['resend'] && pending) {
+      token = pending.token;
+      phone = this.smsOtp.enrollmentPhone(pending.data);
+      if (!phone) {
+        return this.smsSetupRedirect(
+          realm,
+          res,
+          'error',
+          'Please enter your phone number again.',
+        );
+      }
+    } else {
+      phone = SmsOtpService.normalizePhone(body['phone']);
+      if (!phone) {
+        return this.smsSetupRedirect(
+          realm,
+          res,
+          'error',
+          'Enter the number in international format, for example +201012345678.',
+        );
+      }
+      if (!enrollmentToken) {
+        if (user.passwordHash) {
+          const valid =
+            !!body['currentPassword'] &&
+            (await this.crypto.verifyPassword(
+              user.passwordHash,
+              body['currentPassword'],
+            ));
+          if (!valid) {
+            return this.smsSetupRedirect(
+              realm,
+              res,
+              'error',
+              'Password is incorrect.',
+            );
+          }
+        } else if (
+          (await this.mfaService.getEnrolledFactors(user.id)).length > 0
+        ) {
+          // No password to confirm with: a session alone must not be able to
+          // swap or add a factor next to an existing one.
+          return this.smsSetupRedirect(
+            realm,
+            res,
+            'error',
+            'Your second factor can only be changed by an administrator for this account.',
+          );
+        }
+      }
+      if (pending) await this.smsOtp.endEnrollment(pending.token);
+      token = await this.smsOtp.startEnrollment(user.id, realm.id);
+      res.cookie(SMS_ENROLLMENT_COOKIE, token, {
+        httpOnly: true,
+        secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
+        sameSite: 'strict',
+        maxAge: SMS_ENROLLMENT_TTL_SECONDS * 1000,
+        path: `/realms/${realm.name}`,
+      });
+    }
+
+    try {
+      const sent = await this.smsOtp.sendCode({
+        realm,
+        userId: user.id,
+        purpose: 'enroll',
+        binding: token,
+        phone,
+        ip: resolveClientIp(req),
+      });
+      await this.smsOtp.setEnrollmentPhone(token, phone);
+      return this.smsSetupRedirect(
+        realm,
+        res,
+        'info',
+        `We sent a code to ${sent.maskedPhone}.`,
+      );
+    } catch (err) {
+      if (err instanceof SmsOtpError) {
+        return this.smsSetupRedirect(realm, res, 'error', err.message);
+      }
+      throw err;
+    }
+  }
+
+  @Post('sms-setup/verify')
+  @UseGuards(RateLimitGuard)
+  @RateLimitByIp()
+  async verifySmsSetupCode(
+    @CurrentRealm() realm: Realm,
+    @Body() body: Record<string, string>,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    this.validateCsrf(realm, body, req);
+    const setupUser = await this.getTotpSetupUser(realm, req);
+    if (!setupUser) {
+      return res.redirect(`/realms/${realm.name}/login`);
+    }
+    const { user, enrollmentToken } = setupUser;
+    // New phones can't be enrolled once an admin turned SMS MFA off, even if
+    // the code was sent before.
+    if (!SmsOtpService.canEnroll(realm)) {
+      return res.redirect(
+        `/realms/${realm.name}/account?error=${encodeURIComponent('Text message verification is not available.')}`,
+      );
+    }
+    const pending = await this.getSmsEnrollment(realm, req, user.id);
+    if (!pending) {
+      return this.smsSetupRedirect(
+        realm,
+        res,
+        'error',
+        'Your code expired. Please enter your phone number again.',
+      );
+    }
+
+    const result = await this.smsOtp.verifyCode({
+      realmId: realm.id,
+      userId: user.id,
+      purpose: 'enroll',
+      binding: pending.token,
+      code: body['code'] ?? '',
+    });
+    if (!result.ok) {
+      if (result.reason === 'invalid') {
+        return this.smsSetupRedirect(
+          realm,
+          res,
+          'error',
+          `Invalid code. ${result.remainingAttempts} attempt(s) remaining.`,
+        );
+      }
+      // Locked, expired or already used: this enrolment is over.
+      await this.smsOtp.endEnrollment(pending.token);
+      this.clearSmsEnrollmentCookie(realm, res);
+      return this.smsSetupRedirect(
+        realm,
+        res,
+        'error',
+        result.reason === 'locked'
+          ? 'Too many incorrect codes. Please start again.'
+          : 'Your code expired. Please enter your phone number again.',
+      );
+    }
+
+    await this.smsOtp.saveEnrolledPhone(user.id, result.phone);
+    await this.smsOtp.endEnrollment(pending.token);
+    this.clearSmsEnrollmentCookie(realm, res);
+    // Recovery codes come with the first factor; adding SMS next to an
+    // authenticator app keeps the codes the user already saved.
+    const recoveryCodes =
+      (await this.mfaService.ensureRecoveryCodes(user.id)) ?? [];
+    if (enrollmentToken) {
+      await this.mfaService.markMfaEnrollmentVerified(enrollmentToken, 'sms');
+    }
+    this.logger.log(
+      `User ${user.id} enrolled an SMS phone in realm ${realm.name}`,
+    );
+
+    const csrfToken = enrollmentToken ? this.setCsrfCookie(realm, res) : '';
+    return this.themeRender.render(
+      res,
+      realm,
+      'account',
+      'sms-setup',
+      {
+        pageTitle: 'Text Message Verification Enabled',
+        activated: true,
+        recoveryCodes,
+        continueAction: enrollmentToken
+          ? this.enrollmentContinueAction(realm)
+          : '',
+        csrfToken,
+      },
+      req,
+    );
+  }
+
+  @Post('sms-disable')
+  @UseGuards(RateLimitGuard)
+  @RateLimitByIp()
+  async handleSmsDisable(
+    @CurrentRealm() realm: Realm,
+    @Body() body: Record<string, string>,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    this.validateCsrf(realm, body, req);
+    const user = await this.getSessionUser(realm, req);
+    if (!user) {
+      return res.redirect(`/realms/${realm.name}/login`);
+    }
+    const accountError = (message: string) =>
+      res.redirect(
+        `/realms/${realm.name}/account?error=${encodeURIComponent(message)}`,
+      );
+
+    if (realm.mfaRequired) {
+      const others = (await this.mfaService.getEnrolledFactors(user.id)).filter(
+        (f) => f !== 'sms',
+      );
+      if (others.length === 0) {
+        return accountError(
+          'Two-factor authentication is required in this realm and cannot be turned off.',
+        );
+      }
+    }
+
+    // Same bar as turning off the authenticator app: a password is required.
+    if (!user.passwordHash) {
+      return accountError(
+        'Your second factor can only be changed by an administrator for this account.',
+      );
+    }
+    const valid =
+      !!body['currentPassword'] &&
+      (await this.crypto.verifyPassword(
+        user.passwordHash,
+        body['currentPassword'],
+      ));
+    if (!valid) return accountError('Password is incorrect.');
+
+    await this.mfaService.disableSms(user.id);
+    return res.redirect(
+      `/realms/${realm.name}/account?success=${encodeURIComponent('Text message verification has been turned off.')}`,
     );
   }
 

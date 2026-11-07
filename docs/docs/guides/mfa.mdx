@@ -1,21 +1,22 @@
 ---
 id: mfa
 title: MFA Guide
-description: Complete guide to Multi-Factor Authentication (MFA) with TOTP in Idenplane
+description: Complete guide to Multi-Factor Authentication (MFA) with TOTP and SMS in Idenplane
 ---
 
 # MFA Guide
 
-Multi-Factor Authentication (MFA) adds an extra layer of security by requiring a second form of verification beyond passwords. Idenplane supports Time-based One-Time Passwords (TOTP) as the second factor, with optional recovery codes for account recovery.
+Multi-Factor Authentication (MFA) adds an extra layer of security by requiring a second form of verification beyond passwords. Idenplane supports Time-based One-Time Passwords (TOTP) and one-time codes sent by text message (SMS) as second factors, with recovery codes for account recovery.
 
 ## Supported Methods
 
-Idenplane supports TOTP (RFC 6238) for multi-factor authentication:
-
 | Method | Description | Security Level |
 |--------|-------------|----------------|
-| [TOTP](#totp-setup) | Time-based 6-digit codes from authenticator apps | High |
+| [TOTP](#totp-setup) | Time-based 6-digit codes from authenticator apps (RFC 6238) | High |
+| [SMS](#sms-text-message-codes) | One-time codes sent to a verified phone number | Medium |
 | [Recovery Codes](#recovery-codes) | Backup codes for account recovery | Fallback |
+
+A user can have an authenticator app, a phone, or both. Every check that decides whether a sign-in needs a second factor counts any of them.
 
 :::caution MFA Required for Admins
 Realm administrators may require MFA step-up verification for sensitive operations. API key authentication is not permitted for operations that require MFA verification.
@@ -282,9 +283,76 @@ Idenplane validates TOTP codes with a window of ±1 step (30 seconds). This acco
 
 ---
 
+## SMS (Text Message Codes)
+
+### Turning it on
+
+In the admin console, open the realm, go to the **SMS** tab, choose a provider (Twilio, Vonage, AWS SNS or a webhook), save it, and switch on **SMS Multi-Factor Authentication**. The switch can't be turned on without a provider.
+
+Turning the switch off stops new phones from being added. Users who already added one keep signing in with it, so nobody is locked out. Removing the provider stops codes from being delivered; those users then sign in with a recovery code.
+
+### Adding a phone
+
+Users add a phone on their account page (**Text Message Verification → Set Up Text Messages**):
+
+1. Enter the number in international format, for example `+201012345678`. Signed-in users also confirm their password, so a hijacked session can't add its own phone.
+2. Enter the code that arrives by text message.
+3. Save the recovery codes shown, unless the user already has codes from an authenticator app. Those keep working.
+
+Changing the number follows the same steps. The old number keeps working until the new one is confirmed. In a realm that requires MFA, a new user can choose **Use text messages instead** on the setup page and enrol a phone instead of an app.
+
+### Signing in
+
+On the second-factor page, a user with a phone presses **Send code** and enters the texted code. A user who has both an app and a phone can switch between them. The ID token's `amr` claim is `["pwd", "sms"]` after a texted code and `["pwd", "otp"]` after an app or recovery code. Both reach the `urn:idenplane:acr:mfa` level.
+
+### Token API (password grant)
+
+The `mfa_required` response lists the factors the user can answer with:
+
+```json
+{
+  "error": "mfa_required",
+  "mfa_token": "…",
+  "mfa_methods": ["totp", "sms", "recovery"]
+}
+```
+
+To use SMS, request a code for that challenge, then answer it with `mfa_method=sms`:
+
+```bash
+# 1. Text a code (authenticate the client exactly as for the token request)
+curl -X POST "http://localhost:3000/realms/my-realm/protocol/openid-connect/mfa/sms" \
+  -d client_id=my-app -d client_secret=… -d mfa_token=${MFA_TOKEN}
+# → { "masked_phone": "+20••••••5678", "expires_in": 300, "resend_after": 30 }
+
+# 2. Answer the challenge
+curl -X POST "http://localhost:3000/realms/my-realm/protocol/openid-connect/token" \
+  -d grant_type=mfa_otp -d client_id=my-app -d client_secret=… \
+  -d mfa_token=${MFA_TOKEN} -d mfa_method=sms -d otp=123456
+```
+
+### Step-up
+
+`GET /realms/:realm/step-up/challenge` returns `methods` (for example `["sms", "recovery"]`). For SMS, call `POST /realms/:realm/step-up/sms` with `{ "mfa_token": "…" }`, then `POST /realms/:realm/step-up/verify` with `"method": "sms"` and the code as `otp`.
+
+### Protections
+
+- **Bound codes.** A code only answers the challenge it was sent for: one sign-in, one step-up, or one phone enrolment.
+- **Guess limit.** Each challenge allows 5 guesses in total, including after resends.
+- **Single use.** A correct code can be used once.
+- **Storage.** Codes are stored only as keyed hashes. Phone numbers are encrypted.
+- **Sending limits.** A resend needs a 30-second wait. There are caps per challenge, user, phone number, IP address and realm. The realm-wide cap defaults to 1,000 messages an hour and can be changed with `SMS_REALM_HOURLY_LIMIT`. These caps limit the cost of SMS-pumping fraud.
+- **No code in logs.** Codes are never logged, and server logs show only the last digits of a number.
+
+:::tip
+Text messages can be intercepted, for example through SIM swapping, so SMS is weaker than an authenticator app or a passkey. Offer it for convenience, and encourage users to add an authenticator app for high-value accounts.
+:::
+
+---
+
 ## Recovery Codes
 
-Recovery codes provide a fallback mechanism when users lose access to their authenticator app. Each code can only be used once.
+Recovery codes provide a fallback mechanism when users lose access to their authenticator app or phone. Each code can only be used once. A user gets one set of codes with their first factor; adding a second factor keeps them, and they are removed only together with the last factor.
 
 ### Using Recovery Codes
 
@@ -523,7 +591,7 @@ Enable MFA as soon as account creation is complete. Don't wait for a security in
 |--------|----------|----------------|
 | Authenticator App | High | Recommended |
 | Hardware Keys | Highest | Best for high-value accounts |
-| SMS | Vulnerable | Not supported by Idenplane |
+| SMS | Medium (SIM-swap risk) | Supported; prefer an app for high-value accounts |
 
 ### Protect Recovery Codes
 

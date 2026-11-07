@@ -96,6 +96,42 @@
   {{/if}}
 </div>
 
+{{#if smsSection}}
+<div style="border-top: 1px solid #e5e7eb; padding-top: 1.25rem; margin-top: 1.5rem;" id="sms-section">
+  <h3 style="font-size: 0.95rem; font-weight: 600; color: #374151; margin-bottom: 1rem;">{{msg "accountSmsTitle"}}</h3>
+
+  {{#if smsEnabled}}
+  <div style="background: #f0fdf4; border: 1px solid #bbf7d0; border-radius: 6px; padding: 0.75rem; margin-bottom: 1rem;">
+    <span style="color: #166534; font-weight: 500;">{{msg "accountSmsEnabled"}}</span>
+    <span style="color: #6b7280; font-size: 0.85rem;"> &mdash; {{msgArgs "accountSmsEnabledDesc" smsPhone}}</span>
+  </div>
+
+  {{#if smsAvailable}}
+  <a href="/realms/{{realmName}}/account/sms-setup" class="btn-secondary" style="display: inline-block; text-align: center; text-decoration: none; margin-bottom: 1rem;">
+    {{msg "accountSmsChange"}}
+  </a>
+  {{/if}}
+
+  <form method="POST" action="/realms/{{realmName}}/account/sms-disable" class="auth-form">
+    <input type="hidden" name="_csrf" value="{{csrfToken}}">
+    <div class="form-group">
+      <label for="smsDisablePassword">{{msg "accountCurrentPassword"}}</label>
+      <input type="password" id="smsDisablePassword" name="currentPassword" autocomplete="current-password">
+    </div>
+    <button type="submit" class="btn-primary" style="background: #dc2626;"
+      data-confirm-msg="{{msg "accountSmsDisableConfirm"}}">
+      {{msg "accountSmsDisable"}}
+    </button>
+  </form>
+  {{else}}
+  <p style="color: #6b7280; font-size: 0.85rem; margin-bottom: 1rem;">{{msg "accountSmsNotEnabledDesc"}}</p>
+  <a href="/realms/{{realmName}}/account/sms-setup" class="btn-primary" style="display: inline-block; text-align: center; text-decoration: none;">
+    {{msg "accountSmsSetup"}}
+  </a>
+  {{/if}}
+</div>
+{{/if}}
+
 {{#if webAuthnEnabled}}
 <div style="border-top: 1px solid #e5e7eb; padding-top: 1.25rem; margin-top: 1.5rem;" id="passkeys-section">
   <h3 style="font-size: 0.95rem; font-weight: 600; color: #374151; margin-bottom: 0.5rem;">Passkeys (Passwordless)</h3>

@@ -145,8 +145,7 @@ model Realm {
   webAuthnUserVerificationRequired Boolean @default(false) @map("webauthn_user_verification_required")
 
   // SMS MFA. Turning it off stops new enrolments; users who already
-  // enrolled a phone keep signing in with it. The account and login screens
-  // land in a follow-up; until then the admin UI keeps this switch read-only.
+  // enrolled a phone keep signing in with it. Needs an smsProvider.
   smsMfaEnabled Boolean @default(false) @map("sms_mfa_enabled")
 
   // SMS provider configuration

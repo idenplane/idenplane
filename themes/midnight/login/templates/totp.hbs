@@ -1,29 +1,76 @@
 {{#if error}}
 <div class="auth-error">{{error}}</div>
 {{/if}}
+{{#if info}}
+<div class="auth-success">{{info}}</div>
+{{/if}}
 
 <h2 class="auth-subtitle">{{msg "totpTitle"}}</h2>
+
+{{#if recoveryOnly}}
 <p class="consent-description">
-  {{msg "totpInstruction"}}
+  {{msg "totpRecoveryOnly"}}
 </p>
+{{else}}
+<div id="primaryMethod">
+{{#if smsMode}}
+  <p class="consent-description">
+    {{msgArgs "smsLoginInstruction" maskedPhone}}
+  </p>
 
-<form method="POST" action="/realms/{{realmName}}/totp" class="auth-form" id="totpForm">
-  <input type="hidden" name="_csrf" value="{{csrfToken}}">
-  <div class="form-group totp-input">
-    <label for="code">{{msg "totpAuthCode"}}</label>
-    <input type="text" id="code" name="code" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" autocomplete="one-time-code" required autofocus placeholder="000000">
+  <form method="POST" action="/realms/{{realmName}}/totp" class="auth-form" id="smsForm">
+    <input type="hidden" name="_csrf" value="{{csrfToken}}">
+    <div class="form-group totp-input">
+      <label for="smsCode">{{msg "smsCodeLabel"}}</label>
+      <input type="text" id="smsCode" name="smsCode" pattern="[0-9]{6,10}" maxlength="10" inputmode="numeric" autocomplete="one-time-code" required autofocus placeholder="000000">
+    </div>
+
+    <button type="submit" class="btn-primary">{{msg "totpVerify"}}</button>
+  </form>
+
+  <form method="POST" action="/realms/{{realmName}}/totp/sms" class="auth-footer-link" style="border-top: none; padding-top: 0; margin-top: 0.75rem;">
+    <input type="hidden" name="_csrf" value="{{csrfToken}}">
+    <button type="submit" class="btn-link">{{msg "smsSendCode"}}</button>
+  </form>
+
+  {{#if hasTotp}}
+  <div class="auth-footer-link" style="border-top: none; padding-top: 0; margin-top: 0.75rem;">
+    <a href="/realms/{{realmName}}/totp">{{msg "totpUseAuthenticator"}}</a>
   </div>
+  {{/if}}
+{{else}}
+  <p class="consent-description">
+    {{msg "totpInstruction"}}
+  </p>
 
-  <button type="submit" class="btn-primary">{{msg "totpVerify"}}</button>
-</form>
+  <form method="POST" action="/realms/{{realmName}}/totp" class="auth-form" id="totpForm">
+    <input type="hidden" name="_csrf" value="{{csrfToken}}">
+    <div class="form-group totp-input">
+      <label for="code">{{msg "totpAuthCode"}}</label>
+      <input type="text" id="code" name="code" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" autocomplete="one-time-code" required autofocus placeholder="000000">
+    </div>
+
+    <button type="submit" class="btn-primary">{{msg "totpVerify"}}</button>
+  </form>
+
+  {{#if hasSms}}
+  <div class="auth-footer-link" style="border-top: none; padding-top: 0; margin-top: 0.75rem;">
+    <a href="/realms/{{realmName}}/totp?method=sms">{{msg "smsUseInstead"}}</a>
+  </div>
+  {{/if}}
+{{/if}}
+</div>
 
 <div class="auth-footer-link" style="border-top: none; padding-top: 0; margin-top: 1rem;">
-  <button type="button" id="toggleRecovery" class="btn-link">
+  <button type="button" id="toggleRecovery" class="btn-link"
+    data-label-recovery="{{msg "totpUseRecovery"}}"
+    data-label-back="{{#if smsMode}}{{msg "smsUseInstead"}}{{else}}{{msg "totpUseAuthenticator"}}{{/if}}">
     {{msg "totpUseRecovery"}}
   </button>
 </div>
+{{/if}}
 
-<form method="POST" action="/realms/{{realmName}}/totp" class="auth-form" id="recoveryForm" style="display: none;">
+<form method="POST" action="/realms/{{realmName}}/totp" class="auth-form" id="recoveryForm"{{#unless recoveryOnly}} style="display: none;"{{/unless}}>
   <input type="hidden" name="_csrf" value="{{csrfToken}}">
   <div class="form-group">
     <label for="recoveryCode">{{msg "totpRecoveryCode"}}</label>
@@ -33,18 +80,20 @@
   <button type="submit" class="btn-primary">{{msg "totpVerifyRecovery"}}</button>
 </form>
 
+{{#unless recoveryOnly}}
 <script nonce="{{scriptNonce}}">
   document.getElementById('toggleRecovery').addEventListener('click', function() {
-    var totpForm = document.getElementById('totpForm');
+    var primary = document.getElementById('primaryMethod');
     var recoveryForm = document.getElementById('recoveryForm');
     if (recoveryForm.style.display === 'none') {
       recoveryForm.style.display = '';
-      totpForm.style.display = 'none';
-      this.textContent = '{{msg "totpUseAuthenticator"}}';
+      primary.style.display = 'none';
+      this.textContent = this.getAttribute('data-label-back');
     } else {
       recoveryForm.style.display = 'none';
-      totpForm.style.display = '';
-      this.textContent = '{{msg "totpUseRecovery"}}';
+      primary.style.display = '';
+      this.textContent = this.getAttribute('data-label-recovery');
     }
   });
 </script>
+{{/unless}}

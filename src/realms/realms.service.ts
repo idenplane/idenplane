@@ -61,6 +61,7 @@ export class RealmsService {
     if (existing) {
       throw new ConflictException(`Realm '${dto.name}' already exists`);
     }
+    assertSmsMfaDeliverable(dto.smsMfaEnabled, dto.smsProvider);
 
     const keyPair = await this.jwkService.generateRsaKeyPair();
 
@@ -244,6 +245,12 @@ export class RealmsService {
 
   async update(name: string, dto: UpdateRealmDto) {
     const existing = await this.findByNameRaw(name);
+    if (dto.smsMfaEnabled !== undefined || dto.smsProvider !== undefined) {
+      assertSmsMfaDeliverable(
+        dto.smsMfaEnabled ?? existing.smsMfaEnabled,
+        dto.smsProvider ?? existing.smsProvider,
+      );
+    }
 
     // Validate theme names against available themes
     const themeFields = [
@@ -395,5 +402,20 @@ export class RealmsService {
     await this.cache.invalidateRealmCache(existing.id, name);
     const deleted = await this.prisma.realm.delete({ where: { name } });
     return this.redactSecrets(deleted);
+  }
+}
+
+/**
+ * SMS MFA can only be switched on with a provider to deliver the codes;
+ * otherwise users could enrol a phone that never receives anything.
+ */
+function assertSmsMfaDeliverable(
+  smsMfaEnabled: boolean | undefined,
+  smsProvider: string | undefined | null,
+): void {
+  if (smsMfaEnabled && (!smsProvider || smsProvider === 'none')) {
+    throw new BadRequestException(
+      'Choose an SMS provider before turning on SMS multi-factor authentication.',
+    );
   }
 }

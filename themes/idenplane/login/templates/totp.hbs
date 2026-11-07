@@ -1,30 +1,80 @@
 {{#if error}}
 <div class="auth-error">{{error}}</div>
 {{/if}}
+{{#if info}}
+<div class="auth-success">{{info}}</div>
+{{/if}}
 
 <h2 class="auth-subtitle">{{msg "totpTitle"}}</h2>
+
+{{#if recoveryOnly}}
 <p style="color: #6b7280; font-size: 0.85rem; margin-bottom: 1.25rem; text-align: center;">
-  {{msg "totpInstruction"}}
+  {{msg "totpRecoveryOnly"}}
 </p>
+{{else}}
+<div id="primaryMethod">
+{{#if smsMode}}
+  <p style="color: #6b7280; font-size: 0.85rem; margin-bottom: 1.25rem; text-align: center;">
+    {{msgArgs "smsLoginInstruction" maskedPhone}}
+  </p>
 
-<form method="POST" action="/realms/{{realmName}}/totp" class="auth-form" id="totpForm">
-  <input type="hidden" name="_csrf" value="{{csrfToken}}">
-  <div class="form-group">
-    <label for="code">{{msg "totpAuthCode"}}</label>
-    <input type="text" id="code" name="code" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" autocomplete="one-time-code" required autofocus
-      style="text-align: center; font-size: 1.5rem; letter-spacing: 0.5rem;">
+  <form method="POST" action="/realms/{{realmName}}/totp" class="auth-form" id="smsForm">
+    <input type="hidden" name="_csrf" value="{{csrfToken}}">
+    <div class="form-group">
+      <label for="smsCode">{{msg "smsCodeLabel"}}</label>
+      <input type="text" id="smsCode" name="smsCode" pattern="[0-9]{6,10}" maxlength="10" inputmode="numeric" autocomplete="one-time-code" required autofocus
+        style="text-align: center; font-size: 1.5rem; letter-spacing: 0.5rem;">
+    </div>
+
+    <button type="submit" class="btn-primary">{{msg "totpVerify"}}</button>
+  </form>
+
+  <form method="POST" action="/realms/{{realmName}}/totp/sms" style="margin-top: 0.75rem; text-align: center;">
+    <input type="hidden" name="_csrf" value="{{csrfToken}}">
+    <button type="submit" class="btn-link" style="color: #2563eb; background: none; border: none; cursor: pointer; font-size: 0.85rem; text-decoration: underline;">
+      {{msg "smsSendCode"}}
+    </button>
+  </form>
+
+  {{#if hasTotp}}
+  <div style="margin-top: 0.75rem; text-align: center;">
+    <a href="/realms/{{realmName}}/totp" style="color: #2563eb; font-size: 0.85rem;">{{msg "totpUseAuthenticator"}}</a>
   </div>
+  {{/if}}
+{{else}}
+  <p style="color: #6b7280; font-size: 0.85rem; margin-bottom: 1.25rem; text-align: center;">
+    {{msg "totpInstruction"}}
+  </p>
 
-  <button type="submit" class="btn-primary">{{msg "totpVerify"}}</button>
-</form>
+  <form method="POST" action="/realms/{{realmName}}/totp" class="auth-form" id="totpForm">
+    <input type="hidden" name="_csrf" value="{{csrfToken}}">
+    <div class="form-group">
+      <label for="code">{{msg "totpAuthCode"}}</label>
+      <input type="text" id="code" name="code" pattern="[0-9]{6}" maxlength="6" inputmode="numeric" autocomplete="one-time-code" required autofocus
+        style="text-align: center; font-size: 1.5rem; letter-spacing: 0.5rem;">
+    </div>
+
+    <button type="submit" class="btn-primary">{{msg "totpVerify"}}</button>
+  </form>
+
+  {{#if hasSms}}
+  <div style="margin-top: 0.75rem; text-align: center;">
+    <a href="/realms/{{realmName}}/totp?method=sms" style="color: #2563eb; font-size: 0.85rem;">{{msg "smsUseInstead"}}</a>
+  </div>
+  {{/if}}
+{{/if}}
+</div>
 
 <div style="margin-top: 1rem; text-align: center;">
-  <button type="button" id="toggleRecovery" class="btn-link" style="color: #2563eb; background: none; border: none; cursor: pointer; font-size: 0.85rem; text-decoration: underline;">
+  <button type="button" id="toggleRecovery" class="btn-link" style="color: #2563eb; background: none; border: none; cursor: pointer; font-size: 0.85rem; text-decoration: underline;"
+    data-label-recovery="{{msg "totpUseRecovery"}}"
+    data-label-back="{{#if smsMode}}{{msg "smsUseInstead"}}{{else}}{{msg "totpUseAuthenticator"}}{{/if}}">
     {{msg "totpUseRecovery"}}
   </button>
 </div>
+{{/if}}
 
-<form method="POST" action="/realms/{{realmName}}/totp" class="auth-form" id="recoveryForm" style="display: none;">
+<form method="POST" action="/realms/{{realmName}}/totp" class="auth-form" id="recoveryForm"{{#unless recoveryOnly}} style="display: none;"{{/unless}}>
   <input type="hidden" name="_csrf" value="{{csrfToken}}">
   <div class="form-group">
     <label for="recoveryCode">{{msg "totpRecoveryCode"}}</label>
@@ -35,18 +85,20 @@
   <button type="submit" class="btn-primary">{{msg "totpVerifyRecovery"}}</button>
 </form>
 
+{{#unless recoveryOnly}}
 <script nonce="{{scriptNonce}}">
   document.getElementById('toggleRecovery').addEventListener('click', function() {
-    var totpForm = document.getElementById('totpForm');
+    var primary = document.getElementById('primaryMethod');
     var recoveryForm = document.getElementById('recoveryForm');
     if (recoveryForm.style.display === 'none') {
       recoveryForm.style.display = '';
-      totpForm.style.display = 'none';
-      this.textContent = '{{msg "totpUseAuthenticator"}}';
+      primary.style.display = 'none';
+      this.textContent = this.getAttribute('data-label-back');
     } else {
       recoveryForm.style.display = 'none';
-      totpForm.style.display = '';
-      this.textContent = '{{msg "totpUseRecovery"}}';
+      primary.style.display = '';
+      this.textContent = this.getAttribute('data-label-recovery');
     }
   });
 </script>
+{{/unless}}
