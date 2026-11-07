@@ -91,7 +91,7 @@ export default function () {
       client_secret: TEST_CLIENT_SECRET,
       username: TEST_USERNAME,
       password: TEST_PASSWORD,
-      scope: 'openid',
+      scope: 'openid profile',
     });
 
     loginDuration.add(Date.now() - startTime);
@@ -171,9 +171,9 @@ export default function () {
 
       const res = http.post(urls.token, params.toString(), { headers: FORM_HEADERS });
 
-      // Expect 401 for invalid credentials
+      // RFC 6749 §5.2: wrong user credentials are 400 invalid_grant
       check(res, {
-        'invalid login returns 401': () => res.status === 401,
+        'invalid login returns 400 invalid_grant': () => res.status === 400 && String(res.body).includes('invalid_grant'),
       });
 
       // Don't count this as an error - it's expected behavior
