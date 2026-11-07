@@ -1,3 +1,6 @@
+// Load .env like the Prisma CLI (prisma.config.ts) and the server do. Without
+// it `npm run db:setup` migrates fine and then seeds with no DATABASE_URL.
+import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
 import { generateKeyPair, exportJWK } from 'jose';
@@ -26,6 +29,11 @@ async function main() {
   // Initialise Prisma here so the dynamic import stays inside an async
   // function and never becomes a top-level await.
   const databaseUrl = process.env['DATABASE_URL'] ?? '';
+  if (!databaseUrl) {
+    throw new Error(
+      'DATABASE_URL is not set. Copy .env.example to .env (see the development setup guide) or export DATABASE_URL.',
+    );
+  }
   if (databaseUrl.startsWith('file:')) {
     prisma = new PrismaClient();
   } else {
