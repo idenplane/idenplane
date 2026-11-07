@@ -1,0 +1,10 @@
+# Overlay for keycloak.yml: hash passwords with the same Argon2id cost as
+# Idenplane (src/crypto/crypto.service.ts: 64 MiB, 3 passes, 4 lanes) instead
+# of Keycloak's defaults (7 MiB, 5 passes, 1 lane). Without this, a login
+# comparison measures the two hashing settings, not the two servers.
+services:
+  target:
+    environment:
+      KC_SPI_PASSWORD_HASHING__ARGON2__MEMORY: "65536"
+      KC_SPI_PASSWORD_HASHING__ARGON2__ITERATIONS: "3"
+      KC_SPI_PASSWORD_HASHING__ARGON2__PARALLELISM: "4"

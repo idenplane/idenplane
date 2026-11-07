@@ -11,6 +11,7 @@ on:
   pull_request:
     paths:
       - 'benchmarks/**'
+      - '!benchmarks/compare/**'
       - '.github/workflows/benchmark.yml'
 
 # Minimal default token permissions; jobs only read repo contents.
