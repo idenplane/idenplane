@@ -94,6 +94,11 @@ for (const t of targets) {
 const first = summary[targets[0]].meta;
 const allScenarios = [...new Set(targets.flatMap((t) => summary[t].meta.scenarios))];
 const row = (cells) => `| ${cells.join(' | ')} |`;
+// Text from the target's database goes into a table cell inside a code span:
+// escape backslashes first, then the pipe that would end the cell, and drop
+// backticks and newlines that would end the span or the row.
+const mdCell = (s) =>
+  String(s).replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/[`\r\n]/g, ' ');
 const sep = (n) => row(Array(n).fill('---'));
 
 const lines = [
@@ -119,7 +124,7 @@ const lines = [
       `${fmt(meta.firstBootMs / 1000, 1)} s`,
       `${fmt(meta.restartMs / 1000, 1)} s`,
       `${fmt(idleMiB)} MiB`,
-      `\`${meta.passwordHash.replace(/\|/g, '\\|').slice(0, 160)}\``,
+      `\`${mdCell(meta.passwordHash).slice(0, 160)}\``,
     ]);
   }),
   '',
