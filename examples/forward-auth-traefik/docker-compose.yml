@@ -25,7 +25,9 @@ services:
       retries: 5
 
   traefik:
-    image: traefik:v3.3
+    # Traefik 3.3 and older cannot talk to Docker Engine 29+, which dropped the
+    # API versions they negotiate: the demo started and routed nothing.
+    image: traefik:v3.7.15
     command:
       - --providers.docker=true
       - --providers.docker.exposedbydefault=false
@@ -36,7 +38,9 @@ services:
       - /var/run/docker.sock:/var/run/docker.sock:ro
 
   idenplane:
-    image: islamawad/idenplane:latest
+    # IDENPLANE_IMAGE lets CI run this stack against an image built from the
+    # commit under test.
+    image: ${IDENPLANE_IMAGE:-islamawad/idenplane:latest}
     environment:
       DATABASE_URL: postgresql://idenplane:idenplane@db:5432/idenplane
       PORT: '3000'

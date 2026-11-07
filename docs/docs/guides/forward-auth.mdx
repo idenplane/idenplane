@@ -37,10 +37,14 @@ Browser │          │ ──────────────────�
 | | when |
 |---|---|
 | `200` + identity headers | the proxy session is valid |
-| `302` to login | no session, and the request is a browser navigation |
-| `401` | no session, and the request is not (XHR, fetch, an API client) |
+| `302` to login | no session, the request is a browser navigation, and the proxy is Traefik or Caddy |
+| `401` + `X-Idenplane-Login` | no session, and the request is not a browser navigation (XHR, fetch, an API client), or it came through nginx `auth_request` (it sends `X-Original-URL`) |
 
-The `401` matters: a background request should get a status its caller can act on, not an HTML login page.
+The `401` matters: a background request should get a status its caller can act on, not an HTML login page. nginx always gets one because `auth_request` cannot pass a redirect on; its config redirects to the URL in `X-Idenplane-Login` instead.
+
+The login redirect is an absolute URL built from `BASE_URL`, so set `BASE_URL` to the address browsers use for Idenplane, not the internal one the proxy calls.
+
+The sign-in is bound to the browser that started it: `start` sets a short-lived cookie holding a PKCE verifier, and `callback` will not redeem the code without it. A callback link opened in another browser fails with a 400 instead of signing that browser in. Idenplane redeems the code itself, so the client's secret is never needed.
 
 ## 1. Create the OAuth client
 
@@ -133,6 +137,10 @@ server {
 
     location / {
         auth_request /idenplane-auth;
+        # On a 401, Idenplane names the URL that starts sign-in for this exact
+        # request (original URL already encoded). @idenplane_login sends the
+        # browser there.
+        auth_request_set $idenplane_login $upstream_http_x_idenplane_login;
 
         # Lift the identity out of the auth response and forward it upstream.
         auth_request_set $user   $upstream_http_x_forwarded_user;
@@ -150,17 +158,20 @@ server {
         proxy_pass http://idenplane:3000/realms/master/proxy/grafana/verify;
 
         # auth_request strips the body and, by default, tells Idenplane nothing
-        # about the original request. X-Original-URL is what it reads instead.
+        # about the original request. X-Original-URL is what it reads instead,
+        # and its presence is also how Idenplane knows to answer 401 rather
+        # than redirect.
         proxy_pass_request_body off;
         proxy_set_header Content-Length "";
         proxy_set_header X-Original-URL $scheme://$http_host$request_uri;
     }
 
-    # auth_request only understands 2xx / 401 / 403 — it will not follow a
-    # redirect. Turn the 401 into one here.
+    # auth_request only understands 2xx / 401 / 403: a redirect from the auth
+    # server becomes a 500. So Idenplane answers 401, and the redirect to
+    # sign-in happens here, to the public URL it supplied.
     error_page 401 = @idenplane_login;
     location @idenplane_login {
-        return 302 http://idenplane:3000/realms/master/proxy/grafana/start?rd=$scheme://$http_host$request_uri;
+        return 302 $idenplane_login;
     }
 }
 ```

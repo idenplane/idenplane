@@ -69,6 +69,46 @@ export class AuthService {
     @Optional() private readonly smsOtp?: SmsOtpService,
   ) {}
 
+  /**
+   * Redeem an authorization code for a client that lives inside this server:
+   * forward-auth (proxy-auth), where Idenplane is both the authorization
+   * server and the OAuth client. Client authentication proves the caller is
+   * the client; here the caller is the server itself, so a secret would prove
+   * nothing, and the server never holds the plaintext anyway (only its hash).
+   *
+   * Not reachable from the token endpoint: it is a separate method, never a
+   * body field. In place of the secret it requires PKCE, whose verifier the
+   * caller keeps in a cookie on the browser that began the sign-in, so a code
+   * is only redeemable by that browser. Every other check of the ordinary
+   * grant still runs: client enabled and allowed this grant, code single-use,
+   * unexpired and issued to this client, redirect_uri byte-identical.
+   */
+  async redeemAuthorizationCodeForServerClient(
+    realm: Realm,
+    params: {
+      code: string;
+      clientId: string;
+      redirectUri: string;
+      codeVerifier: string;
+    },
+    ip?: string,
+    userAgent?: string,
+  ): Promise<TokenResponse> {
+    return this.handleAuthorizationCodeGrant(
+      realm,
+      {
+        grant_type: 'authorization_code',
+        code: params.code,
+        client_id: params.clientId,
+        redirect_uri: params.redirectUri,
+        code_verifier: params.codeVerifier,
+      },
+      ip,
+      userAgent,
+      { serverClient: true },
+    );
+  }
+
   async handleTokenRequest(
     realm: Realm,
     body: Record<string, string>,
@@ -686,6 +726,7 @@ export class AuthService {
     body: Record<string, string>,
     ip?: string,
     userAgent?: string,
+    opts: { serverClient?: boolean } = {},
   ): Promise<TokenResponse> {
     const { code, client_id, client_secret, redirect_uri, code_verifier } =
       body;
@@ -703,6 +744,7 @@ export class AuthService {
       client_id,
       client_secret,
       'authorization_code',
+      { skipSecret: opts.serverClient === true },
     );
 
     // Atomically mark the code as used in a single conditional UPDATE so that
@@ -754,8 +796,13 @@ export class AuthService {
       );
     }
 
-    // PKCE enforcement: public clients must always use PKCE (OAuth 2.1 / RFC 7636)
-    if (client.clientType === 'PUBLIC' && !authCode.codeChallenge) {
+    // PKCE enforcement: public clients must always use PKCE (OAuth 2.1 / RFC
+    // 7636), and so must a server-side client, for which PKCE stands in for
+    // the client secret it does not present.
+    if (
+      (client.clientType === 'PUBLIC' || opts.serverClient === true) &&
+      !authCode.codeChallenge
+    ) {
       throw new OAuthTokenError(
         'invalid_request',
         'PKCE (code_challenge) is required for public clients',
@@ -1119,6 +1166,7 @@ export class AuthService {
     clientId: string,
     clientSecret?: string,
     grantType?: string,
+    opts: { skipSecret?: boolean } = {},
   ) {
     if (!clientId) {
       throw new OAuthTokenError(
@@ -1177,7 +1225,7 @@ export class AuthService {
       }
     }
 
-    if (client.clientType === 'CONFIDENTIAL') {
+    if (client.clientType === 'CONFIDENTIAL' && !opts.skipSecret) {
       if (!clientSecret) {
         throw new OAuthTokenError(
           'invalid_client',
