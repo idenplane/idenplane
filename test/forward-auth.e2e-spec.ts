@@ -98,10 +98,11 @@ describe('Forward auth (e2e)', () => {
     for (const m of html.matchAll(
       /<input type="hidden" name="([^"]+)" value="([^"]*)"/g,
     )) {
+      // `&amp;` last, so an encoded `&#x3D;` can't be decoded twice.
       fields[m[1]] = m[2]
-        .replace(/&amp;/g, '&')
         .replace(/&#x3D;/g, '=')
-        .replace(/&#x2F;/g, '/');
+        .replace(/&#x2F;/g, '/')
+        .replace(/&amp;/g, '&');
     }
     return fields;
   };

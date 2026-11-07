@@ -86,13 +86,22 @@ const fail = (msg) => {
   process.exit(1);
 };
 
+// Traefik reports ready before it has read the containers' routing labels;
+// until it has, every host answers 404. Wait for the app's route to exist.
+for (let tries = 0; ; tries++) {
+  const probe = await send('http://app.localhost/');
+  if (probe.status !== 404) break;
+  if (tries >= 60) fail('Traefik never routed app.localhost (still 404 after 30 s)');
+  await new Promise((r) => setTimeout(r, 500));
+}
+
 let page = await follow('http://app.localhost/');
 const form = page.text.match(/<form method="POST" action="([^"]+)"/);
 if (page.status !== 200 || !form) fail(`expected the Idenplane login page, got HTTP ${page.status} at ${page.url}`);
 
 const fields = new URLSearchParams();
 for (const m of page.text.matchAll(/<input type="hidden" name="([^"]+)" value="([^"]*)"/g)) {
-  fields.set(m[1], m[2].replace(/&amp;/g, '&').replace(/&#x3D;/g, '=').replace(/&#x2F;/g, '/'));
+  fields.set(m[1], m[2].replace(/&#x3D;/g, '=').replace(/&#x2F;/g, '/').replace(/&amp;/g, '&'));
 }
 fields.set('username', 'demo');
 fields.set('password', 'demo1234');
