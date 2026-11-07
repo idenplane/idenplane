@@ -9,6 +9,45 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+## [0.5.0] - 2026-11-07
+
+SMS becomes a real second factor, "Require MFA" is enforced on every way in, the server moves to NestJS 12 and Node 24, and Idenplane can sit in front of other apps as a forward-auth proxy.
+
+### Added
+- **SMS multi-factor authentication** ([#1690](https://github.com/idenplane/idenplane/pull/1690), [#1691](https://github.com/idenplane/idenplane/pull/1691)):
+  - Users add, change and remove a phone on the account page, and sign in with a texted code.
+  - Realms that require MFA can let new users enrol a phone instead of an authenticator app.
+  - Step-up and the token API accept texted codes: `mfa_methods` on `mfa_required`, `POST …/openid-connect/mfa/sms`, and `mfa_method=sms` on the `mfa_otp` grant.
+  - Codes are bound to the sign-in they were sent for, capped at 5 guesses per challenge, single-use, and stored only as keyed hashes. Phone numbers are encrypted.
+  - Sending is limited per challenge, user, phone, IP and realm (`SMS_REALM_HOURLY_LIMIT`).
+  - The admin console can switch SMS MFA on (a provider is required), list a user's factors, and remove just the phone.
+- **Forward-auth proxy mode** for Traefik, nginx and Caddy, managed from the admin console, with a guide and a runnable Traefik example ([#1486](https://github.com/idenplane/idenplane/pull/1486), [#1487](https://github.com/idenplane/idenplane/pull/1487), [#1488](https://github.com/idenplane/idenplane/pull/1488))
+- Admin MFA status lists the user's `methods`, and `DELETE …/users/:id/mfa/sms` removes only the phone
+- Contributor setup guide and coding standards ([#1511](https://github.com/idenplane/idenplane/pull/1511)), and a release-process page ([#1515](https://github.com/idenplane/idenplane/pull/1515)). The setup guide's steps now run in CI on Linux, macOS and Windows (WSL) ([#1692](https://github.com/idenplane/idenplane/pull/1692))
+
+### Changed
+- **Upgraded to NestJS 12** ([#1665](https://github.com/idenplane/idenplane/pull/1665)). CI and the Docker image run on **Node 24** ([#1651](https://github.com/idenplane/idenplane/pull/1651)).
+- **Every second-factor check now counts any factor** (authenticator app or SMS). Before, it counted only TOTP.
+- `DELETE /admin/realms/:realm/users/:id/mfa` removes **every** second factor and the recovery codes. Use `…/mfa/totp` or `…/mfa/sms` to remove just one.
+- **Recovery codes** are kept while the user still has another factor, and enrolling a second factor no longer replaces them.
+- Theme pages fall back to English for any message a locale hasn't translated, instead of showing the raw key.
+- Java SDK moves to Spring Boot 4 and Spring Security 7, released separately as `java-v1.1.0` ([#1499](https://github.com/idenplane/idenplane/pull/1499), [#1514](https://github.com/idenplane/idenplane/pull/1514)).
+
+### Fixed
+- **Security:** a realm's "Require MFA" setting could be bypassed. An unenrolled user could get a single-factor SSO session that `/authorize` and SAML accepted. Sessions now record the level they reached, and enrolment is required before any session is issued ([#1686](https://github.com/idenplane/idenplane/pull/1686)).
+- **Security:** federated (social / IdP) sign-ins skipped TOTP, consent and the disabled-user check, and could link to an existing account through an unverified email. They now go through the same login flow as passwords ([#1687](https://github.com/idenplane/idenplane/pull/1687)).
+- **Security:** email provider keys were returned by the admin API, and the SMTP password was stored unencrypted. Both are now redacted and encrypted, and are kept when a form is re-saved ([#1688](https://github.com/idenplane/idenplane/pull/1688)).
+- **Security:** two parallel submissions of the same correct code could each complete a sign-in. MFA challenge attempts and recovery codes are now claimed atomically.
+- **Security:** reserved render options can no longer be smuggled into theme templates ([#1685](https://github.com/idenplane/idenplane/pull/1685)).
+- Removed a malicious secret-exfiltration workflow that had been pushed to the repository ([#1650](https://github.com/idenplane/idenplane/pull/1650))
+- Realm SMS settings now save, stay encrypted and take effect ([#1684](https://github.com/idenplane/idenplane/pull/1684))
+- `webAuthnUserVerificationRequired` is accepted and persisted on realms ([#1682](https://github.com/idenplane/idenplane/pull/1682))
+- `npm run db:setup` failed on every fresh checkout, because the seed didn't load `.env` ([#1692](https://github.com/idenplane/idenplane/pull/1692))
+- The Docker `latest` and `main-<sha>` tags were never published on pushes to `main` ([#1413](https://github.com/idenplane/idenplane/pull/1413))
+
+### Security
+- All open Dependabot and code-scanning alerts resolved. Dependencies updated across the server, admin console, docs, SDKs and examples.
+
 ## [0.4.0] - 2026-08-04
 
 Native Java and Android SDKs reach Maven Central, `idenplane-mcp` ships, and the admin console rounds out webhooks, organizations, SCIM, and plugin management.
@@ -133,6 +172,9 @@ The foundation release: core IAM server with OAuth, OIDC, SAML, MFA, and the ini
 - `removeUserRealmRoles` returning 200 instead of 204
 - Login error messages never displayed on failed login
 
+[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.5.0...HEAD
+[0.5.0]: https://github.com/idenplane/idenplane/releases/tag/v0.5.0
+[0.4.0]: https://github.com/idenplane/idenplane/releases/tag/v0.4.0
 [0.3.0]: https://github.com/idenplane/idenplane/releases/tag/v0.3.0
 [0.2.0]: https://github.com/idenplane/idenplane/releases/tag/v0.2.0
 [0.1.0]: https://github.com/idenplane/idenplane/releases/tag/v0.1.0
