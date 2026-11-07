@@ -2,29 +2,41 @@ services:
   # k6 load generator
   k6:
     image: grafana/k6:latest
+    # Run on demand (`docker compose run --rm k6 ...`), not with `up`.
+    profiles: [runner]
     container_name: idenplane-benchmark-runner
     depends_on:
       app:
         condition: service_healthy
     environment:
       - TARGET_URL=http://app:3000
-      - ADMIN_API_KEY=${ADMIN_API_KEY:-change-me-in-production}
+      - ADMIN_API_KEY=${ADMIN_API_KEY:?Set ADMIN_API_KEY}
+      - REALM_NAME=${REALM_NAME:-benchmark}
+      - TEST_CLIENT_ID=${TEST_CLIENT_ID:-benchmark-client}
+      - TEST_CLIENT_SECRET=${TEST_CLIENT_SECRET:-}
+      - TEST_USERNAME=${TEST_USERNAME:-benchuser}
+      - TEST_PASSWORD=${TEST_PASSWORD:-}
       - VUS=${VUS:-50}
       - DURATION=${DURATION:-60s}
       - RAMP_UP=${RAMP_UP:-10s}
     volumes:
       - ./k6:/src/k6
-      - k6-results:/src/k6/results
+      - ./results:/results
     command: >
       run --config /src/k6/config.js
-      --out json=/src/k6/results/summary.json
+      --out json=/results/summary.json
       /src/k6/idenplane-login.js
     networks:
       - benchmarks
 
   # Idenplane application instance for benchmarking
   app:
-    image: islamawad/idenplane:latest
+    # Built from the checked-out source, so a run measures exactly that
+    # commit. Set IDENPLANE_IMAGE to benchmark a published image instead.
+    image: ${IDENPLANE_IMAGE:-idenplane-benchmark:local}
+    build:
+      context: ..
+      dockerfile: Dockerfile
     container_name: idenplane-benchmark-target
     ports:
       - "3001:3000"
@@ -32,17 +44,22 @@ services:
       DATABASE_URL: postgresql://idenplane:idenplane@db:5432/idenplane
       PORT: "3000"
       NODE_ENV: production
-      ADMIN_API_KEY: ${ADMIN_API_KEY:-change-me-in-production}
+      # Production refuses placeholder secrets, so these must be real.
+      ADMIN_API_KEY: ${ADMIN_API_KEY:?Set ADMIN_API_KEY}
       ADMIN_USER: ${ADMIN_USER:-admin}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD}
+      WEBHOOK_SECRET_KEY: ${WEBHOOK_SECRET_KEY:?Set WEBHOOK_SECRET_KEY}
+      WEBHOOK_ENCRYPTION_SALT: ${WEBHOOK_ENCRYPTION_SALT:?Set WEBHOOK_ENCRYPTION_SALT}
+      # The global throttler would otherwise answer the load with 429s.
       THROTTLE_TTL: ${THROTTLE_TTL:-60000}
-      THROTTLE_LIMIT: ${THROTTLE_LIMIT:-100}
-      BASE_URL: ${BASE_URL:-http://localhost:3001}
+      THROTTLE_LIMIT: ${THROTTLE_LIMIT:-1000000}
+      # k6 reaches the app as http://app:3000; tokens must be issued for it.
+      BASE_URL: ${BASE_URL:-http://app:3000}
     depends_on:
       db:
         condition: service_healthy
     healthcheck:
-      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health"]
+      test: ["CMD", "wget", "--no-verbose", "--tries=1", "--spider", "http://localhost:3000/health/ready"]
       interval: 5s
       timeout: 3s
       retries: 5
@@ -73,6 +90,7 @@ services:
 
   # Keycloak for competitor benchmarking
   keycloak:
+    profiles: [competitors]
     image: quay.io/keycloak/keycloak:24.0
     container_name: keycloak-benchmark-target
     command: start --import-realm
@@ -105,6 +123,7 @@ services:
 
   # Keycloak database
   keycloak-db:
+    profiles: [competitors]
     image: postgres:16-alpine
     container_name: keycloak-benchmark-db
     environment:
@@ -125,6 +144,7 @@ services:
 
   # Authentik for competitor benchmarking
   authentik:
+    profiles: [competitors]
     image: ghcr.io/goauthentik/server:2024.10
     container_name: authentik-benchmark-target
     environment:
@@ -159,6 +179,7 @@ services:
 
   # Authentik database
   authentik-db:
+    profiles: [competitors]
     image: postgres:16-alpine
     container_name: authentik-benchmark-db
     environment:
@@ -179,6 +200,7 @@ services:
 
   # Authentik Redis
   authentik-redis:
+    profiles: [competitors]
     image: redis:7-alpine
     container_name: authentik-benchmark-redis
     command: ["redis-server", "--save", "", "--appendonly", "no"]
@@ -194,6 +216,7 @@ services:
 
   # Zitadel for competitor benchmarking
   zitadel:
+    profiles: [competitors]
     image: ghcr.io/zitadel/zitadel:latest
     container_name: zitadel-benchmark-target
     environment:
@@ -229,6 +252,7 @@ services:
 
   # Zitadel database
   zitadel-db:
+    profiles: [competitors]
     image: postgres:16-alpine
     container_name: zitadel-benchmark-db
     environment:
@@ -253,7 +277,6 @@ networks:
 
 volumes:
   pgdata-bench:
-  k6-results:
   keycloak-pgdata:
   authentik-pgdata:
   zitadel-pgdata:
