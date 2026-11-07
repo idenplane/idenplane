@@ -27,6 +27,9 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import {
   ProxyAuthService,
   PROXY_SESSION_COOKIE,
+  PROXY_PKCE_COOKIE,
+  PROXY_LOGIN_HEADER,
+  STATE_TTL_MS,
   type ProxyApplicationWithClient,
 } from './proxy-auth.service.js';
 
@@ -74,10 +77,13 @@ export class ProxyAuthController {
    * The endpoint the proxy calls before every request.
    *
    * 200 — session valid; identity is in the configured headers.
-   * 302 — browser navigation with no session; sends the user into login.
-   * 401 — everything else with no session (XHR, fetch, API clients), so a
+   * 302 — browser navigation with no session (Traefik, Caddy): to the
+   *       absolute start URL, which the proxy passes to the browser.
+   * 401 — everything else with no session: XHR, fetch and API clients, so a
    *       background request gets a status its caller can act on instead of
-   *       an HTML login page.
+   *       an HTML login page; and every request from nginx `auth_request`,
+   *       which turns any status but 2xx/401/403 into a 500. The start URL is
+   *       in the X-Idenplane-Login header for nginx to redirect to.
    */
   @Get('verify')
   @Public()
@@ -101,17 +107,19 @@ export class ProxyAuthController {
       return;
     }
 
-    if (!this.wantsHtml(req)) {
+    const loginUrl = this.proxyAuth.startUrl(
+      realm.name,
+      app.slug,
+      this.proxyAuth.reconstructOriginalUrl(req),
+    );
+
+    if (!this.wantsHtml(req) || this.isNginxAuthRequest(req)) {
+      res.setHeader(PROXY_LOGIN_HEADER, loginUrl);
       res.status(401).end();
       return;
     }
 
-    const original = this.proxyAuth.reconstructOriginalUrl(req);
-    const startUrl = `/realms/${realm.name}/proxy/${app.slug}/start`;
-    res.redirect(
-      302,
-      original ? `${startUrl}?rd=${encodeURIComponent(original)}` : startUrl,
-    );
+    res.redirect(302, loginUrl);
   }
 
   /**
@@ -144,15 +152,28 @@ export class ProxyAuthController {
       );
     }
 
+    const pkce = this.proxyAuth.newPkce();
+    res.cookie(PROXY_PKCE_COOKIE, pkce.verifier, {
+      httpOnly: true,
+      secure: true,
+      // Lax: the browser comes back to the callback by a top-level redirect
+      // from the login page, which Strict would strip the cookie from.
+      sameSite: 'lax',
+      path: this.proxyAuth.callbackPath(realm.name, app.slug),
+      maxAge: STATE_TTL_MS,
+    });
+
     const params = new URLSearchParams({
       client_id: app.client.clientId,
       redirect_uri: this.proxyAuth.callbackUrl(realm.name, app.slug),
       response_type: 'code',
       scope: 'openid profile email',
       state: this.proxyAuth.encodeState(app, returnUrl),
+      code_challenge: pkce.challenge,
+      code_challenge_method: 'S256',
     });
 
-    res.redirect(302, `/realms/${realm.name}/oauth/authorize?${params}`);
+    res.redirect(302, this.proxyAuth.authorizeUrl(realm.name, params));
   }
 
   /**
@@ -183,25 +204,41 @@ export class ProxyAuthController {
       throw new BadRequestException('Missing authorization code');
     }
 
+    // The verifier only exists in the browser that called `start`. Without
+    // it the code can't be redeemed, so a callback link opened anywhere else
+    // fails here instead of signing that browser in.
+    const codeVerifier = req.cookies?.[PROXY_PKCE_COOKIE] as string | undefined;
+    const callbackPath = this.proxyAuth.callbackPath(realm.name, app.slug);
+    res.clearCookie(PROXY_PKCE_COOKIE, {
+      httpOnly: true,
+      secure: true,
+      sameSite: 'lax',
+      path: callbackPath,
+    });
+    if (!codeVerifier) {
+      throw new BadRequestException(
+        'This sign-in was started in another browser or has expired. Open the application again to sign in.',
+      );
+    }
+
     const ip = resolveClientIp(req);
     const userAgent = req.headers['user-agent'];
 
-    // Redeem through the ordinary token grant so the code's single-use,
-    // PKCE and expiry handling stay in one place.
-    const tokens = await this.authService.handleTokenRequest(
-      realm,
-      {
-        grant_type: 'authorization_code',
-        code,
-        client_id: app.client.clientId,
-        ...(app.client.clientSecret
-          ? { client_secret: app.client.clientSecret }
-          : {}),
-        redirect_uri: this.proxyAuth.callbackUrl(realm.name, app.slug),
-      },
-      ip,
-      userAgent,
-    );
+    // Redeem through the ordinary authorization-code grant so the code's
+    // single-use, PKCE and expiry handling stay in one place. No client
+    // secret: Idenplane is this client, and PKCE binds the code instead.
+    const tokens =
+      await this.authService.redeemAuthorizationCodeForServerClient(
+        realm,
+        {
+          code,
+          clientId: app.client.clientId,
+          redirectUri: this.proxyAuth.callbackUrl(realm.name, app.slug),
+          codeVerifier,
+        },
+        ip,
+        userAgent,
+      );
 
     const user = await this.resolveUserFromAccessToken(
       realm,
@@ -287,6 +324,16 @@ export class ProxyAuthController {
   private wantsHtml(req: Request): boolean {
     const accept = req.headers['accept'];
     return typeof accept === 'string' && accept.includes('text/html');
+  }
+
+  /**
+   * nginx `auth_request`, identified by the X-Original-URL header its
+   * documented config sets (Traefik and Caddy send X-Forwarded-* instead).
+   * It forwards the browser's Accept header, so without this a browser
+   * request through nginx would get a 302, which auth_request turns into a 500.
+   */
+  private isNginxAuthRequest(req: Request): boolean {
+    return typeof req.headers['x-original-url'] === 'string';
   }
 
   /**

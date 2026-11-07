@@ -46,7 +46,6 @@ request POST /realms/demo/clients "$(cat <<JSON
 {
   "clientId": "whoami-proxy",
   "clientType": "CONFIDENTIAL",
-  "clientSecret": "whoami-proxy-demo-secret",
   "redirectUris": ["$CALLBACK_URL"]
 }
 JSON
@@ -59,8 +58,7 @@ request POST /realms/demo/users '{
   "firstName": "Demo",
   "lastName": "User",
   "password": "demo1234",
-  "enabled": true,
-  "emailVerified": true
+  "enabled": true
 }' > /dev/null
 
 # cookieDomain is `.localhost` because the browser must send one cookie to both

@@ -649,6 +649,25 @@ jobs:
           docker run --rm --entrypoint pg_dump idenplane:ci --version
           docker run --rm --entrypoint pg_restore idenplane:ci --version
 
+      # The forward-auth demo, run for real against this image: Traefik in
+      # front, a browser-style sign-in, and the protected app must receive the
+      # identity. v0.5.0 shipped with this broken at five points (two in the
+      # example, three in the server) that no unit test could see.
+      - name: Forward-auth example (Traefik) signs a user in
+        working-directory: examples/forward-auth-traefik
+        env:
+          IDENPLANE_IMAGE: idenplane:ci
+        run: |
+          docker compose up -d --wait
+          node check-flow.mjs
+
+      - name: Forward-auth example logs
+        if: failure()
+        working-directory: examples/forward-auth-traefik
+        env:
+          IDENPLANE_IMAGE: idenplane:ci
+        run: docker compose logs --tail 100
+
   helm-chart:
     # 16 files that ship to anyone deploying on Kubernetes, and nothing had
     # ever linted or rendered them. values.schema.json in particular was being
