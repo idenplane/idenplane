@@ -67,7 +67,7 @@ Conventions worth copying rather than re-deriving:
 - After changing the schema: `npm run prisma:generate`. `Property 'x' does not exist on type 'PrismaService'` almost always means you skipped it.
 - **Migrations are additive.** Adding a column or table is routine. Dropping or renaming one needs a plan for deployed instances — say so in the PR rather than leaving the reviewer to notice.
 - Name migrations for what they do: `add_proxy_applications`, not `update_schema`.
-- Store secrets as hashes, not plaintext. Session tokens use SHA-256 (`CryptoService.sha256`); passwords use Argon2id. Anything needing to be read back later uses `CryptoService.encrypt` (AES-256-GCM).
+- Store secrets as hashes, not plaintext. Session tokens use SHA-256 (`CryptoService.sha256`); passwords use Argon2id. Client secrets and API keys use `CryptoService.hashSecret` / `verifySecret`: SHA-256 for the 256-bit values `generateSecret` makes, Argon2id for anything a person may have chosen. Never pass a client secret to `hashPassword`. Anything needing to be read back later uses `CryptoService.encrypt` (AES-256-GCM).
 
 ## Admin console
 

@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { CryptoService } from '../crypto/crypto.service.js';
 import type { ZitadelExport, ZitadelUser } from './zitadel-types.js';
 import { createEmptyReport, type MigrationReport } from './migration-report.js';
 
@@ -14,7 +15,10 @@ const INACTIVE_STATES = ['USER_STATE_INACTIVE', 'USER_STATE_LOCKED'];
 export class ZitadelImporterService {
   private readonly logger = new Logger(ZitadelImporterService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly crypto: CryptoService,
+  ) {}
 
   async importData(
     data: ZitadelExport,
@@ -115,7 +119,9 @@ export class ZitadelImporterService {
                 name: app.name ?? app.appId,
                 enabled: true,
                 clientType: isPublic ? 'PUBLIC' : 'CONFIDENTIAL',
-                clientSecret: app.oidcConfig.clientSecret ?? null,
+                clientSecret: app.oidcConfig.clientSecret
+                  ? await this.crypto.hashSecret(app.oidcConfig.clientSecret)
+                  : null,
                 redirectUris: app.oidcConfig.redirectUris ?? [],
                 webOrigins: [],
                 grantTypes: this.mapZitadelGrantTypes(

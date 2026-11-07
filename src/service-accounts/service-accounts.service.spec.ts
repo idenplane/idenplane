@@ -15,8 +15,8 @@ describe('ServiceAccountsService', () => {
   let prisma: MockPrismaService;
   let cryptoService: {
     generateSecret: jest.Mock;
-    hashPassword: jest.Mock;
-    verifyPassword: jest.Mock;
+    hashSecret: jest.Mock;
+    verifySecret: jest.Mock;
     sha256: jest.Mock;
   };
 
@@ -61,8 +61,8 @@ describe('ServiceAccountsService', () => {
     prisma = createMockPrismaService();
     cryptoService = {
       generateSecret: jest.fn(),
-      hashPassword: jest.fn(),
-      verifyPassword: jest.fn(),
+      hashSecret: jest.fn(),
+      verifySecret: jest.fn(),
       sha256: jest.fn(),
     };
     service = new ServiceAccountsService(prisma as any, cryptoService as any);
@@ -211,7 +211,7 @@ describe('ServiceAccountsService', () => {
       cryptoService.generateSecret.mockReturnValue(
         'abcd1234ef567890abcd1234ef567890abcd1234ef567890abcd1234ef567890',
       );
-      cryptoService.hashPassword.mockResolvedValue('$argon2id$v=19$...');
+      cryptoService.hashSecret.mockResolvedValue('$argon2id$v=19$...');
       prisma.apiKey.create.mockResolvedValue({
         ...mockApiKey,
         keyPrefix: 'abcd1234',
@@ -227,7 +227,7 @@ describe('ServiceAccountsService', () => {
       );
       expect(result.keyWarning).toBeDefined();
       expect(cryptoService.generateSecret).toHaveBeenCalledWith(32);
-      expect(cryptoService.hashPassword).toHaveBeenCalledWith(
+      expect(cryptoService.hashSecret).toHaveBeenCalledWith(
         'abcd1234ef567890abcd1234ef567890abcd1234ef567890abcd1234ef567890',
       );
       expect(prisma.apiKey.create).toHaveBeenCalledWith(
@@ -254,7 +254,7 @@ describe('ServiceAccountsService', () => {
       cryptoService.generateSecret.mockReturnValue(
         'abcd1234ef567890abcd1234ef567890abcd1234ef567890abcd1234ef567890',
       );
-      cryptoService.hashPassword.mockResolvedValue('hash');
+      cryptoService.hashSecret.mockResolvedValue('hash');
       prisma.apiKey.create.mockResolvedValue({
         ...mockApiKey,
         expiresAt: new Date('2027-01-01'),
@@ -278,7 +278,7 @@ describe('ServiceAccountsService', () => {
   describe('validateApiKey', () => {
     it('should return the api key record when credentials are valid', async () => {
       prisma.apiKey.findMany.mockResolvedValue([mockApiKey]);
-      cryptoService.verifyPassword.mockResolvedValue(true);
+      cryptoService.verifySecret.mockResolvedValue({ valid: true });
       prisma.apiKey.update.mockResolvedValue({});
 
       const result = await service.validateApiKey(
@@ -287,10 +287,40 @@ describe('ServiceAccountsService', () => {
       );
 
       expect(result).toEqual(mockApiKey);
-      expect(cryptoService.verifyPassword).toHaveBeenCalledWith(
+      expect(cryptoService.verifySecret).toHaveBeenCalledWith(
         '$argon2id$hash',
         'abcd1234ef567890...',
       );
+    });
+
+    it('moves an Argon2 key hash to the fast format, only if the row still holds it', async () => {
+      prisma.apiKey.findMany.mockResolvedValue([mockApiKey]);
+      cryptoService.verifySecret.mockResolvedValue({
+        valid: true,
+        rehash: 'sha256$new',
+      });
+      prisma.apiKey.update.mockResolvedValue({});
+
+      await service.validateApiKey('abcd1234', 'abcd1234ef567890...');
+
+      expect(prisma.apiKey.updateMany).toHaveBeenCalledWith({
+        where: { id: 'key-uuid-1', keyHash: '$argon2id$hash' },
+        data: { keyHash: 'sha256$new' },
+      });
+    });
+
+    it('still accepts the key when the hash upgrade fails', async () => {
+      prisma.apiKey.findMany.mockResolvedValue([mockApiKey]);
+      cryptoService.verifySecret.mockResolvedValue({
+        valid: true,
+        rehash: 'sha256$new',
+      });
+      prisma.apiKey.updateMany.mockRejectedValue(new Error('db down'));
+      prisma.apiKey.update.mockResolvedValue({});
+
+      await expect(
+        service.validateApiKey('abcd1234', 'abcd1234ef567890...'),
+      ).resolves.toEqual(mockApiKey);
     });
 
     it('should throw UnauthorizedException when no candidates match the prefix', async () => {
@@ -303,7 +333,7 @@ describe('ServiceAccountsService', () => {
 
     it('should throw UnauthorizedException when hash verification fails', async () => {
       prisma.apiKey.findMany.mockResolvedValue([mockApiKey]);
-      cryptoService.verifyPassword.mockResolvedValue(false);
+      cryptoService.verifySecret.mockResolvedValue({ valid: false });
 
       await expect(
         service.validateApiKey('abcd1234', 'wrong-plain-key'),
@@ -321,7 +351,7 @@ describe('ServiceAccountsService', () => {
         service.validateApiKey('abcd1234', 'abcd1234plainkey'),
       ).rejects.toThrow(UnauthorizedException);
 
-      expect(cryptoService.verifyPassword).not.toHaveBeenCalled();
+      expect(cryptoService.verifySecret).not.toHaveBeenCalled();
     });
 
     it('should skip keys whose service account is disabled', async () => {
@@ -335,7 +365,7 @@ describe('ServiceAccountsService', () => {
         service.validateApiKey('abcd1234', 'abcd1234plainkey'),
       ).rejects.toThrow(UnauthorizedException);
 
-      expect(cryptoService.verifyPassword).not.toHaveBeenCalled();
+      expect(cryptoService.verifySecret).not.toHaveBeenCalled();
     });
   });
 
@@ -395,7 +425,7 @@ describe('ServiceAccountsService', () => {
       cryptoService.generateSecret.mockReturnValue(
         'newkey1234567890newkey1234567890newkey1234567890newkey1234567890',
       );
-      cryptoService.hashPassword.mockResolvedValue('$argon2id$newhash');
+      cryptoService.hashSecret.mockResolvedValue('$argon2id$newhash');
       const newKeyRecord = {
         ...mockApiKey,
         id: 'key-uuid-2',

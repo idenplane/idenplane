@@ -9,6 +9,14 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+### Fixed
+- **Clients created by the setup wizard, or imported from Authentik or Zitadel, could not authenticate.** Their secrets were stored as plaintext, which the secret check could not read (500 on every token request). A migration hashes those rows; the clients work with the secrets they already have. The wizard also no longer keeps a copy of the secret in its own state.
+- A client secret left in the database in no known hash format is now rejected with `invalid_client` instead of a 500.
+
+### Changed
+- **Client secrets and service-account API keys are checked in microseconds instead of one Argon2 run per request.** Every token, introspection, revocation and API-key request used to pay 64 MiB and three passes of Argon2id, which capped throughput and queued behind user logins. Secrets Idenplane generates (256 random bits) are now stored as SHA-256 and compared in constant time; a slow hash protects nothing against a 2^256 search. Secrets that came from another system and may have been chosen by a person stay on Argon2id. Existing secrets move to the new format the first time they are used, with no rotation needed.
+- Realm import keeps a client secret hash from an export made with secrets, and hashes a plaintext secret written into the file by hand.
+
 ## [0.5.1] - 2026-11-07
 
 Forward auth did not work in 0.5.0. This release fixes it and checks it against real Traefik, nginx and Caddy. **If you use forward auth, upgrade, and update your nginx config** (below).

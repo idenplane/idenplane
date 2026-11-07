@@ -218,6 +218,12 @@ describe('AuthService', () => {
       metricsService as any,
       customAttributesService as any,
       userFederationService as any,
+      // Client secrets go through ClientSecretService, which has its own
+      // spec; here it defers to the same crypto mock the user password uses.
+      {
+        verify: (client: { clientSecret: string | null }, presented: string) =>
+          crypto.verifyPassword(client.clientSecret, presented),
+      } as any,
     );
   });
 

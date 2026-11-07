@@ -257,7 +257,8 @@ export class SetupWizardService {
       );
     }
 
-    // Generate client secret
+    // Generate client secret. Only its hash is stored, as for any client;
+    // the plaintext goes back in this response once and is never persisted.
     const clientSecret = this.crypto.generateSecret();
 
     // Create the client
@@ -265,7 +266,7 @@ export class SetupWizardService {
       data: {
         realmId: realm.id,
         clientId: dto.clientId,
-        clientSecret,
+        clientSecret: await this.crypto.hashSecret(clientSecret),
         clientType: 'CONFIDENTIAL',
         name: dto.clientId,
         enabled: true,
@@ -274,15 +275,15 @@ export class SetupWizardService {
       },
     });
 
-    return this.prisma.wizardState.update({
+    const updated = await this.prisma.wizardState.update({
       where: { id: state.id },
       data: {
         clientId: dto.clientId,
-        clientSecret,
         redirectUris: dto.redirectUris,
         currentStep: Math.max(state.currentStep, 4),
       },
     });
+    return { ...updated, clientSecret };
   }
 
   /**

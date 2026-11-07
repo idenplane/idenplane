@@ -1,6 +1,7 @@
 import { Test } from '@nestjs/testing';
 import { ZitadelImporterService } from './zitadel-importer.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { CryptoService } from '../crypto/crypto.service.js';
 import type { ZitadelExport } from './zitadel-types.js';
 
 describe('ZitadelImporterService', () => {
@@ -86,7 +87,9 @@ describe('ZitadelImporterService', () => {
   beforeEach(async () => {
     prisma = {
       realm: {
-        findUnique: jest.fn().mockResolvedValue({ id: 'realm-1', name: 'test' }),
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ id: 'realm-1', name: 'test' }),
       },
       role: {
         findFirst: jest.fn().mockResolvedValue(null),
@@ -110,6 +113,7 @@ describe('ZitadelImporterService', () => {
       providers: [
         ZitadelImporterService,
         { provide: PrismaService, useValue: prisma },
+        CryptoService,
       ],
     }).compile();
 
@@ -194,6 +198,41 @@ describe('ZitadelImporterService', () => {
     expect(
       report.warnings.some((w) => w.message.includes("App 'SAML App'")),
     ).toBe(true);
+  });
+
+  it('stores a confidential app secret hashed, never as plaintext', async () => {
+    await service.importData(
+      {
+        ...mockZitadelExport,
+        projects: [
+          {
+            ...mockZitadelExport.projects![0],
+            apps: [
+              {
+                appId: 'app-3',
+                name: 'Backend',
+                oidcConfig: {
+                  clientId: 'backend',
+                  clientSecret: 'zitadel-secret',
+                  redirectUris: [],
+                  authMethodType: 'OIDC_AUTH_METHOD_TYPE_BASIC',
+                  grantTypes: ['OIDC_GRANT_TYPE_AUTHORIZATION_CODE'],
+                },
+              },
+            ],
+          },
+        ],
+      } as ZitadelExport,
+      { dryRun: false, targetRealm: 'test' },
+    );
+
+    const stored = (prisma.client.create as jest.Mock).mock.calls[0][0].data
+      .clientSecret as string;
+    expect(stored).not.toBe('zitadel-secret');
+    const crypto = new CryptoService();
+    expect(await crypto.verifySecret(stored, 'zitadel-secret')).toEqual({
+      valid: true,
+    });
   });
 
   it('should import generic OIDC IdPs and skip non-OIDC IdPs with a warning', async () => {

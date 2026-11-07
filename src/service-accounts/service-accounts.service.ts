@@ -136,7 +136,7 @@ export class ServiceAccountsService {
     // Generate a cryptographically random key: prefix (8 hex chars) + full key (64 hex chars)
     const rawKey = this.crypto.generateSecret(32); // 64 hex chars
     const keyPrefix = rawKey.slice(0, 8);
-    const keyHash = await this.crypto.hashPassword(rawKey);
+    const keyHash = await this.crypto.hashSecret(rawKey);
 
     const apiKey = await this.prisma.apiKey.create({
       data: {
@@ -203,7 +203,7 @@ export class ServiceAccountsService {
     // Create a new key with the same settings
     const newRaw = this.crypto.generateSecret(32);
     const newPrefix = newRaw.slice(0, 8);
-    const newHash = await this.crypto.hashPassword(newRaw);
+    const newHash = await this.crypto.hashSecret(newRaw);
 
     const newKey = await this.prisma.apiKey.create({
       data: {
@@ -247,11 +247,23 @@ export class ServiceAccountsService {
       // Skip disabled service accounts
       if (!candidate.serviceAccount.enabled) continue;
 
-      const valid = await this.crypto.verifyPassword(
+      const { valid, rehash } = await this.crypto.verifySecret(
         candidate.keyHash,
         plainKey,
       );
       if (valid) {
+        // Keys made before 0.5.2 are Argon2; move each to the fast format on
+        // first use. Conditional on the hash just verified, like clients.
+        if (rehash) {
+          try {
+            await this.prisma.apiKey.updateMany({
+              where: { id: candidate.id, keyHash: candidate.keyHash },
+              data: { keyHash: rehash },
+            });
+          } catch {
+            // Retried on the next request.
+          }
+        }
         // Update usage statistics (fire-and-forget — don't block the request)
         this.prisma.apiKey
           .update({

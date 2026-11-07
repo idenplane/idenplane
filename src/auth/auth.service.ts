@@ -8,6 +8,7 @@ import {
 import { OAuthTokenError } from './oauth-token-error.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
+import { ClientSecretService } from '../clients/client-secret.service.js';
 import { JwkService } from '../crypto/jwk.service.js';
 import { ScopesService } from '../scopes/scopes.service.js';
 import {
@@ -64,6 +65,7 @@ export class AuthService {
     private readonly metricsService: MetricsService,
     private readonly customAttributesService: CustomAttributesService,
     private readonly userFederationService: UserFederationService,
+    private readonly clientSecrets: ClientSecretService,
     @Optional() private readonly stepUpService?: StepUpService,
     @Optional() private readonly pluginManager?: PluginManagerService,
     @Optional() private readonly smsOtp?: SmsOtpService,
@@ -1240,10 +1242,7 @@ export class AuthService {
           HttpStatus.UNAUTHORIZED,
         );
       }
-      const valid = await this.crypto.verifyPassword(
-        client.clientSecret,
-        clientSecret,
-      );
+      const valid = await this.clientSecrets.verify(client, clientSecret);
       if (!valid) {
         throw new OAuthTokenError(
           'invalid_client',
