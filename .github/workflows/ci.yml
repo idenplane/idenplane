@@ -85,14 +85,25 @@ jobs:
       # ship: a silently skipped test here would leave the backup/restore
       # mechanics unverified while still reporting green.
       #
-      # Ubuntu 24.04's postgresql-client is 16, matching the service container.
-      # The client major must be >= the server's.
+      # The client major must EQUAL the service container's (postgres:16), the
+      # same rule the Dockerfile pins with PG_MAJOR. A newer pg_dump writes
+      # `SET transaction_timeout` (PG 17+) into the archive, which a 16 server
+      # rejects on restore. Install the versioned package from the PostgreSQL
+      # apt repo instead of the distro's `postgresql-client`, whose major
+      # follows the runner image (Ubuntu 26.04 ships 18), and assert it.
       - name: Install PostgreSQL client (for the backup round-trip spec)
+        env:
+          PG_MAJOR: '16'
         run: |
           sudo apt-get update -qq
-          sudo apt-get install -y --no-install-recommends postgresql-client
-          pg_dump --version
-          pg_restore --version
+          sudo apt-get install -y --no-install-recommends postgresql-common
+          sudo /usr/share/postgresql-common/pgdg/apt.postgresql.org.sh -y
+          sudo apt-get install -y --no-install-recommends "postgresql-client-${PG_MAJOR}"
+          echo "/usr/lib/postgresql/${PG_MAJOR}/bin" >> "$GITHUB_PATH"
+          for tool in pg_dump pg_restore; do
+            "/usr/lib/postgresql/${PG_MAJOR}/bin/${tool}" --version | tee /dev/stderr \
+              | grep -q " ${PG_MAJOR}\." || { echo "::error::${tool} is not PostgreSQL ${PG_MAJOR}"; exit 1; }
+          done
 
       - name: Run database migrations
         env:
