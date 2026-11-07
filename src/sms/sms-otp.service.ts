@@ -1,836 +1,692 @@
-import { Injectable, Logger, Optional } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
+import { Prisma } from '@prisma/client';
+import type { Realm } from '@prisma/client';
+import { randomInt, timingSafeEqual } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
-import { RedisService } from '../redis/redis.service.js';
 import { SmsService } from './sms.service.js';
 
-/** TTL in seconds for a rate limit counter entry. */
-const _RATE_LIMIT_TTL_SECONDS = 900; // 15 minutes default
+/** What a code was sent for. A code is only accepted for the same purpose and binding. */
+export type SmsOtpPurpose = 'enroll' | 'login' | 'step_up';
 
-/** Default OTP length when not configured. */
-const DEFAULT_OTP_LENGTH = 6;
-
-/** Default OTP expiry in seconds (5 minutes). */
-const DEFAULT_OTP_EXPIRY_SECONDS = 300;
-
-/** Maximum verification attempts before lockout. */
-const MAX_VERIFICATION_ATTEMPTS = 5;
-
+/** Guesses allowed per challenge, across every code resent for it. */
+export const SMS_OTP_MAX_ATTEMPTS = 5;
+/** Codes that may be sent for one challenge (the first send plus resends). */
+export const SMS_OTP_MAX_SENDS = 5;
+/** Minimum wait between two sends for the same challenge. */
+export const SMS_OTP_RESEND_COOLDOWN_SECONDS = 30;
+/** Sends allowed from one IP address per realm rate-limit window. */
+export const SMS_OTP_MAX_SENDS_PER_IP = 10;
+/** Realm-wide sends per hour; caps the cost of an SMS-pumping attack. */
+const DEFAULT_REALM_HOURLY_LIMIT = 1000;
 /**
- * Result of generating an OTP for delivery.
+ * Spent or expired codes are kept this long before cleanup. It must outlive
+ * every flow token a code can be bound to (sign-in challenge 5 min, phone
+ * enrolment 10 min); otherwise deleting the row would hand an attacker a
+ * fresh guess budget for the same challenge.
  */
-export interface OtpGenerationResult {
-  /** The plain OTP code (only available immediately after generation). */
-  code?: string;
-  /** Whether SMS was successfully sent. */
-  smsSent: boolean;
-  /** Delivery log ID for tracking. */
-  deliveryLogId?: string;
-  /** Error message if SMS delivery failed. */
-  errorMessage?: string;
+const OTP_ROW_RETENTION_MS = 30 * 60 * 1000;
+
+/** Cookie holding the token of an in-progress phone enrolment. */
+export const SMS_ENROLLMENT_COOKIE = 'IDENPLANE_SMS_ENROLL';
+export const SMS_ENROLLMENT_TTL_SECONDS = 10 * 60;
+
+/** A phone being added or changed on the account page. */
+export interface SmsEnrollmentData {
+  userId: string;
+  realmId: string;
+  /** Set once a code was sent: where it went, for the "enter the code" page. */
+  maskedPhone?: string;
+  /** The number being added, encrypted; lets "send again" reuse it. */
+  phoneEncrypted?: string;
 }
 
-/** Default OTP lockout duration in seconds (15 minutes). */
-const DEFAULT_OTP_LOCKOUT_DURATION_SECONDS = 900;
+/** Delivery logs older than this are deleted. */
+const DELIVERY_LOG_RETENTION_DAYS = 90;
 
-/**
- * Result of checking OTP lockout status.
- */
-export interface OtpLockoutStatus {
-  /** Whether the user is currently locked out. */
-  locked: boolean;
-  /** If locked, the time when the lock expires. */
-  lockedUntil?: Date;
-  /** Remaining verification attempts. */
-  remainingAttempts?: number;
+const MIN_CODE_LENGTH = 6;
+const MAX_CODE_LENGTH = 10;
+const MIN_EXPIRY_SECONDS = 60;
+const MAX_EXPIRY_SECONDS = 15 * 60;
+
+/** HMAC purposes; see CryptoService.hmac. */
+const HMAC_BINDING = 'sms-otp-binding';
+const HMAC_CODE = 'sms-otp-code';
+const HMAC_PHONE = 'sms-phone';
+const HMAC_IP = 'sms-ip';
+
+/** E.164: "+", a non-zero country digit, 7–14 more digits. */
+const E164 = /^\+[1-9]\d{7,14}$/;
+
+export type SmsOtpErrorCode =
+  | 'unavailable'
+  | 'invalid_phone'
+  | 'cooldown'
+  | 'rate_limited'
+  | 'too_many_sends'
+  | 'locked'
+  | 'send_failed';
+
+/** A send that was refused. `message` is safe to show to the user. */
+export class SmsOtpError extends Error {
+  constructor(
+    readonly code: SmsOtpErrorCode,
+    message: string,
+    /** For `cooldown`: seconds until a resend is allowed. */
+    readonly retryAfterSeconds?: number,
+  ) {
+    super(message);
+    this.name = 'SmsOtpError';
+  }
 }
 
-/**
- * Result of verifying an OTP code.
- */
-export interface OtpVerificationResult {
-  /** Whether the code was valid and verified. */
-  success: boolean;
-  /** Whether the user is temporarily locked out due to too many attempts. */
-  locked: boolean;
-  /** If locked, the time when the lock expires. */
-  lockedUntil?: Date;
-  /** Remaining verification attempts (if not locked). */
-  remainingAttempts?: number;
-  /** Error message describing the failure reason. */
-  error?: string;
+export interface SmsOtpSendResult {
+  /** The destination with all but the country prefix and last digits hidden. */
+  maskedPhone: string;
+  expiresAt: Date;
+  /** Earliest time another code can be requested for this challenge. */
+  resendAvailableAt: Date;
 }
 
-/**
- * Delivery status for SMS messages.
- */
-export enum SmsDeliveryStatus {
-  PENDING = 'PENDING',
-  SENT = 'SENT',
-  DELIVERED = 'DELIVERED',
-  FAILED = 'FAILED',
-  UNKNOWN = 'UNKNOWN',
-}
+export type SmsOtpVerifyResult =
+  | {
+      ok: true;
+      /** The number the code was sent to (decrypted). */ phone: string;
+    }
+  | {
+      ok: false;
+      reason: 'invalid' | 'expired' | 'locked' | 'not_found';
+      remainingAttempts?: number;
+    };
 
+type RealmSmsSettings = Pick<
+  Realm,
+  | 'id'
+  | 'name'
+  | 'displayName'
+  | 'smsMfaEnabled'
+  | 'smsProvider'
+  | 'otpLength'
+  | 'otpExpirySeconds'
+  | 'smsMaxRequestsPerUser'
+  | 'smsRateLimitWindow'
+>;
+
+/**
+ * One-time codes sent by SMS, for enrolling a phone and as a second factor.
+ *
+ * Each code belongs to a challenge identified by (purpose, binding). The
+ * binding is a token of the flow that asked for the code — the MFA challenge
+ * token for a sign-in, the step-up token, the enrolment token — so a code
+ * sent for one flow is worthless in another. Codes and phone numbers are
+ * stored only as keyed hashes (and the enrolling number encrypted), every
+ * guess is counted atomically *before* it is checked, and the guess budget
+ * survives resends. Sends are limited per challenge, user, phone, IP and
+ * realm, because every SMS costs the operator money.
+ */
 @Injectable()
 export class SmsOtpService {
   private readonly logger = new Logger(SmsOtpService.name);
 
-  /**
-   * In-memory fallback store for rate limiting when Redis is unavailable.
-   * Key: `ratelimit:{realmId}:{userId}`, Value: { count: number, windowStart: number }.
-   */
-  private readonly rateLimitStore = new Map<
-    string,
-    { count: number; windowStart: number }
-  >();
-
-  /**
-   * In-memory fallback store for OTP verification lockouts when Redis is unavailable.
-   * Key: `otplockout:{realmId}:{userId}`, Value: { lockExpiresAt: number }.
-   */
-  private readonly otpLockoutStore = new Map<
-    string,
-    { lockExpiresAt: number }
-  >();
-
-  /**
-   * In-memory store for verification attempt counts (when DB is unavailable for read).
-   * Key: `otpattempts:{realmId}:{userId}`, Value: { count: number, windowStart: number }.
-   */
-  private readonly verificationAttemptsStore = new Map<
-    string,
-    { count: number; windowStart: number }
-  >();
-
   constructor(
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
-    @Optional() private readonly redis?: RedisService,
-    private readonly smsService?: SmsService,
+    private readonly smsService: SmsService,
   ) {}
 
-  /**
-   * Generate a numeric OTP code of the specified length.
-   */
-  private generateOtpCode(length: number): string {
-    let code = '';
-    for (let i = 0; i < length; i++) {
-      code += Math.floor(Math.random() * 10).toString();
-    }
-    return code;
+  // ── Helpers ───────────────────────────────────────────────
+
+  /** Canonical E.164 form of a user-typed number, or null if it isn't one. */
+  static normalizePhone(input: string | null | undefined): string | null {
+    if (typeof input !== 'string') return null;
+    let phone = input.trim().replace(/[\s().-]/g, '');
+    if (phone.startsWith('00')) phone = `+${phone.slice(2)}`;
+    return E164.test(phone) ? phone : null;
   }
 
-  /**
-   * Check if the user has exceeded the SMS rate limit for the realm.
-   * Uses Redis for atomic increment, falls back to in-memory tracking.
-   *
-   * @returns true if rate limited (should NOT send), false if allowed
-   */
-  private async isRateLimited(
-    realmId: string,
-    userId: string,
-    maxRequests: number,
-    windowSeconds: number,
-  ): Promise<boolean> {
-    const key = `sms:ratelimit:${realmId}:${userId}`;
-
-    if (this.redis?.isAvailable()) {
-      // Use Redis for atomic rate limiting
-      const count = await this.redis.incr(key, windowSeconds);
-      return count > maxRequests;
-    }
-
-    // In-memory fallback
-    const entry = this.rateLimitStore.get(key);
-    const now = Date.now();
-
-    if (!entry || now - entry.windowStart > windowSeconds * 1000) {
-      // Start new window
-      this.rateLimitStore.set(key, { count: 1, windowStart: now });
-      return false;
-    }
-
-    entry.count++;
-    if (entry.count > maxRequests) {
-      return true;
-    }
-    return false;
+  /** "+201012345678" → "+20••••••5678". */
+  static maskPhone(phone: string): string {
+    if (phone.length <= 7) return '••••';
+    return `${phone.slice(0, 3)}${'•'.repeat(phone.length - 7)}${phone.slice(-4)}`;
   }
 
-  /**
-   * Get rate limit status for a user in a realm.
-   */
-  async getRateLimitStatus(
-    realmId: string,
-    userId: string,
-    maxRequests: number,
-    windowSeconds: number,
-  ): Promise<{ remaining: number; resetAt: Date }> {
-    const key = `sms:ratelimit:${realmId}:${userId}`;
-
-    if (this.redis?.isAvailable()) {
-      const count = await this.redis.get(key);
-      const remaining = Math.max(0, maxRequests - parseInt(count ?? '0', 10));
-      // TTL from Redis would give exact reset time, approximate here
-      const resetAt = new Date(Date.now() + windowSeconds * 1000);
-      return { remaining, resetAt };
-    }
-
-    // In-memory fallback
-    const entry = this.rateLimitStore.get(key);
-    if (!entry) {
-      return { remaining: maxRequests, resetAt: new Date() };
-    }
-
-    const elapsed = Date.now() - entry.windowStart;
-    if (elapsed > windowSeconds * 1000) {
-      return { remaining: maxRequests, resetAt: new Date() };
-    }
-
-    const remaining = Math.max(0, maxRequests - entry.count);
-    const resetAt = new Date(entry.windowStart + windowSeconds * 1000);
-    return { remaining, resetAt };
+  /** A provider is set up, so codes can be delivered at all. */
+  static canDeliver(realm: Pick<Realm, 'smsProvider'>): boolean {
+    return !!realm.smsProvider && realm.smsProvider !== 'none';
   }
 
-  /**
-   * Get the lockout status for OTP verification for a user in a realm.
-   * Checks the most recent unverified OTP attempt for lockout information.
-   *
-   * @returns Lockout status with remaining attempts
-   */
-  async getOtpLockoutStatus(
-    realmId: string,
-    userId: string,
-    phoneHash: string,
-  ): Promise<OtpLockoutStatus> {
-    const otpAttempt = await this.prisma.otpAttempt.findFirst({
-      where: {
-        realmId,
-        userId,
-        phoneHash,
-        verified: false,
-      },
-      orderBy: { createdAt: 'desc' },
+  /** New phones may be enrolled: SMS MFA is switched on and deliverable. */
+  static canEnroll(
+    realm: Pick<Realm, 'smsProvider' | 'smsMfaEnabled'>,
+  ): boolean {
+    return realm.smsMfaEnabled && SmsOtpService.canDeliver(realm);
+  }
+
+  private bindingHash(purpose: SmsOtpPurpose, binding: string): string {
+    return this.crypto.hmac(HMAC_BINDING, `${purpose}:${binding}`);
+  }
+
+  private codeHash(bindingHash: string, code: string): string {
+    return this.crypto.hmac(HMAC_CODE, `${bindingHash}:${code}`);
+  }
+
+  phoneHash(phone: string): string {
+    return this.crypto.hmac(HMAC_PHONE, phone);
+  }
+
+  private generateCode(length: number): string {
+    return randomInt(0, 10 ** length)
+      .toString()
+      .padStart(length, '0');
+  }
+
+  private static clamp(
+    value: number | null | undefined,
+    min: number,
+    max: number,
+    fallback: number,
+  ): number {
+    if (!value || !Number.isFinite(value)) return fallback;
+    return Math.min(max, Math.max(min, Math.floor(value)));
+  }
+
+  // ── Enrolled phone ────────────────────────────────────────
+
+  /** The user's verified SMS number, decrypted, or null if none. */
+  async getEnrolledPhone(userId: string): Promise<string | null> {
+    const credential = await this.prisma.userCredential.findUnique({
+      where: { userId_type: { userId, type: 'sms' } },
+      select: { phoneNumber: true, verified: true },
     });
-
-    if (!otpAttempt) {
-      return { locked: false, remainingAttempts: MAX_VERIFICATION_ATTEMPTS };
+    if (!credential?.verified || !credential.phoneNumber) return null;
+    // Strict decrypt: if the key changed, fail rather than text the ciphertext.
+    try {
+      return SmsOtpService.normalizePhone(
+        this.crypto.decrypt(credential.phoneNumber),
+      );
+    } catch {
+      this.logger.error(`Could not decrypt the SMS phone of user ${userId}`);
+      return null;
     }
+  }
 
-    const now = new Date();
-    if (otpAttempt.expiresAt > now) {
-      // If the expiresAt is in the future and failed attempts are high,
-      // this indicates a lockout (we set expiresAt to future when locking)
-      if (otpAttempt.failedAttempts >= MAX_VERIFICATION_ATTEMPTS) {
-        return {
-          locked: true,
-          lockedUntil: otpAttempt.expiresAt,
-          remainingAttempts: 0,
-        };
+  /** Record `phone` as the user's SMS factor (replacing any previous number). */
+  async saveEnrolledPhone(userId: string, phone: string): Promise<void> {
+    const phoneNumber = this.crypto.encrypt(phone);
+    await this.prisma.userCredential.upsert({
+      where: { userId_type: { userId, type: 'sms' } },
+      create: {
+        userId,
+        type: 'sms',
+        secretKey: '',
+        phoneNumber,
+        verified: true,
+      },
+      update: { phoneNumber, verified: true },
+    });
+  }
+
+  /** Remove the SMS factor and any codes still pending for the user. */
+  async removeEnrolledPhone(userId: string): Promise<void> {
+    await this.prisma.userCredential.deleteMany({
+      where: { userId, type: 'sms' },
+    });
+    await this.prisma.otpAttempt.deleteMany({ where: { userId } });
+  }
+
+  // ── Phone enrolment session ───────────────────────────────
+
+  /**
+   * Start adding or changing a phone. The returned token is the binding for
+   * its codes; it is short-lived and single-purpose, so the guess budget of
+   * an enrolment can't be refreshed by reusing a long-lived session.
+   */
+  async startEnrollment(userId: string, realmId: string): Promise<string> {
+    const token = this.crypto.generateSecret(32);
+    const data: SmsEnrollmentData = { userId, realmId };
+    await this.prisma.pendingAction.create({
+      data: {
+        tokenHash: this.crypto.sha256(token),
+        type: 'sms_enrollment',
+        data: data as unknown as Prisma.InputJsonValue,
+        expiresAt: new Date(Date.now() + SMS_ENROLLMENT_TTL_SECONDS * 1000),
+      },
+    });
+    return token;
+  }
+
+  async getEnrollment(token: string): Promise<SmsEnrollmentData | null> {
+    const action = await this.prisma.pendingAction.findUnique({
+      where: { tokenHash: this.crypto.sha256(token) },
+    });
+    if (!action || action.type !== 'sms_enrollment') return null;
+    if (action.expiresAt < new Date()) return null;
+    return action.data as unknown as SmsEnrollmentData;
+  }
+
+  /** Remember which (normalised) number this enrolment is texting. */
+  async setEnrollmentPhone(token: string, phone: string): Promise<void> {
+    const enrollment = await this.getEnrollment(token);
+    if (!enrollment) return;
+    const data: SmsEnrollmentData = {
+      ...enrollment,
+      maskedPhone: SmsOtpService.maskPhone(phone),
+      phoneEncrypted: this.crypto.encrypt(phone),
+    };
+    await this.prisma.pendingAction.update({
+      where: { tokenHash: this.crypto.sha256(token) },
+      data: { data: data as unknown as Prisma.InputJsonValue },
+    });
+  }
+
+  /** The number an enrolment is texting, or null if none was sent yet. */
+  enrollmentPhone(enrollment: SmsEnrollmentData): string | null {
+    if (!enrollment.phoneEncrypted) return null;
+    try {
+      return this.crypto.decrypt(enrollment.phoneEncrypted);
+    } catch {
+      return null;
+    }
+  }
+
+  async endEnrollment(token: string): Promise<void> {
+    await this.prisma.pendingAction.deleteMany({
+      where: { tokenHash: this.crypto.sha256(token), type: 'sms_enrollment' },
+    });
+  }
+
+  // ── Sending ───────────────────────────────────────────────
+
+  /**
+   * Send a code for the challenge (purpose, binding). Calling it again for
+   * the same challenge is a resend: a new code replaces the old one, the
+   * guess budget carries over. For `enroll`, `phone` is the number being
+   * added; otherwise the code goes to the user's enrolled number.
+   *
+   * @throws SmsOtpError when the send is refused or the provider fails.
+   */
+  async sendCode(params: {
+    realm: RealmSmsSettings;
+    userId: string;
+    purpose: SmsOtpPurpose;
+    binding: string;
+    phone?: string;
+    ip?: string;
+  }): Promise<SmsOtpSendResult> {
+    const { realm, userId, purpose, binding } = params;
+
+    let phone: string | null;
+    if (purpose === 'enroll') {
+      if (!SmsOtpService.canEnroll(realm)) {
+        throw new SmsOtpError(
+          'unavailable',
+          'Text message verification is not available.',
+        );
+      }
+      phone = SmsOtpService.normalizePhone(params.phone);
+      if (!phone) {
+        throw new SmsOtpError(
+          'invalid_phone',
+          'Enter the number in international format, for example +201012345678.',
+        );
+      }
+    } else {
+      // Existing enrolments keep working when the switch is turned off; only
+      // a missing provider stops them, because nothing could be delivered.
+      if (!SmsOtpService.canDeliver(realm)) {
+        throw new SmsOtpError(
+          'unavailable',
+          'Text message verification is not available.',
+        );
+      }
+      phone = await this.getEnrolledPhone(userId);
+      if (!phone) {
+        throw new SmsOtpError(
+          'unavailable',
+          'No phone number is set up for this account.',
+        );
       }
     }
 
+    const bindingHash = this.bindingHash(purpose, binding);
+    const phoneHash = this.phoneHash(phone);
+    const ipHash = params.ip ? this.crypto.hmac(HMAC_IP, params.ip) : null;
+    const now = new Date();
+
+    const existing = await this.prisma.otpAttempt.findUnique({
+      where: { purpose_bindingHash: { purpose, bindingHash } },
+    });
+    if (
+      existing &&
+      (existing.userId !== userId || existing.realmId !== realm.id)
+    ) {
+      // A binding is a secret token of one user's flow; a mismatch is misuse.
+      throw new SmsOtpError(
+        'unavailable',
+        'Text message verification is not available.',
+      );
+    }
+    if (existing && existing.attempts >= SMS_OTP_MAX_ATTEMPTS) {
+      throw new SmsOtpError(
+        'locked',
+        'Too many incorrect codes. Please start again.',
+      );
+    }
+    if (existing && existing.sendCount >= SMS_OTP_MAX_SENDS) {
+      throw new SmsOtpError(
+        'too_many_sends',
+        'Too many codes were requested. Please start again.',
+      );
+    }
+    if (existing) {
+      const wait = Math.ceil(
+        (existing.lastSentAt.getTime() +
+          SMS_OTP_RESEND_COOLDOWN_SECONDS * 1000 -
+          now.getTime()) /
+          1000,
+      );
+      if (wait > 0) {
+        throw new SmsOtpError(
+          'cooldown',
+          `Please wait ${wait} seconds before requesting another code.`,
+          wait,
+        );
+      }
+    }
+
+    // Reserve the send in the delivery log *before* counting. Every
+    // concurrent request then sees at least its own row and those committed
+    // before it, so a parallel burst can't all pass a count taken first.
+    // Refused sends stay in the log as REJECTED and keep counting.
+    const log = await this.prisma.smsDeliveryLog.create({
+      data: {
+        realmId: realm.id,
+        userId,
+        phoneHash,
+        ipHash,
+        provider: realm.smsProvider,
+        status: 'PENDING',
+      },
+    });
+    const reject = async (error: SmsOtpError): Promise<never> => {
+      await this.prisma.smsDeliveryLog.update({
+        where: { id: log.id },
+        data: { status: 'REJECTED', errorMessage: error.code },
+      });
+      throw error;
+    };
+
+    const limitError = await this.checkSendLimits(
+      realm,
+      userId,
+      phoneHash,
+      ipHash,
+      now,
+    );
+    if (limitError) await reject(limitError);
+
+    const length = SmsOtpService.clamp(
+      realm.otpLength,
+      MIN_CODE_LENGTH,
+      MAX_CODE_LENGTH,
+      MIN_CODE_LENGTH,
+    );
+    const expirySeconds = SmsOtpService.clamp(
+      realm.otpExpirySeconds,
+      MIN_EXPIRY_SECONDS,
+      MAX_EXPIRY_SECONDS,
+      300,
+    );
+    const code = this.generateCode(length);
+    const expiresAt = new Date(now.getTime() + expirySeconds * 1000);
+    const fields = {
+      codeHash: this.codeHash(bindingHash, code),
+      phoneHash,
+      phoneEncrypted: purpose === 'enroll' ? this.crypto.encrypt(phone) : null,
+      expiresAt,
+      lastSentAt: now,
+    };
+
+    if (existing) {
+      // Claim the resend atomically: two concurrent resends can't both pass
+      // the cooldown or exceed the send budget.
+      const { count } = await this.prisma.otpAttempt.updateMany({
+        where: {
+          id: existing.id,
+          lastSentAt: {
+            lte: new Date(
+              now.getTime() - SMS_OTP_RESEND_COOLDOWN_SECONDS * 1000,
+            ),
+          },
+          sendCount: { lt: SMS_OTP_MAX_SENDS },
+          attempts: { lt: SMS_OTP_MAX_ATTEMPTS },
+        },
+        data: { ...fields, sendCount: { increment: 1 } },
+      });
+      if (count === 0) {
+        await reject(
+          new SmsOtpError(
+            'cooldown',
+            `Please wait ${SMS_OTP_RESEND_COOLDOWN_SECONDS} seconds before requesting another code.`,
+            SMS_OTP_RESEND_COOLDOWN_SECONDS,
+          ),
+        );
+      }
+    } else {
+      try {
+        await this.prisma.otpAttempt.create({
+          data: { realmId: realm.id, userId, purpose, bindingHash, ...fields },
+        });
+      } catch (err) {
+        if (
+          err instanceof Prisma.PrismaClientKnownRequestError &&
+          err.code === 'P2002'
+        ) {
+          // A concurrent first send for the same challenge won the race.
+          await reject(
+            new SmsOtpError(
+              'cooldown',
+              `Please wait ${SMS_OTP_RESEND_COOLDOWN_SECONDS} seconds before requesting another code.`,
+              SMS_OTP_RESEND_COOLDOWN_SECONDS,
+            ),
+          );
+        }
+        throw err;
+      }
+    }
+
+    const minutes = Math.max(1, Math.round(expirySeconds / 60));
+    const appName = realm.displayName || realm.name;
+    const message = `${code} is your ${appName} verification code. It expires in ${minutes} minute${minutes === 1 ? '' : 's'}. Never share it with anyone.`;
+
+    try {
+      await this.smsService.sendSms(realm.name, phone, message);
+    } catch (err) {
+      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      await this.prisma.smsDeliveryLog.update({
+        where: { id: log.id },
+        data: { status: 'FAILED', errorMessage: errorMessage.slice(0, 500) },
+      });
+      this.logger.error(
+        `SMS code delivery failed (realm ${realm.name}, log ${log.id}): ${errorMessage}`,
+      );
+      throw new SmsOtpError(
+        'send_failed',
+        'The text message could not be sent. Please try again later.',
+      );
+    }
+    await this.prisma.smsDeliveryLog.update({
+      where: { id: log.id },
+      data: { status: 'SENT' },
+    });
+
     return {
-      locked: false,
-      remainingAttempts: Math.max(
-        0,
-        MAX_VERIFICATION_ATTEMPTS - otpAttempt.failedAttempts,
+      maskedPhone: SmsOtpService.maskPhone(phone),
+      expiresAt,
+      resendAvailableAt: new Date(
+        now.getTime() + SMS_OTP_RESEND_COOLDOWN_SECONDS * 1000,
       ),
     };
   }
 
   /**
-   * Check if a user is currently locked out from OTP verification.
-   * Uses Redis for lockout state, falls back to in-memory tracking.
+   * Per-user, per-phone, per-IP and realm-wide caps, counted from the
+   * delivery log in the database so they hold across server instances. The
+   * caller has already logged this send, so the counts include it.
    */
-  async isOtpLockedOut(
-    realmId: string,
+  private async checkSendLimits(
+    realm: RealmSmsSettings,
     userId: string,
-  ): Promise<{ locked: boolean; lockedUntil?: Date }> {
-    const key = `sms:otplockout:${realmId}:${userId}`;
-
-    if (this.redis?.isAvailable()) {
-      const lockData = await this.redis.get(key);
-      if (lockData) {
-        const lockUntil = new Date(lockData);
-        if (lockUntil > new Date()) {
-          return { locked: true, lockedUntil: lockUntil };
-        }
-        // Lock expired, clean it up
-        await this.redis.del(key);
-      }
-      return { locked: false };
-    }
-
-    // In-memory fallback
-    const entry = this.otpLockoutStore.get(key);
-    if (!entry) {
-      return { locked: false };
-    }
-
-    if (Date.now() > entry.lockExpiresAt) {
-      this.otpLockoutStore.delete(key);
-      return { locked: false };
-    }
-
-    return { locked: true, lockedUntil: new Date(entry.lockExpiresAt) };
-  }
-
-  /**
-   * Lock a user out from OTP verification attempts.
-   * Uses Redis for persistent lockout state, falls back to in-memory tracking.
-   *
-   * @param realmId - The realm ID
-   * @param userId - The user ID
-   * @param lockoutSeconds - Duration of the lockout in seconds
-   */
-  async lockOtpVerification(
-    realmId: string,
-    userId: string,
-    lockoutSeconds: number,
-  ): Promise<void> {
-    const key = `sms:otplockout:${realmId}:${userId}`;
-    const lockedUntil = new Date(Date.now() + lockoutSeconds * 1000);
-
-    if (this.redis?.isAvailable()) {
-      await this.redis.set(key, lockedUntil.toISOString(), lockoutSeconds);
-    } else {
-      this.otpLockoutStore.set(key, { lockExpiresAt: lockedUntil.getTime() });
-    }
-
-    this.logger.debug(
-      `OTP verification locked for user ${userId} in realm ${realmId} until ${lockedUntil.toISOString()}`,
+    phoneHash: string,
+    ipHash: string | null,
+    now: Date,
+  ): Promise<SmsOtpError | null> {
+    const maxPerWindow = SmsOtpService.clamp(
+      realm.smsMaxRequestsPerUser,
+      1,
+      100,
+      3,
     );
-  }
-
-  /**
-   * Unlock a user from OTP verification lockout.
-   * Uses Redis for persistent lockout state, falls back to in-memory tracking.
-   */
-  async unlockOtpVerification(realmId: string, userId: string): Promise<void> {
-    const key = `sms:otplockout:${realmId}:${userId}`;
-
-    if (this.redis?.isAvailable()) {
-      await this.redis.del(key);
-    } else {
-      this.otpLockoutStore.delete(key);
-    }
-
-    this.logger.debug(
-      `OTP verification unlocked for user ${userId} in realm ${realmId}`,
+    const windowSeconds = SmsOtpService.clamp(
+      realm.smsRateLimitWindow,
+      60,
+      86_400,
+      900,
     );
-  }
+    const windowStart = new Date(now.getTime() - windowSeconds * 1000);
+    const hourStart = new Date(now.getTime() - 3_600_000);
+    const realmHourlyLimit = SmsOtpService.clamp(
+      Number(process.env['SMS_REALM_HOURLY_LIMIT']),
+      1,
+      1_000_000,
+      DEFAULT_REALM_HOURLY_LIMIT,
+    );
 
-  /**
-   * Clean up expired OTP lockout entries from in-memory store.
-   * Runs every 15 minutes.
-   */
-  @Interval(900_000) // every 15 minutes
-  cleanupOtpLockoutStore(): void {
-    const now = Date.now();
+    const since = { gte: windowStart };
+    const [byUser, byPhone, byIp, byRealm] = await Promise.all([
+      this.prisma.smsDeliveryLog.count({
+        where: { realmId: realm.id, userId, createdAt: since },
+      }),
+      this.prisma.smsDeliveryLog.count({
+        where: { realmId: realm.id, phoneHash, createdAt: since },
+      }),
+      ipHash
+        ? this.prisma.smsDeliveryLog.count({
+            where: { realmId: realm.id, ipHash, createdAt: since },
+          })
+        : Promise.resolve(0),
+      this.prisma.smsDeliveryLog.count({
+        where: { realmId: realm.id, createdAt: { gte: hourStart } },
+      }),
+    ]);
 
-    for (const [key, entry] of this.otpLockoutStore.entries()) {
-      if (now > entry.lockExpiresAt) {
-        this.otpLockoutStore.delete(key);
-      }
+    // Each count includes this send's own row, hence "greater than".
+    if (byRealm > realmHourlyLimit) {
+      this.logger.warn(`Realm-wide SMS limit reached for realm ${realm.name}`);
     }
-  }
-
-  /**
-   * Generate and send an OTP code via SMS.
-   *
-   * @param realmId - The realm ID for configuration lookup
-   * @param userId - The user ID for rate limiting
-   * @param phoneNumber - The recipient phone number (E.164 format recommended)
-   * @param realmName - The realm name for SMS configuration
-   * @returns Result containing delivery status
-   */
-  async generateAndSendOtp(
-    realmId: string,
-    userId: string,
-    phoneNumber: string,
-    realmName: string,
-  ): Promise<OtpGenerationResult> {
-    // Get realm SMS configuration
-    const realm = await this.prisma.realm.findUnique({
-      where: { id: realmId },
-      select: {
-        smsProvider: true,
-        smsFrom: true,
-        smsProviderConfig: true,
-        otpLength: true,
-        otpExpirySeconds: true,
-        smsMaxRequestsPerUser: true,
-        smsRateLimitWindow: true,
-      },
-    });
-
-    if (!realm) {
-      return { smsSent: false, errorMessage: 'Realm not found' };
-    }
-
-    if (!realm.smsProvider || realm.smsProvider === 'none') {
-      return {
-        smsSent: false,
-        errorMessage: 'SMS provider not configured for realm',
-      };
-    }
-
-    const otpLength = realm.otpLength || DEFAULT_OTP_LENGTH;
-    const expirySeconds = realm.otpExpirySeconds || DEFAULT_OTP_EXPIRY_SECONDS;
-    const maxRequests = realm.smsMaxRequestsPerUser || 3;
-    const windowSeconds = realm.smsRateLimitWindow || 900;
-
-    // Check rate limit
-    if (await this.isRateLimited(realmId, userId, maxRequests, windowSeconds)) {
-      this.logger.warn(
-        `SMS rate limit exceeded for user ${userId} in realm ${realmId}`,
+    if (
+      byUser > maxPerWindow ||
+      byPhone > maxPerWindow ||
+      byIp > SMS_OTP_MAX_SENDS_PER_IP ||
+      byRealm > realmHourlyLimit
+    ) {
+      return new SmsOtpError(
+        'rate_limited',
+        'Too many text messages were requested. Please try again later.',
       );
-      return {
-        smsSent: false,
-        errorMessage:
-          'Rate limit exceeded. Please wait before requesting another code.',
-      };
     }
-
-    // Generate OTP code
-    const code = this.generateOtpCode(otpLength);
-    const codeHash = this.crypto.sha256(code);
-    const phoneHash = this.crypto.sha256(phoneNumber);
-    const expiresAt = new Date(Date.now() + expirySeconds * 1000);
-
-    // Clean up any existing unverified OTP attempts for this user/phone
-    await this.prisma.otpAttempt.deleteMany({
-      where: { realmId, userId, phoneHash, verified: false },
-    });
-
-    // Store OTP attempt in database
-    await this.prisma.otpAttempt.create({
-      data: {
-        realmId,
-        userId,
-        phoneHash,
-        codeHash,
-        expiresAt,
-        failedAttempts: 0,
-        verified: false,
-      },
-    });
-
-    // Create delivery log entry
-    const deliveryLog = await this.prisma.smsDeliveryLog.create({
-      data: {
-        realmId,
-        userId,
-        phoneHash,
-        provider: realm.smsProvider,
-        status: 'PENDING',
-      },
-    });
-
-    // Send SMS if service is available
-    let smsSent = false;
-    let errorMessage: string | undefined;
-
-    if (this.smsService) {
-      try {
-        const message = `Your Idenplane verification code is: ${code}. This code expires in ${Math.floor(expirySeconds / 60)} minutes.`;
-        await this.smsService.sendSms(realmName, phoneNumber, message);
-        smsSent = true;
-
-        // Update delivery log
-        await this.prisma.smsDeliveryLog.update({
-          where: { id: deliveryLog.id },
-          data: { status: 'SENT' },
-        });
-      } catch (error) {
-        errorMessage = error instanceof Error ? error.message : 'Unknown error';
-        this.logger.error(`Failed to send SMS OTP: ${errorMessage}`);
-
-        // Update delivery log with error
-        await this.prisma.smsDeliveryLog.update({
-          where: { id: deliveryLog.id },
-          data: {
-            status: 'FAILED',
-            errorMessage,
-          },
-        });
-      }
-    } else {
-      // No SMS service - log that code would be sent (development mode)
-      this.logger.log(`SMS OTP would be sent to ${phoneNumber}: ${code}`);
-      smsSent = true;
-
-      await this.prisma.smsDeliveryLog.update({
-        where: { id: deliveryLog.id },
-        data: { status: 'DEV_MODE' },
-      });
-    }
-
-    return {
-      code: smsSent ? code : undefined, // Only return code if SMS was sent successfully
-      smsSent,
-      deliveryLogId: deliveryLog.id,
-      errorMessage,
-    };
+    return null;
   }
 
-  /**
-   * Verify an OTP code.
-   * Tracks verification attempts and locks out users after too many failures.
-   *
-   * @param realmId - The realm ID
-   * @param userId - The user ID
-   * @param phoneNumber - The phone number used for the OTP (for hash matching)
-   * @param code - The OTP code to verify
-   * @returns Verification result with success status and lockout info
-   */
-  async verifyOtp(
-    realmId: string,
-    userId: string,
-    phoneNumber: string,
-    code: string,
-  ): Promise<OtpVerificationResult> {
-    const phoneHash = this.crypto.sha256(phoneNumber);
-    const codeHash = this.crypto.sha256(code);
+  // ── Verifying ─────────────────────────────────────────────
 
-    // First, check if user is locked out from OTP verification
-    const lockoutCheck = await this.isOtpLockedOut(realmId, userId);
-    if (lockoutCheck.locked) {
-      return {
-        success: false,
-        locked: true,
-        lockedUntil: lockoutCheck.lockedUntil,
-        error: 'Too many failed attempts. Please wait before trying again.',
-      };
+  /**
+   * Check a code for the challenge (purpose, binding). Every call spends one
+   * guess before the comparison, atomically, so parallel requests can't get
+   * more than SMS_OTP_MAX_ATTEMPTS guesses. A correct code is claimed with a
+   * conditional delete, so it can be used exactly once.
+   */
+  async verifyCode(params: {
+    realmId: string;
+    userId: string;
+    purpose: SmsOtpPurpose;
+    binding: string;
+    code: string;
+  }): Promise<SmsOtpVerifyResult> {
+    const { realmId, userId, purpose } = params;
+    const bindingHash = this.bindingHash(purpose, params.binding);
+
+    const row = await this.prisma.otpAttempt.findUnique({
+      where: { purpose_bindingHash: { purpose, bindingHash } },
+    });
+    if (!row || row.userId !== userId || row.realmId !== realmId) {
+      return { ok: false, reason: 'not_found' };
     }
 
-    // Find the most recent unverified OTP attempt
-    const otpAttempt = await this.prisma.otpAttempt.findFirst({
+    const now = new Date();
+    const { count: reserved } = await this.prisma.otpAttempt.updateMany({
       where: {
-        realmId,
-        userId,
-        phoneHash,
-        verified: false,
+        id: row.id,
+        attempts: { lt: SMS_OTP_MAX_ATTEMPTS },
+        expiresAt: { gt: now },
       },
-      orderBy: { createdAt: 'desc' },
+      data: { attempts: { increment: 1 } },
     });
-
-    if (!otpAttempt) {
-      return {
-        success: false,
-        locked: false,
-        error: 'No OTP code found. Please request a new code.',
-      };
+    if (reserved === 0) {
+      return row.expiresAt <= now
+        ? { ok: false, reason: 'expired' }
+        : { ok: false, reason: 'locked', remainingAttempts: 0 };
     }
 
-    // Check if expired
-    if (otpAttempt.expiresAt < new Date()) {
-      // Clean up expired attempt
-      await this.prisma.otpAttempt.delete({ where: { id: otpAttempt.id } });
-      return {
-        success: false,
-        locked: false,
-        error: 'OTP code has expired. Please request a new code.',
-      };
+    const code = (params.code ?? '').replace(/\s/g, '');
+    const expected = Buffer.from(row.codeHash, 'hex');
+    const actual = Buffer.from(this.codeHash(bindingHash, code), 'hex');
+    const matches =
+      expected.length === actual.length && timingSafeEqual(expected, actual);
+
+    if (!matches) {
+      const remainingAttempts = Math.max(
+        0,
+        SMS_OTP_MAX_ATTEMPTS - (row.attempts + 1),
+      );
+      return remainingAttempts === 0
+        ? { ok: false, reason: 'locked', remainingAttempts }
+        : { ok: false, reason: 'invalid', remainingAttempts };
     }
 
-    // Check failed attempts from database
-    if (otpAttempt.failedAttempts >= MAX_VERIFICATION_ATTEMPTS) {
-      const lockDuration = DEFAULT_OTP_LOCKOUT_DURATION_SECONDS;
-      const lockedUntil = new Date(Date.now() + lockDuration * 1000);
-
-      // Lock the user out using Redis/in-memory store
-      await this.lockOtpVerification(realmId, userId, lockDuration);
-
-      return {
-        success: false,
-        locked: true,
-        lockedUntil,
-        error: 'Too many failed attempts. Please wait before trying again.',
-      };
-    }
-
-    // Verify code
-    if (otpAttempt.codeHash !== codeHash) {
-      // Increment failed attempts
-      const newFailedAttempts = otpAttempt.failedAttempts + 1;
-      await this.prisma.otpAttempt.update({
-        where: { id: otpAttempt.id },
-        data: { failedAttempts: newFailedAttempts },
-      });
-
-      // Check if this attempt caused a lockout
-      if (newFailedAttempts >= MAX_VERIFICATION_ATTEMPTS) {
-        const lockDuration = DEFAULT_OTP_LOCKOUT_DURATION_SECONDS;
-        const lockedUntil = new Date(Date.now() + lockDuration * 1000);
-
-        // Lock the user out using Redis/in-memory store
-        await this.lockOtpVerification(realmId, userId, lockDuration);
-
-        return {
-          success: false,
-          locked: true,
-          lockedUntil,
-          error: 'Too many failed attempts. Please wait before trying again.',
-        };
-      }
-
-      const remaining = MAX_VERIFICATION_ATTEMPTS - newFailedAttempts;
-      return {
-        success: false,
-        locked: false,
-        remainingAttempts: remaining,
-        error:
-          remaining > 0
-            ? `Invalid code. ${remaining} attempt(s) remaining.`
-            : 'Invalid code. Too many failed attempts.',
-      };
-    }
-
-    // Code is valid - mark as verified and clear any lockout
-    await this.prisma.otpAttempt.update({
-      where: { id: otpAttempt.id },
-      data: {
-        verified: true,
-        verifiedAt: new Date(),
-      },
+    // Claim: only succeeds if the row still holds the code we compared
+    // against (a resend in between replaced it) and nobody claimed it first.
+    const { count: claimed } = await this.prisma.otpAttempt.deleteMany({
+      where: { id: row.id, codeHash: row.codeHash },
     });
+    if (claimed !== 1) return { ok: false, reason: 'not_found' };
 
-    // Clear any lockout since verification succeeded
-    await this.unlockOtpVerification(realmId, userId);
-
-    return {
-      success: true,
-      locked: false,
-    };
+    const phone =
+      purpose === 'enroll'
+        ? row.phoneEncrypted
+          ? this.crypto.decrypt(row.phoneEncrypted)
+          : null
+        : await this.getEnrolledPhone(userId);
+    if (!phone) return { ok: false, reason: 'not_found' };
+    return { ok: true, phone };
   }
 
-  /**
-   * Check if a user has SMS MFA enabled (verified phone number).
-   */
-  async hasSmsMfaEnabled(realmId: string, userId: string): Promise<boolean> {
-    const attempt = await this.prisma.otpAttempt.findFirst({
-      where: {
-        realmId,
-        userId,
-        verified: true,
-      },
-      orderBy: { verifiedAt: 'desc' },
-    });
-    return !!attempt;
-  }
+  // ── Housekeeping ──────────────────────────────────────────
 
-  /**
-   * Get the phone hash for a user's verified phone number.
-   */
-  async getVerifiedPhoneHash(
-    realmId: string,
-    userId: string,
-  ): Promise<string | null> {
-    const attempt = await this.prisma.otpAttempt.findFirst({
-      where: {
-        realmId,
-        userId,
-        verified: true,
-      },
-      select: { phoneHash: true },
-      orderBy: { verifiedAt: 'desc' },
-    });
-    return attempt?.phoneHash ?? null;
-  }
-
-  /**
-   * Remove SMS MFA for a user (clear verified phone).
-   */
-  async disableSmsMfa(realmId: string, userId: string): Promise<void> {
-    // Delete all OTP attempts for this user
-    await this.prisma.otpAttempt.deleteMany({
-      where: { realmId, userId },
-    });
-  }
-
-  /**
-   * Clean up expired OTP attempts.
-   * Runs every 5 minutes.
-   */
-  @Interval(300_000) // every 5 minutes
-  async cleanupExpiredOtpAttempts(): Promise<void> {
+  @Interval(300_000)
+  async cleanup(): Promise<void> {
     const { count } = await this.prisma.otpAttempt.deleteMany({
+      where: { expiresAt: { lt: new Date(Date.now() - OTP_ROW_RETENTION_MS) } },
+    });
+    if (count > 0) this.logger.debug(`Removed ${count} expired SMS codes`);
+
+    await this.prisma.smsDeliveryLog.deleteMany({
       where: {
-        expiresAt: { lt: new Date() },
-        verified: false,
+        createdAt: {
+          lt: new Date(Date.now() - DELIVERY_LOG_RETENTION_DAYS * 86_400_000),
+        },
       },
     });
-    if (count > 0) {
-      this.logger.debug(`Cleaned up ${count} expired OTP attempts`);
-    }
-  }
-
-  /**
-   * Clean up old rate limit entries from in-memory store.
-   * Runs every 15 minutes.
-   */
-  @Interval(900_000) // every 15 minutes
-  cleanupRateLimitStore(): void {
-    const now = Date.now();
-    const windowMs = 16 * 60 * 1000; // 16 minutes (slightly longer than max window)
-
-    for (const [key, entry] of this.rateLimitStore.entries()) {
-      if (now - entry.windowStart > windowMs) {
-        this.rateLimitStore.delete(key);
-      }
-    }
-  }
-
-  /**
-   * Get a delivery log entry by ID.
-   *
-   * @param deliveryLogId - The delivery log ID
-   * @returns The delivery log entry or null if not found
-   */
-  async getDeliveryLog(deliveryLogId: string): Promise<{
-    id: string;
-    status: string;
-    provider: string;
-    providerMessageId: string | null;
-    errorCode: string | null;
-    errorMessage: string | null;
-    createdAt: Date;
-  } | null> {
-    const log = await this.prisma.smsDeliveryLog.findUnique({
-      where: { id: deliveryLogId },
-      select: {
-        id: true,
-        status: true,
-        provider: true,
-        providerMessageId: true,
-        errorCode: true,
-        errorMessage: true,
-        createdAt: true,
-      },
-    });
-    return log;
-  }
-
-  /**
-   * Get delivery logs for a user in a realm.
-   * Useful for troubleshooting SMS delivery issues.
-   *
-   * @param realmId - The realm ID
-   * @param userId - The user ID
-   * @param limit - Maximum number of logs to return (default 50)
-   * @returns Array of delivery log entries
-   */
-  async getDeliveryLogsForUser(
-    realmId: string,
-    userId: string,
-    limit = 50,
-  ): Promise<
-    Array<{
-      id: string;
-      status: string;
-      provider: string;
-      providerMessageId: string | null;
-      errorCode: string | null;
-      errorMessage: string | null;
-      createdAt: Date;
-    }>
-  > {
-    const logs = await this.prisma.smsDeliveryLog.findMany({
-      where: { realmId, userId },
-      select: {
-        id: true,
-        status: true,
-        provider: true,
-        providerMessageId: true,
-        errorCode: true,
-        errorMessage: true,
-        createdAt: true,
-      },
-      orderBy: { createdAt: 'desc' },
-      take: limit,
-    });
-    return logs;
-  }
-
-  /**
-   * Update the delivery status of a message.
-   * Used for delivery receipt tracking from providers.
-   *
-   * @param deliveryLogId - The delivery log ID
-   * @param status - The new status (SENT, DELIVERED, FAILED)
-   * @param providerMessageId - Optional provider message ID
-   * @param errorCode - Optional error code
-   * @param errorMessage - Optional error message
-   */
-  async updateDeliveryStatus(
-    deliveryLogId: string,
-    status: SmsDeliveryStatus,
-    providerMessageId?: string,
-    errorCode?: string,
-    errorMessage?: string,
-  ): Promise<void> {
-    await this.prisma.smsDeliveryLog.update({
-      where: { id: deliveryLogId },
-      data: {
-        status,
-        ...(providerMessageId !== undefined && { providerMessageId }),
-        ...(errorCode !== undefined && { errorCode }),
-        ...(errorMessage !== undefined && { errorMessage }),
-      },
-    });
-
-    this.logger.debug(
-      `Updated delivery log ${deliveryLogId} status to ${status}`,
-    );
-  }
-
-  /**
-   * Get delivery statistics for a realm.
-   * Useful for monitoring SMS delivery success rates.
-   *
-   * @param realmId - The realm ID
-   * @param since - Start date for statistics (default 24 hours ago)
-   * @returns Object containing delivery counts by status
-   */
-  async getDeliveryStats(
-    realmId: string,
-    since?: Date,
-  ): Promise<{
-    total: number;
-    pending: number;
-    sent: number;
-    delivered: number;
-    failed: number;
-    successRate: number;
-  }> {
-    const sinceDate = since || new Date(Date.now() - 24 * 60 * 60 * 1000); // Default: last 24 hours
-
-    const logs = await this.prisma.smsDeliveryLog.findMany({
-      where: {
-        realmId,
-        createdAt: { gte: sinceDate },
-      },
-      select: { status: true },
-    });
-
-    const counts = {
-      total: logs.length,
-      pending: logs.filter((l) => l.status === 'PENDING').length,
-      sent: logs.filter((l) => l.status === 'SENT').length,
-      delivered: logs.filter((l) => l.status === 'DELIVERED').length,
-      failed: logs.filter((l) => l.status === 'FAILED').length,
-      successRate: 0,
-    };
-
-    // Calculate success rate (SENT + DELIVERED / total)
-    const successful = counts.sent + counts.delivered;
-    counts.successRate =
-      counts.total > 0 ? Math.round((successful / counts.total) * 100) : 0;
-
-    return counts;
   }
 }

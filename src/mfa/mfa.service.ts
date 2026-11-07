@@ -7,7 +7,32 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { RedisService } from '../redis/redis.service.js';
 import { BruteForceService } from '../brute-force/brute-force.service.js';
+import { SmsOtpService, type SmsOtpPurpose } from '../sms/sms-otp.service.js';
 import type { Realm } from '@prisma/client';
+
+/** Credential types that count as a second factor. */
+export const SECOND_FACTOR_TYPES = ['totp', 'sms'] as const;
+export type SecondFactorType = (typeof SECOND_FACTOR_TYPES)[number];
+
+/** Which factor satisfied a second-factor check. */
+export type VerifiedFactor = SecondFactorType | 'recovery';
+
+/**
+ * A second-factor answer.
+ * - `totp`, `recovery`, `sms`: the user said which kind of code it is.
+ * - `otp`: a single code field (token API, step-up API, auth flows) — tried
+ *   as an authenticator code, then as a recovery code.
+ */
+export type SecondFactorInput =
+  | { method: 'totp' | 'recovery' | 'otp'; code: string }
+  | {
+      method: 'sms';
+      code: string;
+      realmId: string;
+      purpose: Exclude<SmsOtpPurpose, 'enroll'>;
+      /** The token of the flow the code was sent for. */
+      binding: string;
+    };
 
 /** The shape of the JSON object stored in PendingAction.data for MFA challenges. */
 interface MfaChallengeData {
@@ -15,8 +40,31 @@ interface MfaChallengeData {
   realmId: string;
   clientId?: string;
   oauthParams?: Record<string, string>;
-  attempts: number;
+  /** RFC 8176 methods of the first factor; absent means a password. */
+  primaryAmr?: string[];
 }
+
+/**
+ * A password-verified sign-in that is waiting for the user to enrol TOTP
+ * because the realm requires MFA. It is deliberately *not* an SSO session:
+ * it only unlocks the TOTP setup page, and the real session is created once
+ * enrolment succeeds.
+ */
+export interface MfaEnrollmentData {
+  userId: string;
+  realmId: string;
+  oauthParams?: Record<string, string>;
+  rememberMe?: boolean;
+  /** RFC 8176 methods of the first factor; absent means a password. */
+  primaryAmr?: string[];
+  /** Set once the user has activated a second factor with this enrolment. */
+  verified?: boolean;
+  /** Which factor was enrolled (absent on older rows: TOTP). */
+  factor?: SecondFactorType;
+}
+
+export const MFA_ENROLLMENT_COOKIE = 'IDENPLANE_MFA_ENROLLMENT';
+export const MFA_ENROLLMENT_TTL_SECONDS = 15 * 60;
 
 /** TTL in seconds for a used TOTP code entry — covers the full ±1-step window (3 periods × 30s). */
 const TOTP_USED_CODE_TTL_SECONDS = 90;
@@ -36,6 +84,7 @@ export class MfaService {
     private readonly crypto: CryptoService,
     @Optional() private readonly redis?: RedisService,
     @Optional() private readonly bruteForceService?: BruteForceService,
+    @Optional() private readonly smsOtp?: SmsOtpService,
   ) {}
 
   private async markTotpCodeUsed(userId: string, code: string): Promise<void> {
@@ -173,8 +222,9 @@ export class MfaService {
       data: { verified: true },
     });
 
-    // Generate and return recovery codes (single generation point)
-    return this.generateRecoveryCodes(userId);
+    // First factor enrolled: issue recovery codes. If another factor already
+    // gave the user codes, keep them (an empty list means "unchanged").
+    return (await this.ensureRecoveryCodes(userId)) ?? [];
   }
 
   async verifyTotp(userId: string, code: string): Promise<boolean> {
@@ -210,18 +260,25 @@ export class MfaService {
   async verifyRecoveryCode(userId: string, code: string): Promise<boolean> {
     const codeHash = this.crypto.sha256(code.toLowerCase().replace(/\s/g, ''));
 
-    const recoveryCode = await this.prisma.recoveryCode.findFirst({
+    // The conditional update is the claim: two concurrent requests with the
+    // same code can't both see `used: false` and both succeed.
+    const { count } = await this.prisma.recoveryCode.updateMany({
       where: { userId, codeHash, used: false },
-    });
-
-    if (!recoveryCode) return false;
-
-    await this.prisma.recoveryCode.update({
-      where: { id: recoveryCode.id },
       data: { used: true },
     });
+    return count > 0;
+  }
 
-    return true;
+  /**
+   * Issue recovery codes unless the user still has unused ones. Returns the
+   * new codes, or null when the existing codes were kept.
+   */
+  async ensureRecoveryCodes(userId: string): Promise<string[] | null> {
+    const unused = await this.prisma.recoveryCode.count({
+      where: { userId, used: false },
+    });
+    if (unused > 0) return null;
+    return this.generateRecoveryCodes(userId);
   }
 
   async generateRecoveryCodes(userId: string): Promise<string[]> {
@@ -244,18 +301,114 @@ export class MfaService {
     return codes;
   }
 
+  /** Remove the authenticator app. Recovery codes go with the last factor. */
   async disableTotp(userId: string): Promise<void> {
     await this.prisma.userCredential.deleteMany({
       where: { userId, type: 'totp' },
     });
+    await this.deleteRecoveryCodesIfNoFactorLeft(userId);
+  }
+
+  /** Remove the SMS phone. Recovery codes go with the last factor. */
+  async disableSms(userId: string): Promise<void> {
+    await this.prisma.userCredential.deleteMany({
+      where: { userId, type: 'sms' },
+    });
+    await this.prisma.otpAttempt.deleteMany({ where: { userId } });
+    await this.deleteRecoveryCodesIfNoFactorLeft(userId);
+  }
+
+  /** Remove every second factor and the recovery codes (admin reset). */
+  async disableAllFactors(userId: string): Promise<void> {
+    await this.prisma.userCredential.deleteMany({
+      where: { userId, type: { in: [...SECOND_FACTOR_TYPES] } },
+    });
+    await this.prisma.otpAttempt.deleteMany({ where: { userId } });
     await this.prisma.recoveryCode.deleteMany({ where: { userId } });
   }
 
-  async isMfaEnabled(userId: string): Promise<boolean> {
+  private async deleteRecoveryCodesIfNoFactorLeft(userId: string) {
+    if ((await this.getEnrolledFactors(userId)).length === 0) {
+      await this.prisma.recoveryCode.deleteMany({ where: { userId } });
+    }
+  }
+
+  /** The user's verified second factors. */
+  async getEnrolledFactors(userId: string): Promise<SecondFactorType[]> {
+    const credentials = await this.prisma.userCredential.findMany({
+      where: {
+        userId,
+        verified: true,
+        type: { in: [...SECOND_FACTOR_TYPES] },
+      },
+      select: { type: true },
+    });
+    return SECOND_FACTOR_TYPES.filter((t) =>
+      credentials.some((c) => c.type === t),
+    );
+  }
+
+  /** Whether the user has an authenticator app set up. */
+  async isTotpEnabled(userId: string): Promise<boolean> {
     const credential = await this.prisma.userCredential.findUnique({
       where: { userId_type: { userId, type: 'totp' } },
     });
     return !!credential?.verified;
+  }
+
+  /**
+   * Whether the user has *any* second factor. Every "must this sign-in pass
+   * a second factor?" decision goes through here, so a newly added factor
+   * type can never be skipped by a check that only knew about TOTP.
+   */
+  async isMfaEnabled(userId: string): Promise<boolean> {
+    return (await this.getEnrolledFactors(userId)).length > 0;
+  }
+
+  /**
+   * The one place a second-factor answer is checked. Every entry point (login
+   * page, token API, step-up, auth flows) calls this, so they accept exactly
+   * the same factors in the same way.
+   */
+  async verifySecondFactor(
+    userId: string,
+    input: SecondFactorInput,
+  ): Promise<{ verified: boolean; factor?: VerifiedFactor }> {
+    const code = typeof input.code === 'string' ? input.code.trim() : '';
+    if (!code) return { verified: false };
+
+    switch (input.method) {
+      case 'totp':
+        return (await this.verifyTotp(userId, code))
+          ? { verified: true, factor: 'totp' }
+          : { verified: false };
+      case 'recovery':
+        return (await this.verifyRecoveryCode(userId, code))
+          ? { verified: true, factor: 'recovery' }
+          : { verified: false };
+      case 'otp':
+        if (await this.verifyTotp(userId, code)) {
+          return { verified: true, factor: 'totp' };
+        }
+        return (await this.verifyRecoveryCode(userId, code))
+          ? { verified: true, factor: 'recovery' }
+          : { verified: false };
+      case 'sms': {
+        if (!this.smsOtp) return { verified: false };
+        const result = await this.smsOtp.verifyCode({
+          realmId: input.realmId,
+          userId,
+          purpose: input.purpose,
+          binding: input.binding,
+          code,
+        });
+        return result.ok
+          ? { verified: true, factor: 'sms' }
+          : { verified: false };
+      }
+      default:
+        return { verified: false };
+    }
   }
 
   async isMfaRequired(realm: Realm, userId: string): Promise<boolean> {
@@ -270,6 +423,7 @@ export class MfaService {
     realmId: string,
     oauthParams?: Record<string, string>,
     clientId?: string,
+    primaryAmr?: string[],
   ): Promise<string> {
     const windowStart = new Date(
       Date.now() - MFA_CHALLENGE_RATE_LIMIT_WINDOW_SECONDS * 1000,
@@ -296,7 +450,7 @@ export class MfaService {
       realmId,
       clientId,
       oauthParams,
-      attempts: 0,
+      primaryAmr,
     };
     await this.prisma.pendingAction.create({
       data: {
@@ -315,6 +469,7 @@ export class MfaService {
     realmId: string;
     clientId?: string;
     oauthParams?: Record<string, string>;
+    primaryAmr?: string[];
   } | null> {
     const tokenHash = this.crypto.sha256(challengeToken);
 
@@ -337,6 +492,30 @@ export class MfaService {
       realmId: data.realmId,
       clientId: data.clientId,
       oauthParams: data.oauthParams,
+      primaryAmr: data.primaryAmr,
+    };
+  }
+
+  /**
+   * Reads a live challenge without spending an attempt — for showing the
+   * second-factor page or sending an SMS code, never for accepting an answer.
+   */
+  async getMfaChallenge(challengeToken: string): Promise<{
+    userId: string;
+    realmId: string;
+    clientId?: string;
+  } | null> {
+    const action = await this.prisma.pendingAction.findUnique({
+      where: { tokenHash: this.crypto.sha256(challengeToken) },
+    });
+    if (!action || action.type !== 'mfa_challenge') return null;
+    if (action.expiresAt < new Date()) return null;
+    if (action.attempts >= MfaService.MAX_MFA_ATTEMPTS) return null;
+    const data = action.data as unknown as MfaChallengeData;
+    return {
+      userId: data.userId,
+      realmId: data.realmId,
+      clientId: data.clientId,
     };
   }
 
@@ -349,60 +528,137 @@ export class MfaService {
     realmId: string;
     clientId?: string;
     oauthParams?: Record<string, string>;
+    primaryAmr?: string[];
   } | null> {
     const tokenHash = this.crypto.sha256(challengeToken);
+
+    // Spend one attempt atomically before anything is checked. A
+    // read-then-write counter would let parallel requests all read the same
+    // count and get far more than MAX_MFA_ATTEMPTS guesses.
+    const { count } = await this.prisma.pendingAction.updateMany({
+      where: {
+        tokenHash,
+        type: 'mfa_challenge',
+        expiresAt: { gt: new Date() },
+        attempts: { lt: MfaService.MAX_MFA_ATTEMPTS },
+      },
+      data: { attempts: { increment: 1 } },
+    });
+
+    if (count === 0) {
+      // Unknown, expired or out of attempts: drop it and force a new sign-in.
+      const { count: deleted } = await this.prisma.pendingAction.deleteMany({
+        where: { tokenHash, type: 'mfa_challenge' },
+      });
+      if (deleted > 0) {
+        this.logger.warn(
+          'MFA challenge expired or exceeded max attempts; discarded',
+        );
+      }
+      return null;
+    }
 
     const action = await this.prisma.pendingAction.findUnique({
       where: { tokenHash },
     });
-
-    if (!action || action.type !== 'mfa_challenge') return null;
-    if (action.expiresAt < new Date()) {
-      await this.prisma.pendingAction.delete({ where: { id: action.id } });
-      return null;
-    }
-
+    if (!action) return null;
     const data = action.data as unknown as MfaChallengeData;
-    const attempts = (data.attempts ?? 0) + 1;
-
-    if (attempts > MfaService.MAX_MFA_ATTEMPTS) {
-      // Too many attempts — delete challenge and force re-authentication
-      await this.prisma.pendingAction.delete({ where: { id: action.id } });
-      this.logger.warn(
-        `MFA challenge exceeded max attempts for user ${data.userId}`,
-      );
-      return null;
-    }
-
-    // Update attempt counter (keep the challenge alive for retries)
-    const updatedData: MfaChallengeData = { ...data, attempts };
-    await this.prisma.pendingAction.update({
-      where: { id: action.id },
-      data: { data: updatedData as unknown as Prisma.InputJsonValue },
-    });
 
     return {
       userId: data.userId,
       realmId: data.realmId,
       clientId: data.clientId,
       oauthParams: data.oauthParams,
+      primaryAmr: data.primaryAmr,
     };
   }
 
   /**
    * Consumes (deletes) a challenge token after successful verification.
    */
-  async consumeMfaChallenge(challengeToken: string): Promise<void> {
+  /**
+   * Claims the challenge after a correct answer. Returns false when another
+   * request already claimed it (e.g. the same code submitted twice at once),
+   * in which case the caller must not complete the sign-in a second time.
+   */
+  async consumeMfaChallenge(challengeToken: string): Promise<boolean> {
     const tokenHash = this.crypto.sha256(challengeToken);
-    await this.prisma.pendingAction
-      .delete({ where: { tokenHash } })
-      .catch(() => {});
+    const { count } = await this.prisma.pendingAction.deleteMany({
+      where: { tokenHash, type: 'mfa_challenge' },
+    });
+    return count === 1;
+  }
+
+  // ── Required-MFA enrolment ────────────────────────────────
+
+  async createMfaEnrollment(
+    data: Omit<MfaEnrollmentData, 'verified'>,
+  ): Promise<string> {
+    const token = this.crypto.generateSecret(32);
+    await this.prisma.pendingAction.create({
+      data: {
+        tokenHash: this.crypto.sha256(token),
+        type: 'mfa_enrollment',
+        data: { ...data, verified: false },
+        expiresAt: new Date(Date.now() + MFA_ENROLLMENT_TTL_SECONDS * 1000),
+      },
+    });
+    return token;
+  }
+
+  /** The pending enrolment for `token`, or null if unknown or expired. */
+  async getMfaEnrollment(token: string): Promise<MfaEnrollmentData | null> {
+    const action = await this.prisma.pendingAction.findUnique({
+      where: { tokenHash: this.crypto.sha256(token) },
+    });
+    if (!action || action.type !== 'mfa_enrollment') return null;
+    if (action.expiresAt < new Date()) return null;
+    return action.data as unknown as MfaEnrollmentData;
+  }
+
+  /** Record that a second factor was activated through this enrolment. */
+  async markMfaEnrollmentVerified(
+    token: string,
+    factor: SecondFactorType = 'totp',
+  ): Promise<void> {
+    const tokenHash = this.crypto.sha256(token);
+    const action = await this.prisma.pendingAction.findUnique({
+      where: { tokenHash },
+    });
+    if (!action || action.type !== 'mfa_enrollment') return;
+    const data = action.data as unknown as MfaEnrollmentData;
+    await this.prisma.pendingAction.update({
+      where: { id: action.id },
+      data: {
+        data: { ...data, verified: true, factor },
+      },
+    });
+  }
+
+  /**
+   * Single-use: delete the enrolment and return it, but only if TOTP was
+   * activated through it and it has not expired. The delete is the claim, so
+   * two concurrent requests cannot both complete the sign-in.
+   */
+  async consumeVerifiedMfaEnrollment(
+    token: string,
+  ): Promise<MfaEnrollmentData | null> {
+    const action = await this.prisma.pendingAction
+      .delete({ where: { tokenHash: this.crypto.sha256(token) } })
+      .catch(() => null);
+    if (!action || action.type !== 'mfa_enrollment') return null;
+    if (action.expiresAt < new Date()) return null;
+    const data = action.data as unknown as MfaEnrollmentData;
+    return data.verified ? data : null;
   }
 
   @Interval(60_000)
   async cleanupExpiredActions(): Promise<void> {
     const { count } = await this.prisma.pendingAction.deleteMany({
-      where: { type: 'mfa_challenge', expiresAt: { lt: new Date() } },
+      where: {
+        type: { in: ['mfa_challenge', 'mfa_enrollment', 'sms_enrollment'] },
+        expiresAt: { lt: new Date() },
+      },
     });
     if (count > 0) {
       this.logger.debug(`Cleaned up ${count} expired MFA challenges`);

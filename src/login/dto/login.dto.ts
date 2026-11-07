@@ -129,6 +129,12 @@ export class TotpDto extends OAuthContextDto {
   @IsString()
   recoveryCode?: string;
 
+  /** A code received by text message. */
+  @IsOptional()
+  @IsString()
+  @Matches(/^\d{6,10}$/, { message: 'SMS code must be 6-10 digits' })
+  smsCode?: string;
+
   @IsOptional()
   @IsString()
   session_id?: string;

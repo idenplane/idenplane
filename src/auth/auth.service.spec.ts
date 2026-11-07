@@ -179,6 +179,7 @@ describe('AuthService', () => {
       validateMfaChallenge: jest.fn(),
       verifyTotp: jest.fn(),
       verifyRecoveryCode: jest.fn(),
+      verifySecondFactor: jest.fn().mockResolvedValue({ verified: false }),
     };
     const protocolMapperExecutor = {
       executeMappers: jest.fn().mockResolvedValue({}),

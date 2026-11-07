@@ -8,13 +8,19 @@ description: Get Idenplane running locally on macOS, Linux or Windows (WSL) — 
 
 [`CONTRIBUTING.md`](https://github.com/idenplane/idenplane/blob/main/CONTRIBUTING.md) has the six-command version. This page is for when one of those commands doesn't do what it says.
 
+:::info Checked automatically
+Every step on this page runs in CI on **Linux, macOS and Windows (WSL 2)**. The check is [`scripts/verify-dev-setup.sh`](https://github.com/idenplane/idenplane/blob/dev/scripts/verify-dev-setup.sh), run by the [Dev setup guide workflow](https://github.com/idenplane/idenplane/actions/workflows/dev-setup.yml). It runs whenever something the page depends on changes, and once a week.
+
+Linux uses Docker for Postgres. macOS and WSL use their own Postgres, as in [Using your own Postgres](#using-your-own-postgres), because the hosted runners have no Docker. Docker Desktop itself isn't exercised on those two.
+:::
+
 ## Prerequisites
 
 | | version | why that one |
 |---|---|---|
-| Node.js | **22+** | what CI runs (`.github/workflows/ci.yml`). 20 mostly works; nothing verifies it |
+| Node.js | **22+** | CI runs 24 (`.github/workflows/ci.yml`); the setup check refuses anything below 22 |
 | npm | 10+ | ships with Node 22 |
-| Docker + Compose | any current | only used for Postgres, unless you have your own |
+| Docker + Compose | any current | only used for Postgres; not needed if you [use your own](#using-your-own-postgres) |
 | Git | any current | |
 | Java 17 + | | **only** if you touch `packages/idenplane-java` — Maven comes from the wrapper |
 
@@ -64,11 +70,24 @@ npm install
 npm start
 ```
 
-Independent of everything else — no backend, no database.
+Independent of everything else — no backend, no database. Docusaurus also wants port 3000, so if the backend is running it asks whether to use another port. Answer yes, or start it with `npm start -- --port 3001`.
+
+## Using your own Postgres
+
+Docker is only there to provide Postgres 16. Any local Postgres works, for example Homebrew on macOS or `apt install postgresql` in WSL. Create the role and database that `.env.example` points at:
+
+```sql
+CREATE ROLE idenplane LOGIN PASSWORD 'idenplane' CREATEDB;
+CREATE DATABASE idenplane OWNER idenplane;
+```
+
+`CREATEDB` is required: `prisma migrate dev`, the first half of `db:setup`, creates a temporary *shadow database* to check the migrations. Without it, `db:setup` fails with a permission error before running anything.
+
+Then skip `docker compose up -d db` and continue with `npm run db:setup`. Use another role, password or port if you like; just change `DATABASE_URL` in `.env` to match.
 
 ## What actually needs setting in `.env`
 
-`cp .env.example .env` leaves four `REPLACE_ME_...` placeholders. For local development:
+`cp .env.example .env` leaves five `REPLACE_ME_...` placeholders. For local development, set these four:
 
 ```bash
 ADMIN_API_KEY=$(openssl rand -hex 32)
@@ -77,7 +96,11 @@ WEBHOOK_SECRET_KEY=$(openssl rand -hex 32)
 WEBHOOK_ENCRYPTION_SALT=$(openssl rand -hex 16)
 ```
 
+The fifth, `POSTGRES_PASSWORD`, is only read by the production compose files. The development `docker-compose.yml` uses the fixed password `idenplane`, so you can leave it.
+
 `DATABASE_URL` already matches what `docker compose` starts, so leave it unless you're using your own Postgres.
+
+Keep `.env` in place before running `docker compose`: the compose file also defines the `app` service, and Compose refuses to start anything, even `db` alone, if `ADMIN_API_KEY` has no value.
 
 `ADMIN_API_KEY` is refused at startup in production if it's a known placeholder or under 32 characters (`src/main.ts`). In development it only warns — but generate a real one anyway, since it's the same value you'll paste into API calls.
 
@@ -96,6 +119,12 @@ Only `test:e2e` needs the database up. The rest are self-contained.
 
 **`Can't reach database server at localhost:5432`**
 Postgres isn't up, or it's up in another container from another project holding the port. `docker compose ps` to check, `docker compose up -d db` to start it.
+
+**`client password must be a string` or `DatabaseDoesNotExist` while seeding**
+The seed ran without `DATABASE_URL`. Checkouts before November 2026 had this bug: the seed didn't read `.env`, so `db:setup` migrated fine and then failed. Update your checkout, or run `export $(grep ^DATABASE_URL .env)` first.
+
+**`permission denied to create database` during `db:setup`**
+Your own Postgres role is missing `CREATEDB`, which the shadow database needs. See [Using your own Postgres](#using-your-own-postgres).
 
 **`Unique constraint failed` when seeding**
 The seed is not idempotent. Either you've already seeded, or a previous run half-completed. `npx prisma migrate reset` drops, re-migrates and re-seeds in one step.

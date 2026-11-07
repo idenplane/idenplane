@@ -1,5 +1,6 @@
 import {
   Controller,
+  ForbiddenException,
   Get,
   HttpException,
   Param,
@@ -16,6 +17,7 @@ import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
 import { BrokerService } from './broker.service.js';
 import { ThemeRenderService } from '../theme/theme-render.service.js';
+import { LoginFlowService } from '../login/login-flow.service.js';
 
 @ApiTags('Identity Broker')
 @Controller('realms/:realmName/broker')
@@ -25,6 +27,7 @@ export class BrokerController {
   constructor(
     private readonly brokerService: BrokerService,
     private readonly themeRender: ThemeRenderService,
+    private readonly loginFlow: LoginFlowService,
   ) {}
 
   @Get(':alias/login')
@@ -84,13 +87,27 @@ export class BrokerController {
     @Res() res: Response,
   ) {
     try {
-      const result = await this.brokerService.handleCallback(
+      const { user, oauthParams } = await this.brokerService.handleCallback(
         realm,
         alias,
         code,
         state,
       );
-      res.redirect(302, result.redirectUrl);
+      if (!user.enabled) {
+        throw new ForbiddenException('This account is disabled.');
+      }
+      // From here a federated sign-in is finished exactly like a password
+      // one: the realm's MFA policy applies, and the SSO session, login
+      // event, consent screen and code all come from the same place.
+      await this.loginFlow.continueAfterPrimaryAuth(
+        realm,
+        user,
+        oauthParams,
+        // The external provider's own methods are not known here.
+        { primaryAmr: [] },
+        req,
+        res,
+      );
     } catch (err) {
       // A broker callback is reached by the end-user's browser, so failures
       // (link-only, token-exchange, invalid/expired state) must render a themed

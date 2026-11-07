@@ -56,11 +56,13 @@ export class ThemeMessageService implements OnModuleInit {
       }
     }
 
-    // Fallback to English if requested locale has no messages
-    if (locale !== 'en' && Object.keys(merged).length === 0) {
-      const fallback = this.getMessages(themeName, themeType, 'en');
-      this.cache.set(cacheKey, fallback);
-      return fallback;
+    // English fills any key the locale doesn't translate (yet), so a page
+    // shows English text rather than a raw message key.
+    if (locale !== 'en') {
+      const english = this.getMessages(themeName, themeType, 'en');
+      const withFallback = { ...english, ...merged };
+      this.cache.set(cacheKey, withFallback);
+      return withFallback;
     }
 
     this.cache.set(cacheKey, merged);

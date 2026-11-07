@@ -7,6 +7,8 @@ jest.mock('../crypto/jwk.service.js', () => ({
 
 import { RealmsService } from './realms.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
+import { SmsProviderType } from '../sms/dto/sms-config.dto.js';
+import { SECRET_PLACEHOLDER } from './realm-secrets.util.js';
 import {
   createMockPrismaService,
   MockPrismaService,
@@ -205,6 +207,155 @@ describe('RealmsService', () => {
       const { data } = prisma.realm.update.mock.calls[0][0];
       expect(data.smtpPassword).toBeUndefined();
     });
+
+    it('should persist the SMS settings and encrypt the provider credentials', async () => {
+      prisma.realm.findUnique.mockResolvedValue(mockRealm);
+      prisma.realm.update.mockImplementation(({ data }: any) =>
+        Promise.resolve({ ...mockRealm, ...data }),
+      );
+
+      await service.update('test-realm', {
+        smsMfaEnabled: true,
+        smsProvider: SmsProviderType.TWILIO,
+        smsFrom: '+15550001111',
+        smsProviderConfig: {
+          twilioAccountSid: 'AC123',
+          twilioAuthToken: 'tw-secret',
+        },
+        otpLength: 8,
+        otpExpirySeconds: 120,
+        smsMaxRequestsPerUser: 5,
+        smsRateLimitWindow: 600,
+      });
+
+      const { data } = prisma.realm.update.mock.calls[0][0];
+      expect(data).toMatchObject({
+        smsMfaEnabled: true,
+        smsProvider: 'twilio',
+        smsFrom: '+15550001111',
+        otpLength: 8,
+        otpExpirySeconds: 120,
+        smsMaxRequestsPerUser: 5,
+        smsRateLimitWindow: 600,
+      });
+      expect(data.smsProviderConfig.twilioAccountSid).toBe('AC123');
+      expect(data.smsProviderConfig.twilioAuthToken).not.toBe('tw-secret');
+      expect(crypto.decrypt(data.smsProviderConfig.twilioAuthToken)).toBe(
+        'tw-secret',
+      );
+    });
+
+    it('should keep the stored SMS secret when the placeholder is sent back', async () => {
+      const stored = crypto.encrypt('tw-secret');
+      prisma.realm.findUnique.mockResolvedValue({
+        ...mockRealm,
+        smsProviderConfig: {
+          twilioAccountSid: 'AC123',
+          twilioAuthToken: stored,
+        },
+      });
+      prisma.realm.update.mockImplementation(({ data }: any) =>
+        Promise.resolve({ ...mockRealm, ...data }),
+      );
+
+      const result = await service.update('test-realm', {
+        smsProviderConfig: {
+          twilioAccountSid: 'AC999',
+          twilioAuthToken: SECRET_PLACEHOLDER,
+        },
+      });
+
+      const { data } = prisma.realm.update.mock.calls[0][0];
+      expect(data.smsProviderConfig).toEqual({
+        twilioAccountSid: 'AC999',
+        twilioAuthToken: stored,
+      });
+      // ...and the response never carries the ciphertext
+      expect((result as any).smsProviderConfig.twilioAuthToken).toBe(
+        SECRET_PLACEHOLDER,
+      );
+    });
+
+    it('should not return stored secrets in the delete response', async () => {
+      const row = {
+        ...mockRealm,
+        smtpPassword: crypto.encrypt('smtp'),
+        smsProviderConfig: { twilioAuthToken: crypto.encrypt('tw-secret') },
+      };
+      prisma.realm.findUnique.mockResolvedValue(row);
+      prisma.realm.delete.mockResolvedValue(row);
+
+      const deleted = (await service.remove('test-realm')) as any;
+
+      expect(deleted.smtpPassword).toBe(SECRET_PLACEHOLDER);
+      expect(deleted.smsProviderConfig.twilioAuthToken).toBe(
+        SECRET_PLACEHOLDER,
+      );
+    });
+
+    it('should never return SMS secrets from findByName', async () => {
+      cacheService.getCachedRealmByName.mockResolvedValue(null);
+      prisma.realm.findUnique.mockResolvedValue({
+        ...mockRealm,
+        smsProviderConfig: {
+          twilioAccountSid: 'AC123',
+          twilioAuthToken: crypto.encrypt('tw-secret'),
+        },
+      });
+
+      const realm = (await service.findByName('test-realm')) as any;
+
+      expect(realm.smsProviderConfig).toEqual({
+        twilioAccountSid: 'AC123',
+        twilioAuthToken: SECRET_PLACEHOLDER,
+      });
+    });
+
+    it('should keep the stored email API key when the placeholder is sent back, and never return it', async () => {
+      const stored = crypto.encrypt('SG.original');
+      prisma.realm.findUnique.mockResolvedValue({
+        ...mockRealm,
+        emailProviderConfig: {
+          sendgrid: { apiKey: stored, from: 'old@x.test' },
+        },
+      });
+      prisma.realm.update.mockImplementation(({ data }: any) =>
+        Promise.resolve({ ...mockRealm, ...data }),
+      );
+
+      const result = (await service.update('test-realm', {
+        emailProviderConfig: {
+          sendgrid: { apiKey: SECRET_PLACEHOLDER, from: 'new@x.test' },
+        },
+      })) as any;
+
+      const { data } = prisma.realm.update.mock.calls[0][0];
+      expect(data.emailProviderConfig.sendgrid).toEqual({
+        apiKey: stored,
+        from: 'new@x.test',
+      });
+      expect(result.emailProviderConfig.sendgrid).toEqual({
+        apiKey: SECRET_PLACEHOLDER,
+        from: 'new@x.test',
+      });
+    });
+
+    it('should never return email provider secrets from findByName', async () => {
+      cacheService.getCachedRealmByName.mockResolvedValue(null);
+      prisma.realm.findUnique.mockResolvedValue({
+        ...mockRealm,
+        emailProviderConfig: {
+          postmark: { serverToken: crypto.encrypt('pm'), from: 'a@x.test' },
+        },
+      });
+
+      const realm = (await service.findByName('test-realm')) as any;
+
+      expect(realm.emailProviderConfig.postmark).toEqual({
+        serverToken: SECRET_PLACEHOLDER,
+        from: 'a@x.test',
+      });
+    });
   });
 
   describe('findAll', () => {
@@ -281,6 +432,27 @@ describe('RealmsService', () => {
       await expect(
         service.update('nonexistent', { displayName: 'X' }),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    // idenplane#1558: the flag was accepted nowhere, so it could never be saved.
+    it('should persist the WebAuthn settings, including user verification', async () => {
+      prisma.realm.findUnique.mockResolvedValue(mockRealm);
+      prisma.realm.update.mockResolvedValue(mockRealm);
+
+      await service.update('test-realm', {
+        webAuthnEnabled: true,
+        webAuthnRpName: 'Homelab',
+        webAuthnRpId: 'auth.example.com',
+        webAuthnUserVerificationRequired: true,
+      });
+
+      const { data } = prisma.realm.update.mock.calls[0][0];
+      expect(data).toMatchObject({
+        webAuthnEnabled: true,
+        webAuthnRpName: 'Homelab',
+        webAuthnRpId: 'auth.example.com',
+        webAuthnUserVerificationRequired: true,
+      });
     });
   });
 

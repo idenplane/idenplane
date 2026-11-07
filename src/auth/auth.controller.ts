@@ -115,4 +115,47 @@ export class AuthController {
       throw err;
     }
   }
+
+  /**
+   * Text a code for an `mfa_required` challenge. Answer it with the mfa_otp
+   * grant and `mfa_method=sms`.
+   */
+  @Post('mfa/sms')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({
+    summary: 'Send an SMS code for an MFA challenge (mfa_token)',
+  })
+  @ApiResponse({ status: 200, description: 'Code sent' })
+  @ApiResponse({
+    status: 400,
+    description: 'Invalid mfa_token, or SMS not available for the user',
+  })
+  @ApiResponse({ status: 429, description: 'Too many codes requested' })
+  @SkipThrottle()
+  @UseGuards(RateLimitGuard)
+  @RateLimitBy('ip', 'client')
+  async mfaSms(
+    @CurrentRealm() realm: Realm,
+    @Body() body: Record<string, string>,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    res.set('Cache-Control', 'no-store');
+    try {
+      return await this.authService.sendMfaSms(
+        realm,
+        body,
+        resolveClientIp(req),
+      );
+    } catch (err) {
+      if (err instanceof OAuthTokenError) {
+        res.status(err.httpStatus).json({
+          error: err.code,
+          ...(err.description ? { error_description: err.description } : {}),
+        });
+        return;
+      }
+      throw err;
+    }
+  }
 }

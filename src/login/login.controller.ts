@@ -15,12 +15,9 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { ApiExcludeController } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
-import { Prisma, type Realm, type User } from '@prisma/client';
-import type {
-  AuthorizeParams,
-  SatisfiedAuthContext,
-} from '../oauth/oauth.service.js';
-import { ACR_PASSWORD, ACR_MFA } from '../step-up/step-up.service.js';
+import { Prisma, type Realm } from '@prisma/client';
+import type { AuthorizeParams } from '../oauth/oauth.service.js';
+import { ACR_MFA } from '../step-up/step-up.service.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
@@ -29,6 +26,7 @@ import {
   RateLimitByIp,
 } from '../rate-limit/rate-limit.guard.js';
 import { LoginService } from './login.service.js';
+import { LoginFlowService } from './login-flow.service.js';
 import { OAuthService } from '../oauth/oauth.service.js';
 import { ConsentService } from '../consent/consent.service.js';
 import { VerificationService } from '../verification/verification.service.js';
@@ -36,7 +34,8 @@ import { EmailService } from '../email/email.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { PasswordPolicyService } from '../password-policy/password-policy.service.js';
-import { MfaService } from '../mfa/mfa.service.js';
+import { MfaService, MFA_ENROLLMENT_COOKIE } from '../mfa/mfa.service.js';
+import { SmsOtpService, SmsOtpError } from '../sms/sms-otp.service.js';
 import { ThemeRenderService } from '../theme/theme-render.service.js';
 import { ThemeEmailService } from '../theme/theme-email.service.js';
 import { EventsService } from '../events/events.service.js';
@@ -85,6 +84,8 @@ export class LoginController {
     private readonly customAttributesService: CustomAttributesService,
     private readonly csrfService: CsrfService,
     private readonly bruteForceService: BruteForceService,
+    private readonly loginFlow: LoginFlowService,
+    private readonly smsOtp: SmsOtpService,
     @Optional() private readonly riskAssessmentService?: RiskAssessmentService,
   ) {}
 
@@ -370,57 +371,16 @@ export class LoginController {
         );
       }
 
-      // Check MFA
-      const mfaRequired = await this.mfaService.isMfaRequired(realm, user.id);
-      const mfaEnabled = await this.mfaService.isMfaEnabled(user.id);
-
-      if (mfaEnabled) {
-        // User has TOTP set up — require verification
-        const challengeToken = await this.mfaService.createMfaChallenge(
-          user.id,
-          realm.id,
-          oauthParams,
-        );
-
-        res.cookie('IDENPLANE_MFA_CHALLENGE', challengeToken, {
-          httpOnly: true,
-          secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
-          sameSite: 'strict',
-          maxAge: 5 * 60 * 1000,
-          path: `/realms/${realm.name}`,
-        });
-
-        return res.redirect(`/realms/${realm.name}/totp`);
-      }
-
-      if (mfaRequired && !mfaEnabled) {
-        // Realm requires MFA but user hasn't set it up yet
-        // Create session first so they can set up TOTP
-        const sessionToken = await this.loginService.createLoginSession(
-          realm,
-          user,
-          resolveClientIp(req),
-          req.headers['user-agent'],
-          req.cookies?.['IDENPLANE_SESSION'] as string | undefined,
-        );
-
-        res.cookie('IDENPLANE_SESSION', sessionToken, {
-          httpOnly: true,
-          secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
-          sameSite: 'strict',
-          path: `/realms/${realm.name}`,
-        });
-
-        return res.redirect(
-          `/realms/${realm.name}/account/totp-setup?info=${encodeURIComponent('Two-factor authentication is required. Please set it up now.')}`,
-        );
-      }
-
-      // No MFA needed — proceed to create session (password-only auth)
-      return await this.completeLogin(realm, user, b, oauthParams, req, res, {
-        acr: ACR_PASSWORD,
-        amr: ['pwd'],
-      });
+      // Second factor / required enrolment / session — shared with every
+      // other first-factor path (see LoginFlowService).
+      return await this.loginFlow.continueAfterPrimaryAuth(
+        realm,
+        user,
+        oauthParams,
+        { primaryAmr: ['pwd'], rememberMe: !!b['rememberMe'] },
+        req,
+        res,
+      );
     } catch (err: unknown) {
       const errMessage =
         err instanceof Error ? err.message : 'Invalid credentials';
@@ -450,97 +410,43 @@ export class LoginController {
     }
   }
 
-  private async completeLogin(
-    realm: Realm,
-    user: User,
-    body: Record<string, unknown>,
-    oauthParams: Record<string, string>,
-    req: Request,
-    res: Response,
-    authContext: SatisfiedAuthContext = {},
-  ) {
-    // Validate OAuth request (including redirect_uri) BEFORE creating session
-    let client;
-    if (oauthParams['client_id']) {
-      client = await this.oauthService.validateAuthRequest(
-        realm,
-        oauthParams as unknown as AuthorizeParams,
-      );
-    }
-
-    const sessionToken = await this.loginService.createLoginSession(
-      realm,
-      user,
-      resolveClientIp(req),
-      req.headers['user-agent'],
-      req.cookies?.['IDENPLANE_SESSION'] as string | undefined,
-    );
-
-    res.cookie('IDENPLANE_SESSION', sessionToken, {
-      httpOnly: true,
-      secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
-      sameSite: 'strict',
-      maxAge: body['rememberMe'] ? 30 * 24 * 60 * 60 * 1000 : undefined,
-      path: `/realms/${realm.name}`,
-    });
-
-    void this.eventsService.recordLoginEvent({
-      realmId: realm.id,
-      type: LoginEventType.LOGIN,
-      userId: user.id,
-      clientId: oauthParams['client_id'],
-      ipAddress: resolveClientIp(req),
-    });
-
-    if (!client) {
-      return res.redirect(302, `/realms/${realm.name}/account`);
-    }
-
-    if (client.requireConsent) {
-      const scopes = (oauthParams['scope'] ?? 'openid')
-        .split(' ')
-        .filter(Boolean);
-      const hasConsent = await this.consentService.hasConsent(
-        user.id,
-        client.id,
-        scopes,
-      );
-
-      if (!hasConsent) {
-        const reqId = await this.consentService.storeConsentRequest({
-          userId: user.id,
-          clientId: client.id,
-          clientName: client.name ?? client.clientId,
-          realmName: realm.name,
-          scopes,
-          oauthParams,
-          // Carry the satisfied auth context across the consent round-trip so
-          // the code issued after consent reflects the real acr/amr.
-          satisfiedAcr: authContext.acr,
-          amr: authContext.amr,
-        });
-        return res.redirect(302, `/realms/${realm.name}/consent?req=${reqId}`);
-      }
-    }
-
-    const result = await this.oauthService.authorizeWithUser(
-      realm,
-      user,
-      oauthParams as unknown as AuthorizeParams,
-      authContext,
-    );
-    res.redirect(302, result.redirectUrl);
-  }
-
   // ─── MFA / TOTP ───────────────────────────────────────────
 
   @Get('totp')
-  showTotpForm(
+  async showTotpForm(
     @CurrentRealm() realm: Realm,
     @Query('error') error: string,
     @Req() req: Request,
     @Res() res: Response,
+    @Query('info') info?: string,
+    @Query('method') method?: string,
   ) {
+    const challengeToken = (
+      req.cookies as Record<string, string | undefined>
+    )?.['IDENPLANE_MFA_CHALLENGE'];
+    const challenge = challengeToken
+      ? await this.mfaService.getMfaChallenge(challengeToken)
+      : null;
+
+    // Offer the factors this user actually has. SMS needs a provider to be
+    // deliverable; without one, an SMS-only user falls back to recovery codes.
+    let hasTotp = true;
+    let hasSms = false;
+    let maskedPhone = '';
+    if (challenge && challenge.realmId === realm.id) {
+      const factors = await this.mfaService.getEnrolledFactors(
+        challenge.userId,
+      );
+      hasTotp = factors.includes('totp');
+      if (factors.includes('sms') && SmsOtpService.canDeliver(realm)) {
+        const phone = await this.smsOtp.getEnrolledPhone(challenge.userId);
+        if (phone) {
+          hasSms = true;
+          maskedPhone = SmsOtpService.maskPhone(phone);
+        }
+      }
+    }
+
     const csrfToken = this.setCsrfCookie(realm, res);
     this.themeRender.render(
       res,
@@ -550,10 +456,70 @@ export class LoginController {
       {
         pageTitle: 'Two-Factor Authentication',
         error: error ?? '',
+        info: info ?? '',
         csrfToken,
+        hasTotp,
+        hasSms,
+        smsMode: hasSms && (method === 'sms' || !hasTotp),
+        recoveryOnly: !hasTotp && !hasSms,
+        maskedPhone,
       },
       req,
     );
+  }
+
+  /**
+   * Text a sign-in code to the user's enrolled phone. A POST (with CSRF),
+   * never a page load, so prefetching or reloading can't send messages; the
+   * code is bound to this sign-in's challenge.
+   */
+  @Post('totp/sms')
+  @UseGuards(RateLimitGuard)
+  @RateLimitByIp()
+  async sendTotpSms(
+    @CurrentRealm() realm: Realm,
+    @Body() body: Record<string, string>,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    this.validateCsrf(realm, body, req);
+    const challengeToken = (
+      req.cookies as Record<string, string | undefined>
+    )?.['IDENPLANE_MFA_CHALLENGE'];
+    const challenge = challengeToken
+      ? await this.mfaService.getMfaChallenge(challengeToken)
+      : null;
+    if (!challengeToken || !challenge || challenge.realmId !== realm.id) {
+      return res.redirect(
+        `/realms/${realm.name}/login?error=${encodeURIComponent('MFA session expired. Please login again.')}`,
+      );
+    }
+
+    try {
+      const sent = await this.smsOtp.sendCode({
+        realm,
+        userId: challenge.userId,
+        purpose: 'login',
+        binding: challengeToken,
+        ip: resolveClientIp(req),
+      });
+      void this.eventsService.recordLoginEvent({
+        realmId: realm.id,
+        type: LoginEventType.MFA_CHALLENGE,
+        userId: challenge.userId,
+        ipAddress: resolveClientIp(req),
+      });
+      return res.redirect(
+        `/realms/${realm.name}/totp?method=sms&info=${encodeURIComponent(`We sent a code to ${sent.maskedPhone}.`)}`,
+      );
+    } catch (err) {
+      if (err instanceof SmsOtpError) {
+        return res.redirect(
+          `/realms/${realm.name}/totp?method=sms&error=${encodeURIComponent(err.message)}`,
+        );
+      }
+      throw err;
+    }
   }
 
   @Post('totp')
@@ -618,16 +584,27 @@ export class LoginController {
 
     const code = body.code;
     const recoveryCode = body.recoveryCode;
+    const smsCode = body.smsCode;
+    // Keep the user on the SMS form after a wrong SMS code.
+    const retryMethod = smsCode ? '&method=sms' : '';
 
-    let verified = false;
-    if (code) {
-      verified = await this.mfaService.verifyTotp(challenge.userId, code);
-    } else if (recoveryCode) {
-      verified = await this.mfaService.verifyRecoveryCode(
-        challenge.userId,
-        recoveryCode,
-      );
-    }
+    const { verified, factor } = smsCode
+      ? await this.mfaService.verifySecondFactor(challenge.userId, {
+          method: 'sms',
+          code: smsCode,
+          realmId: realm.id,
+          purpose: 'login',
+          binding: challengeToken,
+        })
+      : code
+        ? await this.mfaService.verifySecondFactor(challenge.userId, {
+            method: 'totp',
+            code,
+          })
+        : await this.mfaService.verifySecondFactor(challenge.userId, {
+            method: 'recovery',
+            code: recoveryCode ?? '',
+          });
 
     if (!verified) {
       await this.bruteForceService.recordTotpFailure(
@@ -651,15 +628,21 @@ export class LoginController {
           ? 'Too many failed attempts. Please try again later.'
           : 'Invalid code. Please try again.';
       return res.redirect(
-        `/realms/${realm.name}/totp?error=${encodeURIComponent(errorMsg)}`,
+        `/realms/${realm.name}/totp?error=${encodeURIComponent(errorMsg)}${retryMethod}`,
       );
     }
 
-    // MFA verified — consume the challenge and clear the cookie
-    await this.mfaService.consumeMfaChallenge(challengeToken);
+    // MFA verified — claim the challenge and clear the cookie. Losing the
+    // claim means a parallel request with the same code already signed in.
+    const claimed = await this.mfaService.consumeMfaChallenge(challengeToken);
     res.clearCookie('IDENPLANE_MFA_CHALLENGE', {
       path: `/realms/${realm.name}`,
     });
+    if (!claimed) {
+      return res.redirect(
+        `/realms/${realm.name}/login?error=${encodeURIComponent('MFA session expired. Please login again.')}`,
+      );
+    }
 
     // Reset TOTP failure tracking on successful verification
     await this.bruteForceService.resetTotpFailures(realm.id, challenge.userId);
@@ -672,15 +655,77 @@ export class LoginController {
       );
     }
 
-    // Password + TOTP completed — second factor satisfied (RFC 8176).
-    return await this.completeLogin(
+    // First factor + TOTP completed — second factor satisfied (RFC 8176).
+    return await this.loginFlow.completeLogin(
       realm,
       user,
-      body as unknown as Record<string, unknown>,
       challenge.oauthParams ?? {},
       req,
       res,
-      { acr: ACR_MFA, amr: ['pwd', 'otp'] },
+      {
+        acr: ACR_MFA,
+        amr: LoginFlowService.amrForFactor(challenge.primaryAmr, factor),
+      },
+    );
+  }
+
+  /**
+   * Finish a sign-in that was paused for required-MFA enrolment. Reached from
+   * the "Continue" button on the recovery-codes page once TOTP is active: the
+   * user has now proven the password and the new authenticator, so the SSO
+   * session is created at the MFA level and the original OAuth request resumes.
+   */
+  @Post('mfa-enrollment/continue')
+  @UseGuards(RateLimitGuard)
+  @RateLimitByIp()
+  async continueAfterMfaEnrollment(
+    @CurrentRealm() realm: Realm,
+    @Body() body: Record<string, string>,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    this.validateCsrf(realm, body, req);
+    const loginAgain = (message: string) => {
+      res.clearCookie(MFA_ENROLLMENT_COOKIE, { path: `/realms/${realm.name}` });
+      return res.redirect(
+        `/realms/${realm.name}/login?error=${encodeURIComponent(message)}`,
+      );
+    };
+
+    const token = (req.cookies as Record<string, string | undefined>)?.[
+      MFA_ENROLLMENT_COOKIE
+    ];
+    const enrollment = token
+      ? await this.mfaService.consumeVerifiedMfaEnrollment(token)
+      : null;
+    if (!enrollment || enrollment.realmId !== realm.id) {
+      return loginAgain('Your sign-in expired. Please sign in again.');
+    }
+
+    const user = await this.loginService.findUserById(enrollment.userId);
+    if (
+      !user ||
+      !user.enabled ||
+      !(await this.mfaService.isMfaEnabled(user.id))
+    ) {
+      return loginAgain('Please sign in again.');
+    }
+
+    res.clearCookie(MFA_ENROLLMENT_COOKIE, { path: `/realms/${realm.name}` });
+    return await this.loginFlow.completeLogin(
+      realm,
+      user,
+      enrollment.oauthParams ?? {},
+      req,
+      res,
+      {
+        acr: ACR_MFA,
+        amr: LoginFlowService.amrForFactor(
+          enrollment.primaryAmr,
+          enrollment.factor,
+        ),
+      },
+      { rememberMe: enrollment.rememberMe },
     );
   }
 

@@ -18,13 +18,13 @@
   },
   "dependencies": {
     "@modelcontextprotocol/sdk": "^1.15.0",
-    "zod": "^3.25.67"
+    "zod": "^4.6.7"
   },
   "devDependencies": {
-    "tsup": "^8.4.0",
-    "typescript": "^5.7.0",
+    "@idenplane/http-internal": "file:../idenplane-http-internal",
     "@types/node": "^22.10.7",
-    "@idenplane/http-internal": "file:../idenplane-http-internal"
+    "tsup": "^8.4.0",
+    "typescript": "^5.7.0"
   },
   "overrides": {
     "esbuild": "^0.28.1",

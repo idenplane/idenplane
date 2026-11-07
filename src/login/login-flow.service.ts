@@ -1,0 +1,219 @@
+import { Injectable } from '@nestjs/common';
+import type { Request, Response } from 'express';
+import type { Realm, User } from '@prisma/client';
+import { LoginService } from './login.service.js';
+import {
+  OAuthService,
+  type AuthorizeParams,
+  type SatisfiedAuthContext,
+} from '../oauth/oauth.service.js';
+import { ConsentService } from '../consent/consent.service.js';
+import { EventsService } from '../events/events.service.js';
+import { LoginEventType } from '../events/event-types.js';
+import {
+  MfaService,
+  MFA_ENROLLMENT_COOKIE,
+  MFA_ENROLLMENT_TTL_SECONDS,
+} from '../mfa/mfa.service.js';
+import { ACR_PASSWORD } from '../step-up/step-up.service.js';
+import type { VerifiedFactor } from '../mfa/mfa.service.js';
+import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
+
+export const MFA_CHALLENGE_COOKIE = 'IDENPLANE_MFA_CHALLENGE';
+
+/**
+ * What happens after a user has proven who they are with a first factor
+ * (a password, or a federated login at an external identity provider).
+ *
+ * Every first-factor path goes through here so they all apply the same
+ * realm policy — the TOTP challenge, required-MFA enrolment — and finish the
+ * same way: an SSO session that records how it was established, the login
+ * event, the consent screen and the authorization code. Keeping this in one
+ * place is what stops a second sign-in path from silently skipping MFA.
+ */
+@Injectable()
+export class LoginFlowService {
+  constructor(
+    private readonly loginService: LoginService,
+    private readonly oauthService: OAuthService,
+    private readonly consentService: ConsentService,
+    private readonly eventsService: EventsService,
+    private readonly mfaService: MfaService,
+  ) {}
+
+  /**
+   * @param primaryAmr RFC 8176 methods of the first factor (`['pwd']` for a
+   *   password; empty for a federated login, whose methods are not known).
+   */
+  async continueAfterPrimaryAuth(
+    realm: Realm,
+    user: User,
+    oauthParams: Record<string, string>,
+    options: { primaryAmr: string[]; rememberMe?: boolean },
+    req: Request,
+    res: Response,
+  ): Promise<void> {
+    const mfaRequired = await this.mfaService.isMfaRequired(realm, user.id);
+    const mfaEnabled = await this.mfaService.isMfaEnabled(user.id);
+
+    if (mfaEnabled) {
+      // The user has TOTP set up — require it.
+      const challengeToken = await this.mfaService.createMfaChallenge(
+        user.id,
+        realm.id,
+        oauthParams,
+        undefined,
+        options.primaryAmr,
+      );
+      res.cookie(MFA_CHALLENGE_COOKIE, challengeToken, {
+        httpOnly: true,
+        secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
+        sameSite: 'strict',
+        maxAge: 5 * 60 * 1000,
+        path: `/realms/${realm.name}`,
+      });
+      return res.redirect(`/realms/${realm.name}/totp`);
+    }
+
+    if (mfaRequired) {
+      // The realm requires MFA and this user has not enrolled yet. Issuing
+      // an SSO session here would hand out a single-factor session that
+      // /authorize and SAML accept, defeating the requirement. Instead the
+      // user gets a short-lived enrolment token that only unlocks the TOTP
+      // setup page; the session is created after enrolment, at the MFA level.
+      const enrollmentToken = await this.mfaService.createMfaEnrollment({
+        userId: user.id,
+        realmId: realm.id,
+        oauthParams,
+        rememberMe: !!options.rememberMe,
+        primaryAmr: options.primaryAmr,
+      });
+      res.cookie(MFA_ENROLLMENT_COOKIE, enrollmentToken, {
+        httpOnly: true,
+        secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
+        sameSite: 'strict',
+        maxAge: MFA_ENROLLMENT_TTL_SECONDS * 1000,
+        path: `/realms/${realm.name}`,
+      });
+      return res.redirect(
+        `/realms/${realm.name}/account/totp-setup?info=${encodeURIComponent('Two-factor authentication is required. Please set it up now.')}`,
+      );
+    }
+
+    // No second factor needed.
+    return this.completeLogin(
+      realm,
+      user,
+      oauthParams,
+      req,
+      res,
+      { acr: ACR_PASSWORD, amr: options.primaryAmr },
+      { rememberMe: options.rememberMe },
+    );
+  }
+
+  /**
+   * Create the SSO session at the level that was actually satisfied, then
+   * continue the OAuth request: account page, consent screen or code.
+   */
+  async completeLogin(
+    realm: Realm,
+    user: User,
+    oauthParams: Record<string, string>,
+    req: Request,
+    res: Response,
+    authContext: SatisfiedAuthContext = {},
+    options: { rememberMe?: boolean } = {},
+  ): Promise<void> {
+    // Validate OAuth request (including redirect_uri) BEFORE creating session
+    let client;
+    if (oauthParams['client_id']) {
+      client = await this.oauthService.validateAuthRequest(
+        realm,
+        oauthParams as unknown as AuthorizeParams,
+      );
+    }
+
+    const sessionToken = await this.loginService.createLoginSession(
+      realm,
+      user,
+      resolveClientIp(req),
+      req.headers['user-agent'],
+      req.cookies?.['IDENPLANE_SESSION'] as string | undefined,
+      // Recorded on the session so silent SSO later reports the real acr/amr
+      // (and an MFA-required realm accepts the session).
+      authContext,
+    );
+
+    res.cookie('IDENPLANE_SESSION', sessionToken, {
+      httpOnly: true,
+      secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
+      sameSite: 'strict',
+      maxAge: options.rememberMe ? 30 * 24 * 60 * 60 * 1000 : undefined,
+      path: `/realms/${realm.name}`,
+    });
+
+    void this.eventsService.recordLoginEvent({
+      realmId: realm.id,
+      type: LoginEventType.LOGIN,
+      userId: user.id,
+      clientId: oauthParams['client_id'],
+      ipAddress: resolveClientIp(req),
+    });
+
+    if (!client) {
+      return res.redirect(302, `/realms/${realm.name}/account`);
+    }
+
+    if (client.requireConsent) {
+      const scopes = (oauthParams['scope'] ?? 'openid')
+        .split(' ')
+        .filter(Boolean);
+      const hasConsent = await this.consentService.hasConsent(
+        user.id,
+        client.id,
+        scopes,
+      );
+
+      if (!hasConsent) {
+        const reqId = await this.consentService.storeConsentRequest({
+          userId: user.id,
+          clientId: client.id,
+          clientName: client.name ?? client.clientId,
+          realmName: realm.name,
+          scopes,
+          oauthParams,
+          // Carry the satisfied auth context across the consent round-trip so
+          // the code issued after consent reflects the real acr/amr.
+          satisfiedAcr: authContext.acr,
+          amr: authContext.amr,
+        });
+        return res.redirect(302, `/realms/${realm.name}/consent?req=${reqId}`);
+      }
+    }
+
+    const result = await this.oauthService.authorizeWithUser(
+      realm,
+      user,
+      oauthParams as unknown as AuthorizeParams,
+      authContext,
+    );
+    res.redirect(302, result.redirectUrl);
+  }
+
+  /** The methods to record once TOTP completes a sign-in (RFC 8176). */
+  static amrWithOtp(primaryAmr: string[] | undefined): string[] {
+    return [...(primaryAmr ?? ['pwd']), 'otp'];
+  }
+
+  /**
+   * RFC 8176 methods after a second factor: `sms` for a texted code, `otp`
+   * for an authenticator or recovery code.
+   */
+  static amrForFactor(
+    primaryAmr: string[] | undefined,
+    factor: VerifiedFactor | undefined,
+  ): string[] {
+    return [...(primaryAmr ?? ['pwd']), factor === 'sms' ? 'sms' : 'otp'];
+  }
+}

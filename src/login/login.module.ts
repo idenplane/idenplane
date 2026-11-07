@@ -1,6 +1,7 @@
 import { Module, forwardRef } from '@nestjs/common';
 import { LoginController } from './login.controller.js';
 import { LoginService } from './login.service.js';
+import { LoginFlowService } from './login-flow.service.js';
 import { OAuthModule } from '../oauth/oauth.module.js';
 import { UserFederationModule } from '../user-federation/user-federation.module.js';
 import { ThemeModule } from '../theme/theme.module.js';
@@ -19,7 +20,7 @@ import { CsrfService } from '../common/csrf/csrf.service.js';
     MigrationModule,
   ],
   controllers: [LoginController],
-  providers: [LoginService, CsrfService],
-  exports: [LoginService, CsrfService],
+  providers: [LoginService, LoginFlowService, CsrfService],
+  exports: [LoginService, LoginFlowService, CsrfService],
 })
 export class LoginModule {}

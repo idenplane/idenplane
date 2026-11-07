@@ -72,6 +72,18 @@ describe('CryptoService', () => {
     });
   });
 
+  describe('hmac', () => {
+    it('is deterministic per purpose and input', () => {
+      expect(service.hmac('a', '123456')).toBe(service.hmac('a', '123456'));
+      expect(service.hmac('a', '123456')).toMatch(/^[0-9a-f]{64}$/);
+    });
+
+    it('separates purposes and is not a plain sha256', () => {
+      expect(service.hmac('a', '123456')).not.toBe(service.hmac('b', '123456'));
+      expect(service.hmac('a', '123456')).not.toBe(service.sha256('123456'));
+    });
+  });
+
   describe('sha256', () => {
     it('should return consistent hash for the same input', () => {
       const hash1 = service.sha256('test');

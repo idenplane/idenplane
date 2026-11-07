@@ -32,13 +32,15 @@ npm install
 2. **Set up environment**
 ```bash
 cp .env.example .env
-# Edit .env with your database credentials
+# Replace the four REPLACE_ME values the setup guide lists
+# (ADMIN_API_KEY, ADMIN_PASSWORD, WEBHOOK_SECRET_KEY, WEBHOOK_ENCRYPTION_SALT)
 ```
 
-3. **Start development database**
+3. **Start the development database**
 ```bash
-docker compose up -d
+docker compose up -d db
 ```
+Only `db`: a bare `docker compose up -d` also starts the published `app` image on port 3000, which then blocks `npm run start:dev`.
 
 4. **Run migrations and seed development data**
 ```bash
@@ -52,14 +54,16 @@ npm run prisma:migrate   # apply migrations
 npm run prisma:seed      # seed development data
 ```
 
-6. **Start development server**
+5. **Start development server**
 ```bash
 npm run start:dev
 ```
 
+The [development setup guide](https://idenplane.com/contributing/development-setup) covers the admin console, the docs site, using your own Postgres and the common failures. Its steps are run in CI on Linux, macOS and WSL.
+
 ### Required Tools
 
-- Node.js 22+
+- Node.js 22+ (CI runs 24)
 - npm 10+
 - Docker & Docker Compose
 - Git

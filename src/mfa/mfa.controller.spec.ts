@@ -6,8 +6,10 @@ import type { Realm } from '@prisma/client';
 describe('MfaController', () => {
   let controller: MfaController;
   let mockMfaService: {
-    isMfaEnabled: jest.Mock;
+    getEnrolledFactors: jest.Mock;
     disableTotp: jest.Mock;
+    disableSms: jest.Mock;
+    disableAllFactors: jest.Mock;
   };
   let mockPrisma: {
     user: { findUnique: jest.Mock };
@@ -36,8 +38,10 @@ describe('MfaController', () => {
 
   beforeEach(() => {
     mockMfaService = {
-      isMfaEnabled: jest.fn(),
+      getEnrolledFactors: jest.fn(),
       disableTotp: jest.fn(),
+      disableSms: jest.fn(),
+      disableAllFactors: jest.fn(),
     };
 
     mockPrisma = {
@@ -72,28 +76,36 @@ describe('MfaController', () => {
   });
 
   describe('getMfaStatus', () => {
-    it('should call mfaService.isMfaEnabled with the userId', async () => {
-      mockMfaService.isMfaEnabled.mockResolvedValue(true);
+    it('should look up the enrolled factors for the userId', async () => {
+      mockMfaService.getEnrolledFactors.mockResolvedValue(['totp']);
 
       await controller.getMfaStatus(realm, 'user-1');
 
-      expect(mockMfaService.isMfaEnabled).toHaveBeenCalledWith('user-1');
+      expect(mockMfaService.getEnrolledFactors).toHaveBeenCalledWith('user-1');
     });
 
-    it('should return { enabled: true } when MFA is enabled', async () => {
-      mockMfaService.isMfaEnabled.mockResolvedValue(true);
+    it('reports every enrolled factor', async () => {
+      mockMfaService.getEnrolledFactors.mockResolvedValue(['totp', 'sms']);
 
       const result = await controller.getMfaStatus(realm, 'user-1');
 
-      expect(result).toEqual({ enabled: true });
+      expect(result).toEqual({ enabled: true, methods: ['totp', 'sms'] });
+    });
+
+    it('counts an SMS-only user as enabled', async () => {
+      mockMfaService.getEnrolledFactors.mockResolvedValue(['sms']);
+
+      const result = await controller.getMfaStatus(realm, 'user-1');
+
+      expect(result).toEqual({ enabled: true, methods: ['sms'] });
     });
 
     it('should return { enabled: false } when MFA is disabled', async () => {
-      mockMfaService.isMfaEnabled.mockResolvedValue(false);
+      mockMfaService.getEnrolledFactors.mockResolvedValue([]);
 
       const result = await controller.getMfaStatus(realm, 'user-2');
 
-      expect(result).toEqual({ enabled: false });
+      expect(result).toEqual({ enabled: false, methods: [] });
     });
 
     it('should throw NotFoundException for user in different realm', async () => {
@@ -114,12 +126,12 @@ describe('MfaController', () => {
       adminUser: { userId: 'user-1' },
     } as any;
 
-    it('should call mfaService.disableTotp with the userId', async () => {
-      mockMfaService.disableTotp.mockResolvedValue(undefined);
+    it('removes every second factor of the user', async () => {
+      mockMfaService.disableAllFactors.mockResolvedValue(undefined);
 
       await controller.resetMfa(realm, 'user-1', mockReq);
 
-      expect(mockMfaService.disableTotp).toHaveBeenCalledWith('user-1');
+      expect(mockMfaService.disableAllFactors).toHaveBeenCalledWith('user-1');
     });
 
     it('should throw UnauthorizedException when no adminUser is present', async () => {

@@ -13,7 +13,13 @@ import { ThemeService } from '../theme/theme.service.js';
 import { CacheService } from '../cache/cache.service.js';
 import { CreateRealmDto } from './dto/create-realm.dto.js';
 import { UpdateRealmDto } from './dto/update-realm.dto.js';
-import { encryptEmailProviderConfig } from './realm-secrets.util.js';
+import {
+  encryptEmailProviderConfig,
+  redactEmailProviderConfig,
+  encryptSmsProviderConfig,
+  redactSmsProviderConfig,
+  SECRET_PLACEHOLDER,
+} from './realm-secrets.util.js';
 
 @Injectable()
 export class RealmsService {
@@ -26,11 +32,26 @@ export class RealmsService {
     private readonly crypto: CryptoService,
   ) {}
 
-  private redactSmtpPassword(realm: Record<string, unknown> | null) {
-    if (realm && realm['smtpPassword']) {
-      return { ...realm, smtpPassword: '••••••' };
+  /**
+   * Strip write-only secrets from a realm before it leaves the service: the
+   * SMTP password and the SMS provider credentials come back as
+   * SECRET_PLACEHOLDER, which update() in turn treats as "unchanged".
+   */
+  private redactSecrets(realm: Record<string, unknown> | null) {
+    if (!realm) return realm;
+    const out: Record<string, unknown> = { ...realm };
+    if (out['smtpPassword']) out['smtpPassword'] = SECRET_PLACEHOLDER;
+    if ('smsProviderConfig' in out) {
+      out['smsProviderConfig'] = redactSmsProviderConfig(
+        out['smsProviderConfig'],
+      );
     }
-    return realm;
+    if ('emailProviderConfig' in out) {
+      out['emailProviderConfig'] = redactEmailProviderConfig(
+        out['emailProviderConfig'],
+      );
+    }
+    return out;
   }
 
   async create(dto: CreateRealmDto) {
@@ -40,6 +61,7 @@ export class RealmsService {
     if (existing) {
       throw new ConflictException(`Realm '${dto.name}' already exists`);
     }
+    assertSmsMfaDeliverable(dto.smsMfaEnabled, dto.smsProvider);
 
     const keyPair = await this.jwkService.generateRsaKeyPair();
 
@@ -114,6 +136,20 @@ export class RealmsService {
         webAuthnEnabled: dto.webAuthnEnabled,
         webAuthnRpName: dto.webAuthnRpName,
         webAuthnRpId: dto.webAuthnRpId,
+        webAuthnUserVerificationRequired: dto.webAuthnUserVerificationRequired,
+        // SMS provider + OTP
+        smsMfaEnabled: dto.smsMfaEnabled,
+        smsProvider: dto.smsProvider,
+        smsFrom: dto.smsFrom,
+        smsProviderConfig: encryptSmsProviderConfig(
+          this.crypto,
+          dto.smsProviderConfig as Record<string, unknown> | undefined,
+          undefined,
+        ) as Prisma.InputJsonValue | undefined,
+        otpLength: dto.otpLength,
+        otpExpirySeconds: dto.otpExpirySeconds,
+        smsMaxRequestsPerUser: dto.smsMaxRequestsPerUser,
+        smsRateLimitWindow: dto.smsRateLimitWindow,
         // Adaptive authentication
         adaptiveAuthEnabled: dto.adaptiveAuthEnabled,
         riskThresholdStepUp: dto.riskThresholdStepUp,
@@ -157,20 +193,20 @@ export class RealmsService {
     // Seed default scopes for the new realm
     await this.scopeSeedService.seedDefaultScopes(realm.id);
 
-    return this.redactSmtpPassword(realm) as Realm;
+    return this.redactSecrets(realm) as Realm;
   }
 
   async findAll() {
     const realms = await this.prisma.realm.findMany({
       orderBy: { createdAt: 'asc' },
     });
-    return realms.map((r) => this.redactSmtpPassword(r));
+    return realms.map((r) => this.redactSecrets(r));
   }
 
   async findByName(name: string): Promise<Realm> {
     const cached = await this.cache.getCachedRealmByName<Realm | null>(name);
     if (cached) {
-      return this.redactSmtpPassword(cached) as Realm;
+      return this.redactSecrets(cached) as Realm;
     }
 
     const realm = await this.prisma.realm.findUnique({
@@ -185,7 +221,7 @@ export class RealmsService {
       this.cache.cacheRealmConfig(realm.id, realm),
     ]);
 
-    return this.redactSmtpPassword(realm) as Realm;
+    return this.redactSecrets(realm) as Realm;
   }
 
   async findByNameRaw(name: string): Promise<Realm> {
@@ -209,6 +245,12 @@ export class RealmsService {
 
   async update(name: string, dto: UpdateRealmDto) {
     const existing = await this.findByNameRaw(name);
+    if (dto.smsMfaEnabled !== undefined || dto.smsProvider !== undefined) {
+      assertSmsMfaDeliverable(
+        dto.smsMfaEnabled ?? existing.smsMfaEnabled,
+        dto.smsProvider ?? existing.smsProvider,
+      );
+    }
 
     // Validate theme names against available themes
     const themeFields = [
@@ -244,6 +286,7 @@ export class RealmsService {
       emailProviderConfig: encryptEmailProviderConfig(
         this.crypto,
         dto.emailProviderConfig,
+        existing.emailProviderConfig,
       ),
       passwordMinLength: dto.passwordMinLength,
       passwordRequireUppercase: dto.passwordRequireUppercase,
@@ -287,6 +330,20 @@ export class RealmsService {
       webAuthnEnabled: dto.webAuthnEnabled,
       webAuthnRpName: dto.webAuthnRpName,
       webAuthnRpId: dto.webAuthnRpId,
+      webAuthnUserVerificationRequired: dto.webAuthnUserVerificationRequired,
+      // SMS provider + OTP
+      smsMfaEnabled: dto.smsMfaEnabled,
+      smsProvider: dto.smsProvider,
+      smsFrom: dto.smsFrom,
+      smsProviderConfig: encryptSmsProviderConfig(
+        this.crypto,
+        dto.smsProviderConfig as Record<string, unknown> | undefined,
+        existing.smsProviderConfig,
+      ),
+      otpLength: dto.otpLength,
+      otpExpirySeconds: dto.otpExpirySeconds,
+      smsMaxRequestsPerUser: dto.smsMaxRequestsPerUser,
+      smsRateLimitWindow: dto.smsRateLimitWindow,
       // Adaptive authentication
       adaptiveAuthEnabled: dto.adaptiveAuthEnabled,
       riskThresholdStepUp: dto.riskThresholdStepUp,
@@ -326,7 +383,7 @@ export class RealmsService {
     };
 
     // Only update password if a real value is provided (not the redacted placeholder)
-    if (dto.smtpPassword && dto.smtpPassword !== '••••••') {
+    if (dto.smtpPassword && dto.smtpPassword !== SECRET_PLACEHOLDER) {
       data.smtpPassword = this.crypto.encryptSecret(dto.smtpPassword);
     }
 
@@ -337,12 +394,28 @@ export class RealmsService {
 
     await this.cache.invalidateRealmCache(existing.id, name);
 
-    return this.redactSmtpPassword(realm);
+    return this.redactSecrets(realm);
   }
 
   async remove(name: string) {
     const existing = await this.findByNameRaw(name);
     await this.cache.invalidateRealmCache(existing.id, name);
-    return this.prisma.realm.delete({ where: { name } });
+    const deleted = await this.prisma.realm.delete({ where: { name } });
+    return this.redactSecrets(deleted);
+  }
+}
+
+/**
+ * SMS MFA can only be switched on with a provider to deliver the codes;
+ * otherwise users could enrol a phone that never receives anything.
+ */
+function assertSmsMfaDeliverable(
+  smsMfaEnabled: boolean | undefined,
+  smsProvider: string | undefined | null,
+): void {
+  if (smsMfaEnabled && (!smsProvider || smsProvider === 'none')) {
+    throw new BadRequestException(
+      'Choose an SMS provider before turning on SMS multi-factor authentication.',
+    );
   }
 }

@@ -7,6 +7,42 @@ interface WebhookHeader {
   value: string;
 }
 
+/** Per-realm settings; any field left empty falls back to the SMS_WEBHOOK_* env. */
+export interface WebhookSmsOptions {
+  url?: string | null;
+  /** JSON: `{"Header": "value"}` or `[{"name": "Header", "value": "value"}]`. */
+  headers?: string | null;
+  timeoutMs?: number | null;
+}
+
+/**
+ * Parse a headers setting. The env variable has always used a list of
+ * `{name, value}`; the admin UI sends a plain object, which is what people
+ * write by hand. Accept both. Returns null when the JSON is unusable.
+ */
+function parseHeaders(raw: string): WebhookHeader[] | null {
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (Array.isArray(parsed)) {
+    return (parsed as unknown[]).filter((h): h is WebhookHeader => {
+      const header = h as Partial<WebhookHeader> | null;
+      return (
+        typeof header?.name === 'string' && typeof header?.value === 'string'
+      );
+    });
+  }
+  if (typeof parsed === 'object' && parsed !== null) {
+    return Object.entries(parsed)
+      .filter(([, value]) => typeof value === 'string')
+      .map(([name, value]) => ({ name, value: value as string }));
+  }
+  return null;
+}
+
 @Injectable()
 export class WebhookSmsProvider implements SmsProvider {
   readonly name = 'webhook';
@@ -18,30 +54,33 @@ export class WebhookSmsProvider implements SmsProvider {
     { name: 'Content-Type', value: 'application/json' },
   ];
 
-  constructor() {
-    this.initializeClient();
+  constructor(options: WebhookSmsOptions = {}) {
+    this.initializeClient(options);
   }
 
-  private initializeClient(): void {
-    this.webhookUrl = process.env['SMS_WEBHOOK_URL'] ?? null;
+  private initializeClient(options: WebhookSmsOptions): void {
+    this.webhookUrl = options.url || process.env['SMS_WEBHOOK_URL'] || null;
 
-    const headersConfig = process.env['SMS_WEBHOOK_HEADERS'];
+    const headersConfig = options.headers || process.env['SMS_WEBHOOK_HEADERS'];
     if (headersConfig) {
-      try {
-        this.headers = JSON.parse(headersConfig) as WebhookHeader[];
-      } catch {
-        this.logger.warn(
-          'Invalid SMS_WEBHOOK_HEADERS JSON - using defaults only',
-        );
+      const parsed = parseHeaders(headersConfig);
+      if (parsed) {
+        this.headers = parsed;
+      } else {
+        this.logger.warn('Invalid webhook headers JSON - using defaults only');
         this.headers = [];
       }
     }
 
-    const timeoutEnv = process.env['SMS_WEBHOOK_TIMEOUT_MS'];
-    if (timeoutEnv) {
-      const parsed = parseInt(timeoutEnv, 10);
-      if (!Number.isNaN(parsed) && parsed > 0) {
-        this.timeoutMs = parsed;
+    if (options.timeoutMs && options.timeoutMs > 0) {
+      this.timeoutMs = options.timeoutMs;
+    } else {
+      const timeoutEnv = process.env['SMS_WEBHOOK_TIMEOUT_MS'];
+      if (timeoutEnv) {
+        const parsed = parseInt(timeoutEnv, 10);
+        if (!Number.isNaN(parsed) && parsed > 0) {
+          this.timeoutMs = parsed;
+        }
       }
     }
 

@@ -1,0 +1,100 @@
+# Keeps docs/docs/contributing/development-setup.mdx true: runs its steps
+# (scripts/verify-dev-setup.sh) on Linux, macOS and Windows WSL 2 whenever
+# something the guide depends on changes, and weekly in case the platforms
+# drift underneath it.
+name: Dev setup guide
+
+on:
+  pull_request:
+    paths:
+      - 'package.json'
+      - 'package-lock.json'
+      - '.env.example'
+      - 'docker-compose.yml'
+      - 'prisma/**'
+      - 'admin-ui/package.json'
+      - 'admin-ui/package-lock.json'
+      - 'admin-ui/vite.config.ts'
+      - 'docs/package.json'
+      - 'docs/package-lock.json'
+      - 'docs/docs/contributing/development-setup.mdx'
+      - 'CONTRIBUTING.md'
+      - 'scripts/verify-dev-setup.sh'
+      - '.github/workflows/dev-setup.yml'
+  schedule:
+    - cron: '17 4 * * 1' # Mondays 04:17 UTC
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dev-setup-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  linux:
+    name: Linux (Docker Postgres)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Follow the guide
+        run: bash scripts/verify-dev-setup.sh
+
+  macos:
+    name: macOS (Homebrew Postgres)
+    # Hosted macOS runners have no Docker, so this takes the guide's
+    # "your own Postgres" path, which is what many Mac contributors use.
+    runs-on: macos-latest
+    timeout-minutes: 50
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+      - name: Start Postgres the way the guide describes for Homebrew
+        run: |
+          brew install postgresql@16
+          brew services start postgresql@16
+          export PATH="$(brew --prefix postgresql@16)/bin:$PATH"
+          for _ in $(seq 1 60); do pg_isready -h localhost && break; sleep 1; done
+          psql -h localhost -d postgres -c "CREATE ROLE idenplane LOGIN PASSWORD 'idenplane' CREATEDB;"
+          psql -h localhost -d postgres -c "CREATE DATABASE idenplane OWNER idenplane;"
+      - name: Follow the guide
+        env:
+          DB_MODE: external
+        run: bash scripts/verify-dev-setup.sh
+
+  wsl:
+    name: Windows (WSL 2, Ubuntu)
+    runs-on: windows-latest
+    timeout-minutes: 60
+    defaults:
+      run:
+        shell: wsl-bash {0}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: Vampire/setup-wsl@v5
+        with:
+          distribution: Ubuntu-24.04
+          additional-packages: ca-certificates curl git openssl postgresql
+      - name: Install Node 24 inside WSL
+        run: |
+          curl -fsSL https://deb.nodesource.com/setup_24.x | bash -
+          apt-get install -y nodejs
+      - name: Start Postgres inside WSL
+        run: |
+          service postgresql start
+          su postgres -c "psql -c \"CREATE ROLE idenplane LOGIN PASSWORD 'idenplane' CREATEDB;\""
+          su postgres -c "psql -c \"CREATE DATABASE idenplane OWNER idenplane;\""
+      - name: Follow the guide from a clone inside the WSL filesystem
+        # The guide says to clone under ~ rather than /mnt/c; do the same.
+        run: |
+          git clone --quiet "$(pwd)" ~/idenplane
+          cd ~/idenplane
+          git checkout --quiet "$(git -C "$OLDPWD" rev-parse HEAD)"
+          DB_MODE=external bash scripts/verify-dev-setup.sh

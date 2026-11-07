@@ -20,8 +20,19 @@ import { server } from './mocks/server';
   }
 };
 
+// jsdom implements neither URL.createObjectURL nor revokeObjectURL. Vitest fills
+// the gap with a shim that converts the Blob through jsdom's private internals
+// (`blob[implSymbol]._buffer`), which jsdom 30.1 no longer has — so any component
+// building a preview or download URL (ImageUploader, theme export, migration
+// report) threw an uncaught TypeError. Tests never need the bytes behind the
+// URL, only a stable string, so pin a self-contained stand-in. Individual tests
+// can still spy on or replace these to assert on what was passed.
+let objectUrlCounter = 0;
+URL.createObjectURL = () => `blob:test/${++objectUrlCounter}`;
+URL.revokeObjectURL = () => {};
+
 // Start MSW server before all tests
-beforeAll(() => server.listen({ onUnhandledRequest: 'warn' }));
+beforeAll(() => server.listen({ onUnhandledFrame: 'warn' }));
 
 // Reset handlers after each test to avoid state leaking between tests
 afterEach(() => server.resetHandlers());

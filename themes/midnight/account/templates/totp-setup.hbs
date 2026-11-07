@@ -8,6 +8,7 @@
 
 <h2 class="auth-subtitle">{{msg "totpSetupTitle"}}</h2>
 
+{{#if activated}}
 {{#if recoveryCodes}}
 <div style="background: rgba(234,179,8,0.1); border: 1px solid rgba(234,179,8,0.2); border-radius: 14px; padding: 1rem; margin-bottom: 1rem;">
   <p style="font-weight: 600; color: #fde047; margin-bottom: 0.5rem;">{{msg "totpSetupSaveRecovery"}}</p>
@@ -20,7 +21,15 @@
     {{/each}}
   </div>
 </div>
+{{/if}}
+{{#if continueAction}}
+<form method="POST" action="{{continueAction}}" class="auth-form">
+  <input type="hidden" name="_csrf" value="{{csrfToken}}">
+  <button type="submit" class="btn-primary">{{msg "totpSetupDone"}}</button>
+</form>
+{{else}}
 <a href="/realms/{{realmName}}/account" class="btn-primary" style="display: block; text-align: center; text-decoration: none;">{{msg "totpSetupDone"}}</a>
+{{/if}}
 {{else}}
 <p style="color: #64748b; font-size: 0.85rem; margin-bottom: 1rem; text-align: center;">
   {{msg "totpSetupScanQr"}}
@@ -46,7 +55,13 @@
   <button type="submit" class="btn-primary">{{msg "totpSetupVerifyActivate"}}</button>
 </form>
 
+{{#if smsSetupUrl}}
 <div style="margin-top: 1rem; text-align: center;">
-  <a href="/realms/{{realmName}}/account" style="color: #64748b; font-size: 0.85rem;">{{msg "totpSetupCancel"}}</a>
+  <a href="{{smsSetupUrl}}" style="color: #06b6d4; font-size: 0.85rem;">{{msg "totpSetupUseSms"}}</a>
+</div>
+{{/if}}
+
+<div style="margin-top: 1rem; text-align: center;">
+  <a href="{{#if cancelUrl}}{{cancelUrl}}{{else}}/realms/{{realmName}}/account{{/if}}" style="color: #64748b; font-size: 0.85rem;">{{msg "totpSetupCancel"}}</a>
 </div>
 {{/if}}

@@ -5,6 +5,17 @@ import { CryptoService } from '../crypto/crypto.service.js';
 import { BruteForceService } from '../brute-force/brute-force.service.js';
 import { UserFederationService } from '../user-federation/user-federation.service.js';
 import { PasswordMigrationService } from '../migration/password-migration.service.js';
+import {
+  ACR_MFA,
+  acrStrength,
+  strongestAcr,
+} from '../step-up/step-up.service.js';
+
+/** How an SSO session was established (OIDC acr / RFC 8176 amr). */
+export interface LoginSessionAuthContext {
+  acr?: string;
+  amr?: string[];
+}
 
 @Injectable()
 export class LoginService {
@@ -119,6 +130,7 @@ export class LoginService {
     ip?: string,
     userAgent?: string,
     existingSessionToken?: string,
+    authContext: LoginSessionAuthContext = {},
   ): Promise<string> {
     // Session-fixation prevention: invalidate the pre-existing session cookie
     // before issuing a new one so an attacker cannot pre-plant a known token.
@@ -166,6 +178,8 @@ export class LoginService {
         tokenHash,
         ipAddress: ip,
         userAgent,
+        satisfiedAcr: authContext.acr ?? null,
+        amr: authContext.amr ?? [],
         expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
       },
     });
@@ -196,7 +210,35 @@ export class LoginService {
       return null;
     }
 
+    if (realm.mfaRequired && !(await this.sessionSatisfiesMfa(session))) {
+      return null;
+    }
+
     return session.user;
+  }
+
+  /**
+   * In a realm that requires MFA, an SSO session only counts once a second
+   * factor is behind it: either it was established with one, or a step-up has
+   * raised it since. Every reader of IDENPLANE_SESSION goes through
+   * `validateLoginSession`, so this one check covers silent SSO, SAML, the
+   * account pages and the admin step-up flows alike — including password-only
+   * sessions that predate this check or the realm turning MFA on.
+   */
+  private async sessionSatisfiesMfa(session: {
+    id: string;
+    satisfiedAcr: string | null;
+  }): Promise<boolean> {
+    if (acrStrength(session.satisfiedAcr) >= acrStrength(ACR_MFA)) return true;
+    const stepUps = await this.prisma.stepUpRecord.findMany({
+      where: { sessionId: session.id, expiresAt: { gt: new Date() } },
+      select: { acrLevel: true },
+    });
+    const acr = strongestAcr(
+      session.satisfiedAcr,
+      ...stepUps.map((s) => s.acrLevel),
+    );
+    return acrStrength(acr) >= acrStrength(ACR_MFA);
   }
 
   async findUserById(userId: string): Promise<User | null> {

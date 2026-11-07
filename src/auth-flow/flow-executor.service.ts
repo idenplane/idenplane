@@ -259,15 +259,12 @@ export class FlowExecutorService {
       throw new BadRequestException('code is required for TOTP step');
     }
 
-    // First try recovery code, then TOTP
-    const recoveryOk = await this.mfaService.verifyRecoveryCode(
+    // Authenticator code, then recovery code.
+    const { verified } = await this.mfaService.verifySecondFactor(
       session.userId,
-      code,
+      { method: 'otp', code },
     );
-    if (recoveryOk) return { success: true };
-
-    const totpOk = await this.mfaService.verifyTotp(session.userId, code);
-    return { success: totpOk };
+    return { success: verified };
   }
 
   private handleWebAuthnStep(
