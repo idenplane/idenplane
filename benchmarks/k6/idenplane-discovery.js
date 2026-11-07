@@ -85,6 +85,10 @@ const REQUIRED_TOKEN_ENDPOINT_AUTH_METHODS = [
 
 // ─── Test Scenarios ────────────────────────────────────────────────────────────
 
+// Per-VU state shared between the groups of one iteration. (k6 scripts are ES
+// modules, so assigning an undeclared global throws.)
+const vuState = {};
+
 export default function () {
   const vuId = __VU;
   const urls = buildOAuthUrls(REALM_NAME, TARGET_URL);
@@ -141,7 +145,7 @@ export default function () {
       });
 
       // Store metadata for subsequent requests
-      __global.metadata = metadata;
+      vuState.metadata = metadata;
     } else {
       discoverySuccessRate.add(0);
       failedDiscoveryAttempts.add(1, { vu_id: String(vuId) });
@@ -151,8 +155,8 @@ export default function () {
   // ─── Scenario 2: JWKS Fetch ──────────────────────────────────────────────────
 
   group('JWKS Fetch', () => {
-    if (__global.metadata && __global.metadata.jwks_uri) {
-      const jwksRes = http.get(__global.metadata.jwks_uri, {
+    if (vuState.metadata && vuState.metadata.jwks_uri) {
+      const jwksRes = http.get(vuState.metadata.jwks_uri, {
         headers: JSON_HEADERS,
         tags: { operation: 'jwks_fetch', vu_id: vuId },
       });
@@ -268,13 +272,6 @@ export default function () {
   // ─── Think time between requests ─────────────────────────────────────────
 
   sleep(Math.random() * 2 + 0.5); // 0.5-2.5 seconds random delay
-}
-
-// ─── Global state for passing data between scenarios ─────────────────────────
-
-// Initialize global storage
-if (typeof __global === 'undefined') {
-  __global = {};
 }
 
 // ─── Setup/Teardown ───────────────────────────────────────────────────────────

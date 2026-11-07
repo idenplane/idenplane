@@ -45,6 +45,7 @@ import {
   TEST_PASSWORD,
   tokenStore,
   errorRate,
+  formEncode,
 } from './shared-scenarios.js';
 import http from 'k6/http';
 import { Rate, Trend, Counter, Gauge } from 'k6/metrics';
@@ -301,7 +302,7 @@ export default function () {
 
       if (tokenResponse && tokenResponse.access_token) {
         // Revoke the token first
-        const params = new URLSearchParams({
+        const params = formEncode({
           token: tokenResponse.access_token,
           client_id: TEST_CLIENT_ID,
           client_secret: TEST_CLIENT_SECRET,
