@@ -85,3 +85,7 @@ backups/
 # Helm pulls these in with `helm dependency build`; they are not ours to commit.
 helm/*/charts/
 helm/*/Chart.lock
+
+# Benchmark output (k6 summaries, reports)
+benchmarks/results/*
+!benchmarks/results/.gitkeep
