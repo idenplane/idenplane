@@ -1,0 +1,71 @@
+name: Benchmark comparison
+
+# Runs benchmarks/compare against Idenplane and Keycloak on one runner and
+# publishes the report. A hosted runner is shared and small (4 vCPU), so its
+# numbers are for checking that the harness works, not for publishing; the
+# published comparison runs the same script on a dedicated machine.
+on:
+  workflow_dispatch:
+    inputs:
+      targets:
+        description: Targets, space separated
+        default: idenplane keycloak keycloak-argon2-parity
+      duration:
+        description: Duration of each measured run
+        default: 60s
+      runs:
+        description: Measured runs per scenario (the median is reported)
+        default: '3'
+      vus:
+        description: Virtual users
+        default: '32'
+  pull_request:
+    paths:
+      - 'benchmarks/compare/**'
+      - '.github/workflows/benchmark-compare.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: benchmark-compare-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  compare:
+    name: Compare identity servers
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      # Short on PRs: proves every target boots, seeds and serves each
+      # scenario without spending an hour on numbers nobody will publish.
+      TARGETS: ${{ inputs.targets || 'idenplane keycloak keycloak-argon2-parity' }}
+      DURATION: ${{ inputs.duration || '15s' }}
+      RUNS: ${{ inputs.runs || '1' }}
+      VUS: ${{ inputs.vus || '16' }}
+      WARMUP: ${{ github.event_name == 'pull_request' && '5s' || '20s' }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Run each target
+        run: |
+          for t in $TARGETS; do
+            bash benchmarks/compare/compare.sh "$t"
+          done
+
+      - name: Report
+        if: always()
+        run: node benchmarks/compare/report.mjs
+
+      - name: Upload results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: benchmark-compare-${{ github.run_number }}
+          path: benchmarks/results/compare/
+          if-no-files-found: ignore
+          retention-days: 90
