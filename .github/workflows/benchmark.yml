@@ -1,77 +1,94 @@
 name: Benchmark
 
+# Load-tests the server built from the checked-out commit with k6 and reports
+# throughput and latency per scenario. It fails only when a scenario's
+# requests stop succeeding; latency on shared runners is reported, not gated.
+# Competitor stacks (Keycloak, Authentik, Zitadel) are not started here.
 on:
   release:
     types: [published]
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'benchmarks/**'
+      - '!benchmarks/compare/**'
+      - '.github/workflows/benchmark.yml'
 
 # Minimal default token permissions; jobs only read repo contents.
 permissions:
   contents: read
 
+concurrency:
+  group: benchmark-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  COMPOSE: docker compose -f benchmarks/docker-compose.benchmarks.yml
+  SCENARIOS: discovery jwks login
+  VUS: '20'
+  DURATION: 30s
+  RAMP_UP: 5s
+
 jobs:
   benchmark:
     name: Run Benchmarks & Generate Report
     runs-on: ubuntu-latest
+    timeout-minutes: 45
 
     steps:
       - name: Checkout code
         uses: actions/checkout@v7
 
-      - name: Set up Docker
-        uses: docker/setup-docker@v4
-
-      - name: Start benchmark stack
+      - name: Generate throwaway secrets
         run: |
-          docker compose -f benchmarks/docker-compose.benchmarks.yml up -d --wait
-
-      - name: Wait for services to be healthy
-        run: |
-          echo "Waiting for services to be healthy..."
-          for service in app db keycloak keycloak-db authentik authentik-db authentik-redis zitadel zitadel-db; do
-            echo "Checking $service..."
-            timeout 180 bash -c 'until docker compose -f benchmarks/docker-compose.benchmarks.yml exec -T $service healthcheck || docker compose -f benchmarks/docker-compose.benchmarks.yml ps $service | grep -q "(healthy)"; do sleep 5; done' || echo "Warning: $service health check timed out"
+          for name in ADMIN_API_KEY WEBHOOK_SECRET_KEY; do
+            value="$(openssl rand -hex 32)"
+            echo "::add-mask::${value}"
+            echo "${name}=${value}" >> "$GITHUB_ENV"
           done
-          echo "Services started, continuing with benchmark..."
+          for name in ADMIN_PASSWORD WEBHOOK_ENCRYPTION_SALT; do
+            value="Bench-$(openssl rand -hex 16)"
+            echo "::add-mask::${value}"
+            echo "${name}=${value}" >> "$GITHUB_ENV"
+          done
 
-      - name: Run Idenplane benchmarks
-        run: |
-          docker compose -f benchmarks/docker-compose.benchmarks.yml run --rm k6 run --config /src/k6/config.js /src/k6/idenplane-login.js
-        continue-on-error: true
+      - name: Build and start Idenplane (this commit)
+        run: $COMPOSE up -d --build --wait app db
 
-      - name: Generate comparison report
+      - name: Seed the benchmark realm
+        run: bash benchmarks/scripts/seed-benchmark-realm.sh
+
+      - name: Run scenarios
         run: |
-          docker compose -f benchmarks/docker-compose.benchmarks.yml exec -T app python3 /src/scripts/generate-report.py || echo "Report generation skipped"
-        continue-on-error: true
+          mkdir -p benchmarks/results
+          chmod 777 benchmarks/results   # the k6 image runs as a non-root user
+          for s in $SCENARIOS; do
+            echo "::group::$s"
+            $COMPOSE run --rm \
+              -e VUS -e DURATION -e RAMP_UP \
+              -e REALM_NAME -e TEST_CLIENT_ID -e TEST_CLIENT_SECRET \
+              -e TEST_USERNAME -e TEST_PASSWORD \
+              k6 run --no-thresholds --summary-export "/results/$s.json" \
+              "/src/k6/idenplane-$s.js"
+            echo "::endgroup::"
+          done
+
+      - name: Report and check results
+        run: node benchmarks/scripts/summarize-k6.mjs benchmarks/results $SCENARIOS
+
+      - name: Show server logs on failure
+        if: failure()
+        run: $COMPOSE logs --tail 200 app
 
       - name: Upload benchmark results
+        if: always()
         uses: actions/upload-artifact@v7
         with:
           name: benchmark-results-${{ github.run_number }}
-          path: |
-            benchmarks/results/*.json
-            benchmarks/results/*.html
+          path: benchmarks/results/*.json
+          if-no-files-found: ignore
           retention-days: 90
-
-      - name: Upload comparison report
-        uses: actions/upload-artifact@v7
-        with:
-          name: comparison-report-${{ github.run_number }}
-          path: benchmarks/results/comparison-report.html
-          retention-days: 90
-
-      - name: Create summary comment
-        if: github.event_name == 'release'
-        run: |
-          echo "## Benchmark Results" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Benchmarks completed for release ${{ github.event.release.tag_name }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "Results available as artifacts:" >> $GITHUB_STEP_SUMMARY
-          echo "- benchmark-results-${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
-          echo "- comparison-report-${{ github.run_number }}" >> $GITHUB_STEP_SUMMARY
-          echo "" >> $GITHUB_STEP_SUMMARY
-          echo "See [benchmark methodology](../docs/benchmarks/methodology.md) for details on how these benchmarks were run." >> $GITHUB_STEP_SUMMARY
 
       - name: Teardown benchmark stack
         if: always()
-        run: docker compose -f benchmarks/docker-compose.benchmarks.yml down --volumes --remove-orphans
+        run: $COMPOSE down --volumes --remove-orphans

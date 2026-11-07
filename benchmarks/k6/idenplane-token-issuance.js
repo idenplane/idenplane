@@ -43,6 +43,7 @@ import {
   TEST_PASSWORD,
   tokenStore,
   errorRate,
+  formEncode,
 } from './shared-scenarios.js';
 import http from 'k6/http';
 import { Rate, Trend, Counter, Gauge } from 'k6/metrics';
@@ -255,7 +256,7 @@ export default function () {
   // Test invalid client credentials periodically
   if (__VU % 20 === 0) {
     group('Invalid Client Credentials', () => {
-      const params = new URLSearchParams({
+      const params = formEncode({
         grant_type: 'client_credentials',
         client_id: TEST_CLIENT_ID,
         client_secret: 'wrong-secret',

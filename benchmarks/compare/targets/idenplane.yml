@@ -1,0 +1,42 @@
+# Idenplane as shipped in the root docker-compose.yml: the published image,
+# PostgreSQL 16, no Redis (Redis is optional and off by default).
+# Driven by benchmarks/compare/compare.sh; every knob comes from its env.
+name: bench-idenplane
+
+services:
+  db:
+    image: postgres:16-alpine
+    cpuset: ${DB_CPUS}
+    environment:
+      POSTGRES_USER: idenplane
+      POSTGRES_PASSWORD: idenplane
+      POSTGRES_DB: idenplane
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U idenplane"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  target:
+    image: ${IDENPLANE_IMAGE}
+    cpuset: ${TARGET_CPUS}
+    mem_limit: ${TARGET_MEM}
+    memswap_limit: ${TARGET_MEM}
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      DATABASE_URL: postgresql://idenplane:idenplane@db:5432/idenplane
+      NODE_ENV: production
+      PORT: "3000"
+      BASE_URL: http://target:3000
+      ADMIN_API_KEY: ${ADMIN_API_KEY}
+      ADMIN_USER: admin
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
+      WEBHOOK_SECRET_KEY: ${WEBHOOK_SECRET_KEY}
+      WEBHOOK_ENCRYPTION_SALT: ${WEBHOOK_ENCRYPTION_SALT}
+      # The global throttler would otherwise answer the load with 429s.
+      # Realm-level rate limiting and lockout are turned off by the seed.
+      THROTTLE_LIMIT: "1000000"
+    ports:
+      - "127.0.0.1:${PUBLIC_PORT}:3000"

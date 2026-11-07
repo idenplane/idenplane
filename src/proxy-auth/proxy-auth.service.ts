@@ -15,8 +15,26 @@ import { matchesRedirectUri } from '../common/redirect-uri.utils.js';
  */
 export const PROXY_SESSION_COOKIE = 'IDENPLANE_PROXY_SESSION';
 
+/**
+ * PKCE verifier for one in-flight sign-in, set by `start` and read by
+ * `callback`. Path-scoped to the callback and short-lived. It is what binds
+ * the handshake to the browser that began it: `state` and `code` travel
+ * together in one URL, so a link carrying both (stolen, or crafted by an
+ * attacker for their own account) is useless in any other browser.
+ */
+export const PROXY_PKCE_COOKIE = 'IDENPLANE_PROXY_PKCE';
+
+/**
+ * On a 401 from `verify`, the absolute URL that starts sign-in for the
+ * request being checked, with the original URL already encoded into it.
+ * nginx `auth_request` can only act on 2xx/401/403, so its config reads this
+ * header and redirects to it; building the URL here avoids nginx having to
+ * URL-encode the original request itself.
+ */
+export const PROXY_LOGIN_HEADER = 'X-Idenplane-Login';
+
 /** How long a `start` handshake may sit unfinished before its state expires. */
-const STATE_TTL_MS = 10 * 60 * 1000;
+export const STATE_TTL_MS = 10 * 60 * 1000;
 
 /**
  * Opaque, tamper-proof handshake state. Encrypted with AES-256-GCM by
@@ -39,7 +57,7 @@ interface ProxyAuthState {
  * extra queries on the login path for data already in hand.
  */
 export type ProxyApplicationWithClient = ProxyApplication & {
-  client: { clientId: string; clientSecret: string | null };
+  client: { clientId: string };
 };
 
 export interface ProxyIdentityHeaders {
@@ -62,7 +80,7 @@ export class ProxyAuthService {
     return this.prisma.proxyApplication.findUnique({
       where: { realmId_slug: { realmId: realm.id, slug } },
       include: {
-        client: { select: { clientId: true, clientSecret: true } },
+        client: { select: { clientId: true } },
       },
     });
   }
@@ -141,10 +159,47 @@ export class ProxyAuthService {
    * on runtime headers.
    */
   callbackUrl(realmName: string, slug: string): string {
-    const configured = process.env['BASE_URL'] ?? 'http://localhost:3000';
-    let baseUrl = configured;
+    return `${this.baseUrl()}/realms/${realmName}/proxy/${slug}/callback`;
+  }
+
+  /**
+   * Where `verify` sends a browser with no session. Absolute, from BASE_URL:
+   * the proxy hands this Location to the browser unchanged (or, for a
+   * relative one, resolves it against the proxy's internal address for
+   * Idenplane, which the browser cannot reach). The original URL rides
+   * along as `rd`; `start` checks it against the allowlist.
+   */
+  startUrl(realmName: string, slug: string, original: string | null): string {
+    const url = `${this.baseUrl()}/realms/${realmName}/proxy/${slug}/start`;
+    return original ? `${url}?rd=${encodeURIComponent(original)}` : url;
+  }
+
+  /** The realm's OIDC authorization endpoint, as discovery advertises it. */
+  authorizeUrl(realmName: string, params: URLSearchParams): string {
+    return `${this.baseUrl()}/realms/${realmName}/protocol/openid-connect/auth?${params.toString()}`;
+  }
+
+  /** Path the PKCE cookie is scoped to: the callback's, as the browser sees it. */
+  callbackPath(realmName: string, slug: string): string {
+    return new URL(this.callbackUrl(realmName, slug)).pathname;
+  }
+
+  /** A fresh S256 PKCE pair (RFC 7636). */
+  newPkce(): { verifier: string; challenge: string } {
+    const verifier = Buffer.from(
+      this.crypto.generateSecret(32),
+      'hex',
+    ).toString('base64url');
+    const challenge = Buffer.from(this.crypto.sha256(verifier), 'hex').toString(
+      'base64url',
+    );
+    return { verifier, challenge };
+  }
+
+  private baseUrl(): string {
+    let baseUrl = process.env['BASE_URL'] ?? 'http://localhost:3000';
     while (baseUrl.endsWith('/')) baseUrl = baseUrl.slice(0, -1);
-    return `${baseUrl}/realms/${realmName}/proxy/${slug}/callback`;
+    return baseUrl;
   }
 
   /**
