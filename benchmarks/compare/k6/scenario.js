@@ -56,12 +56,41 @@ const clientCredentials = () =>
     FORM,
   );
 
+const passwordGrant = () =>
+  http.post(
+    `${OIDC}/token`,
+    form({
+      grant_type: 'password',
+      client_id: CLIENT_ID,
+      client_secret: CLIENT_SECRET,
+      username: env('USERNAME', 'benchuser'),
+      password: env('PASSWORD'),
+      scope: 'openid',
+    }),
+    FORM,
+  );
+
+const introspect = (token) =>
+  http.post(
+    `${OIDC}/token/introspect`,
+    form({ token, client_id: CLIENT_ID, client_secret: CLIENT_SECRET }),
+    FORM,
+  );
+
+// Introspects a user's access token (the common case for a resource server)
+// and proves the request works once before any load, printing the response
+// if it doesn't, so a misconfigured target fails loudly instead of being
+// measured.
 export function setup() {
   if (SCENARIO !== 'introspect') return {};
-  const res = clientCredentials();
+  const res = passwordGrant();
   const body = json(res);
   if (res.status !== 200 || !body || !body.access_token) {
-    throw new Error(`setup: could not get a token to introspect (HTTP ${res.status})`);
+    throw new Error(`setup: password grant failed (HTTP ${res.status}): ${String(res.body).slice(0, 300)}`);
+  }
+  const probe = introspect(body.access_token);
+  if (probe.status !== 200 || (json(probe) || {}).active !== true) {
+    throw new Error(`setup: introspection did not return active=true (HTTP ${probe.status}): ${String(probe.body).slice(0, 300)}`);
   }
   return { token: body.access_token };
 }
@@ -86,34 +115,15 @@ const scenarios = {
       'client_credentials 200 with token': (r) => r.status === 200 && !!(json(r) || {}).access_token,
     }),
 
-  password: () => {
-    const res = http.post(
-      `${OIDC}/token`,
-      form({
-        grant_type: 'password',
-        client_id: CLIENT_ID,
-        client_secret: CLIENT_SECRET,
-        username: env('USERNAME', 'benchuser'),
-        password: env('PASSWORD'),
-        scope: 'openid',
-      }),
-      FORM,
-    );
-    return check(res, {
+  password: () =>
+    check(passwordGrant(), {
       'password 200 with token': (r) => r.status === 200 && !!(json(r) || {}).access_token,
-    });
-  },
+    }),
 
-  introspect: (data) => {
-    const res = http.post(
-      `${OIDC}/token/introspect`,
-      form({ token: data.token, client_id: CLIENT_ID, client_secret: CLIENT_SECRET }),
-      FORM,
-    );
-    return check(res, {
+  introspect: (data) =>
+    check(introspect(data.token), {
       'introspect 200 active': (r) => r.status === 200 && (json(r) || {}).active === true,
-    });
-  },
+    }),
 };
 
 if (!scenarios[SCENARIO]) {
