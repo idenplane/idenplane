@@ -74,6 +74,8 @@ case "$TARGET" in
     READY_URL="http://127.0.0.1:$HEALTH_PORT/health/ready"
     # Keycloak imports the realm at startup. The plain-text password is
     # hashed on import with whatever hashing settings the server runs with.
+    # Keycloak 26 only introspects tokens whose audience includes the
+    # caller, so the client gets the audience mapper a resource server has.
     export KEYCLOAK_IMPORT_DIR="$(mktemp -d)"
     chmod 755 "$KEYCLOAK_IMPORT_DIR"
     cat >"$KEYCLOAK_IMPORT_DIR/benchmark-realm.json" <<JSON
@@ -83,7 +85,13 @@ case "$TARGET" in
     "clientId": "$CLIENT_ID", "enabled": true, "publicClient": false,
     "secret": "$CLIENT_SECRET", "standardFlowEnabled": false,
     "directAccessGrantsEnabled": true, "serviceAccountsEnabled": true,
-    "redirectUris": ["http://localhost/callback"]
+    "redirectUris": ["http://localhost/callback"],
+    "protocolMappers": [{
+      "name": "audience", "protocol": "openid-connect",
+      "protocolMapper": "oidc-audience-mapper",
+      "config": { "included.client.audience": "$CLIENT_ID",
+                  "access.token.claim": "true", "introspection.token.claim": "true" }
+    }]
   }],
   "users": [{
     "username": "$USERNAME", "enabled": true, "email": "$USERNAME@example.com",
