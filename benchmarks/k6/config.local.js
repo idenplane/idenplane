@@ -1,3 +1,4 @@
+import { formEncode } from './shared-scenarios.js';
 import http from 'k6/http';
 import { check, group, sleep } from 'k6';
 import { Rate, Trend, Counter, Gauge } from 'k6/metrics';
@@ -228,7 +229,7 @@ export default function () {
   group('Token Issuance', () => {
     const tokenStart = Date.now();
 
-    const params = new URLSearchParams({
+    const params = formEncode({
       grant_type: 'client_credentials',
       client_id: TEST_CLIENT_ID,
       client_secret: TEST_CLIENT_SECRET,
@@ -259,7 +260,7 @@ export default function () {
       sleep(0.5);
 
       const introspectStart = Date.now();
-      const introspectParams = new URLSearchParams({
+      const introspectParams = formEncode({
         token: accessToken,
         client_id: TEST_CLIENT_ID,
         client_secret: TEST_CLIENT_SECRET,
@@ -299,7 +300,7 @@ export default function () {
   group('Login Flow', () => {
     const loginStart = Date.now();
 
-    const loginParams = new URLSearchParams({
+    const loginParams = formEncode({
       grant_type: 'password',
       client_id: TEST_CLIENT_ID,
       client_secret: TEST_CLIENT_SECRET,

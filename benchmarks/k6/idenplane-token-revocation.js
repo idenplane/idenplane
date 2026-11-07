@@ -39,6 +39,7 @@ import {
   TEST_PASSWORD,
   tokenStore,
   errorRate,
+  formEncode,
 } from './shared-scenarios.js';
 import http from 'k6/http';
 import { check, group, sleep } from 'k6';
@@ -100,7 +101,7 @@ export default function () {
       // Immediately revoke the access token
       const revokeRes = http.post(
         urls.tokenRevoke,
-        new URLSearchParams({
+        formEncode({
           token: tokenResponse.access_token,
           client_id: TEST_CLIENT_ID,
           client_secret: TEST_CLIENT_SECRET,
@@ -142,7 +143,7 @@ export default function () {
       // Revoke the refresh token
       const revokeRes = http.post(
         urls.tokenRevoke,
-        new URLSearchParams({
+        formEncode({
           token: tokenResponse.refresh_token,
           client_id: TEST_CLIENT_ID,
           client_secret: TEST_CLIENT_SECRET,
@@ -173,7 +174,7 @@ export default function () {
     group('Token Revocation - Invalid Token', () => {
       const revokeRes = http.post(
         urls.tokenRevoke,
-        new URLSearchParams({
+        formEncode({
           token: 'invalid-token-that-does-not-exist',
           client_id: TEST_CLIENT_ID,
           client_secret: TEST_CLIENT_SECRET,
@@ -194,7 +195,7 @@ export default function () {
     group('Token Revocation - Missing Client Auth', () => {
       const revokeRes = http.post(
         urls.tokenRevoke,
-        new URLSearchParams({
+        formEncode({
           token: 'some-token-to-revoke',
           // client_id and client_secret intentionally missing
         }).toString(),
@@ -225,7 +226,7 @@ export default function () {
         // Revoke the same access token twice (second should succeed but be idempotent)
         const firstRevoke = http.post(
           urls.tokenRevoke,
-          new URLSearchParams({
+          formEncode({
             token: tokenResponse.access_token,
             client_id: TEST_CLIENT_ID,
             client_secret: TEST_CLIENT_SECRET,
@@ -235,7 +236,7 @@ export default function () {
 
         const secondRevoke = http.post(
           urls.tokenRevoke,
-          new URLSearchParams({
+          formEncode({
             token: tokenResponse.access_token,
             client_id: TEST_CLIENT_ID,
             client_secret: TEST_CLIENT_SECRET,
@@ -264,7 +265,7 @@ export default function () {
       if (storedToken && storedToken.accessToken) {
         const revokeRes = http.post(
           urls.tokenRevoke,
-          new URLSearchParams({
+          formEncode({
             token: storedToken.accessToken,
             client_id: storedToken.clientId || TEST_CLIENT_ID,
             client_secret: TEST_CLIENT_SECRET,
@@ -334,7 +335,7 @@ export function teardown(data) {
     if (token.accessToken) {
       http.post(
         urls.tokenRevoke,
-        new URLSearchParams({
+        formEncode({
           token: token.accessToken,
           client_id: token.clientId || TEST_CLIENT_ID,
           client_secret: TEST_CLIENT_SECRET,

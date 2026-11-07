@@ -38,6 +38,7 @@ import {
   TEST_PASSWORD,
   tokenStore,
   errorRate,
+  formEncode,
 } from './shared-scenarios.js';
 import http from 'k6/http';
 import { check, group, sleep } from 'k6';
@@ -138,7 +139,7 @@ export default function () {
         // Check if token needs refresh (simplified: just refresh every 3rd VU)
         const refreshRes = http.post(
           urls.token,
-          new URLSearchParams({
+          formEncode({
             grant_type: 'refresh_token',
             refresh_token: storedToken.refreshToken,
             client_id: TEST_CLIENT_ID,
@@ -159,7 +160,7 @@ export default function () {
   // Run invalid login test for a subset of VUs to simulate real-world auth failures
   if (vuId % 10 === 0) {
     group('Invalid Login Attempt', () => {
-      const params = new URLSearchParams({
+      const params = formEncode({
         grant_type: 'password',
         client_id: TEST_CLIENT_ID,
         client_secret: TEST_CLIENT_SECRET,
@@ -188,7 +189,7 @@ export default function () {
   if (vuId % 20 === 0) {
     group('Missing Credentials Test', () => {
       // Missing password
-      const paramsMissingPassword = new URLSearchParams({
+      const paramsMissingPassword = formEncode({
         grant_type: 'password',
         client_id: TEST_CLIENT_ID,
         client_secret: TEST_CLIENT_SECRET,

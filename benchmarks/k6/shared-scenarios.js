@@ -72,16 +72,17 @@ export const TEST_PASSWORD = __ENV.TEST_PASSWORD || 'TestPassword123!';
  * @returns {Object} Object containing all OAuth endpoint URLs
  */
 export function buildOAuthUrls(realmName = DEFAULT_REALM, baseUrl = DEFAULT_TARGET_URL) {
+  // Paths as served (src/tokens, src/oauth, src/well-known controllers).
   const realmPath = `/realms/${realmName}/protocol/openid-connect`;
   return {
     token: `${baseUrl}${realmPath}/token`,
     tokenIntrospect: `${baseUrl}${realmPath}/token/introspect`,
-    tokenRevoke: `${baseUrl}${realmPath}/token/revoke`,
+    tokenRevoke: `${baseUrl}${realmPath}/revoke`,
     userinfo: `${baseUrl}${realmPath}/userinfo`,
-    authorize: `${baseUrl}${realmPath}/authorize`,
+    authorize: `${baseUrl}${realmPath}/auth`,
     logout: `${baseUrl}${realmPath}/logout`,
-    jwks: `${baseUrl}${realmPath}/jwk`,
-    wellKnown: `${baseUrl}${realmPath}/.well-known/openid-configuration`,
+    jwks: `${baseUrl}${realmPath}/certs`,
+    wellKnown: `${baseUrl}/realms/${realmName}/.well-known/openid-configuration`,
   };
 }
 
@@ -238,7 +239,7 @@ export function checkResponse(res, context = '', tags = {}) {
  * @returns {Object} Parsed key-value object
  */
 export function parseFormBody(body) {
-  const params = new URLSearchParams(body);
+  const params = parseForm(body);
   const result = {};
   for (const [key, value] of params) {
     result[key] = value;
@@ -256,7 +257,7 @@ export function parseFormBody(body) {
  * @returns {Object|null} Token response or null on failure
  */
 export function requestPasswordToken(tokenUrl, vuId, options = {}) {
-  const params = new URLSearchParams({
+  const params = formEncode({
     grant_type: 'password',
     client_id: options.client_id || TEST_CLIENT_ID,
     client_secret: options.client_secret || TEST_CLIENT_SECRET,
@@ -295,7 +296,7 @@ export function requestPasswordToken(tokenUrl, vuId, options = {}) {
  * @returns {Object|null} Token response or null on failure
  */
 export function requestClientCredentialsToken(tokenUrl, vuId, options = {}) {
-  const params = new URLSearchParams({
+  const params = formEncode({
     grant_type: 'client_credentials',
     client_id: options.client_id || TEST_CLIENT_ID,
     client_secret: options.client_secret || TEST_CLIENT_SECRET,
@@ -332,7 +333,7 @@ export function requestClientCredentialsToken(tokenUrl, vuId, options = {}) {
  * @returns {Object|null} Token response or null on failure
  */
 export function refreshToken(tokenUrl, vuId, refreshToken) {
-  const params = new URLSearchParams({
+  const params = formEncode({
     grant_type: 'refresh_token',
     refresh_token: refreshToken,
     client_id: TEST_CLIENT_ID,
@@ -370,7 +371,7 @@ export function refreshToken(tokenUrl, vuId, refreshToken) {
  * @returns {Object|null} Introspection response or null on failure
  */
 export function introspectToken(introspectUrl, token, context = 'introspection') {
-  const params = new URLSearchParams({
+  const params = formEncode({
     token: token,
     client_id: TEST_CLIENT_ID,
     client_secret: TEST_CLIENT_SECRET,
@@ -452,7 +453,7 @@ export function getOrRefreshToken(tokenUrl, vuId, refreshData) {
  * @returns {boolean} True if successful
  */
 export function revokeToken(revokeUrl, token, context = 'token_revoke') {
-  const params = new URLSearchParams({
+  const params = formEncode({
     token: token,
     client_id: TEST_CLIENT_ID,
     client_secret: TEST_CLIENT_SECRET,
@@ -488,3 +489,27 @@ export const defaultOptions = {
   },
   summaryTimeUnit: 'ms',
 };
+
+// ─── Form encoding ─────────────────────────────────────────────────────────────
+// k6's JavaScript runtime has no URLSearchParams.
+
+/** Encode an object as application/x-www-form-urlencoded. */
+export function formEncode(fields) {
+  return Object.keys(fields)
+    .filter((k) => fields[k] !== undefined && fields[k] !== null)
+    .map((k) => `${encodeURIComponent(k)}=${encodeURIComponent(String(fields[k]))}`)
+    .join('&');
+}
+
+/** Decode application/x-www-form-urlencoded into a Map-like object. */
+function parseForm(body) {
+  const map = new Map();
+  for (const pair of String(body || '').split('&')) {
+    if (!pair) continue;
+    const i = pair.indexOf('=');
+    const key = decodeURIComponent((i < 0 ? pair : pair.slice(0, i)).replace(/\+/g, ' '));
+    const value = i < 0 ? '' : decodeURIComponent(pair.slice(i + 1).replace(/\+/g, ' '));
+    map.set(key, value);
+  }
+  return map;
+}
