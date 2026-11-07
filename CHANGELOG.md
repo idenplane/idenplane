@@ -9,6 +9,25 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+## [0.5.1] - 2026-11-07
+
+Forward auth did not work in 0.5.0. This release fixes it and checks it against real Traefik, nginx and Caddy. **If you use forward auth, upgrade, and update your nginx config** (below).
+
+### Fixed
+- **Forward auth could not sign anyone in** ([#1699](https://github.com/idenplane/idenplane/pull/1699)). Three server bugs, each enough on its own:
+  - `verify` redirected to a relative URL. Traefik resolved it against Idenplane's internal address, so browsers were sent to a host they cannot reach. The redirect is now absolute, built from `BASE_URL`.
+  - `start` sent the browser to an authorize path that does not exist (404). It now uses `/protocol/openid-connect/auth`.
+  - `callback` sent the client's stored secret hash as its secret, so every confidential client failed with `invalid_client`. Idenplane now redeems the code itself, with PKCE in place of the secret.
+- **Forward auth with nginx returned 500 on every page.** `auth_request` cannot pass a redirect on. Requests from nginx now get a 401 and the sign-in URL in `X-Idenplane-Login`, and the guide's nginx config redirects to it. **Update your nginx config to the one in the guide.** The old one also redirected to the internal `idenplane:3000` address.
+- The forward-auth example (`examples/forward-auth-traefik`) failed at setup: its seed sent fields the admin API rejects, and Traefik 3.3 cannot talk to Docker Engine 29.
+
+### Security
+- A forward-auth sign-in is now bound to the browser that started it. A callback link opened in another browser fails instead of signing that browser in, including a link an attacker made for their own account (login CSRF).
+
+### Changed
+- Benchmarks: removed comparison numbers that no benchmark ever produced ([#1696](https://github.com/idenplane/idenplane/pull/1696)), and added a reproducible Idenplane vs Keycloak harness ([#1698](https://github.com/idenplane/idenplane/pull/1698)).
+- CI runs the forward-auth example end to end on every PR, and pins the PostgreSQL 16 client for the backup tests ([#1697](https://github.com/idenplane/idenplane/pull/1697)).
+
 ## [0.5.0] - 2026-11-07
 
 SMS becomes a real second factor, "Require MFA" is enforced on every way in, the server moves to NestJS 12 and Node 24, and Idenplane can sit in front of other apps as a forward-auth proxy.
