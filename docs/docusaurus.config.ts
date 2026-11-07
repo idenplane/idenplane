@@ -15,7 +15,7 @@ const config: Config = {
 
   url: 'https://idenplane.com',
   baseUrl: '/',
-  organizationName: 'idenplane-project',
+  organizationName: 'idenplane',
   projectName: 'idenplane-docs',
 
   // Fail the build rather than warn. Warnings scrolled past unread for long
@@ -41,7 +41,7 @@ const config: Config = {
       {
         docs: {
           sidebarPath: './sidebars.ts',
-          editUrl: 'https://github.com/idenplane-project/idenplane/tree/main/docs',
+          editUrl: 'https://github.com/idenplane/idenplane/tree/dev/docs',
           routeBasePath: '/',
         },
         blog: false,
@@ -83,7 +83,7 @@ const config: Config = {
           position: 'left',
         },
         {
-          href: 'https://github.com/idenplane-project/idenplane',
+          href: 'https://github.com/idenplane/idenplane',
           label: 'GitHub',
           position: 'right',
         },
@@ -154,7 +154,7 @@ const config: Config = {
           items: [
             {
               label: 'GitHub',
-              href: 'https://github.com/idenplane-project/idenplane',
+              href: 'https://github.com/idenplane/idenplane',
             },
             {
               label: 'Discord',
@@ -185,7 +185,7 @@ const config: Config = {
 
     announcementBar: {
       id: 'support_us',
-      content: '⭐️ If you like Idenplane, give it a star on <a href="https://github.com/idenplane-project/idenplane" target="_blank" rel="noopener noreferrer">GitHub</a>!',
+      content: '⭐️ If you like Idenplane, give it a star on <a href="https://github.com/idenplane/idenplane" target="_blank" rel="noopener noreferrer">GitHub</a>!',
       backgroundColor: idenplaneColors.primaryColor,
       textColor: '#ffffff',
       isCloseable: true,
