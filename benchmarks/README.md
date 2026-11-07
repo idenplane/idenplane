@@ -6,6 +6,19 @@ Performance testing infrastructure for the Idenplane authentication server using
 
 This directory contains load testing scripts and configuration for benchmarking Idenplane's API endpoints under various load conditions. It also supports comparison benchmarking against other authentication solutions: Keycloak, Authentik, and Zitadel.
 
+## In CI
+
+`.github/workflows/benchmark.yml` runs on every published release, on demand (**Actions → Benchmark → Run workflow**), and on PRs that touch `benchmarks/`. It:
+
+1. Builds the server from the checked-out commit, so the numbers belong to that commit and not to whatever `:latest` is.
+2. Seeds a `benchmark` realm through the admin API with `scripts/seed-benchmark-realm.sh`: a confidential client, a user, and rate limiting and lockout off for that realm only.
+3. Runs `discovery`, `jwks` and `login` with k6 at 20 VUs for 30 s each.
+4. Writes a req/s / p50 / p95 / success table to the run summary and uploads the JSON.
+
+It fails only when a scenario's own success rate drops below 99%. Latency on shared runners is too noisy to gate on, so it is reported, not enforced. Login throughput is low by design: every sign-in runs Argon2id at 64 MiB, capped at one hash per CPU core.
+
+Competitor stacks are not started in CI. They live behind the `competitors` compose profile (`docker compose --profile competitors …`) for local comparison runs.
+
 ## Prerequisites
 
 - [k6](https://grafana.com/docs/k6/latest/) - Load testing tool
