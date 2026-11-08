@@ -151,7 +151,7 @@ function runPrimary(workers: number): void {
 const workers = requestedWorkers();
 if (workers <= 1) {
   // One process: exactly what `node dist/main.js` does.
-  require('./main.js');
+  void import('./main.js');
 } else if (cluster.isPrimary) {
   runPrimary(workers);
 }
