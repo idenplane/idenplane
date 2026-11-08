@@ -1,15 +1,13 @@
 import { Injectable } from '@nestjs/common';
 import type { Realm } from '@prisma/client';
-import { PrismaService } from '../prisma/prisma.service.js';
+import { CachedLookupsService } from '../cache/cached-lookups.service.js';
 
 @Injectable()
 export class SamlMetadataService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly lookups: CachedLookupsService) {}
 
   async generateMetadata(realm: Realm, baseUrl: string): Promise<string> {
-    const signingKey = await this.prisma.realmSigningKey.findFirst({
-      where: { realmId: realm.id, active: true },
-    });
+    const signingKey = await this.lookups.activeSigningKey(realm.id);
 
     const entityId = `${baseUrl}/realms/${realm.name}`;
     const ssoUrl = `${baseUrl}/realms/${realm.name}/protocol/saml`;

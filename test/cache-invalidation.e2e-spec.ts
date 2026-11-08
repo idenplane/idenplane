@@ -147,6 +147,67 @@ describe('In-process cache invalidation (e2e)', () => {
     });
   });
 
+  it('refuses a client disabled past the app on its very next token request', async () => {
+    const token = () =>
+      request(app.getHttpServer())
+        .post(`/realms/${REALM}/protocol/openid-connect/token`)
+        .type('form')
+        .send({
+          grant_type: 'client_credentials',
+          client_id: 'test-client',
+          client_secret: 'test-client-secret',
+        });
+    await token().expect(200); // the client row is now cached
+    await ctx.prisma.$executeRawUnsafe(
+      `UPDATE clients SET enabled = false WHERE client_id = 'test-client'
+       AND realm_id = (SELECT id FROM realms WHERE name = '${REALM}')`,
+    );
+    await eventually(async () => {
+      await token().expect(401);
+    });
+    await ctx.prisma.$executeRawUnsafe(
+      `UPDATE clients SET enabled = true WHERE client_id = 'test-client'
+       AND realm_id = (SELECT id FROM realms WHERE name = '${REALM}')`,
+    );
+    await eventually(async () => {
+      await token().expect(200);
+    });
+  });
+
+  it('signs new tokens with a newly added signing key', async () => {
+    const kid = async () => {
+      const res = await request(app.getHttpServer())
+        .post(`/realms/${REALM}/protocol/openid-connect/token`)
+        .type('form')
+        .send({
+          grant_type: 'client_credentials',
+          client_id: 'test-client',
+          client_secret: 'test-client-secret',
+        })
+        .expect(200);
+      const header = (res.body as { access_token: string }).access_token.split(
+        '.',
+      )[0];
+      return (
+        JSON.parse(Buffer.from(header, 'base64url').toString()) as {
+          kid: string;
+        }
+      ).kid;
+    };
+    const before = await kid(); // the signing key is now cached
+    const key = await ctx.prisma.realmSigningKey.findFirstOrThrow({
+      where: { realm: { name: REALM }, kid: before },
+    });
+    await ctx.prisma.$executeRawUnsafe(
+      `INSERT INTO realm_signing_keys (id, realm_id, kid, algorithm, public_key, private_key, active, created_at)
+       SELECT gen_random_uuid(), realm_id, 'e2e-signing-kid', algorithm, public_key, private_key, true, now() + interval '1 minute'
+       FROM realm_signing_keys WHERE id = '${key.id}'`,
+    );
+    await eventually(async () => {
+      expect(await kid()).toBe('e2e-signing-kid');
+    });
+  });
+
   it('goes to the database while the announcement connection is down, and recovers', async () => {
     await discovery(REALM).expect(200);
     await ctx.prisma.$executeRawUnsafe(

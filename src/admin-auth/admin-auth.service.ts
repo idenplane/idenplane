@@ -1,3 +1,4 @@
+import { CachedLookupsService } from '../cache/cached-lookups.service.js';
 import {
   Injectable,
   UnauthorizedException,
@@ -20,6 +21,7 @@ export class AdminAuthService implements OnModuleDestroy {
   private cleanupInterval: ReturnType<typeof setInterval> | undefined;
 
   constructor(
+    private readonly lookups: CachedLookupsService,
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
     private readonly jwkService: JwkService,
@@ -146,10 +148,7 @@ export class AdminAuthService implements OnModuleDestroy {
     await this.bruteForceService.resetFailures(masterRealm.id, user.id);
 
     // Sign admin JWT with master realm signing key
-    const signingKey = await this.prisma.realmSigningKey.findFirst({
-      where: { realmId: masterRealm.id, active: true },
-      orderBy: { createdAt: 'desc' },
-    });
+    const signingKey = await this.lookups.activeSigningKey(masterRealm.id);
 
     if (!signingKey) {
       throw new Error('No signing key found for master realm');
@@ -234,10 +233,7 @@ export class AdminAuthService implements OnModuleDestroy {
       throw new UnauthorizedException('Admin system not initialized');
     }
 
-    const signingKey = await this.prisma.realmSigningKey.findFirst({
-      where: { realmId: masterRealm.id, active: true },
-      orderBy: { createdAt: 'desc' },
-    });
+    const signingKey = await this.lookups.activeSigningKey(masterRealm.id);
 
     if (!signingKey) {
       throw new Error('No signing key found for master realm');
@@ -284,10 +280,7 @@ export class AdminAuthService implements OnModuleDestroy {
       throw new UnauthorizedException('Admin system not initialized');
     }
 
-    const signingKey = await this.prisma.realmSigningKey.findFirst({
-      where: { realmId: masterRealm.id, active: true },
-      orderBy: { createdAt: 'desc' },
-    });
+    const signingKey = await this.lookups.activeSigningKey(masterRealm.id);
 
     if (!signingKey) {
       throw new UnauthorizedException('No signing key found');

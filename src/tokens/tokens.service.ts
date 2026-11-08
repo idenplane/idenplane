@@ -1,3 +1,4 @@
+import { CachedLookupsService } from '../cache/cached-lookups.service.js';
 import {
   Injectable,
   UnauthorizedException,
@@ -23,6 +24,7 @@ export class TokensService {
   private readonly logger = new Logger(TokensService.name);
 
   constructor(
+    private readonly lookups: CachedLookupsService,
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
     private readonly jwkService: JwkService,
@@ -35,10 +37,7 @@ export class TokensService {
 
   async introspect(realm: Realm, token: string) {
     try {
-      const signingKey = await this.prisma.realmSigningKey.findFirst({
-        where: { realmId: realm.id, active: true },
-        orderBy: { createdAt: 'desc' },
-      });
+      const signingKey = await this.lookups.activeSigningKey(realm.id);
 
       if (!signingKey) {
         return { active: false };
@@ -187,10 +186,7 @@ export class TokensService {
     // --- Access token (JWT) check ---
     if (tokenTypeHint === 'access_token' || !tokenTypeHint) {
       try {
-        const signingKey = await this.prisma.realmSigningKey.findFirst({
-          where: { realmId: realm.id, active: true },
-          orderBy: { createdAt: 'desc' },
-        });
+        const signingKey = await this.lookups.activeSigningKey(realm.id);
         if (signingKey) {
           const payload = await this.jwkService.verifyJwt(
             token,
@@ -240,10 +236,7 @@ export class TokensService {
     // For access tokens (JWTs), blacklist them by jti
     if (tokenTypeHint === 'access_token' || !tokenTypeHint) {
       try {
-        const signingKey = await this.prisma.realmSigningKey.findFirst({
-          where: { realmId: realm.id, active: true },
-          orderBy: { createdAt: 'desc' },
-        });
+        const signingKey = await this.lookups.activeSigningKey(realm.id);
         if (signingKey) {
           const payload = await this.jwkService.verifyJwt(
             token,
@@ -292,10 +285,7 @@ export class TokensService {
     }
 
     try {
-      const signingKey = await this.prisma.realmSigningKey.findFirst({
-        where: { realmId: realm.id, active: true },
-        orderBy: { createdAt: 'desc' },
-      });
+      const signingKey = await this.lookups.activeSigningKey(realm.id);
 
       if (!signingKey) return;
 
@@ -355,10 +345,7 @@ export class TokensService {
     // formed we still extract the client id so the redirect can be validated.
     let clientId: string | undefined;
     try {
-      const signingKey = await this.prisma.realmSigningKey.findFirst({
-        where: { realmId: realm.id, active: true },
-        orderBy: { createdAt: 'desc' },
-      });
+      const signingKey = await this.lookups.activeSigningKey(realm.id);
       if (signingKey) {
         const payload = await this.jwkService.verifyJwt(
           idTokenHint,
@@ -455,10 +442,7 @@ export class TokensService {
   }
 
   async userinfo(realm: Realm, accessToken: string) {
-    const signingKey = await this.prisma.realmSigningKey.findFirst({
-      where: { realmId: realm.id, active: true },
-      orderBy: { createdAt: 'desc' },
-    });
+    const signingKey = await this.lookups.activeSigningKey(realm.id);
 
     if (!signingKey) {
       throw new UnauthorizedException('No signing key');
@@ -525,10 +509,7 @@ export class TokensService {
   }
 
   async handleBackchannelLogout(realm: Realm, logoutToken: string) {
-    const signingKey = await this.prisma.realmSigningKey.findFirst({
-      where: { realmId: realm.id, active: true },
-      orderBy: { createdAt: 'desc' },
-    });
+    const signingKey = await this.lookups.activeSigningKey(realm.id);
 
     if (!signingKey) {
       throw new UnauthorizedException('No signing key');

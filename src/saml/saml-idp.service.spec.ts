@@ -1,3 +1,4 @@
+import { lookupsBackedBy } from '../cache/cached-lookups.mock.js';
 import { BadRequestException } from '@nestjs/common';
 import { generateKeyPairSync } from 'crypto';
 import { deflateSync } from 'zlib';
@@ -118,7 +119,11 @@ describe('SamlIdpService', () => {
       hashPassword: jest.fn(),
       verifyPassword: jest.fn(),
     };
-    service = new SamlIdpService(prisma as any, crypto as any);
+    service = new SamlIdpService(
+      lookupsBackedBy(prisma as any) as any,
+      prisma as any,
+      crypto as any,
+    );
   });
 
   // ─── validateAuthnRequest ──────────────────────────────

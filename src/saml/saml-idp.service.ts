@@ -1,3 +1,4 @@
+import { CachedLookupsService } from '../cache/cached-lookups.service.js';
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
 import { randomUUID } from 'crypto';
 import { inflate } from 'zlib';
@@ -27,6 +28,7 @@ export class SamlIdpService {
   private readonly logger = new Logger(SamlIdpService.name);
 
   constructor(
+    private readonly lookups: CachedLookupsService,
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
   ) {}
@@ -146,9 +148,7 @@ export class SamlIdpService {
     user: User,
     inResponseTo?: string,
   ): Promise<string> {
-    const signingKey = await this.prisma.realmSigningKey.findFirst({
-      where: { realmId: realm.id, active: true },
-    });
+    const signingKey = await this.lookups.activeSigningKey(realm.id);
 
     if (!signingKey) {
       throw new BadRequestException('Realm has no active signing key');

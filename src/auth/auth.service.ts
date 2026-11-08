@@ -1,3 +1,4 @@
+import { CachedLookupsService } from '../cache/cached-lookups.service.js';
 import {
   Injectable,
   Logger,
@@ -60,6 +61,7 @@ export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
   constructor(
+    private readonly lookups: CachedLookupsService,
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
     private readonly jwkService: JwkService,
@@ -1145,9 +1147,7 @@ export class AuthService {
       );
     }
 
-    const client = await this.prisma.client.findUnique({
-      where: { realmId_clientId: { realmId: realm.id, clientId } },
-    });
+    const client = await this.lookups.client(realm.id, clientId);
 
     if (!client || !client.enabled) {
       throw new OAuthTokenError(
@@ -1508,10 +1508,7 @@ export class AuthService {
   }
 
   private async getActiveSigningKey(realmId: string) {
-    const key = await this.prisma.realmSigningKey.findFirst({
-      where: { realmId, active: true },
-      orderBy: { createdAt: 'desc' },
-    });
+    const key = await this.lookups.activeSigningKey(realmId);
     if (!key) {
       throw new Error('No active signing key found for realm');
     }

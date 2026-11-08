@@ -1,3 +1,4 @@
+import { lookupsBackedBy } from '../cache/cached-lookups.mock.js';
 jest.mock('../crypto/jwk.service.js', () => ({ JwkService: jest.fn() }));
 
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
@@ -102,6 +103,7 @@ describe('BrokerService', () => {
     };
 
     service = new BrokerService(
+      lookupsBackedBy(prisma as any) as any,
       prisma as any,
       jwkService as any,
       idpService as any,
