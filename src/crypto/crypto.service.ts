@@ -13,6 +13,7 @@ import {
   createHmac,
   hkdfSync,
   scryptSync,
+  timingSafeEqual,
 } from 'crypto';
 import { cpus } from 'os';
 import { createConcurrencyLimiter } from '../common/utils/concurrency-limiter.util.js';
@@ -38,6 +39,13 @@ const DEFAULT_ARGON2_MAX_CONCURRENCY = cpus().length;
 const ALGORITHM = 'aes-256-gcm';
 const IV_BYTES = 12; // 96-bit IV recommended for GCM
 const TAG_BYTES = 16; // 128-bit authentication tag
+
+/** Storage prefix for fast-hashed generated secrets; see hashSecret. */
+const SHA256_SECRET_PREFIX = 'sha256$';
+
+/** The shape generateSecret() returns by default: 32 random bytes as hex. */
+const isGeneratedSecret = (secret: string): boolean =>
+  /^[0-9a-f]{64}$/.test(secret);
 
 /** Default/placeholder values that must never be used in production. */
 const DEFAULT_WEBHOOK_SECRET_KEY = 'dev-webhook-secret-key-replace-me';
@@ -143,6 +151,68 @@ export class CryptoService implements OnModuleInit {
 
   generateSecret(bytes = 32): string {
     return randomBytes(bytes).toString('hex');
+  }
+
+  /**
+   * Hash a client secret or API key for storage.
+   *
+   * A value in the shape {@link generateSecret} produces (64 hex characters,
+   * 256 random bits) is stored as `sha256$<hex>`: no attacker can enumerate
+   * 2^256 candidates, so a slow hash adds nothing but cost, and these values
+   * are checked on every token, introspection or API request. Anything else
+   * (a secret imported from another IdP, possibly chosen by a person) gets
+   * Argon2id like a password.
+   */
+  async hashSecret(secret: string): Promise<string> {
+    return isGeneratedSecret(secret)
+      ? `${SHA256_SECRET_PREFIX}${this.sha256(secret)}`
+      : this.hashPassword(secret);
+  }
+
+  /**
+   * Check a presented secret against a value from {@link hashSecret} (or an
+   * Argon2 hash written before it existed). Dispatches on the stored format.
+   * Anything else in the column fails closed instead of throwing.
+   *
+   * `rehash` is set when the secret matched but is not stored the way
+   * {@link hashSecret} would store it now. Callers write it back,
+   * conditionally on the stored value being unchanged.
+   */
+  async verifySecret(
+    stored: string,
+    presented: string,
+  ): Promise<{ valid: boolean; rehash?: string }> {
+    if (presented.length > MAX_PASSWORD_LENGTH) return { valid: false };
+
+    let valid: boolean;
+    if (stored.startsWith(SHA256_SECRET_PREFIX)) {
+      const expected = Buffer.from(
+        stored.slice(SHA256_SECRET_PREFIX.length),
+        'hex',
+      );
+      const actual = createHash('sha256').update(presented).digest();
+      valid =
+        expected.length === actual.length && timingSafeEqual(expected, actual);
+    } else if (stored.startsWith('$argon2')) {
+      valid = await this.verifyPassword(stored, presented);
+    } else {
+      this.logger.warn(
+        'A stored secret is in no recognized hash format; rejecting it.',
+      );
+      return { valid: false };
+    }
+
+    if (!valid) return { valid: false };
+    const fast = isGeneratedSecret(presented);
+    const storedFast = stored.startsWith(SHA256_SECRET_PREFIX);
+    return fast === storedFast
+      ? { valid: true }
+      : { valid: true, rehash: await this.hashSecret(presented) };
+  }
+
+  /** True if `value` is something {@link hashSecret} could have produced. */
+  isSecretHash(value: string): boolean {
+    return /^sha256\$[0-9a-f]{64}$/.test(value) || value.startsWith('$argon2');
   }
 
   sha256(data: string): string {

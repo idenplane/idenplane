@@ -22,7 +22,7 @@ import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { CryptoService } from '../crypto/crypto.service.js';
+import { ClientSecretService } from '../clients/client-secret.service.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 import { RateLimitGuard, RateLimitBy } from '../rate-limit/rate-limit.guard.js';
 
@@ -36,7 +36,7 @@ export class TokensController {
   constructor(
     private readonly tokensService: TokensService,
     private readonly prisma: PrismaService,
-    private readonly crypto: CryptoService,
+    private readonly clientSecrets: ClientSecretService,
   ) {}
 
   @Post('token/introspect')
@@ -207,10 +207,7 @@ export class TokensController {
           error_description: 'Client has no secret configured.',
         });
       }
-      const valid = await this.crypto.verifyPassword(
-        client.clientSecret,
-        cSecret,
-      );
+      const valid = await this.clientSecrets.verify(client, cSecret);
       if (!valid) {
         throw new UnauthorizedException({
           error: 'invalid_client',

@@ -3,6 +3,7 @@ import { pbkdf2Sync } from 'crypto';
 import * as argon2 from 'argon2';
 import { AuthentikImporterService } from './authentik-importer.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { CryptoService } from '../crypto/crypto.service.js';
 import type { AuthentikExport } from './authentik-types.js';
 
 describe('AuthentikImporterService', () => {
@@ -73,7 +74,9 @@ describe('AuthentikImporterService', () => {
   beforeEach(async () => {
     prisma = {
       realm: {
-        findUnique: jest.fn().mockResolvedValue({ id: 'realm-1', name: 'test' }),
+        findUnique: jest
+          .fn()
+          .mockResolvedValue({ id: 'realm-1', name: 'test' }),
       },
       group: {
         findFirst: jest.fn().mockResolvedValue(null),
@@ -100,6 +103,7 @@ describe('AuthentikImporterService', () => {
       providers: [
         AuthentikImporterService,
         { provide: PrismaService, useValue: prisma },
+        CryptoService,
       ],
     }).compile();
 
@@ -129,7 +133,10 @@ describe('AuthentikImporterService', () => {
   });
 
   it('should translate a Django pbkdf2_sha256 hash into a form the login fallback can verify', async () => {
-    await service.importData(mockExport, { dryRun: false, targetRealm: 'test' });
+    await service.importData(mockExport, {
+      dryRun: false,
+      targetRealm: 'test',
+    });
 
     const aliceCall = prisma.user.create.mock.calls.find(
       (c: any) => c[0].data.username === 'alice',
@@ -138,7 +145,8 @@ describe('AuthentikImporterService', () => {
 
     // The transformed hash must actually verify against the real password —
     // not just "some string", since a wrong transform fails silently at login.
-    const [iterations, saltB64, hashB64] = aliceCall[0].data.passwordHash.split('$');
+    const [iterations, saltB64, hashB64] =
+      aliceCall[0].data.passwordHash.split('$');
     const salt = Buffer.from(saltB64, 'base64');
     const derived = pbkdf2Sync(
       'CorrectHorseBatteryStaple1',
@@ -151,7 +159,10 @@ describe('AuthentikImporterService', () => {
   });
 
   it('should drop unsupported password hashers with a null hash', async () => {
-    await service.importData(mockExport, { dryRun: false, targetRealm: 'test' });
+    await service.importData(mockExport, {
+      dryRun: false,
+      targetRealm: 'test',
+    });
 
     expect(prisma.user.create).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -166,7 +177,9 @@ describe('AuthentikImporterService', () => {
   });
 
   it('should translate a Django argon2 hash into standard PHC format', async () => {
-    const realPhc = await argon2.hash('MyRealPassword1', { type: argon2.argon2id });
+    const realPhc = await argon2.hash('MyRealPassword1', {
+      type: argon2.argon2id,
+    });
     const exportWithArgon2: AuthentikExport = {
       users: [
         {
@@ -177,7 +190,10 @@ describe('AuthentikImporterService', () => {
       ],
     };
 
-    await service.importData(exportWithArgon2, { dryRun: false, targetRealm: 'test' });
+    await service.importData(exportWithArgon2, {
+      dryRun: false,
+      targetRealm: 'test',
+    });
 
     const daveCall = prisma.user.create.mock.calls.find(
       (c: any) => c[0].data.username === 'dave',
@@ -206,7 +222,10 @@ describe('AuthentikImporterService', () => {
   });
 
   it('should import public OAuth2 providers as public clients', async () => {
-    await service.importData(mockExport, { dryRun: false, targetRealm: 'test' });
+    await service.importData(mockExport, {
+      dryRun: false,
+      targetRealm: 'test',
+    });
 
     expect(prisma.client.create).toHaveBeenCalledWith({
       data: expect.objectContaining({
@@ -214,6 +233,33 @@ describe('AuthentikImporterService', () => {
         clientType: 'PUBLIC',
         redirectUris: ['http://localhost:3000/callback'],
       }),
+    });
+  });
+
+  it('stores a confidential provider secret hashed, never as plaintext', async () => {
+    await service.importData(
+      {
+        ...mockExport,
+        providers: [
+          {
+            pk: 2,
+            name: 'Backend',
+            client_id: 'backend',
+            client_type: 'confidential',
+            client_secret: 'authentik-secret',
+            redirect_uris: [],
+          },
+        ],
+      },
+      { dryRun: false, targetRealm: 'test' },
+    );
+
+    const stored = (prisma.client.create as jest.Mock).mock.calls[0][0].data
+      .clientSecret as string;
+    expect(stored).not.toBe('authentik-secret');
+    const crypto = new CryptoService();
+    expect(await crypto.verifySecret(stored, 'authentik-secret')).toEqual({
+      valid: true,
     });
   });
 

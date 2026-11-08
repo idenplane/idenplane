@@ -1,5 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { CryptoService } from '../crypto/crypto.service.js';
 import type { AuthentikExport, AuthentikUser } from './authentik-types.js';
 import { createEmptyReport, type MigrationReport } from './migration-report.js';
 
@@ -14,7 +15,10 @@ const OIDC_SOURCE_TYPES = new Set(['openidconnect', 'oidc']);
 export class AuthentikImporterService {
   private readonly logger = new Logger(AuthentikImporterService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly crypto: CryptoService,
+  ) {}
 
   async importData(
     data: AuthentikExport,
@@ -117,7 +121,9 @@ export class AuthentikImporterService {
               enabled: true,
               clientType:
                 provider.client_type === 'public' ? 'PUBLIC' : 'CONFIDENTIAL',
-              clientSecret: provider.client_secret ?? null,
+              clientSecret: provider.client_secret
+                ? await this.crypto.hashSecret(provider.client_secret)
+                : null,
               redirectUris: provider.redirect_uris ?? [],
               webOrigins: [],
               grantTypes: ['authorization_code', 'refresh_token'],

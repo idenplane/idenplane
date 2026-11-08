@@ -7,6 +7,7 @@ import {
 import { Prisma, type ClientType } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { JwkService } from '../crypto/jwk.service.js';
+import { CryptoService } from '../crypto/crypto.service.js';
 import { ScopeSeedService } from '../scopes/scope-seed.service.js';
 
 /** Shape of each item in the clientScopes / roles / clients / groups / idps /
@@ -98,7 +99,20 @@ export class RealmImportService {
     private readonly prisma: PrismaService,
     private readonly jwkService: JwkService,
     private readonly scopeSeedService: ScopeSeedService,
+    private readonly crypto: CryptoService,
   ) {}
+
+  /**
+   * An export made with includeSecrets carries each client's stored hash, so
+   * a hash is kept as it is (the client's secret keeps working). Anything
+   * else is a plaintext secret written by hand, and is hashed like any other.
+   */
+  private async importedClientSecret(value?: string | null) {
+    if (!value) return null;
+    return this.crypto.isSecretHash(value)
+      ? value
+      : this.crypto.hashSecret(value);
+  }
 
   async importRealm(
     payload: Record<string, unknown>,
@@ -234,7 +248,7 @@ export class RealmImportService {
           realmId: realm.id,
           clientId: c.clientId,
           clientType: c.clientType ?? 'CONFIDENTIAL',
-          clientSecret: c.clientSecret ?? null,
+          clientSecret: await this.importedClientSecret(c.clientSecret),
           name: c.name ?? null,
           description: c.description ?? null,
           enabled: c.enabled ?? true,
