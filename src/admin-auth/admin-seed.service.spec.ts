@@ -25,6 +25,11 @@ describe('AdminSeedService', () => {
 
   beforeEach(() => {
     prisma = createMockPrismaService();
+    // The seed runs in one transaction; run it against the same mock.
+    (prisma.$transaction as jest.Mock).mockImplementation(
+      async (fn: (tx: typeof prisma) => Promise<unknown>) => fn(prisma),
+    );
+    (prisma as any).$executeRawUnsafe = jest.fn().mockResolvedValue(0);
     crypto = { hashPassword: jest.fn().mockResolvedValue('hashed-password') };
     jwkService = { generateRsaKeyPair: jest.fn().mockResolvedValue(keyPair) };
     config = {
@@ -48,6 +53,33 @@ describe('AdminSeedService', () => {
   });
 
   describe('onApplicationBootstrap', () => {
+    it('does nothing when another instance seeded while this one waited for the lock', async () => {
+      const prev = process.env['DATABASE_URL'];
+      process.env['DATABASE_URL'] = 'postgresql://x@db/idp';
+      prisma.realm.findUnique
+        .mockResolvedValueOnce(null) // before the lock
+        .mockResolvedValueOnce({ id: 'master-id' } as never); // inside it
+      try {
+        await service.onApplicationBootstrap();
+      } finally {
+        process.env['DATABASE_URL'] = prev;
+      }
+      expect((prisma as any).$executeRawUnsafe).toHaveBeenCalledWith(
+        expect.stringContaining('pg_advisory_xact_lock'),
+      );
+      expect(prisma.realm.create).not.toHaveBeenCalled();
+      expect(scopeSeedService.seedDefaultScopes).not.toHaveBeenCalled();
+    });
+
+    it('treats a unique-name conflict as seeded by another instance', async () => {
+      prisma.realm.findUnique.mockResolvedValue(null);
+      (prisma.$transaction as jest.Mock).mockRejectedValue(
+        Object.assign(new Error('Unique constraint failed'), { code: 'P2002' }),
+      );
+      await expect(service.onApplicationBootstrap()).resolves.toBeUndefined();
+      expect(scopeSeedService.seedDefaultScopes).not.toHaveBeenCalled();
+    });
+
     it('should skip if master realm already exists', async () => {
       prisma.realm.findUnique.mockResolvedValue({
         id: 'existing',

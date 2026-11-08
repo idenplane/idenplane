@@ -80,6 +80,9 @@ const WIZARD_STEPS = [
   },
 ] as const;
 
+/** The id of the one wizard state row created from now on. */
+const WIZARD_STATE_ID = 'wizard';
+
 @Injectable()
 export class SetupWizardService {
   private readonly logger = new Logger(SetupWizardService.name);
@@ -141,13 +144,23 @@ export class SetupWizardService {
     });
 
     if (!state) {
-      state = await this.prisma.wizardState.create({
-        data: {
-          completed: false,
-          skipped: false,
-          currentStep: 0,
-        },
-      });
+      // A fixed id, so two first requests at once (or two instances) cannot
+      // create two states: the second insert conflicts and reads the first.
+      try {
+        state = await this.prisma.wizardState.create({
+          data: {
+            id: WIZARD_STATE_ID,
+            completed: false,
+            skipped: false,
+            currentStep: 0,
+          },
+        });
+      } catch (err) {
+        if ((err as { code?: string }).code !== 'P2002') throw err;
+        state = await this.prisma.wizardState.findUniqueOrThrow({
+          where: { id: WIZARD_STATE_ID },
+        });
+      }
     }
 
     return state;
