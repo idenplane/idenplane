@@ -22,6 +22,13 @@ const MAX_ATTEMPTS = RETRY_DELAYS_MS.length + 1; // 5
 const BATCH_SIZE = 50;
 
 /**
+ * A PROCESSING event untouched for this long belongs to a process that died
+ * mid-delivery, and is taken over. Far above one delivery (each HTTP call
+ * times out after 10 s), so a live process is never overtaken.
+ */
+const LEASE_MS = 5 * 60_000;
+
+/**
  * WebhookSchedulerService — database-backed queue processor (Issue #338).
  *
  * ### Problem
@@ -38,11 +45,26 @@ const BATCH_SIZE = 50;
  *    FAILED) events, attempts HTTP delivery, and updates the row's status.
  *
  * 3. A row is only marked DELIVERED or terminally FAILED once the outcome is
- *    confirmed, so crashes mid-delivery leave the row in PENDING/PROCESSING
- *    and it will be re-picked on the next tick.
+ *    confirmed. A process that dies mid-delivery leaves its rows PROCESSING;
+ *    once their lease (LEASE_MS) has run out, any process takes them over.
+ *
+ * Every process runs this tick (replicas, rolling deploys), so a row is
+ * claimed one at a time with a conditional update on the state it was read
+ * in, and only the process whose update changed it delivers it.
  *
  * 4. Retries use exponential back-off via the `next_retry_at` column.
  */
+interface QueuedEvent {
+  id: string;
+  realmId: string;
+  eventType: string;
+  payload: unknown;
+  status: string;
+  attempts: number;
+  maxAttempts: number;
+  updatedAt: Date;
+}
+
 @Injectable()
 export class WebhookSchedulerService {
   private readonly logger = new Logger(WebhookSchedulerService.name);
@@ -70,43 +92,42 @@ export class WebhookSchedulerService {
   @Interval(10_000) // every 10 seconds
   async processQueue(): Promise<void> {
     const now = new Date();
+    const leaseExpired = new Date(now.getTime() - LEASE_MS);
 
-    // Claim a batch of events that are due for processing.
-    // We update to PROCESSING first so that a second concurrent scheduler
-    // instance (e.g. during a rolling deploy) does not pick up the same rows.
-    const events = await this.db.webhookEvent.findMany({
+    const candidates = (await this.db.webhookEvent.findMany({
       where: {
-        status: { in: ['PENDING', 'FAILED'] },
-        nextRetryAt: { lte: now },
         attempts: { lt: MAX_ATTEMPTS },
+        OR: [
+          { status: { in: ['PENDING', 'FAILED'] }, nextRetryAt: { lte: now } },
+          { status: 'PROCESSING', updatedAt: { lt: leaseExpired } },
+        ],
       },
       orderBy: { nextRetryAt: 'asc' },
       take: BATCH_SIZE,
-    });
+    })) as QueuedEvent[];
 
-    if (events.length === 0) return;
+    if (candidates.length === 0) return;
 
-    // Mark them all PROCESSING atomically before doing any I/O.
-    const ids = (events as Array<{ id: string }>).map((e) => e.id);
-    await this.db.webhookEvent.updateMany({
-      where: { id: { in: ids }, status: { in: ['PENDING', 'FAILED'] } },
-      data: { status: 'PROCESSING' },
-    });
+    // Claim each row on the exact state it was read in. Another process
+    // that read the same row claims it first or not at all: its update and
+    // this one cannot both match, so a webhook is never sent twice.
+    const claimed: QueuedEvent[] = [];
+    for (const event of candidates) {
+      const { count } = (await this.db.webhookEvent.updateMany({
+        where: {
+          id: event.id,
+          status: event.status,
+          updatedAt: event.updatedAt,
+        },
+        data: { status: 'PROCESSING' },
+      })) as { count: number };
+      if (count === 1) claimed.push(event);
+    }
 
-    this.logger.debug(`Processing ${events.length} queued webhook event(s)`);
+    if (claimed.length === 0) return;
+    this.logger.debug(`Processing ${claimed.length} queued webhook event(s)`);
 
-    await Promise.allSettled(
-      (
-        events as Array<{
-          id: string;
-          realmId: string;
-          eventType: string;
-          payload: unknown;
-          attempts: number;
-          maxAttempts: number;
-        }>
-      ).map((event) => this.processEvent(event)),
-    );
+    await Promise.allSettled(claimed.map((event) => this.processEvent(event)));
   }
 
   // ─── Per-event processing ─────────────────────────────────────────────────
