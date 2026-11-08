@@ -10,6 +10,7 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 ## [Unreleased]
 
 ### Security
+- **Concurrent failed sign-ins went uncounted.** The brute-force counter runs Serializable, and PostgreSQL aborts one of two conflicting transactions; that failure was rolled back and never counted, so a parallel password-guessing burst got many more tries than `maxLoginFailures`. Aborted transactions are now retried, and the lockout email is sent once, after the lockout has committed.
 - **A TOTP code could be accepted more than once.** Submissions of the same code checked that it was unused before any of them recorded it, so concurrent ones (on one instance or several) all passed. The code is now claimed by inserting it under a new unique index on (user, code), and only the first insert wins; an earlier use whose window has passed is taken over, so a code that comes round again still works.
 
 ### Changed

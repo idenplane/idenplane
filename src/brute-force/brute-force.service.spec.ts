@@ -98,6 +98,63 @@ describe('BruteForceService', () => {
       expect(prisma.loginFailure.create).not.toHaveBeenCalled();
     });
 
+    it('reruns a transaction that PostgreSQL aborted as a serialization conflict', async () => {
+      const conflict = Object.assign(new Error('DriverAdapterError'), {
+        cause: { kind: 'TransactionWriteConflict' },
+      });
+      const real = (prisma.$transaction as jest.Mock).getMockImplementation()!;
+      (prisma.$transaction as jest.Mock)
+        .mockRejectedValueOnce(conflict)
+        .mockRejectedValueOnce(Object.assign(new Error('x'), { code: 'P2034' }))
+        .mockImplementation(real);
+      prisma.loginFailure.create.mockResolvedValue({});
+      prisma.loginFailure.count.mockResolvedValue(1);
+
+      await service.recordFailure(mockRealm, 'user-1', '10.0.0.1');
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(3);
+      expect(prisma.loginFailure.create).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not retry other errors', async () => {
+      (prisma.$transaction as jest.Mock).mockRejectedValueOnce(
+        new Error('boom'),
+      );
+      await expect(service.recordFailure(mockRealm, 'user-1')).rejects.toThrow(
+        'boom',
+      );
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+    });
+
+    it('sends the lockout notification once, after the transaction', async () => {
+      const notify = jest
+        .spyOn(
+          service as unknown as {
+            sendLockoutNotification: () => Promise<void>;
+          },
+          'sendLockoutNotification',
+        )
+        .mockResolvedValue(undefined);
+      const real = (prisma.$transaction as jest.Mock).getMockImplementation()!;
+      let committed = false;
+      (prisma.$transaction as jest.Mock).mockImplementation(
+        async (fn: never, opts: never) => {
+          const result = await real(fn, opts);
+          expect(notify).not.toHaveBeenCalled();
+          committed = true;
+          return result;
+        },
+      );
+      prisma.loginFailure.create.mockResolvedValue({});
+      prisma.loginFailure.count.mockResolvedValue(mockRealm.maxLoginFailures);
+      prisma.user.update.mockResolvedValue({} as never);
+
+      await service.recordFailure(mockRealm, 'user-1');
+
+      expect(committed).toBe(true);
+      expect(notify).toHaveBeenCalledTimes(1);
+    });
+
     it('should create a failure record', async () => {
       prisma.loginFailure.create.mockResolvedValue({});
       prisma.loginFailure.count.mockResolvedValue(1);
@@ -275,8 +332,12 @@ describe('BruteForceService', () => {
   describe('cleanupOldFailures', () => {
     it('should delete failure records older than 24 hours', async () => {
       prisma.loginFailure.deleteMany.mockResolvedValue({ count: 10 });
-      (prisma as any).totpFailureTracking.deleteMany.mockResolvedValue({ count: 0 });
-      (prisma as any).webAuthnFailureTracking.deleteMany.mockResolvedValue({ count: 0 });
+      (prisma as any).totpFailureTracking.deleteMany.mockResolvedValue({
+        count: 0,
+      });
+      (prisma as any).webAuthnFailureTracking.deleteMany.mockResolvedValue({
+        count: 0,
+      });
 
       await service.cleanupOldFailures();
 
@@ -295,8 +356,12 @@ describe('BruteForceService', () => {
 
     it('should handle zero deleted records gracefully', async () => {
       prisma.loginFailure.deleteMany.mockResolvedValue({ count: 0 });
-      (prisma as any).totpFailureTracking.deleteMany.mockResolvedValue({ count: 0 });
-      (prisma as any).webAuthnFailureTracking.deleteMany.mockResolvedValue({ count: 0 });
+      (prisma as any).totpFailureTracking.deleteMany.mockResolvedValue({
+        count: 0,
+      });
+      (prisma as any).webAuthnFailureTracking.deleteMany.mockResolvedValue({
+        count: 0,
+      });
 
       await expect(service.cleanupOldFailures()).resolves.toBeUndefined();
     });
