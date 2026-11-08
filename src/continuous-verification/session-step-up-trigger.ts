@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service.js';
 import {
   StepUpService,
@@ -38,7 +37,8 @@ export class SessionStepUpTrigger {
    * 2. Logs the step-up event for monitoring/alerting
    * 3. Emits an event to notify the client application
    */
-  @Interval(60_000) // every minute
+  // Run by ContinuousVerificationScheduler.checkStepUpRequired, on the
+  // leader only. (It also carried its own @Interval, so it ran twice a tick.)
   async checkAndTriggerStepUp(): Promise<void> {
     const now = new Date();
 

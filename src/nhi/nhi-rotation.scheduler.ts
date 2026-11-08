@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { LeaderService } from '../cache/leader.service.js';
 import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
@@ -39,12 +40,15 @@ export class NhiRotationScheduler {
   constructor(
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
+    private readonly leader: LeaderService,
   ) {}
 
   // ─── Scheduler tick ───────────────────────────────────────────────────────
 
   @Interval(60_000) // every 60 seconds
   async processRotations(): Promise<void> {
+    // Once per cluster: two processes would each rotate the same credential.
+    if (!this.leader.isLeader()) return;
     const realms = await this.prisma.realm.findMany({
       where: { enabled: true },
       select: { id: true, name: true },

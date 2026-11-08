@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { ContinuousRiskAssessmentService } from './continuous-risk.service.js';
 import { SessionStepUpTrigger } from './session-step-up-trigger.js';
 import { SessionTerminationService } from './session-termination.service.js';
+import { LeaderService } from '../cache/leader.service.js';
 
 @Injectable()
 export class ContinuousVerificationScheduler {
@@ -14,6 +15,7 @@ export class ContinuousVerificationScheduler {
     private readonly continuousRiskService: ContinuousRiskAssessmentService,
     private readonly stepUpTrigger: SessionStepUpTrigger,
     private readonly terminationService: SessionTerminationService,
+    private readonly leader: LeaderService,
   ) {}
 
   /**
@@ -22,6 +24,8 @@ export class ContinuousVerificationScheduler {
    */
   @Interval(300_000) // every 5 minutes
   async evaluateActiveSessions(): Promise<void> {
+    // Once per cluster, not once per process (see LeaderService).
+    if (!this.leader.isLeader()) return;
     const now = new Date();
 
     // Find all active sessions that are due for re-evaluation
@@ -116,6 +120,8 @@ export class ContinuousVerificationScheduler {
    */
   @Interval(60_000) // every minute
   async checkStepUpRequired(): Promise<void> {
+    // Once per cluster, not once per process (see LeaderService).
+    if (!this.leader.isLeader()) return;
     // Delegate to the SessionStepUpTrigger service
     // which handles step-up record creation and ACR level determination
     try {
@@ -134,6 +140,8 @@ export class ContinuousVerificationScheduler {
    */
   @Interval(120_000) // every 2 minutes
   async checkTerminateRequired(): Promise<void> {
+    // Once per cluster, not once per process (see LeaderService).
+    if (!this.leader.isLeader()) return;
     // Delegate to the SessionTerminationService
     // which handles actual session revocation via SessionsService
     try {
@@ -151,6 +159,8 @@ export class ContinuousVerificationScheduler {
    */
   @Cron('0 3 * * *') // 3 AM daily
   async cleanupOldRiskData(): Promise<void> {
+    // Once per cluster, not once per process (see LeaderService).
+    if (!this.leader.isLeader()) return;
     const now = new Date();
     const thirtyDaysAgo = new Date(now.getTime() - 30 * 24 * 60 * 60 * 1000);
     const ninetyDaysAgo = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
@@ -188,6 +198,8 @@ export class ContinuousVerificationScheduler {
    */
   @Interval(3_600_000) // every hour
   async applyTrustDecay(): Promise<void> {
+    // Once per cluster, not once per process (see LeaderService).
+    if (!this.leader.isLeader()) return;
     const now = new Date();
     const oneDayAgo = new Date(now.getTime() - 24 * 60 * 60 * 1000);
 

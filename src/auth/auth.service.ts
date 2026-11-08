@@ -659,13 +659,57 @@ export class AuthService {
       );
     }
 
-    // Rotate: revoke old token
-    await this.prisma.refreshToken.update({
-      where: { id: storedToken.id },
+    const user = storedToken.session.user;
+    if (!user.enabled) {
+      throw new OAuthTokenError(
+        'invalid_grant',
+        'The user is disabled',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // RFC 6749 §6: a refresh may narrow the scope, never widen it. (A token
+    // stored without a scope predates scope tracking; nothing to compare.)
+    const grantedScopes = (storedToken.scope ?? '').split(' ').filter(Boolean);
+    const requestedScopes = (scope ?? '').split(' ').filter(Boolean);
+    const widened =
+      storedToken.scope === null
+        ? []
+        : requestedScopes.filter((s) => !grantedScopes.includes(s));
+    if (widened.length > 0) {
+      throw new OAuthTokenError(
+        'invalid_scope',
+        `Scope not granted to this refresh token: ${widened.join(' ')}`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Rotate: the revocation is the claim. Only one request can revoke a
+    // live token; a concurrent one using the same token loses, and is
+    // treated as the reuse it is (RFC 9700 §4.14): the whole session's
+    // refresh tokens are revoked, as for any reuse of a revoked token.
+    const { count } = await this.prisma.refreshToken.updateMany({
+      where: { id: storedToken.id, revoked: false },
       data: { revoked: true },
     });
-
-    const user = storedToken.session.user;
+    if (count === 0) {
+      await this.prisma.refreshToken.updateMany({
+        where: { sessionId: storedToken.sessionId },
+        data: { revoked: true },
+      });
+      void this.eventsService.recordLoginEvent({
+        realmId: realm.id,
+        type: LoginEventType.TOKEN_REFRESH_ERROR,
+        clientId: client_id,
+        ipAddress: ip,
+        error: 'Refresh token reused concurrently',
+      });
+      throw new OAuthTokenError(
+        'invalid_grant',
+        'Invalid or expired refresh token',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
 
     void this.eventsService.recordLoginEvent({
       realmId: realm.id,

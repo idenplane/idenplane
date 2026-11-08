@@ -41,7 +41,9 @@ describe('SessionStepUpTrigger', () => {
 
     stepUpService = {
       recordStepUp: jest.fn().mockResolvedValue(undefined),
-      getAcrStrength: jest.fn((acr: string) => (acr === ACR_WEBAUTHN ? 2 : acr === ACR_MFA ? 1 : 0)),
+      getAcrStrength: jest.fn((acr: string) =>
+        acr === ACR_WEBAUTHN ? 2 : acr === ACR_MFA ? 1 : 0,
+      ),
     };
     sessionEvents = { emitStepUpRequired: jest.fn() };
 
@@ -90,7 +92,10 @@ describe('SessionStepUpTrigger', () => {
     it('uses the override reason over the stored one when provided', async () => {
       prisma.sessionRiskProfile.findUnique.mockResolvedValue(baseProfile);
 
-      await trigger.triggerStepUpForSession('session-1', 'Manually triggered by admin');
+      await trigger.triggerStepUpForSession(
+        'session-1',
+        'Manually triggered by admin',
+      );
 
       expect(sessionEvents.emitStepUpRequired).toHaveBeenCalledWith(
         'user-1',
@@ -126,7 +131,11 @@ describe('SessionStepUpTrigger', () => {
         {
           ...baseProfile,
           sessionId: 'session-2',
-          session: { ...baseProfile.session, id: 'session-2', userId: 'user-2' },
+          session: {
+            ...baseProfile.session,
+            id: 'session-2',
+            userId: 'user-2',
+          },
         },
       ]);
 
