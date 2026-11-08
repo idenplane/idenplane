@@ -60,11 +60,14 @@ fi
 if [ "$DB_MODE" = "docker" ]; then
   step "Backend: docker compose up -d db"
   docker compose up -d db
+  # Over TCP, not the socket: on first start the image runs a temporary
+  # server, socket only, to initialise the database, then restarts. Over the
+  # socket that one answers "ready" and then shuts down under the next step.
   for _ in $(seq 1 60); do
-    docker compose exec -T db pg_isready -U idenplane >/dev/null 2>&1 && break
+    docker compose exec -T db pg_isready -h 127.0.0.1 -U idenplane >/dev/null 2>&1 && break
     sleep 1
   done
-  docker compose exec -T db pg_isready -U idenplane
+  docker compose exec -T db pg_isready -h 127.0.0.1 -U idenplane
 else
   step "Backend: using the Postgres already running at DATABASE_URL"
 fi
