@@ -1550,6 +1550,8 @@ model SessionRiskProfile {
   stepUpRequired  Boolean   @default(false) @map("step_up_required")
   stepUpReason    String?   @map("step_up_reason")
   stepUpExpiresAt DateTime? @map("step_up_expires_at")
+  /// When this risk episode's step-up was announced; cleared when it ends.
+  stepUpNotifiedAt DateTime? @map("step_up_notified_at")
 
   terminateSession  Boolean @default(false) @map("terminate_session")
   terminationReason String? @map("termination_reason")

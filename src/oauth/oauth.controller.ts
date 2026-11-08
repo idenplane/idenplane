@@ -136,11 +136,19 @@ export class OAuthController {
           ? query['acr_values'].split(' ')[0] // take the highest-preference value
           : null;
         const clientRequiredAcr = client.requiredAcr ?? null;
+        //   3. Continuous verification: a session of this user flagged for
+        //      step-up by risk (applies to this user only)
+        const riskRequiredAcr = loginSession
+          ? await this.stepUpService.getRiskRequiredAcr(
+              realm.id,
+              loginSession.userId,
+            )
+          : null;
 
-        // Prefer the stronger of the two requirements
+        // The strongest of the three requirements
         const requiredAcr = this.resolveRequiredAcr(
-          requestedAcr,
-          clientRequiredAcr,
+          this.resolveRequiredAcr(requestedAcr, clientRequiredAcr),
+          riskRequiredAcr,
         );
 
         if (requiredAcr) {

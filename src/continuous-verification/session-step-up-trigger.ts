@@ -1,10 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
-import {
-  StepUpService,
-  ACR_MFA,
-  ACR_WEBAUTHN,
-} from '../step-up/step-up.service.js';
+import { riskStepUpAcr } from '../step-up/step-up.service.js';
 import { SessionEventsGateway } from '../realtime/session-events.gateway.js';
 
 /**
@@ -24,7 +20,6 @@ export class SessionStepUpTrigger {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly stepUpService: StepUpService,
     private readonly sessionEvents: SessionEventsGateway,
   ) {}
 
@@ -126,30 +121,7 @@ export class SessionStepUpTrigger {
    * Higher risk scores require stronger authentication.
    */
   private determineRequiredAcr(riskScore: number): string {
-    // CRITICAL risk (>=80) requires WebAuthn
-    // HIGH risk (>=60) requires MFA
-    // MEDIUM risk (>=40) also requires MFA as a precaution
-    if (riskScore >= 80) {
-      return ACR_WEBAUTHN;
-    }
-    return ACR_MFA;
-  }
-
-  /**
-   * Get the step-up cache duration based on risk level.
-   * Higher risk = shorter cache duration to force more frequent re-auth.
-   */
-  private getCacheDuration(riskScore: number): number {
-    // CRITICAL: 5 minutes
-    // HIGH: 10 minutes
-    // MEDIUM: 15 minutes
-    if (riskScore >= 80) {
-      return 5 * 60; // 5 minutes
-    }
-    if (riskScore >= 60) {
-      return 10 * 60; // 10 minutes
-    }
-    return 15 * 60; // 15 minutes
+    return riskStepUpAcr(riskScore);
   }
 
   // ── Private helpers ────────────────────────────────────────────────────────
@@ -178,39 +150,19 @@ export class SessionStepUpTrigger {
       return;
     }
 
-    // Determine required ACR based on risk score
     const requiredAcr = this.determineRequiredAcr(profile.riskScore);
-    const cacheDuration = this.getCacheDuration(profile.riskScore);
 
-    // Create step-up record
-    await this.stepUpService.recordStepUp(
-      profile.sessionId,
-      requiredAcr,
-      cacheDuration,
-    );
-
-    // Also update the session's required ACR if it's higher than current
-    if (session.clientId) {
-      const client = await this.prisma.client.findUnique({
-        where: { id: session.clientId },
-        select: { id: true, requiredAcr: true },
-      });
-
-      // If the client doesn't have a required ACR set, or if our required ACR
-      // is higher, update it
-      const currentAcrStrength = this.stepUpService.getAcrStrength(
-        client?.requiredAcr ?? '',
-      );
-      const requiredAcrStrength =
-        this.stepUpService.getAcrStrength(requiredAcr);
-
-      if (requiredAcrStrength > currentAcrStrength) {
-        await this.prisma.client.update({
-          where: { id: session.clientId },
-          data: { requiredAcr },
-        });
-      }
-    }
+    // Announce each risk episode once. The flag stays set while the risk
+    // persists (every re-evaluation extends it), so without this the same
+    // event and push went out every minute until it expired. The claim also
+    // makes a concurrent run on another instance announce nothing.
+    // Enforcement does not depend on this: the authorization endpoint asks
+    // StepUpService.getRiskRequiredAcr for this user on every request.
+    const { count } = await this.prisma.sessionRiskProfile.updateMany({
+      where: { sessionId: profile.sessionId, stepUpNotifiedAt: null },
+      data: { stepUpNotifiedAt: now },
+    });
+    if (count === 0 && !overrideReason) return;
 
     // Create an event log entry for audit/monitoring
     await this.prisma.continuousRiskEvent.create({

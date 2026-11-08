@@ -186,6 +186,8 @@ export class ContinuousRiskAssessmentService {
         currentBiometricData as unknown as Prisma.InputJsonValue,
       stepUpRequired: action === 'STEP_UP',
       stepUpReason: action === 'STEP_UP' ? 'Risk threshold exceeded' : null,
+      // A new episode is announced again; a continuing one is not.
+      ...(action === 'STEP_UP' ? {} : { stepUpNotifiedAt: null }),
       stepUpExpiresAt:
         action === 'STEP_UP'
           ? new Date(Date.now() + 15 * 60 * 1000) // 15 min

@@ -71,7 +71,18 @@ describe('PluginManagerService', () => {
       validatePlugin: jest.fn().mockReturnValue(true),
     } as any;
 
-    service = new PluginManagerService(prisma as any, loader, registry);
+    // A bus that reaches no other instance (see the cross-instance tests).
+    const bus = {
+      onMessage: jest.fn(),
+      onReset: jest.fn(),
+      publish: jest.fn(),
+    };
+    service = new PluginManagerService(
+      prisma as any,
+      loader,
+      registry,
+      bus as any,
+    );
   });
 
   afterEach(() => {
@@ -465,5 +476,99 @@ describe('PluginManagerService', () => {
 
       expect(plugin.enrichToken).not.toHaveBeenCalled();
     });
+  });
+});
+
+describe('PluginManagerService across instances', () => {
+  /** A bus shared by the instances of one test, delivering to each. */
+  const sharedBus = () => {
+    const handlers: Array<{ topic: string; fn: (p: unknown) => void }> = [];
+    const resets: Array<() => void> = [];
+    return {
+      reset: () => resets.forEach((r) => r()),
+      forInstance: () => ({
+        onMessage: (topic: string, fn: (p: unknown) => void) =>
+          handlers.push({ topic, fn }),
+        onReset: (fn: () => void) => resets.push(fn),
+        publish: async (topic: string, payload: unknown) =>
+          handlers
+            .filter((h) => h.topic === topic)
+            .forEach((h) => h.fn(payload)),
+      }),
+    };
+  };
+  const flush = () => new Promise((r) => setImmediate(r));
+
+  const instance = (
+    prisma: MockPrismaService,
+    bus: ReturnType<typeof sharedBus>,
+  ) => {
+    const registry = new PluginRegistry();
+    const plugin = makeEventListenerPlugin();
+    registry.register(plugin, true);
+    const service = new PluginManagerService(
+      prisma as any,
+      {} as any,
+      registry,
+      bus.forInstance() as any,
+    );
+    return { registry, plugin, service };
+  };
+
+  it('stops a plugin on every instance when one of them disables it', async () => {
+    const prisma = createMockPrismaService();
+    const bus = sharedBus();
+    const a = instance(prisma, bus);
+    const b = instance(prisma, bus);
+    let stored = makeDbRecord({ enabled: true });
+    prisma.installedPlugin.findUnique.mockImplementation(async () => stored);
+    prisma.installedPlugin.update.mockImplementation(async () => {
+      stored = makeDbRecord({ enabled: false });
+      return stored;
+    });
+
+    await a.service.disablePlugin('test-listener');
+    await flush();
+
+    expect(a.registry.isEnabled('test-listener')).toBe(false);
+    expect(b.registry.isEnabled('test-listener')).toBe(false);
+    // Each instance ran its own onDisable, once.
+    expect(a.plugin.onDisable).toHaveBeenCalledTimes(1);
+    expect(b.plugin.onDisable).toHaveBeenCalledTimes(1);
+  });
+
+  it('runs onUninstall once, where the request landed, and drops the plugin elsewhere', async () => {
+    const prisma = createMockPrismaService();
+    const bus = sharedBus();
+    const a = instance(prisma, bus);
+    const b = instance(prisma, bus);
+    let stored: unknown = makeDbRecord({ enabled: true });
+    prisma.installedPlugin.findUnique.mockImplementation(async () => stored);
+    prisma.installedPlugin.delete.mockImplementation(async () => {
+      stored = null;
+      return makeDbRecord();
+    });
+
+    await a.service.uninstallPlugin('test-listener');
+    await flush();
+
+    expect(a.plugin.onUninstall).toHaveBeenCalledTimes(1);
+    expect(b.plugin.onUninstall).not.toHaveBeenCalled();
+    expect(b.registry.get('test-listener')).toBeUndefined();
+  });
+
+  it('rereads every plugin state after the channel reconnects', async () => {
+    const prisma = createMockPrismaService();
+    const bus = sharedBus();
+    const b = instance(prisma, bus);
+    // Disabled elsewhere while this instance was not listening:
+    prisma.installedPlugin.findUnique.mockResolvedValue(
+      makeDbRecord({ enabled: false }),
+    );
+
+    bus.reset();
+    await flush();
+
+    expect(b.registry.isEnabled('test-listener')).toBe(false);
   });
 });
