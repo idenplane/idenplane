@@ -14,6 +14,10 @@ export type CacheEvent =
   | { t: 'keys'; realmId: string };
 
 const CHANNEL = 'idenplane_cache';
+/** Application messages fanned out to every process (see publish). */
+const APP_CHANNEL = 'idenplane_app';
+/** NOTIFY payloads are limited to 8000 bytes. */
+const MAX_PAYLOAD_BYTES = 7900;
 const MAX_BACKOFF_MS = 30_000;
 const PING_INTERVAL_MS = 30_000;
 
@@ -48,6 +52,10 @@ export class CacheBusService implements OnModuleInit, OnModuleDestroy {
   private pingTimer: NodeJS.Timeout | null = null;
   private readonly eventHandlers = new Set<(event: CacheEvent) => void>();
   private readonly resetHandlers = new Set<() => void>();
+  private readonly messageHandlers = new Map<
+    string,
+    Set<(payload: unknown) => void>
+  >();
 
   constructor(prisma: PrismaService) {
     // Stop before the database client closes, so no late announcement makes
@@ -91,6 +99,49 @@ export class CacheBusService implements OnModuleInit, OnModuleDestroy {
     this.eventHandlers.add(handler);
   }
 
+  /**
+   * Delivers `payload` to every process's `onMessage(topic)` handlers, this
+   * one's included: through PostgreSQL while connected, so a message raised
+   * on one replica reaches what the others hold (their WebSockets); only to
+   * this process otherwise, which is all there is to reach when there is no
+   * channel. At most once: a message published while the connection drops is
+   * lost, like the event it reports would be on a restart.
+   */
+  async publish(topic: string, payload: unknown): Promise<void> {
+    const body = JSON.stringify({ topic, payload });
+    const client = this.client;
+    if (
+      this.connected &&
+      client &&
+      Buffer.byteLength(body) <= MAX_PAYLOAD_BYTES
+    ) {
+      try {
+        await client.query('SELECT pg_notify($1, $2)', [APP_CHANNEL, body]);
+        return;
+      } catch (err) {
+        this.logger.warn(`Could not publish ${topic}: ${String(err)}`);
+      }
+    }
+    this.deliver(topic, payload);
+  }
+
+  /** Called with every message published on `topic`, by any process. */
+  onMessage(topic: string, handler: (payload: unknown) => void): void {
+    let handlers = this.messageHandlers.get(topic);
+    if (!handlers) this.messageHandlers.set(topic, (handlers = new Set()));
+    handlers.add(handler);
+  }
+
+  private deliver(topic: string, payload: unknown): void {
+    for (const handler of this.messageHandlers.get(topic) ?? []) {
+      try {
+        handler(payload);
+      } catch (err) {
+        this.logger.warn(`Message handler for ${topic} failed: ${String(err)}`);
+      }
+    }
+  }
+
   /** Called whenever notifications may have been missed: drop everything. */
   onReset(handler: () => void): void {
     this.resetHandlers.add(handler);
@@ -98,11 +149,28 @@ export class CacheBusService implements OnModuleInit, OnModuleDestroy {
 
   private async connect(url: string): Promise<void> {
     if (this.stopped) return;
-    const client = new pg.Client({ connectionString: url, keepAlive: true });
+    const client = new pg.Client({
+      connectionString: url,
+      keepAlive: true,
+      application_name: 'idenplane-cache-bus',
+    });
     client.on('error', (err) => this.lost(client, err));
     client.on('end', () => this.lost(client));
     client.on('notification', (msg) => {
-      if (msg.channel !== CHANNEL || !msg.payload) return;
+      if (!msg.payload) return;
+      if (msg.channel === APP_CHANNEL) {
+        try {
+          const { topic, payload } = JSON.parse(msg.payload) as {
+            topic: string;
+            payload: unknown;
+          };
+          this.deliver(topic, payload);
+        } catch {
+          this.logger.warn('Unreadable application message');
+        }
+        return;
+      }
+      if (msg.channel !== CHANNEL) return;
       let event: CacheEvent;
       try {
         event = JSON.parse(msg.payload) as CacheEvent;
@@ -122,6 +190,7 @@ export class CacheBusService implements OnModuleInit, OnModuleDestroy {
     try {
       await client.connect();
       await client.query(`LISTEN ${CHANNEL}`);
+      await client.query(`LISTEN ${APP_CHANNEL}`);
       // An auxiliary connection: it must not, on its own, keep the process
       // alive (the HTTP server does that), any more than its timers do.
       (

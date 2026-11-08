@@ -212,7 +212,7 @@ describe('In-process cache invalidation (e2e)', () => {
     await discovery(REALM).expect(200);
     await ctx.prisma.$executeRawUnsafe(
       `SELECT pg_terminate_backend(pid) FROM pg_stat_activity
-       WHERE query = 'LISTEN idenplane_cache' AND pid <> pg_backend_pid()`,
+       WHERE application_name = 'idenplane-cache-bus' AND pid <> pg_backend_pid()`,
     );
     await eventually(async () => expect(bus.isConnected()).toBe(false));
 
