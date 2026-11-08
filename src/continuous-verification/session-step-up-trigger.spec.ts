@@ -11,7 +11,6 @@ describe('SessionStepUpTrigger', () => {
     sessionRiskProfile: Record<string, jest.Mock>;
     continuousRiskEvent: Record<string, jest.Mock>;
   };
-  let stepUpService: { recordStepUp: jest.Mock; getAcrStrength: jest.Mock };
   let sessionEvents: { emitStepUpRequired: jest.Mock };
 
   const baseProfile = {
@@ -34,24 +33,16 @@ describe('SessionStepUpTrigger', () => {
     prisma.sessionRiskProfile = {
       findMany: jest.fn(),
       findUnique: jest.fn(),
+      // The claim that announces an episode once: succeeds unless told not to.
+      updateMany: jest.fn().mockResolvedValue({ count: 1 }),
     };
     prisma.continuousRiskEvent = { create: jest.fn().mockResolvedValue({}) };
     prisma.client.findUnique = jest.fn();
     prisma.client.update = jest.fn();
 
-    stepUpService = {
-      recordStepUp: jest.fn().mockResolvedValue(undefined),
-      getAcrStrength: jest.fn((acr: string) =>
-        acr === ACR_WEBAUTHN ? 2 : acr === ACR_MFA ? 1 : 0,
-      ),
-    };
     sessionEvents = { emitStepUpRequired: jest.fn() };
 
-    trigger = new SessionStepUpTrigger(
-      prisma as any,
-      stepUpService as any,
-      sessionEvents as any,
-    );
+    trigger = new SessionStepUpTrigger(prisma as any, sessionEvents as any);
   });
 
   describe('triggerStepUpForSession', () => {
@@ -78,11 +69,6 @@ describe('SessionStepUpTrigger', () => {
 
       await trigger.triggerStepUpForSession('session-1');
 
-      expect(stepUpService.recordStepUp).toHaveBeenCalledWith(
-        'session-1',
-        ACR_WEBAUTHN,
-        expect.any(Number),
-      );
       expect(sessionEvents.emitStepUpRequired).toHaveBeenCalledWith(
         'user-1',
         expect.objectContaining({ requiredAcr: ACR_WEBAUTHN }),
@@ -124,7 +110,36 @@ describe('SessionStepUpTrigger', () => {
     });
   });
 
+  describe('what a step-up does not do', () => {
+    it('never raises the requiredAcr of the whole client', async () => {
+      prisma.sessionRiskProfile.findUnique.mockResolvedValue({
+        ...baseProfile,
+        session: { ...baseProfile.session, clientId: 'client-1' },
+      });
+      await trigger.triggerStepUpForSession('session-1');
+      expect(prisma.client.update).not.toHaveBeenCalled();
+    });
+  });
+
   describe('checkAndTriggerStepUp', () => {
+    it('announces a risk episode once, not on every run while it lasts', async () => {
+      prisma.sessionRiskProfile.findMany.mockResolvedValue([baseProfile]);
+      prisma.sessionRiskProfile.updateMany
+        .mockResolvedValueOnce({ count: 1 })
+        .mockResolvedValue({ count: 0 });
+
+      await trigger.checkAndTriggerStepUp();
+      await trigger.checkAndTriggerStepUp();
+      await trigger.checkAndTriggerStepUp();
+
+      expect(sessionEvents.emitStepUpRequired).toHaveBeenCalledTimes(1);
+      expect(prisma.continuousRiskEvent.create).toHaveBeenCalledTimes(1);
+      expect(prisma.sessionRiskProfile.updateMany).toHaveBeenCalledWith({
+        where: { sessionId: 'session-1', stepUpNotifiedAt: null },
+        data: { stepUpNotifiedAt: expect.any(Date) },
+      });
+    });
+
     it('processes every session found by the scheduled query and pushes an event for each', async () => {
       prisma.sessionRiskProfile.findMany.mockResolvedValue([
         baseProfile,

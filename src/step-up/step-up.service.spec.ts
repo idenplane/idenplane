@@ -16,6 +16,7 @@ const mockStepUpRecordDeleteMany = jest.fn();
 const mockClientFindUnique = jest.fn();
 
 const mockPrisma = {
+  sessionRiskProfile: { findFirst: jest.fn() },
   stepUpRecord: {
     findMany: mockStepUpRecordFindMany,
     create: mockStepUpRecordCreate,
@@ -51,6 +52,45 @@ describe('StepUpService', () => {
   });
 
   // ── ACR strength ───────────────────────────────────────────────────────────
+
+  describe('getRiskRequiredAcr()', () => {
+    it(`is null when none of the user's sessions is flagged for step-up`, async () => {
+      mockPrisma.sessionRiskProfile.findFirst.mockResolvedValue(null);
+      expect(await service.getRiskRequiredAcr('realm-1', 'user-1')).toBeNull();
+    });
+
+    it('requires MFA for a flagged session below critical risk', async () => {
+      mockPrisma.sessionRiskProfile.findFirst.mockResolvedValue({
+        riskScore: 65,
+      });
+      expect(await service.getRiskRequiredAcr('realm-1', 'user-1')).toBe(
+        ACR_MFA,
+      );
+    });
+
+    it('requires WebAuthn at critical risk', async () => {
+      mockPrisma.sessionRiskProfile.findFirst.mockResolvedValue({
+        riskScore: 85,
+      });
+      expect(await service.getRiskRequiredAcr('realm-1', 'user-1')).toBe(
+        ACR_WEBAUTHN,
+      );
+    });
+
+    it(`looks only at this user's live, unexpired, non-terminated flags in the realm`, async () => {
+      mockPrisma.sessionRiskProfile.findFirst.mockResolvedValue(null);
+      await service.getRiskRequiredAcr('realm-1', 'user-1');
+      const { where } =
+        mockPrisma.sessionRiskProfile.findFirst.mock.calls[0][0];
+      expect(where).toMatchObject({
+        realmId: 'realm-1',
+        userId: 'user-1',
+        stepUpRequired: true,
+        terminateSession: false,
+        stepUpExpiresAt: { gte: expect.any(Date) },
+      });
+    });
+  });
 
   describe('getAcrStrength()', () => {
     it('assigns level 1 to ACR_PASSWORD', () => {
