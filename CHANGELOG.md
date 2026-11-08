@@ -10,6 +10,7 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 ## [Unreleased]
 
 ### Security
+- **Registration, email verification and magic links had no rate limit at all.** They were exempt from the global throttle and had no realm limit, so anyone could create accounts or have any address flooded with verification or sign-in mail. They now fall under the global throttle and the realm's IP limit. A verification resend or a password reset sends at most one email a minute per account, with the same response either way.
 - **Concurrent failed sign-ins went uncounted.** The brute-force counter runs Serializable, and PostgreSQL aborts one of two conflicting transactions; that failure was rolled back and never counted, so a parallel password-guessing burst got many more tries than `maxLoginFailures`. Aborted transactions are now retried, and the lockout email is sent once, after the lockout has committed.
 - **One refresh token could be redeemed several times at once.** Concurrent refreshes with the same token each checked it was live, then each revoked it and got new tokens: several token families from one. The revocation is now the claim, conditional on the token still being live; a request that loses is treated as reuse, and the session's refresh tokens are revoked (RFC 9700).
 - **A refresh could widen the scope.** A `scope` broader than the token was granted was issued as asked. It is now refused with `invalid_scope` (RFC 6749 §6); a narrower scope still works.

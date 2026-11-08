@@ -34,6 +34,32 @@ export class VerificationService {
     return rawToken;
   }
 
+  /**
+   * Like createToken, for a token that is emailed on request (verification
+   * resends, password resets): null, and nothing sent, if one of this type
+   * was issued to the user less than `cooldownSeconds` ago. Without it,
+   * anyone could have any address flooded with mail by repeating the
+   * request. Only one token of a type exists at a time, so its creation
+   * time is when the last one was sent.
+   */
+  async createTokenUnlessRecent(
+    userId: string,
+    type: string,
+    expiresInSeconds: number,
+    cooldownSeconds = 60,
+  ): Promise<string | null> {
+    const recent = await this.prisma.verificationToken.findFirst({
+      where: {
+        userId,
+        type,
+        createdAt: { gt: new Date(Date.now() - cooldownSeconds * 1000) },
+      },
+      select: { id: true },
+    });
+    if (recent) return null;
+    return this.createToken(userId, type, expiresInSeconds);
+  }
+
   async createTokenWithHash(
     userId: string,
     type: string,

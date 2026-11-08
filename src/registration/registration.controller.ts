@@ -20,6 +20,10 @@ import {
   ApiQuery,
 } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
+import {
+  RateLimitGuard,
+  RateLimitByIp,
+} from '../rate-limit/rate-limit.guard.js';
 import { CaptchaProvider } from './captcha.service.js';
 import type { Realm } from '@prisma/client';
 import { RegistrationService } from './registration.service.js';
@@ -50,7 +54,8 @@ export class RegistrationController {
   @Post('register')
   @HttpCode(HttpStatus.CREATED)
   @Public()
-  @SkipThrottle()
+  @UseGuards(RateLimitGuard)
+  @RateLimitByIp()
   @ApiOperation({ summary: 'Register a new user' })
   @ApiResponse({ status: 201, description: 'User registered successfully' })
   @ApiResponse({ status: 400, description: 'Invalid input or CAPTCHA failed' })
@@ -89,7 +94,8 @@ export class RegistrationController {
   @Post('verify-email')
   @HttpCode(HttpStatus.OK)
   @Public()
-  @SkipThrottle()
+  @UseGuards(RateLimitGuard)
+  @RateLimitByIp()
   @ApiOperation({ summary: 'Verify email address with token' })
   @ApiResponse({ status: 200, description: 'Email verified successfully' })
   @ApiResponse({ status: 400, description: 'Invalid or expired token' })
@@ -109,7 +115,8 @@ export class RegistrationController {
   @Post('resend-verification')
   @HttpCode(HttpStatus.OK)
   @Public()
-  @SkipThrottle()
+  @UseGuards(RateLimitGuard)
+  @RateLimitByIp()
   @ApiOperation({ summary: 'Resend email verification' })
   @ApiResponse({ status: 200, description: 'Verification email sent' })
   async resendVerification(
