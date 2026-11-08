@@ -144,6 +144,22 @@ If `WEBHOOK_SECRET_KEY` changes, all stored webhook secrets become unreadable. A
 
 ---
 
+## In-process cache
+
+Every Idenplane process keeps the realms, clients, signing keys (JWKS) and CORS origins it reads in memory, so the hottest endpoints (discovery, JWKS, every realm-scoped request) don't query the database each time.
+
+The database keeps those copies current. A trigger on the `realms`, `clients` and `realm_signing_keys` tables sends a PostgreSQL notification on every change, and each process drops what changed as soon as it hears it. This works however the change was made (Admin API, import, SQL by hand), and on every replica. Each process holds one extra database connection for this. If that connection drops, the process reads from the database until it is back, and then starts with an empty cache. A missed notification therefore never leaves stale data behind.
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `CACHE_L1` | on | No | Set to `off` to disable the in-process cache. |
+
+Set `CACHE_L1=off` when Idenplane reaches PostgreSQL through a connection pooler in **transaction** mode, such as PgBouncer with `pool_mode = transaction`. `LISTEN` appears to work there, but notifications are never delivered. Session mode, or a direct connection, is fine. The cache is also off when the database is not PostgreSQL.
+
+With Redis configured, the same notifications also delete the shared Redis entries.
+
+---
+
 ## Redis (Optional)
 
 Redis is optional but recommended for production deployments with multiple instances or when you need shared session storage.

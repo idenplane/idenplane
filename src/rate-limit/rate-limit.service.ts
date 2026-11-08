@@ -2,6 +2,8 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { RedisService } from '../redis/redis.service.js';
+import { CacheService } from '../cache/cache.service.js';
+import type { Realm } from '@prisma/client';
 import type { RateLimitResult } from './rate-limit.dto.js';
 
 const RL_PREFIX = 'rl:';
@@ -13,20 +15,28 @@ export class RateLimitService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
+    private readonly cache: CacheService,
   ) {}
+
+  /**
+   * The realm's rate-limit settings, from the realm cache that every guarded
+   * request already warms (RealmGuard), instead of one query per check.
+   */
+  private async realmSettings(realmId: string): Promise<Realm | null> {
+    const cached = await this.cache.getCachedRealmConfig<Realm>(realmId);
+    if (cached) return cached;
+    const realm = await this.prisma.realm.findUnique({
+      where: { id: realmId },
+    });
+    if (realm) await this.cache.cacheRealmConfig(realmId, realm);
+    return realm;
+  }
 
   async checkClientLimit(
     clientId: string,
     realmId: string,
   ): Promise<RateLimitResult> {
-    const realm = await this.prisma.realm.findUnique({
-      where: { id: realmId },
-      select: {
-        rateLimitEnabled: true,
-        clientRateLimitPerMinute: true,
-        clientRateLimitPerHour: true,
-      },
-    });
+    const realm = await this.realmSettings(realmId);
 
     if (!realm || !realm.rateLimitEnabled) {
       return { allowed: true, limit: 0, remaining: 0, resetAt: 0 };
@@ -43,14 +53,7 @@ export class RateLimitService {
     userId: string,
     realmId: string,
   ): Promise<RateLimitResult> {
-    const realm = await this.prisma.realm.findUnique({
-      where: { id: realmId },
-      select: {
-        rateLimitEnabled: true,
-        userRateLimitPerMinute: true,
-        userRateLimitPerHour: true,
-      },
-    });
+    const realm = await this.realmSettings(realmId);
 
     if (!realm || !realm.rateLimitEnabled) {
       return { allowed: true, limit: 0, remaining: 0, resetAt: 0 };
@@ -97,14 +100,7 @@ export class RateLimitService {
   }
 
   async checkIpLimit(ip: string, realmId: string): Promise<RateLimitResult> {
-    const realm = await this.prisma.realm.findUnique({
-      where: { id: realmId },
-      select: {
-        rateLimitEnabled: true,
-        ipRateLimitPerMinute: true,
-        ipRateLimitPerHour: true,
-      },
-    });
+    const realm = await this.realmSettings(realmId);
 
     if (!realm || !realm.rateLimitEnabled) {
       return { allowed: true, limit: 0, remaining: 0, resetAt: 0 };

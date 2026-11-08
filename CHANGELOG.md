@@ -9,6 +9,21 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+### Changed
+- **Realms, clients, signing keys and CORS origins are cached in every process**, with no Redis needed. Discovery, JWKS and every realm-scoped request no longer query the database each time. The database itself keeps the copies current: triggers on `realms`, `clients` and `realm_signing_keys` announce each change with PostgreSQL `NOTIFY`, and every process and replica drops what changed as soon as it hears it, however the change was made. While that connection is down a process reads from the database, and it starts empty once reconnected. Set `CACHE_L1=off` behind a connection pooler in transaction mode. With Redis, the same announcements delete the shared entries.
+- The realm rate-limit settings are read from the realm cache instead of one query per check.
+
+### Fixed
+- **CORS denied every client origin from five minutes after boot.** The allowed-origin set expired and nothing reloaded it; the same happened right after any client edit. It is now reloaded on every client change and never expires to empty.
+- **Changes that bypassed cache invalidation were served stale with Redis.** These were:
+  - assigning a login flow to a client;
+  - a risk-triggered raise of a client's required ACR;
+  - overwriting a realm on import;
+  - a client looked up by its database id.
+
+  They are now invalidated by the database, along with every other write.
+- With several instances, a CORS change reached only the instance that made it until the others' 5-minute cache expired. It now reaches all of them at once.
+
 ## [0.5.2] - 2026-11-08
 
 Machine-to-machine authentication gets much faster and stops dropping tokens under load, and clients created by the setup wizard or imported from Authentik or Zitadel can authenticate at all. **If you rely on a `refresh_token` from client_credentials, read Changed below.** The upgrade runs one migration and needs no secret rotation.

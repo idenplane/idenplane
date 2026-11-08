@@ -114,7 +114,8 @@ describe('RateLimitService', () => {
             entry.hourCount -= d.hourCount.decrement;
           else if (typeof d.hourCount === 'number')
             entry.hourCount = d.hourCount;
-          if (d.minuteWindowStart) entry.minuteWindowStart = d.minuteWindowStart;
+          if (d.minuteWindowStart)
+            entry.minuteWindowStart = d.minuteWindowStart;
           if (d.hourWindowStart) entry.hourWindowStart = d.hourWindowStart;
         }
         return Promise.resolve(entry ? { ...entry } : { key: args.where.key });
@@ -122,6 +123,11 @@ describe('RateLimitService', () => {
     service = new RateLimitService(
       prisma as any,
       createMockRedisService() as any,
+      // The realm cache always misses here, so each check reads the realm.
+      {
+        getCachedRealmConfig: jest.fn().mockResolvedValue(null),
+        cacheRealmConfig: jest.fn().mockResolvedValue(undefined),
+      } as any,
     );
   });
 
@@ -395,7 +401,9 @@ describe('RateLimitService', () => {
         expect.objectContaining({
           where: expect.objectContaining({
             OR: expect.arrayContaining([
-              expect.objectContaining({ minuteWindowStart: expect.any(Object) }),
+              expect.objectContaining({
+                minuteWindowStart: expect.any(Object),
+              }),
               expect.objectContaining({ hourWindowStart: expect.any(Object) }),
             ]),
           }),
