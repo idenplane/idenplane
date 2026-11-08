@@ -5,6 +5,10 @@ import { WebSocketServer, WebSocket } from 'ws';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { JwkService } from '../crypto/jwk.service.js';
 import { TokenBlacklistService } from '../tokens/token-blacklist.service.js';
+import { CacheBusService } from '../cache/cache-bus.service.js';
+
+/** The bus topic session events travel on between processes. */
+const TOPIC = 'session-events';
 
 export const SESSION_EVENTS_PATH = '/ws/events';
 
@@ -41,7 +45,20 @@ export class SessionEventsGateway {
     private readonly prisma: PrismaService,
     private readonly jwkService: JwkService,
     private readonly blacklist: TokenBlacklistService,
-  ) {}
+    private readonly bus: CacheBusService,
+  ) {
+    // An event is raised by whichever process runs the job that found it
+    // (the leader); the user's sockets may be held by any process. Every
+    // process hears it and pushes to the sockets it holds.
+    bus.onMessage(TOPIC, (message) => {
+      const { userId, type, event } = message as {
+        userId: string;
+        type: string;
+        event: object;
+      };
+      this.broadcast(userId, type, event);
+    });
+  }
 
   /** Wire the WebSocket upgrade handler onto the app's underlying HTTP server. */
   attach(server: HttpServer): void {
@@ -79,7 +96,7 @@ export class SessionEventsGateway {
 
   /** Push a session-termination event to every connection for this user. */
   emitSessionTerminated(userId: string, event: SessionTerminatedEvent): void {
-    this.broadcast(userId, 'session.terminated', event);
+    this.publish(userId, 'session.terminated', event);
   }
 
   /**
@@ -88,7 +105,12 @@ export class SessionEventsGateway {
    * of only discovering the requirement on its next API call.
    */
   emitStepUpRequired(userId: string, event: StepUpRequiredEvent): void {
-    this.broadcast(userId, 'session.stepup_required', event);
+    this.publish(userId, 'session.stepup_required', event);
+  }
+
+  /** To every process, which each push to the sockets they hold. */
+  private publish(userId: string, type: string, event: object): void {
+    void this.bus.publish(TOPIC, { userId, type, event });
   }
 
   private broadcast<T extends object>(

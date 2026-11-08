@@ -49,7 +49,10 @@ describe('SessionTerminationService', () => {
 
   describe('terminateSessionById', () => {
     it('pushes a session.terminated event to the affected user over the realtime gateway', async () => {
-      await service.terminateSessionById('sess-1', 'Impossible travel detected');
+      await service.terminateSessionById(
+        'sess-1',
+        'Impossible travel detected',
+      );
 
       expect(sessionEvents.emitSessionTerminated).toHaveBeenCalledWith(
         'user-1',
@@ -95,7 +98,10 @@ describe('SessionTerminationService', () => {
     });
 
     it('emails the affected user with the realm name resolved from realmId', async () => {
-      await service.terminateSessionById('sess-1', 'Impossible travel detected');
+      await service.terminateSessionById(
+        'sess-1',
+        'Impossible travel detected',
+      );
 
       expect(prisma.realm.findUnique).toHaveBeenCalledWith({
         where: { id: 'realm-1' },
@@ -114,11 +120,17 @@ describe('SessionTerminationService', () => {
         ...mockProfile,
         session: {
           ...mockProfile.session,
-          user: { username: '<script>alert(1)</script>', email: 'alice@example.com' },
+          user: {
+            username: '<script>alert(1)</script>',
+            email: 'alice@example.com',
+          },
         },
       });
 
-      await service.terminateSessionById('sess-1', '<img src=x onerror=alert(1)>');
+      await service.terminateSessionById(
+        'sess-1',
+        '<img src=x onerror=alert(1)>',
+      );
 
       const html = emailService.sendEmail.mock.calls[0][3] as string;
       expect(html).not.toContain('<script>');
@@ -143,14 +155,18 @@ describe('SessionTerminationService', () => {
     it('does not throw and still completes termination when the email send fails', async () => {
       emailService.sendEmail.mockRejectedValue(new Error('SMTP down'));
 
-      await expect(service.terminateSessionById('sess-1')).resolves.toBeUndefined();
+      await expect(
+        service.terminateSessionById('sess-1'),
+      ).resolves.toBeUndefined();
       expect(sessionEvents.emitSessionTerminated).toHaveBeenCalled();
     });
 
     it('skips the email silently if the realm cannot be resolved', async () => {
       prisma.realm.findUnique.mockResolvedValue(null);
 
-      await expect(service.terminateSessionById('sess-1')).resolves.toBeUndefined();
+      await expect(
+        service.terminateSessionById('sess-1'),
+      ).resolves.toBeUndefined();
       expect(emailService.sendEmail).not.toHaveBeenCalled();
     });
   });
