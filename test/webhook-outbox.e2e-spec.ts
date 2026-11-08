@@ -2,6 +2,7 @@ import { createTestApp, type TestContext } from './setup';
 import { WebhookSchedulerService } from '../src/webhooks/webhook-scheduler.service';
 import { CryptoService } from '../src/crypto/crypto.service';
 import { PrismaService } from '../src/prisma/prisma.service';
+import { SchedulerRegistry } from '@nestjs/schedule';
 
 /**
  * The webhook outbox with more than one process draining it, as with
@@ -46,6 +47,10 @@ describe('Webhook outbox with several processes (e2e)', () => {
 
   beforeAll(async () => {
     ctx = await createTestApp();
+    // The app's own scheduler drains the outbox every 10 s too; stop it, so
+    // the only processes draining it are the ones each test builds.
+    const registry = ctx.app.get(SchedulerRegistry);
+    for (const name of registry.getIntervals()) registry.deleteInterval(name);
     await ctx.seedTestRealm(REALM);
     realmId = (
       await ctx.prisma.realm.findUniqueOrThrow({ where: { name: REALM } })
