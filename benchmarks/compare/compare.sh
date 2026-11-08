@@ -31,9 +31,13 @@ export PUBLIC_PORT="${PUBLIC_PORT:-18080}" HEALTH_PORT="${HEALTH_PORT:-19000}"
 
 log() { printf '\n\033[1m== %s\033[0m\n' "$*" >&2; }
 now_ms() { date +%s%3N; }
+# A path as docker on this host expects it: unchanged except under Git Bash.
+host_path() { if command -v cygpath >/dev/null 2>&1; then cygpath -m "$1"; else printf '%s' "$1"; fi; }
 
 # ── CPU split: server | database | load generator ───────────────────────────
-cpus="$(nproc)"
+# The CPUs the containers can use, which is the Docker VM's count on Docker
+# Desktop, not the host's.
+cpus="$(docker info --format '{{.NCPU}}' 2>/dev/null || nproc)"
 if [ -z "${TARGET_CPUS:-}" ]; then
   if   [ "$cpus" -ge 8 ]; then TARGET_CPUS=0-3 DB_CPUS=4-5 K6_CPUS=6-$((cpus - 1))
   elif [ "$cpus" -ge 4 ]; then TARGET_CPUS=0-1 DB_CPUS=2   K6_CPUS=3-$((cpus - 1))
@@ -125,8 +129,11 @@ wait_ready() {
 
 # ── 1. images (pulled up front so startup timing excludes downloads) ───────
 log "$TARGET: pulling images"
-"${COMPOSE[@]}" pull --quiet
-docker pull --quiet "$K6_IMAGE" >/dev/null
+# An image already present is used as it is, so a locally built
+# IDENPLANE_IMAGE (one that exists in no registry) can be benchmarked.
+for image in $("${COMPOSE[@]}" config --images) "$K6_IMAGE"; do
+  docker image inspect "$image" >/dev/null 2>&1 || docker pull --quiet "$image" >/dev/null
+done
 
 # ── 2. first boot on an empty database, then a restart ──────────────────────
 log "$TARGET: database"
@@ -177,8 +184,10 @@ for _ in $(seq 10); do stats_once; sleep 1; done >"$OUT/idle.stats"
 k6_run() { # <scenario> <duration> <summary file or empty>
   local export_args=()
   [ -n "$3" ] && export_args=(--summary-export "/out/$3")
-  docker run --rm --network "$NETWORK" --cpuset-cpus "$K6_CPUS" \
-    -v "$HERE/k6:/scripts:ro" -v "$OUT:/out" \
+  # Git Bash on Windows rewrites container paths such as /scripts/scenario.js
+  # into host paths; turn that off here and hand docker Windows host paths.
+  MSYS_NO_PATHCONV=1 docker run --rm --network "$NETWORK" --cpuset-cpus "$K6_CPUS" \
+    -v "$(host_path "$HERE/k6"):/scripts:ro" -v "$(host_path "$OUT"):/out" \
     -e SCENARIO="$1" -e DURATION="$2" -e VUS \
     -e BASE_URL="http://target:$PORT_IN" -e REALM="$REALM" -e CLIENT_ID="$CLIENT_ID" \
     -e CLIENT_SECRET="$CLIENT_SECRET" -e USERNAME="$USERNAME" -e PASSWORD="$PASSWORD" \
