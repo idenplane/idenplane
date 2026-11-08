@@ -14,6 +14,8 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 - The realm rate-limit settings are read from the realm cache instead of one query per check.
 
 ### Fixed
+- **Concurrent sign-ins for the same user could fail with a 500.** Once the user was at the realm's session cap (`maxSessionsPerUser`, 10 by default), a sign-in could evict another sign-in's session in the moment between its creation and its refresh token's, which then failed on a foreign key. A new session and its refresh token are now one write, and the cap is applied afterwards, to older sessions only, so concurrent sign-ins all succeed and the newest sessions are kept. A refresh or code exchange whose session has meanwhile ended answers `invalid_grant` instead of a 500.
+- The default Argon2 concurrency and database pool size now follow the CPUs the process may use (its cpuset), not every core of the host, which oversized both in pinned containers.
 - **CORS denied every client origin from five minutes after boot.** The allowed-origin set expired and nothing reloaded it; the same happened right after any client edit. It is now reloaded on every client change and never expires to empty.
 - **Changes that bypassed cache invalidation were served stale with Redis.** These were:
   - assigning a login flow to a client;
