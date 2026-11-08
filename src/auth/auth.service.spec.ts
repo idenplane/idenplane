@@ -511,14 +511,20 @@ describe('AuthService', () => {
         }),
       );
 
-      // Verify refresh token was persisted
-      expect(prisma.refreshToken.create).toHaveBeenCalledWith(
+      // The new session and its refresh token are written together, so no
+      // concurrent login can evict the session before it has a token.
+      expect(prisma.session.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            tokenHash: FAKE_REFRESH_TOKEN_HASH,
+            refreshTokens: {
+              create: expect.objectContaining({
+                tokenHash: FAKE_REFRESH_TOKEN_HASH,
+              }),
+            },
           }),
         }),
       );
+      expect(prisma.refreshToken.create).not.toHaveBeenCalled();
     });
 
     it('should throw invalid_request when username is missing', async () => {

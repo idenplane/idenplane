@@ -34,7 +34,8 @@ import {
   ACR_MFA,
 } from '../step-up/step-up.service.js';
 import type { PluginManagerService } from '../plugins/plugin-manager.service.js';
-import type { Realm } from '@prisma/client';
+import type { Prisma, Realm } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 import type { JWTPayload } from 'jose';
 
 export interface TokenResponse {
@@ -46,6 +47,12 @@ export interface TokenResponse {
   id_token?: string;
   /** OIDC Session Management: the server-side session identifier. */
   session_state?: string;
+}
+
+/** See AuthService.newSession. */
+interface NewSession {
+  id: string;
+  data: Omit<Prisma.SessionUncheckedCreateInput, 'id' | 'refreshTokens'>;
 }
 
 @Injectable()
@@ -312,18 +319,14 @@ export class AuthService {
       );
     }
 
-    await this.enforceSessionLimit(realm, user.id);
-
-    const session = await this.prisma.session.create({
-      data: {
-        userId: user.id,
-        ipAddress: ip,
-        userAgent,
-        // Persist so a later refresh preserves the password-level context.
-        satisfiedAcr: ACR_PASSWORD,
-        amr: ['pwd'],
-        expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
-      },
+    const session = this.newSession({
+      userId: user.id,
+      ipAddress: ip,
+      userAgent,
+      // Persist so a later refresh preserves the password-level context.
+      satisfiedAcr: ACR_PASSWORD,
+      amr: ['pwd'],
+      expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
     });
 
     void this.eventsService.recordLoginEvent({
@@ -347,7 +350,7 @@ export class AuthService {
       realm,
       user,
       client_id,
-      session.id,
+      session,
       scope,
       undefined,
       new Date(),
@@ -469,18 +472,14 @@ export class AuthService {
       );
     }
 
-    await this.enforceSessionLimit(realm, user.id);
-
-    const session = await this.prisma.session.create({
-      data: {
-        userId: user.id,
-        ipAddress: ip,
-        userAgent,
-        // Persist so a later refresh preserves the MFA-level context.
-        satisfiedAcr: ACR_MFA,
-        amr: ['pwd', factor === 'sms' ? 'sms' : 'otp'],
-        expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
-      },
+    const session = this.newSession({
+      userId: user.id,
+      ipAddress: ip,
+      userAgent,
+      // Persist so a later refresh preserves the MFA-level context.
+      satisfiedAcr: ACR_MFA,
+      amr: ['pwd', factor === 'sms' ? 'sms' : 'otp'],
+      expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
     });
 
     void this.eventsService.recordLoginEvent({
@@ -500,7 +499,7 @@ export class AuthService {
       realm,
       user,
       client_id,
-      session.id,
+      session,
       scope,
       undefined,
       new Date(),
@@ -831,25 +830,21 @@ export class AuthService {
       );
     }
 
-    await this.enforceSessionLimit(realm, user.id);
-
     // Reflect the auth context actually *satisfied* during login (persisted on
     // the code at authorization time), not merely the client-*requested*
     // `acrValues`. Falls back to password-level for legacy/null codes.
     const acr = authCode.satisfiedAcr ?? ACR_PASSWORD;
     const amr = authCode.amr.length > 0 ? authCode.amr : ['pwd'];
 
-    const session = await this.prisma.session.create({
-      data: {
-        userId: user.id,
-        ipAddress: ip,
-        userAgent,
-        // Persist so the refresh_token grant can preserve acr/amr (see
-        // handleRefreshTokenGrant).
-        satisfiedAcr: acr,
-        amr,
-        expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
-      },
+    const session = this.newSession({
+      userId: user.id,
+      ipAddress: ip,
+      userAgent,
+      // Persist so the refresh_token grant can preserve acr/amr (see
+      // handleRefreshTokenGrant).
+      satisfiedAcr: acr,
+      amr,
+      expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
     });
 
     void this.eventsService.recordLoginEvent({
@@ -869,7 +864,7 @@ export class AuthService {
       realm,
       user,
       client_id,
-      session.id,
+      session,
       authCode.scope ?? undefined,
       authCode.nonce ?? undefined,
       new Date(),
@@ -1006,15 +1001,11 @@ export class AuthService {
     // Clean up the device code
     await this.prisma.deviceCode.delete({ where: { id: deviceCode.id } });
 
-    await this.enforceSessionLimit(realm, user.id);
-
-    const session = await this.prisma.session.create({
-      data: {
-        userId: user.id,
-        ipAddress: ip,
-        userAgent,
-        expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
-      },
+    const session = this.newSession({
+      userId: user.id,
+      ipAddress: ip,
+      userAgent,
+      expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
     });
 
     void this.eventsService.recordLoginEvent({
@@ -1034,7 +1025,7 @@ export class AuthService {
       realm,
       user,
       client_id,
-      session.id,
+      session,
       deviceCode.scope ?? undefined,
       undefined,
       new Date(),
@@ -1236,11 +1227,13 @@ export class AuthService {
     user: UserClaimSource,
     clientId: string,
     /**
-     * The session the tokens belong to. `null` issues a session-less access
-     * token alone: no `sid`, no refresh token, no ID token. That is what a
-     * service account gets from client_credentials (RFC 6749 §4.4.3).
+     * The session the tokens belong to: the id of an existing one (refresh,
+     * a browser login's code), a new one from `newSession`, which is created
+     * here together with its refresh token, or `null` for a session-less
+     * access token alone: no `sid`, no refresh token, no ID token. That is
+     * what a service account gets from client_credentials (RFC 6749 §4.4.3).
      */
-    sessionId: string | null,
+    session: string | NewSession | null,
     scope?: string,
     nonce?: string,
     authTime?: Date,
@@ -1248,6 +1241,8 @@ export class AuthService {
     amr?: string[],
     code?: string,
   ): Promise<TokenResponse> {
+    const sessionId =
+      typeof session === 'string' ? session : (session?.id ?? null);
     const signingKey = await this.getActiveSigningKey(realm.id);
 
     // Parse and validate scopes, default to openid
@@ -1384,16 +1379,44 @@ export class AuthService {
     const rawRefreshToken = this.crypto.generateSecret(64);
     const refreshTokenHash = this.crypto.sha256(rawRefreshToken);
 
-    await this.prisma.refreshToken.create({
-      data: {
-        sessionId,
-        tokenHash: refreshTokenHash,
-        scope: validatedScope,
-        expiresAt: new Date(Date.now() + refreshLifespan * 1000),
-        isOffline,
-        clientId,
-      },
-    });
+    const refreshToken = {
+      tokenHash: refreshTokenHash,
+      scope: validatedScope,
+      expiresAt: new Date(Date.now() + refreshLifespan * 1000),
+      isOffline,
+      clientId,
+    };
+    if (typeof session === 'string') {
+      try {
+        await this.prisma.refreshToken.create({
+          data: { ...refreshToken, sessionId },
+        });
+      } catch (err) {
+        // The session ended (logout, revocation, or evicted by a newer
+        // login) after this request was authorised: that is a grant that
+        // no longer holds, not a server error.
+        if ((err as { code?: string }).code === 'P2003') {
+          throw new OAuthTokenError(
+            'invalid_grant',
+            'The session has ended',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+        throw err;
+      }
+    } else if (session) {
+      // A new session and its refresh token are one write, so no concurrent
+      // login can evict the session while it has no token yet. The cap is
+      // enforced afterwards, against the user's other sessions only.
+      await this.prisma.session.create({
+        data: {
+          ...session.data,
+          id: session.id,
+          refreshTokens: { create: refreshToken },
+        },
+      });
+      await this.enforceSessionLimit(realm, session);
+    }
 
     // Build ID token if openid scope is present
     let idToken: string | undefined;
@@ -1546,26 +1569,51 @@ export class AuthService {
   }
 
   /**
-   * Enforce the per-realm maximum concurrent OAuth sessions limit for a user.
-   * If the user already has `maxSessionsPerUser` or more active sessions, the
-   * oldest ones are deleted (FIFO) so that after this call there is room for
-   * exactly one additional session.
+   * A session for a fresh sign-in, not yet written: `issueTokens` creates it
+   * together with its refresh token and then applies the realm's session
+   * cap. Its id and creation time are fixed now, so the tokens and login
+   * events can name it and the cap can order it against concurrent logins.
+   */
+  private newSession(
+    data: Omit<
+      Prisma.SessionUncheckedCreateInput,
+      'id' | 'refreshTokens' | 'createdAt'
+    >,
+  ): NewSession {
+    return { id: randomUUID(), data: { ...data, createdAt: new Date() } };
+  }
+
+  /**
+   * Enforce the per-realm maximum concurrent OAuth sessions for a user, right
+   * after `session` was created: of the user's sessions *older* than it, all
+   * but the newest `maxSessionsPerUser - 1` are deleted (FIFO), so with the
+   * new one the user is at the cap.
+   *
+   * Only older sessions are considered. Concurrent sign-ins therefore never
+   * evict each other's brand-new session from both sides (which, with a cap
+   * of 1, would leave the user with none); the newest always survives, and
+   * each newer sign-in trims what came before it.
    *
    * A `maxSessionsPerUser` value of 0 means "unlimited" — no eviction occurs.
    */
   private async enforceSessionLimit(
     realm: Realm,
-    userId: string,
+    session: NewSession,
   ): Promise<void> {
     const maxSessions = (realm as Realm & { maxSessionsPerUser?: number })
       .maxSessionsPerUser;
     if (!maxSessions || maxSessions <= 0) return;
 
+    const createdAt = session.data.createdAt as Date;
     const activeSessions = await this.prisma.session.findMany({
       where: {
-        userId,
+        userId: session.data.userId,
         user: { realmId: realm.id },
         expiresAt: { gt: new Date() },
+        OR: [
+          { createdAt: { lt: createdAt } },
+          { createdAt, id: { lt: session.id } },
+        ],
       },
       orderBy: { createdAt: 'asc' },
       select: { id: true },

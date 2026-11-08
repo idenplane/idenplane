@@ -1,4 +1,4 @@
-import { cpus } from 'os';
+import { availableParallelism } from 'os';
 
 /**
  * `pg`'s own default pool size is 10 connections regardless of instance
@@ -10,7 +10,9 @@ import { cpus } from 'os';
  * N * DATABASE_POOL_MAX — tune DATABASE_POOL_MAX down (or raise Postgres's
  * max_connections) if running many replicas on multi-core hosts.
  */
-const DEFAULT_POOL_MAX = cpus().length * 2 + 1;
+// availableParallelism honours a container's cpuset, unlike cpus(), which
+// reports every core of the host (16 on a 16-core node for a pod pinned to 2).
+const DEFAULT_POOL_MAX = availableParallelism() * 2 + 1;
 const DEFAULT_POOL_MIN = 2;
 const DEFAULT_IDLE_TIMEOUT_MS = 30_000;
 
