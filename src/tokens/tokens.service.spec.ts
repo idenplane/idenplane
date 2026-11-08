@@ -355,6 +355,7 @@ describe('TokensService', () => {
       emailVerified: true,
       firstName: 'Test',
       lastName: 'User',
+      enabled: true,
     };
 
     it('should return scope-filtered claims for a valid token', async () => {
@@ -393,6 +394,7 @@ describe('TokensService', () => {
           emailVerified: true,
           firstName: true,
           lastName: true,
+          enabled: true,
         },
       });
       expect(scopesService.parseAndValidate).toHaveBeenCalledWith(
@@ -442,6 +444,16 @@ describe('TokensService', () => {
       prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
       jwkService.verifyJwt.mockResolvedValue({ sub: 'deleted-user' });
       prisma.user.findUnique.mockResolvedValue(null);
+
+      await expect(service.userinfo(mockRealm, 'valid-token')).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('rejects a session-less token whose user has been disabled', async () => {
+      prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
+      jwkService.verifyJwt.mockResolvedValue({ sub: 'user-1' });
+      prisma.user.findUnique.mockResolvedValue({ ...mockUser, enabled: false });
 
       await expect(service.userinfo(mockRealm, 'valid-token')).rejects.toThrow(
         UnauthorizedException,

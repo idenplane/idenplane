@@ -707,6 +707,58 @@ describe('AuthService', () => {
         realm.accessTokenLifespan,
       );
     });
+
+    describe('for a client with a service account', () => {
+      const serviceAccountClient = {
+        ...dbClient,
+        serviceAccountUserId: dbUser.id,
+      };
+
+      const request = () =>
+        service.handleTokenRequest(realm, {
+          grant_type: 'client_credentials',
+          client_id: 'my-client',
+          client_secret: 'correct-secret',
+          scope: 'openid',
+        });
+
+      beforeEach(() => {
+        setupValidClient(serviceAccountClient);
+        setupSigningKey();
+        setupEmptyRoles();
+        prisma.user.findUnique.mockResolvedValue(dbUser);
+      });
+
+      it('issues a token for the service account user and nothing else', async () => {
+        const result = await request();
+
+        expect(result).toEqual({
+          access_token: FAKE_ACCESS_TOKEN,
+          token_type: 'Bearer',
+          expires_in: realm.accessTokenLifespan,
+          scope: 'openid',
+        });
+        expect(jwkService.signJwt).toHaveBeenCalledWith(
+          expect.objectContaining({ sub: dbUser.id, azp: 'my-client' }),
+          signingKey.privateKey,
+          signingKey.kid,
+          realm.accessTokenLifespan,
+        );
+      });
+
+      it('writes no session or refresh token and leaves sid out', async () => {
+        await request();
+
+        expect(prisma.session.create).not.toHaveBeenCalled();
+        expect(prisma.session.deleteMany).not.toHaveBeenCalled();
+        expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+        const payload = jwkService.signJwt.mock.calls[0][0] as Record<
+          string,
+          unknown
+        >;
+        expect(payload).not.toHaveProperty('sid');
+      });
+    });
   });
 
   // -----------------------------------------------------------------------
