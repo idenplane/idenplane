@@ -15,7 +15,7 @@ import {
   scryptSync,
   timingSafeEqual,
 } from 'crypto';
-import { cpus } from 'os';
+import { availableParallelism } from 'os';
 import { createConcurrencyLimiter } from '../common/utils/concurrency-limiter.util.js';
 
 /** Maximum password length accepted by hashPassword / verifyPassword.
@@ -33,7 +33,10 @@ const MAX_PASSWORD_LENGTH = 1024;
  * Overridable via ARGON2_MAX_CONCURRENCY for environments that need to tune
  * it (e.g. containers with a CPU limit below the host's core count).
  */
-const DEFAULT_ARGON2_MAX_CONCURRENCY = cpus().length;
+// availableParallelism honours the CPU affinity a container is pinned to
+// (cpuset); cpus() reports every core of the host. Neither sees a CFS quota
+// (a Kubernetes CPU limit), hence the override.
+const DEFAULT_ARGON2_MAX_CONCURRENCY = availableParallelism();
 
 // Algorithm constants for AES-256-GCM symmetric encryption.
 const ALGORITHM = 'aes-256-gcm';
