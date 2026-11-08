@@ -10,6 +10,9 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 ## [Unreleased]
 
 ### Security
+- **One refresh token could be redeemed several times at once.** Concurrent refreshes with the same token each checked it was live, then each revoked it and got new tokens: several token families from one. The revocation is now the claim, conditional on the token still being live; a request that loses is treated as reuse, and the session's refresh tokens are revoked (RFC 9700).
+- **A refresh could widen the scope.** A `scope` broader than the token was granted was issued as asked. It is now refused with `invalid_scope` (RFC 6749 §6); a narrower scope still works.
+- **A disabled user could keep refreshing tokens.** The refresh grant now refuses them.
 - **A TOTP code could be accepted more than once.** Submissions of the same code checked that it was unused before any of them recorded it, so concurrent ones (on one instance or several) all passed. The code is now claimed by inserting it under a new unique index on (user, code), and only the first insert wins; an earlier use whose window has passed is taken over, so a code that comes round again still works.
 
 ### Changed
