@@ -100,6 +100,10 @@ const row = (cells) => `| ${cells.join(' | ')} |`;
 const mdCell = (s) =>
   String(s).replace(/\\/g, '\\\\').replace(/\|/g, '\\|').replace(/[`\r\n]/g, ' ');
 const sep = (n) => row(Array(n).fill('---'));
+// A scenario the target cannot run faithfully (no password grant, say) is
+// shown as such rather than as a blank or a zero.
+const unsupported = (t, s) => (summary[t].meta.unsupported ?? []).includes(s);
+const cell = (t, s, f) => (unsupported(t, s) ? 'not supported' : f(summary[t].scenarios[s]));
 
 const lines = [
   '# Identity server benchmark',
@@ -137,8 +141,8 @@ const lines = [
   ...allScenarios.map((s) =>
     row([
       s,
-      ...targets.map((t) => fmt(summary[t].scenarios[s]?.rps)),
-      ...targets.map((t) => fmt(summary[t].scenarios[s]?.p95, 1)),
+      ...targets.map((t) => cell(t, s, (x) => fmt(x?.rps))),
+      ...targets.map((t) => cell(t, s, (x) => fmt(x?.p95, 1))),
     ]),
   ),
   '',
@@ -149,13 +153,32 @@ const lines = [
   ...allScenarios.map((s) =>
     row([
       s,
-      ...targets.map((t) => `${fmt(summary[t].scenarios[s]?.peakMiB)} MiB`),
-      ...targets.map((t) => `${fmt(summary[t].scenarios[s]?.avgCpu)}%`),
-      `${fmt(Math.min(...targets.map((t) => summary[t].scenarios[s]?.success ?? NaN)) * 100, 2)}%`,
+      ...targets.map((t) => cell(t, s, (x) => `${fmt(x?.peakMiB)} MiB`)),
+      ...targets.map((t) => cell(t, s, (x) => `${fmt(x?.avgCpu)}%`)),
+      targets.every((t) => unsupported(t, s))
+        ? 'not supported'
+        : `${fmt(Math.min(...targets.filter((t) => !unsupported(t, s)).map((t) => summary[t].scenarios[s]?.success ?? NaN)) * 100, 2)}%`,
     ]),
   ),
   '',
-  'CPU is docker-stats percent of one core, averaged over the run. Images are referenced by digest in summary.json.',
+  'CPU is docker-stats percent of one core, averaged over the run, summed over every container of the server ' +
+    '(Authentik runs two). Images are referenced by digest in summary.json.',
+  ...(targets.some((t) => summary[t].meta.notes || summary[t].meta.introspectTokenGrant === 'client_credentials')
+    ? [
+        '',
+        '## Notes',
+        '',
+        ...targets.flatMap((t) => {
+          const { meta } = summary[t];
+          const out = [];
+          if (meta.introspectTokenGrant === 'client_credentials') {
+            out.push(`- **${t}**: introspect checks a machine (client_credentials) token, not a user's.`);
+          }
+          if (meta.notes) out.push(`- **${t}**: ${mdCell(meta.notes)}`);
+          return out;
+        }),
+      ]
+    : []),
 ];
 
 const report = lines.join('\n') + '\n';

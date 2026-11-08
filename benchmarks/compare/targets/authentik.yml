@@ -1,0 +1,76 @@
+# Authentik as its official compose file ships it (lifecycle/container/compose.yml
+# of the same release): server + worker on PostgreSQL 16, no Redis (Redis was
+# dropped in 2025.10; cache, sessions and the task queue live in PostgreSQL).
+# Plain HTTP on :9000 because the load generator sits on the same Docker
+# network; no TLS on either side.
+# Driven by benchmarks/compare/compare.sh; every knob comes from its env.
+#
+# The worker is part of the server under test (it runs the bootstrap
+# blueprints, the default flows, the self-signed certificate and all
+# background tasks), so it shares the server's CPUs and memory cap.
+#
+# Password hashing stays at Authentik's defaults: Django's default hasher
+# list (PBKDF2-SHA256 first); the seed reads the stored hash back from the db.
+name: bench-authentik
+
+x-authentik-env: &authentik-env
+  AUTHENTIK_POSTGRESQL__HOST: db
+  AUTHENTIK_POSTGRESQL__NAME: authentik
+  AUTHENTIK_POSTGRESQL__USER: authentik
+  AUTHENTIK_POSTGRESQL__PASSWORD: authentik
+  AUTHENTIK_SECRET_KEY: ${AUTHENTIK_SECRET_KEY:?AUTHENTIK_SECRET_KEY is required}
+  # First-boot admin (akadmin) and an API token for the seed.
+  AUTHENTIK_BOOTSTRAP_PASSWORD: ${ADMIN_PASSWORD:?ADMIN_PASSWORD is required}
+  AUTHENTIK_BOOTSTRAP_TOKEN: ${AUTHENTIK_BOOTSTRAP_TOKEN:?AUTHENTIK_BOOTSTRAP_TOKEN is required}
+  AUTHENTIK_BOOTSTRAP_EMAIL: admin@example.com
+  # The only rate limit in Authentik is DRF's per-IP anonymous throttle
+  # (default 1000/second). It covers the /api/v3 REST API only, not the
+  # OAuth2/OIDC views under /application/o/ that are measured, but it is
+  # raised so it can never answer the load (or the seed) with 429s.
+  AUTHENTIK_THROTTLE__DEFAULT: 1000000/second
+  # No phoning home during a measurement.
+  AUTHENTIK_DISABLE_UPDATE_CHECK: "true"
+  AUTHENTIK_DISABLE_STARTUP_ANALYTICS: "true"
+  AUTHENTIK_ERROR_REPORTING__ENABLED: "false"
+  # No docker socket is mounted, so there is nothing to discover.
+  AUTHENTIK_OUTPOSTS__DISCOVER: "false"
+
+services:
+  db:
+    image: postgres:16-alpine
+    cpuset: ${DB_CPUS}
+    environment:
+      POSTGRES_USER: authentik
+      POSTGRES_PASSWORD: authentik
+      POSTGRES_DB: authentik
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U authentik"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  target:
+    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server:2026.8.5}
+    command: server
+    cpuset: ${TARGET_CPUS}
+    mem_limit: ${TARGET_MEM}
+    memswap_limit: ${TARGET_MEM}
+    shm_size: 512mb
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: *authentik-env
+    ports:
+      - "127.0.0.1:${PUBLIC_PORT}:9000"
+
+  worker:
+    image: ${AUTHENTIK_IMAGE:-ghcr.io/goauthentik/server:2026.8.5}
+    command: worker
+    cpuset: ${TARGET_CPUS}
+    mem_limit: ${TARGET_MEM}
+    memswap_limit: ${TARGET_MEM}
+    shm_size: 512mb
+    depends_on:
+      db:
+        condition: service_healthy
+    environment: *authentik-env
