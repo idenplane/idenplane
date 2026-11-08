@@ -528,41 +528,17 @@ export class AuthService {
         where: { id: client.serviceAccountUserId },
       });
       if (user) {
-        // Service account tokens are machine-to-machine and are not tied to a
-        // user-facing session lifecycle — skip the concurrent-session limit so
-        // that high-frequency service clients are not unexpectedly evicted.
-        const session = await this.prisma.session.create({
-          data: {
-            userId: user.id,
-            expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
-          },
-        });
-
-        // Prevent unbounded session growth for service accounts: keep only the
-        // most recent 100 sessions, deleting any older ones beyond that cap.
-        const SERVICE_ACCOUNT_SESSION_LIMIT = 100;
-        const oldSessions = await this.prisma.session.findMany({
-          where: { userId: user.id },
-          orderBy: { createdAt: 'desc' },
-          skip: SERVICE_ACCOUNT_SESSION_LIMIT,
-          select: { id: true },
-        });
-        if (oldSessions.length > 0) {
-          const oldIds = oldSessions.map((s) => s.id);
-          await this.prisma.refreshToken.updateMany({
-            where: { sessionId: { in: oldIds }, isOffline: false },
-            data: { revoked: true },
-          });
-          await this.prisma.session.deleteMany({
-            where: { id: { in: oldIds } },
-          });
-        }
-
+        // A machine-to-machine token carries the service account's claims but
+        // no session: nobody logs in, so there is nothing to refresh or log
+        // out of, and the client simply asks for a new token. Writing nothing
+        // keeps this grant cheap under load, and no token can be pushed out by
+        // newer ones. Disabling the service account, or revoking a token by
+        // its jti, still ends it at introspection.
         return this.issueTokens(
           realm,
           user,
           client_id,
-          session.id,
+          null,
           scope,
           undefined,
           new Date(),
@@ -1259,7 +1235,12 @@ export class AuthService {
     realm: Realm,
     user: UserClaimSource,
     clientId: string,
-    sessionId: string,
+    /**
+     * The session the tokens belong to. `null` issues a session-less access
+     * token alone: no `sid`, no refresh token, no ID token. That is what a
+     * service account gets from client_credentials (RFC 6749 §4.4.3).
+     */
+    sessionId: string | null,
     scope?: string,
     nonce?: string,
     authTime?: Date,
@@ -1351,7 +1332,7 @@ export class AuthService {
       scope: validatedScope,
       typ: 'Bearer',
       azp: clientId,
-      sid: sessionId,
+      ...(sessionId ? { sid: sessionId } : {}),
       // RFC 9068 §2.2: surface the authentication context (acr) and methods
       // (amr) in the access token too, so a resource server can make step-up /
       // assurance decisions from the bearer token without needing the id_token.
@@ -1383,6 +1364,15 @@ export class AuthService {
       signingKey.kid,
       realm.accessTokenLifespan,
     );
+
+    if (sessionId === null) {
+      return {
+        access_token: accessToken,
+        token_type: 'Bearer',
+        expires_in: realm.accessTokenLifespan,
+        scope: validatedScope,
+      };
+    }
 
     // Determine if this is an offline token
     const isOffline = effectiveScopes.includes('offline_access');
