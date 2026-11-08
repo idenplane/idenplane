@@ -758,6 +758,7 @@ model UsedTotpCode {
 
   user User @relation(fields: [userId], references: [id], onDelete: Cascade)
 
+  @@unique([userId, codeHash])
   @@index([userId])
   @@index([expiresAt])
   @@map("used_totp_codes")

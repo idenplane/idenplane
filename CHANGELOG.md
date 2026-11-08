@@ -9,6 +9,9 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+### Security
+- **A TOTP code could be accepted more than once.** Submissions of the same code checked that it was unused before any of them recorded it, so concurrent ones (on one instance or several) all passed. The code is now claimed by inserting it under a new unique index on (user, code), and only the first insert wins; an earlier use whose window has passed is taken over, so a code that comes round again still works.
+
 ### Changed
 - **Realms, clients, signing keys and CORS origins are cached in every process**, with no Redis needed. Discovery, JWKS and every realm-scoped request no longer query the database each time. The database itself keeps the copies current: triggers on `realms`, `clients` and `realm_signing_keys` announce each change with PostgreSQL `NOTIFY`, and every process and replica drops what changed as soon as it hears it, however the change was made. While that connection is down a process reads from the database, and it starts empty once reconnected. Set `CACHE_L1=off` behind a connection pooler in transaction mode. With Redis, the same announcements delete the shared entries.
 - The realm rate-limit settings are read from the realm cache instead of one query per check.
