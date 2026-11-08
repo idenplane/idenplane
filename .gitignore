@@ -89,3 +89,7 @@ helm/*/Chart.lock
 # Benchmark output (k6 summaries, reports)
 benchmarks/results/*
 !benchmarks/results/.gitkeep
+
+# Runtime data the server writes in its working directory
+/uploads/
+/backups/
