@@ -10,6 +10,28 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { EmailService } from '../email/email.service.js';
 import type { Realm, User } from '@prisma/client';
 
+/**
+ * PostgreSQL aborted a transaction as a serialization conflict (SQLSTATE
+ * 40001). Prisma reports it as P2034; through the pg driver adapter it
+ * arrives as a DriverAdapterError whose cause is a TransactionWriteConflict.
+ */
+function isSerializationConflict(err: unknown): boolean {
+  const e = err as {
+    code?: string;
+    name?: string;
+    message?: string;
+    cause?: { kind?: string; originalCode?: string; code?: string };
+  };
+  return (
+    e?.code === 'P2034' ||
+    e?.code === '40001' ||
+    e?.cause?.kind === 'TransactionWriteConflict' ||
+    e?.cause?.originalCode === '40001' ||
+    e?.cause?.code === '40001' ||
+    /TransactionWriteConflict|could not serialize access/.test(e?.message ?? '')
+  );
+}
+
 @Injectable()
 export class BruteForceService {
   private readonly logger = new Logger(BruteForceService.name);
@@ -45,56 +67,81 @@ export class BruteForceService {
     const lockoutDuration = realm.lockoutDuration;
     const permanentLockoutAfter = realm.permanentLockoutAfter;
 
-    await this.prisma.$transaction(
-      async (tx) => {
-        await tx.loginFailure.create({
-          data: { realmId: realm.id, userId, ipAddress: ipAddress ?? null },
-        });
-
-        const windowStart = new Date(Date.now() - resetTime * 1000);
-        const failureCount = await tx.loginFailure.count({
-          where: {
-            realmId: realm.id,
-            userId,
-            failedAt: { gte: windowStart },
-          },
-        });
-
-        if (failureCount < maxFailures) return;
-
-        if (permanentLockoutAfter > 0) {
-          const totalFailures = await tx.loginFailure.count({
-            where: { realmId: realm.id, userId },
+    // Serializable, so concurrent failures for one user count correctly; it
+    // aborts one of two conflicting transactions (P2034), which is retried
+    // so that no failure goes uncounted. The notification goes out once the
+    // lockout has committed, never from inside a transaction that may rerun.
+    const outcome = await this.withSerializationRetry(() =>
+      this.prisma.$transaction(
+        async (tx): Promise<'none' | 'locked' | 'permanent'> => {
+          await tx.loginFailure.create({
+            data: { realmId: realm.id, userId, ipAddress: ipAddress ?? null },
           });
-          const lockoutCount = Math.floor(totalFailures / maxFailures);
 
-          if (lockoutCount >= permanentLockoutAfter) {
-            await tx.user.update({
-              where: { id: userId },
-              data: {
-                lockedUntil: new Date('2099-12-31T23:59:59Z'),
-                enabled: false,
-              },
+          const windowStart = new Date(Date.now() - resetTime * 1000);
+          const failureCount = await tx.loginFailure.count({
+            where: {
+              realmId: realm.id,
+              userId,
+              failedAt: { gte: windowStart },
+            },
+          });
+
+          if (failureCount < maxFailures) return 'none';
+
+          if (permanentLockoutAfter > 0) {
+            const totalFailures = await tx.loginFailure.count({
+              where: { realmId: realm.id, userId },
             });
-            this.logger.warn(
-              `User ${userId} in realm ${realm.id} permanently locked after ${lockoutCount} lockout cycles`,
-            );
-            await this.sendLockoutNotification(realm, userId, true);
-            return;
-          }
-        }
+            const lockoutCount = Math.floor(totalFailures / maxFailures);
 
-        const lockedUntil = new Date(Date.now() + lockoutDuration * 1000);
-        await tx.user.update({
-          where: { id: userId },
-          data: { lockedUntil },
-        });
-        await this.sendLockoutNotification(realm, userId, false);
-      },
-      {
-        isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
-      },
+            if (lockoutCount >= permanentLockoutAfter) {
+              await tx.user.update({
+                where: { id: userId },
+                data: {
+                  lockedUntil: new Date('2099-12-31T23:59:59Z'),
+                  enabled: false,
+                },
+              });
+              this.logger.warn(
+                `User ${userId} in realm ${realm.id} permanently locked after ${lockoutCount} lockout cycles`,
+              );
+              return 'permanent';
+            }
+          }
+
+          const lockedUntil = new Date(Date.now() + lockoutDuration * 1000);
+          await tx.user.update({
+            where: { id: userId },
+            data: { lockedUntil },
+          });
+          return 'locked';
+        },
+        {
+          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+        },
+      ),
     );
+    if (outcome !== 'none') {
+      await this.sendLockoutNotification(
+        realm,
+        userId,
+        outcome === 'permanent',
+      );
+    }
+  }
+
+  /** Reruns `fn` when PostgreSQL aborts it as a serialization conflict. */
+  private async withSerializationRetry<T>(fn: () => Promise<T>): Promise<T> {
+    for (let attempt = 1; ; attempt++) {
+      try {
+        return await fn();
+      } catch (err) {
+        if (!isSerializationConflict(err) || attempt >= 10) throw err;
+        // Spread the retries so the same transactions do not collide again.
+        await new Promise((r) => setTimeout(r, Math.random() * 20 * attempt));
+      }
+    }
   }
 
   async resetFailures(realmId: string, userId: string): Promise<void> {
