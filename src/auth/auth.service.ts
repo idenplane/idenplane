@@ -1667,15 +1667,22 @@ export class AuthService {
       );
       const evictIds = toEvict.map((s) => s.id);
 
-      // Revoke all refresh tokens for the evicted sessions before deleting them
-      await this.prisma.refreshToken.updateMany({
-        where: { sessionId: { in: evictIds }, isOffline: false },
-        data: { revoked: true },
-      });
-
-      await this.prisma.session.deleteMany({
-        where: { id: { in: evictIds } },
-      });
+      // One statement: deleting a session deletes its refresh tokens
+      // (ON DELETE CASCADE), so revoking them first only took more locks,
+      // which concurrent sign-ins evicting overlapping sessions could take
+      // in opposite orders and deadlock on. Eviction is housekeeping: the
+      // new session is already written, so a failure here (a deadlock that
+      // PostgreSQL broke by aborting this side) must not fail the sign-in;
+      // the user's next sign-in trims again.
+      try {
+        await this.prisma.session.deleteMany({
+          where: { id: { in: evictIds } },
+        });
+      } catch (err) {
+        this.logger.warn(
+          `Could not evict ${evictIds.length} old session(s) of user ${session.data.userId}: ${String(err)}`,
+        );
+      }
     }
   }
 }
