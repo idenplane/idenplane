@@ -1,3 +1,4 @@
+import { lookupsBackedBy } from '../cache/cached-lookups.mock.js';
 import {
   ForbiddenException,
   NotFoundException,
@@ -92,6 +93,7 @@ describe('ImpersonationService', () => {
     };
 
     service = new ImpersonationService(
+      lookupsBackedBy(prisma as any) as any,
       prisma as any,
       jwkService as any,
       crypto as any,

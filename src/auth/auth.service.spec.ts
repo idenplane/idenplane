@@ -1,3 +1,4 @@
+import { lookupsBackedBy } from '../cache/cached-lookups.mock.js';
 // Mock modules that transitively import jose (ESM-only) to avoid parse errors
 jest.mock('../crypto/jwk.service.js', () => ({
   JwkService: jest.fn(),
@@ -206,6 +207,7 @@ describe('AuthService', () => {
     };
 
     service = new AuthService(
+      lookupsBackedBy(prisma as any) as any,
       prisma as any,
       crypto as any,
       jwkService as any,

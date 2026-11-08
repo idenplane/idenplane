@@ -1,3 +1,4 @@
+import { lookupsBackedBy } from '../cache/cached-lookups.mock.js';
 jest.mock('../crypto/jwk.service.js', () => ({ JwkService: jest.fn() }));
 
 import { UnauthorizedException, BadRequestException } from '@nestjs/common';
@@ -69,7 +70,7 @@ describe('TokensController', () => {
 
     controller = new TokensController(
       mockTokensService as any,
-      mockPrisma as any,
+      lookupsBackedBy(mockPrisma as any) as any,
       mockClientSecrets as any,
     );
   });

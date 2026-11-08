@@ -9,6 +9,11 @@ const KEY = {
   client: (clientId: string) => `client:config:${clientId}`,
   jwks: (realmId: string) => `realm:jwks:${realmId}`,
   corsOrigins: 'cors:allowed-origins',
+  // In-process only, never Redis: these hold a client's secret hash and a
+  // realm's private signing key.
+  clientRow: (realmId: string, clientId: string) =>
+    `local:client:${realmId}:${clientId}`,
+  signingKey: (realmId: string) => `local:signing-key:${realmId}`,
 } as const;
 
 /** Bound on the in-process cache; realm names and client ids come from callers. */
@@ -159,6 +164,30 @@ export class CacheService {
     this.logger.debug('Invalidated CORS allowed-origins cache');
   }
 
+  // ─── In-process only ─────────────────────────────────────────────────────
+
+  /**
+   * A client's full row, secret hash included: the in-process level only,
+   * so it never leaves the process. Null when the announcement channel is
+   * down or the row is not cached; see CachedLookupsService.
+   */
+  getLocalClientRow<T>(realmId: string, clientId: string): T | null {
+    return this.l1Get<T>(KEY.clientRow(realmId, clientId), 'client_row');
+  }
+
+  setLocalClientRow(realmId: string, clientId: string, row: object): void {
+    this.l1Set(KEY.clientRow(realmId, clientId), row, 60);
+  }
+
+  /** A realm's active signing key, private key included; in-process only. */
+  getLocalSigningKey<T>(realmId: string): T | null {
+    return this.l1Get<T>(KEY.signingKey(realmId), 'signing_key');
+  }
+
+  setLocalSigningKey(realmId: string, key: object): void {
+    this.l1Set(KEY.signingKey(realmId), key, 600);
+  }
+
   // ─── Database announcements ──────────────────────────────────────────────
 
   private async onEvent(event: CacheEvent): Promise<void> {
@@ -167,6 +196,7 @@ export class CacheService {
         await this.drop([
           KEY.realm(event.id),
           KEY.jwks(event.id),
+          KEY.signingKey(event.id),
           ...event.names.map((n) => KEY.realmByName(n)),
         ]);
         break;
@@ -174,11 +204,15 @@ export class CacheService {
         await this.drop([
           ...event.clientIds.map((c) => KEY.client(`${event.realmId}:${c}`)),
           KEY.client(`${event.realmId}:${event.id}`),
+          ...event.clientIds.map((c) => KEY.clientRow(event.realmId, c)),
           KEY.corsOrigins,
         ]);
         break;
       case 'keys':
-        await this.drop([KEY.jwks(event.realmId)]);
+        await this.drop([
+          KEY.jwks(event.realmId),
+          KEY.signingKey(event.realmId),
+        ]);
         break;
     }
   }
@@ -209,6 +243,30 @@ export class CacheService {
     await this.redis.set(key, JSON.stringify(value), ttl);
   }
 
+  /**
+   * The in-process entry for `key`, or null. A miss is recorded for the
+   * fill-race guard before any slower lookup, so an invalidation that arrives
+   * while Redis or the database is read keeps that lookup's result out.
+   */
+  private l1Get<T>(key: string, metricLabel: string): T | null {
+    if (!this.bus.isConnected()) return null;
+    const entry = this.l1.get(key);
+    if (entry && entry.expiresAt > Date.now()) {
+      this.metrics.cacheOperationsTotal.inc({
+        operation: 'hit',
+        cache: metricLabel,
+      });
+      return structuredClone(entry.value) as T;
+    }
+    if (entry) this.l1.delete(key);
+    if (this.missEpoch.size >= L1_MAX_ENTRIES) {
+      this.missEpoch.clear();
+      this.epoch++;
+    }
+    this.missEpoch.set(key, this.epoch);
+    return null;
+  }
+
   private l1Set(key: string, value: unknown, ttl: number): void {
     const recorded = this.missEpoch.get(key);
     this.missEpoch.delete(key);
@@ -229,22 +287,8 @@ export class CacheService {
     metricLabel: string,
   ): Promise<T | null> {
     if (this.bus.isConnected()) {
-      const entry = this.l1.get(key);
-      if (entry && entry.expiresAt > Date.now()) {
-        this.metrics.cacheOperationsTotal.inc({
-          operation: 'hit',
-          cache: metricLabel,
-        });
-        return structuredClone(entry.value) as T;
-      }
-      if (entry) this.l1.delete(key);
-      // Recorded before any slower lookup, so an invalidation that arrives
-      // while Redis or the database is being read keeps the result out.
-      if (this.missEpoch.size >= L1_MAX_ENTRIES) {
-        this.missEpoch.clear();
-        this.epoch++;
-      }
-      this.missEpoch.set(key, this.epoch);
+      const hit = this.l1Get<T>(key, metricLabel);
+      if (hit !== null) return hit;
     }
 
     if (!this.redis.isAvailable()) {

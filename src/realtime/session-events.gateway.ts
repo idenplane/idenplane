@@ -1,3 +1,4 @@
+import { CachedLookupsService } from '../cache/cached-lookups.service.js';
 import type { Server as HttpServer } from 'http';
 import { Injectable, Logger } from '@nestjs/common';
 import { WebSocketServer, WebSocket } from 'ws';
@@ -36,6 +37,7 @@ export class SessionEventsGateway {
   private readonly connections = new Map<string, Set<WebSocket>>();
 
   constructor(
+    private readonly lookups: CachedLookupsService,
     private readonly prisma: PrismaService,
     private readonly jwkService: JwkService,
     private readonly blacklist: TokenBlacklistService,
@@ -117,10 +119,7 @@ export class SessionEventsGateway {
     });
     if (!realm) return null;
 
-    const signingKey = await this.prisma.realmSigningKey.findFirst({
-      where: { realmId: realm.id, active: true },
-      orderBy: { createdAt: 'desc' },
-    });
+    const signingKey = await this.lookups.activeSigningKey(realm.id);
     if (!signingKey) return null;
 
     let payload;

@@ -1,3 +1,4 @@
+import { lookupsBackedBy } from '../cache/cached-lookups.mock.js';
 import { UnauthorizedException, BadRequestException } from '@nestjs/common';
 
 // Mock JwkService and ScopesService modules to avoid importing jose (ESM-only)
@@ -84,6 +85,7 @@ describe('TokensService', () => {
     };
 
     service = new TokensService(
+      lookupsBackedBy(prisma as any) as any,
       prisma as any,
       cryptoService as any,
       jwkService as any,
