@@ -10,11 +10,22 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 ## [Unreleased]
 
 ### Changed
+- **Realms, clients, signing keys and CORS origins are cached in every process**, with no Redis needed. Discovery, JWKS and every realm-scoped request no longer query the database each time. The database itself keeps the copies current: triggers on `realms`, `clients` and `realm_signing_keys` announce each change with PostgreSQL `NOTIFY`, and every process and replica drops what changed as soon as it hears it, however the change was made. While that connection is down a process reads from the database, and it starts empty once reconnected. Set `CACHE_L1=off` behind a connection pooler in transaction mode. With Redis, the same announcements delete the shared entries.
+- The realm rate-limit settings are read from the realm cache instead of one query per check.
 - **The Docker image is about 620 MB smaller on disk** (447 MB to 317 MB to download). A final `chown -R /app` copied all of `node_modules` into a second layer only to change its owner. The app code and `node_modules` now stay owned by root, so a compromised process cannot rewrite them; the `node` user owns only what the server writes: `/app` itself, `uploads`, `backups` and `themes`.
 
 ### Fixed
 - **Concurrent sign-ins for the same user could fail with a 500.** Once the user was at the realm's session cap (`maxSessionsPerUser`, 10 by default), a sign-in could evict another sign-in's session in the moment between its creation and its refresh token's, which then failed on a foreign key. A new session and its refresh token are now one write, and the cap is applied afterwards, to older sessions only, so concurrent sign-ins all succeed and the newest sessions are kept. A refresh or code exchange whose session has meanwhile ended answers `invalid_grant` instead of a 500.
 - The default Argon2 concurrency and database pool size now follow the CPUs the process may use (its cpuset), not every core of the host, which oversized both in pinned containers.
+- **CORS denied every client origin from five minutes after boot.** The allowed-origin set expired and nothing reloaded it; the same happened right after any client edit. It is now reloaded on every client change and never expires to empty.
+- **Changes that bypassed cache invalidation were served stale with Redis.** These were:
+  - assigning a login flow to a client;
+  - a risk-triggered raise of a client's required ACR;
+  - overwriting a realm on import;
+  - a client looked up by its database id.
+
+  They are now invalidated by the database, along with every other write.
+- With several instances, a CORS change reached only the instance that made it until the others' 5-minute cache expired. It now reaches all of them at once.
 
 ## [0.5.2] - 2026-11-08
 

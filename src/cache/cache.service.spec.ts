@@ -2,6 +2,7 @@ import { Test, TestingModule } from '@nestjs/testing';
 import { CacheService } from './cache.service.js';
 import { RedisService } from '../redis/redis.service.js';
 import { MetricsService } from '../metrics/metrics.service.js';
+import { CacheBusService, type CacheEvent } from './cache-bus.service.js';
 
 const makeMockRedis = (available = true) => ({
   isAvailable: jest.fn().mockReturnValue(available),
@@ -12,6 +13,22 @@ const makeMockRedis = (available = true) => ({
   delPattern: jest.fn().mockResolvedValue(undefined),
   ping: jest.fn().mockResolvedValue(true),
 });
+
+/** A bus the test drives by hand; disconnected unless told otherwise. */
+const makeMockBus = (connected = false) => {
+  const events: Array<(e: CacheEvent) => void> = [];
+  const resets: Array<() => void> = [];
+  return {
+    connected,
+    isConnected: jest.fn(function (this: { connected: boolean }) {
+      return this.connected;
+    }),
+    onEvent: jest.fn((h: (e: CacheEvent) => void) => events.push(h)),
+    onReset: jest.fn((h: () => void) => resets.push(h)),
+    emit: (e: CacheEvent) => events.forEach((h) => h(e)),
+    reset: () => resets.forEach((h) => h()),
+  };
+};
 
 const makeMockMetrics = () => ({
   cacheOperationsTotal: { inc: jest.fn() },
@@ -31,6 +48,8 @@ describe('CacheService', () => {
         CacheService,
         { provide: RedisService, useValue: redis },
         { provide: MetricsService, useValue: metrics },
+        // Disconnected: these tests cover the Redis level alone.
+        { provide: CacheBusService, useValue: makeMockBus(false) },
       ],
     }).compile();
 
@@ -122,7 +141,7 @@ describe('CacheService', () => {
       expect(redis.set).toHaveBeenCalledWith(
         'client:config:c1',
         JSON.stringify({ clientId: 'myapp' }),
-        300,
+        60,
       );
     });
 
@@ -247,5 +266,144 @@ describe('CacheService', () => {
   it('returns null on invalid JSON without throwing', async () => {
     redis.get.mockResolvedValue('not-json{{{');
     expect(await service.getCachedRealmConfig('r1')).toBeNull();
+  });
+});
+
+describe('CacheService in-process level', () => {
+  let service: CacheService;
+  let bus: ReturnType<typeof makeMockBus>;
+  let redis: ReturnType<typeof makeMockRedis>;
+
+  beforeEach(async () => {
+    redis = makeMockRedis(false); // no Redis: the default deployment
+    bus = makeMockBus(true);
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        CacheService,
+        { provide: RedisService, useValue: redis },
+        { provide: MetricsService, useValue: makeMockMetrics() },
+        { provide: CacheBusService, useValue: bus },
+      ],
+    }).compile();
+    service = module.get<CacheService>(CacheService);
+  });
+
+  afterEach(() => jest.useRealTimers());
+
+  /** The cache-aside pattern every caller uses: miss, read, store. */
+  const fill = async (name: string, realm: object) => {
+    expect(await service.getCachedRealmByName(name)).toBeNull();
+    await service.cacheRealmByName(name, realm);
+  };
+
+  it('serves a stored entry without Redis', async () => {
+    await fill('master', { id: 'r1', name: 'master' });
+    expect(await service.getCachedRealmByName('master')).toEqual({
+      id: 'r1',
+      name: 'master',
+    });
+  });
+
+  it('hands out copies, so no caller can change what another reads', async () => {
+    const realm = { id: 'r1', name: 'master', enabled: true };
+    await fill('master', realm);
+    realm.enabled = false;
+    const first = await service.getCachedRealmByName<{ enabled: boolean }>(
+      'master',
+    );
+    first!.enabled = false;
+    expect(
+      (await service.getCachedRealmByName<{ enabled: boolean }>('master'))!
+        .enabled,
+    ).toBe(true);
+  });
+
+  it('keeps Dates as Dates', async () => {
+    const createdAt = new Date('2026-01-02T03:04:05Z');
+    await fill('master', { id: 'r1', createdAt });
+    const hit = await service.getCachedRealmByName<{ createdAt: Date }>(
+      'master',
+    );
+    // structuredClone builds the Date in the main realm, not jest's, so
+    // instanceof would compare constructors from different realms.
+    expect(Object.prototype.toString.call(hit!.createdAt)).toBe(
+      '[object Date]',
+    );
+    expect(hit!.createdAt.getTime()).toBe(createdAt.getTime());
+  });
+
+  it('drops a realm under its old and new name, and its JWKS, when announced', async () => {
+    await fill('old', { id: 'r1' });
+    expect(await service.getCachedJWKS('r1')).toBeNull();
+    await service.cacheJWKS('r1', { keys: [1] });
+
+    bus.emit({ t: 'realm', id: 'r1', names: ['old', 'new'] });
+    await Promise.resolve();
+
+    expect(await service.getCachedRealmByName('old')).toBeNull();
+    expect(await service.getCachedJWKS('r1')).toBeNull();
+  });
+
+  it('drops a client under its client_id and its database id when announced', async () => {
+    for (const key of ['r1:app', 'r1:uuid-1']) {
+      expect(await service.getCachedClientConfig(key)).toBeNull();
+      await service.cacheClientConfig(key, { clientId: 'app' });
+    }
+
+    bus.emit({ t: 'client', realmId: 'r1', id: 'uuid-1', clientIds: ['app'] });
+    await Promise.resolve();
+
+    expect(await service.getCachedClientConfig('r1:app')).toBeNull();
+    expect(await service.getCachedClientConfig('r1:uuid-1')).toBeNull();
+  });
+
+  it('drops the JWKS when signing keys change', async () => {
+    expect(await service.getCachedJWKS('r1')).toBeNull();
+    await service.cacheJWKS('r1', { keys: [1] });
+    bus.emit({ t: 'keys', realmId: 'r1' });
+    await Promise.resolve();
+    expect(await service.getCachedJWKS('r1')).toBeNull();
+  });
+
+  it('does not store a row read before an invalidation that arrived meanwhile', async () => {
+    expect(await service.getCachedRealmByName('master')).toBeNull();
+    // ...the database is read, and before the result is stored, the row
+    // changes and the change is announced:
+    bus.emit({ t: 'realm', id: 'r1', names: ['master'] });
+    await Promise.resolve();
+    await service.cacheRealmByName('master', { id: 'r1', enabled: true });
+
+    expect(await service.getCachedRealmByName('master')).toBeNull();
+  });
+
+  it('is not used while the announcement channel is down', async () => {
+    await fill('master', { id: 'r1' });
+    bus.connected = false;
+    expect(await service.getCachedRealmByName('master')).toBeNull();
+    await service.cacheRealmByName('master', { id: 'r1' });
+    bus.connected = true;
+    // Whatever was stored before the outage is gone after it (reset).
+    bus.reset();
+    expect(await service.getCachedRealmByName('master')).toBeNull();
+  });
+
+  it('expires entries after their TTL', async () => {
+    jest.useFakeTimers();
+    await fill('master', { id: 'r1' });
+    jest.setSystemTime(Date.now() + 301_000);
+    expect(await service.getCachedRealmByName('master')).toBeNull();
+  });
+
+  it('stores nothing for a key that was never looked up', async () => {
+    await service.cacheRealmByName('master', { id: 'r1' });
+    expect(await service.getCachedRealmByName('master')).toBeNull();
+  });
+
+  it('stays bounded, evicting the oldest entries', async () => {
+    for (let i = 0; i < 10_001; i++) await fill(`realm-${i}`, { id: `${i}` });
+    expect(await service.getCachedRealmByName('realm-0')).toBeNull();
+    expect(await service.getCachedRealmByName('realm-10000')).toEqual({
+      id: '10000',
+    });
   });
 });

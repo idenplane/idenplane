@@ -1,40 +1,59 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CacheService } from '../cache/cache.service.js';
+import { CacheBusService } from '../cache/cache-bus.service.js';
 
 /**
  * CorsOriginService
  *
- * Centralises the "is this Origin allowed?" check that the CORS middleware runs
- * on every cross-origin request.  Without caching each request triggered a DB
- * query (findFirst on the client table), making CORS a performance bottleneck.
+ * The set of origins the CORS middleware allows: every enabled client's
+ * webOrigins. The middleware's origin callback is synchronous, so the set
+ * lives in this process and is reloaded in the background, never emptied:
  *
- * Strategy (two-level cache, fast → slow):
+ *  - loaded before the server accepts requests (`preloadCache`);
+ *  - reloaded when the database announces any change to a client
+ *    (CacheBusService), from whichever process or tool made it, and when that
+ *    announcement channel reconnects;
+ *  - reloaded when it is older than LOCAL_TTL_MS, a backstop for when the
+ *    channel is down or off. The current set is served until the new one is
+ *    ready.
  *
- *  1. In-process Set<string>  — zero-latency; rebuilt from level 2 on miss.
- *  2. Redis (via CacheService) — survives process restarts; TTL 300 s.
- *  3. Prisma (database)       — authoritative; only consulted on Redis miss.
- *
- * Invalidation:
- *   Call invalidate() whenever a client's webOrigins or enabled flag changes.
- *   ClientsService already calls cache.invalidateCorsOrigins(); that in turn
- *   clears Redis and sets localCacheExpiry = 0 so the next request reloads.
+ * An earlier version let the set expire and never reloaded it, so five
+ * minutes after boot, or right after any client edit, every client origin
+ * was denied.
  */
 @Injectable()
 export class CorsOriginService {
   private readonly logger = new Logger(CorsOriginService.name);
 
-  /** In-process cache: set of concrete allowed origins (wildcard '*' is never stored). */
+  /** In-process set of concrete allowed origins (wildcard '*' is never stored). */
   private localOrigins: Set<string> | null = null;
-  /** Epoch ms at which the in-process cache expires. */
+  /** Epoch ms after which the set is reloaded on its next use. */
   private localCacheExpiry = 0;
-  /** Local TTL in ms (5 minutes — mirrors the Redis TTL). */
+  /** Backstop TTL in ms (5 minutes). */
   private readonly LOCAL_TTL_MS = 5 * 60 * 1000;
+  private reloading: Promise<Set<string>> | null = null;
+  private reloadAgain = false;
+  private stopped = false;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly cache: CacheService,
-  ) {}
+    bus: CacheBusService,
+  ) {
+    // No reload may start once the database client is closing: it would
+    // reopen the pool. One already running is waited for.
+    prisma.onBeforeDisconnect(async () => {
+      this.stopped = true;
+      await this.reloading?.catch(() => {});
+    });
+    bus.onEvent((event) => {
+      if (event.t === 'client') void this.reload();
+    });
+    bus.onReset(() => {
+      if (this.localOrigins !== null) void this.reload();
+    });
+  }
 
   /**
    * Returns true if the given origin is permitted by at least one enabled client.
@@ -47,29 +66,26 @@ export class CorsOriginService {
    * out during {@link loadFromDatabase} and a warning is emitted instead.
    */
   async isOriginAllowed(origin: string): Promise<boolean> {
-    const origins = await this.getAllowedOrigins();
+    const origins = this.localOrigins ?? (await this.reload());
+    if (Date.now() >= this.localCacheExpiry) void this.reload();
     return origins.has(origin);
   }
 
-  /**
-   * Drop both caches so the next call reloads from the database.
-   * Called automatically by CacheService.invalidateCorsOrigins() via ClientsService.
-   */
+  /** Reload the set in the background; the current one is served meanwhile. */
   invalidateLocalCache(): void {
-    this.localOrigins = null;
-    this.localCacheExpiry = 0;
-    this.logger.debug('In-process CORS origin cache invalidated');
+    void this.reload();
+    this.logger.debug('In-process CORS origin set reload requested');
   }
 
   /**
-   * Returns the locally cached set of allowed origins, or null if the cache
-   * has not been populated yet. This is used for synchronous CORS origin checks.
+   * The allowed origins, for the synchronous CORS check: null only before
+   * the first load. A set past its TTL is still returned, and reloaded.
    */
   getCachedOrigins(): Set<string> | null {
-    if (this.localOrigins !== null && Date.now() < this.localCacheExpiry) {
-      return this.localOrigins;
+    if (this.localOrigins !== null && Date.now() >= this.localCacheExpiry) {
+      void this.reload();
     }
-    return null;
+    return this.localOrigins;
   }
 
   /**
@@ -77,29 +93,29 @@ export class CorsOriginService {
    * the cache is ready before the first CORS check.
    */
   async preloadCache(): Promise<void> {
-    await this.loadFromDatabase();
+    await this.reload();
   }
 
   // ─── Private helpers ──────────────────────────────────────────────────────
 
-  private async getAllowedOrigins(): Promise<Set<string>> {
-    const now = Date.now();
-
-    // 1. In-process cache hit
-    if (this.localOrigins !== null && now < this.localCacheExpiry) {
-      return this.localOrigins;
+  /**
+   * One load at a time. A change announced during a load may not be in its
+   * result, so it queues exactly one more.
+   */
+  private reload(): Promise<Set<string>> {
+    if (this.stopped) return Promise.resolve(this.localOrigins ?? new Set());
+    if (this.reloading) {
+      this.reloadAgain = true;
+      return this.reloading;
     }
-
-    // 2. Redis cache hit
-    const redisOrigins = await this.cache.getCachedCorsOrigins();
-    if (redisOrigins !== null) {
-      this.localOrigins = new Set(redisOrigins);
-      this.localCacheExpiry = now + this.LOCAL_TTL_MS;
-      return this.localOrigins;
-    }
-
-    // 3. Database (cache miss)
-    return this.loadFromDatabase();
+    this.reloading = this.loadFromDatabase().finally(() => {
+      this.reloading = null;
+      if (this.reloadAgain) {
+        this.reloadAgain = false;
+        void this.reload();
+      }
+    });
+    return this.reloading;
   }
 
   private async loadFromDatabase(): Promise<Set<string>> {
@@ -162,8 +178,9 @@ export class CorsOriginService {
       this.logger.error(
         `Failed to load CORS origins from database: ${(err as Error).message}`,
       );
-      // Return an empty set on error — the CORS callback will deny the request.
-      return new Set<string>();
+      // Keep serving the current set; with none yet, deny (empty set).
+      this.localCacheExpiry = Date.now() + 10_000;
+      return this.localOrigins ?? new Set<string>();
     }
   }
 }

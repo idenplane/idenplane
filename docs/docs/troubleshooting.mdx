@@ -73,18 +73,12 @@ So it's possible to pass authorization with a wildcard-registered URI and then f
 - A plain entry (no `/*` suffix) must match **exactly** — different port, scheme, or trailing slash all fail.
 - An entry ending in `/*` matches the bare origin and anything under that path prefix. For example, `http://localhost:4000/*` matches both `http://localhost:4000` and `http://localhost:4000/callback`.
 
-### Why a `redirect_uri` change takes effect immediately but a CORS (`webOrigins`) change might not
+### How quickly `redirect_uri` and CORS (`webOrigins`) changes take effect
 
-These are two independent mechanisms with different freshness guarantees — don't assume they behave the same way:
+- **`redirect_uri` validation** reads `client.redirectUris` from the database on every `/authorize` request. A change takes effect on the very next request.
+- **CORS `webOrigins` validation** checks a set of allowed origins that every Idenplane process keeps in memory. When a client's `webOrigins` or `enabled` flag changes, the database announces it (PostgreSQL `LISTEN`/`NOTIFY`) and every process and replica reloads its set, typically within milliseconds. That holds however the change was made, including the Admin API, an import, or SQL run by hand.
 
-- **`redirect_uri` validation** reads `client.redirectUris` straight from the database on every `/authorize` request. There is no cache. A change takes effect on the very next request.
-- **CORS `webOrigins` validation** goes through `CorsOriginService`, which caches the full set of allowed origins in two layers: an in-process `Set` (5-minute TTL) backed by Redis (5-minute TTL), which is only consulted when the in-process cache misses.
-
-When you update a client's `webOrigins` (or its `enabled` flag) through the Admin API, the instance that handled that request immediately clears **its own** in-process cache and the shared Redis entry. If you're running a single instance, the change is effectively immediate. If you're running multiple instances behind a load balancer, only the instance that processed the write is refreshed right away — every other instance keeps serving its own stale in-process `Set` until that instance's 5-minute TTL naturally expires. In practice: a CORS origin change can take **up to 5 minutes** to reach all instances in a horizontally-scaled deployment.
-
-:::tip
-If you just added an origin and requests from your new frontend are still being blocked by CORS in a multi-instance deployment, wait a few minutes before assuming the configuration is wrong.
-:::
+If a CORS change seems not to apply, check that the processes can receive these announcements. When they cannot (`CACHE_L1=off`, or a connection pooler in transaction mode in front of the database), the set is reloaded every 5 minutes instead. See [In-process cache](./configuration/environment-variables.md#in-process-cache).
 
 ---
 
@@ -235,8 +229,8 @@ The SMTP provider (`nodemailer` under the hood) only treats itself as configured
 
 ## FAQ
 
-**Why did my `redirect_uri` change take effect immediately, but my CORS `webOrigins` change didn't?**
-They're validated by two different code paths with different freshness guarantees. `redirect_uri` is checked live against the database on every request. `webOrigins` (CORS) goes through a two-level cache with a 5-minute TTL per instance — see [redirect_uri, CORS, and Origin Mismatches](#redirect_uri-cors-and-origin-mismatches).
+**How quickly do `redirect_uri` and CORS `webOrigins` changes take effect?**
+`redirect_uri` is checked against the database on every request. `webOrigins` (CORS) are kept in memory by every process and reloaded as soon as the database announces a change, see [redirect_uri, CORS, and Origin Mismatches](#redirect_uri-cors-and-origin-mismatches).
 
 **Why does my authorization request succeed but the token exchange fails with `redirect_uri mismatch`?**
 `/authorize` allows wildcard-registered redirect URIs (`https://app.example.com/*`); `/token` requires the exact string you sent to `/authorize`, byte-for-byte. See [redirect_uri exactness at token exchange](#redirect_uri-exactness-at-token-exchange).
