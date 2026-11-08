@@ -158,20 +158,33 @@ export class PluginManagerService implements OnModuleInit {
         where: { name: plugin.name },
       });
 
+      // First time seeing this plugin: persist it as enabled by default,
+      // recording the current file hash as the trusted baseline. Another
+      // instance booting at the same moment may insert it first; then this
+      // one takes that row and continues, rather than running without it.
+      let installedHere = false;
       if (!record) {
-        // First time seeing this plugin — persist it as enabled by default,
-        // recording the current file hash as the trusted baseline.
-        record = await this.prisma.installedPlugin.create({
-          data: {
-            name: plugin.name,
-            version: plugin.version,
-            type: plugin.type,
-            enabled: true,
-            config: Prisma.JsonNull,
-            fileHash: currentHash,
-          },
-        });
+        try {
+          record = await this.prisma.installedPlugin.create({
+            data: {
+              name: plugin.name,
+              version: plugin.version,
+              type: plugin.type,
+              enabled: true,
+              config: Prisma.JsonNull,
+              fileHash: currentHash,
+            },
+          });
+          installedHere = true;
+        } catch (err) {
+          if ((err as { code?: string }).code !== 'P2002') throw err;
+          record = await this.prisma.installedPlugin.findUniqueOrThrow({
+            where: { name: plugin.name },
+          });
+        }
+      }
 
+      if (installedHere) {
         const context = this.buildContext(plugin, null);
         await this.invokeLifecycle(plugin, 'onInstall', context);
         this.logger.log(
