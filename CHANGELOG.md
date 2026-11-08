@@ -9,6 +9,9 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+### Changed
+- **The Docker image is about 620 MB smaller on disk** (447 MB to 317 MB to download). A final `chown -R /app` copied all of `node_modules` into a second layer only to change its owner. The app code and `node_modules` now stay owned by root, so a compromised process cannot rewrite them; the `node` user owns only what the server writes: `/app` itself, `uploads`, `backups` and `themes`.
+
 ## [0.5.2] - 2026-11-08
 
 Machine-to-machine authentication gets much faster and stops dropping tokens under load, and clients created by the setup wizard or imported from Authentik or Zitadel can authenticate at all. **If you rely on a `refresh_token` from client_credentials, read Changed below.** The upgrade runs one migration and needs no secret rotation.
