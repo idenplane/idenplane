@@ -42,7 +42,9 @@ describe('ThemeTemplateService', () => {
 
       const result = service.resolve('dark', 'login', 'login');
 
-      expect(result).toMatch(/idenplane[/\\]login[/\\]templates[/\\]login\.hbs/);
+      expect(result).toMatch(
+        /idenplane[/\\]login[/\\]templates[/\\]login\.hbs/,
+      );
     });
 
     it('should throw if template not found in any theme', () => {

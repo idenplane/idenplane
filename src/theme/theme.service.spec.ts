@@ -51,7 +51,9 @@ describe('ThemeService', () => {
 
       expect(service.getTheme('idenplane')).toBeDefined();
       expect(service.getTheme('dark')).toBeDefined();
-      expect(service.getTheme('idenplane')!.displayName).toBe('Idenplane Default');
+      expect(service.getTheme('idenplane')!.displayName).toBe(
+        'Idenplane Default',
+      );
     });
 
     it('should handle missing themes directory', async () => {

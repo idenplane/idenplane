@@ -39,7 +39,9 @@ describe('ThemeEmailService', () => {
     templateService = {
       resolve: jest
         .fn()
-        .mockReturnValue('/app/themes/idenplane/email/templates/verify-email.hbs'),
+        .mockReturnValue(
+          '/app/themes/idenplane/email/templates/verify-email.hbs',
+        ),
     };
     messageService = {
       getMessages: jest.fn().mockReturnValue({
