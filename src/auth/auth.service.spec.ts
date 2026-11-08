@@ -471,6 +471,38 @@ describe('AuthService', () => {
   // -----------------------------------------------------------------------
 
   describe('password grant', () => {
+    it('signs in even when evicting older sessions at the cap fails', async () => {
+      setupForTokenIssuance();
+      prisma.user.findUnique.mockResolvedValue(dbUser);
+      prisma.session.findMany.mockResolvedValue([
+        { id: 'old-1' },
+        { id: 'old-2' },
+      ]);
+      prisma.session.deleteMany.mockRejectedValue(
+        new Error('Transaction failed due to a write conflict or a deadlock'),
+      );
+
+      const result = await service.handleTokenRequest(
+        { ...realm, maxSessionsPerUser: 2 } as typeof realm,
+        {
+          grant_type: 'password',
+          client_id: 'my-client',
+          client_secret: 'correct-secret',
+          username: 'testuser',
+          password: 'pass',
+        },
+        '127.0.0.1',
+        'jest-agent',
+      );
+
+      expect(result.refresh_token).toBe(FAKE_REFRESH_TOKEN_RAW);
+      // One statement: the cascade removes the evicted sessions' tokens.
+      expect(prisma.session.deleteMany).toHaveBeenCalledWith({
+        where: { id: { in: ['old-1'] } },
+      });
+      expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
+    });
+
     it('should return a valid token response for correct credentials', async () => {
       setupForTokenIssuance();
       prisma.user.findUnique.mockResolvedValue(dbUser);

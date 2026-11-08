@@ -1396,11 +1396,19 @@ export class LoginController {
         try {
           const configured = await this.emailService.isConfigured(realm.name);
           if (configured) {
-            const rawToken = await this.verificationService.createToken(
-              user.id,
-              'password_reset',
-              3600,
-            );
+            // At most one reset email a minute per user: the response is
+            // the same either way, so this reveals nothing.
+            const rawToken =
+              await this.verificationService.createTokenUnlessRecent(
+                user.id,
+                'password_reset',
+                3600,
+              );
+            if (rawToken === null) {
+              return res.redirect(
+                `/realms/${realm.name}/forgot-password?info=${successMessage}`,
+              );
+            }
             const baseUrl = this.config.get<string>(
               'BASE_URL',
               'http://localhost:3000',

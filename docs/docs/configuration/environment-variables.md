@@ -227,6 +227,8 @@ SESSION_STORE=database
 
 Protect your API from abuse with configurable throttling.
 
+This is a coarse flood guard, per client IP and **per instance**: with three instances a client can make up to three times `THROTTLE_LIMIT` requests per window. It is kept in memory so it costs nothing per request. The limits that matter for abuse are shared by every instance through the database: the realm's rate limits (`rateLimitEnabled`, per IP, client and user), brute-force lockout, and the per-address limits on mail that a request can trigger. A verification resend or a password reset sends at most one email a minute to an account, and a magic link at most `magicLinkRateLimitPerEmail` every 15 minutes.
+
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
 | `THROTTLE_TTL` | `60000` | No | Time window for rate limiting in milliseconds |
