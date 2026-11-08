@@ -47,10 +47,15 @@ export TARGET_CPUS DB_CPUS K6_CPUS
 
 # ── node, or node in a container when the host has none ─────────────────────
 if ! command -v node >/dev/null 2>&1; then
+  # Only $ROOT is mounted, and the container sees only the variables named in
+  # NODE_PASS_ENV, so a script run this way reads its input from those and
+  # writes its output to stdout.
   shim="$(mktemp -d)"
   cat >"$shim/node" <<EOF
 #!/bin/sh
-exec docker run --rm -i -v "$ROOT:$ROOT" -w "\$PWD" node:24-alpine node "\$@"
+pass=""
+for v in \$NODE_PASS_ENV; do pass="\$pass -e \$v"; done
+exec docker run --rm -i \$pass -v "$ROOT:$ROOT" -w "\$PWD" node:24-alpine node "\$@"
 EOF
   chmod +x "$shim/node"
   PATH="$shim:$PATH"
@@ -212,9 +217,11 @@ TARGET="$TARGET" IMAGE="$IMAGE" DIGEST="$digest" SIZE="$size" FIRST_BOOT_MS="$fi
 RESTART_MS="$restart_ms" HASH_INFO="$hash_info" SCENARIOS="$SCENARIOS" RUNS="$RUNS" WARMUP="$WARMUP" \
 HOST_CPUS="$cpus" HOST_MEM="$(free -b 2>/dev/null | awk '/^Mem:/{print $2}')" \
 CPU_MODEL="$(grep -m1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2- | sed 's/^ *//')" \
-K6_IMAGE="$K6_IMAGE" OUT="$OUT" node -e '
+K6_IMAGE="$K6_IMAGE" \
+NODE_PASS_ENV="TARGET IMAGE DIGEST SIZE FIRST_BOOT_MS RESTART_MS HASH_INFO SCENARIOS RUNS WARMUP VUS DURATION TARGET_CPUS DB_CPUS K6_CPUS TARGET_MEM HOST_CPUS HOST_MEM CPU_MODEL K6_IMAGE" \
+node -e '
 const e = process.env;
-require("fs").writeFileSync(`${e.OUT}/meta.json`, JSON.stringify({
+process.stdout.write(JSON.stringify({
   target: e.TARGET, image: e.IMAGE, digest: e.DIGEST, imageBytes: Number(e.SIZE),
   firstBootMs: Number(e.FIRST_BOOT_MS), restartMs: Number(e.RESTART_MS),
   passwordHash: e.HASH_INFO.trim(),
@@ -224,5 +231,5 @@ require("fs").writeFileSync(`${e.OUT}/meta.json`, JSON.stringify({
   host: { cpus: Number(e.HOST_CPUS), memBytes: Number(e.HOST_MEM) || null, cpuModel: e.CPU_MODEL || null },
   k6: e.K6_IMAGE, finishedAt: new Date().toISOString(),
 }, null, 2));
-'
+' >"$OUT/meta.json"
 log "$TARGET: done -> $OUT"
