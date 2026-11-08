@@ -1,5 +1,4 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { SessionsService } from '../sessions/sessions.service.js';
 import { SessionEventsGateway } from '../realtime/session-events.gateway.js';
@@ -36,7 +35,8 @@ export class SessionTerminationService {
    * 2. All associated refresh tokens are invalidated
    * 3. An audit event is recorded
    */
-  @Interval(120_000) // every 2 minutes
+  // Run by ContinuousVerificationScheduler.checkTerminateRequired, on the
+  // leader only. (It also carried its own @Interval, so it ran twice a tick.)
   async checkAndTerminateSessions(): Promise<void> {
     const now = new Date();
 

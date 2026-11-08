@@ -158,6 +158,16 @@ Set `CACHE_L1=off` when Idenplane reaches PostgreSQL through a connection pooler
 
 With Redis configured, the same notifications also delete the shared Redis entries.
 
+### Scheduled jobs with several instances
+
+Some scheduled jobs must run once per tick across all instances, not once per instance: risk re-evaluation, step-up and termination checks, trust decay and credential rotation. The instances elect one of themselves to run them. The leader holds a PostgreSQL advisory lock on a connection of its own. If it stops or loses that connection, another instance takes over within about 15 seconds. Cleanup jobs and webhook delivery run on every instance; they are safe to.
+
+Live session events (`/realms/{realm}/session-events` WebSockets) are fanned out through PostgreSQL `NOTIFY`, so a client gets them whichever instance it is connected to.
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `LEADER_ELECTION` | on | No | Set to `off` to make every instance run every job (a single instance, or a connection pooler in transaction mode, which cannot hold the lock). |
+
 ---
 
 ## Redis (Optional)

@@ -45,11 +45,21 @@ describe('SessionEventsGateway', () => {
     jwkService = { verifyJwt: jest.fn() };
     blacklist = { isBlacklisted: jest.fn().mockResolvedValue(false) };
 
+    // A bus with no database channel delivers to this process, as the
+    // real one does then.
+    const handlers = new Map<string, Array<(p: unknown) => void>>();
+    const bus = {
+      onMessage: (topic: string, h: (p: unknown) => void) =>
+        handlers.set(topic, [...(handlers.get(topic) ?? []), h]),
+      publish: async (topic: string, payload: unknown) =>
+        (handlers.get(topic) ?? []).forEach((h) => h(payload)),
+    };
     service = new SessionEventsGateway(
       lookupsBackedBy(prisma as any) as any,
       prisma as any,
       jwkService as any,
       blacklist as any,
+      bus as any,
     );
   });
 
