@@ -40,7 +40,7 @@ services:
   idenplane:
     # IDENPLANE_IMAGE lets CI run this stack against an image built from the
     # commit under test.
-    image: ${IDENPLANE_IMAGE:-islamawad/idenplane:0.5.1}
+    image: ${IDENPLANE_IMAGE:-islamawad/idenplane:0.5.2}
     environment:
       DATABASE_URL: postgresql://idenplane:idenplane@db:5432/idenplane
       PORT: '3000'
