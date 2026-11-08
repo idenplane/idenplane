@@ -24,6 +24,18 @@ interface L1Entry {
   expiresAt: number;
 }
 
+/** Freezes an object and everything reachable from it, in place. */
+function deepFreeze<T>(value: T): T {
+  if (value === null || typeof value !== 'object' || Object.isFrozen(value)) {
+    return value;
+  }
+  Object.freeze(value);
+  for (const key of Reflect.ownKeys(value)) {
+    deepFreeze((value as Record<string | symbol, unknown>)[key]);
+  }
+  return value;
+}
+
 /**
  * Realm, client, JWKS and CORS lookups, in two levels:
  *
@@ -37,8 +49,10 @@ interface L1Entry {
  * 2. **Redis**, when configured: shared by replicas and kept across
  *    restarts. The same announcements delete its keys too.
  *
- * Values are copied in and out of the L1 (`structuredClone`, which keeps
- * Dates), so no caller can change what another one reads.
+ * A value is copied once on its way into the L1 (`structuredClone`, which
+ * keeps Dates) and deeply frozen, then handed out as is: no caller can
+ * change what another one reads, and a hit costs no copy. Code that tries
+ * to modify a cached object fails loudly instead of corrupting the cache.
  */
 @Injectable()
 export class CacheService {
@@ -256,7 +270,7 @@ export class CacheService {
         operation: 'hit',
         cache: metricLabel,
       });
-      return structuredClone(entry.value) as T;
+      return entry.value as T;
     }
     if (entry) this.l1.delete(key);
     if (this.missEpoch.size >= L1_MAX_ENTRIES) {
@@ -277,7 +291,7 @@ export class CacheService {
       if (oldest !== undefined) this.l1.delete(oldest);
     }
     this.l1.set(key, {
-      value: structuredClone(value),
+      value: deepFreeze(structuredClone(value)),
       expiresAt: Date.now() + ttl * 1000,
     });
   }

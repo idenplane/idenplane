@@ -304,18 +304,35 @@ describe('CacheService in-process level', () => {
     });
   });
 
-  it('hands out copies, so no caller can change what another reads', async () => {
-    const realm = { id: 'r1', name: 'master', enabled: true };
+  it('detaches what it stores from the caller, and hands out a frozen object', async () => {
+    const realm = { id: 'r1', name: 'master', enabled: true, tags: ['a'] };
     await fill('master', realm);
-    realm.enabled = false;
-    const first = await service.getCachedRealmByName<{ enabled: boolean }>(
-      'master',
-    );
-    first!.enabled = false;
+    realm.enabled = false; // the caller's object, not the cache's
+    realm.tags.push('b');
+
+    const hit = await service.getCachedRealmByName<typeof realm>('master');
+    expect(hit).toEqual({
+      id: 'r1',
+      name: 'master',
+      enabled: true,
+      tags: ['a'],
+    });
+    // A reader cannot change what the next one reads: it would throw.
+    expect(() => {
+      hit!.enabled = false;
+    }).toThrow(/read only|read-only/);
+    // (Thrown from the main realm under jest's VM modules, so match the message.)
+    expect(() => hit!.tags.push('c')).toThrow(/not extensible/);
     expect(
-      (await service.getCachedRealmByName<{ enabled: boolean }>('master'))!
-        .enabled,
+      (await service.getCachedRealmByName<typeof realm>('master'))!.enabled,
     ).toBe(true);
+  });
+
+  it('serves the same object to every reader, without copying', async () => {
+    await fill('master', { id: 'r1' });
+    const a = await service.getCachedRealmByName('master');
+    const b = await service.getCachedRealmByName('master');
+    expect(a).toBe(b);
   });
 
   it('keeps Dates as Dates', async () => {
