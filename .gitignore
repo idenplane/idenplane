@@ -90,6 +90,6 @@ helm/*/Chart.lock
 benchmarks/results/*
 !benchmarks/results/.gitkeep
 
-# Runtime data the server writes in its working directory
+# Uploaded theme assets the server writes in its working directory
+# (backups/ is ignored above)
 /uploads/
-/backups/
