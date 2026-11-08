@@ -5,7 +5,10 @@ import {
   Counter,
   Histogram,
   Gauge,
+  AggregatorRegistry,
 } from 'prom-client';
+import cluster from 'node:cluster';
+import { randomUUID } from 'node:crypto';
 
 @Injectable()
 export class MetricsService implements OnModuleInit {
@@ -81,5 +84,43 @@ export class MetricsService implements OnModuleInit {
 
   onModuleInit() {
     collectDefaultMetrics({ register: this.registry });
+    // In cluster mode the primary gathers every worker's registry.
+    if (cluster.isWorker) {
+      // Constructing one is what makes prom-client answer the primary's
+      // requests (setRegistries alone does not); it then reports ours.
+      new AggregatorRegistry();
+      AggregatorRegistry.setRegistries([this.registry]);
+    }
+  }
+
+  /**
+   * The metrics to serve: this process's, or in cluster mode every worker's,
+   * aggregated by the primary (a scrape lands on one worker at random, and
+   * must see the whole container).
+   */
+  async metricsText(): Promise<string> {
+    if (!cluster.isWorker || !process.send) return this.registry.metrics();
+    const id = randomUUID();
+    return new Promise<string>((resolve, reject) => {
+      const timer = setTimeout(() => {
+        process.off('message', onMessage);
+        reject(new Error('The cluster primary did not answer for metrics'));
+      }, 5_000);
+      const onMessage = (message: unknown) => {
+        const m = message as {
+          type?: string;
+          id?: string;
+          body?: string;
+          error?: string;
+        };
+        if (m?.type !== 'idenplane:metrics:response' || m.id !== id) return;
+        clearTimeout(timer);
+        process.off('message', onMessage);
+        if (m.error) reject(new Error(m.error));
+        else resolve(m.body ?? '');
+      };
+      process.on('message', onMessage);
+      process.send!({ type: 'idenplane:metrics:request', id });
+    });
   }
 }

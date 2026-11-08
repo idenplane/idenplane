@@ -9,6 +9,10 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+### Added
+- **`WEB_CONCURRENCY` runs one worker per CPU** (`auto`, or a number), so one container can use the whole machine instead of about one core. A small primary process forks the workers, restarts one that crashes, stops the container if workers keep failing at startup, and stops them gracefully on SIGTERM; `/admin/metrics` reports the whole container. The default stays one process. The CPU count honours the container's cpuset and CPU quota (a Kubernetes CPU limit), and the Argon2, database-pool and throttle budgets are split between workers rather than multiplied.
+- The server now shuts down gracefully on SIGTERM/SIGINT (it used to stop at once): in-flight requests finish, and the leader lock and database connections are released.
+
 ### Security
 - **A risk-triggered step-up stepped up every user of the client.** Continuous verification enforced a risky session's step-up by raising the `requiredAcr` of its whole client, permanently. It now applies to that user only: the authorization endpoint requires the risk's ACR (MFA, or WebAuthn at critical risk) of a user with a flagged session, until the flag expires. The trigger also recorded the required ACR as already *satisfied* for the session, and it announced the same step-up (risk event and WebSocket push) every minute until it expired; each risk episode is now announced once.
 - **Registration, email verification and magic links had no rate limit at all.** They were exempt from the global throttle and had no realm limit, so anyone could create accounts or have any address flooded with verification or sign-in mail. They now fall under the global throttle and the realm's IP limit. A verification resend or a password reset sends at most one email a minute per account, with the same response either way.

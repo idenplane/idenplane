@@ -158,6 +158,24 @@ Set `CACHE_L1=off` when Idenplane reaches PostgreSQL through a connection pooler
 
 With Redis configured, the same notifications also delete the shared Redis entries.
 
+### Using every CPU
+
+By default an Idenplane container runs one Node.js process, which uses about one CPU however many the container has. To use them all, set `WEB_CONCURRENCY`. The container then starts a small primary process, which runs one worker per CPU. The workers share the port, and everything they must agree on goes through PostgreSQL: caches, scheduled jobs, live session events and plugin state. The primary restarts a worker that crashes. If workers keep failing at startup, it stops the container with the workers' error, rather than retrying for ever.
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `WEB_CONCURRENCY` | `1` | No | `auto` for one worker per usable CPU, or a number of workers. |
+
+"Usable" means the CPUs the container may actually use: its cpuset (`--cpuset-cpus`) and its CPU quota (`--cpus`, or a Kubernetes `resources.limits.cpu`), whichever is smaller. A pod limited to 2 CPUs on a 64-core node runs 2 workers, not 64.
+
+Each worker is a full process: it needs roughly another 150–200 MiB of memory. Per-container budgets are split between the workers rather than given to each:
+
+- **Argon2 concurrency:** one hash at a time per usable CPU, across all workers.
+- **Database pool:** about `2 × CPUs + 1` connections in total, but at least 5 per worker.
+- **Global throttle:** `THROTTLE_LIMIT` per container.
+
+Each process also keeps two connections of its own, the cache-invalidation listener and the leader lock. A container with *N* workers therefore uses up to its pool plus 2 × *N* connections. Size PostgreSQL's `max_connections` for all your containers together.
+
 ### Scheduled jobs with several instances
 
 Some scheduled jobs must run once per tick across all instances, not once per instance: risk re-evaluation, step-up and termination checks, trust decay and credential rotation. The instances elect one of themselves to run them. The leader holds a PostgreSQL advisory lock on a connection of its own. If it stops or loses that connection, another instance takes over within about 15 seconds. Cleanup jobs and webhook delivery run on every instance; they are safe to.
@@ -227,7 +245,7 @@ SESSION_STORE=database
 
 Protect your API from abuse with configurable throttling.
 
-This is a coarse flood guard, per client IP and **per instance**: with three instances a client can make up to three times `THROTTLE_LIMIT` requests per window. It is kept in memory so it costs nothing per request. The limits that matter for abuse are shared by every instance through the database: the realm's rate limits (`rateLimitEnabled`, per IP, client and user), brute-force lockout, and the per-address limits on mail that a request can trigger. A verification resend or a password reset sends at most one email a minute to an account, and a magic link at most `magicLinkRateLimitPerEmail` every 15 minutes.
+This is a coarse flood guard, per client IP and **per container** (split between the container's workers, if any): with three containers a client can make up to three times `THROTTLE_LIMIT` requests per window. It is kept in memory so it costs nothing per request. The limits that matter for abuse are shared by every instance through the database: the realm's rate limits (`rateLimitEnabled`, per IP, client and user), brute-force lockout, and the per-address limits on mail that a request can trigger. A verification resend or a password reset sends at most one email a minute to an account, and a magic link at most `magicLinkRateLimitPerEmail` every 15 minutes.
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
