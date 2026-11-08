@@ -1,4 +1,4 @@
-import { cpus } from 'os';
+import { availableParallelism } from 'os';
 import { getPgPoolConfig } from './pg-pool-config.js';
 
 describe('getPgPoolConfig', () => {
@@ -35,7 +35,7 @@ describe('getPgPoolConfig', () => {
 
   it('should default max to 2x CPU cores + 1, not the pg default of 10', () => {
     const config = getPgPoolConfig('postgresql://localhost/db');
-    expect(config.max).toBe(cpus().length * 2 + 1);
+    expect(config.max).toBe(availableParallelism() * 2 + 1);
   });
 
   it('should default min to 2 and idleTimeoutMillis to 30s', () => {

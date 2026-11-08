@@ -143,35 +143,10 @@ export class LoginService {
         });
     }
 
-    const maxSessions = realm.maxSessionsPerUser;
-    if (maxSessions !== undefined && maxSessions > 0) {
-      // Count active SSO (login) sessions for this user in this realm
-      const activeSessions = await this.prisma.loginSession.findMany({
-        where: {
-          userId: user.id,
-          realmId: realm.id,
-          expiresAt: { gt: new Date() },
-        },
-        orderBy: { createdAt: 'asc' },
-        select: { id: true },
-      });
-
-      // FIFO eviction: delete the oldest sessions until we are below the limit
-      if (activeSessions.length >= maxSessions) {
-        const toDelete = activeSessions.slice(
-          0,
-          activeSessions.length - maxSessions + 1,
-        );
-        await this.prisma.loginSession.deleteMany({
-          where: { id: { in: toDelete.map((s) => s.id) } },
-        });
-      }
-    }
-
     const token = this.crypto.generateSecret(32);
     const tokenHash = this.crypto.sha256(token);
 
-    await this.prisma.loginSession.create({
+    const created = await this.prisma.loginSession.create({
       data: {
         userId: user.id,
         realmId: realm.id,
@@ -182,7 +157,35 @@ export class LoginService {
         amr: authContext.amr ?? [],
         expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
       },
+      select: { id: true, createdAt: true },
     });
+
+    // FIFO eviction after the new session exists, against the user's older
+    // sessions only: concurrent sign-ins never evict each other from both
+    // sides (with a cap of 1 that would leave none), the newest survives,
+    // and each newer sign-in trims what came before it.
+    const maxSessions = realm.maxSessionsPerUser;
+    if (maxSessions !== undefined && maxSessions > 0) {
+      const others = await this.prisma.loginSession.findMany({
+        where: {
+          userId: user.id,
+          realmId: realm.id,
+          expiresAt: { gt: new Date() },
+          OR: [
+            { createdAt: { lt: created.createdAt } },
+            { createdAt: created.createdAt, id: { lt: created.id } },
+          ],
+        },
+        orderBy: { createdAt: 'asc' },
+        select: { id: true },
+      });
+      if (others.length >= maxSessions) {
+        const toDelete = others.slice(0, others.length - maxSessions + 1);
+        await this.prisma.loginSession.deleteMany({
+          where: { id: { in: toDelete.map((s) => s.id) } },
+        });
+      }
+    }
 
     return token;
   }
