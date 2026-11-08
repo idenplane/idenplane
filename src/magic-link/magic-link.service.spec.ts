@@ -28,7 +28,9 @@ const mockThemeEmail = {
   getSubject: jest.fn().mockReturnValue('Sign in to Idenplane'),
   renderEmail: jest
     .fn()
-    .mockReturnValue('<a href="https://app.example.com/magic-link?token=raw-magic-link-token">Sign In</a>'),
+    .mockReturnValue(
+      '<a href="https://app.example.com/magic-link?token=raw-magic-link-token">Sign In</a>',
+    ),
 };
 
 const mockRealmSlim = {
@@ -362,7 +364,10 @@ describe('MagicLinkService', () => {
       const customRealm = { ...mockRealmSlim, magicLinkExpirySeconds: 900 };
       prisma.realm.findUnique
         .mockResolvedValueOnce(customRealm)
-        .mockResolvedValueOnce({ ...mockRealmFull, magicLinkExpirySeconds: 900 });
+        .mockResolvedValueOnce({
+          ...mockRealmFull,
+          magicLinkExpirySeconds: 900,
+        });
       prisma.client.findFirst.mockResolvedValue(mockClient);
       prisma.user.findFirst.mockResolvedValue(mockUser);
       mockRateLimit.checkIpLimit.mockResolvedValue(okRateLimit);
@@ -391,10 +396,16 @@ describe('MagicLinkService', () => {
     });
 
     it('should use default expiry when realm does not specify', async () => {
-      const realmNullExpiry = { ...mockRealmSlim, magicLinkExpirySeconds: null };
+      const realmNullExpiry = {
+        ...mockRealmSlim,
+        magicLinkExpirySeconds: null,
+      };
       prisma.realm.findUnique
         .mockResolvedValueOnce(realmNullExpiry)
-        .mockResolvedValueOnce({ ...mockRealmFull, magicLinkExpirySeconds: null });
+        .mockResolvedValueOnce({
+          ...mockRealmFull,
+          magicLinkExpirySeconds: null,
+        });
       prisma.client.findFirst.mockResolvedValue(mockClient);
       prisma.user.findFirst.mockResolvedValue(mockUser);
       mockRateLimit.checkIpLimit.mockResolvedValue(okRateLimit);

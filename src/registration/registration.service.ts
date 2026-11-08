@@ -247,24 +247,37 @@ export class RegistrationService {
   /**
    * Send email verification to a user
    */
+  /**
+   * Emails a verification link. `{ resend: true }` (a user asking again)
+   * sends nothing if a link went out less than a minute ago; the result
+   * says whether one was sent.
+   */
   async sendVerificationEmail(
     realm: Realm,
     userId: string,
     email: string,
-  ): Promise<void> {
+    opts: { resend?: boolean } = {},
+  ): Promise<boolean> {
     const configured = await this.emailService.isConfigured(realm.name);
     if (!configured) {
       this.logger.warn(
         `SMTP not configured for realm "${realm.name}", skipping verification email`,
       );
-      return;
+      return false;
     }
 
-    const rawToken = await this.verificationService.createToken(
-      userId,
-      'email_verification',
-      86400,
-    );
+    const rawToken = opts.resend
+      ? await this.verificationService.createTokenUnlessRecent(
+          userId,
+          'email_verification',
+          86400,
+        )
+      : await this.verificationService.createToken(
+          userId,
+          'email_verification',
+          86400,
+        );
+    if (rawToken === null) return false;
     const baseUrl = this.config.get<string>(
       'BASE_URL',
       'http://localhost:3000',
@@ -280,6 +293,7 @@ export class RegistrationService {
     this.logger.log(
       `Verification email sent to ${email} (realm: ${realm.name})`,
     );
+    return true;
   }
 
   /**
@@ -374,8 +388,10 @@ export class RegistrationService {
       return { sent: false };
     }
 
-    await this.sendVerificationEmail(realm, user.id, email);
-    return { sent: true };
+    const sent = await this.sendVerificationEmail(realm, user.id, email, {
+      resend: true,
+    });
+    return { sent };
   }
 
   /**

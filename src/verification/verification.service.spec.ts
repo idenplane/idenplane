@@ -26,6 +26,42 @@ describe('VerificationService', () => {
     service = new VerificationService(prisma as any, mockCrypto as any);
   });
 
+  // ─── createTokenUnlessRecent ───────────────────────────────
+
+  describe('createTokenUnlessRecent', () => {
+    beforeEach(() => {
+      (prisma.verificationToken as any).findFirst = jest.fn();
+      prisma.verificationToken.deleteMany.mockResolvedValue({ count: 0 });
+      prisma.verificationToken.create.mockResolvedValue({});
+    });
+
+    it('issues nothing if a token of the type went out within the cooldown', async () => {
+      (prisma.verificationToken as any).findFirst.mockResolvedValue({
+        id: 't1',
+      });
+
+      expect(
+        await service.createTokenUnlessRecent('user-1', 'password_reset', 3600),
+      ).toBeNull();
+      expect(prisma.verificationToken.create).not.toHaveBeenCalled();
+      const where = (prisma.verificationToken as any).findFirst.mock.calls[0][0]
+        .where;
+      expect(where).toMatchObject({ userId: 'user-1', type: 'password_reset' });
+      expect(Date.now() - where.createdAt.gt.getTime()).toBeGreaterThanOrEqual(
+        59_000,
+      );
+    });
+
+    it('issues a token once the cooldown has passed', async () => {
+      (prisma.verificationToken as any).findFirst.mockResolvedValue(null);
+
+      expect(
+        await service.createTokenUnlessRecent('user-1', 'password_reset', 3600),
+      ).toBe('raw-token-abc');
+      expect(prisma.verificationToken.create).toHaveBeenCalled();
+    });
+  });
+
   // ─── createToken ───────────────────────────────────────────
 
   describe('createToken', () => {

@@ -10,6 +10,7 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 ## [Unreleased]
 
 ### Security
+- **Registration, email verification and magic links had no rate limit at all.** They were exempt from the global throttle and had no realm limit, so anyone could create accounts or have any address flooded with verification or sign-in mail. They now fall under the global throttle and the realm's IP limit. A verification resend or a password reset sends at most one email a minute per account, with the same response either way.
 - **A TOTP code could be accepted more than once.** Submissions of the same code checked that it was unused before any of them recorded it, so concurrent ones (on one instance or several) all passed. The code is now claimed by inserting it under a new unique index on (user, code), and only the first insert wins; an earlier use whose window has passed is taken over, so a code that comes round again still works.
 
 ### Changed
