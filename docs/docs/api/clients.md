@@ -19,7 +19,7 @@ The Clients API provides endpoints for managing OAuth 2.0 / OpenID Connect clien
 All client endpoints require API key authentication:
 
 ```bash
--H "X-API-Key: your-api-key-here"
+-H "x-admin-api-key: your-api-key-here"
 ```
 
 ## List Clients
@@ -34,7 +34,7 @@ Returns all clients in the realm.
 
 ```bash
 curl -X GET "http://localhost:3000/admin/realms/master/clients" \
-  -H "X-API-Key: your-api-key-here"
+  -H "x-admin-api-key: your-api-key-here"
 ```
 
 ### Response
@@ -104,7 +104,7 @@ Creates a new OAuth client application.
 
 ```bash
 curl -X POST "http://localhost:3000/admin/realms/master/clients" \
-  -H "X-API-Key: your-api-key-here" \
+  -H "x-admin-api-key: your-api-key-here" \
   -H "Content-Type: application/json" \
   -d '{
     "clientId": "my-mobile-app",
@@ -149,7 +149,7 @@ Returns a single client by ID.
 
 ```bash
 curl -X GET "http://localhost:3000/admin/realms/master/clients/client-uuid-789" \
-  -H "X-API-Key: your-api-key-here"
+  -H "x-admin-api-key: your-api-key-here"
 ```
 
 ### Response
@@ -191,7 +191,7 @@ Updates an existing client. Replaces all fields.
 
 ```bash
 curl -X PUT "http://localhost:3000/admin/realms/master/clients/client-uuid-789" \
-  -H "X-API-Key: your-api-key-here" \
+  -H "x-admin-api-key: your-api-key-here" \
   -H "Content-Type: application/json" \
   -d '{
     "clientId": "my-mobile-app",
@@ -217,7 +217,7 @@ Partially updates a client. Only provided fields are modified.
 
 ```bash
 curl -X PATCH "http://localhost:3000/admin/realms/master/clients/client-uuid-789" \
-  -H "X-API-Key: your-api-key-here" \
+  -H "x-admin-api-key: your-api-key-here" \
   -H "Content-Type: application/json" \
   -d '{
     "description": "Updated via PATCH"
@@ -236,7 +236,7 @@ Permanently deletes a client and all associated data including client credential
 
 ```bash
 curl -X DELETE "http://localhost:3000/admin/realms/master/clients/client-uuid-789" \
-  -H "X-API-Key: your-api-key-here"
+  -H "x-admin-api-key: your-api-key-here"
 ```
 
 ### Response
@@ -259,19 +259,16 @@ When regenerating a secret, immediately update your application's configuration 
 
 ```bash
 curl -X POST "http://localhost:3000/admin/realms/master/clients/client-uuid-123/regenerate-secret" \
-  -H "X-API-Key: your-api-key-here"
+  -H "x-admin-api-key: your-api-key-here"
 ```
 
 ### Response
 
 ```json
 {
-  "id": "client-uuid-123",
   "clientId": "my-web-app",
-  "name": "My Web Application",
-  "secret": "new-generated-secret-value-here",
-  "createdAt": "2024-01-01T00:00:00Z",
-  "updatedAt": "2024-02-20T15:30:00Z"
+  "clientSecret": "b3f1c2...64 hex characters...9e0a",
+  "secretWarning": "Store this secret securely. It will not be shown again."
 }
 ```
 
@@ -287,7 +284,7 @@ Returns the service account user associated with a client. This user can be used
 
 ```bash
 curl -X GET "http://localhost:3000/admin/realms/master/clients/client-uuid-123/service-account-user" \
-  -H "X-API-Key: your-api-key-here"
+  -H "x-admin-api-key: your-api-key-here"
 ```
 
 ### Response
