@@ -113,7 +113,7 @@ export class Auth0ImporterService {
           const isPublic = client.token_endpoint_auth_method === 'none';
           const grantTypes = this.mapAuth0GrantTypes(client.grant_types ?? []);
           const secretHash = client.client_secret
-            ? await this.crypto.hashPassword(client.client_secret)
+            ? await this.crypto.hashSecret(client.client_secret)
             : null;
 
           await this.prisma.client.create({

@@ -9,6 +9,23 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+## [0.5.2] - 2026-11-08
+
+Machine-to-machine authentication gets much faster and stops dropping tokens under load, and clients created by the setup wizard or imported from Authentik or Zitadel can authenticate at all. **If you rely on a `refresh_token` from client_credentials, read Changed below.** The upgrade runs one migration and needs no secret rotation.
+
+### Fixed
+- **Clients created by the setup wizard, or imported from Authentik or Zitadel, could not authenticate.** Their secrets were stored as plaintext, which the secret check could not read (500 on every token request) ([#1702](https://github.com/idenplane/idenplane/pull/1702)). A migration hashes those rows; the clients work with the secrets they already have. The wizard also no longer keeps a copy of the secret in its own state.
+- A client secret left in the database in no known hash format is now rejected with `invalid_client` instead of a 500.
+- **A client_credentials token could turn inactive within seconds under load.** Each token for a client with a service account (every confidential client with `client_credentials` gets one) opened a session, and only the newest 100 were kept, so a client that requested tokens quickly saw its earlier, unexpired tokens fail introspection. These tokens no longer have a session, so nothing pushes them out ([#1704](https://github.com/idenplane/idenplane/pull/1704)).
+- Userinfo now rejects a token whose user has been disabled. Introspection already did.
+- The docs sent the admin key in `X-API-Key` in 56 examples, which the Admin API does not read, so each of them returned 401. They now use `x-admin-api-key`, and the regenerate-secret response examples match what the endpoint returns ([#1705](https://github.com/idenplane/idenplane/pull/1705)).
+
+### Changed
+- **client_credentials no longer returns a `refresh_token`, `id_token` or `session_state` for a client with a service account**, as RFC 6749 §4.4.3 asks and as clients without a service account already behaved. The access token keeps the service account's claims and roles but no `sid`. Ask for a new token when one expires. Each token request also writes nothing to the database any more, where it used to create a session and a refresh token and prune old sessions. Disabling the service account, or revoking a token, still ends it. In the benchmark harness on 2 CPUs this grant went from 41 to 143 requests per second, with p95 from 3.1 s to 0.33 s.
+- **Client secrets and service-account API keys are checked in microseconds instead of one Argon2 run per request.** Every token, introspection, revocation and API-key request used to pay 64 MiB and three passes of Argon2id, which capped throughput and queued behind user logins. Secrets Idenplane generates (256 random bits) are now stored as SHA-256 and compared in constant time; a slow hash protects nothing against a 2^256 search. Secrets that came from another system and may have been chosen by a person stay on Argon2id. Existing secrets move to the new format the first time they are used, with no rotation needed ([#1702](https://github.com/idenplane/idenplane/pull/1702)).
+- Realm import keeps a client secret hash from an export made with secrets, and hashes a plaintext secret written into the file by hand.
+- The benchmark harness runs on Docker Desktop and with locally built images ([#1703](https://github.com/idenplane/idenplane/pull/1703)).
+
 ## [0.5.1] - 2026-11-07
 
 Forward auth did not work in 0.5.0. This release fixes it and checks it against real Traefik, nginx and Caddy. **If you use forward auth, upgrade, and update your nginx config** (below).

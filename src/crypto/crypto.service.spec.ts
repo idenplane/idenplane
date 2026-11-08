@@ -72,6 +72,94 @@ describe('CryptoService', () => {
     });
   });
 
+  describe('hashSecret / verifySecret', () => {
+    const generated = 'ab'.repeat(32); // the shape generateSecret() returns
+    const chosen = 'my-imported-secret'; // e.g. from another IdP
+
+    it('stores a generated secret as a fast sha256 digest that verifies', async () => {
+      (argon2.verify as jest.Mock).mockClear();
+      const stored = await service.hashSecret(generated);
+      expect(stored).toBe(`sha256$${service.sha256(generated)}`);
+      expect(await service.verifySecret(stored, generated)).toEqual({
+        valid: true,
+      });
+      expect(await service.verifySecret(stored, 'cd'.repeat(32))).toEqual({
+        valid: false,
+      });
+      expect(argon2.verify).not.toHaveBeenCalled();
+    });
+
+    it('stores any other secret with Argon2id', async () => {
+      const stored = await service.hashSecret(chosen);
+      expect(stored.startsWith('$argon2id$')).toBe(true);
+      expect(await service.verifySecret(stored, chosen)).toEqual({
+        valid: true,
+      });
+      expect(await service.verifySecret(stored, 'wrong')).toEqual({
+        valid: false,
+      });
+    });
+
+    it('asks to move an Argon2-stored generated secret to the fast format', async () => {
+      const legacy = await service.hashPassword(generated); // pre-0.5.2 row
+      const { valid, rehash } = await service.verifySecret(legacy, generated);
+      expect(valid).toBe(true);
+      expect(rehash).toBe(`sha256$${service.sha256(generated)}`);
+    });
+
+    it('asks to move a fast-stored chosen secret to Argon2', async () => {
+      // What the migration makes of a plaintext row written by an importer.
+      const migrated = `sha256$${service.sha256(chosen)}`;
+      const { valid, rehash } = await service.verifySecret(migrated, chosen);
+      expect(valid).toBe(true);
+      expect(rehash?.startsWith('$argon2id$')).toBe(true);
+      expect(await service.verifySecret(rehash!, chosen)).toEqual({
+        valid: true,
+      });
+    });
+
+    it('never asks for a rehash when the secret does not match', async () => {
+      const legacy = await service.hashPassword(generated);
+      expect(await service.verifySecret(legacy, 'cd'.repeat(32))).toEqual({
+        valid: false,
+      });
+    });
+
+    it('rejects a plaintext value in the column instead of throwing', async () => {
+      await expect(service.verifySecret(generated, generated)).resolves.toEqual(
+        { valid: false },
+      );
+      await expect(service.verifySecret('', '')).resolves.toEqual({
+        valid: false,
+      });
+    });
+
+    it('rejects a sha256 value of the wrong length', async () => {
+      await expect(
+        service.verifySecret('sha256$abcd', generated),
+      ).resolves.toEqual({ valid: false });
+    });
+
+    it('rejects an oversized presented secret before hashing it', async () => {
+      const stored = await service.hashSecret(chosen);
+      (argon2.verify as jest.Mock).mockClear();
+      expect(await service.verifySecret(stored, 'x'.repeat(1025))).toEqual({
+        valid: false,
+      });
+      expect(argon2.verify).not.toHaveBeenCalled();
+    });
+
+    it('recognizes its own hash formats, and nothing else', async () => {
+      expect(service.isSecretHash(await service.hashSecret(generated))).toBe(
+        true,
+      );
+      expect(service.isSecretHash(await service.hashSecret(chosen))).toBe(true);
+      expect(service.isSecretHash(generated)).toBe(false);
+      expect(service.isSecretHash('sha256$short')).toBe(false);
+      expect(service.isSecretHash(chosen)).toBe(false);
+    });
+  });
+
   describe('hmac', () => {
     it('is deterministic per purpose and input', () => {
       expect(service.hmac('a', '123456')).toBe(service.hmac('a', '123456'));

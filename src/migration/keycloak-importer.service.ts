@@ -341,7 +341,7 @@ export class KeycloakImporterService {
         if (!dryRun) {
           const grantTypes = this.mapKeycloakGrantTypes(client);
           const secretHash = client.secret
-            ? await this.crypto.hashPassword(client.secret)
+            ? await this.crypto.hashSecret(client.secret)
             : null;
           await db.client.create({
             data: {

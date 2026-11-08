@@ -68,7 +68,7 @@ export class ClientsService {
 
     if (clientType === 'CONFIDENTIAL') {
       rawSecret = this.crypto.generateSecret();
-      secretHash = await this.crypto.hashPassword(rawSecret);
+      secretHash = await this.crypto.hashSecret(rawSecret);
     }
 
     const grantTypes = dto.grantTypes ?? ['authorization_code'];
@@ -279,7 +279,7 @@ export class ClientsService {
     }
 
     const rawSecret = this.crypto.generateSecret();
-    const secretHash = await this.crypto.hashPassword(rawSecret);
+    const secretHash = await this.crypto.hashSecret(rawSecret);
 
     await this.prisma.client.update({
       where: { id: client.id },

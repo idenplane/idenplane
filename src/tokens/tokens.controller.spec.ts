@@ -19,8 +19,8 @@ describe('TokensController', () => {
   let mockPrisma: {
     client: { findUnique: jest.Mock };
   };
-  let mockCrypto: {
-    verifyPassword: jest.Mock;
+  let mockClientSecrets: {
+    verify: jest.Mock;
   };
 
   const realm = {
@@ -63,14 +63,14 @@ describe('TokensController', () => {
       },
     };
 
-    mockCrypto = {
-      verifyPassword: jest.fn().mockResolvedValue(true),
+    mockClientSecrets = {
+      verify: jest.fn().mockResolvedValue(true),
     };
 
     controller = new TokensController(
       mockTokensService as any,
       mockPrisma as any,
-      mockCrypto as any,
+      mockClientSecrets as any,
     );
   });
 
@@ -121,8 +121,8 @@ describe('TokensController', () => {
 
       await controller.introspect(realm, body, mockReq());
 
-      expect(mockCrypto.verifyPassword).toHaveBeenCalledWith(
-        'hashed-secret',
+      expect(mockClientSecrets.verify).toHaveBeenCalledWith(
+        confidentialClient,
         'raw-secret',
       );
       expect(mockTokensService.introspect).toHaveBeenCalled();

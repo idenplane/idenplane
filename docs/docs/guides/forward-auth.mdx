@@ -52,7 +52,7 @@ Forward auth needs a normal client to authenticate through. In the console, **Cl
 
 ```bash
 curl -X POST https://auth.example.com/admin/realms/master/clients \
-  -H "X-API-Key: $ADMIN_API_KEY" \
+  -H "x-admin-api-key: $ADMIN_API_KEY" \
   -H 'Content-Type: application/json' \
   -d '{
     "clientId": "grafana-proxy",
@@ -69,7 +69,7 @@ Leave `redirectUris` empty for now — step 2 tells you exactly what to put ther
 
 ```bash
 curl -X POST https://auth.example.com/admin/realms/master/proxy-applications \
-  -H "X-API-Key: $ADMIN_API_KEY" \
+  -H "x-admin-api-key: $ADMIN_API_KEY" \
   -H 'Content-Type: application/json' \
   -d '{
     "slug": "grafana",
@@ -100,7 +100,7 @@ Add the `callbackUrl` above to the client's `redirectUris` and it becomes `true`
 
 ```bash
 curl -X PUT https://auth.example.com/admin/realms/master/clients/grafana-proxy \
-  -H "X-API-Key: $ADMIN_API_KEY" \
+  -H "x-admin-api-key: $ADMIN_API_KEY" \
   -H 'Content-Type: application/json' \
   -d '{
     "redirectUris": ["https://auth.example.com/realms/master/proxy/grafana/callback"]
@@ -246,7 +246,7 @@ To revoke everyone at once, use **Revoke all sessions** on the application, or:
 
 ```bash
 curl -X POST https://auth.example.com/admin/realms/master/proxy-applications/grafana/revoke-sessions \
-  -H "X-API-Key: $ADMIN_API_KEY"
+  -H "x-admin-api-key: $ADMIN_API_KEY"
 ```
 
 ## Session lifetime

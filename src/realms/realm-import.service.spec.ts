@@ -5,6 +5,7 @@ jest.mock('../crypto/jwk.service.js', () => ({
 }));
 
 import { RealmImportService } from './realm-import.service.js';
+import { CryptoService } from '../crypto/crypto.service.js';
 import {
   createMockPrismaService,
   type MockPrismaService,
@@ -99,6 +100,7 @@ describe('RealmImportService', () => {
       prisma as any,
       jwkService as any,
       scopeSeedService as any,
+      new CryptoService(),
     );
 
     // Default mock return values
@@ -233,6 +235,32 @@ describe('RealmImportService', () => {
           }),
         }),
       );
+    });
+
+    it('keeps an exported client secret hash, so the secret keeps working', async () => {
+      const crypto = new CryptoService();
+      const hash = await crypto.hashSecret(crypto.generateSecret());
+      await service.importRealm({
+        ...validPayload,
+        clients: [{ ...validPayload.clients[0], clientSecret: hash }],
+      });
+
+      expect(prisma.client.create.mock.calls[0][0].data.clientSecret).toBe(
+        hash,
+      );
+    });
+
+    it('hashes a plaintext client secret written into the payload by hand', async () => {
+      await service.importRealm({
+        ...validPayload,
+        clients: [{ ...validPayload.clients[0], clientSecret: 'hand-written' }],
+      });
+
+      const stored = prisma.client.create.mock.calls[0][0].data.clientSecret;
+      expect(stored).not.toBe('hand-written');
+      expect(
+        await new CryptoService().verifySecret(stored, 'hand-written'),
+      ).toEqual({ valid: true });
     });
 
     it('should import roles including client roles', async () => {

@@ -113,6 +113,7 @@ describe('KeycloakImporterService', () => {
           provide: CryptoService,
           useValue: {
             hashPassword: jest.fn().mockResolvedValue('hashed'),
+            hashSecret: jest.fn().mockResolvedValue('hashed'),
             generateSecret: jest.fn(),
           },
         },

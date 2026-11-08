@@ -35,7 +35,7 @@ describe('ClientsService', () => {
   let prisma: MockPrismaService;
   let cryptoService: {
     generateSecret: jest.Mock;
-    hashPassword: jest.Mock;
+    hashSecret: jest.Mock;
     verifyPassword: jest.Mock;
     sha256: jest.Mock;
   };
@@ -77,7 +77,7 @@ describe('ClientsService', () => {
     prisma = createMockPrismaService();
     cryptoService = {
       generateSecret: jest.fn(),
-      hashPassword: jest.fn(),
+      hashSecret: jest.fn(),
       verifyPassword: jest.fn(),
       sha256: jest.fn(),
     };
@@ -123,7 +123,7 @@ describe('ClientsService', () => {
     it('should create a confidential client with a generated secret', async () => {
       prisma.client.findUnique.mockResolvedValue(null);
       cryptoService.generateSecret.mockReturnValue('raw-secret-hex');
-      cryptoService.hashPassword.mockResolvedValue('hashed-secret');
+      cryptoService.hashSecret.mockResolvedValue('hashed-secret');
       prisma.client.create.mockResolvedValue(mockClient);
 
       const result = await service.create(mockRealm, {
@@ -136,7 +136,7 @@ describe('ClientsService', () => {
       expect(result.secretDisplayedOnce).toBe(true);
       expect(result.secretWarning).toBeDefined();
       expect(cryptoService.generateSecret).toHaveBeenCalled();
-      expect(cryptoService.hashPassword).toHaveBeenCalledWith('raw-secret-hex');
+      expect(cryptoService.hashSecret).toHaveBeenCalledWith('raw-secret-hex');
       expect(prisma.client.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
@@ -175,7 +175,7 @@ describe('ClientsService', () => {
     it('should default to CONFIDENTIAL when clientType is not specified', async () => {
       prisma.client.findUnique.mockResolvedValue(null);
       cryptoService.generateSecret.mockReturnValue('secret');
-      cryptoService.hashPassword.mockResolvedValue('hashed');
+      cryptoService.hashSecret.mockResolvedValue('hashed');
       prisma.client.create.mockResolvedValue(mockClient);
 
       await service.create(mockRealm, {
@@ -327,7 +327,7 @@ describe('ClientsService', () => {
     it('should regenerate the secret for a confidential client (looked up by clientId string)', async () => {
       prisma.client.findUnique.mockResolvedValue(mockClient);
       cryptoService.generateSecret.mockReturnValue('new-raw-secret');
-      cryptoService.hashPassword.mockResolvedValue('new-hashed-secret');
+      cryptoService.hashSecret.mockResolvedValue('new-hashed-secret');
       prisma.client.update.mockResolvedValue({});
 
       const result = await service.regenerateSecret(mockRealm, 'my-app');
@@ -336,7 +336,7 @@ describe('ClientsService', () => {
       expect(result.clientSecret).toBe('new-raw-secret');
       expect(result.secretWarning).toBeDefined();
       expect(cryptoService.generateSecret).toHaveBeenCalled();
-      expect(cryptoService.hashPassword).toHaveBeenCalledWith('new-raw-secret');
+      expect(cryptoService.hashSecret).toHaveBeenCalledWith('new-raw-secret');
       // Regression for the bug where the update used the raw URL param in the
       // realmId_clientId compound key — that crashed with P2025 whenever the
       // caller passed the row UUID. We now use the resolved row PK.
@@ -355,7 +355,7 @@ describe('ClientsService', () => {
         .mockResolvedValueOnce(null)
         .mockResolvedValueOnce(mockClient);
       cryptoService.generateSecret.mockReturnValue('new-raw-secret');
-      cryptoService.hashPassword.mockResolvedValue('new-hashed-secret');
+      cryptoService.hashSecret.mockResolvedValue('new-hashed-secret');
       prisma.client.update.mockResolvedValue({});
 
       const result = await service.regenerateSecret(mockRealm, uuid);

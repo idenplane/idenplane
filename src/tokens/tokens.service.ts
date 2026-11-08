@@ -500,11 +500,17 @@ export class TokensService {
         emailVerified: true,
         firstName: true,
         lastName: true,
+        enabled: true,
       },
     });
 
     if (!user) {
       throw new UnauthorizedException('User not found');
+    }
+    // A session-less token (a service account's) has no session to delete
+    // when its user is disabled, so the user's own state must be checked.
+    if (!user.enabled) {
+      throw new UnauthorizedException('User is disabled');
     }
 
     const scopeString = payload['scope'] as string | undefined;

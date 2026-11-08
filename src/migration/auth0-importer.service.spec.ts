@@ -92,7 +92,10 @@ describe('Auth0ImporterService', () => {
         { provide: PrismaService, useValue: prisma },
         {
           provide: CryptoService,
-          useValue: { hashPassword: jest.fn().mockResolvedValue('hashed') },
+          useValue: {
+            hashPassword: jest.fn().mockResolvedValue('hashed'),
+            hashSecret: jest.fn().mockResolvedValue('hashed'),
+          },
         },
       ],
     }).compile();

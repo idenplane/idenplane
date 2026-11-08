@@ -19,7 +19,7 @@ The Realms API provides endpoints for managing realms (multi-tenancy units) and 
 Most realm endpoints require super-admin role access:
 
 ```bash
--H "X-API-Key: your-api-key-here"
+-H "x-admin-api-key: your-api-key-here"
 ```
 
 Realms with `super-admin` role can manage all realms. Regular admin users can only manage their assigned realm.
@@ -36,7 +36,7 @@ Returns all realms in the system.
 
 ```bash
 curl -X GET "http://localhost:3000/admin/realms" \
-  -H "X-API-Key: your-api-key-here"
+  -H "x-admin-api-key: your-api-key-here"
 ```
 
 ### Response
@@ -119,7 +119,7 @@ Creates a new realm. Requires `super-admin` role.
 
 ```bash
 curl -X POST "http://localhost:3000/admin/realms" \
-  -H "X-API-Key: your-api-key-here" \
+  -H "x-admin-api-key: your-api-key-here" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "partner-portal",
@@ -170,7 +170,7 @@ Returns a single realm by name.
 
 ```bash
 curl -X GET "http://localhost:3000/admin/realms/partner-portal" \
-  -H "X-API-Key: your-api-key-here"
+  -H "x-admin-api-key: your-api-key-here"
 ```
 
 ### Response
@@ -211,7 +211,7 @@ Updates an existing realm. Requires `super-admin` role. Replaces all configurati
 
 ```bash
 curl -X PUT "http://localhost:3000/admin/realms/partner-portal" \
-  -H "X-API-Key: your-api-key-here" \
+  -H "x-admin-api-key: your-api-key-here" \
   -H "Content-Type: application/json" \
   -d '{
     "name": "partner-portal",
@@ -235,7 +235,7 @@ Partially updates a realm. Only provided fields are modified.
 
 ```bash
 curl -X PATCH "http://localhost:3000/admin/realms/partner-portal" \
-  -H "X-API-Key: your-api-key-here" \
+  -H "x-admin-api-key: your-api-key-here" \
   -H "Content-Type: application/json" \
   -d '{
     "registrationAllowed": true,
@@ -259,7 +259,7 @@ This action is irreversible. Ensure you have exported any important data before 
 
 ```bash
 curl -X DELETE "http://localhost:3000/admin/realms/partner-portal" \
-  -H "X-API-Key: your-api-key-here"
+  -H "x-admin-api-key: your-api-key-here"
 ```
 
 ### Response
@@ -286,15 +286,15 @@ Exports realm configuration to JSON. Can optionally include users and secrets.
 ```bash
 # Export realm configuration only
 curl -X GET "http://localhost:3000/admin/realms/partner-portal/export" \
-  -H "X-API-Key: your-api-key-here"
+  -H "x-admin-api-key: your-api-key-here"
 
 # Export with users (no secrets for security)
 curl -X GET "http://localhost:3000/admin/realms/partner-portal/export?includeUsers=true" \
-  -H "X-API-Key: your-api-key-here"
+  -H "x-admin-api-key: your-api-key-here"
 
 # Export with users and secrets
 curl -X GET "http://localhost:3000/admin/realms/partner-portal/export?includeUsers=true&includeSecrets=true" \
-  -H "X-API-Key: your-api-key-here"
+  -H "x-admin-api-key: your-api-key-here"
 ```
 
 ### Response
@@ -336,7 +336,7 @@ Imports realm configuration from JSON.
 
 ```bash
 curl -X POST "http://localhost:3000/admin/realms/import?overwrite=true" \
-  -H "X-API-Key: your-api-key-here" \
+  -H "x-admin-api-key: your-api-key-here" \
   -H "Content-Type: application/json" \
   -d @realm-export.json
 ```
@@ -362,7 +362,7 @@ Returns list of themes available for realm customization.
 
 ```bash
 curl -X GET "http://localhost:3000/admin/realms/themes" \
-  -H "X-API-Key: your-api-key-here"
+  -H "x-admin-api-key: your-api-key-here"
 ```
 
 ### Response
@@ -404,7 +404,7 @@ Sends a test email to verify SMTP configuration.
 
 ```bash
 curl -X POST "http://localhost:3000/admin/realms/partner-portal/email/test" \
-  -H "X-API-Key: your-api-key-here" \
+  -H "x-admin-api-key: your-api-key-here" \
   -H "Content-Type: application/json" \
   -d '{
     "to": "admin@example.com"
