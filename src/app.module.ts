@@ -1,4 +1,5 @@
 import { Module } from '@nestjs/common';
+import { workerCount } from './common/utils/cpu-count.util.js';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
 import { ServeStaticModule } from '@nestjs/serve-static';
@@ -77,7 +78,15 @@ import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
     ThrottlerModule.forRoot([
       {
         ttl: parseInt(process.env['THROTTLE_TTL'] ?? '60000', 10),
-        limit: parseInt(process.env['THROTTLE_LIMIT'] ?? '100', 10),
+        // THROTTLE_LIMIT is per container: split between cluster workers,
+        // since each counts only the requests it serves.
+        limit: Math.max(
+          1,
+          Math.ceil(
+            parseInt(process.env['THROTTLE_LIMIT'] ?? '100', 10) /
+              workerCount(),
+          ),
+        ),
       },
     ]),
     ScheduleModule.forRoot(),

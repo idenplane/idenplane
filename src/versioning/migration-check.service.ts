@@ -20,6 +20,9 @@ export class MigrationCheckService implements OnModuleInit {
   private readonly logger = new Logger(MigrationCheckService.name);
 
   onModuleInit(): void {
+    // Once per container: in cluster mode only the first worker runs it
+    // (it shells out to prisma and blocks the event loop while it does).
+    if ((process.env['IDENPLANE_WORKER_INDEX'] ?? '0') !== '0') return;
     const status = this.getStatus();
 
     if (status.pendingCount > 0) {

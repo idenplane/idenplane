@@ -316,6 +316,11 @@ async function bootstrap() {
 
   app.get(SessionEventsGateway).attach(app.getHttpServer());
 
+  // Close cleanly on SIGTERM/SIGINT (docker stop, a rolling deploy, the
+  // cluster primary): shutdown hooks release the leader lock, end the
+  // database pools and finish in-flight requests.
+  app.enableShutdownHooks();
+
   const port = process.env['PORT'] ?? 3000;
   await app.listen(port);
   console.log(`Idenplane is running on http://localhost:${port}`);

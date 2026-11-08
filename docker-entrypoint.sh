@@ -139,4 +139,6 @@ fi
 npx prisma migrate deploy
 
 echo "Starting Idenplane..."
-exec node dist/main.js
+# cluster.js runs one process by default, or one worker per CPU with
+# WEB_CONCURRENCY=auto (or a number).
+exec node dist/cluster.js

@@ -11,9 +11,9 @@ describe('detectProvider', () => {
     });
 
     it('detects postgres:// alias scheme', () => {
-      expect(detectProvider('postgres://user:pass@localhost:5432/idenplane')).toBe(
-        DatabaseProvider.POSTGRESQL,
-      );
+      expect(
+        detectProvider('postgres://user:pass@localhost:5432/idenplane'),
+      ).toBe(DatabaseProvider.POSTGRESQL);
     });
 
     it('is case-insensitive for the scheme', () => {
