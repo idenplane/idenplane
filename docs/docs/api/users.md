@@ -38,7 +38,7 @@ Returns a paginated list of users in the realm.
 
 ```bash
 curl -X GET "http://localhost:3000/admin/realms/master/users?page=1&limit=20&search=john" \
-  -H "X-API-Key: your-api-key-here"
+  -H "x-admin-api-key: your-api-key-here"
 ```
 
 ### Response
@@ -91,7 +91,7 @@ Creates a new user in the realm.
 
 ```bash
 curl -X POST "http://localhost:3000/admin/realms/master/users" \
-  -H "X-API-Key: your-api-key-here" \
+  -H "x-admin-api-key: your-api-key-here" \
   -H "Content-Type: application/json" \
   -d '{
     "username": "janedoe",
@@ -130,7 +130,7 @@ Returns a single user by ID.
 
 ```bash
 curl -X GET "http://localhost:3000/admin/realms/master/users/user-uuid-456" \
-  -H "X-API-Key: your-api-key-here"
+  -H "x-admin-api-key: your-api-key-here"
 ```
 
 ### Response
@@ -174,7 +174,7 @@ Updates an existing user. Replaces all mutable fields.
 
 ```bash
 curl -X PUT "http://localhost:3000/admin/realms/master/users/user-uuid-456" \
-  -H "X-API-Key: your-api-key-here" \
+  -H "x-admin-api-key: your-api-key-here" \
   -H "Content-Type: application/json" \
   -d '{
     "username": "janedoe",
@@ -194,7 +194,7 @@ Partially updates a user. Only provided fields are updated.
 
 ```bash
 curl -X PATCH "http://localhost:3000/admin/realms/master/users/user-uuid-456" \
-  -H "X-API-Key: your-api-key-here" \
+  -H "x-admin-api-key: your-api-key-here" \
   -H "Content-Type: application/json" \
   -d '{
     "firstName": "Jane Elizabeth"
@@ -213,7 +213,7 @@ Permanently deletes a user and all associated data.
 
 ```bash
 curl -X DELETE "http://localhost:3000/admin/realms/master/users/user-uuid-456" \
-  -H "X-API-Key: your-api-key-here"
+  -H "x-admin-api-key: your-api-key-here"
 ```
 
 ### Response
@@ -239,7 +239,7 @@ Sets or resets a user's password.
 
 ```bash
 curl -X PUT "http://localhost:3000/admin/realms/master/users/user-uuid-456/reset-password" \
-  -H "X-API-Key: your-api-key-here" \
+  -H "x-admin-api-key: your-api-key-here" \
   -H "Content-Type: application/json" \
   -d '{
     "password": "newSecurePassword123",
@@ -263,7 +263,7 @@ Sends or resends email verification to a user.
 
 ```bash
 curl -X POST "http://localhost:3000/admin/realms/master/users/user-uuid-456/send-verification-email" \
-  -H "X-API-Key: your-api-key-here"
+  -H "x-admin-api-key: your-api-key-here"
 ```
 
 ### Response
@@ -286,7 +286,7 @@ Lists all offline sessions for a user.
 
 ```bash
 curl -X GET "http://localhost:3000/admin/realms/master/users/user-uuid-456/offline-sessions" \
-  -H "X-API-Key: your-api-key-here"
+  -H "x-admin-api-key: your-api-key-here"
 ```
 
 ### Response
@@ -318,7 +318,7 @@ Revokes a specific offline session.
 
 ```bash
 curl -X DELETE "http://localhost:3000/admin/realms/master/users/user-uuid-456/offline-sessions/token-uuid-789" \
-  -H "X-API-Key: your-api-key-here"
+  -H "x-admin-api-key: your-api-key-here"
 ```
 
 ### Response

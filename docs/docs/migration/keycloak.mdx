@@ -74,7 +74,7 @@ Import the entire realm export:
 
 ```bash
 curl -X POST "http://localhost:3000/admin/migration/keycloak" \
-  -H "X-API-Key: ${ADMIN_API_KEY}" \
+  -H "x-admin-api-key: ${ADMIN_API_KEY}" \
   -H "Content-Type: application/json" \
   -d @your-realm-export.json
 ```
@@ -85,7 +85,7 @@ By default, the import creates a realm with the same name as the source. To over
 
 ```bash
 curl -X POST "http://localhost:3000/admin/migration/keycloak" \
-  -H "X-API-Key: ${ADMIN_API_KEY}" \
+  -H "x-admin-api-key: ${ADMIN_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
     "data": '"$(cat your-realm-export.json)"',
@@ -99,7 +99,7 @@ Test the migration without making changes:
 
 ```bash
 curl -X POST "http://localhost:3000/admin/migration/keycloak" \
-  -H "X-API-Key: ${ADMIN_API_KEY}" \
+  -H "x-admin-api-key: ${ADMIN_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '{
     "data": '"$(cat your-realm-export.json)"',
@@ -179,7 +179,7 @@ Users with passwords using unsupported algorithms will be imported **without** a
 ```bash
 # After migration, trigger password reset for affected users
 curl -X POST "http://localhost:3000/admin/realms/my-realm/users/${USER_ID}/execute-actions-email" \
-  -H "X-API-Key: ${ADMIN_API_KEY}" \
+  -H "x-admin-api-key: ${ADMIN_API_KEY}" \
   -H "Content-Type: application/json" \
   -d '["VERIFY_ACTION", "UPDATE_PASSWORD"]'
 ```
@@ -240,15 +240,16 @@ After migration, regenerate secrets for confidential clients:
 
 ```bash
 curl -X POST "http://localhost:3000/admin/realms/my-realm/clients/${CLIENT_ID}/regenerate-secret" \
-  -H "X-API-Key: ${ADMIN_API_KEY}"
+  -H "x-admin-api-key: ${ADMIN_API_KEY}"
 ```
 
 **Response:**
 
 ```json
 {
-  "value": "new-client-secret-here",
-  "type": "secret"
+  "clientId": "my-app",
+  "clientSecret": "b3f1c2...64 hex characters...9e0a",
+  "secretWarning": "Store this secret securely. It will not be shown again."
 }
 ```
 
@@ -347,13 +348,13 @@ jq '[.users[] | select(.username | contains("batch2"))]' export.json > batch2.js
 ```bash
 # Import batch 1
 curl -X POST "http://localhost:3000/admin/migration/keycloak" \
-  -H "X-API-Key: ${ADMIN_API_KEY}" \
+  -H "x-admin-api-key: ${ADMIN_API_KEY}" \
   -H "Content-Type: application/json" \
   -d "{\"data\": $(cat batch1.json), \"targetRealm\": \"my-realm\"}"
 
 # Import batch 2
 curl -X POST "http://localhost:3000/admin/migration/keycloak" \
-  -H "X-API-Key: ${ADMIN_API_KEY}" \
+  -H "x-admin-api-key: ${ADMIN_API_KEY}" \
   -H "Content-Type: application/json" \
   -d "{\"data\": $(cat batch2.json), \"targetRealm\": \"my-realm\"}"
 ```
@@ -370,7 +371,7 @@ Import clients, roles, and groups **before** importing users when splitting the 
 
 ```bash
 curl -X GET "http://localhost:3000/admin/realms/my-realm/users?limit=1" \
-  -H "X-API-Key: ${ADMIN_API_KEY}"
+  -H "x-admin-api-key: ${ADMIN_API_KEY}"
 ```
 
 ### 2. Test Authentication

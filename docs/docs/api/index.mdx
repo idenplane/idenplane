@@ -38,21 +38,25 @@ Interactive API documentation is available via Swagger UI. This provides a visua
 
 ## Authentication
 
-All Admin API endpoints require authentication via an API key. Include your API key in the request header:
+Every Admin API endpoint (`/admin/...`) needs one of these:
 
-```http
-X-API-Key: your-api-key-here
-Authorization: Bearer your-jwt-token
-```
+- **The admin API key**, the `ADMIN_API_KEY` the server was started with, in the `x-admin-api-key` header:
 
-### API Key Authentication
+  ```bash
+  curl "http://localhost:3000/admin/realms" \
+    -H "x-admin-api-key: $ADMIN_API_KEY"
+  ```
 
-Admin API endpoints are protected by API key authentication:
+- **An admin user's access token**, the one the admin console signs in with, as a bearer token:
 
-```bash
-curl -X GET "http://localhost:3000/admin/realms" \
-  -H "X-API-Key: your-api-key-here"
-```
+  ```bash
+  curl "http://localhost:3000/admin/realms" \
+    -H "Authorization: Bearer $ADMIN_ACCESS_TOKEN"
+  ```
+
+:::note
+`X-Api-Key` is a different header. It carries a service account's API key, not the admin key, and the Admin API does not accept it.
+:::
 
 ## API Endpoints Overview
 
