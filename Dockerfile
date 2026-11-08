@@ -91,7 +91,7 @@ RUN npm ci --omit=dev
 RUN rm prisma.config.ts
 
 COPY --from=build /app/dist ./dist
-COPY --from=build /app/themes ./themes
+COPY --from=build --chown=node:node /app/themes ./themes
 
 # Use the existing 'node' user (UID 1000, GID 1000) from the base image
 # instead of creating a new group/user that conflicts with the pre-existing GID
@@ -103,8 +103,14 @@ HEALTHCHECK --interval=30s --timeout=5s CMD wget -q --spider http://localhost:30
 COPY docker-entrypoint.sh /docker-entrypoint.sh
 RUN chmod +x /docker-entrypoint.sh
 
-# Ensure the app directory is owned by the non-root user
-RUN chown -R node:node /app
+# The code and node_modules stay owned by root, so the app cannot rewrite
+# them, and no layer copies them again just to change their owner (a
+# `chown -R /app` here added ~620 MB). The node user owns only what it writes:
+#   /app          the entrypoint writes prisma.config.js
+#   /app/uploads  uploaded theme assets
+#   /app/backups  the default BACKUP_DIR for the upgrade flow
+#   /app/themes   (copied above with --chown) a mount point in the Helm chart
+RUN mkdir -p uploads backups && chown node:node /app uploads backups
 
 USER node
 ENTRYPOINT ["/docker-entrypoint.sh"]
