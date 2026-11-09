@@ -203,6 +203,14 @@ updates:
         update-types:
           - minor
           - patch
+    ignore:
+      # The example lints with typescript-eslint, which refuses TypeScript 7
+      # ("typescript-eslint does not support TS 7.0"); that is what failed
+      # #1745. Same wall as the root and the admin UI; remove once
+      # typescript-eslint supports TypeScript 7.
+      - dependency-name: "typescript"
+        update-types:
+          - version-update:semver-major
 
   - package-ecosystem: npm
     directory: "/examples/vanilla-js-quickstart"
