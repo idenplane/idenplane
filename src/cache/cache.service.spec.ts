@@ -534,3 +534,48 @@ describe('CacheService user claims', () => {
     expect(count()).toBe(2);
   });
 });
+
+describe('CacheService sessions', () => {
+  let service: CacheService;
+  let bus: ReturnType<typeof makeMockBus>;
+
+  beforeEach(async () => {
+    bus = makeMockBus(true);
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        CacheService,
+        { provide: RedisService, useValue: makeMockRedis(false) },
+        { provide: MetricsService, useValue: makeMockMetrics() },
+        { provide: CacheBusService, useValue: bus },
+      ],
+    }).compile();
+    service = module.get<CacheService>(CacheService);
+  });
+
+  it('keeps an existing session until the database says it ended', async () => {
+    const load = jest.fn().mockResolvedValue({ id: 's1' });
+    await service.localSession('s1', load);
+    await service.localSession('s1', load);
+    expect(load).toHaveBeenCalledTimes(1);
+    bus.emit({ t: 'sessions', ids: ['s1'] });
+    load.mockResolvedValue(null);
+    expect(await service.localSession('s1', load)).toBeNull();
+  });
+
+  it('forgets every session when too many ended to list', async () => {
+    const load = jest.fn().mockResolvedValue({ id: 's' });
+    await service.localSession('a', load);
+    await service.localSession('b', load);
+    bus.emit({ t: 'sessions-all' });
+    await service.localSession('a', load);
+    await service.localSession('b', load);
+    expect(load).toHaveBeenCalledTimes(4);
+  });
+
+  it('never remembers a session that was not there', async () => {
+    const load = jest.fn().mockResolvedValue(null);
+    await service.localSession('gone', load);
+    await service.localSession('gone', load);
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+});

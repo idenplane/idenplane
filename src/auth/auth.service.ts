@@ -27,6 +27,7 @@ import {
   resolveUserClaims,
   type UserClaimSource,
 } from '../scopes/claims.resolver.js';
+import { loadUserGrants } from './user-grants.js';
 import { CustomAttributesService } from '../custom-attributes/custom-attributes.service.js';
 import { UserFederationService } from '../user-federation/user-federation.service.js';
 import {
@@ -38,13 +39,6 @@ import type { PluginManagerService } from '../plugins/plugin-manager.service.js'
 import type { Prisma, Realm } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import type { JWTPayload } from 'jose';
-
-/** What a token says about a user's grants; see loadUserGrants. */
-interface UserGrants {
-  attributeClaims: Record<string, string>;
-  realmRoles: string[];
-  resourceAccess: Record<string, { roles: string[] }>;
-}
 
 export interface TokenResponse {
   access_token: string;
@@ -1307,7 +1301,7 @@ export class AuthService {
     // the enrichment plugins below may all modify what they are given.
     const { attributeClaims, realmRoles, resourceAccess } = structuredClone(
       await this.lookups.userGrants(user.id, () =>
-        this.loadUserGrants(user.id),
+        loadUserGrants(this.prisma, this.customAttributesService, user.id),
       ),
     );
     const userClaims = resolveUserClaims(user, allowedClaims, attributeClaims);
@@ -1542,88 +1536,6 @@ export class AuthService {
   private getIssuer(realm: Realm): string {
     const baseUrl = process.env['BASE_URL'] ?? 'http://localhost:3000';
     return `${baseUrl}/realms/${realm.name}`;
-  }
-
-  /**
-   * Everything a token says about what `userId` is granted, read from the
-   * database: realm and client roles, direct and inherited through groups
-   * (deduplicated), and custom-attribute claims. Cached per user by
-   * CachedLookupsService, which drops it when any of those rows change.
-   */
-  private async loadUserGrants(userId: string): Promise<UserGrants> {
-    const [attributeClaims, userRoles, groupRoles] = await Promise.all([
-      this.customAttributesService.getOidcClaimsForUser(userId),
-      this.prisma.userRole.findMany({
-        where: { userId },
-        include: { role: { include: { client: true } } },
-      }),
-      this.resolveGroupRoles(userId),
-    ]);
-
-    const seenRoleIds = new Set<string>();
-    const roles = [...userRoles.map((ur) => ur.role), ...groupRoles].filter(
-      (r) => {
-        if (seenRoleIds.has(r.id)) return false;
-        seenRoleIds.add(r.id);
-        return true;
-      },
-    );
-
-    const realmRoles = roles.filter((r) => !r.clientId).map((r) => r.name);
-    const resourceAccess: Record<string, { roles: string[] }> = {};
-    for (const role of roles) {
-      if (role.client) {
-        (resourceAccess[role.client.clientId] ??= { roles: [] }).roles.push(
-          role.name,
-        );
-      }
-    }
-    return { attributeClaims, realmRoles, resourceAccess };
-  }
-
-  private async resolveGroupRoles(userId: string) {
-    const memberships = await this.prisma.userGroup.findMany({
-      where: { userId },
-      select: { groupId: true },
-    });
-
-    if (memberships.length === 0) return [];
-
-    type RoleWithClient = {
-      id: string;
-      name: string;
-      clientId: string | null;
-      client: { clientId: string } | null;
-    };
-    const allRoles: RoleWithClient[] = [];
-    const visited = new Set<string>();
-
-    const walkGroup = async (groupId: string) => {
-      if (visited.has(groupId)) return;
-      visited.add(groupId);
-
-      const group = await this.prisma.group.findUnique({
-        where: { id: groupId },
-        include: {
-          groupRoles: { include: { role: { include: { client: true } } } },
-        },
-      });
-      if (!group) return;
-
-      for (const gr of group.groupRoles) {
-        allRoles.push(gr.role);
-      }
-
-      if (group.parentId) {
-        await walkGroup(group.parentId);
-      }
-    };
-
-    for (const m of memberships) {
-      await walkGroup(m.groupId);
-    }
-
-    return allRoles;
   }
 
   /**
