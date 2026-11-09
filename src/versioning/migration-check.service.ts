@@ -1,8 +1,5 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
-import { exec } from 'node:child_process';
-import { promisify } from 'node:util';
-
-const execAsync = promisify(exec);
+import { prismaMigrateStatus } from '../upgrade/migrate-status.js';
 
 export interface MigrationStatus {
   appliedCount: number;
@@ -51,10 +48,7 @@ export class MigrationCheckService implements OnModuleInit {
 
   async getStatus(): Promise<MigrationStatus> {
     try {
-      const { stdout } = await execAsync('npx prisma migrate status 2>&1', {
-        encoding: 'utf-8',
-      });
-      return this.parseStatus(stdout);
+      return this.parseStatus(await prismaMigrateStatus());
     } catch (err: unknown) {
       // A non-zero exit code is how prisma reports pending migrations.
       const output =
