@@ -75,7 +75,7 @@
     "rxjs": "^7.8.1",
     "sanitize-html": "^2.18.0",
     "twilio": "^6.1.0",
-    "xml-crypto": "^6.1.2"
+    "xml-crypto": "^6.4.0"
   },
   "devDependencies": {
     "@eslint/eslintrc": "^3.3.7",
