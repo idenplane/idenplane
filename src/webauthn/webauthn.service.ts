@@ -17,7 +17,6 @@ import type {
   PublicKeyCredentialRequestOptionsJSON,
   RegistrationResponseJSON,
   AuthenticationResponseJSON,
-  AuthenticatorTransportFuture,
 } from '@simplewebauthn/server';
 import type { Realm, User, WebAuthnCredential } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -92,7 +91,7 @@ export class WebAuthnService {
       attestationType: 'none',
       excludeCredentials: existingCredentials.map((cred) => ({
         id: cred.credentialId,
-        transports: cred.transports as AuthenticatorTransportFuture[],
+        transports: cred.transports,
       })),
       authenticatorSelection: {
         residentKey: 'preferred',
@@ -200,8 +199,7 @@ export class WebAuthnService {
 
     const rpId = this.getRpId(realm);
 
-    let allowCredentials:
-      { id: string; transports: AuthenticatorTransportFuture[] }[] | undefined;
+    let allowCredentials: { id: string; transports: string[] }[] | undefined;
     if (userId) {
       const user = await this.prisma.user.findFirst({
         where: { id: userId, realmId: realm.id },
@@ -215,7 +213,7 @@ export class WebAuthnService {
       if (credentials.length > 0) {
         allowCredentials = credentials.map((c) => ({
           id: c.credentialId,
-          transports: c.transports as AuthenticatorTransportFuture[],
+          transports: c.transports,
         }));
       }
     }
@@ -296,7 +294,7 @@ export class WebAuthnService {
           id: credential.credentialId,
           publicKey: new Uint8Array(credential.publicKey),
           counter: Number(credential.counter),
-          transports: credential.transports as AuthenticatorTransportFuture[],
+          transports: credential.transports,
         },
         requireUserVerification: realm.webAuthnUserVerificationRequired,
       });
