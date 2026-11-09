@@ -5,6 +5,7 @@ import { CacheBusService, type CacheEvent } from './cache-bus.service.js';
 
 const GRANTS_PREFIX = 'local:grants:';
 const SCOPES_PREFIX = 'local:scope-mappers:';
+const SESSION_PREFIX = 'local:session:';
 
 const KEY = {
   realm: (realmId: string) => `realm:config:${realmId}`,
@@ -18,6 +19,7 @@ const KEY = {
     `local:client:${realmId}:${clientId}`,
   signingKey: (realmId: string) => `local:signing-key:${realmId}`,
   user: (userId: string) => `local:user:${userId}`,
+  session: (sessionId: string) => `${SESSION_PREFIX}${sessionId}`,
   grants: (userId: string) => `${GRANTS_PREFIX}${userId}`,
   scopeMappers: (realmId: string, scopes: string) =>
     `${SCOPES_PREFIX}${realmId}:${scopes}`,
@@ -222,6 +224,17 @@ export class CacheService {
     return this.local(KEY.user(userId), 'user', 60, load);
   }
 
+  /**
+   * A session that exists, as `load` read it; a missing one is not kept.
+   * Dropped as soon as the database announces the session ended.
+   */
+  async localSession<T extends object>(
+    sessionId: string,
+    load: () => Promise<T | null>,
+  ): Promise<T | null> {
+    return this.local(KEY.session(sessionId), 'session', 300, load);
+  }
+
   async localUserGrants<T extends object>(
     userId: string,
     load: () => Promise<T>,
@@ -279,6 +292,12 @@ export class CacheService {
         break;
       case 'scopes':
         this.dropLocalPrefix(SCOPES_PREFIX);
+        break;
+      case 'sessions':
+        this.dropLocal(event.ids.map((id) => KEY.session(id)));
+        break;
+      case 'sessions-all':
+        this.dropLocalPrefix(SESSION_PREFIX);
         break;
     }
   }

@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { Client, Prisma, RealmSigningKey } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CacheService } from './cache.service.js';
+import type { UserGrants } from '../auth/user-grants.js';
 
 /** The user columns a token or an introspection response can carry. */
 const USER_PROFILE_SELECT = {
@@ -82,11 +83,26 @@ export class CachedLookupsService {
    * direct and through groups, and their attribute claims. Dropped whenever
    * any of those rows change.
    */
-  userGrants<T extends object>(
+  userGrants(
     userId: string,
-    load: () => Promise<T>,
-  ): Promise<T> {
+    load: () => Promise<UserGrants>,
+  ): Promise<UserGrants> {
     return this.cache.localUserGrants(userId, load);
+  }
+
+  /**
+   * Whether the session `sessionId` still exists (logout, revocation and
+   * the session cap delete it). Kept current by the database: an ended
+   * session is seen by the next request on every process.
+   */
+  async sessionExists(sessionId: string): Promise<boolean> {
+    const found = await this.cache.localSession(sessionId, () =>
+      this.prisma.session.findUnique({
+        where: { id: sessionId },
+        select: { id: true },
+      }),
+    );
+    return found !== null;
   }
 
   /** A realm's protocol mappers for a set of scopes, read by `load` on a miss. */
