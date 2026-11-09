@@ -72,6 +72,8 @@ Control the server's network and runtime settings.
 | `PORT` | `3000` | No | Port the server listens on |
 | `NODE_ENV` | `development` | No | Environment: `development`, `production`, `test` |
 | `BASE_URL` | `http://localhost:3000` | No | Public URL used for redirects, emails, and OAuth callbacks |
+| `LOG_LEVEL` | `info` in production, `debug` otherwise | No | Lowest level written to the log: `fatal`, `error`, `warn`, `info`, `debug`, `trace` |
+| `LOG_ACCESS` | `errors` | No | Which HTTP requests get an access-log line: `errors` (failed requests only: 4xx as `warn`, 5xx as `error`), `all` (every request, successful ones at `info`), or `off` |
 
 ### Examples
 
@@ -86,6 +88,8 @@ PORT=3000
 NODE_ENV=production
 BASE_URL=https://auth.example.com
 ```
+
+An access-log line for every request costs throughput on the busiest endpoints (token, introspection, discovery), so by default only failed requests are logged. Set `LOG_ACCESS=all` to log every request, for example while investigating traffic. Application logs (sign-in failures, admin changes, errors) are written whatever `LOG_ACCESS` says.
 
 ---
 
