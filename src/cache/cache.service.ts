@@ -75,6 +75,7 @@ export class CacheService {
    */
   private epoch = 0;
   private readonly missEpoch = new Map<string, number>();
+  private readonly counters = new Map<string, { inc(): void }>();
 
   constructor(
     private readonly redis: RedisService,
@@ -173,10 +174,7 @@ export class CacheService {
       KEY.corsOrigins,
       await this.redis.get(KEY.corsOrigins),
     );
-    this.metrics.cacheOperationsTotal.inc({
-      operation: value !== null ? 'hit' : 'miss',
-      cache: 'cors_origins',
-    });
+    this.count(value !== null ? 'hit' : 'miss', 'cors_origins');
     return value;
   }
 
@@ -304,6 +302,21 @@ export class CacheService {
 
   // ─── Internal helpers ────────────────────────────────────────────────────
 
+  /**
+   * Counts a hit or miss. The labelled child counter is looked up once per
+   * (operation, cache) pair: every in-process hit is counted, and resolving
+   * labels on each call costs more than the hit itself.
+   */
+  private count(operation: 'hit' | 'miss', cache: string): void {
+    const key = `${operation}:${cache}`;
+    let counter = this.counters.get(key);
+    if (!counter) {
+      counter = this.metrics.cacheOperationsTotal.labels({ operation, cache });
+      this.counters.set(key, counter);
+    }
+    counter.inc();
+  }
+
   private flushL1(): void {
     this.l1.clear();
     this.missEpoch.clear();
@@ -364,10 +377,7 @@ export class CacheService {
     if (!this.bus.isConnected()) return null;
     const entry = this.l1.get(key);
     if (entry && entry.expiresAt > Date.now()) {
-      this.metrics.cacheOperationsTotal.inc({
-        operation: 'hit',
-        cache: metricLabel,
-      });
+      this.count('hit', metricLabel);
       return entry.value as T;
     }
     if (entry) this.l1.delete(key);
@@ -404,19 +414,13 @@ export class CacheService {
     }
 
     if (!this.redis.isAvailable()) {
-      this.metrics.cacheOperationsTotal.inc({
-        operation: 'miss',
-        cache: metricLabel,
-      });
+      this.count('miss', metricLabel);
       return null;
     }
 
     const raw = await this.redis.get(key);
     const value = this.parse<T>(key, raw);
-    this.metrics.cacheOperationsTotal.inc({
-      operation: value !== null ? 'hit' : 'miss',
-      cache: metricLabel,
-    });
+    this.count(value !== null ? 'hit' : 'miss', metricLabel);
     // A Redis hit fills the L1 too, under the same fill-race guard.
     if (value !== null) this.l1Set(key, value, 60);
     return value;
