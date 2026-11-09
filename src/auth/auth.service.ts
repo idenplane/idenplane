@@ -27,6 +27,7 @@ import {
   resolveUserClaims,
   type UserClaimSource,
 } from '../scopes/claims.resolver.js';
+import { loadUserGrants } from './user-grants.js';
 import { CustomAttributesService } from '../custom-attributes/custom-attributes.service.js';
 import { UserFederationService } from '../user-federation/user-federation.service.js';
 import {
@@ -525,9 +526,7 @@ export class AuthService {
 
     // If client has a service account user, issue tokens through that user
     if (client.serviceAccountUserId) {
-      const user = await this.prisma.user.findUnique({
-        where: { id: client.serviceAccountUserId },
-      });
+      const user = await this.lookups.userProfile(client.serviceAccountUserId);
       if (user) {
         // A machine-to-machine token carries the service account's claims but
         // no session: nobody logs in, so there is nothing to refresh or log
@@ -1297,41 +1296,15 @@ export class AuthService {
     // Resolve scope-filtered user claims
     const allowedClaims =
       this.scopesService.getClaimsForScopes(effectiveScopes);
-    const customAttrClaims =
-      await this.customAttributesService.getOidcClaimsForUser(user.id);
-    const userClaims = resolveUserClaims(user, allowedClaims, customAttrClaims);
-
-    // Build role claims (direct user roles + group-inherited roles)
-    const userRoles = await this.prisma.userRole.findMany({
-      where: { userId: user.id },
-      include: { role: { include: { client: true } } },
-    });
-
-    const groupRoles = await this.resolveGroupRoles(user.id);
-
-    // Merge and deduplicate
-    const allRoles = [...userRoles.map((ur) => ur.role), ...groupRoles];
-    const seenRoleIds = new Set<string>();
-    const dedupedRoles = allRoles.filter((r) => {
-      if (seenRoleIds.has(r.id)) return false;
-      seenRoleIds.add(r.id);
-      return true;
-    });
-
-    const realmRoles = dedupedRoles
-      .filter((r) => !r.clientId)
-      .map((r) => r.name);
-
-    const resourceAccess: Record<string, { roles: string[] }> = {};
-    for (const role of dedupedRoles) {
-      if (role.client) {
-        const cId = role.client.clientId;
-        if (!resourceAccess[cId]) {
-          resourceAccess[cId] = { roles: [] };
-        }
-        resourceAccess[cId].roles.push(role.name);
-      }
-    }
+    // The user's roles (direct and through groups) and attribute claims,
+    // from the in-process cache. A copy: the token payload, the mappers and
+    // the enrichment plugins below may all modify what they are given.
+    const { attributeClaims, realmRoles, resourceAccess } = structuredClone(
+      await this.lookups.userGrants(user.id, () =>
+        loadUserGrants(this.prisma, this.customAttributesService, user.id),
+      ),
+    );
+    const userClaims = resolveUserClaims(user, allowedClaims, attributeClaims);
 
     // Include roles by default (backward compat) or when 'roles' scope is granted
     const includeRoles = !scope || allowedClaims.has('realm_access');
@@ -1339,9 +1312,10 @@ export class AuthService {
     // Try to apply protocol mappers from DB scopes
     let mapperClaims: Record<string, unknown> = {};
     try {
-      const mappers = await this.scopesService.getScopeMappers(
-        effectiveScopes,
-        realm.id,
+      const mappers = structuredClone(
+        await this.lookups.scopeMappers(realm.id, effectiveScopes, () =>
+          this.scopesService.getScopeMappers(effectiveScopes, realm.id),
+        ),
       );
       if (mappers.length > 0) {
         const mapperContext: MapperContext = {
@@ -1392,7 +1366,7 @@ export class AuthService {
     const enrichedPayload: Record<string, unknown> = this.pluginManager
       ? await this.pluginManager.enrichToken(
           accessTokenPayload,
-          user,
+          { ...user },
           realm.name,
         )
       : accessTokenPayload;
@@ -1478,6 +1452,7 @@ export class AuthService {
         acr,
         amr,
         code,
+        attributeClaims,
       });
     }
 
@@ -1505,14 +1480,13 @@ export class AuthService {
     acr?: string;
     amr?: string[];
     code?: string;
+    attributeClaims: Record<string, string>;
   }): Promise<string> {
     const allowedClaims = this.scopesService.getClaimsForScopes(params.scopes);
-    const customAttrClaims =
-      await this.customAttributesService.getOidcClaimsForUser(params.user.id);
     const userClaims = resolveUserClaims(
       params.user,
       allowedClaims,
-      customAttrClaims,
+      params.attributeClaims,
     );
 
     // Resolve the ACR claim:
@@ -1562,51 +1536,6 @@ export class AuthService {
   private getIssuer(realm: Realm): string {
     const baseUrl = process.env['BASE_URL'] ?? 'http://localhost:3000';
     return `${baseUrl}/realms/${realm.name}`;
-  }
-
-  private async resolveGroupRoles(userId: string) {
-    const memberships = await this.prisma.userGroup.findMany({
-      where: { userId },
-      select: { groupId: true },
-    });
-
-    if (memberships.length === 0) return [];
-
-    type RoleWithClient = {
-      id: string;
-      name: string;
-      clientId: string | null;
-      client: { clientId: string } | null;
-    };
-    const allRoles: RoleWithClient[] = [];
-    const visited = new Set<string>();
-
-    const walkGroup = async (groupId: string) => {
-      if (visited.has(groupId)) return;
-      visited.add(groupId);
-
-      const group = await this.prisma.group.findUnique({
-        where: { id: groupId },
-        include: {
-          groupRoles: { include: { role: { include: { client: true } } } },
-        },
-      });
-      if (!group) return;
-
-      for (const gr of group.groupRoles) {
-        allRoles.push(gr.role);
-      }
-
-      if (group.parentId) {
-        await walkGroup(group.parentId);
-      }
-    };
-
-    for (const m of memberships) {
-      await walkGroup(m.groupId);
-    }
-
-    return allRoles;
   }
 
   /**

@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { execSync } from 'child_process';
+import { prismaMigrateStatus } from './migrate-status.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 
 export interface UpgradeHealthCheck {
@@ -86,7 +86,7 @@ export class UpgradeHealthService {
     else failures++;
 
     // 3. Migrations verification
-    const migrationsCheck = this.checkMigrationsApplied();
+    const migrationsCheck = await this.checkMigrationsApplied();
     checks.push(migrationsCheck);
     if (migrationsCheck.status === 'pass') passed++;
     else if (migrationsCheck.status === 'warn') warnings++;
@@ -205,12 +205,9 @@ export class UpgradeHealthService {
   /**
    * Verify that all migrations have been applied.
    */
-  private checkMigrationsApplied(): UpgradeHealthCheck {
+  private async checkMigrationsApplied(): Promise<UpgradeHealthCheck> {
     try {
-      const output = execSync('npx prisma migrate status 2>&1', {
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
+      const output = await prismaMigrateStatus();
 
       // Exit code 0 means no pending migrations
       const pendingMigrations = this.parsePendingMigrations(output);

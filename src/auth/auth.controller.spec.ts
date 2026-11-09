@@ -100,7 +100,9 @@ describe('AuthController', () => {
       );
 
       expect(res.status).toHaveBeenCalledWith(400);
-      expect(res.json).toHaveBeenCalledWith({ error: 'unsupported_grant_type' });
+      expect(res.json).toHaveBeenCalledWith({
+        error: 'unsupported_grant_type',
+      });
     });
 
     it('serializes invalid_grant as 400 { error, error_description }', async () => {
@@ -128,12 +130,20 @@ describe('AuthController', () => {
 
     it('serializes invalid_client as 401 with a WWW-Authenticate header', async () => {
       mockAuthService.handleTokenRequest.mockRejectedValue(
-        new OAuthTokenError('invalid_client', 'Invalid client credentials', 401),
+        new OAuthTokenError(
+          'invalid_client',
+          'Invalid client credentials',
+          401,
+        ),
       );
 
       await controller.token(
         realm,
-        { grant_type: 'client_credentials', client_id: 'x', client_secret: 'y' },
+        {
+          grant_type: 'client_credentials',
+          client_id: 'x',
+          client_secret: 'y',
+        },
         req as any,
         res as any,
       );

@@ -32,11 +32,11 @@
 
 ## Why Idenplane?
 
-Most identity solutions are either too complex to self-host (Keycloak — 1GB+ RAM, Java) or too limited for production (simple JWT libraries). Idenplane fills that gap:
+Most identity solutions are either too complex to self-host (Java, heavy runtimes) or too limited for production (simple JWT libraries). Idenplane fills that gap:
 
 - **Deploy in 30 seconds** — single `docker compose up` gets you a full IAM server
 - **Modern stack** — TypeScript, NestJS, React, PostgreSQL. No Java, no XML
-- **Lightweight** — runs in ~150 MB RAM vs. Keycloak's 1 GB+
+- **Lightweight** — about 194 MiB of RAM at idle and ready in about 5 s, vs. 464 MiB and 24 s for Keycloak on the same machine ([benchmarks](docs/docs/benchmarks.md))
 - **Complete** — OAuth 2.0, OIDC, SAML 2.0, WebAuthn, MFA, LDAP, SSO, Organizations — all built-in
 - **Extensible** — plugin system, custom auth flows, webhooks, and 10 client SDKs
 - **Admin Console** — full-featured React dashboard at `/console`

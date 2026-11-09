@@ -30,9 +30,19 @@ const makeMockBus = (connected = false) => {
   };
 };
 
-const makeMockMetrics = () => ({
-  cacheOperationsTotal: { inc: jest.fn() },
-});
+/**
+ * A counter whose labelled children report to the parent's `inc`, so the
+ * assertions read as `inc({ operation, cache })` however it is counted.
+ */
+const makeMockMetrics = () => {
+  const inc = jest.fn();
+  return {
+    cacheOperationsTotal: {
+      inc,
+      labels: jest.fn((labels: object) => ({ inc: () => inc(labels) })),
+    },
+  };
+};
 
 describe('CacheService', () => {
   let service: CacheService;
@@ -422,5 +432,160 @@ describe('CacheService in-process level', () => {
     expect(await service.getCachedRealmByName('realm-10000')).toEqual({
       id: '10000',
     });
+  });
+});
+
+describe('CacheService user claims', () => {
+  let service: CacheService;
+  let bus: ReturnType<typeof makeMockBus>;
+
+  beforeEach(async () => {
+    bus = makeMockBus(true);
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        CacheService,
+        { provide: RedisService, useValue: makeMockRedis(false) },
+        { provide: MetricsService, useValue: makeMockMetrics() },
+        { provide: CacheBusService, useValue: bus },
+      ],
+    }).compile();
+    service = module.get<CacheService>(CacheService);
+  });
+
+  const grantsOf = (userId: string, roles: string[]) =>
+    service.localUserGrants(userId, () => Promise.resolve({ roles }));
+  const loadsOf = () => {
+    let loads = 0;
+    const load = () => {
+      loads++;
+      return Promise.resolve({ roles: [`r${loads}`] });
+    };
+    return { load, count: () => loads };
+  };
+
+  it('loads a user grants once, then serves them from memory', async () => {
+    const { load, count } = loadsOf();
+    expect(await service.localUserGrants('u1', load)).toEqual({
+      roles: ['r1'],
+    });
+    expect(await service.localUserGrants('u1', load)).toEqual({
+      roles: ['r1'],
+    });
+    expect(count()).toBe(1);
+  });
+
+  it('drops a user when the database announces a change to them', async () => {
+    await grantsOf('u1', ['old']);
+    await grantsOf('u2', ['other']);
+    bus.emit({ t: 'users', ids: ['u1'] });
+    expect(await grantsOf('u1', ['new'])).toEqual({ roles: ['new'] });
+    expect(await grantsOf('u2', ['changed'])).toEqual({ roles: ['other'] });
+  });
+
+  it('drops every user grants on a realm-wide change, and keeps profiles', async () => {
+    await grantsOf('u1', ['old']);
+    await service.localUser('u1', () => Promise.resolve({ name: 'a' }));
+    bus.emit({ t: 'grants' });
+    expect(await grantsOf('u1', ['new'])).toEqual({ roles: ['new'] });
+    expect(
+      await service.localUser('u1', () => Promise.resolve({ name: 'b' })),
+    ).toEqual({ name: 'a' });
+  });
+
+  it('drops grants when a client is renamed, not when it is only updated', async () => {
+    await grantsOf('u1', ['old']);
+    bus.emit({ t: 'client', realmId: 'r', id: 'c', clientIds: ['app', 'app'] });
+    expect(await grantsOf('u1', ['new'])).toEqual({ roles: ['old'] });
+    bus.emit({
+      t: 'client',
+      realmId: 'r',
+      id: 'c',
+      clientIds: ['app', 'app2'],
+    });
+    expect(await grantsOf('u1', ['new'])).toEqual({ roles: ['new'] });
+  });
+
+  it('keys scope mappers by realm and by the set of scopes, in any order', async () => {
+    const { load, count } = loadsOf();
+    await service.localScopeMappers('r1', ['openid', 'email'], load);
+    await service.localScopeMappers('r1', ['email', 'openid'], load);
+    expect(count()).toBe(1);
+    await service.localScopeMappers('r2', ['openid', 'email'], load);
+    expect(count()).toBe(2);
+    bus.emit({ t: 'scopes' });
+    await service.localScopeMappers('r1', ['openid', 'email'], load);
+    expect(count()).toBe(3);
+  });
+
+  it('does not keep a user that was not found', async () => {
+    const load = jest.fn().mockResolvedValue(null);
+    expect(await service.localUser('ghost', load)).toBeNull();
+    expect(await service.localUser('ghost', load)).toBeNull();
+    expect(load).toHaveBeenCalledTimes(2);
+  });
+
+  it('does not keep what was read while a change to it arrived', async () => {
+    let finish!: (v: { roles: string[] }) => void;
+    const slow = service.localUserGrants(
+      'u1',
+      () => new Promise((resolve) => (finish = resolve)),
+    );
+    bus.emit({ t: 'users', ids: ['u1'] });
+    finish({ roles: ['stale'] });
+    expect(await slow).toEqual({ roles: ['stale'] });
+    expect(await grantsOf('u1', ['fresh'])).toEqual({ roles: ['fresh'] });
+  });
+
+  it('reads the database every time while the announcement channel is down', async () => {
+    bus.connected = false;
+    const { load, count } = loadsOf();
+    await service.localUserGrants('u1', load);
+    await service.localUserGrants('u1', load);
+    expect(count()).toBe(2);
+  });
+});
+
+describe('CacheService sessions', () => {
+  let service: CacheService;
+  let bus: ReturnType<typeof makeMockBus>;
+
+  beforeEach(async () => {
+    bus = makeMockBus(true);
+    const module: TestingModule = await Test.createTestingModule({
+      providers: [
+        CacheService,
+        { provide: RedisService, useValue: makeMockRedis(false) },
+        { provide: MetricsService, useValue: makeMockMetrics() },
+        { provide: CacheBusService, useValue: bus },
+      ],
+    }).compile();
+    service = module.get<CacheService>(CacheService);
+  });
+
+  it('keeps an existing session until the database says it ended', async () => {
+    const load = jest.fn().mockResolvedValue({ id: 's1' });
+    await service.localSession('s1', load);
+    await service.localSession('s1', load);
+    expect(load).toHaveBeenCalledTimes(1);
+    bus.emit({ t: 'sessions', ids: ['s1'] });
+    load.mockResolvedValue(null);
+    expect(await service.localSession('s1', load)).toBeNull();
+  });
+
+  it('forgets every session when too many ended to list', async () => {
+    const load = jest.fn().mockResolvedValue({ id: 's' });
+    await service.localSession('a', load);
+    await service.localSession('b', load);
+    bus.emit({ t: 'sessions-all' });
+    await service.localSession('a', load);
+    await service.localSession('b', load);
+    expect(load).toHaveBeenCalledTimes(4);
+  });
+
+  it('never remembers a session that was not there', async () => {
+    const load = jest.fn().mockResolvedValue(null);
+    await service.localSession('gone', load);
+    await service.localSession('gone', load);
+    expect(load).toHaveBeenCalledTimes(2);
   });
 });

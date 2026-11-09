@@ -1,0 +1,552 @@
+{
+  "idenplane": {
+    "meta": {
+      "target": "idenplane",
+      "image": "idenplane:final",
+      "digest": "idenplane@sha256:9cf461849762cc09d2b667736abbb729e514e755b01965d746bfd0f7829081f3",
+      "imageBytes": 787006769,
+      "firstBootMs": 4909,
+      "restartMs": 3365,
+      "passwordHash": "argon2id m=65536,p=4,t=3",
+      "scenarios": [
+        "discovery",
+        "jwks",
+        "client_credentials",
+        "introspect",
+        "password"
+      ],
+      "runs": 3,
+      "vus": 32,
+      "duration": "60s",
+      "warmup": "20s",
+      "cpus": {
+        "target": "0-3",
+        "db": "4-5",
+        "k6": "6-15"
+      },
+      "targetMem": "2g",
+      "host": {
+        "cpus": 16,
+        "memBytes": 33678110720,
+        "cpuModel": "AMD EPYC"
+      },
+      "unsupported": [],
+      "introspectTokenGrant": "",
+      "notes": null,
+      "k6": "grafana/k6:2.3.0",
+      "finishedAt": "2026-11-09T12:21:28.970Z"
+    },
+    "idleMiB": 193.5,
+    "scenarios": {
+      "discovery": {
+        "runs": 3,
+        "rps": 4476.122333337526,
+        "p50": 6.71582,
+        "p95": 8.01451455,
+        "p99": 13.636345690000004,
+        "success": 1,
+        "peakMiB": 237.1,
+        "avgCpu": 100.34645161290325
+      },
+      "jwks": {
+        "runs": 3,
+        "rps": 4817.871627802978,
+        "p50": 6.26776,
+        "p95": 7.431630999999995,
+        "p99": 12.71789,
+        "success": 1,
+        "peakMiB": 235.6,
+        "avgCpu": 101.85645161290324
+      },
+      "client_credentials": {
+        "runs": 3,
+        "rps": 2536.2788134260754,
+        "p50": 11.66806,
+        "p95": 18.62163299999999,
+        "p99": 20.1468162,
+        "success": 1,
+        "peakMiB": 233.4,
+        "avgCpu": 241.27
+      },
+      "introspect": {
+        "runs": 3,
+        "rps": 2869.7941426648504,
+        "p50": 10.629305,
+        "p95": 13.712252000000001,
+        "p99": 15.2168827,
+        "success": 1,
+        "peakMiB": 234,
+        "avgCpu": 112.77354838709681
+      },
+      "password": {
+        "runs": 3,
+        "rps": 22.986757496371517,
+        "p50": 1387.1695905,
+        "p95": 1497.3230105,
+        "p99": 1562.9209668,
+        "success": 1,
+        "peakMiB": 509.6,
+        "avgCpu": 356.36000000000007
+      }
+    }
+  },
+  "authentik": {
+    "meta": {
+      "target": "authentik",
+      "image": "ghcr.io/goauthentik/server:2026.8.5",
+      "digest": "ghcr.io/goauthentik/server@sha256:602227a86455d6772e3d16b7d852713c4f864f40df5df894abd1285bb53979a5",
+      "imageBytes": 1937679868,
+      "firstBootMs": 83837,
+      "restartMs": 8181,
+      "passwordHash": "pbkdf2_sha256 iterations=1000000",
+      "scenarios": [
+        "discovery",
+        "jwks",
+        "client_credentials",
+        "introspect",
+        "password"
+      ],
+      "runs": 3,
+      "vus": 32,
+      "duration": "60s",
+      "warmup": "20s",
+      "cpus": {
+        "target": "0-3",
+        "db": "4-5",
+        "k6": "6-15"
+      },
+      "targetMem": "2g",
+      "host": {
+        "cpus": 16,
+        "memBytes": 33678110720,
+        "cpuModel": "AMD EPYC"
+      },
+      "unsupported": [
+        "password"
+      ],
+      "introspectTokenGrant": "client_credentials",
+      "notes": "The Authentik password grant is an alias of client_credentials that checks an app-password token instead of the stored user password hash, so the password scenario is skipped; introspection checks a client_credentials token. Every client_credentials request also upserts the service-account user of the client, stores the access token and writes a login Event row that the worker then processes, so the worker on the same CPUs does work under that load; introspection is a db lookup of the stored token. Server and worker share TARGET_CPUS and each has its own TARGET_MEM cap, so the stack may use up to 2x TARGET_MEM. The web server runs at its defaults (web.workers=2, web.threads=4: two Python processes, so at most about two cores of request handling).",
+      "k6": "grafana/k6:2.3.0",
+      "finishedAt": "2026-11-09T13:48:49.565Z"
+    },
+    "idleMiB": 652.2,
+    "scenarios": {
+      "discovery": {
+        "runs": 3,
+        "rps": 41.9880942354834,
+        "p50": 725.555406,
+        "p95": 1129.524296,
+        "p99": 1380.9876663900002,
+        "success": 0.9948474038842647,
+        "peakMiB": 851.2,
+        "avgCpu": 136.00387096774193
+      },
+      "jwks": {
+        "runs": 3,
+        "rps": 46.17170717274846,
+        "p50": 667.846,
+        "p95": 985.21140795,
+        "p99": 1171.36407959,
+        "success": 0.9980945121951219,
+        "peakMiB": 849.4,
+        "avgCpu": 127.70354838709676
+      },
+      "client_credentials": {
+        "runs": 3,
+        "rps": 6.943186417209747,
+        "p50": 4130.532251,
+        "p95": 8331.335245599998,
+        "p99": 10227.111046459999,
+        "success": 0.9971671388101983,
+        "peakMiB": 951.8,
+        "avgCpu": 198.0634375
+      },
+      "introspect": {
+        "runs": 3,
+        "rps": 41.19334849837759,
+        "p50": 749.435291,
+        "p95": 1076.4069175,
+        "p99": 1251.2752013999998,
+        "success": 0.9947895791583167,
+        "peakMiB": 845,
+        "avgCpu": 143.45468750000003
+      },
+      "password": {
+        "runs": 0,
+        "rps": null,
+        "p50": null,
+        "p95": null,
+        "p99": null,
+        "success": null,
+        "peakMiB": null,
+        "avgCpu": null
+      }
+    }
+  },
+  "idenplane-4-workers": {
+    "meta": {
+      "target": "idenplane",
+      "image": "idenplane:final",
+      "digest": "idenplane@sha256:9cf461849762cc09d2b667736abbb729e514e755b01965d746bfd0f7829081f3",
+      "imageBytes": 787006769,
+      "firstBootMs": 5495,
+      "restartMs": 4188,
+      "passwordHash": "argon2id m=65536,p=4,t=3",
+      "scenarios": [
+        "discovery",
+        "jwks",
+        "client_credentials",
+        "introspect",
+        "password"
+      ],
+      "runs": 3,
+      "vus": 32,
+      "duration": "60s",
+      "warmup": "20s",
+      "cpus": {
+        "target": "0-3",
+        "db": "4-5",
+        "k6": "6-15"
+      },
+      "targetMem": "2g",
+      "host": {
+        "cpus": 16,
+        "memBytes": 33678110720,
+        "cpuModel": "AMD EPYC"
+      },
+      "unsupported": [],
+      "introspectTokenGrant": "",
+      "notes": null,
+      "k6": "grafana/k6:2.3.0",
+      "finishedAt": "2026-11-09T12:39:35.396Z"
+    },
+    "idleMiB": 761.75,
+    "scenarios": {
+      "discovery": {
+        "runs": 3,
+        "rps": 17901.059114819327,
+        "p50": 1.63577,
+        "p95": 3.36011,
+        "p99": 3.5989502,
+        "success": 1,
+        "peakMiB": 809,
+        "avgCpu": 394.79129032258055
+      },
+      "jwks": {
+        "runs": 3,
+        "rps": 19106.503781227013,
+        "p50": 1.39516,
+        "p95": 2.85531,
+        "p99": 3.427524000000013,
+        "success": 1,
+        "peakMiB": 790.7,
+        "avgCpu": 393.7158064516129
+      },
+      "client_credentials": {
+        "runs": 3,
+        "rps": 3924.067203522932,
+        "p50": 7.175,
+        "p95": 15.864111999999995,
+        "p99": 23.506549980000006,
+        "success": 1,
+        "peakMiB": 798.8,
+        "avgCpu": 394.91032258064513
+      },
+      "introspect": {
+        "runs": 3,
+        "rps": 9224.664045956924,
+        "p50": 3.134055,
+        "p95": 4.860650999999998,
+        "p99": 6.077881199999999,
+        "success": 1,
+        "peakMiB": 779.1,
+        "avgCpu": 397.79387096774184
+      },
+      "password": {
+        "runs": 3,
+        "rps": 23.684990888894845,
+        "p50": 1227.409828,
+        "p95": 2143.332604,
+        "p99": 2238.7383339400003,
+        "success": 1,
+        "peakMiB": 1065.984,
+        "avgCpu": 381.3831249999999
+      }
+    }
+  },
+  "keycloak": {
+    "meta": {
+      "target": "keycloak",
+      "image": "quay.io/keycloak/keycloak:26.8.2",
+      "digest": "quay.io/keycloak/keycloak@sha256:3879c623248408de29a5303178b5816c77e8dfef3890c361f8c0bbeaa979ba3b",
+      "imageBytes": 750069827,
+      "firstBootMs": 24096,
+      "restartMs": 6436,
+      "passwordHash": "{\"hashIterations\":5,\"algorithm\":\"argon2\",\"additionalParameters\":{\"hashLength\":[\"32\"],\"memory\":[\"7168\"],\"type\":[\"id\"],\"version\":[\"1.3\"],\"parallelism\":[\"1\"]}}",
+      "scenarios": [
+        "discovery",
+        "jwks",
+        "client_credentials",
+        "introspect",
+        "password"
+      ],
+      "runs": 3,
+      "vus": 32,
+      "duration": "60s",
+      "warmup": "20s",
+      "cpus": {
+        "target": "0-3",
+        "db": "4-5",
+        "k6": "6-15"
+      },
+      "targetMem": "2g",
+      "host": {
+        "cpus": 16,
+        "memBytes": 33678110720,
+        "cpuModel": "AMD EPYC"
+      },
+      "unsupported": [],
+      "introspectTokenGrant": "",
+      "notes": null,
+      "k6": "grafana/k6:2.3.0",
+      "finishedAt": "2026-11-09T12:58:04.777Z"
+    },
+    "idleMiB": 463.6,
+    "scenarios": {
+      "discovery": {
+        "runs": 3,
+        "rps": 14913.509100024598,
+        "p50": 1.7324,
+        "p95": 3.6259549999999976,
+        "p99": 6.5801733199999966,
+        "success": 1,
+        "peakMiB": 700.8,
+        "avgCpu": 385.18129032258065
+      },
+      "jwks": {
+        "runs": 3,
+        "rps": 14560.648307354606,
+        "p50": 1.90836,
+        "p95": 3.792943999999999,
+        "p99": 6.934430500000022,
+        "success": 1,
+        "peakMiB": 727.3,
+        "avgCpu": 386.1258064516129
+      },
+      "client_credentials": {
+        "runs": 3,
+        "rps": 2239.5326543496817,
+        "p50": 13.5938,
+        "p95": 22.694588549999995,
+        "p99": 30.290129899999993,
+        "success": 1,
+        "peakMiB": 733.8,
+        "avgCpu": 391.8312903225807
+      },
+      "introspect": {
+        "runs": 3,
+        "rps": 8803.19988236668,
+        "p50": 3.287341,
+        "p95": 5.895612999999999,
+        "p99": 9.633504699999998,
+        "success": 1,
+        "peakMiB": 764.6,
+        "avgCpu": 389.48129032258066
+      },
+      "password": {
+        "runs": 3,
+        "rps": 114.68740279169495,
+        "p50": 281.011929,
+        "p95": 323.59763799999996,
+        "p99": 344.778183,
+        "success": 1,
+        "peakMiB": 786.7,
+        "avgCpu": 331.34612903225803
+      }
+    }
+  },
+  "keycloak-argon2-parity": {
+    "meta": {
+      "target": "keycloak-argon2-parity",
+      "image": "quay.io/keycloak/keycloak:26.8.2",
+      "digest": "quay.io/keycloak/keycloak@sha256:3879c623248408de29a5303178b5816c77e8dfef3890c361f8c0bbeaa979ba3b",
+      "imageBytes": 750069827,
+      "firstBootMs": 24924,
+      "restartMs": 6377,
+      "passwordHash": "{\"hashIterations\":3,\"algorithm\":\"argon2\",\"additionalParameters\":{\"hashLength\":[\"32\"],\"memory\":[\"65536\"],\"type\":[\"id\"],\"version\":[\"1.3\"],\"parallelism\":[\"4\"]}}",
+      "scenarios": [
+        "discovery",
+        "jwks",
+        "client_credentials",
+        "introspect",
+        "password"
+      ],
+      "runs": 3,
+      "vus": 32,
+      "duration": "60s",
+      "warmup": "20s",
+      "cpus": {
+        "target": "0-3",
+        "db": "4-5",
+        "k6": "6-15"
+      },
+      "targetMem": "2g",
+      "host": {
+        "cpus": 16,
+        "memBytes": 33678110720,
+        "cpuModel": "AMD EPYC"
+      },
+      "unsupported": [],
+      "introspectTokenGrant": "",
+      "notes": null,
+      "k6": "grafana/k6:2.3.0",
+      "finishedAt": "2026-11-09T13:16:36.265Z"
+    },
+    "idleMiB": 465.15,
+    "scenarios": {
+      "discovery": {
+        "runs": 3,
+        "rps": 15092.776709973237,
+        "p50": 1.71788,
+        "p95": 3.38643,
+        "p99": 5.797817259999979,
+        "success": 1,
+        "peakMiB": 882.2,
+        "avgCpu": 383.7783870967742
+      },
+      "jwks": {
+        "runs": 3,
+        "rps": 14954.18455570824,
+        "p50": 1.86848,
+        "p95": 3.66018,
+        "p99": 6.094695099999977,
+        "success": 1,
+        "peakMiB": 900.9,
+        "avgCpu": 390.0767741935484
+      },
+      "client_credentials": {
+        "runs": 3,
+        "rps": 2253.515926831302,
+        "p50": 13.7111305,
+        "p95": 22.973920499999995,
+        "p99": 29.394806510000034,
+        "success": 1,
+        "peakMiB": 936.5,
+        "avgCpu": 392.87258064516124
+      },
+      "introspect": {
+        "runs": 3,
+        "rps": 8743.669999742242,
+        "p50": 3.3173645,
+        "p95": 5.965105999999999,
+        "p99": 9.1750421700001,
+        "success": 1,
+        "peakMiB": 960.4,
+        "avgCpu": 387.045806451613
+      },
+      "password": {
+        "runs": 3,
+        "rps": 18.842782406665933,
+        "p50": 1690.6248300000002,
+        "p95": 1854.545125,
+        "p99": 1919.80692012,
+        "success": 1,
+        "peakMiB": 1124.352,
+        "avgCpu": 372.34843750000005
+      }
+    }
+  },
+  "zitadel": {
+    "meta": {
+      "target": "zitadel",
+      "image": "ghcr.io/zitadel/zitadel:v4.20.1",
+      "digest": "ghcr.io/zitadel/zitadel@sha256:4817dbd8896306867f28bba63e7dc3526b2d2646ac7111db9524eb3ab6e82301",
+      "imageBytes": 237075304,
+      "firstBootMs": 3552,
+      "restartMs": 1231,
+      "passwordHash": "bcrypt cost 14 ($2a$14$...) in eventstore.events2",
+      "scenarios": [
+        "discovery",
+        "jwks",
+        "client_credentials",
+        "introspect",
+        "password"
+      ],
+      "runs": 3,
+      "vus": 32,
+      "duration": "60s",
+      "warmup": "20s",
+      "cpus": {
+        "target": "0-3",
+        "db": "4-5",
+        "k6": "6-15"
+      },
+      "targetMem": "2g",
+      "host": {
+        "cpus": 16,
+        "memBytes": 33678110720,
+        "cpuModel": "AMD EPYC"
+      },
+      "unsupported": [
+        "password"
+      ],
+      "introspectTokenGrant": "client_credentials",
+      "notes": "introspection checks a machine-user (client_credentials) token, not a user token; access tokens are JWT; client secrets (machine user and API app) are bcrypt cost 4 and verified on every token and introspection request; token endpoint also accepts CLIENT_AUTH=basic: yes",
+      "k6": "grafana/k6:2.3.0",
+      "finishedAt": "2026-11-09T13:31:15.856Z"
+    },
+    "idleMiB": 70.64500000000001,
+    "scenarios": {
+      "discovery": {
+        "runs": 3,
+        "rps": 4756.302908001545,
+        "p50": 6.34682,
+        "p95": 9.015962,
+        "p99": 11.162232809999999,
+        "success": 1,
+        "peakMiB": 120.3,
+        "avgCpu": 168.08354838709684
+      },
+      "jwks": {
+        "runs": 3,
+        "rps": 4217.994784026613,
+        "p50": 7.33835,
+        "p95": 9.36887,
+        "p99": 11.0000078,
+        "success": 1,
+        "peakMiB": 120.6,
+        "avgCpu": 189.6603225806452
+      },
+      "client_credentials": {
+        "runs": 3,
+        "rps": 484.69747737358097,
+        "p50": 65.124246,
+        "p95": 76.62363425000001,
+        "p99": 83.37658799,
+        "success": 1,
+        "peakMiB": 121.3,
+        "avgCpu": 278.9990322580646
+      },
+      "introspect": {
+        "runs": 3,
+        "rps": 1370.1594564814304,
+        "p50": 22.770371,
+        "p95": 27.9336477,
+        "p99": 31.387314339999996,
+        "success": 1,
+        "peakMiB": 122.5,
+        "avgCpu": 264.498
+      },
+      "password": {
+        "runs": 0,
+        "rps": null,
+        "p50": null,
+        "p95": null,
+        "p99": null,
+        "success": null,
+        "peakMiB": null,
+        "avgCpu": null
+      }
+    }
+  }
+}

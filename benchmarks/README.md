@@ -45,4 +45,4 @@ $COMPOSE down --volumes
 
 ## Comparing with other identity servers
 
-No comparison numbers are published yet. A reproducible side-by-side run is being built. It will pin images, CPU and memory, use matching password-hashing settings, and record the configuration next to the results. Until those numbers exist, treat any Idenplane-vs-X throughput figure as unverified.
+`compare/` runs Idenplane, Keycloak (default and with Idenplane's Argon2 cost), Zitadel and Authentik one at a time on the same machine, with pinned images, CPUs and memory. Published runs, with their raw results, are in `published/`; the latest is described on the [benchmarks page](../docs/docs/benchmarks.md), which also shows how to reproduce it.

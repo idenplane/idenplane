@@ -72,6 +72,8 @@ Control the server's network and runtime settings.
 | `PORT` | `3000` | No | Port the server listens on |
 | `NODE_ENV` | `development` | No | Environment: `development`, `production`, `test` |
 | `BASE_URL` | `http://localhost:3000` | No | Public URL used for redirects, emails, and OAuth callbacks |
+| `LOG_LEVEL` | `info` in production, `debug` otherwise | No | Lowest level written to the log: `fatal`, `error`, `warn`, `info`, `debug`, `trace` |
+| `LOG_ACCESS` | `errors` | No | Which HTTP requests get an access-log line: `errors` (failed requests only: 4xx as `warn`, 5xx as `error`), `all` (every request, successful ones at `info`), or `off` |
 
 ### Examples
 
@@ -86,6 +88,8 @@ PORT=3000
 NODE_ENV=production
 BASE_URL=https://auth.example.com
 ```
+
+An access-log line for every request costs throughput on the busiest endpoints (token, introspection, discovery), so by default only failed requests are logged. Set `LOG_ACCESS=all` to log every request, for example while investigating traffic. Application logs (sign-in failures, admin changes, errors) are written whatever `LOG_ACCESS` says.
 
 ---
 
@@ -146,9 +150,16 @@ If `WEBHOOK_SECRET_KEY` changes, all stored webhook secrets become unreadable. A
 
 ## In-process cache
 
-Every Idenplane process keeps the realms, clients, signing keys (JWKS) and CORS origins it reads in memory, so the hottest endpoints (discovery, JWKS, every realm-scoped request) don't query the database each time.
+Every Idenplane process keeps in memory what most requests read:
 
-The database keeps those copies current. A trigger on the `realms`, `clients` and `realm_signing_keys` tables sends a PostgreSQL notification on every change, and each process drops what changed as soon as it hears it. This works however the change was made (Admin API, import, SQL by hand), and on every replica. Each process holds one extra database connection for this. If that connection drops, the process reads from the database until it is back, and then starts with an empty cache. A missed notification therefore never leaves stale data behind.
+- realms, clients, signing keys (JWKS) and CORS origins;
+- what a token says about its user: the profile, roles (direct and through groups) and custom-attribute claims;
+- each realm's scope mappers;
+- the list of revoked token ids, and which sessions still exist.
+
+Issuing a client-credentials token, verifying one, or reading discovery and JWKS therefore doesn't query the database each time.
+
+The database keeps those copies current. Triggers on the tables behind them (realms, clients, signing keys, users, roles, groups and their memberships, custom attributes, client scopes and mappers, revoked tokens, sessions) send a PostgreSQL notification whenever something the cache holds changes, and each process drops what changed as soon as it hears it. This works however the change was made (Admin API, import, SQL by hand), and on every replica. Each process holds one extra database connection for this. If that connection drops, the process reads from the database until it is back, and then starts with an empty cache. A missed notification therefore never leaves stale data behind.
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|

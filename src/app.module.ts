@@ -2,6 +2,7 @@ import { Module } from '@nestjs/common';
 import { workerCount } from './common/utils/cpu-count.util.js';
 import { ConfigModule } from '@nestjs/config';
 import { ThrottlerModule, ThrottlerGuard } from '@nestjs/throttler';
+import { BucketedThrottlerStorage } from './common/throttler/bucketed-throttler.storage.js';
 import { ServeStaticModule } from '@nestjs/serve-static';
 import { ScheduleModule } from '@nestjs/schedule';
 import { LoggerModule } from 'nestjs-pino';
@@ -73,22 +74,34 @@ import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
 
 @Module({
   imports: [
+    // The protocol endpoints every client and resource server calls first:
+    // Express tries routes in the order they were registered, and Nest
+    // registers a module's routes in the order modules are imported, so
+    // these are matched before the hundreds of admin routes. No other route
+    // can match their paths, so the order changes speed only.
+    WellKnownModule,
+    TokensModule,
+    AuthModule,
     ConfigModule.forRoot({ isGlobal: true }),
     LoggerModule.forRoot(createLoggerConfig()),
-    ThrottlerModule.forRoot([
-      {
-        ttl: parseInt(process.env['THROTTLE_TTL'] ?? '60000', 10),
-        // THROTTLE_LIMIT is per container: split between cluster workers,
-        // since each counts only the requests it serves.
-        limit: Math.max(
-          1,
-          Math.ceil(
-            parseInt(process.env['THROTTLE_LIMIT'] ?? '100', 10) /
-              workerCount(),
+    ThrottlerModule.forRoot({
+      throttlers: [
+        {
+          ttl: parseInt(process.env['THROTTLE_TTL'] ?? '60000', 10),
+          // THROTTLE_LIMIT is per container: split between cluster workers,
+          // since each counts only the requests it serves.
+          limit: Math.max(
+            1,
+            Math.ceil(
+              parseInt(process.env['THROTTLE_LIMIT'] ?? '100', 10) /
+                workerCount(),
+            ),
           ),
-        ),
-      },
-    ]),
+        },
+      ],
+      // Constant cost per request however busy a client is; see the class.
+      storage: new BucketedThrottlerStorage(),
+    }),
     ScheduleModule.forRoot(),
     ServeStaticModule.forRoot({
       rootPath: join(__dirname, 'admin-ui'),
@@ -110,10 +123,7 @@ import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
     UsersModule,
     ClientsModule,
     RolesModule,
-    AuthModule,
     OAuthModule,
-    TokensModule,
-    WellKnownModule,
     ScopesModule,
     LoginModule,
     ConsentModule,

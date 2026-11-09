@@ -360,6 +360,12 @@ describe('TokensService', () => {
       enabled: true,
     };
 
+    beforeEach(() => {
+      // The user's grants are read along with the attribute claims.
+      prisma.userRole.findMany.mockResolvedValue([]);
+      prisma.userGroup.findMany.mockResolvedValue([]);
+    });
+
     it('should return scope-filtered claims for a valid token', async () => {
       prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
       jwkService.verifyJwt.mockResolvedValue({
@@ -387,18 +393,9 @@ describe('TokensService', () => {
       const result = await service.userinfo(mockRealm, 'valid-access-token');
 
       expect(result).toBeDefined();
-      expect(prisma.user.findUnique).toHaveBeenCalledWith({
-        where: { id: 'user-1' },
-        select: {
-          id: true,
-          username: true,
-          email: true,
-          emailVerified: true,
-          firstName: true,
-          lastName: true,
-          enabled: true,
-        },
-      });
+      expect(prisma.user.findUnique).toHaveBeenCalledWith(
+        expect.objectContaining({ where: { id: 'user-1' } }),
+      );
       expect(scopesService.parseAndValidate).toHaveBeenCalledWith(
         'openid profile email',
       );
