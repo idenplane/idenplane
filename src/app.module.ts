@@ -73,6 +73,14 @@ import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
 
 @Module({
   imports: [
+    // The protocol endpoints every client and resource server calls first:
+    // Express tries routes in the order they were registered, and Nest
+    // registers a module's routes in the order modules are imported, so
+    // these are matched before the hundreds of admin routes. No other route
+    // can match their paths, so the order changes speed only.
+    WellKnownModule,
+    TokensModule,
+    AuthModule,
     ConfigModule.forRoot({ isGlobal: true }),
     LoggerModule.forRoot(createLoggerConfig()),
     ThrottlerModule.forRoot([
@@ -110,10 +118,7 @@ import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
     UsersModule,
     ClientsModule,
     RolesModule,
-    AuthModule,
     OAuthModule,
-    TokensModule,
-    WellKnownModule,
     ScopesModule,
     LoginModule,
     ConsentModule,

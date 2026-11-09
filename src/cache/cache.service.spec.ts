@@ -30,9 +30,19 @@ const makeMockBus = (connected = false) => {
   };
 };
 
-const makeMockMetrics = () => ({
-  cacheOperationsTotal: { inc: jest.fn() },
-});
+/**
+ * A counter whose labelled children report to the parent's `inc`, so the
+ * assertions read as `inc({ operation, cache })` however it is counted.
+ */
+const makeMockMetrics = () => {
+  const inc = jest.fn();
+  return {
+    cacheOperationsTotal: {
+      inc,
+      labels: jest.fn((labels: object) => ({ inc: () => inc(labels) })),
+    },
+  };
+};
 
 describe('CacheService', () => {
   let service: CacheService;
