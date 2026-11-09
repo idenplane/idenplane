@@ -80,7 +80,12 @@ COPY --from=build /app/package.json ./package.json
 COPY --from=build /app/package-lock.json ./package-lock.json
 COPY --from=build /app/prisma.config.ts ./prisma.config.ts
 COPY --from=build /app/prisma ./prisma
-RUN npm ci --omit=dev
+COPY scripts/prune-production-modules.mjs /tmp/prune-production-modules.mjs
+# One layer: the install, then what the server can never load (Prisma
+# Studio and its local-dev database, packages nothing reaches any more,
+# query compilers for other databases, source maps; see the script), and
+# npm's and Prisma's download caches, which would otherwise ship in it.
+RUN npm ci --omit=dev     && node /tmp/prune-production-modules.mjs     && npm cache clean --force     && rm -rf /root/.cache /root/.npm /tmp/*
 
 # prisma.config.ts is TypeScript and cannot be executed directly by Node in
 # this image (no compiler present) — it was only needed above, for
