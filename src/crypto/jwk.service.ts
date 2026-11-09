@@ -11,6 +11,40 @@ import {
 } from 'jose';
 import { randomUUID, createHash } from 'crypto';
 
+type ImportedKey = Awaited<ReturnType<typeof importSPKI>>;
+
+/**
+ * Parsed keys kept per PEM. Parsing a PEM is the costliest step of signing
+ * or verifying a token after the RSA operation itself, and a realm signs
+ * with the same key until it rotates, so each one is parsed once. A PEM
+ * names its key completely, so an entry can never be stale; the bound only
+ * keeps rotated keys from accumulating.
+ */
+const MAX_IMPORTED_KEYS = 256;
+
+class ImportedKeyCache {
+  private readonly keys = new Map<string, Promise<ImportedKey>>();
+
+  constructor(private readonly load: (pem: string) => Promise<ImportedKey>) {}
+
+  get(pem: string): Promise<ImportedKey> {
+    const cached = this.keys.get(pem);
+    if (cached) return cached;
+    if (this.keys.size >= MAX_IMPORTED_KEYS) {
+      const oldest = this.keys.keys().next().value;
+      if (oldest !== undefined) this.keys.delete(oldest);
+    }
+    // The promise itself is kept, so concurrent first uses parse once. A
+    // PEM that fails to parse is not kept: the caller sees the error.
+    const loading = this.load(pem);
+    this.keys.set(pem, loading);
+    loading.catch(() => {
+      if (this.keys.get(pem) === loading) this.keys.delete(pem);
+    });
+    return loading;
+  }
+}
+
 export interface GeneratedKeyPair {
   kid: string;
   publicKeyPem: string;
@@ -19,6 +53,13 @@ export interface GeneratedKeyPair {
 
 @Injectable()
 export class JwkService {
+  private readonly privateKeys = new ImportedKeyCache((pem) =>
+    importPKCS8(pem, 'RS256'),
+  );
+  private readonly publicKeys = new ImportedKeyCache((pem) =>
+    importSPKI(pem, 'RS256'),
+  );
+
   async generateRsaKeyPair(): Promise<GeneratedKeyPair> {
     const { publicKey, privateKey } = await generateKeyPair('RS256', {
       extractable: true,
@@ -40,7 +81,7 @@ export class JwkService {
     kid: string,
     expiresInSeconds: number,
   ): Promise<string> {
-    const privateKey = await importPKCS8(privateKeyPem, 'RS256');
+    const privateKey = await this.privateKeys.get(privateKeyPem);
 
     return new SignJWT(payload)
       .setProtectedHeader({ alg: 'RS256', kid, typ: 'JWT' })
@@ -51,13 +92,13 @@ export class JwkService {
   }
 
   async verifyJwt(token: string, publicKeyPem: string): Promise<JWTPayload> {
-    const publicKey = await importSPKI(publicKeyPem, 'RS256');
+    const publicKey = await this.publicKeys.get(publicKeyPem);
     const { payload } = await jwtVerify(token, publicKey);
     return payload;
   }
 
   async publicKeyToJwk(publicKeyPem: string, kid: string): Promise<JWK> {
-    const publicKey = await importSPKI(publicKeyPem, 'RS256');
+    const publicKey = await this.publicKeys.get(publicKeyPem);
     const jwk = await exportJWK(publicKey);
     return {
       ...jwk,
