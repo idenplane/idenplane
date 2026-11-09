@@ -10,6 +10,7 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 ## [Unreleased]
 
 ### Added
+- **Published benchmarks** against Keycloak, Zitadel and Authentik, measured on one machine with pinned images, CPUs and memory. The method, the results and the raw data are on the new Benchmarks docs page and in `benchmarks/published/`. The README and introduction now quote measured memory figures instead of estimates.
 - **`WEB_CONCURRENCY` runs one worker per CPU** (`auto`, or a number), so one container can use the whole machine instead of about one core. A small primary process forks the workers, restarts one that crashes, stops the container if workers keep failing at startup, and stops them gracefully on SIGTERM; `/admin/metrics` reports the whole container. The default stays one process. The CPU count honours the container's cpuset and CPU quota (a Kubernetes CPU limit), and the Argon2, database-pool and throttle budgets are split between workers rather than multiplied.
 - The server now shuts down gracefully on SIGTERM/SIGINT (it used to stop at once): in-flight requests finish, and the leader lock and database connections are released.
 

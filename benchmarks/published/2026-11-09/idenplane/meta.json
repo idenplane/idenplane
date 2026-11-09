@@ -1,0 +1,36 @@
+{
+  "target": "idenplane",
+  "image": "idenplane:final",
+  "digest": "idenplane@sha256:9cf461849762cc09d2b667736abbb729e514e755b01965d746bfd0f7829081f3",
+  "imageBytes": 787006769,
+  "firstBootMs": 4909,
+  "restartMs": 3365,
+  "passwordHash": "argon2id m=65536,p=4,t=3",
+  "scenarios": [
+    "discovery",
+    "jwks",
+    "client_credentials",
+    "introspect",
+    "password"
+  ],
+  "runs": 3,
+  "vus": 32,
+  "duration": "60s",
+  "warmup": "20s",
+  "cpus": {
+    "target": "0-3",
+    "db": "4-5",
+    "k6": "6-15"
+  },
+  "targetMem": "2g",
+  "host": {
+    "cpus": 16,
+    "memBytes": 33678110720,
+    "cpuModel": "AMD EPYC"
+  },
+  "unsupported": [],
+  "introspectTokenGrant": "",
+  "notes": null,
+  "k6": "grafana/k6:2.3.0",
+  "finishedAt": "2026-11-09T12:21:28.970Z"
+}
