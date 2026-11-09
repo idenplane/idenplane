@@ -3,6 +3,9 @@ import { RedisService } from '../redis/redis.service.js';
 import { MetricsService } from '../metrics/metrics.service.js';
 import { CacheBusService, type CacheEvent } from './cache-bus.service.js';
 
+const GRANTS_PREFIX = 'local:grants:';
+const SCOPES_PREFIX = 'local:scope-mappers:';
+
 const KEY = {
   realm: (realmId: string) => `realm:config:${realmId}`,
   realmByName: (name: string) => `realm:name:${name}`,
@@ -14,6 +17,10 @@ const KEY = {
   clientRow: (realmId: string, clientId: string) =>
     `local:client:${realmId}:${clientId}`,
   signingKey: (realmId: string) => `local:signing-key:${realmId}`,
+  user: (userId: string) => `local:user:${userId}`,
+  grants: (userId: string) => `${GRANTS_PREFIX}${userId}`,
+  scopeMappers: (realmId: string, scopes: string) =>
+    `${SCOPES_PREFIX}${realmId}:${scopes}`,
 } as const;
 
 /** Bound on the in-process cache; realm names and client ids come from callers. */
@@ -202,9 +209,43 @@ export class CacheService {
     this.l1Set(KEY.signingKey(realmId), key, 600);
   }
 
+  /**
+   * What a token says about a user: their profile, their roles and
+   * attribute claims, and a realm's scope mappers. In-process only (a
+   * profile is personal data, and nothing else needs it). `load` reads the
+   * database on a miss; a null result is not kept.
+   */
+  async localUser<T extends object>(
+    userId: string,
+    load: () => Promise<T | null>,
+  ): Promise<T | null> {
+    return this.local(KEY.user(userId), 'user', 60, load);
+  }
+
+  async localUserGrants<T extends object>(
+    userId: string,
+    load: () => Promise<T>,
+  ): Promise<T> {
+    return (await this.local(KEY.grants(userId), 'user_grants', 60, load))!;
+  }
+
+  async localScopeMappers<T extends object>(
+    realmId: string,
+    scopeNames: string[],
+    load: () => Promise<T>,
+  ): Promise<T> {
+    const key = KEY.scopeMappers(realmId, [...scopeNames].sort().join(' '));
+    return (await this.local(key, 'scope_mappers', 300, load))!;
+  }
+
   // ─── Database announcements ──────────────────────────────────────────────
 
   private async onEvent(event: CacheEvent): Promise<void> {
+    // A token's resource_access names a role's client by its client_id, so
+    // renaming a client changes the grants of everyone with its roles.
+    if (event.t === 'client' && new Set(event.clientIds).size > 1) {
+      this.dropLocalPrefix(GRANTS_PREFIX);
+    }
     switch (event.t) {
       case 'realm':
         await this.drop([
@@ -228,6 +269,17 @@ export class CacheService {
           KEY.signingKey(event.realmId),
         ]);
         break;
+      case 'users':
+        this.dropLocal(
+          event.ids.flatMap((id) => [KEY.user(id), KEY.grants(id)]),
+        );
+        break;
+      case 'grants':
+        this.dropLocalPrefix(GRANTS_PREFIX);
+        break;
+      case 'scopes':
+        this.dropLocalPrefix(SCOPES_PREFIX);
+        break;
     }
   }
 
@@ -237,6 +289,33 @@ export class CacheService {
     this.l1.clear();
     this.missEpoch.clear();
     this.epoch++;
+  }
+
+  /** Drops in-process-only keys. */
+  private dropLocal(keys: string[]): void {
+    this.epoch++;
+    for (const key of keys) this.l1.delete(key);
+  }
+
+  private dropLocalPrefix(prefix: string): void {
+    this.epoch++;
+    for (const key of this.l1.keys()) {
+      if (key.startsWith(prefix)) this.l1.delete(key);
+    }
+  }
+
+  /** An in-process-only entry, loaded on a miss. */
+  private async local<T extends object>(
+    key: string,
+    metricLabel: string,
+    ttl: number,
+    load: () => Promise<T | null>,
+  ): Promise<T | null> {
+    const hit = this.l1Get<T>(key, metricLabel);
+    if (hit !== null) return hit;
+    const value = await load();
+    if (value !== null) this.l1Set(key, value, ttl);
+    return value;
   }
 
   /** Drops keys from both levels. Redis errors are logged, never thrown. */

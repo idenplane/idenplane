@@ -75,10 +75,7 @@ export class TokensService {
       let username: string | undefined;
       const active = true;
       if (sub) {
-        const user = await this.prisma.user.findUnique({
-          where: { id: sub },
-          select: { username: true, enabled: true },
-        });
+        const user = await this.lookups.userProfile(sub);
         if (!user) {
           // User was deleted after token was issued
           return { active: false };

@@ -1,7 +1,25 @@
 import { Injectable } from '@nestjs/common';
-import type { Client, RealmSigningKey } from '@prisma/client';
+import type { Client, Prisma, RealmSigningKey } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CacheService } from './cache.service.js';
+
+/** The user columns a token or an introspection response can carry. */
+const USER_PROFILE_SELECT = {
+  id: true,
+  realmId: true,
+  username: true,
+  email: true,
+  emailVerified: true,
+  firstName: true,
+  lastName: true,
+  enabled: true,
+  federationLink: true,
+  createdAt: true,
+} satisfies Prisma.UserSelect;
+
+export type UserProfile = Prisma.UserGetPayload<{
+  select: typeof USER_PROFILE_SELECT;
+}>;
 
 /**
  * The lookups every token, introspection and verification request makes,
@@ -43,5 +61,40 @@ export class CachedLookupsService {
     });
     if (key) this.cache.setLocalSigningKey(realmId, key);
     return key;
+  }
+
+  /**
+   * A user's profile as tokens and introspection see it (no credentials),
+   * or null if there is no such user. Kept current by the database: a
+   * disabled or renamed user is seen by the next request on every process.
+   */
+  async userProfile(userId: string): Promise<UserProfile | null> {
+    return this.cache.localUser(userId, () =>
+      this.prisma.user.findUnique({
+        where: { id: userId },
+        select: USER_PROFILE_SELECT,
+      }),
+    );
+  }
+
+  /**
+   * What a user is granted, computed by `load` on a miss: their roles,
+   * direct and through groups, and their attribute claims. Dropped whenever
+   * any of those rows change.
+   */
+  userGrants<T extends object>(
+    userId: string,
+    load: () => Promise<T>,
+  ): Promise<T> {
+    return this.cache.localUserGrants(userId, load);
+  }
+
+  /** A realm's protocol mappers for a set of scopes, read by `load` on a miss. */
+  scopeMappers<T extends object>(
+    realmId: string,
+    scopeNames: string[],
+    load: () => Promise<T>,
+  ): Promise<T> {
+    return this.cache.localScopeMappers(realmId, scopeNames, load);
   }
 }
