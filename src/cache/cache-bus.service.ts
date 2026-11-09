@@ -11,7 +11,12 @@ import { PrismaService } from '../prisma/prisma.service.js';
 export type CacheEvent =
   | { t: 'realm'; id: string; names: string[] }
   | { t: 'client'; realmId: string; id: string; clientIds: string[] }
-  | { t: 'keys'; realmId: string };
+  | { t: 'keys'; realmId: string }
+  // From the user_claims_cache_triggers migration:
+  | { t: 'users'; ids: string[] }
+  | { t: 'grants' }
+  | { t: 'scopes' }
+  | { t: 'revoked'; jti: string; exp: number };
 
 const CHANNEL = 'idenplane_cache';
 /** Application messages fanned out to every process (see publish). */
