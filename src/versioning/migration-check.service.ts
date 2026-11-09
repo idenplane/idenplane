@@ -1,5 +1,8 @@
 import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
-import { execSync } from 'child_process';
+import { exec } from 'node:child_process';
+import { promisify } from 'node:util';
+
+const execAsync = promisify(exec);
 
 export interface MigrationStatus {
   appliedCount: number;
@@ -11,19 +14,26 @@ export interface MigrationStatus {
 /**
  * MigrationCheckService
  *
- * Runs on application startup and after any version-check request to report
- * pending Prisma migrations.  It shells out to `prisma migrate status` so it
- * works independently of any specific Prisma client API.
+ * Reports pending Prisma migrations once the application has started. It
+ * shells out to `prisma migrate status` so it works independently of any
+ * specific Prisma client API.
+ *
+ * In the background: the CLI takes seconds to start, and nothing waits for
+ * the answer (the container entrypoint has already run `migrate deploy`),
+ * so the server starts accepting requests without it.
  */
 @Injectable()
 export class MigrationCheckService implements OnModuleInit {
   private readonly logger = new Logger(MigrationCheckService.name);
 
   onModuleInit(): void {
-    // Once per container: in cluster mode only the first worker runs it
-    // (it shells out to prisma and blocks the event loop while it does).
+    // Once per container: in cluster mode only the first worker runs it.
     if ((process.env['IDENPLANE_WORKER_INDEX'] ?? '0') !== '0') return;
-    const status = this.getStatus();
+    void this.report();
+  }
+
+  private async report(): Promise<void> {
+    const status = await this.getStatus();
 
     if (status.pendingCount > 0) {
       this.logger.warn(
@@ -39,21 +49,18 @@ export class MigrationCheckService implements OnModuleInit {
     }
   }
 
-  getStatus(): MigrationStatus {
+  async getStatus(): Promise<MigrationStatus> {
     try {
-      const output = execSync('npx prisma migrate status 2>&1', {
+      const { stdout } = await execAsync('npx prisma migrate status 2>&1', {
         encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
       });
-
-      return this.parseStatus(output);
+      return this.parseStatus(stdout);
     } catch (err: unknown) {
-      // execSync throws when exit code != 0 (i.e. when there ARE pending migrations)
+      // A non-zero exit code is how prisma reports pending migrations.
       const output =
         err instanceof Error && 'stdout' in err
-          ? String((err as NodeJS.ErrnoException & { stdout?: Buffer }).stdout)
+          ? String((err as Error & { stdout?: string }).stdout)
           : String(err);
-
       return this.parseStatus(output);
     }
   }

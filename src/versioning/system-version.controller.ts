@@ -35,8 +35,8 @@ export class SystemVersionController {
     status: 401,
     description: 'Unauthorized — missing or invalid admin API key',
   })
-  getVersion() {
-    const migrationStatus = this.migrationCheck.getStatus();
+  async getVersion() {
+    const migrationStatus = await this.migrationCheck.getStatus();
 
     return {
       version: APP_VERSION,
