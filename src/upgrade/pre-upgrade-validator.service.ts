@@ -1,5 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
-import { execSync } from 'child_process';
+import { prismaMigrateStatus } from './migrate-status.js';
 import * as fs from 'fs';
 import * as path from 'path';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -64,7 +64,7 @@ export class PreUpgradeValidatorService {
     else failures++;
 
     // 2. Pending migrations check
-    const migrationCheck = this.checkPendingMigrations();
+    const migrationCheck = await this.checkPendingMigrations();
     checks.push(migrationCheck);
     if (migrationCheck.status === 'pass') passed++;
     else if (migrationCheck.status === 'warn') warnings++;
@@ -165,12 +165,9 @@ export class PreUpgradeValidatorService {
   /**
    * Check for pending Prisma migrations.
    */
-  private checkPendingMigrations(): PreUpgradeCheck {
+  private async checkPendingMigrations(): Promise<PreUpgradeCheck> {
     try {
-      const output = execSync('npx prisma migrate status 2>&1', {
-        encoding: 'utf-8',
-        stdio: ['pipe', 'pipe', 'pipe'],
-      });
+      const output = await prismaMigrateStatus();
 
       // Exit code 0 means no pending migrations
       return {
@@ -183,7 +180,7 @@ export class PreUpgradeValidatorService {
       // Exit code non-zero means there ARE pending migrations
       const output =
         err instanceof Error && 'stdout' in err
-          ? String((err as NodeJS.ErrnoException & { stdout?: Buffer }).stdout)
+          ? String((err as Error & { stdout?: string }).stdout)
           : String(err);
 
       // Parse pending migrations from output

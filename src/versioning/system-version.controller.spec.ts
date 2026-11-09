@@ -4,7 +4,7 @@ import { MigrationCheckService } from './migration-check.service.js';
 import type { MigrationStatus } from './migration-check.service.js';
 
 function makeMigrationCheckService(status: MigrationStatus) {
-  return { getStatus: jest.fn().mockReturnValue(status) };
+  return { getStatus: jest.fn().mockResolvedValue(status) };
 }
 
 describe('SystemVersionController', () => {
@@ -36,22 +36,22 @@ describe('SystemVersionController', () => {
     });
 
     it('returns databaseUpToDate: true', async () => {
-      const result = await controller.getVersion();
+      const result = await await controller.getVersion();
       expect(result.databaseUpToDate).toBe(true);
     });
 
     it('returns empty pendingMigrations array', async () => {
-      const result = await controller.getVersion();
+      const result = await await controller.getVersion();
       expect(result.pendingMigrations).toEqual([]);
     });
 
     it('returns the last applied migration as schemaVersion', async () => {
-      const result = await controller.getVersion();
+      const result = await await controller.getVersion();
       expect(result.schemaVersion).toBe('20260324400000_add_plugin_system');
     });
 
     it('includes an application version string', async () => {
-      const result = await controller.getVersion();
+      const result = await await controller.getVersion();
       expect(typeof result.version).toBe('string');
       expect(result.version.length).toBeGreaterThan(0);
     });
@@ -70,12 +70,12 @@ describe('SystemVersionController', () => {
     });
 
     it('returns databaseUpToDate: false', async () => {
-      const result = await controller.getVersion();
+      const result = await await controller.getVersion();
       expect(result.databaseUpToDate).toBe(false);
     });
 
     it('lists pending migration names', async () => {
-      const result = await controller.getVersion();
+      const result = await await controller.getVersion();
       expect(result.pendingMigrations).toEqual(pending);
     });
   });
@@ -91,7 +91,7 @@ describe('SystemVersionController', () => {
     });
 
     it('returns null schemaVersion', async () => {
-      const result = await controller.getVersion();
+      const result = await await controller.getVersion();
       expect(result.schemaVersion).toBeNull();
     });
   });
