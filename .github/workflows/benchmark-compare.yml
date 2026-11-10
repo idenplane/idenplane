@@ -51,6 +51,14 @@ jobs:
         with:
           node-version: 24
 
+      # Measure this commit, not a published tag: a release PR bumps the
+      # harness default to an image that exists only once it is tagged.
+      - name: Build the Idenplane image
+        if: contains(format(' {0} ', env.TARGETS), ' idenplane ')
+        run: |
+          docker build -q -t idenplane:ci .
+          echo "IDENPLANE_IMAGE=idenplane:ci" >> "$GITHUB_ENV"
+
       - name: Run each target
         run: |
           for t in $TARGETS; do
