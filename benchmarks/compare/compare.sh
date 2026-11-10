@@ -23,7 +23,7 @@ RUNS="${RUNS:-3}"
 export VUS="${VUS:-32}" DURATION="${DURATION:-60s}"
 WARMUP="${WARMUP:-20s}"
 export TARGET_MEM="${TARGET_MEM:-2g}"
-export IDENPLANE_IMAGE="${IDENPLANE_IMAGE:-islamawad/idenplane:0.5.0}"
+export IDENPLANE_IMAGE="${IDENPLANE_IMAGE:-islamawad/idenplane:0.6.0}"
 export KEYCLOAK_IMAGE="${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.8.2}"
 # Defaults for these two live in their target files; compare.sh only needs
 # the resolved names, which it reads back from compose below.

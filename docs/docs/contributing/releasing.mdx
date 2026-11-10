@@ -22,11 +22,12 @@ Merging `dev` → `main` therefore **does** update the Docker `latest` tag that 
 
 ## Server release (`v*`)
 
-`release-version-check.yml` refuses the tag unless three things agree, so do them first:
+`release-version-check.yml` refuses the tag unless these agree, so do them first:
 
 1. Bump `version` in `package.json`.
-2. Add the matching `CHANGELOG.md` entry.
-3. Merge to `main`.
+2. Set `appVersion` in `helm/idenplane/Chart.yaml` to the same version, and bump the chart's own `version`. The chart pulls the image tagged with `appVersion` by default.
+3. Add the matching `CHANGELOG.md` entry.
+4. Merge to `main`.
 
 ```bash
 git checkout main && git pull
@@ -34,7 +35,7 @@ git tag -a v0.4.1 -m "0.4.1"
 git push origin v0.4.1
 ```
 
-A mismatch between the tag, `package.json` and the changelog fails the check before the image builds, rather than after.
+A mismatch between the tag, `package.json`, the chart and the changelog fails the check before the image builds, rather than after.
 
 ## Java SDK release (`java-v*`)
 

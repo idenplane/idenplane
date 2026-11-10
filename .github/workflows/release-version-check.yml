@@ -44,4 +44,14 @@ jobs:
             exit 1
           fi
 
-          echo "Tag, package.json, and CHANGELOG.md agree on ${TAG_VERSION}."
+          # The Helm chart pulls the image tagged with its appVersion unless
+          # image.tag is set, so a stale appVersion makes every default
+          # install pull an image that does not exist.
+          CHART_APP_VERSION=$(sed -n 's/^appVersion:[[:space:]]*"\{0,1\}\([^"]*\)"\{0,1\}[[:space:]]*$/\1/p' helm/idenplane/Chart.yaml)
+          echo "Chart appVersion: ${CHART_APP_VERSION}"
+          if [ "${TAG_VERSION}" != "${CHART_APP_VERSION}" ]; then
+            echo "::error::helm/idenplane/Chart.yaml appVersion (${CHART_APP_VERSION}) does not match the tag (${TAG_VERSION}). Bump appVersion (and the chart version) before tagging."
+            exit 1
+          fi
+
+          echo "Tag, package.json, CHANGELOG.md and the Helm chart agree on ${TAG_VERSION}."
