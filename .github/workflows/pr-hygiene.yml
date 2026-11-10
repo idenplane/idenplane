@@ -53,7 +53,8 @@ jobs:
           # templates whose placeholders (e.g. REPLACE_ME...) are not real secrets.
           # Excludes matches whose value is a bare UPPER_SNAKE_CASE identifier, e.g.
           # naming an env var for actions/setup-java to read a real secret from
-          # later rather than the secret value itself — real leaked tokens/keys are
+          # later rather than the secret value itself, or a reference to one
+          # (`$NAME`, `${NAME:?...}` in shell and compose files) — real leaked tokens/keys are
           # never pure-uppercase with no lowercase or mixed-case characters. Matched
           # without anchoring to end-of-line, since trailing punctuation (closing
           # backtick/paren, a comment continuing past it) shouldn't defeat this.
@@ -69,7 +70,7 @@ jobs:
               -- . ':(exclude)*.example' ':(exclude)*.sample' ':(exclude)*.template' ':(exclude)*.dist' \
             | grep -E '^\+[^+]' \
             | grep -iE '(api[_-]?key|secret|password|token|bearer)[^A-Za-z]*[:=][^A-Za-z]*[A-Za-z0-9_-]{20,}' \
-            | grep -vE '[:=][[:space:]]*"?[A-Z][A-Z0-9_]{19,}("?([^a-zA-Z]|$))' \
+            | grep -vE '[:=][[:space:]]*"?(\$\{?)?[A-Z][A-Z0-9_]{19,}("?([^a-zA-Z]|$))' \
             | grep -vE '(^|[^a-zA-Z])(demo|example|sample|dummy|placeholder|do-not-use-in-production|change-in-production|quickstart-dev)([^a-zA-Z]|$)' || true)
           if [ -n "$HITS" ]; then
             echo "::error::Possible secret leaked in diff:"
