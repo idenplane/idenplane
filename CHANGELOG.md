@@ -9,6 +9,16 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-11-10
+
+Idenplane gets much faster and runs correctly as several instances. Protocol requests no longer go to the database each time, and `WEB_CONCURRENCY` lets one container use every CPU. Scheduled jobs, webhooks, plugins and first boot now behave when more than one instance runs, and several security fixes land. With one worker per CPU, Idenplane served discovery, JWKS, client-credentials tokens and introspection faster than Keycloak 26.8 on the same machine. See the [benchmarks](docs/docs/benchmarks.md).
+
+**Before you upgrade:**
+- **Migrations:** five run on start. They add triggers and indexes, and remove duplicate used-TOTP rows before adding a unique index.
+- **Connection pooler in transaction mode:** if Idenplane reaches PostgreSQL through PgBouncer with `pool_mode = transaction`, or a similar pooler, set `CACHE_L1=off` and `LEADER_ELECTION=off`. Notifications and the leader lock need a session. Session mode, or a direct connection, needs nothing.
+- **Access log:** only failed requests are logged now. Set `LOG_ACCESS=all` to log every request as before.
+- **Helm:** the chart used to default to an image tag that does not exist. See Fixed below.
+
 ### Added
 - **Published benchmarks** against Keycloak, Zitadel and Authentik, measured on one machine with pinned images, CPUs and memory. The method, the results and the raw data are on the new Benchmarks docs page and in `benchmarks/published/`. The README and introduction now quote measured memory figures instead of estimates.
 - **`WEB_CONCURRENCY` runs one worker per CPU** (`auto`, or a number), so one container can use the whole machine instead of about one core. A small primary process forks the workers, restarts one that crashes, stops the container if workers keep failing at startup, and stops them gracefully on SIGTERM; `/admin/metrics` reports the whole container. The default stays one process. The CPU count honours the container's cpuset and CPU quota (a Kubernetes CPU limit), and the Argon2, database-pool and throttle budgets are split between workers rather than multiplied.
@@ -39,6 +49,7 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 - **The Docker image is about 620 MB smaller on disk** (447 MB to 317 MB to download). A final `chown -R /app` copied all of `node_modules` into a second layer only to change its owner. The app code and `node_modules` now stay owned by root, so a compromised process cannot rewrite them; the `node` user owns only what the server writes: `/app` itself, `uploads`, `backups` and `themes`.
 
 ### Fixed
+- **The Helm chart could not start Idenplane with its defaults.** The image tag defaults to the chart's `appVersion`. That was `0.0.1`, which was never published, so a default install could not pull its image. `appVersion` is now `0.6.0` (chart `0.2.0`). The release check now refuses a tag that does not match `appVersion`, so the two can no longer drift apart.
 - **The database rate limiter (without Redis) could let a client past its limit at every window boundary.** Concurrent requests could each restart an expired window and wipe the others' counts. Counting and restarting a window is now one atomic statement.
 - **Theme asset upload never worked.** `POST /admin/realms/{realm}/themes/assets/upload` rejected every file (`property data should not exist`): the nested DTO was never transformed, so validation stripped its fields. Had it accepted one, the returned URL (`/themes/assets/...`) was served by nothing. Uploads are now accepted and served from `/themes/uploads/{realmId}/{file}`, with a sandboxing Content-Security-Policy and `nosniff` so an uploaded SVG cannot run script, and long-lived caching; a name's own extension is no longer doubled (`logo.png.png`).
 - **Disabling or uninstalling a plugin took effect only on the instance that handled the request.** The others kept running it, token enrichment and event listeners included, until they restarted. Every instance now follows the change at once (PostgreSQL `NOTIFY`), runs its own `onEnable`/`onDisable`, and rereads all plugin states after any gap in that channel; `onUninstall` still runs once.
