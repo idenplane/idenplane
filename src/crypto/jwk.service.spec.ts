@@ -68,6 +68,60 @@ describe('JwkService', () => {
     });
   });
 
+  describe('parsed key reuse', () => {
+    it('signs and verifies repeatedly, and with each of two keys', async () => {
+      const a = await service.generateRsaKeyPair();
+      const b = await service.generateRsaKeyPair();
+      for (let i = 0; i < 3; i++) {
+        for (const key of [a, b]) {
+          const token = await service.signJwt(
+            { sub: `user-${i}` },
+            key.privateKeyPem,
+            key.kid,
+            300,
+          );
+          const verified = await service.verifyJwt(token, key.publicKeyPem);
+          expect(verified.sub).toBe(`user-${i}`);
+          const other = key === a ? b : a;
+          await expect(
+            service.verifyJwt(token, other.publicKeyPem),
+          ).rejects.toThrow();
+        }
+      }
+    });
+
+    it('rejects a malformed PEM every time, not only the first', async () => {
+      const bad = [
+        '-----BEGIN PRIVATE KEY-----',
+        'not-a-key',
+        '-----END PRIVATE KEY-----',
+      ].join('\n');
+      for (let i = 0; i < 2; i++) {
+        await expect(
+          service.signJwt({ sub: 'x' }, bad, 'kid', 300),
+        ).rejects.toThrow();
+      }
+    });
+
+    it('starts signing with a new key as soon as it is passed', async () => {
+      const old = await service.generateRsaKeyPair();
+      const next = await service.generateRsaKeyPair();
+      await service.signJwt({ sub: 'x' }, old.privateKeyPem, old.kid, 300);
+      const token = await service.signJwt(
+        { sub: 'y' },
+        next.privateKeyPem,
+        next.kid,
+        300,
+      );
+      await expect(
+        service.verifyJwt(token, next.publicKeyPem),
+      ).resolves.toMatchObject({ sub: 'y' });
+      await expect(
+        service.verifyJwt(token, old.publicKeyPem),
+      ).rejects.toThrow();
+    });
+  });
+
   describe('computeAtHash', () => {
     it('should return a base64url string', () => {
       const hash = service.computeAtHash('some-access-token');

@@ -35,8 +35,9 @@ This page covers setup, the payload format, and retries. For deep debugging — 
 | `user.approval_pending` | Self-registration created but awaiting admin approval |
 | `user.registered` | Self-registration completed (no approval required) |
 | `user.approved` / `user.rejected` | An admin approved/rejected a pending registration |
+| `nhi.credential.rotation_due` | A non-human identity's credential reached its policy's rotation threshold (`autoRotate: true`). Payload: `credentialId`, `nhiIdentityId`, `policyId`. Sent once per credential; it is also flagged `rotationRequired`. Rotate it with `POST .../credentials/{id}/rotate`, which returns the new key: Idenplane never replaces a key it cannot hand to its owner. |
 
-Everything above `user.approval_pending` comes from the realm's login-event stream (they fire only if `eventsEnabled` is on for the realm — the event is skipped, and no webhook dispatch happens, while it's off); the last four (`user.approval_pending`, `user.registered`, `user.approved`, `user.rejected`) come from the registration flow directly and aren't gated by `eventsEnabled`. The admin console's webhook form shows a curated checkbox list that doesn't cover every string above — to subscribe to an event not shown there (e.g. `user.registered`), create or update the webhook through the Admin API with the exact string.
+Everything above `user.approval_pending` comes from the realm's login-event stream (they fire only if `eventsEnabled` is on for the realm — the event is skipped, and no webhook dispatch happens, while it's off); `user.approval_pending`, `user.registered`, `user.approved` and `user.rejected` come from the registration flow directly, and `nhi.credential.rotation_due` from the rotation-policy scheduler, and aren't gated by `eventsEnabled`. The admin console's webhook form shows a curated checkbox list that doesn't cover every string above — to subscribe to an event not shown there (e.g. `user.registered`), create or update the webhook through the Admin API with the exact string.
 
 ### Delivery
 

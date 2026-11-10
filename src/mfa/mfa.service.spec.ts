@@ -57,6 +57,7 @@ describe('MfaService', () => {
     (prisma as any).usedTotpCode = {
       findFirst: jest.fn(),
       create: jest.fn(),
+      updateMany: jest.fn().mockResolvedValue({ count: 0 }),
       deleteMany: jest.fn().mockResolvedValue({ count: 0 }),
     };
 
@@ -309,6 +310,39 @@ describe('MfaService', () => {
       const result = await service.verifyTotp('user-1', 'bad-code');
 
       expect(result).toBe(false);
+    });
+
+    it('refuses a valid code that a concurrent request claimed first', async () => {
+      prisma.userCredential.findUnique.mockResolvedValue(
+        verifiedCredential as any,
+      );
+      (prisma as any).usedTotpCode.findFirst.mockResolvedValue(null);
+      (prisma as any).usedTotpCode.create.mockRejectedValue(
+        Object.assign(new Error('Unique constraint failed'), { code: 'P2002' }),
+      );
+      (prisma as any).usedTotpCode.updateMany.mockResolvedValue({ count: 0 });
+
+      expect(await service.verifyTotp('user-1', '123456')).toBe(false);
+    });
+
+    it('accepts a code whose earlier use has expired but is not cleaned up yet', async () => {
+      prisma.userCredential.findUnique.mockResolvedValue(
+        verifiedCredential as any,
+      );
+      (prisma as any).usedTotpCode.findFirst.mockResolvedValue(null);
+      (prisma as any).usedTotpCode.create.mockRejectedValue(
+        Object.assign(new Error('Unique constraint failed'), { code: 'P2002' }),
+      );
+      (prisma as any).usedTotpCode.updateMany.mockResolvedValue({ count: 1 });
+
+      expect(await service.verifyTotp('user-1', '123456')).toBe(true);
+      expect((prisma as any).usedTotpCode.updateMany).toHaveBeenCalledWith({
+        where: expect.objectContaining({
+          userId: 'user-1',
+          expiresAt: { lte: expect.any(Date) },
+        }),
+        data: expect.objectContaining({ expiresAt: expect.any(Date) }),
+      });
     });
 
     it('should return true when TOTP code is valid', async () => {
@@ -612,7 +646,10 @@ describe('MfaService', () => {
       const spy = jest.spyOn(service, 'verifyTotp');
 
       expect(
-        await service.verifySecondFactor('user-1', { method: 'otp', code: ' ' }),
+        await service.verifySecondFactor('user-1', {
+          method: 'otp',
+          code: ' ',
+        }),
       ).toEqual({ verified: false });
       expect(spy).not.toHaveBeenCalled();
     });

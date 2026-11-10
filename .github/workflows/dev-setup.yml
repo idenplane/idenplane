@@ -78,7 +78,7 @@ jobs:
         shell: wsl-bash {0}
     steps:
       - uses: actions/checkout@v7
-      - uses: Vampire/setup-wsl@v5
+      - uses: Vampire/setup-wsl@v7
         with:
           distribution: Ubuntu-24.04
           additional-packages: ca-certificates curl git openssl postgresql

@@ -1,3 +1,4 @@
+import { lookupsBackedBy } from '../cache/cached-lookups.mock.js';
 import {
   UnauthorizedException,
   HttpException,
@@ -101,6 +102,7 @@ describe('AdminAuthService', () => {
     };
 
     service = new AdminAuthService(
+      lookupsBackedBy(prisma as any) as any,
       prisma as any,
       crypto as any,
       jwkService as any,

@@ -1,3 +1,4 @@
+import { lookupsBackedBy } from '../cache/cached-lookups.mock.js';
 import { generateKeyPairSync } from 'crypto';
 import type { Realm } from '@prisma/client';
 import { SamlMetadataService } from './saml-metadata.service.js';
@@ -37,7 +38,7 @@ describe('SamlMetadataService', () => {
 
   beforeEach(() => {
     prisma = createMockPrismaService();
-    service = new SamlMetadataService(prisma as any);
+    service = new SamlMetadataService(lookupsBackedBy(prisma as any) as any);
   });
 
   describe('generateMetadata', () => {
@@ -128,6 +129,7 @@ describe('SamlMetadataService', () => {
 
       expect(prisma.realmSigningKey.findFirst).toHaveBeenCalledWith({
         where: { realmId: mockRealm.id, active: true },
+        orderBy: { createdAt: 'desc' },
       });
     });
   });

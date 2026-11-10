@@ -47,6 +47,11 @@ export function strongestAcr(
 
 // ─── Service ─────────────────────────────────────────────────────────────────
 
+/** The ACR a risk score requires: WebAuthn when CRITICAL (80+), else MFA. */
+export function riskStepUpAcr(riskScore: number): string {
+  return riskScore >= 80 ? ACR_WEBAUTHN : ACR_MFA;
+}
+
 @Injectable()
 export class StepUpService {
   private readonly logger = new Logger(StepUpService.name);
@@ -78,6 +83,35 @@ export class StepUpService {
    * record for the given session.  Falls back to `ACR_PASSWORD` if no records
    * exist (the session was established via password-only).
    */
+  /**
+   * The ACR a user must reach because continuous verification flagged one
+   * of their sessions in this realm for step-up (risk at or above the
+   * step-up threshold, not yet expired), or null. CRITICAL risk (score 80
+   * and above) requires WebAuthn, lower requires MFA.
+   *
+   * This is the per-user enforcement of a risk-triggered step-up; it used to
+   * be done by raising the requiredAcr of the session's whole client, which
+   * stepped up every user of that client.
+   */
+  async getRiskRequiredAcr(
+    realmId: string,
+    userId: string,
+  ): Promise<string | null> {
+    const flagged = await this.prisma.sessionRiskProfile.findFirst({
+      where: {
+        realmId,
+        userId,
+        stepUpRequired: true,
+        terminateSession: false,
+        stepUpExpiresAt: { gte: new Date() },
+      },
+      orderBy: { riskScore: 'desc' },
+      select: { riskScore: true },
+    });
+    if (!flagged) return null;
+    return riskStepUpAcr(flagged.riskScore);
+  }
+
   async getSessionAcr(sessionId: string): Promise<string> {
     const now = new Date();
     const records = await this.prisma.stepUpRecord.findMany({

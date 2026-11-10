@@ -1,0 +1,38 @@
+{
+  "target": "authentik",
+  "image": "ghcr.io/goauthentik/server:2026.8.5",
+  "digest": "ghcr.io/goauthentik/server@sha256:602227a86455d6772e3d16b7d852713c4f864f40df5df894abd1285bb53979a5",
+  "imageBytes": 1937679868,
+  "firstBootMs": 83837,
+  "restartMs": 8181,
+  "passwordHash": "pbkdf2_sha256 iterations=1000000",
+  "scenarios": [
+    "discovery",
+    "jwks",
+    "client_credentials",
+    "introspect",
+    "password"
+  ],
+  "runs": 3,
+  "vus": 32,
+  "duration": "60s",
+  "warmup": "20s",
+  "cpus": {
+    "target": "0-3",
+    "db": "4-5",
+    "k6": "6-15"
+  },
+  "targetMem": "2g",
+  "host": {
+    "cpus": 16,
+    "memBytes": 33678110720,
+    "cpuModel": "AMD EPYC"
+  },
+  "unsupported": [
+    "password"
+  ],
+  "introspectTokenGrant": "client_credentials",
+  "notes": "The Authentik password grant is an alias of client_credentials that checks an app-password token instead of the stored user password hash, so the password scenario is skipped; introspection checks a client_credentials token. Every client_credentials request also upserts the service-account user of the client, stores the access token and writes a login Event row that the worker then processes, so the worker on the same CPUs does work under that load; introspection is a db lookup of the stored token. Server and worker share TARGET_CPUS and each has its own TARGET_MEM cap, so the stack may use up to 2x TARGET_MEM. The web server runs at its defaults (web.workers=2, web.threads=4: two Python processes, so at most about two cores of request handling).",
+  "k6": "grafana/k6:2.3.0",
+  "finishedAt": "2026-11-09T13:48:49.565Z"
+}

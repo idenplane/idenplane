@@ -1,4 +1,7 @@
-import { cpus } from 'os';
+import {
+  effectiveCpuCount,
+  workerCount,
+} from '../common/utils/cpu-count.util.js';
 
 /**
  * `pg`'s own default pool size is 10 connections regardless of instance
@@ -10,7 +13,15 @@ import { cpus } from 'os';
  * N * DATABASE_POOL_MAX — tune DATABASE_POOL_MAX down (or raise Postgres's
  * max_connections) if running many replicas on multi-core hosts.
  */
-const DEFAULT_POOL_MAX = cpus().length * 2 + 1;
+// Two connections per usable CPU, plus one, for the whole container: split
+// between cluster workers rather than given to each (four workers on four
+// CPUs would otherwise hold 36). At least 5 per worker, so one worker is
+// never starved. Each process also holds two dedicated connections of its
+// own: the cache-invalidation listener and the leader lock.
+const DEFAULT_POOL_MAX = Math.max(
+  5,
+  Math.ceil((effectiveCpuCount() * 2) / workerCount()) + 1,
+);
 const DEFAULT_POOL_MIN = 2;
 const DEFAULT_IDLE_TIMEOUT_MS = 30_000;
 

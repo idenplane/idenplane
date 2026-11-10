@@ -1,3 +1,4 @@
+import { CachedLookupsService } from '../cache/cached-lookups.service.js';
 import {
   Injectable,
   Logger,
@@ -26,6 +27,7 @@ import {
   resolveUserClaims,
   type UserClaimSource,
 } from '../scopes/claims.resolver.js';
+import { loadUserGrants } from './user-grants.js';
 import { CustomAttributesService } from '../custom-attributes/custom-attributes.service.js';
 import { UserFederationService } from '../user-federation/user-federation.service.js';
 import {
@@ -34,7 +36,8 @@ import {
   ACR_MFA,
 } from '../step-up/step-up.service.js';
 import type { PluginManagerService } from '../plugins/plugin-manager.service.js';
-import type { Realm } from '@prisma/client';
+import type { Prisma, Realm } from '@prisma/client';
+import { randomUUID } from 'node:crypto';
 import type { JWTPayload } from 'jose';
 
 export interface TokenResponse {
@@ -48,11 +51,18 @@ export interface TokenResponse {
   session_state?: string;
 }
 
+/** See AuthService.newSession. */
+interface NewSession {
+  id: string;
+  data: Omit<Prisma.SessionUncheckedCreateInput, 'id' | 'refreshTokens'>;
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
 
   constructor(
+    private readonly lookups: CachedLookupsService,
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
     private readonly jwkService: JwkService,
@@ -312,18 +322,14 @@ export class AuthService {
       );
     }
 
-    await this.enforceSessionLimit(realm, user.id);
-
-    const session = await this.prisma.session.create({
-      data: {
-        userId: user.id,
-        ipAddress: ip,
-        userAgent,
-        // Persist so a later refresh preserves the password-level context.
-        satisfiedAcr: ACR_PASSWORD,
-        amr: ['pwd'],
-        expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
-      },
+    const session = this.newSession({
+      userId: user.id,
+      ipAddress: ip,
+      userAgent,
+      // Persist so a later refresh preserves the password-level context.
+      satisfiedAcr: ACR_PASSWORD,
+      amr: ['pwd'],
+      expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
     });
 
     void this.eventsService.recordLoginEvent({
@@ -347,7 +353,7 @@ export class AuthService {
       realm,
       user,
       client_id,
-      session.id,
+      session,
       scope,
       undefined,
       new Date(),
@@ -469,18 +475,14 @@ export class AuthService {
       );
     }
 
-    await this.enforceSessionLimit(realm, user.id);
-
-    const session = await this.prisma.session.create({
-      data: {
-        userId: user.id,
-        ipAddress: ip,
-        userAgent,
-        // Persist so a later refresh preserves the MFA-level context.
-        satisfiedAcr: ACR_MFA,
-        amr: ['pwd', factor === 'sms' ? 'sms' : 'otp'],
-        expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
-      },
+    const session = this.newSession({
+      userId: user.id,
+      ipAddress: ip,
+      userAgent,
+      // Persist so a later refresh preserves the MFA-level context.
+      satisfiedAcr: ACR_MFA,
+      amr: ['pwd', factor === 'sms' ? 'sms' : 'otp'],
+      expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
     });
 
     void this.eventsService.recordLoginEvent({
@@ -500,7 +502,7 @@ export class AuthService {
       realm,
       user,
       client_id,
-      session.id,
+      session,
       scope,
       undefined,
       new Date(),
@@ -524,9 +526,7 @@ export class AuthService {
 
     // If client has a service account user, issue tokens through that user
     if (client.serviceAccountUserId) {
-      const user = await this.prisma.user.findUnique({
-        where: { id: client.serviceAccountUserId },
-      });
+      const user = await this.lookups.userProfile(client.serviceAccountUserId);
       if (user) {
         // A machine-to-machine token carries the service account's claims but
         // no session: nobody logs in, so there is nothing to refresh or log
@@ -658,13 +658,57 @@ export class AuthService {
       );
     }
 
-    // Rotate: revoke old token
-    await this.prisma.refreshToken.update({
-      where: { id: storedToken.id },
+    const user = storedToken.session.user;
+    if (!user.enabled) {
+      throw new OAuthTokenError(
+        'invalid_grant',
+        'The user is disabled',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // RFC 6749 §6: a refresh may narrow the scope, never widen it. (A token
+    // stored without a scope predates scope tracking; nothing to compare.)
+    const grantedScopes = (storedToken.scope ?? '').split(' ').filter(Boolean);
+    const requestedScopes = (scope ?? '').split(' ').filter(Boolean);
+    const widened =
+      storedToken.scope === null
+        ? []
+        : requestedScopes.filter((s) => !grantedScopes.includes(s));
+    if (widened.length > 0) {
+      throw new OAuthTokenError(
+        'invalid_scope',
+        `Scope not granted to this refresh token: ${widened.join(' ')}`,
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // Rotate: the revocation is the claim. Only one request can revoke a
+    // live token; a concurrent one using the same token loses, and is
+    // treated as the reuse it is (RFC 9700 §4.14): the whole session's
+    // refresh tokens are revoked, as for any reuse of a revoked token.
+    const { count } = await this.prisma.refreshToken.updateMany({
+      where: { id: storedToken.id, revoked: false },
       data: { revoked: true },
     });
-
-    const user = storedToken.session.user;
+    if (count === 0) {
+      await this.prisma.refreshToken.updateMany({
+        where: { sessionId: storedToken.sessionId },
+        data: { revoked: true },
+      });
+      void this.eventsService.recordLoginEvent({
+        realmId: realm.id,
+        type: LoginEventType.TOKEN_REFRESH_ERROR,
+        clientId: client_id,
+        ipAddress: ip,
+        error: 'Refresh token reused concurrently',
+      });
+      throw new OAuthTokenError(
+        'invalid_grant',
+        'Invalid or expired refresh token',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
 
     void this.eventsService.recordLoginEvent({
       realmId: realm.id,
@@ -831,25 +875,21 @@ export class AuthService {
       );
     }
 
-    await this.enforceSessionLimit(realm, user.id);
-
     // Reflect the auth context actually *satisfied* during login (persisted on
     // the code at authorization time), not merely the client-*requested*
     // `acrValues`. Falls back to password-level for legacy/null codes.
     const acr = authCode.satisfiedAcr ?? ACR_PASSWORD;
     const amr = authCode.amr.length > 0 ? authCode.amr : ['pwd'];
 
-    const session = await this.prisma.session.create({
-      data: {
-        userId: user.id,
-        ipAddress: ip,
-        userAgent,
-        // Persist so the refresh_token grant can preserve acr/amr (see
-        // handleRefreshTokenGrant).
-        satisfiedAcr: acr,
-        amr,
-        expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
-      },
+    const session = this.newSession({
+      userId: user.id,
+      ipAddress: ip,
+      userAgent,
+      // Persist so the refresh_token grant can preserve acr/amr (see
+      // handleRefreshTokenGrant).
+      satisfiedAcr: acr,
+      amr,
+      expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
     });
 
     void this.eventsService.recordLoginEvent({
@@ -869,7 +909,7 @@ export class AuthService {
       realm,
       user,
       client_id,
-      session.id,
+      session,
       authCode.scope ?? undefined,
       authCode.nonce ?? undefined,
       new Date(),
@@ -1006,15 +1046,11 @@ export class AuthService {
     // Clean up the device code
     await this.prisma.deviceCode.delete({ where: { id: deviceCode.id } });
 
-    await this.enforceSessionLimit(realm, user.id);
-
-    const session = await this.prisma.session.create({
-      data: {
-        userId: user.id,
-        ipAddress: ip,
-        userAgent,
-        expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
-      },
+    const session = this.newSession({
+      userId: user.id,
+      ipAddress: ip,
+      userAgent,
+      expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
     });
 
     void this.eventsService.recordLoginEvent({
@@ -1034,7 +1070,7 @@ export class AuthService {
       realm,
       user,
       client_id,
-      session.id,
+      session,
       deviceCode.scope ?? undefined,
       undefined,
       new Date(),
@@ -1154,9 +1190,7 @@ export class AuthService {
       );
     }
 
-    const client = await this.prisma.client.findUnique({
-      where: { realmId_clientId: { realmId: realm.id, clientId } },
-    });
+    const client = await this.lookups.client(realm.id, clientId);
 
     if (!client || !client.enabled) {
       throw new OAuthTokenError(
@@ -1236,11 +1270,13 @@ export class AuthService {
     user: UserClaimSource,
     clientId: string,
     /**
-     * The session the tokens belong to. `null` issues a session-less access
-     * token alone: no `sid`, no refresh token, no ID token. That is what a
-     * service account gets from client_credentials (RFC 6749 §4.4.3).
+     * The session the tokens belong to: the id of an existing one (refresh,
+     * a browser login's code), a new one from `newSession`, which is created
+     * here together with its refresh token, or `null` for a session-less
+     * access token alone: no `sid`, no refresh token, no ID token. That is
+     * what a service account gets from client_credentials (RFC 6749 §4.4.3).
      */
-    sessionId: string | null,
+    session: string | NewSession | null,
     scope?: string,
     nonce?: string,
     authTime?: Date,
@@ -1248,6 +1284,8 @@ export class AuthService {
     amr?: string[],
     code?: string,
   ): Promise<TokenResponse> {
+    const sessionId =
+      typeof session === 'string' ? session : (session?.id ?? null);
     const signingKey = await this.getActiveSigningKey(realm.id);
 
     // Parse and validate scopes, default to openid
@@ -1258,41 +1296,15 @@ export class AuthService {
     // Resolve scope-filtered user claims
     const allowedClaims =
       this.scopesService.getClaimsForScopes(effectiveScopes);
-    const customAttrClaims =
-      await this.customAttributesService.getOidcClaimsForUser(user.id);
-    const userClaims = resolveUserClaims(user, allowedClaims, customAttrClaims);
-
-    // Build role claims (direct user roles + group-inherited roles)
-    const userRoles = await this.prisma.userRole.findMany({
-      where: { userId: user.id },
-      include: { role: { include: { client: true } } },
-    });
-
-    const groupRoles = await this.resolveGroupRoles(user.id);
-
-    // Merge and deduplicate
-    const allRoles = [...userRoles.map((ur) => ur.role), ...groupRoles];
-    const seenRoleIds = new Set<string>();
-    const dedupedRoles = allRoles.filter((r) => {
-      if (seenRoleIds.has(r.id)) return false;
-      seenRoleIds.add(r.id);
-      return true;
-    });
-
-    const realmRoles = dedupedRoles
-      .filter((r) => !r.clientId)
-      .map((r) => r.name);
-
-    const resourceAccess: Record<string, { roles: string[] }> = {};
-    for (const role of dedupedRoles) {
-      if (role.client) {
-        const cId = role.client.clientId;
-        if (!resourceAccess[cId]) {
-          resourceAccess[cId] = { roles: [] };
-        }
-        resourceAccess[cId].roles.push(role.name);
-      }
-    }
+    // The user's roles (direct and through groups) and attribute claims,
+    // from the in-process cache. A copy: the token payload, the mappers and
+    // the enrichment plugins below may all modify what they are given.
+    const { attributeClaims, realmRoles, resourceAccess } = structuredClone(
+      await this.lookups.userGrants(user.id, () =>
+        loadUserGrants(this.prisma, this.customAttributesService, user.id),
+      ),
+    );
+    const userClaims = resolveUserClaims(user, allowedClaims, attributeClaims);
 
     // Include roles by default (backward compat) or when 'roles' scope is granted
     const includeRoles = !scope || allowedClaims.has('realm_access');
@@ -1300,9 +1312,10 @@ export class AuthService {
     // Try to apply protocol mappers from DB scopes
     let mapperClaims: Record<string, unknown> = {};
     try {
-      const mappers = await this.scopesService.getScopeMappers(
-        effectiveScopes,
-        realm.id,
+      const mappers = structuredClone(
+        await this.lookups.scopeMappers(realm.id, effectiveScopes, () =>
+          this.scopesService.getScopeMappers(effectiveScopes, realm.id),
+        ),
       );
       if (mappers.length > 0) {
         const mapperContext: MapperContext = {
@@ -1353,7 +1366,7 @@ export class AuthService {
     const enrichedPayload: Record<string, unknown> = this.pluginManager
       ? await this.pluginManager.enrichToken(
           accessTokenPayload,
-          user,
+          { ...user },
           realm.name,
         )
       : accessTokenPayload;
@@ -1384,16 +1397,44 @@ export class AuthService {
     const rawRefreshToken = this.crypto.generateSecret(64);
     const refreshTokenHash = this.crypto.sha256(rawRefreshToken);
 
-    await this.prisma.refreshToken.create({
-      data: {
-        sessionId,
-        tokenHash: refreshTokenHash,
-        scope: validatedScope,
-        expiresAt: new Date(Date.now() + refreshLifespan * 1000),
-        isOffline,
-        clientId,
-      },
-    });
+    const refreshToken = {
+      tokenHash: refreshTokenHash,
+      scope: validatedScope,
+      expiresAt: new Date(Date.now() + refreshLifespan * 1000),
+      isOffline,
+      clientId,
+    };
+    if (typeof session === 'string') {
+      try {
+        await this.prisma.refreshToken.create({
+          data: { ...refreshToken, sessionId },
+        });
+      } catch (err) {
+        // The session ended (logout, revocation, or evicted by a newer
+        // login) after this request was authorised: that is a grant that
+        // no longer holds, not a server error.
+        if ((err as { code?: string }).code === 'P2003') {
+          throw new OAuthTokenError(
+            'invalid_grant',
+            'The session has ended',
+            HttpStatus.BAD_REQUEST,
+          );
+        }
+        throw err;
+      }
+    } else if (session) {
+      // A new session and its refresh token are one write, so no concurrent
+      // login can evict the session while it has no token yet. The cap is
+      // enforced afterwards, against the user's other sessions only.
+      await this.prisma.session.create({
+        data: {
+          ...session.data,
+          id: session.id,
+          refreshTokens: { create: refreshToken },
+        },
+      });
+      await this.enforceSessionLimit(realm, session);
+    }
 
     // Build ID token if openid scope is present
     let idToken: string | undefined;
@@ -1411,6 +1452,7 @@ export class AuthService {
         acr,
         amr,
         code,
+        attributeClaims,
       });
     }
 
@@ -1438,14 +1480,13 @@ export class AuthService {
     acr?: string;
     amr?: string[];
     code?: string;
+    attributeClaims: Record<string, string>;
   }): Promise<string> {
     const allowedClaims = this.scopesService.getClaimsForScopes(params.scopes);
-    const customAttrClaims =
-      await this.customAttributesService.getOidcClaimsForUser(params.user.id);
     const userClaims = resolveUserClaims(
       params.user,
       allowedClaims,
-      customAttrClaims,
+      params.attributeClaims,
     );
 
     // Resolve the ACR claim:
@@ -1485,10 +1526,7 @@ export class AuthService {
   }
 
   private async getActiveSigningKey(realmId: string) {
-    const key = await this.prisma.realmSigningKey.findFirst({
-      where: { realmId, active: true },
-      orderBy: { createdAt: 'desc' },
-    });
+    const key = await this.lookups.activeSigningKey(realmId);
     if (!key) {
       throw new Error('No active signing key found for realm');
     }
@@ -1500,72 +1538,52 @@ export class AuthService {
     return `${baseUrl}/realms/${realm.name}`;
   }
 
-  private async resolveGroupRoles(userId: string) {
-    const memberships = await this.prisma.userGroup.findMany({
-      where: { userId },
-      select: { groupId: true },
-    });
-
-    if (memberships.length === 0) return [];
-
-    type RoleWithClient = {
-      id: string;
-      name: string;
-      clientId: string | null;
-      client: { clientId: string } | null;
-    };
-    const allRoles: RoleWithClient[] = [];
-    const visited = new Set<string>();
-
-    const walkGroup = async (groupId: string) => {
-      if (visited.has(groupId)) return;
-      visited.add(groupId);
-
-      const group = await this.prisma.group.findUnique({
-        where: { id: groupId },
-        include: {
-          groupRoles: { include: { role: { include: { client: true } } } },
-        },
-      });
-      if (!group) return;
-
-      for (const gr of group.groupRoles) {
-        allRoles.push(gr.role);
-      }
-
-      if (group.parentId) {
-        await walkGroup(group.parentId);
-      }
-    };
-
-    for (const m of memberships) {
-      await walkGroup(m.groupId);
-    }
-
-    return allRoles;
+  /**
+   * A session for a fresh sign-in, not yet written: `issueTokens` creates it
+   * together with its refresh token and then applies the realm's session
+   * cap. Its id and creation time are fixed now, so the tokens and login
+   * events can name it and the cap can order it against concurrent logins.
+   */
+  private newSession(
+    data: Omit<
+      Prisma.SessionUncheckedCreateInput,
+      'id' | 'refreshTokens' | 'createdAt'
+    >,
+  ): NewSession {
+    return { id: randomUUID(), data: { ...data, createdAt: new Date() } };
   }
 
   /**
-   * Enforce the per-realm maximum concurrent OAuth sessions limit for a user.
-   * If the user already has `maxSessionsPerUser` or more active sessions, the
-   * oldest ones are deleted (FIFO) so that after this call there is room for
-   * exactly one additional session.
+   * Enforce the per-realm maximum concurrent OAuth sessions for a user, right
+   * after `session` was created: of the user's sessions *older* than it, all
+   * but the newest `maxSessionsPerUser - 1` are deleted (FIFO), so with the
+   * new one the user is at the cap.
+   *
+   * Only older sessions are considered. Concurrent sign-ins therefore never
+   * evict each other's brand-new session from both sides (which, with a cap
+   * of 1, would leave the user with none); the newest always survives, and
+   * each newer sign-in trims what came before it.
    *
    * A `maxSessionsPerUser` value of 0 means "unlimited" — no eviction occurs.
    */
   private async enforceSessionLimit(
     realm: Realm,
-    userId: string,
+    session: NewSession,
   ): Promise<void> {
     const maxSessions = (realm as Realm & { maxSessionsPerUser?: number })
       .maxSessionsPerUser;
     if (!maxSessions || maxSessions <= 0) return;
 
+    const createdAt = session.data.createdAt as Date;
     const activeSessions = await this.prisma.session.findMany({
       where: {
-        userId,
+        userId: session.data.userId,
         user: { realmId: realm.id },
         expiresAt: { gt: new Date() },
+        OR: [
+          { createdAt: { lt: createdAt } },
+          { createdAt, id: { lt: session.id } },
+        ],
       },
       orderBy: { createdAt: 'asc' },
       select: { id: true },
@@ -1578,15 +1596,22 @@ export class AuthService {
       );
       const evictIds = toEvict.map((s) => s.id);
 
-      // Revoke all refresh tokens for the evicted sessions before deleting them
-      await this.prisma.refreshToken.updateMany({
-        where: { sessionId: { in: evictIds }, isOffline: false },
-        data: { revoked: true },
-      });
-
-      await this.prisma.session.deleteMany({
-        where: { id: { in: evictIds } },
-      });
+      // One statement: deleting a session deletes its refresh tokens
+      // (ON DELETE CASCADE), so revoking them first only took more locks,
+      // which concurrent sign-ins evicting overlapping sessions could take
+      // in opposite orders and deadlock on. Eviction is housekeeping: the
+      // new session is already written, so a failure here (a deadlock that
+      // PostgreSQL broke by aborting this side) must not fail the sign-in;
+      // the user's next sign-in trims again.
+      try {
+        await this.prisma.session.deleteMany({
+          where: { id: { in: evictIds } },
+        });
+      } catch (err) {
+        this.logger.warn(
+          `Could not evict ${evictIds.length} old session(s) of user ${session.data.userId}: ${String(err)}`,
+        );
+      }
     }
   }
 }

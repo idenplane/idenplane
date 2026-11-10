@@ -116,7 +116,11 @@ export class ThemeUploadService {
     // Generate a unique filename to avoid collisions
     const timestamp = Date.now();
     const randomSuffix = randomBytes(4).toString('hex');
-    const sanitizedName = this.sanitizeFilename(fileData.filename);
+    // The extension comes from the MIME type, so drop the one in the name
+    // (logo.png must not become logo.png.png).
+    const sanitizedName = this.sanitizeFilename(
+      fileData.filename.replace(/\.[A-Za-z0-9]{1,5}$/, ''),
+    );
     const ext = this.getExtension(fileData.mimeType);
     const uniqueFilename = `${timestamp}-${randomSuffix}-${sanitizedName}${ext}`;
 
@@ -136,7 +140,8 @@ export class ThemeUploadService {
       originalName: fileData.filename,
       mimeType: fileData.mimeType,
       size: buffer.length,
-      url: `/themes/assets/${realm.name}/${uniqueFilename}`,
+      // Served by main.ts from this service's upload directory.
+      url: `/themes/uploads/${realm.id}/${uniqueFilename}`,
     };
   }
 

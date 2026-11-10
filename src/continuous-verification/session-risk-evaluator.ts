@@ -620,6 +620,8 @@ export class SessionRiskEvaluator {
         trustScore,
         stepUpRequired: action === 'STEP_UP',
         stepUpReason: action === 'STEP_UP' ? 'Risk threshold exceeded' : null,
+        // A new episode is announced again; a continuing one is not.
+        ...(action === 'STEP_UP' ? {} : { stepUpNotifiedAt: null }),
         stepUpExpiresAt:
           action === 'STEP_UP'
             ? new Date(now.getTime() + 15 * 60 * 1000)

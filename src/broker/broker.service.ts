@@ -1,3 +1,4 @@
+import { CachedLookupsService } from '../cache/cached-lookups.service.js';
 import {
   Injectable,
   Logger,
@@ -65,6 +66,7 @@ export class BrokerService {
   private readonly logger = new Logger(BrokerService.name);
 
   constructor(
+    private readonly lookups: CachedLookupsService,
     private readonly prisma: PrismaService,
     private readonly jwkService: JwkService,
     private readonly idpService: IdentityProvidersService,
@@ -474,10 +476,7 @@ export class BrokerService {
   }
 
   private async getActiveSigningKey(realmId: string) {
-    const key = await this.prisma.realmSigningKey.findFirst({
-      where: { realmId, active: true },
-      orderBy: { createdAt: 'desc' },
-    });
+    const key = await this.lookups.activeSigningKey(realmId);
     if (!key) {
       throw new Error('No active signing key found for realm');
     }

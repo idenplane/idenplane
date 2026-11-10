@@ -1,5 +1,6 @@
 import { IsString, IsArray, IsOptional, ValidateNested } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { Type } from 'class-transformer';
 
 export class ThemeAssetFileDto {
   @ApiProperty({
@@ -29,6 +30,9 @@ export class UploadThemeAssetDto {
   })
   @IsArray()
   @ValidateNested({ each: true })
+  // Without it the items stay plain objects, and the whitelisting
+  // ValidationPipe rejected every one of their fields.
+  @Type(() => ThemeAssetFileDto)
   files!: ThemeAssetFileDto[];
 
   @ApiPropertyOptional({ description: 'Theme ID to associate assets with' })

@@ -1,36 +1,27 @@
 import { Injectable, Logger } from '@nestjs/common';
+import { LeaderService } from '../cache/leader.service.js';
 import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { CryptoService } from '../crypto/crypto.service.js';
+import { WebhooksService } from '../webhooks/webhooks.service.js';
 import type { Realm } from '@prisma/client';
 
 /** How many credentials to process per scheduler tick per realm. */
 const BATCH_SIZE = 50;
 
 /**
- * NhiRotationScheduler — automated credential rotation (Issue #NHI-Credential-Rotation).
+ * NhiRotationScheduler: enforces NHI credential rotation policies.
  *
- * ### Problem
- * NHI credentials (API keys, certificates, JWTs) have rotation policies defined per
- * realm via `NhiCredentialPolicy`.  When a policy has `autoRotate: true`, credentials
- * that have aged past the `rotationIntervalDays - rotationBeforeDays` threshold should
- * be rotated automatically rather than requiring manual intervention.
+ * A policy with `autoRotate: true` says a credential must be rotated once it
+ * is `rotationIntervalDays - rotationBeforeDays` old. The server cannot hand
+ * a new secret to a workload it has no channel to, so it does not replace the
+ * key itself (an earlier version did: it revoked the working key and stored a
+ * new one that nobody could ever learn). Instead, when a credential comes due
+ * it is flagged `rotationRequired` and an `nhi.credential.rotation_due`
+ * webhook is sent, once. The owner then rotates it through the API
+ * (`POST .../credentials/:id/rotate`), which returns the new key.
  *
- * ### Solution
- * This scheduler runs on a fixed interval, iterates over all active realms, finds
- * credentials that are due for rotation based on their policy, and performs the
- * rotation atomically:
- *
- * 1. Generate a new credential with the same settings.
- * 2. Mark the old credential as revoked with a `rotatedAt` timestamp.
- * 3. Update the `rotationRequired` flag on the new credential.
- *
- * The rotation does NOT revoke the credential immediately — existing clients can
- * continue using the old key during a grace period.  The old key is marked revoked
- * so it will not be re-issued and will be rejected on next use.
- *
- * Concurrent scheduler instances (e.g. during a rolling deploy) are handled by
- * claiming credentials atomically with an optimistic lock on `rotationRequired`.
+ * Runs on the elected leader only (LeaderService); the flag is set with a
+ * conditional update, so the event is sent once even across a failover.
  */
 @Injectable()
 export class NhiRotationScheduler {
@@ -38,13 +29,16 @@ export class NhiRotationScheduler {
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly crypto: CryptoService,
+    private readonly webhooks: WebhooksService,
+    private readonly leader: LeaderService,
   ) {}
 
   // ─── Scheduler tick ───────────────────────────────────────────────────────
 
   @Interval(60_000) // every 60 seconds
   async processRotations(): Promise<void> {
+    // Once per cluster: two processes would each rotate the same credential.
+    if (!this.leader.isLeader()) return;
     const realms = await this.prisma.realm.findMany({
       where: { enabled: true },
       select: { id: true, name: true },
@@ -119,6 +113,7 @@ export class NhiRotationScheduler {
           revoked: false,
           enabled: true,
           rotatedAt: null,
+          rotationRequired: false,
         },
         select: {
           id: true,
@@ -168,81 +163,45 @@ export class NhiRotationScheduler {
     return new Date() >= rotationDate;
   }
 
-  // ─── Rotation execution ──────────────────────────────────────────────────
+  // ─── Flagging ────────────────────────────────────────────────────────────
 
   private async rotateCredentialItem(
     realm: Realm,
-    item: { credentialId: string; nhiIdentityId: string },
+    item: {
+      credentialId: string;
+      nhiIdentityId: string;
+      policyId: string;
+      reason: string;
+    },
   ): Promise<void> {
     try {
-      await this.rotateCredential(realm, item.credentialId);
+      // The flag flips once: a credential already flagged (by an earlier
+      // tick, an admin or another leader) is not announced again.
+      const { count } = await this.prisma.nhiCredential.updateMany({
+        where: {
+          id: item.credentialId,
+          revoked: false,
+          rotationRequired: false,
+        },
+        data: { rotationRequired: true },
+      });
+      if (count === 0) return;
+      await this.webhooks.dispatchEvent({
+        realmId: realm.id,
+        eventType: 'nhi.credential.rotation_due',
+        payload: {
+          credentialId: item.credentialId,
+          nhiIdentityId: item.nhiIdentityId,
+          policyId: item.policyId,
+        },
+      });
       this.logger.log(
-        `Rotated credential '${item.credentialId}' for identity '${item.nhiIdentityId}' in realm '${realm.name}'`,
+        `Credential '${item.credentialId}' of identity '${item.nhiIdentityId}' in realm '${realm.name}' is due for rotation`,
       );
     } catch (err) {
       this.logger.error(
-        `Failed to rotate credential '${item.credentialId}': ${(err as Error).message}`,
+        `Failed to flag credential '${item.credentialId}' for rotation: ${(err as Error).message}`,
       );
     }
-  }
-
-  /**
-   * Rotate a single API_KEY credential.
-   *
-   * 1. Fetches the old credential.
-   * 2. Creates a new API_KEY credential with a fresh key.
-   * 3. Marks the old credential as revoked.
-   */
-  private async rotateCredential(
-    realm: Realm,
-    credentialId: string,
-  ): Promise<void> {
-    const oldCredential = await this.prisma.nhiCredential.findFirst({
-      where: {
-        id: credentialId,
-        nhiIdentity: { realmId: realm.id },
-        credentialType: 'API_KEY',
-        revoked: false,
-        enabled: true,
-      },
-    });
-
-    if (!oldCredential) {
-      // Credential was already rotated or is no longer eligible — skip silently.
-      return;
-    }
-
-    // Generate a new API key.
-    const newRaw = this.crypto.generateSecret(32);
-    const newPrefix = newRaw.slice(0, 8);
-    const newHash = await this.crypto.hashPassword(newRaw);
-
-    // Create new credential, inheriting allowed IP ranges from the old one.
-    await this.prisma.nhiCredential.create({
-      data: {
-        nhiIdentityId: oldCredential.nhiIdentityId,
-        credentialType: 'API_KEY',
-        name: oldCredential.name
-          ? `${oldCredential.name} (rotated)`
-          : 'rotated credential',
-        keyPrefix: newPrefix,
-        keyHash: newHash,
-        expiresAt: oldCredential.expiresAt,
-        rotationRequired: false,
-        enabled: true,
-        allowedIpRanges: oldCredential.allowedIpRanges ?? [],
-      },
-    });
-
-    // Revoke the old credential atomically.
-    await this.prisma.nhiCredential.update({
-      where: { id: credentialId },
-      data: {
-        revoked: true,
-        revokedAt: new Date(),
-        enabled: false,
-        rotatedAt: new Date(),
-      },
-    });
   }
 }

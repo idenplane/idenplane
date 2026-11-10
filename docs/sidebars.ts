@@ -237,6 +237,11 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'doc',
+      id: 'benchmarks',
+      label: 'Benchmarks',
+    },
+    {
+      type: 'doc',
       id: 'troubleshooting',
       label: 'Troubleshooting & FAQ',
     },

@@ -87,7 +87,7 @@ describe('WebhookSchedulerService', () => {
       expect(prisma.webhookEvent.updateMany).not.toHaveBeenCalled();
     });
 
-    it('should mark events as PROCESSING before delivery', async () => {
+    it('claims each event on the state it was read in before delivering it', async () => {
       prisma.webhookEvent.findMany.mockResolvedValue([pendingEvent]);
       prisma.webhookEvent.updateMany.mockResolvedValue({ count: 1 });
       prisma.webhook.findMany.mockResolvedValue([]);
@@ -95,25 +95,41 @@ describe('WebhookSchedulerService', () => {
 
       await service.processQueue();
 
-      expect(prisma.webhookEvent.updateMany).toHaveBeenCalledWith(
-        expect.objectContaining({
-          where: expect.objectContaining({
-            id: { in: ['evt-1'] },
-            status: { in: ['PENDING', 'FAILED'] },
-          }),
-          data: { status: 'PROCESSING' },
-        }),
-      );
+      expect(prisma.webhookEvent.updateMany).toHaveBeenCalledWith({
+        where: {
+          id: 'evt-1',
+          status: 'PENDING',
+          updatedAt: (pendingEvent as { updatedAt?: Date }).updatedAt,
+        },
+        data: { status: 'PROCESSING' },
+      });
+      expect(prisma.webhook.findMany).toHaveBeenCalled();
     });
 
-    it('should query PENDING and FAILED events that are due', async () => {
-      prisma.webhookEvent.findMany.mockResolvedValue([]);
+    it('does not deliver an event another process claimed first', async () => {
+      prisma.webhookEvent.findMany.mockResolvedValue([pendingEvent]);
+      prisma.webhookEvent.updateMany.mockResolvedValue({ count: 0 });
 
       await service.processQueue();
 
-      const findCall = prisma.webhookEvent.findMany.mock.calls[0][0];
-      expect(findCall.where.status).toEqual({ in: ['PENDING', 'FAILED'] });
-      expect(findCall.where.nextRetryAt).toBeDefined();
+      expect(prisma.webhook.findMany).not.toHaveBeenCalled();
+      expect(prisma.webhookEvent.update).not.toHaveBeenCalled();
+    });
+
+    it('queries due PENDING and FAILED events, and PROCESSING ones whose lease ran out', async () => {
+      prisma.webhookEvent.findMany.mockResolvedValue([]);
+      const before = Date.now();
+
+      await service.processQueue();
+
+      const { where } = prisma.webhookEvent.findMany.mock.calls[0][0];
+      expect(where.OR[0]).toEqual({
+        status: { in: ['PENDING', 'FAILED'] },
+        nextRetryAt: { lte: expect.any(Date) },
+      });
+      expect(where.OR[1].status).toBe('PROCESSING');
+      const leaseCutoff = where.OR[1].updatedAt.lt.getTime();
+      expect(before - leaseCutoff).toBeGreaterThanOrEqual(5 * 60_000 - 1000);
     });
   });
 
@@ -186,9 +202,13 @@ describe('WebhookSchedulerService', () => {
       [2, 60_000],
       [3, 600_000],
     ])(
-      'schedules a %dms-old event\'s retry after %dms',
+      "schedules a %dms-old event's retry after %dms",
       async (attemptsBefore, expectedDelayMs) => {
-        const event = { ...pendingEvent, attempts: attemptsBefore, maxAttempts: 5 };
+        const event = {
+          ...pendingEvent,
+          attempts: attemptsBefore,
+          maxAttempts: 5,
+        };
         prisma.webhookEvent.findMany.mockResolvedValue([event]);
         prisma.webhookEvent.updateMany.mockResolvedValue({ count: 1 });
         prisma.webhook.findMany.mockResolvedValue([mockWebhook]);

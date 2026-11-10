@@ -2,9 +2,21 @@ import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { RedisService } from '../redis/redis.service.js';
+import { CacheService } from '../cache/cache.service.js';
+import type { Realm } from '@prisma/client';
 import type { RateLimitResult } from './rate-limit.dto.js';
 
 const RL_PREFIX = 'rl:';
+/** The database-backed counter has a one-statement form on PostgreSQL. */
+const isPostgres = () =>
+  /^postgres(ql)?:\/\//i.test(process.env['DATABASE_URL'] ?? '');
+
+interface CounterRow {
+  minuteCount: number;
+  minuteWindowStart: Date;
+  hourCount: number;
+  hourWindowStart: Date;
+}
 
 @Injectable()
 export class RateLimitService {
@@ -13,20 +25,28 @@ export class RateLimitService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly redis: RedisService,
+    private readonly cache: CacheService,
   ) {}
+
+  /**
+   * The realm's rate-limit settings, from the realm cache that every guarded
+   * request already warms (RealmGuard), instead of one query per check.
+   */
+  private async realmSettings(realmId: string): Promise<Realm | null> {
+    const cached = await this.cache.getCachedRealmConfig<Realm>(realmId);
+    if (cached) return cached;
+    const realm = await this.prisma.realm.findUnique({
+      where: { id: realmId },
+    });
+    if (realm) await this.cache.cacheRealmConfig(realmId, realm);
+    return realm;
+  }
 
   async checkClientLimit(
     clientId: string,
     realmId: string,
   ): Promise<RateLimitResult> {
-    const realm = await this.prisma.realm.findUnique({
-      where: { id: realmId },
-      select: {
-        rateLimitEnabled: true,
-        clientRateLimitPerMinute: true,
-        clientRateLimitPerHour: true,
-      },
-    });
+    const realm = await this.realmSettings(realmId);
 
     if (!realm || !realm.rateLimitEnabled) {
       return { allowed: true, limit: 0, remaining: 0, resetAt: 0 };
@@ -43,14 +63,7 @@ export class RateLimitService {
     userId: string,
     realmId: string,
   ): Promise<RateLimitResult> {
-    const realm = await this.prisma.realm.findUnique({
-      where: { id: realmId },
-      select: {
-        rateLimitEnabled: true,
-        userRateLimitPerMinute: true,
-        userRateLimitPerHour: true,
-      },
-    });
+    const realm = await this.realmSettings(realmId);
 
     if (!realm || !realm.rateLimitEnabled) {
       return { allowed: true, limit: 0, remaining: 0, resetAt: 0 };
@@ -97,14 +110,7 @@ export class RateLimitService {
   }
 
   async checkIpLimit(ip: string, realmId: string): Promise<RateLimitResult> {
-    const realm = await this.prisma.realm.findUnique({
-      where: { id: realmId },
-      select: {
-        rateLimitEnabled: true,
-        ipRateLimitPerMinute: true,
-        ipRateLimitPerHour: true,
-      },
-    });
+    const realm = await this.realmSettings(realmId);
 
     if (!realm || !realm.rateLimitEnabled) {
       return { allowed: true, limit: 0, remaining: 0, resetAt: 0 };
@@ -233,9 +239,13 @@ export class RateLimitService {
   }
 
   /**
-   * Database-based rate limiting fallback (cluster-safe).
-   * Uses a dedicated table with a single upsert to atomically increment counters.
-   * Works across all instances without Redis.
+   * Database-based rate limiting (shared across instances, no Redis).
+   *
+   * One atomic step per request counts it and, when a window has run out,
+   * starts a new one. On PostgreSQL that is a single statement. Elsewhere
+   * each window is first restarted by a conditional update that only one
+   * concurrent request can win, then counted; either way no request
+   * counted in the new window can be wiped by another one's restart.
    */
   private async checkWithDatabase(
     key: string,
@@ -246,67 +256,30 @@ export class RateLimitService {
     const minuteWindowMs = 60_000;
     const hourWindowMs = 3_600_000;
 
-    const entry = await this.prisma.rateLimitEntry.upsert({
-      where: { key },
-      create: {
-        key,
-        minuteCount: 1,
-        minuteWindowStart: new Date(now),
-        hourCount: 1,
-        hourWindowStart: new Date(now),
-      },
-      update: {
-        minuteCount: { increment: 1 },
-        hourCount: { increment: 1 },
-      },
-    });
+    const entry = isPostgres()
+      ? await this.countPostgres(key, new Date(now))
+      : await this.countPortable(key, new Date(now));
 
-    const entryMinuteWindowStart = entry.minuteWindowStart.getTime();
-    const entryHourWindowStart = entry.hourWindowStart.getTime();
-
-    let minuteCount = entry.minuteCount;
-    let hourCount = entry.hourCount;
-
-    if (now - entryMinuteWindowStart >= minuteWindowMs) {
-      await this.prisma.rateLimitEntry.update({
-        where: { key },
-        data: {
-          minuteCount: 1,
-          minuteWindowStart: new Date(now),
-        },
-      });
-      minuteCount = 1;
-    }
-
-    if (now - entryHourWindowStart >= hourWindowMs) {
-      await this.prisma.rateLimitEntry.update({
-        where: { key },
-        data: {
-          hourCount: 1,
-          hourWindowStart: new Date(now),
-        },
-      });
-      hourCount = 1;
-    }
-
+    const { minuteCount, hourCount, minuteWindowStart, hourWindowStart } =
+      entry;
     const minuteResetAt = Math.ceil(
-      (Math.max(entryMinuteWindowStart, now) + minuteWindowMs) / 1000,
+      (minuteWindowStart.getTime() + minuteWindowMs) / 1000,
     );
     const hourResetAt = Math.ceil(
-      (Math.max(entryHourWindowStart, now) + hourWindowMs) / 1000,
+      (hourWindowStart.getTime() + hourWindowMs) / 1000,
     );
 
     // Don't count rejected requests: undo this request's increment so a retry
     // storm cannot keep inflating the counter and extend the lockout window.
     if (minuteCount > limitPerMinute || hourCount > limitPerHour) {
+      // Only in the windows this request was counted in: if another
+      // request has since started new ones, there is nothing to undo.
       await this.prisma.rateLimitEntry
-        .update({
-          where: { key },
+        .updateMany({
+          where: { key, minuteWindowStart, hourWindowStart },
           data: { minuteCount: { decrement: 1 }, hourCount: { decrement: 1 } },
         })
-        .catch(() => {
-          // Entry may have been cleaned up concurrently — nothing to undo.
-        });
+        .catch(() => {});
     }
 
     if (minuteCount > limitPerMinute) {
@@ -337,6 +310,66 @@ export class RateLimitService {
       remaining: Math.max(0, limitPerMinute - minuteCount),
       resetAt: minuteResetAt,
     };
+  }
+
+  /** Counts one request, restarting expired windows, in one statement. */
+  private async countPostgres(key: string, at: Date): Promise<CounterRow> {
+    const now = at.toISOString();
+    const rows = await this.prisma.$queryRaw<CounterRow[]>`
+      WITH t AS (SELECT (${now}::timestamptz AT TIME ZONE 'UTC') AS now)
+      INSERT INTO rate_limit_entries AS e
+        (id, key, minute_count, minute_window_start, hour_count, hour_window_start, updated_at)
+      SELECT gen_random_uuid()::text, ${key}, 1, t.now, 1, t.now, t.now FROM t
+      ON CONFLICT (key) DO UPDATE SET
+        minute_count = CASE WHEN e.minute_window_start <= EXCLUDED.updated_at - interval '1 minute'
+                            THEN 1 ELSE e.minute_count + 1 END,
+        minute_window_start = CASE WHEN e.minute_window_start <= EXCLUDED.updated_at - interval '1 minute'
+                                   THEN EXCLUDED.updated_at ELSE e.minute_window_start END,
+        hour_count = CASE WHEN e.hour_window_start <= EXCLUDED.updated_at - interval '1 hour'
+                          THEN 1 ELSE e.hour_count + 1 END,
+        hour_window_start = CASE WHEN e.hour_window_start <= EXCLUDED.updated_at - interval '1 hour'
+                                 THEN EXCLUDED.updated_at ELSE e.hour_window_start END,
+        updated_at = EXCLUDED.updated_at
+      RETURNING minute_count AS "minuteCount", minute_window_start AS "minuteWindowStart",
+                hour_count AS "hourCount", hour_window_start AS "hourWindowStart"
+    `;
+    return rows[0];
+  }
+
+  /**
+   * The same on databases without that statement: restart each expired
+   * window with a conditional update (the window start is in the
+   * condition, so of concurrent requests only one restarts it), then count.
+   */
+  private async countPortable(key: string, at: Date): Promise<CounterRow> {
+    await this.prisma.rateLimitEntry.updateMany({
+      where: {
+        key,
+        minuteWindowStart: { lte: new Date(at.getTime() - 60_000) },
+      },
+      data: { minuteCount: 0, minuteWindowStart: at },
+    });
+    await this.prisma.rateLimitEntry.updateMany({
+      where: {
+        key,
+        hourWindowStart: { lte: new Date(at.getTime() - 3_600_000) },
+      },
+      data: { hourCount: 0, hourWindowStart: at },
+    });
+    return this.prisma.rateLimitEntry.upsert({
+      where: { key },
+      create: {
+        key,
+        minuteCount: 1,
+        minuteWindowStart: at,
+        hourCount: 1,
+        hourWindowStart: at,
+      },
+      update: {
+        minuteCount: { increment: 1 },
+        hourCount: { increment: 1 },
+      },
+    });
   }
 
   @Interval(600_000)

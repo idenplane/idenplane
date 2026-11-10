@@ -87,33 +87,50 @@ export class MfaService {
     @Optional() private readonly smsOtp?: SmsOtpService,
   ) {}
 
-  private async markTotpCodeUsed(userId: string, code: string): Promise<void> {
+  /**
+   * Claims a TOTP code for this user: true if this call is the first to use
+   * it within its window, false if it was already used.
+   *
+   * The claim is the database write itself, on the unique (user, code hash)
+   * index, so two concurrent submissions of the same code (on one process or
+   * on several) cannot both succeed. A row whose window has passed but that
+   * the cleanup job has not deleted yet is taken over by a conditional
+   * update, so a code that comes round again later still works.
+   */
+  private async claimTotpCode(userId: string, code: string): Promise<boolean> {
     const key = `totp:used:${userId}:${code}`;
     const codeHash = this.crypto.sha256(code);
-    const expiresAt = new Date(Date.now() + TOTP_USED_CODE_TTL_SECONDS * 1000);
+    const now = new Date();
+    const expiresAt = new Date(
+      now.getTime() + TOTP_USED_CODE_TTL_SECONDS * 1000,
+    );
 
     try {
       await this.prisma.usedTotpCode.create({
         data: { userId, codeHash, expiresAt },
       });
     } catch (err) {
-      this.logger.warn(
-        `Failed to persist used TOTP code to DB: ${(err as Error).message}`,
-      );
+      if ((err as { code?: string }).code !== 'P2002') throw err;
+      const { count } = await this.prisma.usedTotpCode.updateMany({
+        where: { userId, codeHash, expiresAt: { lte: now } },
+        data: { expiresAt, createdAt: now },
+      });
+      if (count === 0) return false;
     }
 
+    // Fast-path copies, so a replay is refused before the database is asked.
     if (this.redis?.isAvailable()) {
       try {
         await this.redis.set(key, '1', TOTP_USED_CODE_TTL_SECONDS);
-        return;
+        return true;
       } catch (err) {
         this.logger.warn(
           `Failed to store used TOTP code in Redis: ${(err as Error).message}`,
         );
       }
     }
-
     this.usedTotpCodes.set(key, expiresAt.getTime());
+    return true;
   }
 
   private async isTotpCodeUsed(userId: string, code: string): Promise<boolean> {
@@ -252,8 +269,14 @@ export class MfaService {
     const delta = totp.validate({ token: code, window: 1 });
     if (delta === null) return false;
 
-    // Mark the code as used so it cannot be replayed within the TOTP window.
-    await this.markTotpCodeUsed(userId, code);
+    // Claim the code so it cannot be replayed within the TOTP window; a
+    // concurrent request that claimed it first wins and this one is refused.
+    if (!(await this.claimTotpCode(userId, code))) {
+      this.logger.warn(
+        `Replay attack detected: concurrent TOTP code reuse for user ${userId}`,
+      );
+      return false;
+    }
     return true;
   }
 

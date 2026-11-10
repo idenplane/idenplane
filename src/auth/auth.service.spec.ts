@@ -1,3 +1,4 @@
+import { lookupsBackedBy } from '../cache/cached-lookups.mock.js';
 // Mock modules that transitively import jose (ESM-only) to avoid parse errors
 jest.mock('../crypto/jwk.service.js', () => ({
   JwkService: jest.fn(),
@@ -206,6 +207,7 @@ describe('AuthService', () => {
     };
 
     service = new AuthService(
+      lookupsBackedBy(prisma as any) as any,
       prisma as any,
       crypto as any,
       jwkService as any,
@@ -469,6 +471,38 @@ describe('AuthService', () => {
   // -----------------------------------------------------------------------
 
   describe('password grant', () => {
+    it('signs in even when evicting older sessions at the cap fails', async () => {
+      setupForTokenIssuance();
+      prisma.user.findUnique.mockResolvedValue(dbUser);
+      prisma.session.findMany.mockResolvedValue([
+        { id: 'old-1' },
+        { id: 'old-2' },
+      ]);
+      prisma.session.deleteMany.mockRejectedValue(
+        new Error('Transaction failed due to a write conflict or a deadlock'),
+      );
+
+      const result = await service.handleTokenRequest(
+        { ...realm, maxSessionsPerUser: 2 } as typeof realm,
+        {
+          grant_type: 'password',
+          client_id: 'my-client',
+          client_secret: 'correct-secret',
+          username: 'testuser',
+          password: 'pass',
+        },
+        '127.0.0.1',
+        'jest-agent',
+      );
+
+      expect(result.refresh_token).toBe(FAKE_REFRESH_TOKEN_RAW);
+      // One statement: the cascade removes the evicted sessions' tokens.
+      expect(prisma.session.deleteMany).toHaveBeenCalledWith({
+        where: { id: { in: ['old-1'] } },
+      });
+      expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
+    });
+
     it('should return a valid token response for correct credentials', async () => {
       setupForTokenIssuance();
       prisma.user.findUnique.mockResolvedValue(dbUser);
@@ -511,14 +545,20 @@ describe('AuthService', () => {
         }),
       );
 
-      // Verify refresh token was persisted
-      expect(prisma.refreshToken.create).toHaveBeenCalledWith(
+      // The new session and its refresh token are written together, so no
+      // concurrent login can evict the session before it has a token.
+      expect(prisma.session.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({
-            tokenHash: FAKE_REFRESH_TOKEN_HASH,
+            refreshTokens: {
+              create: expect.objectContaining({
+                tokenHash: FAKE_REFRESH_TOKEN_HASH,
+              }),
+            },
           }),
         }),
       );
+      expect(prisma.refreshToken.create).not.toHaveBeenCalled();
     });
 
     it('should throw invalid_request when username is missing', async () => {
@@ -771,6 +811,7 @@ describe('AuthService', () => {
       sessionId: 'session-1',
       tokenHash: FAKE_REFRESH_TOKEN_HASH,
       clientId: 'my-client', // Must match the requesting client
+      scope: 'openid profile',
       revoked: false,
       expiresAt: new Date(Date.now() + 3600 * 1000), // 1 hour from now
       session: {
@@ -788,10 +829,7 @@ describe('AuthService', () => {
       setupRefreshTokenCreate();
 
       prisma.refreshToken.findUnique.mockResolvedValue(storedRefreshToken);
-      prisma.refreshToken.update.mockResolvedValue({
-        ...storedRefreshToken,
-        revoked: true,
-      });
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 1 });
 
       const result = await service.handleTokenRequest(realm, {
         grant_type: 'refresh_token',
@@ -805,14 +843,78 @@ describe('AuthService', () => {
       expect(result.refresh_token).toBe(FAKE_REFRESH_TOKEN_RAW);
       expect(result.token_type).toBe('Bearer');
 
-      // Old token should be revoked
-      expect(prisma.refreshToken.update).toHaveBeenCalledWith({
-        where: { id: storedRefreshToken.id },
+      // The old token is revoked, on the condition that it is still live
+      expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
+        where: { id: storedRefreshToken.id, revoked: false },
         data: { revoked: true },
       });
 
       // New refresh token should be created
       expect(prisma.refreshToken.create).toHaveBeenCalled();
+    });
+
+    it('treats a token revoked meanwhile by a concurrent refresh as reuse', async () => {
+      setupValidClient();
+      prisma.refreshToken.findUnique.mockResolvedValue(storedRefreshToken);
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 0 });
+
+      await expectOAuthError(
+        service.handleTokenRequest(realm, {
+          grant_type: 'refresh_token',
+          refresh_token: 'orig-opaque-rt',
+          client_id: 'my-client',
+          client_secret: 'correct-secret',
+        }),
+        'invalid_grant',
+        400,
+      );
+      // The whole session's refresh tokens are revoked.
+      expect(prisma.refreshToken.updateMany).toHaveBeenLastCalledWith({
+        where: { sessionId: storedRefreshToken.sessionId },
+        data: { revoked: true },
+      });
+      expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses a refresh for a disabled user', async () => {
+      setupValidClient();
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        ...storedRefreshToken,
+        session: {
+          ...storedRefreshToken.session,
+          user: { ...dbUser, enabled: false },
+        },
+      });
+
+      await expectOAuthError(
+        service.handleTokenRequest(realm, {
+          grant_type: 'refresh_token',
+          refresh_token: 'orig-opaque-rt',
+          client_id: 'my-client',
+          client_secret: 'correct-secret',
+        }),
+        'invalid_grant',
+        400,
+      );
+      expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
+    });
+
+    it('refuses a scope the refresh token was not granted', async () => {
+      setupValidClient();
+      prisma.refreshToken.findUnique.mockResolvedValue(storedRefreshToken);
+
+      await expectOAuthError(
+        service.handleTokenRequest(realm, {
+          grant_type: 'refresh_token',
+          refresh_token: 'orig-opaque-rt',
+          client_id: 'my-client',
+          client_secret: 'correct-secret',
+          scope: 'openid admin',
+        }),
+        'invalid_scope',
+        400,
+      );
+      expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
     });
 
     it('preserves the session acr/amr across refresh (no downgrade to password)', async () => {
@@ -830,6 +932,7 @@ describe('AuthService', () => {
         },
       };
       prisma.refreshToken.findUnique.mockResolvedValue(mfaToken);
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 1 });
       prisma.refreshToken.update.mockResolvedValue({
         ...mfaToken,
         revoked: true,

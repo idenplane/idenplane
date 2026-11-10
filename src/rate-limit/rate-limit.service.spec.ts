@@ -63,7 +63,15 @@ function createStatefulUpsertMock() {
   return upsertFn;
 }
 
+const isDate = (v: unknown) =>
+  Object.prototype.toString.call(v) === '[object Date]';
+
 describe('RateLimitService', () => {
+  const databaseUrl = process.env['DATABASE_URL'];
+  afterAll(() => {
+    process.env['DATABASE_URL'] = databaseUrl;
+  });
+
   let service: RateLimitService;
   let prisma: MockPrismaService;
   let upsertMock: ReturnType<typeof createStatefulUpsertMock>;
@@ -114,14 +122,53 @@ describe('RateLimitService', () => {
             entry.hourCount -= d.hourCount.decrement;
           else if (typeof d.hourCount === 'number')
             entry.hourCount = d.hourCount;
-          if (d.minuteWindowStart) entry.minuteWindowStart = d.minuteWindowStart;
+          if (d.minuteWindowStart)
+            entry.minuteWindowStart = d.minuteWindowStart;
           if (d.hourWindowStart) entry.hourWindowStart = d.hourWindowStart;
         }
         return Promise.resolve(entry ? { ...entry } : { key: args.where.key });
       });
+    // The portable form; the PostgreSQL statement runs against a real
+    // database in test/rate-limit-window.e2e-spec.ts.
+    process.env['DATABASE_URL'] = 'file:./unit-test.db';
+    prisma.rateLimitEntry.updateMany = jest
+      .fn()
+      .mockImplementation(
+        (args: { where: Record<string, any>; data: Record<string, any> }) => {
+          const store = (upsertMock as any).__store as Map<string, any>;
+          const entry = store.get(args.where['key']);
+          const w = args.where;
+          const matches =
+            entry &&
+            (w['minuteWindowStart'] === undefined ||
+              (isDate(w['minuteWindowStart'])
+                ? +entry.minuteWindowStart === +w['minuteWindowStart']
+                : +entry.minuteWindowStart <= +w['minuteWindowStart'].lte)) &&
+            (w['hourWindowStart'] === undefined ||
+              (isDate(w['hourWindowStart'])
+                ? +entry.hourWindowStart === +w['hourWindowStart']
+                : +entry.hourWindowStart <= +w['hourWindowStart'].lte));
+          if (!matches) return Promise.resolve({ count: 0 });
+          const d = args.data;
+          for (const f of ['minuteCount', 'hourCount']) {
+            if (d[f]?.decrement !== undefined) entry[f] -= d[f].decrement;
+            else if (typeof d[f] === 'number') entry[f] = d[f];
+          }
+          if (d['minuteWindowStart'])
+            entry.minuteWindowStart = d['minuteWindowStart'];
+          if (d['hourWindowStart'])
+            entry.hourWindowStart = d['hourWindowStart'];
+          return Promise.resolve({ count: 1 });
+        },
+      );
     service = new RateLimitService(
       prisma as any,
       createMockRedisService() as any,
+      // The realm cache always misses here, so each check reads the realm.
+      {
+        getCachedRealmConfig: jest.fn().mockResolvedValue(null),
+        cacheRealmConfig: jest.fn().mockResolvedValue(undefined),
+      } as any,
     );
   });
 
@@ -395,7 +442,9 @@ describe('RateLimitService', () => {
         expect.objectContaining({
           where: expect.objectContaining({
             OR: expect.arrayContaining([
-              expect.objectContaining({ minuteWindowStart: expect.any(Object) }),
+              expect.objectContaining({
+                minuteWindowStart: expect.any(Object),
+              }),
               expect.objectContaining({ hourWindowStart: expect.any(Object) }),
             ]),
           }),

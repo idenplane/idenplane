@@ -1,0 +1,38 @@
+{
+  "target": "zitadel",
+  "image": "ghcr.io/zitadel/zitadel:v4.20.1",
+  "digest": "ghcr.io/zitadel/zitadel@sha256:4817dbd8896306867f28bba63e7dc3526b2d2646ac7111db9524eb3ab6e82301",
+  "imageBytes": 237075304,
+  "firstBootMs": 3552,
+  "restartMs": 1231,
+  "passwordHash": "bcrypt cost 14 ($2a$14$...) in eventstore.events2",
+  "scenarios": [
+    "discovery",
+    "jwks",
+    "client_credentials",
+    "introspect",
+    "password"
+  ],
+  "runs": 3,
+  "vus": 32,
+  "duration": "60s",
+  "warmup": "20s",
+  "cpus": {
+    "target": "0-3",
+    "db": "4-5",
+    "k6": "6-15"
+  },
+  "targetMem": "2g",
+  "host": {
+    "cpus": 16,
+    "memBytes": 33678110720,
+    "cpuModel": "AMD EPYC"
+  },
+  "unsupported": [
+    "password"
+  ],
+  "introspectTokenGrant": "client_credentials",
+  "notes": "introspection checks a machine-user (client_credentials) token, not a user token; access tokens are JWT; client secrets (machine user and API app) are bcrypt cost 4 and verified on every token and introspection request; token endpoint also accepts CLIENT_AUTH=basic: yes",
+  "k6": "grafana/k6:2.3.0",
+  "finishedAt": "2026-11-09T13:31:15.856Z"
+}

@@ -5,9 +5,12 @@ const mockPrisma = {
   $disconnect: jest.fn(),
 };
 
-// Mock child_process execSync
+// Mock child_process. The tests describe the CLI's behaviour through
+// execSync (return the output, or throw with it as stdout); exec, which the
+// service uses (through prismaMigrateStatus), replays that asynchronously.
 jest.mock('child_process', () => ({
   execSync: jest.fn(),
+  exec: jest.fn(),
 }));
 
 // fs is mocked as a module rather than spied on: its exports are
@@ -23,7 +26,7 @@ jest.mock('fs', () => ({
 }));
 
 import { PreUpgradeValidatorService } from './pre-upgrade-validator.service.js';
-import { execSync } from 'child_process';
+import { exec, execSync } from 'child_process';
 import * as fs from 'fs';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { DatabaseBackupService } from './database-backup.service.js';
@@ -34,6 +37,20 @@ describe('PreUpgradeValidatorService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    (exec as unknown as jest.Mock).mockImplementation(
+      (
+        cmd: string,
+        opts: unknown,
+        cb: (err: unknown, stdout?: string) => void,
+      ) => {
+        try {
+          const out = (execSync as jest.Mock)(cmd, opts) as string;
+          setImmediate(() => cb(null, out));
+        } catch (err) {
+          setImmediate(() => cb(err, (err as { stdout?: string }).stdout));
+        }
+      },
+    );
 
     mockBackupService = {
       pgToolsAvailable: jest
@@ -222,7 +239,7 @@ describe('PreUpgradeValidatorService', () => {
       'To apply migrations in production run prisma migrate deploy.',
     ].join('\n');
 
-    it('reports a pending migration as a warning, not a failure', () => {
+    it('reports a pending migration as a warning, not a failure', async () => {
       (execSync as jest.Mock).mockImplementation(() => {
         const err = new Error('exit 1') as NodeJS.ErrnoException & {
           stdout: string;
@@ -231,14 +248,14 @@ describe('PreUpgradeValidatorService', () => {
         throw err;
       });
 
-      const check = (validatorService as any).checkPendingMigrations();
+      const check = await (validatorService as any).checkPendingMigrations();
 
       expect(check.status).toBe('warn');
       expect(check.message).toContain('1 pending migration');
       expect(check.details).toContain('99990101000000_rehearsal_add_column');
     });
 
-    it('does not swallow the prose that follows the list', () => {
+    it('does not swallow the prose that follows the list', async () => {
       (execSync as jest.Mock).mockImplementation(() => {
         const err = new Error('exit 1') as NodeJS.ErrnoException & {
           stdout: string;
@@ -247,7 +264,7 @@ describe('PreUpgradeValidatorService', () => {
         throw err;
       });
 
-      const check = (validatorService as any).checkPendingMigrations();
+      const check = await (validatorService as any).checkPendingMigrations();
 
       // "To apply migrations in development run prisma migrate dev." must not
       // be mistaken for a migration name.

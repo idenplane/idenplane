@@ -2,8 +2,35 @@ import type { Params } from 'nestjs-pino';
 import { randomUUID } from 'crypto';
 import { SENSITIVE_BODY_FIELDS } from '../security/sensitive-body-fields.js';
 
+/**
+ * Which requests get an access-log line (LOG_ACCESS):
+ * - `errors` (default): requests that failed, 4xx as warn and 5xx as error;
+ * - `all`: every request, successful ones at info;
+ * - `off`: none. Application logs are not affected by any of these.
+ */
+export type AccessLogMode = 'errors' | 'all' | 'off';
+
+export function accessLogMode(
+  value = process.env['LOG_ACCESS'],
+): AccessLogMode {
+  const mode = (value ?? '').trim().toLowerCase();
+  return mode === 'all' || mode === 'off' ? mode : 'errors';
+}
+
+/** The level of a request's access-log line, or 'silent' for none. */
+export function accessLogLevel(
+  mode: AccessLogMode,
+  statusCode: number,
+  err?: Error,
+): 'error' | 'warn' | 'info' | 'silent' {
+  if (err || statusCode >= 500) return 'error';
+  if (statusCode >= 400) return 'warn';
+  return mode === 'all' ? 'info' : 'silent';
+}
+
 export function createLoggerConfig(): Params {
   const isProduction = process.env['NODE_ENV'] === 'production';
+  const accessLog = accessLogMode();
   const logLevel =
     process.env['LOG_LEVEL'] ?? (isProduction ? 'info' : 'debug');
 
@@ -43,11 +70,21 @@ export function createLoggerConfig(): Params {
           statusCode: res.statusCode,
         }),
       },
-      autoLogging: {
-        ignore: (req: Request & { url?: string }) =>
-          req.url?.startsWith('/health') ||
-          req.url?.startsWith('/admin/metrics'),
-      },
+      autoLogging:
+        accessLog === 'off'
+          ? false
+          : {
+              ignore: (req: Request & { url?: string }) =>
+                req.url?.startsWith('/health') ||
+                req.url?.startsWith('/admin/metrics'),
+            },
+      // One line per request costs measurable throughput on the hottest
+      // endpoints, so by default only failed requests are logged.
+      customLogLevel: (
+        _req: unknown,
+        res: { statusCode: number },
+        err?: Error,
+      ) => accessLogLevel(accessLog, res.statusCode, err),
     } as unknown as Params['pinoHttp'],
   };
 }

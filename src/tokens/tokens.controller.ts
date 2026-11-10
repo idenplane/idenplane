@@ -21,7 +21,7 @@ import { TokensService } from './tokens.service.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
-import { PrismaService } from '../prisma/prisma.service.js';
+import { CachedLookupsService } from '../cache/cached-lookups.service.js';
 import { ClientSecretService } from '../clients/client-secret.service.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 import { RateLimitGuard, RateLimitBy } from '../rate-limit/rate-limit.guard.js';
@@ -35,7 +35,7 @@ import { RateLimitGuard, RateLimitBy } from '../rate-limit/rate-limit.guard.js';
 export class TokensController {
   constructor(
     private readonly tokensService: TokensService,
-    private readonly prisma: PrismaService,
+    private readonly lookups: CachedLookupsService,
     private readonly clientSecrets: ClientSecretService,
   ) {}
 
@@ -181,9 +181,7 @@ export class TokensController {
       });
     }
 
-    const client = await this.prisma.client.findUnique({
-      where: { realmId_clientId: { realmId: realm.id, clientId: cId } },
-    });
+    const client = await this.lookups.client(realm.id, cId);
 
     if (!client || !client.enabled) {
       throw new UnauthorizedException({

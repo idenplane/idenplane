@@ -1,3 +1,4 @@
+import { lookupsBackedBy } from '../cache/cached-lookups.mock.js';
 // Mock JwkService module to avoid importing jose (ESM-only)
 jest.mock('../crypto/jwk.service.js', () => ({
   JwkService: jest.fn(),
@@ -38,6 +39,7 @@ describe('BackchannelLogoutService', () => {
     prisma = createMockPrismaService();
     mockJwkService = { signJwt: jest.fn().mockResolvedValue('mock.jwt.token') };
     service = new BackchannelLogoutService(
+      lookupsBackedBy(prisma as any) as any,
       prisma as any,
       mockJwkService as any,
     );

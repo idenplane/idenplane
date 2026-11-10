@@ -23,8 +23,11 @@ RUNS="${RUNS:-3}"
 export VUS="${VUS:-32}" DURATION="${DURATION:-60s}"
 WARMUP="${WARMUP:-20s}"
 export TARGET_MEM="${TARGET_MEM:-2g}"
-export IDENPLANE_IMAGE="${IDENPLANE_IMAGE:-islamawad/idenplane:0.5.0}"
+export IDENPLANE_IMAGE="${IDENPLANE_IMAGE:-islamawad/idenplane:0.6.0}"
 export KEYCLOAK_IMAGE="${KEYCLOAK_IMAGE:-quay.io/keycloak/keycloak:26.8.2}"
+# Defaults for these two live in their target files; compare.sh only needs
+# the resolved names, which it reads back from compose below.
+export AUTHENTIK_IMAGE="${AUTHENTIK_IMAGE:-}" ZITADEL_IMAGE="${ZITADEL_IMAGE:-}"
 K6_IMAGE="${K6_IMAGE:-grafana/k6:2.3.0}"
 RESULTS_DIR="${RESULTS_DIR:-$ROOT/benchmarks/results/compare}"
 export PUBLIC_PORT="${PUBLIC_PORT:-18080}" HEALTH_PORT="${HEALTH_PORT:-19000}"
@@ -47,10 +50,15 @@ export TARGET_CPUS DB_CPUS K6_CPUS
 
 # ── node, or node in a container when the host has none ─────────────────────
 if ! command -v node >/dev/null 2>&1; then
+  # Only $ROOT is mounted, and the container sees only the variables named in
+  # NODE_PASS_ENV, so a script run this way reads its input from those and
+  # writes its output to stdout.
   shim="$(mktemp -d)"
   cat >"$shim/node" <<EOF
 #!/bin/sh
-exec docker run --rm -i -v "$ROOT:$ROOT" -w "\$PWD" node:24-alpine node "\$@"
+pass=""
+for v in \$NODE_PASS_ENV; do pass="\$pass -e \$v"; done
+exec docker run --rm -i \$pass -v "$ROOT:$ROOT" -w "\$PWD" node:24-alpine node "\$@"
 EOF
   chmod +x "$shim/node"
   PATH="$shim:$PATH"
@@ -62,6 +70,14 @@ export ADMIN_PASSWORD="Bench-$(openssl rand -hex 16)" WEBHOOK_ENCRYPTION_SALT="B
 REALM=benchmark CLIENT_ID=benchmark-client USERNAME=benchuser
 PASSWORD="Bench-$(openssl rand -hex 12)"
 CLIENT_SECRET="$(openssl rand -hex 24)"
+
+# Where each endpoint is and how the client authenticates. Empty means the
+# Keycloak-style default in k6/scenario.js; a target's seed script can set
+# any of them, along with the scenarios the server cannot run (UNSUPPORTED),
+# how it stored the user's password (HASH_INFO) and notes for the report.
+export DISCOVERY_PATH="" JWKS_PATH="" TOKEN_PATH="" INTROSPECT_PATH="" CLIENT_AUTH="" TOKEN_SCOPE=""
+export INTROSPECT_CLIENT_ID="" INTROSPECT_CLIENT_SECRET="" INTROSPECT_AUTH="" INTROSPECT_TOKEN_GRANT=""
+UNSUPPORTED="" HASH_INFO="" NOTES=""
 
 OUT="$RESULTS_DIR/$TARGET"
 rm -rf "$OUT" && mkdir -p "$OUT" && chmod 777 "$OUT"   # k6 runs as non-root
@@ -105,12 +121,33 @@ case "$TARGET" in
 }
 JSON
     chmod 644 "$KEYCLOAK_IMPORT_DIR/benchmark-realm.json" ;;
+  authentik)
+    FILES=(-f "$HERE/targets/authentik.yml")
+    IMAGE="$AUTHENTIK_IMAGE" PORT_IN=9000
+    READY_URL="http://127.0.0.1:$PUBLIC_PORT/-/health/ready/"
+    export AUTHENTIK_SECRET_KEY="$(openssl rand -hex 32)" AUTHENTIK_BOOTSTRAP_TOKEN="$(openssl rand -hex 32)" ;;
+  zitadel)
+    FILES=(-f "$HERE/targets/zitadel.yml")
+    IMAGE="$ZITADEL_IMAGE" PORT_IN=8080
+    READY_URL="http://127.0.0.1:$PUBLIC_PORT/debug/ready"
+    # The admin PAT that start-from-init writes for the seed lands here. The
+    # image runs as non-root, and Docker Desktop needs a Windows host path.
+    pat_dir="$(mktemp -d)"; chmod 777 "$pat_dir"
+    export ZITADEL_MASTERKEY="$(openssl rand -hex 16)" ZITADEL_PAT_DIR="$(host_path "$pat_dir")" ;;
   *) echo "Unknown target: $TARGET" >&2; exit 1 ;;
 esac
 
 COMPOSE=(docker compose "${FILES[@]}")
 PROJECT="$("${COMPOSE[@]}" config --format json | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>process.stdout.write(JSON.parse(d).name))')"
 NETWORK="${PROJECT}_default"
+# A target file may carry its own default image; record what compose resolved.
+[ -n "$IMAGE" ] || IMAGE="$("${COMPOSE[@]}" config --format json | node -e 'let d="";process.stdin.on("data",c=>d+=c).on("end",()=>process.stdout.write(JSON.parse(d).services.target.image))')"
+
+# The server under test is every service but its database: one for most,
+# a server and a worker for Authentik. They boot, restart and are measured
+# together.
+SERVER_SVCS=()
+for svc in $("${COMPOSE[@]}" config --services); do [ "$svc" = db ] || SERVER_SVCS+=("$svc"); done
 
 teardown() { "${COMPOSE[@]}" down --volumes --remove-orphans >/dev/null 2>&1 || true; }
 trap teardown EXIT
@@ -140,7 +177,7 @@ log "$TARGET: database"
 "${COMPOSE[@]}" up -d --wait db
 
 log "$TARGET: first boot"
-t0=$(now_ms); "${COMPOSE[@]}" up -d --no-deps target; wait_ready; first_boot_ms=$(( $(now_ms) - t0 ))
+t0=$(now_ms); "${COMPOSE[@]}" up -d --no-deps "${SERVER_SVCS[@]}"; wait_ready; first_boot_ms=$(( $(now_ms) - t0 ))
 echo "ready after ${first_boot_ms} ms" >&2
 
 if [ "$TARGET" = idenplane ]; then
@@ -149,21 +186,42 @@ if [ "$TARGET" = idenplane ]; then
     TEST_CLIENT_ID="$CLIENT_ID" TEST_USERNAME="$USERNAME" TEST_PASSWORD="$PASSWORD" \
     bash "$ROOT/benchmarks/scripts/seed-benchmark-realm.sh")"
   CLIENT_SECRET="$(printf '%s\n' "$seeded" | sed -n 's/^TEST_CLIENT_SECRET=//p')"
+elif [ -f "$HERE/seed/$TARGET.sh" ]; then
+  # The seed creates the client and user through the server's own API and
+  # prints KEY=VALUE lines saying where its endpoints are and what it cannot
+  # do (the defaults are at the top). Only known keys are taken.
+  log "$TARGET: seeding through its API"
+  seeded="$(PUBLIC_URL="http://127.0.0.1:$PUBLIC_PORT" REALM="$REALM" CLIENT_ID="$CLIENT_ID" \
+    CLIENT_SECRET="$CLIENT_SECRET" USERNAME="$USERNAME" PASSWORD="$PASSWORD" \
+    COMPOSE="${COMPOSE[*]}" bash "$HERE/seed/$TARGET.sh")"
+  while IFS= read -r line; do
+    key="${line%%=*}" value="${line#*=}"
+    case "$key" in
+      CLIENT_ID|CLIENT_SECRET|DISCOVERY_PATH|JWKS_PATH|TOKEN_PATH|INTROSPECT_PATH|CLIENT_AUTH|\
+      TOKEN_SCOPE|INTROSPECT_CLIENT_ID|INTROSPECT_CLIENT_SECRET|INTROSPECT_AUTH|\
+      INTROSPECT_TOKEN_GRANT|UNSUPPORTED|HASH_INFO|NOTES) printf -v "$key" '%s' "$value" ;;
+    esac
+  done <<<"$seeded"
 fi
 
 log "$TARGET: restart"
-"${COMPOSE[@]}" stop target >/dev/null
-t0=$(now_ms); "${COMPOSE[@]}" start target >/dev/null; wait_ready; restart_ms=$(( $(now_ms) - t0 ))
+"${COMPOSE[@]}" stop "${SERVER_SVCS[@]}" >/dev/null
+t0=$(now_ms); "${COMPOSE[@]}" start "${SERVER_SVCS[@]}" >/dev/null; wait_ready; restart_ms=$(( $(now_ms) - t0 ))
 echo "ready after ${restart_ms} ms" >&2
 
-# Every scenario's credentials must work before any load is generated.
-curl -fsS -o /dev/null -X POST "http://127.0.0.1:$PUBLIC_PORT/realms/$REALM/protocol/openid-connect/token" \
-  --data-urlencode grant_type=password --data-urlencode "client_id=$CLIENT_ID" \
-  --data-urlencode "client_secret=$CLIENT_SECRET" --data-urlencode "username=$USERNAME" \
-  --data-urlencode "password=$PASSWORD" --data-urlencode scope=openid
+# Scenarios this server cannot run faithfully are reported, not measured.
+RUN_SCENARIOS=""
+for s in $SCENARIOS; do
+  case " $UNSUPPORTED " in
+    *" $s "*) log "$TARGET: $s not supported, skipped" ;;
+    *) RUN_SCENARIOS+="$s " ;;
+  esac
+done
 
 # ── 3. evidence: how the server actually stored the password ────────────────
-if [ "$TARGET" = idenplane ]; then
+if [ -n "$HASH_INFO" ]; then
+  hash_info="$HASH_INFO"
+elif [ "$TARGET" = idenplane ]; then
   hash_info="$("${COMPOSE[@]}" exec -T db psql -U idenplane -d idenplane -tAc \
     "select split_part(password_hash, '\$', 2) || ' ' || split_part(password_hash, '\$', 4) from users where username = '$USERNAME'")"
 else
@@ -172,8 +230,28 @@ else
 fi
 echo "password hash: $hash_info" >&2
 
-CID="$("${COMPOSE[@]}" ps -q target)"
-stats_once() { docker stats --no-stream --format '{{.MemUsage}}|{{.CPUPerc}}' "$CID"; }
+# Every container of the server under test except its database (Authentik
+# runs a server and a worker), summed into one "<n>MiB / -|<cpu>%" line.
+# With a single container the line is docker's own, as before.
+CIDS=()
+for svc in "${SERVER_SVCS[@]}"; do CIDS+=("$("${COMPOSE[@]}" ps -q "$svc")"); done
+stats_once() {
+  if [ "${#CIDS[@]}" -eq 1 ]; then
+    docker stats --no-stream --format '{{.MemUsage}}|{{.CPUPerc}}' "${CIDS[0]}"
+    return
+  fi
+  docker stats --no-stream --format '{{.MemUsage}}|{{.CPUPerc}}' "${CIDS[@]}" | awk -F'|' '
+    function mib(v,  n, u) {
+      n = v + 0; u = v; sub(/^[0-9.]+/, "", u)
+      if (u == "GiB") return n * 1024;  if (u == "KiB") return n / 1024
+      if (u == "B")   return n / 1048576
+      if (u == "GB")  return n * 1e9 / 1048576; if (u == "MB") return n * 1e6 / 1048576
+      if (u == "kB")  return n * 1e3 / 1048576
+      return n
+    }
+    { split($1, m, " / "); mem += mib(m[1]); cpu += $2 + 0 }
+    END { printf "%.1fMiB / -|%.2f%%\n", mem, cpu }'
+}
 
 # ── 4. idle memory, after the server has settled ────────────────────────────
 log "$TARGET: idle memory (30 s settle, 10 samples)"
@@ -182,8 +260,9 @@ for _ in $(seq 10); do stats_once; sleep 1; done >"$OUT/idle.stats"
 
 # ── 5. load ──────────────────────────────────────────────────────────────────
 k6_run() { # <scenario> <duration> <summary file or empty>
-  local export_args=()
+  local export_args=() threshold_args=(--no-thresholds)
   [ -n "$3" ] && export_args=(--summary-export "/out/$3")
+  [ -n "${PREFLIGHT:-}" ] && threshold_args=()
   # Git Bash on Windows rewrites container paths such as /scripts/scenario.js
   # into host paths; turn that off here and hand docker Windows host paths.
   MSYS_NO_PATHCONV=1 docker run --rm --network "$NETWORK" --cpuset-cpus "$K6_CPUS" \
@@ -191,10 +270,20 @@ k6_run() { # <scenario> <duration> <summary file or empty>
     -e SCENARIO="$1" -e DURATION="$2" -e VUS \
     -e BASE_URL="http://target:$PORT_IN" -e REALM="$REALM" -e CLIENT_ID="$CLIENT_ID" \
     -e CLIENT_SECRET="$CLIENT_SECRET" -e USERNAME="$USERNAME" -e PASSWORD="$PASSWORD" \
-    "$K6_IMAGE" run --quiet --no-thresholds "${export_args[@]}" /scripts/scenario.js
+    -e DISCOVERY_PATH -e JWKS_PATH -e TOKEN_PATH -e INTROSPECT_PATH -e CLIENT_AUTH -e TOKEN_SCOPE \
+    -e INTROSPECT_CLIENT_ID -e INTROSPECT_CLIENT_SECRET -e INTROSPECT_AUTH -e INTROSPECT_TOKEN_GRANT \
+    -e PREFLIGHT \
+    "$K6_IMAGE" run --quiet "${threshold_args[@]}" "${export_args[@]}" /scripts/scenario.js
 }
 
-for s in $SCENARIOS; do
+# Every scenario must pass a few times before any load: a misconfigured
+# target fails here, loudly, instead of being measured.
+log "$TARGET: preflight"
+for s in $RUN_SCENARIOS; do
+  PREFLIGHT=1 k6_run "$s" 10s "" >/dev/null || { echo "preflight failed: $s" >&2; exit 1; }
+done
+
+for s in $RUN_SCENARIOS; do
   log "$TARGET: $s (warm-up $WARMUP, then $RUNS x $DURATION at $VUS VUs)"
   k6_run "$s" "$WARMUP" "" >/dev/null
   for i in $(seq "$RUNS"); do
@@ -212,9 +301,11 @@ TARGET="$TARGET" IMAGE="$IMAGE" DIGEST="$digest" SIZE="$size" FIRST_BOOT_MS="$fi
 RESTART_MS="$restart_ms" HASH_INFO="$hash_info" SCENARIOS="$SCENARIOS" RUNS="$RUNS" WARMUP="$WARMUP" \
 HOST_CPUS="$cpus" HOST_MEM="$(free -b 2>/dev/null | awk '/^Mem:/{print $2}')" \
 CPU_MODEL="$(grep -m1 'model name' /proc/cpuinfo 2>/dev/null | cut -d: -f2- | sed 's/^ *//')" \
-K6_IMAGE="$K6_IMAGE" OUT="$OUT" node -e '
+K6_IMAGE="$K6_IMAGE" UNSUPPORTED="$UNSUPPORTED" NOTES="$NOTES" INTROSPECT_TOKEN_GRANT="$INTROSPECT_TOKEN_GRANT" \
+NODE_PASS_ENV="TARGET IMAGE DIGEST SIZE FIRST_BOOT_MS RESTART_MS HASH_INFO SCENARIOS RUNS WARMUP VUS DURATION TARGET_CPUS DB_CPUS K6_CPUS TARGET_MEM HOST_CPUS HOST_MEM CPU_MODEL K6_IMAGE UNSUPPORTED NOTES INTROSPECT_TOKEN_GRANT" \
+node -e '
 const e = process.env;
-require("fs").writeFileSync(`${e.OUT}/meta.json`, JSON.stringify({
+process.stdout.write(JSON.stringify({
   target: e.TARGET, image: e.IMAGE, digest: e.DIGEST, imageBytes: Number(e.SIZE),
   firstBootMs: Number(e.FIRST_BOOT_MS), restartMs: Number(e.RESTART_MS),
   passwordHash: e.HASH_INFO.trim(),
@@ -222,7 +313,9 @@ require("fs").writeFileSync(`${e.OUT}/meta.json`, JSON.stringify({
   vus: Number(e.VUS), duration: e.DURATION, warmup: e.WARMUP,
   cpus: { target: e.TARGET_CPUS, db: e.DB_CPUS, k6: e.K6_CPUS }, targetMem: e.TARGET_MEM,
   host: { cpus: Number(e.HOST_CPUS), memBytes: Number(e.HOST_MEM) || null, cpuModel: e.CPU_MODEL || null },
+  unsupported: e.UNSUPPORTED.split(/\s+/).filter(Boolean),
+  introspectTokenGrant: e.INTROSPECT_TOKEN_GRANT, notes: e.NOTES || null,
   k6: e.K6_IMAGE, finishedAt: new Date().toISOString(),
 }, null, 2));
-'
+' >"$OUT/meta.json"
 log "$TARGET: done -> $OUT"

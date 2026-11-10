@@ -261,6 +261,22 @@ async function bootstrap() {
     },
   );
 
+  // Theme assets uploaded through the Admin API (ThemeUploadService). SVG is
+  // allowed, so a file opened directly could carry script; the sandbox CSP
+  // and nosniff keep it inert, while <img> and CSS url() still render it.
+  // Names are unique per upload, so they never change and can be cached.
+  app.useStaticAssets(join(process.cwd(), 'uploads', 'themes'), {
+    prefix: '/themes/uploads',
+    index: false,
+    setHeaders: (res: { setHeader: (k: string, v: string) => void }) => {
+      res.setHeader(
+        'Content-Security-Policy',
+        "default-src 'none'; style-src 'unsafe-inline'; sandbox",
+      );
+      res.setHeader('X-Content-Type-Options', 'nosniff');
+      res.setHeader('Cache-Control', 'public, max-age=31536000, immutable');
+    },
+  });
   app.useStaticAssets(join(__dirname, '..', 'themes'), { prefix: '/themes' });
 
   // Register theme engine Handlebars helpers ({{msg}}, {{msgArgs}})
@@ -299,6 +315,11 @@ async function bootstrap() {
   await corsOriginService.preloadCache();
 
   app.get(SessionEventsGateway).attach(app.getHttpServer());
+
+  // Close cleanly on SIGTERM/SIGINT (docker stop, a rolling deploy, the
+  // cluster primary): shutdown hooks release the leader lock, end the
+  // database pools and finish in-flight requests.
+  app.enableShutdownHooks();
 
   const port = process.env['PORT'] ?? 3000;
   await app.listen(port);

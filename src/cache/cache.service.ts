@@ -1,6 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { RedisService } from '../redis/redis.service.js';
 import { MetricsService } from '../metrics/metrics.service.js';
+import { CacheBusService, type CacheEvent } from './cache-bus.service.js';
+
+const GRANTS_PREFIX = 'local:grants:';
+const SCOPES_PREFIX = 'local:scope-mappers:';
+const SESSION_PREFIX = 'local:session:';
 
 const KEY = {
   realm: (realmId: string) => `realm:config:${realmId}`,
@@ -8,16 +13,78 @@ const KEY = {
   client: (clientId: string) => `client:config:${clientId}`,
   jwks: (realmId: string) => `realm:jwks:${realmId}`,
   corsOrigins: 'cors:allowed-origins',
+  // In-process only, never Redis: these hold a client's secret hash and a
+  // realm's private signing key.
+  clientRow: (realmId: string, clientId: string) =>
+    `local:client:${realmId}:${clientId}`,
+  signingKey: (realmId: string) => `local:signing-key:${realmId}`,
+  user: (userId: string) => `local:user:${userId}`,
+  session: (sessionId: string) => `${SESSION_PREFIX}${sessionId}`,
+  grants: (userId: string) => `${GRANTS_PREFIX}${userId}`,
+  scopeMappers: (realmId: string, scopes: string) =>
+    `${SCOPES_PREFIX}${realmId}:${scopes}`,
 } as const;
 
+/** Bound on the in-process cache; realm names and client ids come from callers. */
+const L1_MAX_ENTRIES = 10_000;
+
+interface L1Entry {
+  value: unknown;
+  expiresAt: number;
+}
+
+/** Freezes an object and everything reachable from it, in place. */
+function deepFreeze<T>(value: T): T {
+  if (value === null || typeof value !== 'object' || Object.isFrozen(value)) {
+    return value;
+  }
+  Object.freeze(value);
+  for (const key of Reflect.ownKeys(value)) {
+    deepFreeze((value as Record<string | symbol, unknown>)[key]);
+  }
+  return value;
+}
+
+/**
+ * Realm, client, JWKS and CORS lookups, in two levels:
+ *
+ * 1. **In-process** (L1), in every process, on by default. Entries are
+ *    dropped the moment the database announces that the row behind them
+ *    changed (CacheBusService), whichever process or tool changed it. While
+ *    that announcement channel is down the L1 is not used at all, and it
+ *    starts empty again once the channel is back, so it can never serve a
+ *    row the database has since changed for longer than a notification
+ *    takes to arrive. The TTLs below are only a backstop.
+ * 2. **Redis**, when configured: shared by replicas and kept across
+ *    restarts. The same announcements delete its keys too.
+ *
+ * A value is copied once on its way into the L1 (`structuredClone`, which
+ * keeps Dates) and deeply frozen, then handed out as is: no caller can
+ * change what another one reads, and a hit costs no copy. Code that tries
+ * to modify a cached object fails loudly instead of corrupting the cache.
+ */
 @Injectable()
 export class CacheService {
   private readonly logger = new Logger(CacheService.name);
+  private readonly l1 = new Map<string, L1Entry>();
+  /**
+   * Fill-race guard. A reader that missed, then read the database, must not
+   * store its row if an invalidation arrived in between (its row may be the
+   * one that was just replaced). Every invalidation bumps `epoch`; a fill is
+   * kept only if the epoch is still the one recorded at the miss.
+   */
+  private epoch = 0;
+  private readonly missEpoch = new Map<string, number>();
+  private readonly counters = new Map<string, { inc(): void }>();
 
   constructor(
     private readonly redis: RedisService,
     private readonly metrics: MetricsService,
-  ) {}
+    private readonly bus: CacheBusService,
+  ) {
+    bus.onEvent((event) => void this.onEvent(event));
+    bus.onReset(() => this.flushL1());
+  }
 
   // ─── Realm ───────────────────────────────────────────────────────────────
 
@@ -26,8 +93,7 @@ export class CacheService {
     config: object,
     ttl = 300,
   ): Promise<void> {
-    if (!this.redis.isAvailable()) return;
-    await this.redis.set(KEY.realm(realmId), JSON.stringify(config), ttl);
+    await this.set(KEY.realm(realmId), config, ttl);
   }
 
   async getCachedRealmConfig<T = unknown>(realmId: string): Promise<T | null> {
@@ -39,8 +105,7 @@ export class CacheService {
     config: object,
     ttl = 300,
   ): Promise<void> {
-    if (!this.redis.isAvailable()) return;
-    await this.redis.set(KEY.realmByName(name), JSON.stringify(config), ttl);
+    await this.set(KEY.realmByName(name), config, ttl);
   }
 
   async getCachedRealmByName<T = unknown>(name: string): Promise<T | null> {
@@ -51,24 +116,23 @@ export class CacheService {
     realmId: string,
     realmName?: string,
   ): Promise<void> {
-    if (!this.redis.isAvailable()) return;
-    await Promise.all([
-      this.redis.del(KEY.realm(realmId)),
-      this.redis.del(KEY.jwks(realmId)),
-      ...(realmName ? [this.redis.del(KEY.realmByName(realmName))] : []),
+    await this.drop([
+      KEY.realm(realmId),
+      KEY.jwks(realmId),
+      ...(realmName ? [KEY.realmByName(realmName)] : []),
     ]);
     this.logger.debug(`Invalidated cache for realm ${realmId}`);
   }
 
   // ─── Client ──────────────────────────────────────────────────────────────
 
+  /** `clientId` is the cache key `${realmId}:${clientId}`. */
   async cacheClientConfig(
     clientId: string,
     config: object,
-    ttl = 300,
+    ttl = 60,
   ): Promise<void> {
-    if (!this.redis.isAvailable()) return;
-    await this.redis.set(KEY.client(clientId), JSON.stringify(config), ttl);
+    await this.set(KEY.client(clientId), config, ttl);
   }
 
   async getCachedClientConfig<T = unknown>(
@@ -78,16 +142,14 @@ export class CacheService {
   }
 
   async invalidateClientCache(clientId: string): Promise<void> {
-    if (!this.redis.isAvailable()) return;
-    await this.redis.del(KEY.client(clientId));
+    await this.drop([KEY.client(clientId)]);
     this.logger.debug(`Invalidated cache for client ${clientId}`);
   }
 
   // ─── JWKS ────────────────────────────────────────────────────────────────
 
   async cacheJWKS(realmId: string, jwks: object, ttl = 600): Promise<void> {
-    if (!this.redis.isAvailable()) return;
-    await this.redis.set(KEY.jwks(realmId), JSON.stringify(jwks), ttl);
+    await this.set(KEY.jwks(realmId), jwks, ttl);
   }
 
   async getCachedJWKS<T = unknown>(realmId: string): Promise<T | null> {
@@ -97,21 +159,23 @@ export class CacheService {
   // ─── CORS allowed origins ────────────────────────────────────────────────
 
   /**
-   * Persist the full set of allowed CORS origins to Redis.
-   * @param origins - flat array of origin strings (e.g. ["https://app.example.com", "*"])
-   * @param ttl     - seconds until expiry (default 300 s)
+   * Persist the full set of allowed CORS origins to Redis. (The in-process
+   * set lives in CorsOriginService, which reloads it on client changes.)
    */
   async cacheCorsOrigins(origins: string[], ttl = 300): Promise<void> {
     if (!this.redis.isAvailable()) return;
     await this.redis.set(KEY.corsOrigins, JSON.stringify(origins), ttl);
   }
 
-  /**
-   * Retrieve the cached set of allowed CORS origins.
-   * Returns null when there is no entry (cache miss or Redis unavailable).
-   */
+  /** The Redis copy of the allowed CORS origins, or null. */
   async getCachedCorsOrigins(): Promise<string[] | null> {
-    return this.getJson<string[]>(KEY.corsOrigins, 'cors_origins');
+    if (!this.redis.isAvailable()) return null;
+    const value = this.parse<string[]>(
+      KEY.corsOrigins,
+      await this.redis.get(KEY.corsOrigins),
+    );
+    this.count(value !== null ? 'hit' : 'miss', 'cors_origins');
+    return value;
   }
 
   /** Remove the CORS origins cache entry so the next request re-fetches from the DB. */
@@ -121,24 +185,249 @@ export class CacheService {
     this.logger.debug('Invalidated CORS allowed-origins cache');
   }
 
+  // ─── In-process only ─────────────────────────────────────────────────────
+
+  /**
+   * A client's full row, secret hash included: the in-process level only,
+   * so it never leaves the process. Null when the announcement channel is
+   * down or the row is not cached; see CachedLookupsService.
+   */
+  getLocalClientRow<T>(realmId: string, clientId: string): T | null {
+    return this.l1Get<T>(KEY.clientRow(realmId, clientId), 'client_row');
+  }
+
+  setLocalClientRow(realmId: string, clientId: string, row: object): void {
+    this.l1Set(KEY.clientRow(realmId, clientId), row, 60);
+  }
+
+  /** A realm's active signing key, private key included; in-process only. */
+  getLocalSigningKey<T>(realmId: string): T | null {
+    return this.l1Get<T>(KEY.signingKey(realmId), 'signing_key');
+  }
+
+  setLocalSigningKey(realmId: string, key: object): void {
+    this.l1Set(KEY.signingKey(realmId), key, 600);
+  }
+
+  /**
+   * What a token says about a user: their profile, their roles and
+   * attribute claims, and a realm's scope mappers. In-process only (a
+   * profile is personal data, and nothing else needs it). `load` reads the
+   * database on a miss; a null result is not kept.
+   */
+  async localUser<T extends object>(
+    userId: string,
+    load: () => Promise<T | null>,
+  ): Promise<T | null> {
+    return this.local(KEY.user(userId), 'user', 60, load);
+  }
+
+  /**
+   * A session that exists, as `load` read it; a missing one is not kept.
+   * Dropped as soon as the database announces the session ended.
+   */
+  async localSession<T extends object>(
+    sessionId: string,
+    load: () => Promise<T | null>,
+  ): Promise<T | null> {
+    return this.local(KEY.session(sessionId), 'session', 300, load);
+  }
+
+  async localUserGrants<T extends object>(
+    userId: string,
+    load: () => Promise<T>,
+  ): Promise<T> {
+    return (await this.local(KEY.grants(userId), 'user_grants', 60, load))!;
+  }
+
+  async localScopeMappers<T extends object>(
+    realmId: string,
+    scopeNames: string[],
+    load: () => Promise<T>,
+  ): Promise<T> {
+    const key = KEY.scopeMappers(realmId, [...scopeNames].sort().join(' '));
+    return (await this.local(key, 'scope_mappers', 300, load))!;
+  }
+
+  // ─── Database announcements ──────────────────────────────────────────────
+
+  private async onEvent(event: CacheEvent): Promise<void> {
+    // A token's resource_access names a role's client by its client_id, so
+    // renaming a client changes the grants of everyone with its roles.
+    if (event.t === 'client' && new Set(event.clientIds).size > 1) {
+      this.dropLocalPrefix(GRANTS_PREFIX);
+    }
+    switch (event.t) {
+      case 'realm':
+        await this.drop([
+          KEY.realm(event.id),
+          KEY.jwks(event.id),
+          KEY.signingKey(event.id),
+          ...event.names.map((n) => KEY.realmByName(n)),
+        ]);
+        break;
+      case 'client':
+        await this.drop([
+          ...event.clientIds.map((c) => KEY.client(`${event.realmId}:${c}`)),
+          KEY.client(`${event.realmId}:${event.id}`),
+          ...event.clientIds.map((c) => KEY.clientRow(event.realmId, c)),
+          KEY.corsOrigins,
+        ]);
+        break;
+      case 'keys':
+        await this.drop([
+          KEY.jwks(event.realmId),
+          KEY.signingKey(event.realmId),
+        ]);
+        break;
+      case 'users':
+        this.dropLocal(
+          event.ids.flatMap((id) => [KEY.user(id), KEY.grants(id)]),
+        );
+        break;
+      case 'grants':
+        this.dropLocalPrefix(GRANTS_PREFIX);
+        break;
+      case 'scopes':
+        this.dropLocalPrefix(SCOPES_PREFIX);
+        break;
+      case 'sessions':
+        this.dropLocal(event.ids.map((id) => KEY.session(id)));
+        break;
+      case 'sessions-all':
+        this.dropLocalPrefix(SESSION_PREFIX);
+        break;
+    }
+  }
+
   // ─── Internal helpers ────────────────────────────────────────────────────
+
+  /**
+   * Counts a hit or miss. The labelled child counter is looked up once per
+   * (operation, cache) pair: every in-process hit is counted, and resolving
+   * labels on each call costs more than the hit itself.
+   */
+  private count(operation: 'hit' | 'miss', cache: string): void {
+    const key = `${operation}:${cache}`;
+    let counter = this.counters.get(key);
+    if (!counter) {
+      counter = this.metrics.cacheOperationsTotal.labels({ operation, cache });
+      this.counters.set(key, counter);
+    }
+    counter.inc();
+  }
+
+  private flushL1(): void {
+    this.l1.clear();
+    this.missEpoch.clear();
+    this.epoch++;
+  }
+
+  /** Drops in-process-only keys. */
+  private dropLocal(keys: string[]): void {
+    this.epoch++;
+    for (const key of keys) this.l1.delete(key);
+  }
+
+  private dropLocalPrefix(prefix: string): void {
+    this.epoch++;
+    for (const key of this.l1.keys()) {
+      if (key.startsWith(prefix)) this.l1.delete(key);
+    }
+  }
+
+  /** An in-process-only entry, loaded on a miss. */
+  private async local<T extends object>(
+    key: string,
+    metricLabel: string,
+    ttl: number,
+    load: () => Promise<T | null>,
+  ): Promise<T | null> {
+    const hit = this.l1Get<T>(key, metricLabel);
+    if (hit !== null) return hit;
+    const value = await load();
+    if (value !== null) this.l1Set(key, value, ttl);
+    return value;
+  }
+
+  /** Drops keys from both levels. Redis errors are logged, never thrown. */
+  private async drop(keys: string[]): Promise<void> {
+    this.epoch++;
+    for (const key of keys) this.l1.delete(key);
+    if (!this.redis.isAvailable()) return;
+    try {
+      await Promise.all(keys.map((k) => this.redis.del(k)));
+    } catch (err) {
+      this.logger.warn(`Cache invalidation in Redis failed: ${String(err)}`);
+    }
+  }
+
+  private async set(key: string, value: object, ttl: number): Promise<void> {
+    this.l1Set(key, value, ttl);
+    if (!this.redis.isAvailable()) return;
+    await this.redis.set(key, JSON.stringify(value), ttl);
+  }
+
+  /**
+   * The in-process entry for `key`, or null. A miss is recorded for the
+   * fill-race guard before any slower lookup, so an invalidation that arrives
+   * while Redis or the database is read keeps that lookup's result out.
+   */
+  private l1Get<T>(key: string, metricLabel: string): T | null {
+    if (!this.bus.isConnected()) return null;
+    const entry = this.l1.get(key);
+    if (entry && entry.expiresAt > Date.now()) {
+      this.count('hit', metricLabel);
+      return entry.value as T;
+    }
+    if (entry) this.l1.delete(key);
+    if (this.missEpoch.size >= L1_MAX_ENTRIES) {
+      this.missEpoch.clear();
+      this.epoch++;
+    }
+    this.missEpoch.set(key, this.epoch);
+    return null;
+  }
+
+  private l1Set(key: string, value: unknown, ttl: number): void {
+    const recorded = this.missEpoch.get(key);
+    this.missEpoch.delete(key);
+    if (!this.bus.isConnected() || recorded !== this.epoch) return;
+    if (this.l1.size >= L1_MAX_ENTRIES) {
+      // Oldest first: a Map iterates in insertion order.
+      const oldest = this.l1.keys().next().value;
+      if (oldest !== undefined) this.l1.delete(oldest);
+    }
+    this.l1.set(key, {
+      value: deepFreeze(structuredClone(value)),
+      expiresAt: Date.now() + ttl * 1000,
+    });
+  }
 
   private async getJson<T>(
     key: string,
     metricLabel: string,
   ): Promise<T | null> {
-    if (!this.redis.isAvailable()) return null;
+    if (this.bus.isConnected()) {
+      const hit = this.l1Get<T>(key, metricLabel);
+      if (hit !== null) return hit;
+    }
+
+    if (!this.redis.isAvailable()) {
+      this.count('miss', metricLabel);
+      return null;
+    }
 
     const raw = await this.redis.get(key);
-    const hit = raw !== null;
+    const value = this.parse<T>(key, raw);
+    this.count(value !== null ? 'hit' : 'miss', metricLabel);
+    // A Redis hit fills the L1 too, under the same fill-race guard.
+    if (value !== null) this.l1Set(key, value, 60);
+    return value;
+  }
 
-    this.metrics.cacheOperationsTotal.inc({
-      operation: hit ? 'hit' : 'miss',
-      cache: metricLabel,
-    });
-
-    if (!hit) return null;
-
+  private parse<T>(key: string, raw: string | null): T | null {
+    if (raw === null) return null;
     try {
       return JSON.parse(raw) as T;
     } catch (err) {

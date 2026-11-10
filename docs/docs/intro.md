@@ -23,10 +23,10 @@ description: Idenplane is an open-source identity and access management server w
 Idenplane is a modern, lightweight identity and access management (IAM) server built for teams that need enterprise-grade authentication without enterprise complexity.
 
 Most identity solutions are either:
-- **Too complex** — Keycloak requires 1GB+ RAM and Java expertise
+- **Too complex** — heavy to run and to customise
 - **Too limited** — Simple JWT libraries lack production features
 
-Idenplane fills that gap with a complete, self-hosted solution that deploys in under 30 seconds and runs in ~150MB RAM.
+Idenplane fills that gap with a complete, self-hosted solution that deploys in under 30 seconds and idles at about 194 MiB of RAM.
 
 ## Key Benefits
 
@@ -34,7 +34,7 @@ Idenplane fills that gap with a complete, self-hosted solution that deploys in u
 |---------|-------------|
 | **Deploy in 30 seconds** | Single `docker compose up` gets you a full IAM server |
 | **Modern stack** | TypeScript, NestJS, React, PostgreSQL — no Java, no XML |
-| **Lightweight** | Runs in ~150 MB RAM vs. Keycloak's 1 GB+ |
+| **Lightweight** | About 194 MiB of RAM at idle vs. 464 MiB for Keycloak, and with one worker per CPU faster than Keycloak on discovery, JWKS, client-credentials tokens and introspection; see [Benchmarks](./benchmarks.md) |
 | **Complete** | OAuth 2.0, OIDC, SAML 2.0, WebAuthn, MFA, LDAP, SSO, Organizations |
 | **Extensible** | Plugin system, custom auth flows, webhooks, and 7 client SDKs |
 | **Admin Console** | Full-featured React dashboard at `/console` |

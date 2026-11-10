@@ -12,7 +12,6 @@ import {
   Logger,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse, ApiQuery } from '@nestjs/swagger';
-import { SkipThrottle } from '@nestjs/throttler';
 import type { Request } from 'express';
 import { MagicLinkService } from './magic-link.service.js';
 import {
@@ -30,7 +29,7 @@ import type { Realm } from '@prisma/client';
 @Controller('realms/:realmName/protocol/openid-connect')
 @UseGuards(RealmGuard)
 @Public()
-@SkipThrottle()
+// Not exempt from the global throttle: requesting a link sends an email.
 export class MagicLinkController {
   private readonly logger = new Logger(MagicLinkController.name);
 

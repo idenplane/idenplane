@@ -636,6 +636,7 @@ describe('LoginService', () => {
       );
 
       expect(prisma.loginSession.create).toHaveBeenCalledWith({
+        select: { id: true, createdAt: true },
         data: expect.objectContaining({
           userId: dbUser.id,
           realmId: realm.id,
@@ -659,6 +660,7 @@ describe('LoginService', () => {
       );
 
       expect(prisma.loginSession.create).toHaveBeenCalledWith({
+        select: { id: true, createdAt: true },
         data: expect.objectContaining({
           satisfiedAcr: 'urn:idenplane:acr:mfa',
           amr: ['pwd', 'otp'],
@@ -689,6 +691,7 @@ describe('LoginService', () => {
       await service.createLoginSession(realm, dbUser);
 
       expect(prisma.loginSession.create).toHaveBeenCalledWith({
+        select: { id: true, createdAt: true },
         data: expect.objectContaining({
           ipAddress: undefined,
           userAgent: undefined,

@@ -17,7 +17,19 @@ export class PrismaService
     await this.$connect();
   }
 
+  private readonly beforeDisconnect: Array<() => Promise<void>> = [];
+
+  /**
+   * Runs `fn` before the pool closes on shutdown. For work that would
+   * otherwise query a closed client, which reopens the pool and keeps the
+   * process alive (Nest does not order onModuleDestroy across modules).
+   */
+  onBeforeDisconnect(fn: () => Promise<void>): void {
+    this.beforeDisconnect.push(fn);
+  }
+
   async onModuleDestroy() {
+    for (const fn of this.beforeDisconnect) await fn().catch(() => {});
     await this.$disconnect();
   }
 }

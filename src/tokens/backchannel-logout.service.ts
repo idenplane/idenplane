@@ -1,3 +1,4 @@
+import { CachedLookupsService } from '../cache/cached-lookups.service.js';
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { JwkService } from '../crypto/jwk.service.js';
@@ -8,6 +9,7 @@ export class BackchannelLogoutService {
   private readonly logger = new Logger(BackchannelLogoutService.name);
 
   constructor(
+    private readonly lookups: CachedLookupsService,
     private readonly prisma: PrismaService,
     private readonly jwkService: JwkService,
   ) {}
@@ -35,10 +37,7 @@ export class BackchannelLogoutService {
 
     if (clients.length === 0) return;
 
-    const signingKey = await this.prisma.realmSigningKey.findFirst({
-      where: { realmId: realm.id, active: true },
-      orderBy: { createdAt: 'desc' },
-    });
+    const signingKey = await this.lookups.activeSigningKey(realm.id);
 
     if (!signingKey) {
       this.logger.warn('No active signing key found for backchannel logout');

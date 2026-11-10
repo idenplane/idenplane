@@ -38,5 +38,8 @@ services:
       # The global throttler would otherwise answer the load with 429s.
       # Realm-level rate limiting and lockout are turned off by the seed.
       THROTTLE_LIMIT: "1000000"
+      # One process by default, as the image ships; "auto" for one worker
+      # per CPU of the cpuset (see src/cluster.ts).
+      WEB_CONCURRENCY: ${WEB_CONCURRENCY:-1}
     ports:
       - "127.0.0.1:${PUBLIC_PORT}:3000"

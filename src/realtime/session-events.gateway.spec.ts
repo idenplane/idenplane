@@ -1,3 +1,4 @@
+import { lookupsBackedBy } from '../cache/cached-lookups.mock.js';
 // Mock JwkService to avoid importing jose (ESM-only) in Jest's CJS transform.
 jest.mock('../crypto/jwk.service.js', () => ({
   JwkService: jest.fn(),
@@ -25,11 +26,13 @@ describe('SessionEventsGateway', () => {
   };
 
   function authenticate(searchParams: Record<string, string>) {
-    return (service as unknown as {
-      authenticate: (
-        p: URLSearchParams,
-      ) => Promise<{ userId: string } | null>;
-    }).authenticate(new URLSearchParams(searchParams));
+    return (
+      service as unknown as {
+        authenticate: (
+          p: URLSearchParams,
+        ) => Promise<{ userId: string } | null>;
+      }
+    ).authenticate(new URLSearchParams(searchParams));
   }
 
   function makeFakeSocket(readyState: number) {
@@ -42,10 +45,21 @@ describe('SessionEventsGateway', () => {
     jwkService = { verifyJwt: jest.fn() };
     blacklist = { isBlacklisted: jest.fn().mockResolvedValue(false) };
 
+    // A bus with no database channel delivers to this process, as the
+    // real one does then.
+    const handlers = new Map<string, Array<(p: unknown) => void>>();
+    const bus = {
+      onMessage: (topic: string, h: (p: unknown) => void) =>
+        handlers.set(topic, [...(handlers.get(topic) ?? []), h]),
+      publish: async (topic: string, payload: unknown) =>
+        (handlers.get(topic) ?? []).forEach((h) => h(payload)),
+    };
     service = new SessionEventsGateway(
+      lookupsBackedBy(prisma as any) as any,
       prisma as any,
       jwkService as any,
       blacklist as any,
+      bus as any,
     );
   });
 
@@ -104,18 +118,18 @@ describe('SessionEventsGateway', () => {
       prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
       jwkService.verifyJwt.mockResolvedValue({ sub: 'user-1', sid: 'sess-1' });
       prisma.session.findUnique.mockResolvedValue({ id: 'sess-1' });
-      expect(
-        await authenticate({ token: 'abc', realm: 'test-realm' }),
-      ).toEqual({ userId: 'user-1' });
+      expect(await authenticate({ token: 'abc', realm: 'test-realm' })).toEqual(
+        { userId: 'user-1' },
+      );
     });
 
     it('returns the userId for a valid token with no sid claim', async () => {
       prisma.realm.findUnique.mockResolvedValue(mockRealm);
       prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
       jwkService.verifyJwt.mockResolvedValue({ sub: 'user-1' });
-      expect(
-        await authenticate({ token: 'abc', realm: 'test-realm' }),
-      ).toEqual({ userId: 'user-1' });
+      expect(await authenticate({ token: 'abc', realm: 'test-realm' })).toEqual(
+        { userId: 'user-1' },
+      );
     });
   });
 

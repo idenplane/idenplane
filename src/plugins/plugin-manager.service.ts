@@ -11,6 +11,10 @@ import { readFileSync } from 'fs';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { PluginLoaderService } from './plugin-loader.service.js';
 import { PluginRegistry } from './plugin-registry.js';
+import { CacheBusService } from '../cache/cache-bus.service.js';
+
+/** Bus topic: a plugin was enabled, disabled or uninstalled somewhere. */
+const TOPIC = 'plugin-state';
 import type {
   IdenplanePlugin,
   PluginContext,
@@ -47,7 +51,58 @@ export class PluginManagerService implements OnModuleInit {
     private readonly prisma: PrismaService,
     private readonly loader: PluginLoaderService,
     private readonly registry: PluginRegistry,
-  ) {}
+    private readonly bus: CacheBusService,
+  ) {
+    // An admin's enable, disable or uninstall reaches one instance; every
+    // other one hears it here and follows, so a plugin disabled for a reason
+    // stops everywhere, not only where the request landed. After a gap in
+    // the channel, every state is reread from the database.
+    bus.onMessage(TOPIC, (message) => {
+      void this.followRemoteChange(message as { name: string }).catch(
+        (err: unknown) =>
+          this.logger.warn(`Could not apply a plugin change: ${String(err)}`),
+      );
+    });
+    bus.onReset(() => {
+      void this.resyncFromDatabase().catch((err: unknown) =>
+        this.logger.warn(`Could not resync plugin states: ${String(err)}`),
+      );
+    });
+  }
+
+  /**
+   * Brings this instance's registry in line with the database for one
+   * plugin. A no-op where it already is, such as on the instance that made
+   * the change. The plugin's own cleanup on uninstall (onUninstall) ran once,
+   * there; here the plugin is only disabled and dropped.
+   */
+  private async followRemoteChange({ name }: { name: string }): Promise<void> {
+    const entry = this.registry.get(name);
+    if (!entry) return; // not loaded on this instance
+    const record = await this.prisma.installedPlugin.findUnique({
+      where: { name },
+    });
+    const enabled = record?.enabled ?? false;
+    const config = (record?.config ?? null) as Record<string, any> | null;
+    if (entry.enabled !== enabled) {
+      this.registry.setEnabled(name, enabled);
+      await this.invokeLifecycle(
+        entry.plugin,
+        enabled ? 'onEnable' : 'onDisable',
+        this.buildContext(entry.plugin, config),
+      );
+      this.logger.log(
+        `Plugin '${name}' ${enabled ? 'enabled' : 'disabled'} elsewhere; following.`,
+      );
+    }
+    if (!record) this.registry.unregister(name);
+  }
+
+  private async resyncFromDatabase(): Promise<void> {
+    for (const name of this.registry.getAll().map((e) => e.plugin.name)) {
+      await this.followRemoteChange({ name });
+    }
+  }
 
   // ─── Lifecycle ────────────────────────────────────────────────────────────
 
@@ -103,20 +158,33 @@ export class PluginManagerService implements OnModuleInit {
         where: { name: plugin.name },
       });
 
+      // First time seeing this plugin: persist it as enabled by default,
+      // recording the current file hash as the trusted baseline. Another
+      // instance booting at the same moment may insert it first; then this
+      // one takes that row and continues, rather than running without it.
+      let installedHere = false;
       if (!record) {
-        // First time seeing this plugin — persist it as enabled by default,
-        // recording the current file hash as the trusted baseline.
-        record = await this.prisma.installedPlugin.create({
-          data: {
-            name: plugin.name,
-            version: plugin.version,
-            type: plugin.type,
-            enabled: true,
-            config: Prisma.JsonNull,
-            fileHash: currentHash,
-          },
-        });
+        try {
+          record = await this.prisma.installedPlugin.create({
+            data: {
+              name: plugin.name,
+              version: plugin.version,
+              type: plugin.type,
+              enabled: true,
+              config: Prisma.JsonNull,
+              fileHash: currentHash,
+            },
+          });
+          installedHere = true;
+        } catch (err) {
+          if ((err as { code?: string }).code !== 'P2002') throw err;
+          record = await this.prisma.installedPlugin.findUniqueOrThrow({
+            where: { name: plugin.name },
+          });
+        }
+      }
 
+      if (installedHere) {
         const context = this.buildContext(plugin, null);
         await this.invokeLifecycle(plugin, 'onInstall', context);
         this.logger.log(
@@ -229,6 +297,7 @@ export class PluginManagerService implements OnModuleInit {
     }
 
     this.logger.log(`Plugin '${name}' enabled.`);
+    await this.bus.publish(TOPIC, { name });
     return this.getPlugin(name);
   }
 
@@ -256,6 +325,7 @@ export class PluginManagerService implements OnModuleInit {
     }
 
     this.logger.log(`Plugin '${name}' disabled.`);
+    await this.bus.publish(TOPIC, { name });
     return this.getPlugin(name);
   }
 
@@ -277,6 +347,7 @@ export class PluginManagerService implements OnModuleInit {
 
     await this.prisma.installedPlugin.delete({ where: { name } });
     this.logger.log(`Plugin '${name}' uninstalled.`);
+    await this.bus.publish(TOPIC, { name });
   }
 
   // ─── Extension Point Dispatch ─────────────────────────────────────────────

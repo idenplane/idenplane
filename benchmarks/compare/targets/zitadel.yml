@@ -1,0 +1,72 @@
+# Zitadel (API only, no login UI container) on PostgreSQL 16, started with
+# `start-from-init` the way its Docker Compose guide does. Plain HTTP because
+# the load generator sits on the same Docker network; no TLS on either side.
+# Driven by benchmarks/compare/compare.sh; every knob comes from its env.
+#
+# Zitadel picks the instance by Host, and the instance's domain is
+# target:8080 here, so the load generator's http://target:8080 works as it
+# is. Anything sent from the host (the seed) has to send `Host: target:8080`.
+# /debug/ready and /debug/healthz are not instance-scoped and answer on the
+# published port with any Host.
+#
+# Needs from the environment, besides the usual: ZITADEL_MASTERKEY (exactly
+# 32 characters) and ZITADEL_PAT_DIR (an empty host dir the non-root
+# container can write to; the admin PAT appears there as admin.pat).
+name: bench-zitadel
+
+services:
+  db:
+    image: postgres:16-alpine
+    cpuset: ${DB_CPUS}
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  target:
+    image: ${ZITADEL_IMAGE:-ghcr.io/zitadel/zitadel:v4.20.1}
+    command: ["start-from-init", "--masterkey", "${ZITADEL_MASTERKEY}", "--tlsMode", "disabled"]
+    cpuset: ${TARGET_CPUS}
+    mem_limit: ${TARGET_MEM}
+    memswap_limit: ${TARGET_MEM}
+    depends_on:
+      db:
+        condition: service_healthy
+    environment:
+      ZITADEL_EXTERNALDOMAIN: target
+      ZITADEL_EXTERNALPORT: "8080"
+      ZITADEL_EXTERNALSECURE: "false"
+      ZITADEL_DATABASE_POSTGRES_HOST: db
+      ZITADEL_DATABASE_POSTGRES_PORT: "5432"
+      ZITADEL_DATABASE_POSTGRES_DATABASE: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_USERNAME: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_PASSWORD: zitadel
+      ZITADEL_DATABASE_POSTGRES_USER_SSL_MODE: disable
+      ZITADEL_DATABASE_POSTGRES_ADMIN_USERNAME: postgres
+      ZITADEL_DATABASE_POSTGRES_ADMIN_PASSWORD: postgres
+      ZITADEL_DATABASE_POSTGRES_ADMIN_SSL_MODE: disable
+      # The human admin of the first instance.
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_USERNAME: zitadel-admin
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORD: ${ADMIN_PASSWORD}
+      ZITADEL_FIRSTINSTANCE_ORG_HUMAN_PASSWORDCHANGEREQUIRED: "false"
+      # An IAM_OWNER service account whose PAT the seed uses for the APIs.
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_USERNAME: bench-admin
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_MACHINE_NAME: Benchmark admin
+      ZITADEL_FIRSTINSTANCE_ORG_MACHINE_PAT_EXPIRATIONDATE: "2099-01-01T00:00:00Z"
+      ZITADEL_FIRSTINSTANCE_PATPATH: /zitadel-bootstrap/admin.pat
+      # Lockout is already off by default (0 = unlimited attempts); pinned
+      # here so a load test can never lock an account. Quotas and limits
+      # stay at their defaults, which are off. Zitadel has no request
+      # throttler of its own.
+      ZITADEL_DEFAULTINSTANCE_LOCKOUTPOLICY_MAXPASSWORDATTEMPTS: "0"
+      ZITADEL_DEFAULTINSTANCE_LOCKOUTPOLICY_MAXOTPATTEMPTS: "0"
+      # Password hashing stays at Zitadel's defaults: bcrypt cost 14 for user
+      # passwords, bcrypt cost 4 for client and machine-user secrets.
+    volumes:
+      - ${ZITADEL_PAT_DIR}:/zitadel-bootstrap
+    ports:
+      - "127.0.0.1:${PUBLIC_PORT}:8080"

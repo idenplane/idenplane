@@ -72,6 +72,8 @@ Control the server's network and runtime settings.
 | `PORT` | `3000` | No | Port the server listens on |
 | `NODE_ENV` | `development` | No | Environment: `development`, `production`, `test` |
 | `BASE_URL` | `http://localhost:3000` | No | Public URL used for redirects, emails, and OAuth callbacks |
+| `LOG_LEVEL` | `info` in production, `debug` otherwise | No | Lowest level written to the log: `fatal`, `error`, `warn`, `info`, `debug`, `trace` |
+| `LOG_ACCESS` | `errors` | No | Which HTTP requests get an access-log line: `errors` (failed requests only: 4xx as `warn`, 5xx as `error`), `all` (every request, successful ones at `info`), or `off` |
 
 ### Examples
 
@@ -86,6 +88,8 @@ PORT=3000
 NODE_ENV=production
 BASE_URL=https://auth.example.com
 ```
+
+An access-log line for every request costs throughput on the busiest endpoints (token, introspection, discovery), so by default only failed requests are logged. Set `LOG_ACCESS=all` to log every request, for example while investigating traffic. Application logs (sign-in failures, admin changes, errors) are written whatever `LOG_ACCESS` says.
 
 ---
 
@@ -141,6 +145,57 @@ WEBHOOK_ENCRYPTION_SALT=REPLACE_ME_WITH_A_UNIQUE_RANDOM_SALT
 :::warning
 If `WEBHOOK_SECRET_KEY` changes, all stored webhook secrets become unreadable. Always backup your existing key before rotating.
 :::
+
+---
+
+## In-process cache
+
+Every Idenplane process keeps in memory what most requests read:
+
+- realms, clients, signing keys (JWKS) and CORS origins;
+- what a token says about its user: the profile, roles (direct and through groups) and custom-attribute claims;
+- each realm's scope mappers;
+- the list of revoked token ids, and which sessions still exist.
+
+Issuing a client-credentials token, verifying one, or reading discovery and JWKS therefore doesn't query the database each time.
+
+The database keeps those copies current. Triggers on the tables behind them (realms, clients, signing keys, users, roles, groups and their memberships, custom attributes, client scopes and mappers, revoked tokens, sessions) send a PostgreSQL notification whenever something the cache holds changes, and each process drops what changed as soon as it hears it. This works however the change was made (Admin API, import, SQL by hand), and on every replica. Each process holds one extra database connection for this. If that connection drops, the process reads from the database until it is back, and then starts with an empty cache. A missed notification therefore never leaves stale data behind.
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `CACHE_L1` | on | No | Set to `off` to disable the in-process cache. |
+
+Set `CACHE_L1=off` when Idenplane reaches PostgreSQL through a connection pooler in **transaction** mode, such as PgBouncer with `pool_mode = transaction`. `LISTEN` appears to work there, but notifications are never delivered. Session mode, or a direct connection, is fine. The cache is also off when the database is not PostgreSQL.
+
+With Redis configured, the same notifications also delete the shared Redis entries.
+
+### Using every CPU
+
+By default an Idenplane container runs one Node.js process, which uses about one CPU however many the container has. To use them all, set `WEB_CONCURRENCY`. The container then starts a small primary process, which runs one worker per CPU. The workers share the port, and everything they must agree on goes through PostgreSQL: caches, scheduled jobs, live session events and plugin state. The primary restarts a worker that crashes. If workers keep failing at startup, it stops the container with the workers' error, rather than retrying for ever.
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `WEB_CONCURRENCY` | `1` | No | `auto` for one worker per usable CPU, or a number of workers. |
+
+"Usable" means the CPUs the container may actually use: its cpuset (`--cpuset-cpus`) and its CPU quota (`--cpus`, or a Kubernetes `resources.limits.cpu`), whichever is smaller. A pod limited to 2 CPUs on a 64-core node runs 2 workers, not 64.
+
+Each worker is a full process: it needs roughly another 150–200 MiB of memory. Per-container budgets are split between the workers rather than given to each:
+
+- **Argon2 concurrency:** one hash at a time per usable CPU, across all workers.
+- **Database pool:** about `2 × CPUs + 1` connections in total, but at least 5 per worker.
+- **Global throttle:** `THROTTLE_LIMIT` per container.
+
+Each process also keeps two connections of its own, the cache-invalidation listener and the leader lock. A container with *N* workers therefore uses up to its pool plus 2 × *N* connections. Size PostgreSQL's `max_connections` for all your containers together.
+
+### Scheduled jobs with several instances
+
+Some scheduled jobs must run once per tick across all instances, not once per instance: risk re-evaluation, step-up and termination checks, trust decay and credential rotation. The instances elect one of themselves to run them. The leader holds a PostgreSQL advisory lock on a connection of its own. If it stops or loses that connection, another instance takes over within about 15 seconds. Cleanup jobs and webhook delivery run on every instance; they are safe to.
+
+Live session events (`/realms/{realm}/session-events` WebSockets) are fanned out through PostgreSQL `NOTIFY`, so a client gets them whichever instance it is connected to.
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `LEADER_ELECTION` | on | No | Set to `off` to make every instance run every job (a single instance, or a connection pooler in transaction mode, which cannot hold the lock). |
 
 ---
 
@@ -200,6 +255,8 @@ SESSION_STORE=database
 ## Rate Limiting
 
 Protect your API from abuse with configurable throttling.
+
+This is a coarse flood guard, per client IP and **per container** (split between the container's workers, if any): with three containers a client can make up to three times `THROTTLE_LIMIT` requests per window. It is kept in memory so it costs nothing per request. The limits that matter for abuse are shared by every instance through the database: the realm's rate limits (`rateLimitEnabled`, per IP, client and user), brute-force lockout, and the per-address limits on mail that a request can trigger. A verification resend or a password reset sends at most one email a minute to an account, and a magic link at most `magicLinkRateLimitPerEmail` every 15 minutes.
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|

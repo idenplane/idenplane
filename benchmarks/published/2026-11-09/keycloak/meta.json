@@ -1,0 +1,36 @@
+{
+  "target": "keycloak",
+  "image": "quay.io/keycloak/keycloak:26.8.2",
+  "digest": "quay.io/keycloak/keycloak@sha256:3879c623248408de29a5303178b5816c77e8dfef3890c361f8c0bbeaa979ba3b",
+  "imageBytes": 750069827,
+  "firstBootMs": 24096,
+  "restartMs": 6436,
+  "passwordHash": "{\"hashIterations\":5,\"algorithm\":\"argon2\",\"additionalParameters\":{\"hashLength\":[\"32\"],\"memory\":[\"7168\"],\"type\":[\"id\"],\"version\":[\"1.3\"],\"parallelism\":[\"1\"]}}",
+  "scenarios": [
+    "discovery",
+    "jwks",
+    "client_credentials",
+    "introspect",
+    "password"
+  ],
+  "runs": 3,
+  "vus": 32,
+  "duration": "60s",
+  "warmup": "20s",
+  "cpus": {
+    "target": "0-3",
+    "db": "4-5",
+    "k6": "6-15"
+  },
+  "targetMem": "2g",
+  "host": {
+    "cpus": 16,
+    "memBytes": 33678110720,
+    "cpuModel": "AMD EPYC"
+  },
+  "unsupported": [],
+  "introspectTokenGrant": "",
+  "notes": null,
+  "k6": "grafana/k6:2.3.0",
+  "finishedAt": "2026-11-09T12:58:04.777Z"
+}
