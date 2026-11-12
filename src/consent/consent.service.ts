@@ -19,6 +19,8 @@ export interface ConsentRequest {
   satisfiedAcr?: string;
   /** The authentication methods performed (e.g. `['pwd', 'otp']`). */
   amr?: string[];
+  /** When the end user authenticated, as an ISO string (OIDC `auth_time`). */
+  authTime?: string;
 }
 
 export type ConsentAction = 'granted' | 'revoked' | 'updated';

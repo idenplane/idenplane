@@ -820,6 +820,9 @@ export class AuthService {
     // when: (a) the code does not exist, (b) it was already used by a
     // concurrent request, or (c) it has already expired.  All three cases are
     // treated identically — the caller receives an "invalid or expired" error.
+    // The session this exchange creates is recorded on the code, so that a
+    // replay of the code can end it.
+    const sessionId = randomUUID();
     let authCode: Awaited<
       ReturnType<typeof this.prisma.authorizationCode.update>
     >;
@@ -830,7 +833,7 @@ export class AuthService {
           used: false,
           expiresAt: { gt: new Date() },
         },
-        data: { used: true },
+        data: { used: true, sessionId },
       });
     } catch (err: unknown) {
       const isPrismaNotFound =
@@ -838,6 +841,7 @@ export class AuthService {
         err !== null &&
         (err as { code?: string }).code === 'P2025';
       if (isPrismaNotFound) {
+        await this.revokeReplayedCode(code);
         throw new OAuthTokenError(
           'invalid_grant',
           'Invalid or expired authorization code',
@@ -926,16 +930,19 @@ export class AuthService {
     const acr = authCode.satisfiedAcr ?? ACR_PASSWORD;
     const amr = authCode.amr.length > 0 ? authCode.amr : ['pwd'];
 
-    const session = this.newSession({
-      userId: user.id,
-      ipAddress: ip,
-      userAgent,
-      // Persist so the refresh_token grant can preserve acr/amr (see
-      // handleRefreshTokenGrant).
-      satisfiedAcr: acr,
-      amr,
-      expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
-    });
+    const session = this.newSession(
+      {
+        userId: user.id,
+        ipAddress: ip,
+        userAgent,
+        // Persist so the refresh_token grant can preserve acr/amr (see
+        // handleRefreshTokenGrant).
+        satisfiedAcr: acr,
+        amr,
+        expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
+      },
+      sessionId,
+    );
 
     void this.eventsService.recordLoginEvent({
       realmId: realm.id,
@@ -957,7 +964,7 @@ export class AuthService {
       session,
       authCode.scope ?? undefined,
       authCode.nonce ?? undefined,
-      new Date(),
+      authCode.authTime ?? authCode.createdAt,
       acr,
       amr,
       authCode.code,
@@ -1605,8 +1612,28 @@ export class AuthService {
       Prisma.SessionUncheckedCreateInput,
       'id' | 'refreshTokens' | 'createdAt'
     >,
+    id: string = randomUUID(),
   ): NewSession {
-    return { id: randomUUID(), data: { ...data, createdAt: new Date() } };
+    return { id, data: { ...data, createdAt: new Date() } };
+  }
+
+  /**
+   * RFC 6749 §4.1.2: when a used code is presented again, revoke the tokens
+   * issued from it. Ending their session deletes its refresh tokens and makes
+   * its access tokens introspect as inactive (they carry its `sid`).
+   */
+  private async revokeReplayedCode(code: string): Promise<void> {
+    const replayed = await this.prisma.authorizationCode.findUnique({
+      where: { code },
+      select: { used: true, sessionId: true, clientId: true },
+    });
+    if (!replayed?.used || !replayed.sessionId) return;
+    await this.prisma.session.deleteMany({
+      where: { id: replayed.sessionId },
+    });
+    this.logger.warn(
+      `Authorization code replayed for client ${replayed.clientId}; revoked the tokens issued from it`,
+    );
   }
 
   /**

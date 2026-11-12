@@ -1161,9 +1161,34 @@ describe('AuthService', () => {
             code: 'valid-auth-code',
             used: false,
           }),
-          data: { used: true },
+          data: { used: true, sessionId: expect.any(String) },
         }),
       );
+    });
+
+    it('ends the session issued from a code when the code is replayed', async () => {
+      setupForTokenIssuance();
+      prisma.authorizationCode.update.mockRejectedValue(
+        Object.assign(new Error('not found'), { code: 'P2025' }),
+      );
+      prisma.authorizationCode.findUnique.mockResolvedValue({
+        used: true,
+        sessionId: 'session-from-first-exchange',
+        clientId: 'client-db-id',
+      });
+
+      await expect(
+        service.handleTokenRequest(realm, {
+          grant_type: 'authorization_code',
+          client_id: 'my-client',
+          client_secret: 'correct-secret',
+          code: 'valid-auth-code',
+          redirect_uri: 'http://localhost:3000/callback',
+        }),
+      ).rejects.toMatchObject({ code: 'invalid_grant' });
+      expect(prisma.session.deleteMany).toHaveBeenCalledWith({
+        where: { id: 'session-from-first-exchange' },
+      });
     });
 
     it('reflects the satisfied MFA context (acr/amr) when the code carries it', async () => {

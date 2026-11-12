@@ -27,6 +27,30 @@ import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 import { RateLimitGuard, RateLimitBy } from '../rate-limit/rate-limit.guard.js';
 import { parseBasicClientCredentials } from '../common/utils/basic-client-auth.util.js';
 
+/**
+ * The access token of a UserInfo request: `Authorization: Bearer` (any case,
+ * RFC 7235) or the form parameter, but not both (RFC 6750 §2).
+ */
+function bearerToken(req: Request, formToken: string | undefined): string {
+  const header = req.headers['authorization'];
+  const fromHeader =
+    header && /^bearer /i.test(header) ? header.slice(7).trim() : undefined;
+  if (fromHeader && formToken) {
+    throw new BadRequestException({
+      error: 'invalid_request',
+      error_description: 'Send the access token in one place only',
+    });
+  }
+  const token = fromHeader || formToken;
+  if (!token) {
+    throw new UnauthorizedException({
+      error: 'invalid_token',
+      error_description: 'Missing Bearer token',
+    });
+  }
+  return token;
+}
+
 @ApiTags('Tokens')
 @Controller('realms/:realmName/protocol/openid-connect')
 @SkipThrottle()
@@ -342,15 +366,35 @@ export class TokensController {
     description: 'invalid_token — missing or invalid Bearer token',
   })
   userinfo(@CurrentRealm() realm: Realm, @Req() req: Request) {
-    const authHeader = req.headers['authorization'];
-    if (!authHeader?.startsWith('Bearer ')) {
-      throw new UnauthorizedException({
-        error: 'invalid_token',
-        error_description: 'Missing Bearer token',
-      });
-    }
-    const token = authHeader.slice(7);
-    return this.tokensService.userinfo(realm, token);
+    return this.tokensService.userinfo(realm, bearerToken(req, undefined));
+  }
+
+  /**
+   * OIDC Core §5.3.1: the UserInfo endpoint MUST support POST too. The token
+   * comes in the Authorization header or, RFC 6750 §2.2, as a form
+   * `access_token` parameter (never both).
+   */
+  @Post('userinfo')
+  @HttpCode(HttpStatus.OK)
+  @ApiOperation({ summary: 'Get user info from access token (POST)' })
+  @ApiResponse({
+    status: 200,
+    description: 'User claims from the access token',
+  })
+  @ApiResponse({
+    status: 401,
+    description: 'invalid_token — missing or invalid Bearer token',
+  })
+  userinfoPost(
+    @CurrentRealm() realm: Realm,
+    @Req() req: Request,
+    @Body() body: Record<string, unknown>,
+  ) {
+    const formToken =
+      typeof body?.['access_token'] === 'string'
+        ? body['access_token']
+        : undefined;
+    return this.tokensService.userinfo(realm, bearerToken(req, formToken));
   }
 
   @Post('logout/backchannel')

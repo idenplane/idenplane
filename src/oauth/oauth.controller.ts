@@ -1,7 +1,9 @@
 import {
+  Body,
   Controller,
   Get,
   HttpException,
+  Post,
   Query,
   Req,
   Res,
@@ -25,6 +27,29 @@ import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
 import { ThemeRenderService } from '../theme/theme-render.service.js';
+
+/**
+ * Whether a sign-in at `authenticatedAt` is older than the request's
+ * `max_age` (seconds). An invalid max_age is ignored, as before.
+ */
+export function sessionTooOld(
+  maxAge: string | undefined,
+  authenticatedAt: Date | undefined,
+  now = Date.now(),
+): boolean {
+  if (maxAge === undefined || !/^\d+$/.test(maxAge)) return false;
+  if (!authenticatedAt) return true;
+  return now - authenticatedAt.getTime() > Number(maxAge) * 1000;
+}
+
+/** Keeps only string parameters, as a query string would carry. */
+function stringParams(body: Record<string, unknown>): Record<string, string> {
+  const params: Record<string, string> = {};
+  for (const [key, value] of Object.entries(body ?? {})) {
+    if (typeof value === 'string') params[key] = value;
+  }
+  return params;
+}
 
 @ApiTags('OAuth')
 @Controller('realms/:realmName/protocol/openid-connect')
@@ -83,6 +108,26 @@ export class OAuthController {
     }
   }
 
+  /**
+   * OIDC Core §3.1.2.1: the authorization endpoint MUST accept POST with the
+   * parameters form-encoded in the body, and treat them like a GET's query.
+   */
+  @Post('auth')
+  @ApiOperation({ summary: 'Authorization endpoint (code flow, POST)' })
+  @ApiResponse({
+    status: 302,
+    description:
+      'Redirect to login page or redirect_uri with authorization code',
+  })
+  async authorizePost(
+    @CurrentRealm() realm: Realm,
+    @Body() body: Record<string, string>,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    return this.authorize(realm, stringParams(body), req, res);
+  }
+
   private async authorizeInternal(
     realm: Realm,
     query: Record<string, string>,
@@ -94,6 +139,27 @@ export class OAuthController {
       realm,
       query as unknown as AuthorizeParams,
     );
+
+    // Request objects are not supported (discovery says so); OIDC Core §6
+    // requires saying that rather than ignoring the parameter.
+    if (query['request'] !== undefined) {
+      return this.redirectWithError(
+        res,
+        query['redirect_uri'],
+        'request_not_supported',
+        'Request objects are not supported',
+        query['state'],
+      );
+    }
+    if (query['request_uri'] !== undefined) {
+      return this.redirectWithError(
+        res,
+        query['redirect_uri'],
+        'request_uri_not_supported',
+        'request_uri is not supported',
+        query['state'],
+      );
+    }
 
     const prompts = (query['prompt'] ?? '').split(/\s+/).filter(Boolean);
     const silent = prompts.includes('none');
@@ -121,10 +187,25 @@ export class OAuthController {
           return this.handlePromptLogin(res, realm.name, query);
         }
 
+        // OIDC Core §3.1.2.1 max_age: a sign-in older than this many seconds
+        // must be repeated (silently impossible, so login_required).
+        const loginSession = await this.getLoginSessionByToken(sessionCookie);
+        if (sessionTooOld(query['max_age'], loginSession?.createdAt)) {
+          if (silent) {
+            return this.redirectWithError(
+              res,
+              query['redirect_uri'],
+              'login_required',
+              'The sign-in is older than max_age',
+              query['state'],
+            );
+          }
+          return this.handlePromptLogin(res, realm.name, query);
+        }
+
         // Resolve the ACR actually satisfied by the existing SSO session so it
         // can be reflected in any code issued silently below. Falls back to
         // ACR_PASSWORD when there is no step-up record / login session.
-        const loginSession = await this.getLoginSessionByToken(sessionCookie);
         const sessionAcr = loginSession
           ? await this.stepUpService.getLoginSessionAcr(loginSession)
           : ACR_PASSWORD;
@@ -203,6 +284,7 @@ export class OAuthController {
         // When the session is still at the level it was established with, the
         // methods recorded at sign-in are exact; otherwise derive them.
         const ssoAuthContext = {
+          authTime: loginSession?.createdAt,
           acr: sessionAcr,
           amr:
             loginSession?.amr?.length &&
@@ -239,6 +321,7 @@ export class OAuthController {
               oauthParams: query,
               satisfiedAcr: ssoAuthContext.acr,
               amr: ssoAuthContext.amr,
+              authTime: ssoAuthContext.authTime?.toISOString(),
             });
             return res.redirect(
               302,
