@@ -136,7 +136,25 @@ module.exports = defineConfig({
 JSEOF
 fi
 
-npx prisma migrate deploy
+# Prisma's migration engine reads TLS options from different URL parameters
+# than the node-postgres driver the server uses: given the driver's
+# `sslmode=verify-full&sslrootcert=<ca>`, it would encrypt but not verify the
+# certificate. Translate them for this one command (`sslmode=require`,
+# `sslcert=<ca>`, `sslaccept=strict`), or use DATABASE_MIGRATION_URL as is.
+MIGRATION_DATABASE_URL="${DATABASE_MIGRATION_URL:-$(node -e '
+const url = new URL(process.env.DATABASE_URL);
+const params = url.searchParams;
+const mode = params.get("sslmode");
+if (mode === "verify-full" || mode === "verify-ca") {
+  const ca = params.get("sslrootcert");
+  params.delete("sslrootcert");
+  params.set("sslmode", "require");
+  params.set("sslaccept", "strict");
+  if (ca) params.set("sslcert", ca);
+}
+process.stdout.write(url.toString());
+')}"
+DATABASE_URL="$MIGRATION_DATABASE_URL" npx prisma migrate deploy
 
 echo "Starting Idenplane..."
 # cluster.js runs one process by default, or one worker per CPU with
