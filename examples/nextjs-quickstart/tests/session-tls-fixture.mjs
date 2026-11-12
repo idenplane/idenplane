@@ -48,7 +48,8 @@ console.log(JSON.stringify({ca:ca.toString('pem'),cert:cert.toString('pem'),key}
       }),
     )
     .digest('base64');
-  const name = tag + '-tls';
+  const name = tag + '-tls',
+    browserName = tag + '-browser';
   const origin = (host, port) => `https://${host}:${port}`;
   const base = origin('login.idenplane.test', ports.idp),
     web = origin('app.idenplane.test', ports.web),
@@ -57,19 +58,19 @@ console.log(JSON.stringify({ca:ca.toString('pem'),cert:cert.toString('pem'),key}
   admin off
   auto_https off
 }
-:443 {
+:443, :${ports.idp} {
   tls /fixture/leaf.pem /fixture/leaf.key
   reverse_proxy ${tag}-app:3000
 }
-:444 {
+:444, :${ports.web} {
   tls /fixture/leaf.pem /fixture/leaf.key
   reverse_proxy ${tag}-web:3001
 }
-:445 {
+:445, :${ports.replica} {
   tls /fixture/leaf.pem /fixture/leaf.key
   reverse_proxy ${tag}-replica:3001
 }
-:80 {
+:80, :${ports.plain} {
   respond "plain HTTP fixture" 200
 }
 `;
@@ -129,11 +130,6 @@ console.log(JSON.stringify({ca:ca.toString('pem'),cert:cert.toString('pem'),key}
     web,
     replica,
     fetch: request,
-    browserArgs: [
-      '--host-resolver-rules=MAP app.idenplane.test 127.0.0.1, MAP login.idenplane.test 127.0.0.1',
-      '--no-proxy-server',
-      '--ignore-certificate-errors-spki-list=' + spki,
-    ],
     containerArgs: [
       '--mount',
       `type=bind,source=${path.join(directory, 'ca.pem')},target=/fixture-ca.pem,readonly`,
@@ -155,16 +151,21 @@ console.log(JSON.stringify({ca:ca.toString('pem'),cert:cert.toString('pem'),key}
         tag,
         '--network-alias',
         'session-tls',
+        // The browser container reaches the proxy by these names too.
+        '--network-alias',
+        'app.idenplane.test',
+        '--network-alias',
+        'login.idenplane.test',
         '--mount',
         `type=bind,source=${directory},target=/fixture,readonly`,
         '-p',
-        `127.0.0.1:${ports.idp}:443`,
+        `127.0.0.1:${ports.idp}:${ports.idp}`,
         '-p',
-        `127.0.0.1:${ports.web}:444`,
+        `127.0.0.1:${ports.web}:${ports.web}`,
         '-p',
-        `127.0.0.1:${ports.replica}:445`,
+        `127.0.0.1:${ports.replica}:${ports.replica}`,
         '-p',
-        `127.0.0.1:${ports.plain}:80`,
+        `127.0.0.1:${ports.plain}:${ports.plain}`,
         'caddy:2.10-alpine',
         'caddy',
         'run',
@@ -173,6 +174,64 @@ console.log(JSON.stringify({ca:ca.toString('pem'),cert:cert.toString('pem'),key}
         '--adapter',
         'caddyfile',
       ]);
+    },
+    /**
+     * Runs Chromium in a Playwright server container on the test network
+     * rather than on the host. On shared CI runners the host's interfaces
+     * change while containers start, and a host browser aborts requests with
+     * ERR_NETWORK_CHANGED; the container's own network namespace does not see
+     * those changes. Caddy listens on the host port numbers inside the
+     * network too, so the browser uses the same URLs.
+     */
+    async launchBrowser(chromium, playwrightVersion) {
+      // launchServer, unlike `playwright run-server`, takes the browser flags:
+      // the certificate exception stays limited to this fixture's key.
+      const server = `
+const { chromium } = require('/tmp/pw/node_modules/playwright');
+chromium
+  .launchServer({
+    host: '0.0.0.0',
+    port: 3333,
+    wsPath: '/playwright',
+    headless: true,
+    args: ['--no-proxy-server', '--ignore-certificate-errors-spki-list=${spki}'],
+  })
+  .then(() => console.log('playwright server ready'));`;
+      docker([
+        'run',
+        '-d',
+        '--name',
+        browserName,
+        '--label',
+        'idenplane.validation=' + tag,
+        '--network',
+        tag,
+        '-p',
+        `127.0.0.1:${ports.browser}:3333`,
+        '--init',
+        `mcr.microsoft.com/playwright:v${playwrightVersion}-noble`,
+        'sh',
+        '-c',
+        `npm install --silent --prefix /tmp/pw playwright@${playwrightVersion} && node -e "$0"`,
+        server,
+      ]);
+      let lastError;
+      for (let attempt = 0; attempt < 90; attempt++) {
+        try {
+          return await chromium.connect(
+            `ws://127.0.0.1:${ports.browser}/playwright`,
+            { timeout: 5000 },
+          );
+        } catch (error) {
+          lastError = error;
+          await new Promise((resolve) => setTimeout(resolve, 2000));
+        }
+      }
+      const logs = run(['logs', '--tail', '40', browserName]);
+      throw new Error(
+        'Playwright server did not start: ' + (logs.stdout + logs.stderr),
+        { cause: lastError },
+      );
     },
     async verifyTrust() {
       assert.equal((await request(base + '/health/ready')).status, 200);
@@ -224,13 +283,17 @@ console.log(JSON.stringify({ca:ca.toString('pem'),cert:cert.toString('pem'),key}
       record('secure_host_bound_cookie_used_in_real_https_browser');
     },
     close() {
-      const inspected = run(['inspect', name]);
-      if (inspected.status === 0) {
-        assert.equal(
-          JSON.parse(inspected.stdout)[0].Config.Labels['idenplane.validation'],
-          tag,
-        );
-        docker(['rm', '-f', '-v', name]);
+      for (const container of [name, browserName]) {
+        const inspected = run(['inspect', container]);
+        if (inspected.status === 0) {
+          assert.equal(
+            JSON.parse(inspected.stdout)[0].Config.Labels[
+              'idenplane.validation'
+            ],
+            tag,
+          );
+          docker(['rm', '-f', '-v', container]);
+        }
       }
       for (const file of ['ca.pem', 'leaf.pem', 'leaf.key', 'Caddyfile'])
         fs.unlinkSync(path.join(directory, file));
