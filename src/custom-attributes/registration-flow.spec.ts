@@ -15,6 +15,7 @@ describe('resolveUserClaims with custom attribute OIDC claims', () => {
     emailVerified: true,
     firstName: 'John',
     lastName: 'Doe',
+    updatedAt: new Date('2026-01-01T00:00:00Z'),
   };
 
   it('should include standard claims when in allowed set', () => {

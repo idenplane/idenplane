@@ -93,6 +93,7 @@ export class WellKnownController {
         'preferred_username',
         'given_name',
         'family_name',
+        'updated_at',
         'realm_access',
         'resource_access',
       ],

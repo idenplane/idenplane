@@ -135,6 +135,22 @@ describe('AdminEventInterceptor', () => {
       });
     });
 
+    it('should detect THEME resource type for themes paths', (done) => {
+      const context = createContext({
+        method: 'PUT',
+        path: '/admin/realms/test/themes/t1',
+      });
+
+      interceptor.intercept(context as any, nextHandler).subscribe({
+        complete: () => {
+          expect(eventsService.recordAdminEvent).toHaveBeenCalledWith(
+            expect.objectContaining({ resourceType: ResourceType.THEME }),
+          );
+          done();
+        },
+      });
+    });
+
     it('should detect IDP resource type for identity-providers paths', (done) => {
       const context = createContext({
         method: 'POST',

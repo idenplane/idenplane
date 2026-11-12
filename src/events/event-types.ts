@@ -53,6 +53,7 @@ export const ResourceType = {
   MFA: 'MFA',
   WEBHOOK: 'WEBHOOK',
   AUTH_FLOW: 'AUTH_FLOW',
+  THEME: 'THEME',
   PLUGIN: 'PLUGIN',
   MIGRATION: 'MIGRATION',
   SCIM_TOKEN: 'SCIM_TOKEN',

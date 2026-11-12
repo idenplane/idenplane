@@ -60,7 +60,22 @@ describe('User Management API (e2e)', () => {
     expect(res.body).toHaveProperty('email', 'mgmt-user@example.com');
     expect(res.body).toHaveProperty('firstName', 'Management');
     expect(res.body).toHaveProperty('lastName', 'User');
+    expect(res.body).toHaveProperty('emailVerified', false);
     createdUserId = res.body.id;
+  });
+
+  it('POST /admin/realms/:name/users — accepts emailVerified', async () => {
+    const res = await withKey(
+      adminRequest()
+        .post(`/admin/realms/${REALM_NAME}/users`)
+        .send({
+          username: 'verified-user',
+          email: 'verified-user@example.com',
+          emailVerified: true,
+        }),
+    ).expect(201);
+
+    expect(res.body).toHaveProperty('emailVerified', true);
   });
 
   // ─── 2. LIST USERS ────────────────────────────────────────
