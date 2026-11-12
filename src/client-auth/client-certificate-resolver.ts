@@ -1,4 +1,5 @@
 import { Injectable } from '@nestjs/common';
+import type { Client } from '@prisma/client';
 import type { PresentedClientCertificate } from '../mtls/client-certificate.source.js';
 
 /** Which RFC 8705 §2 method a resolver answers for. */
@@ -14,23 +15,37 @@ export interface ClientCertificateResolution {
 }
 
 /**
- * Decides whether a presented certificate authenticates a client: the client
- * table (PR 2) and NHI credentials (PR 4) each register one. A resolver
- * returns `null` when the certificate is not one it knows about.
+ * The certificate was this resolver's to judge and does not authenticate
+ * the client. `reason` is for logs only; the client is told nothing more
+ * than `invalid_client`.
  */
-export interface ClientCertificateResolver {
-  readonly name: string;
-  resolve(input: {
-    realmId: string;
-    clientId: string;
-    certificate: PresentedClientCertificate;
-  }): Promise<ClientCertificateResolution | null>;
+export interface ClientCertificateRejection {
+  rejected: string;
+}
+
+export interface ClientCertificateResolveInput {
+  realm: { id: string; mtlsTrustGlobalAnchors?: boolean };
+  client: Client;
+  method: CertificateAuthMethod;
+  certificate: PresentedClientCertificate;
 }
 
 /**
- * The resolvers certificate authentication may consult. Empty in this
- * release, so no `tls_*` method can succeed: certificate authentication fails
- * closed until a resolver is registered.
+ * Decides whether a presented certificate authenticates a client: the client
+ * table (PR 2) and NHI credentials (PR 4) each register one. A resolver
+ * returns `null` when the client is not one it knows about, so the next one
+ * is asked; the first non-null answer decides.
+ */
+export interface ClientCertificateResolver {
+  readonly name: string;
+  resolve(
+    input: ClientCertificateResolveInput,
+  ): Promise<ClientCertificateResolution | ClientCertificateRejection | null>;
+}
+
+/**
+ * The resolvers certificate authentication may consult. With none
+ * registered no `tls_*` method can succeed: it fails closed.
  */
 @Injectable()
 export class ClientCertificateResolverRegistry {

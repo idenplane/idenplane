@@ -99,6 +99,9 @@ export class AuthController {
             `Basic realm="${realm.name}", error="invalid_client"`,
           );
         }
+        if (err.retryAfterSeconds !== undefined) {
+          res.set('Retry-After', String(err.retryAfterSeconds));
+        }
         res.status(err.httpStatus).json({
           error: err.code,
           ...(err.description ? { error_description: err.description } : {}),

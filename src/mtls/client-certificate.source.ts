@@ -202,6 +202,15 @@ export class ClientCertificateSource {
   ): PresentedClientCertificate | null {
     const socket = req.socket;
     if (!(socket instanceof TLSSocket)) return null;
+    // The detailed chain first: on Node 24, once getPeerX509Certificate()
+    // has run, getPeerCertificate(true) no longer links the intermediates
+    // the client sent.
+    let detailed: DetailedPeerCertificate | undefined;
+    try {
+      detailed = socket.getPeerCertificate(true);
+    } catch {
+      detailed = undefined;
+    }
     let certificate: X509Certificate | undefined;
     try {
       certificate = socket.getPeerX509Certificate();
@@ -214,22 +223,16 @@ export class ClientCertificateSource {
       certificate,
       der: certificate.raw,
       x5tS256: computeX5tS256(certificate.raw),
-      chain: this.peerChain(socket, certificate),
+      chain: this.peerChain(detailed, certificate),
       tlsAuthorized: socket.authorized === true,
     };
   }
 
   /** Intermediates from the handshake, stopping at a self-issued root. */
   private peerChain(
-    socket: TLSSocket,
+    detailed: DetailedPeerCertificate | undefined,
     leaf: X509Certificate,
   ): X509Certificate[] {
-    let detailed: DetailedPeerCertificate | undefined;
-    try {
-      detailed = socket.getPeerCertificate(true);
-    } catch {
-      return [];
-    }
     const chain: X509Certificate[] = [];
     const seen = new Set<string>([leaf.fingerprint256]);
     let current = detailed?.issuerCertificate;

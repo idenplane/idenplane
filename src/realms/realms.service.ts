@@ -179,6 +179,9 @@ export class RealmsService {
         captchaScoreThreshold: dto.captchaScoreThreshold,
         // SCIM provisioning
         scimEnabled: dto.scimEnabled,
+        // RFC 8705 certificate client authentication
+        mtlsClientAuthEnabled: dto.mtlsClientAuthEnabled,
+        mtlsTrustGlobalAnchors: dto.mtlsTrustGlobalAnchors,
         signingKeys: {
           create: {
             kid: keyPair.kid,
@@ -380,6 +383,9 @@ export class RealmsService {
       adminEventRetentionDays: dto.adminEventRetentionDays,
       // User lifecycle
       deletionGracePeriodDays: dto.deletionGracePeriodDays,
+      // RFC 8705 certificate client authentication
+      mtlsClientAuthEnabled: dto.mtlsClientAuthEnabled,
+      mtlsTrustGlobalAnchors: dto.mtlsTrustGlobalAnchors,
     };
 
     // Only update password if a real value is provided (not the redacted placeholder)

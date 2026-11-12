@@ -7,6 +7,8 @@ import type { Realm } from '@prisma/client';
 import type { RateLimitResult } from './rate-limit.dto.js';
 
 const RL_PREFIX = 'rl:';
+/** Failure budgets share the counters, under their own key space. */
+const FAILURE_PREFIX = 'fail:';
 /** The database-backed counter has a one-statement form on PostgreSQL. */
 const isPostgres = () =>
   /^postgres(ql)?:\/\//i.test(process.env['DATABASE_URL'] ?? '');
@@ -121,6 +123,69 @@ export class RateLimitService {
       realm.ipRateLimitPerMinute,
       realm.ipRateLimitPerHour,
     );
+  }
+
+  /**
+   * A failure budget: whether `key` has already had `limitPerMinute`
+   * failures in the current minute window. Unlike the request limits it
+   * counts nothing itself; call {@link recordFailure} when an attempt fails.
+   * Shared across instances through Redis, or the database without it.
+   */
+  async failureBudget(
+    key: string,
+    limitPerMinute: number,
+  ): Promise<{ exhausted: boolean; retryAfter: number }> {
+    const now = Date.now();
+    const nowSeconds = Math.floor(now / 1000);
+    if (this.redis.isAvailable()) {
+      try {
+        const minuteWindow = Math.floor(nowSeconds / 60);
+        const raw = await this.redis.get(
+          `${RL_PREFIX}m:${FAILURE_PREFIX}${key}:${minuteWindow}`,
+        );
+        const count = raw ? parseInt(raw, 10) : 0;
+        return {
+          exhausted: count >= limitPerMinute,
+          retryAfter: Math.max(1, (minuteWindow + 1) * 60 - nowSeconds),
+        };
+      } catch (err) {
+        this.logger.warn(
+          `Redis failure-budget read failed, falling back to database: ${(err as Error).message}`,
+        );
+      }
+    }
+    const entry = await this.prisma.rateLimitEntry.findUnique({
+      where: { key: `${FAILURE_PREFIX}${key}` },
+      select: { minuteCount: true, minuteWindowStart: true },
+    });
+    const windowEnd = entry ? entry.minuteWindowStart.getTime() + 60_000 : 0;
+    const count = entry && windowEnd > now ? entry.minuteCount : 0;
+    return {
+      exhausted: count >= limitPerMinute,
+      retryAfter: Math.max(1, Math.ceil((windowEnd - now) / 1000)),
+    };
+  }
+
+  /** Counts one failure against {@link failureBudget}. */
+  async recordFailure(key: string): Promise<void> {
+    if (this.redis.isAvailable()) {
+      try {
+        const minuteWindow = Math.floor(Date.now() / 60_000);
+        await this.redis.incr(
+          `${RL_PREFIX}m:${FAILURE_PREFIX}${key}:${minuteWindow}`,
+          120,
+        );
+        return;
+      } catch (err) {
+        this.logger.warn(
+          `Redis failure count failed, falling back to database: ${(err as Error).message}`,
+        );
+      }
+    }
+    const fullKey = `${FAILURE_PREFIX}${key}`;
+    const at = new Date();
+    if (isPostgres()) await this.countPostgres(fullKey, at);
+    else await this.countPortable(fullKey, at);
   }
 
   computeHeaders(result: RateLimitResult): Record<string, string> {

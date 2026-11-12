@@ -1,11 +1,16 @@
-import { Injectable, HttpStatus } from '@nestjs/common';
+import { Inject, Injectable, HttpStatus, Logger } from '@nestjs/common';
 import type { Client } from '@prisma/client';
 import { CachedLookupsService } from '../cache/cached-lookups.service.js';
 import { ClientSecretService } from '../clients/client-secret.service.js';
 import { OAuthTokenError } from '../auth/oauth-token-error.js';
 import { parseBasicClientCredentials } from '../common/utils/basic-client-auth.util.js';
 import type { PresentedClientCertificate } from '../mtls/client-certificate.source.js';
-import { ClientCertificateResolverRegistry } from './client-certificate-resolver.js';
+import { MTLS_CONFIG, type MtlsConfig } from '../mtls/mtls-config.js';
+import {
+  ClientCertificateResolverRegistry,
+  type CertificateAuthMethod,
+} from './client-certificate-resolver.js';
+import { CertificateAuthFailureBudget } from './certificate-auth-failure-budget.js';
 
 /** RFC 7591 `token_endpoint_auth_method` values the server knows. */
 export type ClientAuthMethod =
@@ -25,11 +30,18 @@ export type ClientAuthFailure =
   | 'missing_secret'
   | 'no_secret_configured'
   | 'invalid_secret'
-  | 'unsupported_method';
+  | 'unsupported_method'
+  | 'wrong_method'
+  | 'credential_with_certificate_method'
+  | 'missing_certificate'
+  | 'invalid_certificate'
+  | 'too_many_failures';
+
+type FailureCode = 'invalid_client' | 'invalid_request' | 'slow_down';
 
 const FAILURES: Record<
   ClientAuthFailure,
-  { code: 'invalid_client' | 'invalid_request'; description: string }
+  { code: FailureCode; description: string }
 > = {
   malformed_basic: {
     code: 'invalid_client',
@@ -64,24 +76,57 @@ const FAILURES: Record<
     code: 'invalid_client',
     description: 'Client authentication method is not available',
   },
+  wrong_method: {
+    code: 'invalid_client',
+    description:
+      'Client authentication method does not match the registered token_endpoint_auth_method',
+  },
+  credential_with_certificate_method: {
+    code: 'invalid_request',
+    description:
+      'This client authenticates with a certificate; do not send a client secret or assertion',
+  },
+  missing_certificate: {
+    code: 'invalid_client',
+    description: 'A client certificate is required',
+  },
+  // One description for every way a certificate can fail, so the response
+  // tells a caller nothing about which check it failed.
+  invalid_certificate: {
+    code: 'invalid_client',
+    description: 'Invalid client certificate',
+  },
+  too_many_failures: {
+    code: 'slow_down',
+    description: 'Too many failed attempts with this certificate; retry later',
+  },
+};
+
+const STATUS: Record<FailureCode, HttpStatus> = {
+  invalid_client: HttpStatus.UNAUTHORIZED,
+  invalid_request: HttpStatus.BAD_REQUEST,
+  slow_down: HttpStatus.TOO_MANY_REQUESTS,
 };
 
 /**
  * A failed client authentication. `invalid_client` is 401 and
- * `invalid_request` 400, as RFC 6749 §5.2 asks; `reason` lets an endpoint
- * keep its own wording.
+ * `invalid_request` 400, as RFC 6749 §5.2 asks; a spent certificate failure
+ * budget is 429 `slow_down` with `Retry-After`. `reason` lets an endpoint
+ * keep its own wording; `detail` is for logs only.
  */
 export class ClientAuthError extends OAuthTokenError {
-  constructor(readonly reason: ClientAuthFailure) {
+  constructor(
+    readonly reason: ClientAuthFailure,
+    options: { retryAfterSeconds?: number; detail?: string } = {},
+  ) {
     const { code, description } = FAILURES[reason];
-    super(
-      code,
-      description,
-      code === 'invalid_client'
-        ? HttpStatus.UNAUTHORIZED
-        : HttpStatus.BAD_REQUEST,
-    );
+    super(code, description, STATUS[code]);
+    this.retryAfterSeconds = options.retryAfterSeconds;
+    this.detail = options.detail;
   }
+
+  /** Internal: which certificate check failed. Never sent to the client. */
+  readonly detail?: string;
 }
 
 /** The client credentials a request carries, before any is checked. */
@@ -92,10 +137,20 @@ export interface PresentedClientCredentials {
   secret:
     | { method: 'client_secret_basic' | 'client_secret_post'; value: string }
     | undefined;
+  /** A `client_assertion`/`client_assertion_type` parameter was sent. */
+  assertion: boolean;
 }
 
 export interface ClientAuthInput {
-  realm: { id: string };
+  /**
+   * The realm. The certificate methods need its flags; missing flags (e.g.
+   * a realm row cached before they existed) count as off.
+   */
+  realm: {
+    id: string;
+    mtlsClientAuthEnabled?: boolean;
+    mtlsTrustGlobalAnchors?: boolean;
+  };
   /** Request parameters: `client_id`, `client_secret`. */
   body: Record<string, unknown> | undefined;
   /** The `Authorization` header, if any. */
@@ -122,29 +177,44 @@ export interface AuthenticatedClient {
   method: ClientAuthMethod;
   /** The certificate the request presented, if any (not necessarily used). */
   certificate: PresentedClientCertificate | null;
+  /**
+   * The `x5t#S256` of the certificate that authenticated the client, when a
+   * certificate method did; `null` otherwise.
+   */
+  x5tS256: string | null;
+  /** The client's tokens must be bound to that certificate (RFC 8705 §3). */
+  bindToCertificate: boolean;
 }
 
 /**
  * The one place an OAuth client is authenticated, for every endpoint that
- * needs it: token, introspection, revocation.
+ * needs it.
  *
  * - One method per request: HTTP Basic together with a `client_secret`
  *   parameter, or a `client_id` parameter naming a different client than
  *   Basic, is `invalid_request`.
- * - The client's method is its registered `token_endpoint_auth_method`;
- *   clients registered before that existed infer it, CONFIDENTIAL meaning
- *   `client_secret_basic` or `client_secret_post` and PUBLIC meaning `none`.
+ * - The client's method is its registered `token_endpoint_auth_method`.
+ *   Without one it is inferred: CONFIDENTIAL means `client_secret_basic` or
+ *   `client_secret_post`, PUBLIC means `none`. A registered secret method
+ *   accepts only that method.
+ * - `tls_client_auth` / `self_signed_tls_client_auth` (RFC 8705) work only
+ *   with `MTLS_ENABLED` and the realm's `mtlsClientAuthEnabled`; otherwise
+ *   they are `invalid_client`. Such a client sending a secret or assertion
+ *   too is `invalid_request`. Repeated failures with one certificate are
+ *   429 (MTLS_AUTH_FAILURE_LIMIT_PER_MINUTE).
+ * - A certificate presented by a client of any other method is ignored.
  * - An unknown or disabled client is `invalid_client`.
- * - `tls_client_auth` and `self_signed_tls_client_auth` are not accepted yet:
- *   no {@link ClientCertificateResolverRegistry} resolver is registered.
  */
 @Injectable()
 export class ClientAuthenticator {
+  private readonly logger = new Logger(ClientAuthenticator.name);
+
   constructor(
     private readonly lookups: CachedLookupsService,
     private readonly clientSecrets: ClientSecretService,
-    /** Consulted by the certificate methods once they are accepted. */
     readonly certificateResolvers: ClientCertificateResolverRegistry,
+    @Inject(MTLS_CONFIG) private readonly mtls: Pick<MtlsConfig, 'enabled'>,
+    private readonly failureBudget: CertificateAuthFailureBudget,
   ) {}
 
   /**
@@ -157,6 +227,9 @@ export class ClientAuthenticator {
     const body = input.body ?? {};
     const bodyClientId = body['client_id'];
     const bodySecret = body['client_secret'];
+    const assertion =
+      body['client_assertion'] !== undefined ||
+      body['client_assertion_type'] !== undefined;
     const basic = parseBasicClientCredentials(input.authorization);
     if (basic === 'malformed') throw new ClientAuthError('malformed_basic');
     if (basic) {
@@ -169,6 +242,7 @@ export class ClientAuthenticator {
       return {
         clientId: basic.clientId,
         secret: { method: 'client_secret_basic', value: basic.clientSecret },
+        assertion,
       };
     }
     return {
@@ -177,6 +251,7 @@ export class ClientAuthenticator {
         typeof bodySecret === 'string'
           ? { method: 'client_secret_post', value: bodySecret }
           : undefined,
+      assertion,
     };
   }
 
@@ -195,24 +270,43 @@ export class ClientAuthenticator {
 
     const certificate = input.clientCert ?? null;
     const registered = registeredMethods(client);
+    const done = (method: ClientAuthMethod): AuthenticatedClient => ({
+      client,
+      clientId,
+      method,
+      certificate,
+      x5tS256: null,
+      bindToCertificate: false,
+    });
 
-    if (input.skipCredentialCheck) {
-      return { client, clientId, method: registered[0], certificate };
-    }
+    // A registration that contradicts the client type authenticates nobody.
+    if (registered.length === 0)
+      throw new ClientAuthError('unsupported_method');
+
+    if (input.skipCredentialCheck) return done(registered[0]);
 
     if (registered.includes('none')) {
       // A public client has no credential to check. A secret it sends anyway
       // is ignored, as it always has been.
-      return { client, clientId, method: 'none', certificate };
+      return done('none');
     }
 
-    if (registered.some(isCertificateMethod)) {
-      // Certificate authentication is not accepted in this release, whatever
-      // resolvers are registered: it fails closed.
-      throw new ClientAuthError('unsupported_method');
+    const certificateMethod = registered.find(isCertificateMethod);
+    if (certificateMethod) {
+      return this.authenticateWithCertificate(
+        input,
+        client,
+        clientId,
+        certificateMethod as CertificateAuthMethod,
+        presented,
+        certificate,
+      );
     }
 
     const secret = presented.secret;
+    if (secret && !registered.includes(secret.method)) {
+      throw new ClientAuthError('wrong_method');
+    }
     if (!secret?.value) throw new ClientAuthError('missing_secret');
     if (!client.clientSecret) {
       throw new ClientAuthError('no_secret_configured');
@@ -220,7 +314,78 @@ export class ClientAuthenticator {
     if (!(await this.clientSecrets.verify(client, secret.value))) {
       throw new ClientAuthError('invalid_secret');
     }
-    return { client, clientId, method: secret.method, certificate };
+    return done(secret.method);
+  }
+
+  private async authenticateWithCertificate(
+    input: ClientAuthInput,
+    client: Client,
+    clientId: string,
+    method: CertificateAuthMethod,
+    presented: PresentedClientCredentials,
+    certificate: PresentedClientCertificate | null,
+  ): Promise<AuthenticatedClient> {
+    const realm = input.realm;
+    if (!this.mtls.enabled || realm.mtlsClientAuthEnabled !== true) {
+      throw new ClientAuthError('unsupported_method');
+    }
+    if (presented.secret || presented.assertion) {
+      throw new ClientAuthError('credential_with_certificate_method');
+    }
+    if (!certificate) throw new ClientAuthError('missing_certificate');
+
+    const retryAfter = await this.failureBudget.retryAfter(
+      realm.id,
+      certificate.x5tS256,
+    );
+    if (retryAfter !== null) {
+      throw new ClientAuthError('too_many_failures', {
+        retryAfterSeconds: retryAfter,
+      });
+    }
+
+    let rejection = 'no_resolver';
+    for (const resolver of this.certificateResolvers.resolvers()) {
+      let result;
+      try {
+        result = await resolver.resolve({ realm, client, method, certificate });
+      } catch (err) {
+        this.logger.error(
+          `Certificate resolver "${resolver.name}" failed: ${(err as Error).message}`,
+        );
+        rejection = `resolver_error:${resolver.name}`;
+        break;
+      }
+      if (result === null) continue;
+      if ('rejected' in result) {
+        rejection = result.rejected;
+        break;
+      }
+      if (result.clientId === clientId && result.method === method) {
+        return {
+          client,
+          clientId,
+          method,
+          certificate,
+          x5tS256: certificate.x5tS256,
+          bindToCertificate: result.bindToCertificate,
+        };
+      }
+      rejection = 'resolver_mismatch';
+      break;
+    }
+
+    await this.failureBudget
+      .recordFailure(realm.id, certificate.x5tS256)
+      .catch((err: Error) =>
+        this.logger.warn(
+          `Could not count a certificate failure: ${err.message}`,
+        ),
+      );
+    this.logger.warn(
+      `Certificate authentication failed for client "${clientId}" in realm ${realm.id} (${method}): ${rejection}`,
+    );
+    throw new ClientAuthError('invalid_certificate', { detail: rejection });
   }
 }
 
@@ -230,13 +395,27 @@ export function isCertificateMethod(method: ClientAuthMethod): boolean {
   );
 }
 
+/** The methods each client type may register. */
+export function methodFitsClientType(
+  method: ClientAuthMethod,
+  clientType: Client['clientType'],
+): boolean {
+  return clientType === 'PUBLIC' ? method === 'none' : method !== 'none';
+}
+
 /**
- * The methods a client may use. There is no stored
- * `token_endpoint_auth_method` yet, so it is inferred from the client type.
+ * The methods a client may use: its registered `token_endpoint_auth_method`,
+ * or, when it has none, the ones its type implies. Empty when the
+ * registered method contradicts the client type.
  */
 export function registeredMethods(
-  client: Pick<Client, 'clientType'>,
+  client: Pick<Client, 'clientType'> &
+    Partial<Pick<Client, 'tokenEndpointAuthMethod'>>,
 ): readonly ClientAuthMethod[] {
+  const explicit = client.tokenEndpointAuthMethod;
+  if (explicit) {
+    return methodFitsClientType(explicit, client.clientType) ? [explicit] : [];
+  }
   return client.clientType === 'PUBLIC'
     ? ['none']
     : ['client_secret_basic', 'client_secret_post'];

@@ -679,4 +679,23 @@ export class CreateRealmDto {
   @IsInt()
   @Min(0)
   deletionGracePeriodDays?: number;
+
+  // RFC 8705 certificate client authentication
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      'Accept tls_client_auth and self_signed_tls_client_auth for this realm. Takes effect only when the server runs with MTLS_ENABLED=true.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  mtlsClientAuthEnabled?: boolean;
+
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      'Also trust the CAs in MTLS_GLOBAL_TRUST_ANCHORS_FILE for tls_client_auth, besides the realm’s own trust anchors.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  mtlsTrustGlobalAnchors?: boolean;
 }

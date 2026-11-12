@@ -315,7 +315,7 @@ Setting `TRUSTED_PROXIES=*` is only safe when the network layer prevents direct 
 
 ## Client Certificates (mTLS)
 
-Groundwork for OAuth client authentication with TLS client certificates ([RFC 8705](https://www.rfc-editor.org/rfc/rfc8705)). Everything is off by default. In this release, a certificate can reach the server, but no client authentication method accepts one yet.
+OAuth client authentication with TLS client certificates ([RFC 8705](https://www.rfc-editor.org/rfc/rfc8705)): `tls_client_auth` and `self_signed_tls_client_auth`. Everything is off by default; a realm must also turn on `mtlsClientAuthEnabled`. See the [mTLS client authentication guide](../guides/mtls-client-auth.mdx). Certificate-bound access tokens are not issued yet.
 
 The server checks these settings at startup. An unsafe or incomplete setting stops the process with an error that names the variable, even while `MTLS_ENABLED` is `false`.
 
@@ -329,16 +329,16 @@ The server checks these settings at startup. An unsafe or incomplete setting sto
 | `MTLS_TLS_KEY_PASSPHRASE_FILE` | — | File that holds the key's passphrase. |
 | `MTLS_TLS_MIN_VERSION` | `TLSv1.2` | `TLSv1.2` or `TLSv1.3`. |
 | `MTLS_HANDSHAKE_CA_FILE` | — | CA certificates named in the TLS CertificateRequest, so clients pick the right certificate. This is only a hint: the listener accepts any certificate at the handshake, and trust is decided for each realm. |
-| `MTLS_GLOBAL_TRUST_ANCHORS_FILE` | — | CA certificates a realm can opt in to trusting. Not used yet. |
-| `MTLS_BASE_URL` | — | `https` origin of the certificate listener, for `mtls_endpoint_aliases`. It must be `https`. Not advertised in discovery yet. |
+| `MTLS_GLOBAL_TRUST_ANCHORS_FILE` | — | PEM bundle of CA certificates that realms with `mtlsTrustGlobalAnchors` trust for `tls_client_auth`, besides their own anchors. Read at startup; a missing file or a certificate that is not a CA stops the server. |
+| `MTLS_BASE_URL` | — | `https` origin of the certificate listener (or the proxy that asks for certificates). Discovery publishes `mtls_endpoint_aliases` under it for realms with certificate authentication on. It must be `https`. |
 | `MTLS_PROXY_CERT_HEADER` | — | Header in which a TLS-terminating proxy forwards the client certificate. Requires `MTLS_TRUSTED_PROXY_CIDRS`. |
 | `MTLS_PROXY_CERT_FORMAT` | `pem-urlencoded` | `pem-urlencoded` (one URL-encoded PEM `CERTIFICATE` block, like nginx `$ssl_client_escaped_cert`) or `rfc9440` (`:base64-DER:`, the `Client-Cert` header of RFC 9440). |
 | `MTLS_PROXY_CERT_CHAIN_HEADER` | — | Optional header with the intermediates, in the same format (several PEM blocks, or a comma-separated RFC 9440 list). |
 | `MTLS_TRUSTED_PROXY_CIDRS` | — | Comma-separated IPv4/IPv6 addresses and CIDR blocks of the proxies allowed to send the certificate headers. It is matched against the TCP peer only, never against `X-Forwarded-For`. `*`, `0.0.0.0/0` and `::/0` are refused. |
 | `MTLS_PROXY_UNTRUSTED_HEADER_ACTION` | `reject` | What happens when a certificate header comes from any other peer: `reject` answers `400 invalid_request`, `strip` removes the header and continues. Either way the event is logged, at most once a minute per peer. |
 | `MTLS_MAX_CERT_HEADER_BYTES` | `16384` | Largest accepted certificate header. A larger one, a repeated one, or one with more than one certificate is rejected. |
-| `MTLS_MAX_CHAIN_DEPTH` | `5` | Most intermediates read from the handshake or the chain header (1–10). |
-| `MTLS_AUTH_FAILURE_LIMIT_PER_MINUTE` | `20` | Failed certificate authentications allowed per realm and certificate each minute. Not used yet. |
+| `MTLS_MAX_CHAIN_DEPTH` | `5` | Most intermediates read from the handshake or the chain header, and the longest `tls_client_auth` path accepted, leaf included and trust anchor excluded (1–10). |
+| `MTLS_AUTH_FAILURE_LIMIT_PER_MINUTE` | `20` | Failed certificate authentications allowed per realm and certificate (`x5t#S256`) each minute. Further attempts with that certificate get `429 slow_down` with `Retry-After` until the minute ends. Counted in Redis, or in the database without it. |
 
 The listener serves only the endpoints a client needs: discovery (`/realms/{realm}/.well-known/openid-configuration`), `token`, `token/introspect`, `revoke`, `userinfo`, `auth/device` and `certs` under `/realms/{realm}/protocol/openid-connect/`. Every other path returns 404.
 
