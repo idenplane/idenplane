@@ -14,13 +14,18 @@ const OPERATORS: { value: ConditionOperator; label: string; hasValue: boolean }[
   { value: 'not_exists', label: 'does not exist', hasValue: false },
 ];
 
+// Must match CONDITION_FIELDS in src/auth-flow/flow-validator.ts: the server
+// rejects any other field.
 const FIELD_SUGGESTIONS = [
-  'user.group',
-  'user.role',
-  'user.attribute',
-  'client.id',
-  'network.ip',
-  'session.amr',
+  'user.username',
+  'user.email',
+  'user.emailVerified',
+  'user.groups',
+  'user.roles',
+  'user.totpEnrolled',
+  'user.webauthnEnrolled',
+  'client.clientId',
+  'risk.level',
 ];
 
 export default function FlowConditionEditor({
@@ -91,7 +96,7 @@ export default function FlowConditionEditor({
               list="field-suggestions"
               value={condition.field}
               onChange={(e) => handleField(e.target.value)}
-              placeholder="e.g. user.group"
+              placeholder="e.g. user.groups"
               className="w-full rounded-md border border-line-strong px-3 py-1.5 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             />
             <datalist id="field-suggestions">

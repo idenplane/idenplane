@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw';
-import { makeRealm, makeUser, makeClient, makeLoginEvent, makeAdminEvent, makeStats, makeFailedLoginHeatmap, makeAuthFlow, makeUpgradeAuditEntry, makePreUpgradeValidationResult, makeUpgradeHealthResult, makeRollbackCapability, makeNhiIdentity, makeConsentCategory,
+import { makeRealm, makeUser, makeClient, makeLoginEvent, makeAdminEvent, makeStats, makeFailedLoginHeatmap, makeAuthFlow, makeFlowBindings, makeUpgradeAuditEntry, makePreUpgradeValidationResult, makeUpgradeHealthResult, makeRollbackCapability, makeNhiIdentity, makeConsentCategory,
   makeProxyApplication,
   makeProxyApplicationView,
 } from './data';
@@ -243,6 +243,33 @@ export const handlers = [
       makeAuthFlow({ id: 'flow-1', name: 'Basic Login', isDefault: true }),
       makeAuthFlow({ id: 'flow-2', name: 'MFA Required', isDefault: false }),
     ]);
+  }),
+
+  // Declared before `auth-flows/:id` so "bindings" is not taken as an id.
+  http.get(`${BASE}/realms/:name/auth-flows/bindings`, () => {
+    return HttpResponse.json(makeFlowBindings());
+  }),
+
+  http.put(`${BASE}/realms/:name/auth-flows/bindings`, async ({ request }) => {
+    const body = await request.json() as {
+      browserFlowId?: string | null;
+      authFlowsEnabled?: boolean;
+      clients?: Array<{ clientId: string; authFlowId: string | null }>;
+    };
+    const current = makeFlowBindings();
+    return HttpResponse.json({
+      ...current,
+      ...(body.browserFlowId !== undefined && { browserFlowId: body.browserFlowId }),
+      ...(body.authFlowsEnabled !== undefined && { authFlowsEnabled: body.authFlowsEnabled }),
+      clients: current.clients.map((c) => {
+        const patch = body.clients?.find((p) => p.clientId === c.clientId);
+        return patch ? { ...c, authFlowId: patch.authFlowId } : c;
+      }),
+    });
+  }),
+
+  http.post(`${BASE}/realms/:name/auth-flows/:id/validate`, () => {
+    return HttpResponse.json({ valid: true, errors: [] });
   }),
 
   http.get(`${BASE}/realms/:name/auth-flows/:id`, ({ params }) => {

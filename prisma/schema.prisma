@@ -92,6 +92,15 @@ model Realm {
   emailProvider       String @default("smtp") @map("email_provider")
   emailProviderConfig Json?  @map("email_provider_config")
 
+  // Custom authentication flows (binding model). Inert until the runtime
+  // ships behind AUTH_FLOW_RUNTIME_ENABLED: nothing in the login path reads
+  // these yet. `browserFlowId` must reference a flow of this same realm; that
+  // is enforced by AuthFlowService (there is no composite FK). NoAction (not
+  // Restrict) so a realm delete can cascade both rows in one statement.
+  authFlowsEnabled Boolean             @default(false) @map("auth_flows_enabled")
+  browserFlowId    String?             @map("browser_flow_id")
+  browserFlow      AuthenticationFlow? @relation("RealmBrowserFlow", fields: [browserFlowId], references: [id], onDelete: NoAction)
+
   // Magic link / passwordless authentication
   magicLinkEnabled                Boolean @default(false) @map("magic_link_enabled")
   magicLinkExpirySeconds          Int     @default(300) @map("magic_link_expiry_seconds")
@@ -237,7 +246,7 @@ model Realm {
   impersonationSessions       ImpersonationSession[]
   policies                    Policy[]
   customAttributes            CustomAttribute[]
-  authenticationFlows         AuthenticationFlow[]
+  authenticationFlows         AuthenticationFlow[]         @relation("RealmAuthenticationFlows")
   loginRiskAssessments        LoginRiskAssessment[]
   userLoginProfiles           UserLoginProfile[]
   organizations               Organization[]
@@ -350,14 +359,16 @@ model Client {
   // Service account
   serviceAccountUserId String? @map("service_account_user_id")
 
-  // Auth flow assignment (optional override; falls back to realm default)
+  // Auth flow binding: per-client override of Realm.browserFlowId. Must be a
+  // flow of the same realm (enforced by AuthFlowService). Deleting a bound
+  // flow is refused (409 in the service; NoAction FK as the backstop).
   authFlowId String? @map("auth_flow_id")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   realm          Realm                 @relation(fields: [realmId], references: [id], onDelete: Cascade)
-  authFlow       AuthenticationFlow?   @relation(fields: [authFlowId], references: [id], onDelete: SetNull)
+  authFlow       AuthenticationFlow?   @relation(fields: [authFlowId], references: [id], onDelete: NoAction)
   clientRoles    Role[]
   authCodes      AuthorizationCode[]
   consents       UserConsent[]
@@ -368,6 +379,7 @@ model Client {
   proxyApplications ProxyApplication[]
 
   @@unique([realmId, clientId])
+  @@index([authFlowId])
   @@map("clients")
 }
 
@@ -1278,16 +1290,20 @@ model UserAttribute {
 model AuthenticationFlow {
   id          String  @id @default(uuid())
   realmId     String  @map("realm_id")
-  realm       Realm   @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  realm       Realm   @relation("RealmAuthenticationFlows", fields: [realmId], references: [id], onDelete: Cascade)
   name        String
   description String?
+  /// Deprecated: never used for binding. Use Realm.browserFlowId instead.
   isDefault   Boolean @default(false) @map("is_default")
   steps       Json // Array of flow step definitions
+  /// Incremented on every update.
+  version     Int     @default(1)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  clients Client[]
+  clients            Client[]
+  browserFlowOfRealm Realm[]  @relation("RealmBrowserFlow")
 
   @@unique([realmId, name])
   @@map("authentication_flows")

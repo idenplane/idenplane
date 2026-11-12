@@ -15,6 +15,14 @@ const ALL_STEP_TYPES: StepType[] = [
   'consent',
 ];
 
+/** Step types the server accepts today; others are rejected on save. */
+const SUPPORTED_STEP_TYPES: ReadonlySet<StepType> = new Set([
+  'password',
+  'ldap',
+  'totp',
+  'webauthn',
+]);
+
 export default function FlowStepPalette({ onAddStep }: FlowStepPaletteProps) {
   return (
     <div className="flex flex-col gap-2">
@@ -39,6 +47,14 @@ export default function FlowStepPalette({ onAddStep }: FlowStepPaletteProps) {
               {meta.icon}
             </span>
             <span className="text-muted">{meta.label}</span>
+            {!SUPPORTED_STEP_TYPES.has(type) && (
+              <span
+                className="ml-auto text-xs text-subtle"
+                title="Not supported by the flow runtime yet; a flow using it cannot be saved."
+              >
+                coming
+              </span>
+            )}
           </button>
         );
       })}
