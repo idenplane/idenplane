@@ -1,80 +1,83 @@
 import { Routes, Route, Navigate, Outlet } from 'react-router';
-import { useEffect } from 'react';
+import { lazy, Suspense, useEffect } from 'react';
 import ErrorBoundary from './components/ErrorBoundary';
 import Layout from './components/Layout';
 import LoginPage from './pages/LoginPage';
 import DashboardPage from './pages/DashboardPage';
-import RealmListPage from './pages/realms/RealmListPage';
-import RealmCreatePage from './pages/realms/RealmCreatePage';
-import RealmDetailPage from './pages/realms/RealmDetailPage';
-import UserListPage from './pages/users/UserListPage';
-import UserCreatePage from './pages/users/UserCreatePage';
-import UserDetailPage from './pages/users/UserDetailPage';
-import ClientListPage from './pages/clients/ClientListPage';
-import ClientCreatePage from './pages/clients/ClientCreatePage';
-import ClientDetailPage from './pages/clients/ClientDetailPage';
-import ProxyApplicationListPage from './pages/proxy-applications/ProxyApplicationListPage';
-import ProxyApplicationCreatePage from './pages/proxy-applications/ProxyApplicationCreatePage';
-import ProxyApplicationDetailPage from './pages/proxy-applications/ProxyApplicationDetailPage';
-import RoleListPage from './pages/roles/RoleListPage';
-import GroupListPage from './pages/groups/GroupListPage';
-import GroupCreatePage from './pages/groups/GroupCreatePage';
-import GroupDetailPage from './pages/groups/GroupDetailPage';
-import SessionListPage from './pages/sessions/SessionListPage';
-import IdpListPage from './pages/identity-providers/IdpListPage';
-import IdpCreatePage from './pages/identity-providers/IdpCreatePage';
-import IdpDetailPage from './pages/identity-providers/IdpDetailPage';
-import ClientScopeListPage from './pages/client-scopes/ClientScopeListPage';
-import ClientScopeCreatePage from './pages/client-scopes/ClientScopeCreatePage';
-import ClientScopeDetailPage from './pages/client-scopes/ClientScopeDetailPage';
-import ConsentCategoriesListPage from './pages/consent/ConsentCategoriesListPage';
-import ConsentCategoryDetailPage from './pages/consent/ConsentCategoryDetailPage';
-import ConsentStatisticsPage from './pages/consent/ConsentStatisticsPage';
-import FederationListPage from './pages/user-federation/FederationListPage';
-import FederationCreatePage from './pages/user-federation/FederationCreatePage';
-import FederationDetailPage from './pages/user-federation/FederationDetailPage';
-import SamlSpListPage from './pages/saml/SamlSpListPage';
-import SamlSpCreatePage from './pages/saml/SamlSpCreatePage';
-import SamlSpDetailPage from './pages/saml/SamlSpDetailPage';
-import LoginEventsPage from './pages/events/LoginEventsPage';
-import AdminEventsPage from './pages/events/AdminEventsPage';
-import AuthFlowListPage from './pages/auth-flows/AuthFlowListPage';
-import AuthFlowEditorPage from './pages/auth-flows/AuthFlowEditorPage';
-import SetupWizardPage from './pages/setup-wizard/SetupWizardPage';
-import MigrationWizardPage from './pages/migration/MigrationWizardPage';
-import PendingRegistrationsPage from './pages/registration/PendingRegistrationsPage';
-import RegistrationFieldsPage from './pages/registration/RegistrationFieldsPage';
-import RegistrationSettingsPage from './pages/registration/RegistrationSettingsPage';
-import ContinuousRiskDashboard from './pages/continuous-verification/ContinuousRiskDashboard';
-import RiskPolicyListPage from './pages/continuous-verification/RiskPolicyListPage';
-import SessionRiskDetailPage from './pages/continuous-verification/SessionRiskDetailPage';
-import OrganizationListPage from './pages/organizations/OrganizationListPage';
-import OrganizationCreatePage from './pages/organizations/OrganizationCreatePage';
-import OrganizationDetailPage from './pages/organizations/OrganizationDetailPage';
-import WebhookListPage from './pages/webhooks/WebhookListPage';
-import WebhookCreatePage from './pages/webhooks/WebhookCreatePage';
-import WebhookDetailPage from './pages/webhooks/WebhookDetailPage';
-import ServiceAccountListPage from './pages/service-accounts/ServiceAccountListPage';
-import ServiceAccountCreatePage from './pages/service-accounts/ServiceAccountCreatePage';
-import ServiceAccountDetailPage from './pages/service-accounts/ServiceAccountDetailPage';
-import CustomAttributesPage from './pages/custom-attributes/CustomAttributesPage';
-import ScimConfigPage from './pages/scim/ScimConfigPage';
-import PolicyListPage from './pages/authorization/PolicyListPage';
-import PolicyCreatePage from './pages/authorization/PolicyCreatePage';
-import PolicyDetailPage from './pages/authorization/PolicyDetailPage';
-import ThemeBuilderPage from './pages/theme-builder/ThemeBuilderPage';
-import NhiListPage from './pages/nhi/NhiListPage';
-import NhiCreatePage from './pages/nhi/NhiCreatePage';
-import NhiDetailPage from './pages/nhi/NhiDetailPage';
-import NhiAnalyticsPage from './pages/nhi/NhiAnalyticsPage';
-import PluginsPage from './pages/plugins/PluginsPage';
-import SystemStatusPage from './pages/system/SystemStatusPage';
-import UpgradeStatusPage from './pages/upgrade/UpgradeStatusPage';
-import StartUpgradePage from './pages/upgrade/StartUpgradePage';
-import MigrationHistoryPage from './pages/upgrade/MigrationHistoryPage';
-import NotFoundPage from './pages/NotFoundPage';
 import { hasCredentials, refreshSession } from './api/client';
 import { useAuthContext } from './context/AuthContext';
+import PageFallback from './components/PageFallback';
+
+// Each page is its own chunk, loaded when first visited.
+const RealmListPage = lazy(() => import('./pages/realms/RealmListPage'));
+const RealmCreatePage = lazy(() => import('./pages/realms/RealmCreatePage'));
+const RealmDetailPage = lazy(() => import('./pages/realms/RealmDetailPage'));
+const UserListPage = lazy(() => import('./pages/users/UserListPage'));
+const UserCreatePage = lazy(() => import('./pages/users/UserCreatePage'));
+const UserDetailPage = lazy(() => import('./pages/users/UserDetailPage'));
+const ClientListPage = lazy(() => import('./pages/clients/ClientListPage'));
+const ClientCreatePage = lazy(() => import('./pages/clients/ClientCreatePage'));
+const ClientDetailPage = lazy(() => import('./pages/clients/ClientDetailPage'));
+const ProxyApplicationListPage = lazy(() => import('./pages/proxy-applications/ProxyApplicationListPage'));
+const ProxyApplicationCreatePage = lazy(() => import('./pages/proxy-applications/ProxyApplicationCreatePage'));
+const ProxyApplicationDetailPage = lazy(() => import('./pages/proxy-applications/ProxyApplicationDetailPage'));
+const RoleListPage = lazy(() => import('./pages/roles/RoleListPage'));
+const GroupListPage = lazy(() => import('./pages/groups/GroupListPage'));
+const GroupCreatePage = lazy(() => import('./pages/groups/GroupCreatePage'));
+const GroupDetailPage = lazy(() => import('./pages/groups/GroupDetailPage'));
+const SessionListPage = lazy(() => import('./pages/sessions/SessionListPage'));
+const IdpListPage = lazy(() => import('./pages/identity-providers/IdpListPage'));
+const IdpCreatePage = lazy(() => import('./pages/identity-providers/IdpCreatePage'));
+const IdpDetailPage = lazy(() => import('./pages/identity-providers/IdpDetailPage'));
+const ClientScopeListPage = lazy(() => import('./pages/client-scopes/ClientScopeListPage'));
+const ClientScopeCreatePage = lazy(() => import('./pages/client-scopes/ClientScopeCreatePage'));
+const ClientScopeDetailPage = lazy(() => import('./pages/client-scopes/ClientScopeDetailPage'));
+const ConsentCategoriesListPage = lazy(() => import('./pages/consent/ConsentCategoriesListPage'));
+const ConsentCategoryDetailPage = lazy(() => import('./pages/consent/ConsentCategoryDetailPage'));
+const ConsentStatisticsPage = lazy(() => import('./pages/consent/ConsentStatisticsPage'));
+const FederationListPage = lazy(() => import('./pages/user-federation/FederationListPage'));
+const FederationCreatePage = lazy(() => import('./pages/user-federation/FederationCreatePage'));
+const FederationDetailPage = lazy(() => import('./pages/user-federation/FederationDetailPage'));
+const SamlSpListPage = lazy(() => import('./pages/saml/SamlSpListPage'));
+const SamlSpCreatePage = lazy(() => import('./pages/saml/SamlSpCreatePage'));
+const SamlSpDetailPage = lazy(() => import('./pages/saml/SamlSpDetailPage'));
+const LoginEventsPage = lazy(() => import('./pages/events/LoginEventsPage'));
+const AdminEventsPage = lazy(() => import('./pages/events/AdminEventsPage'));
+const AuthFlowListPage = lazy(() => import('./pages/auth-flows/AuthFlowListPage'));
+const AuthFlowEditorPage = lazy(() => import('./pages/auth-flows/AuthFlowEditorPage'));
+const SetupWizardPage = lazy(() => import('./pages/setup-wizard/SetupWizardPage'));
+const MigrationWizardPage = lazy(() => import('./pages/migration/MigrationWizardPage'));
+const PendingRegistrationsPage = lazy(() => import('./pages/registration/PendingRegistrationsPage'));
+const RegistrationFieldsPage = lazy(() => import('./pages/registration/RegistrationFieldsPage'));
+const RegistrationSettingsPage = lazy(() => import('./pages/registration/RegistrationSettingsPage'));
+const ContinuousRiskDashboard = lazy(() => import('./pages/continuous-verification/ContinuousRiskDashboard'));
+const RiskPolicyListPage = lazy(() => import('./pages/continuous-verification/RiskPolicyListPage'));
+const SessionRiskDetailPage = lazy(() => import('./pages/continuous-verification/SessionRiskDetailPage'));
+const OrganizationListPage = lazy(() => import('./pages/organizations/OrganizationListPage'));
+const OrganizationCreatePage = lazy(() => import('./pages/organizations/OrganizationCreatePage'));
+const OrganizationDetailPage = lazy(() => import('./pages/organizations/OrganizationDetailPage'));
+const WebhookListPage = lazy(() => import('./pages/webhooks/WebhookListPage'));
+const WebhookCreatePage = lazy(() => import('./pages/webhooks/WebhookCreatePage'));
+const WebhookDetailPage = lazy(() => import('./pages/webhooks/WebhookDetailPage'));
+const ServiceAccountListPage = lazy(() => import('./pages/service-accounts/ServiceAccountListPage'));
+const ServiceAccountCreatePage = lazy(() => import('./pages/service-accounts/ServiceAccountCreatePage'));
+const ServiceAccountDetailPage = lazy(() => import('./pages/service-accounts/ServiceAccountDetailPage'));
+const CustomAttributesPage = lazy(() => import('./pages/custom-attributes/CustomAttributesPage'));
+const ScimConfigPage = lazy(() => import('./pages/scim/ScimConfigPage'));
+const PolicyListPage = lazy(() => import('./pages/authorization/PolicyListPage'));
+const PolicyCreatePage = lazy(() => import('./pages/authorization/PolicyCreatePage'));
+const PolicyDetailPage = lazy(() => import('./pages/authorization/PolicyDetailPage'));
+const ThemeBuilderPage = lazy(() => import('./pages/theme-builder/ThemeBuilderPage'));
+const NhiListPage = lazy(() => import('./pages/nhi/NhiListPage'));
+const NhiCreatePage = lazy(() => import('./pages/nhi/NhiCreatePage'));
+const NhiDetailPage = lazy(() => import('./pages/nhi/NhiDetailPage'));
+const NhiAnalyticsPage = lazy(() => import('./pages/nhi/NhiAnalyticsPage'));
+const PluginsPage = lazy(() => import('./pages/plugins/PluginsPage'));
+const SystemStatusPage = lazy(() => import('./pages/system/SystemStatusPage'));
+const UpgradeStatusPage = lazy(() => import('./pages/upgrade/UpgradeStatusPage'));
+const StartUpgradePage = lazy(() => import('./pages/upgrade/StartUpgradePage'));
+const MigrationHistoryPage = lazy(() => import('./pages/upgrade/MigrationHistoryPage'));
+const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 
 function ProtectedRoute() {
   const { bootstrapped } = useAuthContext();
@@ -112,6 +115,7 @@ export default function App() {
   return (
     <ErrorBoundary>
     <SessionBootstrap />
+    <Suspense fallback={<PageFallback />}>
     <Routes>
       <Route path="/console/login" element={<LoginPage />} />
       <Route path="/setup" element={<SetupWizardPage />} />
@@ -195,6 +199,7 @@ export default function App() {
       {/* Catch-all for every other URL (e.g. bare / or unknown top-level paths) */}
       <Route path="*" element={<NotFoundPage />} />
     </Routes>
+    </Suspense>
     </ErrorBoundary>
   );
 }
