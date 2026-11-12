@@ -251,6 +251,8 @@ export class WebAuthnService {
     realm: Realm,
     response: AuthenticationResponseJSON,
     binding?: string,
+    /** Throws to refuse the user; runs after verification, before the counter is stored. */
+    assertAllowed?: (user: User) => void,
   ): Promise<{ user: User; credential: WebAuthnCredential }> {
     if (!realm.webAuthnEnabled) {
       throw new ForbiddenException('WebAuthn is not enabled for this realm');
@@ -331,16 +333,22 @@ export class WebAuthnService {
       throw new BadRequestException('Authentication verification failed');
     }
 
-    const newCounter = verification.authenticationInfo.newCounter;
-    if (newCounter <= credential.counter) {
+    // WebAuthn §6.1.1: an authenticator without a signature counter always
+    // reports 0 (most synced passkeys). Only a counter that is in use and
+    // did not grow signals a cloned authenticator.
+    const newCounter = BigInt(verification.authenticationInfo.newCounter);
+    const storedCounter = BigInt(credential.counter);
+    const counterInUse = newCounter !== 0n || storedCounter !== 0n;
+    if (counterInUse && newCounter <= storedCounter) {
       throw new BadRequestException('Counter rollback detected');
     }
+    assertAllowed?.(credential.user);
 
     // Update counter and lastUsedAt
     await this.prisma.webAuthnCredential.update({
       where: { id: credential.id },
       data: {
-        counter: BigInt(newCounter),
+        counter: newCounter,
         lastUsedAt: new Date(),
       },
     });

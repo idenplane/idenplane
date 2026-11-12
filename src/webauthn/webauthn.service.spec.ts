@@ -497,6 +497,40 @@ describe('WebAuthnService', () => {
       });
     });
 
+    describe('signature counter', () => {
+      const verifyWith = async (stored: bigint, reported: number) => {
+        const cred = { ...makeCredential(), counter: stored };
+        prisma.webAuthnCredential.findUnique.mockResolvedValue(cred as any);
+        prisma.pendingAction.findUnique.mockResolvedValue({
+          id: 'action-1',
+          type: 'webauthn_authentication_challenge',
+          data: { challenge: 'expected-challenge' } as any,
+          expiresAt: new Date(Date.now() + 60_000),
+        } as any);
+        prisma.pendingAction.delete.mockResolvedValue({} as any);
+        prisma.webAuthnCredential.update.mockResolvedValue(cred as any);
+        (
+          simpleWebAuthn.verifyAuthenticationResponse as jest.Mock
+        ).mockResolvedValue({
+          verified: true,
+          authenticationInfo: { newCounter: reported },
+        });
+        return service.verifyAuthentication(makeRealm(), mockResponse);
+      };
+
+      it('accepts an authenticator without a counter (always 0)', async () => {
+        await expect(verifyWith(0n, 0)).resolves.toBeDefined();
+      });
+
+      it('rejects a counter that did not grow', async () => {
+        await expect(verifyWith(5n, 5)).rejects.toThrow(BadRequestException);
+      });
+
+      it('rejects a counter that went back to 0 after being used', async () => {
+        await expect(verifyWith(5n, 0)).rejects.toThrow(BadRequestException);
+      });
+    });
+
     it('should throw BadRequestException when verification returns verified=false', async () => {
       const realm = makeRealm();
       const cred = makeCredential();

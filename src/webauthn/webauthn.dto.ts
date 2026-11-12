@@ -57,4 +57,8 @@ export class VerifyAuthenticationDto {
   @IsOptional()
   @IsString()
   code_challenge_method?: string;
+
+  @IsOptional()
+  @IsString()
+  prompt?: string;
 }

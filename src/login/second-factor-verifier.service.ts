@@ -103,8 +103,12 @@ export class SecondFactorVerifier {
       return {
         ok: false,
         reason: 'invalid',
+        // remainingAttempts is -1 when brute-force protection is off: there
+        // is no limit to warn about then.
         tooManyAttempts:
-          remainingCheck.blocked || remainingCheck.remainingAttempts <= 2,
+          remainingCheck.blocked ||
+          (remainingCheck.remainingAttempts >= 0 &&
+            remainingCheck.remainingAttempts <= 2),
       };
     }
 
@@ -112,7 +116,17 @@ export class SecondFactorVerifier {
   }
 
   /** Clears the user's failure count once the second factor let them in. */
-  async recordSuccess(realm: Realm, userId: string): Promise<void> {
+  async recordSuccess(
+    realm: Realm,
+    userId: string,
+    ip?: string,
+  ): Promise<void> {
     await this.bruteForceService.resetTotpFailures(realm.id, userId);
+    void this.eventsService.recordLoginEvent({
+      realmId: realm.id,
+      type: LoginEventType.MFA_VERIFY,
+      userId,
+      ipAddress: ip,
+    });
   }
 }

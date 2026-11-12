@@ -227,19 +227,9 @@ export class LoginController {
       // Build OAuth params for later use
       const oauthParams = pickOAuthParams(b, OAUTH_FORM_PARAM_KEYS);
 
-      // Risk-based step-up: a second factor even where MFA is optional. With
-      // no factor enrolled there is nothing to step up with; the sign-in
-      // continues as usual.
-      if (gates.riskStepUp && (await this.mfaService.isMfaEnabled(user.id))) {
-        return this.loginFlow.startSecondFactor(
-          realm,
-          user,
-          oauthParams,
-          ['pwd'],
-          res,
-        );
-      }
-
+      // A risk step-up (gates.riskStepUp) needs no branch of its own: a user
+      // with a second factor always gets the challenge below, after the
+      // client's policy; without one there is nothing to step up with.
       // Second factor / required enrolment / session — shared with every
       // other first-factor path (see LoginFlowService).
       return await this.loginFlow.continueAfterPrimaryAuth(
@@ -440,14 +430,14 @@ export class LoginController {
       challengeToken,
       resolveClientIp(req),
     );
+    // Keep the user on the SMS form after an SMS attempt.
+    const retryMethod = body.smsCode ? '&method=sms' : '';
     if (!result.ok && result.reason === 'rate_limited') {
       return res.redirect(
-        `/realms/${realm.name}/totp?error=${encodeURIComponent('Too many failed attempts. Please try again later.')}`,
+        `/realms/${realm.name}/totp?error=${encodeURIComponent('Too many failed attempts. Please try again later.')}${retryMethod}`,
       );
     }
     if (!result.ok) {
-      // Keep the user on the SMS form after a wrong SMS code.
-      const retryMethod = body.smsCode ? '&method=sms' : '';
       const errorMsg = result.tooManyAttempts
         ? 'Too many failed attempts. Please try again later.'
         : 'Invalid code. Please try again.';
@@ -469,7 +459,11 @@ export class LoginController {
     }
 
     // Reset TOTP failure tracking on successful verification
-    await this.secondFactorVerifier.recordSuccess(realm, challenge.userId);
+    await this.secondFactorVerifier.recordSuccess(
+      realm,
+      challenge.userId,
+      resolveClientIp(req),
+    );
 
     // MFA verified — complete login
     const user = await this.loginService.findUserById(challenge.userId);
@@ -490,6 +484,7 @@ export class LoginController {
         acr: ACR_MFA,
         amr: amrForFactor(challenge.primaryAmr, result.factor),
       },
+      { rememberMe: !!challenge.rememberMe },
     );
   }
 

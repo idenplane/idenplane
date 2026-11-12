@@ -42,6 +42,8 @@ interface MfaChallengeData {
   oauthParams?: Record<string, string>;
   /** RFC 8176 methods of the first factor; absent means a password. */
   primaryAmr?: string[];
+  /** "Remember me" from the first factor, applied when the session is created. */
+  rememberMe?: boolean;
 }
 
 /**
@@ -447,6 +449,7 @@ export class MfaService {
     oauthParams?: Record<string, string>,
     clientId?: string,
     primaryAmr?: string[],
+    rememberMe?: boolean,
   ): Promise<string> {
     const windowStart = new Date(
       Date.now() - MFA_CHALLENGE_RATE_LIMIT_WINDOW_SECONDS * 1000,
@@ -474,6 +477,7 @@ export class MfaService {
       clientId,
       oauthParams,
       primaryAmr,
+      rememberMe,
     };
     await this.prisma.pendingAction.create({
       data: {
@@ -493,6 +497,7 @@ export class MfaService {
     clientId?: string;
     oauthParams?: Record<string, string>;
     primaryAmr?: string[];
+    rememberMe?: boolean;
   } | null> {
     const tokenHash = this.crypto.sha256(challengeToken);
 
@@ -516,6 +521,7 @@ export class MfaService {
       clientId: data.clientId,
       oauthParams: data.oauthParams,
       primaryAmr: data.primaryAmr,
+      rememberMe: data.rememberMe,
     };
   }
 
@@ -552,6 +558,7 @@ export class MfaService {
     clientId?: string;
     oauthParams?: Record<string, string>;
     primaryAmr?: string[];
+    rememberMe?: boolean;
   } | null> {
     const tokenHash = this.crypto.sha256(challengeToken);
 
@@ -593,6 +600,7 @@ export class MfaService {
       clientId: data.clientId,
       oauthParams: data.oauthParams,
       primaryAmr: data.primaryAmr,
+      rememberMe: data.rememberMe,
     };
   }
 

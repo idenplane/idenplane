@@ -88,6 +88,7 @@ describe('LoginFlowService', () => {
         oauthParams,
         undefined,
         [],
+        false,
       );
       expect(res.cookie).toHaveBeenCalledWith(
         MFA_CHALLENGE_COOKIE,
