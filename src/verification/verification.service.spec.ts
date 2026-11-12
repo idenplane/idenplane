@@ -181,6 +181,23 @@ describe('VerificationService', () => {
   // ─── validateToken ─────────────────────────────────────────
 
   describe('validateToken', () => {
+    it('binds realm-scoped links to the token owner without consuming a foreign token', async () => {
+      prisma.verificationToken.findUnique.mockResolvedValue(null);
+      expect(
+        await service.validateToken(
+          'raw-token-abc',
+          'password_reset',
+          'realm-owner',
+        ),
+      ).toBeNull();
+      expect(prisma.verificationToken.findUnique).toHaveBeenCalledWith({
+        where: {
+          tokenHash: 'hashed-token-abc',
+          user: { realmId: 'realm-owner' },
+        },
+      });
+      expect(prisma.verificationToken.delete).not.toHaveBeenCalled();
+    });
     it('should hash the raw token and look it up', async () => {
       prisma.verificationToken.findUnique.mockResolvedValue(null);
 

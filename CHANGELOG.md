@@ -9,6 +9,17 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+### Security
+- **LDAP federation now verifies the directory server's certificate.** `ldaps://` connections reject an untrusted or mismatched server certificate, and `startTls` on an `ldap://` URL performs a real StartTLS upgrade, with the same checks, before any bind. Every connection is closed after use, and an empty password is refused instead of being sent as an anonymous bind. A directory signed by a private CA needs that CA trusted by the server (for example with `NODE_EXTRA_CA_CERTS`).
+- **The mTLS guard no longer trusts certificate headers.** It reads the peer certificate from a verified TLS connection only; `X-Client-Certificate` and `X-Client-Certificate-Fingerprint` request headers are ignored. The unfinished NHI certificate-authentication route now refuses every request until certificates are bound to a tenant-scoped credential.
+- **Verification links are bound to their realm.** Password-reset, password-change and email-verification tokens are only accepted on the realm of the user they were issued to. A token presented on another realm is rejected and stays unused.
+- **Removed the `hbs` package.** Login pages render through a small built-in view engine on the existing `handlebars` package, with fixed runtime options, a bounded template cache, and template and layout paths confined to the themes directory. Request data can no longer select engine options or the layout. Themes and translation helpers work as before.
+
+### Fixed
+- **NHI device certificates are real X.509.** Generated certificates are standard X.509 signed with the requested key, with the requested validity, subject and SANs, and they parse with standard X.509 tooling such as Node's `X509Certificate`. Validation reads the real validity dates and rejects malformed or expired certificates.
+- **`prompt=none` works with a valid session.** Silent authorization used to return `login_required` even when the user was signed in. It now completes without UI when the session, redirect URI, consent and requested assurance allow it, and returns `login_required`, `consent_required` or `interaction_required` otherwise.
+- The integration-test database preflight no longer shells out to `prisma db execute`, so it works the same on Windows and Linux.
+
 ## [0.6.0] - 2026-11-10
 
 Idenplane gets much faster and runs correctly as several instances. Protocol requests no longer go to the database each time, and `WEB_CONCURRENCY` lets one container use every CPU. Scheduled jobs, webhooks, plugins and first boot now behave when more than one instance runs, and several security fixes land. With one worker per CPU, Idenplane served discovery, JWKS, client-credentials tokens and introspection faster than Keycloak 26.8 on the same machine. See the [benchmarks](docs/docs/benchmarks.md).

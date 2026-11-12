@@ -1,5 +1,5 @@
 /* eslint-disable @typescript-eslint/no-unsafe-call,@typescript-eslint/no-unsafe-member-access,@typescript-eslint/no-unsafe-return,@typescript-eslint/no-unsafe-assignment -- Handlebars helper types are inherently any */
-import hbs from 'hbs';
+import { themeHandlebars as hbs } from './theme-handlebars.js';
 
 /**
  * Registers Handlebars helpers for the theme engine i18n system.

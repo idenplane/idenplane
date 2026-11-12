@@ -5,6 +5,10 @@ import type { App } from 'supertest/types';
 import * as OTPAuth from 'otpauth';
 import { createTestApp, type SeededRealm, type TestContext } from './setup';
 import { registerHandlebarsHelpers } from '../src/theme/handlebars-helpers.js';
+import {
+  createThemeViewEngine,
+  type ThemeViewEngine,
+} from '../src/theme/theme-view-engine.js';
 import { CryptoService } from '../src/crypto/crypto.service.js';
 
 /**
@@ -125,8 +129,10 @@ describe('Required MFA enforcement (e2e)', () => {
     // The shared test app has no view engine; the browser pages need one.
     const express = app.getHttpAdapter().getInstance() as {
       set: (key: string, value: string) => void;
+      engine: (extension: string, engine: ThemeViewEngine) => void;
     };
     express.set('views', join(process.cwd(), 'themes'));
+    express.engine('hbs', createThemeViewEngine(join(process.cwd(), 'themes')));
     express.set('view engine', 'hbs');
     registerHandlebarsHelpers();
 

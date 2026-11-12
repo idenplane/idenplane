@@ -5,6 +5,10 @@ import type { App } from 'supertest/types';
 import { createTestApp, TEST_ADMIN_API_KEY, type TestContext } from './setup';
 import { registerHandlebarsHelpers } from '../src/theme/handlebars-helpers.js';
 import {
+  createThemeViewEngine,
+  type ThemeViewEngine,
+} from '../src/theme/theme-view-engine.js';
+import {
   ProxyAuthService,
   PROXY_LOGIN_HEADER,
   PROXY_PKCE_COOKIE,
@@ -157,8 +161,10 @@ describe('Forward auth (e2e)', () => {
     app = ctx.app as INestApplication<App>;
     const express = app.getHttpAdapter().getInstance() as {
       set: (key: string, value: string) => void;
+      engine: (extension: string, engine: ThemeViewEngine) => void;
     };
     express.set('views', join(process.cwd(), 'themes'));
+    express.engine('hbs', createThemeViewEngine(join(process.cwd(), 'themes')));
     express.set('view engine', 'hbs');
     registerHandlebarsHelpers();
     proxy = app.get(ProxyAuthService);
@@ -218,8 +224,9 @@ describe('Forward auth (e2e)', () => {
     expect(res.headers[PROXY_LOGIN_HEADER.toLowerCase()]).toBe(
       proxy.startUrl(REALM, SLUG, ORIGINAL),
     );
-    const rd = new URL(res.headers[PROXY_LOGIN_HEADER.toLowerCase()])
-      .searchParams.get('rd');
+    const rd = new URL(
+      res.headers[PROXY_LOGIN_HEADER.toLowerCase()],
+    ).searchParams.get('rd');
     expect(rd).toBe(ORIGINAL);
   });
 

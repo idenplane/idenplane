@@ -1,3 +1,4 @@
+import { isIP } from 'node:net';
 import { Client as LdapClient } from 'ldapts';
 
 export interface LdapConnectionConfig {
@@ -36,102 +37,123 @@ export class LdapClientWrapper {
   }
 
   private createClient(): LdapClient {
+    const protocol = new URL(this.config.connectionUrl).protocol;
+    if (protocol !== 'ldap:' && protocol !== 'ldaps:') {
+      throw new Error('LDAP URL must use ldap:// or ldaps://');
+    }
     return new LdapClient({
       url: this.config.connectionUrl,
       timeout: this.config.connectionTimeout,
       connectTimeout: this.config.connectionTimeout,
-      tlsOptions: this.config.startTls
-        ? { rejectUnauthorized: false }
-        : undefined,
+      tlsOptions:
+        protocol === 'ldaps:' ? { rejectUnauthorized: true } : undefined,
     });
   }
 
-  async testConnection(): Promise<{ success: boolean; error?: string }> {
+  private async withBoundClient<T>(
+    dn: string,
+    credential: string,
+    work: (client: LdapClient) => Promise<T> | T,
+  ): Promise<T> {
     const client = this.createClient();
     try {
-      await client.bind(this.config.bindDn, this.config.bindCredential);
-      await client.unbind();
+      if (
+        this.config.startTls &&
+        new URL(this.config.connectionUrl).protocol === 'ldap:'
+      ) {
+        const hostname = new URL(this.config.connectionUrl).hostname.replace(
+          /^\[|\]$/g,
+          '',
+        );
+        await client.startTLS({
+          rejectUnauthorized: true,
+          host: hostname,
+          servername: isIP(hostname) ? undefined : hostname,
+        });
+      }
+      await client.bind(dn, credential);
+      return await work(client);
+    } finally {
+      await client.unbind().catch(() => undefined);
+    }
+  }
+
+  async testConnection(): Promise<{ success: boolean; error?: string }> {
+    try {
+      await this.withBoundClient(
+        this.config.bindDn,
+        this.config.bindCredential,
+        () => undefined,
+      );
       return { success: true };
     } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : 'Connection failed';
-      return { success: false, error: message ?? 'Connection failed' };
+      return {
+        success: false,
+        error: err instanceof Error ? err.message : 'Connection failed',
+      };
     }
   }
 
   async authenticate(username: string, password: string): Promise<boolean> {
-    const client = this.createClient();
+    // LDAP servers can accept an empty password as an anonymous bind.
+    if (!username || !password) return false;
     try {
-      // First bind as service account to find user DN
-      await client.bind(this.config.bindDn, this.config.bindCredential);
-
-      const filter = this.buildUserFilter(username);
-      const result = await client.search(this.searchConfig.usersDn, {
-        scope: 'sub',
-        filter,
-        sizeLimit: 1,
-      });
-
-      if (result.searchEntries.length === 0) {
-        await client.unbind();
-        return false;
-      }
-
-      const userDn = result.searchEntries[0]['dn'];
-      await client.unbind();
-
-      // Now try to bind as the user
-      const userClient = this.createClient();
-      try {
-        await userClient.bind(userDn, password);
-        await userClient.unbind();
-        return true;
-      } catch {
-        return false;
-      }
+      const userDn = await this.withBoundClient(
+        this.config.bindDn,
+        this.config.bindCredential,
+        async (client) => {
+          const result = await client.search(this.searchConfig.usersDn, {
+            scope: 'sub',
+            filter: this.buildUserFilter(username),
+            sizeLimit: 1,
+          });
+          return result.searchEntries[0]?.dn;
+        },
+      );
+      if (!userDn) return false;
+      return await this.withBoundClient(userDn, password, () => true);
     } catch {
       return false;
     }
   }
 
   async searchUser(username: string): Promise<LdapUserEntry | null> {
-    const client = this.createClient();
     try {
-      await client.bind(this.config.bindDn, this.config.bindCredential);
-
-      const filter = this.buildUserFilter(username);
-      const result = await client.search(this.searchConfig.usersDn, {
-        scope: 'sub',
-        filter,
-        sizeLimit: 1,
-      });
-
-      await client.unbind();
-
-      if (result.searchEntries.length === 0) return null;
-
-      const entry = result.searchEntries[0];
-      return this.mapEntry(entry);
+      return await this.withBoundClient(
+        this.config.bindDn,
+        this.config.bindCredential,
+        async (client) => {
+          const result = await client.search(this.searchConfig.usersDn, {
+            scope: 'sub',
+            filter: this.buildUserFilter(username),
+            sizeLimit: 1,
+          });
+          return result.searchEntries.length
+            ? this.mapEntry(result.searchEntries[0])
+            : null;
+        },
+      );
     } catch {
       return null;
     }
   }
 
   async searchAllUsers(): Promise<LdapUserEntry[]> {
-    const client = this.createClient();
     try {
-      await client.bind(this.config.bindDn, this.config.bindCredential);
-
-      const filter = this.searchConfig.searchFilter
-        ? `(&(objectClass=${this.searchConfig.userObjectClass})${this.searchConfig.searchFilter})`
-        : `(objectClass=${this.searchConfig.userObjectClass})`;
-
-      const result = await client.search(this.searchConfig.usersDn, {
-        scope: 'sub',
-        filter,
-      });
-
-      await client.unbind();
-      return result.searchEntries.map((e) => this.mapEntry(e));
+      return await this.withBoundClient(
+        this.config.bindDn,
+        this.config.bindCredential,
+        async (client) => {
+          const filter = this.searchConfig.searchFilter
+            ? `(&(objectClass=${this.searchConfig.userObjectClass})${this.searchConfig.searchFilter})`
+            : `(objectClass=${this.searchConfig.userObjectClass})`;
+          const result = await client.search(this.searchConfig.usersDn, {
+            scope: 'sub',
+            filter,
+          });
+          return result.searchEntries.map((entry) => this.mapEntry(entry));
+        },
+      );
     } catch {
       return [];
     }

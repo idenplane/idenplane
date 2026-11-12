@@ -3,6 +3,7 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
+import { makeTestCertificate } from './__mocks__/certificate.fixture.js';
 import { NhiService } from './nhi.service.js';
 import {
   createMockPrismaService,
@@ -740,12 +741,8 @@ describe('NhiService', () => {
   // ── Certificate validation ────────────────────────────────────────────────
 
   describe('validateCertificate', () => {
-    it('should return valid for a certificate with valid dates', () => {
-      const validCert = [
-        '-----BEGIN CERTIFICATE-----',
-        'MIIBhTCCASugAwIBAgIQiT5GLJYD8t0KhKk5dNwbMAoGCCqGSM49AgE',
-        '-----END CERTIFICATE-----',
-      ].join('\n');
+    it('should return valid for a certificate with valid dates', async () => {
+      const { pem: validCert } = await makeTestCertificate();
 
       const result = service.validateCertificate(validCert);
 
@@ -764,12 +761,8 @@ describe('NhiService', () => {
   });
 
   describe('getCertificateInfo', () => {
-    it('should parse certificate info from PEM', () => {
-      const cert = [
-        '-----BEGIN CERTIFICATE-----',
-        'MIIBhTCCASugAwIBAgIQiT5GLJYD8t0KhKk5dNwbMAoGCCqGSM49AgE',
-        '-----END CERTIFICATE-----',
-      ].join('\n');
+    it('should parse certificate info from PEM', async () => {
+      const { pem: cert } = await makeTestCertificate();
 
       const result = service.getCertificateInfo(cert);
 

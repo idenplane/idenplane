@@ -799,7 +799,7 @@ export class LoginController {
     // Validate token
     const tokenHash = this.crypto.sha256(token);
     const record = await this.prisma.verificationToken.findUnique({
-      where: { tokenHash },
+      where: { tokenHash, user: { realmId: realm.id } },
     });
     if (
       !record ||
@@ -1313,6 +1313,7 @@ export class LoginController {
     const result = await this.verificationService.validateToken(
       token,
       'email_verification',
+      realm.id,
     );
     if (!result) {
       return this.themeRender.render(
@@ -1472,7 +1473,7 @@ export class LoginController {
 
     const tokenHash = this.crypto.sha256(token);
     const record = await this.prisma.verificationToken.findUnique({
-      where: { tokenHash },
+      where: { tokenHash, user: { realmId: realm.id } },
     });
 
     if (
@@ -1547,6 +1548,7 @@ export class LoginController {
     const result = await this.verificationService.validateToken(
       token,
       'password_reset',
+      realm.id,
     );
     if (!result) {
       return res.redirect(

@@ -9,6 +9,7 @@ import { join } from 'path';
 import { AppModule } from './app.module.js';
 import { GlobalExceptionFilter } from './common/filters/http-exception.filter.js';
 import { registerHandlebarsHelpers } from './theme/handlebars-helpers.js';
+import { createThemeViewEngine } from './theme/theme-view-engine.js';
 import { CorsOriginService } from './cors/cors-origin.service.js';
 import { NormalizeRoleBodyPipe } from './roles/pipes/normalize-role-body.pipe.js';
 import { SessionEventsGateway } from './realtime/session-events.gateway.js';
@@ -239,6 +240,7 @@ async function bootstrap() {
 
   // Handlebars template engine — templates live in themes/ and are resolved by ThemeRenderService
   app.setBaseViewsDir(join(__dirname, '..', 'themes'));
+  app.engine('hbs', createThemeViewEngine(join(__dirname, '..', 'themes')));
   app.setViewEngine('hbs');
 
   // Block access to template sources, config files, and message bundles

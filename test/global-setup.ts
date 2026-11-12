@@ -3,7 +3,7 @@
  * Verifies database connectivity before running any test suite.
  */
 
-import { execSync } from 'child_process';
+import { Client } from 'pg';
 
 export default async function globalSetup(): Promise<void> {
   const dbUrl = process.env['TEST_DATABASE_URL'] || process.env['DATABASE_URL'];
@@ -22,7 +22,8 @@ export default async function globalSetup(): Promise<void> {
     }
   }
 
-  const finalUrl = process.env['TEST_DATABASE_URL'] || process.env['DATABASE_URL'];
+  const finalUrl =
+    process.env['TEST_DATABASE_URL'] || process.env['DATABASE_URL'];
 
   if (!finalUrl) {
     console.error(
@@ -38,24 +39,38 @@ export default async function globalSetup(): Promise<void> {
         '║    npm run test:e2e                                        ║\n' +
         '╚══════════════════════════════════════════════════════════════╝\n',
     );
-    throw new Error('DATABASE_URL is not set. E2E tests cannot run without a database.');
+    throw new Error(
+      'DATABASE_URL is not set. E2E tests cannot run without a database.',
+    );
   }
 
   // Quick connectivity check for PostgreSQL
-  if (finalUrl.startsWith('postgresql://') || finalUrl.startsWith('postgres://')) {
+  if (
+    finalUrl.startsWith('postgresql://') ||
+    finalUrl.startsWith('postgres://')
+  ) {
     try {
-      execSync('echo "SELECT 1" | npx prisma db execute --stdin', {
-        stdio: 'pipe',
-        timeout: 10_000,
-        env: { ...process.env, DATABASE_URL: finalUrl },
+      const client = new Client({
+        connectionString: finalUrl,
+        connectionTimeoutMillis: 10_000,
+        query_timeout: 10_000,
       });
+      try {
+        await client.connect();
+        await client.query('SELECT 1');
+      } finally {
+        await client.end();
+      }
     } catch {
       console.error(
         '\n' +
           '╔══════════════════════════════════════════════════════════════╗\n' +
           '║  DATABASE CONNECTION FAILED                                ║\n' +
           '║                                                            ║\n' +
-          `║  URL: ${finalUrl.replace(/\/\/.*@/, '//***@').slice(0, 52).padEnd(52)} ║\n` +
+          `║  URL: ${finalUrl
+            .replace(/\/\/.*@/, '//***@')
+            .slice(0, 52)
+            .padEnd(52)} ║\n` +
           '║                                                            ║\n' +
           '║  Make sure the database is running:                        ║\n' +
           '║    docker compose -f docker-compose.dev.yml up -d postgres ║\n' +
