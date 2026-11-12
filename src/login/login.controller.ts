@@ -182,6 +182,7 @@ export class LoginController {
         nonce: query['nonce'] ?? '',
         code_challenge: query['code_challenge'] ?? '',
         code_challenge_method: query['code_challenge_method'] ?? '',
+        prompt: query['prompt'] ?? '',
         error: query['error'] ?? '',
         info: query['info'] ?? '',
         login_hint: query['login_hint'] ?? '',
@@ -213,6 +214,7 @@ export class LoginController {
       );
 
       // ── Adaptive authentication / risk assessment ──────────────────────────
+      let riskStepUp = false;
       if (realm.adaptiveAuthEnabled && this.riskAssessmentService) {
         const riskContext = {
           userId: user.id,
@@ -260,41 +262,9 @@ export class LoginController {
           );
         }
 
-        if (assessment.action === 'STEP_UP') {
-          // Force MFA step-up by storing challenge even if MFA is not globally required
-          const mfaAvailable = await this.mfaService.isMfaEnabled(user.id);
-          if (mfaAvailable) {
-            const oauthParamsForChallenge: Record<string, string> = {};
-            for (const key of [
-              'response_type',
-              'client_id',
-              'redirect_uri',
-              'scope',
-              'state',
-              'nonce',
-              'code_challenge',
-              'code_challenge_method',
-            ]) {
-              if (b[key]) oauthParamsForChallenge[key] = b[key];
-            }
-            const challengeToken = await this.mfaService.createMfaChallenge(
-              user.id,
-              realm.id,
-              oauthParamsForChallenge,
-            );
-
-            res.cookie(MFA_CHALLENGE_COOKIE, challengeToken, {
-              httpOnly: true,
-              secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
-              sameSite: 'strict',
-              maxAge: 5 * 60 * 1000,
-              path: `/realms/${realm.name}`,
-            });
-
-            return res.redirect(`/realms/${realm.name}/totp`);
-          }
-          // If no MFA is configured, allow through (step-up without MFA setup falls through)
-        }
+        // STEP_UP is applied after the account gates below, so a risky
+        // sign-in still has to pass email verification and password expiry.
+        riskStepUp = assessment.action === 'STEP_UP';
 
         // Update the user's profile on ALLOW or STEP_UP (will learn from the login)
         void this.riskAssessmentService.updateUserProfile(
@@ -320,19 +290,7 @@ export class LoginController {
       }
 
       // Build OAuth params for later use
-      const oauthParams: Record<string, string> = {};
-      for (const key of [
-        'response_type',
-        'client_id',
-        'redirect_uri',
-        'scope',
-        'state',
-        'nonce',
-        'code_challenge',
-        'code_challenge_method',
-      ]) {
-        if (b[key]) oauthParams[key] = b[key];
-      }
+      const oauthParams = pickOAuthParams(b, OAUTH_FORM_PARAM_KEYS);
 
       // Check password expiry
       if (this.passwordPolicyService.isExpired(user, realm)) {
@@ -348,6 +306,27 @@ export class LoginController {
         return res.redirect(
           `/realms/${realm.name}/change-password?token=${changeToken}&info=${encodeURIComponent('Your password has expired and must be changed.')}`,
         );
+      }
+
+      // Risk-based step-up: a second factor even where MFA is optional. With
+      // no factor enrolled there is nothing to step up with; the sign-in
+      // continues as usual.
+      if (riskStepUp && (await this.mfaService.isMfaEnabled(user.id))) {
+        const challengeToken = await this.mfaService.createMfaChallenge(
+          user.id,
+          realm.id,
+          oauthParams,
+          undefined,
+          ['pwd'],
+        );
+        res.cookie(MFA_CHALLENGE_COOKIE, challengeToken, {
+          httpOnly: true,
+          secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
+          sameSite: 'strict',
+          maxAge: 5 * 60 * 1000,
+          path: `/realms/${realm.name}`,
+        });
+        return res.redirect(`/realms/${realm.name}/totp`);
       }
 
       // Second factor / required enrolment / session — shared with every
@@ -997,6 +976,7 @@ export class LoginController {
         nonce: query['nonce'] ?? '',
         code_challenge: query['code_challenge'] ?? '',
         code_challenge_method: query['code_challenge_method'] ?? '',
+        prompt: query['prompt'] ?? '',
         customAttributes: customAttributes.map((a) => ({
           name: a.name,
           displayName: a.displayName,

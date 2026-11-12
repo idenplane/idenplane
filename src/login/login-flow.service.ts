@@ -9,7 +9,7 @@ import { LoginEventType } from '../events/event-types.js';
 import { MfaService, MFA_ENROLLMENT_TTL_SECONDS } from '../mfa/mfa.service.js';
 import type { VerifiedFactor } from '../mfa/mfa.service.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
-import { ACR_PASSWORD } from '../authn-core/acr.js';
+import { ACR_MFA, ACR_PASSWORD, satisfiesAcr } from '../authn-core/acr.js';
 import {
   amrForFactor,
   amrWithOtp,
@@ -34,6 +34,19 @@ export { MFA_CHALLENGE_COOKIE };
  * event, the consent screen and the authorization code. Keeping this in one
  * place is what stops a second sign-in path from silently skipping MFA.
  */
+/** The redirect_uri with an OAuth error, as an authorization response. */
+function authorizationError(
+  oauthParams: Record<string, string>,
+  error: string,
+  description: string,
+): string {
+  const url = new URL(oauthParams['redirect_uri']);
+  url.searchParams.set('error', error);
+  url.searchParams.set('error_description', description);
+  if (oauthParams['state']) url.searchParams.set('state', oauthParams['state']);
+  return url.toString();
+}
+
 @Injectable()
 export class LoginFlowService {
   constructor(
@@ -56,7 +69,32 @@ export class LoginFlowService {
     req: Request,
     res: Response,
   ): Promise<void> {
-    const mfaRequired = await this.mfaService.isMfaRequired(realm, user.id);
+    // A client that requires MFA (or stronger) makes MFA required for this
+    // sign-in, exactly like a realm that requires it: enrolled users answer a
+    // challenge, others enrol first.
+    const client = oauthParams['client_id']
+      ? await this.oauthService.validateAuthRequest(
+          realm,
+          oauthParams as unknown as AuthorizeParams,
+        )
+      : null;
+    // A password with any second factor reaches MFA at most: a client that
+    // requires more (a passkey) cannot be satisfied on this path at all.
+    if (client?.requiredAcr && !satisfiesAcr(ACR_MFA, client.requiredAcr)) {
+      return res.redirect(
+        302,
+        authorizationError(
+          oauthParams,
+          'access_denied',
+          'This application requires signing in with a passkey',
+        ),
+      );
+    }
+    const clientRequiresMfa =
+      !!client?.requiredAcr && satisfiesAcr(client.requiredAcr, ACR_MFA);
+    const mfaRequired =
+      clientRequiresMfa ||
+      (await this.mfaService.isMfaRequired(realm, user.id));
     const mfaEnabled = await this.mfaService.isMfaEnabled(user.id);
 
     if (mfaEnabled) {
@@ -151,7 +189,11 @@ export class LoginFlowService {
     res.cookie(SESSION_COOKIE, sessionToken, {
       httpOnly: true,
       secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
-      sameSite: 'strict',
+      // Lax, not Strict: applications on other sites send the browser here
+      // with a top-level GET (authorization, logout), and a Strict cookie
+      // would not come along, so single sign-on and sign-out would not see
+      // the session. Every state-changing form still carries a CSRF token.
+      sameSite: 'lax',
       maxAge: options.rememberMe ? 30 * 24 * 60 * 60 * 1000 : undefined,
       path: `/realms/${realm.name}`,
     });
@@ -168,15 +210,33 @@ export class LoginFlowService {
       return res.redirect(302, `/realms/${realm.name}/account`);
     }
 
-    if (client.requireConsent) {
+    // The client's own policy: a sign-in weaker than its required ACR never
+    // yields a code for it (the session still exists for other clients).
+    if (
+      client.requiredAcr &&
+      !satisfiesAcr(authContext.acr ?? ACR_PASSWORD, client.requiredAcr)
+    ) {
+      return res.redirect(
+        302,
+        authorizationError(
+          oauthParams,
+          'access_denied',
+          'This application requires a stronger sign-in method',
+        ),
+      );
+    }
+
+    // prompt=consent asks again even when consent was given before.
+    const forceConsent = (oauthParams['prompt'] ?? '')
+      .split(' ')
+      .includes('consent');
+    if (client.requireConsent || forceConsent) {
       const scopes = (oauthParams['scope'] ?? 'openid')
         .split(' ')
         .filter(Boolean);
-      const hasConsent = await this.consentService.hasConsent(
-        user.id,
-        client.id,
-        scopes,
-      );
+      const hasConsent =
+        !forceConsent &&
+        (await this.consentService.hasConsent(user.id, client.id, scopes));
 
       if (!hasConsent) {
         const reqId = await this.consentService.storeConsentRequest({

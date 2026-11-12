@@ -32,6 +32,8 @@ export const OAUTH_FORM_PARAM_KEYS = [
   'nonce',
   'code_challenge',
   'code_challenge_method',
+  // Kept through the form so a fresh sign-in honours prompt=consent.
+  'prompt',
 ] as const;
 
 /**
@@ -41,7 +43,6 @@ export const OAUTH_FORM_PARAM_KEYS = [
  */
 export const OAUTH_RELAY_PARAM_KEYS = [
   ...OAUTH_FORM_PARAM_KEYS,
-  'prompt',
   'acr_values',
   'login_hint',
 ] as const;
