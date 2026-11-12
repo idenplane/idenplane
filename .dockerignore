@@ -13,3 +13,15 @@ dist
 coverage
 *.md
 test
+
+# Exclude secrets and local artifacts at every nesting level.
+**/.env*
+**/.npmrc
+**/node_modules
+**/.git
+**/coverage
+admin-ui/dist
+backups
+.calm
+.agents
+.codex

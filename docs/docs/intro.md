@@ -1,7 +1,7 @@
 ---
 id: intro
 title: Introduction
-slug: /
+slug: /intro
 description: Idenplane is an open-source identity and access management server with OAuth 2.0, OpenID Connect, SAML 2.0, WebAuthn, and more.
 ---
 
@@ -26,13 +26,13 @@ Most identity solutions are either:
 - **Too complex** — heavy to run and to customise
 - **Too limited** — Simple JWT libraries lack production features
 
-Idenplane fills that gap with a complete, self-hosted solution that deploys in under 30 seconds and idles at about 194 MiB of RAM.
+Idenplane fills that gap with a complete, self-hosted solution with Docker Compose setup and an idle-memory benchmark of about 194 MiB.
 
 ## Key Benefits
 
 | Benefit | Description |
 |---------|-------------|
-| **Deploy in 30 seconds** | Single `docker compose up` gets you a full IAM server |
+| **Local Docker setup** | Generate unique credentials, then start with Docker Compose and wait for readiness |
 | **Modern stack** | TypeScript, NestJS, React, PostgreSQL — no Java, no XML |
 | **Lightweight** | About 194 MiB of RAM at idle vs. 464 MiB for Keycloak, and with one worker per CPU faster than Keycloak on discovery, JWKS, client-credentials tokens and introspection; see [Benchmarks](./benchmarks.md) |
 | **Complete** | OAuth 2.0, OIDC, SAML 2.0, WebAuthn, MFA, LDAP, SSO, Organizations |

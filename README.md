@@ -34,7 +34,7 @@
 
 Most identity solutions are either too complex to self-host (Java, heavy runtimes) or too limited for production (simple JWT libraries). Idenplane fills that gap:
 
-- **Deploy in 30 seconds** — single `docker compose up` gets you a full IAM server
+- **Local Docker setup** — generate unique secrets, then start the server with Docker Compose
 - **Modern stack** — TypeScript, NestJS, React, PostgreSQL. No Java, no XML
 - **Lightweight** — about 194 MiB of RAM at idle and ready in about 5 s, vs. 464 MiB and 24 s for Keycloak on the same machine ([benchmarks](docs/docs/benchmarks.md))
 - **Complete** — OAuth 2.0, OIDC, SAML 2.0, WebAuthn, MFA, LDAP, SSO, Organizations — all built-in
@@ -57,7 +57,7 @@ Most identity solutions are either too complex to self-host (Java, heavy runtime
 | **Adaptive / Risk-Based Auth** | Impossible travel detection, IP reputation scoring, device fingerprinting, and risk-based step-up or block |
 | **Social Login** | Broker external OIDC and SAML identity providers (Google, GitHub, Azure AD, etc.) |
 | **LDAP User Federation** | Sync users from LDAP/Active Directory with on-demand or scheduled sync |
-| **Custom Auth Flows** | Configurable multi-step authentication flows with conditional branching and fallback logic |
+| **Custom Auth Flows (experimental)** | Flow configuration and execution engine; not yet integrated into the normal login path |
 | **Single Sign-On** | Browser-based SSO across all clients in a realm |
 | **SCIM 2.0** | Complete Identity provisioning with Users, Groups, and Service Providers |
 | **GraphQL API** | Full GraphQL API for users, realms, clients, and organizations |
@@ -84,7 +84,7 @@ Most identity solutions are either too complex to self-host (Java, heavy runtime
 |---------|-------------|
 | **Modern React Dashboard** | Full-featured admin UI at `/console` with real-time stats |
 | **Entity Management** | CRUD for realms, users, clients, roles, groups, scopes, organizations, and more |
-| **Auth Flow Builder** | Visual configuration of custom multi-step authentication flows |
+| **Auth Flow Builder (experimental)** | Visual flow configuration; normal login integration is still pending |
 | **Session Management** | View and revoke active user sessions |
 | **Event Audit Logs** | Login events and admin action history with filtering and export |
 | **Identity Provider Config** | Configure OIDC, SAML, and LDAP providers from the UI |
@@ -120,14 +120,18 @@ Most identity solutions are either too complex to self-host (Java, heavy runtime
 
 ## Quick Start
 
-### Docker Hub (Recommended)
+### Docker Hub (Local Quick Start)
+
+Requires Docker Compose v2.20+ and Node.js 24 for the one-time setup helper. On Windows, use `curl.exe` instead of `curl`.
 
 ```bash
-curl -o docker-compose.yml https://raw.githubusercontent.com/idenplane/idenplane/main/docker-compose.yml
-docker compose up -d
+curl --fail --location -o docker-compose.yml https://raw.githubusercontent.com/idenplane/idenplane/main/docker-compose.yml
+curl --fail --location -o setup-env.cjs https://raw.githubusercontent.com/idenplane/idenplane/main/scripts/setup-env.cjs
+node setup-env.cjs
+docker compose up -d --wait --wait-timeout 180
 ```
 
-That's it. Idenplane is now running:
+Wait for the services to become healthy, then open:
 
 | URL | Description |
 |-----|-------------|
@@ -136,31 +140,31 @@ That's it. Idenplane is now running:
 | http://localhost:3000/health/live | Health Check |
 | http://localhost:3000/metrics | Prometheus Metrics |
 
-**Default admin credentials:**
+**Generated admin credentials:**
 
 | Field | Value |
 |-------|-------|
 | Username | `admin` |
-| Password | `admin` |
+| Password | Value of `ADMIN_PASSWORD` in `.env` |
 | API Key | Value of `ADMIN_API_KEY` in `.env` |
 
-> **Warning:** Change the default password and API key before exposing to the internet.
+> Keep `.env` private and preserve its encryption keys. The helper refuses to overwrite an existing file. For an existing database, keep its current password; changing `.env` does not rotate a PostgreSQL password. This setup listens on localhost. Configure HTTPS, backups and a pinned release image before production use.
 
 ### From Source
 
-**Prerequisites:** Node.js 22+, PostgreSQL 16+
+**Prerequisites:** Node.js 24, PostgreSQL 16+
 
 ```bash
 git clone https://github.com/idenplane/idenplane.git
-cd Idenplane
+cd idenplane
 
 # Install dependencies
 npm install
 cd admin-ui && npm install && cd ..
 
 # Configure
-cp .env.example .env
-# Edit .env with your DATABASE_URL
+node scripts/setup-env.cjs
+# Edit DATABASE_URL in .env if your local PostgreSQL uses different credentials
 
 # Setup database
 npm run prisma:generate
@@ -683,7 +687,6 @@ REDIS_URL=redis://your-redis:6379
 | Self-hosted | Yes | Yes | No | No |
 | Open source | Yes | Yes | No | No |
 | Memory usage | ~150 MB | ~1 GB+ | N/A | N/A |
-| Setup time | 30 seconds | Minutes | Minutes | Minutes |
 | Language | TypeScript | Java | N/A | N/A |
 | OAuth 2.0 + OIDC | Yes | Yes | Yes | Yes |
 | SAML 2.0 | Yes | Yes | Yes | No |

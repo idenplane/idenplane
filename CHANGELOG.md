@@ -9,7 +9,16 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+**Before you upgrade:**
+- **First production start needs `ADMIN_PASSWORD`.** With `NODE_ENV=production` (the Docker image default), creating the initial admin now fails when `ADMIN_PASSWORD` is missing, `admin`, a documented placeholder, or shorter than 12 characters. Existing databases already have their admin and are not affected.
+- **Root `docker-compose.yml` no longer has a built-in database password.** It reads `POSTGRES_PASSWORD` from `.env`. For an existing volume created with the old file, add `POSTGRES_PASSWORD=idenplane` to `.env` (changing the value does not rotate the password inside an existing volume). Ports 3000 and 5432 now listen on localhost only.
+
+### Added
+- **`scripts/setup-env.cjs`** writes a `.env` with unique random database, admin, API and webhook secrets for Docker Compose or a source checkout. It refuses to overwrite an existing `.env`, so keys that encrypt stored data are never replaced. The README and Quickstart use it.
+
 ### Security
+- **The first production admin can no longer be `admin`/`admin`.** See *Before you upgrade*.
+- The Docker build context excludes `.env*`, `.npmrc`, nested `node_modules` and other local files at every level.
 - **LDAP federation now verifies the directory server's certificate.** `ldaps://` connections reject an untrusted or mismatched server certificate, and `startTls` on an `ldap://` URL performs a real StartTLS upgrade, with the same checks, before any bind. Every connection is closed after use, and an empty password is refused instead of being sent as an anonymous bind. A directory signed by a private CA needs that CA trusted by the server (for example with `NODE_EXTRA_CA_CERTS`).
 - **The mTLS guard no longer trusts certificate headers.** It reads the peer certificate from a verified TLS connection only; `X-Client-Certificate` and `X-Client-Certificate-Fingerprint` request headers are ignored. The unfinished NHI certificate-authentication route now refuses every request until certificates are bound to a tenant-scoped credential.
 - **Verification links are bound to their realm.** Password-reset, password-change and email-verification tokens are only accepted on the realm of the user they were issued to. A token presented on another realm is rejected and stays unused.
