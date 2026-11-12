@@ -7,7 +7,17 @@ import {
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { CreateAuthFlowDto, UpdateAuthFlowDto } from './auth-flow.dto.js';
+import { CacheService } from '../cache/cache.service.js';
+import {
+  CreateAuthFlowDto,
+  UpdateAuthFlowDto,
+  UpdateFlowBindingsDto,
+} from './auth-flow.dto.js';
+import {
+  validateFlowSteps,
+  type FlowValidationError,
+} from './flow-validator.js';
+import { isAuthFlowRuntimeEnabled } from './auth-flow-runtime.js';
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -36,6 +46,63 @@ export interface FlowStep {
 }
 
 export type FlowContext = Record<string, unknown>;
+
+// ─── Binding types ─────────────────────────────────────────
+
+/** One error from a bindings / assign request. */
+export interface BindingError {
+  /** Path into the request, e.g. `browserFlowId` or `clients[1].authFlowId`. */
+  path: string;
+  code:
+    | 'flow_not_found'
+    | 'flow_invalid'
+    | 'client_not_found'
+    | 'client_duplicate'
+    | 'flow_id_required'
+    | 'flow_id_mismatch';
+  message: string;
+  /** The flow concerned, when there is one. */
+  flowId?: string;
+  /** Validator output for `flow_invalid`. */
+  flowErrors?: FlowValidationError[];
+}
+
+export interface FlowBindings {
+  /** Whether the server runs with AUTH_FLOW_RUNTIME_ENABLED (read-only). */
+  runtimeEnabled: boolean;
+  authFlowsEnabled: boolean;
+  browserFlowId: string | null;
+  /** Every client of the realm, with its override (null = none). */
+  clients: Array<{
+    id: string;
+    clientId: string;
+    name: string | null;
+    authFlowId: string | null;
+  }>;
+}
+
+/** Where a flow is bound; returned with a 409 on delete. */
+export type FlowBindingRef =
+  | { kind: 'realm'; realmId: string; realmName: string }
+  | { kind: 'client'; id: string; clientId: string };
+
+function flowInvalid(errors: FlowValidationError[]): BadRequestException {
+  return new BadRequestException({
+    statusCode: 400,
+    error: 'Bad Request',
+    message: 'Authentication flow is invalid',
+    errors,
+  });
+}
+
+function bindingInvalid(errors: BindingError[]): BadRequestException {
+  return new BadRequestException({
+    statusCode: 400,
+    error: 'Bad Request',
+    message: 'Flow binding rejected',
+    errors,
+  });
+}
 
 // ─── Default Flow Definitions ──────────────────────────────
 
@@ -106,12 +173,15 @@ export const DEFAULT_FLOWS: Array<{
 export class AuthFlowService {
   private readonly logger = new Logger(AuthFlowService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly cache: CacheService,
+  ) {}
 
   // ── CRUD ────────────────────────────────────────────────
 
   async create(realmId: string, dto: CreateAuthFlowDto) {
-    this.validateSteps(dto.steps as FlowStep[]);
+    this.assertValidSteps(dto.steps);
 
     const existing = await this.prisma.authenticationFlow.findUnique({
       where: { realmId_name: { realmId, name: dto.name } },
@@ -157,8 +227,8 @@ export class AuthFlowService {
   async update(realmId: string, id: string, dto: UpdateAuthFlowDto) {
     await this.findOne(realmId, id); // throws if not found
 
-    if (dto.steps) {
-      this.validateSteps(dto.steps as FlowStep[]);
+    if (dto.steps !== undefined) {
+      this.assertValidSteps(dto.steps);
     }
 
     if (dto.name) {
@@ -185,55 +255,332 @@ export class AuthFlowService {
         ...(dto.steps !== undefined && {
           steps: dto.steps as unknown as Prisma.InputJsonValue,
         }),
+        version: { increment: 1 },
       },
     });
   }
 
+  /**
+   * Delete a flow. Refused with 409 (and the list of bindings) while the realm
+   * or any client is bound to it: deleting would otherwise silently change how
+   * those logins run.
+   */
   async remove(realmId: string, id: string) {
     await this.findOne(realmId, id); // throws if not found
-    await this.prisma.authenticationFlow.delete({ where: { id } });
+    const bindings = await this.findBindingsOf(id);
+    if (bindings.length > 0) throw this.boundConflict(id, bindings);
+    try {
+      await this.prisma.authenticationFlow.delete({ where: { id } });
+    } catch (err) {
+      // A binding created between the check and the delete trips the FK.
+      if (
+        err instanceof Prisma.PrismaClientKnownRequestError &&
+        err.code === 'P2003'
+      ) {
+        throw this.boundConflict(id, await this.findBindingsOf(id));
+      }
+      throw err;
+    }
   }
 
-  // ── Flow resolution ─────────────────────────────────────
+  // ── Validation ──────────────────────────────────────────
+
+  /** Validate a stored flow against the current rules. */
+  async validateFlow(
+    realmId: string,
+    id: string,
+  ): Promise<{ valid: boolean; errors: FlowValidationError[] }> {
+    const flow = await this.findOne(realmId, id);
+    const errors = validateFlowSteps(flow.steps);
+    return { valid: errors.length === 0, errors };
+  }
+
+  // ── Bindings ────────────────────────────────────────────
+  //
+  // Same-realm membership is enforced here, not by a composite FK: every
+  // write path below loads the flow and the client with `realmId` in the
+  // where clause, and FlowBindingResolver loads the flow the same way.
+  // `isDefault` is never consulted.
+
+  async getBindings(realmId: string): Promise<FlowBindings> {
+    const realm = await this.prisma.realm.findUnique({
+      where: { id: realmId },
+      select: { authFlowsEnabled: true, browserFlowId: true },
+    });
+    if (!realm) throw new NotFoundException(`Realm '${realmId}' not found`);
+    const clients = await this.prisma.client.findMany({
+      where: { realmId },
+      select: { id: true, clientId: true, name: true, authFlowId: true },
+      orderBy: { clientId: 'asc' },
+    });
+    return {
+      runtimeEnabled: isAuthFlowRuntimeEnabled(),
+      authFlowsEnabled: realm.authFlowsEnabled,
+      browserFlowId: realm.browserFlowId,
+      clients,
+    };
+  }
 
   /**
-   * Returns the flow assigned to a client, or the realm's default flow.
-   * Throws if neither exists.
+   * Partially update the realm's bindings. Every flow it would bind is loaded
+   * in-realm and validated first; nothing is written unless all pass. When
+   * the result has `authFlowsEnabled`, every *effective* binding (including
+   * client overrides not in this request) must be valid too, so enabling can
+   * never leave a client failing closed.
    */
-  async getFlowForClient(clientId: string, realmId: string) {
-    const client = await this.prisma.client.findFirst({
-      where: { id: clientId, realmId },
-      select: { authFlowId: true },
+  async updateBindings(
+    realmId: string,
+    dto: UpdateFlowBindingsDto,
+  ): Promise<{ bindings: FlowBindings; changed: Record<string, unknown> }> {
+    const realm = await this.prisma.realm.findUnique({
+      where: { id: realmId },
+      select: {
+        id: true,
+        name: true,
+        authFlowsEnabled: true,
+        browserFlowId: true,
+      },
+    });
+    if (!realm) throw new NotFoundException(`Realm '${realmId}' not found`);
+
+    const errors: BindingError[] = [];
+    const nextBrowserFlowId =
+      dto.browserFlowId === undefined
+        ? realm.browserFlowId
+        : dto.browserFlowId || null;
+    const nextEnabled = dto.authFlowsEnabled ?? realm.authFlowsEnabled;
+
+    // Resolve the clients the request names (by OAuth client_id).
+    const requested = dto.clients ?? [];
+    const realmClients = await this.prisma.client.findMany({
+      where: { realmId },
+      select: { id: true, clientId: true, authFlowId: true },
+    });
+    const byClientId = new Map(realmClients.map((c) => [c.clientId, c]));
+    const clientUpdates: Array<{
+      index: number;
+      id: string;
+      clientId: string;
+      from: string | null;
+      authFlowId: string | null;
+    }> = [];
+    const seen = new Set<string>();
+    requested.forEach((entry, index) => {
+      const path = `clients[${index}]`;
+      if (seen.has(entry.clientId)) {
+        errors.push({
+          path: `${path}.clientId`,
+          code: 'client_duplicate',
+          message: `Client '${entry.clientId}' is listed more than once`,
+        });
+        return;
+      }
+      seen.add(entry.clientId);
+      const client = byClientId.get(entry.clientId);
+      if (!client) {
+        errors.push({
+          path: `${path}.clientId`,
+          code: 'client_not_found',
+          message: `Client '${entry.clientId}' not found in this realm`,
+        });
+        return;
+      }
+      if (entry.authFlowId === undefined) {
+        errors.push({
+          path: `${path}.authFlowId`,
+          code: 'flow_id_required',
+          message: 'authFlowId is required (null removes the override)',
+        });
+        return;
+      }
+      clientUpdates.push({
+        index,
+        id: client.id,
+        clientId: client.clientId,
+        from: client.authFlowId,
+        authFlowId: entry.authFlowId || null,
+      });
     });
 
-    if (!client) {
-      throw new NotFoundException(`Client '${clientId}' not found in realm`);
+    // Flows to check: everything this request binds, plus (when the realm
+    // will be enabled) every binding that would then be in effect.
+    const toCheck = new Map<string, string[]>(); // flowId -> request paths
+    const want = (flowId: string | null, path: string) => {
+      if (!flowId) return;
+      toCheck.set(flowId, [...(toCheck.get(flowId) ?? []), path]);
+    };
+    if (dto.browserFlowId !== undefined || nextEnabled) {
+      want(nextBrowserFlowId, 'browserFlowId');
+    }
+    for (const u of clientUpdates) {
+      want(u.authFlowId, `clients[${u.index}].authFlowId`);
+    }
+    if (nextEnabled) {
+      const patched = new Set(clientUpdates.map((u) => u.id));
+      for (const c of realmClients) {
+        if (!patched.has(c.id)) {
+          want(c.authFlowId, `clients[clientId=${c.clientId}].authFlowId`);
+        }
+      }
     }
 
-    if (client.authFlowId) {
-      const flow = await this.prisma.authenticationFlow.findFirst({
-        where: { id: client.authFlowId, realmId },
+    if (toCheck.size > 0) {
+      const flows = await this.prisma.authenticationFlow.findMany({
+        where: { realmId, id: { in: [...toCheck.keys()] } },
+        select: { id: true, name: true, steps: true },
       });
-      if (flow) return flow;
-      this.logger.warn(
-        `Client ${clientId} references missing auth flow ${client.authFlowId}; falling back to realm default`,
+      const flowById = new Map(flows.map((f) => [f.id, f]));
+      for (const [flowId, paths] of toCheck) {
+        const flow = flowById.get(flowId);
+        const flowErrors = flow ? validateFlowSteps(flow.steps) : [];
+        for (const path of paths) {
+          if (!flow) {
+            errors.push({
+              path,
+              code: 'flow_not_found',
+              message: `Flow '${flowId}' not found in this realm`,
+              flowId,
+            });
+          } else if (flowErrors.length > 0) {
+            errors.push({
+              path,
+              code: 'flow_invalid',
+              message: `Flow '${flow.name}' is invalid: ${flowErrors[0].message}`,
+              flowId,
+              flowErrors,
+            });
+          }
+        }
+      }
+    }
+
+    if (errors.length > 0) throw bindingInvalid(errors);
+
+    const realmData: Prisma.RealmUpdateInput = {};
+    if (dto.browserFlowId !== undefined) {
+      realmData.browserFlow = nextBrowserFlowId
+        ? { connect: { id: nextBrowserFlowId } }
+        : { disconnect: true };
+    }
+    if (dto.authFlowsEnabled !== undefined) {
+      realmData.authFlowsEnabled = dto.authFlowsEnabled;
+    }
+
+    await this.prisma.$transaction([
+      ...(Object.keys(realmData).length > 0
+        ? [
+            this.prisma.realm.update({
+              where: { id: realmId },
+              data: realmData,
+            }),
+          ]
+        : []),
+      ...clientUpdates.map((u) =>
+        this.prisma.client.update({
+          where: { id: u.id },
+          data: { authFlowId: u.authFlowId },
+        }),
+      ),
+    ]);
+
+    await this.cache.invalidateRealmCache(realm.id, realm.name);
+    await Promise.all(
+      clientUpdates.map((u) => this.invalidateClient(realmId, u)),
+    );
+
+    const changed: Record<string, unknown> = {};
+    if (dto.browserFlowId !== undefined) {
+      changed['browserFlowId'] = {
+        from: realm.browserFlowId,
+        to: nextBrowserFlowId,
+      };
+    }
+    if (dto.authFlowsEnabled !== undefined) {
+      changed['authFlowsEnabled'] = {
+        from: realm.authFlowsEnabled,
+        to: dto.authFlowsEnabled,
+      };
+    }
+    if (clientUpdates.length > 0) {
+      changed['clients'] = clientUpdates.map((u) => ({
+        clientId: u.clientId,
+        from: u.from,
+        to: u.authFlowId,
+      }));
+    }
+
+    return { bindings: await this.getBindings(realmId), changed };
+  }
+
+  /**
+   * Bind flow `flowId` to one client (both looked up in `realmId`). 404 when
+   * either is not in the realm; 400 when the body names a different flow or
+   * the flow fails validation.
+   */
+  async assignToClient(
+    realmId: string,
+    flowId: string,
+    clientPk: string,
+    bodyFlowId: string | null | undefined,
+  ) {
+    const flow = await this.prisma.authenticationFlow.findFirst({
+      where: { id: flowId, realmId },
+      select: { id: true, steps: true },
+    });
+    if (!flow) {
+      throw new NotFoundException(`Authentication flow '${flowId}' not found`);
+    }
+    const client = await this.prisma.client.findFirst({
+      where: { id: clientPk, realmId },
+      select: { id: true, clientId: true, authFlowId: true },
+    });
+    if (!client) throw new NotFoundException(`Client '${clientPk}' not found`);
+
+    if (bodyFlowId !== undefined && bodyFlowId !== flowId) {
+      throw bindingInvalid([
+        {
+          path: 'authFlowId',
+          code: 'flow_id_mismatch',
+          message:
+            bodyFlowId === null
+              ? 'To clear an assignment use DELETE on this path'
+              : `Body authFlowId '${bodyFlowId}' does not match the flow in the path '${flowId}'`,
+        },
+      ]);
+    }
+
+    const flowErrors = validateFlowSteps(flow.steps);
+    if (flowErrors.length > 0) throw flowInvalid(flowErrors);
+
+    const updated = await this.prisma.client.update({
+      where: { id: client.id },
+      data: { authFlowId: flowId },
+      select: { id: true, clientId: true, authFlowId: true },
+    });
+    await this.invalidateClient(realmId, updated);
+    return { ...updated, previousAuthFlowId: client.authFlowId };
+  }
+
+  /** Remove client `clientPk`'s override, if it is bound to `flowId`. */
+  async unassignFromClient(realmId: string, flowId: string, clientPk: string) {
+    await this.findOne(realmId, flowId);
+    const client = await this.prisma.client.findFirst({
+      where: { id: clientPk, realmId },
+      select: { id: true, clientId: true, authFlowId: true },
+    });
+    if (!client) throw new NotFoundException(`Client '${clientPk}' not found`);
+    if (client.authFlowId !== flowId) {
+      throw new NotFoundException(
+        `Client '${clientPk}' is not assigned to flow '${flowId}'`,
       );
     }
-
-    // Fall back to realm default
-    const defaultFlow = await this.prisma.authenticationFlow.findFirst({
-      where: { realmId, isDefault: true },
+    const updated = await this.prisma.client.update({
+      where: { id: client.id },
+      data: { authFlowId: null },
+      select: { id: true, clientId: true, authFlowId: true },
     });
-    if (defaultFlow) return defaultFlow;
-
-    // Last resort: first available flow
-    const anyFlow = await this.prisma.authenticationFlow.findFirst({
-      where: { realmId },
-      orderBy: { createdAt: 'asc' },
-    });
-    if (anyFlow) return anyFlow;
-
-    throw new NotFoundException(`No authentication flow configured for realm`);
+    await this.invalidateClient(realmId, updated);
+    return updated;
   }
 
   // ── Step execution ──────────────────────────────────────
@@ -389,31 +736,59 @@ export class AuthFlowService {
 
   // ── Private helpers ─────────────────────────────────────
 
-  private validateSteps(steps: FlowStep[]): void {
-    if (!steps.length) {
-      throw new BadRequestException('A flow must have at least one step');
-    }
+  /** Run the strict validator; 400 with the full error list on failure. */
+  private assertValidSteps(steps: unknown): void {
+    const errors = validateFlowSteps(steps);
+    if (errors.length > 0) throw flowInvalid(errors);
+  }
 
-    const ids = steps.map((s) => s.id);
-    if (new Set(ids).size !== ids.length) {
-      throw new BadRequestException('Step IDs must be unique within a flow');
-    }
+  private async findBindingsOf(flowId: string): Promise<FlowBindingRef[]> {
+    const [realms, clients] = await Promise.all([
+      this.prisma.realm.findMany({
+        where: { browserFlowId: flowId },
+        select: { id: true, name: true },
+      }),
+      this.prisma.client.findMany({
+        where: { authFlowId: flowId },
+        select: { id: true, clientId: true },
+        orderBy: { clientId: 'asc' },
+      }),
+    ]);
+    return [
+      ...realms.map((r): FlowBindingRef => ({
+        kind: 'realm',
+        realmId: r.id,
+        realmName: r.name,
+      })),
+      ...clients.map((c): FlowBindingRef => ({
+        kind: 'client',
+        id: c.id,
+        clientId: c.clientId,
+      })),
+    ];
+  }
 
-    const orders = steps.map((s) => s.order);
-    if (new Set(orders).size !== orders.length) {
-      throw new BadRequestException(
-        'Step order values must be unique within a flow',
-      );
-    }
+  private boundConflict(
+    flowId: string,
+    bindings: FlowBindingRef[],
+  ): ConflictException {
+    return new ConflictException({
+      statusCode: 409,
+      error: 'Conflict',
+      message: `Authentication flow '${flowId}' is bound and cannot be deleted. Unbind it first.`,
+      bindings,
+    });
+  }
 
-    // Validate fallbackStepId references
-    for (const step of steps) {
-      if (step.fallbackStepId && !ids.includes(step.fallbackStepId)) {
-        throw new BadRequestException(
-          `Step '${step.id}' references unknown fallbackStepId '${step.fallbackStepId}'`,
-        );
-      }
-    }
+  /** Drop both cache keys a client can be cached under (client_id and PK). */
+  private async invalidateClient(
+    realmId: string,
+    client: { id: string; clientId: string },
+  ): Promise<void> {
+    await Promise.all([
+      this.cache.invalidateClientCache(`${realmId}:${client.clientId}`),
+      this.cache.invalidateClientCache(`${realmId}:${client.id}`),
+    ]);
   }
 
   /** Remove the isDefault flag from all flows in the realm, optionally excluding one. */
