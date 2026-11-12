@@ -49,6 +49,11 @@ export class PostAuthService {
       return `/realms/${realm.name}/account`;
     }
 
+    // Fix auth_time now, when the user has just authenticated, so a consent
+    // screen in between does not move it to the moment they click Allow.
+    const authTime = authContext.authTime ?? new Date();
+    const context: AuthContext = { ...authContext, authTime };
+
     // The client's own policy: a sign-in weaker than its required ACR never
     // yields a code for it (the session still exists for other clients).
     if (
@@ -84,8 +89,9 @@ export class PostAuthService {
           oauthParams,
           // Carry the satisfied auth context across the consent round-trip so
           // the code issued after consent reflects the real acr/amr.
-          satisfiedAcr: authContext.acr,
-          amr: authContext.amr,
+          satisfiedAcr: context.acr,
+          amr: context.amr,
+          authTime: authTime.toISOString(),
         });
         return `/realms/${realm.name}/consent?req=${reqId}`;
       }
@@ -95,7 +101,7 @@ export class PostAuthService {
       realm,
       user,
       oauthParams as unknown as AuthorizeParams,
-      authContext,
+      context,
     );
     return result.redirectUrl;
   }

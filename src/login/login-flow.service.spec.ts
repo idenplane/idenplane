@@ -153,7 +153,7 @@ describe('LoginFlowService', () => {
         realm,
         user,
         oauthParams,
-        context,
+        { ...context, authTime: expect.any(Date) },
       );
       expect(res.redirect).toHaveBeenCalledWith(
         302,

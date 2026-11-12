@@ -385,6 +385,7 @@ describe('Login parity (e2e)', () => {
     expect(afterMfa.headers['location']).toMatch(
       new RegExp(`^/realms/${REALM}/consent\\?req=`),
     );
+    const signedInAt = Math.floor(Date.now() / 1000);
 
     const consentPage = await browser.get(
       afterMfa.headers['location'] as string,
@@ -394,6 +395,8 @@ describe('Login parity (e2e)', () => {
       consentPage.text,
     )?.[1];
     expect(reqId).toBeTruthy();
+    // Linger on the consent page past a second boundary.
+    await new Promise((resolve) => setTimeout(resolve, 1100));
     const res = await browser.post(`/realms/${REALM}/consent`, {
       _csrf: csrfFrom(consentPage.text),
       auth_req_id: reqId as string,
@@ -403,6 +406,8 @@ describe('Login parity (e2e)', () => {
     const claims = await idTokenClaims(codeFrom(res));
     expect(claims['acr']).toBe(ACR_MFA);
     expect(claims['amr']).toEqual(['pwd', 'otp']);
+    // auth_time is when the user signed in, not when they clicked Allow.
+    expect(claims['auth_time']).toBeLessThanOrEqual(signedInAt);
   });
 
   // ─── Account gates ─────────────────────────────────────────────────────
