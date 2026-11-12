@@ -80,8 +80,7 @@ import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
     // registers a module's routes in the order modules are imported, so
     // these are matched before the hundreds of admin routes. No other route
     // can match their paths, so the order changes speed only. The browser
-    // sign-in endpoints come next, in the order they had when these modules
-    // were pulled in through AuthModule.
+    // sign-in endpoints come next.
     WellKnownModule,
     TokensModule,
     AuthModule,
