@@ -412,9 +412,18 @@ async function ready(url) {
       await page.locator('input[name="username"]').fill(username);
       await page.locator('input[name="password"]').fill(password);
       await page.locator('button[type="submit"]').first().click();
-      await page
-        .getByRole('heading', { name: 'Signed in securely' })
-        .waitFor({ timeout: 30000 });
+      // The first sign-in crosses the provider, the TLS proxy and a cold
+      // Next.js worker; shared CI runners sometimes need more than 30 s.
+      try {
+        await page
+          .getByRole('heading', { name: 'Signed in securely' })
+          .waitFor({ timeout: 90000 });
+      } catch (error) {
+        throw new Error(
+          'Sign-in did not finish; the browser stopped at ' + page.url(),
+          { cause: error },
+        );
+      }
     }
     assert.equal((await api(web)).status, 401);
     record('session_api_rejects_anonymous');
