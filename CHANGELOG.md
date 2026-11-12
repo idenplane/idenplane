@@ -48,8 +48,8 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
   - The authorization endpoint accepts a form POST (OIDC Core §3.1.2.1).
   - `request` and `request_uri` are rejected with `request_not_supported` / `request_uri_not_supported` instead of being ignored, and discovery states `request_parameter_supported` and `request_uri_parameter_supported` as `false`.
   - `auth_time` is when the user signed in, not when the code was exchanged, including for codes issued from an SSO session. `max_age` is honoured: an older sign-in is repeated, or `prompt=none` returns `login_required`.
-  - `offline_access`, advertised in discovery, is granted and yields an offline refresh token with the realm's offline lifespan.
-  - Presenting a used authorization code again ends the session it created, so its refresh token stops working and its access token introspects as inactive (RFC 6749 §4.1.2).
+  - `offline_access`, advertised in discovery, is granted, with the realm's offline token lifespan, when a code-returning grant (authorization code, device) is used by a client that has the `offline_access` client scope assigned. Other grants never get it (OIDC Core §11).
+  - When its own client presents a used authorization code again (authenticated, or with the PKCE verifier) within five minutes of the code's expiry, the session the code created ends, so its refresh token stops working and its access token introspects as inactive (RFC 6749 §4.1.2).
   - Discovery no longer lists `backchannel_logout_uri`, a client registration parameter rather than provider metadata; `backchannel_logout_supported` already advertises the feature.
 - **The Helm chart did not start with its default values.** The default `ADMIN_API_KEY` was a placeholder the server refuses in production, and the chart never set `WEBHOOK_SECRET_KEY` or `WEBHOOK_ENCRYPTION_SALT`, which production requires. CI now installs the chart on a kind cluster, signs in with the generated password, upgrades it and runs `helm test`.
 

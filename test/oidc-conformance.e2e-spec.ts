@@ -231,17 +231,49 @@ describe('OIDC conformance behaviour (e2e)', () => {
     expect(silent.get('error')).toBe('login_required');
   });
 
-  it('grants offline_access as an offline refresh token', async () => {
-    const code = await signIn(new Browser(), {
-      scope: 'openid offline_access',
-    });
-    const tokens = await exchange(code).expect(200);
+  it('grants offline_access only to a code flow of a client that has the scope', async () => {
+    // Without the scope assigned, the request is honoured without offline access.
+    const plain = await exchange(
+      await signIn(new Browser(), { scope: 'openid offline_access' }),
+    ).expect(200);
+    expect(String(plain.body.scope).split(' ')).not.toContain('offline_access');
 
-    expect(String(tokens.body.scope).split(' ')).toContain('offline_access');
+    const scope = await ctx.prisma.clientScope.upsert({
+      where: {
+        realmId_name: { realmId: seeded.realm.id, name: 'offline_access' },
+      },
+      update: {},
+      create: { realmId: seeded.realm.id, name: 'offline_access' },
+    });
+    await ctx.prisma.clientOptionalScope.create({
+      data: { clientId: seeded.client.id, clientScopeId: scope.id },
+    });
+
+    const offline = await exchange(
+      await signIn(new Browser(), { scope: 'openid offline_access' }),
+    ).expect(200);
+    expect(String(offline.body.scope).split(' ')).toContain('offline_access');
     const stored = await ctx.prisma.refreshToken.findFirst({
       where: { session: { userId: seeded.user.id }, isOffline: true },
     });
     expect(stored).not.toBeNull();
+
+    // The password grant never returns a code, so it never gets offline access.
+    const password = await request(app.getHttpServer())
+      .post(`${base}/token`)
+      .type('form')
+      .send({
+        grant_type: 'password',
+        client_id: 'test-client',
+        client_secret: SECRET,
+        username: 'testuser',
+        password: 'TestPassword123!',
+        scope: 'openid offline_access',
+      })
+      .expect(200);
+    expect(String(password.body.scope).split(' ')).not.toContain(
+      'offline_access',
+    );
   });
 
   it('revokes the tokens issued from a code when the code is replayed', async () => {
