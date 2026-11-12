@@ -39,6 +39,7 @@ import { CsrfService } from '../common/csrf/csrf.service.js';
 import { EmailService } from '../email/email.service.js';
 import { escapeHtml } from '../common/utils/html-escape.util.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
+import { SESSION_COOKIE } from '../authn-core/cookies.js';
 
 @ApiExcludeController()
 @Controller('realms/:realmName/account')
@@ -87,8 +88,7 @@ export class AccountController {
   }
 
   private async getSessionUser(realm: Realm, req: Request) {
-    const sessionToken = req.cookies?.['IDENPLANE_SESSION'] as
-      string | undefined;
+    const sessionToken = req.cookies?.[SESSION_COOKIE] as string | undefined;
     if (!sessionToken) return null;
     return this.loginService.validateLoginSession(realm, sessionToken);
   }
@@ -213,15 +213,14 @@ export class AccountController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    const sessionToken = req.cookies?.['IDENPLANE_SESSION'] as
-      string | undefined;
+    const sessionToken = req.cookies?.[SESSION_COOKIE] as string | undefined;
     if (sessionToken) {
       const tokenHash = this.crypto.sha256(sessionToken);
       await this.prisma.loginSession
         .delete({ where: { tokenHash } })
         .catch(() => undefined);
     }
-    res.clearCookie('IDENPLANE_SESSION', {
+    res.clearCookie(SESSION_COOKIE, {
       httpOnly: true,
       secure: true,
       sameSite: 'strict',

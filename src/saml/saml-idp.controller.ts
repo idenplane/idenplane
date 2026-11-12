@@ -19,6 +19,7 @@ import { Public } from '../common/decorators/public.decorator.js';
 import { SamlIdpService } from './saml-idp.service.js';
 import { SamlMetadataService } from './saml-metadata.service.js';
 import { LoginService } from '../login/login.service.js';
+import { SAML_REQUEST_COOKIE, SESSION_COOKIE } from '../authn-core/cookies.js';
 
 @ApiExcludeController()
 @Controller('realms/:realmName/protocol/saml')
@@ -154,7 +155,7 @@ export class SamlIdpController {
     });
 
     res.cookie(
-      'IDENPLANE_SAML_REQUEST',
+      SAML_REQUEST_COOKIE,
       Buffer.from(samlSessionData).toString('base64'),
       {
         httpOnly: true,
@@ -166,8 +167,7 @@ export class SamlIdpController {
     );
 
     // Check if the user already has an active login session
-    const sessionToken = req.cookies?.['IDENPLANE_SESSION'] as
-      string | undefined;
+    const sessionToken = req.cookies?.[SESSION_COOKIE] as string | undefined;
     if (sessionToken) {
       const user = await this.loginService.validateLoginSession(
         realm,
@@ -213,7 +213,7 @@ export class SamlIdpController {
     );
 
     // Clear the SAML request cookie
-    res.clearCookie('IDENPLANE_SAML_REQUEST', {
+    res.clearCookie(SAML_REQUEST_COOKIE, {
       path: `/realms/${realm.name}`,
     });
 

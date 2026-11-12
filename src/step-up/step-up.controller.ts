@@ -13,12 +13,9 @@ import {
 import { ApiTags, ApiOperation, ApiQuery, ApiResponse } from '@nestjs/swagger';
 import type { Request } from 'express';
 import type { Realm } from '@prisma/client';
-import {
-  StepUpService,
-  ACR_MFA,
-  ACR_WEBAUTHN,
-  ACR_PASSWORD,
-} from './step-up.service.js';
+import { StepUpService } from './step-up.service.js';
+import { ACR_MFA, ACR_WEBAUTHN, ACR_PASSWORD } from '../authn-core/acr.js';
+import { SESSION_COOKIE } from '../authn-core/cookies.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { MfaService } from '../mfa/mfa.service.js';
 import { SmsOtpService, SmsOtpError } from '../sms/sms-otp.service.js';
@@ -87,8 +84,9 @@ export class StepUpController {
     // Read the session token from the HttpOnly cookie so it is never exposed
     // in URLs (access logs, browser history, Referer headers).
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-member-access -- express Request.cookies typed as any
-    const sessionToken: string | undefined = (req as any).cookies
-      ?.IDENPLANE_SESSION;
+    const sessionToken: string | undefined = (req as any).cookies?.[
+      SESSION_COOKIE
+    ];
 
     if (!requiredAcr || !clientId || !sessionToken) {
       throw new BadRequestException(
@@ -205,8 +203,9 @@ export class StepUpController {
     @Req() req: Request,
   ) {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-member-access -- express Request.cookies typed as any
-    const sessionToken: string | undefined = (req as any).cookies
-      ?.IDENPLANE_SESSION;
+    const sessionToken: string | undefined = (req as any).cookies?.[
+      SESSION_COOKIE
+    ];
     const mfaToken = body?.mfa_token;
     if (!sessionToken || !mfaToken) {
       throw new BadRequestException(
@@ -322,8 +321,9 @@ export class StepUpController {
     // body.  Accepting it in the body would allow it to be transmitted in URLs
     // or plain-text POST bodies, exposing it in server logs and browser history.
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment,@typescript-eslint/no-unsafe-member-access -- express Request.cookies typed as any
-    const session_token: string | undefined = (req as any).cookies
-      ?.IDENPLANE_SESSION;
+    const session_token: string | undefined = (req as any).cookies?.[
+      SESSION_COOKIE
+    ];
     const { acr, client_id, mfa_token, otp, password } = body;
 
     if (!session_token || !acr || !client_id) {

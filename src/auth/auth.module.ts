@@ -3,14 +3,14 @@ import { AuthController } from './auth.controller.js';
 import { AuthService } from './auth.service.js';
 import { ClientSecretModule } from '../clients/client-secret.module.js';
 import { CustomAttributesModule } from '../custom-attributes/custom-attributes.module.js';
-import { StepUpModule } from '../step-up/step-up.module.js';
+import { StepUpCoreModule } from '../step-up/step-up-core.module.js';
 import { UserFederationModule } from '../user-federation/user-federation.module.js';
 
 @Module({
   imports: [
     ClientSecretModule,
     CustomAttributesModule,
-    StepUpModule,
+    StepUpCoreModule,
     UserFederationModule,
   ],
   controllers: [AuthController],

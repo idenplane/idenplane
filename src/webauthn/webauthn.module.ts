@@ -1,14 +1,17 @@
 import { Module } from '@nestjs/common';
-import { WebAuthnService } from './webauthn.service.js';
 import { WebAuthnController } from './webauthn.controller.js';
-import { LoginModule } from '../login/login.module.js';
-import { OAuthModule } from '../oauth/oauth.module.js';
+import { WebAuthnCoreModule } from './webauthn-core.module.js';
+import { LoginCoreModule } from '../login/login-core.module.js';
+import { OAuthCoreModule } from '../oauth/oauth-core.module.js';
 import { ConsentModule } from '../consent/consent.module.js';
 
 @Module({
-  imports: [LoginModule, OAuthModule, ConsentModule],
+  imports: [
+    WebAuthnCoreModule,
+    LoginCoreModule,
+    OAuthCoreModule,
+    ConsentModule,
+  ],
   controllers: [WebAuthnController],
-  providers: [WebAuthnService],
-  exports: [WebAuthnService],
 })
 export class WebAuthnModule {}

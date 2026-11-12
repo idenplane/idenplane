@@ -30,11 +30,8 @@ import {
 import { loadUserGrants } from './user-grants.js';
 import { CustomAttributesService } from '../custom-attributes/custom-attributes.service.js';
 import { UserFederationService } from '../user-federation/user-federation.service.js';
-import {
-  StepUpService,
-  ACR_PASSWORD,
-  ACR_MFA,
-} from '../step-up/step-up.service.js';
+import { StepUpService } from '../step-up/step-up.service.js';
+import { ACR_PASSWORD, ACR_MFA } from '../authn-core/acr.js';
 import type { PluginManagerService } from '../plugins/plugin-manager.service.js';
 import type { Prisma, Realm } from '@prisma/client';
 import { randomUUID } from 'node:crypto';

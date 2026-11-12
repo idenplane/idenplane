@@ -2,24 +2,27 @@ import { Injectable } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import type { Realm, User } from '@prisma/client';
 import { LoginService } from './login.service.js';
-import {
-  OAuthService,
-  type AuthorizeParams,
-  type SatisfiedAuthContext,
-} from '../oauth/oauth.service.js';
+import { OAuthService } from '../oauth/oauth.service.js';
 import { ConsentService } from '../consent/consent.service.js';
 import { EventsService } from '../events/events.service.js';
 import { LoginEventType } from '../events/event-types.js';
-import {
-  MfaService,
-  MFA_ENROLLMENT_COOKIE,
-  MFA_ENROLLMENT_TTL_SECONDS,
-} from '../mfa/mfa.service.js';
-import { ACR_PASSWORD } from '../step-up/step-up.service.js';
+import { MfaService, MFA_ENROLLMENT_TTL_SECONDS } from '../mfa/mfa.service.js';
 import type { VerifiedFactor } from '../mfa/mfa.service.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
+import { ACR_PASSWORD } from '../authn-core/acr.js';
+import {
+  amrForFactor,
+  amrWithOtp,
+  type AuthContext,
+} from '../authn-core/auth-context.js';
+import {
+  MFA_CHALLENGE_COOKIE,
+  MFA_ENROLLMENT_COOKIE,
+  SESSION_COOKIE,
+} from '../authn-core/cookies.js';
+import type { AuthorizeParams } from '../authn-core/oauth-params.js';
 
-export const MFA_CHALLENGE_COOKIE = 'IDENPLANE_MFA_CHALLENGE';
+export { MFA_CHALLENGE_COOKIE };
 
 /**
  * What happens after a user has proven who they are with a first factor
@@ -122,7 +125,7 @@ export class LoginFlowService {
     oauthParams: Record<string, string>,
     req: Request,
     res: Response,
-    authContext: SatisfiedAuthContext = {},
+    authContext: AuthContext = {},
     options: { rememberMe?: boolean } = {},
   ): Promise<void> {
     // Validate OAuth request (including redirect_uri) BEFORE creating session
@@ -139,13 +142,13 @@ export class LoginFlowService {
       user,
       resolveClientIp(req),
       req.headers['user-agent'],
-      req.cookies?.['IDENPLANE_SESSION'] as string | undefined,
+      req.cookies?.[SESSION_COOKIE] as string | undefined,
       // Recorded on the session so silent SSO later reports the real acr/amr
       // (and an MFA-required realm accepts the session).
       authContext,
     );
 
-    res.cookie('IDENPLANE_SESSION', sessionToken, {
+    res.cookie(SESSION_COOKIE, sessionToken, {
       httpOnly: true,
       secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
       sameSite: 'strict',
@@ -203,7 +206,7 @@ export class LoginFlowService {
 
   /** The methods to record once TOTP completes a sign-in (RFC 8176). */
   static amrWithOtp(primaryAmr: string[] | undefined): string[] {
-    return [...(primaryAmr ?? ['pwd']), 'otp'];
+    return amrWithOtp(primaryAmr);
   }
 
   /**
@@ -214,6 +217,6 @@ export class LoginFlowService {
     primaryAmr: string[] | undefined,
     factor: VerifiedFactor | undefined,
   ): string[] {
-    return [...(primaryAmr ?? ['pwd']), factor === 'sms' ? 'sms' : 'otp'];
+    return amrForFactor(primaryAmr, factor);
   }
 }

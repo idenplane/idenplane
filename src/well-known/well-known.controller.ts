@@ -8,7 +8,7 @@ import { CacheService } from '../cache/cache.service.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
-import { ACR_VALUES_SUPPORTED } from '../step-up/step-up.service.js';
+import { ACR_VALUES_SUPPORTED } from '../authn-core/acr.js';
 import {
   RateLimitGuard,
   RateLimitByIp,

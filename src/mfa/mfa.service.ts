@@ -63,7 +63,7 @@ export interface MfaEnrollmentData {
   factor?: SecondFactorType;
 }
 
-export const MFA_ENROLLMENT_COOKIE = 'IDENPLANE_MFA_ENROLLMENT';
+export { MFA_ENROLLMENT_COOKIE } from '../authn-core/cookies.js';
 export const MFA_ENROLLMENT_TTL_SECONDS = 15 * 60;
 
 /** TTL in seconds for a used TOTP code entry — covers the full ±1-step window (3 periods × 30s). */

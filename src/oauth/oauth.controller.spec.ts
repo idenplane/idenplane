@@ -17,8 +17,6 @@ describe('OAuthController', () => {
       {} as any, // loginService
       {} as any, // consentService
       {} as any, // stepUpService
-      {} as any, // crypto
-      {} as any, // prisma
       themeRender as any,
     );
   });

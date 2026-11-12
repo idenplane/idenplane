@@ -1,26 +1,21 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { LoginController } from './login.controller.js';
-import { LoginService } from './login.service.js';
-import { LoginFlowService } from './login-flow.service.js';
-import { OAuthModule } from '../oauth/oauth.module.js';
-import { UserFederationModule } from '../user-federation/user-federation.module.js';
+import { LoginCoreModule } from './login-core.module.js';
+import { LoginFlowModule } from './login-flow.module.js';
+import { OAuthCoreModule } from '../oauth/oauth-core.module.js';
 import { ThemeModule } from '../theme/theme.module.js';
 import { CustomAttributesModule } from '../custom-attributes/custom-attributes.module.js';
 import { RiskAssessmentModule } from '../risk-assessment/risk-assessment.module.js';
-import { MigrationModule } from '../migration/migration.module.js';
-import { CsrfService } from '../common/csrf/csrf.service.js';
 
 @Module({
   imports: [
-    forwardRef(() => OAuthModule),
-    UserFederationModule,
+    LoginCoreModule,
+    LoginFlowModule,
+    OAuthCoreModule,
     ThemeModule,
     CustomAttributesModule,
     RiskAssessmentModule,
-    MigrationModule,
   ],
   controllers: [LoginController],
-  providers: [LoginService, LoginFlowService, CsrfService],
-  exports: [LoginService, LoginFlowService, CsrfService],
 })
 export class LoginModule {}
