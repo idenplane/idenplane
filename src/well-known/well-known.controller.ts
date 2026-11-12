@@ -99,7 +99,6 @@ export class WellKnownController {
       code_challenge_methods_supported: ['S256'],
       backchannel_logout_supported: true,
       backchannel_logout_session_supported: true,
-      backchannel_logout_uri: `${protocolUrl}/logout/backchannel`,
       // Step-up authentication (OIDC Core §3.1.2.1 acr_values_supported)
       acr_values_supported: ACR_VALUES_SUPPORTED,
       // Step-up endpoints

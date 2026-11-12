@@ -50,6 +50,7 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
   - `auth_time` is when the user signed in, not when the code was exchanged, including for codes issued from an SSO session. `max_age` is honoured: an older sign-in is repeated, or `prompt=none` returns `login_required`.
   - `offline_access`, advertised in discovery, is granted and yields an offline refresh token with the realm's offline lifespan.
   - Presenting a used authorization code again ends the session it created, so its refresh token stops working and its access token introspects as inactive (RFC 6749 §4.1.2).
+  - Discovery no longer lists `backchannel_logout_uri`, a client registration parameter rather than provider metadata; `backchannel_logout_supported` already advertises the feature.
 - **The Helm chart did not start with its default values.** The default `ADMIN_API_KEY` was a placeholder the server refuses in production, and the chart never set `WEBHOOK_SECRET_KEY` or `WEBHOOK_ENCRYPTION_SALT`, which production requires. CI now installs the chart on a kind cluster, signs in with the generated password, upgrades it and runs `helm test`.
 
 ## [0.6.0] - 2026-11-10
