@@ -426,7 +426,7 @@ async function ready(url) {
         redirect: 'manual',
       });
     }
-    async function login(page, username, password) {
+    async function attemptLogin(page, username, password) {
       const failedRequests = [];
       const onFailed = (request) =>
         failedRequests.push(
@@ -457,6 +457,18 @@ async function ready(url) {
         );
       } finally {
         page.off('requestfailed', onFailed);
+      }
+    }
+    // Chromium aborts in-flight requests with ERR_NETWORK_CHANGED when the
+    // host's interfaces change, which Docker does on shared CI runners while
+    // containers start. That says nothing about Idenplane, so such a sign-in
+    // is started once more; any other failure fails the check.
+    async function login(page, username, password) {
+      try {
+        await attemptLogin(page, username, password);
+      } catch (error) {
+        if (!String(error.message).includes('ERR_NETWORK_CHANGED')) throw error;
+        await attemptLogin(page, username, password);
       }
     }
     assert.equal((await api(web)).status, 401);
