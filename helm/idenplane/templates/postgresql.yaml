@@ -5,8 +5,9 @@ postgres image. Use a managed database for production (postgresql.enabled:
 false plus secrets.DATABASE_URL).
 
 Compatible with volumes created by the Bitnami sub-chart this replaces: same
-PVC name (data-<release>-postgresql-0), data in the volume's data/ directory,
-UID 1001, and the same PostgreSQL major version on Debian (glibc collations).
+PVC name (data-<release>-postgresql-0), same mount path and data directory
+(/bitnami/postgresql/data), UID 1001, and the same PostgreSQL major version on
+Debian (glibc collations).
 */ -}}
 {{- $name := include "idenplane.postgresqlHost" . }}
 {{- if not .Values.postgresql.auth.existingSecret }}
@@ -96,8 +97,11 @@ spec:
                 secretKeyRef:
                   name: {{ include "idenplane.postgresqlSecretName" . }}
                   key: password
+            # The volume is mounted where the Bitnami chart mounted it, outside
+            # the image's own VOLUME (/var/lib/postgresql/data), which the
+            # runtime would otherwise create with the image's postgres owner.
             - name: PGDATA
-              value: /var/lib/postgresql/data
+              value: /bitnami/postgresql/data
           ports:
             - name: tcp-postgresql
               containerPort: 5432
@@ -116,7 +120,7 @@ spec:
             {{- toYaml .Values.postgresql.resources | nindent 12 }}
           volumeMounts:
             - name: data
-              mountPath: /var/lib/postgresql
+              mountPath: /bitnami/postgresql
             - name: run
               mountPath: /var/run/postgresql
             - name: tmp
