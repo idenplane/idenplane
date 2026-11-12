@@ -80,7 +80,20 @@ jobs:
         env:
           SESSION_TEST_HTTPS: 'true'
           SESSION_TEST_ARTIFACTS: ${{ runner.temp }}/session-evidence/https
-        run: node --experimental-strip-types examples/nextjs-quickstart/tests/session-runtime.mjs
+        # Chromium aborts in-flight requests with ERR_NETWORK_CHANGED when the
+        # runner's interfaces change (Docker does that), which says nothing
+        # about Idenplane. Each run is fully isolated (own containers and
+        # database), so only that failure is run again from scratch, once.
+        run: |
+          set -o pipefail
+          for attempt in 1 2; do
+            if node --experimental-strip-types examples/nextjs-quickstart/tests/session-runtime.mjs 2>&1 | tee "$RUNNER_TEMP/https-attempt-$attempt.log"; then
+              exit 0
+            fi
+            grep -q 'ERR_NETWORK_CHANGED' "$RUNNER_TEMP/https-attempt-$attempt.log" || exit 1
+            echo "::warning::Chromium reported ERR_NETWORK_CHANGED; running the isolated HTTPS check again"
+          done
+          exit 1
       - name: Upload sanitized verification results
         if: always()
         uses: actions/upload-artifact@v7
