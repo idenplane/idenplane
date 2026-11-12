@@ -171,6 +171,27 @@ describe('OIDC conformance behaviour (e2e)', () => {
       .expect(400);
   });
 
+  it('keeps the original auth_time in ID tokens issued by a refresh', async () => {
+    const first = await exchange(await signIn(new Browser())).expect(200);
+    const signedInAt = claims(first.body.id_token as string)['auth_time'];
+    await new Promise((resolve) => setTimeout(resolve, 1100));
+
+    const refreshed = await request(app.getHttpServer())
+      .post(`${base}/token`)
+      .type('form')
+      .send({
+        grant_type: 'refresh_token',
+        refresh_token: first.body.refresh_token as string,
+        client_id: 'test-client',
+        client_secret: SECRET,
+      })
+      .expect(200);
+
+    expect(claims(refreshed.body.id_token as string)['auth_time']).toBe(
+      signedInAt,
+    );
+  });
+
   it('accepts the authorization request as a form POST', async () => {
     const browser = new Browser();
     await signIn(browser);

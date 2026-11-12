@@ -785,7 +785,8 @@ export class AuthService {
       storedToken.sessionId,
       scope || storedToken.scope || undefined,
       undefined,
-      undefined,
+      // The original sign-in time, not the refresh time (OIDC Core §12.2).
+      session.authTime ?? session.createdAt,
       acr,
       amr,
       undefined,
@@ -944,6 +945,7 @@ export class AuthService {
         // handleRefreshTokenGrant).
         satisfiedAcr: acr,
         amr,
+        authTime: authCode.authTime ?? authCode.createdAt,
         expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
       },
       sessionId,
@@ -1632,7 +1634,13 @@ export class AuthService {
     >,
     id: string = randomUUID(),
   ): NewSession {
-    return { id, data: { ...data, createdAt: new Date() } };
+    const now = new Date();
+    // auth_time defaults to now: the password, MFA and device grants
+    // authenticate the user in this request.
+    return {
+      id,
+      data: { ...data, authTime: data.authTime ?? now, createdAt: now },
+    };
   }
 
   /**
