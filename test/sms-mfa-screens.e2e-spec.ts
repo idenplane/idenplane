@@ -9,6 +9,10 @@ import {
   type TestContext,
 } from './setup';
 import { registerHandlebarsHelpers } from '../src/theme/handlebars-helpers.js';
+import {
+  createThemeViewEngine,
+  type ThemeViewEngine,
+} from '../src/theme/theme-view-engine.js';
 import { SmsService } from '../src/sms/sms.service.js';
 
 /**
@@ -62,7 +66,9 @@ describe('SMS MFA screens (e2e)', () => {
 
     async get(url: string) {
       return this.store(
-        await request(app.getHttpServer()).get(url).set('Cookie', this.header()),
+        await request(app.getHttpServer())
+          .get(url)
+          .set('Cookie', this.header()),
       );
     }
 
@@ -149,8 +155,10 @@ describe('SMS MFA screens (e2e)', () => {
     app = ctx.app;
     const express = app.getHttpAdapter().getInstance() as {
       set: (key: string, value: string) => void;
+      engine: (extension: string, engine: ThemeViewEngine) => void;
     };
     express.set('views', join(process.cwd(), 'themes'));
+    express.engine('hbs', createThemeViewEngine(join(process.cwd(), 'themes')));
     express.set('view engine', 'hbs');
     registerHandlebarsHelpers();
 
@@ -189,17 +197,22 @@ describe('SMS MFA screens (e2e)', () => {
     await signIn(browser);
 
     const totpSetup = await browser.get(`/realms/${REALM}/account/totp-setup`);
-    expect(totpSetup.text).toContain(`href="/realms/${REALM}/account/sms-setup"`);
+    expect(totpSetup.text).toContain(
+      `href="/realms/${REALM}/account/sms-setup"`,
+    );
 
     const phonePage = await browser.get(`/realms/${REALM}/account/sms-setup`);
     expect(phonePage.status).toBe(200);
     // The password was just entered: no second password prompt here.
     expect(phonePage.text).not.toContain('name="currentPassword"');
 
-    const sendRes = await browser.post(`/realms/${REALM}/account/sms-setup/send`, {
-      phone: '+20 101 234 5678',
-      _csrf: csrfFrom(phonePage.text),
-    });
+    const sendRes = await browser.post(
+      `/realms/${REALM}/account/sms-setup/send`,
+      {
+        phone: '+20 101 234 5678',
+        _csrf: csrfFrom(phonePage.text),
+      },
+    );
     expect(sendRes.headers['location']).toContain('sms-setup?info=');
     expect(sent[sent.length - 1].to).toBe(PHONE);
 
@@ -207,31 +220,46 @@ describe('SMS MFA screens (e2e)', () => {
     expect(codePage.text).toContain('+20••••••5678');
     expect(codePage.text).toContain('sms-setup/verify');
 
-    const wrong = await browser.post(`/realms/${REALM}/account/sms-setup/verify`, {
-      code: wrongCode(lastCode()),
-      _csrf: csrfFrom(codePage.text),
-    });
+    const wrong = await browser.post(
+      `/realms/${REALM}/account/sms-setup/verify`,
+      {
+        code: wrongCode(lastCode()),
+        _csrf: csrfFrom(codePage.text),
+      },
+    );
     expect(wrong.headers['location']).toContain('error=');
     await expect(
-      ctx.prisma.userCredential.count({ where: { userId: seeded.user.id, type: 'sms' } }),
+      ctx.prisma.userCredential.count({
+        where: { userId: seeded.user.id, type: 'sms' },
+      }),
     ).resolves.toBe(0);
 
     const retryPage = await browser.get(`/realms/${REALM}/account/sms-setup`);
-    const activated = await browser.post(`/realms/${REALM}/account/sms-setup/verify`, {
-      code: lastCode(),
-      _csrf: csrfFrom(retryPage.text),
-    });
+    const activated = await browser.post(
+      `/realms/${REALM}/account/sms-setup/verify`,
+      {
+        code: lastCode(),
+        _csrf: csrfFrom(retryPage.text),
+      },
+    );
     expect(activated.status).toBe(201);
-    expect(activated.text).toContain(`action="/realms/${REALM}/mfa-enrollment/continue"`);
+    expect(activated.text).toContain(
+      `action="/realms/${REALM}/mfa-enrollment/continue"`,
+    );
     await expect(
       ctx.prisma.recoveryCode.count({ where: { userId: seeded.user.id } }),
     ).resolves.toBe(10);
 
-    const done = await browser.post(`/realms/${REALM}/mfa-enrollment/continue`, {
-      _csrf: csrfFrom(activated.text),
-    });
+    const done = await browser.post(
+      `/realms/${REALM}/mfa-enrollment/continue`,
+      {
+        _csrf: csrfFrom(activated.text),
+      },
+    );
     expect(done.status).toBe(302);
-    const claims = await idTokenClaims(codeFrom(done.headers['location'] as string));
+    const claims = await idTokenClaims(
+      codeFrom(done.headers['location'] as string),
+    );
     expect(claims['acr']).toBe(ACR_MFA);
     expect(claims['amr']).toEqual(['pwd', 'sms']);
   });
@@ -256,7 +284,9 @@ describe('SMS MFA screens (e2e)', () => {
       _csrf: csrfFrom(page.text),
     });
     expect(ok.status).toBe(302);
-    const claims = await idTokenClaims(codeFrom(ok.headers['location'] as string));
+    const claims = await idTokenClaims(
+      codeFrom(ok.headers['location'] as string),
+    );
     expect(claims['acr']).toBe(ACR_MFA);
     expect(claims['amr']).toEqual(['pwd', 'sms']);
     signedIn = browser;
@@ -290,7 +320,9 @@ describe('SMS MFA screens (e2e)', () => {
     });
     expect(res.headers['location']).toContain('/account?error=');
     await expect(
-      ctx.prisma.userCredential.count({ where: { userId: seeded.user.id, type: 'sms' } }),
+      ctx.prisma.userCredential.count({
+        where: { userId: seeded.user.id, type: 'sms' },
+      }),
     ).resolves.toBe(1);
   });
 
@@ -326,7 +358,10 @@ describe('SMS MFA screens (e2e)', () => {
       method: 'sms',
     });
     expect(verify.status).toBe(201);
-    expect(verify.body).toMatchObject({ status: 'success', amr: ['pwd', 'sms'] });
+    expect(verify.body).toMatchObject({
+      status: 'success',
+      amr: ['pwd', 'sms'],
+    });
   });
 
   it('completes the token API challenge with a texted code', async () => {

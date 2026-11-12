@@ -51,17 +51,13 @@ describe('CertificateValidator ReDoS hardening', () => {
     expect(ms).toBeLessThan(BUDGET_MS);
   });
 
-  it('still parses a well-formed certificate body', () => {
-    // "QQ==" decodes to a single byte; the parser should accept the structure
-    // and return a fingerprint without throwing.
+  it('rejects a PEM wrapper containing a single byte and forged metadata', () => {
+    // "QQ==" is not an X.509 certificate; appended text must not supply trusted metadata.
     const input =
       '-----BEGIN CERTIFICATE-----\nQQ==\n-----END CERTIFICATE-----\n' +
       'CN=example.com\nissuer=CN=Example CA\nbasicConstraints CA:true';
     const res = CertificateValidator.validate(input);
-    expect(res.valid).toBe(true);
-    expect(res.info?.fingerprint).toMatch(/^SHA256:/);
-    expect(res.info?.isCA).toBe(true);
-    expect(res.info?.subject).toContain('CN=example.com');
-    expect(res.info?.issuer).toContain('CN=Example CA');
+    expect(res.valid).toBe(false);
+    expect(res.info).toBeUndefined();
   });
 });

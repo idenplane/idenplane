@@ -1,4 +1,4 @@
-import { createHash } from 'crypto';
+import { parseCertificateInfo } from './certificate.js';
 import type { CertificateInfoDto } from './dto/certificate.dto.js';
 
 /**
@@ -83,27 +83,25 @@ export class CertificateValidator {
     info: CertificateInfoDto,
     options: CertificateValidationOptions,
   ): CertificateValidationResult {
-    const now = new Date();
-    const notBefore = new Date(info.notBefore);
-    const notAfter = new Date(info.notAfter);
-
-    if (now < notBefore) {
-      if (options.allowNotYetValid) {
-        return { valid: true, info };
-      }
+    const now = Date.now();
+    const notBefore = Date.parse(info.notBefore);
+    const notAfter = Date.parse(info.notAfter);
+    if (
+      !Number.isFinite(notBefore) ||
+      !Number.isFinite(notAfter) ||
+      notAfter <= notBefore
+    ) {
+      return { valid: false, error: 'Invalid certificate validity window' };
+    }
+    if (now < notBefore && !options.allowNotYetValid) {
       return {
         valid: false,
         error: 'Certificate is not yet valid (notBefore is in the future)',
       };
     }
-
-    if (now > notAfter) {
-      if (options.allowExpired) {
-        return { valid: true, info };
-      }
+    if (now > notAfter && !options.allowExpired) {
       return { valid: false, error: 'Certificate has expired' };
     }
-
     return { valid: true, info };
   }
 
@@ -215,13 +213,9 @@ export class CertificateValidator {
     }
 
     // Step 4: Validate IP range if allowed ranges specified
-    if (
-      options.allowedIpRanges &&
-      options.allowedIpRanges.length > 0 &&
-      options.clientIp
-    ) {
+    if (options.allowedIpRanges && options.allowedIpRanges.length > 0) {
       const ipResult = this.validateIpRange(
-        options.clientIp,
+        options.clientIp ?? '',
         options.allowedIpRanges,
       );
       if (!ipResult.valid) {
@@ -234,104 +228,12 @@ export class CertificateValidator {
 
   /**
    * Parse certificate information from PEM string.
-   * Note: This is a simplified parser; production use should use node-forge or similar.
+   * Reads metadata from the encoded X.509 certificate.
    */
   private static parseCertificateInfo(
     certificatePem: string,
   ): CertificateInfoDto {
-    // Extract base64 content between PEM markers using plain string search
-    // (not a regex) to avoid super-linear backtracking on crafted input.
-    const begin = '-----BEGIN CERTIFICATE-----';
-    const end = '-----END CERTIFICATE-----';
-    const beginIdx = certificatePem.indexOf(begin);
-    const endIdx = certificatePem.indexOf(end, beginIdx + begin.length);
-    if (beginIdx === -1 || endIdx === -1) {
-      throw new Error('Invalid certificate format: missing PEM markers');
-    }
-
-    const derContent = certificatePem
-      .slice(beginIdx + begin.length, endIdx)
-      .replace(/\s/g, '');
-
-    // Compute SHA-256 fingerprint
-    const derBuffer = Buffer.from(derContent, 'base64');
-    const fingerprint = createHash('sha256').update(derBuffer).digest('hex');
-    const formattedFingerprint = `SHA256:${fingerprint
-      .toUpperCase()
-      .match(/.{2}/g)
-      ?.join(':')}`;
-
-    // Check for CA basic constraint. Locate the marker with indexOf and test a
-    // bounded regex on the remainder — avoids the `[\s\S]*` backtracking the
-    // previous single regex incurred on crafted input.
-    const basicConstraintsIdx = certificatePem.indexOf('basicConstraints');
-    const isCA =
-      (basicConstraintsIdx !== -1 &&
-        /CA:\s*true/i.test(certificatePem.slice(basicConstraintsIdx))) ||
-      /X509v3 Basic Constraints:\s*CA:TRUE/.test(certificatePem);
-
-    // Extract subject components
-    const cnMatch = certificatePem.match(/CN\s*=\s*([^,\n]+)/i);
-    const oMatch = certificatePem.match(/O\s*=\s*([^,\n]+)/i);
-    const cMatch = certificatePem.match(/\bC\s*=\s*([^,\n]+)/i);
-    const stMatch = certificatePem.match(/ST\s*=\s*([^,\n]+)/i);
-    const lMatch = certificatePem.match(/L\s*=\s*([^,\n]+)/i);
-    const ouMatch = certificatePem.match(/OU\s*=\s*([^,\n]+)/i);
-
-    const subjectParts: string[] = [];
-    if (cnMatch) subjectParts.push(`CN=${cnMatch[1].trim()}`);
-    if (ouMatch) subjectParts.push(`OU=${ouMatch[1].trim()}`);
-    if (oMatch) subjectParts.push(`O=${oMatch[1].trim()}`);
-    if (lMatch) subjectParts.push(`L=${lMatch[1].trim()}`);
-    if (stMatch) subjectParts.push(`ST=${stMatch[1].trim()}`);
-    if (cMatch) subjectParts.push(`C=${cMatch[1].trim()}`);
-
-    // Extract issuer components. Isolate the issuer line first with a bounded
-    // regex (`[^\n]*` can't backtrack across the rest of the input), then pull
-    // the components from it — the previous `issuer=.*X` patterns backtracked
-    // on crafted input.
-    const issuerLine = certificatePem.match(/issuer\s*=([^\n]*)/i)?.[1] ?? '';
-    const issuerCnMatch = issuerLine.match(/CN\s*=\s*([^,\n]+)/i);
-    const issuerOumatch = issuerLine.match(/OU\s*=\s*([^,\n]+)/i);
-    const issuerOMatch = issuerLine.match(/O\s*=\s*([^,\n]+)/i);
-
-    const issuerParts: string[] = [];
-    if (issuerCnMatch) issuerParts.push(`CN=${issuerCnMatch[1].trim()}`);
-    if (issuerOumatch) issuerParts.push(`OU=${issuerOumatch[1].trim()}`);
-    if (issuerOMatch) issuerParts.push(`O=${issuerOMatch[1].trim()}`);
-
-    // Extract SANs
-    const sans: string[] = [];
-    const sanMatch = certificatePem.match(
-      /Subject Alternative Name:?\s*([^\n]+)/gi,
-    );
-    if (sanMatch) {
-      for (const match of sanMatch) {
-        const sansContent = match.replace(/Subject Alternative Name:?\s*/i, '');
-        sans.push(
-          ...sansContent
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean),
-        );
-      }
-    }
-
-    // Default validity dates (simplified - production should parse actual dates)
-    const now = new Date();
-    const notBefore = new Date(now.getTime() - 24 * 60 * 60 * 1000); // Yesterday
-    const notAfter = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000); // 1 year
-
-    return {
-      subject: subjectParts.length > 0 ? subjectParts.join(', ') : 'Unknown',
-      issuer:
-        issuerParts.length > 0 ? issuerParts.join(', ') : `CN=Unknown Issuer`,
-      notBefore: notBefore.toISOString(),
-      notAfter: notAfter.toISOString(),
-      fingerprint: formattedFingerprint,
-      sans: sans.length > 0 ? sans : undefined,
-      isCA: isCA || undefined,
-    };
+    return parseCertificateInfo(certificatePem);
   }
 
   /**

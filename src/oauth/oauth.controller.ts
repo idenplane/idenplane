@@ -95,6 +95,18 @@ export class OAuthController {
       query as unknown as AuthorizeParams,
     );
 
+    const prompts = (query['prompt'] ?? '').split(/\s+/).filter(Boolean);
+    const silent = prompts.includes('none');
+    if (silent && prompts.length !== 1) {
+      return this.redirectWithError(
+        res,
+        query['redirect_uri'],
+        'invalid_request',
+        'prompt=none cannot be combined with other prompt values',
+        query['state'],
+      );
+    }
+
     // Check for existing SSO session cookie
     const sessionCookie = (req.cookies as Record<string, string>)?.[
       'IDENPLANE_SESSION'
@@ -105,17 +117,7 @@ export class OAuthController {
         sessionCookie,
       );
       if (user) {
-        const prompt = query['prompt'];
-
-        if (prompt === 'none') {
-          return this.handlePromptNone(
-            res,
-            client.redirectUris[0],
-            query['state'],
-          );
-        }
-
-        if (prompt === 'login') {
+        if (prompts.includes('login')) {
           return this.handlePromptLogin(res, realm.name, query);
         }
 
@@ -150,6 +152,20 @@ export class OAuthController {
           this.resolveRequiredAcr(requestedAcr, clientRequiredAcr),
           riskRequiredAcr,
         );
+
+        if (
+          silent &&
+          requiredAcr &&
+          !this.stepUpService.satisfiesAcr(sessionAcr, requiredAcr)
+        ) {
+          return this.redirectWithError(
+            res,
+            query['redirect_uri'],
+            'interaction_required',
+            'Additional authentication is required',
+            query['state'],
+          );
+        }
 
         if (requiredAcr) {
           if (loginSession) {
@@ -196,17 +212,24 @@ export class OAuthController {
         };
 
         // Check if client requires consent
-        if (client.requireConsent) {
+        if (client.requireConsent || prompts.includes('consent')) {
           const scopes = (query['scope'] ?? 'openid')
             .split(' ')
             .filter(Boolean);
-          const hasConsent = await this.consentService.hasConsent(
-            user.id,
-            client.id,
-            scopes,
-          );
+          const hasConsent =
+            !prompts.includes('consent') &&
+            (await this.consentService.hasConsent(user.id, client.id, scopes));
 
           if (!hasConsent) {
+            if (silent) {
+              return this.redirectWithError(
+                res,
+                query['redirect_uri'],
+                'consent_required',
+                'User consent is required',
+                query['state'],
+              );
+            }
             const reqId = await this.consentService.storeConsentRequest({
               userId: user.id,
               clientId: client.id,
@@ -234,6 +257,10 @@ export class OAuthController {
         );
         return res.redirect(302, result.redirectUrl);
       }
+    }
+
+    if (silent) {
+      return this.handlePromptNone(res, query['redirect_uri'], query['state']);
     }
 
     // No valid session: redirect to login page with OAuth params.
@@ -334,7 +361,7 @@ export class OAuthController {
     const url = new URL(redirectUri);
     url.searchParams.set('error', error);
     url.searchParams.set('error_description', errorDescription);
-    if (state) {
+    if (state !== undefined) {
       url.searchParams.set('state', state);
     }
     res.redirect(302, url.toString());

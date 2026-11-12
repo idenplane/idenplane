@@ -8,6 +8,7 @@ import { ThemeTemplateService } from './theme-template.service.js';
 import { ThemeMessageService } from './theme-message.service.js';
 import { I18nService, SUPPORTED_LOCALES } from './i18n.service.js';
 import type { ThemeType } from './theme.types.js';
+import { createThemeLayout } from './theme-view-engine.js';
 
 /**
  * Sanitizes a CSS string so it cannot break out of a <style> block.
@@ -39,19 +40,27 @@ export function sanitizeCss(css: string): string {
 }
 
 /**
- * Render locals that Express and hbs read as engine configuration rather than
- * template data: `layout` picks the layout file, `settings` carries the views
- * directory, `cache` toggles template caching and `_locals` is merged into the
- * options by Express. Letting page data set any of them is the hbs file
- * disclosure (CVE-2021-32822, unpatched upstream), so they are removed from
- * everything a caller passes in and only set by this service.
+ * Keep Express bookkeeping and prototype keys out of page data. The view
+ * adapter receives fixed runtime options and accepts only layout markers
+ * created by this service, rather than request-controlled layout filenames.
  */
-const RESERVED_RENDER_LOCALS = ['layout', 'settings', 'cache', '_locals'];
+const RESERVED_RENDER_LOCALS = [
+  'layout',
+  'settings',
+  'cache',
+  '_locals',
+  '__proto__',
+  'constructor',
+  'prototype',
+];
 
 function withoutReservedLocals(
   data: Record<string, unknown>,
 ): Record<string, unknown> {
-  const clean: Record<string, unknown> = {};
+  const clean: Record<string, unknown> = Object.create(null) as Record<
+    string,
+    unknown
+  >;
   for (const [key, value] of Object.entries(data)) {
     if (!RESERVED_RENDER_LOCALS.includes(key)) clean[key] = value;
   }
@@ -170,7 +179,7 @@ export class ThemeRenderService {
       // CSP nonce for inline <script> blocks in theme templates
       scriptNonce,
       // Last, so nothing above can replace the layout this service resolved.
-      layout: relativeLayout,
+      layout: createThemeLayout(relativeLayout),
     });
   }
 

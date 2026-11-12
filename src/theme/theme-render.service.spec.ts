@@ -154,7 +154,7 @@ describe('ThemeRenderService', () => {
       );
 
       const [, data] = mockRes.render.mock.calls[0];
-      expect(data.layout).toMatch(/layouts[/\\]main\.hbs/);
+      expect(data.layout.filename).toMatch(/layouts[/\\]main\.hbs/);
     });
 
     // hbs reads these render locals as engine configuration (CVE-2021-32822):
@@ -176,7 +176,7 @@ describe('ThemeRenderService', () => {
       );
 
       const [, data] = mockRes.render.mock.calls[0];
-      expect(data.layout).toMatch(/layouts[/\\]main\.hbs/);
+      expect(data.layout.filename).toMatch(/layouts[/\\]main\.hbs/);
       expect(data).not.toHaveProperty('settings');
       expect(data).not.toHaveProperty('cache');
       expect(data).not.toHaveProperty('_locals');
@@ -192,7 +192,7 @@ describe('ThemeRenderService', () => {
       service.render(mockRes as any, mockRealm, 'login', 'login', {});
 
       const [, data] = mockRes.render.mock.calls[0];
-      expect(data.layout).toMatch(/layouts[/\\]main\.hbs/);
+      expect(data.layout.filename).toMatch(/layouts[/\\]main\.hbs/);
       expect(data.primaryColor).toBe('#2563eb');
     });
 
