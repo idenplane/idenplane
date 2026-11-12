@@ -105,7 +105,7 @@ The following variables are **required in production**. Idenplane will refuse to
 |----------|---------|----------|-------------|
 | `ADMIN_API_KEY` | — | Yes (prod) | Secret API key for admin endpoints (32+ characters recommended) |
 | `ADMIN_USER` | `admin` | No | Initial admin username (only used on first run) |
-| `ADMIN_PASSWORD` | `admin` | No | Initial admin password (only used on first run) |
+| `ADMIN_PASSWORD` | `admin` outside production | Production, first start | Initial admin password (only used on first run). With `NODE_ENV=production` the first start refuses a missing, default or shorter-than-12-character value |
 
 Generate a secure key:
 

@@ -175,4 +175,63 @@ describe('AdminSeedService', () => {
       );
     });
   });
+  describe('initial admin password in production', () => {
+    const configure = (password: string | undefined, nodeEnv: string) => {
+      config.get.mockImplementation((key: string, defaultValue?: string) => {
+        if (key === 'ADMIN_USER') return 'admin';
+        if (key === 'ADMIN_PASSWORD') return password;
+        if (key === 'NODE_ENV') return nodeEnv;
+        return defaultValue;
+      });
+      prisma.realm.findUnique.mockResolvedValue(null);
+    };
+
+    it.each([
+      undefined,
+      '',
+      'admin',
+      'Admin',
+      'change_this_password',
+      'short-pass',
+    ])('refuses to seed the first admin with %p', async (password) => {
+      configure(password, 'production');
+
+      await expect(service.onApplicationBootstrap()).rejects.toThrow(
+        /ADMIN_PASSWORD must be set/,
+      );
+      expect(crypto.hashPassword).not.toHaveBeenCalled();
+      expect(prisma.realm.create).not.toHaveBeenCalled();
+    });
+
+    it('seeds with a strong configured password', async () => {
+      configure('a-unique-strong-password', 'production');
+      prisma.realm.create.mockResolvedValue({ id: 'realm-1' });
+      prisma.role.create.mockResolvedValue({ id: 'role-1' });
+      prisma.user.create.mockResolvedValue({ id: 'user-1' });
+
+      await service.onApplicationBootstrap();
+
+      expect(crypto.hashPassword).toHaveBeenCalledWith(
+        'a-unique-strong-password',
+      );
+    });
+
+    it('does not check the password once the master realm exists', async () => {
+      configure(undefined, 'production');
+      prisma.realm.findUnique.mockResolvedValue({ id: 'realm-1' });
+
+      await expect(service.onApplicationBootstrap()).resolves.toBeUndefined();
+    });
+
+    it('keeps the admin default outside production', async () => {
+      configure(undefined, 'development');
+      prisma.realm.create.mockResolvedValue({ id: 'realm-1' });
+      prisma.role.create.mockResolvedValue({ id: 'role-1' });
+      prisma.user.create.mockResolvedValue({ id: 'user-1' });
+
+      await service.onApplicationBootstrap();
+
+      expect(crypto.hashPassword).toHaveBeenCalledWith('admin');
+    });
+  });
 });

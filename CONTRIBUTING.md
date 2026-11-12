@@ -31,9 +31,9 @@ npm install
 
 2. **Set up environment**
 ```bash
-cp .env.example .env
-# Replace the four REPLACE_ME values the setup guide lists
-# (ADMIN_API_KEY, ADMIN_PASSWORD, WEBHOOK_SECRET_KEY, WEBHOOK_ENCRYPTION_SALT)
+node scripts/setup-env.cjs
+# Writes .env with unique local secrets and a DATABASE_URL that matches
+# the compose database. It refuses to overwrite an existing .env.
 ```
 
 3. **Start the development database**
