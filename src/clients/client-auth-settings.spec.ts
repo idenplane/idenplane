@@ -128,6 +128,8 @@ describe('client DTO validation', () => {
       expect(await errors({ [field]: good })).toEqual([]);
       expect(await errors({ [field]: bad })).toEqual([field]);
       expect(await errors({ [field]: null }, UpdateClientDto)).toEqual([]);
+      // The validators survive PartialType/OmitType, so PATCH checks too.
+      expect(await errors({ [field]: bad }, UpdateClientDto)).toEqual([field]);
     },
   );
 
