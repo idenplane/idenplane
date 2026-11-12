@@ -124,7 +124,8 @@
     "deepmerge-ts": "^8.0.2",
     "mysql2": "^3.23.1",
     "minimatch@^9": "^11.0.1",
-    "minimatch@^10": "^11.0.1"
+    "minimatch@^10": "^11.0.1",
+    "glob@>=9 <14.0.2": "^14.0.6"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"
