@@ -37,7 +37,7 @@ secret_value() {
 }
 
 step "Render refuses placeholder credentials"
-for bad in "secrets.ADMIN_API_KEY=change-me-in-production" "secrets.ADMIN_PASSWORD=admin"; do
+for bad in "secrets.ADMIN_API_KEY=change-me-in-production" "secrets.ADMIN_PASSWORD=admin"; do # placeholder values the chart must refuse
   if helm template "$RELEASE" "$CHART" --set "$bad" >/dev/null 2>&1; then
     echo "helm template accepted --set $bad" >&2
     exit 1
