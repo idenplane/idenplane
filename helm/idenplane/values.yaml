@@ -234,9 +234,22 @@ env:
 # ── Sensitive / Secret Environment Variables ─────────────────────────────────
 # Values in this section are stored in a Kubernetes Secret.
 secrets:
-  # Admin API key used to access protected administrative endpoints.
-  # REQUIRED — change before deploying to production.
-  ADMIN_API_KEY: "change-me-in-production"
+  # Existing Secret with ADMIN_API_KEY, ADMIN_PASSWORD, WEBHOOK_SECRET_KEY and
+  # WEBHOOK_ENCRYPTION_SALT. When set, the chart creates none of these keys.
+  # Use it with GitOps tools (Argo CD, Flux) or `helm template`: they cannot
+  # read the stored Secret back, so generated keys would change on every render
+  # and stored webhook secrets would become unreadable.
+  existingSecret: ""
+
+  # Leave the four values below empty to have the chart generate them on first
+  # install and keep them on upgrades (stored in the "<release>-keys" Secret).
+  # Admin API key for administrative endpoints (at least 32 characters).
+  ADMIN_API_KEY: ""
+  # Password of the initial `admin` user, used only on the first start.
+  ADMIN_PASSWORD: ""
+  # Encrypts webhook secrets at rest. Never change it after the first install.
+  WEBHOOK_SECRET_KEY: ""
+  WEBHOOK_ENCRYPTION_SALT: ""
 
   # Database connection string. When postgresql.enabled is true the chart
   # auto-constructs this from the postgresql sub-chart credentials; set an

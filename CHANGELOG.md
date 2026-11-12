@@ -12,6 +12,8 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 **Before you upgrade:**
 - **First production start needs `ADMIN_PASSWORD`.** With `NODE_ENV=production` (the Docker image default), creating the initial admin now fails when `ADMIN_PASSWORD` is missing, `admin`, a documented placeholder, or shorter than 12 characters. Existing databases already have their admin and are not affected.
 - **Root `docker-compose.yml` no longer has a built-in database password.** It reads `POSTGRES_PASSWORD` from `.env`. For an existing volume created with the old file, add `POSTGRES_PASSWORD=idenplane` to `.env` (changing the value does not rotate the password inside an existing volume). Ports 3000 and 5432 now listen on localhost only.
+- **Helm:** the chart now creates a `<release>-idenplane-keys` Secret with `ADMIN_API_KEY`, `ADMIN_PASSWORD`, `WEBHOOK_SECRET_KEY` and `WEBHOOK_ENCRYPTION_SALT`. Values you set under `secrets:` win; empty ones are generated on first install and kept on upgrades. Rendering fails on the old placeholders (`change-me-in-production`, `REPLACE_WITH_STRONG_SECRET`, the production values' database password), so pass real values or leave the keys empty.
+- **Helm with Argo CD, Flux or `helm template`:** these cannot read a stored Secret back, so generated keys would change on every render. Create the four keys yourself and set `secrets.existingSecret`.
 
 ### Added
 - **Next.js example: server-side sessions and a protected API.** The quickstart can keep tokens on the server in PostgreSQL behind an HTTP-only cookie, with refresh, sign-out, encrypted backup/restore and scheduled cleanup; `/api/profile` verifies the access token on the server and only returns the caller's own profile. A new CI workflow runs these flows against an image built from the commit, over HTTP and HTTPS.
@@ -37,6 +39,7 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 - **`prompt=none` works with a valid session.** Silent authorization used to return `login_required` even when the user was signed in. It now completes without UI when the session, redirect URI, consent and requested assurance allow it, and returns `login_required`, `consent_required` or `interaction_required` otherwise.
 - The integration-test database preflight no longer shells out to `prisma db execute`, so it works the same on Windows and Linux.
 
+- **The Helm chart did not start with its default values.** The default `ADMIN_API_KEY` was a placeholder the server refuses in production, and the chart never set `WEBHOOK_SECRET_KEY` or `WEBHOOK_ENCRYPTION_SALT`, which production requires. CI now installs the chart on a kind cluster, signs in with the generated password, upgrades it and runs `helm test`.
 ## [0.6.0] - 2026-11-10
 
 Idenplane gets much faster and runs correctly as several instances. Protocol requests no longer go to the database each time, and `WEB_CONCURRENCY` lets one container use every CPU. Scheduled jobs, webhooks, plugins and first boot now behave when more than one instance runs, and several security fixes land. With one worker per CPU, Idenplane served discovery, JWKS, client-credentials tokens and introspection faster than Keycloak 26.8 on the same machine. See the [benchmarks](docs/docs/benchmarks.md).

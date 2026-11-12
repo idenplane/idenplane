@@ -43,6 +43,8 @@ spec:
               protocol: TCP
           # ── Environment: non-sensitive values from ConfigMap ──────────────
           envFrom:
+            - secretRef:
+                name: {{ .Values.secrets.existingSecret | default (include "idenplane.keysSecretName" .) }}
             - configMapRef:
                 name: {{ include "idenplane.fullname" . }}
             - secretRef:

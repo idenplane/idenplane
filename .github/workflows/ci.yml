@@ -698,8 +698,45 @@ jobs:
       - name: Render with default values
         run: helm template idenplane helm/idenplane > /dev/null
 
+      # The production file carries a placeholder database password on purpose,
+      # so render it the way an operator must: with a real one.
       - name: Render with production values
-        run: helm template idenplane helm/idenplane -f helm/idenplane/values.production.yaml > /dev/null
+        run: >-
+          helm template idenplane helm/idenplane
+          -f helm/idenplane/values.production.yaml
+          --set postgresql.auth.password=ci-render-only-password > /dev/null
+
+  helm-install:
+    name: Helm install (kind)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: azure/setup-helm@v5
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Build the image from this commit
+        run: docker build -t idenplane:helm-ci .
+
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: idenplane
+
+      - name: Load the image into kind
+        run: kind load docker-image idenplane:helm-ci --name idenplane
+
+      - name: Fetch chart dependencies
+        run: helm dependency build helm/idenplane
+
+      - name: Install, sign in, upgrade and test
+        env:
+          IMAGE_REPOSITORY: idenplane
+          IMAGE_TAG: helm-ci
+        run: bash scripts/verify-helm-install.sh
 
   build:
     name: Build

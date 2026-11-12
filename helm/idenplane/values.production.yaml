@@ -65,7 +65,10 @@ env:
 # control. Example:
 #   --set secrets.ADMIN_API_KEY="$(openssl rand -hex 32)"
 secrets:
-  ADMIN_API_KEY: "REPLACE_WITH_STRONG_SECRET"
+  # Generated on first install and kept on upgrades; see values.yaml.
+  # With GitOps, create the keys yourself and set existingSecret.
+  existingSecret: ""
+  ADMIN_API_KEY: ""
   DATABASE_URL: ""   # auto-constructed from postgresql sub-chart when enabled
 
 # ── PostgreSQL Sub-chart ──────────────────────────────────────────────────────

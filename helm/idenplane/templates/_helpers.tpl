@@ -110,3 +110,34 @@ and no explicit REDIS_URL secret value has been provided.
 {{- .Values.secrets.REDIS_URL }}
 {{- end }}
 {{- end }}
+
+{{/*
+Name of the Secret that holds the generated application keys.
+*/}}
+{{- define "idenplane.keysSecretName" -}}
+{{- printf "%s-keys" (include "idenplane.fullname" .) | trunc 63 | trimSuffix "-" }}
+{{- end }}
+
+{{/*
+Refuse to render with placeholder or weak credentials. An empty value is fine:
+the chart generates one.
+*/}}
+{{- define "idenplane.validateSecrets" -}}
+{{- $apiKey := .Values.secrets.ADMIN_API_KEY | default "" }}
+{{- if has $apiKey (list "change-me-in-production" "REPLACE_WITH_STRONG_SECRET" "changeme" "secret" "admin" "password") }}
+{{- fail "secrets.ADMIN_API_KEY is a placeholder. Leave it empty to generate one, or set a random value of at least 32 characters." }}
+{{- end }}
+{{- if and $apiKey (lt (len $apiKey) 32) }}
+{{- fail "secrets.ADMIN_API_KEY must be at least 32 characters." }}
+{{- end }}
+{{- $password := .Values.secrets.ADMIN_PASSWORD | default "" }}
+{{- if has (lower $password) (list "admin" "password" "changeme" "change_this_password" "replace_with_strong_admin_password") }}
+{{- fail "secrets.ADMIN_PASSWORD is a placeholder. Leave it empty to generate one." }}
+{{- end }}
+{{- if and $password (lt (len $password) 12) }}
+{{- fail "secrets.ADMIN_PASSWORD must be at least 12 characters." }}
+{{- end }}
+{{- if and .Values.postgresql.enabled (eq (.Values.postgresql.auth.password | default "") "REPLACE_WITH_STRONG_DB_PASSWORD") }}
+{{- fail "postgresql.auth.password is still the placeholder from values.production.yaml. Set a strong password." }}
+{{- end }}
+{{- end }}
