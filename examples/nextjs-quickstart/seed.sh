@@ -45,14 +45,13 @@ user_response=$(post "/quickstart/users" '{
   "email": "demo@example.com",
   "firstName": "Demo",
   "lastName": "User",
-  "enabled": true,
-  "emailVerified": true
+  "enabled": true
 }')
 user_id=$(echo "$user_response" | grep -o '"id":"[^"]*"' | head -1 | cut -d'"' -f4)
 
 if [ -n "${user_id:-}" ]; then
   echo "Setting demo user password..."
-  curl -sS -o /dev/null -w "%{http_code}\n" \
+  curl --fail-with-body -sS -o /dev/null -w "%{http_code}\n" \
     -X PUT "$BASE/quickstart/users/$user_id/reset-password" \
     -H "$AUTH_HEADER" -H "Content-Type: application/json" \
     -d '{"password":"Demo1234!"}'

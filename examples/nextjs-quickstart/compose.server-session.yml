@@ -1,0 +1,36 @@
+# Local demonstration overlay, not an internet-facing production recipe.
+# Generate .env.server-session first; never regenerate its key for existing data.
+services:
+  session-db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: bff
+      POSTGRES_DB: bff
+      POSTGRES_PASSWORD: ${SESSION_POSTGRES_PASSWORD:?Generate the server-session environment first}
+    volumes:
+      - bff_session_data:/var/lib/postgresql/data
+      - ./session-schema.sql:/docker-entrypoint-initdb.d/001-sessions.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U bff -d bff"]
+      interval: 3s
+      timeout: 3s
+      retries: 20
+  web:
+    build:
+      args:
+        NEXT_PUBLIC_IDENPLANE_SERVER_URL: ${NEXT_PUBLIC_IDENPLANE_SERVER_URL:-http://localhost:3000}
+        NEXT_PUBLIC_IDENPLANE_REALM: ${NEXT_PUBLIC_IDENPLANE_REALM:-quickstart}
+    environment:
+      NEXT_PUBLIC_IDENPLANE_SERVER_URL: ${NEXT_PUBLIC_IDENPLANE_SERVER_URL:-http://localhost:3000}
+      NEXT_PUBLIC_IDENPLANE_REALM: ${NEXT_PUBLIC_IDENPLANE_REALM:-quickstart}
+      SESSION_APP_ORIGIN: ${SESSION_APP_ORIGIN:?Required application origin}
+      SESSION_DATABASE_URL: postgresql://bff:${SESSION_POSTGRES_PASSWORD}@session-db:5432/bff
+      SESSION_ENCRYPTION_KEY: ${SESSION_ENCRYPTION_KEY:?Required stable private encryption key}
+      SESSION_CLIENT_ID: ${SESSION_CLIENT_ID:-nextjs-session}
+      SESSION_CLIENT_SECRET: ${SESSION_CLIENT_SECRET:?Required confidential OIDC client secret}
+      SESSION_ALLOW_INSECURE_LOCALHOST: ${SESSION_ALLOW_INSECURE_LOCALHOST:-false}
+    depends_on:
+      session-db:
+        condition: service_healthy
+volumes:
+  bff_session_data:

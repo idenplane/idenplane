@@ -14,6 +14,7 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 - **Root `docker-compose.yml` no longer has a built-in database password.** It reads `POSTGRES_PASSWORD` from `.env`. For an existing volume created with the old file, add `POSTGRES_PASSWORD=idenplane` to `.env` (changing the value does not rotate the password inside an existing volume). Ports 3000 and 5432 now listen on localhost only.
 
 ### Added
+- **Next.js example: server-side sessions and a protected API.** The quickstart can keep tokens on the server in PostgreSQL behind an HTTP-only cookie, with refresh, sign-out, encrypted backup/restore and scheduled cleanup; `/api/profile` verifies the access token on the server and only returns the caller's own profile. A new CI workflow runs these flows against an image built from the commit, over HTTP and HTTPS.
 - **`scripts/setup-env.cjs`** writes a `.env` with unique random database, admin, API and webhook secrets for Docker Compose or a source checkout. It refuses to overwrite an existing `.env`, so keys that encrypt stored data are never replaced. The README and Quickstart use it.
 
 ### Security
@@ -25,6 +26,7 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 - **Removed the `hbs` package.** Login pages render through a small built-in view engine on the existing `handlebars` package, with fixed runtime options, a bounded template cache, and template and layout paths confined to the themes directory. Request data can no longer select engine options or the layout. Themes and translation helpers work as before.
 
 ### Fixed
+- **JavaScript SDK: sign-out ends the single sign-on session.** `logout()` revokes the refresh token and then sends the browser to the provider's end-session endpoint with `id_token_hint` (and `post_logout_redirect_uri` when configured), so the next sign-in asks for credentials again. The PKCE verifier and state are kept in a separate, client-scoped login transaction that expires after 10 minutes and survives the full-page redirect even when tokens use in-memory storage.
 - **NHI device certificates are real X.509.** Generated certificates are standard X.509 signed with the requested key, with the requested validity, subject and SANs, and they parse with standard X.509 tooling such as Node's `X509Certificate`. Validation reads the real validity dates and rejects malformed or expired certificates.
 - **`prompt=none` works with a valid session.** Silent authorization used to return `login_required` even when the user was signed in. It now completes without UI when the session, redirect URI, consent and requested assurance allow it, and returns `login_required`, `consent_required` or `interaction_required` otherwise.
 - The integration-test database preflight no longer shells out to `prisma db execute`, so it works the same on Windows and Linux.

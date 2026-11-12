@@ -205,7 +205,7 @@ jobs:
         run: |
           node dist/main.js > backend.log 2>&1 &
           echo "Waiting for backend on :3000/health..."
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             if curl -sf http://localhost:3000/health > /dev/null; then
               echo "Backend is up."
               exit 0
@@ -301,7 +301,7 @@ jobs:
         run: |
           node dist/main.js > backend.log 2>&1 &
           echo "Waiting for backend on :3000/health..."
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             if curl -sf http://localhost:3000/health > /dev/null; then
               echo "Backend is up."
               exit 0
@@ -331,7 +331,7 @@ jobs:
         run: |
           npm run dev > vite.log 2>&1 &
           echo "Waiting for admin-ui on :5173..."
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             if curl -sf http://localhost:5173/console/login > /dev/null; then
               echo "admin-ui is up."
               exit 0
@@ -552,7 +552,7 @@ jobs:
           cache-dependency-path: examples/${{ matrix.example }}/package-lock.json
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       # Reported, not enforced. `npm audit` resolves against the advisory
       # database at run time, so a newly published advisory against any
@@ -575,6 +575,10 @@ jobs:
       # nextjs-quickstart has a real Next.js build; vanilla-js-quickstart has
       # no build step at all (that's the point of it), so just confirm the
       # SDK it depends on actually resolves to something with a dist/ in it.
+      - name: Test server resource authorization (nextjs-quickstart only)
+        if: matrix.example == 'nextjs-quickstart'
+        run: node --experimental-strip-types --test tests/*.test.mjs
+
       - name: Build (nextjs-quickstart only)
         if: matrix.example == 'nextjs-quickstart'
         run: npm run build

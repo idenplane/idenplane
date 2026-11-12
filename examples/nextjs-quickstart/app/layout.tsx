@@ -1,6 +1,6 @@
 'use client';
 
-import { AuthProvider } from 'idenplane-nextjs';
+import { AuthProvider } from './auth-provider';
 import './globals.css';
 
 const serverUrl = process.env.NEXT_PUBLIC_IDENPLANE_SERVER_URL ?? 'http://localhost:3000';

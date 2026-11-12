@@ -1,0 +1,97 @@
+name: Server session integration
+
+on:
+  push:
+    branches: [main, dev]
+    paths:
+      - 'src/**'
+      - 'prisma/**'
+      - 'themes/**'
+      - 'Dockerfile'
+      - 'docker-entrypoint.sh'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'packages/idenplane-js/**'
+      - 'examples/nextjs-quickstart/**'
+      - '.github/workflows/server-session.yml'
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'src/**'
+      - 'prisma/**'
+      - 'themes/**'
+      - 'Dockerfile'
+      - 'docker-entrypoint.sh'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'packages/idenplane-js/**'
+      - 'examples/nextjs-quickstart/**'
+      - '.github/workflows/server-session.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: server-session-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  session-integration:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      IDENPLANE_TEST_IMAGE: idenplane:session-ci
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: |
+            examples/nextjs-quickstart/package-lock.json
+            packages/idenplane-js/package-lock.json
+            admin-ui/package-lock.json
+      - name: Configure verification artifact directory
+        run: echo "SESSION_TEST_ARTIFACTS=$RUNNER_TEMP/session-evidence" >> "$GITHUB_ENV"
+      - name: Install example dependencies from lockfile
+        run: npm ci --prefix examples/nextjs-quickstart
+      - name: Run session and authorization unit tests
+        working-directory: examples/nextjs-quickstart
+        run: node --experimental-strip-types --test tests/*.test.mjs
+      - name: Verify real PostgreSQL session storage
+        run: node --experimental-strip-types examples/nextjs-quickstart/tests/session-store.integration.mjs
+      - name: Verify encrypted backup, safe restore and scheduled session cleanup
+        run: node --experimental-strip-types examples/nextjs-quickstart/tests/session-operations.integration.mjs
+      - name: Build current SDK source
+        run: |
+          npm ci --prefix packages/idenplane-js
+          npm run build --prefix packages/idenplane-js
+      - name: Install browser test tools
+        run: npm ci --prefix admin-ui
+      - name: Install Chromium
+        working-directory: admin-ui
+        run: npx playwright install --with-deps chromium
+      - name: Build current backend image
+        run: docker build -t "$IDENPLANE_TEST_IMAGE" .
+      - name: Verify real login, refresh, restart and logout on two workers
+        run: node --experimental-strip-types examples/nextjs-quickstart/tests/session-runtime.mjs
+      - name: Verify HTTPS cookies and two-domain session flow
+        env:
+          SESSION_TEST_HTTPS: 'true'
+          SESSION_TEST_ARTIFACTS: ${{ runner.temp }}/session-evidence/https
+        run: node --experimental-strip-types examples/nextjs-quickstart/tests/session-runtime.mjs
+      - name: Upload sanitized verification results
+        if: always()
+        uses: actions/upload-artifact@v7
+        with:
+          name: server-session-results
+          path: |
+            ${{ runner.temp }}/session-evidence/*results.json
+            ${{ runner.temp }}/session-evidence/nextjs-build.log
+            ${{ runner.temp }}/session-evidence/operations-build.log
+            ${{ runner.temp }}/session-evidence/server-session-mobile.png
+            ${{ runner.temp }}/session-evidence/https/*results.json
+            ${{ runner.temp }}/session-evidence/https/nextjs-build.log
+            ${{ runner.temp }}/session-evidence/https/server-session-mobile.png
+          retention-days: 14

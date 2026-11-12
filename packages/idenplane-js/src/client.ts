@@ -9,6 +9,7 @@ import type {
 import { generateCodeChallenge, generateCodeVerifier, generateState } from './pkce.js';
 import { getRolesFromToken, isTokenExpired, parseJwt } from './token.js';
 import { createStorage, type TokenStorage } from './storage.js';
+import { saveLoginTransaction, readLoginTransaction, clearLoginTransaction } from './login-transaction.js';
 import { EventEmitter } from './events.js';
 import { DiscoveryClient } from './discovery.js';
 import { TokenRefresher } from './token-refresh.js';
@@ -260,8 +261,7 @@ export class IdenplaneClient {
     const state = options?.state ?? generateState();
     const scopes = options?.scope ?? this.config.scopes;
 
-    this.storage.set('pkce_verifier', verifier);
-    this.storage.set('auth_state', state);
+    saveLoginTransaction(this.config, this.storage, state, verifier);
 
     const params = new URLSearchParams({
       response_type: 'code',
@@ -310,13 +310,14 @@ export class IdenplaneClient {
     }
 
     // Verify state — fail-closed: reject if stored state is missing or mismatched
-    const storedState = this.storage.get('auth_state');
+    const transaction = readLoginTransaction(this.config, this.storage);
+    const storedState = transaction?.state;
     if (!storedState || state !== storedState) {
       this.events.emit('error', new Error('State mismatch — possible CSRF attack'));
       return false;
     }
 
-    const verifier = this.storage.get('pkce_verifier');
+    const verifier = transaction?.verifier;
     if (!verifier) {
       this.events.emit('error', new Error('Missing PKCE verifier'));
       return false;
@@ -348,8 +349,7 @@ export class IdenplaneClient {
     this.tokenRefresher.scheduleRefresh();
 
     // Clean up PKCE state
-    this.storage.remove('pkce_verifier');
-    this.storage.remove('auth_state');
+    clearLoginTransaction(this.config, this.storage);
 
     // Clean authorization code from URL
     if (typeof window !== 'undefined') {
@@ -371,14 +371,22 @@ export class IdenplaneClient {
    */
   async logout(): Promise<void> {
     const refreshToken = this.storage.get('refresh_token');
+    const idToken = this.storage.get('id_token');
+    let browserLogoutUrl: string | undefined;
 
-    if (refreshToken) {
-      try {
-        const config = await this.getOidcConfig();
-        if (config.end_session_endpoint) {
-          // Bug #3 fix: OIDC end_session_endpoint expects form-urlencoded, not JSON.
-          // Sending JSON causes the server to ignore the refresh_token parameter,
-          // leaving the server-side session alive.
+    try {
+      const config = await this.getOidcConfig();
+      if (config.end_session_endpoint) {
+        if (typeof window !== 'undefined') {
+          const url = new URL(config.end_session_endpoint);
+          if (idToken) url.searchParams.set('id_token_hint', idToken);
+          // The provider validates this URI against the client's registration.
+          if (idToken && this.config.postLogoutRedirectUri) {
+            url.searchParams.set('post_logout_redirect_uri', this.config.postLogoutRedirectUri);
+          }
+          browserLogoutUrl = url.toString();
+        }
+        if (refreshToken) {
           const body = new URLSearchParams({
             client_id: this.config.clientId,
             refresh_token: refreshToken,
@@ -389,16 +397,25 @@ export class IdenplaneClient {
             body: body.toString(),
           });
         }
-      } catch {
-        // Best-effort server logout
       }
+    } catch {
+      // Local logout and an already-resolved browser logout still proceed.
     }
 
+    try {
+      clearLoginTransaction(this.config, this.storage);
+    } catch {
+      // Denied browser transaction storage must not prevent local logout.
+    }
     this.clearTokens();
     this.events.emit('logout');
 
-    if (typeof window !== 'undefined' && this.config.postLogoutRedirectUri) {
-      window.location.href = this.config.postLogoutRedirectUri;
+    if (typeof window !== 'undefined') {
+      if (browserLogoutUrl) {
+        window.location.href = browserLogoutUrl;
+      } else if (this.config.postLogoutRedirectUri) {
+        window.location.href = this.config.postLogoutRedirectUri;
+      }
     }
   }
 
