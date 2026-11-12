@@ -28,8 +28,9 @@ import {
   StartAuthenticationDto,
   VerifyAuthenticationDto,
 } from './webauthn.dto.js';
-import type { AuthorizeParams } from '../oauth/oauth.service.js';
-import { ACR_WEBAUTHN } from '../step-up/step-up.service.js';
+import { ACR_WEBAUTHN } from '../authn-core/acr.js';
+import { SESSION_COOKIE } from '../authn-core/cookies.js';
+import type { AuthorizeParams } from '../authn-core/oauth-params.js';
 import type {
   RegistrationResponseJSON,
   AuthenticationResponseJSON,
@@ -50,7 +51,7 @@ export class WebAuthnController {
 
   private async getSessionUser(realm: Realm, req: Request) {
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- express Request.cookies typed as any
-    const sessionToken = req.cookies?.['IDENPLANE_SESSION'];
+    const sessionToken = req.cookies?.[SESSION_COOKIE];
     if (!sessionToken) return null;
 
     return this.loginService.validateLoginSession(
@@ -203,11 +204,11 @@ export class WebAuthnController {
       user,
       resolveClientIp(req),
       req.headers['user-agent'],
-      req.cookies?.['IDENPLANE_SESSION'] as string | undefined,
+      req.cookies?.[SESSION_COOKIE] as string | undefined,
       authContext,
     );
 
-    res.cookie('IDENPLANE_SESSION', sessionToken, {
+    res.cookie(SESSION_COOKIE, sessionToken, {
       httpOnly: true,
       secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
       sameSite: 'lax',

@@ -16,8 +16,17 @@ import { ConfigService } from '@nestjs/config';
 import { ApiExcludeController } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { Prisma, type Realm } from '@prisma/client';
-import type { AuthorizeParams } from '../oauth/oauth.service.js';
-import { ACR_MFA } from '../step-up/step-up.service.js';
+import { ACR_MFA } from '../authn-core/acr.js';
+import { amrForFactor } from '../authn-core/auth-context.js';
+import {
+  MFA_CHALLENGE_COOKIE,
+  MFA_ENROLLMENT_COOKIE,
+} from '../authn-core/cookies.js';
+import {
+  OAUTH_FORM_PARAM_KEYS,
+  pickOAuthParams,
+  type AuthorizeParams,
+} from '../authn-core/oauth-params.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
@@ -34,7 +43,7 @@ import { EmailService } from '../email/email.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { PasswordPolicyService } from '../password-policy/password-policy.service.js';
-import { MfaService, MFA_ENROLLMENT_COOKIE } from '../mfa/mfa.service.js';
+import { MfaService } from '../mfa/mfa.service.js';
 import { SmsOtpService, SmsOtpError } from '../sms/sms-otp.service.js';
 import { ThemeRenderService } from '../theme/theme-render.service.js';
 import { ThemeEmailService } from '../theme/theme-email.service.js';
@@ -128,21 +137,9 @@ export class LoginController {
     // Build a properly percent-encoded register link so the hosted page does
     // not emit a URL with literal spaces (scope) or an unencoded redirect_uri,
     // and so empty params are dropped rather than rendered as `nonce=`.
-    const oauthParamKeys = [
-      'client_id',
-      'redirect_uri',
-      'response_type',
-      'scope',
-      'state',
-      'nonce',
-      'code_challenge',
-      'code_challenge_method',
-    ];
-    const registerParams = new URLSearchParams();
-    for (const k of oauthParamKeys) {
-      const v = query[k];
-      if (v) registerParams.set(k, v);
-    }
+    const registerParams = new URLSearchParams(
+      pickOAuthParams(query, OAUTH_FORM_PARAM_KEYS),
+    );
     const registerQs = registerParams.toString();
     const registerUrl = `/realms/${realm.name}/register${
       registerQs ? `?${registerQs}` : ''
@@ -255,16 +252,7 @@ export class LoginController {
             'error',
             'Login blocked due to suspicious activity. Check your email for details.',
           );
-          for (const key of [
-            'client_id',
-            'redirect_uri',
-            'response_type',
-            'scope',
-            'state',
-            'nonce',
-            'code_challenge',
-            'code_challenge_method',
-          ]) {
+          for (const key of OAUTH_FORM_PARAM_KEYS) {
             if (b[key]) params.set(key, b[key]);
           }
           return res.redirect(
@@ -295,7 +283,7 @@ export class LoginController {
               oauthParamsForChallenge,
             );
 
-            res.cookie('IDENPLANE_MFA_CHALLENGE', challengeToken, {
+            res.cookie(MFA_CHALLENGE_COOKIE, challengeToken, {
               httpOnly: true,
               secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
               sameSite: 'strict',
@@ -325,16 +313,7 @@ export class LoginController {
           'error',
           'Please verify your email address before signing in. Check your inbox for the verification link.',
         );
-        for (const key of [
-          'client_id',
-          'redirect_uri',
-          'response_type',
-          'scope',
-          'state',
-          'nonce',
-          'code_challenge',
-          'code_challenge_method',
-        ]) {
+        for (const key of OAUTH_FORM_PARAM_KEYS) {
           if (b[key]) params.set(key, b[key]);
         }
         return res.redirect(`/realms/${realm.name}/login?${params.toString()}`);
@@ -394,16 +373,7 @@ export class LoginController {
 
       const params = new URLSearchParams();
       params.set('error', errMessage);
-      for (const key of [
-        'client_id',
-        'redirect_uri',
-        'response_type',
-        'scope',
-        'state',
-        'nonce',
-        'code_challenge',
-        'code_challenge_method',
-      ]) {
+      for (const key of OAUTH_FORM_PARAM_KEYS) {
         if (b[key]) params.set(key, b[key]);
       }
       res.redirect(`/realms/${realm.name}/login?${params.toString()}`);
@@ -423,7 +393,7 @@ export class LoginController {
   ) {
     const challengeToken = (
       req.cookies as Record<string, string | undefined>
-    )?.['IDENPLANE_MFA_CHALLENGE'];
+    )?.[MFA_CHALLENGE_COOKIE];
     const challenge = challengeToken
       ? await this.mfaService.getMfaChallenge(challengeToken)
       : null;
@@ -485,7 +455,7 @@ export class LoginController {
     this.validateCsrf(realm, body, req);
     const challengeToken = (
       req.cookies as Record<string, string | undefined>
-    )?.['IDENPLANE_MFA_CHALLENGE'];
+    )?.[MFA_CHALLENGE_COOKIE];
     const challenge = challengeToken
       ? await this.mfaService.getMfaChallenge(challengeToken)
       : null;
@@ -534,7 +504,7 @@ export class LoginController {
     this.validateCsrf(realm, body, req);
     const challengeToken = (
       req.cookies as Record<string, string | undefined>
-    )?.['IDENPLANE_MFA_CHALLENGE'];
+    )?.[MFA_CHALLENGE_COOKIE];
     if (!challengeToken) {
       return res.redirect(
         `/realms/${realm.name}/login?error=${encodeURIComponent('MFA session expired. Please login again.')}`,
@@ -547,7 +517,7 @@ export class LoginController {
         challengeToken,
       );
     if (!challenge) {
-      res.clearCookie('IDENPLANE_MFA_CHALLENGE', {
+      res.clearCookie(MFA_CHALLENGE_COOKIE, {
         path: `/realms/${realm.name}`,
       });
       return res.redirect(
@@ -560,7 +530,7 @@ export class LoginController {
       this.logger.warn(
         `MFA cross-realm token use attempt: challenge realm ${challenge.realmId} used against realm ${realm.id}`,
       );
-      res.clearCookie('IDENPLANE_MFA_CHALLENGE', {
+      res.clearCookie(MFA_CHALLENGE_COOKIE, {
         path: `/realms/${realm.name}`,
       });
       return res.redirect(
@@ -635,7 +605,7 @@ export class LoginController {
     // MFA verified — claim the challenge and clear the cookie. Losing the
     // claim means a parallel request with the same code already signed in.
     const claimed = await this.mfaService.consumeMfaChallenge(challengeToken);
-    res.clearCookie('IDENPLANE_MFA_CHALLENGE', {
+    res.clearCookie(MFA_CHALLENGE_COOKIE, {
       path: `/realms/${realm.name}`,
     });
     if (!claimed) {
@@ -664,7 +634,7 @@ export class LoginController {
       res,
       {
         acr: ACR_MFA,
-        amr: LoginFlowService.amrForFactor(challenge.primaryAmr, factor),
+        amr: amrForFactor(challenge.primaryAmr, factor),
       },
     );
   }
@@ -720,10 +690,7 @@ export class LoginController {
       res,
       {
         acr: ACR_MFA,
-        amr: LoginFlowService.amrForFactor(
-          enrollment.primaryAmr,
-          enrollment.factor,
-        ),
+        amr: amrForFactor(enrollment.primaryAmr, enrollment.factor),
       },
       { rememberMe: enrollment.rememberMe },
     );
@@ -1071,18 +1038,7 @@ export class LoginController {
     const confirmPassword = body['confirmPassword'] ?? '';
 
     // Preserve OAuth params through registration redirects
-    const oauthParamNames = [
-      'client_id',
-      'redirect_uri',
-      'response_type',
-      'scope',
-      'state',
-      'nonce',
-      'code_challenge',
-      'code_challenge_method',
-    ];
-    const oauthParams = oauthParamNames
-      .filter((p) => body[p])
+    const oauthParams = OAUTH_FORM_PARAM_KEYS.filter((p) => body[p])
       .map((p) => `${p}=${encodeURIComponent(body[p])}`)
       .join('&');
     const oauthSuffix = oauthParams ? `&${oauthParams}` : '';

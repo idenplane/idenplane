@@ -34,6 +34,7 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 - **Removed the `hbs` package.** Login pages render through a small built-in view engine on the existing `handlebars` package, with fixed runtime options, a bounded template cache, and template and layout paths confined to the themes directory. Request data can no longer select engine options or the layout. Themes and translation helpers work as before.
 
 ### Changed
+- **Login, OAuth, step-up and WebAuthn no longer depend on each other in a cycle.** Their services now live in core modules (`LoginCore`, `OAuthCore`, `StepUpCore`, `WebAuthnCore`) and shared types and constants in `src/authn-core`, which also removes every `forwardRef` between them. CI now fails on new import cycles in these modules (`npm run lint:cycles`). As a side effect, `LoginService`, `StepUpService`, `CryptoService` and `PrismaService` each have one instance again: the brute-force module had created second copies, so the step-up cleanup ran twice per interval and brute-force records used a second database pool.
 - **The admin console loads each page on demand.** Every page is its own code chunk, so the first load no longer downloads the whole console: the main bundle went from 877 kB to 138 kB (158 kB to 44 kB gzipped). The shell stays on screen with a short loading state while a page loads.
 
 ### Fixed

@@ -15,7 +15,7 @@ import { PrismaModule } from '../prisma/prisma.module.js';
 import { EmailModule } from '../email/email.module.js';
 import { ImpossibleTravelService } from '../risk-assessment/impossible-travel.service.js';
 import { SessionsModule } from '../sessions/sessions.module.js';
-import { StepUpModule } from '../step-up/step-up.module.js';
+import { StepUpCoreModule } from '../step-up/step-up-core.module.js';
 import { CacheModule } from '../cache/cache.module.js';
 import { RealtimeModule } from '../realtime/realtime.module.js';
 
@@ -24,7 +24,7 @@ import { RealtimeModule } from '../realtime/realtime.module.js';
     PrismaModule,
     EmailModule,
     SessionsModule,
-    StepUpModule,
+    StepUpCoreModule,
     CacheModule,
     RealtimeModule,
   ],

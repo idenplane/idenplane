@@ -9,10 +9,9 @@ describe('OIDC silent authorization decisions', () => {
   const user = {id:'user-1'};
   let controller: OAuthController;
   let oauth: {validateAuthRequest:jest.Mock;authorizeWithUser:jest.Mock};
-  let login: {validateLoginSession:jest.Mock};
+  let login: {validateLoginSession:jest.Mock;findLoginSession:jest.Mock};
   let consent: {hasConsent:jest.Mock;storeConsentRequest:jest.Mock};
   let stepUp: {getLoginSessionAcr:jest.Mock;getRiskRequiredAcr:jest.Mock;satisfiesAcr:jest.Mock;getAcrStrength:jest.Mock};
-  let prisma: {loginSession:{findUnique:jest.Mock}};
   let theme: {render:jest.Mock};
   let client: {id:string;clientId:string;redirectUris:string[];requireConsent:boolean;requiredAcr:string|null};
   let req: {cookies:Record<string,string>};
@@ -26,12 +25,11 @@ describe('OIDC silent authorization decisions', () => {
     oauth={validateAuthRequest:jest.fn().mockResolvedValue(client),authorizeWithUser:jest.fn().mockImplementation(async (_realm,_user,params) => {
       const uri=new URL(params.redirect_uri);uri.searchParams.set('code','test-code');uri.searchParams.set('state',params.state);return {redirectUrl:uri.toString()};
     })};
-    login={validateLoginSession:jest.fn().mockResolvedValue(user)};
+    login={validateLoginSession:jest.fn().mockResolvedValue(user),findLoginSession:jest.fn().mockResolvedValue({id:'session-1',userId:user.id,satisfiedAcr:ACR_PASSWORD,amr:['pwd']})};
     consent={hasConsent:jest.fn().mockResolvedValue(true),storeConsentRequest:jest.fn().mockResolvedValue('consent-1')};
     stepUp={getLoginSessionAcr:jest.fn().mockResolvedValue(ACR_PASSWORD),getRiskRequiredAcr:jest.fn().mockResolvedValue(null),satisfiesAcr:jest.fn((a,b)=>strength(a)>=strength(b)),getAcrStrength:jest.fn(strength)};
-    prisma={loginSession:{findUnique:jest.fn().mockResolvedValue({id:'session-1',userId:user.id,satisfiedAcr:ACR_PASSWORD,amr:['pwd']})}};
     theme={render:jest.fn()};req={cookies:{IDENPLANE_SESSION:'session-token'}};res={status:jest.fn().mockReturnThis(),redirect:jest.fn()};
-    controller=new OAuthController(oauth as never,login as never,consent as never,stepUp as never,{sha256:jest.fn().mockReturnValue('hash')} as never,prisma as never,theme as never);
+    controller=new OAuthController(oauth as never,login as never,consent as never,stepUp as never,theme as never);
   });
 
   async function authorize(){await controller.authorize(realm,query,req as never,res as never);}
@@ -59,7 +57,7 @@ describe('OIDC silent authorization decisions', () => {
     await authorize();expectSilentError('interaction_required');
   });
   it('does not bypass an assurance requirement when the session record is missing', async () => {
-    prisma.loginSession.findUnique.mockResolvedValue(null);client.requiredAcr=ACR_MFA;await authorize();expectSilentError('interaction_required');
+    login.findLoginSession.mockResolvedValue(null);client.requiredAcr=ACR_MFA;await authorize();expectSilentError('interaction_required');
   });
   it('allows an existing session that already satisfies the requested assurance', async () => {
     client.requiredAcr=ACR_MFA;stepUp.getLoginSessionAcr.mockResolvedValue(ACR_MFA);await authorize();expect(redirect().searchParams.get('code')).toBe('test-code');expect(oauth.authorizeWithUser.mock.calls[0][3]).toEqual({acr:ACR_MFA,amr:['pwd','otp']});

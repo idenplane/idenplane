@@ -1,56 +1,26 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { Interval } from '@nestjs/schedule';
 import { PrismaService } from '../prisma/prisma.service.js';
+import * as core from '../authn-core/acr.js';
 
-// ─── ACR Level Constants ──────────────────────────────────────────────────────
-
-/** ACR level for password-only authentication (level 1). */
-export const ACR_PASSWORD = 'urn:idenplane:acr:password';
-
-/** ACR level for password + MFA/TOTP authentication (level 2). */
-export const ACR_MFA = 'urn:idenplane:acr:mfa';
-
-/** ACR level for WebAuthn/passkey authentication (level 3). */
-export const ACR_WEBAUTHN = 'urn:idenplane:acr:webauthn';
-
-/** All supported ACR values, ordered from lowest to highest assurance. */
-export const ACR_VALUES_SUPPORTED = [
-  ACR_PASSWORD,
-  ACR_MFA,
-  ACR_WEBAUTHN,
-] as const;
-
-export type AcrValue = (typeof ACR_VALUES_SUPPORTED)[number];
-
-/** Numeric strength mapping: higher number = stronger authentication. */
-const ACR_LEVEL_STRENGTH: Record<string, number> = {
-  [ACR_PASSWORD]: 1,
-  [ACR_MFA]: 2,
-  [ACR_WEBAUTHN]: 3,
-};
-
-/** Numeric strength of an ACR value; unknown values (and null) count as 0. */
-export function acrStrength(acr: string | null | undefined): number {
-  return (acr && ACR_LEVEL_STRENGTH[acr]) || 0;
-}
-
-/** The strongest of the given ACR values, or `ACR_PASSWORD` if none is known. */
-export function strongestAcr(
-  ...candidates: Array<string | null | undefined>
-): string {
-  let best: string = ACR_PASSWORD;
-  for (const acr of candidates) {
-    if (acr && acrStrength(acr) > acrStrength(best)) best = acr;
-  }
-  return best;
-}
-
-// ─── Service ─────────────────────────────────────────────────────────────────
-
-/** The ACR a risk score requires: WebAuthn when CRITICAL (80+), else MFA. */
-export function riskStepUpAcr(riskScore: number): string {
-  return riskScore >= 80 ? ACR_WEBAUTHN : ACR_MFA;
-}
+// The ACR primitives moved to authn-core; these re-exports keep old imports
+// compiling.
+/** @deprecated import from authn-core */
+export const ACR_PASSWORD = core.ACR_PASSWORD;
+/** @deprecated import from authn-core */
+export const ACR_MFA = core.ACR_MFA;
+/** @deprecated import from authn-core */
+export const ACR_WEBAUTHN = core.ACR_WEBAUTHN;
+/** @deprecated import from authn-core */
+export const ACR_VALUES_SUPPORTED = core.ACR_VALUES_SUPPORTED;
+/** @deprecated import from authn-core */
+export const acrStrength = core.acrStrength;
+/** @deprecated import from authn-core */
+export const strongestAcr = core.strongestAcr;
+/** @deprecated import from authn-core */
+export const riskStepUpAcr = core.riskStepUpAcr;
+/** @deprecated import from authn-core */
+export type AcrValue = core.AcrValue;
 
 @Injectable()
 export class StepUpService {
@@ -65,7 +35,7 @@ export class StepUpService {
    * Unknown values default to 0 (no assurance).
    */
   getAcrStrength(acr: string): number {
-    return acrStrength(acr);
+    return core.acrStrength(acr);
   }
 
   /**
@@ -73,7 +43,7 @@ export class StepUpService {
    * strong as required).
    */
   satisfiesAcr(candidate: string, required: string): boolean {
-    return this.getAcrStrength(candidate) >= this.getAcrStrength(required);
+    return core.satisfiesAcr(candidate, required);
   }
 
   // ── Session ACR ────────────────────────────────────────────────────────────
@@ -109,7 +79,7 @@ export class StepUpService {
       select: { riskScore: true },
     });
     if (!flagged) return null;
-    return riskStepUpAcr(flagged.riskScore);
+    return core.riskStepUpAcr(flagged.riskScore);
   }
 
   async getSessionAcr(sessionId: string): Promise<string> {
@@ -120,11 +90,11 @@ export class StepUpService {
     });
 
     if (records.length === 0) {
-      return ACR_PASSWORD;
+      return core.ACR_PASSWORD;
     }
 
     // Return the record with the highest strength
-    let best = ACR_PASSWORD;
+    let best = core.ACR_PASSWORD;
     for (const rec of records) {
       if (this.getAcrStrength(rec.acrLevel) > this.getAcrStrength(best)) {
         best = rec.acrLevel;
@@ -145,7 +115,7 @@ export class StepUpService {
     id: string;
     satisfiedAcr: string | null;
   }): Promise<string> {
-    return strongestAcr(
+    return core.strongestAcr(
       session.satisfiedAcr,
       await this.getSessionAcr(session.id),
     );

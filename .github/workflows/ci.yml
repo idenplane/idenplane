@@ -38,6 +38,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Import cycles
+        run: npm run lint:cycles
+
       - name: Unit Tests
         run: npm test -- --coverage --no-cache
 

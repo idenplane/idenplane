@@ -12,17 +12,20 @@ import {
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import type { Realm } from '@prisma/client';
-import { OAuthService, type AuthorizeParams } from './oauth.service.js';
+import { OAuthService } from './oauth.service.js';
 import { LoginService } from '../login/login.service.js';
 import { ConsentService } from '../consent/consent.service.js';
+import { StepUpService } from '../step-up/step-up.service.js';
 import {
-  StepUpService,
   ACR_PASSWORD,
-  ACR_MFA,
-  ACR_WEBAUTHN,
-} from '../step-up/step-up.service.js';
-import { CryptoService } from '../crypto/crypto.service.js';
-import { PrismaService } from '../prisma/prisma.service.js';
+  amrForSessionAcr,
+  resolveRequiredAcr,
+} from '../authn-core/acr.js';
+import { SESSION_COOKIE } from '../authn-core/cookies.js';
+import {
+  OAUTH_RELAY_PARAM_KEYS,
+  type AuthorizeParams,
+} from '../authn-core/oauth-params.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
@@ -61,8 +64,6 @@ export class OAuthController {
     private readonly loginService: LoginService,
     private readonly consentService: ConsentService,
     private readonly stepUpService: StepUpService,
-    private readonly crypto: CryptoService,
-    private readonly prisma: PrismaService,
     private readonly themeRender: ThemeRenderService,
   ) {}
 
@@ -175,7 +176,7 @@ export class OAuthController {
 
     // Check for existing SSO session cookie
     const sessionCookie = (req.cookies as Record<string, string>)?.[
-      'IDENPLANE_SESSION'
+      SESSION_COOKIE
     ];
     if (sessionCookie) {
       const user = await this.loginService.validateLoginSession(
@@ -189,7 +190,8 @@ export class OAuthController {
 
         // OIDC Core §3.1.2.1 max_age: a sign-in older than this many seconds
         // must be repeated (silently impossible, so login_required).
-        const loginSession = await this.getLoginSessionByToken(sessionCookie);
+        const loginSession =
+          await this.loginService.findLoginSession(sessionCookie);
         if (sessionTooOld(query['max_age'], loginSession?.createdAt)) {
           if (silent) {
             return this.redirectWithError(
@@ -229,8 +231,9 @@ export class OAuthController {
           : null;
 
         // The strongest of the three requirements
-        const requiredAcr = this.resolveRequiredAcr(
-          this.resolveRequiredAcr(requestedAcr, clientRequiredAcr),
+        const requiredAcr = resolveRequiredAcr(
+          requestedAcr,
+          clientRequiredAcr,
           riskRequiredAcr,
         );
 
@@ -290,7 +293,7 @@ export class OAuthController {
             loginSession?.amr?.length &&
             loginSession.satisfiedAcr === sessionAcr
               ? loginSession.amr
-              : this.amrForSessionAcr(sessionAcr),
+              : amrForSessionAcr(sessionAcr),
         };
 
         // Check if client requires consent
@@ -349,19 +352,7 @@ export class OAuthController {
     // No valid session: redirect to login page with OAuth params.
     // Only relay params from the explicit allowlist to prevent open-redirect
     // and parameter-injection attacks via arbitrary query string forwarding.
-    const OAUTH_PARAM_ALLOWLIST = new Set([
-      'client_id',
-      'redirect_uri',
-      'response_type',
-      'scope',
-      'state',
-      'nonce',
-      'code_challenge',
-      'code_challenge_method',
-      'prompt',
-      'acr_values',
-      'login_hint',
-    ]);
+    const OAUTH_PARAM_ALLOWLIST = new Set<string>(OAUTH_RELAY_PARAM_KEYS);
     const loginParams = new URLSearchParams();
     for (const [key, value] of Object.entries(query)) {
       if (value && OAUTH_PARAM_ALLOWLIST.has(key)) loginParams.set(key, value);
@@ -389,49 +380,6 @@ export class OAuthController {
       return err.message;
     }
     return 'The sign-in request could not be processed. Please try again.';
-  }
-
-  /**
-   * Given two optional ACR requirements, returns the one with higher
-   * assurance strength, or null if neither is set.
-   */
-  private resolveRequiredAcr(
-    requestedAcr: string | null,
-    clientAcr: string | null,
-  ): string | null {
-    if (!requestedAcr && !clientAcr) return null;
-    if (!requestedAcr) return clientAcr;
-    if (!clientAcr) return requestedAcr;
-
-    // Both are set — return the stronger one
-    const reqStrength = this.stepUpService.getAcrStrength(requestedAcr);
-    const clientStrength = this.stepUpService.getAcrStrength(clientAcr);
-    return reqStrength >= clientStrength ? requestedAcr : clientAcr;
-  }
-
-  /**
-   * Derive RFC 8176 `amr` values from a session's satisfied ACR. We can only
-   * infer methods from the ACR level (we don't track per-method history on the
-   * SSO session), so each level maps to its canonical method set:
-   *   - WebAuthn  → ['hwk']        (hardware key; matches the passkey login path)
-   *   - MFA       → ['pwd', 'otp'] (password + second factor)
-   *   - otherwise → ['pwd']        (password only)
-   * Must be checked strongest-first so a WebAuthn session (which also satisfies
-   * MFA) is not mislabelled as password+otp.
-   */
-  private amrForSessionAcr(sessionAcr: string): string[] {
-    if (this.stepUpService.satisfiesAcr(sessionAcr, ACR_WEBAUTHN)) {
-      return ['hwk'];
-    }
-    if (this.stepUpService.satisfiesAcr(sessionAcr, ACR_MFA)) {
-      return ['pwd', 'otp'];
-    }
-    return ['pwd'];
-  }
-
-  private async getLoginSessionByToken(sessionToken: string) {
-    const tokenHash = this.crypto.sha256(sessionToken);
-    return this.prisma.loginSession.findUnique({ where: { tokenHash } });
   }
 
   private redirectWithError(
@@ -470,19 +418,7 @@ export class OAuthController {
     query: Record<string, string>,
   ): void {
     const loginParams = new URLSearchParams();
-    const allowlist = new Set([
-      'client_id',
-      'redirect_uri',
-      'response_type',
-      'scope',
-      'state',
-      'nonce',
-      'code_challenge',
-      'code_challenge_method',
-      'prompt',
-      'acr_values',
-      'login_hint',
-    ]);
+    const allowlist = new Set<string>(OAUTH_RELAY_PARAM_KEYS);
     for (const [key, value] of Object.entries(query)) {
       if (value && allowlist.has(key)) loginParams.set(key, value);
     }

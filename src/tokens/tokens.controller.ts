@@ -24,6 +24,7 @@ import { Public } from '../common/decorators/public.decorator.js';
 import { CachedLookupsService } from '../cache/cached-lookups.service.js';
 import { ClientSecretService } from '../clients/client-secret.service.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
+import { SESSION_COOKIE } from '../authn-core/cookies.js';
 import { RateLimitGuard, RateLimitBy } from '../rate-limit/rate-limit.guard.js';
 import { parseBasicClientCredentials } from '../common/utils/basic-client-auth.util.js';
 
@@ -334,12 +335,12 @@ export class TokensController {
     res: Response,
   ): Promise<void> {
     const ssoToken = (req.cookies as Record<string, string> | undefined)?.[
-      'IDENPLANE_SESSION'
+      SESSION_COOKIE
     ];
     if (ssoToken) {
       await this.tokensService.invalidateLoginSession(ssoToken);
     }
-    res.clearCookie('IDENPLANE_SESSION', {
+    res.clearCookie(SESSION_COOKIE, {
       httpOnly: true,
       secure: true,
       sameSite: 'strict',

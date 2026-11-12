@@ -1,18 +1,12 @@
-import { Module, forwardRef } from '@nestjs/common';
+import { Module } from '@nestjs/common';
 import { OAuthController } from './oauth.controller.js';
-import { OAuthService } from './oauth.service.js';
-import { LoginModule } from '../login/login.module.js';
-import { StepUpModule } from '../step-up/step-up.module.js';
+import { OAuthCoreModule } from './oauth-core.module.js';
+import { LoginCoreModule } from '../login/login-core.module.js';
+import { StepUpCoreModule } from '../step-up/step-up-core.module.js';
 import { ThemeModule } from '../theme/theme.module.js';
 
 @Module({
-  imports: [
-    forwardRef(() => LoginModule),
-    forwardRef(() => StepUpModule),
-    ThemeModule,
-  ],
+  imports: [OAuthCoreModule, LoginCoreModule, StepUpCoreModule, ThemeModule],
   controllers: [OAuthController],
-  providers: [OAuthService],
-  exports: [OAuthService],
 })
 export class OAuthModule {}

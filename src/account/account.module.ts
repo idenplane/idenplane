@@ -1,13 +1,13 @@
 import { Module } from '@nestjs/common';
 import { AccountController } from './account.controller.js';
-import { LoginModule } from '../login/login.module.js';
+import { LoginCoreModule } from '../login/login-core.module.js';
 import { ThemeModule } from '../theme/theme.module.js';
-import { WebAuthnModule } from '../webauthn/webauthn.module.js';
+import { WebAuthnCoreModule } from '../webauthn/webauthn-core.module.js';
 import { DataExportService } from './data-export.service.js';
 import { AccountDeletionService } from './account-deletion.service.js';
 
 @Module({
-  imports: [LoginModule, ThemeModule, WebAuthnModule],
+  imports: [LoginCoreModule, ThemeModule, WebAuthnCoreModule],
   controllers: [AccountController],
   providers: [DataExportService, AccountDeletionService],
 })
