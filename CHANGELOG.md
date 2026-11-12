@@ -15,6 +15,7 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 - **Helm:** the chart now creates a `<release>-idenplane-keys` Secret with `ADMIN_API_KEY`, `ADMIN_PASSWORD`, `WEBHOOK_SECRET_KEY` and `WEBHOOK_ENCRYPTION_SALT`. Values you set under `secrets:` win; empty ones are generated on first install and kept on upgrades. Rendering fails on the old placeholders (`change-me-in-production`, `REPLACE_WITH_STRONG_SECRET`, the production values' database password), so pass real values or leave the keys empty.
 - **Helm with Argo CD, Flux or `helm template`:** these cannot read a stored Secret back, so generated keys would change on every render. Create the four keys yourself and set `secrets.existingSecret`.
 - **Helm chart 0.3.0 drops the Bitnami PostgreSQL and Redis sub-charts.** Their `docker.io/bitnami` images are no longer published, so the bundled database could not start. The chart now runs the official `postgres` (17, Debian) and `redis` images and reuses the existing PostgreSQL volume and password. Before upgrading, take a `pg_dump`, then delete the old StatefulSets with `--cascade=orphan` (see *Upgrading from chart 0.2.x* in the Kubernetes guide). The bundled database and Redis passwords are now generated when empty.
+- **Migrations:** one adds `auth_time` and `session_id` to authorization codes.
 
 ### Added
 - **Next.js example: server-side sessions and a protected API.** The quickstart can keep tokens on the server in PostgreSQL behind an HTTP-only cookie, with refresh, sign-out, encrypted backup/restore and scheduled cleanup; `/api/profile` verifies the access token on the server and only returns the caller's own profile. A new CI workflow runs these flows against an image built from the commit, over HTTP and HTTPS.
@@ -42,8 +43,16 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 - **NHI device certificates are real X.509.** Generated certificates are standard X.509 signed with the requested key, with the requested validity, subject and SANs, and they parse with standard X.509 tooling such as Node's `X509Certificate`. Validation reads the real validity dates and rejects malformed or expired certificates.
 - **`prompt=none` works with a valid session.** Silent authorization used to return `login_required` even when the user was signed in. It now completes without UI when the session, redirect URI, consent and requested assurance allow it, and returns `login_required`, `consent_required` or `interaction_required` otherwise.
 - The integration-test database preflight no longer shells out to `prisma db execute`, so it works the same on Windows and Linux.
-
+- **OpenID Connect conformance fixes**, found by running the OpenID Foundation conformance suite (oidcc-basic, static client) against Idenplane:
+  - The UserInfo endpoint accepts POST, with the access token in the `Authorization` header or as a form `access_token` parameter (OIDC Core §5.3.1, RFC 6750). Sending it in both places is rejected.
+  - The authorization endpoint accepts a form POST (OIDC Core §3.1.2.1).
+  - `request` and `request_uri` are rejected with `request_not_supported` / `request_uri_not_supported` instead of being ignored, and discovery states `request_parameter_supported` and `request_uri_parameter_supported` as `false`.
+  - `auth_time` is when the user signed in, not when the code was exchanged, including for codes issued from an SSO session. `max_age` is honoured: an older sign-in is repeated, or `prompt=none` returns `login_required`.
+  - `offline_access`, advertised in discovery, is granted, with the realm's offline token lifespan, when a code-returning grant (authorization code, device) is used by a client that has the `offline_access` client scope assigned. Other grants never get it (OIDC Core §11).
+  - When its own client presents a used authorization code again (authenticated, or with the PKCE verifier) within five minutes of the code's expiry, the session the code created ends, so its refresh token stops working and its access token introspects as inactive (RFC 6749 §4.1.2).
+  - Discovery no longer lists `backchannel_logout_uri`, a client registration parameter rather than provider metadata; `backchannel_logout_supported` already advertises the feature.
 - **The Helm chart did not start with its default values.** The default `ADMIN_API_KEY` was a placeholder the server refuses in production, and the chart never set `WEBHOOK_SECRET_KEY` or `WEBHOOK_ENCRYPTION_SALT`, which production requires. CI now installs the chart on a kind cluster, signs in with the generated password, upgrades it and runs `helm test`.
+
 ## [0.6.0] - 2026-11-10
 
 Idenplane gets much faster and runs correctly as several instances. Protocol requests no longer go to the database each time, and `WEB_CONCURRENCY` lets one container use every CPU. Scheduled jobs, webhooks, plugins and first boot now behave when more than one instance runs, and several security fixes land. With one worker per CPU, Idenplane served discovery, JWKS, client-credentials tokens and introspection faster than Keycloak 26.8 on the same machine. See the [benchmarks](docs/docs/benchmarks.md).

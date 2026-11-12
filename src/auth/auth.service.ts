@@ -61,6 +61,12 @@ interface NewSession {
  * Registered and assurance claims of an access token that only the server
  * sets. `exp`, `iat` and `jti` are set when signing.
  */
+/**
+ * How long after a code expires a replay by its own client still revokes the
+ * tokens issued from it (RFC 6749 §4.1.2).
+ */
+const REPLAY_REVOCATION_WINDOW_MS = 5 * 60 * 1000;
+
 const PROTECTED_ACCESS_TOKEN_CLAIMS = [
   'iss',
   'sub',
@@ -785,6 +791,8 @@ export class AuthService {
       undefined,
       acr,
       amr,
+      undefined,
+      storedToken.isOffline,
     );
   }
 
@@ -820,6 +828,9 @@ export class AuthService {
     // when: (a) the code does not exist, (b) it was already used by a
     // concurrent request, or (c) it has already expired.  All three cases are
     // treated identically — the caller receives an "invalid or expired" error.
+    // The session this exchange creates is recorded on the code, so that a
+    // replay of the code can end it.
+    const sessionId = randomUUID();
     let authCode: Awaited<
       ReturnType<typeof this.prisma.authorizationCode.update>
     >;
@@ -830,7 +841,7 @@ export class AuthService {
           used: false,
           expiresAt: { gt: new Date() },
         },
-        data: { used: true },
+        data: { used: true, sessionId },
       });
     } catch (err: unknown) {
       const isPrismaNotFound =
@@ -838,6 +849,7 @@ export class AuthService {
         err !== null &&
         (err as { code?: string }).code === 'P2025';
       if (isPrismaNotFound) {
+        await this.revokeReplayedCode(code, client, code_verifier);
         throw new OAuthTokenError(
           'invalid_grant',
           'Invalid or expired authorization code',
@@ -926,16 +938,19 @@ export class AuthService {
     const acr = authCode.satisfiedAcr ?? ACR_PASSWORD;
     const amr = authCode.amr.length > 0 ? authCode.amr : ['pwd'];
 
-    const session = this.newSession({
-      userId: user.id,
-      ipAddress: ip,
-      userAgent,
-      // Persist so the refresh_token grant can preserve acr/amr (see
-      // handleRefreshTokenGrant).
-      satisfiedAcr: acr,
-      amr,
-      expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
-    });
+    const session = this.newSession(
+      {
+        userId: user.id,
+        ipAddress: ip,
+        userAgent,
+        // Persist so the refresh_token grant can preserve acr/amr (see
+        // handleRefreshTokenGrant).
+        satisfiedAcr: acr,
+        amr,
+        expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
+      },
+      sessionId,
+    );
 
     void this.eventsService.recordLoginEvent({
       realmId: realm.id,
@@ -957,10 +972,11 @@ export class AuthService {
       session,
       authCode.scope ?? undefined,
       authCode.nonce ?? undefined,
-      new Date(),
+      authCode.authTime ?? authCode.createdAt,
       acr,
       amr,
       authCode.code,
+      await this.clientAllowsOfflineAccess(client.id),
     );
   }
 
@@ -980,7 +996,7 @@ export class AuthService {
       );
     }
 
-    await this.validateClient(
+    const client = await this.validateClient(
       realm,
       client_id,
       client_secret,
@@ -1119,6 +1135,10 @@ export class AuthService {
       deviceCode.scope ?? undefined,
       undefined,
       new Date(),
+      undefined,
+      undefined,
+      undefined,
+      await this.clientAllowsOfflineAccess(client.id),
     );
   }
 
@@ -1328,13 +1348,21 @@ export class AuthService {
     acr?: string,
     amr?: string[],
     code?: string,
+    /**
+     * Whether `offline_access` may be granted (OIDC Core §11): only for a
+     * code-returning grant of a client with that scope assigned, or when
+     * refreshing a token that already is offline. Otherwise it is dropped.
+     */
+    offlineAccess = false,
   ): Promise<TokenResponse> {
     const sessionId =
       typeof session === 'string' ? session : (session?.id ?? null);
     const signingKey = await this.getActiveSigningKey(realm.id);
 
     // Parse and validate scopes, default to openid
-    const scopes = this.scopesService.parseAndValidate(scope);
+    const scopes = this.scopesService
+      .parseAndValidate(scope)
+      .filter((s) => offlineAccess || s !== 'offline_access');
     const effectiveScopes = scopes.length > 0 ? scopes : ['openid'];
     const validatedScope = this.scopesService.toString(effectiveScopes);
 
@@ -1605,8 +1633,73 @@ export class AuthService {
       Prisma.SessionUncheckedCreateInput,
       'id' | 'refreshTokens' | 'createdAt'
     >,
+    id: string = randomUUID(),
   ): NewSession {
-    return { id: randomUUID(), data: { ...data, createdAt: new Date() } };
+    return { id, data: { ...data, createdAt: new Date() } };
+  }
+
+  /**
+   * An administrator opts a client into offline tokens by assigning it the
+   * `offline_access` client scope (default or optional).
+   */
+  private async clientAllowsOfflineAccess(
+    clientDbId: string,
+  ): Promise<boolean> {
+    const where = {
+      clientId: clientDbId,
+      clientScope: { name: 'offline_access' },
+    };
+    const [asDefault, asOptional] = await Promise.all([
+      this.prisma.clientDefaultScope.count({ where }),
+      this.prisma.clientOptionalScope.count({ where }),
+    ]);
+    return asDefault + asOptional > 0;
+  }
+
+  /**
+   * RFC 6749 §4.1.2: when a used code is presented again, revoke the tokens
+   * issued from it. Ending their session deletes its refresh tokens and makes
+   * its access tokens introspect as inactive (they carry its `sid`).
+   *
+   * Only the code's own client can trigger this, proving itself the way the
+   * exchange does (its secret, already checked, or the PKCE verifier), and only
+   * shortly after the code expired: a used code that leaked later must not let
+   * anyone end the user's session.
+   */
+  private async revokeReplayedCode(
+    code: string,
+    client: { id: string; clientType: string },
+    codeVerifier: string | undefined,
+  ): Promise<void> {
+    const replayed = await this.prisma.authorizationCode.findUnique({
+      where: { code },
+      select: {
+        used: true,
+        sessionId: true,
+        clientId: true,
+        codeChallenge: true,
+        expiresAt: true,
+      },
+    });
+    if (!replayed?.used || !replayed.sessionId) return;
+    if (replayed.clientId !== client.id) return;
+    if (Date.now() > replayed.expiresAt.getTime() + REPLAY_REVOCATION_WINDOW_MS)
+      return;
+    if (client.clientType !== 'CONFIDENTIAL') {
+      const proven =
+        !!replayed.codeChallenge &&
+        !!codeVerifier &&
+        Buffer.from(this.crypto.sha256(codeVerifier), 'hex').toString(
+          'base64url',
+        ) === replayed.codeChallenge;
+      if (!proven) return;
+    }
+    await this.prisma.session.deleteMany({
+      where: { id: replayed.sessionId },
+    });
+    this.logger.warn(
+      `Authorization code replayed by client ${client.id}; revoked the tokens issued from it`,
+    );
   }
 
   /**

@@ -66,6 +66,10 @@ export class WellKnownController {
         'roles',
         'offline_access',
       ],
+      // Request objects are not supported; request_uri defaults to true, so
+      // it must be stated.
+      request_parameter_supported: false,
+      request_uri_parameter_supported: false,
       token_endpoint_auth_methods_supported: [
         'client_secret_post',
         'client_secret_basic',
@@ -95,7 +99,6 @@ export class WellKnownController {
       code_challenge_methods_supported: ['S256'],
       backchannel_logout_supported: true,
       backchannel_logout_session_supported: true,
-      backchannel_logout_uri: `${protocolUrl}/logout/backchannel`,
       // Step-up authentication (OIDC Core §3.1.2.1 acr_values_supported)
       acr_values_supported: ACR_VALUES_SUPPORTED,
       // Step-up endpoints

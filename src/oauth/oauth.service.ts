@@ -22,6 +22,8 @@ export interface SatisfiedAuthContext {
   acr?: string;
   /** The authentication methods performed (e.g. `['pwd', 'otp']`). */
   amr?: string[];
+  /** When the end user authenticated (OIDC `auth_time`); defaults to now. */
+  authTime?: Date;
 }
 
 export interface AuthorizeParams {
@@ -151,6 +153,7 @@ export class OAuthService {
         acrValues: params.acr_values ?? null,
         satisfiedAcr: authContext.acr ?? null,
         amr: authContext.amr ?? [],
+        authTime: authContext.authTime ?? new Date(),
         expiresAt: new Date(Date.now() + 60 * 1000),
       },
     });

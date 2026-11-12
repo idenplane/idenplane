@@ -968,7 +968,13 @@ export class LoginController {
       consentReq.oauthParams as unknown as AuthorizeParams,
       // Preserve the auth context established before the consent screen so the
       // issued code carries the real acr/amr (not a defaulted password level).
-      { acr: consentReq.satisfiedAcr, amr: consentReq.amr },
+      {
+        acr: consentReq.satisfiedAcr,
+        amr: consentReq.amr,
+        authTime: consentReq.authTime
+          ? new Date(consentReq.authTime)
+          : undefined,
+      },
     );
 
     res.redirect(302, result.redirectUrl);

@@ -217,6 +217,7 @@ export function createMockPrismaService(): MockPrismaService {
       delete: jest.fn(),
     },
     clientDefaultScope: {
+      count: jest.fn().mockResolvedValue(0),
       findUnique: jest.fn(),
       findMany: jest.fn(),
       create: jest.fn(),
@@ -225,6 +226,7 @@ export function createMockPrismaService(): MockPrismaService {
       deleteMany: jest.fn(),
     },
     clientOptionalScope: {
+      count: jest.fn().mockResolvedValue(0),
       findUnique: jest.fn(),
       findMany: jest.fn(),
       create: jest.fn(),
