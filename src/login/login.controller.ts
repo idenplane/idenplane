@@ -10,7 +10,6 @@ import {
   Res,
   BadRequestException,
   ForbiddenException,
-  Optional,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiExcludeController } from '@nestjs/swagger';
@@ -50,8 +49,8 @@ import { ThemeEmailService } from '../theme/theme-email.service.js';
 import { EventsService } from '../events/events.service.js';
 import { LoginEventType } from '../events/event-types.js';
 import { CustomAttributesService } from '../custom-attributes/custom-attributes.service.js';
-import { RiskAssessmentService } from '../risk-assessment/risk-assessment.service.js';
-import { BruteForceService } from '../brute-force/brute-force.service.js';
+import { PrimaryAuthGatesService } from './primary-auth-gates.service.js';
+import { SecondFactorVerifier } from './second-factor-verifier.service.js';
 import { CsrfService } from '../common/csrf/csrf.service.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 import {
@@ -92,10 +91,10 @@ export class LoginController {
     private readonly eventsService: EventsService,
     private readonly customAttributesService: CustomAttributesService,
     private readonly csrfService: CsrfService,
-    private readonly bruteForceService: BruteForceService,
     private readonly loginFlow: LoginFlowService,
     private readonly smsOtp: SmsOtpService,
-    @Optional() private readonly riskAssessmentService?: RiskAssessmentService,
+    private readonly primaryAuthGates: PrimaryAuthGatesService,
+    private readonly secondFactorVerifier: SecondFactorVerifier,
   ) {}
 
   // ─── CSRF HELPERS ──────────────────────────────────────
@@ -213,105 +212,25 @@ export class LoginController {
         resolveClientIp(req),
       );
 
-      // ── Adaptive authentication / risk assessment ──────────────────────────
-      let riskStepUp = false;
-      if (realm.adaptiveAuthEnabled && this.riskAssessmentService) {
-        const riskContext = {
-          userId: user.id,
-          realmId: realm.id,
-          realmName: realm.name,
-          ipAddress: resolveClientIp(req),
-          userAgent: req.headers['user-agent'] ?? null,
-          deviceFingerprint: body.device_fingerprint ?? null,
-          timestamp: new Date(),
-        };
-
-        const assessment =
-          await this.riskAssessmentService.assessRisk(riskContext);
-
-        if (assessment.action === 'BLOCK') {
-          // Send email notification if user has an email address
-          if (user.email) {
-            void this.riskAssessmentService.sendBlockedLoginEmail(
-              realm.name,
-              user.email,
-              riskContext,
-              assessment.geoLocation,
-            );
-          }
-
-          void this.eventsService.recordLoginEvent({
-            realmId: realm.id,
-            type: LoginEventType.LOGIN_ERROR,
-            userId: user.id,
-            clientId: body.client_id,
-            ipAddress: resolveClientIp(req),
-            error: `Login blocked by risk assessment (score=${assessment.riskScore})`,
-          });
-
-          const params = new URLSearchParams();
-          params.set(
-            'error',
-            'Login blocked due to suspicious activity. Check your email for details.',
-          );
-          for (const key of OAUTH_FORM_PARAM_KEYS) {
-            if (b[key]) params.set(key, b[key]);
-          }
-          return res.redirect(
-            `/realms/${realm.name}/login?${params.toString()}`,
-          );
-        }
-
-        // STEP_UP is applied after the account gates below, so a risky
-        // sign-in still has to pass email verification and password expiry.
-        riskStepUp = assessment.action === 'STEP_UP';
-
-        // Update the user's profile on ALLOW or STEP_UP (will learn from the login)
-        void this.riskAssessmentService.updateUserProfile(
-          user.id,
-          realm.id,
-          riskContext,
-          assessment.geoLocation,
-        );
-      }
-      // ── End risk assessment ────────────────────────────────────────────────
-
-      // Check email verification requirement
-      if (realm.requireEmailVerification && user.email && !user.emailVerified) {
-        const params = new URLSearchParams();
-        params.set(
-          'error',
-          'Please verify your email address before signing in. Check your inbox for the verification link.',
-        );
-        for (const key of OAUTH_FORM_PARAM_KEYS) {
-          if (b[key]) params.set(key, b[key]);
-        }
-        return res.redirect(`/realms/${realm.name}/login?${params.toString()}`);
+      // Risk assessment, email verification and password expiry, in that
+      // order.
+      const gates = await this.primaryAuthGates.evaluate(realm, user, {
+        ipAddress: resolveClientIp(req),
+        userAgent: req.headers['user-agent'] ?? null,
+        deviceFingerprint: body.device_fingerprint ?? null,
+        form: b,
+      });
+      if (gates.kind === 'block') {
+        return res.redirect(gates.redirectUrl);
       }
 
       // Build OAuth params for later use
       const oauthParams = pickOAuthParams(b, OAUTH_FORM_PARAM_KEYS);
 
-      // Check password expiry
-      if (this.passwordPolicyService.isExpired(user, realm)) {
-        const changeToken = this.crypto.generateSecret(32);
-        // Store a short-lived verification token for the change-password flow
-        await this.verificationService.createTokenWithHash(
-          user.id,
-          'change_password',
-          300,
-          this.crypto.sha256(changeToken),
-        );
-
-        return res.redirect(
-          `/realms/${realm.name}/change-password?token=${changeToken}&info=${encodeURIComponent('Your password has expired and must be changed.')}`,
-        );
-      }
-
       // Risk-based step-up: a second factor even where MFA is optional. With
       // no factor enrolled there is nothing to step up with; the sign-in
       // continues as usual.
-      if (riskStepUp && (await this.mfaService.isMfaEnabled(user.id))) {
+      if (gates.riskStepUp && (await this.mfaService.isMfaEnabled(user.id))) {
         return this.loginFlow.startSecondFactor(
           realm,
           user,
@@ -509,65 +428,29 @@ export class LoginController {
       );
     }
 
-    // Check TOTP rate limit before processing
-    const rateLimitCheck = await this.bruteForceService.checkTotpRateLimit(
+    // Rate limit, the factor itself, and the failure record and event.
+    const result = await this.secondFactorVerifier.verify(
       realm,
       challenge.userId,
+      {
+        code: body.code,
+        recoveryCode: body.recoveryCode,
+        smsCode: body.smsCode,
+      },
+      challengeToken,
+      resolveClientIp(req),
     );
-    if (rateLimitCheck.blocked) {
-      this.logger.warn(
-        `TOTP rate limit exceeded for user ${challenge.userId} in realm ${realm.id}`,
-      );
+    if (!result.ok && result.reason === 'rate_limited') {
       return res.redirect(
         `/realms/${realm.name}/totp?error=${encodeURIComponent('Too many failed attempts. Please try again later.')}`,
       );
     }
-
-    const code = body.code;
-    const recoveryCode = body.recoveryCode;
-    const smsCode = body.smsCode;
-    // Keep the user on the SMS form after a wrong SMS code.
-    const retryMethod = smsCode ? '&method=sms' : '';
-
-    const { verified, factor } = smsCode
-      ? await this.mfaService.verifySecondFactor(challenge.userId, {
-          method: 'sms',
-          code: smsCode,
-          realmId: realm.id,
-          purpose: 'login',
-          binding: challengeToken,
-        })
-      : code
-        ? await this.mfaService.verifySecondFactor(challenge.userId, {
-            method: 'totp',
-            code,
-          })
-        : await this.mfaService.verifySecondFactor(challenge.userId, {
-            method: 'recovery',
-            code: recoveryCode ?? '',
-          });
-
-    if (!verified) {
-      await this.bruteForceService.recordTotpFailure(
-        realm,
-        challenge.userId,
-        resolveClientIp(req),
-      );
-      void this.eventsService.recordLoginEvent({
-        realmId: realm.id,
-        type: LoginEventType.MFA_VERIFY_ERROR,
-        userId: challenge.userId,
-        ipAddress: resolveClientIp(req),
-        error: 'Invalid MFA code',
-      });
-      const remainingCheck = await this.bruteForceService.checkTotpRateLimit(
-        realm,
-        challenge.userId,
-      );
-      const errorMsg =
-        remainingCheck.blocked || remainingCheck.remainingAttempts <= 2
-          ? 'Too many failed attempts. Please try again later.'
-          : 'Invalid code. Please try again.';
+    if (!result.ok) {
+      // Keep the user on the SMS form after a wrong SMS code.
+      const retryMethod = body.smsCode ? '&method=sms' : '';
+      const errorMsg = result.tooManyAttempts
+        ? 'Too many failed attempts. Please try again later.'
+        : 'Invalid code. Please try again.';
       return res.redirect(
         `/realms/${realm.name}/totp?error=${encodeURIComponent(errorMsg)}${retryMethod}`,
       );
@@ -586,7 +469,7 @@ export class LoginController {
     }
 
     // Reset TOTP failure tracking on successful verification
-    await this.bruteForceService.resetTotpFailures(realm.id, challenge.userId);
+    await this.secondFactorVerifier.recordSuccess(realm, challenge.userId);
 
     // MFA verified — complete login
     const user = await this.loginService.findUserById(challenge.userId);
@@ -605,7 +488,7 @@ export class LoginController {
       res,
       {
         acr: ACR_MFA,
-        amr: amrForFactor(challenge.primaryAmr, factor),
+        amr: amrForFactor(challenge.primaryAmr, result.factor),
       },
     );
   }

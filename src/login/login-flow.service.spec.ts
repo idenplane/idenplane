@@ -4,6 +4,8 @@ import {
   MFA_CHALLENGE_COOKIE,
 } from './login-flow.service.js';
 import { MFA_ENROLLMENT_COOKIE } from '../mfa/mfa.service.js';
+import { SessionIssuer } from './session-issuer.service.js';
+import { PostAuthService } from './post-auth.service.js';
 
 describe('LoginFlowService', () => {
   const realm = { id: 'realm-1', name: 'test-realm' } as Realm;
@@ -57,11 +59,11 @@ describe('LoginFlowService', () => {
       createMfaEnrollment: jest.fn().mockResolvedValue('enrolment'),
     };
     flow = new LoginFlowService(
-      loginService as any,
       oauthService as any,
-      consentService as any,
       eventsService as any,
       mfaService as any,
+      new SessionIssuer(loginService as any),
+      new PostAuthService(oauthService as any, consentService as any),
     );
     res = { cookie: jest.fn(), redirect: jest.fn() };
   });

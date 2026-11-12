@@ -1,5 +1,6 @@
 import { Module } from '@nestjs/common';
 import { LoginService } from './login.service.js';
+import { SessionIssuer } from './session-issuer.service.js';
 import { UserFederationModule } from '../user-federation/user-federation.module.js';
 import { MigrationModule } from '../migration/migration.module.js';
 import { CsrfService } from '../common/csrf/csrf.service.js';
@@ -11,7 +12,7 @@ import { CsrfService } from '../common/csrf/csrf.service.js';
  */
 @Module({
   imports: [UserFederationModule, MigrationModule],
-  providers: [LoginService, CsrfService],
-  exports: [LoginService, CsrfService],
+  providers: [LoginService, SessionIssuer, CsrfService],
+  exports: [LoginService, SessionIssuer, CsrfService],
 })
 export class LoginCoreModule {}
