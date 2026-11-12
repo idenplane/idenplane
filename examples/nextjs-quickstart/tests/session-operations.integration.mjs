@@ -146,7 +146,7 @@ try {
   const build = run([
     'build',
     '-f',
-    'Dockerfile.session-ops',
+    path.join(example, 'Dockerfile.session-ops'),
     '-t',
     image,
     example,
