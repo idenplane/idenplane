@@ -21,12 +21,29 @@ import { TokensService } from './tokens.service.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
-import { CachedLookupsService } from '../cache/cached-lookups.service.js';
-import { ClientSecretService } from '../clients/client-secret.service.js';
+import {
+  ClientAuthenticator,
+  ClientAuthError,
+  type ClientAuthFailure,
+} from '../client-auth/client-authenticator.js';
+import { ClientCertificateSource } from '../mtls/client-certificate.source.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 import { SESSION_COOKIE } from '../authn-core/cookies.js';
 import { RateLimitGuard, RateLimitBy } from '../rate-limit/rate-limit.guard.js';
-import { parseBasicClientCredentials } from '../common/utils/basic-client-auth.util.js';
+
+/**
+ * The `error_description` introspection and revocation have always sent for
+ * each client authentication failure; the token endpoint words them
+ * differently. Failures not listed keep the authenticator's wording.
+ */
+const CLIENT_AUTH_DESCRIPTIONS: Partial<Record<ClientAuthFailure, string>> = {
+  missing_client_id:
+    'Client authentication is required. Provide client_id/client_secret or use HTTP Basic.',
+  unknown_client: 'Invalid client_id or client is disabled.',
+  missing_secret: 'client_secret is required for confidential clients.',
+  no_secret_configured: 'Client has no secret configured.',
+  invalid_secret: 'Invalid client credentials.',
+};
 
 /**
  * The access token of a UserInfo request: `Authorization: Bearer` (any case,
@@ -61,8 +78,8 @@ function bearerToken(req: Request, formToken: string | undefined): string {
 export class TokensController {
   constructor(
     private readonly tokensService: TokensService,
-    private readonly lookups: CachedLookupsService,
-    private readonly clientSecrets: ClientSecretService,
+    private readonly clientAuthenticator: ClientAuthenticator,
+    private readonly clientCertificates: ClientCertificateSource,
   ) {}
 
   @Post('token/introspect')
@@ -85,12 +102,7 @@ export class TokensController {
     @Body() body: { token: string; client_id?: string; client_secret?: string },
     @Req() req: Request,
   ) {
-    const callerClientId = await this.authenticateClient(
-      realm,
-      body.client_id,
-      body.client_secret,
-      req,
-    );
+    const callerClientId = await this.authenticateClient(realm, body, req);
     const result = await this.tokensService.introspect(realm, body.token);
 
     // If the token is active, verify it was issued to the calling client.
@@ -151,12 +163,7 @@ export class TokensController {
     ) {
       throw new BadRequestException('token is required');
     }
-    const callerClientId = await this.authenticateClient(
-      realm,
-      body.client_id,
-      body.client_secret,
-      req,
-    );
+    const callerClientId = await this.authenticateClient(realm, body, req);
     await this.tokensService.assertTokenBelongsToClient(
       realm,
       body.token,
@@ -167,72 +174,36 @@ export class TokensController {
   }
 
   /**
-   * Authenticate the calling client via client_id/client_secret in the body
-   * or via HTTP Basic Authentication (RFC 6749 §2.3.1).
-   * Public clients are allowed with only client_id (no secret required).
+   * Authenticates the calling client (RFC 7662 §2.1, RFC 7009 §2.1) through
+   * the ClientAuthenticator the token endpoint uses: `client_secret_basic`,
+   * `client_secret_post`, or `none` for a public client, which sends only its
+   * client_id. Failures keep the wording these endpoints always used.
    *
    * Returns the resolved clientId so callers can enforce token-ownership checks.
    */
   private async authenticateClient(
     realm: Realm,
-    clientId?: string,
-    clientSecret?: string,
-    req?: Request,
+    body: Record<string, unknown>,
+    req: Request,
   ): Promise<string> {
-    let cId = clientId;
-    let cSecret = clientSecret;
-
-    // Fall back to HTTP Basic Authentication
-    if (!cId && req) {
-      const basic = parseBasicClientCredentials(req.headers['authorization']);
-      if (basic && basic !== 'malformed') {
-        cId = basic.clientId;
-        cSecret = basic.clientSecret;
-      }
-    }
-
-    if (!cId) {
-      throw new UnauthorizedException({
-        error: 'invalid_client',
-        error_description:
-          'Client authentication is required. Provide client_id/client_secret or use HTTP Basic.',
+    try {
+      const { clientId } = await this.clientAuthenticator.authenticate({
+        realm,
+        body,
+        authorization: req.headers['authorization'],
+        clientCert: this.clientCertificates.fromRequest(req),
       });
-    }
-
-    const client = await this.lookups.client(realm.id, cId);
-
-    if (!client || !client.enabled) {
-      throw new UnauthorizedException({
-        error: 'invalid_client',
-        error_description: 'Invalid client_id or client is disabled.',
-      });
-    }
-
-    // Confidential clients must provide a valid secret
-    if (client.clientType === 'CONFIDENTIAL') {
-      if (!cSecret) {
+      return clientId;
+    } catch (err) {
+      if (err instanceof ClientAuthError && err.code === 'invalid_client') {
         throw new UnauthorizedException({
           error: 'invalid_client',
           error_description:
-            'client_secret is required for confidential clients.',
+            CLIENT_AUTH_DESCRIPTIONS[err.reason] ?? err.description,
         });
       }
-      if (!client.clientSecret) {
-        throw new UnauthorizedException({
-          error: 'invalid_client',
-          error_description: 'Client has no secret configured.',
-        });
-      }
-      const valid = await this.clientSecrets.verify(client, cSecret);
-      if (!valid) {
-        throw new UnauthorizedException({
-          error: 'invalid_client',
-          error_description: 'Invalid client credentials.',
-        });
-      }
+      throw err;
     }
-
-    return cId;
   }
 
   @Post('logout')

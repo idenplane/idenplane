@@ -28,6 +28,7 @@ Idenplane is configured entirely through environment variables. This reference d
 | `THROTTLE_TTL` | `60000` | No | Rate limit window (ms) |
 | `THROTTLE_LIMIT` | `100` | No | Max requests per window |
 | `TRUSTED_PROXIES` | — | No | Trusted proxy IPs or CIDR blocks |
+| `MTLS_ENABLED` | `false` | No | Client certificates (RFC 8705); see [Client Certificates](#client-certificates-mtls) |
 
 ---
 
@@ -308,6 +309,55 @@ TRUSTED_PROXIES=*
 
 :::warning
 Setting `TRUSTED_PROXIES=*` is only safe when the network layer prevents direct public access to the Idenplane process (e.g., behind a managed cloud load balancer).
+:::
+
+---
+
+## Client Certificates (mTLS)
+
+Groundwork for OAuth client authentication with TLS client certificates ([RFC 8705](https://www.rfc-editor.org/rfc/rfc8705)). Everything is off by default. In this release, a certificate can reach the server, but no client authentication method accepts one yet.
+
+The server checks these settings at startup. An unsafe or incomplete setting stops the process with an error that names the variable, even while `MTLS_ENABLED` is `false`.
+
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `MTLS_ENABLED` | `false` | Master switch. While it is off, the listener does not start and certificate headers are ignored. |
+| `MTLS_LISTEN_PORT` | — | Port of an extra HTTPS listener that asks every client for a certificate. Requires `MTLS_TLS_CERT_FILE` and `MTLS_TLS_KEY_FILE`. |
+| `MTLS_LISTEN_HOST` | all interfaces | Address the listener binds to. |
+| `MTLS_TLS_CERT_FILE` | — | Server certificate (PEM) for the listener. |
+| `MTLS_TLS_KEY_FILE` | — | Private key (PEM) for the listener. |
+| `MTLS_TLS_KEY_PASSPHRASE_FILE` | — | File that holds the key's passphrase. |
+| `MTLS_TLS_MIN_VERSION` | `TLSv1.2` | `TLSv1.2` or `TLSv1.3`. |
+| `MTLS_HANDSHAKE_CA_FILE` | — | CA certificates named in the TLS CertificateRequest, so clients pick the right certificate. This is only a hint: the listener accepts any certificate at the handshake, and trust is decided for each realm. |
+| `MTLS_GLOBAL_TRUST_ANCHORS_FILE` | — | CA certificates a realm can opt in to trusting. Not used yet. |
+| `MTLS_BASE_URL` | — | `https` origin of the certificate listener, for `mtls_endpoint_aliases`. It must be `https`. |
+| `MTLS_PROXY_CERT_HEADER` | — | Header in which a TLS-terminating proxy forwards the client certificate. Requires `MTLS_TRUSTED_PROXY_CIDRS`. |
+| `MTLS_PROXY_CERT_FORMAT` | `pem-urlencoded` | `pem-urlencoded` (one URL-encoded PEM `CERTIFICATE` block, like nginx `$ssl_client_escaped_cert`) or `rfc9440` (`:base64-DER:`, the `Client-Cert` header of RFC 9440). |
+| `MTLS_PROXY_CERT_CHAIN_HEADER` | — | Optional header with the intermediates, in the same format (several PEM blocks, or a comma-separated RFC 9440 list). |
+| `MTLS_TRUSTED_PROXY_CIDRS` | — | Comma-separated IPv4/IPv6 addresses and CIDR blocks of the proxies allowed to send the certificate headers. It is matched against the TCP peer only, never against `X-Forwarded-For`. `*`, `0.0.0.0/0` and `::/0` are refused. |
+| `MTLS_PROXY_UNTRUSTED_HEADER_ACTION` | `reject` | What happens when a certificate header comes from any other peer: `reject` answers `400 invalid_request`, `strip` removes the header and continues. Either way the event is logged, at most once a minute per peer. |
+| `MTLS_MAX_CERT_HEADER_BYTES` | `16384` | Largest accepted certificate header. A larger one, a repeated one, or one with more than one certificate is rejected. |
+| `MTLS_MAX_CHAIN_DEPTH` | `5` | Most intermediates read from the handshake or the chain header (1–10). |
+| `MTLS_AUTH_FAILURE_LIMIT_PER_MINUTE` | `20` | Failed certificate authentications allowed per realm and certificate each minute. Not used yet. |
+
+The listener serves only the endpoints a client needs: discovery (`/realms/{realm}/.well-known/openid-configuration`), `token`, `token/introspect`, `revoke`, `userinfo`, `auth/device` and `certs` under `/realms/{realm}/protocol/openid-connect/`. Every other path returns 404.
+
+```bash
+# nginx terminates TLS on 10.0.0.2 and forwards the certificate
+MTLS_ENABLED=true
+MTLS_PROXY_CERT_HEADER=X-SSL-Client-Cert
+MTLS_TRUSTED_PROXY_CIDRS=10.0.0.2/32
+
+# or: Idenplane terminates TLS for certificate clients itself
+MTLS_ENABLED=true
+MTLS_LISTEN_PORT=8443
+MTLS_TLS_CERT_FILE=/etc/idenplane/tls.crt
+MTLS_TLS_KEY_FILE=/etc/idenplane/tls.key
+MTLS_BASE_URL=https://mtls.idp.example.com:8443
+```
+
+:::warning
+Only a proxy you control may set the certificate header. Make sure the proxy overwrites any copy of the header that a client sends.
 :::
 
 ---

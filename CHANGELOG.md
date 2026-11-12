@@ -9,6 +9,12 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+### Added
+- **Groundwork for client certificates (RFC 8705 mTLS), off by default.** New `MTLS_*` settings (see *Environment Variables*) add an optional HTTPS listener and support for a certificate forwarded by a TLS-terminating proxy. The listener asks each client for a certificate and serves only the OAuth endpoints a client needs. The proxy header counts only from addresses in `MTLS_TRUSTED_PROXY_CIDRS`, which refuses `*`, `0.0.0.0/0` and `::/0`. From any other peer the header is rejected with `400 invalid_request`, or stripped when `MTLS_PROXY_UNTRUSTED_HEADER_ACTION=strip`. Invalid settings stop the server at startup. No client can authenticate with a certificate yet.
+
+### Changed
+- **One client authentication for the token, introspection and revocation endpoints.** These endpoints had separate copies of the same checks and now share one. Responses are unchanged except on introspection and revocation. There, HTTP Basic sent together with `client_secret`, or with a `client_id` naming another client, is now `400 invalid_request`, as on the token endpoint. A malformed Basic header there is now `401 invalid_client`; before, it was ignored.
+
 ## [0.7.0] - 2026-11-12
 
 A security and correctness release. It closes vulnerabilities in LDAP federation, database TLS during migrations, the default admin password, device certificates, verification links, token claims, flow assignment and passkey sign-in; makes a fresh sign-in enforce a client's required authentication level; fixes every OpenID Connect failure the OpenID Foundation conformance suite's basic plan reported against 0.6.0; makes the Helm chart start with its defaults on official PostgreSQL and Redis images; gives Docker Compose a setup helper with unique secrets; and adds a production checklist. Read *Before you upgrade*: several defaults changed on purpose.
