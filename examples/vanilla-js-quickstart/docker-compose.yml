@@ -21,12 +21,13 @@ services:
   idenplane:
     image: islamawad/idenplane:latest
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
       DATABASE_URL: postgresql://idenplane:idenplane@db:5432/idenplane
       PORT: "3000"
       NODE_ENV: production
       ADMIN_API_KEY: quickstart-dev-admin-key-do-not-use-in-production
+      ADMIN_PASSWORD: quickstart-admin-password-do-not-use-in-production
       WEBHOOK_SECRET_KEY: 0000000000000000000000000000000000000000000000000000000000000000
       WEBHOOK_ENCRYPTION_SALT: 00000000000000000000000000000000
       BASE_URL: http://localhost:3000

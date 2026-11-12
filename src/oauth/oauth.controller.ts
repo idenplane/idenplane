@@ -1,7 +1,9 @@
 import {
+  Body,
   Controller,
   Get,
   HttpException,
+  Post,
   Query,
   Req,
   Res,
@@ -10,21 +12,47 @@ import {
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import type { Realm } from '@prisma/client';
-import { OAuthService, type AuthorizeParams } from './oauth.service.js';
+import { OAuthService } from './oauth.service.js';
 import { LoginService } from '../login/login.service.js';
 import { ConsentService } from '../consent/consent.service.js';
+import { StepUpService } from '../step-up/step-up.service.js';
 import {
-  StepUpService,
   ACR_PASSWORD,
-  ACR_MFA,
-  ACR_WEBAUTHN,
-} from '../step-up/step-up.service.js';
-import { CryptoService } from '../crypto/crypto.service.js';
-import { PrismaService } from '../prisma/prisma.service.js';
+  amrForSessionAcr,
+  resolveRequiredAcr,
+} from '../authn-core/acr.js';
+import { SESSION_COOKIE } from '../authn-core/cookies.js';
+import {
+  OAUTH_RELAY_PARAM_KEYS,
+  type AuthorizeParams,
+} from '../authn-core/oauth-params.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
 import { ThemeRenderService } from '../theme/theme-render.service.js';
+
+/**
+ * Whether a sign-in at `authenticatedAt` is older than the request's
+ * `max_age` (seconds). An invalid max_age is ignored, as before.
+ */
+export function sessionTooOld(
+  maxAge: string | undefined,
+  authenticatedAt: Date | undefined,
+  now = Date.now(),
+): boolean {
+  if (maxAge === undefined || !/^\d+$/.test(maxAge)) return false;
+  if (!authenticatedAt) return true;
+  return now - authenticatedAt.getTime() > Number(maxAge) * 1000;
+}
+
+/** Keeps only string parameters, as a query string would carry. */
+function stringParams(body: Record<string, unknown>): Record<string, string> {
+  const params: Record<string, string> = {};
+  for (const [key, value] of Object.entries(body ?? {})) {
+    if (typeof value === 'string') params[key] = value;
+  }
+  return params;
+}
 
 @ApiTags('OAuth')
 @Controller('realms/:realmName/protocol/openid-connect')
@@ -36,8 +64,6 @@ export class OAuthController {
     private readonly loginService: LoginService,
     private readonly consentService: ConsentService,
     private readonly stepUpService: StepUpService,
-    private readonly crypto: CryptoService,
-    private readonly prisma: PrismaService,
     private readonly themeRender: ThemeRenderService,
   ) {}
 
@@ -83,6 +109,26 @@ export class OAuthController {
     }
   }
 
+  /**
+   * OIDC Core §3.1.2.1: the authorization endpoint MUST accept POST with the
+   * parameters form-encoded in the body, and treat them like a GET's query.
+   */
+  @Post('auth')
+  @ApiOperation({ summary: 'Authorization endpoint (code flow, POST)' })
+  @ApiResponse({
+    status: 302,
+    description:
+      'Redirect to login page or redirect_uri with authorization code',
+  })
+  async authorizePost(
+    @CurrentRealm() realm: Realm,
+    @Body() body: Record<string, string>,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    return this.authorize(realm, stringParams(body), req, res);
+  }
+
   private async authorizeInternal(
     realm: Realm,
     query: Record<string, string>,
@@ -95,9 +141,42 @@ export class OAuthController {
       query as unknown as AuthorizeParams,
     );
 
+    // Request objects are not supported (discovery says so); OIDC Core §6
+    // requires saying that rather than ignoring the parameter.
+    if (query['request'] !== undefined) {
+      return this.redirectWithError(
+        res,
+        query['redirect_uri'],
+        'request_not_supported',
+        'Request objects are not supported',
+        query['state'],
+      );
+    }
+    if (query['request_uri'] !== undefined) {
+      return this.redirectWithError(
+        res,
+        query['redirect_uri'],
+        'request_uri_not_supported',
+        'request_uri is not supported',
+        query['state'],
+      );
+    }
+
+    const prompts = (query['prompt'] ?? '').split(/\s+/).filter(Boolean);
+    const silent = prompts.includes('none');
+    if (silent && prompts.length !== 1) {
+      return this.redirectWithError(
+        res,
+        query['redirect_uri'],
+        'invalid_request',
+        'prompt=none cannot be combined with other prompt values',
+        query['state'],
+      );
+    }
+
     // Check for existing SSO session cookie
     const sessionCookie = (req.cookies as Record<string, string>)?.[
-      'IDENPLANE_SESSION'
+      SESSION_COOKIE
     ];
     if (sessionCookie) {
       const user = await this.loginService.validateLoginSession(
@@ -105,24 +184,30 @@ export class OAuthController {
         sessionCookie,
       );
       if (user) {
-        const prompt = query['prompt'];
-
-        if (prompt === 'none') {
-          return this.handlePromptNone(
-            res,
-            client.redirectUris[0],
-            query['state'],
-          );
+        if (prompts.includes('login')) {
+          return this.handlePromptLogin(res, realm.name, query);
         }
 
-        if (prompt === 'login') {
+        // OIDC Core §3.1.2.1 max_age: a sign-in older than this many seconds
+        // must be repeated (silently impossible, so login_required).
+        const loginSession =
+          await this.loginService.findLoginSession(sessionCookie);
+        if (sessionTooOld(query['max_age'], loginSession?.createdAt)) {
+          if (silent) {
+            return this.redirectWithError(
+              res,
+              query['redirect_uri'],
+              'login_required',
+              'The sign-in is older than max_age',
+              query['state'],
+            );
+          }
           return this.handlePromptLogin(res, realm.name, query);
         }
 
         // Resolve the ACR actually satisfied by the existing SSO session so it
         // can be reflected in any code issued silently below. Falls back to
         // ACR_PASSWORD when there is no step-up record / login session.
-        const loginSession = await this.getLoginSessionByToken(sessionCookie);
         const sessionAcr = loginSession
           ? await this.stepUpService.getLoginSessionAcr(loginSession)
           : ACR_PASSWORD;
@@ -146,10 +231,25 @@ export class OAuthController {
           : null;
 
         // The strongest of the three requirements
-        const requiredAcr = this.resolveRequiredAcr(
-          this.resolveRequiredAcr(requestedAcr, clientRequiredAcr),
+        const requiredAcr = resolveRequiredAcr(
+          requestedAcr,
+          clientRequiredAcr,
           riskRequiredAcr,
         );
+
+        if (
+          silent &&
+          requiredAcr &&
+          !this.stepUpService.satisfiesAcr(sessionAcr, requiredAcr)
+        ) {
+          return this.redirectWithError(
+            res,
+            query['redirect_uri'],
+            'interaction_required',
+            'Additional authentication is required',
+            query['state'],
+          );
+        }
 
         if (requiredAcr) {
           if (loginSession) {
@@ -187,26 +287,34 @@ export class OAuthController {
         // When the session is still at the level it was established with, the
         // methods recorded at sign-in are exact; otherwise derive them.
         const ssoAuthContext = {
+          authTime: loginSession?.createdAt,
           acr: sessionAcr,
           amr:
             loginSession?.amr?.length &&
             loginSession.satisfiedAcr === sessionAcr
               ? loginSession.amr
-              : this.amrForSessionAcr(sessionAcr),
+              : amrForSessionAcr(sessionAcr),
         };
 
         // Check if client requires consent
-        if (client.requireConsent) {
+        if (client.requireConsent || prompts.includes('consent')) {
           const scopes = (query['scope'] ?? 'openid')
             .split(' ')
             .filter(Boolean);
-          const hasConsent = await this.consentService.hasConsent(
-            user.id,
-            client.id,
-            scopes,
-          );
+          const hasConsent =
+            !prompts.includes('consent') &&
+            (await this.consentService.hasConsent(user.id, client.id, scopes));
 
           if (!hasConsent) {
+            if (silent) {
+              return this.redirectWithError(
+                res,
+                query['redirect_uri'],
+                'consent_required',
+                'User consent is required',
+                query['state'],
+              );
+            }
             const reqId = await this.consentService.storeConsentRequest({
               userId: user.id,
               clientId: client.id,
@@ -216,6 +324,7 @@ export class OAuthController {
               oauthParams: query,
               satisfiedAcr: ssoAuthContext.acr,
               amr: ssoAuthContext.amr,
+              authTime: ssoAuthContext.authTime?.toISOString(),
             });
             return res.redirect(
               302,
@@ -236,22 +345,14 @@ export class OAuthController {
       }
     }
 
+    if (silent) {
+      return this.handlePromptNone(res, query['redirect_uri'], query['state']);
+    }
+
     // No valid session: redirect to login page with OAuth params.
     // Only relay params from the explicit allowlist to prevent open-redirect
     // and parameter-injection attacks via arbitrary query string forwarding.
-    const OAUTH_PARAM_ALLOWLIST = new Set([
-      'client_id',
-      'redirect_uri',
-      'response_type',
-      'scope',
-      'state',
-      'nonce',
-      'code_challenge',
-      'code_challenge_method',
-      'prompt',
-      'acr_values',
-      'login_hint',
-    ]);
+    const OAUTH_PARAM_ALLOWLIST = new Set<string>(OAUTH_RELAY_PARAM_KEYS);
     const loginParams = new URLSearchParams();
     for (const [key, value] of Object.entries(query)) {
       if (value && OAUTH_PARAM_ALLOWLIST.has(key)) loginParams.set(key, value);
@@ -281,49 +382,6 @@ export class OAuthController {
     return 'The sign-in request could not be processed. Please try again.';
   }
 
-  /**
-   * Given two optional ACR requirements, returns the one with higher
-   * assurance strength, or null if neither is set.
-   */
-  private resolveRequiredAcr(
-    requestedAcr: string | null,
-    clientAcr: string | null,
-  ): string | null {
-    if (!requestedAcr && !clientAcr) return null;
-    if (!requestedAcr) return clientAcr;
-    if (!clientAcr) return requestedAcr;
-
-    // Both are set — return the stronger one
-    const reqStrength = this.stepUpService.getAcrStrength(requestedAcr);
-    const clientStrength = this.stepUpService.getAcrStrength(clientAcr);
-    return reqStrength >= clientStrength ? requestedAcr : clientAcr;
-  }
-
-  /**
-   * Derive RFC 8176 `amr` values from a session's satisfied ACR. We can only
-   * infer methods from the ACR level (we don't track per-method history on the
-   * SSO session), so each level maps to its canonical method set:
-   *   - WebAuthn  → ['hwk']        (hardware key; matches the passkey login path)
-   *   - MFA       → ['pwd', 'otp'] (password + second factor)
-   *   - otherwise → ['pwd']        (password only)
-   * Must be checked strongest-first so a WebAuthn session (which also satisfies
-   * MFA) is not mislabelled as password+otp.
-   */
-  private amrForSessionAcr(sessionAcr: string): string[] {
-    if (this.stepUpService.satisfiesAcr(sessionAcr, ACR_WEBAUTHN)) {
-      return ['hwk'];
-    }
-    if (this.stepUpService.satisfiesAcr(sessionAcr, ACR_MFA)) {
-      return ['pwd', 'otp'];
-    }
-    return ['pwd'];
-  }
-
-  private async getLoginSessionByToken(sessionToken: string) {
-    const tokenHash = this.crypto.sha256(sessionToken);
-    return this.prisma.loginSession.findUnique({ where: { tokenHash } });
-  }
-
   private redirectWithError(
     res: Response,
     redirectUri: string,
@@ -334,7 +392,7 @@ export class OAuthController {
     const url = new URL(redirectUri);
     url.searchParams.set('error', error);
     url.searchParams.set('error_description', errorDescription);
-    if (state) {
+    if (state !== undefined) {
       url.searchParams.set('state', state);
     }
     res.redirect(302, url.toString());
@@ -360,19 +418,7 @@ export class OAuthController {
     query: Record<string, string>,
   ): void {
     const loginParams = new URLSearchParams();
-    const allowlist = new Set([
-      'client_id',
-      'redirect_uri',
-      'response_type',
-      'scope',
-      'state',
-      'nonce',
-      'code_challenge',
-      'code_challenge_method',
-      'prompt',
-      'acr_values',
-      'login_hint',
-    ]);
+    const allowlist = new Set<string>(OAUTH_RELAY_PARAM_KEYS);
     for (const [key, value] of Object.entries(query)) {
       if (value && allowlist.has(key)) loginParams.set(key, value);
     }

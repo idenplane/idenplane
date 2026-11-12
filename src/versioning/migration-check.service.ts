@@ -1,4 +1,9 @@
-import { Injectable, OnModuleInit, Logger } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  OnApplicationShutdown,
+  OnModuleInit,
+} from '@nestjs/common';
 import { prismaMigrateStatus } from '../upgrade/migrate-status.js';
 
 export interface MigrationStatus {
@@ -20,8 +25,12 @@ export interface MigrationStatus {
  * so the server starts accepting requests without it.
  */
 @Injectable()
-export class MigrationCheckService implements OnModuleInit {
+export class MigrationCheckService
+  implements OnModuleInit, OnApplicationShutdown
+{
   private readonly logger = new Logger(MigrationCheckService.name);
+  /** Stops a check still running at shutdown instead of leaving the CLI behind. */
+  private readonly shutdown = new AbortController();
 
   onModuleInit(): void {
     // Once per container: in cluster mode only the first worker runs it.
@@ -29,8 +38,13 @@ export class MigrationCheckService implements OnModuleInit {
     void this.report();
   }
 
+  onApplicationShutdown(): void {
+    this.shutdown.abort();
+  }
+
   private async report(): Promise<void> {
-    const status = await this.getStatus();
+    const status = await this.getStatus(this.shutdown.signal);
+    if (this.shutdown.signal.aborted) return;
 
     if (status.pendingCount > 0) {
       this.logger.warn(
@@ -46,9 +60,9 @@ export class MigrationCheckService implements OnModuleInit {
     }
   }
 
-  async getStatus(): Promise<MigrationStatus> {
+  async getStatus(signal?: AbortSignal): Promise<MigrationStatus> {
     try {
-      return this.parseStatus(await prismaMigrateStatus());
+      return this.parseStatus(await prismaMigrateStatus(signal));
     } catch (err: unknown) {
       // A non-zero exit code is how prisma reports pending migrations.
       const output =

@@ -16,6 +16,7 @@ Idenplane is configured entirely through environment variables. This reference d
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
 | `DATABASE_URL` | — | Yes | PostgreSQL/MySQL/SQLite connection string |
+| `DATABASE_MIGRATION_URL` | — | No | URL the Docker image uses for `prisma migrate deploy` only. Defaults to `DATABASE_URL`, with `sslmode=verify-full`/`verify-ca` and `sslrootcert` translated to Prisma's `sslmode=require&sslcert=…&sslaccept=strict` so migrations verify the database certificate too |
 | `PORT` | `3000` | No | Server port |
 | `NODE_ENV` | `development` | No | Environment: `development`, `production` |
 | `BASE_URL` | `http://localhost:3000` | No | Public URL for redirects and emails |
@@ -105,7 +106,7 @@ The following variables are **required in production**. Idenplane will refuse to
 |----------|---------|----------|-------------|
 | `ADMIN_API_KEY` | — | Yes (prod) | Secret API key for admin endpoints (32+ characters recommended) |
 | `ADMIN_USER` | `admin` | No | Initial admin username (only used on first run) |
-| `ADMIN_PASSWORD` | `admin` | No | Initial admin password (only used on first run) |
+| `ADMIN_PASSWORD` | `admin` outside production | Production, first start | Initial admin password (only used on first run). With `NODE_ENV=production` the first start refuses a missing, default or shorter-than-12-character value |
 
 Generate a secure key:
 

@@ -10,6 +10,20 @@ import { ClientsService } from '../clients/clients.service.js';
 import { CreateClientScopeDto } from './dto/create-client-scope.dto.js';
 import { UpdateClientScopeDto } from './dto/update-client-scope.dto.js';
 
+/** An assignment that already exists is a 409, not a server error. */
+async function alreadyAssignedAsConflict<T>(create: Promise<T>): Promise<T> {
+  try {
+    return await create;
+  } catch (err) {
+    if ((err as { code?: string }).code === 'P2002') {
+      throw new ConflictException(
+        'The client scope is already assigned to this client',
+      );
+    }
+    throw err;
+  }
+}
+
 @Injectable()
 export class ClientScopesService {
   constructor(
@@ -163,9 +177,11 @@ export class ClientScopesService {
       clientIdOrUuid,
     );
     await this.findById(realm, clientScopeId);
-    return this.prisma.clientDefaultScope.create({
-      data: { clientId: client.id, clientScopeId },
-    });
+    return alreadyAssignedAsConflict(
+      this.prisma.clientDefaultScope.create({
+        data: { clientId: client.id, clientScopeId },
+      }),
+    );
   }
 
   async removeDefaultScope(
@@ -203,9 +219,11 @@ export class ClientScopesService {
       clientIdOrUuid,
     );
     await this.findById(realm, clientScopeId);
-    return this.prisma.clientOptionalScope.create({
-      data: { clientId: client.id, clientScopeId },
-    });
+    return alreadyAssignedAsConflict(
+      this.prisma.clientOptionalScope.create({
+        data: { clientId: client.id, clientScopeId },
+      }),
+    );
   }
 
   async removeOptionalScope(

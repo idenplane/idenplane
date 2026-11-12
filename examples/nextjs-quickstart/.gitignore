@@ -2,3 +2,8 @@ node_modules
 .next
 next-env.d.ts
 .env.local
+
+# Private server-session credentials and encryption keys.
+.env
+.env.*
+!.env.example

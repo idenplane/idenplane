@@ -40,12 +40,13 @@ services:
   idenplane:
     # IDENPLANE_IMAGE lets CI run this stack against an image built from the
     # commit under test.
-    image: ${IDENPLANE_IMAGE:-islamawad/idenplane:0.6.0}
+    image: ${IDENPLANE_IMAGE:-islamawad/idenplane:0.7.0}
     environment:
       DATABASE_URL: postgresql://idenplane:idenplane@db:5432/idenplane
       PORT: '3000'
       NODE_ENV: production
       ADMIN_API_KEY: forward-auth-demo-admin-key-do-not-use-in-production
+      ADMIN_PASSWORD: forward-auth-demo-admin-password-do-not-use-in-production
       WEBHOOK_SECRET_KEY: '0000000000000000000000000000000000000000000000000000000000000000'
       WEBHOOK_ENCRYPTION_SALT: '00000000000000000000000000000000'
       # Must match the URL the BROWSER uses, not the internal service name:

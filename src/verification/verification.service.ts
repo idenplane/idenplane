@@ -83,11 +83,12 @@ export class VerificationService {
   async validateToken(
     rawToken: string,
     type: string,
+    realmId?: string,
   ): Promise<{ userId: string } | null> {
     const tokenHash = this.crypto.sha256(rawToken);
 
     const record = await this.prisma.verificationToken.findUnique({
-      where: { tokenHash },
+      where: { tokenHash, ...(realmId ? { user: { realmId } } : {}) },
     });
 
     if (!record || record.type !== type || record.expiresAt < new Date()) {

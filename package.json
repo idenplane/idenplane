@@ -1,6 +1,6 @@
 {
   "name": "idenplane",
-  "version": "0.6.0",
+  "version": "0.7.0",
   "description": "",
   "author": "",
   "private": true,
@@ -17,6 +17,7 @@
     "start:prod": "node dist/cluster",
     "lint": "eslint \"src/**/*.ts\" --ignore-pattern '**/*.spec.ts'",
     "lint:fix": "eslint \"src/**/*.ts\" --ignore-pattern '**/*.spec.ts' --fix",
+    "lint:cycles": "node scripts/check-import-cycles.mjs",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js",
     "test:watch": "node --experimental-vm-modules node_modules/jest/bin/jest.js --watch",
     "test:cov": "node --experimental-vm-modules node_modules/jest/bin/jest.js --coverage",
@@ -43,6 +44,7 @@
     "@nestjs/terminus": "^12.1.0",
     "@nestjs/throttler": "^6.7.1",
     "@node-saml/node-saml": "^5.1.0",
+    "@peculiar/x509": "2.2.0",
     "@prisma/adapter-pg": "^7.10.1",
     "@prisma/client": "^7.10.1",
     "@simplewebauthn/server": "^14.0.3",
@@ -53,10 +55,9 @@
     "class-validator": "^0.15.1",
     "cookie-parser": "^1.4.7",
     "dotenv": "^18.0.9",
-    "fast-xml-parser": "^5.11.0",
+    "fast-xml-parser": "^5.12.0",
     "graphql": "^16.14.1",
     "handlebars": "^4.7.10",
-    "hbs": "^4.4.0",
     "helmet": "^8.3.0",
     "ioredis": "^6.0.0",
     "jose": "^6.2.10",
@@ -124,7 +125,8 @@
     "deepmerge-ts": "^8.0.2",
     "mysql2": "^3.23.1",
     "minimatch@^9": "^11.0.1",
-    "minimatch@^10": "^11.0.1"
+    "minimatch@^10": "^11.0.1",
+    "glob@>=9 <14.0.2": "^14.0.6"
   },
   "prisma": {
     "seed": "ts-node prisma/seed.ts"

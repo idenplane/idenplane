@@ -1,6 +1,6 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { riskStepUpAcr } from '../step-up/step-up.service.js';
+import { riskStepUpAcr } from '../authn-core/acr.js';
 import { SessionEventsGateway } from '../realtime/session-events.gateway.js';
 
 /**

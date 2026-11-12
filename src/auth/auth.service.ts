@@ -30,11 +30,8 @@ import {
 import { loadUserGrants } from './user-grants.js';
 import { CustomAttributesService } from '../custom-attributes/custom-attributes.service.js';
 import { UserFederationService } from '../user-federation/user-federation.service.js';
-import {
-  StepUpService,
-  ACR_PASSWORD,
-  ACR_MFA,
-} from '../step-up/step-up.service.js';
+import { StepUpService } from '../step-up/step-up.service.js';
+import { ACR_PASSWORD, ACR_MFA } from '../authn-core/acr.js';
 import type { PluginManagerService } from '../plugins/plugin-manager.service.js';
 import type { Prisma, Realm } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
@@ -55,6 +52,52 @@ export interface TokenResponse {
 interface NewSession {
   id: string;
   data: Omit<Prisma.SessionUncheckedCreateInput, 'id' | 'refreshTokens'>;
+}
+
+/**
+ * Registered and assurance claims of an access token that only the server
+ * sets. `exp`, `iat` and `jti` are set when signing.
+ */
+/**
+ * How long after a code expires a replay by its own client still revokes the
+ * tokens issued from it (RFC 6749 §4.1.2).
+ */
+const REPLAY_REVOCATION_WINDOW_MS = 5 * 60 * 1000;
+
+const PROTECTED_ACCESS_TOKEN_CLAIMS = [
+  'iss',
+  'sub',
+  'aud',
+  'azp',
+  'scope',
+  'typ',
+  'sid',
+  'acr',
+  'amr',
+  'nbf',
+  'cnf',
+  'auth_time',
+  'nonce',
+] as const;
+
+/**
+ * Restores the server's values of the protected claims after mappers and
+ * plugins ran: a configured claim named `sub`, `acr` or `aud` must not let a
+ * token speak for another user, assurance level or audience.
+ */
+export function withProtectedClaims(
+  payload: Record<string, unknown>,
+  protectedClaims: JWTPayload,
+): JWTPayload {
+  const result: Record<string, unknown> = { ...payload };
+  for (const claim of PROTECTED_ACCESS_TOKEN_CLAIMS) {
+    if (claim in protectedClaims) {
+      result[claim] = protectedClaims[claim];
+    } else {
+      delete result[claim];
+    }
+  }
+  return result;
 }
 
 @Injectable()
@@ -546,15 +589,20 @@ export class AuthService {
       }
     }
 
-    // Fallback: basic client_credentials token without user context
+    // Fallback: basic client_credentials token without user context. The
+    // scope is validated like any other grant's, never copied as sent.
     const signingKey = await this.getActiveSigningKey(realm.id);
+    const scopes = this.scopesService.parseAndValidate(scope);
+    const grantedScope = this.scopesService.toString(
+      scopes.length > 0 ? scopes : ['openid'],
+    );
 
     const accessToken = await this.jwkService.signJwt(
       {
         iss: this.getIssuer(realm),
         sub: client.id,
         aud: client_id,
-        scope: scope ?? 'openid',
+        scope: grantedScope,
         typ: 'Bearer',
         azp: client_id,
       },
@@ -578,7 +626,7 @@ export class AuthService {
       access_token: accessToken,
       token_type: 'Bearer',
       expires_in: realm.accessTokenLifespan,
-      scope: scope ?? 'openid',
+      scope: grantedScope,
     };
   }
 
@@ -737,9 +785,12 @@ export class AuthService {
       storedToken.sessionId,
       scope || storedToken.scope || undefined,
       undefined,
-      undefined,
+      // The original sign-in time, not the refresh time (OIDC Core §12.2).
+      session.authTime ?? session.createdAt,
       acr,
       amr,
+      undefined,
+      storedToken.isOffline,
     );
   }
 
@@ -775,6 +826,9 @@ export class AuthService {
     // when: (a) the code does not exist, (b) it was already used by a
     // concurrent request, or (c) it has already expired.  All three cases are
     // treated identically — the caller receives an "invalid or expired" error.
+    // The session this exchange creates is recorded on the code, so that a
+    // replay of the code can end it.
+    const sessionId = randomUUID();
     let authCode: Awaited<
       ReturnType<typeof this.prisma.authorizationCode.update>
     >;
@@ -785,7 +839,7 @@ export class AuthService {
           used: false,
           expiresAt: { gt: new Date() },
         },
-        data: { used: true },
+        data: { used: true, sessionId },
       });
     } catch (err: unknown) {
       const isPrismaNotFound =
@@ -793,6 +847,7 @@ export class AuthService {
         err !== null &&
         (err as { code?: string }).code === 'P2025';
       if (isPrismaNotFound) {
+        await this.revokeReplayedCode(code, client, code_verifier);
         throw new OAuthTokenError(
           'invalid_grant',
           'Invalid or expired authorization code',
@@ -881,16 +936,20 @@ export class AuthService {
     const acr = authCode.satisfiedAcr ?? ACR_PASSWORD;
     const amr = authCode.amr.length > 0 ? authCode.amr : ['pwd'];
 
-    const session = this.newSession({
-      userId: user.id,
-      ipAddress: ip,
-      userAgent,
-      // Persist so the refresh_token grant can preserve acr/amr (see
-      // handleRefreshTokenGrant).
-      satisfiedAcr: acr,
-      amr,
-      expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
-    });
+    const session = this.newSession(
+      {
+        userId: user.id,
+        ipAddress: ip,
+        userAgent,
+        // Persist so the refresh_token grant can preserve acr/amr (see
+        // handleRefreshTokenGrant).
+        satisfiedAcr: acr,
+        amr,
+        authTime: authCode.authTime ?? authCode.createdAt,
+        expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
+      },
+      sessionId,
+    );
 
     void this.eventsService.recordLoginEvent({
       realmId: realm.id,
@@ -912,10 +971,11 @@ export class AuthService {
       session,
       authCode.scope ?? undefined,
       authCode.nonce ?? undefined,
-      new Date(),
+      authCode.authTime ?? authCode.createdAt,
       acr,
       amr,
       authCode.code,
+      await this.clientAllowsOfflineAccess(client.id),
     );
   }
 
@@ -935,7 +995,7 @@ export class AuthService {
       );
     }
 
-    await this.validateClient(
+    const client = await this.validateClient(
       realm,
       client_id,
       client_secret,
@@ -1074,6 +1134,10 @@ export class AuthService {
       deviceCode.scope ?? undefined,
       undefined,
       new Date(),
+      undefined,
+      undefined,
+      undefined,
+      await this.clientAllowsOfflineAccess(client.id),
     );
   }
 
@@ -1283,13 +1347,21 @@ export class AuthService {
     acr?: string,
     amr?: string[],
     code?: string,
+    /**
+     * Whether `offline_access` may be granted (OIDC Core §11): only for a
+     * code-returning grant of a client with that scope assigned, or when
+     * refreshing a token that already is offline. Otherwise it is dropped.
+     */
+    offlineAccess = false,
   ): Promise<TokenResponse> {
     const sessionId =
       typeof session === 'string' ? session : (session?.id ?? null);
     const signingKey = await this.getActiveSigningKey(realm.id);
 
     // Parse and validate scopes, default to openid
-    const scopes = this.scopesService.parseAndValidate(scope);
+    const scopes = this.scopesService
+      .parseAndValidate(scope)
+      .filter((s) => offlineAccess || s !== 'offline_access');
     const effectiveScopes = scopes.length > 0 ? scopes : ['openid'];
     const validatedScope = this.scopesService.toString(effectiveScopes);
 
@@ -1338,7 +1410,9 @@ export class AuthService {
       // If mappers fail, fall back to standard claims
     }
 
-    const accessTokenPayload: JWTPayload = {
+    // Claims the server decides. Protocol mappers and enrichment plugins run
+    // after them and may add claims, but never change or remove these.
+    const protectedClaims: JWTPayload = {
       iss: this.getIssuer(realm),
       sub: user.id,
       aud: clientId,
@@ -1352,6 +1426,10 @@ export class AuthService {
       // Mirror the id_token resolution (default acr = password).
       acr: acr ?? ACR_PASSWORD,
       ...(amr && amr.length > 0 ? { amr } : {}),
+    };
+
+    const accessTokenPayload: JWTPayload = {
+      ...protectedClaims,
       ...userClaims,
       ...(includeRoles
         ? {
@@ -1363,13 +1441,16 @@ export class AuthService {
     };
 
     // Allow token-enrichment plugins to add custom claims (non-blocking)
-    const enrichedPayload: Record<string, unknown> = this.pluginManager
-      ? await this.pluginManager.enrichToken(
-          accessTokenPayload,
-          { ...user },
-          realm.name,
-        )
-      : accessTokenPayload;
+    const enrichedPayload = withProtectedClaims(
+      this.pluginManager
+        ? await this.pluginManager.enrichToken(
+            accessTokenPayload,
+            { ...user },
+            realm.name,
+          )
+        : accessTokenPayload,
+      protectedClaims,
+    );
 
     const accessToken = await this.jwkService.signJwt(
       enrichedPayload,
@@ -1494,7 +1575,10 @@ export class AuthService {
     //  - Otherwise default to ACR_PASSWORD ("urn:idenplane:acr:password")
     const resolvedAcr = params.acr ?? ACR_PASSWORD;
 
+    // User claims first: an attribute mapped to a registered claim name must
+    // not replace the server's value.
     const idTokenPayload: JWTPayload = {
+      ...userClaims,
       iss: this.getIssuer(params.realm),
       sub: params.user.id,
       aud: params.clientId,
@@ -1510,7 +1594,6 @@ export class AuthService {
       ...(params.code
         ? { c_hash: this.jwkService.computeChash(params.code) }
         : {}),
-      ...userClaims,
     };
 
     if (params.nonce) {
@@ -1549,8 +1632,79 @@ export class AuthService {
       Prisma.SessionUncheckedCreateInput,
       'id' | 'refreshTokens' | 'createdAt'
     >,
+    id: string = randomUUID(),
   ): NewSession {
-    return { id: randomUUID(), data: { ...data, createdAt: new Date() } };
+    const now = new Date();
+    // auth_time defaults to now: the password, MFA and device grants
+    // authenticate the user in this request.
+    return {
+      id,
+      data: { ...data, authTime: data.authTime ?? now, createdAt: now },
+    };
+  }
+
+  /**
+   * An administrator opts a client into offline tokens by assigning it the
+   * `offline_access` client scope (default or optional).
+   */
+  private async clientAllowsOfflineAccess(
+    clientDbId: string,
+  ): Promise<boolean> {
+    const where = {
+      clientId: clientDbId,
+      clientScope: { name: 'offline_access' },
+    };
+    const [asDefault, asOptional] = await Promise.all([
+      this.prisma.clientDefaultScope.count({ where }),
+      this.prisma.clientOptionalScope.count({ where }),
+    ]);
+    return asDefault + asOptional > 0;
+  }
+
+  /**
+   * RFC 6749 §4.1.2: when a used code is presented again, revoke the tokens
+   * issued from it. Ending their session deletes its refresh tokens and makes
+   * its access tokens introspect as inactive (they carry its `sid`).
+   *
+   * Only the code's own client can trigger this, proving itself the way the
+   * exchange does (its secret, already checked, or the PKCE verifier), and only
+   * shortly after the code expired: a used code that leaked later must not let
+   * anyone end the user's session.
+   */
+  private async revokeReplayedCode(
+    code: string,
+    client: { id: string; clientType: string },
+    codeVerifier: string | undefined,
+  ): Promise<void> {
+    const replayed = await this.prisma.authorizationCode.findUnique({
+      where: { code },
+      select: {
+        used: true,
+        sessionId: true,
+        clientId: true,
+        codeChallenge: true,
+        expiresAt: true,
+      },
+    });
+    if (!replayed?.used || !replayed.sessionId) return;
+    if (replayed.clientId !== client.id) return;
+    if (Date.now() > replayed.expiresAt.getTime() + REPLAY_REVOCATION_WINDOW_MS)
+      return;
+    if (client.clientType !== 'CONFIDENTIAL') {
+      const proven =
+        !!replayed.codeChallenge &&
+        !!codeVerifier &&
+        Buffer.from(this.crypto.sha256(codeVerifier), 'hex').toString(
+          'base64url',
+        ) === replayed.codeChallenge;
+      if (!proven) return;
+    }
+    await this.prisma.session.deleteMany({
+      where: { id: replayed.sessionId },
+    });
+    this.logger.warn(
+      `Authorization code replayed by client ${client.id}; revoked the tokens issued from it`,
+    );
   }
 
   /**

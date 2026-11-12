@@ -1,21 +1,15 @@
 import { Injectable, UnauthorizedException, Optional } from '@nestjs/common';
-import type { Realm, User } from '@prisma/client';
+import type { LoginSession, Realm, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { BruteForceService } from '../brute-force/brute-force.service.js';
 import { UserFederationService } from '../user-federation/user-federation.service.js';
 import { PasswordMigrationService } from '../migration/password-migration.service.js';
-import {
-  ACR_MFA,
-  acrStrength,
-  strongestAcr,
-} from '../step-up/step-up.service.js';
+import { ACR_MFA, acrStrength, strongestAcr } from '../authn-core/acr.js';
+import type { AuthContext } from '../authn-core/auth-context.js';
 
 /** How an SSO session was established (OIDC acr / RFC 8176 amr). */
-export interface LoginSessionAuthContext {
-  acr?: string;
-  amr?: string[];
-}
+export type LoginSessionAuthContext = AuthContext;
 
 @Injectable()
 export class LoginService {
@@ -242,6 +236,15 @@ export class LoginService {
       ...stepUps.map((s) => s.acrLevel),
     );
     return acrStrength(acr) >= acrStrength(ACR_MFA);
+  }
+
+  /**
+   * The login session behind an SSO session token, as stored: no realm,
+   * expiry or user checks (`validateLoginSession` does those).
+   */
+  async findLoginSession(sessionToken: string): Promise<LoginSession | null> {
+    const tokenHash = this.crypto.sha256(sessionToken);
+    return this.prisma.loginSession.findUnique({ where: { tokenHash } });
   }
 
   async findUserById(userId: string): Promise<User | null> {

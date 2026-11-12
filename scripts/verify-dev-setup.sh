@@ -46,15 +46,19 @@ node -e 'const [maj] = process.versions.node.split("."); if (+maj < 22) { consol
 step "Backend: npm install"
 npm install --no-audit --no-fund
 
-step "Backend: cp .env.example .env, then set the placeholders"
-cp .env.example .env
-set_env ADMIN_API_KEY "$(openssl rand -hex 32)"
-set_env ADMIN_PASSWORD "Dev-$(openssl rand -hex 12)"
-set_env WEBHOOK_SECRET_KEY "$(openssl rand -hex 32)"
-set_env WEBHOOK_ENCRYPTION_SALT "$(openssl rand -hex 16)"
-if grep -n 'REPLACE_ME' .env | grep -v '^.*POSTGRES_PASSWORD='; then
-  echo "A placeholder the page doesn't mention is still in .env" >&2
+step "Backend: node scripts/setup-env.cjs"
+if [ -e .env ]; then
+  echo ".env already exists; move it away first (this script follows the guide from a clean checkout)" >&2
   exit 1
+fi
+node scripts/setup-env.cjs
+if grep -n 'REPLACE_ME' .env; then
+  echo "setup-env.cjs left a placeholder in .env" >&2
+  exit 1
+fi
+if [ "$DB_MODE" != "docker" ]; then
+  # The guide's "own Postgres" section: point DATABASE_URL at that role.
+  set_env DATABASE_URL "postgresql://idenplane:idenplane@localhost:5432/idenplane"
 fi
 
 if [ "$DB_MODE" = "docker" ]; then

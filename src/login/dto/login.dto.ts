@@ -61,6 +61,12 @@ export class LoginDto {
   @IsString()
   code_challenge_method?: string;
 
+  // OIDC prompt, carried through the form so a fresh sign-in honours
+  // prompt=consent.
+  @IsOptional()
+  @IsString()
+  prompt?: string;
+
   // Risk-assessment device fingerprint (injected by browser-side JS).
   @IsOptional()
   @IsString()
@@ -114,6 +120,12 @@ export class OAuthContextDto {
   @IsOptional()
   @IsString()
   code_challenge_method?: string;
+
+  // OIDC prompt, carried through the form so a fresh sign-in honours
+  // prompt=consent.
+  @IsOptional()
+  @IsString()
+  prompt?: string;
 }
 
 // Field names match the totp.hbs form: name="code" and name="recoveryCode".

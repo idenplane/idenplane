@@ -166,14 +166,36 @@ export class AuthFlowController {
     description: 'Unauthorized — missing or invalid admin API key',
   })
   @ApiResponse({ status: 404, description: 'Client or flow not found' })
-  assignToClient(
+  async assignToClient(
+    @Param('realm') realmParam: string,
     @Param('id') _flowId: string,
     @Param('clientId') clientId: string,
     @Body() dto: AssignFlowToClientDto,
   ) {
+    const realmId = await this.resolveRealmId(realmParam);
+    // Both the client and the flow must belong to the realm in the path, so a
+    // realm's admin can neither change another realm's client nor bind a flow
+    // from another realm.
+    const client = await this.prisma.client.findFirst({
+      where: { id: clientId, realmId },
+      select: { id: true },
+    });
+    if (!client) {
+      throw new NotFoundException(`Client '${clientId}' not found`);
+    }
+    const authFlowId = dto.authFlowId ?? null;
+    if (authFlowId) {
+      const flow = await this.prisma.authenticationFlow.findFirst({
+        where: { id: authFlowId, realmId },
+        select: { id: true },
+      });
+      if (!flow) {
+        throw new NotFoundException(`Flow '${authFlowId}' not found`);
+      }
+    }
     return this.prisma.client.update({
-      where: { id: clientId },
-      data: { authFlowId: dto.authFlowId ?? null },
+      where: { id: client.id },
+      data: { authFlowId },
       select: { id: true, clientId: true, authFlowId: true },
     });
   }

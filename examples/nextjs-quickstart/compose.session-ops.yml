@@ -1,0 +1,35 @@
+# Local-only addition to docker-compose.yml + compose.server-session.yml.
+# Production must use verify-full, a CA file and a least-privilege cleanup role.
+services:
+  session-cleaner:
+    build:
+      context: .
+      dockerfile: Dockerfile.session-ops
+    command: ['cleanup-loop']
+    environment:
+      PGHOST: session-db
+      PGPORT: '5432'
+      PGUSER: bff
+      PGDATABASE: bff
+      SESSION_POSTGRES_PASSWORD: ${SESSION_POSTGRES_PASSWORD:?Required session database password}
+      PGSSLMODE: disable
+      SESSION_OPS_ALLOW_INSECURE: 'true'
+      SESSION_CLEANUP_INTERVAL_SECONDS: '300'
+      SESSION_CLEANUP_BATCH_SIZE: '500'
+      SESSION_CLEANUP_MAX_BATCHES: '20'
+    depends_on:
+      session-db:
+        condition: service_healthy
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop: [ALL]
+    security_opt: ['no-new-privileges:true']
+    restart: unless-stopped
+    stop_grace_period: 150s
+    healthcheck:
+      test: ['CMD', 'node', '/ops/scripts/session-maintenance.mjs', 'health']
+      interval: 30s
+      timeout: 5s
+      retries: 2
+      start_period: 30s

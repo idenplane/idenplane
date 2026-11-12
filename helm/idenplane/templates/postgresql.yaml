@@ -1,0 +1,150 @@
+{{- if .Values.postgresql.enabled }}
+{{- /*
+Built-in PostgreSQL for evaluation and small installs, on the official
+postgres image. Use a managed database for production (postgresql.enabled:
+false plus secrets.DATABASE_URL).
+
+Compatible with volumes created by the Bitnami sub-chart this replaces: same
+PVC name (data-<release>-postgresql-0), same mount path and data directory
+(/bitnami/postgresql/data), UID 1001, and the same PostgreSQL major version on
+Debian (glibc collations).
+*/ -}}
+{{- $name := include "idenplane.postgresqlHost" . }}
+{{- if not .Values.postgresql.auth.existingSecret }}
+{{- $stored := dict }}
+{{- with (lookup "v1" "Secret" .Release.Namespace $name) }}
+{{- $stored = .data | default dict }}
+{{- end }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "idenplane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgresql
+  annotations:
+    helm.sh/resource-policy: keep
+type: Opaque
+data:
+  {{- if .Values.postgresql.auth.password }}
+  password: {{ .Values.postgresql.auth.password | b64enc | quote }}
+  {{- else if hasKey $stored "password" }}
+  password: {{ index $stored "password" | quote }}
+  {{- else }}
+  password: {{ randAlphaNum 32 | b64enc | quote }}
+  {{- end }}
+---
+{{- end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "idenplane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgresql
+spec:
+  type: ClusterIP
+  ports:
+    - name: tcp-postgresql
+      port: 5432
+      targetPort: tcp-postgresql
+  selector:
+    {{- include "idenplane.componentSelectorLabels" (dict "context" . "component" "postgresql") | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "idenplane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: postgresql
+spec:
+  serviceName: {{ $name }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "idenplane.componentSelectorLabels" (dict "context" . "component" "postgresql") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "idenplane.componentSelectorLabels" (dict "context" . "component" "postgresql") | nindent 8 }}
+    spec:
+      securityContext:
+        runAsUser: 1001
+        runAsGroup: 1001
+        fsGroup: 1001
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: postgresql
+          image: "{{ .Values.postgresql.image.repository }}:{{ .Values.postgresql.image.tag }}"
+          imagePullPolicy: {{ .Values.postgresql.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          env:
+            - name: POSTGRES_USER
+              value: {{ .Values.postgresql.auth.username | quote }}
+            - name: POSTGRES_DB
+              value: {{ .Values.postgresql.auth.database | quote }}
+            - name: POSTGRES_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "idenplane.postgresqlSecretName" . }}
+                  key: password
+            # The volume is mounted where the Bitnami chart mounted it, outside
+            # the image's own VOLUME (/var/lib/postgresql/data), which the
+            # runtime would otherwise create with the image's postgres owner.
+            - name: PGDATA
+              value: /bitnami/postgresql/data
+          ports:
+            - name: tcp-postgresql
+              containerPort: 5432
+          readinessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -h 127.0.0.1 -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            periodSeconds: 5
+            timeoutSeconds: 5
+          livenessProbe:
+            exec:
+              command: ["sh", "-c", "pg_isready -h 127.0.0.1 -U \"$POSTGRES_USER\" -d \"$POSTGRES_DB\""]
+            initialDelaySeconds: 30
+            periodSeconds: 10
+            timeoutSeconds: 5
+          resources:
+            {{- toYaml .Values.postgresql.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /bitnami/postgresql
+            - name: run
+              mountPath: /var/run/postgresql
+            - name: tmp
+              mountPath: /tmp
+      volumes:
+        - name: run
+          emptyDir: {}
+        - name: tmp
+          emptyDir: {}
+        {{- if not .Values.postgresql.primary.persistence.enabled }}
+        - name: data
+          emptyDir: {}
+        {{- end }}
+  {{- if .Values.postgresql.primary.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        {{- with .Values.postgresql.primary.persistence.storageClass }}
+        storageClassName: {{ . | quote }}
+        {{- end }}
+        resources:
+          requests:
+            storage: {{ .Values.postgresql.primary.persistence.size }}
+  {{- end }}
+{{- end }}

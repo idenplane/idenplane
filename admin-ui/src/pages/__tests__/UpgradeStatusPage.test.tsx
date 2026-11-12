@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { screen, waitFor, act, waitForElementToBeRemoved } from '@testing-library/react';
+import { screen, waitFor, act, waitForElementToBeRemoved, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../test/mocks/server';
 import { render } from '../../test/utils';
@@ -20,14 +20,12 @@ describe('UpgradeStatusPage', () => {
     expect(await screen.findByText('Current Status')).toBeInTheDocument();
   });
 
-  it.skip('displays upgrade status information', async () => {
+  it('displays upgrade status information', async () => {
     renderUpgradeStatusPage();
-    await screen.findByText('Current Status');
-    const completedBadges = await screen.findAllByText('COMPLETED');
-    expect(completedBadges.length).toBeGreaterThanOrEqual(2);
-    const versionElements = await screen.findAllByText('1.0.0');
-    expect(versionElements.length).toBeGreaterThanOrEqual(1);
-    expect(await screen.findByText('1.1.0')).toBeInTheDocument();
+    const current = await screen.findByRole('region', { name: 'Current Status' });
+    expect(await within(current).findByText('COMPLETED')).toBeInTheDocument();
+    expect(within(current).getByText('1.0.0')).toBeInTheDocument();
+    expect(within(current).getByText('1.1.0')).toBeInTheDocument();
   });
 
   it('shows pre-upgrade validation section', async () => {

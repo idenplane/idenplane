@@ -214,6 +214,11 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'doc',
+          id: 'deployment/production',
+          label: 'Production Checklist',
+        },
+        {
+          type: 'doc',
           id: 'deployment/upgrading',
           label: 'Upgrading',
         },

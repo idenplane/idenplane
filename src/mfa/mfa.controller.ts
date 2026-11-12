@@ -27,7 +27,9 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
-import { StepUpService, ACR_MFA } from '../step-up/step-up.service.js';
+import { StepUpService } from '../step-up/step-up.service.js';
+import { ACR_MFA } from '../authn-core/acr.js';
+import { SESSION_COOKIE } from '../authn-core/cookies.js';
 import { LoginService } from '../login/login.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 
@@ -155,8 +157,7 @@ export class MfaController {
       );
     }
 
-    const sessionToken = req.cookies?.['IDENPLANE_SESSION'] as
-      string | undefined;
+    const sessionToken = req.cookies?.[SESSION_COOKIE] as string | undefined;
     if (!sessionToken) {
       throw new UnauthorizedException(
         'MFA step-up is required. No active session found. Please log in via the user login flow to establish an MFA-verified session.',

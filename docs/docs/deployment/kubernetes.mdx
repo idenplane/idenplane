@@ -40,9 +40,14 @@ kubectl create namespace idenplane
 helm upgrade --install idenplane ./helm/idenplane \
   --namespace idenplane \
   --values ./helm/idenplane/values.production.yaml \
-  --set secrets.ADMIN_API_KEY="$(openssl rand -hex 32)" \
   --set env.BASE_URL="https://auth.example.com"
+
+# Read the generated admin password
+kubectl get secret --namespace idenplane idenplane-keys \
+  -o jsonpath="{.data.ADMIN_PASSWORD}" | base64 -d; echo
 ```
+
+The chart generates the admin password, the admin API key, the webhook encryption keys and the bundled database password on the first install, and keeps them on upgrades. See [Secrets](#2-secrets).
 
 ---
 
@@ -87,17 +92,17 @@ env:
   THROTTLE_TTL: "60000"
   THROTTLE_LIMIT: "100"
 
-# secrets — generate strong values at deploy time
+# secrets — leave empty to generate on first install (see Secrets below)
 secrets:
-  ADMIN_API_KEY: "REPLACE_WITH_STRONG_SECRET"
-  DATABASE_URL: ""  # auto-constructed when postgresql.enabled is true
+  existingSecret: ""   # required with Argo CD / Flux / helm template
+  DATABASE_URL: ""     # required when postgresql.enabled is false
 
-# postgresql sub-chart
+# bundled PostgreSQL (official image); prefer a managed database in production
 postgresql:
   enabled: true
   auth:
     username: idenplane
-    password: "REPLACE_WITH_STRONG_DB_PASSWORD"
+    password: ""       # generated when empty
     database: idenplane
   primary:
     persistence:
@@ -128,19 +133,27 @@ affinity:
           topologyKey: kubernetes.io/hostname
 ```
 
-### 2. Generate Secrets
+### 2. Secrets
 
-:::warning
-Never commit real secrets to source control. Generate secrets at deploy time:
-:::
+The chart keeps the application keys in the `<release>-idenplane-keys` Secret: `ADMIN_API_KEY`, `ADMIN_PASSWORD` (the initial `admin` user), `WEBHOOK_SECRET_KEY` and `WEBHOOK_ENCRYPTION_SALT`. A value you set under `secrets:` is used as is. An empty one is generated on the first install and read back from the cluster on every upgrade, so it never changes. The Secret has `helm.sh/resource-policy: keep`, so `helm uninstall` leaves it in place.
+
+Back the Secret up. The two webhook values encrypt stored webhook secrets, and losing them makes those secrets unreadable.
+
+:::warning GitOps
+Argo CD, Flux and `helm template` cannot read the stored Secret back, so they would generate new keys on every render. Create the four keys yourself and point the chart at them:
 
 ```bash
-# Generate admin API key
-ADMIN_API_KEY=$(openssl rand -hex 32)
-
-# Generate database password
-DB_PASSWORD=$(openssl rand -hex 32)
+kubectl create secret generic idenplane-app-keys --namespace idenplane \
+  --from-literal=ADMIN_API_KEY="$(openssl rand -hex 32)" \
+  --from-literal=ADMIN_PASSWORD="$(openssl rand -hex 16)" \
+  --from-literal=WEBHOOK_SECRET_KEY="$(openssl rand -hex 32)" \
+  --from-literal=WEBHOOK_ENCRYPTION_SALT="$(openssl rand -hex 16)"
 ```
+
+Then set `secrets.existingSecret: idenplane-app-keys`, and likewise `postgresql.auth.existingSecret` (key `password`) for the bundled database.
+:::
+
+Rendering fails on the old placeholders (`change-me-in-production`, `REPLACE_WITH_STRONG_SECRET`, `REPLACE_WITH_STRONG_DB_PASSWORD`), on an admin API key shorter than 32 characters and on an admin password shorter than 12.
 
 ### 3. Install the Chart
 
@@ -149,8 +162,6 @@ helm upgrade --install idenplane ./helm/idenplane \
   --namespace idenplane \
   --create-namespace \
   --values ./helm/idenplane/values.production.yaml \
-  --set secrets.ADMIN_API_KEY="$ADMIN_API_KEY" \
-  --set postgresql.auth.password="$DB_PASSWORD" \
   --set env.BASE_URL="https://auth.example.com"
 ```
 
@@ -225,22 +236,34 @@ resources:
 
 ## Database Configuration
 
-### Managed PostgreSQL (Default)
+### Bundled PostgreSQL (Default)
 
-The chart includes a Bitnami PostgreSQL sub-chart:
+The chart runs one PostgreSQL pod on the official `postgres` image, which suits evaluation and small installs. Its password is generated unless you set `postgresql.auth.password` or `postgresql.auth.existingSecret`. For production, prefer a managed database (below).
 
 ```yaml
 postgresql:
   enabled: true
-  auth:
-    username: idenplane
-    password: "REPLACE_WITH_STRONG_PASSWORD"
-    database: idenplane
+  image:
+    tag: "17-bookworm"
   primary:
     persistence:
       enabled: true
       size: 20Gi
 ```
+
+#### Upgrading from chart 0.2.x (Bitnami sub-chart)
+
+Chart 0.2.x pulled PostgreSQL and Redis from Bitnami sub-charts. Their `docker.io/bitnami` images are no longer published, so those pods cannot be rescheduled. Chart 0.3.0 replaces them with the official images and reuses the existing volume: same claim name (`data-<release>-postgresql-0`), same data directory, the same user ID (1001) and the same PostgreSQL major version (17, Debian).
+
+A StatefulSet's selector cannot change, so delete the old StatefulSets without deleting their volumes, then upgrade:
+
+```bash
+kubectl delete statefulset idenplane-postgresql --namespace idenplane --cascade=orphan
+kubectl delete statefulset idenplane-redis-master --namespace idenplane --cascade=orphan  # only if redis.enabled
+helm upgrade idenplane ./helm/idenplane --namespace idenplane --reuse-values
+```
+
+Take a `pg_dump` first. The database password stays the same: the chart reads it from the existing `<release>-postgresql` Secret.
 
 ### External PostgreSQL
 
@@ -263,11 +286,10 @@ redis:
   enabled: true
   auth:
     enabled: true
-    password: "REPLACE_WITH_STRONG_REDIS_PASSWORD"
+    password: ""   # generated when empty
 
 env:
-  SESSION_STORE: "redis"
-  REDIS_URL: ""  # auto-constructed when redis.enabled is true
+  SESSION_STORE: "redis"   # REDIS_URL is wired to the bundled Redis
 ```
 
 ---
@@ -389,8 +411,7 @@ helm upgrade idenplane ./helm/idenplane \
 # Upgrade with new values
 helm upgrade idenplane ./helm/idenplane \
   --namespace idenplane \
-  --set image.tag="1.2.3" \
-  --set secrets.ADMIN_API_KEY="$ADMIN_API_KEY"
+  --set image.tag="1.2.3"
 ```
 
 ### Rolling Back

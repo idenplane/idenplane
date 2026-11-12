@@ -1,25 +1,27 @@
 ---
 id: quickstart
 title: Quickstart
-description: Get Idenplane up and running in under 30 seconds with Docker Compose.
+description: Generate unique local credentials and start Idenplane with Docker Compose.
 ---
 
 # Quickstart
 
-Get Idenplane up and running in under 30 seconds.
+Generate local credentials, start the services and wait for readiness.
 
 ---
 
 ## Docker Hub (Recommended)
 
-The fastest way to get started is with Docker Compose:
+Requires Docker Compose v2.20+ and Node.js 24 for the setup helper. On Windows use `curl.exe` instead of `curl`:
 
 ```bash
-curl -o docker-compose.yml https://raw.githubusercontent.com/idenplane/idenplane/main/docker-compose.yml
-docker compose up -d
+curl --fail --location -o docker-compose.yml https://raw.githubusercontent.com/idenplane/idenplane/main/docker-compose.yml
+curl --fail --location -o setup-env.cjs https://raw.githubusercontent.com/idenplane/idenplane/main/scripts/setup-env.cjs
+node setup-env.cjs
+docker compose up -d --wait --wait-timeout 180
 ```
 
-That's it. Idenplane is now running:
+Once the services are healthy, open:
 
 | URL | Description |
 |-----|-------------|
@@ -28,18 +30,18 @@ That's it. Idenplane is now running:
 | http://localhost:3000/health/live | Health Check |
 | http://localhost:3000/metrics | Prometheus Metrics |
 
-### Default Credentials
+### Generated Credentials
 
-After starting Idenplane, you can access the Admin Console with these default credentials:
+Sign in with the credentials generated in your local `.env` file:
 
 | Field | Value |
 |-------|-------|
 | Username | `admin` |
-| Password | `admin` |
+| Password | Value of `ADMIN_PASSWORD` in `.env` |
 | API Key | Value of `ADMIN_API_KEY` in your `.env` file |
 
 :::warning
-**Important:** Change the default password and API key before exposing Idenplane to the internet. You can update these in the Admin Console under **Realm Settings > User Management**.
+Keep `.env` private and back it up: changing its webhook encryption keys makes stored webhook secrets unreadable. The helper never overwrites an existing file. Changing POSTGRES_PASSWORD in `.env` does not rotate a password in an existing database. Local services bind to localhost; configure HTTPS, backups and a pinned release image before production use.
 :::
 
 ---
@@ -65,19 +67,19 @@ Register your first OAuth client and integrate with your app
 
 If you prefer to build from source, you'll need:
 
-**Prerequisites:** Node.js 22+, PostgreSQL 16+
+**Prerequisites:** Node.js 24, PostgreSQL 16+
 
 ```bash
 git clone https://github.com/idenplane/idenplane.git
-cd Idenplane
+cd idenplane
 
 # Install dependencies
 npm install
 cd admin-ui && npm install && cd ..
 
 # Configure
-cp .env.example .env
-# Edit .env with your DATABASE_URL
+node scripts/setup-env.cjs
+# Edit DATABASE_URL in .env if your local PostgreSQL uses different credentials
 
 # Setup database
 npm run prisma:generate

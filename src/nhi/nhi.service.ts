@@ -6,12 +6,7 @@ import {
   BadRequestException,
 } from '@nestjs/common';
 import type { Realm } from '@prisma/client';
-import {
-  createHash,
-  randomBytes,
-  generateKeyPairSync,
-  createSign,
-} from 'crypto';
+import { generateCertificate, parseCertificateInfo } from './certificate.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { CreateNhiIdentityDto } from './dto/create-nhi.dto.js';
@@ -63,7 +58,7 @@ const NHI_CREDENTIAL_SELECT = {
   keyPrefix: true,
   certificatePem: true,
   certificateChain: true,
-  privateKeyPem: true,
+  // privateKeyPem is never returned: it is a secret the caller already holds.
   jwtSigningAlgorithm: true,
   jwtIssuer: true,
   jwtAudience: true,
@@ -273,7 +268,10 @@ export class NhiService {
         keyHash,
         certificatePem: dto.certificatePem,
         certificateChain: dto.certificateChain,
-        privateKeyPem: dto.privateKeyPem,
+        // Encrypted at rest; nothing reads it back.
+        privateKeyPem: dto.privateKeyPem
+          ? this.crypto.encrypt(dto.privateKeyPem)
+          : undefined,
         jwtSigningAlgorithm: dto.jwtSigningAlgorithm,
         jwtIssuer: dto.jwtIssuer,
         jwtAudience: dto.jwtAudience,
@@ -746,318 +744,37 @@ export class NhiService {
    * This method creates a new key pair (RSA or ECDSA) and generates a
    * self-signed X.509 certificate for device authentication.
    */
-  generateDeviceCertificate(
-    realm: Realm,
+  async generateDeviceCertificate(
+    _realm: Realm,
     dto: GenerateCertificateDto,
-  ): {
+  ): Promise<{
     certificatePem: string;
     privateKeyPem: string;
     info: CertificateInfoDto;
-  } {
-    const keyAlgorithm = dto.keyAlgorithm ?? CertificateKeyAlgorithm.ECDSA_P256;
-    const validityDays = dto.validityDays ?? 365;
-
-    // Build subject DN
-    const subjectParts: string[] = [];
-    if (dto.subjectCommonName) subjectParts.push(`CN=${dto.subjectCommonName}`);
-    if (dto.subjectOrganizationalUnit)
-      subjectParts.push(`OU=${dto.subjectOrganizationalUnit}`);
-    if (dto.subjectOrganization)
-      subjectParts.push(`O=${dto.subjectOrganization}`);
-    if (dto.subjectLocality) subjectParts.push(`L=${dto.subjectLocality}`);
-    if (dto.subjectState) subjectParts.push(`ST=${dto.subjectState}`);
-    if (dto.subjectCountry) subjectParts.push(`C=${dto.subjectCountry}`);
-    const subject =
-      subjectParts.join(', ') || `CN=device-${randomBytes(4).toString('hex')}`;
-
-    // Generate key pair based on algorithm
-    let keyPair: { publicKeyPem: string; privateKeyPem: string };
-    let signingAlgorithm: string;
-
-    if (keyAlgorithm === CertificateKeyAlgorithm.RSA_2048) {
-      const kp = generateKeyPairSync('rsa', {
-        modulusLength: 2048,
-        publicKeyEncoding: { type: 'spki', format: 'pem' },
-        privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-      });
-      keyPair = {
-        publicKeyPem: kp.publicKey,
-        privateKeyPem: kp.privateKey,
-      };
-      signingAlgorithm = 'SHA256';
-    } else if (keyAlgorithm === CertificateKeyAlgorithm.RSA_4096) {
-      const kp = generateKeyPairSync('rsa', {
-        modulusLength: 4096,
-        publicKeyEncoding: { type: 'spki', format: 'pem' },
-        privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-      });
-      keyPair = {
-        publicKeyPem: kp.publicKey,
-        privateKeyPem: kp.privateKey,
-      };
-      signingAlgorithm = 'SHA256';
-    } else if (keyAlgorithm === CertificateKeyAlgorithm.ECDSA_P384) {
-      const kp = generateKeyPairSync('ec', {
-        namedCurve: 'secp384r1',
-        publicKeyEncoding: { type: 'spki', format: 'pem' },
-        privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-      });
-      keyPair = {
-        publicKeyPem: kp.publicKey,
-        privateKeyPem: kp.privateKey,
-      };
-      signingAlgorithm = 'SHA384';
-    } else {
-      // Default: ECDSA_P256 — Node.js uses the OpenSSL alias 'prime256v1'
-      const kp = generateKeyPairSync('ec', {
-        namedCurve: 'prime256v1',
-        publicKeyEncoding: { type: 'spki', format: 'pem' },
-        privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-      });
-      keyPair = {
-        publicKeyPem: kp.publicKey,
-        privateKeyPem: kp.privateKey,
-      };
-      signingAlgorithm = 'SHA256';
-    }
-
-    // Calculate validity dates
-    const notBefore = new Date();
-    notBefore.setDate(notBefore.getDate() - 1); // Yesterday (slight buffer)
-    const notAfter = new Date();
-    notAfter.setDate(notAfter.getDate() + validityDays);
-
-    // Generate serial number
-    const serialNumber = randomBytes(16).toString('hex');
-
-    // Build self-signed certificate
-    // Note: This is a simplified implementation. For production, use node-forge or similar.
-    // Node's X509Certificate doesn't support creation, so we create a placeholder PEM
-    // and sign it using the private key.
-    const certificateContent = this.buildSelfSignedCertificate({
-      subject,
-      publicKeyPem: keyPair.publicKeyPem,
-      notBefore,
-      notAfter,
-      serialNumber,
-      signingAlgorithm,
-      privateKeyPem: keyPair.privateKeyPem,
-      isCA: dto.isCertificateAuthority ?? false,
-    });
-
-    // Parse the generated certificate to extract info
-    const info = this.parseCertificateInfo(certificateContent);
-
-    return {
-      certificatePem: certificateContent,
-      privateKeyPem: keyPair.privateKeyPem,
-      info,
-    };
-  }
-
-  /**
-   * Build a self-signed X.509 certificate PEM string.
-   * Uses Node's crypto module for signing.
-   */
-  private buildSelfSignedCertificate(options: {
-    subject: string;
-    publicKeyPem: string;
-    notBefore: Date;
-    notAfter: Date;
-    serialNumber: string;
-    signingAlgorithm: string;
-    privateKeyPem: string;
-    isCA: boolean;
-  }): string {
-    // Create a sign object for signing the certificate data
-    const _sign = createSign(options.signingAlgorithm);
-
-    // Build the TBSCertificate (To-Be-Signed) components
-    const _version = 'v3';
-    const _signatureAlgorithm = options.signingAlgorithm.includes('RSA')
-      ? 'sha256WithRSAEncryption'
-      : 'ecdsa-with-SHA256';
-
-    // Format dates in ASN.1 format
-    const _formatDate = (d: Date) => {
-      const pad = (n: number) => String(n).padStart(2, '0');
-      const y = d.getUTCFullYear();
-      const m = pad(d.getUTCMonth() + 1);
-      const day = pad(d.getUTCDate());
-      const h = pad(d.getUTCHours());
-      const min = pad(d.getUTCMinutes());
-      const s = pad(d.getUTCSeconds());
-      return `${y}${m}${day}${h}${min}${s}Z`;
-    };
-
-    // Build a minimal PEM wrapper (in production, use proper ASN.1 encoding)
-    // Since Node's crypto doesn't support X.509 certificate creation directly,
-    // we create a placeholder that indicates it was generated by idenplane
-    const placeholderCert = this.createMinimalCertificate(options);
-
-    // Verify the private key can sign
-    const testSign = createSign(options.signingAlgorithm);
-    testSign.update(placeholderCert.slice(32, -30)); // Minimal test
+  }> {
     try {
-      testSign.sign(options.privateKeyPem);
-    } catch {
-      // Ignore signing errors during certificate building
+      return await generateCertificate(dto);
+    } catch (error) {
+      throw new BadRequestException(
+        error instanceof Error
+          ? error.message
+          : 'Certificate generation failed',
+      );
     }
-
-    return placeholderCert;
-  }
-
-  /**
-   * Create a minimal self-signed certificate for device authentication.
-   * This creates a properly formatted PEM certificate with basic fields.
-   * Note: For full X.509 compliance, production should use node-forge or similar.
-   */
-  private createMinimalCertificate(options: {
-    subject: string;
-    publicKeyPem: string;
-    notBefore: Date;
-    notAfter: Date;
-    serialNumber: string;
-    signingAlgorithm: string;
-    privateKeyPem: string;
-    isCA: boolean;
-  }): string {
-    // Generate a signature over the certificate data
-    const certData = JSON.stringify({
-      subject: options.subject,
-      notBefore: options.notBefore.toISOString(),
-      notAfter: options.notAfter.toISOString(),
-      serialNumber: options.serialNumber,
-      algorithm: options.signingAlgorithm,
-    });
-
-    const sign = createSign(options.signingAlgorithm);
-    sign.update(certData);
-    const _signature = sign.sign(options.privateKeyPem);
-
-    // Create a self-signed certificate representation
-    // In production, use proper ASN.1 DER encoding with node-forge
-    const tbsCert = {
-      version: 3,
-      serialNumber: options.serialNumber,
-      signature: { algorithm: options.signingAlgorithm },
-      issuer: { CN: options.subject },
-      validity: {
-        notBefore: options.notBefore,
-        notAfter: options.notAfter,
-      },
-      subject: { CN: options.subject },
-      publicKey: options.publicKeyPem,
-      extensions: {
-        basicConstraints: options.isCA ? 'CA:TRUE' : 'CA:FALSE',
-        keyUsage: 'digitalSignature,keyEncipherment',
-        extKeyUsage: 'serverAuth,clientAuth',
-      },
-    };
-
-    // Create a placeholder certificate that can be verified
-    // This uses a base64-encoded representation with PEM headers
-    const certJson = JSON.stringify(tbsCert);
-    const certBase64 = Buffer.from(certJson).toString('base64');
-
-    // Create wrapped certificate that Node can parse as X509Certificate
-    // For actual mTLS verification, the client would need to use this same data
-    const wrappedPem = [
-      '-----BEGIN CERTIFICATE-----',
-      certBase64.match(/.{1,64}/g)?.join('\n') ?? certBase64,
-      '-----END CERTIFICATE-----',
-    ].join('\n');
-
-    return wrappedPem;
   }
 
   /**
    * Parse certificate information from a PEM-encoded certificate.
-   * Uses basic string parsing since we avoid heavy external dependencies.
+   * Reads metadata from the encoded X.509 certificate.
    */
   private parseCertificateInfo(certificatePem: string): CertificateInfoDto {
-    // Basic validation - check for PEM headers
-    if (!certificatePem.includes('-----BEGIN CERTIFICATE-----')) {
+    try {
+      return parseCertificateInfo(certificatePem);
+    } catch (error) {
       throw new BadRequestException(
-        'Invalid certificate format: missing PEM header',
+        error instanceof Error ? error.message : 'Invalid certificate format',
       );
     }
-
-    // Extract the base64 DER body between the PEM markers using plain string
-    // search (not a regex) to avoid super-linear backtracking on crafted input.
-    const certBegin = '-----BEGIN CERTIFICATE-----';
-    const certEnd = '-----END CERTIFICATE-----';
-    const beginIdx = certificatePem.indexOf(certBegin);
-    const endIdx = certificatePem.indexOf(certEnd, beginIdx + certBegin.length);
-    if (beginIdx === -1 || endIdx === -1) {
-      throw new BadRequestException('Invalid certificate format');
-    }
-
-    // Compute SHA-256 fingerprint
-    const derContent = certificatePem
-      .slice(beginIdx + certBegin.length, endIdx)
-      .replace(/\s/g, '');
-    const fingerprint = createHash('sha256')
-      .update(Buffer.from(derContent, 'base64'))
-      .digest('hex');
-
-    // Extract subject alternative names (if present as comments)
-    const sans: string[] = [];
-    const sanMatch = certificatePem.match(
-      /Subject Alternative Name:?\s*([^\n]+)/gi,
-    );
-    if (sanMatch) {
-      for (const match of sanMatch) {
-        const sansContent = match.replace(/Subject Alternative Name:?\s*/i, '');
-        sans.push(
-          ...sansContent
-            .split(',')
-            .map((s) => s.trim())
-            .filter(Boolean),
-        );
-      }
-    }
-
-    // Check for CA basic constraint. Locate the marker with indexOf and test a
-    // bounded regex on the remainder — avoids the `[\s\S]*` backtracking the
-    // previous single regex incurred on crafted input.
-    const basicConstraintsIdx = certificatePem.indexOf('basicConstraints');
-    const isCA =
-      (basicConstraintsIdx !== -1 &&
-        /CA:\s*true/i.test(certificatePem.slice(basicConstraintsIdx))) ||
-      /X509v3 Basic Constraints:\s*CA:TRUE/.test(certificatePem);
-
-    // For demonstration, set default validity dates
-    // In production, this would be parsed from the actual certificate
-    const now = new Date();
-    const notBefore = new Date(now.getTime() - 24 * 60 * 60 * 1000); // Yesterday
-    const notAfter = new Date(now.getTime() + 365 * 24 * 60 * 60 * 1000); // 1 year
-
-    // Extract subject components (simplified - would need proper ASN.1 parsing in production)
-    const cnMatch = certificatePem.match(/CN\s*=\s*([^,\n]+)/i);
-    const oMatch = certificatePem.match(/O\s*=\s*([^,\n]+)/i);
-    const cMatch = certificatePem.match(/\bC\s*=\s*([^,\n]+)/i);
-    const stMatch = certificatePem.match(/ST\s*=\s*([^,\n]+)/i);
-    const lMatch = certificatePem.match(/L\s*=\s*([^,\n]+)/i);
-    const ouMatch = certificatePem.match(/OU\s*=\s*([^,\n]+)/i);
-
-    const subjectParts: string[] = [];
-    if (cnMatch) subjectParts.push(`CN=${cnMatch[1].trim()}`);
-    if (ouMatch) subjectParts.push(`OU=${ouMatch[1].trim()}`);
-    if (oMatch) subjectParts.push(`O=${oMatch[1].trim()}`);
-    if (lMatch) subjectParts.push(`L=${lMatch[1].trim()}`);
-    if (stMatch) subjectParts.push(`ST=${stMatch[1].trim()}`);
-    if (cMatch) subjectParts.push(`C=${cMatch[1].trim()}`);
-
-    return {
-      subject: subjectParts.length > 0 ? subjectParts.join(', ') : 'Unknown',
-      issuer: `CN=Unknown Issuer`, // Would be extracted from certificate in production
-      notBefore: notBefore.toISOString(),
-      notAfter: notAfter.toISOString(),
-      fingerprint: `SHA256:${fingerprint.toUpperCase().match(/.{2}/g)?.join(':')}`,
-      sans: sans.length > 0 ? sans : undefined,
-      isCA: isCA || undefined,
-    };
   }
 
   // ── Usage statistics ─────────────────────────────────────────────────────────
@@ -1369,7 +1086,10 @@ export class NhiService {
             validityDays: validityDays,
           };
 
-          const certResult = this.generateDeviceCertificate(realm, certDto);
+          const certResult = await this.generateDeviceCertificate(
+            realm,
+            certDto,
+          );
           result.certificatePem = certResult.certificatePem;
           result.privateKeyPem = certResult.privateKeyPem;
           result.certificateInfo = {

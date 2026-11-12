@@ -9,6 +9,66 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-12
+
+A security and correctness release. It closes vulnerabilities in LDAP federation, database TLS during migrations, the default admin password, device certificates, verification links, token claims, flow assignment and passkey sign-in; makes a fresh sign-in enforce a client's required authentication level; fixes every OpenID Connect failure the OpenID Foundation conformance suite's basic plan reported against 0.6.0; makes the Helm chart start with its defaults on official PostgreSQL and Redis images; gives Docker Compose a setup helper with unique secrets; and adds a production checklist. Read *Before you upgrade*: several defaults changed on purpose.
+
+**Before you upgrade:**
+- **First production start needs `ADMIN_PASSWORD`.** With `NODE_ENV=production` (the Docker image default), creating the initial admin now fails when `ADMIN_PASSWORD` is missing, `admin`, a documented placeholder, or shorter than 12 characters. Existing databases already have their admin and are not affected.
+- **Root `docker-compose.yml` no longer has a built-in database password.** It reads `POSTGRES_PASSWORD` from `.env`. For an existing volume created with the old file, add `POSTGRES_PASSWORD=idenplane` to `.env` (changing the value does not rotate the password inside an existing volume). Ports 3000 and 5432 now listen on localhost only.
+- **Helm:** the chart now creates a `<release>-idenplane-keys` Secret with `ADMIN_API_KEY`, `ADMIN_PASSWORD`, `WEBHOOK_SECRET_KEY` and `WEBHOOK_ENCRYPTION_SALT`. Values you set under `secrets:` win; empty ones are generated on first install and kept on upgrades. Rendering fails on the old placeholders (`change-me-in-production`, `REPLACE_WITH_STRONG_SECRET`, the production values' database password), so pass real values or leave the keys empty.
+- **Helm with Argo CD, Flux or `helm template`:** these cannot read a stored Secret back, so generated keys would change on every render. Create the four keys yourself and set `secrets.existingSecret`.
+- **Helm chart 0.3.0 drops the Bitnami PostgreSQL and Redis sub-charts.** Their `docker.io/bitnami` images are no longer published, so the bundled database could not start. The chart now runs the official `postgres` (17, Debian) and `redis` images and reuses the existing PostgreSQL volume and password. Before upgrading, take a `pg_dump`, then delete the old StatefulSets with `--cascade=orphan` (see *Upgrading from chart 0.2.x* in the Kubernetes guide). The bundled database and Redis passwords are now generated when empty.
+- **Migrations:** two run on start. They add `auth_time` and `session_id` to authorization codes and `auth_time` to sessions; all are nullable.
+- **A client's `requiredAcr` now applies to a fresh sign-in too**, not only to SSO. A client that requires MFA sends a password-only user through TOTP enrolment (or their existing second factor) before it gets a code; a client that requires a passkey gets `access_denied` for a password sign-in. Check clients that set `requiredAcr`.
+- **The SSO cookie is `SameSite=Lax`** (was `Strict`), so applications on other sites see the session on the authorization and logout redirects. Custom themes should add `<input type="hidden" name="prompt" value="{{prompt}}">` to `login.hbs` and `register.hbs` for `prompt=consent` to survive the form; without it nothing breaks, consent just isn't forced.
+
+### Added
+- **Production checklist** in the deployment docs: public HTTPS, secrets, a verified TLS connection to the database, and off-host backups with a restore check.
+- **Next.js example: server-side sessions and a protected API.** The quickstart can keep tokens on the server in PostgreSQL behind an HTTP-only cookie, with refresh, sign-out, encrypted backup/restore and scheduled cleanup; `/api/profile` verifies the access token on the server and only returns the caller's own profile. A new CI workflow runs these flows against an image built from the commit, over HTTP and HTTPS.
+- **`scripts/setup-env.cjs`** writes a `.env` with unique random database, admin, API and webhook secrets for Docker Compose or a source checkout. It refuses to overwrite an existing `.env`, so keys that encrypt stored data are never replaced. The README and Quickstart use it.
+
+### Security
+- **Database migrations verify the server certificate.** With `DATABASE_URL=…?sslmode=verify-full&sslrootcert=<ca>`, the server verified the database certificate, but Prisma's migration engine, which reads different parameter names, encrypted without verifying it. The Docker image now translates the parameters for `prisma migrate deploy`; `DATABASE_MIGRATION_URL` overrides the URL used for migrations.
+- **A fresh sign-in ignored the client's required authentication level.** Only the SSO path enforced `requiredAcr`, so a client requiring MFA got a password-only code from the login form. See *Before you upgrade*.
+- **A risky sign-in skipped email verification and password expiry.** The risk step-up redirected to the second factor before those checks; they now run first.
+- **Passkey sign-in challenges were shared per realm.** Every usernameless sign-in, and anyone calling the options endpoint, replaced the same stored challenge, so concurrent sign-ins failed and could be disrupted on purpose. Each browser now gets its own challenge, bound by an `HttpOnly` cookie, and verification uses only that one. Passkey sign-in also enforces email verification.
+- **NHI credentials no longer return stored private keys.** Listing, reading or creating a credential returned a `privateKeyPem` that had been supplied for it. It is never returned now, and a newly supplied key is encrypted at rest.
+- **Assigning an auth flow to a client was not scoped to the realm.** `PUT /admin/realms/{realm}/auth-flows/{id}/assign-client/{clientId}` changed a client of any realm and accepted a flow of any realm. Both must now belong to the realm in the path.
+- **Protocol mappers and token-enrichment plugins can no longer change protected token claims.** A mapper or plugin producing `sub`, `aud`, `azp`, `iss`, `scope`, `acr`, `amr`, `sid`, `cnf` or `nbf` could rewrite who or what an access token speaks for; those claims keep the server's values now. In ID tokens, user attributes can no longer replace registered claims.
+- **`client_credentials` tokens of clients without a service account carried any requested scope.** The scope is validated like every other grant's.
+- **The first production admin can no longer be `admin`/`admin`.** See *Before you upgrade*.
+- The Docker build context excludes `.env*`, `.npmrc`, nested `node_modules` and other local files at every level.
+- **LDAP federation now verifies the directory server's certificate.** `ldaps://` connections reject an untrusted or mismatched server certificate, and `startTls` on an `ldap://` URL performs a real StartTLS upgrade, with the same checks, before any bind. Every connection is closed after use, and an empty password is refused instead of being sent as an anonymous bind. A directory signed by a private CA needs that CA trusted by the server (for example with `NODE_EXTRA_CA_CERTS`).
+- **The mTLS guard no longer trusts certificate headers.** It reads the peer certificate from a verified TLS connection only; `X-Client-Certificate` and `X-Client-Certificate-Fingerprint` request headers are ignored. The unfinished NHI certificate-authentication route now refuses every request until certificates are bound to a tenant-scoped credential.
+- **Verification links are bound to their realm.** Password-reset, password-change and email-verification tokens are only accepted on the realm of the user they were issued to. A token presented on another realm is rejected and stays unused.
+- **Removed the `hbs` package.** Login pages render through a small built-in view engine on the existing `handlebars` package, with fixed runtime options, a bounded template cache, and template and layout paths confined to the themes directory. Request data can no longer select engine options or the layout. Themes and translation helpers work as before.
+
+### Changed
+- **Login, OAuth, step-up and WebAuthn no longer depend on each other in a cycle.** Their services now live in core modules (`LoginCore`, `OAuthCore`, `StepUpCore`, `WebAuthnCore`) and shared types and constants in `src/authn-core`, which also removes every `forwardRef` between them. CI now fails on new import cycles in these modules (`npm run lint:cycles`). As a side effect, `LoginService`, `StepUpService`, `CryptoService` and `PrismaService` each have one instance again: the brute-force module had created second copies, so the step-up cleanup ran twice per interval and brute-force records used a second database pool.
+- **The admin console loads each page on demand.** Every page is its own code chunk, so the first load no longer downloads the whole console: the main bundle went from 877 kB to 138 kB (158 kB to 44 kB gzipped). The shell stays on screen with a short loading state while a page loads.
+
+### Fixed
+- **Single sign-on and sign-out across sites.** The `Strict` SSO cookie was not sent on redirects from applications on other sites, so they always saw the login page and RP-initiated logout did not end the session.
+- **`prompt=consent` is honoured on a fresh sign-in**, not only with an existing session.
+- **The token endpoint accepts `client_secret_basic`.** Discovery advertised it, but `/token` ignored the `Authorization: Basic` header, so clients that use it by default (most OIDC libraries and the OpenID conformance suite) got `invalid_client`. Sending Basic together with `client_secret`, or with a different `client_id`, is rejected as `invalid_request`. Discovery no longer advertises `private_key_jwt`, which is not implemented.
+- **Introspection reported `client_credentials` tokens of clients without a service account as inactive.** They are active while the client exists and is enabled.
+- **JavaScript SDK: sign-out ends the single sign-on session.** `logout()` revokes the refresh token and then sends the browser to the provider's end-session endpoint with `id_token_hint` (and `post_logout_redirect_uri` when configured), so the next sign-in asks for credentials again. The PKCE verifier and state are kept in a separate, client-scoped login transaction that expires after 10 minutes and survives the full-page redirect even when tokens use in-memory storage.
+- **NHI device certificates are real X.509.** Generated certificates are standard X.509 signed with the requested key, with the requested validity, subject and SANs, and they parse with standard X.509 tooling such as Node's `X509Certificate`. Validation reads the real validity dates and rejects malformed or expired certificates.
+- **`prompt=none` works with a valid session.** Silent authorization used to return `login_required` even when the user was signed in. It now completes without UI when the session, redirect URI, consent and requested assurance allow it, and returns `login_required`, `consent_required` or `interaction_required` otherwise.
+- The integration-test database preflight no longer shells out to `prisma db execute`, so it works the same on Windows and Linux.
+- **OpenID Connect conformance fixes**, found by running the OpenID Foundation conformance suite (oidcc-basic, static client) against Idenplane:
+  - The UserInfo endpoint accepts POST, with the access token in the `Authorization` header or as a form `access_token` parameter (OIDC Core §5.3.1, RFC 6750). Sending it in both places is rejected.
+  - The authorization endpoint accepts a form POST (OIDC Core §3.1.2.1).
+  - `request` and `request_uri` are rejected with `request_not_supported` / `request_uri_not_supported` instead of being ignored, and discovery states `request_parameter_supported` and `request_uri_parameter_supported` as `false`.
+  - `auth_time` is when the user signed in, not when the code was exchanged, including for codes issued from an SSO session. `max_age` is honoured: an older sign-in is repeated, or `prompt=none` returns `login_required`.
+  - `offline_access`, advertised in discovery, is granted, with the realm's offline token lifespan, when a code-returning grant (authorization code, device) is used by a client that has the `offline_access` client scope assigned. Other grants never get it (OIDC Core §11).
+  - When its own client presents a used authorization code again (authenticated, or with the PKCE verifier) within five minutes of the code's expiry, the session the code created ends, so its refresh token stops working and its access token introspects as inactive (RFC 6749 §4.1.2).
+  - Discovery no longer lists `backchannel_logout_uri`, a client registration parameter rather than provider metadata; `backchannel_logout_supported` already advertises the feature.
+- **The Helm chart did not start with its default values.** The default `ADMIN_API_KEY` was a placeholder the server refuses in production, and the chart never set `WEBHOOK_SECRET_KEY` or `WEBHOOK_ENCRYPTION_SALT`, which production requires. CI now installs the chart on a kind cluster, signs in with the generated password, upgrades it and runs `helm test`.
+- **ID tokens issued by a refresh keep the original `auth_time`** instead of the refresh time (OIDC Core §12.2). This was the last failure of the OpenID conformance basic plan.
+- Assigning a client scope that is already assigned answers 409 instead of 500.
+
 ## [0.6.0] - 2026-11-10
 
 Idenplane gets much faster and runs correctly as several instances. Protocol requests no longer go to the database each time, and `WEB_CONCURRENCY` lets one container use every CPU. Scheduled jobs, webhooks, plugins and first boot now behave when more than one instance runs, and several security fixes land. With one worker per CPU, Idenplane served discovery, JWKS, client-credentials tokens and introspection faster than Keycloak 26.8 on the same machine. See the [benchmarks](docs/docs/benchmarks.md).
@@ -268,7 +328,9 @@ The foundation release: core IAM server with OAuth, OIDC, SAML, MFA, and the ini
 - `removeUserRealmRoles` returning 200 instead of 204
 - Login error messages never displayed on failed login
 
-[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/idenplane/idenplane/releases/tag/v0.7.0
+[0.6.0]: https://github.com/idenplane/idenplane/releases/tag/v0.6.0
 [0.5.0]: https://github.com/idenplane/idenplane/releases/tag/v0.5.0
 [0.4.0]: https://github.com/idenplane/idenplane/releases/tag/v0.4.0
 [0.3.0]: https://github.com/idenplane/idenplane/releases/tag/v0.3.0

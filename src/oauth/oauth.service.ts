@@ -10,6 +10,10 @@ import type { Realm, User, Client } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { ScopesService } from '../scopes/scopes.service.js';
 import { matchesRedirectUri } from '../common/redirect-uri.utils.js';
+import type { AuthContext } from '../authn-core/auth-context.js';
+import type { AuthorizeParams } from '../authn-core/oauth-params.js';
+
+export type { AuthorizeParams };
 
 /**
  * The authentication context actually *satisfied* by the flow that produced an
@@ -17,33 +21,7 @@ import { matchesRedirectUri } from '../common/redirect-uri.utils.js';
  * Persisted on the code so the code→token exchange can mint tokens whose
  * `acr`/`amr` claims reflect the real authentication (RFC 8176 / RFC 9068).
  */
-export interface SatisfiedAuthContext {
-  /** The ACR level satisfied (e.g. `urn:idenplane:acr:mfa`). */
-  acr?: string;
-  /** The authentication methods performed (e.g. `['pwd', 'otp']`). */
-  amr?: string[];
-}
-
-export interface AuthorizeParams {
-  response_type: string;
-  client_id: string;
-  redirect_uri: string;
-  scope?: string;
-  state?: string;
-  code_challenge?: string;
-  code_challenge_method?: string;
-  nonce?: string;
-  /** Space-separated list of requested ACR values (highest preference first). */
-  acr_values?: string;
-  /**
-   * OIDC prompt parameter.
-   * - none: return error if user is not authenticated
-   * - login: force re-authentication
-   * - consent: show consent screen
-   * - select_account: show account selection
-   */
-  prompt?: string;
-}
+export type SatisfiedAuthContext = AuthContext;
 
 @Injectable()
 export class OAuthService {
@@ -151,6 +129,7 @@ export class OAuthService {
         acrValues: params.acr_values ?? null,
         satisfiedAcr: authContext.acr ?? null,
         amr: authContext.amr ?? [],
+        authTime: authContext.authTime ?? new Date(),
         expiresAt: new Date(Date.now() + 60 * 1000),
       },
     });

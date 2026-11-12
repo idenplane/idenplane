@@ -13,6 +13,9 @@ export const OIDC_SCOPES: Record<string, string[]> = {
   ],
   email: ['email', 'email_verified'],
   roles: ['realm_access', 'resource_access'],
+  // No claims: it asks for a refresh token that outlives the SSO session
+  // (OIDC Core §11), with the realm's offline token lifespan.
+  offline_access: [],
 };
 
 /** All valid scope names the server recognizes */

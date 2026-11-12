@@ -1,0 +1,10 @@
+FROM node:24-alpine
+RUN apk add --no-cache postgresql16-client \
+    && pg_dump --version | grep -q ' 16\.' \
+    && pg_restore --version | grep -q ' 16\.'
+WORKDIR /ops
+COPY --chown=node:node scripts/session-maintenance.mjs ./scripts/session-maintenance.mjs
+COPY --chown=node:node lib/session/crypto.ts ./lib/session/crypto.ts
+USER node
+ENTRYPOINT ["node", "/ops/scripts/session-maintenance.mjs"]
+CMD ["cleanup"]

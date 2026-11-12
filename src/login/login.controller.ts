@@ -16,8 +16,17 @@ import { ConfigService } from '@nestjs/config';
 import { ApiExcludeController } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { Prisma, type Realm } from '@prisma/client';
-import type { AuthorizeParams } from '../oauth/oauth.service.js';
-import { ACR_MFA } from '../step-up/step-up.service.js';
+import { ACR_MFA } from '../authn-core/acr.js';
+import { amrForFactor } from '../authn-core/auth-context.js';
+import {
+  MFA_CHALLENGE_COOKIE,
+  MFA_ENROLLMENT_COOKIE,
+} from '../authn-core/cookies.js';
+import {
+  OAUTH_FORM_PARAM_KEYS,
+  pickOAuthParams,
+  type AuthorizeParams,
+} from '../authn-core/oauth-params.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
@@ -34,7 +43,7 @@ import { EmailService } from '../email/email.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { PasswordPolicyService } from '../password-policy/password-policy.service.js';
-import { MfaService, MFA_ENROLLMENT_COOKIE } from '../mfa/mfa.service.js';
+import { MfaService } from '../mfa/mfa.service.js';
 import { SmsOtpService, SmsOtpError } from '../sms/sms-otp.service.js';
 import { ThemeRenderService } from '../theme/theme-render.service.js';
 import { ThemeEmailService } from '../theme/theme-email.service.js';
@@ -128,21 +137,9 @@ export class LoginController {
     // Build a properly percent-encoded register link so the hosted page does
     // not emit a URL with literal spaces (scope) or an unencoded redirect_uri,
     // and so empty params are dropped rather than rendered as `nonce=`.
-    const oauthParamKeys = [
-      'client_id',
-      'redirect_uri',
-      'response_type',
-      'scope',
-      'state',
-      'nonce',
-      'code_challenge',
-      'code_challenge_method',
-    ];
-    const registerParams = new URLSearchParams();
-    for (const k of oauthParamKeys) {
-      const v = query[k];
-      if (v) registerParams.set(k, v);
-    }
+    const registerParams = new URLSearchParams(
+      pickOAuthParams(query, OAUTH_FORM_PARAM_KEYS),
+    );
     const registerQs = registerParams.toString();
     const registerUrl = `/realms/${realm.name}/register${
       registerQs ? `?${registerQs}` : ''
@@ -185,6 +182,7 @@ export class LoginController {
         nonce: query['nonce'] ?? '',
         code_challenge: query['code_challenge'] ?? '',
         code_challenge_method: query['code_challenge_method'] ?? '',
+        prompt: query['prompt'] ?? '',
         error: query['error'] ?? '',
         info: query['info'] ?? '',
         login_hint: query['login_hint'] ?? '',
@@ -216,6 +214,7 @@ export class LoginController {
       );
 
       // ── Adaptive authentication / risk assessment ──────────────────────────
+      let riskStepUp = false;
       if (realm.adaptiveAuthEnabled && this.riskAssessmentService) {
         const riskContext = {
           userId: user.id,
@@ -255,16 +254,7 @@ export class LoginController {
             'error',
             'Login blocked due to suspicious activity. Check your email for details.',
           );
-          for (const key of [
-            'client_id',
-            'redirect_uri',
-            'response_type',
-            'scope',
-            'state',
-            'nonce',
-            'code_challenge',
-            'code_challenge_method',
-          ]) {
+          for (const key of OAUTH_FORM_PARAM_KEYS) {
             if (b[key]) params.set(key, b[key]);
           }
           return res.redirect(
@@ -272,41 +262,9 @@ export class LoginController {
           );
         }
 
-        if (assessment.action === 'STEP_UP') {
-          // Force MFA step-up by storing challenge even if MFA is not globally required
-          const mfaAvailable = await this.mfaService.isMfaEnabled(user.id);
-          if (mfaAvailable) {
-            const oauthParamsForChallenge: Record<string, string> = {};
-            for (const key of [
-              'response_type',
-              'client_id',
-              'redirect_uri',
-              'scope',
-              'state',
-              'nonce',
-              'code_challenge',
-              'code_challenge_method',
-            ]) {
-              if (b[key]) oauthParamsForChallenge[key] = b[key];
-            }
-            const challengeToken = await this.mfaService.createMfaChallenge(
-              user.id,
-              realm.id,
-              oauthParamsForChallenge,
-            );
-
-            res.cookie('IDENPLANE_MFA_CHALLENGE', challengeToken, {
-              httpOnly: true,
-              secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
-              sameSite: 'strict',
-              maxAge: 5 * 60 * 1000,
-              path: `/realms/${realm.name}`,
-            });
-
-            return res.redirect(`/realms/${realm.name}/totp`);
-          }
-          // If no MFA is configured, allow through (step-up without MFA setup falls through)
-        }
+        // STEP_UP is applied after the account gates below, so a risky
+        // sign-in still has to pass email verification and password expiry.
+        riskStepUp = assessment.action === 'STEP_UP';
 
         // Update the user's profile on ALLOW or STEP_UP (will learn from the login)
         void this.riskAssessmentService.updateUserProfile(
@@ -325,35 +283,14 @@ export class LoginController {
           'error',
           'Please verify your email address before signing in. Check your inbox for the verification link.',
         );
-        for (const key of [
-          'client_id',
-          'redirect_uri',
-          'response_type',
-          'scope',
-          'state',
-          'nonce',
-          'code_challenge',
-          'code_challenge_method',
-        ]) {
+        for (const key of OAUTH_FORM_PARAM_KEYS) {
           if (b[key]) params.set(key, b[key]);
         }
         return res.redirect(`/realms/${realm.name}/login?${params.toString()}`);
       }
 
       // Build OAuth params for later use
-      const oauthParams: Record<string, string> = {};
-      for (const key of [
-        'response_type',
-        'client_id',
-        'redirect_uri',
-        'scope',
-        'state',
-        'nonce',
-        'code_challenge',
-        'code_challenge_method',
-      ]) {
-        if (b[key]) oauthParams[key] = b[key];
-      }
+      const oauthParams = pickOAuthParams(b, OAUTH_FORM_PARAM_KEYS);
 
       // Check password expiry
       if (this.passwordPolicyService.isExpired(user, realm)) {
@@ -368,6 +305,19 @@ export class LoginController {
 
         return res.redirect(
           `/realms/${realm.name}/change-password?token=${changeToken}&info=${encodeURIComponent('Your password has expired and must be changed.')}`,
+        );
+      }
+
+      // Risk-based step-up: a second factor even where MFA is optional. With
+      // no factor enrolled there is nothing to step up with; the sign-in
+      // continues as usual.
+      if (riskStepUp && (await this.mfaService.isMfaEnabled(user.id))) {
+        return this.loginFlow.startSecondFactor(
+          realm,
+          user,
+          oauthParams,
+          ['pwd'],
+          res,
         );
       }
 
@@ -394,16 +344,7 @@ export class LoginController {
 
       const params = new URLSearchParams();
       params.set('error', errMessage);
-      for (const key of [
-        'client_id',
-        'redirect_uri',
-        'response_type',
-        'scope',
-        'state',
-        'nonce',
-        'code_challenge',
-        'code_challenge_method',
-      ]) {
+      for (const key of OAUTH_FORM_PARAM_KEYS) {
         if (b[key]) params.set(key, b[key]);
       }
       res.redirect(`/realms/${realm.name}/login?${params.toString()}`);
@@ -423,7 +364,7 @@ export class LoginController {
   ) {
     const challengeToken = (
       req.cookies as Record<string, string | undefined>
-    )?.['IDENPLANE_MFA_CHALLENGE'];
+    )?.[MFA_CHALLENGE_COOKIE];
     const challenge = challengeToken
       ? await this.mfaService.getMfaChallenge(challengeToken)
       : null;
@@ -485,7 +426,7 @@ export class LoginController {
     this.validateCsrf(realm, body, req);
     const challengeToken = (
       req.cookies as Record<string, string | undefined>
-    )?.['IDENPLANE_MFA_CHALLENGE'];
+    )?.[MFA_CHALLENGE_COOKIE];
     const challenge = challengeToken
       ? await this.mfaService.getMfaChallenge(challengeToken)
       : null;
@@ -534,7 +475,7 @@ export class LoginController {
     this.validateCsrf(realm, body, req);
     const challengeToken = (
       req.cookies as Record<string, string | undefined>
-    )?.['IDENPLANE_MFA_CHALLENGE'];
+    )?.[MFA_CHALLENGE_COOKIE];
     if (!challengeToken) {
       return res.redirect(
         `/realms/${realm.name}/login?error=${encodeURIComponent('MFA session expired. Please login again.')}`,
@@ -547,7 +488,7 @@ export class LoginController {
         challengeToken,
       );
     if (!challenge) {
-      res.clearCookie('IDENPLANE_MFA_CHALLENGE', {
+      res.clearCookie(MFA_CHALLENGE_COOKIE, {
         path: `/realms/${realm.name}`,
       });
       return res.redirect(
@@ -560,7 +501,7 @@ export class LoginController {
       this.logger.warn(
         `MFA cross-realm token use attempt: challenge realm ${challenge.realmId} used against realm ${realm.id}`,
       );
-      res.clearCookie('IDENPLANE_MFA_CHALLENGE', {
+      res.clearCookie(MFA_CHALLENGE_COOKIE, {
         path: `/realms/${realm.name}`,
       });
       return res.redirect(
@@ -635,7 +576,7 @@ export class LoginController {
     // MFA verified — claim the challenge and clear the cookie. Losing the
     // claim means a parallel request with the same code already signed in.
     const claimed = await this.mfaService.consumeMfaChallenge(challengeToken);
-    res.clearCookie('IDENPLANE_MFA_CHALLENGE', {
+    res.clearCookie(MFA_CHALLENGE_COOKIE, {
       path: `/realms/${realm.name}`,
     });
     if (!claimed) {
@@ -664,7 +605,7 @@ export class LoginController {
       res,
       {
         acr: ACR_MFA,
-        amr: LoginFlowService.amrForFactor(challenge.primaryAmr, factor),
+        amr: amrForFactor(challenge.primaryAmr, factor),
       },
     );
   }
@@ -720,10 +661,7 @@ export class LoginController {
       res,
       {
         acr: ACR_MFA,
-        amr: LoginFlowService.amrForFactor(
-          enrollment.primaryAmr,
-          enrollment.factor,
-        ),
+        amr: amrForFactor(enrollment.primaryAmr, enrollment.factor),
       },
       { rememberMe: enrollment.rememberMe },
     );
@@ -799,7 +737,7 @@ export class LoginController {
     // Validate token
     const tokenHash = this.crypto.sha256(token);
     const record = await this.prisma.verificationToken.findUnique({
-      where: { tokenHash },
+      where: { tokenHash, user: { realmId: realm.id } },
     });
     if (
       !record ||
@@ -968,7 +906,13 @@ export class LoginController {
       consentReq.oauthParams as unknown as AuthorizeParams,
       // Preserve the auth context established before the consent screen so the
       // issued code carries the real acr/amr (not a defaulted password level).
-      { acr: consentReq.satisfiedAcr, amr: consentReq.amr },
+      {
+        acr: consentReq.satisfiedAcr,
+        amr: consentReq.amr,
+        authTime: consentReq.authTime
+          ? new Date(consentReq.authTime)
+          : undefined,
+      },
     );
 
     res.redirect(302, result.redirectUrl);
@@ -1024,6 +968,7 @@ export class LoginController {
         nonce: query['nonce'] ?? '',
         code_challenge: query['code_challenge'] ?? '',
         code_challenge_method: query['code_challenge_method'] ?? '',
+        prompt: query['prompt'] ?? '',
         customAttributes: customAttributes.map((a) => ({
           name: a.name,
           displayName: a.displayName,
@@ -1065,18 +1010,7 @@ export class LoginController {
     const confirmPassword = body['confirmPassword'] ?? '';
 
     // Preserve OAuth params through registration redirects
-    const oauthParamNames = [
-      'client_id',
-      'redirect_uri',
-      'response_type',
-      'scope',
-      'state',
-      'nonce',
-      'code_challenge',
-      'code_challenge_method',
-    ];
-    const oauthParams = oauthParamNames
-      .filter((p) => body[p])
+    const oauthParams = OAUTH_FORM_PARAM_KEYS.filter((p) => body[p])
       .map((p) => `${p}=${encodeURIComponent(body[p])}`)
       .join('&');
     const oauthSuffix = oauthParams ? `&${oauthParams}` : '';
@@ -1313,6 +1247,7 @@ export class LoginController {
     const result = await this.verificationService.validateToken(
       token,
       'email_verification',
+      realm.id,
     );
     if (!result) {
       return this.themeRender.render(
@@ -1472,7 +1407,7 @@ export class LoginController {
 
     const tokenHash = this.crypto.sha256(token);
     const record = await this.prisma.verificationToken.findUnique({
-      where: { tokenHash },
+      where: { tokenHash, user: { realmId: realm.id } },
     });
 
     if (
@@ -1547,6 +1482,7 @@ export class LoginController {
     const result = await this.verificationService.validateToken(
       token,
       'password_reset',
+      realm.id,
     );
     if (!result) {
       return res.redirect(

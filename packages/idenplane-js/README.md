@@ -329,11 +329,17 @@ export const config = {
 
 ---
 
+## Login transaction and logout behavior
+
+Tokens default to memory. Only the PKCE verifier and state are saved in tab-scoped `sessionStorage` during a login redirect. This transaction is isolated by server, realm, client, and callback URI, expires after ten minutes, and is removed after successful login or logout. Login fails before redirecting if the browser cannot save the transaction. Memory tokens are lost on a full page reload; persistent token storage remains an explicit opt-in.
+
+In a browser, `logout()` revokes the refresh token, clears local authentication, and navigates to the discovered OpenID Connect logout endpoint to end the browser SSO session. The ID token is sent as `id_token_hint`; access and refresh tokens are not placed in the navigation URL. Set `postLogoutRedirectUri` to a URI registered in the client's `postLogoutRedirectUris` to return to your application. Without an ID token the SDK omits the return URI. If discovery is unavailable, local logout still occurs but provider logout cannot be guaranteed. Server-side logout uses POST without browser navigation.
+
 ## SSR Compatibility
 
 The SDK is fully SSR-safe. When `window` is undefined (e.g., in Node.js / Next.js):
 - Storage automatically falls back to `MemoryStorage`
-- `login()` and `logout()` browser redirects throw a safe error
+- `login()` throws without a browser; `logout()` still revokes refresh tokens and clears local state without navigating
 - `init()` and token operations work without errors
 
 ```typescript
@@ -366,7 +372,7 @@ new IdenplaneClient(config: IdenplaneConfig)
 | `clientId` | `string` | *required* | OAuth2 client ID (PUBLIC client) |
 | `redirectUri` | `string` | *required* | Callback URL after login |
 | `scopes` | `string[]` | `['openid', 'profile', 'email']` | OAuth2 scopes to request |
-| `storage` | `'sessionStorage' \| 'localStorage' \| 'memory'` | `'sessionStorage'` | Where to persist tokens |
+| `storage` | `'sessionStorage' \| 'localStorage' \| 'memory'` | `'memory'` | Where to persist tokens (separate from the short-lived login transaction) |
 | `autoRefresh` | `boolean` | `true` | Automatically refresh tokens before expiry |
 | `refreshBuffer` | `number` | `30` | Seconds before expiry to trigger refresh |
 | `refreshStrategy` | `'rotation' \| 'silent' \| 'eager'` | `'rotation'` | Token refresh strategy |

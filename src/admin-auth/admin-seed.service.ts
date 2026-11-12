@@ -8,6 +8,17 @@ import { ScopeSeedService } from '../scopes/scope-seed.service.js';
 /** The advisory lock first-boot seeding takes (an arbitrary constant). */
 const MASTER_SEED_LOCK_KEY = 7_204_311_862;
 
+/** Shortest initial admin password accepted in production. */
+const MIN_PRODUCTION_ADMIN_PASSWORD_LENGTH = 12;
+
+/** Documented defaults and placeholders that must never seed a production admin. */
+const INSECURE_ADMIN_PASSWORDS = new Set([
+  'admin',
+  'password',
+  'changeme',
+  'change_this_password',
+]);
+
 @Injectable()
 export class AdminSeedService implements OnApplicationBootstrap {
   private readonly logger = new Logger(AdminSeedService.name);
@@ -49,7 +60,7 @@ export class AdminSeedService implements OnApplicationBootstrap {
     // The slow parts happen before the lock is taken.
     const keyPair = await this.jwkService.generateRsaKeyPair();
     const adminUsername = this.config.get<string>('ADMIN_USER', 'admin');
-    const adminPassword = this.config.get<string>('ADMIN_PASSWORD', 'admin');
+    const adminPassword = this.initialAdminPassword();
     const passwordHash = await this.crypto.hashPassword(adminPassword);
     const isPostgres = /^postgres(ql)?:\/\//i.test(
       process.env['DATABASE_URL'] ?? '',
@@ -136,5 +147,29 @@ export class AdminSeedService implements OnApplicationBootstrap {
     await this.scopeSeedService.seedDefaultScopes(masterRealmId);
 
     this.logger.log(`Master realm created. Admin user: ${adminUsername}`);
+  }
+
+  /**
+   * Development keeps the `admin` default. Production refuses to create the
+   * first admin with a missing, default or short password, because that
+   * account controls every realm.
+   */
+  private initialAdminPassword(): string {
+    const configured = this.config.get<string>('ADMIN_PASSWORD');
+    if (this.config.get<string>('NODE_ENV') !== 'production') {
+      return configured || 'admin';
+    }
+    if (
+      !configured ||
+      INSECURE_ADMIN_PASSWORDS.has(configured.toLowerCase()) ||
+      configured.length < MIN_PRODUCTION_ADMIN_PASSWORD_LENGTH
+    ) {
+      throw new Error(
+        `ADMIN_PASSWORD must be set to a unique value of at least ${MIN_PRODUCTION_ADMIN_PASSWORD_LENGTH} characters ` +
+          'before the first production start (it creates the initial admin). ' +
+          'Generate one with: openssl rand -hex 24',
+      );
+    }
+    return configured;
   }
 }

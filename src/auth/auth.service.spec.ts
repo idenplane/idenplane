@@ -723,9 +723,33 @@ describe('AuthService', () => {
       );
     });
 
+    it('grants only validated scopes to a client without a service account', async () => {
+      setupValidClient();
+      setupSigningKey();
+      scopesService.parseAndValidate.mockReturnValue(['openid']);
+      scopesService.toString.mockReturnValue('openid');
+
+      const result = await service.handleTokenRequest(realm, {
+        grant_type: 'client_credentials',
+        client_id: 'my-client',
+        client_secret: 'correct-secret',
+        scope: 'openid admin:everything',
+      });
+
+      expect(scopesService.parseAndValidate).toHaveBeenCalledWith(
+        'openid admin:everything',
+      );
+      expect(jwkService.signJwt.mock.calls[0][0]).toMatchObject({
+        scope: 'openid',
+      });
+      expect(result).toMatchObject({ scope: 'openid' });
+    });
+
     it('should sign the JWT with the correct payload shape', async () => {
       setupValidClient();
       setupSigningKey();
+      scopesService.parseAndValidate.mockReturnValue(['openid', 'profile']);
+      scopesService.toString.mockReturnValue('openid profile');
 
       await service.handleTokenRequest(realm, {
         grant_type: 'client_credentials',
@@ -1137,9 +1161,62 @@ describe('AuthService', () => {
             code: 'valid-auth-code',
             used: false,
           }),
-          data: { used: true },
+          data: { used: true, sessionId: expect.any(String) },
         }),
       );
+    });
+
+    describe('replayed code', () => {
+      const replay = () =>
+        service.handleTokenRequest(realm, {
+          grant_type: 'authorization_code',
+          client_id: 'my-client',
+          client_secret: 'correct-secret',
+          code: 'valid-auth-code',
+          redirect_uri: 'http://localhost:3000/callback',
+        });
+      const usedCode = (overrides: Record<string, unknown> = {}) => ({
+        used: true,
+        sessionId: 'session-from-first-exchange',
+        clientId: dbClient.id,
+        codeChallenge: null,
+        expiresAt: new Date(Date.now() - 1000),
+        ...overrides,
+      });
+
+      beforeEach(() => {
+        setupForTokenIssuance();
+        prisma.authorizationCode.update.mockRejectedValue(
+          Object.assign(new Error('not found'), { code: 'P2025' }),
+        );
+      });
+
+      it('ends the session issued from it when its own client replays it', async () => {
+        prisma.authorizationCode.findUnique.mockResolvedValue(usedCode());
+
+        await expect(replay()).rejects.toMatchObject({ code: 'invalid_grant' });
+        expect(prisma.session.deleteMany).toHaveBeenCalledWith({
+          where: { id: 'session-from-first-exchange' },
+        });
+      });
+
+      it('leaves the session alone when another client presents it', async () => {
+        prisma.authorizationCode.findUnique.mockResolvedValue(
+          usedCode({ clientId: 'another-client' }),
+        );
+
+        await expect(replay()).rejects.toMatchObject({ code: 'invalid_grant' });
+        expect(prisma.session.deleteMany).not.toHaveBeenCalled();
+      });
+
+      it('leaves the session alone long after the code expired', async () => {
+        prisma.authorizationCode.findUnique.mockResolvedValue(
+          usedCode({ expiresAt: new Date(Date.now() - 60 * 60 * 1000) }),
+        );
+
+        await expect(replay()).rejects.toMatchObject({ code: 'invalid_grant' });
+        expect(prisma.session.deleteMany).not.toHaveBeenCalled();
+      });
     });
 
     it('reflects the satisfied MFA context (acr/amr) when the code carries it', async () => {

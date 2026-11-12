@@ -130,6 +130,59 @@ describe('TokensService', () => {
       expect(result.realm_access).toEqual({ roles: ['admin'] });
     });
 
+    describe('client_credentials token of a client without a service account', () => {
+      const clientToken = () => ({
+        sub: 'client-db-id',
+        azp: 'backend',
+        aud: 'backend',
+        scope: 'openid',
+        exp: Math.floor(Date.now() / 1000) + 300,
+        iat: Math.floor(Date.now() / 1000),
+      });
+
+      beforeEach(() => {
+        prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
+        prisma.user.findUnique.mockResolvedValue(null);
+        jwkService.verifyJwt.mockResolvedValue(clientToken());
+      });
+
+      it('is active while the client is enabled', async () => {
+        prisma.client.findUnique.mockResolvedValue({
+          id: 'client-db-id',
+          clientId: 'backend',
+          enabled: true,
+        });
+
+        const result = await service.introspect(mockRealm, 'client-token');
+
+        expect(result).toMatchObject({ active: true, client_id: 'backend' });
+      });
+
+      it('is inactive once the client is disabled', async () => {
+        prisma.client.findUnique.mockResolvedValue({
+          id: 'client-db-id',
+          clientId: 'backend',
+          enabled: false,
+        });
+
+        await expect(
+          service.introspect(mockRealm, 'client-token'),
+        ).resolves.toEqual({ active: false });
+      });
+
+      it('is inactive when the subject is neither a user nor that client', async () => {
+        prisma.client.findUnique.mockResolvedValue({
+          id: 'another-client',
+          clientId: 'backend',
+          enabled: true,
+        });
+
+        await expect(
+          service.introspect(mockRealm, 'client-token'),
+        ).resolves.toEqual({ active: false });
+      });
+    });
+
     it('should return active=false when no signing key exists', async () => {
       prisma.realmSigningKey.findFirst.mockResolvedValue(null);
 

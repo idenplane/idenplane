@@ -18,7 +18,7 @@ Before installing Idenplane, ensure you have:
 | Requirement | Minimum | Recommended |
 |-------------|---------|-------------|
 | **Docker** | 20.10+ | 24.x+ |
-| **Docker Compose** | 2.0+ | 2.20+ |
+| **Docker Compose** | 2.20+ | 2.20+ |
 | **Database** | PostgreSQL 14 | PostgreSQL 16 |
 | **RAM** | 512 MB | 2 GB |
 | **Disk** | 1 GB | 10 GB |
@@ -29,111 +29,20 @@ For local development, SQLite is supported without requiring a separate database
 
 ---
 
-## Docker Hub (Recommended)
+## Docker Hub / Docker Compose
 
-The fastest way to get started is using our pre-built Docker image from Docker Hub:
+For a new local installation, follow the [Quickstart](../quickstart.md). It creates unique required credentials before starting the containers and waits for readiness.
 
-```bash
-# Pull and run with default settings
-docker pull islamawad/idenplane:latest
-
-# Start with Docker Compose
-curl -o docker-compose.yml https://raw.githubusercontent.com/idenplane/idenplane/main/docker-compose.yml
-docker compose up -d
-```
-
-### Environment Configuration
-
-Create a `.env` file for customization:
+From an existing repository checkout, with Node.js 24 and Docker Compose v2.20+:
 
 ```bash
-# Database configuration
-DATABASE_URL=postgresql://idenplane:idenplane@localhost:5432/idenplane
-
-# Server settings
-PORT=3000
-NODE_ENV=production
-BASE_URL=https://auth.example.com
-
-# Security (REQUIRED in production)
-ADMIN_API_KEY=REPLACE_ME_WITH_A_STRONG_RANDOM_SECRET
-WEBHOOK_SECRET_KEY=REPLACE_ME_WITH_A_STRONG_RANDOM_SECRET
-WEBHOOK_ENCRYPTION_SALT=REPLACE_ME_WITH_A_UNIQUE_RANDOM_SALT
+node scripts/setup-env.cjs
+docker compose up -d --wait --wait-timeout 180
 ```
 
-:::warning
-Never use the placeholder values in production. Generate secure secrets using:
+Read ADMIN_PASSWORD in the generated .env file to sign in as admin. The helper refuses to overwrite an existing .env: preserve its database password and webhook encryption keys. Changing POSTGRES_PASSWORD in a file does not rotate it inside an existing PostgreSQL volume.
 
-```bash
-# Generate a secure API key
-openssl rand -hex 32
-
-# Generate webhook encryption key
-openssl rand -hex 32
-
-# Generate encryption salt
-openssl rand -hex 16
-```
-:::
-
----
-
-## Docker Compose
-
-Create a production-ready `docker-compose.yml`:
-
-```yaml
-version: '3.8'
-
-services:
-  idenplane:
-    image: islamawad/idenplane:latest
-    container_name: idenplane
-    restart: unless-stopped
-    ports:
-      - "3000:3000"
-    environment:
-      - DATABASE_URL=postgresql://idenplane:idenplane@db:5432/idenplane
-      - PORT=3000
-      - NODE_ENV=production
-      - BASE_URL=http://localhost:3000
-      - ADMIN_API_KEY=${ADMIN_API_KEY}
-      - WEBHOOK_SECRET_KEY=${WEBHOOK_SECRET_KEY}
-      - WEBHOOK_ENCRYPTION_SALT=${WEBHOOK_ENCRYPTION_SALT}
-    depends_on:
-      db:
-        condition: service_healthy
-    healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health/live"]
-      interval: 30s
-      timeout: 10s
-      retries: 3
-
-  db:
-    image: postgres:16-alpine
-    container_name: idenplane-db
-    restart: unless-stopped
-    environment:
-      - POSTGRES_USER=idenplane
-      - POSTGRES_PASSWORD=idenplane
-      - POSTGRES_DB=idenplane
-    volumes:
-      - postgres_data:/var/lib/postgresql/data
-    healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U idenplane"]
-      interval: 10s
-      timeout: 5s
-      retries: 5
-
-volumes:
-  postgres_data:
-```
-
-Start the stack:
-
-```bash
-docker compose up -d
-```
+The supplied Compose file binds to localhost. Before production use configure HTTPS, durable backups, your public BASE_URL and a pinned release image. Keep secrets outside source control.
 
 ---
 
@@ -145,7 +54,7 @@ For development or custom deployments, build from source.
 
 | Requirement | Version |
 |-------------|---------|
-| **Node.js** | 22.x LTS |
+| **Node.js** | 24.x |
 | **npm** | 10.x+ |
 | **PostgreSQL** | 16+ |
 
@@ -155,7 +64,7 @@ For development or custom deployments, build from source.
 
    ```bash
    git clone https://github.com/idenplane/idenplane.git
-   cd Idenplane
+   cd idenplane
    ```
 
 2. **Install dependencies:**

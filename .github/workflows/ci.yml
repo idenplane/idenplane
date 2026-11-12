@@ -38,6 +38,9 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Import cycles
+        run: npm run lint:cycles
+
       - name: Unit Tests
         run: npm test -- --coverage --no-cache
 
@@ -205,7 +208,7 @@ jobs:
         run: |
           node dist/main.js > backend.log 2>&1 &
           echo "Waiting for backend on :3000/health..."
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             if curl -sf http://localhost:3000/health > /dev/null; then
               echo "Backend is up."
               exit 0
@@ -301,7 +304,7 @@ jobs:
         run: |
           node dist/main.js > backend.log 2>&1 &
           echo "Waiting for backend on :3000/health..."
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             if curl -sf http://localhost:3000/health > /dev/null; then
               echo "Backend is up."
               exit 0
@@ -331,7 +334,7 @@ jobs:
         run: |
           npm run dev > vite.log 2>&1 &
           echo "Waiting for admin-ui on :5173..."
-          for i in $(seq 1 30); do
+          for _ in $(seq 1 30); do
             if curl -sf http://localhost:5173/console/login > /dev/null; then
               echo "admin-ui is up."
               exit 0
@@ -552,7 +555,7 @@ jobs:
           cache-dependency-path: examples/${{ matrix.example }}/package-lock.json
 
       - name: Install dependencies
-        run: npm install
+        run: npm ci
 
       # Reported, not enforced. `npm audit` resolves against the advisory
       # database at run time, so a newly published advisory against any
@@ -575,6 +578,10 @@ jobs:
       # nextjs-quickstart has a real Next.js build; vanilla-js-quickstart has
       # no build step at all (that's the point of it), so just confirm the
       # SDK it depends on actually resolves to something with a dist/ in it.
+      - name: Test server resource authorization (nextjs-quickstart only)
+        if: matrix.example == 'nextjs-quickstart'
+        run: node --experimental-strip-types --test tests/*.test.mjs
+
       - name: Build (nextjs-quickstart only)
         if: matrix.example == 'nextjs-quickstart'
         run: npm run build
@@ -679,12 +686,6 @@ jobs:
 
       - uses: azure/setup-helm@v5
 
-      # postgresql and redis are declared as dependencies. Their conditions
-      # control whether they get installed, not whether helm needs them
-      # present — without this, lint warns and template refuses outright.
-      - name: Fetch chart dependencies
-        run: helm dependency build helm/idenplane
-
       - name: Lint
         run: helm lint helm/idenplane
 
@@ -696,6 +697,38 @@ jobs:
 
       - name: Render with production values
         run: helm template idenplane helm/idenplane -f helm/idenplane/values.production.yaml > /dev/null
+
+      - name: Render with bundled Redis
+        run: helm template idenplane helm/idenplane --set redis.enabled=true > /dev/null
+
+  helm-install:
+    name: Helm install (kind)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: azure/setup-helm@v5
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Build the image from this commit
+        run: docker build -t idenplane:helm-ci .
+
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: idenplane
+
+      - name: Load the image into kind
+        run: kind load docker-image idenplane:helm-ci --name idenplane
+
+      - name: Install, sign in, upgrade and test
+        env:
+          IMAGE_REPOSITORY: idenplane
+          IMAGE_TAG: helm-ci
+        run: bash scripts/verify-helm-install.sh
 
   build:
     name: Build

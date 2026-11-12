@@ -32,6 +32,7 @@ import { VerificationModule } from './verification/verification.module.js';
 import { AccountModule } from './account/account.module.js';
 import { PasswordPolicyModule } from './password-policy/password-policy.module.js';
 import { BruteForceModule } from './brute-force/brute-force.module.js';
+import { BruteForceAdminModule } from './brute-force/brute-force-admin.module.js';
 import { MfaModule } from './mfa/mfa.module.js';
 import { AdminAuthModule } from './admin-auth/admin-auth.module.js';
 import { ClientScopesModule } from './client-scopes/client-scopes.module.js';
@@ -78,10 +79,15 @@ import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
     // Express tries routes in the order they were registered, and Nest
     // registers a module's routes in the order modules are imported, so
     // these are matched before the hundreds of admin routes. No other route
-    // can match their paths, so the order changes speed only.
+    // can match their paths, so the order changes speed only. The browser
+    // sign-in endpoints come next.
     WellKnownModule,
     TokensModule,
     AuthModule,
+    StepUpModule,
+    OAuthModule,
+    LoginModule,
+    WebAuthnModule,
     ConfigModule.forRoot({ isGlobal: true }),
     LoggerModule.forRoot(createLoggerConfig()),
     ThrottlerModule.forRoot({
@@ -116,6 +122,7 @@ import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
     VerificationModule,
     PasswordPolicyModule,
     BruteForceModule,
+    BruteForceAdminModule,
     MfaModule,
     AdminAuthModule,
     RealmsModule,
@@ -123,9 +130,7 @@ import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
     UsersModule,
     ClientsModule,
     RolesModule,
-    OAuthModule,
     ScopesModule,
-    LoginModule,
     ConsentModule,
     GroupsModule,
     SessionsModule,
@@ -144,13 +149,11 @@ import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
     RateLimitModule,
     ImpersonationModule,
     StatsModule,
-    WebAuthnModule,
     AuthorizationModule,
     CustomAttributesModule,
     PluginsModule,
     AuthFlowModule,
     VersioningModule,
-    StepUpModule,
     OrganizationsModule,
     RiskAssessmentModule,
     MigrationModule,
