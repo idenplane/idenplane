@@ -597,10 +597,30 @@
       "type": "object",
       "description": "Sensitive environment variables stored in a Kubernetes Secret.",
       "properties": {
+        "existingSecret": {
+          "type": "string",
+          "default": "",
+          "description": "Existing Secret holding ADMIN_API_KEY, ADMIN_PASSWORD, WEBHOOK_SECRET_KEY and WEBHOOK_ENCRYPTION_SALT. Required for GitOps renders."
+        },
         "ADMIN_API_KEY": {
           "type": "string",
-          "default": "change-me-in-production",
-          "description": "Admin API key for protected endpoints."
+          "default": "",
+          "description": "Admin API key (at least 32 characters). Empty: generated on first install and kept on upgrades."
+        },
+        "ADMIN_PASSWORD": {
+          "type": "string",
+          "default": "",
+          "description": "Initial admin password (at least 12 characters). Empty: generated."
+        },
+        "WEBHOOK_SECRET_KEY": {
+          "type": "string",
+          "default": "",
+          "description": "Encrypts webhook secrets at rest. Empty: generated. Never change it after install."
+        },
+        "WEBHOOK_ENCRYPTION_SALT": {
+          "type": "string",
+          "default": "",
+          "description": "Salt for the webhook encryption key. Empty: generated."
         },
         "DATABASE_URL": {
           "type": "string",
@@ -622,11 +642,19 @@
     },
     "postgresql": {
       "type": "object",
-      "description": "PostgreSQL sub-chart configuration (Bitnami).",
+      "description": "Bundled PostgreSQL (official image).",
       "properties": {
         "enabled": {
           "type": "boolean",
           "default": true
+        },
+        "image": {
+          "type": "object",
+          "properties": {
+            "repository": { "type": "string" },
+            "tag": { "type": "string" },
+            "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+          }
         },
         "auth": {
           "type": "object",
@@ -637,7 +665,8 @@
             },
             "password": {
               "type": "string",
-              "default": "idenplane"
+              "default": "",
+              "description": "Empty: generated on first install and kept on upgrades."
             },
             "database": {
               "type": "string",
@@ -645,7 +674,7 @@
             },
             "existingSecret": {
               "type": "string",
-              "description": "Existing secret for passwords."
+              "description": "Existing Secret with the password under the key \"password\"."
             }
           }
         },
@@ -662,6 +691,9 @@
                 "size": {
                   "type": "string",
                   "default": "8Gi"
+                },
+                "storageClass": {
+                  "type": "string"
                 }
               }
             }
@@ -675,11 +707,19 @@
     },
     "redis": {
       "type": "object",
-      "description": "Redis sub-chart configuration (Bitnami).",
+      "description": "Bundled Redis (official image).",
       "properties": {
         "enabled": {
           "type": "boolean",
           "default": false
+        },
+        "image": {
+          "type": "object",
+          "properties": {
+            "repository": { "type": "string" },
+            "tag": { "type": "string" },
+            "pullPolicy": { "type": "string", "enum": ["Always", "IfNotPresent", "Never"] }
+          }
         },
         "auth": {
           "type": "object",
@@ -690,17 +730,13 @@
             },
             "password": {
               "type": "string",
-              "default": "idenplane-redis"
+              "default": "",
+              "description": "Empty: generated on first install and kept on upgrades."
             },
             "existingSecret": {
               "type": "string"
             }
           }
-        },
-        "architecture": {
-          "type": "string",
-          "enum": ["standalone", "replication"],
-          "default": "standalone"
         },
         "master": {
           "type": "object",

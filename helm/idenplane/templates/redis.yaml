@@ -1,0 +1,127 @@
+{{- if .Values.redis.enabled }}
+{{- /*
+Built-in Redis (official image) for caching and the redis session store.
+The service keeps the <release>-redis-master name of the Bitnami sub-chart it
+replaces, so REDIS_URL does not change.
+*/ -}}
+{{- $name := include "idenplane.redisHost" . }}
+{{- $secretName := include "idenplane.redisSecretName" . }}
+{{- if and .Values.redis.auth.enabled (not .Values.redis.auth.existingSecret) }}
+{{- $stored := dict }}
+{{- with (lookup "v1" "Secret" .Release.Namespace $secretName) }}
+{{- $stored = .data | default dict }}
+{{- end }}
+apiVersion: v1
+kind: Secret
+metadata:
+  name: {{ $secretName }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "idenplane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+type: Opaque
+data:
+  {{- if .Values.redis.auth.password }}
+  redis-password: {{ .Values.redis.auth.password | b64enc | quote }}
+  {{- else if hasKey $stored "redis-password" }}
+  redis-password: {{ index $stored "redis-password" | quote }}
+  {{- else }}
+  redis-password: {{ randAlphaNum 32 | b64enc | quote }}
+  {{- end }}
+---
+{{- end }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "idenplane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  type: ClusterIP
+  ports:
+    - name: tcp-redis
+      port: 6379
+      targetPort: tcp-redis
+  selector:
+    {{- include "idenplane.componentSelectorLabels" (dict "context" . "component" "redis") | nindent 4 }}
+---
+apiVersion: apps/v1
+kind: StatefulSet
+metadata:
+  name: {{ $name }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "idenplane.labels" . | nindent 4 }}
+    app.kubernetes.io/component: redis
+spec:
+  serviceName: {{ $name }}
+  replicas: 1
+  selector:
+    matchLabels:
+      {{- include "idenplane.componentSelectorLabels" (dict "context" . "component" "redis") | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "idenplane.componentSelectorLabels" (dict "context" . "component" "redis") | nindent 8 }}
+    spec:
+      securityContext:
+        runAsUser: 999
+        runAsGroup: 999
+        fsGroup: 999
+        runAsNonRoot: true
+        seccompProfile:
+          type: RuntimeDefault
+      containers:
+        - name: redis
+          image: "{{ .Values.redis.image.repository }}:{{ .Values.redis.image.tag }}"
+          imagePullPolicy: {{ .Values.redis.image.pullPolicy }}
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          {{- if .Values.redis.auth.enabled }}
+          env:
+            - name: REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ $secretName }}
+                  key: redis-password
+          command: ["sh", "-c", "exec redis-server --appendonly yes --requirepass \"$REDIS_PASSWORD\""]
+          {{- else }}
+          command: ["redis-server", "--appendonly", "yes"]
+          {{- end }}
+          ports:
+            - name: tcp-redis
+              containerPort: 6379
+          readinessProbe:
+            tcpSocket:
+              port: tcp-redis
+            periodSeconds: 5
+          livenessProbe:
+            tcpSocket:
+              port: tcp-redis
+            initialDelaySeconds: 15
+            periodSeconds: 10
+          resources:
+            {{- toYaml .Values.redis.resources | nindent 12 }}
+          volumeMounts:
+            - name: data
+              mountPath: /data
+      {{- if not .Values.redis.master.persistence.enabled }}
+      volumes:
+        - name: data
+          emptyDir: {}
+      {{- end }}
+  {{- if .Values.redis.master.persistence.enabled }}
+  volumeClaimTemplates:
+    - metadata:
+        name: data
+      spec:
+        accessModes: ["ReadWriteOnce"]
+        resources:
+          requests:
+            storage: {{ .Values.redis.master.persistence.size }}
+  {{- end }}
+{{- end }}

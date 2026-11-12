@@ -683,12 +683,6 @@ jobs:
 
       - uses: azure/setup-helm@v5
 
-      # postgresql and redis are declared as dependencies. Their conditions
-      # control whether they get installed, not whether helm needs them
-      # present — without this, lint warns and template refuses outright.
-      - name: Fetch chart dependencies
-        run: helm dependency build helm/idenplane
-
       - name: Lint
         run: helm lint helm/idenplane
 
@@ -700,6 +694,38 @@ jobs:
 
       - name: Render with production values
         run: helm template idenplane helm/idenplane -f helm/idenplane/values.production.yaml > /dev/null
+
+      - name: Render with bundled Redis
+        run: helm template idenplane helm/idenplane --set redis.enabled=true > /dev/null
+
+  helm-install:
+    name: Helm install (kind)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: azure/setup-helm@v5
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: 24
+
+      - name: Build the image from this commit
+        run: docker build -t idenplane:helm-ci .
+
+      - uses: helm/kind-action@v1
+        with:
+          cluster_name: idenplane
+
+      - name: Load the image into kind
+        run: kind load docker-image idenplane:helm-ci --name idenplane
+
+      - name: Install, sign in, upgrade and test
+        env:
+          IMAGE_REPOSITORY: idenplane
+          IMAGE_TAG: helm-ci
+        run: bash scripts/verify-helm-install.sh
 
   build:
     name: Build

@@ -30,13 +30,13 @@
 4. View application logs:
   kubectl logs --namespace {{ .Release.Namespace }} -l "app.kubernetes.io/name={{ include "idenplane.name" . }}" --tail=100 -f
 
-{{- if .Values.secrets.ADMIN_API_KEY | eq "change-me-in-production" }}
+{{- if not .Values.secrets.existingSecret }}
 
-WARNING: You are using the default ADMIN_API_KEY value.
-         Please set a strong secret before exposing Idenplane to the internet:
+5. Sign in to the console as "admin" with the generated password:
+  kubectl get secret --namespace {{ .Release.Namespace }} {{ include "idenplane.keysSecretName" . }} -o jsonpath="{.data.ADMIN_PASSWORD}" | base64 -d; echo
 
-  helm upgrade {{ .Release.Name }} {{ .Chart.Name }} \
-    --namespace {{ .Release.Namespace }} \
-    --reuse-values \
-    --set secrets.ADMIN_API_KEY="<your-strong-api-key>"
+  The same Secret holds the admin API key and the webhook encryption keys.
+  Back it up: losing WEBHOOK_SECRET_KEY or WEBHOOK_ENCRYPTION_SALT makes stored
+  webhook secrets unreadable. With Argo CD, Flux or `helm template`, create these
+  keys yourself and set secrets.existingSecret instead.
 {{- end }}
