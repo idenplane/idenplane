@@ -28,6 +28,22 @@ describe('parseSingleCertificatePem', () => {
     expect(() => parseSingleCertificatePem(`\n\n${a.pem}\n`)).not.toThrow();
   });
 
+  it('accepts CRLF line endings', () => {
+    expect(() =>
+      parseSingleCertificatePem(a.pem.replace(/\n/g, '\r\n')),
+    ).not.toThrow();
+  });
+
+  it('refuses adversarial input in linear time', () => {
+    // The shape CodeQL flagged for the old multi-line regular expression.
+    const hostile = '-----BEGIN  -----' + '-----BEGIN  -----a'.repeat(3500);
+    const started = Date.now();
+    expect(() => parseSingleCertificatePem(hostile)).toThrow(
+      CertificatePemError,
+    );
+    expect(Date.now() - started).toBeLessThan(200);
+  });
+
   it.each([
     [
       'a private key alongside',
@@ -46,6 +62,16 @@ describe('parseSingleCertificatePem', () => {
       'garbage base64',
       () => '-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----',
       /not an X.509/,
+    ],
+    [
+      'an END that does not match its BEGIN',
+      () => '-----BEGIN CERTIFICATE-----\nAAAA\n-----END PUBLIC KEY-----',
+      /does not match/,
+    ],
+    [
+      'an unclosed block',
+      () => '-----BEGIN CERTIFICATE-----\nAAAA\n',
+      /not closed/,
     ],
     ['empty input', () => '', /required/],
     ['a non-string', () => 42, /required/],

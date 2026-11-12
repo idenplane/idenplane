@@ -15,7 +15,64 @@ export class CertificatePemError extends Error {
 }
 
 const MAX_PEM_BYTES = 64 * 1024;
-const BLOCK = /-----BEGIN ([A-Z0-9 ]+)-----([\s\S]*?)-----END \1-----/g;
+const BEGIN = '-----BEGIN ';
+const END = '-----END ';
+const DASHES = '-----';
+const LABEL = /^[A-Z0-9 ]{1,64}$/;
+
+interface PemBlock {
+  label: string;
+  body: string;
+}
+
+/**
+ * Splits PEM text into its blocks with forward `indexOf` scans only, so the
+ * cost stays linear in the input (a regular expression spanning the block
+ * can backtrack badly on hostile input). Text outside a block, a BEGIN inside
+ * a block, or an END that does not match its BEGIN is refused.
+ */
+function readPemBlocks(pem: string): PemBlock[] {
+  const outside = () =>
+    new CertificatePemError(
+      'certificatePem has content outside the CERTIFICATE block',
+    );
+  const notClosed = () =>
+    new CertificatePemError(
+      'certificatePem has a PEM block that is not closed',
+    );
+  /** The label of a marker starting at `from`, and where the marker ends. */
+  const readLabel = (from: number): { label: string; next: number } => {
+    const close = pem.indexOf(DASHES, from);
+    const label = close < 0 ? '' : pem.slice(from, close);
+    if (!LABEL.test(label)) throw notClosed();
+    return { label, next: close + DASHES.length };
+  };
+
+  const blocks: PemBlock[] = [];
+  let pos = 0;
+  for (;;) {
+    const begin = pem.indexOf(BEGIN, pos);
+    if (pem.slice(pos, begin < 0 ? pem.length : begin).trim() !== '') {
+      throw outside();
+    }
+    if (begin < 0) return blocks;
+
+    const opened = readLabel(begin + BEGIN.length);
+    const end = pem.indexOf(END, opened.next);
+    if (end < 0) throw notClosed();
+    const body = pem.slice(opened.next, end);
+    if (body.includes(BEGIN)) throw notClosed();
+
+    const closed = readLabel(end + END.length);
+    if (closed.label !== opened.label) {
+      throw new CertificatePemError(
+        'certificatePem has a PEM block whose END does not match its BEGIN',
+      );
+    }
+    blocks.push({ label: opened.label, body });
+    pos = closed.next;
+  }
+}
 
 /**
  * Reads exactly one certificate from PEM text. Refuses a private key in any
@@ -34,7 +91,7 @@ export function parseSingleCertificatePem(pem: unknown): X509Certificate {
       'certificatePem contains a private key; upload the certificate only',
     );
   }
-  const blocks = [...pem.matchAll(BLOCK)];
+  const blocks = readPemBlocks(pem);
   if (blocks.length === 0) {
     throw new CertificatePemError(
       'certificatePem has no PEM CERTIFICATE block',
@@ -46,17 +103,12 @@ export function parseSingleCertificatePem(pem: unknown): X509Certificate {
     );
   }
   const [block] = blocks;
-  if (block[1] !== 'CERTIFICATE') {
+  if (block.label !== 'CERTIFICATE') {
     throw new CertificatePemError(
-      `certificatePem must be a CERTIFICATE block, got ${block[1]}`,
+      `certificatePem must be a CERTIFICATE block, got ${block.label}`,
     );
   }
-  if (pem.replace(block[0], '').trim() !== '') {
-    throw new CertificatePemError(
-      'certificatePem has content outside the CERTIFICATE block',
-    );
-  }
-  const body = block[2].replace(/\s+/g, '');
+  const body = block.body.replace(/\s+/g, '');
   if (!/^[A-Za-z0-9+/]+={0,2}$/.test(body)) {
     throw new CertificatePemError('certificatePem is not valid base64');
   }
