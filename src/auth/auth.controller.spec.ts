@@ -3,6 +3,8 @@ jest.mock('../crypto/jwk.service.js', () => ({ JwkService: jest.fn() }));
 import { HttpException, HttpStatus } from '@nestjs/common';
 import { AuthController } from './auth.controller.js';
 import { OAuthTokenError } from './oauth-token-error.js';
+import { ClientCertificateSource } from '../mtls/client-certificate.source.js';
+import { loadMtlsConfig } from '../mtls/mtls-config.js';
 import type { Realm } from '@prisma/client';
 
 describe('AuthController', () => {
@@ -39,7 +41,10 @@ describe('AuthController', () => {
       json: jest.fn(),
     };
 
-    controller = new AuthController(mockAuthService as any);
+    controller = new AuthController(
+      mockAuthService as any,
+      new ClientCertificateSource(loadMtlsConfig({})),
+    );
   });
 
   describe('token', () => {
@@ -57,6 +62,53 @@ describe('AuthController', () => {
         body,
         '127.0.0.1',
         'test-agent',
+        { authorization: undefined, clientCert: null },
+      );
+    });
+
+    it('passes the Authorization header to the service instead of merging it into the body', () => {
+      const authorization = `Basic ${Buffer.from('app:secret').toString('base64')}`;
+      const body = { grant_type: 'client_credentials' };
+
+      controller.token(
+        realm,
+        body,
+        { ...req, headers: { ...req.headers, authorization } } as any,
+        res as any,
+      );
+
+      const [, passedBody, , , ctx] =
+        mockAuthService.handleTokenRequest.mock.calls[0];
+      expect(passedBody).toBe(body);
+      expect(ctx).toEqual({ authorization, clientCert: null });
+    });
+
+    it('answers 400 invalid_request for a malformed certificate header from a trusted proxy', async () => {
+      controller = new AuthController(
+        mockAuthService as any,
+        new ClientCertificateSource(
+          loadMtlsConfig({
+            MTLS_ENABLED: 'true',
+            MTLS_PROXY_CERT_HEADER: 'x-client-cert',
+            MTLS_TRUSTED_PROXY_CIDRS: '127.0.0.1',
+          }),
+        ),
+      );
+
+      await controller.token(
+        realm,
+        { grant_type: 'client_credentials' },
+        {
+          ...req,
+          headers: { ...req.headers, 'x-client-cert': 'garbage' },
+        } as any,
+        res as any,
+      );
+
+      expect(mockAuthService.handleTokenRequest).not.toHaveBeenCalled();
+      expect(res.status).toHaveBeenCalledWith(400);
+      expect(res.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'invalid_request' }),
       );
     });
 

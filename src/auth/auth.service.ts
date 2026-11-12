@@ -9,7 +9,8 @@ import {
 import { OAuthTokenError } from './oauth-token-error.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
-import { ClientSecretService } from '../clients/client-secret.service.js';
+import { ClientAuthenticator } from '../client-auth/client-authenticator.js';
+import type { PresentedClientCertificate } from '../mtls/client-certificate.source.js';
 import { JwkService } from '../crypto/jwk.service.js';
 import { ScopesService } from '../scopes/scopes.service.js';
 import {
@@ -33,7 +34,7 @@ import { UserFederationService } from '../user-federation/user-federation.servic
 import { StepUpService } from '../step-up/step-up.service.js';
 import { ACR_PASSWORD, ACR_MFA } from '../authn-core/acr.js';
 import type { PluginManagerService } from '../plugins/plugin-manager.service.js';
-import type { Prisma, Realm } from '@prisma/client';
+import type { Client, Prisma, Realm } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import type { JWTPayload } from 'jose';
 
@@ -46,6 +47,17 @@ export interface TokenResponse {
   id_token?: string;
   /** OIDC Session Management: the server-side session identifier. */
   session_state?: string;
+}
+
+/**
+ * What the token endpoint knows about a request besides its parameters, so
+ * services never read the HTTP request.
+ */
+export interface TokenRequestContext {
+  /** The `Authorization` header (HTTP Basic client authentication). */
+  authorization?: string;
+  /** The certificate the client presented, if any. */
+  clientCert?: PresentedClientCertificate | null;
 }
 
 /** See AuthService.newSession. */
@@ -100,6 +112,47 @@ export function withProtectedClaims(
   return result;
 }
 
+/**
+ * Throws `unauthorized_client` unless the client may use the grant.
+ */
+function assertGrantAllowed(
+  client: Pick<Client, 'grantTypes'>,
+  grantType: string,
+): void {
+  // For the device_code grant (RFC 8628) accept both the full URN and the
+  // shorthand alias so that clients stored with either value are permitted
+  // (issue #503).  All other grant types must match exactly — with one
+  // continuation exception below.
+  const DEVICE_URN = 'urn:ietf:params:oauth:grant-type:device_code';
+  const isDeviceGrant = grantType === DEVICE_URN || grantType === 'device_code';
+  const clientAllowsDevice =
+    client.grantTypes.includes(DEVICE_URN) ||
+    client.grantTypes.includes('device_code');
+
+  // A `password`-grant client that hands back `mfa_required` must be able
+  // to complete the challenge it issued; implicitly permit the
+  // `mfa_otp` continuation so admins don't have to grant both side-by-side
+  // (finding #23).
+  const MFA_OTP_URN = 'urn:ietf:params:oauth:grant-type:mfa-otp';
+  const isMfaOtpGrant = grantType === MFA_OTP_URN || grantType === 'mfa_otp';
+  const clientAllowsMfaOtp =
+    client.grantTypes.includes(MFA_OTP_URN) ||
+    client.grantTypes.includes('password');
+
+  const allowed = isDeviceGrant
+    ? clientAllowsDevice
+    : isMfaOtpGrant
+      ? clientAllowsMfaOtp
+      : client.grantTypes.includes(grantType);
+  if (!allowed) {
+    throw new OAuthTokenError(
+      'unauthorized_client',
+      `Grant type '${grantType}' not allowed for this client`,
+      HttpStatus.BAD_REQUEST,
+    );
+  }
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -118,7 +171,7 @@ export class AuthService {
     private readonly metricsService: MetricsService,
     private readonly customAttributesService: CustomAttributesService,
     private readonly userFederationService: UserFederationService,
-    private readonly clientSecrets: ClientSecretService,
+    private readonly clientAuthenticator: ClientAuthenticator,
     @Optional() private readonly stepUpService?: StepUpService,
     @Optional() private readonly pluginManager?: PluginManagerService,
     @Optional() private readonly smsOtp?: SmsOtpService,
@@ -169,7 +222,20 @@ export class AuthService {
     body: Record<string, string>,
     ip?: string,
     userAgent?: string,
+    ctx: TokenRequestContext = {},
   ): Promise<TokenResponse> {
+    // One way of authenticating the client per request (RFC 6749 §2.3),
+    // checked before anything else as it always was.
+    const presented = this.clientAuthenticator.readCredentials({
+      body,
+      authorization: ctx.authorization,
+    });
+    // The grant handlers read `client_id` from the parameters; with HTTP
+    // Basic it comes from the header. The secret stays out of `body`.
+    if (presented.clientId !== undefined && body['client_id'] === undefined) {
+      body = { ...body, client_id: presented.clientId };
+    }
+
     const grantType = body['grant_type'];
 
     if (!grantType) {
@@ -182,17 +248,19 @@ export class AuthService {
 
     switch (grantType) {
       case 'password':
-        return this.handlePasswordGrant(realm, body, ip, userAgent);
+        return this.handlePasswordGrant(realm, body, ip, userAgent, ctx);
       case 'client_credentials':
-        return this.handleClientCredentialsGrant(realm, body, ip);
+        return this.handleClientCredentialsGrant(realm, body, ip, ctx);
       case 'refresh_token':
-        return this.handleRefreshTokenGrant(realm, body, ip);
+        return this.handleRefreshTokenGrant(realm, body, ip, ctx);
       case 'authorization_code':
-        return this.handleAuthorizationCodeGrant(realm, body, ip, userAgent);
+        return this.handleAuthorizationCodeGrant(realm, body, ip, userAgent, {
+          ctx,
+        });
       case 'mfa_otp':
-        return this.handleMfaOtpGrant(realm, body, ip, userAgent);
+        return this.handleMfaOtpGrant(realm, body, ip, userAgent, ctx);
       case 'urn:ietf:params:oauth:grant-type:device_code':
-        return this.handleDeviceCodeGrant(realm, body, ip, userAgent);
+        return this.handleDeviceCodeGrant(realm, body, ip, userAgent, ctx);
       default:
         throw new OAuthTokenError(
           'unsupported_grant_type',
@@ -207,6 +275,7 @@ export class AuthService {
     body: Record<string, string>,
     ip?: string,
     userAgent?: string,
+    ctx: TokenRequestContext = {},
   ): Promise<TokenResponse> {
     this.logger.warn(
       `Password grant type used by client "${body['client_id']}" in realm "${realm.name}" — ` +
@@ -214,9 +283,9 @@ export class AuthService {
         'Migrate to the authorization_code grant with PKCE.',
     );
 
-    const { client_id, client_secret, username, password, scope } = body;
+    const { client_id, username, password, scope } = body;
 
-    await this.validateClient(realm, client_id, client_secret, 'password');
+    await this.validateClient(realm, body, 'password', { ctx });
 
     if (!username || !password) {
       throw new OAuthTokenError(
@@ -410,8 +479,9 @@ export class AuthService {
     body: Record<string, string>,
     ip?: string,
     userAgent?: string,
+    ctx: TokenRequestContext = {},
   ): Promise<TokenResponse> {
-    const { client_id, client_secret, mfa_token, otp, scope } = body;
+    const { client_id, mfa_token, otp, scope } = body;
     const smsMethod = body['mfa_method'] === 'sms';
 
     // The MFA OTP grant is a custom extension — pass the registered grant-type
@@ -422,9 +492,9 @@ export class AuthService {
     // simply completing the second factor here.
     await this.validateClient(
       realm,
-      client_id,
-      client_secret,
+      body,
       'urn:ietf:params:oauth:grant-type:mfa-otp',
+      { ctx },
     );
 
     if (!mfa_token || !otp) {
@@ -558,13 +628,14 @@ export class AuthService {
     realm: Realm,
     body: Record<string, string>,
     ip?: string,
+    ctx: TokenRequestContext = {},
   ): Promise<TokenResponse> {
-    const { client_id, client_secret, scope } = body;
+    const { client_id, scope } = body;
     const client = await this.validateClient(
       realm,
-      client_id,
-      client_secret,
+      body,
       'client_credentials',
+      { ctx },
     );
 
     // If client has a service account user, issue tokens through that user
@@ -634,8 +705,9 @@ export class AuthService {
     realm: Realm,
     body: Record<string, string>,
     ip?: string,
+    ctx: TokenRequestContext = {},
   ): Promise<TokenResponse> {
-    const { refresh_token, client_id, client_secret, scope } = body;
+    const { refresh_token, client_id, scope } = body;
 
     if (!refresh_token) {
       throw new OAuthTokenError(
@@ -645,7 +717,7 @@ export class AuthService {
       );
     }
 
-    await this.validateClient(realm, client_id, client_secret, 'refresh_token');
+    await this.validateClient(realm, body, 'refresh_token', { ctx });
 
     const tokenHash = this.crypto.sha256(refresh_token);
 
@@ -799,10 +871,9 @@ export class AuthService {
     body: Record<string, string>,
     ip?: string,
     userAgent?: string,
-    opts: { serverClient?: boolean } = {},
+    opts: { serverClient?: boolean; ctx?: TokenRequestContext } = {},
   ): Promise<TokenResponse> {
-    const { code, client_id, client_secret, redirect_uri, code_verifier } =
-      body;
+    const { code, client_id, redirect_uri, code_verifier } = body;
 
     if (!code) {
       throw new OAuthTokenError(
@@ -814,10 +885,9 @@ export class AuthService {
 
     const client = await this.validateClient(
       realm,
-      client_id,
-      client_secret,
+      body,
       'authorization_code',
-      { skipSecret: opts.serverClient === true },
+      { skipSecret: opts.serverClient === true, ctx: opts.ctx },
     );
 
     // Atomically mark the code as used in a single conditional UPDATE so that
@@ -984,8 +1054,9 @@ export class AuthService {
     body: Record<string, string>,
     ip?: string,
     userAgent?: string,
+    ctx: TokenRequestContext = {},
   ): Promise<TokenResponse> {
-    const { device_code, client_id, client_secret } = body;
+    const { device_code, client_id } = body;
 
     if (!device_code) {
       throw new OAuthTokenError(
@@ -997,9 +1068,9 @@ export class AuthService {
 
     const client = await this.validateClient(
       realm,
-      client_id,
-      client_secret,
+      body,
       'urn:ietf:params:oauth:grant-type:device_code',
+      { ctx },
     );
 
     const deviceCode = await this.prisma.deviceCode.findUnique({
@@ -1171,11 +1242,10 @@ export class AuthService {
     expires_in: number;
     resend_after: number;
   }> {
-    const { client_id, client_secret, mfa_token } = body;
+    const { client_id, mfa_token } = body;
     await this.validateClient(
       realm,
-      client_id,
-      client_secret,
+      body,
       'urn:ietf:params:oauth:grant-type:mfa-otp',
     );
     if (!mfa_token) {
@@ -1239,93 +1309,28 @@ export class AuthService {
     }
   }
 
+  /**
+   * Authenticates the client of a token request (see ClientAuthenticator)
+   * and checks it may use the grant. The grant check runs once the client is
+   * known and before its secret is checked, so a disallowed grant is
+   * `unauthorized_client` whatever the secret.
+   */
   private async validateClient(
     realm: Realm,
-    clientId: string,
-    clientSecret?: string,
+    body: Record<string, string>,
     grantType?: string,
-    opts: { skipSecret?: boolean } = {},
+    opts: { skipSecret?: boolean; ctx?: TokenRequestContext } = {},
   ) {
-    if (!clientId) {
-      throw new OAuthTokenError(
-        'invalid_client',
-        'client_id is required',
-        HttpStatus.UNAUTHORIZED,
-      );
-    }
-
-    const client = await this.lookups.client(realm.id, clientId);
-
-    if (!client || !client.enabled) {
-      throw new OAuthTokenError(
-        'invalid_client',
-        'Invalid client',
-        HttpStatus.UNAUTHORIZED,
-      );
-    }
-
-    if (grantType) {
-      // For the device_code grant (RFC 8628) accept both the full URN and the
-      // shorthand alias so that clients stored with either value are permitted
-      // (issue #503).  All other grant types must match exactly — with one
-      // continuation exception below.
-      const DEVICE_URN = 'urn:ietf:params:oauth:grant-type:device_code';
-      const isDeviceGrant =
-        grantType === DEVICE_URN || grantType === 'device_code';
-      const clientAllowsDevice =
-        client.grantTypes.includes(DEVICE_URN) ||
-        client.grantTypes.includes('device_code');
-
-      // A `password`-grant client that hands back `mfa_required` must be able
-      // to complete the challenge it issued; implicitly permit the
-      // `mfa_otp` continuation so admins don't have to grant both side-by-side
-      // (finding #23).
-      const MFA_OTP_URN = 'urn:ietf:params:oauth:grant-type:mfa-otp';
-      const isMfaOtpGrant =
-        grantType === MFA_OTP_URN || grantType === 'mfa_otp';
-      const clientAllowsMfaOtp =
-        client.grantTypes.includes(MFA_OTP_URN) ||
-        client.grantTypes.includes('password');
-
-      const allowed = isDeviceGrant
-        ? clientAllowsDevice
-        : isMfaOtpGrant
-          ? clientAllowsMfaOtp
-          : client.grantTypes.includes(grantType);
-      if (!allowed) {
-        throw new OAuthTokenError(
-          'unauthorized_client',
-          `Grant type '${grantType}' not allowed for this client`,
-          HttpStatus.BAD_REQUEST,
-        );
-      }
-    }
-
-    if (client.clientType === 'CONFIDENTIAL' && !opts.skipSecret) {
-      if (!clientSecret) {
-        throw new OAuthTokenError(
-          'invalid_client',
-          'client_secret is required',
-          HttpStatus.UNAUTHORIZED,
-        );
-      }
-      if (!client.clientSecret) {
-        throw new OAuthTokenError(
-          'invalid_client',
-          'Client has no secret configured',
-          HttpStatus.UNAUTHORIZED,
-        );
-      }
-      const valid = await this.clientSecrets.verify(client, clientSecret);
-      if (!valid) {
-        throw new OAuthTokenError(
-          'invalid_client',
-          'Invalid client credentials',
-          HttpStatus.UNAUTHORIZED,
-        );
-      }
-    }
-
+    const { client } = await this.clientAuthenticator.authenticate({
+      realm,
+      body,
+      authorization: opts.ctx?.authorization,
+      clientCert: opts.ctx?.clientCert,
+      skipCredentialCheck: opts.skipSecret === true,
+      beforeCredentialCheck: grantType
+        ? (client) => assertGrantAllowed(client, grantType)
+        : undefined,
+    });
     return client;
   }
 
