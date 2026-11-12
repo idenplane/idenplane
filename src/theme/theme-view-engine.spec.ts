@@ -206,8 +206,22 @@ describe('Theme view engine filesystem and configuration boundary', () => {
         layout: createThemeLayout('layouts/main.hbs'),
       }),
     );
-    app.post('/direct', (req, res) =>
-      res.render('page', req.body as Record<string, unknown>),
+    // Locals an attacker could reach if a handler rendered parsed input as-is.
+    const forgedLocals: Record<string, Record<string, unknown>> = {
+      layout: {
+        layout: { filename: join(outside, 'secret.hbs') },
+        settings: { views: outside },
+      },
+      settings: {
+        settings: { views: outside },
+        _messages: { title: 'Own view' },
+      },
+    };
+    app.post('/forged-layout', (_req, res) =>
+      res.render('page', { ...forgedLocals.layout }),
+    );
+    app.post('/forged-settings', (_req, res) =>
+      res.render('page', { ...forgedLocals.settings }),
     );
     app.use(
       (
@@ -229,17 +243,10 @@ describe('Theme view engine filesystem and configuration boundary', () => {
     expect(safe.status).toBe(200);
     expect(safe.text).toContain('<html');
     expect(safe.text).toContain('&lt;script&gt;');
-    const unsafe = await request(app)
-      .post('/direct')
-      .send({
-        layout: { filename: join(outside, 'secret.hbs') },
-        settings: { views: outside },
-      });
+    const unsafe = await request(app).post('/forged-layout');
     expect(unsafe.status).toBe(500);
     expect(unsafe.text).not.toContain('OUTSIDE_PRIVATE_CONTENT');
-    const settings = await request(app)
-      .post('/direct')
-      .send({ settings: { views: outside }, _messages: { title: 'Own view' } });
+    const settings = await request(app).post('/forged-settings');
     expect(settings.status).toBe(200);
     expect(settings.text).toContain('Own view');
     expect(settings.text).not.toContain('OUTSIDE_PRIVATE_CONTENT');

@@ -87,12 +87,14 @@ describe('Safe theme pages and realm-bound action links (e2e)', () => {
     expect(submitted.status).toBe(302);
     expect(send).toHaveBeenCalled();
     const html = send.mock.calls.at(-1)![3] as string;
-    const decodedHtml = html.replaceAll('&amp;', '&').replaceAll('&#x3D;', '=');
-    const rawLink = /href="([^"]*reset-password\?token=[^"]+)"/.exec(
-      decodedHtml,
+    const escapedLink = /href="([^"]*reset-password\?token(?:=|&#x3D;)[^"]+)"/.exec(
+      html,
     )?.[1];
-    expect(rawLink).toBeTruthy();
-    const link = new URL(rawLink!.replaceAll('&amp;', '&'));
+    expect(escapedLink).toBeTruthy();
+    // Decode the attribute once; `&amp;` goes last so it cannot form new entities.
+    const link = new URL(
+      escapedLink!.replaceAll('&#x3D;', '=').replaceAll('&amp;', '&'),
+    );
     const form = await browser.get(link.pathname + link.search);
     expect(form.status).toBe(200);
     expect(form.text).toContain('name="confirmPassword"');
