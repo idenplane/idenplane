@@ -9,7 +9,7 @@ test('silent OIDC reuses a real session and respects consent, assurance and the 
   const realm = `oidc-browser-${randomUUID().slice(0, 8)}`;
   const redirect = `${base}/oidc-test-second-callback`;
   const headers = { 'x-admin-api-key': key };
-  const password = 'Disposable-Browser-Test-2026!';
+  const password = 'Disposable-Browser-Test-2026!'; // dummy test password
   let created = false;
   function authorization(clientId: string, prompt?: string) {
     const verifier = randomBytes(48).toString('base64url'), state = randomUUID();
