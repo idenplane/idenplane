@@ -78,6 +78,8 @@ describe('TokensController', () => {
         lookupsBackedBy(mockPrisma as any) as any,
         mockClientSecrets as any,
         new ClientCertificateResolverRegistry(),
+        { enabled: false },
+        { retryAfter: async () => null, recordFailure: async () => {} } as any,
       ),
       new ClientCertificateSource(loadMtlsConfig({})),
     );

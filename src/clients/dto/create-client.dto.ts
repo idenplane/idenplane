@@ -5,12 +5,44 @@ import {
   IsEnum,
   IsInt,
   IsArray,
+  IsIn,
   MinLength,
   registerDecorator,
   ValidationOptions,
   ValidationArguments as _ValidationArguments,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import {
+  TOKEN_ENDPOINT_AUTH_METHODS,
+  isValidSanDns,
+  isValidSanEmail,
+  isValidSanIp,
+  isValidSanUri,
+  isValidSubjectDn,
+  type TokenEndpointAuthMethodValue,
+} from '../client-auth-settings.js';
+
+/** A string the predicate accepts. */
+function Satisfies(
+  predicate: (value: unknown) => boolean,
+  description: string,
+  validationOptions?: ValidationOptions,
+) {
+  return function (object: object, propertyName: string) {
+    registerDecorator({
+      name: 'satisfies',
+      target: (
+        object as { constructor: new (...args: unknown[]) => typeof object }
+      ).constructor,
+      propertyName,
+      options: {
+        message: `${propertyName} ${description}`,
+        ...validationOptions,
+      },
+      validator: { validate: (value: unknown) => predicate(value) },
+    });
+  };
+}
 
 /**
  * Rejects arrays that contain the bare wildcard origin '*'.
@@ -148,4 +180,56 @@ export class CreateClientDto {
   @IsOptional()
   @IsInt()
   stepUpCacheDuration?: number;
+
+  @ApiPropertyOptional({
+    enum: TOKEN_ENDPOINT_AUTH_METHODS,
+    nullable: true,
+    description:
+      'RFC 7591 token_endpoint_auth_method. null (default) infers it from clientType: client_secret_basic or client_secret_post for CONFIDENTIAL, none for PUBLIC. tls_client_auth and self_signed_tls_client_auth (RFC 8705) also need MTLS_ENABLED and the realm’s mtlsClientAuthEnabled.',
+  })
+  @IsOptional()
+  @IsIn(TOKEN_ENDPOINT_AUTH_METHODS)
+  tokenEndpointAuthMethod?: TokenEndpointAuthMethodValue | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description:
+      'tls_client_auth: the certificate subject, as an RFC 4514 string (most specific RDN first), e.g. "CN=device-1,O=Example,C=US". Compared as parsed RDNs.',
+  })
+  @IsOptional()
+  @Satisfies(isValidSubjectDn, 'must be an RFC 4514 distinguished name')
+  tlsClientAuthSubjectDn?: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'tls_client_auth: a dNSName the certificate must carry.',
+  })
+  @IsOptional()
+  @Satisfies(isValidSanDns, 'must be a DNS name without wildcards')
+  tlsClientAuthSanDns?: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description:
+      'tls_client_auth: a uniformResourceIdentifier the certificate must carry, e.g. a SPIFFE ID.',
+  })
+  @IsOptional()
+  @Satisfies(isValidSanUri, 'must be an absolute URI')
+  tlsClientAuthSanUri?: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'tls_client_auth: an iPAddress the certificate must carry.',
+  })
+  @IsOptional()
+  @Satisfies(isValidSanIp, 'must be an IPv4 or IPv6 address')
+  tlsClientAuthSanIp?: string | null;
+
+  @ApiPropertyOptional({
+    nullable: true,
+    description: 'tls_client_auth: an rfc822Name the certificate must carry.',
+  })
+  @IsOptional()
+  @Satisfies(isValidSanEmail, 'must be an email address')
+  tlsClientAuthSanEmail?: string | null;
 }

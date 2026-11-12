@@ -86,6 +86,82 @@ describe('WellKnownController', () => {
     });
   });
 
+  describe('RFC 8705 metadata', () => {
+    const mtlsRealm = { ...realm, mtlsClientAuthEnabled: true } as Realm;
+    const make = (mtls: { enabled: boolean; baseUrl?: string } | undefined) =>
+      new WellKnownController(
+        prisma as any,
+        mockJwkService as any,
+        mockCacheService as any,
+        mtls,
+      );
+
+    it('advertises the certificate methods and aliases when both switches are on', () => {
+      const result = make({
+        enabled: true,
+        baseUrl: 'https://mtls.example.com',
+      }).discovery(mtlsRealm) as Record<string, any>;
+      expect(result.token_endpoint_auth_methods_supported).toEqual([
+        'client_secret_post',
+        'client_secret_basic',
+        'none',
+        'tls_client_auth',
+        'self_signed_tls_client_auth',
+      ]);
+      expect(result.mtls_endpoint_aliases).toEqual({
+        token_endpoint:
+          'https://mtls.example.com/realms/test-realm/protocol/openid-connect/token',
+        introspection_endpoint:
+          'https://mtls.example.com/realms/test-realm/protocol/openid-connect/token/introspect',
+        revocation_endpoint:
+          'https://mtls.example.com/realms/test-realm/protocol/openid-connect/revoke',
+        userinfo_endpoint:
+          'https://mtls.example.com/realms/test-realm/protocol/openid-connect/userinfo',
+        device_authorization_endpoint:
+          'https://mtls.example.com/realms/test-realm/protocol/openid-connect/auth/device',
+      });
+      expect(result).not.toHaveProperty(
+        'tls_client_certificate_bound_access_tokens',
+      );
+    });
+
+    it('advertises the methods without aliases when MTLS_BASE_URL is unset', () => {
+      const result = make({ enabled: true }).discovery(mtlsRealm) as Record<
+        string,
+        any
+      >;
+      expect(result.token_endpoint_auth_methods_supported).toContain(
+        'tls_client_auth',
+      );
+      expect(result).not.toHaveProperty('mtls_endpoint_aliases');
+    });
+
+    it.each([
+      [
+        'MTLS_ENABLED off',
+        { enabled: false, baseUrl: 'https://m.example' },
+        true,
+      ],
+      [
+        'the realm flag off',
+        { enabled: true, baseUrl: 'https://m.example' },
+        false,
+      ],
+      ['no mTLS config', undefined, true],
+    ])('advertises nothing with %s', (_label, mtls, realmFlag) => {
+      const result = make(mtls).discovery({
+        ...realm,
+        mtlsClientAuthEnabled: realmFlag,
+      } as Realm) as Record<string, any>;
+      expect(result.token_endpoint_auth_methods_supported).toEqual([
+        'client_secret_post',
+        'client_secret_basic',
+        'none',
+      ]);
+      expect(result).not.toHaveProperty('mtls_endpoint_aliases');
+    });
+  });
+
   describe('certs', () => {
     it('should query active signing keys and return them as JWKS', async () => {
       const signingKeys = [

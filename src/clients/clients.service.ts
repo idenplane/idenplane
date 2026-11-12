@@ -13,6 +13,10 @@ import { CacheService } from '../cache/cache.service.js';
 import { CorsOriginService } from '../cors/cors-origin.service.js';
 import { CreateClientDto } from './dto/create-client.dto.js';
 import { UpdateClientDto } from './dto/update-client.dto.js';
+import {
+  clientAuthSettingsProblem,
+  type ClientAuthSettings,
+} from './client-auth-settings.js';
 
 const CLIENT_SELECT = {
   id: true,
@@ -32,9 +36,44 @@ const CLIENT_SELECT = {
   serviceAccountUserId: true,
   requiredAcr: true,
   stepUpCacheDuration: true,
+  tokenEndpointAuthMethod: true,
+  tlsClientAuthSubjectDn: true,
+  tlsClientAuthSanDns: true,
+  tlsClientAuthSanUri: true,
+  tlsClientAuthSanIp: true,
+  tlsClientAuthSanEmail: true,
   createdAt: true,
   updatedAt: true,
 } as const;
+
+/** The authentication fields a create or update may set. */
+const AUTH_FIELDS = [
+  'tokenEndpointAuthMethod',
+  'tlsClientAuthSubjectDn',
+  'tlsClientAuthSanDns',
+  'tlsClientAuthSanUri',
+  'tlsClientAuthSanIp',
+  'tlsClientAuthSanEmail',
+] as const;
+
+type AuthFieldValues = Pick<ClientAuthSettings, (typeof AUTH_FIELDS)[number]>;
+
+/** The DTO's authentication fields, `null` clearing one, absent ones left out. */
+function authFieldsFrom(dto: UpdateClientDto): Partial<AuthFieldValues> {
+  const values: Partial<AuthFieldValues> = {};
+  for (const field of AUTH_FIELDS) {
+    if (dto[field] !== undefined) {
+      (values as Record<string, unknown>)[field] =
+        dto[field] === '' ? null : dto[field];
+    }
+  }
+  return values;
+}
+
+function assertAuthSettings(settings: ClientAuthSettings): void {
+  const problem = clientAuthSettingsProblem(settings);
+  if (problem) throw new BadRequestException(problem);
+}
 
 @Injectable()
 export class ClientsService {
@@ -63,10 +102,26 @@ export class ClientsService {
     // convenience alias, then the default of CONFIDENTIAL.
     const clientType =
       dto.clientType ?? (dto.publicClient === true ? 'PUBLIC' : 'CONFIDENTIAL');
+    const auth = authFieldsFrom(dto);
+    assertAuthSettings({
+      clientType,
+      tokenEndpointAuthMethod: null,
+      tlsClientAuthSubjectDn: null,
+      tlsClientAuthSanDns: null,
+      tlsClientAuthSanUri: null,
+      tlsClientAuthSanIp: null,
+      tlsClientAuthSanEmail: null,
+      ...auth,
+    });
     let rawSecret: string | undefined;
     let secretHash: string | undefined;
 
-    if (clientType === 'CONFIDENTIAL') {
+    // A client that authenticates with a certificate gets no secret: it
+    // could never use one.
+    const usesSecret =
+      !auth.tokenEndpointAuthMethod ||
+      auth.tokenEndpointAuthMethod.startsWith('client_secret_');
+    if (clientType === 'CONFIDENTIAL' && usesSecret) {
       rawSecret = this.crypto.generateSecret();
       secretHash = await this.crypto.hashSecret(rawSecret);
     }
@@ -109,6 +164,7 @@ export class ClientsService {
         serviceAccountUserId,
         requiredAcr: dto.requiredAcr,
         stepUpCacheDuration: dto.stepUpCacheDuration,
+        ...auth,
       },
       select: CLIENT_SELECT,
     });
@@ -190,6 +246,31 @@ export class ClientsService {
     const existing = await this.findByClientId(realm, clientIdOrUuid);
     const resolvedClientId = existing.clientId;
 
+    // The settings after this update, from the row itself rather than the
+    // cached copy, which may predate these columns.
+    const auth = authFieldsFrom(dto);
+    if (Object.keys(auth).length > 0 || dto.clientType !== undefined) {
+      const stored = await this.prisma.client.findUnique({
+        where: { id: existing.id },
+        select: {
+          clientType: true,
+          tokenEndpointAuthMethod: true,
+          tlsClientAuthSubjectDn: true,
+          tlsClientAuthSanDns: true,
+          tlsClientAuthSanUri: true,
+          tlsClientAuthSanIp: true,
+          tlsClientAuthSanEmail: true,
+        },
+      });
+      if (!stored)
+        throw new NotFoundException(`Client '${clientIdOrUuid}' not found`);
+      assertAuthSettings({
+        ...stored,
+        ...(dto.clientType ? { clientType: dto.clientType } : {}),
+        ...auth,
+      });
+    }
+
     const updated = await this.prisma.client.update({
       where: {
         realmId_clientId: { realmId: realm.id, clientId: resolvedClientId },
@@ -208,6 +289,7 @@ export class ClientsService {
         backchannelLogoutSessionRequired: dto.backchannelLogoutSessionRequired,
         requiredAcr: dto.requiredAcr,
         stepUpCacheDuration: dto.stepUpCacheDuration,
+        ...auth,
       },
       select: CLIENT_SELECT,
     });

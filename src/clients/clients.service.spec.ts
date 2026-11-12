@@ -260,6 +260,94 @@ describe('ClientsService', () => {
     });
   });
 
+  describe('token endpoint authentication', () => {
+    it('creates a tls_client_auth client without a secret', async () => {
+      prisma.client.findUnique.mockResolvedValue(null);
+      prisma.client.create.mockResolvedValue(mockClient);
+      const result = await service.create(mockRealm, {
+        clientId: 'device',
+        tokenEndpointAuthMethod: 'tls_client_auth',
+        tlsClientAuthSubjectDn: 'CN=device,O=Example',
+      });
+      expect(cryptoService.generateSecret).not.toHaveBeenCalled();
+      expect(result).not.toHaveProperty('clientSecret');
+      expect(prisma.client.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            clientSecret: undefined,
+            tokenEndpointAuthMethod: 'tls_client_auth',
+            tlsClientAuthSubjectDn: 'CN=device,O=Example',
+          }),
+        }),
+      );
+    });
+
+    it('refuses tls_client_auth without a rule, and a PUBLIC certificate client', async () => {
+      prisma.client.findUnique.mockResolvedValue(null);
+      await expect(
+        service.create(mockRealm, {
+          clientId: 'device',
+          tokenEndpointAuthMethod: 'tls_client_auth',
+        }),
+      ).rejects.toThrow(/exactly one/);
+      await expect(
+        service.create(mockRealm, {
+          clientId: 'device',
+          clientType: 'PUBLIC',
+          tokenEndpointAuthMethod: 'self_signed_tls_client_auth',
+        }),
+      ).rejects.toThrow(/CONFIDENTIAL/);
+      expect(prisma.client.create).not.toHaveBeenCalled();
+    });
+
+    it('validates an update against the stored row merged with the change', async () => {
+      prisma.client.findUnique.mockImplementation(async (args: any) =>
+        args.select?.tokenEndpointAuthMethod
+          ? {
+              clientType: 'CONFIDENTIAL',
+              tokenEndpointAuthMethod: 'tls_client_auth',
+              tlsClientAuthSubjectDn: 'CN=a',
+              tlsClientAuthSanDns: null,
+              tlsClientAuthSanUri: null,
+              tlsClientAuthSanIp: null,
+              tlsClientAuthSanEmail: null,
+            }
+          : mockClient,
+      );
+      prisma.client.update.mockResolvedValue(mockClient);
+
+      // A second rule on top of the stored one.
+      await expect(
+        service.update(mockRealm, 'my-app', {
+          tlsClientAuthSanDns: 'a.example',
+        }),
+      ).rejects.toThrow(/exactly one/);
+      // Replacing the rule, clearing the old one with null.
+      await service.update(mockRealm, 'my-app', {
+        tlsClientAuthSubjectDn: null,
+        tlsClientAuthSanDns: 'a.example',
+      });
+      expect(prisma.client.update).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            tlsClientAuthSubjectDn: null,
+            tlsClientAuthSanDns: 'a.example',
+          }),
+        }),
+      );
+      // Switching to a secret method while the stored rule remains.
+      await expect(
+        service.update(mockRealm, 'my-app', {
+          tokenEndpointAuthMethod: 'client_secret_basic',
+        }),
+      ).rejects.toThrow(/only to tls_client_auth/);
+      // Switching to PUBLIC while the stored method needs CONFIDENTIAL.
+      await expect(
+        service.update(mockRealm, 'my-app', { clientType: 'PUBLIC' }),
+      ).rejects.toThrow(/CONFIDENTIAL/);
+    });
+  });
+
   describe('update', () => {
     it('should update and return the client', async () => {
       prisma.client.findUnique.mockResolvedValue(mockClient);

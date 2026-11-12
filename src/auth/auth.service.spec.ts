@@ -235,6 +235,8 @@ describe('AuthService', () => {
           ) => crypto.verifyPassword(client.clientSecret, presented),
         } as any,
         new ClientCertificateResolverRegistry(),
+        { enabled: false },
+        { retryAfter: async () => null, recordFailure: async () => {} } as any,
       ),
     );
   });
