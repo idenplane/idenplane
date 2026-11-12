@@ -422,6 +422,9 @@ model Session {
   satisfiedAcr String?  @map("satisfied_acr")
   /// The authentication methods (RFC 8176) actually performed for this session.
   amr          String[] @default([]) @map("amr")
+  /// When the user authenticated (OIDC `auth_time`). Refreshed ID tokens keep
+  /// it (OIDC Core §12.2); null for sessions created before it was recorded.
+  authTime     DateTime? @map("auth_time")
 
   createdAt DateTime @default(now()) @map("created_at")
   expiresAt DateTime @map("expires_at")

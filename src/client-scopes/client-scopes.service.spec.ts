@@ -466,6 +466,18 @@ describe('ClientScopesService', () => {
       });
     });
 
+    it('answers 409 when the scope is already assigned', async () => {
+      prisma.client.findUnique.mockResolvedValue(mockClient);
+      prisma.clientScope.findFirst.mockResolvedValue(mockScope);
+      prisma.clientOptionalScope.create.mockRejectedValue(
+        Object.assign(new Error('Unique constraint failed'), { code: 'P2002' }),
+      );
+
+      await expect(
+        service.assignOptionalScope(mockRealm, 'my-app', 'scope-1'),
+      ).rejects.toThrow(ConflictException);
+    });
+
     it('should throw NotFoundException when client does not exist', async () => {
       mockClientsService.findByClientId.mockRejectedValueOnce(new NotFoundException("Client not found"));
 

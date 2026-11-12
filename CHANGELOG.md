@@ -15,7 +15,7 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 - **Helm:** the chart now creates a `<release>-idenplane-keys` Secret with `ADMIN_API_KEY`, `ADMIN_PASSWORD`, `WEBHOOK_SECRET_KEY` and `WEBHOOK_ENCRYPTION_SALT`. Values you set under `secrets:` win; empty ones are generated on first install and kept on upgrades. Rendering fails on the old placeholders (`change-me-in-production`, `REPLACE_WITH_STRONG_SECRET`, the production values' database password), so pass real values or leave the keys empty.
 - **Helm with Argo CD, Flux or `helm template`:** these cannot read a stored Secret back, so generated keys would change on every render. Create the four keys yourself and set `secrets.existingSecret`.
 - **Helm chart 0.3.0 drops the Bitnami PostgreSQL and Redis sub-charts.** Their `docker.io/bitnami` images are no longer published, so the bundled database could not start. The chart now runs the official `postgres` (17, Debian) and `redis` images and reuses the existing PostgreSQL volume and password. Before upgrading, take a `pg_dump`, then delete the old StatefulSets with `--cascade=orphan` (see *Upgrading from chart 0.2.x* in the Kubernetes guide). The bundled database and Redis passwords are now generated when empty.
-- **Migrations:** one adds `auth_time` and `session_id` to authorization codes.
+- **Migrations:** two run on start. They add `auth_time` and `session_id` to authorization codes and `auth_time` to sessions; all are nullable.
 - **A client's `requiredAcr` now applies to a fresh sign-in too**, not only to SSO. A client that requires MFA sends a password-only user through TOTP enrolment (or their existing second factor) before it gets a code; a client that requires a passkey gets `access_denied` for a password sign-in. Check clients that set `requiredAcr`.
 - **The SSO cookie is `SameSite=Lax`** (was `Strict`), so applications on other sites see the session on the authorization and logout redirects. Custom themes should add `<input type="hidden" name="prompt" value="{{prompt}}">` to `login.hbs` and `register.hbs` for `prompt=consent` to survive the form; without it nothing breaks, consent just isn't forced.
 
@@ -60,6 +60,8 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
   - When its own client presents a used authorization code again (authenticated, or with the PKCE verifier) within five minutes of the code's expiry, the session the code created ends, so its refresh token stops working and its access token introspects as inactive (RFC 6749 §4.1.2).
   - Discovery no longer lists `backchannel_logout_uri`, a client registration parameter rather than provider metadata; `backchannel_logout_supported` already advertises the feature.
 - **The Helm chart did not start with its default values.** The default `ADMIN_API_KEY` was a placeholder the server refuses in production, and the chart never set `WEBHOOK_SECRET_KEY` or `WEBHOOK_ENCRYPTION_SALT`, which production requires. CI now installs the chart on a kind cluster, signs in with the generated password, upgrades it and runs `helm test`.
+- **ID tokens issued by a refresh keep the original `auth_time`** instead of the refresh time (OIDC Core §12.2). This was the last failure of the OpenID conformance basic plan.
+- Assigning a client scope that is already assigned answers 409 instead of 500.
 
 ## [0.6.0] - 2026-11-10
 
