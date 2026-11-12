@@ -220,6 +220,11 @@ model Realm {
   // GDPR account deletion
   deletionGracePeriodDays Int @default(14) @map("deletion_grace_period_days")
 
+  // RFC 8705 certificate client authentication (also needs MTLS_ENABLED)
+  mtlsClientAuthEnabled  Boolean @default(false) @map("mtls_client_auth_enabled")
+  /// Also trust the anchors in MTLS_GLOBAL_TRUST_ANCHORS_FILE.
+  mtlsTrustGlobalAnchors Boolean @default(false) @map("mtls_trust_global_anchors")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -264,6 +269,9 @@ model Realm {
   consentCategories           ConsentCategory[]
   themes                      Theme[]
   proxyApplications           ProxyApplication[]
+  clientTlsCertificates       ClientTlsCertificate[]
+  tlsTrustAnchors             RealmTlsTrustAnchor[]
+  tlsRevokedCertificates      TlsRevokedCertificate[]
 
   @@map("realms")
 }
@@ -332,6 +340,15 @@ enum ClientType {
   PUBLIC
 }
 
+/// RFC 7591 token_endpoint_auth_method.
+enum TokenEndpointAuthMethod {
+  client_secret_basic
+  client_secret_post
+  none
+  tls_client_auth
+  self_signed_tls_client_auth
+}
+
 model Client {
   id             String     @id @default(uuid())
   realmId        String     @map("realm_id")
@@ -364,6 +381,17 @@ model Client {
   // flow is refused (409 in the service; NoAction FK as the backstop).
   authFlowId String? @map("auth_flow_id")
 
+  /// null: inferred from clientType (client_secret_basic/post, or none).
+  tokenEndpointAuthMethod               TokenEndpointAuthMethod? @map("token_endpoint_auth_method")
+  /// RFC 8705 §2.1.2 tls_client_auth: exactly one of these is set.
+  tlsClientAuthSubjectDn                String?                  @map("tls_client_auth_subject_dn")
+  tlsClientAuthSanDns                   String?                  @map("tls_client_auth_san_dns")
+  tlsClientAuthSanUri                   String?                  @map("tls_client_auth_san_uri")
+  tlsClientAuthSanIp                    String?                  @map("tls_client_auth_san_ip")
+  tlsClientAuthSanEmail                 String?                  @map("tls_client_auth_san_email")
+  /// RFC 8705 §3 tls_client_certificate_bound_access_tokens (not used yet).
+  tlsClientCertificateBoundAccessTokens Boolean                  @default(false) @map("tls_client_certificate_bound_access_tokens")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -377,10 +405,67 @@ model Client {
   optionalScopes ClientOptionalScope[]
 
   proxyApplications ProxyApplication[]
+  tlsCertificates   ClientTlsCertificate[]
 
   @@unique([realmId, clientId])
   @@index([authFlowId])
   @@map("clients")
+}
+
+/// A certificate registered for self_signed_tls_client_auth (RFC 8705 §2.2).
+model ClientTlsCertificate {
+  id             String   @id @default(uuid())
+  clientId       String   @map("client_id")
+  realmId        String   @map("realm_id")
+  /// RFC 8705 x5t#S256: base64url SHA-256 of the DER, no padding.
+  x5tS256        String   @map("x5t_s256")
+  certificatePem String   @map("certificate_pem")
+  subject        String
+  notBefore      DateTime @map("not_before")
+  notAfter       DateTime @map("not_after")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  realm  Realm  @relation(fields: [realmId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, x5tS256])
+  @@index([realmId])
+  @@map("client_tls_certificates")
+}
+
+/// A CA the realm trusts to issue tls_client_auth client certificates.
+model RealmTlsTrustAnchor {
+  id             String   @id @default(uuid())
+  realmId        String   @map("realm_id")
+  certificatePem String   @map("certificate_pem")
+  subject        String
+  x5tS256        String   @map("x5t_s256")
+  notAfter       DateTime @map("not_after")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  realm Realm @relation(fields: [realmId], references: [id], onDelete: Cascade)
+
+  @@unique([realmId, x5tS256])
+  @@map("realm_tls_trust_anchors")
+}
+
+/// The realm's certificate deny-list: by x5t#S256, by issuer and serial, or both.
+model TlsRevokedCertificate {
+  id           String   @id @default(uuid())
+  realmId      String   @map("realm_id")
+  x5tS256      String?  @map("x5t_s256")
+  /// Canonical issuer DN (canonicalDn in src/client-auth/distinguished-name.ts).
+  issuerDn     String?  @map("issuer_dn")
+  /// Lower-case hex without leading zeros.
+  serialNumber String?  @map("serial_number")
+  reason       String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  realm Realm @relation(fields: [realmId], references: [id], onDelete: Cascade)
+
+  @@index([realmId, x5tS256])
+  @@index([realmId, serialNumber])
+  @@map("tls_revoked_certificates")
 }
 
 // ─── ROLES ────────────────────────────────────────────────
