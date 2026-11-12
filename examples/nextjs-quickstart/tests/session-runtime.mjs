@@ -26,6 +26,7 @@ let fetch = globalThis.fetch,
 let browser,
   fixture,
   cleanup = false,
+  failed = true,
   rootPool,
   sessionPool;
 const names = [tag + '-web', tag + '-app', tag + '-db'];
@@ -48,6 +49,27 @@ const docker = (args, opts) => {
   return r.stdout.trim();
 };
 const record = (name) => checks.push({ name, passed: true });
+/** Keeps every container's recent output next to the results of a failed run. */
+const saveContainerLogs = () => {
+  const listed = run([
+    'ps',
+    '-a',
+    '--filter',
+    'label=idenplane.validation=' + tag,
+    '--format',
+    '{{.Names}}',
+  ]);
+  for (const name of listed.stdout.split('\n').filter(Boolean)) {
+    const logs = run(['logs', '--tail', '300', name]);
+    fs.writeFileSync(
+      dir + '/container-' + name + '.log',
+      (logs.stdout + logs.stderr).replace(
+        /id_token_hint=[^&\s"\\]+/g,
+        'id_token_hint=REDACTED',
+      ),
+    );
+  }
+};
 const save = (error) =>
   fs.writeFileSync(
     dir + '/runtime-results.json',
@@ -405,6 +427,12 @@ async function ready(url) {
       });
     }
     async function login(page, username, password) {
+      const failedRequests = [];
+      const onFailed = (request) =>
+        failedRequests.push(
+          request.url().split('?')[0] + ' ' + request.failure()?.errorText,
+        );
+      page.on('requestfailed', onFailed);
       await page.goto(web + '/server-session');
       await page
         .getByRole('button', { name: 'Sign in securely', exact: true })
@@ -420,9 +448,15 @@ async function ready(url) {
           .waitFor({ timeout: 90000 });
       } catch (error) {
         throw new Error(
-          'Sign-in did not finish; the browser stopped at ' + page.url(),
+          'Sign-in did not finish; the browser stopped at ' +
+            page.url() +
+            (failedRequests.length
+              ? '; failed requests: ' + failedRequests.join(', ')
+              : ''),
           { cause: error },
         );
+      } finally {
+        page.off('requestfailed', onFailed);
       }
     }
     assert.equal((await api(web)).status, 401);
@@ -633,7 +667,9 @@ async function ready(url) {
     assert.equal(unconfirmed.status, 503);
     assert.equal(unconfirmed.headers.get('location'), null);
     record('database_outage_never_reports_successful_logout');
+    failed = false;
   } finally {
+    if (failed) saveContainerLogs();
     if (browser) await browser.close();
     if (fixture) await new Promise((r) => fixture.close(r));
     await sessionPool?.end();
