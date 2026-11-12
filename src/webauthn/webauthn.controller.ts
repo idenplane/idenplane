@@ -24,6 +24,7 @@ import { WebAuthnService } from './webauthn.service.js';
 import { LoginService } from '../login/login.service.js';
 import { OAuthService } from '../oauth/oauth.service.js';
 import { ConsentService } from '../consent/consent.service.js';
+import { SessionIssuer } from '../login/session-issuer.service.js';
 import {
   StartRegistrationDto,
   VerifyRegistrationDto,
@@ -40,7 +41,6 @@ import type {
   RegistrationResponseJSON,
   AuthenticationResponseJSON,
 } from '@simplewebauthn/server';
-import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 
 @ApiExcludeController()
 @Controller('realms/:realmName')
@@ -52,6 +52,7 @@ export class WebAuthnController {
     private readonly loginService: LoginService,
     private readonly oauthService: OAuthService,
     private readonly consentService: ConsentService,
+    private readonly sessionIssuer: SessionIssuer,
   ) {}
 
   private async getSessionUser(realm: Realm, req: Request) {
@@ -235,21 +236,7 @@ export class WebAuthnController {
     const authContext = { acr: ACR_WEBAUTHN, amr: ['hwk'] };
 
     // Create session (invalidating any pre-existing cookie to prevent session fixation)
-    const sessionToken = await this.loginService.createLoginSession(
-      realm,
-      user,
-      resolveClientIp(req),
-      req.headers['user-agent'],
-      req.cookies?.[SESSION_COOKIE] as string | undefined,
-      authContext,
-    );
-
-    res.cookie(SESSION_COOKIE, sessionToken, {
-      httpOnly: true,
-      secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
-      sameSite: 'lax',
-      path: `/realms/${realm.name}`,
-    });
+    await this.sessionIssuer.issue(realm, user, authContext, req, res);
 
     // Determine redirect
     if (!oauthParams['client_id']) {
