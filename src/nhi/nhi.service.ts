@@ -58,7 +58,7 @@ const NHI_CREDENTIAL_SELECT = {
   keyPrefix: true,
   certificatePem: true,
   certificateChain: true,
-  privateKeyPem: true,
+  // privateKeyPem is never returned: it is a secret the caller already holds.
   jwtSigningAlgorithm: true,
   jwtIssuer: true,
   jwtAudience: true,
@@ -268,7 +268,10 @@ export class NhiService {
         keyHash,
         certificatePem: dto.certificatePem,
         certificateChain: dto.certificateChain,
-        privateKeyPem: dto.privateKeyPem,
+        // Encrypted at rest; nothing reads it back.
+        privateKeyPem: dto.privateKeyPem
+          ? this.crypto.encrypt(dto.privateKeyPem)
+          : undefined,
         jwtSigningAlgorithm: dto.jwtSigningAlgorithm,
         jwtIssuer: dto.jwtIssuer,
         jwtAudience: dto.jwtAudience,

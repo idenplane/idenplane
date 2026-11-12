@@ -70,22 +70,25 @@ export class TokensService {
       const sub = payload.sub;
       let username: string | undefined;
       const active = true;
-      if (sub) {
-        const user = await this.lookups.userProfile(sub);
-        if (!user) {
-          // User was deleted after token was issued
-          return { active: false };
-        }
-        if (!user.enabled) {
-          // User is disabled
-          return { active: false };
-        }
-        username = user.username;
-      }
-
       // azp (authorized party) identifies the client the token was issued to.
       // RFC 7662 / OIDC clients rely on it (and client_id) to verify audience.
       const azp = payload['azp'] as string | undefined;
+
+      if (sub) {
+        const user = await this.lookups.userProfile(sub);
+        if (user) {
+          if (!user.enabled) return { active: false };
+          username = user.username;
+        } else {
+          // A client_credentials token of a client without a service account
+          // has the client as its subject. It is active while that client
+          // exists and is enabled; a deleted user's token is not.
+          const client = azp ? await this.lookups.client(realm.id, azp) : null;
+          if (!client || client.id !== sub || !client.enabled) {
+            return { active: false };
+          }
+        }
+      }
 
       return {
         active,

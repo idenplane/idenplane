@@ -27,6 +27,45 @@ import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
 import { RateLimitGuard, RateLimitBy } from '../rate-limit/rate-limit.guard.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
+import { parseBasicClientCredentials } from '../common/utils/basic-client-auth.util.js';
+
+/**
+ * Moves HTTP Basic client credentials (RFC 6749 §2.3.1) into the request
+ * parameters the grant handlers read. A request may use only one way of
+ * authenticating the client, so Basic together with a `client_secret`
+ * parameter, or with a different `client_id`, is rejected.
+ */
+function withBasicClientCredentials(
+  body: Record<string, string>,
+  authorization: string | undefined,
+): Record<string, string> {
+  const basic = parseBasicClientCredentials(authorization);
+  if (basic === null) return body;
+  if (basic === 'malformed') {
+    throw new OAuthTokenError(
+      'invalid_client',
+      'Malformed HTTP Basic client credentials',
+      HttpStatus.UNAUTHORIZED,
+    );
+  }
+  if (body['client_secret'] !== undefined) {
+    throw new OAuthTokenError(
+      'invalid_request',
+      'Use either HTTP Basic or client_secret, not both',
+    );
+  }
+  if (body['client_id'] !== undefined && body['client_id'] !== basic.clientId) {
+    throw new OAuthTokenError(
+      'invalid_request',
+      'client_id does not match the HTTP Basic credentials',
+    );
+  }
+  return {
+    ...body,
+    client_id: basic.clientId,
+    client_secret: basic.clientSecret,
+  };
+}
 
 @ApiTags('Authentication')
 @Controller('realms/:realmName/protocol/openid-connect')
@@ -75,7 +114,7 @@ export class AuthController {
     try {
       return await this.authService.handleTokenRequest(
         realm,
-        body,
+        withBasicClientCredentials(body, req.headers['authorization']),
         resolveClientIp(req),
         req.headers['user-agent'],
       );
