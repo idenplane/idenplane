@@ -22,6 +22,10 @@ diagnose() {
   kubectl get pods -o wide || true
   kubectl describe pods -l "app.kubernetes.io/instance=$RELEASE" | tail -n 60 || true
   kubectl logs -l "app.kubernetes.io/name=idenplane,app.kubernetes.io/instance=$RELEASE" --tail=120 || true
+  for component in postgresql redis; do
+    kubectl logs -l "app.kubernetes.io/component=$component,app.kubernetes.io/instance=$RELEASE" --tail=60 --all-containers || true
+    kubectl logs -l "app.kubernetes.io/component=$component,app.kubernetes.io/instance=$RELEASE" --tail=60 --previous || true
+  done
 }
 
 keys() {
