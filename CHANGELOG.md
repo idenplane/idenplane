@@ -17,6 +17,7 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 - **Internal refactor of the sign-in code, no behaviour change.** The password sign-in's risk, email-verification and password-expiry checks (`PrimaryAuthGatesService`), the second-factor check (`SecondFactorVerifier`), what follows a completed sign-in (`PostAuthService`) and SSO session creation (`SessionIssuer`) are now separate services. `SessionIssuer` is the only code that creates an SSO session; a lint rule enforces it. New end-to-end tests pin the password, TOTP, recovery-code, SMS and passkey sign-ins, consent, the account gates, risk, single sign-on and `prompt` handling.
 
 ### Fixed
+- **`auth_time` no longer moves to the moment of consent.** After a fresh sign-in followed by the consent screen, the ID token's `auth_time` was the time the user clicked Allow. It is now the time they signed in, so `max_age` checks are exact.
 - **Passkeys without a signature counter can sign in.** Most synced passkeys always report a counter of 0, which was rejected as a rollback; a counter of 0 is now accepted while it stays 0 (WebAuthn §6.1.1).
 - **Passkey sign-in follows the password sign-in.** It validates the authorization request before creating a session, records a `LOGIN` event, honours `prompt=consent` and the client's required level through the same decision code, keeps all OAuth parameters, and checks email verification before counting the use of the passkey.
 - **"Remember me" survives the second factor.** It was dropped when the user had TOTP or SMS enrolled.
