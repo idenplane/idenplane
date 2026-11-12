@@ -50,6 +50,8 @@ const peer = (
               issuerCertificate: detailed(options.issuers ?? []),
             }
           : {},
+      writable: true,
+      configurable: true,
     },
   }) as TLSSocket;
 };
@@ -375,5 +377,25 @@ describe('ClientCertificateSource', () => {
     const first = src.fromRequest(req);
     expect(src.fromRequest(req)).toBe(first);
     expect(spy).toHaveBeenCalledTimes(1);
+  });
+
+  it('reads the detailed chain before the X509Certificate', () => {
+    // On Node 24, getPeerCertificate(true) stops linking the client's
+    // intermediates once getPeerX509Certificate() has run (real sockets;
+    // covered end to end by test/mtls-client-auth.e2e-spec.ts).
+    const calls: string[] = [];
+    const socket = peer(leaf);
+    const detailed = socket.getPeerCertificate.bind(socket);
+    const x509 = socket.getPeerX509Certificate.bind(socket);
+    Object.defineProperties(socket, {
+      getPeerCertificate: {
+        value: (full: boolean) => (calls.push('detailed'), detailed(full)),
+      },
+      getPeerX509Certificate: {
+        value: () => (calls.push('x509'), x509()),
+      },
+    });
+    source().fromRequest(request({}, socket));
+    expect(calls).toEqual(['detailed', 'x509']);
   });
 });
