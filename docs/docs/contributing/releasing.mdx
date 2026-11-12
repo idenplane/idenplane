@@ -6,7 +6,7 @@ description: How each Idenplane artifact is published — the tags that trigger 
 
 # Releasing
 
-Five artifacts publish to four registries, each from its own tag. Nothing publishes from a branch push except the Docker `latest` image.
+Six artifacts publish to four registries, each from its own tag. Nothing publishes from a branch push except the Docker `latest` image.
 
 ## What publishes, and from what
 
@@ -16,6 +16,7 @@ Five artifacts publish to four registries, each from its own tag. Nothing publis
 | Docker image `:x.y.z` | Docker Hub | tag `v*` |
 | `idenplane-java-core` | Maven Central | tag `java-v*` |
 | `idenplane-mcp` | npm | tag `mcp-v*` |
+| `idenplane-sdk` (JavaScript SDK) | npm | tag `sdk-v*` |
 | Android SDK | Maven Central | tag `android-v*` |
 
 Merging `dev` → `main` therefore **does** update the Docker `latest` tag that the quickstart docs tell people to pull. It does **not** touch Maven Central or npm — those need an explicit tag.
@@ -84,6 +85,18 @@ git push origin mcp-v1.2.0
 ```
 
 Publishes straight to npm — **no validated stage**, no second chance. npm allows unpublishing within 72 hours, and only if nothing depends on the version yet.
+
+## JavaScript SDK (`sdk-v*`)
+
+```bash
+cd packages/idenplane-js
+npm version 1.1.0 --no-git-tag-version   # updates package.json and the lockfile
+# merge to main, then:
+git tag -a sdk-v1.1.0 -m "idenplane-sdk 1.1.0"
+git push origin sdk-v1.1.0
+```
+
+`publish-sdk.yml` checks the tag against `package.json`, typechecks, tests and builds before `npm publish`. As with the MCP server there is no validated stage.
 
 ## Choosing a version number
 

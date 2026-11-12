@@ -9,6 +9,10 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+## [0.7.0] - 2026-11-12
+
+A security and correctness release. It closes vulnerabilities in LDAP federation, database TLS during migrations, the default admin password, device certificates, verification links, token claims, flow assignment and passkey sign-in; makes a fresh sign-in enforce a client's required authentication level; fixes every OpenID Connect failure the OpenID Foundation conformance suite's basic plan reported against 0.6.0; makes the Helm chart start with its defaults on official PostgreSQL and Redis images; gives Docker Compose a setup helper with unique secrets; and adds a production checklist. Read *Before you upgrade*: several defaults changed on purpose.
+
 **Before you upgrade:**
 - **First production start needs `ADMIN_PASSWORD`.** With `NODE_ENV=production` (the Docker image default), creating the initial admin now fails when `ADMIN_PASSWORD` is missing, `admin`, a documented placeholder, or shorter than 12 characters. Existing databases already have their admin and are not affected.
 - **Root `docker-compose.yml` no longer has a built-in database password.** It reads `POSTGRES_PASSWORD` from `.env`. For an existing volume created with the old file, add `POSTGRES_PASSWORD=idenplane` to `.env` (changing the value does not rotate the password inside an existing volume). Ports 3000 and 5432 now listen on localhost only.
@@ -324,7 +328,9 @@ The foundation release: core IAM server with OAuth, OIDC, SAML, MFA, and the ini
 - `removeUserRealmRoles` returning 200 instead of 204
 - Login error messages never displayed on failed login
 
-[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.5.0...HEAD
+[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.7.0...HEAD
+[0.7.0]: https://github.com/idenplane/idenplane/releases/tag/v0.7.0
+[0.6.0]: https://github.com/idenplane/idenplane/releases/tag/v0.6.0
 [0.5.0]: https://github.com/idenplane/idenplane/releases/tag/v0.5.0
 [0.4.0]: https://github.com/idenplane/idenplane/releases/tag/v0.4.0
 [0.3.0]: https://github.com/idenplane/idenplane/releases/tag/v0.3.0
