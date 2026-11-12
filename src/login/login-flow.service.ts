@@ -58,6 +58,7 @@ export class LoginFlowService {
     oauthParams: Record<string, string>,
     primaryAmr: string[],
     res: Response,
+    rememberMe = false,
   ): Promise<void> {
     const challengeToken = await this.mfaService.createMfaChallenge(
       user.id,
@@ -65,6 +66,7 @@ export class LoginFlowService {
       oauthParams,
       undefined,
       primaryAmr,
+      rememberMe,
     );
     res.cookie(MFA_CHALLENGE_COOKIE, challengeToken, {
       httpOnly: true,
@@ -120,6 +122,7 @@ export class LoginFlowService {
         oauthParams,
         options.primaryAmr,
         res,
+        !!options.rememberMe,
       );
     }
 

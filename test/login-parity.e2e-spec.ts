@@ -238,6 +238,22 @@ describe('Login parity (e2e)', () => {
     expect(browser.raw.get('IDENPLANE_SESSION')).toMatch(/Max-Age=2592000/);
   });
 
+  it('keeps "remember me" through the second factor', async () => {
+    const browser = new Browser(app);
+    await signIn(browser, {
+      username: users.recovery.username,
+      form: { rememberMe: 'on' },
+    });
+
+    // A recovery code: a fresh TOTP code could be refused as a replay.
+    const res = await answerSecondFactor(browser, {
+      recoveryCode: users.recovery.recovery![1],
+    });
+
+    codeFrom(res);
+    expect(browser.raw.get('IDENPLANE_SESSION')).toMatch(/Max-Age=2592000/);
+  });
+
   it('opens the account page when there is no OAuth request', async () => {
     const browser = new Browser(app);
     const res = await signIn(browser, { query: null });
@@ -294,10 +310,10 @@ describe('Login parity (e2e)', () => {
       recoveryCode: 'not-a-recovery-code',
     });
     expect(wrong.status).toBe(302);
-    // With brute-force protection off (the default) the remaining-attempts
-    // count is -1, so even a first wrong code reads "too many attempts".
+    // With brute-force protection off (the default) there is no attempt
+    // limit to warn about: a wrong code just says so.
     expect(wrong.headers['location']).toBe(
-      `/realms/${REALM}/totp?error=${encodeURIComponent('Too many failed attempts. Please try again later.')}`,
+      `/realms/${REALM}/totp?error=${encodeURIComponent('Invalid code. Please try again.')}`,
     );
     expect(browser.jar.has('IDENPLANE_MFA_CHALLENGE')).toBe(true);
 
@@ -481,9 +497,9 @@ describe('Login parity (e2e)', () => {
     expect(spies.profile).toHaveBeenCalledTimes(1);
   });
 
-  it('runs the risk step-up before the client policy', async () => {
-    // The usual path refuses a password sign-in for a passkey-only client;
-    // the risk step-up asks for the second factor first.
+  it('applies the client policy before a risk step-up', async () => {
+    // A passkey-only client cannot be satisfied by password + TOTP, so the
+    // sign-in is refused instead of sending the user through TOTP first.
     await setClient({ requiredAcr: ACR_WEBAUTHN });
     await setRealm({ adaptiveAuthEnabled: true });
     mockRisk('STEP_UP');
@@ -492,7 +508,8 @@ describe('Login parity (e2e)', () => {
       username: users.totp.username,
     });
 
-    expect(res.headers['location']).toBe(`/realms/${REALM}/totp`);
+    const url = new URL(res.headers['location'] as string);
+    expect(url.searchParams.get('error')).toBe('access_denied');
   });
 
   it('lets a risky sign-in through when there is no factor to step up with', async () => {
