@@ -1,13 +1,7 @@
-import { join } from 'path';
 import type { INestApplication } from '@nestjs/common';
-import request from 'supertest';
 import type { App } from 'supertest/types';
 import { createTestApp, type SeededRealm, type TestContext } from './setup';
-import { registerHandlebarsHelpers } from '../src/theme/handlebars-helpers.js';
-import {
-  createThemeViewEngine,
-  type ThemeViewEngine,
-} from '../src/theme/theme-view-engine.js';
+import { Browser, csrfFrom, useThemeViews } from './helpers/browser';
 import { RiskAssessmentService } from '../src/risk-assessment/risk-assessment.service.js';
 
 /**
@@ -31,67 +25,6 @@ describe('Login hardening (e2e)', () => {
     state: 'xyz',
     ...extra,
   });
-
-  /** Auth cookies are `Secure`; track them by hand, as a browser would. */
-  class Browser {
-    readonly jar = new Map<string, string>();
-    readonly raw = new Map<string, string>();
-
-    private header(): string {
-      return [...this.jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    }
-
-    private store(res: request.Response): request.Response {
-      const cookies = res.headers['set-cookie'] as unknown as
-        string[] | undefined;
-      for (const cookie of cookies ?? []) {
-        const [pair] = cookie.split(';');
-        const eq = pair.indexOf('=');
-        const name = pair.slice(0, eq).trim();
-        const value = decodeURIComponent(pair.slice(eq + 1).trim());
-        const cleared = !value || /expires=thu, 01 jan 1970/i.test(cookie);
-        if (cleared) this.jar.delete(name);
-        else {
-          this.jar.set(name, value);
-          this.raw.set(name, cookie);
-        }
-      }
-      return res;
-    }
-
-    async get(url: string) {
-      return this.store(
-        await request(app.getHttpServer())
-          .get(url)
-          .set('Cookie', this.header()),
-      );
-    }
-
-    async post(url: string, form: Record<string, string>) {
-      return this.store(
-        await request(app.getHttpServer())
-          .post(url)
-          .set('Cookie', this.header())
-          .type('form')
-          .send(form),
-      );
-    }
-
-    async postJson(url: string, body: Record<string, unknown>) {
-      return this.store(
-        await request(app.getHttpServer())
-          .post(url)
-          .set('Cookie', this.header())
-          .send(body),
-      );
-    }
-  }
-
-  const csrfFrom = (html: string) => {
-    const match = /name="_csrf" value="([^"]+)"/.exec(html);
-    if (!match) throw new Error('no CSRF token in page');
-    return match[1];
-  };
 
   /** Opens the login page as /auth would, then submits the form. */
   const signIn = async (
@@ -123,14 +56,7 @@ describe('Login hardening (e2e)', () => {
   beforeAll(async () => {
     ctx = await createTestApp();
     app = ctx.app;
-    const express = app.getHttpAdapter().getInstance() as {
-      set: (key: string, value: string) => void;
-      engine: (extension: string, engine: ThemeViewEngine) => void;
-    };
-    express.set('views', join(process.cwd(), 'themes'));
-    express.engine('hbs', createThemeViewEngine(join(process.cwd(), 'themes')));
-    express.set('view engine', 'hbs');
-    registerHandlebarsHelpers();
+    useThemeViews(app);
     seeded = await ctx.seedTestRealm(REALM);
   }, 30_000);
 
@@ -149,7 +75,7 @@ describe('Login hardening (e2e)', () => {
   });
 
   it('sets the SSO cookie SameSite=Lax so other sites reach the session', async () => {
-    const browser = new Browser();
+    const browser = new Browser(app);
     const res = await signIn(browser);
 
     expect(res.status).toBe(302);
@@ -159,7 +85,7 @@ describe('Login hardening (e2e)', () => {
   it('enrols MFA before issuing a code to a client that requires it', async () => {
     await setClient({ requiredAcr: 'urn:idenplane:acr:mfa' });
 
-    const res = await signIn(new Browser());
+    const res = await signIn(new Browser(app));
 
     expect(res.status).toBe(302);
     expect(res.headers['location']).toContain(
@@ -171,7 +97,7 @@ describe('Login hardening (e2e)', () => {
   it('refuses a password sign-in for a client that requires a passkey', async () => {
     await setClient({ requiredAcr: 'urn:idenplane:acr:webauthn' });
 
-    const res = await signIn(new Browser());
+    const res = await signIn(new Browser(app));
 
     const url = new URL(res.headers['location'] as string);
     expect(`${url.origin}${url.pathname}`).toBe(REDIRECT_URI);
@@ -181,7 +107,7 @@ describe('Login hardening (e2e)', () => {
   });
 
   it('asks for consent on a fresh sign-in with prompt=consent', async () => {
-    const res = await signIn(new Browser(), { prompt: 'consent' });
+    const res = await signIn(new Browser(app), { prompt: 'consent' });
 
     expect(res.status).toBe(302);
     expect(res.headers['location']).toContain(`/realms/${REALM}/consent?req=`);
@@ -201,7 +127,7 @@ describe('Login hardening (e2e)', () => {
       riskScore: 70,
     } as never);
 
-    const res = await signIn(new Browser());
+    const res = await signIn(new Browser(app));
 
     expect(res.status).toBe(302);
     expect(res.headers['location']).toContain(`/realms/${REALM}/login?`);
@@ -218,7 +144,7 @@ describe('Login hardening (e2e)', () => {
       where: { id: seeded.realm.id },
       data: { webAuthnEnabled: true },
     });
-    const browser = new Browser();
+    const browser = new Browser(app);
     const options = await browser.postJson(
       `/realms/${REALM}/webauthn/authenticate/options`,
       {},
@@ -227,7 +153,7 @@ describe('Login hardening (e2e)', () => {
     expect(browser.raw.get('IDENPLANE_WEBAUTHN_LOGIN')).toMatch(/HttpOnly/i);
 
     // Another browser has no handle, so it cannot use (or consume) it.
-    const other = await new Browser().postJson(
+    const other = await new Browser(app).postJson(
       `/realms/${REALM}/webauthn/authenticate/verify`,
       { response: { id: 'x', rawId: 'x', type: 'public-key', response: {} } },
     );

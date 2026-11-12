@@ -1,14 +1,9 @@
-import { join } from 'path';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import * as OTPAuth from 'otpauth';
 import { createTestApp, type SeededRealm, type TestContext } from './setup';
-import { registerHandlebarsHelpers } from '../src/theme/handlebars-helpers.js';
-import {
-  createThemeViewEngine,
-  type ThemeViewEngine,
-} from '../src/theme/theme-view-engine.js';
+import { Browser, csrfFrom, useThemeViews } from './helpers/browser';
 import { CryptoService } from '../src/crypto/crypto.service.js';
 
 /**
@@ -32,56 +27,6 @@ describe('Required MFA enforcement (e2e)', () => {
     state: 'xyz',
   };
   const authorizeUrl = `/realms/${REALM}/protocol/openid-connect/auth?${new URLSearchParams(oauthQuery).toString()}`;
-
-  /**
-   * Auth cookies are `Secure`, which supertest's agent will not send over
-   * http — so cookies are tracked by hand, the way a browser would.
-   */
-  class Browser {
-    readonly jar = new Map<string, string>();
-
-    private header(): string {
-      return [...this.jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    }
-
-    private store(res: request.Response): request.Response {
-      const raw = res.headers['set-cookie'] as unknown as string[] | undefined;
-      for (const cookie of raw ?? []) {
-        const [pair] = cookie.split(';');
-        const eq = pair.indexOf('=');
-        const name = pair.slice(0, eq).trim();
-        const value = decodeURIComponent(pair.slice(eq + 1).trim());
-        const cleared = !value || /expires=thu, 01 jan 1970/i.test(cookie);
-        if (cleared) this.jar.delete(name);
-        else this.jar.set(name, value);
-      }
-      return res;
-    }
-
-    async get(url: string) {
-      return this.store(
-        await request(app.getHttpServer())
-          .get(url)
-          .set('Cookie', this.header()),
-      );
-    }
-
-    async post(url: string, form: Record<string, string>) {
-      return this.store(
-        await request(app.getHttpServer())
-          .post(url)
-          .set('Cookie', this.header())
-          .type('form')
-          .send(form),
-      );
-    }
-  }
-
-  const csrfFrom = (html: string) => {
-    const match = /name="_csrf" value="([^"]+)"/.exec(html);
-    if (!match) throw new Error('no CSRF token in page');
-    return match[1];
-  };
 
   const codeFrom = (location: string) => {
     const url = new URL(location);
@@ -126,15 +71,7 @@ describe('Required MFA enforcement (e2e)', () => {
   beforeAll(async () => {
     ctx = await createTestApp();
     app = ctx.app;
-    // The shared test app has no view engine; the browser pages need one.
-    const express = app.getHttpAdapter().getInstance() as {
-      set: (key: string, value: string) => void;
-      engine: (extension: string, engine: ThemeViewEngine) => void;
-    };
-    express.set('views', join(process.cwd(), 'themes'));
-    express.engine('hbs', createThemeViewEngine(join(process.cwd(), 'themes')));
-    express.set('view engine', 'hbs');
-    registerHandlebarsHelpers();
+    useThemeViews(app);
 
     seeded = await ctx.seedTestRealm(REALM);
     await ctx.prisma.realm.update({
@@ -149,7 +86,7 @@ describe('Required MFA enforcement (e2e)', () => {
   });
 
   it('pauses an un-enrolled sign-in without creating an SSO session', async () => {
-    const browser = new Browser();
+    const browser = new Browser(app);
     const res = await signIn(browser);
 
     expect(res.status).toBe(302);
@@ -183,7 +120,7 @@ describe('Required MFA enforcement (e2e)', () => {
       },
     });
 
-    const browser = new Browser();
+    const browser = new Browser(app);
     browser.jar.set('IDENPLANE_SESSION', token);
 
     const authorize = await browser.get(authorizeUrl);
@@ -200,7 +137,7 @@ describe('Required MFA enforcement (e2e)', () => {
   });
 
   it('enrols TOTP, then resumes the original authorization at the MFA level', async () => {
-    const browser = new Browser();
+    const browser = new Browser(app);
     await signIn(browser);
 
     const setupPage = await browser.get(`/realms/${REALM}/account/totp-setup`);
@@ -264,7 +201,7 @@ describe('Required MFA enforcement (e2e)', () => {
   });
 
   it('does not let the user turn off the required second factor', async () => {
-    const browser = new Browser();
+    const browser = new Browser(app);
     const challenge = await signIn(browser);
     expect(challenge.headers['location']).toBe(`/realms/${REALM}/totp`);
     // Drop the challenge: this only checks the disable endpoint, which needs a

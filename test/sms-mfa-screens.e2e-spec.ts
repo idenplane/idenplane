@@ -1,4 +1,3 @@
-import { join } from 'path';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import type { App } from 'supertest/types';
@@ -8,11 +7,7 @@ import {
   type SeededRealm,
   type TestContext,
 } from './setup';
-import { registerHandlebarsHelpers } from '../src/theme/handlebars-helpers.js';
-import {
-  createThemeViewEngine,
-  type ThemeViewEngine,
-} from '../src/theme/theme-view-engine.js';
+import { Browser, csrfFrom, useThemeViews } from './helpers/browser';
 import { SmsService } from '../src/sms/sms.service.js';
 
 /**
@@ -41,62 +36,6 @@ describe('SMS MFA screens (e2e)', () => {
 
   const lastCode = () => /^(\d+)/.exec(sent[sent.length - 1].message)![1];
   const wrongCode = (code: string) => (code === '000000' ? '111111' : '000000');
-
-  /** Auth cookies are `Secure`, so they are tracked by hand like a browser. */
-  class Browser {
-    readonly jar = new Map<string, string>();
-
-    private header(): string {
-      return [...this.jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    }
-
-    private store(res: request.Response): request.Response {
-      const raw = res.headers['set-cookie'] as unknown as string[] | undefined;
-      for (const cookie of raw ?? []) {
-        const [pair] = cookie.split(';');
-        const eq = pair.indexOf('=');
-        const name = pair.slice(0, eq).trim();
-        const value = decodeURIComponent(pair.slice(eq + 1).trim());
-        const cleared = !value || /expires=thu, 01 jan 1970/i.test(cookie);
-        if (cleared) this.jar.delete(name);
-        else this.jar.set(name, value);
-      }
-      return res;
-    }
-
-    async get(url: string) {
-      return this.store(
-        await request(app.getHttpServer())
-          .get(url)
-          .set('Cookie', this.header()),
-      );
-    }
-
-    async post(url: string, form: Record<string, string>) {
-      return this.store(
-        await request(app.getHttpServer())
-          .post(url)
-          .set('Cookie', this.header())
-          .type('form')
-          .send(form),
-      );
-    }
-
-    async postJson(url: string, body: Record<string, string>) {
-      return this.store(
-        await request(app.getHttpServer())
-          .post(url)
-          .set('Cookie', this.header())
-          .send(body),
-      );
-    }
-  }
-
-  const csrfFrom = (html: string) => {
-    const match = /name="_csrf" value="([^"]+)"/.exec(html);
-    if (!match) throw new Error('no CSRF token in page');
-    return match[1];
-  };
 
   const codeFrom = (location: string) => {
     const url = new URL(location);
@@ -153,14 +92,7 @@ describe('SMS MFA screens (e2e)', () => {
   beforeAll(async () => {
     ctx = await createTestApp();
     app = ctx.app;
-    const express = app.getHttpAdapter().getInstance() as {
-      set: (key: string, value: string) => void;
-      engine: (extension: string, engine: ThemeViewEngine) => void;
-    };
-    express.set('views', join(process.cwd(), 'themes'));
-    express.engine('hbs', createThemeViewEngine(join(process.cwd(), 'themes')));
-    express.set('view engine', 'hbs');
-    registerHandlebarsHelpers();
+    useThemeViews(app);
 
     seeded = await ctx.seedTestRealm(REALM);
     await ctx.prisma.realm.update({
@@ -193,7 +125,7 @@ describe('SMS MFA screens (e2e)', () => {
   });
 
   it('lets a required-MFA user enrol a phone instead of an app, then resumes sign-in at the MFA level', async () => {
-    const browser = new Browser();
+    const browser = new Browser(app);
     await signIn(browser);
 
     const totpSetup = await browser.get(`/realms/${REALM}/account/totp-setup`);
@@ -265,7 +197,7 @@ describe('SMS MFA screens (e2e)', () => {
   });
 
   it('signs in with a texted code, and keeps a wrong code on the SMS form', async () => {
-    const browser = new Browser();
+    const browser = new Browser(app);
     const smsPage = await signInAndTextCode(browser);
     expect(smsPage.text).toContain('name="smsCode"');
     // SMS-only user: no authenticator field.
@@ -293,11 +225,11 @@ describe('SMS MFA screens (e2e)', () => {
   });
 
   it('rejects a code that was texted for a different sign-in', async () => {
-    const first = new Browser();
+    const first = new Browser(app);
     await signInAndTextCode(first);
     const codeForFirst = lastCode();
 
-    const second = new Browser();
+    const second = new Browser(app);
     await signIn(second);
     const page = await second.get(`/realms/${REALM}/totp?method=sms`);
     const res = await second.post(`/realms/${REALM}/totp`, {

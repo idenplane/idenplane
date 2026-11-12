@@ -1,13 +1,8 @@
-import { join } from 'path';
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import { createTestApp, type SeededRealm, type TestContext } from './setup';
-import { registerHandlebarsHelpers } from '../src/theme/handlebars-helpers.js';
-import {
-  createThemeViewEngine,
-  type ThemeViewEngine,
-} from '../src/theme/theme-view-engine.js';
+import { Browser, csrfFrom, useThemeViews } from './helpers/browser';
 
 /**
  * Behaviour the OpenID conformance suite (oidcc-basic) checks, driven through
@@ -31,53 +26,6 @@ describe('OIDC conformance behaviour (e2e)', () => {
     state: 'xyz',
     ...extra,
   });
-
-  /** Auth cookies are `Secure`; track them by hand, as a browser would. */
-  class Browser {
-    readonly jar = new Map<string, string>();
-
-    private header(): string {
-      return [...this.jar].map(([k, v]) => `${k}=${v}`).join('; ');
-    }
-
-    private store(res: request.Response): request.Response {
-      const raw = res.headers['set-cookie'] as unknown as string[] | undefined;
-      for (const cookie of raw ?? []) {
-        const [pair] = cookie.split(';');
-        const eq = pair.indexOf('=');
-        const name = pair.slice(0, eq).trim();
-        const value = decodeURIComponent(pair.slice(eq + 1).trim());
-        const cleared = !value || /expires=thu, 01 jan 1970/i.test(cookie);
-        if (cleared) this.jar.delete(name);
-        else this.jar.set(name, value);
-      }
-      return res;
-    }
-
-    async get(url: string) {
-      return this.store(
-        await request(app.getHttpServer())
-          .get(url)
-          .set('Cookie', this.header()),
-      );
-    }
-
-    async post(url: string, form: Record<string, string>) {
-      return this.store(
-        await request(app.getHttpServer())
-          .post(url)
-          .set('Cookie', this.header())
-          .type('form')
-          .send(form),
-      );
-    }
-  }
-
-  const csrfFrom = (html: string) => {
-    const match = /name="_csrf" value="([^"]+)"/.exec(html);
-    if (!match) throw new Error('no CSRF token in page');
-    return match[1];
-  };
 
   const redirectParams = (res: request.Response) => {
     expect(res.status).toBe(302);
@@ -130,14 +78,7 @@ describe('OIDC conformance behaviour (e2e)', () => {
   beforeAll(async () => {
     ctx = await createTestApp();
     app = ctx.app;
-    const express = app.getHttpAdapter().getInstance() as {
-      set: (key: string, value: string) => void;
-      engine: (extension: string, engine: ThemeViewEngine) => void;
-    };
-    express.set('views', join(process.cwd(), 'themes'));
-    express.engine('hbs', createThemeViewEngine(join(process.cwd(), 'themes')));
-    express.set('view engine', 'hbs');
-    registerHandlebarsHelpers();
+    useThemeViews(app);
     seeded = await ctx.seedTestRealm(REALM);
   }, 30_000);
 
@@ -147,7 +88,7 @@ describe('OIDC conformance behaviour (e2e)', () => {
   });
 
   it('serves UserInfo over POST with the token in the header or the body', async () => {
-    const tokens = await exchange(await signIn(new Browser())).expect(200);
+    const tokens = await exchange(await signIn(new Browser(app))).expect(200);
     const accessToken = tokens.body.access_token as string;
 
     const header = await request(app.getHttpServer())
@@ -172,7 +113,7 @@ describe('OIDC conformance behaviour (e2e)', () => {
   });
 
   it('keeps the original auth_time in ID tokens issued by a refresh', async () => {
-    const first = await exchange(await signIn(new Browser())).expect(200);
+    const first = await exchange(await signIn(new Browser(app))).expect(200);
     const signedInAt = claims(first.body.id_token as string)['auth_time'];
     await new Promise((resolve) => setTimeout(resolve, 1100));
 
@@ -193,7 +134,7 @@ describe('OIDC conformance behaviour (e2e)', () => {
   });
 
   it('accepts the authorization request as a form POST', async () => {
-    const browser = new Browser();
+    const browser = new Browser(app);
     await signIn(browser);
 
     const res = await browser.post(`${base}/auth`, oauthQuery());
@@ -202,7 +143,7 @@ describe('OIDC conformance behaviour (e2e)', () => {
   });
 
   it('rejects request objects instead of ignoring them', async () => {
-    const browser = new Browser();
+    const browser = new Browser(app);
     await signIn(browser);
 
     const params = redirectParams(
@@ -216,7 +157,7 @@ describe('OIDC conformance behaviour (e2e)', () => {
   });
 
   it('reports the real sign-in time as auth_time and honours max_age', async () => {
-    const browser = new Browser();
+    const browser = new Browser(app);
     const first = await exchange(await signIn(browser)).expect(200);
     const authTime = claims(first.body.id_token as string)['auth_time'];
 
@@ -255,7 +196,7 @@ describe('OIDC conformance behaviour (e2e)', () => {
   it('grants offline_access only to a code flow of a client that has the scope', async () => {
     // Without the scope assigned, the request is honoured without offline access.
     const plain = await exchange(
-      await signIn(new Browser(), { scope: 'openid offline_access' }),
+      await signIn(new Browser(app), { scope: 'openid offline_access' }),
     ).expect(200);
     expect(String(plain.body.scope).split(' ')).not.toContain('offline_access');
 
@@ -271,7 +212,7 @@ describe('OIDC conformance behaviour (e2e)', () => {
     });
 
     const offline = await exchange(
-      await signIn(new Browser(), { scope: 'openid offline_access' }),
+      await signIn(new Browser(app), { scope: 'openid offline_access' }),
     ).expect(200);
     expect(String(offline.body.scope).split(' ')).toContain('offline_access');
     const stored = await ctx.prisma.refreshToken.findFirst({
@@ -298,7 +239,7 @@ describe('OIDC conformance behaviour (e2e)', () => {
   });
 
   it('revokes the tokens issued from a code when the code is replayed', async () => {
-    const code = await signIn(new Browser());
+    const code = await signIn(new Browser(app));
     const first = await exchange(code).expect(200);
     await introspect(first.body.access_token as string).expect((res) =>
       expect(res.body.active).toBe(true),
