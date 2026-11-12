@@ -11,7 +11,7 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [0.7.0] - 2026-11-12
 
-A security and correctness release. It closes vulnerabilities in LDAP federation, device certificates, verification links, token claims, flow assignment and passkey sign-in; makes a fresh sign-in enforce a client's required authentication level; fixes every OpenID Connect failure the OpenID Foundation conformance suite's basic plan reported against 0.6.0; makes the Helm chart start with its defaults on official PostgreSQL and Redis images; and gives Docker Compose a setup helper with unique secrets. Read *Before you upgrade*: several defaults changed on purpose.
+A security and correctness release. It closes vulnerabilities in LDAP federation, database TLS during migrations, the default admin password, device certificates, verification links, token claims, flow assignment and passkey sign-in; makes a fresh sign-in enforce a client's required authentication level; fixes every OpenID Connect failure the OpenID Foundation conformance suite's basic plan reported against 0.6.0; makes the Helm chart start with its defaults on official PostgreSQL and Redis images; gives Docker Compose a setup helper with unique secrets; and adds a production checklist. Read *Before you upgrade*: several defaults changed on purpose.
 
 **Before you upgrade:**
 - **First production start needs `ADMIN_PASSWORD`.** With `NODE_ENV=production` (the Docker image default), creating the initial admin now fails when `ADMIN_PASSWORD` is missing, `admin`, a documented placeholder, or shorter than 12 characters. Existing databases already have their admin and are not affected.
