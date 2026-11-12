@@ -63,52 +63,43 @@ Create the name of the service account to use.
 {{- end }}
 
 {{/*
-Return the PostgreSQL host.
-When the bundled sub-chart is enabled, derive the host from the sub-chart's
-fully-qualified service name. Otherwise leave it empty so the caller must
-supply DATABASE_URL directly via secrets.DATABASE_URL.
+Selector labels of a bundled dependency (postgresql, redis). The name label
+differs from the application's, so the application Service and Deployment
+never select these pods.
+*/}}
+{{- define "idenplane.componentSelectorLabels" -}}
+app.kubernetes.io/name: {{ printf "%s-%s" (include "idenplane.name" .context) .component | trunc 63 | trimSuffix "-" }}
+app.kubernetes.io/instance: {{ .context.Release.Name }}
+app.kubernetes.io/component: {{ .component }}
+{{- end }}
+
+{{/*
+Name of the bundled PostgreSQL Service, StatefulSet and Secret. It matches the
+Bitnami sub-chart this chart used to depend on, so existing volumes are reused.
 */}}
 {{- define "idenplane.postgresqlHost" -}}
-{{- if .Values.postgresql.enabled }}
 {{- printf "%s-postgresql" .Release.Name | trunc 63 | trimSuffix "-" }}
 {{- end }}
-{{- end }}
 
 {{/*
-Construct the DATABASE_URL from the sub-chart credentials when postgresql is
-enabled and no explicit DATABASE_URL secret value has been provided.
+Secret holding the bundled PostgreSQL password (key "password").
 */}}
-{{- define "idenplane.databaseURL" -}}
-{{- if .Values.postgresql.enabled }}
-{{- printf "postgresql://%s:%s@%s:5432/%s" .Values.postgresql.auth.username .Values.postgresql.auth.password (include "idenplane.postgresqlHost" .) .Values.postgresql.auth.database }}
-{{- else }}
-{{- .Values.secrets.DATABASE_URL }}
-{{- end }}
+{{- define "idenplane.postgresqlSecretName" -}}
+{{- .Values.postgresql.auth.existingSecret | default (include "idenplane.postgresqlHost" .) }}
 {{- end }}
 
 {{/*
-Return the Redis host derived from the bundled sub-chart service name.
+Name of the bundled Redis Service and StatefulSet.
 */}}
 {{- define "idenplane.redisHost" -}}
-{{- if .Values.redis.enabled }}
 {{- printf "%s-redis-master" .Release.Name | trunc 63 | trimSuffix "-" }}
-{{- end }}
 {{- end }}
 
 {{/*
-Construct the REDIS_URL from the sub-chart credentials when redis is enabled
-and no explicit REDIS_URL secret value has been provided.
+Secret holding the bundled Redis password (key "redis-password").
 */}}
-{{- define "idenplane.redisURL" -}}
-{{- if .Values.redis.enabled }}
-{{- if .Values.redis.auth.enabled }}
-{{- printf "redis://:%s@%s:6379" .Values.redis.auth.password (include "idenplane.redisHost" .) }}
-{{- else }}
-{{- printf "redis://%s:6379" (include "idenplane.redisHost" .) }}
-{{- end }}
-{{- else }}
-{{- .Values.secrets.REDIS_URL }}
-{{- end }}
+{{- define "idenplane.redisSecretName" -}}
+{{- .Values.redis.auth.existingSecret | default (printf "%s-redis" .Release.Name | trunc 63 | trimSuffix "-") }}
 {{- end }}
 
 {{/*
@@ -137,7 +128,10 @@ the chart generates one.
 {{- if and $password (lt (len $password) 12) }}
 {{- fail "secrets.ADMIN_PASSWORD must be at least 12 characters." }}
 {{- end }}
-{{- if and .Values.postgresql.enabled (eq (.Values.postgresql.auth.password | default "") "REPLACE_WITH_STRONG_DB_PASSWORD") }}
-{{- fail "postgresql.auth.password is still the placeholder from values.production.yaml. Set a strong password." }}
+{{- if and .Values.postgresql.enabled (has (.Values.postgresql.auth.password | default "") (list "REPLACE_WITH_STRONG_DB_PASSWORD")) }}
+{{- fail "postgresql.auth.password is the placeholder from values.production.yaml. Leave it empty to generate one." }}
+{{- end }}
+{{- if and (not .Values.postgresql.enabled) (not .Values.secrets.DATABASE_URL) }}
+{{- fail "postgresql.enabled is false: set secrets.DATABASE_URL to your database." }}
 {{- end }}
 {{- end }}

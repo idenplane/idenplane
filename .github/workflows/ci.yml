@@ -683,12 +683,6 @@ jobs:
 
       - uses: azure/setup-helm@v5
 
-      # postgresql and redis are declared as dependencies. Their conditions
-      # control whether they get installed, not whether helm needs them
-      # present — without this, lint warns and template refuses outright.
-      - name: Fetch chart dependencies
-        run: helm dependency build helm/idenplane
-
       - name: Lint
         run: helm lint helm/idenplane
 
@@ -698,13 +692,11 @@ jobs:
       - name: Render with default values
         run: helm template idenplane helm/idenplane > /dev/null
 
-      # The production file carries a placeholder database password on purpose,
-      # so render it the way an operator must: with a real one.
       - name: Render with production values
-        run: >-
-          helm template idenplane helm/idenplane
-          -f helm/idenplane/values.production.yaml
-          --set postgresql.auth.password=ci-render-only-password > /dev/null
+        run: helm template idenplane helm/idenplane -f helm/idenplane/values.production.yaml > /dev/null
+
+      - name: Render with bundled Redis
+        run: helm template idenplane helm/idenplane --set redis.enabled=true > /dev/null
 
   helm-install:
     name: Helm install (kind)
@@ -728,9 +720,6 @@ jobs:
 
       - name: Load the image into kind
         run: kind load docker-image idenplane:helm-ci --name idenplane
-
-      - name: Fetch chart dependencies
-        run: helm dependency build helm/idenplane
 
       - name: Install, sign in, upgrade and test
         env:

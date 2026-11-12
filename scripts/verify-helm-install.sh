@@ -39,8 +39,8 @@ for bad in "secrets.ADMIN_API_KEY=change-me-in-production" "secrets.ADMIN_PASSWO
     exit 1
   fi
 done
-if helm template "$RELEASE" "$CHART" -f "$CHART/values.production.yaml" >/dev/null 2>&1; then
-  echo "helm template accepted the production values' placeholder database password" >&2
+if helm template "$RELEASE" "$CHART" --set postgresql.enabled=false >/dev/null 2>&1; then
+  echo "helm template accepted an external database without secrets.DATABASE_URL" >&2
   exit 1
 fi
 

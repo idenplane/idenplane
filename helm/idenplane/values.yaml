@@ -266,23 +266,30 @@ secrets:
   # Redis Sentinel master name.
   REDIS_SENTINEL_NAME: ""
 
-# ── PostgreSQL Sub-chart (Bitnami) ────────────────────────────────────────────
-# https://artifacthub.io/packages/helm/bitnami/postgresql
-# Set enabled: false and configure secrets.DATABASE_URL to use an external DB.
+# ── Bundled PostgreSQL ────────────────────────────────────────────────────────
+# A single PostgreSQL pod on the official image, for evaluation and small
+# installs. For production, prefer a managed database: set enabled: false and
+# secrets.DATABASE_URL. Volumes created by the Bitnami sub-chart of chart
+# versions up to 0.2.x are reused (see docs/docs/deployment/kubernetes.mdx).
 postgresql:
   enabled: true
+  image:
+    repository: postgres
+    # Keep the major version of an existing volume (0.2.x installs used 17).
+    tag: "17-bookworm"
+    pullPolicy: IfNotPresent
   auth:
     username: idenplane
-    password: idenplane
+    # Empty: generated on first install and kept on upgrades.
+    password: ""
     database: idenplane
-    # Existing Kubernetes Secret that holds the postgres passwords.
-    # When set, the password fields above are ignored.
+    # Existing Secret with the password under the key "password".
     existingSecret: ""
   primary:
     persistence:
       enabled: true
       size: 8Gi
-  # Adjust resources for the PostgreSQL pod.
+      storageClass: ""
   resources:
     requests:
       cpu: 100m
@@ -291,16 +298,20 @@ postgresql:
       cpu: 500m
       memory: 512Mi
 
-# ── Redis Sub-chart (Bitnami) ─────────────────────────────────────────────────
-# https://artifacthub.io/packages/helm/bitnami/redis
-# Enable when you want a managed Redis instance for caching / session storage.
+# ── Bundled Redis ─────────────────────────────────────────────────────────────
+# Optional single Redis pod (official image) for caching and SESSION_STORE=redis.
 redis:
   enabled: false
+  image:
+    repository: redis
+    tag: "7-alpine"
+    pullPolicy: IfNotPresent
   auth:
     enabled: true
-    password: idenplane-redis
+    # Empty: generated on first install and kept on upgrades.
+    password: ""
+    # Existing Secret with the password under the key "redis-password".
     existingSecret: ""
-  architecture: standalone
   master:
     persistence:
       enabled: true

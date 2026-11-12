@@ -42,6 +42,34 @@ spec:
               containerPort: {{ .Values.env.PORT | default 3000 | int }}
               protocol: TCP
           # ── Environment: non-sensitive values from ConfigMap ──────────────
+          {{- if or .Values.postgresql.enabled .Values.redis.enabled }}
+          # Bundled dependencies: the password comes from their Secret and is
+          # expanded into the URL, so it is never copied into another Secret.
+          env:
+            {{- if .Values.postgresql.enabled }}
+            - name: IDENPLANE_DB_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "idenplane.postgresqlSecretName" . }}
+                  key: password
+            - name: DATABASE_URL
+              value: {{ printf "postgresql://%s:$(IDENPLANE_DB_PASSWORD)@%s:5432/%s" .Values.postgresql.auth.username (include "idenplane.postgresqlHost" .) .Values.postgresql.auth.database | quote }}
+            {{- end }}
+            {{- if .Values.redis.enabled }}
+            {{- if .Values.redis.auth.enabled }}
+            - name: IDENPLANE_REDIS_PASSWORD
+              valueFrom:
+                secretKeyRef:
+                  name: {{ include "idenplane.redisSecretName" . }}
+                  key: redis-password
+            - name: REDIS_URL
+              value: {{ printf "redis://:$(IDENPLANE_REDIS_PASSWORD)@%s:6379" (include "idenplane.redisHost" .) | quote }}
+            {{- else }}
+            - name: REDIS_URL
+              value: {{ printf "redis://%s:6379" (include "idenplane.redisHost" .) | quote }}
+            {{- end }}
+            {{- end }}
+          {{- end }}
           envFrom:
             - secretRef:
                 name: {{ .Values.secrets.existingSecret | default (include "idenplane.keysSecretName" .) }}

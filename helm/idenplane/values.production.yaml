@@ -69,15 +69,16 @@ secrets:
   # With GitOps, create the keys yourself and set existingSecret.
   existingSecret: ""
   ADMIN_API_KEY: ""
-  DATABASE_URL: ""   # auto-constructed from postgresql sub-chart when enabled
+  DATABASE_URL: ""   # required when postgresql.enabled is false
 
-# ── PostgreSQL Sub-chart ──────────────────────────────────────────────────────
+# ── Bundled PostgreSQL ────────────────────────────────────────────────────────
+# Prefer a managed database in production: postgresql.enabled=false and
+# secrets.DATABASE_URL. The bundled one generates its password when empty.
 postgresql:
   enabled: true
   auth:
     username: idenplane
-    # Override at deploy time: --set postgresql.auth.password="..."
-    password: "REPLACE_WITH_STRONG_DB_PASSWORD"
+    password: ""
     database: idenplane
   primary:
     persistence:
