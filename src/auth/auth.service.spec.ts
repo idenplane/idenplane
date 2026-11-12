@@ -723,9 +723,33 @@ describe('AuthService', () => {
       );
     });
 
+    it('grants only validated scopes to a client without a service account', async () => {
+      setupValidClient();
+      setupSigningKey();
+      scopesService.parseAndValidate.mockReturnValue(['openid']);
+      scopesService.toString.mockReturnValue('openid');
+
+      const result = await service.handleTokenRequest(realm, {
+        grant_type: 'client_credentials',
+        client_id: 'my-client',
+        client_secret: 'correct-secret',
+        scope: 'openid admin:everything',
+      });
+
+      expect(scopesService.parseAndValidate).toHaveBeenCalledWith(
+        'openid admin:everything',
+      );
+      expect(jwkService.signJwt.mock.calls[0][0]).toMatchObject({
+        scope: 'openid',
+      });
+      expect(result).toMatchObject({ scope: 'openid' });
+    });
+
     it('should sign the JWT with the correct payload shape', async () => {
       setupValidClient();
       setupSigningKey();
+      scopesService.parseAndValidate.mockReturnValue(['openid', 'profile']);
+      scopesService.toString.mockReturnValue('openid profile');
 
       await service.handleTokenRequest(realm, {
         grant_type: 'client_credentials',

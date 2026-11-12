@@ -57,6 +57,46 @@ interface NewSession {
   data: Omit<Prisma.SessionUncheckedCreateInput, 'id' | 'refreshTokens'>;
 }
 
+/**
+ * Registered and assurance claims of an access token that only the server
+ * sets. `exp`, `iat` and `jti` are set when signing.
+ */
+const PROTECTED_ACCESS_TOKEN_CLAIMS = [
+  'iss',
+  'sub',
+  'aud',
+  'azp',
+  'scope',
+  'typ',
+  'sid',
+  'acr',
+  'amr',
+  'nbf',
+  'cnf',
+  'auth_time',
+  'nonce',
+] as const;
+
+/**
+ * Restores the server's values of the protected claims after mappers and
+ * plugins ran: a configured claim named `sub`, `acr` or `aud` must not let a
+ * token speak for another user, assurance level or audience.
+ */
+export function withProtectedClaims(
+  payload: Record<string, unknown>,
+  protectedClaims: JWTPayload,
+): JWTPayload {
+  const result: Record<string, unknown> = { ...payload };
+  for (const claim of PROTECTED_ACCESS_TOKEN_CLAIMS) {
+    if (claim in protectedClaims) {
+      result[claim] = protectedClaims[claim];
+    } else {
+      delete result[claim];
+    }
+  }
+  return result;
+}
+
 @Injectable()
 export class AuthService {
   private readonly logger = new Logger(AuthService.name);
@@ -546,15 +586,20 @@ export class AuthService {
       }
     }
 
-    // Fallback: basic client_credentials token without user context
+    // Fallback: basic client_credentials token without user context. The
+    // scope is validated like any other grant's, never copied as sent.
     const signingKey = await this.getActiveSigningKey(realm.id);
+    const scopes = this.scopesService.parseAndValidate(scope);
+    const grantedScope = this.scopesService.toString(
+      scopes.length > 0 ? scopes : ['openid'],
+    );
 
     const accessToken = await this.jwkService.signJwt(
       {
         iss: this.getIssuer(realm),
         sub: client.id,
         aud: client_id,
-        scope: scope ?? 'openid',
+        scope: grantedScope,
         typ: 'Bearer',
         azp: client_id,
       },
@@ -578,7 +623,7 @@ export class AuthService {
       access_token: accessToken,
       token_type: 'Bearer',
       expires_in: realm.accessTokenLifespan,
-      scope: scope ?? 'openid',
+      scope: grantedScope,
     };
   }
 
@@ -1338,7 +1383,9 @@ export class AuthService {
       // If mappers fail, fall back to standard claims
     }
 
-    const accessTokenPayload: JWTPayload = {
+    // Claims the server decides. Protocol mappers and enrichment plugins run
+    // after them and may add claims, but never change or remove these.
+    const protectedClaims: JWTPayload = {
       iss: this.getIssuer(realm),
       sub: user.id,
       aud: clientId,
@@ -1352,6 +1399,10 @@ export class AuthService {
       // Mirror the id_token resolution (default acr = password).
       acr: acr ?? ACR_PASSWORD,
       ...(amr && amr.length > 0 ? { amr } : {}),
+    };
+
+    const accessTokenPayload: JWTPayload = {
+      ...protectedClaims,
       ...userClaims,
       ...(includeRoles
         ? {
@@ -1363,13 +1414,16 @@ export class AuthService {
     };
 
     // Allow token-enrichment plugins to add custom claims (non-blocking)
-    const enrichedPayload: Record<string, unknown> = this.pluginManager
-      ? await this.pluginManager.enrichToken(
-          accessTokenPayload,
-          { ...user },
-          realm.name,
-        )
-      : accessTokenPayload;
+    const enrichedPayload = withProtectedClaims(
+      this.pluginManager
+        ? await this.pluginManager.enrichToken(
+            accessTokenPayload,
+            { ...user },
+            realm.name,
+          )
+        : accessTokenPayload,
+      protectedClaims,
+    );
 
     const accessToken = await this.jwkService.signJwt(
       enrichedPayload,
@@ -1494,7 +1548,10 @@ export class AuthService {
     //  - Otherwise default to ACR_PASSWORD ("urn:idenplane:acr:password")
     const resolvedAcr = params.acr ?? ACR_PASSWORD;
 
+    // User claims first: an attribute mapped to a registered claim name must
+    // not replace the server's value.
     const idTokenPayload: JWTPayload = {
+      ...userClaims,
       iss: this.getIssuer(params.realm),
       sub: params.user.id,
       aud: params.clientId,
@@ -1510,7 +1567,6 @@ export class AuthService {
       ...(params.code
         ? { c_hash: this.jwkService.computeChash(params.code) }
         : {}),
-      ...userClaims,
     };
 
     if (params.nonce) {

@@ -17,6 +17,7 @@ describe('NhiService', () => {
   let cryptoService: {
     generateSecret: jest.Mock;
     hashPassword: jest.Mock;
+    encrypt: jest.Mock;
   };
 
   const mockRealm: Realm = {
@@ -104,6 +105,7 @@ describe('NhiService', () => {
     cryptoService = {
       generateSecret: jest.fn(),
       hashPassword: jest.fn(),
+      encrypt: jest.fn((plaintext: string) => `enc(${plaintext})`),
     };
     service = new NhiService(prisma as any, cryptoService as any);
   });
@@ -409,6 +411,21 @@ describe('NhiService', () => {
       expect(cryptoService.generateSecret).not.toHaveBeenCalled();
     });
 
+    it('encrypts a supplied private key and never selects it back', async () => {
+      prisma.nhiIdentity.findFirst.mockResolvedValue(mockIdentity);
+      prisma.nhiCredential.create.mockResolvedValue(mockCredential);
+
+      await service.createCredential(mockRealm, 'nhi-uuid-1', {
+        credentialType: 'CERTIFICATE',
+        name: 'cert-with-key',
+        privateKeyPem: 'PRIVATE',
+      });
+
+      const args = prisma.nhiCredential.create.mock.calls[0][0];
+      expect(args.data.privateKeyPem).toBe('enc(PRIVATE)');
+      expect(args.select).not.toHaveProperty('privateKeyPem');
+    });
+
     it('should throw NotFoundException when identity does not exist', async () => {
       prisma.nhiIdentity.findFirst.mockResolvedValue(null);
 
@@ -429,6 +446,17 @@ describe('NhiService', () => {
       expect(prisma.nhiCredential.findMany).toHaveBeenCalledWith(
         expect.objectContaining({ where: { nhiIdentityId: 'nhi-uuid-1' } }),
       );
+    });
+
+    it('never selects stored private keys', async () => {
+      prisma.nhiIdentity.findFirst.mockResolvedValue(mockIdentity);
+      prisma.nhiCredential.findMany.mockResolvedValue([]);
+
+      await service.listCredentials(mockRealm, 'nhi-uuid-1');
+
+      expect(
+        prisma.nhiCredential.findMany.mock.calls[0][0].select,
+      ).not.toHaveProperty('privateKeyPem');
     });
 
     it('should throw NotFoundException when identity does not exist', async () => {

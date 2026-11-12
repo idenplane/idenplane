@@ -25,6 +25,7 @@ import { CachedLookupsService } from '../cache/cached-lookups.service.js';
 import { ClientSecretService } from '../clients/client-secret.service.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 import { RateLimitGuard, RateLimitBy } from '../rate-limit/rate-limit.guard.js';
+import { parseBasicClientCredentials } from '../common/utils/basic-client-auth.util.js';
 
 @ApiTags('Tokens')
 @Controller('realms/:realmName/protocol/openid-connect')
@@ -158,18 +159,10 @@ export class TokensController {
 
     // Fall back to HTTP Basic Authentication
     if (!cId && req) {
-      const authHeader = req.headers['authorization'];
-      if (authHeader?.startsWith('Basic ')) {
-        try {
-          const decoded = Buffer.from(authHeader.slice(6), 'base64').toString();
-          const colonIdx = decoded.indexOf(':');
-          if (colonIdx > 0) {
-            cId = decodeURIComponent(decoded.slice(0, colonIdx));
-            cSecret = decodeURIComponent(decoded.slice(colonIdx + 1));
-          }
-        } catch {
-          // Malformed Basic auth - ignore
-        }
+      const basic = parseBasicClientCredentials(req.headers['authorization']);
+      if (basic && basic !== 'malformed') {
+        cId = basic.clientId;
+        cSecret = basic.clientSecret;
       }
     }
 
