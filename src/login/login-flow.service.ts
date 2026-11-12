@@ -61,6 +61,35 @@ export class LoginFlowService {
    * @param primaryAmr RFC 8176 methods of the first factor (`['pwd']` for a
    *   password; empty for a federated login, whose methods are not known).
    */
+  /**
+   * Starts the second-factor challenge for a user who has one enrolled and
+   * sends the browser to it. Used after the first factor, and by the risk
+   * step-up when MFA is otherwise optional.
+   */
+  async startSecondFactor(
+    realm: Realm,
+    user: User,
+    oauthParams: Record<string, string>,
+    primaryAmr: string[],
+    res: Response,
+  ): Promise<void> {
+    const challengeToken = await this.mfaService.createMfaChallenge(
+      user.id,
+      realm.id,
+      oauthParams,
+      undefined,
+      primaryAmr,
+    );
+    res.cookie(MFA_CHALLENGE_COOKIE, challengeToken, {
+      httpOnly: true,
+      secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
+      sameSite: 'strict',
+      maxAge: 5 * 60 * 1000,
+      path: `/realms/${realm.name}`,
+    });
+    return res.redirect(`/realms/${realm.name}/totp`);
+  }
+
   async continueAfterPrimaryAuth(
     realm: Realm,
     user: User,
@@ -99,21 +128,13 @@ export class LoginFlowService {
 
     if (mfaEnabled) {
       // The user has TOTP set up — require it.
-      const challengeToken = await this.mfaService.createMfaChallenge(
-        user.id,
-        realm.id,
+      return this.startSecondFactor(
+        realm,
+        user,
         oauthParams,
-        undefined,
         options.primaryAmr,
+        res,
       );
-      res.cookie(MFA_CHALLENGE_COOKIE, challengeToken, {
-        httpOnly: true,
-        secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
-        sameSite: 'strict',
-        maxAge: 5 * 60 * 1000,
-        path: `/realms/${realm.name}`,
-      });
-      return res.redirect(`/realms/${realm.name}/totp`);
     }
 
     if (mfaRequired) {

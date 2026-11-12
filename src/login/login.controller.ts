@@ -312,21 +312,13 @@ export class LoginController {
       // no factor enrolled there is nothing to step up with; the sign-in
       // continues as usual.
       if (riskStepUp && (await this.mfaService.isMfaEnabled(user.id))) {
-        const challengeToken = await this.mfaService.createMfaChallenge(
-          user.id,
-          realm.id,
+        return this.loginFlow.startSecondFactor(
+          realm,
+          user,
           oauthParams,
-          undefined,
           ['pwd'],
+          res,
         );
-        res.cookie(MFA_CHALLENGE_COOKIE, challengeToken, {
-          httpOnly: true,
-          secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
-          sameSite: 'strict',
-          maxAge: 5 * 60 * 1000,
-          path: `/realms/${realm.name}`,
-        });
-        return res.redirect(`/realms/${realm.name}/totp`);
       }
 
       // Second factor / required enrolment / session — shared with every
