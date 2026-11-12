@@ -192,6 +192,12 @@ export class WebAuthnService {
   async generateAuthenticationOptions(
     realm: Realm,
     userId?: string,
+    /**
+     * A random handle the browser holds (in a cookie). The challenge is
+     * stored under it, so one browser's sign-in can neither replace nor use
+     * another's. Without it the legacy per-user / per-realm slot is used.
+     */
+    binding?: string,
   ): Promise<PublicKeyCredentialRequestOptionsJSON> {
     if (!realm.webAuthnEnabled) {
       throw new ForbiddenException('WebAuthn is not enabled for this realm');
@@ -226,8 +232,11 @@ export class WebAuthnService {
         : 'preferred',
     });
 
-    // Store challenge — keyed by realm for usernameless flow, or by user for user-specific
-    const challengeKey = userId ?? `realm:${realm.id}`;
+    // Store challenge — keyed by the browser's binding when given, otherwise
+    // by user (user-specific) or by realm (usernameless).
+    const challengeKey = binding
+      ? `login:${binding}`
+      : (userId ?? `realm:${realm.id}`);
     await this.storeWebAuthnChallenge(
       challengeKey,
       realm.id,
@@ -241,6 +250,7 @@ export class WebAuthnService {
   async verifyAuthentication(
     realm: Realm,
     response: AuthenticationResponseJSON,
+    binding?: string,
   ): Promise<{ user: User; credential: WebAuthnCredential }> {
     if (!realm.webAuthnEnabled) {
       throw new ForbiddenException('WebAuthn is not enabled for this realm');
@@ -262,14 +272,15 @@ export class WebAuthnService {
       throw new ForbiddenException('Passkey does not belong to this realm');
     }
 
-    // Try user-specific challenge first, then realm-level (usernameless)
+    // A bound sign-in uses only its own challenge. Otherwise try the
+    // user-specific challenge first, then realm-level (usernameless).
     let expectedChallenge = await this.consumeWebAuthnChallenge(
-      credential.userId,
+      binding ? `login:${binding}` : credential.userId,
       realm.id,
       'authentication',
     );
 
-    if (!expectedChallenge) {
+    if (!expectedChallenge && !binding) {
       expectedChallenge = await this.consumeWebAuthnChallenge(
         `realm:${realm.id}`,
         realm.id,

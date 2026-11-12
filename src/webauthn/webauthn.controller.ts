@@ -11,8 +11,10 @@ import {
   HttpCode,
   HttpStatus,
   BadRequestException,
+  ForbiddenException,
 } from '@nestjs/common';
 import { ApiExcludeController, ApiResponse } from '@nestjs/swagger';
+import { randomBytes } from 'node:crypto';
 import type { Request, Response } from 'express';
 import type { Realm } from '@prisma/client';
 import { RealmGuard } from '../common/guards/realm.guard.js';
@@ -29,7 +31,10 @@ import {
   VerifyAuthenticationDto,
 } from './webauthn.dto.js';
 import { ACR_WEBAUTHN } from '../authn-core/acr.js';
-import { SESSION_COOKIE } from '../authn-core/cookies.js';
+import {
+  SESSION_COOKIE,
+  WEBAUTHN_LOGIN_COOKIE,
+} from '../authn-core/cookies.js';
 import type { AuthorizeParams } from '../authn-core/oauth-params.js';
 import type {
   RegistrationResponseJSON,
@@ -138,6 +143,7 @@ export class WebAuthnController {
   async startAuthentication(
     @CurrentRealm() realm: Realm,
     @Body() body: StartAuthenticationDto,
+    @Res({ passthrough: true }) res: Response,
   ) {
     // Look up userId if username given (for autofill / non-resident-key flow)
     let userId: string | undefined;
@@ -149,7 +155,21 @@ export class WebAuthnController {
       userId = user?.id;
     }
 
-    return this.webAuthnService.generateAuthenticationOptions(realm, userId);
+    // Bind the challenge to this browser, so concurrent sign-ins in the realm
+    // (or anyone calling this endpoint) cannot replace each other's.
+    const binding = randomBytes(32).toString('base64url');
+    res.cookie(WEBAUTHN_LOGIN_COOKIE, binding, {
+      httpOnly: true,
+      secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
+      sameSite: 'strict',
+      maxAge: 5 * 60 * 1000,
+      path: `/realms/${realm.name}`,
+    });
+    return this.webAuthnService.generateAuthenticationOptions(
+      realm,
+      userId,
+      binding,
+    );
   }
 
   @Post('webauthn/authenticate/verify')
@@ -172,10 +192,26 @@ export class WebAuthnController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    const binding = req.cookies?.[WEBAUTHN_LOGIN_COOKIE] as string | undefined;
+    if (!binding) {
+      throw new BadRequestException(
+        'Authentication challenge expired or not found. Please try again.',
+      );
+    }
+    res.clearCookie(WEBAUTHN_LOGIN_COOKIE, { path: `/realms/${realm.name}` });
     const { user } = await this.webAuthnService.verifyAuthentication(
       realm,
       body.response as AuthenticationResponseJSON,
+      binding,
     );
+
+    // The same account gate as a password sign-in. (Password expiry does not
+    // apply: no password was used.)
+    if (realm.requireEmailVerification && user.email && !user.emailVerified) {
+      throw new ForbiddenException(
+        'Please verify your email address before signing in.',
+      );
+    }
 
     // Build OAuth params from request body
     const oauthParams: Record<string, string> = {};

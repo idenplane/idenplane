@@ -69,9 +69,9 @@ describe('authn-core', () => {
       ['client_id', 'app'],
       ['state', 's'],
     ]);
+    expect(OAUTH_FORM_PARAM_KEYS).toContain('prompt');
     expect(OAUTH_RELAY_PARAM_KEYS).toEqual([
       ...OAUTH_FORM_PARAM_KEYS,
-      'prompt',
       'acr_values',
       'login_hint',
     ]);
