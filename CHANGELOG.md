@@ -20,10 +20,12 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 - **The SSO cookie is `SameSite=Lax`** (was `Strict`), so applications on other sites see the session on the authorization and logout redirects. Custom themes should add `<input type="hidden" name="prompt" value="{{prompt}}">` to `login.hbs` and `register.hbs` for `prompt=consent` to survive the form; without it nothing breaks, consent just isn't forced.
 
 ### Added
+- **Production checklist** in the deployment docs: public HTTPS, secrets, a verified TLS connection to the database, and off-host backups with a restore check.
 - **Next.js example: server-side sessions and a protected API.** The quickstart can keep tokens on the server in PostgreSQL behind an HTTP-only cookie, with refresh, sign-out, encrypted backup/restore and scheduled cleanup; `/api/profile` verifies the access token on the server and only returns the caller's own profile. A new CI workflow runs these flows against an image built from the commit, over HTTP and HTTPS.
 - **`scripts/setup-env.cjs`** writes a `.env` with unique random database, admin, API and webhook secrets for Docker Compose or a source checkout. It refuses to overwrite an existing `.env`, so keys that encrypt stored data are never replaced. The README and Quickstart use it.
 
 ### Security
+- **Database migrations verify the server certificate.** With `DATABASE_URL=…?sslmode=verify-full&sslrootcert=<ca>`, the server verified the database certificate, but Prisma's migration engine, which reads different parameter names, encrypted without verifying it. The Docker image now translates the parameters for `prisma migrate deploy`; `DATABASE_MIGRATION_URL` overrides the URL used for migrations.
 - **A fresh sign-in ignored the client's required authentication level.** Only the SSO path enforced `requiredAcr`, so a client requiring MFA got a password-only code from the login form. See *Before you upgrade*.
 - **A risky sign-in skipped email verification and password expiry.** The risk step-up redirected to the second factor before those checks; they now run first.
 - **Passkey sign-in challenges were shared per realm.** Every usernameless sign-in, and anyone calling the options endpoint, replaced the same stored challenge, so concurrent sign-ins failed and could be disrupted on purpose. Each browser now gets its own challenge, bound by an `HttpOnly` cookie, and verification uses only that one. Passkey sign-in also enforces email verification.

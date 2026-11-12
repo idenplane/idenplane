@@ -16,6 +16,7 @@ Idenplane is configured entirely through environment variables. This reference d
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
 | `DATABASE_URL` | — | Yes | PostgreSQL/MySQL/SQLite connection string |
+| `DATABASE_MIGRATION_URL` | — | No | URL the Docker image uses for `prisma migrate deploy` only. Defaults to `DATABASE_URL`, with `sslmode=verify-full`/`verify-ca` and `sslrootcert` translated to Prisma's `sslmode=require&sslcert=…&sslaccept=strict` so migrations verify the database certificate too |
 | `PORT` | `3000` | No | Server port |
 | `NODE_ENV` | `development` | No | Environment: `development`, `production` |
 | `BASE_URL` | `http://localhost:3000` | No | Public URL for redirects and emails |
