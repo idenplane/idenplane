@@ -167,7 +167,7 @@ describe('ImageUploader', () => {
       );
     });
 
-    it.skip('shows error for files exceeding size limit', () => {
+    it('shows error for files exceeding size limit', () => {
       vi.useFakeTimers();
       render(
         <ImageUploader
