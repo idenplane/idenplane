@@ -347,8 +347,13 @@ export default function UpgradeStatusPage() {
       </div>
 
       {/* Current Status Card */}
-      <div className="rounded-lg border border-line bg-surface p-6 shadow-sm">
-        <h2 className="text-base font-semibold text-fg">Current Status</h2>
+      <section
+        aria-labelledby="upgrade-current-status"
+        className="rounded-lg border border-line bg-surface p-6 shadow-sm"
+      >
+        <h2 id="upgrade-current-status" className="text-base font-semibold text-fg">
+          Current Status
+        </h2>
         {currentStatus ? (
           <div className="mt-4 grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
             <div>
@@ -385,7 +390,7 @@ export default function UpgradeStatusPage() {
         ) : (
           <p className="mt-3 text-sm text-subtle">No active or recent upgrades.</p>
         )}
-      </div>
+      </section>
 
       {/* Validation Section */}
       <div className="rounded-lg border border-line bg-surface p-6 shadow-sm">
