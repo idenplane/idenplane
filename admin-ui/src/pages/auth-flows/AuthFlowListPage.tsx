@@ -1,9 +1,30 @@
 import { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router';
-import { getAuthFlows, createAuthFlow, deleteAuthFlow, type AuthFlow } from '../../api/authFlows';
+import {
+  getAuthFlows,
+  createAuthFlow,
+  deleteAuthFlow,
+  getFlowBindingConflicts,
+  type AuthFlow,
+  type FlowStep,
+} from '../../api/authFlows';
 import { getErrorMessage } from '../../utils/getErrorMessage';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import FlowBindingsPanel from './FlowBindingsPanel';
+
+/** A new flow starts valid: the server rejects flows without an identifying first step. */
+const NEW_FLOW_STEPS: FlowStep[] = [
+  {
+    id: 'step-password',
+    type: 'password',
+    required: true,
+    order: 1,
+    condition: null,
+    fallbackStepId: null,
+    config: {},
+  },
+];
 
 export default function AuthFlowListPage() {
   const { name } = useParams<{ name: string }>();
@@ -11,6 +32,7 @@ export default function AuthFlowListPage() {
   const qc = useQueryClient();
 
   const [deleteTarget, setDeleteTarget] = useState<AuthFlow | null>(null);
+  const [deleteError, setDeleteError] = useState<string | null>(null);
   const [createError, setCreateError] = useState<string | null>(null);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [newFlowName, setNewFlowName] = useState('');
@@ -27,7 +49,7 @@ export default function AuthFlowListPage() {
         name: flowName,
         description: '',
         isDefault: false,
-        steps: [],
+        steps: NEW_FLOW_STEPS,
       }),
     onSuccess: (flow) => {
       qc.invalidateQueries({ queryKey: ['auth-flows', name] });
@@ -40,6 +62,18 @@ export default function AuthFlowListPage() {
     mutationFn: (id: string) => deleteAuthFlow(name!, id),
     onSuccess: () => {
       qc.invalidateQueries({ queryKey: ['auth-flows', name] });
+      setDeleteTarget(null);
+      setDeleteError(null);
+    },
+    onError: (err) => {
+      const bindings = getFlowBindingConflicts(err);
+      setDeleteError(
+        bindings.length
+          ? `"${deleteTarget?.name}" is still bound to ${bindings
+              .map((b) => (b.kind === 'realm' ? `realm ${b.realmName}` : `client ${b.clientId}`))
+              .join(', ')}. Unbind it in Flow bindings first.`
+          : getErrorMessage(err),
+      );
       setDeleteTarget(null);
     },
   });
@@ -113,6 +147,14 @@ export default function AuthFlowListPage() {
         </div>
       )}
 
+      {deleteError && (
+        <div role="alert" className="mb-4 rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
+          {deleteError}
+        </div>
+      )}
+
+      {name && <FlowBindingsPanel realmName={name} flows={flows ?? []} />}
+
       <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-sm">
         <table className="min-w-full divide-y divide-line">
           <thead className="bg-sunken">
@@ -127,7 +169,9 @@ export default function AuthFlowListPage() {
                 Steps
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
-                Default
+                <span title="Deprecated: informational only, never used for binding. Use Flow bindings.">
+                  Default (deprecated)
+                </span>
               </th>
               <th className="px-6 py-3 text-left text-xs font-medium uppercase tracking-wider text-subtle">
                 Last Modified

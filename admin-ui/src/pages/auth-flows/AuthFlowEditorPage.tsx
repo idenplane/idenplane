@@ -4,8 +4,10 @@ import { useParams, useNavigate } from 'react-router';
 import {
   getAuthFlowById,
   updateAuthFlow,
+  getFlowValidationErrors,
   type FlowStep,
   type AuthFlow,
+  type FlowValidationError,
 } from '../../api/authFlows';
 import { getErrorMessage } from '../../utils/getErrorMessage';
 import FlowCanvas from '../../components/flow-editor/FlowCanvas';
@@ -32,6 +34,7 @@ export default function AuthFlowEditorPage() {
   const [isDirty, setIsDirty] = useState(false);
   const [isPreview, setIsPreview] = useState(false);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [validationErrors, setValidationErrors] = useState<FlowValidationError[]>([]);
 
   // Seed the editable draft from fetched data when the loaded flow changes.
   // Adjusting state during render (vs. an effect) avoids an extra render pass.
@@ -60,12 +63,17 @@ export default function AuthFlowEditorPage() {
       qc.invalidateQueries({ queryKey: ['auth-flows', name] });
       setIsDirty(false);
       setSaveError(null);
+      setValidationErrors([]);
     },
-    onError: (err) => setSaveError(getErrorMessage(err)),
+    onError: (err) => {
+      setSaveError(getErrorMessage(err));
+      setValidationErrors(getFlowValidationErrors(err));
+    },
   });
 
   function handleSave() {
     setSaveError(null);
+    setValidationErrors([]);
     saveMutation.mutate({
       name: draftName,
       description: draftDescription,
@@ -148,7 +156,9 @@ export default function AuthFlowEditorPage() {
             onChange={(e) => handleIsDefaultChange(e.target.checked)}
             className="rounded border-line-strong text-accent focus:ring-accent"
           />
-          Default flow
+          <span title="Deprecated: never used for binding. Bind flows in the Flow bindings panel.">
+            Default (deprecated)
+          </span>
         </label>
 
         <div className="flex-1" />
@@ -199,6 +209,16 @@ export default function AuthFlowEditorPage() {
       {saveError && (
         <div className="shrink-0 border-b border-danger-soft bg-danger-soft px-4 py-2 text-sm text-danger-fg">
           {saveError}
+          {validationErrors.length > 0 && (
+            <ul className="mt-1 list-disc pl-5" data-testid="flow-validation-errors">
+              {validationErrors.map((e, i) => (
+                <li key={`${e.path}-${e.code}-${i}`}>
+                  <span className="font-mono text-xs">{describePath(e.path, draftSteps)}</span>:{' '}
+                  {e.message}
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       )}
 
@@ -222,4 +242,14 @@ export default function AuthFlowEditorPage() {
       )}
     </div>
   );
+}
+
+/** `steps[1].config.digits` -> `Step "otp" (#2) config.digits`, for readable inline errors. */
+function describePath(path: string, steps: FlowStep[]): string {
+  const m = /^steps\[(\d+)\]\.?(.*)$/.exec(path);
+  if (!m) return path;
+  const index = Number(m[1]);
+  const step = steps[index];
+  const label = step ? `Step "${step.id}" (#${index + 1})` : `Step #${index + 1}`;
+  return m[2] ? `${label} ${m[2]}` : label;
 }
