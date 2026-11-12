@@ -330,7 +330,7 @@ The server checks these settings at startup. An unsafe or incomplete setting sto
 | `MTLS_TLS_MIN_VERSION` | `TLSv1.2` | `TLSv1.2` or `TLSv1.3`. |
 | `MTLS_HANDSHAKE_CA_FILE` | — | CA certificates named in the TLS CertificateRequest, so clients pick the right certificate. This is only a hint: the listener accepts any certificate at the handshake, and trust is decided for each realm. |
 | `MTLS_GLOBAL_TRUST_ANCHORS_FILE` | — | CA certificates a realm can opt in to trusting. Not used yet. |
-| `MTLS_BASE_URL` | — | `https` origin of the certificate listener, for `mtls_endpoint_aliases`. It must be `https`. |
+| `MTLS_BASE_URL` | — | `https` origin of the certificate listener, for `mtls_endpoint_aliases`. It must be `https`. Not advertised in discovery yet. |
 | `MTLS_PROXY_CERT_HEADER` | — | Header in which a TLS-terminating proxy forwards the client certificate. Requires `MTLS_TRUSTED_PROXY_CIDRS`. |
 | `MTLS_PROXY_CERT_FORMAT` | `pem-urlencoded` | `pem-urlencoded` (one URL-encoded PEM `CERTIFICATE` block, like nginx `$ssl_client_escaped_cert`) or `rfc9440` (`:base64-DER:`, the `Client-Cert` header of RFC 9440). |
 | `MTLS_PROXY_CERT_CHAIN_HEADER` | — | Optional header with the intermediates, in the same format (several PEM blocks, or a comma-separated RFC 9440 list). |

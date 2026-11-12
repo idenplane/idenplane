@@ -69,6 +69,22 @@ function bearerToken(req: Request, formToken: string | undefined): string {
   return token;
 }
 
+/**
+ * Rethrows a failed client authentication as introspection and revocation
+ * always answered it: `invalid_client` as an UnauthorizedException with their
+ * own wording. Anything else (`invalid_request`) is rethrown as is.
+ */
+function withTokensEndpointWording(err: unknown): never {
+  if (err instanceof ClientAuthError && err.code === 'invalid_client') {
+    throw new UnauthorizedException({
+      error: 'invalid_client',
+      error_description:
+        CLIENT_AUTH_DESCRIPTIONS[err.reason] ?? err.description,
+    });
+  }
+  throw err;
+}
+
 @ApiTags('Tokens')
 @Controller('realms/:realmName/protocol/openid-connect')
 @SkipThrottle()
@@ -102,7 +118,16 @@ export class TokensController {
     @Body() body: { token: string; client_id?: string; client_secret?: string },
     @Req() req: Request,
   ) {
-    const callerClientId = await this.authenticateClient(realm, body, req);
+    // RFC 7662 §2.1 / RFC 7009 §2.1: the same client authentication as the
+    // token endpoint; a public client sends only its client_id.
+    const { clientId: callerClientId } = await this.clientAuthenticator
+      .authenticate({
+        realm,
+        body,
+        authorization: req.headers['authorization'],
+        clientCert: this.clientCertificates.fromRequest(req),
+      })
+      .catch(withTokensEndpointWording);
     const result = await this.tokensService.introspect(realm, body.token);
 
     // If the token is active, verify it was issued to the calling client.
@@ -163,7 +188,16 @@ export class TokensController {
     ) {
       throw new BadRequestException('token is required');
     }
-    const callerClientId = await this.authenticateClient(realm, body, req);
+    // RFC 7662 §2.1 / RFC 7009 §2.1: the same client authentication as the
+    // token endpoint; a public client sends only its client_id.
+    const { clientId: callerClientId } = await this.clientAuthenticator
+      .authenticate({
+        realm,
+        body,
+        authorization: req.headers['authorization'],
+        clientCert: this.clientCertificates.fromRequest(req),
+      })
+      .catch(withTokensEndpointWording);
     await this.tokensService.assertTokenBelongsToClient(
       realm,
       body.token,
@@ -171,39 +205,6 @@ export class TokensController {
       body.token_type_hint,
     );
     return this.tokensService.revoke(realm, body.token, body.token_type_hint);
-  }
-
-  /**
-   * Authenticates the calling client (RFC 7662 §2.1, RFC 7009 §2.1) through
-   * the ClientAuthenticator the token endpoint uses: `client_secret_basic`,
-   * `client_secret_post`, or `none` for a public client, which sends only its
-   * client_id. Failures keep the wording these endpoints always used.
-   *
-   * Returns the resolved clientId so callers can enforce token-ownership checks.
-   */
-  private async authenticateClient(
-    realm: Realm,
-    body: Record<string, unknown>,
-    req: Request,
-  ): Promise<string> {
-    try {
-      const { clientId } = await this.clientAuthenticator.authenticate({
-        realm,
-        body,
-        authorization: req.headers['authorization'],
-        clientCert: this.clientCertificates.fromRequest(req),
-      });
-      return clientId;
-    } catch (err) {
-      if (err instanceof ClientAuthError && err.code === 'invalid_client') {
-        throw new UnauthorizedException({
-          error: 'invalid_client',
-          error_description:
-            CLIENT_AUTH_DESCRIPTIONS[err.reason] ?? err.description,
-        });
-      }
-      throw err;
-    }
   }
 
   @Post('logout')
