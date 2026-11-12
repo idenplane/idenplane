@@ -6,11 +6,12 @@ const mockPrisma = {
 };
 
 // Mock child_process. The tests describe the CLI's behaviour through
-// execSync (return the output, or throw with it as stdout); exec, which the
-// service uses (through prismaMigrateStatus), replays that asynchronously.
+// execSync (return the output, or throw with it as stdout); execFile, which
+// prismaMigrateStatus uses to run the CLI, replays that asynchronously under
+// the CLI's command line.
 jest.mock('child_process', () => ({
   execSync: jest.fn(),
-  exec: jest.fn(),
+  execFile: jest.fn(),
 }));
 
 // fs is mocked as a module rather than spied on: its exports are
@@ -26,7 +27,7 @@ jest.mock('fs', () => ({
 }));
 
 import { PreUpgradeValidatorService } from './pre-upgrade-validator.service.js';
-import { exec, execSync } from 'child_process';
+import { execFile, execSync } from 'child_process';
 import * as fs from 'fs';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { DatabaseBackupService } from './database-backup.service.js';
@@ -37,17 +38,20 @@ describe('PreUpgradeValidatorService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
-    (exec as unknown as jest.Mock).mockImplementation(
+    (execFile as unknown as jest.Mock).mockImplementation(
       (
-        cmd: string,
+        _file: string,
+        args: string[],
         opts: unknown,
-        cb: (err: unknown, stdout?: string) => void,
+        cb: (err: unknown, stdout: string, stderr: string) => void,
       ) => {
+        const cmd = `npx prisma ${args.slice(1).join(' ')} 2>&1`;
         try {
           const out = (execSync as jest.Mock)(cmd, opts) as string;
-          setImmediate(() => cb(null, out));
+          setImmediate(() => cb(null, out, ''));
         } catch (err) {
-          setImmediate(() => cb(err, (err as { stdout?: string }).stdout));
+          const stdout = String((err as { stdout?: string }).stdout ?? '');
+          setImmediate(() => cb(err, stdout, ''));
         }
       },
     );
