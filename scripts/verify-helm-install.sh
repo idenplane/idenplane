@@ -97,7 +97,7 @@ pf_pid=""
 
 step "helm upgrade keeps the generated keys"
 if ! helm upgrade "$RELEASE" "$CHART" --reuse-values \
-  --set env.THROTTLE_LIMIT=150 \
+  --set-string env.THROTTLE_LIMIT=150 \
   --wait --timeout 10m; then
   diagnose
   exit 1
