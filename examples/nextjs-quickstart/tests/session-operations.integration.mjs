@@ -210,8 +210,8 @@ try {
   const store = new PostgresSessionStore(source, new SessionCipher(payloadKey));
   const data = {
     subject: 'fixture-user',
-    accessToken: 'fixture-access-private',
-    refreshToken: 'fixture-refresh-private',
+    accessToken: 'dummy-access-private',
+    refreshToken: 'dummy-refresh-private',
     idToken: 'fixture-id-private',
   };
   const sid = await store.createSession(data),

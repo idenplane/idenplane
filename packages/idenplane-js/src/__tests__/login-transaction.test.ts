@@ -8,7 +8,7 @@ function setup() {
   const location = { href: 'http://localhost:3001/' };
   vi.stubGlobal('window', { sessionStorage: storage, location, history: { replaceState: vi.fn() } });
   const claims = btoa(JSON.stringify({ sub: 'user', exp: Math.floor(Date.now() / 1000) + 3600 }));
-  const token = 'eyJhbGciOiJSUzI1NiJ9.' + claims + '.signature';
+  const token = 'eyJhbGciOiJSUzI1NiJ9.' + claims + '.signature'; // dummy JWT
   const fetchMock = vi.fn(async (url: string) => ({ ok: true, json: async () => url.includes('.well-known') ? {
     authorization_endpoint: config.url + '/authorize', token_endpoint: config.url + '/token', end_session_endpoint: config.url + '/logout',
   } : { access_token: token, id_token: token, refresh_token: 'disposable-refresh', token_type: 'Bearer', expires_in: 3600 } }));
