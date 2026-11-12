@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { Suspense, useState, useEffect, useRef } from 'react';
 import { NavLink, Outlet, useParams, useNavigate, useLocation } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { getAllRealms } from '../api/realms';
@@ -6,6 +6,7 @@ import { useAuth } from '../hooks/useAuth';
 import Breadcrumbs from './Breadcrumbs';
 import { Icons, cn } from './ui';
 import type { IconProps } from './ui';
+import PageFallback from './PageFallback';
 
 type NavItem = { to: string; label: string; icon: (p: IconProps) => React.JSX.Element; end?: boolean };
 
@@ -257,7 +258,10 @@ export default function Layout() {
         {/* Page content */}
         <main id="main-content" className="flex-1 overflow-y-auto p-4 sm:p-6" tabIndex={-1}>
           <Breadcrumbs />
-          <Outlet />
+          {/* Keeps the shell on screen while the next page's chunk loads. */}
+          <Suspense fallback={<PageFallback />}>
+            <Outlet />
+          </Suspense>
         </main>
       </div>
     </div>

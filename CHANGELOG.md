@@ -32,6 +32,9 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 - **Verification links are bound to their realm.** Password-reset, password-change and email-verification tokens are only accepted on the realm of the user they were issued to. A token presented on another realm is rejected and stays unused.
 - **Removed the `hbs` package.** Login pages render through a small built-in view engine on the existing `handlebars` package, with fixed runtime options, a bounded template cache, and template and layout paths confined to the themes directory. Request data can no longer select engine options or the layout. Themes and translation helpers work as before.
 
+### Changed
+- **The admin console loads each page on demand.** Every page is its own code chunk, so the first load no longer downloads the whole console: the main bundle went from 877 kB to 138 kB (158 kB to 44 kB gzipped). The shell stays on screen with a short loading state while a page loads.
+
 ### Fixed
 - **The token endpoint accepts `client_secret_basic`.** Discovery advertised it, but `/token` ignored the `Authorization: Basic` header, so clients that use it by default (most OIDC libraries and the OpenID conformance suite) got `invalid_client`. Sending Basic together with `client_secret`, or with a different `client_id`, is rejected as `invalid_request`. Discovery no longer advertises `private_key_jwt`, which is not implemented.
 - **Introspection reported `client_credentials` tokens of clients without a service account as inactive.** They are active while the client exists and is enabled.
