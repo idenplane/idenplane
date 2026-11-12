@@ -433,24 +433,13 @@ async function ready(url) {
           request.url().split('?')[0] + ' ' + request.failure()?.errorText,
         );
       page.on('requestfailed', onFailed);
-      const signedIn = page.getByRole('heading', {
-        name: 'Signed in securely',
-      });
       await page.goto(web + '/server-session');
-      // A retried sign-in may find the first attempt finished after all.
-      if (await signedIn.isVisible())
-        return page.off('requestfailed', onFailed);
       await page
         .getByRole('button', { name: 'Sign in securely', exact: true })
         .click();
-      const usernameField = page.locator('input[name="username"]');
-      // An SSO session from an interrupted attempt skips the login form.
-      await usernameField.or(signedIn).first().waitFor({ timeout: 90000 });
-      if (await usernameField.isVisible()) {
-        await usernameField.fill(username);
-        await page.locator('input[name="password"]').fill(password);
-        await page.locator('button[type="submit"]').first().click();
-      }
+      await page.locator('input[name="username"]').fill(username);
+      await page.locator('input[name="password"]').fill(password);
+      await page.locator('button[type="submit"]').first().click();
       // The first sign-in crosses the provider, the TLS proxy and a cold
       // Next.js worker; shared CI runners sometimes need more than 30 s.
       try {
