@@ -39,7 +39,7 @@ Four values protect the installation. Generate each one once and keep it.
 |---|---|---|
 | `ADMIN_PASSWORD` | The initial `admin` user, created on the first start | Only used once. Afterwards, change the password in the console. |
 | `ADMIN_API_KEY` | The static admin API credential (at least 32 characters) | Yes. Clients using it must be updated. |
-| `WEBHOOK_SECRET_KEY` | Encrypts webhook and identity-provider secrets at rest | **No.** Stored secrets become unreadable. |
+| `WEBHOOK_SECRET_KEY` | Encrypts every stored secret at rest (see below) | **No.** Stored secrets become unreadable, and Idenplane refuses to start. |
 | `WEBHOOK_ENCRYPTION_SALT` | Derives the key above | **No.** |
 
 Keep them in a secret manager, not in a file on the server:
@@ -48,6 +48,23 @@ Keep them in a secret manager, not in a file on the server:
 - **Docker Compose:** `scripts/setup-env.cjs` writes `.env` with mode `0600`. Back that file up to your secret manager and restrict who can read it on the host.
 
 **Back up the two webhook keys separately from the database.** A database backup without them cannot decrypt its stored secrets.
+
+### Encryption at rest
+
+`WEBHOOK_SECRET_KEY` and `WEBHOOK_ENCRYPTION_SALT` derive one AES-256-GCM key. Despite the name, it encrypts every secret Idenplane must read back later:
+
+- realm SMTP password, CAPTCHA secret keys, and email and SMS provider credentials;
+- identity provider (OIDC and social) client secrets;
+- LDAP federation bind credentials;
+- audit log stream HTTP header values;
+- secret-named keys of organization SSO connection configs (`clientSecret`, `password`, `privateKey`, `…Token`, `apiKey` and the like);
+- realm signing keys (the private key that signs tokens and SAML assertions);
+- TOTP seeds, SMS factor phone numbers, NHI private keys and webhook signing secrets;
+- the SMTP password entered in the setup wizard.
+
+Passwords, client secrets, API keys, SCIM tokens and session tokens are hashed, not encrypted, and need no key. The admin API never returns an encrypted secret: it returns `••••••`, and sending `••••••` back on an update keeps the stored value.
+
+On every start, Idenplane checks that the key is the one the stored secrets were encrypted with, using a check value kept in the `encryption_key_check` table. With another key it **refuses to start** rather than read or rewrite secrets with the wrong key: restore the previous `WEBHOOK_SECRET_KEY` and `WEBHOOK_ENCRYPTION_SALT`. The same start encrypts any secret still stored in plaintext by an older version; it is safe with several replicas or workers starting at once. There is no key rotation yet, so these two values must be kept for the life of the database.
 
 ---
 
