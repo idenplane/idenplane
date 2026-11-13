@@ -18,6 +18,10 @@ import { EmailService } from '../src/email/email.service';
 import { CacheService } from '../src/cache/cache.service';
 import { SECRET_PLACEHOLDER } from '../src/realms/secret-placeholder';
 
+/** Escapes every regular-expression metacharacter in `text`. */
+const escapeRegExp = (text: string): string =>
+  text.replace(/[.*+?^${}()|[\]\\/-]/g, '\\$&');
+
 const REALM = 'captcha-e2e';
 const PASSWORD = 'Str0ng!Passw0rd#';
 const HOSTED_HOST = new URL(process.env['BASE_URL'] ?? 'http://localhost:3000')
@@ -397,7 +401,7 @@ describe('CAPTCHA enforcement on registration (e2e)', () => {
         const hc = 'https://hcaptcha.com https://*.hcaptcha.com';
         expect(csp).toMatch(
           new RegExp(
-            `script-src 'self' 'nonce-[^']+' ${hc.replace(/[.*]/g, '\\$&')};`,
+            `script-src 'self' 'nonce-[^']+' ${escapeRegExp(hc)};`,
           ),
         );
         expect(csp).toContain(`frame-src 'self' ${hc}`);
