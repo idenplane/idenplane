@@ -21,7 +21,9 @@ A flow is a `name`, an optional `description`, a `version`, and an ordered array
 ```typescript
 interface FlowStep {
   id: string;                       // unique within the flow, max 100 characters
-  type: 'password' | 'ldap' | 'totp' | 'webauthn';
+  type:
+    | 'password' | 'ldap' | 'webauthn' | 'magic_link' | 'social' // identify the user
+    | 'totp' | 'email_otp';                                      // second factors
   required: boolean;
   order: number;                    // integer >= 1, unique; lower runs first
   condition?: {
@@ -45,9 +47,12 @@ interface FlowStep {
 | `password` | Yes | none |
 | `ldap` | Yes | `federationProviderId` (string) |
 | `webauthn` | Yes (passwordless) or second factor | `rpName` (string), `userVerification` (`required`, `preferred`, `discouraged`) |
+| `magic_link` | Yes (a sign-in link sent to the account's email) | `expirySeconds` (integer, 60–600) |
+| `social` | Yes (a sign-in at a realm identity provider) | `providerAlias` (**required**: an enabled identity provider of the realm) |
 | `totp` | No (second factor) | `issuer` (string), `digits` (`6` or `8`), `algorithm` (`SHA1`, `SHA256`, `SHA512`) |
+| `email_otp` | No (second factor: a code sent to the account's email) | `otpLength` (`6` or `8`), `expirySeconds` (integer, 60–600) |
 
-`social`, `email_otp`, `magic_link` and `consent` are recognised but **not supported yet**: a flow that uses them is rejected with `unsupported_type`. Social, email OTP and magic-link steps are planned for a later release; consent is not a flow step (it is handled after the flow, as today).
+`consent` is recognised but is not a flow step: a flow that uses it is rejected with `unsupported_type`. Consent is handled after the flow, as for every sign-in.
 
 ### Conditions
 
@@ -74,7 +79,7 @@ Every create and update runs the same strict validator; a failing flow is reject
   "statusCode": 400,
   "message": "Authentication flow is invalid",
   "errors": [
-    { "path": "steps[0].type", "code": "first_step_not_identifying", "message": "The first step must identify the user (password, ldap, webauthn); 'totp' does not" }
+    { "path": "steps[0].type", "code": "first_step_not_identifying", "message": "The first step must identify the user (password, ldap, webauthn, magic_link, social); 'totp' does not" }
   ]
 }
 ```
@@ -83,11 +88,12 @@ The rules:
 
 - 1 to 20 steps; step `id`s unique and non-empty; `order`s unique integers ≥ 1.
 - Supported step types only (see above).
-- The first step identifies the user (`password`, `ldap` or `webauthn`), is required, and has no condition.
+- The first step identifies the user (`password`, `ldap`, `webauthn`, `magic_link` or `social`), is required, and has no condition. So `email_otp`, like `totp`, only runs after the user is identified.
 - Every `fallbackStepId` points at another existing step of the flow, not at the first step; the fallback graph has no cycles; and no step is unreachable.
 - Identifying steps may only fall back to identifying steps.
 - Conditions use only the whitelisted fields, a known operator, and a value of the right shape.
-- Each step's `config` contains only the keys listed for its type, with valid values.
+- Each step's `config` contains only the keys listed for its type, with valid values, and the required ones (`config_missing_key`).
+- A `social` step names an identity provider that exists in the realm and is enabled (`provider_not_found`). This is checked again at every login: deleting or disabling the provider makes the binding fail closed (`503`), never fall back.
 
 Flows saved before these rules may not pass them. `POST …/auth-flows/{id}/validate` checks a stored flow without changing it, and a flow that fails validation cannot be bound.
 
@@ -204,14 +210,38 @@ The flow drives the same hosted pages and endpoints as the built-in login, so th
 | `password`, `ldap` | login page | `POST /realms/{realm}/login` |
 | `totp` | second-factor page (authenticator, texted or recovery code) | `POST /realms/{realm}/totp` |
 | `webauthn` | login page, *Sign in with a passkey* | `POST /realms/{realm}/webauthn/authenticate/verify` |
+| `email_otp` | email-code page (`email-otp`) | `POST /realms/{realm}/login/email-otp/send`, then `POST /realms/{realm}/login/email-otp` |
+| `magic_link` | sign-in-link page (`magic-link`) | `POST /realms/{realm}/login/magic-link/send`, then the link: `GET /realms/{realm}/login/magic-link?token=…` |
+| `social` | login page, *Sign in with {provider}* | `GET /realms/{realm}/broker/{alias}/login`, back at `GET /realms/{realm}/broker/{alias}/callback` |
 
 - **A server-side login transaction.** `/auth` validates the request, starts a transaction and points the browser at it with the `IDENPLANE_AUTHN_TXN` cookie. The transaction lasts 10 minutes. It pins the flow's id and `version`, holds the OAuth request, the identified user, the current step and a receipt for each step passed. OAuth parameters posted in forms are ignored. The cookie value changes once the user is identified.
 - **Steps.** A step passes, or it fails and its fallback runs, or, with no fallback, the page shows an error. After five failed answers the login starts over. A locked account, a rate-limited second factor or an unexpected error ends the login; it never moves to the fallback.
 - **Declining a step.** Submitting to the endpoint of the current step's own, direct fallback (for example, the password form while a passkey step with a password fallback is current) counts as failing the current step, so the fallback runs. Any other endpoint is refused (see below).
 - **Conditions and `required`.** A step whose condition is false is skipped. A step without a condition applies; if the user has no credential for it (no authenticator app, no passkey), an optional step is skipped and a required one runs its fallback. A required `totp` step makes a user without a second factor enrol one first, as a realm that requires MFA does.
-- **Checks after identification.** Once the user is identified, the same checks as the built-in login run once: risk assessment (a block ends the login), email verification, and password expiry (not after a passkey).
-- **Never weaker than the built-in login.** The session's `acr` and `amr` come only from the steps actually passed. The login must reach the strongest of: the requested `acr_values` or `claims` acr, the client's required ACR, the risk level, and MFA when the client or realm requires it or the user has a second factor. If the flow fell short, the runtime adds a second-factor or passkey step the user can do, or sends a user without a second factor through MFA enrolment. A client's required ACR that the user cannot reach ends in `access_denied`.
+- **Checks after identification.** Once the user is identified, the same checks as the built-in login run once, in this order: risk assessment (a block ends the login), email verification, and password expiry (only after a `password` or `ldap` step). A risk step-up is applied after these checks. After a forced password change the login starts again through `/auth` with the original request.
+- **Never weaker than the built-in login.** The session's `acr` and `amr` come only from the steps actually passed. The login must reach the strongest of: the requested `acr_values` or `claims` acr, the client's required ACR, the risk level, and MFA when the client or realm requires it or the user has a second factor. If the flow fell short, the runtime adds a second-factor or passkey step the user can do, or sends a user without a second factor through MFA enrolment. A client's required ACR that the user cannot reach ends in `access_denied`. With `ENFORCE_ACR_ON_FRESH_LOGIN=true`, an `acr` requested as an Essential Claim (OIDC `claims` parameter) is mandatory too, and one the user cannot reach ends in `unmet_authentication_requirements`, as for the built-in login.
 - **After the flow.** The transaction is claimed once, the SSO session is created, and consent and the authorization code follow as for every sign-in. Consent is not a flow step.
+
+### Email, link and social steps
+
+- **`email_otp`.** The page offers *Send a code*; nothing is sent when the page is only viewed. The code goes to the identified user's address, which must be verified, and only if the realm can send email (otherwise the user cannot do the step: an optional one is skipped, a required one runs its fallback). Only a keyed hash of the code is stored, bound to this login transaction. Each guess is counted before the code is compared (in constant time), and a correct code works once. A code expires after `expirySeconds` (default 300), never after the transaction. Limits: 5 guesses and 5 codes per transaction, 30 seconds between two codes, and per user 10 codes and 10 wrong guesses in 15 minutes across transactions. Running out of guesses ends the login (it never runs a fallback).
+- **`magic_link`.** The page asks for an email address, or, after identification, offers to send the link to the user's own. The answer is the same whether or not an account has that address, and nothing is sent to an unverified address. The link points at this server and works **only in the browser that asked for it**, while that login is in progress: the link's token is checked against the transaction the browser's `IDENPLANE_AUTHN_TXN` cookie points to. Opened anywhere else (another browser, a mail client's preview, a security scanner), it shows an error page and changes nothing, so it still works in the right browser. A link works once, expires after `expirySeconds` (default: the realm's magic-link expiry, at most 10 minutes), and a newer link replaces it. Per transaction, 3 links at most, 30 seconds apart; the realm's per-address limit (`magicLinkRateLimitPerEmail`) and IP limit apply. The token is stored only as a keyed hash, and the standalone `/magic-link/verify` API never accepts a flow link.
+- **`social`.** The login page offers the step's provider. The redirect to the provider carries a signed state naming this transaction, the step and a single-use nonce kept in the transaction; the callback finishes the step only in the browser holding that transaction, once. The client's `state`, `nonce` and PKCE challenge stay in the transaction. As the first step, the provider's account signs in as its linked account (or, as for the built-in federated sign-in, an account matched by a verified email of a provider trusted for email, or a new one unless the provider is link-only). After identification, the provider's account must already be linked to the user (or be linkable through such a verified email); no account is created, and an account linked to someone else ends the login. A cancelled or failed sign-in at the provider is a failed step, so its fallback can run.
+- **Declining.** A password step whose fallback is a sign-in link shows *Email me a sign-in link instead*, a link step whose fallback is a password shows *Use your password instead*, and a step whose fallback is a social step shows that provider: using the alternative counts as failing the current step, as for a passkey step.
+
+#### Strength (`acr`) and methods (`amr`)
+
+How strong a flow sign-in is depends on the kind of each step passed, never on the `amr` values:
+
+| Steps passed | `acr` | `amr` |
+|---|---|---|
+| a passkey (alone or with others) | WebAuthn | `hwk`, … |
+| an identifying step and a second factor (`totp`, `email_otp`, MFA enrolment) | MFA | e.g. `pwd`, `otp` |
+| a sign-in link and an emailed code (one mailbox) | password | `otp` |
+| two identifying steps (password and social, password and sign-in link) | password | e.g. `pwd` |
+| an identifying step alone | password | `pwd` (password, LDAP), `otp` (sign-in link), none (social) |
+
+`email_otp` records `otp` (RFC 8176). A sign-in link records `otp` too: RFC 8176 has no value for it, and a link carries a single-use secret delivered out of band. A social step records no method, as the built-in federated sign-in does (the provider's methods are not known); the token endpoint reports an empty list as `pwd`, as before.
 
 ### Single sign-on
 
@@ -229,12 +259,14 @@ A weaker session signs in again through the flow; with `prompt=none` the respons
 - A submission for another step than the current one is refused with `400`, and the transaction ends.
 - A step after identification cannot switch user: another account's password or passkey ends the transaction.
 - Of two concurrent submissions of the same step, the second is refused with `409`. A finished transaction cannot be replayed.
-- Where a login is bound, the built-in sign-in paths cannot create a session: a stale login form starts again, and a social (identity-provider) sign-in is refused with a themed `403` page as soon as it returns from the provider, before any second factor is asked for (social steps are not supported yet).
+- Where a login is bound, the built-in sign-in paths cannot create a session: a stale login form starts again, and an identity-provider sign-in that a `social` step did not start is refused with a themed `403` page as soon as it returns from the provider, before any second factor is asked for. A callback, sign-in link or code for another browser's login is refused there and changes nothing.
 
 ### Current limits
 
 - On a passkey step without a password fallback, the built-in themes hide the password form (the template gets `passkeyOnly`). A custom theme that does not check `passkeyOnly` still shows it, and submitting it there ends the transaction.
-- Identity-provider buttons are hidden on bound logins.
+- On bound logins, the login page offers only the identity providers of the current step (or its fallback), never the realm's other providers.
+- The same applies to a social step without a password fallback: the built-in themes hide the password form (`passwordFormHidden`); a custom theme that does not check it still shows it, and submitting it ends the transaction.
+- `email-otp` and `magic-link` are new pages. A custom theme without them uses the built-in theme's.
 
 ---
 
@@ -312,7 +344,7 @@ While the server runs without `AUTH_FLOW_RUNTIME_ENABLED`, the panel shows a not
 
 Opening a flow opens a canvas-based editor:
 
-- **Step palette.** Drag a step onto the canvas, or click it to append it. Types the runtime does not support yet are marked *coming*.
+- **Step palette.** Drag a step onto the canvas, or click it to append it. *Consent*, which is not a flow step, is marked *coming*.
 - **Fallback connections.** These render as dashed lines between steps.
 - **Preview mode.** Walks the flow top to bottom.
 - **Validation errors on save.** Errors are listed per step.
