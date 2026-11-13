@@ -16,6 +16,7 @@ import {
 } from '../src/captcha/captcha.service';
 import { EmailService } from '../src/email/email.service';
 import { CacheService } from '../src/cache/cache.service';
+import { SECRET_PLACEHOLDER } from '../src/realms/secret-placeholder';
 
 const REALM = 'captcha-e2e';
 const PASSWORD = 'Str0ng!Passw0rd#';
@@ -198,6 +199,29 @@ describe('CAPTCHA enforcement on registration (e2e)', () => {
 
     it('accepts a complete configuration', async () => {
       expect((await enableHcaptcha()).status).toBe(200);
+    });
+
+    it('returns the secret as the placeholder and keeps it when the placeholder is sent back', async () => {
+      await enableHcaptcha();
+      const got = await admin()
+        .get(`/admin/realms/${REALM}`)
+        .set('x-admin-api-key', TEST_ADMIN_API_KEY);
+      expect(got.status).toBe(200);
+      expect(got.body.hcaptchaSecretKey).toBe(SECRET_PLACEHOLDER);
+      expect(JSON.stringify(got.body)).not.toContain('hc-secret');
+
+      // Round-trip what the admin console sends back.
+      const saved = await configure({
+        captchaEnabled: true,
+        captchaProvider: 'hcaptcha',
+        hcaptchaSiteKey: 'hc-site-key',
+        hcaptchaSecretKey: got.body.hcaptchaSecretKey,
+      });
+      expect(saved.status).toBe(200);
+      received = [];
+      const res = await apiRegister({ ...newUser(), captchaToken: 'good' });
+      expect(res.status).toBe(201);
+      expect(received[0].form.get('secret')).toBe('hc-secret');
     });
   });
 
@@ -551,6 +575,79 @@ describe('CAPTCHA enforcement on registration (e2e)', () => {
         expect(res.headers.location).toContain('/login?info=');
         expect(await userExists(user.username)).toBe(true);
         expect(received).toHaveLength(0);
+      });
+    });
+
+    describe('midnight theme with terms of service and a custom attribute', () => {
+      beforeAll(async () => {
+        const realm = await ctx.prisma.realm.update({
+          where: { name: REALM },
+          data: {
+            loginTheme: 'midnight',
+            termsOfServiceUrl: 'https://example.com/terms',
+          },
+        });
+        await ctx.prisma.customAttribute.create({
+          data: {
+            realmId: realm.id,
+            name: 'department',
+            displayName: 'Department',
+            type: 'text',
+            required: true,
+            showOnRegistration: true,
+          },
+        });
+        await ctx.app.get(CacheService).invalidateRealmCache(realm.id, REALM);
+      });
+      afterAll(async () => {
+        const realm = await ctx.prisma.realm.update({
+          where: { name: REALM },
+          data: { loginTheme: 'idenplane', termsOfServiceUrl: null },
+        });
+        await ctx.prisma.customAttribute.deleteMany({
+          where: { realmId: realm.id, name: 'department' },
+        });
+        await ctx.app.get(CacheService).invalidateRealmCache(realm.id, REALM);
+      });
+
+      it('renders the terms checkbox and the custom attribute', async () => {
+        const res = await new Browser(ctx.app).get(`/realms/${REALM}/register`);
+        expect(res.text).toContain('midnight');
+        expect(res.text).toContain('name="terms_accepted"');
+        expect(res.text).toContain('href="https://example.com/terms"');
+        expect(res.text).toContain('name="attr_department"');
+      });
+
+      it('refuses a registration without accepting the terms', async () => {
+        const browser = new Browser(ctx.app);
+        const page = await browser.get(`/realms/${REALM}/register`);
+        const user = newUser();
+        const res = await browser.post(`/realms/${REALM}/register`, {
+          ...fillForm(page.text, user),
+          attr_department: 'Sales',
+        });
+        expect(res.headers.location).toContain('register?error=');
+        expect(await userExists(user.username)).toBe(false);
+      });
+
+      it('registers with the terms accepted and the attribute filled in', async () => {
+        const browser = new Browser(ctx.app);
+        const page = await browser.get(`/realms/${REALM}/register`);
+        const user = newUser();
+        const res = await browser.post(`/realms/${REALM}/register`, {
+          ...fillForm(page.text, user),
+          terms_accepted: '1',
+          attr_department: 'Sales',
+        });
+        expect(res.headers.location).toContain('/login?info=');
+        expect(await userExists(user.username)).toBe(true);
+        const stored = await ctx.prisma.userAttribute.findFirst({
+          where: {
+            user: { username: user.username, realm: { name: REALM } },
+            attribute: { name: 'department' },
+          },
+        });
+        expect(stored?.value).toBe('Sales');
       });
     });
   });
