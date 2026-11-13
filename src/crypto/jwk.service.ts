@@ -93,6 +93,7 @@ export class JwkService {
 
   async verifyJwt(token: string, publicKeyPem: string): Promise<JWTPayload> {
     const publicKey = await this.publicKeys.get(publicKeyPem);
+    // cert-binding: exempt: the verification helper itself; every caller of verifyJwt is classified
     const { payload } = await jwtVerify(token, publicKey);
     return payload;
   }

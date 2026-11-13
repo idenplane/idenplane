@@ -13,7 +13,7 @@ A client can prove who it is with a TLS client certificate instead of a `client_
 | `tls_client_auth` | its certificate chains to one of the realm's **trust anchors** (CAs), and matches the **one subject rule** the client is registered with | Fleets of workloads or devices with certificates from your own PKI |
 | `self_signed_tls_client_auth` | its certificate's SHA-256 thumbprint (`x5t#S256`) is one the client **registered** in advance | A handful of clients, no PKI |
 
-Both work at the token, introspection and revocation endpoints, with any grant the client is allowed (typically `client_credentials`). Certificate-bound access tokens (`cnf`, RFC 8705 §3) are not issued yet.
+Both work at the token, introspection and revocation endpoints, with any grant the client is allowed (typically `client_credentials`). A client can also receive [certificate-bound access tokens](#certificate-bound-access-tokens) (RFC 8705 §3), which are useless without its certificate.
 
 ## Everything is off by default
 
@@ -34,7 +34,7 @@ The TLS handshake proves the client holds the key. Whether the certificate is tr
 
 ### Direct: Idenplane's certificate listener
 
-Idenplane opens a second HTTPS port that asks every client for a certificate. It serves only the endpoints a client needs (discovery, token, introspection, revocation, userinfo, device authorization, JWKS); everything else is 404 there.
+Idenplane opens a second HTTPS port that asks every client for a certificate. It serves only the endpoints a client needs (discovery, token, introspection, revocation, userinfo, device authorization, JWKS, and the MFA SMS endpoint of the `mfa_otp` grant); everything else is 404 there, the session events WebSocket included.
 
 ```bash
 MTLS_ENABLED=true
@@ -169,8 +169,53 @@ curl --cert sensor-17.crt --key sensor-17.key \
 | `401 invalid_client` "Client authentication method is not available" | `MTLS_ENABLED` or the realm's `mtlsClientAuthEnabled` is off. |
 | `429 slow_down` with `Retry-After` | This certificate failed `MTLS_AUTH_FAILURE_LIMIT_PER_MINUTE` times this minute in this realm. |
 
-A client that authenticates with a secret is not affected by a certificate it happens to present.
+A client that authenticates with a secret is not affected by a certificate it happens to present, unless it receives certificate-bound tokens (next section).
+
+## Certificate-bound access tokens
+
+A stolen bearer token works for whoever holds it. A **certificate-bound** token ([RFC 8705 §3](https://www.rfc-editor.org/rfc/rfc8705#section-3)) works only on a request that presents the client certificate it was issued to. Turn it on per client:
+
+```bash
+curl -X PUT https://idp.example.com/admin/realms/acme/clients/sensor-17 \
+  -H "x-admin-api-key: $ADMIN_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"tlsClientCertificateBoundAccessTokens": true}'
+```
+
+Every access token the client then gets from the token endpoint, with any grant (`authorization_code`, `refresh_token`, `client_credentials`, device code, `password`), carries the thumbprint of the certificate presented with the token request:
+
+```json
+{ "sub": "…", "azp": "sensor-17", "cnf": { "x5t#S256": "n4bQgYhMfWWaL-qgxVrQFaO_TxsrC4Is0V1sFbDwCgg" } }
+```
+
+- **Any authentication method.** The client may authenticate with a certificate method, with a secret, or as a public client (`none`): what counts is the certificate it presents over mutual TLS. A token request **without** a certificate is `401 invalid_client`; the client never silently gets an unbound token.
+- **Nothing can change the binding.** `cnf` is set after protocol mappers and token plugins, so a mapper or plugin that writes or deletes `cnf` has no effect.
+- **Refresh.** A confidential client's refreshed access token is bound to the certificate it presents *now*, so it can roll over to a new certificate. A public client has no other credential, so its refresh token is bound too: a refresh must present the **same** certificate, or it is `400 invalid_grant` (and the refresh token stays usable by its owner).
+- **Introspection** returns `cnf` for a bound access token, and for a public client's bound refresh token, so a resource server can check the binding itself.
+
+### Where the binding is enforced
+
+Idenplane checks the binding wherever it accepts an access token: **userinfo** (GET and POST), the **session events WebSocket** (`/ws/events`) and **admin API bearer authentication**. The certificate must reach Idenplane the same way as for the token request: through the [certificate listener](#direct-idenplanes-certificate-listener) or a [trusted proxy's header](#behind-a-proxy-that-terminates-tls). The certificate listener serves userinfo but not the WebSocket or the admin API, so those see a certificate only through a trusted proxy.
+
+| Request with a bound token | Response |
+|---|---|
+| Same certificate | Accepted |
+| No certificate, or a header from an untrusted peer | `401` `{"error":"invalid_token"}` |
+| A different certificate | `401` `{"error":"invalid_token"}` |
+
+Each `401` carries `WWW-Authenticate: Bearer error="invalid_token", error_description="…"` (RFC 6750 §3). Tokens of clients without the flag are not affected, and their requests never read a certificate.
+
+Your own APIs must check the binding too. With the JavaScript SDK, pass the presented certificate to `verifyToken`:
+
+```ts
+import { verifyToken } from 'idenplane-sdk/server';
+
+const der = req.socket.getPeerX509Certificate()?.raw; // or from your proxy
+const payload = await verifyToken(token, config, { certificate: der });
+// or { certificateThumbprint: '<x5t#S256>' }; computeX5tS256(der) computes it
+```
+
+`verifyToken` rejects a bound token verified without a certificate, or with a different one, with `CertificateBindingError`.
 
 ## Discovery
 
-For a realm with certificate authentication on (and `MTLS_ENABLED`), `token_endpoint_auth_methods_supported` lists `tls_client_auth` and `self_signed_tls_client_auth`, and, when `MTLS_BASE_URL` is set, `mtls_endpoint_aliases` points the token, introspection, revocation, userinfo and device authorization endpoints at it. Other realms are unchanged.
+For a realm with certificate authentication on (and `MTLS_ENABLED`), `token_endpoint_auth_methods_supported` lists `tls_client_auth` and `self_signed_tls_client_auth`, `tls_client_certificate_bound_access_tokens` is `true`, and, when `MTLS_BASE_URL` is set, `mtls_endpoint_aliases` points the token, introspection, revocation, userinfo and device authorization endpoints at it. Other realms are unchanged.

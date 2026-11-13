@@ -1,5 +1,6 @@
 import { HttpException, HttpStatus, BadRequestException } from '@nestjs/common';
 import { GlobalExceptionFilter } from './http-exception.filter.js';
+import { CertificateBindingError } from '../../mtls/certificate-binding.js';
 
 describe('GlobalExceptionFilter', () => {
   let filter: GlobalExceptionFilter;
@@ -22,6 +23,24 @@ describe('GlobalExceptionFilter', () => {
   describe('non-production environment', () => {
     beforeEach(() => {
       process.env.NODE_ENV = 'development';
+    });
+
+    it('sends the WWW-Authenticate challenge of a refused bound token', () => {
+      const setHeader = jest.fn();
+      Object.assign(mockResponse, { setHeader });
+
+      filter.catch(new CertificateBindingError('mismatch'), mockHost);
+
+      expect(mockResponse.status).toHaveBeenCalledWith(401);
+      expect(setHeader).toHaveBeenCalledWith(
+        'WWW-Authenticate',
+        expect.stringMatching(
+          /^Bearer error="invalid_token", error_description="/,
+        ),
+      );
+      expect(mockResponse.json).toHaveBeenCalledWith(
+        expect.objectContaining({ error: 'invalid_token' }),
+      );
     });
 
     it('should handle HttpException with string message', () => {

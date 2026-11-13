@@ -1,11 +1,13 @@
 import { CachedLookupsService } from '../cache/cached-lookups.service.js';
-import type { Server as HttpServer } from 'http';
-import { Injectable, Logger } from '@nestjs/common';
+import type { IncomingMessage, Server as HttpServer } from 'http';
+import { Injectable, Logger, Optional } from '@nestjs/common';
 import { WebSocketServer, WebSocket } from 'ws';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { JwkService } from '../crypto/jwk.service.js';
 import { TokenBlacklistService } from '../tokens/token-blacklist.service.js';
 import { CacheBusService } from '../cache/cache-bus.service.js';
+import { ClientCertificateSource } from '../mtls/client-certificate.source.js';
+import { assertCertificateBinding } from '../mtls/certificate-binding.js';
 
 /** The bus topic session events travel on between processes. */
 const TOPIC = 'session-events';
@@ -46,6 +48,7 @@ export class SessionEventsGateway {
     private readonly jwkService: JwkService,
     private readonly blacklist: TokenBlacklistService,
     private readonly bus: CacheBusService,
+    @Optional() private readonly certificates?: ClientCertificateSource,
   ) {
     // An event is raised by whichever process runs the job that found it
     // (the leader); the user's sockets may be held by any process. Every
@@ -71,7 +74,7 @@ export class SessionEventsGateway {
         return;
       }
 
-      this.authenticate(url.searchParams)
+      this.authenticate(url.searchParams, req)
         .then((auth) => {
           if (!auth) {
             socket.write('HTTP/1.1 401 Unauthorized\r\n\r\n');
@@ -131,6 +134,7 @@ export class SessionEventsGateway {
 
   private async authenticate(
     searchParams: URLSearchParams,
+    req?: IncomingMessage,
   ): Promise<{ userId: string } | null> {
     const token = searchParams.get('token');
     const realmName = searchParams.get('realm');
@@ -146,7 +150,19 @@ export class SessionEventsGateway {
 
     let payload;
     try {
+      // cert-binding: enforced
       payload = await this.jwkService.verifyJwt(token, signingKey.publicKey);
+    } catch {
+      return null;
+    }
+    // RFC 8705 §3: a certificate-bound token needs its certificate. The
+    // certificate listener serves no WebSocket, so here it can only come from
+    // a trusted proxy's header. Read inside this promise, so a malformed
+    // header is a refusal and never an uncaught throw in the upgrade handler.
+    try {
+      assertCertificateBinding(payload, () =>
+        req && this.certificates ? this.certificates.fromRequest(req) : null,
+      );
     } catch {
       return null;
     }

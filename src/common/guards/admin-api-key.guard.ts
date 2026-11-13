@@ -15,6 +15,7 @@ import { AdminAuthService } from '../../admin-auth/admin-auth.service.js';
 import { RateLimitService } from '../../rate-limit/rate-limit.service.js';
 import type { RateLimitResult } from '../../rate-limit/rate-limit.dto.js';
 import { resolveClientIp } from '../utils/proxy-ip.util.js';
+import { CertificateBindingError } from '../../mtls/certificate-binding.js';
 
 @Injectable()
 export class AdminApiKeyGuard implements CanActivate {
@@ -52,10 +53,16 @@ export class AdminApiKeyGuard implements CanActivate {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.slice(7);
       try {
-        const adminUser = await this.adminAuthService.validateAdminToken(token);
+        const adminUser = await this.adminAuthService.validateAdminToken(
+          token,
+          request,
+        );
         adminReq.adminUser = adminUser;
         return true;
-      } catch {
+      } catch (err) {
+        // A certificate-bound token without its certificate is refused
+        // outright with its RFC 6750 challenge (RFC 8705 §3).
+        if (err instanceof CertificateBindingError) throw err;
         // Fall through to API key check
       }
     }

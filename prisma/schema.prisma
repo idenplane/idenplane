@@ -544,6 +544,11 @@ model RefreshToken {
   /// The client that was granted this refresh token (security fix #456).
   /// Nullable for backwards compatibility with tokens created before this migration.
   clientId  String? @map("client_id")
+  /// RFC 8705 §4: the `x5t#S256` of the certificate a public client presented
+  /// when this token was issued. A refresh must present the same certificate.
+  /// Null for unbound tokens and for confidential clients, whose refreshed
+  /// access tokens are bound to whatever certificate authenticates the refresh.
+  cnfX5tS256 String? @map("cnf_x5t_s256")
 
   createdAt DateTime @default(now()) @map("created_at")
   expiresAt DateTime @map("expires_at")

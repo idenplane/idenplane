@@ -15,6 +15,7 @@ import {
   MockPrismaService,
 } from '../prisma/prisma.mock.js';
 import type { Realm } from '@prisma/client';
+import { CertificateBindingError } from '../mtls/certificate-binding.js';
 
 describe('TokensService', () => {
   let service: TokensService;
@@ -551,6 +552,108 @@ describe('TokensService', () => {
       await expect(
         service.logout(mockRealm, '127.0.0.1', 'invalid-refresh'),
       ).rejects.toThrow(UnauthorizedException);
+    });
+  });
+
+  describe('certificate-bound tokens (RFC 8705 §3)', () => {
+    const X5T = 'n4bQgYhMfWWaL-qgxVrQFaO_TxsrC4Is0V1sFbDwCgg';
+    const cnf = { 'x5t#S256': X5T };
+
+    beforeEach(() => {
+      prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-1',
+        username: 'testuser',
+        enabled: true,
+        updatedAt: new Date('2026-01-01'),
+      });
+      prisma.userRole.findMany.mockResolvedValue([]);
+      prisma.userGroup.findMany.mockResolvedValue([]);
+      scopesService.parseAndValidate.mockReturnValue(['openid']);
+      scopesService.getClaimsForScopes.mockReturnValue(new Set(['sub']));
+    });
+
+    it('introspection returns cnf for a bound access token', async () => {
+      jwkService.verifyJwt.mockResolvedValue({ sub: 'user-1', cnf });
+
+      const result = await service.introspect(mockRealm, 'bound-token');
+
+      expect(result).toMatchObject({ active: true, cnf });
+    });
+
+    it('introspection has no cnf for an unbound access token', async () => {
+      jwkService.verifyJwt.mockResolvedValue({ sub: 'user-1' });
+
+      const result = await service.introspect(mockRealm, 'token');
+
+      expect(JSON.parse(JSON.stringify(result))).not.toHaveProperty('cnf');
+    });
+
+    it('introspection returns cnf for a bound refresh token', async () => {
+      jwkService.verifyJwt.mockRejectedValue(new Error('not a JWT'));
+      cryptoService.sha256.mockReturnValue('rt-hash');
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        revoked: false,
+        expiresAt: new Date(Date.now() + 60_000),
+        createdAt: new Date(),
+        clientId: 'public-app',
+        cnfX5tS256: X5T,
+        session: {
+          user: {
+            id: 'user-1',
+            username: 'u',
+            enabled: true,
+            realmId: 'realm-1',
+          },
+        },
+      });
+
+      const result = await service.introspect(mockRealm, 'opaque');
+
+      expect(result).toMatchObject({ active: true, cnf });
+    });
+
+    it('userinfo answers a bound token presented with its certificate', async () => {
+      jwkService.verifyJwt.mockResolvedValue({ sub: 'user-1', cnf });
+
+      await expect(
+        service.userinfo(mockRealm, 'bound-token', () => ({ x5tS256: X5T })),
+      ).resolves.toBeDefined();
+    });
+
+    it.each([
+      ['no certificate', () => null, 'missing'],
+      [
+        'another certificate',
+        () => ({ x5tS256: `x${X5T.slice(1)}` }),
+        'mismatch',
+      ],
+    ])(
+      'userinfo refuses a bound token with %s: 401 invalid_token',
+      async (_label, presented, reason) => {
+        jwkService.verifyJwt.mockResolvedValue({ sub: 'user-1', cnf });
+
+        const err = await service
+          .userinfo(mockRealm, 'bound-token', presented)
+          .catch((e: unknown) => e);
+
+        expect(err).toBeInstanceOf(CertificateBindingError);
+        expect((err as CertificateBindingError).reason).toBe(reason);
+        expect((err as CertificateBindingError).getStatus()).toBe(401);
+        expect(prisma.user.findUnique).not.toHaveBeenCalled();
+      },
+    );
+
+    it('userinfo never reads the certificate for an unbound token', async () => {
+      jwkService.verifyJwt.mockResolvedValue({ sub: 'user-1' });
+      const read = jest.fn(() => {
+        throw new Error('malformed header');
+      });
+
+      await expect(
+        service.userinfo(mockRealm, 'token', read),
+      ).resolves.toBeDefined();
+      expect(read).not.toHaveBeenCalled();
     });
   });
 });
