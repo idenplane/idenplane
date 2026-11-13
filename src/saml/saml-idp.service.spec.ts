@@ -294,6 +294,32 @@ describe('SamlIdpService', () => {
       expect(xml).toContain('InResponseTo="_inresponseto123"');
     });
 
+    it('names the ACS URL it is posted to as Recipient and Destination', async () => {
+      prisma.realmSigningKey.findFirst.mockResolvedValue({
+        ...mockSigningKey,
+        publicKey,
+        privateKey,
+      });
+      const alternate = 'https://sp.example.com/saml/acs-alternate';
+
+      const result = await service.createSamlResponse(
+        mockRealm,
+        mockSp,
+        mockUser,
+        '_req',
+        alternate,
+      );
+      const xml = Buffer.from(result, 'base64').toString('utf-8');
+      expect(xml).toContain(`Recipient="${alternate}"`);
+      expect(xml).toContain(`Destination="${alternate}"`);
+
+      const byDefault = Buffer.from(
+        await service.createSamlResponse(mockRealm, mockSp, mockUser, '_req'),
+        'base64',
+      ).toString('utf-8');
+      expect(byDefault).toContain(`Recipient="${mockSp.acsUrl}"`);
+    });
+
     it('should not include InResponseTo when not provided', async () => {
       prisma.realmSigningKey.findFirst.mockResolvedValue({
         ...mockSigningKey,

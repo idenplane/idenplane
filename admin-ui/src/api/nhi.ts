@@ -12,7 +12,8 @@ import type {
 
 export type NhiIdentityType = 'IOT_DEVICE' | 'AI_AGENT' | 'BOT' | 'MACHINE_TO_MACHINE';
 export type NhiLifecycleStatus = 'PROVISIONING' | 'ACTIVE' | 'SUSPENDED' | 'DECOMMISSIONED';
-export type NhiCredentialType = 'API_KEY' | 'CERTIFICATE' | 'JWT_BEARER';
+/** The server's NhiCredentialType. Only API_KEY and CERTIFICATE authenticate. */
+export type NhiCredentialType = 'API_KEY' | 'CERTIFICATE' | 'JWT' | 'OAUTH' | 'MTLS';
 
 export interface CreateNhiIdentityDto {
   name: string;

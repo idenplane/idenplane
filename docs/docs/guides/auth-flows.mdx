@@ -245,7 +245,7 @@ How strong a flow sign-in is depends on the kind of each step passed, never on t
 A flow with `email_otp` as its second factor meets an MFA requirement, including a client's `requiredAcr` and a user who has an authenticator app enrolled. Whoever controls the user's mailbox holds that factor, and NIST SP 800-63B does not accept email as an authenticator at AAL2. Use `email_otp` where reach matters more than strength. For clients that need strong assurance, bind a flow that uses `totp` or `webauthn` instead.
 :::
 
-`email_otp` records `otp` (RFC 8176). A sign-in link records `otp` too: RFC 8176 has no value for it, and a link carries a single-use secret delivered out of band. A social step records no method, as the built-in federated sign-in does (the provider's methods are not known); the token endpoint reports an empty list as `pwd`, as before.
+`email_otp` records `otp` (RFC 8176). A sign-in link records `otp` too: RFC 8176 has no value for it, and a link carries a single-use secret delivered out of band. A social step records no method, as the built-in federated sign-in does (the provider's methods are not known), so its tokens carry no `amr` claim.
 
 ### Single sign-on
 

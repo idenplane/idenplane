@@ -501,10 +501,9 @@ describe('Auth-flow email, link and social steps (e2e)', () => {
     );
     expect(claims['sub']).toBe(user.id);
     expect(claims['acr']).toBe(ACR.password);
-    // The sign-in records no methods (the provider's are unknown); the token
-    // endpoint reports an empty list as ['pwd'], as for the built-in
-    // federated sign-in.
-    expect(claims['amr']).toEqual(['pwd']);
+    // The sign-in records no methods (the provider's are unknown), so the
+    // token carries no amr rather than a false ['pwd'].
+    expect(claims).not.toHaveProperty('amr');
     const session = await ctx.prisma.loginSession.findFirst({
       where: { userId: user.id },
       orderBy: { createdAt: 'desc' },
