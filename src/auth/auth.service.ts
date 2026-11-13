@@ -277,17 +277,7 @@ export class AuthService {
     userAgent?: string,
     ctx: TokenRequestContext = {},
   ): Promise<TokenResponse> {
-    // One way of authenticating the client per request (RFC 6749 §2.3),
-    // checked before anything else as it always was.
-    const presented = this.clientAuthenticator.readCredentials({
-      body,
-      authorization: ctx.authorization,
-    });
-    // The grant handlers read `client_id` from the parameters; with HTTP
-    // Basic it comes from the header. The secret stays out of `body`.
-    if (presented.clientId !== undefined && body['client_id'] === undefined) {
-      body = { ...body, client_id: presented.clientId };
-    }
+    body = this.withPresentedClientId(body, ctx);
 
     const grantType = body['grant_type'];
 
@@ -1340,16 +1330,21 @@ export class AuthService {
     realm: Realm,
     body: Record<string, string>,
     ip?: string,
+    ctx: TokenRequestContext = {},
   ): Promise<{
     masked_phone: string;
     expires_in: number;
     resend_after: number;
   }> {
+    // Client authentication exactly as at the token endpoint: HTTP Basic,
+    // and the certificate of a tls_client_auth client.
+    body = this.withPresentedClientId(body, ctx);
     const { client_id, mfa_token } = body;
     await this.validateClient(
       realm,
       body,
       'urn:ietf:params:oauth:grant-type:mfa-otp',
+      { ctx },
     );
     if (!mfa_token) {
       throw new OAuthTokenError(
@@ -1410,6 +1405,25 @@ export class AuthService {
       }
       throw err;
     }
+  }
+
+  /**
+   * Enforces one way of authenticating the client per request (RFC 6749
+   * §2.3), before anything else, and returns the parameters with the
+   * `client_id` HTTP Basic carried, which the handlers read from `body`.
+   * The secret stays out of `body`.
+   */
+  private withPresentedClientId(
+    body: Record<string, string>,
+    ctx: TokenRequestContext,
+  ): Record<string, string> {
+    const presented = this.clientAuthenticator.readCredentials({
+      body,
+      authorization: ctx.authorization,
+    });
+    return presented.clientId !== undefined && body['client_id'] === undefined
+      ? { ...body, client_id: presented.clientId }
+      : body;
   }
 
   /**

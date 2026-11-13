@@ -118,6 +118,7 @@ describe('certificate-bound access tokens (RFC 8705 §3)', () => {
   let getScopeMappers: jest.Mock;
   let enrichToken: jest.Mock;
   let mfaService: Record<string, jest.Mock>;
+  let smsOtp: { sendCode: jest.Mock };
 
   beforeEach(() => {
     prisma = createMockPrismaService();
@@ -145,6 +146,22 @@ describe('certificate-bound access tokens (RFC 8705 §3)', () => {
       getScopeMappers,
     };
     const lookups = lookupsBackedBy(prisma as any) as any;
+    // Accepts exactly one certificate (X5T) for the self-signed client.
+    const resolvers = new ClientCertificateResolverRegistry();
+    resolvers.register({
+      name: 'test',
+      resolve: async ({ client, method, certificate }) =>
+        certificate.x5tS256 === X5T
+          ? { clientId: client.clientId, method, bindToCertificate: false }
+          : { rejected: 'unknown certificate' },
+    });
+    smsOtp = {
+      sendCode: jest.fn().mockResolvedValue({
+        maskedPhone: '+1 ••• •• 42',
+        expiresAt: new Date(Date.now() + 300_000),
+        resendAvailableAt: new Date(Date.now() + 30_000),
+      }),
+    };
 
     prisma.realmSigningKey.findFirst.mockResolvedValue(signingKey);
     prisma.userRole.findMany.mockResolvedValue([]);
@@ -179,12 +196,13 @@ describe('certificate-bound access tokens (RFC 8705 §3)', () => {
           verify: (client: { clientSecret: string | null }, secret: string) =>
             crypto.verifyPassword(client.clientSecret, secret),
         } as any,
-        new ClientCertificateResolverRegistry(),
+        resolvers,
         { enabled: true },
         { retryAfter: async () => null, recordFailure: async () => {} } as any,
       ),
       undefined,
       { enrichToken } as any,
+      smsOtp as any,
     );
   });
 
@@ -419,6 +437,62 @@ describe('certificate-bound access tokens (RFC 8705 §3)', () => {
         cert(),
       );
       expect(accessTokenPayload()).not.toHaveProperty('cnf');
+    });
+  });
+
+  describe('/mfa/sms for a certificate-authenticated client', () => {
+    const tlsClient = {
+      ...unboundClient,
+      clientId: 'tls-client',
+      clientSecret: null,
+      tokenEndpointAuthMethod: 'self_signed_tls_client_auth',
+    };
+    const realmOn = { ...realm, mtlsClientAuthEnabled: true } as Realm;
+
+    beforeEach(() => {
+      useClient(tlsClient);
+      mfaService.getMfaChallenge = jest.fn().mockResolvedValue({
+        userId: dbUser.id,
+        realmId: realm.id,
+        clientId: 'tls-client',
+      });
+    });
+
+    it('authenticates the client with its certificate and sends the code', async () => {
+      const result = await service.sendMfaSms(
+        realmOn,
+        { client_id: 'tls-client', mfa_token: 'mfa-token' },
+        '127.0.0.1',
+        cert(),
+      );
+      expect(result.masked_phone).toBe('+1 ••• •• 42');
+      expect(smsOtp.sendCode).toHaveBeenCalledWith(
+        expect.objectContaining({ userId: dbUser.id, binding: 'mfa-token' }),
+      );
+    });
+
+    it.each([
+      ['no certificate', {}],
+      ['an unknown certificate', cert(OTHER_X5T)],
+    ])('is invalid_client with %s', async (_label, ctx) => {
+      await expect(
+        service.sendMfaSms(
+          realmOn,
+          { client_id: 'tls-client', mfa_token: 'mfa-token' },
+          undefined,
+          ctx,
+        ),
+      ).rejects.toMatchObject({ code: 'invalid_client' });
+      expect(smsOtp.sendCode).not.toHaveBeenCalled();
+    });
+
+    it('takes the client_id from HTTP Basic, as the token endpoint does', async () => {
+      useClient({ ...unboundClient, clientId: 'tls-client' });
+      const basic = Buffer.from('tls-client:secret').toString('base64');
+      await service.sendMfaSms(realmOn, { mfa_token: 'mfa-token' }, undefined, {
+        authorization: `Basic ${basic}`,
+      });
+      expect(smsOtp.sendCode).toHaveBeenCalled();
     });
   });
 

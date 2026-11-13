@@ -17,7 +17,8 @@ const OIDC = `/realms/${REALM}/protocol/openid-connect`;
 /**
  * The only paths the certificate listener serves: the RFC 8705 §5
  * `mtls_endpoint_aliases` (token, introspection, revocation, userinfo, device
- * authorization) plus discovery and the JWKS a client needs to use them.
+ * authorization) plus discovery, the JWKS a client needs to use them, and
+ * the MFA SMS endpoint that completes the mfa_otp grant.
  * Everything else, admin API and login pages included, is 404 here.
  */
 export const MTLS_ALIAS_PATHS: readonly RegExp[] = [
@@ -28,6 +29,9 @@ export const MTLS_ALIAS_PATHS: readonly RegExp[] = [
   new RegExp(`^${OIDC}/userinfo$`),
   new RegExp(`^${OIDC}/auth/device$`),
   new RegExp(`^${OIDC}/certs$`),
+  // Texts the code a password grant's mfa_required challenge is answered
+  // with, so a certificate-authenticated client can complete mfa_otp here.
+  new RegExp(`^${OIDC}/mfa/sms$`),
 ];
 
 /** True when the raw request target is one of {@link MTLS_ALIAS_PATHS}. */

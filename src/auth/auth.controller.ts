@@ -157,6 +157,10 @@ export class AuthController {
         realm,
         body,
         resolveClientIp(req),
+        {
+          authorization: req.headers['authorization'],
+          clientCert: this.clientCertificates.fromRequest(req),
+        },
       );
     } catch (err) {
       if (err instanceof OAuthTokenError) {

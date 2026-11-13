@@ -202,6 +202,18 @@ describe('RFC 8705 certificate-bound access tokens (e2e)', () => {
     boundSecret = secretClient.clientSecret;
     expect(boundSecret).toEqual(expect.any(String));
 
+    // A certificate-authenticated client of the password grant, for /mfa/sms.
+    await createClient({
+      clientId: 'mfa-device',
+      grantTypes: ['password'],
+      tokenEndpointAuthMethod: 'self_signed_tls_client_auth',
+    });
+    const mfaUpload = await http()
+      .post(`${realmPath()}/clients/mfa-device/tls-certificates`)
+      .set('x-admin-api-key', TEST_ADMIN_API_KEY)
+      .send({ certificatePem: alice.pem });
+    expect(mfaUpload.status).toBe(201);
+
     // A public client holding its certificate as its key (RFC 8705 §4).
     await createClient({
       clientId: 'bound-public',
@@ -452,6 +464,80 @@ describe('RFC 8705 certificate-bound access tokens (e2e)', () => {
         .set(CERT_HEADER, 'not-a-certificate');
       expect(res.status).toBe(401);
       expect(res.body.error).toBe('invalid_token');
+    });
+  });
+
+  describe('/mfa/sms for a tls_* client', () => {
+    const sms = (identity?: TestIdentity) =>
+      tls('POST', oidc('mfa/sms'), {
+        form: { client_id: 'mfa-device', mfa_token: 'unknown-mfa-token' },
+        identity,
+      });
+
+    it('authenticates the client by its certificate on the certificate listener', async () => {
+      // Client authentication passes; the made-up mfa_token is what fails.
+      const res = await sms(alice);
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('invalid_grant');
+    });
+
+    it('is invalid_client without the certificate', async () => {
+      const res = await sms();
+      expect(res.status).toBe(401);
+      expect(res.body.error).toBe('invalid_client');
+    });
+
+    it('authenticates the client through a trusted proxy header too', async () => {
+      const res = await http()
+        .post(oidc('mfa/sms'))
+        .set(CERT_HEADER, headerPem(alice.pem))
+        .type('form')
+        .send({ client_id: 'mfa-device', mfa_token: 'unknown-mfa-token' });
+      expect(res.status).toBe(400);
+      expect(res.body.error).toBe('invalid_grant');
+    });
+  });
+
+  describe('admin API: null for a non-nullable boolean', () => {
+    const BOOLEANS = [
+      'tlsClientCertificateBoundAccessTokens',
+      'enabled',
+      'requireConsent',
+      'backchannelLogoutSessionRequired',
+      'publicClient',
+    ];
+
+    it.each(BOOLEANS)('refuses %s: null on create with 400', async (field) => {
+      const res = await http()
+        .post(`${realmPath()}/clients`)
+        .set('x-admin-api-key', TEST_ADMIN_API_KEY)
+        .send({ clientId: `null-${field}`, [field]: null });
+      expect(res.status).toBe(400);
+      expect(JSON.stringify(res.body.message)).toContain(field);
+    });
+
+    it.each(BOOLEANS)('refuses %s: null on update with 400', async (field) => {
+      for (const method of ['put', 'patch'] as const) {
+        const res = await http()
+          [method](`${realmPath()}/clients/bound-secret`)
+          .set('x-admin-api-key', TEST_ADMIN_API_KEY)
+          .send({ [field]: null });
+        expect(res.status).toBe(400);
+      }
+    });
+
+    it('still accepts null for the nullable fields', async () => {
+      const res = await http()
+        .patch(`${realmPath()}/clients/bound-secret`)
+        .set('x-admin-api-key', TEST_ADMIN_API_KEY)
+        .send({
+          tokenEndpointAuthMethod: null,
+          tlsClientAuthSubjectDn: null,
+          tlsClientAuthSanDns: null,
+          requiredAcr: null,
+        });
+      expect(res.status).toBe(200);
+      expect(res.body.tlsClientCertificateBoundAccessTokens).toBe(true);
     });
   });
 

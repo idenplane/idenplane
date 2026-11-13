@@ -34,7 +34,7 @@ The TLS handshake proves the client holds the key. Whether the certificate is tr
 
 ### Direct: Idenplane's certificate listener
 
-Idenplane opens a second HTTPS port that asks every client for a certificate. It serves only the endpoints a client needs (discovery, token, introspection, revocation, userinfo, device authorization, JWKS); everything else is 404 there.
+Idenplane opens a second HTTPS port that asks every client for a certificate. It serves only the endpoints a client needs (discovery, token, introspection, revocation, userinfo, device authorization, JWKS, and the MFA SMS endpoint of the `mfa_otp` grant); everything else is 404 there, the session events WebSocket included.
 
 ```bash
 MTLS_ENABLED=true
