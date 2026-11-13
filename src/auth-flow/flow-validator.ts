@@ -19,6 +19,11 @@
  *   step runs for an already-identified user.
  */
 
+import {
+  IDENTIFYING_STEP_TYPES as RUNTIME_IDENTIFYING_STEP_TYPES,
+  type FlowStepType,
+} from '../authn-core/flow-contracts.js';
+
 // ─── Error shape ───────────────────────────────────────────
 
 export interface FlowValidationError {
@@ -58,6 +63,8 @@ export const FLOW_ERROR_CODES = [
   'config_invalid',
   'config_unknown_key',
   'config_invalid_value',
+  'config_missing_key',
+  'provider_not_found',
 ] as const;
 export type FlowValidationErrorCode = (typeof FLOW_ERROR_CODES)[number];
 
@@ -69,8 +76,7 @@ export const MAX_STEP_ID_LENGTH = 100;
 
 /**
  * Step types a flow may use: the ones the runtime (FlowStepHandlers) has a
- * real credential check for. The DTO also accepts social, email_otp,
- * magic_link and consent; those have no handler yet, and consent is a
+ * real credential check for. The DTO also accepts consent, which is a
  * post-flow concern, not a step.
  */
 export const SUPPORTED_STEP_TYPES = [
@@ -78,23 +84,21 @@ export const SUPPORTED_STEP_TYPES = [
   'ldap',
   'totp',
   'webauthn',
-] as const;
-export type SupportedStepType = (typeof SUPPORTED_STEP_TYPES)[number];
-
-/** Known to the DTO / executor but not runnable yet; rejected with a hint. */
-export const NOT_YET_SUPPORTED_STEP_TYPES = [
-  'social',
   'email_otp',
   'magic_link',
-  'consent',
-] as const;
+  'social',
+] as const satisfies readonly FlowStepType[];
+export type SupportedStepType = (typeof SUPPORTED_STEP_TYPES)[number];
 
-/** Step types that can establish who the user is. */
-export const IDENTIFYING_STEP_TYPES: readonly SupportedStepType[] = [
-  'password',
-  'ldap',
-  'webauthn',
-];
+/** Known to the DTO but not a flow step; rejected with a hint. */
+export const NOT_YET_SUPPORTED_STEP_TYPES = ['consent'] as const;
+
+/**
+ * Step types that can establish who the user is (the runtime's list, so
+ * the two never disagree).
+ */
+export const IDENTIFYING_STEP_TYPES: readonly SupportedStepType[] =
+  RUNTIME_IDENTIFYING_STEP_TYPES;
 
 export const CONDITION_OPERATORS = [
   'eq',
@@ -142,9 +146,31 @@ const oneOf =
       ? null
       : `must be one of ${allowed.join(', ')}`;
 
+const integerBetween =
+  (min: number, max: number): ConfigRule =>
+  (v) =>
+    typeof v === 'number' && Number.isInteger(v) && v >= min && v <= max
+      ? null
+      : `must be an integer from ${min} to ${max}`;
+
+const nonEmptyString =
+  (max: number): ConfigRule =>
+  (v) =>
+    typeof v === 'string' && v.trim().length > 0 && v.length <= max
+      ? null
+      : `must be a non-empty string of at most ${max} characters`;
+
+/**
+ * The longest a code or link sent by email may live: the login transaction
+ * itself lasts 10 minutes.
+ */
+export const MAX_EMAIL_STEP_EXPIRY_SECONDS = 600;
+export const MIN_EMAIL_STEP_EXPIRY_SECONDS = 60;
+
 /**
  * Allowed config keys per step type, matching what the admin UI flow editor
- * emits. An absent or empty config is always valid.
+ * emits. An absent or empty config is valid, except for the keys in
+ * STEP_REQUIRED_CONFIG_KEYS.
  */
 export const STEP_CONFIG_RULES: Record<
   SupportedStepType,
@@ -161,7 +187,39 @@ export const STEP_CONFIG_RULES: Record<
     rpName: optionalString(100),
     userVerification: oneOf(['required', 'preferred', 'discouraged']),
   },
+  email_otp: {
+    otpLength: oneOf([6, 8]),
+    expirySeconds: integerBetween(
+      MIN_EMAIL_STEP_EXPIRY_SECONDS,
+      MAX_EMAIL_STEP_EXPIRY_SECONDS,
+    ),
+  },
+  magic_link: {
+    expirySeconds: integerBetween(
+      MIN_EMAIL_STEP_EXPIRY_SECONDS,
+      MAX_EMAIL_STEP_EXPIRY_SECONDS,
+    ),
+  },
+  social: { providerAlias: nonEmptyString(100) },
 };
+
+/** Config keys a step type cannot do without. */
+export const STEP_REQUIRED_CONFIG_KEYS: Partial<
+  Record<SupportedStepType, readonly string[]>
+> = {
+  social: ['providerAlias'],
+};
+
+/**
+ * What the validator needs to know about the realm a flow belongs to. Built
+ * by `loadFlowValidationContext` wherever a flow is saved, bound or loaded
+ * for a login, so a flow that names a missing or disabled identity provider
+ * is refused (and a binding to it fails closed).
+ */
+export interface FlowValidationContext {
+  /** Aliases of the realm's *enabled* identity providers. */
+  identityProviderAliases: ReadonlySet<string>;
+}
 
 // ─── Helpers ───────────────────────────────────────────────
 
@@ -201,7 +259,10 @@ interface NormalisedStep {
  * Validate a flow's steps. Returns an empty array when the flow is valid.
  * Accepts `unknown` because it also runs on JSON loaded from the database.
  */
-export function validateFlowSteps(steps: unknown): FlowValidationError[] {
+export function validateFlowSteps(
+  steps: unknown,
+  context?: FlowValidationContext,
+): FlowValidationError[] {
   const errors: FlowValidationError[] = [];
   const err = (path: string, code: FlowValidationErrorCode, message: string) =>
     errors.push({ path, code, message });
@@ -279,7 +340,7 @@ export function validateFlowSteps(steps: unknown): FlowValidationError[] {
           : `Unknown step type '${t}'. Supported: ${SUPPORTED_STEP_TYPES.join(', ')}`,
       );
     } else {
-      validateConfig(raw.type, raw.config, `${p}.config`, err);
+      validateConfig(raw.type, raw.config, `${p}.config`, err, context);
     }
 
     validateCondition(raw.condition, `${p}.condition`, err);
@@ -559,8 +620,19 @@ function validateConfig(
   config: unknown,
   path: string,
   err: (p: string, c: FlowValidationErrorCode, m: string) => void,
+  context: FlowValidationContext | undefined,
 ): void {
-  if (config === undefined || config === null) return;
+  const required = STEP_REQUIRED_CONFIG_KEYS[type] ?? [];
+  if (config === undefined || config === null) {
+    for (const key of required) {
+      err(
+        `${path}.${key}`,
+        'config_missing_key',
+        `${type} steps need '${key}'`,
+      );
+    }
+    return;
+  }
   if (!isPlainObject(config)) {
     err(path, 'config_invalid', 'Step config must be an object');
     return;
@@ -585,9 +657,36 @@ function validateConfig(
       err(`${path}.${key}`, 'config_invalid_value', `${key} ${problem}`);
     }
   }
+  for (const key of required) {
+    if (config[key] === undefined || config[key] === null) {
+      err(
+        `${path}.${key}`,
+        'config_missing_key',
+        `${type} steps need '${key}'`,
+      );
+    }
+  }
+
+  // The identity provider must exist in the realm and be enabled.
+  const alias = type === 'social' ? config['providerAlias'] : undefined;
+  if (
+    context &&
+    typeof alias === 'string' &&
+    alias.trim() &&
+    !context.identityProviderAliases.has(alias)
+  ) {
+    err(
+      `${path}.providerAlias`,
+      'provider_not_found',
+      `No enabled identity provider '${alias}' in this realm`,
+    );
+  }
 }
 
 /** Convenience: true when the steps pass every rule. */
-export function isValidFlow(steps: unknown): boolean {
-  return validateFlowSteps(steps).length === 0;
+export function isValidFlow(
+  steps: unknown,
+  context?: FlowValidationContext,
+): boolean {
+  return validateFlowSteps(steps, context).length === 0;
 }

@@ -6,8 +6,10 @@
 <div class="auth-error">{{error}}</div>
 {{/if}}
 
-{{!-- passkeyOnly: a custom-flow passkey step with no password fallback --}}
-{{#unless passkeyOnly}}
+{{!-- passwordFormHidden: a custom-flow step (passkey, social) whose sign-in is
+      not a password and has no password fallback; passkeyOnly says it is a
+      passkey step --}}
+{{#unless passwordFormHidden}}
 <form method="POST" action="/realms/{{realmName}}/login" class="auth-form">
   <div class="form-group">
     <label for="username">{{msg "loginUsername"}}</label>
@@ -37,6 +39,8 @@
   <input type="hidden" name="code_challenge" value="{{code_challenge}}">
   <input type="hidden" name="code_challenge_method" value="{{code_challenge_method}}">
   <input type="hidden" name="prompt" value="{{prompt}}">
+  {{#if acr_values}}<input type="hidden" name="acr_values" value="{{acr_values}}">{{/if}}
+  {{#if claims}}<input type="hidden" name="claims" value="{{claims}}">{{/if}}
 
   <button type="submit" class="btn-primary">{{msg "loginSignIn"}}</button>
 </form>
@@ -48,6 +52,12 @@
   {{#each identityProviders}}
   <a href="{{this.loginUrl}}" class="btn-secondary">Sign in with {{this.displayName}}</a>
   {{/each}}
+</div>
+{{/if}}
+
+{{#if magicLinkFallback}}
+<div class="auth-footer-link">
+  <a href="/realms/{{realmName}}/login?link=1">{{msg "loginEmailMeLink"}}</a>
 </div>
 {{/if}}
 

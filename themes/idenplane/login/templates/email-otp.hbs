@@ -1,0 +1,31 @@
+{{#if error}}
+<div class="auth-error">{{error}}</div>
+{{/if}}
+{{#if info}}
+<div class="auth-success">{{info}}</div>
+{{/if}}
+
+{{!-- An email_otp step of a custom sign-in flow: a code sent to the account's address --}}
+<h2 class="auth-subtitle">{{msg "emailOtpTitle"}}</h2>
+
+<p style="color: #6b7280; font-size: 0.85rem; margin-bottom: 1.25rem; text-align: center;">
+  {{msgArgs "emailOtpInstruction" maskedEmail}}
+</p>
+
+<form method="POST" action="/realms/{{realmName}}/login/email-otp" class="auth-form" id="emailOtpForm">
+  <input type="hidden" name="_csrf" value="{{csrfToken}}">
+  <div class="form-group">
+    <label for="code">{{msg "emailOtpCode"}}</label>
+    <input type="text" id="code" name="code" pattern="[0-9]{6,8}" maxlength="8" inputmode="numeric" autocomplete="one-time-code" required autofocus
+      style="text-align: center; font-size: 1.5rem; letter-spacing: 0.5rem;">
+  </div>
+
+  <button type="submit" class="btn-primary">{{msg "emailOtpVerify"}}</button>
+</form>
+
+<form method="POST" action="/realms/{{realmName}}/login/email-otp/send" style="margin-top: 0.75rem; text-align: center;">
+  <input type="hidden" name="_csrf" value="{{csrfToken}}">
+  <button type="submit" class="btn-link" style="color: #2563eb; background: none; border: none; cursor: pointer; font-size: 0.85rem; text-decoration: underline;">
+    {{msg "emailOtpSend"}}
+  </button>
+</form>

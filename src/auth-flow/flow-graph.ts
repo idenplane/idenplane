@@ -10,7 +10,11 @@
  */
 import { acrFromReceipts } from '../authn-core/flow-assurance.js';
 import { ACR_PASSWORD, ACR_WEBAUTHN, acrStrength } from '../authn-core/acr.js';
-import type { FlowStepType, Receipt } from '../authn-core/flow-contracts.js';
+import {
+  STEP_AMR,
+  type FlowStepType,
+  type Receipt,
+} from '../authn-core/flow-contracts.js';
 
 export interface RuntimeStepCondition {
   field: string;
@@ -86,14 +90,6 @@ export function evaluateFlowCondition(
       return false;
   }
 }
-
-/** The RFC 8176 method one step type performs (TOTP stands for any code). */
-const STEP_AMR: Record<FlowStepType, string> = {
-  password: 'pwd',
-  ldap: 'pwd',
-  totp: 'otp',
-  webauthn: 'hwk',
-};
 
 /** The upper bound on combinations `requiredAcrFor` enumerates. */
 const MAX_COMBINATIONS = 4096;
@@ -187,7 +183,7 @@ export class FlowGraph {
         const receipts: Receipt[] = picked.map((t, i) => ({
           stepId: String(i),
           kind: t,
-          amr: [STEP_AMR[t]],
+          amr: [...STEP_AMR[t]],
           at: '',
         }));
         const acr = acrFromReceipts(receipts) ?? ACR_PASSWORD;

@@ -11,17 +11,40 @@ import { JwkService } from '../crypto/jwk.service.js';
 import { IdentityProvidersService } from '../identity-providers/identity-providers.service.js';
 import { matchesRedirectUri } from '../common/redirect-uri.utils.js';
 
-interface BrokerState {
+/**
+ * A sign-in at an external provider started by a `social` step of a login
+ * transaction. The callback goes back into that transaction, and only in
+ * the browser that holds it (see FlowRuntimeService).
+ */
+export interface BrokerFlowState {
+  /** The login transaction's id (not its cookie value). */
+  txn: string;
+  /** The step that started the redirect. */
+  step: string;
+  /** Random, also kept in the transaction: one callback per redirect. */
+  nonce: string;
+}
+
+export interface BrokerState {
   realmId: string;
   realmName: string;
   alias: string;
-  clientId: string;
-  redirectUri: string;
+  /** The OAuth request of a built-in (unbound) federated sign-in. */
+  clientId?: string;
+  redirectUri?: string;
   scope?: string;
   state?: string;
   nonce?: string;
   codeChallenge?: string;
   codeChallengeMethod?: string;
+  /** Set when a flow's social step started the sign-in. */
+  flow?: BrokerFlowState;
+}
+
+/** The provider and the account it vouched for, after a callback. */
+export interface ExternalIdentity {
+  idp: IdentityProvider;
+  external: ExternalUserInfo;
 }
 
 /** A single entry returned by GitHub's `GET /user/emails` endpoint. */
@@ -51,7 +74,7 @@ function toStr(value: unknown): string | undefined {
   return undefined;
 }
 
-interface ExternalUserInfo {
+export interface ExternalUserInfo {
   sub: string;
   email?: string;
   emailVerified?: boolean;
@@ -135,9 +158,17 @@ export class BrokerService {
       600, // 10 minutes
     );
 
-    // Build external authorization URL
+    return this.authorizationUrl(realm, idp, stateJwt);
+  }
+
+  /** The provider's authorization URL, with our callback and signed state. */
+  private authorizationUrl(
+    realm: Realm,
+    idp: IdentityProvider,
+    stateJwt: string,
+  ): string {
     const baseUrl = process.env['BASE_URL'] ?? 'http://localhost:3000';
-    const callbackUrl = `${baseUrl}/realms/${realm.name}/broker/${alias}/callback`;
+    const callbackUrl = `${baseUrl}/realms/${realm.name}/broker/${idp.alias}/callback`;
 
     const authUrl = new URL(idp.authorizationUrl);
     authUrl.searchParams.set('client_id', idp.clientId);
@@ -150,16 +181,43 @@ export class BrokerService {
   }
 
   /**
-   * Handle the callback from the external provider.
-   * Exchange code, fetch user info, link/create user, issue Idenplane auth code.
+   * The external provider's authorization URL for a `social` step of a
+   * login transaction. The signed state names the transaction, the step and
+   * a nonce the transaction keeps, so the callback can only resume that
+   * transaction, once. No OAuth request travels in it: the transaction
+   * holds that.
    */
-  async handleCallback(
+  async initiateFlowLogin(
     realm: Realm,
     alias: string,
-    code: string,
+    flow: BrokerFlowState,
+  ): Promise<string> {
+    const idp = await this.idpService.findByAlias(realm, alias);
+    if (!idp.enabled) {
+      throw new BadRequestException(`Identity provider '${alias}' is disabled`);
+    }
+    const signingKey = await this.getActiveSigningKey(realm.id);
+    const brokerState: BrokerState = {
+      realmId: realm.id,
+      realmName: realm.name,
+      alias,
+      flow,
+    };
+    const stateJwt = await this.jwkService.signJwt(
+      { ...brokerState, typ: 'broker_state' },
+      signingKey.privateKey,
+      signingKey.kid,
+      600, // 10 minutes, as the login transaction
+    );
+    return this.authorizationUrl(realm, idp, stateJwt);
+  }
+
+  /** Verifies the signed broker state of a callback for `alias`. */
+  async readState(
+    realm: Realm,
+    alias: string,
     stateJwt: string,
-  ): Promise<{ user: User; oauthParams: Record<string, string> }> {
-    // Verify broker state
+  ): Promise<BrokerState> {
     const signingKey = await this.getActiveSigningKey(realm.id);
     let brokerState: BrokerState;
     try {
@@ -172,27 +230,117 @@ export class BrokerService {
     } catch {
       throw new UnauthorizedException('Invalid or expired broker state');
     }
-
     if (brokerState.alias !== alias || brokerState.realmId !== realm.id) {
       throw new BadRequestException('Broker state mismatch');
     }
+    return brokerState;
+  }
 
+  /**
+   * Exchanges the callback's code at the provider and reads who signed in.
+   * Creates and links nothing.
+   */
+  async fetchExternalIdentity(
+    realm: Realm,
+    alias: string,
+    code: string,
+  ): Promise<ExternalIdentity> {
     const idp = await this.idpService.findByAlias(realm, alias);
-
-    // Exchange code for tokens at external provider
+    if (!idp.enabled) {
+      throw new BadRequestException(`Identity provider '${alias}' is disabled`);
+    }
     const baseUrl = process.env['BASE_URL'] ?? 'http://localhost:3000';
     const callbackUrl = `${baseUrl}/realms/${realm.name}/broker/${alias}/callback`;
-
     const tokenResponse = await this.exchangeCode(idp, code, callbackUrl);
-
-    // Fetch user info from external provider
-    const externalUser = await this.fetchExternalUserInfo(
+    const external = await this.fetchExternalUserInfo(
       idp,
       tokenResponse.access_token,
     );
+    if (!external.sub) {
+      throw new UnauthorizedException(
+        'The identity provider did not identify the user',
+      );
+    }
+    return { idp, external };
+  }
 
-    // Link or create local user
-    const user = await this.linkOrCreateUser(realm, idp, externalUser);
+  /**
+   * The local account an external identity signs in as, linking or creating
+   * it as the built-in federated sign-in does.
+   */
+  resolveFederatedUser(
+    realm: Realm,
+    identity: ExternalIdentity,
+  ): Promise<User> {
+    return this.linkOrCreateUser(realm, identity.idp, identity.external);
+  }
+
+  /**
+   * Whether the external identity belongs to `user`, who is already
+   * identified: an existing link to them, or (for a provider trusted for
+   * email) a verified address equal to theirs, which is then linked. Never
+   * creates an account, and never links an identity linked to someone else.
+   */
+  async belongsToUser(
+    identity: ExternalIdentity,
+    user: User,
+  ): Promise<'linked' | 'other_user' | 'not_linked'> {
+    const { idp, external } = identity;
+    const existing = await this.prisma.federatedIdentity.findUnique({
+      where: {
+        identityProviderId_externalUserId: {
+          identityProviderId: idp.id,
+          externalUserId: external.sub,
+        },
+      },
+      select: { userId: true },
+    });
+    if (existing) {
+      return existing.userId === user.id ? 'linked' : 'other_user';
+    }
+    if (
+      idp.trustEmail &&
+      external.emailVerified === true &&
+      !!external.email &&
+      !!user.email &&
+      external.email.toLowerCase() === user.email.toLowerCase()
+    ) {
+      await this.prisma.federatedIdentity.create({
+        data: {
+          userId: user.id,
+          identityProviderId: idp.id,
+          externalUserId: external.sub,
+          externalUsername: external.preferredUsername,
+          externalEmail: external.email,
+        },
+      });
+      return 'linked';
+    }
+    return 'not_linked';
+  }
+
+  /**
+   * Handle the callback from the external provider.
+   * Exchange code, fetch user info, link/create user, issue Idenplane auth code.
+   */
+  async handleCallback(
+    realm: Realm,
+    alias: string,
+    code: string,
+    stateJwt: string,
+  ): Promise<{ user: User; oauthParams: Record<string, string> }> {
+    const brokerState = await this.readState(realm, alias, stateJwt);
+    if (!brokerState.clientId || !brokerState.redirectUri) {
+      throw new BadRequestException('Broker state mismatch');
+    }
+
+    // Exchange the code, fetch user info, then link or create the user.
+    const identity = await this.fetchExternalIdentity(realm, alias, code);
+    const user = await this.linkOrCreateUser(
+      realm,
+      identity.idp,
+      identity.external,
+    );
 
     // The external provider has authenticated the user; the rest of the
     // sign-in (account status, MFA policy, session, consent, code) is the

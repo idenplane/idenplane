@@ -264,7 +264,7 @@ describe('validateFlowSteps: invalid flows', () => {
     },
 
     // Types
-    ...['social', 'email_otp', 'magic_link', 'consent', 'sms', ''].map((t) => ({
+    ...['consent', 'sms', 'magic-link', ''].map((t) => ({
       name: `unsupported type '${t}'`,
       steps: [pw(), totp(2, { type: t })],
       expect: [{ code: 'unsupported_type', path: 'steps[1].type' }],
@@ -628,7 +628,7 @@ describe('validateFlowSteps: behaviour', () => {
   });
 
   it('lists the supported types in the unsupported_type message', () => {
-    const [e] = validateFlowSteps([pw(), totp(2, { type: 'social' })]);
+    const [e] = validateFlowSteps([pw(), totp(2, { type: 'consent' })]);
     for (const t of SUPPORTED_STEP_TYPES) expect(e.message).toContain(t);
     expect(e.message).toMatch(/not supported by the flow runtime yet/);
   });
@@ -642,5 +642,138 @@ describe('validateFlowSteps: behaviour', () => {
         ]),
       ).toEqual([]);
     }
+  });
+});
+
+// ─── Email and social steps ───────────────────────────────
+
+describe('validateFlowSteps: email_otp, magic_link and social', () => {
+  const social = (id: string, order: number, over: RawStep = {}) =>
+    step(id, order, {
+      type: 'social',
+      config: { providerAlias: 'google' },
+      ...over,
+    });
+  const context = { identityProviderAliases: new Set(['google']) };
+
+  it.each<[string, unknown]>([
+    ['password then email_otp', [pw(), step('e', 2, { type: 'email_otp' })]],
+    [
+      'email_otp with its settings',
+      [
+        pw(),
+        step('e', 2, {
+          type: 'email_otp',
+          config: { otpLength: 8, expirySeconds: 600 },
+        }),
+      ],
+    ],
+    ['magic link first', [step('m', 1, { type: 'magic_link' })]],
+    [
+      'magic link with an expiry',
+      [step('m', 1, { type: 'magic_link', config: { expirySeconds: 60 } })],
+    ],
+    ['social first', [social('s', 1)]],
+    [
+      'social falls back to password (both identify)',
+      [social('s', 1, { fallbackStepId: 'pw' }), step('pw', 2)],
+    ],
+    [
+      'password falls back to a magic link',
+      [pw({ fallbackStepId: 'm' }), step('m', 2, { type: 'magic_link' })],
+    ],
+    [
+      'post-identification email_otp falls back to totp',
+      [
+        pw(),
+        step('e', 2, { type: 'email_otp', fallbackStepId: 'otp' }),
+        totp(3),
+      ],
+    ],
+  ])('%s', (_name, steps) => {
+    expect(validateFlowSteps(steps, context)).toEqual([]);
+  });
+
+  it('refuses email_otp as the first step: it identifies no one', () => {
+    expect(
+      codes(validateFlowSteps([step('e', 1, { type: 'email_otp' })])),
+    ).toEqual(['first_step_not_identifying']);
+  });
+
+  it('refuses email_otp as a fallback of an identifying step', () => {
+    expect(
+      codes(
+        validateFlowSteps([
+          pw({ fallbackStepId: 'e' }),
+          step('e', 2, { type: 'email_otp' }),
+        ]),
+      ),
+    ).toEqual(['fallback_not_identifying']);
+  });
+
+  it.each<[string, RawStep, string]>([
+    ['otpLength 4', { otpLength: 4 }, 'config_invalid_value'],
+    [
+      'expiry above the transaction',
+      { expirySeconds: 601 },
+      'config_invalid_value',
+    ],
+    ['expiry too short', { expirySeconds: 59 }, 'config_invalid_value'],
+    ['fractional expiry', { expirySeconds: 90.5 }, 'config_invalid_value'],
+    ['unknown key', { digits: 6 }, 'config_unknown_key'],
+  ])('refuses an email_otp config with %s', (_name, config, code) => {
+    expect(
+      codes(
+        validateFlowSteps([pw(), step('e', 2, { type: 'email_otp', config })]),
+      ),
+    ).toEqual([code]);
+  });
+
+  it('refuses a magic link config with an unknown key', () => {
+    expect(
+      codes(
+        validateFlowSteps([
+          step('m', 1, { type: 'magic_link', config: { otpLength: 6 } }),
+        ]),
+      ),
+    ).toEqual(['config_unknown_key']);
+  });
+
+  it('needs a provider alias for a social step', () => {
+    for (const config of [undefined, null, {}]) {
+      const errors = validateFlowSteps([
+        step('s', 1, { type: 'social', config }),
+      ]);
+      expect(errors).toEqual([
+        expect.objectContaining({
+          code: 'config_missing_key',
+          path: 'steps[0].config.providerAlias',
+        }),
+      ]);
+    }
+    expect(
+      codes(
+        validateFlowSteps([social('s', 1, { config: { providerAlias: ' ' } })]),
+      ),
+    ).toEqual(['config_invalid_value']);
+  });
+
+  it('refuses a provider the realm does not have (or has disabled)', () => {
+    const errors = validateFlowSteps(
+      [social('s', 1, { config: { providerAlias: 'github' } })],
+      context,
+    );
+    expect(errors).toEqual([
+      expect.objectContaining({
+        code: 'provider_not_found',
+        path: 'steps[0].config.providerAlias',
+      }),
+    ]);
+    // Without a realm context (pure use) the alias is not looked up.
+    expect(
+      validateFlowSteps([
+        social('s', 1, { config: { providerAlias: 'github' } }),
+      ]),
+    ).toEqual([]);
   });
 });

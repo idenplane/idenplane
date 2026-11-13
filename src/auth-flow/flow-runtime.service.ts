@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import { HttpException, Injectable, Logger } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import type { AuthenticationFlow, Client, Realm, User } from '@prisma/client';
@@ -26,6 +27,10 @@ import { CsrfService } from '../common/csrf/csrf.service.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 import { ACR_MFA, riskStepUpAcr, satisfiesAcr } from '../authn-core/acr.js';
 import {
+  UNMET_AUTHENTICATION_REQUIREMENTS,
+  isEnforceAcrOnFreshLoginEnabled,
+} from '../authn-core/acr-enforcement.js';
+import {
   AUTHN_TXN_COOKIE,
   MFA_ENROLLMENT_COOKIE,
   WEBAUTHN_LOGIN_COOKIE,
@@ -45,7 +50,9 @@ import {
   acrFromReceipts,
   amrFromReceipts,
   computeTargetAcr,
+  essentialAcrFromClaimsParam,
   meetsAcr,
+  meetsEssentialAcr,
 } from '../authn-core/flow-assurance.js';
 import { isAuthFlowRuntimeEnabled } from './auth-flow-runtime.js';
 import {
@@ -68,10 +75,20 @@ import {
 } from './authn-transaction.store.js';
 import {
   FlowStepHandlers,
+  type EmailOtpStepInput,
+  type MagicLinkStepInput,
   type PasswordStepInput,
+  type SocialStepInput,
   type TotpStepInput,
   type WebAuthnStepInput,
 } from './flow-step-handlers.service.js';
+import { EmailOtpError, EmailOtpService } from './email-otp.service.js';
+import {
+  FlowMagicLinkError,
+  MagicLinkService,
+} from '../magic-link/magic-link.service.js';
+import { BrokerService } from '../broker/broker.service.js';
+import { MAX_EMAIL_STEP_EXPIRY_SECONDS } from './flow-validator.js';
 
 /** A submission to one of the existing login endpoints. */
 export type FlowSubmission =
@@ -85,7 +102,24 @@ export type FlowSubmission =
       form: Record<string, string | undefined>;
     } & PasswordStepInput)
   | ({ endpoint: 'totp' } & TotpStepInput)
-  | ({ endpoint: 'webauthn'; clientId?: string } & WebAuthnStepInput);
+  | ({ endpoint: 'webauthn'; clientId?: string } & WebAuthnStepInput)
+  | ({ endpoint: 'email_otp' } & EmailOtpStepInput)
+  | ({ endpoint: 'magic_link' } & MagicLinkStepInput)
+  | ({ endpoint: 'social' } & SocialStepInput);
+
+/**
+ * Endpoints that exist only for a flow step and are bound to the browser's
+ * transaction: without one they never fall back to the built-in login.
+ */
+const FLOW_ONLY_ENDPOINTS: ReadonlySet<LoginEndpoint> = new Set([
+  'email_otp',
+  'magic_link',
+  'social',
+]);
+
+/** Sign-in links one transaction may send, and the wait between two. */
+export const MAX_MAGIC_LINK_SENDS = 3;
+export const MAGIC_LINK_RESEND_COOLDOWN_SECONDS = 30;
 
 /** What the browser gets back; rendered per endpoint (redirect or JSON). */
 type Reply =
@@ -121,6 +155,10 @@ const UNEXPECTED_STEP_MESSAGE =
   'This sign-in step was not expected. Please sign in again.';
 const CONCURRENT_MESSAGE =
   'This sign-in is already being processed. Please wait a moment and reload the page.';
+const OTHER_BROWSER_MESSAGE =
+  'This sign-in link works only in the browser where you asked for it, while that sign-in is in progress. Open it there, or sign in again.';
+const LINK_SENT_MESSAGE =
+  'If an account with that address exists, we sent it a sign-in link. Open the link in this browser to continue.';
 
 /**
  * Why a login started again, shown on the login page. The browser carries
@@ -189,6 +227,9 @@ export class FlowRuntimeService {
     private readonly eventsService: EventsService,
     private readonly themeRender: ThemeRenderService,
     private readonly csrfService: CsrfService,
+    private readonly emailOtp: EmailOtpService,
+    private readonly magicLinks: MagicLinkService,
+    private readonly broker: BrokerService,
   ) {}
 
   // ─── Entry: the authorization endpoint ─────────────────────
@@ -222,18 +263,19 @@ export class FlowRuntimeService {
       oauthParams: { client_id: clientId },
       riskLevel: null,
     });
-    const types = [...new Set(graph.steps.map((s) => s.type))];
+    // Whether the user has what each step checks, once per kind of check
+    // (a social step's depends on its provider).
     const able = new Map<string, boolean>();
-    for (const type of types) {
-      able.set(
-        type,
-        await this.canAttempt(realm, { ...graph.first, type }, user),
-      );
+    for (const step of graph.steps) {
+      const key = attemptKey(step);
+      if (!able.has(key)) {
+        able.set(key, await this.canAttempt(realm, step, user));
+      }
     }
     return graph.requiredAcrFor({
       context,
       unknownFields: SSO_UNKNOWN_CONDITION_FIELDS,
-      canAttempt: (step) => able.get(step.type) ?? true,
+      canAttempt: (step) => able.get(attemptKey(step)) ?? true,
     });
   }
 
@@ -270,9 +312,13 @@ export class FlowRuntimeService {
     // A realm without custom flows has nothing to resolve, unless this
     // browser still holds a transaction from when it had.
     if (!realm.authFlowsEnabled && !this.txnCookie(req)) return false;
-    const messages = {
+    const messages: PageMessages = {
       error: query['error'] || this.takeNotice(realm, req, res),
       info: query['info'] ?? '',
+      // Which form a step with an alternative shows: the password form of
+      // a link step's password fallback, or the link form of a password
+      // step's link fallback. Display only; the POST decides.
+      view: query['password'] ? 'password' : query['link'] ? 'link' : undefined,
     };
 
     if (query['client_id']) {
@@ -469,6 +515,357 @@ export class FlowRuntimeService {
     return { active: true, userId: found.txn.state.userId ?? undefined };
   }
 
+  // ─── Email and link steps, social redirects ────────────────
+
+  /**
+   * `POST /login/email-otp/send` while a transaction's current step is an
+   * `email_otp` step: emails a code to the identified user, bound to this
+   * transaction. False when no transaction is active.
+   */
+  async sendEmailOtp(
+    realm: Realm,
+    req: Request,
+    res: Response,
+  ): Promise<boolean> {
+    if (!isAuthFlowRuntimeEnabled() || !this.txnCookie(req)) return false;
+    const loaded = await this.load(realm, req, res);
+    if (loaded.kind === 'none') return false;
+    if (loaded.kind === 'reply') {
+      this.send('page', realm, loaded.reply, req, res);
+      return true;
+    }
+    const { active } = loaded;
+    const step = this.currentStep(active);
+    if (
+      !step ||
+      step.type !== 'email_otp' ||
+      active.txn.state.enrolling ||
+      !active.txn.state.userId
+    ) {
+      await this.end(active.txn.id, realm, res);
+      this.send('page', realm, this.unexpectedStep(), req, res);
+      return true;
+    }
+    const user = await this.loginService.findUserById(active.txn.state.userId);
+    if (!user || !user.enabled) {
+      await this.end(active.txn.id, realm, res);
+      this.send(
+        'page',
+        realm,
+        this.restartReply(realm, active.txn.state, 'failed'),
+        req,
+        res,
+      );
+      return true;
+    }
+    const otpLength = step.config?.['otpLength'];
+    const expiry = step.config?.['expirySeconds'];
+    try {
+      const sent = await this.emailOtp.send({
+        realm,
+        user,
+        binding: active.txn.id,
+        length: typeof otpLength === 'number' ? otpLength : undefined,
+        expirySeconds: this.linkExpiry(
+          active,
+          typeof expiry === 'number' ? expiry : 300,
+        ),
+      });
+      void this.eventsService.recordLoginEvent({
+        realmId: realm.id,
+        type: LoginEventType.MFA_CHALLENGE,
+        userId: user.id,
+        ipAddress: resolveClientIp(req),
+      });
+      res.redirect(
+        302,
+        this.pageOf(realm, active, {
+          info: `We sent a code to ${sent.maskedEmail}.`,
+        }),
+      );
+    } catch (err) {
+      if (!(err instanceof EmailOtpError)) throw err;
+      if (err.code === 'locked') {
+        await this.end(active.txn.id, realm, res);
+        this.send(
+          'page',
+          realm,
+          this.restartReply(realm, active.txn.state, 'locked'),
+          req,
+          res,
+        );
+        return true;
+      }
+      res.redirect(302, this.pageOf(realm, active, { error: err.message }));
+    }
+    return true;
+  }
+
+  /**
+   * `POST /login/magic-link/send`: emails a sign-in link for this
+   * transaction, on a `magic_link` step (or, declining the current step, on
+   * its direct `magic_link` fallback). Before identification the page says
+   * the same whether or not an account has that address. False when no
+   * transaction is active.
+   */
+  async sendMagicLink(
+    realm: Realm,
+    body: { email?: string },
+    req: Request,
+    res: Response,
+  ): Promise<boolean> {
+    if (!isAuthFlowRuntimeEnabled() || !this.txnCookie(req)) return false;
+    const loaded = await this.load(realm, req, res);
+    if (loaded.kind === 'none') return false;
+    if (loaded.kind === 'reply') {
+      this.send('page', realm, loaded.reply, req, res);
+      return true;
+    }
+    const reply = await this.sendMagicLinkActive(
+      realm,
+      loaded.active,
+      body,
+      req,
+      res,
+    );
+    this.send('page', realm, reply, req, res);
+    return true;
+  }
+
+  private async sendMagicLinkActive(
+    realm: Realm,
+    active: ActiveTxn,
+    body: { email?: string },
+    req: Request,
+    res: Response,
+  ): Promise<Reply> {
+    const state: AuthnTxnState = structuredClone(active.txn.state);
+    const step = this.stepOrDeclineTo(
+      active,
+      state,
+      (s) => s.type === 'magic_link',
+    );
+    if (step === 'too_many_failures') {
+      await this.end(active.txn.id, realm, res);
+      return this.restartReply(realm, state, 'too_many_failures');
+    }
+    if (!step) {
+      await this.end(active.txn.id, realm, res);
+      return this.unexpectedStep();
+    }
+    const txn = await this.store.begin(active.txn);
+    if (!txn) return this.concurrent();
+    const current = { ...active, txn };
+
+    const keep = async (messages: { error?: string; info?: string }) => {
+      const committed = await this.store.commit(txn, state);
+      if (!committed) return this.concurrent();
+      return {
+        kind: 'redirect' as const,
+        url: this.pageOf(realm, { ...current, txn: committed.txn }, messages),
+      };
+    };
+
+    const sends = state.magicLinkSends ?? 0;
+    if (sends >= MAX_MAGIC_LINK_SENDS) {
+      return keep({
+        error: 'Too many sign-in links were requested. Please sign in again.',
+      });
+    }
+    const lastSent = state.magicLinkSentAt
+      ? new Date(state.magicLinkSentAt).getTime()
+      : 0;
+    if (lastSent + MAGIC_LINK_RESEND_COOLDOWN_SECONDS * 1000 > Date.now()) {
+      return keep({
+        error: `Please wait ${MAGIC_LINK_RESEND_COOLDOWN_SECONDS} seconds before requesting another link.`,
+      });
+    }
+
+    const pinned = state.userId
+      ? await this.loginService.findUserById(state.userId)
+      : null;
+    const email = (body.email ?? '').trim();
+    if (!pinned && !email) {
+      return keep({ error: 'Enter your email address.' });
+    }
+    const configured = step.config?.['expirySeconds'];
+    const expirySeconds = this.linkExpiry(
+      current,
+      typeof configured === 'number'
+        ? configured
+        : (realm.magicLinkExpirySeconds ?? MAX_EMAIL_STEP_EXPIRY_SECONDS),
+    );
+
+    let link;
+    try {
+      link = await this.magicLinks.sendFlowLink({
+        realm,
+        target: pinned ? { user: pinned } : { email },
+        expirySeconds,
+        ipAddress: resolveClientIp(req),
+        userAgent: req.headers['user-agent'],
+      });
+    } catch (err) {
+      if (!(err instanceof FlowMagicLinkError)) throw err;
+      return keep({ error: err.message });
+    }
+    // A new link replaces the last one.
+    if (state.magicLink) {
+      await this.magicLinks.cancelFlowLink(state.magicLink.requestId);
+    }
+    state.magicLink = link;
+    state.magicLinkSends = sends + 1;
+    state.magicLinkSentAt = new Date().toISOString();
+    if (pinned && !link) {
+      return keep({
+        error: 'A sign-in link cannot be sent to this account.',
+      });
+    }
+    return keep({
+      info: pinned?.email
+        ? `We sent a sign-in link to ${EmailOtpService.maskEmail(pinned.email)}. Open it in this browser to continue.`
+        : LINK_SENT_MESSAGE,
+    });
+  }
+
+  /**
+   * `GET /login/magic-link?token=…`, the link in the email. It completes the
+   * step only in the browser holding the transaction that sent it: anything
+   * else (another browser, a mail scanner fetching the link, an expired or
+   * replaced link) gets an error page and changes nothing, so the link
+   * still works where it belongs.
+   */
+  async openMagicLink(
+    realm: Realm,
+    token: string | undefined,
+    req: Request,
+    res: Response,
+  ): Promise<void> {
+    const otherBrowser = (): void =>
+      this.renderError(
+        realm,
+        {
+          kind: 'error',
+          status: 400,
+          title: 'This sign-in link cannot be used here',
+          message: OTHER_BROWSER_MESSAGE,
+        },
+        req,
+        res,
+      );
+    const cookie = this.txnCookie(req);
+    if (!isAuthFlowRuntimeEnabled() || !cookie || !token) {
+      return otherBrowser();
+    }
+    const found = await this.store.find(cookie);
+    if (
+      found.status !== 'active' ||
+      found.txn.state.realmId !== realm.id ||
+      !this.magicLinks.matchesFlowLink(token, found.txn.state.magicLink)
+    ) {
+      return otherBrowser();
+    }
+    await this.dispatch(realm, { endpoint: 'magic_link', token }, req, res);
+  }
+
+  /**
+   * `GET /broker/{alias}/login` while a transaction is active: the redirect
+   * of a `social` step (or, declining the current step, of its direct
+   * `social` fallback) to that provider. False when no transaction is
+   * active, so the built-in federated sign-in handles it.
+   */
+  async startSocial(
+    realm: Realm,
+    alias: string,
+    req: Request,
+    res: Response,
+  ): Promise<boolean> {
+    if (!isAuthFlowRuntimeEnabled() || !this.txnCookie(req)) return false;
+    const loaded = await this.load(realm, req, res);
+    if (loaded.kind === 'none') return false;
+    if (loaded.kind === 'reply') {
+      this.send('page', realm, loaded.reply, req, res);
+      return true;
+    }
+    const { active } = loaded;
+    const state: AuthnTxnState = structuredClone(active.txn.state);
+    const step = this.stepOrDeclineTo(
+      active,
+      state,
+      (s) => s.type === 'social' && s.config?.['providerAlias'] === alias,
+    );
+    if (step === 'too_many_failures') {
+      await this.end(active.txn.id, realm, res);
+      this.send(
+        'page',
+        realm,
+        this.restartReply(realm, state, 'too_many_failures'),
+        req,
+        res,
+      );
+      return true;
+    }
+    if (!step) {
+      await this.end(active.txn.id, realm, res);
+      this.send('page', realm, this.unexpectedStep(), req, res);
+      return true;
+    }
+    const txn = await this.store.begin(active.txn);
+    if (!txn) {
+      this.send('page', realm, this.concurrent(), req, res);
+      return true;
+    }
+    const nonce = randomBytes(24).toString('base64url');
+    state.social = { nonce, stepId: step.id, alias };
+    const committed = await this.store.commit(txn, state);
+    if (!committed) {
+      this.send('page', realm, this.concurrent(), req, res);
+      return true;
+    }
+    const url = await this.broker.initiateFlowLogin(realm, alias, {
+      txn: txn.id,
+      step: step.id,
+      nonce,
+    });
+    res.redirect(302, url);
+    return true;
+  }
+
+  /**
+   * The current step if `matches` it; else its direct fallback if that
+   * matches, which declines the current step (a failure, as a wrong answer
+   * would be: `state` is updated); else null. Assurance steps and the
+   * enrolment detour have no alternative.
+   */
+  private stepOrDeclineTo(
+    active: ActiveTxn,
+    state: AuthnTxnState,
+    matches: (step: RuntimeStep) => boolean,
+  ): RuntimeStep | null | 'too_many_failures' {
+    const step = this.currentStep(active);
+    if (!step || state.enrolling) return null;
+    if (matches(step)) return step;
+    const fallback = state.synthetic
+      ? undefined
+      : active.graph.fallbackOf(step);
+    if (!fallback || !matches(fallback)) return null;
+    state.failures += 1;
+    if (state.failures >= MAX_FLOW_FAILURES) return 'too_many_failures';
+    state.currentStepId = fallback.id;
+    return fallback;
+  }
+
+  /** A code's or link's lifetime: as configured, within the transaction. */
+  private linkExpiry(active: ActiveTxn, configured: number): number {
+    const remaining = Math.floor(
+      (active.txn.expiresAt.getTime() - Date.now()) / 1000,
+    );
+    return Math.max(
+      1,
+      Math.min(configured, MAX_EMAIL_STEP_EXPIRY_SECONDS, remaining),
+    );
+  }
+
   // ─── Dispatch ──────────────────────────────────────────────
 
   /**
@@ -490,10 +887,16 @@ export class FlowRuntimeService {
       // The second-factor page only exists after a first factor, which a
       // bound login can only pass inside a transaction (SessionIssuer
       // refuses any session that bypasses one).
-      if (endpoint === 'totp' || !realm.authFlowsEnabled) return false;
-      const client = submission.clientId
-        ? await this.findClient(realm, submission.clientId)
-        : null;
+      if (
+        endpoint === 'totp' ||
+        FLOW_ONLY_ENDPOINTS.has(endpoint) ||
+        !realm.authFlowsEnabled
+      ) {
+        return false;
+      }
+      const clientId =
+        'clientId' in submission ? submission.clientId : undefined;
+      const client = clientId ? await this.findClient(realm, clientId) : null;
       const binding = await this.resolver.resolve(realm, client);
       if (binding.kind === 'legacy') return false;
       if (binding.kind === 'misconfigured') {
@@ -574,6 +977,28 @@ export class FlowRuntimeService {
       }
       step = fallback;
       state.currentStepId = fallback.id;
+    }
+
+    // A provider's callback resumes only the redirect this transaction
+    // started, once: same transaction, step, provider and nonce (the signed
+    // broker state carries them; the cookie proves the browser).
+    if (submission.endpoint === 'social') {
+      const pending = state.social;
+      if (
+        !pending ||
+        submission.flow.txn !== active.txn.id ||
+        submission.flow.step !== step.id ||
+        pending.stepId !== step.id ||
+        pending.alias !== submission.alias ||
+        pending.nonce !== submission.flow.nonce
+      ) {
+        this.logger.warn(
+          `A provider callback did not match transaction ${active.txn.id}; it ends`,
+        );
+        await this.end(active.txn.id, realm, res);
+        return this.unexpectedStep();
+      }
+      state.social = null;
     }
 
     // Optimistic lock: of two concurrent submissions only one runs.
@@ -657,6 +1082,16 @@ export class FlowRuntimeService {
         return this.handlers.totp(realm, pinned.id, submission, txn.id, ip);
       case 'webauthn':
         return this.handlers.webauthn(realm, submission, pinned?.id ?? null);
+      case 'email_otp':
+        if (!pinned) {
+          throw new Error('An email_otp step needs an identified user');
+        }
+        // The code is bound to the transaction id (stable across rotation).
+        return this.handlers.emailOtp(realm, pinned.id, submission, txn.id);
+      case 'magic_link':
+        return this.handlers.magicLink(submission, txn.state.magicLink, pinned);
+      case 'social':
+        return this.handlers.social(realm, step, submission, pinned);
     }
   }
 
@@ -748,6 +1183,7 @@ export class FlowRuntimeService {
       at: new Date().toISOString(),
     });
     state.failures = 0;
+    if (step.type === 'magic_link') state.magicLink = null;
     if (step.type === 'totp') {
       await this.secondFactorVerifier.recordSuccess(
         realm,
@@ -843,7 +1279,30 @@ export class FlowRuntimeService {
         return !!user.federationLink;
       case 'password':
         return !!user.passwordHash || !!user.federationLink;
+      case 'email_otp':
+      case 'magic_link':
+        return this.emailOtp.canDeliver(realm, user);
+      case 'social':
+        return this.hasProviderLink(realm, step, user);
     }
+  }
+
+  /** Whether `user` has an account at the step's (enabled) provider. */
+  private async hasProviderLink(
+    realm: Realm,
+    step: RuntimeStep,
+    user: User,
+  ): Promise<boolean> {
+    const alias = step.config?.['providerAlias'];
+    if (typeof alias !== 'string') return false;
+    const link = await this.prisma.federatedIdentity.findFirst({
+      where: {
+        userId: user.id,
+        identityProvider: { realmId: realm.id, alias, enabled: true },
+      },
+      select: { id: true },
+    });
+    return !!link;
   }
 
   // ─── Finalisation ──────────────────────────────────────────
@@ -890,12 +1349,30 @@ export class FlowRuntimeService {
     const mfaRequired =
       clientRequiresMfa ||
       (await this.mfaService.isMfaRequired(realm, user.id));
+    // An essential `acr` in the claims parameter is mandatory with
+    // ENFORCE_ACR_ON_FRESH_LOGIN, as on the built-in sign-in.
+    const essential =
+      client && isEnforceAcrOnFreshLoginEnabled()
+        ? essentialAcrFromClaimsParam(state.claims)
+        : null;
+    if (essential?.kind === 'unsupported') {
+      await this.end(active.txn.id, realm, res);
+      return {
+        kind: 'redirect',
+        url: authorizationError(
+          state.oauthParams,
+          UNMET_AUTHENTICATION_REQUIREMENTS,
+          'The requested authentication level is not supported',
+        ),
+      };
+    }
     const { target, mandatory } = computeTargetAcr({
       requested: state.requestedAcr,
       clientRequiredAcr: client?.requiredAcr,
       riskFloor: await this.stepUpService.getRiskRequiredAcr(realm.id, user.id),
       riskAcr: state.riskStepUp ? riskStepUpAcr(state.riskScore ?? 0) : null,
       mfaRequired,
+      essentialAcr: essential?.acr ?? null,
     });
 
     if (target && !meetsAcr(acr, target)) {
@@ -921,12 +1398,16 @@ export class FlowRuntimeService {
         const description =
           'This application requires a stronger sign-in method';
         if (client) {
+          // The request's own essential acr is what failed: say so.
+          const unmet = !meetsEssentialAcr(acr, essential);
           return {
             kind: 'redirect',
             url: authorizationError(
               state.oauthParams,
-              'access_denied',
-              description,
+              unmet ? UNMET_AUTHENTICATION_REQUIREMENTS : 'access_denied',
+              unmet
+                ? 'The requested authentication level could not be met'
+                : description,
             ),
           };
         }
@@ -1275,7 +1756,7 @@ export class FlowRuntimeService {
   private async renderStep(
     realm: Realm,
     active: ActiveTxn,
-    messages: { error: string; info: string },
+    messages: PageMessages,
     req: Request,
     res: Response,
   ): Promise<void> {
@@ -1291,14 +1772,75 @@ export class FlowRuntimeService {
     const fallback = state.synthetic
       ? undefined
       : active.graph.fallbackOf(step);
+    const csrfToken = this.setCsrfCookie(realm, res);
+
+    if (step.type === 'email_otp') {
+      this.themeRender.render(
+        res,
+        realm,
+        'login',
+        'email-otp',
+        {
+          pageTitle: 'Check your email',
+          error: messages.error,
+          info: messages.info,
+          csrfToken,
+          maskedEmail: pinned?.email
+            ? EmailOtpService.maskEmail(pinned.email)
+            : '',
+        },
+        req,
+      );
+      return;
+    }
+
+    const passwordFallback =
+      !!fallback && PASSWORD_STEP_TYPES.has(fallback.type);
+    const showLinkForm =
+      (step.type === 'magic_link' &&
+        !(messages.view === 'password' && passwordFallback)) ||
+      (messages.view === 'link' && fallback?.type === 'magic_link');
+    if (showLinkForm) {
+      this.themeRender.render(
+        res,
+        realm,
+        'login',
+        'magic-link',
+        {
+          pageTitle: 'Sign in with a link',
+          error: messages.error,
+          info: messages.info,
+          csrfToken,
+          maskedEmail: pinned?.email
+            ? EmailOtpService.maskEmail(pinned.email)
+            : '',
+          login_hint: state.loginHint ?? '',
+          // The way back to a password form, if this step has one.
+          passwordFallback:
+            step.type === 'magic_link'
+              ? passwordFallback
+              : PASSWORD_STEP_TYPES.has(step.type),
+        },
+        req,
+      );
+      return;
+    }
+
     const passkey =
       !!realm.webAuthnEnabled &&
       (step.type === 'webauthn' || fallback?.type === 'webauthn');
+    const passwordStep =
+      PASSWORD_STEP_TYPES.has(step.type) ||
+      (step.type === 'magic_link' && passwordFallback) ||
+      passwordFallback;
+    const identityProviders = await this.providerButtons(
+      realm,
+      [step, fallback].filter((s): s is RuntimeStep => s?.type === 'social'),
+    );
 
     const registerQs = new URLSearchParams(
       pickOAuthParams(state.oauthParams, OAUTH_FORM_PARAM_KEYS),
     ).toString();
-    const csrfToken = this.setCsrfCookie(realm, res);
     this.themeRender.render(
       res,
       realm,
@@ -1310,9 +1852,11 @@ export class FlowRuntimeService {
         webAuthnEnabled: passkey,
         // A passkey step with no password fallback: the built-in themes
         // hide their password form (posting it would end the login).
-        passkeyOnly:
-          step.type === 'webauthn' &&
-          (!fallback || STEP_ENDPOINT[fallback.type] !== 'password'),
+        passkeyOnly: step.type === 'webauthn' && !passwordFallback,
+        // Any step that is not a password, without a password fallback.
+        passwordFormHidden: !passwordStep,
+        // A password step that may fall back to a sign-in link.
+        magicLinkFallback: fallback?.type === 'magic_link',
         // The OAuth request lives in the transaction; the hidden fields
         // stay empty, and anything posted in them is ignored.
         client_id: '',
@@ -1324,16 +1868,38 @@ export class FlowRuntimeService {
         code_challenge: '',
         code_challenge_method: '',
         prompt: '',
+        acr_values: '',
+        claims: '',
         error: messages.error,
         info: messages.info,
         login_hint: pinned?.username ?? state.loginHint ?? '',
         registerUrl: `/realms/${realm.name}/register${registerQs ? `?${registerQs}` : ''}`,
-        // Social sign-in is not a flow step yet.
-        identityProviders: [],
+        // Only the providers of this step (or its fallback): a social step.
+        identityProviders,
         csrfToken,
       },
       req,
     );
+  }
+
+  /** "Sign in with …" buttons for the social steps on the page. */
+  private async providerButtons(
+    realm: Realm,
+    steps: RuntimeStep[],
+  ): Promise<Array<{ alias: string; displayName: string; loginUrl: string }>> {
+    const aliases = steps
+      .map((s) => s.config?.['providerAlias'])
+      .filter((a): a is string => typeof a === 'string');
+    if (aliases.length === 0) return [];
+    const providers = await this.prisma.identityProvider.findMany({
+      where: { realmId: realm.id, alias: { in: aliases }, enabled: true },
+      select: { alias: true, displayName: true },
+    });
+    return providers.map((p) => ({
+      alias: p.alias,
+      displayName: p.displayName ?? p.alias,
+      loginUrl: `/realms/${realm.name}/broker/${encodeURIComponent(p.alias)}/login`,
+    }));
   }
 
   /** The condition context: the whitelisted user, client and risk fields. */
@@ -1579,6 +2145,21 @@ export class FlowRuntimeService {
       select: { authFlowId: true },
     });
   }
+}
+
+/** Messages and the alternative view a login page shows. */
+interface PageMessages {
+  error: string;
+  info: string;
+  view?: 'password' | 'link';
+}
+
+/** Steps with the same key check the same thing (see canAttempt). */
+function attemptKey(step: RuntimeStep): string {
+  const alias = step.config?.['providerAlias'];
+  return step.type === 'social' && typeof alias === 'string'
+    ? `social:${alias}`
+    : step.type;
 }
 
 /** Step types that check a password (the password-expiry gate applies). */

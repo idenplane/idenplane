@@ -4,16 +4,27 @@
  */
 
 /** The step types the runtime can execute (the validator refuses the rest). */
-export type FlowStepType = 'password' | 'ldap' | 'totp' | 'webauthn';
+export type FlowStepType =
+  | 'password'
+  | 'ldap'
+  | 'totp'
+  | 'webauthn'
+  | 'email_otp'
+  | 'magic_link'
+  | 'social';
 
 /**
- * The existing login endpoints a flow step is submitted to. Themes hard-code
- * these form actions, so the runtime sits behind them:
+ * The login endpoints a flow step is submitted to. Themes hard-code the
+ * form actions of the first four, so the runtime sits behind them:
  * - `password`: `POST /login` (password and ldap steps);
  * - `totp`: `POST /totp` (authenticator, texted and recovery codes);
- * - `webauthn`: `POST /webauthn/authenticate/verify`.
+ * - `webauthn`: `POST /webauthn/authenticate/verify`;
+ * - `email_otp`: `POST /login/email-otp` (a code sent by email);
+ * - `magic_link`: `GET /login/magic-link?token=…` (the link in the email);
+ * - `social`: `GET /broker/{alias}/callback` (back from the provider).
  */
-export type LoginEndpoint = 'password' | 'totp' | 'webauthn';
+export type LoginEndpoint =
+  'password' | 'totp' | 'webauthn' | 'email_otp' | 'magic_link' | 'social';
 
 /** Which endpoint runs each step type. */
 export const STEP_ENDPOINT: Readonly<Record<FlowStepType, LoginEndpoint>> = {
@@ -21,12 +32,46 @@ export const STEP_ENDPOINT: Readonly<Record<FlowStepType, LoginEndpoint>> = {
   ldap: 'password',
   totp: 'totp',
   webauthn: 'webauthn',
+  email_otp: 'email_otp',
+  magic_link: 'magic_link',
+  social: 'social',
 };
+
+/** Step types that establish who the user is. */
+export const IDENTIFYING_STEP_TYPES: readonly FlowStepType[] = [
+  'password',
+  'ldap',
+  'webauthn',
+  'magic_link',
+  'social',
+];
 
 /** A step type that establishes who the user is. */
 export function isIdentifyingType(type: FlowStepType): boolean {
-  return type === 'password' || type === 'ldap' || type === 'webauthn';
+  return IDENTIFYING_STEP_TYPES.includes(type);
 }
+
+/**
+ * The RFC 8176 methods a passed step records (`totp` records `sms` instead
+ * for a texted code):
+ * - `email_otp`: `otp`, a one-time code (RFC 8176 §2).
+ * - `magic_link`: `otp` too. RFC 8176 has no value for a sign-in link; the
+ *   link carries a single-use secret delivered out of band, which is what
+ *   `otp` describes, and only registered values are used. How strong a
+ *   sign-in is never depends on these values (see `acrFromReceipts`), so a
+ *   link and an emailed code never count as two factors.
+ * - `social`: none, as for the built-in federated sign-in: the methods the
+ *   external provider used are not known here.
+ */
+export const STEP_AMR: Readonly<Record<FlowStepType, readonly string[]>> = {
+  password: ['pwd'],
+  ldap: ['pwd'],
+  totp: ['otp'],
+  webauthn: ['hwk'],
+  email_otp: ['otp'],
+  magic_link: ['otp'],
+  social: [],
+};
 
 /**
  * Proof that one step of a login transaction was passed. Receipts are

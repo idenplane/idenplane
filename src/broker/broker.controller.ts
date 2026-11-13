@@ -18,6 +18,7 @@ import { Public } from '../common/decorators/public.decorator.js';
 import { BrokerService } from './broker.service.js';
 import { ThemeRenderService } from '../theme/theme-render.service.js';
 import { LoginFlowService } from '../login/login-flow.service.js';
+import { FlowRuntimeService } from '../auth-flow/flow-runtime.service.js';
 
 @ApiTags('Identity Broker')
 @Controller('realms/:realmName/broker')
@@ -28,6 +29,7 @@ export class BrokerController {
     private readonly brokerService: BrokerService,
     private readonly themeRender: ThemeRenderService,
     private readonly loginFlow: LoginFlowService,
+    private readonly flowRuntime: FlowRuntimeService,
   ) {}
 
   @Get(':alias/login')
@@ -51,8 +53,12 @@ export class BrokerController {
     @Query('nonce') nonce: string,
     @Query('code_challenge') codeChallenge: string,
     @Query('code_challenge_method') codeChallengeMethod: string,
+    @Req() req: Request,
     @Res() res: Response,
   ) {
+    // The `social` step of a custom-flow login in progress in this browser.
+    if (await this.flowRuntime.startSocial(realm, alias, req, res)) return;
+
     const redirectUrl = await this.brokerService.initiateLogin(realm, alias, {
       client_id: clientId,
       redirect_uri: redirectUri,
@@ -87,6 +93,31 @@ export class BrokerController {
     @Res() res: Response,
   ) {
     try {
+      // A sign-in a flow's social step started goes back into its login
+      // transaction, in this browser only; never the built-in path.
+      const brokerState = await this.brokerService.readState(
+        realm,
+        alias,
+        typeof state === 'string' ? state : '',
+      );
+      if (brokerState.flow) {
+        const handled = await this.flowRuntime.dispatch(
+          realm,
+          {
+            endpoint: 'social',
+            alias,
+            code: typeof code === 'string' && code ? code : undefined,
+            flow: brokerState.flow,
+          },
+          req,
+          res,
+        );
+        if (handled) return;
+        throw new ForbiddenException(
+          'This sign-in can only be finished in the browser where it started. Please sign in again.',
+        );
+      }
+
       const { user, oauthParams } = await this.brokerService.handleCallback(
         realm,
         alias,

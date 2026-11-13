@@ -58,7 +58,10 @@ import { CsrfService } from '../common/csrf/csrf.service.js';
 import { FlowRuntimeService } from '../auth-flow/flow-runtime.service.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 import {
+  CsrfOnlyDto,
+  EmailOtpDto,
   LoginDto,
+  MagicLinkSendDto,
   TotpDto,
   ChangePasswordDto,
   ForgotPasswordDto,
@@ -285,6 +288,110 @@ export class LoginController {
       }
       res.redirect(`/realms/${realm.name}/login?${params.toString()}`);
     }
+  }
+
+  // ─── CUSTOM-FLOW EMAIL STEPS ───────────────────────────────
+
+  /** Shown when a flow-only endpoint is reached without a sign-in. */
+  private noSignInInProgress(realm: Realm, req: Request, res: Response) {
+    res.status(400);
+    this.themeRender.render(
+      res,
+      realm,
+      'login',
+      'error',
+      {
+        pageTitle: 'Sign-in expired',
+        errorTitle: 'Sign-in expired',
+        errorMessage:
+          'There is no sign-in in progress in this browser. Please start again from the application.',
+      },
+      req,
+    );
+  }
+
+  /** `email_otp` step: email a code to the identified user. */
+  @Post('login/email-otp/send')
+  @UseGuards(RateLimitGuard)
+  @RateLimitByIp()
+  async sendFlowEmailOtp(
+    @CurrentRealm() realm: Realm,
+    @Body() body: CsrfOnlyDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    this.validateCsrf(realm, body, req);
+    if (await this.flowRuntime.sendEmailOtp(realm, req, res)) return;
+    this.noSignInInProgress(realm, req, res);
+  }
+
+  /** `email_otp` step: the code from the email. */
+  @Post('login/email-otp')
+  @UseGuards(RateLimitGuard)
+  @RateLimitByIp()
+  async verifyFlowEmailOtp(
+    @CurrentRealm() realm: Realm,
+    @Body() body: EmailOtpDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    this.validateCsrf(realm, body, req);
+    if (
+      await this.flowRuntime.dispatch(
+        realm,
+        { endpoint: 'email_otp', code: body.code },
+        req,
+        res,
+      )
+    ) {
+      return;
+    }
+    this.noSignInInProgress(realm, req, res);
+  }
+
+  /** `magic_link` step: email a sign-in link for this browser's sign-in. */
+  @Post('login/magic-link/send')
+  @UseGuards(RateLimitGuard)
+  @RateLimitByIp()
+  async sendFlowMagicLink(
+    @CurrentRealm() realm: Realm,
+    @Body() body: MagicLinkSendDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    this.validateCsrf(realm, body, req);
+    if (
+      await this.flowRuntime.sendMagicLink(
+        realm,
+        { email: body.email },
+        req,
+        res,
+      )
+    ) {
+      return;
+    }
+    this.noSignInInProgress(realm, req, res);
+  }
+
+  /**
+   * `magic_link` step: the link from the email. A GET, as links are, so it
+   * changes nothing unless this browser holds the sign-in that sent it.
+   */
+  @Get('login/magic-link')
+  @UseGuards(RateLimitGuard)
+  @RateLimitByIp()
+  async openFlowMagicLink(
+    @CurrentRealm() realm: Realm,
+    @Query('token') token: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    return this.flowRuntime.openMagicLink(
+      realm,
+      typeof token === 'string' ? token : undefined,
+      req,
+      res,
+    );
   }
 
   // ─── MFA / TOTP ───────────────────────────────────────────

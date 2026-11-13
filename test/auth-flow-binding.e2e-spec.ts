@@ -176,7 +176,7 @@ describe('Auth-flow bindings (e2e)', () => {
         data: {
           realmId: realm.id,
           name: 'Legacy stored',
-          steps: [{ id: 's', type: 'social', required: true, order: 1 }],
+          steps: [{ id: 's', type: 'consent', required: true, order: 1 }],
         },
       });
       const res = await key(api().post(`${base}/${legacy.id}/validate`)).expect(

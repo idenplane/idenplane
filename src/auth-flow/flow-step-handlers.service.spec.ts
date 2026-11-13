@@ -27,17 +27,177 @@ describe('FlowStepHandlers', () => {
   let login: { validateCredentials: jest.Mock };
   let verifier: { verify: jest.Mock };
   let webAuthn: { verifyAuthentication: jest.Mock };
+  let emailOtp: { verify: jest.Mock };
+  let magicLinks: { matchesFlowLink: jest.Mock; completeFlowLink: jest.Mock };
+  let broker: {
+    fetchExternalIdentity: jest.Mock;
+    resolveFederatedUser: jest.Mock;
+    belongsToUser: jest.Mock;
+  };
   let handlers: FlowStepHandlers;
 
   beforeEach(() => {
     login = { validateCredentials: jest.fn().mockResolvedValue(alice) };
     verifier = { verify: jest.fn() };
     webAuthn = { verifyAuthentication: jest.fn() };
+    emailOtp = { verify: jest.fn() };
+    magicLinks = {
+      matchesFlowLink: jest.fn().mockReturnValue(true),
+      completeFlowLink: jest.fn().mockResolvedValue(true),
+    };
+    broker = {
+      fetchExternalIdentity: jest
+        .fn()
+        .mockResolvedValue({ idp: {}, external: { sub: 's' } }),
+      resolveFederatedUser: jest.fn(),
+      belongsToUser: jest.fn(),
+    };
     handlers = new FlowStepHandlers(
       login as never,
       verifier as never,
       webAuthn as never,
+      emailOtp as never,
+      magicLinks as never,
+      broker as never,
     );
+  });
+
+  describe('email_otp', () => {
+    it('passes a correct code as otp, bound to the transaction', async () => {
+      emailOtp.verify.mockResolvedValue({ ok: true });
+      const out = await handlers.emailOtp(
+        realm,
+        'u-alice',
+        { code: '123456' },
+        'txn-1',
+      );
+      expect(out).toEqual({ kind: 'passed', userId: 'u-alice', amr: ['otp'] });
+      expect(emailOtp.verify).toHaveBeenCalledWith({
+        realmId: 'realm-1',
+        userId: 'u-alice',
+        binding: 'txn-1',
+        code: '123456',
+      });
+    });
+
+    it.each([
+      ['invalid', 'failed'],
+      ['expired', 'failed'],
+      ['not_found', 'failed'],
+      ['locked', 'locked'],
+    ])('maps %s to %s (locked never runs a fallback)', async (reason, kind) => {
+      emailOtp.verify.mockResolvedValue({ ok: false, reason });
+      const out = await handlers.emailOtp(realm, 'u-alice', { code: '1' }, 't');
+      expect(out.kind).toBe(kind);
+    });
+  });
+
+  describe('magic_link', () => {
+    const link = {
+      requestId: 'req-1',
+      tokenHash: 'h',
+      userId: 'u-alice',
+      expiresAt: new Date(Date.now() + 60_000).toISOString(),
+    };
+
+    it('passes the link of this transaction once, as otp, for its account', async () => {
+      const out = await handlers.magicLink({ token: 't' }, link, null);
+      expect(out).toEqual({ kind: 'passed', userId: 'u-alice', amr: ['otp'] });
+      expect(magicLinks.completeFlowLink).toHaveBeenCalledWith('req-1');
+    });
+
+    it('fails a token that is not this transaction’s link, without using it', async () => {
+      magicLinks.matchesFlowLink.mockReturnValue(false);
+      const out = await handlers.magicLink({ token: 'other' }, link, null);
+      expect(out.kind).toBe('failed');
+      expect(magicLinks.completeFlowLink).not.toHaveBeenCalled();
+      expect((await handlers.magicLink({ token: 't' }, null, null)).kind).toBe(
+        'failed',
+      );
+    });
+
+    it('fails a link already used (single use)', async () => {
+      magicLinks.completeFlowLink.mockResolvedValue(false);
+      expect((await handlers.magicLink({ token: 't' }, link, null)).kind).toBe(
+        'failed',
+      );
+    });
+
+    it('refuses a link for another account than the identified one', async () => {
+      const out = await handlers.magicLink({ token: 't' }, link, {
+        id: 'u-bob',
+      } as never);
+      expect(out).toEqual({ kind: 'user_mismatch' });
+      expect(magicLinks.completeFlowLink).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('social', () => {
+    const social: RuntimeStep = {
+      id: 'so',
+      type: 'social',
+      order: 1,
+      required: true,
+      config: { providerAlias: 'google' },
+    };
+    const input = (over: Record<string, unknown> = {}) => ({
+      alias: 'google',
+      code: 'c',
+      flow: { txn: 't', step: 'so', nonce: 'n' },
+      ...over,
+    });
+
+    it('identifies the linked (or new) account with no methods', async () => {
+      broker.resolveFederatedUser.mockResolvedValue({
+        id: 'u-alice',
+        enabled: true,
+      });
+      const out = await handlers.social(realm, social, input(), null);
+      expect(out).toMatchObject({ kind: 'passed', userId: 'u-alice', amr: [] });
+    });
+
+    it('fails a cancelled sign-in or another provider, so a fallback can run', async () => {
+      expect(
+        (await handlers.social(realm, social, input({ code: undefined }), null))
+          .kind,
+      ).toBe('failed');
+      expect(
+        (await handlers.social(realm, social, input({ alias: 'github' }), null))
+          .kind,
+      ).toBe('failed');
+      expect(broker.fetchExternalIdentity).not.toHaveBeenCalled();
+    });
+
+    it('fails a provider error and a link-only miss', async () => {
+      broker.fetchExternalIdentity.mockRejectedValueOnce(
+        new UnauthorizedException('Failed to exchange code'),
+      );
+      expect((await handlers.social(realm, social, input(), null)).kind).toBe(
+        'failed',
+      );
+      broker.resolveFederatedUser.mockRejectedValueOnce(
+        new UnauthorizedException('link-only'),
+      );
+      expect((await handlers.social(realm, social, input(), null)).kind).toBe(
+        'failed',
+      );
+    });
+
+    it('after identification: never creates an account, and refuses someone else', async () => {
+      broker.belongsToUser.mockResolvedValueOnce('linked');
+      expect(
+        await handlers.social(realm, social, input(), alice as never),
+      ).toMatchObject({ kind: 'passed', userId: 'u-alice' });
+      broker.belongsToUser.mockResolvedValueOnce('not_linked');
+      expect(
+        (await handlers.social(realm, social, input(), alice as never)).kind,
+      ).toBe('failed');
+      broker.belongsToUser.mockResolvedValueOnce('other_user');
+      expect(
+        await handlers.social(realm, social, input(), alice as never),
+      ).toEqual({ kind: 'user_mismatch' });
+      expect(broker.resolveFederatedUser).not.toHaveBeenCalled();
+    });
   });
 
   describe('password', () => {

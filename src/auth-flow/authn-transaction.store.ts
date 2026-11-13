@@ -7,6 +7,7 @@ import {
   type FlowSessionProof,
   type Receipt,
 } from '../authn-core/flow-contracts.js';
+import type { FlowMagicLink } from '../magic-link/magic-link.service.js';
 
 /** `PendingAction.type` of a login transaction. */
 export const AUTHN_TXN_TYPE = 'authn_txn';
@@ -56,6 +57,20 @@ export interface AuthnTxnState {
   riskLevel: string | null;
   /** Failed answers so far in this transaction. */
   failures: number;
+  /**
+   * The sign-in link a `magic_link` step sent last (its token's hash, the
+   * account and expiry), and how many were sent. Optional: transactions
+   * started before these steps existed have none.
+   */
+  magicLink?: FlowMagicLink | null;
+  magicLinkSends?: number;
+  magicLinkSentAt?: string | null;
+  /**
+   * The pending redirect of a `social` step: the nonce its signed broker
+   * state carries, so exactly one callback can come back into this
+   * transaction, and the step that started it.
+   */
+  social?: { nonce: string; stepId: string; alias: string } | null;
 }
 
 export interface AuthnTxn {
