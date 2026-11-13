@@ -286,8 +286,8 @@ describe('ENFORCE_ACR_ON_FRESH_LOGIN (e2e)', () => {
     );
     expect(button).not.toBeNull();
     const href = (button as RegExpExecArray)[1]
-      .replaceAll('&amp;', '&')
-      .replaceAll('&#x3D;', '=');
+      .replaceAll('&#x3D;', '=')
+      .replaceAll('&amp;', '&');
     expect(href).toContain('claims=');
     const toIdp = await browser.get(href);
     const state = new URL(toIdp.headers['location'] as string).searchParams.get(

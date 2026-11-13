@@ -212,7 +212,7 @@ The flow drives the same hosted pages and endpoints as the built-in login, so th
 | `webauthn` | login page, *Sign in with a passkey* | `POST /realms/{realm}/webauthn/authenticate/verify` |
 | `email_otp` | email-code page (`email-otp`) | `POST /realms/{realm}/login/email-otp/send`, then `POST /realms/{realm}/login/email-otp` |
 | `magic_link` | sign-in-link page (`magic-link`) | `POST /realms/{realm}/login/magic-link/send`, then the link: `GET /realms/{realm}/login/magic-link?token=…` |
-| `social` | login page, *Sign in with {provider}* | `GET /realms/{realm}/broker/{alias}/login`, back at `GET /realms/{realm}/broker/{alias}/callback` |
+| `social` | login page, *Sign in with* the provider's name | `GET /realms/{realm}/broker/{alias}/login`, back at `GET /realms/{realm}/broker/{alias}/callback` |
 
 - **A server-side login transaction.** `/auth` validates the request, starts a transaction and points the browser at it with the `IDENPLANE_AUTHN_TXN` cookie. The transaction lasts 10 minutes. It pins the flow's id and `version`, holds the OAuth request, the identified user, the current step and a receipt for each step passed. OAuth parameters posted in forms are ignored. The cookie value changes once the user is identified.
 - **Steps.** A step passes, or it fails and its fallback runs, or, with no fallback, the page shows an error. After five failed answers the login starts over. A locked account, a rate-limited second factor or an unexpected error ends the login; it never moves to the fallback.
