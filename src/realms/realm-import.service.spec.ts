@@ -15,7 +15,10 @@ describe('RealmImportService', () => {
   let service: RealmImportService;
   let prisma: MockPrismaService;
   let jwkService: { generateRsaKeyPair: jest.Mock };
-  let cache: { invalidateRealmCache: jest.Mock; invalidateCorsOrigins: jest.Mock };
+  let cache: {
+    invalidateRealmCache: jest.Mock;
+    invalidateCorsOrigins: jest.Mock;
+  };
   let cors: { invalidateLocalCache: jest.Mock };
 
   /** The built-in scopes seeded through the transaction. */
@@ -170,6 +173,19 @@ describe('RealmImportService', () => {
       await expect(service.importRealm(validPayload)).rejects.toThrow(
         ConflictException,
       );
+    });
+
+    it('refuses to replace the master realm, even with overwrite', async () => {
+      prisma.realm.findUnique.mockResolvedValue({ id: 'm', name: 'master' });
+      const payload = {
+        ...validPayload,
+        realm: { ...(validPayload['realm'] as object), name: 'master' },
+      };
+
+      await expect(
+        service.importRealm(payload, { overwrite: true }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.realm.delete).not.toHaveBeenCalled();
     });
 
     it('should delete existing realm when overwrite is true', async () => {

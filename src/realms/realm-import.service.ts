@@ -31,6 +31,7 @@ import {
   encryptEmailProviderConfig,
   encryptSmsProviderConfig,
 } from './realm-secrets.util.js';
+import { MASTER_REALM } from './realm.constants.js';
 
 export interface ImportOptions {
   overwrite?: boolean;
@@ -145,6 +146,11 @@ export class RealmImportService {
     if (existing && !options.overwrite) {
       throw new ConflictException(
         `Realm '${realmName}' already exists. Use overwrite option to replace it.`,
+      );
+    }
+    if (existing && realmName === MASTER_REALM) {
+      throw new BadRequestException(
+        'The master realm holds the administrators and cannot be replaced by an import.',
       );
     }
 

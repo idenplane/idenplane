@@ -20,6 +20,7 @@ import {
   redactSmsProviderConfig,
   SECRET_PLACEHOLDER,
 } from './realm-secrets.util.js';
+import { MASTER_REALM } from './realm.constants.js';
 
 @Injectable()
 export class RealmsService {
@@ -248,6 +249,11 @@ export class RealmsService {
 
   async update(name: string, dto: UpdateRealmDto) {
     const existing = await this.findByNameRaw(name);
+    if (name === MASTER_REALM && dto.enabled === false) {
+      throw new BadRequestException(
+        'The master realm holds the administrators and cannot be disabled.',
+      );
+    }
     if (dto.smsMfaEnabled !== undefined || dto.smsProvider !== undefined) {
       assertSmsMfaDeliverable(
         dto.smsMfaEnabled ?? existing.smsMfaEnabled,
@@ -404,6 +410,12 @@ export class RealmsService {
   }
 
   async remove(name: string) {
+    if (name === MASTER_REALM) {
+      // Every administrator signs in through it: deleting it locks them all out.
+      throw new BadRequestException(
+        'The master realm holds the administrators and cannot be deleted.',
+      );
+    }
     const existing = await this.findByNameRaw(name);
     await this.cache.invalidateRealmCache(existing.id, name);
     const deleted = await this.prisma.realm.delete({ where: { name } });
