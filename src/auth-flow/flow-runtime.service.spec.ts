@@ -572,6 +572,59 @@ describe('FlowRuntimeService.dispatch', () => {
     });
   });
 
+  describe('enrolment detour', () => {
+    const enrollment = (overrides = {}) => ({
+      userId: alice.id,
+      realmId: 'realm-1',
+      factor: 'totp' as const,
+      verified: true,
+      authnTxnId: 'txn-1',
+      ...overrides,
+    });
+
+    beforeEach(() => {
+      steps = [
+        step({ id: 'pw', type: 'password', order: 1 }),
+        step({ id: 'otp', type: 'totp', order: 2 }),
+      ];
+      current.state = txnState({
+        userId: alice.id,
+        mainStepId: 'otp',
+        currentStepId: 'otp',
+        enrolling: true,
+        receipts: [{ stepId: 'pw', kind: 'password', amr: ['pwd'], at: '' }],
+      });
+      mfa.isMfaEnabled.mockResolvedValue(true);
+    });
+
+    const resume = (e: ReturnType<typeof enrollment>) =>
+      runtime.resumeAfterEnrolment(realm, e, req as never, res as never);
+
+    it('resumes the flow with the new factor as the step receipt', async () => {
+      await resume(enrollment());
+      expect(sessionIssuer.issue.mock.calls[0][2]).toEqual({
+        acr: ACR_MFA,
+        amr: ['pwd', 'otp'],
+      });
+    });
+
+    it.each([
+      ['another transaction', { authnTxnId: 'txn-other' }],
+      ['another user', { userId: 'user-mallory' }],
+    ])('fails closed for %s', async (_label, overrides) => {
+      await resume(enrollment(overrides));
+      expect(store.destroy).toHaveBeenCalledWith('txn-1');
+      expect(sessionIssuer.issue).not.toHaveBeenCalled();
+      expect(redirectedTo()).toMatch(/error=/);
+    });
+
+    it('fails closed when the transaction is not waiting for enrolment', async () => {
+      current.state = { ...current.state, enrolling: false };
+      await resume(enrollment());
+      expect(sessionIssuer.issue).not.toHaveBeenCalled();
+    });
+  });
+
   describe('pinned flow', () => {
     it('restarts when the flow version changed', async () => {
       resolver.resolve.mockResolvedValue({

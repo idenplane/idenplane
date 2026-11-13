@@ -505,6 +505,99 @@ describe('Auth-flow runtime (e2e)', () => {
     );
   });
 
+  /** Password, then the TOTP setup page, up to the "Continue" form. */
+  const enrolDetour = async (browser: Browser, username: string) => {
+    const afterPassword = await postPassword(
+      browser,
+      await start(browser),
+      username,
+    );
+    expect(afterPassword.headers['location']).toMatch(
+      new RegExp(`^/realms/${REALM}/account/totp-setup`),
+    );
+    expect(browser.jar.has('IDENPLANE_SESSION')).toBe(false);
+    const setupPage = await browser.get(`/realms/${REALM}/account/totp-setup`);
+    expect(setupPage.status).toBe(200);
+    const secret = /<code[^>]*>([A-Z2-7]+)<\/code>/.exec(setupPage.text)?.[1];
+    expect(secret).toBeTruthy();
+    const OTPAuth = await import('otpauth');
+    const totp = new OTPAuth.TOTP({
+      secret: OTPAuth.Secret.fromBase32(secret as string),
+      algorithm: 'SHA1',
+      digits: 6,
+      period: 30,
+    });
+    const activated = await browser.post(
+      `/realms/${REALM}/account/totp-setup`,
+      {
+        code: totp.generate(),
+        _csrf: csrfFrom(setupPage.text),
+      },
+    );
+    expect(activated.text).toContain(
+      `action="/realms/${REALM}/mfa-enrollment/continue"`,
+    );
+    return csrfFrom(activated.text);
+  };
+
+  it('a required totp step sends a user without a factor through enrolment, then resumes the flow', async () => {
+    const flow = await createFlow(
+      ctx.prisma,
+      seeded.realm.id,
+      'enrol',
+      PASSWORD_TOTP,
+    );
+    await bindRealm(ctx.prisma, seeded.realm.id, flow.id);
+    const user = await newUser();
+
+    const browser = new Browser(app);
+    const csrf = await enrolDetour(browser, user.username);
+    const done = await browser.post(
+      `/realms/${REALM}/mfa-enrollment/continue`,
+      {
+        _csrf: csrf,
+      },
+    );
+    expect(done.status).toBe(302);
+    const claims = await idTokenClaims(
+      app,
+      REALM,
+      codeFrom(done.headers['location']),
+    );
+    expect(claims['sub']).toBe(user.id);
+    expect(claims['acr']).toBe(ACR.mfa);
+    expect(claims['amr']).toEqual(['pwd', 'otp']);
+    expect(browser.jar.has(TXN_COOKIE)).toBe(false);
+    expect(browser.jar.has('IDENPLANE_MFA_ENROLLMENT')).toBe(false);
+  });
+
+  it('the enrolment detour only resumes in the browser that holds the transaction', async () => {
+    const flow = await createFlow(
+      ctx.prisma,
+      seeded.realm.id,
+      'enrol-2',
+      PASSWORD_TOTP,
+    );
+    await bindRealm(ctx.prisma, seeded.realm.id, flow.id);
+    const user = await newUser();
+
+    const browser = new Browser(app);
+    const csrf = await enrolDetour(browser, user.username);
+    const thief = new Browser(app);
+    for (const [k, v] of browser.jar) {
+      if (k !== TXN_COOKIE) thief.jar.set(k, v);
+    }
+    const stolen = await thief.post(
+      `/realms/${REALM}/mfa-enrollment/continue`,
+      {
+        _csrf: csrf,
+      },
+    );
+    expect(stolen.status).toBe(302);
+    expect(String(stolen.headers['location'])).not.toMatch(/code=/);
+    expect(thief.jar.has('IDENPLANE_SESSION')).toBe(false);
+  });
+
   it('SSO from a flow session serves a client bound to the same flow silently', async () => {
     const flow = await createFlow(
       ctx.prisma,
