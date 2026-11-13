@@ -216,7 +216,8 @@ describe('UserFederationService', () => {
 
       expect(prisma.userFederation.findUnique).toHaveBeenCalledWith({
         where: { id: 'fed-1' },
-        include: { realm: true, mappers: true },
+        // Only the realm's name, never the full realm row (settings, secrets).
+        include: { realm: { select: { name: true } }, mappers: true },
       });
       expect(result).toEqual(mockFederation);
     });

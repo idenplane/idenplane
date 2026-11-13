@@ -74,7 +74,9 @@ export class UserFederationService {
   async findById(realmName: string, id: string) {
     const federation = await this.prisma.userFederation.findUnique({
       where: { id },
-      include: { realm: true, mappers: true },
+      // Only the realm's name: the full realm row (settings, encrypted
+      // secrets) must never reach the admin API response.
+      include: { realm: { select: { name: true } }, mappers: true },
     });
     if (!federation || federation.realm.name !== realmName) {
       throw new NotFoundException('User federation not found');

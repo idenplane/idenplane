@@ -28,14 +28,20 @@ export const wizardSecrets = {
     return sealSecret(crypto, incoming);
   },
 
-  /** A wizard state as the API returns it. */
-  redact<T extends { smtpConfig?: unknown }>(state: T): T {
-    const config = state.smtpConfig;
+  /**
+   * A wizard state as the API returns it: the SMTP password as the
+   * placeholder, and never the admin's password hash.
+   */
+  redact<T extends { smtpConfig?: unknown; adminPasswordHash?: unknown }>(
+    state: T,
+  ): Omit<T, 'adminPasswordHash'> {
+    const { adminPasswordHash: _hash, ...rest } = state;
+    const config = rest.smtpConfig;
     if (!isRecord(config) || typeof config['password'] !== 'string') {
-      return state;
+      return rest;
     }
     return {
-      ...state,
+      ...rest,
       smtpConfig: { ...config, password: redactSecret(config['password']) },
     };
   },
