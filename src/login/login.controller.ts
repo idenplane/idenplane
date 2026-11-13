@@ -14,7 +14,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { ApiExcludeController } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
-import { Prisma, type Realm } from '@prisma/client';
+import { Prisma, type Client, type Realm, type User } from '@prisma/client';
 import { ACR_MFA } from '../authn-core/acr.js';
 import { amrForFactor } from '../authn-core/auth-context.js';
 import {
@@ -49,7 +49,10 @@ import { ThemeEmailService } from '../theme/theme-email.service.js';
 import { EventsService } from '../events/events.service.js';
 import { LoginEventType } from '../events/event-types.js';
 import { CustomAttributesService } from '../custom-attributes/custom-attributes.service.js';
-import { PrimaryAuthGatesService } from './primary-auth-gates.service.js';
+import {
+  PrimaryAuthGatesService,
+  type PasswordChangeResume,
+} from './primary-auth-gates.service.js';
 import { SecondFactorVerifier } from './second-factor-verifier.service.js';
 import { CsrfService } from '../common/csrf/csrf.service.js';
 import { FlowRuntimeService } from '../auth-flow/flow-runtime.service.js';
@@ -748,7 +751,66 @@ export class LoginController {
     const info = encodeURIComponent(
       'Password changed successfully. You can now sign in.',
     );
-    res.redirect(`/realms/${realm.name}/login?info=${info}`);
+    const resume = await this.primaryAuthGates.takePasswordChangeResume(
+      token,
+      realm.id,
+      user.id,
+    );
+    const updated = resume
+      ? await this.loginService.findUserById(user.id)
+      : null;
+    if (!resume || !updated?.enabled) {
+      return res.redirect(`/realms/${realm.name}/login?info=${info}`);
+    }
+    return this.resumeAfterPasswordChange(realm, updated, resume, req, res);
+  }
+
+  /**
+   * The sign-in an expired password interrupted goes on once the password
+   * is changed: the user proved the old password and chose a new one, so it
+   * continues after the first factor (second factor, required enrolment,
+   * consent, the code), with the OAuth request kept server-side. Where the
+   * login is bound to a custom flow, the built-in path may not finish it:
+   * it starts again through the authorization endpoint instead.
+   */
+  private async resumeAfterPasswordChange(
+    realm: Realm,
+    user: User,
+    resume: PasswordChangeResume,
+    req: Request,
+    res: Response,
+  ) {
+    const info = encodeURIComponent(
+      'Password changed successfully. You can now sign in.',
+    );
+    const { oauthParams } = resume;
+    let client: Client | null = null;
+    if (oauthParams['client_id']) {
+      try {
+        client = await this.oauthService.validateAuthRequest(
+          realm,
+          oauthParams as unknown as AuthorizeParams,
+        );
+      } catch {
+        return res.redirect(`/realms/${realm.name}/login?info=${info}`);
+      }
+    }
+    const binding = await this.flowRuntime.resolveBinding(realm, client);
+    if (binding.kind !== 'legacy') {
+      return res.redirect(
+        client
+          ? `/realms/${realm.name}/protocol/openid-connect/auth?${new URLSearchParams(oauthParams).toString()}`
+          : `/realms/${realm.name}/login?info=${info}`,
+      );
+    }
+    return this.loginFlow.continueAfterPrimaryAuth(
+      realm,
+      user,
+      oauthParams,
+      { primaryAmr: ['pwd'], rememberMe: resume.rememberMe },
+      req,
+      res,
+    );
   }
 
   // ─── CONSENT ────────────────────────────────────────────

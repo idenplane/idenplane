@@ -723,7 +723,14 @@ export class FlowRuntimeService {
             ? submission.deviceFingerprint
             : null,
         form: state.oauthParams,
-        skipPasswordExpiry: step.type === 'webauthn',
+        // No password was used: a passkey, a federated sign-in or a link.
+        skipPasswordExpiry: !PASSWORD_STEP_TYPES.has(step.type),
+        // After a forced password change the login starts again through
+        // /auth with this request (the built-in path may not finish it).
+        resume: {
+          oauthParams: state.oauthParams,
+          rememberMe: state.rememberMe,
+        },
       });
       if (gate.kind === 'block') {
         await this.end(active.txn.id, realm, res);
@@ -1573,6 +1580,9 @@ export class FlowRuntimeService {
     });
   }
 }
+
+/** Step types that check a password (the password-expiry gate applies). */
+const PASSWORD_STEP_TYPES: ReadonlySet<string> = new Set(['password', 'ldap']);
 
 /** Condition fields only a login knows (risk is assessed at sign-in). */
 const SSO_UNKNOWN_CONDITION_FIELDS: ReadonlySet<string> = new Set([
