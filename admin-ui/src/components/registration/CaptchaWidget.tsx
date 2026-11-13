@@ -1,77 +1,104 @@
-import { useEffect, useRef } from 'react';
+import { forwardRef, useEffect, useImperativeHandle, useRef, useState } from 'react';
+import {
+  captchaScriptUrl,
+  executeRecaptcha,
+  loadCaptchaScript,
+  type CaptchaProvider,
+} from './captcha';
 
 interface CaptchaWidgetProps {
-  provider?: string;
-  siteKey?: string;
+  provider: CaptchaProvider;
+  siteKey: string;
 }
 
-declare global {
-  interface Window {
-    grecaptcha?: {
-      ready: (callback: () => void) => void;
-      execute: (siteKey: string, options: { action: string }) => Promise<string>;
-    };
-    hcaptcha?: {
-      render: (container: string, options: {
-        sitekey: string;
-        callback: (token: string) => void;
-        'expired-callback'?: () => void;
-        'error-callback'?: () => void;
-      }) => string;
-      reset: (widgetId?: string) => void;
-    };
-    __captchaToken?: string;
-  }
+export interface CaptchaWidgetHandle {
+  /**
+   * The token to send as `captchaToken`: the solved hCaptcha checkbox, or a
+   * reCAPTCHA v3 token generated now for the `register` action (they expire
+   * after two minutes, so never earlier). Null when hCaptcha isn't solved.
+   */
+  getToken: () => Promise<string | null>;
+  /** Clear a used token (tokens work once). */
+  reset: () => void;
 }
 
-export default function CaptchaWidget({ provider, siteKey }: CaptchaWidgetProps) {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const widgetIdRef = useRef<string | undefined>(undefined);
+const CaptchaWidget = forwardRef<CaptchaWidgetHandle, CaptchaWidgetProps>(
+  function CaptchaWidget({ provider, siteKey }, ref) {
+    const containerRef = useRef<HTMLDivElement>(null);
+    const widgetIdRef = useRef<string | undefined>(undefined);
+    const tokenRef = useRef<string | null>(null);
+    const [loadError, setLoadError] = useState<string | null>(null);
 
-  useEffect(() => {
-    if (!siteKey) return;
+    useEffect(() => {
+      let cancelled = false;
+      tokenRef.current = null;
+      setLoadError(null);
+      loadCaptchaScript(captchaScriptUrl(provider, siteKey))
+        .then(() => {
+          if (cancelled || provider !== 'hcaptcha') return;
+          const hcaptcha = window.hcaptcha;
+          if (!hcaptcha || !containerRef.current) {
+            throw new Error('The CAPTCHA could not be loaded.');
+          }
+          widgetIdRef.current = hcaptcha.render(containerRef.current, {
+            sitekey: siteKey,
+            callback: (token) => {
+              tokenRef.current = token;
+            },
+            'expired-callback': () => {
+              tokenRef.current = null;
+            },
+            'error-callback': () => {
+              tokenRef.current = null;
+            },
+          });
+        })
+        .catch((err: Error) => {
+          if (!cancelled) setLoadError(err.message);
+        });
+      return () => {
+        cancelled = true;
+      };
+    }, [provider, siteKey]);
 
-    if (provider === 'recaptcha' && window.grecaptcha) {
-      const grecaptcha = window.grecaptcha;
-      grecaptcha.ready(() => {
-        grecaptcha.execute(siteKey, { action: 'register' }).then((token) => {
-          window.__captchaToken = token;
-        }).catch(console.error);
-      });
-    } else if (provider === 'hcaptcha' && window.hcaptcha && containerRef.current) {
-      const containerId = `hcaptcha-${Date.now()}`;
-      containerRef.current.id = containerId;
-      widgetIdRef.current = window.hcaptcha.render(containerId, {
-        sitekey: siteKey,
-        callback: (token: string) => {
-          window.__captchaToken = token;
+    useImperativeHandle(
+      ref,
+      () => ({
+        getToken: async () =>
+          provider === 'recaptcha' ? executeRecaptcha(siteKey) : tokenRef.current,
+        reset: () => {
+          tokenRef.current = null;
+          if (provider === 'hcaptcha') window.hcaptcha?.reset(widgetIdRef.current);
         },
-      });
-    }
-  }, [provider, siteKey]);
+      }),
+      [provider, siteKey],
+    );
 
-  if (!siteKey) return null;
-
-  if (provider === 'recaptcha') {
     return (
       <div className="space-y-2">
-        <div
-          className="grecaptcha-badge"
-          data-size="invisible"
-          style={{ display: 'none' }}
-        />
-        <p className="text-xs text-subtle">
-          reCAPTCHA protection active
-        </p>
+        {provider === 'hcaptcha' ? (
+          <div ref={containerRef} data-testid="hcaptcha-container" />
+        ) : (
+          <p className="text-xs text-subtle">
+            This site is protected by reCAPTCHA; the Google{' '}
+            <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" className="text-accent">
+              Privacy Policy
+            </a>{' '}
+            and{' '}
+            <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" className="text-accent">
+              Terms of Service
+            </a>{' '}
+            apply.
+          </p>
+        )}
+        {loadError && (
+          <p role="alert" className="text-sm text-danger">
+            {loadError}
+          </p>
+        )}
       </div>
     );
-  }
+  },
+);
 
-  if (provider === 'hcaptcha') {
-    return (
-      <div ref={containerRef} data-size="normal" />
-    );
-  }
-
-  return null;
-}
+export default CaptchaWidget;

@@ -1,9 +1,10 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useParams } from 'react-router';
 import type { Realm } from '../../types';
 import { getRealmByName } from '../../api/realms';
 import { getPublicRegistrationFields } from '../../api/registration';
-import CaptchaWidget from '../../components/registration/CaptchaWidget';
+import CaptchaWidget, { type CaptchaWidgetHandle } from '../../components/registration/CaptchaWidget';
+import { captchaConfig } from '../../components/registration/captcha';
 
 interface RegistrationField {
   name: string;
@@ -22,6 +23,8 @@ export default function PublicRegistrationPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
+  const captchaRef = useRef<CaptchaWidgetHandle>(null);
+  const captcha = captchaConfig(realm);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
   const [form, setForm] = useState({
@@ -63,23 +66,41 @@ export default function PublicRegistrationPage() {
     setSuccess(null);
 
     try {
-      const response = await fetch(`/api/realms/${realmName}/registration/register`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          ...form,
-          attributes: customAttributes,
-          captchaToken: window.__captchaToken,
-        }),
-      });
-
-      if (!response.ok) {
-        const data = await response.json();
-        throw new Error(data.message || 'Registration failed');
+      // The server decides whether CAPTCHA is required, from the realm's
+      // settings only; the page just supplies the token of that provider.
+      let captchaToken: string | undefined;
+      if (captcha) {
+        const token = await captchaRef.current?.getToken();
+        if (!token) {
+          throw new Error('Please complete the CAPTCHA challenge.');
+        }
+        captchaToken = token;
       }
 
-      const data = await response.json();
-      setSuccess(data.message);
+      const response = await fetch(
+        `/realms/${encodeURIComponent(realmName)}/registration/register`,
+        {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({
+            ...form,
+            attributes: customAttributes,
+            ...(captchaToken ? { captchaToken } : {}),
+          }),
+        },
+      );
+      // A token works once, whatever the outcome.
+      captchaRef.current?.reset();
+
+      const data = (await response.json().catch(() => ({}))) as {
+        message?: string | string[];
+      };
+      if (!response.ok) {
+        const message = Array.isArray(data.message) ? data.message.join('. ') : data.message;
+        throw new Error(message || 'Registration failed');
+      }
+
+      setSuccess(typeof data.message === 'string' ? data.message : 'Registration successful.');
       setForm({ username: '', email: '', password: '', firstName: '', lastName: '', acceptTerms: false });
       setCustomAttributes({});
     } catch (err) {
@@ -244,10 +265,11 @@ export default function PublicRegistrationPage() {
             ))}
 
             {/* CAPTCHA widget */}
-            {realm?.captchaEnabled && (
+            {captcha && (
               <CaptchaWidget
-                provider={realm.captchaProvider}
-                siteKey={realm.recaptchaSiteKey || realm.hcaptchaSiteKey}
+                ref={captchaRef}
+                provider={captcha.provider}
+                siteKey={captcha.siteKey}
               />
             )}
 
