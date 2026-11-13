@@ -44,11 +44,11 @@ Each entry below is sourced from an actual commit, PR description, or the projec
 
 **Status**: Accepted — 2026-01-15
 
-**Context**: The backend needs to support PostgreSQL, MySQL, and SQLite from the same codebase, with a migration story that doesn't require hand-written SQL per database dialect.
+**Context**: The backend needs type-safe database access and versioned migrations on PostgreSQL.
 
 **Decision**: Use Prisma ORM instead of raw SQL or a lower-level query builder.
 
-**Rationale** (from `DECISIONS.md`): type-safe queries; built-in migration management; easy database switching across PostgreSQL, MySQL, and SQLite.
+**Rationale** (from `DECISIONS.md`): type-safe queries and built-in migration management. Idenplane supports PostgreSQL only (decision of 2026-11-13 in `DECISIONS.md`): it relies on PostgreSQL triggers, row locks and LISTEN/NOTIFY, and the MySQL and SQLite variants had fallen behind.
 
 **References**: `DECISIONS.md` § Architecture Decisions.
 

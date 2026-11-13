@@ -220,7 +220,7 @@ services:
   #     timeout: 3s
   #     retries: 5
 
-  # ── PostgreSQL (default / recommended for production) ─────────────────────
+  # ── PostgreSQL (the supported database) ───────────────────────────────────
   db:
     image: postgres:16-alpine
     environment:
@@ -237,50 +237,20 @@ services:
       timeout: 3s
       retries: 5
 
-  # ── MySQL 8 (alternative — uncomment and comment-out the postgres service) ─
-  # Before switching: run ./scripts/use-mysql.sh to activate the MySQL schema.
-  # mysql:
-  #   image: mysql:8.0
-  #   environment:
-  #     MYSQL_ROOT_PASSWORD: idenplane
-  #     MYSQL_DATABASE: idenplane
-  #     MYSQL_USER: idenplane
-  #     MYSQL_PASSWORD: idenplane
-  #   command: >
-  #     --character-set-server=utf8mb4
-  #     --collation-server=utf8mb4_unicode_ci
-  #   ports:
-  #     - "3306:3306"
-  #   volumes:
-  #     - mysqldata:/var/lib/mysql
-  #   healthcheck:
-  #     test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "idenplane", "-pidenplane"]
-  #     interval: 5s
-  #     timeout: 3s
-  #     retries: 10
-
-  # ── SQLite (development only — no database service required) ──────────────
-  # SQLite requires no Docker service.  Simply set:
-  #   DATABASE_URL=file:./dev.db
-  # in your .env file and run: ./scripts/use-sqlite.sh
-  # Then: npx prisma migrate dev --name init
-
   app:
     build: .
     ports:
       - "3000:3000"
+    volumes:
+      - .:/app
+      - /app/node_modules
     environment:
-      # PostgreSQL (default):
       DATABASE_URL: postgresql://idenplane:idenplane@db:5432/idenplane
-      # MySQL — uncomment when using the mysql service above:
-      # DATABASE_URL: mysql://idenplane:idenplane@mysql:3306/idenplane
-      # SQLite — not recommended inside Docker; use host-mode dev instead:
-      # DATABASE_URL: file:./dev.db
       PORT: "3000"
       NODE_ENV: development
       ADMIN_API_KEY: ${ADMIN_API_KEY:-change-me-in-production}
-      ADMIN_USER: ${ADMIN_USER:-admin}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      ADMIN_USER: ${ADMIN_USER}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD}
       THROTTLE_TTL: ${THROTTLE_TTL:-60000}
       THROTTLE_LIMIT: ${THROTTLE_LIMIT:-100}
       BASE_URL: ${BASE_URL:-http://localhost:3000}
@@ -294,7 +264,6 @@ services:
 
 volumes:
   pgdata:
-  # mysqldata:  # uncomment when using the MySQL service
 ```
 
 ### Starting Development Stack
@@ -309,11 +278,9 @@ docker compose -f docker-compose.dev.yml logs -f
 
 ---
 
-## Database Options
+## Database
 
-### PostgreSQL (Recommended)
-
-PostgreSQL is the recommended database for production deployments:
+Idenplane runs on **PostgreSQL 16 or later**, and only on PostgreSQL. The compose files start the official `postgres` image:
 
 ```yaml
 db:
@@ -324,48 +291,7 @@ db:
     POSTGRES_DB: idenplane
 ```
 
-### MySQL 8
-
-To use MySQL instead:
-
-1. Run the MySQL schema activation script:
-   ```bash
-   ./scripts/use-mysql.sh
-   ```
-
-2. Uncomment the MySQL service and comment out PostgreSQL in your compose file
-
-3. Update the DATABASE_URL:
-   ```
-   DATABASE_URL: mysql://idenplane:idenplane@mysql:3306/idenplane
-   ```
-
-:::note
-MySQL support requires running `./scripts/use-mysql.sh` to activate the MySQL schema before deployment.
-:::
-
-### SQLite (Development Only)
-
-SQLite requires no Docker service. For host-mode development:
-
-1. Set the database URL in your `.env`:
-   ```
-   DATABASE_URL=file:./dev.db
-   ```
-
-2. Run the SQLite schema activation script:
-   ```bash
-   ./scripts/use-sqlite.sh
-   ```
-
-3. Run migrations:
-   ```bash
-   npx prisma migrate dev --name init
-   ```
-
-:::warning
-SQLite is intended for development and CI only. It does not support concurrent connections in production.
-:::
+To use a managed database instead (Amazon RDS or Aurora PostgreSQL, Google Cloud SQL, Azure Database for PostgreSQL, Supabase, Neon), remove the `db` service and point `DATABASE_URL` at it. Use TLS with certificate verification, as the [Production Checklist](./production.md) describes.
 
 ---
 

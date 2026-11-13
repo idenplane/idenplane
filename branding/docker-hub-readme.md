@@ -72,7 +72,7 @@ Production deployments should pin a specific version rather than `latest`.
 
 | Variable | Purpose |
 |---|---|
-| `DATABASE_URL` | PostgreSQL connection string (also accepts MySQL and SQLite) |
+| `DATABASE_URL` | PostgreSQL 16+ connection string |
 | `ADMIN_API_KEY` | 32+ character secret for admin endpoints. Startup refuses to boot in `NODE_ENV=production` if absent, placeholder, or shorter than 32 chars. |
 | `ADMIN_PASSWORD` | Initial admin-user password |
 | `WEBHOOK_SECRET_KEY` | 32-byte key for AES-256-GCM encryption of webhook secrets at rest |

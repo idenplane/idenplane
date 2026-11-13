@@ -1,30 +1,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Idenplane — primary Prisma schema (PostgreSQL)
+// Idenplane — Prisma schema
 //
-// This is the canonical schema used in production.  Two additional provider
-// variants live alongside it for alternative deployments:
-//
-//   prisma/schema.sqlite.prisma  — SQLite (development / CI, no Docker needed)
-//   prisma/schema.mysql.prisma   — MySQL 8+ / MariaDB 10.5+
-//
-// To switch providers use the helper scripts:
-//   ./scripts/use-sqlite.sh      activate SQLite (copies sqlite variant here)
-//   ./scripts/use-mysql.sh       activate MySQL  (copies mysql variant here)
-//   git checkout prisma/schema.prisma   revert to PostgreSQL
-//
-// Provider compatibility notes
-// ─────────────────────────────
-// The following Prisma / PostgreSQL features are NOT available in all providers
-// and are handled differently in the sqlite/mysql variants:
-//
-//   Feature              PostgreSQL      MySQL           SQLite
-//   ─────────────────────────────────────────────────────────────────────
-//   Json fields          native JSONB    native JSON     serialised String
-//   Bytes fields         native bytea    native LONGBLOB base64 String
-//   BigInt fields        native int8     native bigint   mapped to Int
-//   String[] arrays      native array    JSON column     JSON text String
-//   @db.VarChar(n)       supported       supported       ignored (omitted)
-//   enum types           native          native          stored as String
+// Idenplane runs on PostgreSQL 16 or later and nothing else: it relies on
+// PostgreSQL triggers, row locks (FOR UPDATE / FOR SHARE), LISTEN/NOTIFY for
+// cache invalidation across processes, and PostgreSQL-specific SQL.
 // ─────────────────────────────────────────────────────────────────────────────
 
 generator client {

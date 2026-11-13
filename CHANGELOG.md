@@ -36,6 +36,7 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 - **Every NHI query is scoped by realm.** Credential, identity and policy reads and writes now name the realm, not only the row id, and the rotation scheduler skips credentials already rotated.
 
 ### Removed
+- **MySQL and SQLite are no longer listed as supported. Idenplane runs on PostgreSQL 16 or later only.** The server already worked only on PostgreSQL: it uses the PostgreSQL driver, PostgreSQL triggers, row locks and LISTEN/NOTIFY, and the MySQL and SQLite schema variants had fallen behind, so they could not run. Removed: `prisma/schema.mysql.prisma`, `prisma/schema.sqlite.prisma`, `scripts/use-mysql.sh`, `scripts/use-sqlite.sh`, the unused `src/database` provider layer and the `mysql2` dependency. The docs, README, `.env.example` and the dev compose file now say PostgreSQL only. The CLI's rollback restore now also accepts `postgres://` URLs.
 - **`NhiCertificateGuard`, `MtlsGuard` and `CertificateValidator`.** They protected no route; devices authenticate at the token endpoint with their certificates instead (see above).
 
 ### Fixed
