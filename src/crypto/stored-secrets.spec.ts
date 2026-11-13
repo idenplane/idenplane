@@ -242,5 +242,15 @@ describe('stored secrets', () => {
         wizardSecrets.redact({ smtpConfig: { host: 'h', password: stored } }),
       ).toEqual({ smtpConfig: { host: 'h', password: SECRET_PLACEHOLDER } });
     });
+
+    it('never returns the admin password hash', () => {
+      const redacted = wizardSecrets.redact({
+        adminUsername: 'admin',
+        adminPasswordHash: '$argon2id$v=19$m=65536,t=3,p=4$abc$def',
+        smtpConfig: null,
+      });
+      expect(redacted).toEqual({ adminUsername: 'admin', smtpConfig: null });
+      expect(redacted).not.toHaveProperty('adminPasswordHash');
+    });
   });
 });
