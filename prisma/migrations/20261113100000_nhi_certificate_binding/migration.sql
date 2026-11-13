@@ -49,8 +49,8 @@ ALTER TABLE "nhi_credentials" ALTER COLUMN "realm_id" SET NOT NULL;
 -- RFC 8705 x5t#S256 of the first CERTIFICATE block of a PEM: base64url of
 -- the SHA-256 of the DER, without padding (as computeX5tS256 in
 -- src/mtls/client-certificate.source.ts). NULL when there is no readable
--- block. Kept after the migration: the migration test checks it against the
--- application's computation.
+-- block or the block is not a DER SEQUENCE. Kept after the migration: the
+-- migration test checks it against the application's computation.
 CREATE OR REPLACE FUNCTION idenplane_pem_x5t_s256(pem text) RETURNS text
 LANGUAGE plpgsql IMMUTABLE STRICT AS $$
 DECLARE
@@ -64,7 +64,9 @@ BEGIN
     RETURN NULL;
   END IF;
   der := decode(regexp_replace(body, '[[:space:]]+', '', 'g'), 'base64');
-  IF length(der) = 0 THEN
+  -- An X.509 certificate is a DER SEQUENCE (0x30) of some size; anything
+  -- else is not hashed.
+  IF length(der) < 64 OR get_byte(der, 0) <> 48 THEN
     RETURN NULL;
   END IF;
   -- encode() wraps base64 at 76 characters; a 32-byte digest never wraps,
