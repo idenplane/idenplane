@@ -450,6 +450,15 @@ Importing a realm whose name already exists returns `409` unless `overwrite=true
 
 Version 1 files never contained the settings that format 2 added, so those settings take their defaults. After importing a version 1 file, check the realm's sign-in protection, rate limits, CAPTCHA, registration, themes and other settings. Export again from the current server to get a complete version 2 file.
 
+### Before you upgrade
+
+- **Scripts that read export files.** The file is now `version: 2`. Scope assignments moved from the top-level `clientScopeAssignments` into each client's `defaultScopes` and `optionalScopes`, and the file has many new sections. Update any script that reads or edits export files.
+- **Unknown versions are refused.** An import accepts `version` 1 (`1`, `"1"`, `"1.0"`) or 2 (`2`, `"2"`, `"2.0"`) and answers `400` to anything else. A version 1 section that is not an array of objects is also `400` now.
+- **Version 2 imports are strict.** A realm that the server holds today can fail to import again in two cases:
+  - **Flows that fail today's flow validator.** Flows created before the stricter validation were not migrated. Run `POST /admin/realms/{realm}/auth-flows/{id}/validate` on each flow and fix it before exporting.
+  - **Realm names that are not lowercase slugs**, which a version 1 import could create. Change `realm.name` in the file.
+- **Realms already moved with an export file** kept the defaults for every setting version 1 did not carry. Check them, or export and import them again.
+
 ## List Available Themes
 
 ```
