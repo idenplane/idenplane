@@ -100,6 +100,11 @@ describe('FlowRuntimeService.dispatch', () => {
     store.commit.mock.calls.at(-1)?.[1] as AuthnTxnState;
   const redirectedTo = (): string => res.redirect.mock.calls.at(-1)?.[1];
   const renderedStatus = () => res.status.mock.calls.at(-1)?.[0];
+  /** The restart notice code set on the browser, if any. */
+  const notice = () =>
+    res.cookie.mock.calls.find((c) => c[0] === 'IDENPLANE_LOGIN_NOTICE')?.[1];
+  const AUTH_RESTART =
+    /^\/realms\/acme\/protocol\/openid-connect\/auth\?client_id=app/;
 
   beforeEach(() => {
     previousEnv = process.env[ENV];
@@ -267,7 +272,9 @@ describe('FlowRuntimeService.dispatch', () => {
       req.cookies = {};
       expect(await dispatch(password())).toBe(true);
       expect(handlers.password).not.toHaveBeenCalled();
-      expect(redirectedTo()).toMatch(/^\/realms\/acme\/login\?.*error=/);
+      // The form has no OAuth request: the login page starts afresh.
+      expect(redirectedTo()).toBe('/realms/acme/login');
+      expect(notice()).toBe('invalid');
     });
 
     it('answers 503 for a misconfigured binding without a transaction', async () => {
@@ -364,7 +371,8 @@ describe('FlowRuntimeService.dispatch', () => {
       await dispatch(password());
       expect(store.destroy).toHaveBeenCalledWith('txn-1');
       expect(store.commit).not.toHaveBeenCalled();
-      expect(redirectedTo()).toMatch(/client_id=app/);
+      expect(redirectedTo()).toMatch(AUTH_RESTART);
+      expect(notice()).toBe('too_many_failures');
     });
 
     it('locked never takes the fallback: the transaction ends', async () => {
@@ -382,7 +390,9 @@ describe('FlowRuntimeService.dispatch', () => {
       await dispatch(totp);
       expect(store.destroy).toHaveBeenCalledWith('txn-1');
       expect(store.commit).not.toHaveBeenCalled();
-      expect(redirectedTo()).toMatch(/error=Too\+many\./);
+      // A restart goes through /auth, rebuilt from the stored request.
+      expect(redirectedTo()).toMatch(AUTH_RESTART);
+      expect(notice()).toBe('locked');
     });
 
     it('a thrown error never takes the fallback: the transaction ends', async () => {
@@ -615,7 +625,8 @@ describe('FlowRuntimeService.dispatch', () => {
       await resume(enrollment(overrides));
       expect(store.destroy).toHaveBeenCalledWith('txn-1');
       expect(sessionIssuer.issue).not.toHaveBeenCalled();
-      expect(redirectedTo()).toMatch(/error=/);
+      expect(redirectedTo()).toBe('/realms/acme/login');
+      expect(notice()).toBe('invalid');
     });
 
     it('fails closed when the transaction is not waiting for enrolment', async () => {
@@ -635,7 +646,9 @@ describe('FlowRuntimeService.dispatch', () => {
       await dispatch(password());
       expect(handlers.password).not.toHaveBeenCalled();
       expect(store.destroy).toHaveBeenCalledWith('txn-1');
-      expect(redirectedTo()).toMatch(/^\/realms\/acme\/login\?client_id=app/);
+      expect(redirectedTo()).toMatch(AUTH_RESTART);
+      expect(redirectedTo()).toContain('redirect_uri=');
+      expect(notice()).toBe('flow_changed');
     });
 
     it('restarts when the transaction expired', async () => {
@@ -649,7 +662,8 @@ describe('FlowRuntimeService.dispatch', () => {
       store.find.mockResolvedValue({ status: 'missing' });
       expect(await dispatch(password())).toBe(true);
       expect(handlers.password).not.toHaveBeenCalled();
-      expect(redirectedTo()).toMatch(/error=/);
+      expect(redirectedTo()).toBe('/realms/acme/login');
+      expect(notice()).toBe('invalid');
     });
   });
 });

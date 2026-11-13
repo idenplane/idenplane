@@ -9,7 +9,7 @@
  * resolver refuses anything else), so ids, orders and references are sound.
  */
 import { acrFromReceipts } from '../authn-core/flow-assurance.js';
-import { ACR_PASSWORD, acrStrength } from '../authn-core/acr.js';
+import { ACR_PASSWORD, ACR_WEBAUTHN, acrStrength } from '../authn-core/acr.js';
 import type { FlowStepType, Receipt } from '../authn-core/flow-contracts.js';
 
 export interface RuntimeStepCondition {
@@ -95,7 +95,7 @@ const STEP_AMR: Record<FlowStepType, string> = {
   webauthn: 'hwk',
 };
 
-/** The upper bound on combinations `impliedAcr` enumerates. */
+/** The upper bound on combinations `requiredAcrFor` enumerates. */
 const MAX_COMBINATIONS = 4096;
 
 export class FlowGraph {
@@ -146,18 +146,35 @@ export class FlowGraph {
   }
 
   /**
-   * The weakest ACR any run of this flow can end with: the minimum, over
-   * every way through it, of what the receipts would prove. A required step
-   * without a condition always runs (as itself or one of its fallbacks);
-   * any other step may be skipped. An SSO session weaker than this must not
+   * The ACR this flow requires of one user: the weakest ACR any run of it
+   * *for that user* can end with. An SSO session weaker than this must not
    * satisfy a client bound to the flow.
+   *
+   * A main-path step counts (as itself or one of its fallbacks) when it
+   * applies to the user, and either is required or is one the user can do
+   * (an optional step the user has a credential for runs at login too).
+   * A step applies when it has no condition, its condition holds for
+   * `context`, or its condition reads a field in `unknownFields` (one that
+   * cannot be known outside a login, such as `risk.level`): an unknown
+   * condition counts as true, which errs toward signing in again.
    */
-  impliedAcr(): string {
+  requiredAcrFor(subject: FlowSubject): string {
+    const counts = (s: RuntimeStep): boolean => {
+      if (s === this.first) return true;
+      const applies =
+        !s.condition ||
+        subject.unknownFields.has(s.condition.field) ||
+        evaluateFlowCondition(s.condition, subject.context);
+      return applies && (s.required || subject.canAttempt(s));
+    };
+    return this.weakestAcr(counts);
+  }
+
+  private weakestAcr(counts: (s: RuntimeStep) => boolean): string {
     const options: Array<Array<FlowStepType | null>> = this.mainPath.map(
       (s) => {
         const types = this.chain(s).map((c) => c.type);
-        const mandatory = s === this.first || (s.required && !s.condition);
-        return mandatory ? types : [...types, null];
+        return counts(s) ? types : [...types, null];
       },
     );
 
@@ -184,10 +201,20 @@ export class FlowGraph {
       }
     };
     walk(0, []);
-    // Too many combinations to enumerate: claim no more than a password.
-    if (combinations > MAX_COMBINATIONS) return ACR_PASSWORD;
+    // Too many combinations to enumerate: fail closed (sign in again).
+    if (combinations > MAX_COMBINATIONS) return ACR_WEBAUTHN;
     return weakest ?? ACR_PASSWORD;
   }
+}
+
+/** The user an SSO session belongs to, as `requiredAcrFor` sees them. */
+export interface FlowSubject {
+  /** The condition context (see ConditionContext). */
+  context: unknown;
+  /** Condition fields that cannot be known here; such steps count. */
+  unknownFields: ReadonlySet<string>;
+  /** Whether the user has the credential a step checks. */
+  canAttempt: (step: RuntimeStep) => boolean;
 }
 
 /** The steps of a stored (validated) flow, typed for the runtime. */

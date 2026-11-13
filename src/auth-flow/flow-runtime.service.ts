@@ -89,7 +89,12 @@ export type FlowSubmission =
 
 /** What the browser gets back; rendered per endpoint (redirect or JSON). */
 type Reply =
-  | { kind: 'redirect'; url: string }
+  | {
+      kind: 'redirect';
+      url: string;
+      /** Shown on the login page the redirect leads to (see LOGIN_NOTICES). */
+      notice?: LoginNotice;
+    }
   | { kind: 'error'; status: number; title: string; message: string };
 
 interface ActiveTxn {
@@ -112,20 +117,32 @@ const ASSURANCE_ENROL = `${ASSURANCE_STEP_PREFIX}enrol`;
 
 const MISCONFIGURED_MESSAGE =
   'Sign-in for this application is not configured correctly. Please contact the administrator.';
-const EXPIRED_MESSAGE = 'Your sign-in expired. Please sign in again.';
-const INVALID_TXN_MESSAGE =
-  'Your sign-in is no longer valid. Please sign in again.';
-const FLOW_CHANGED_MESSAGE =
-  'The sign-in steps changed while you were signing in. Please sign in again.';
 const UNEXPECTED_STEP_MESSAGE =
   'This sign-in step was not expected. Please sign in again.';
 const CONCURRENT_MESSAGE =
   'This sign-in is already being processed. Please wait a moment and reload the page.';
-const USER_MISMATCH_MESSAGE =
-  'You must finish signing in with the account you started with.';
-const FAILED_MESSAGE = 'Sign-in failed. Please sign in again.';
-const TOO_MANY_FAILURES_MESSAGE =
-  'Too many failed attempts. Please sign in again.';
+
+/**
+ * Why a login started again, shown on the login page. The browser carries
+ * only the code (cookie IDENPLANE_LOGIN_NOTICE), never the text, because a
+ * restart goes through `/auth`, which relays nothing but OAuth parameters.
+ */
+export const LOGIN_NOTICES = {
+  expired: 'Your sign-in expired. Please sign in again.',
+  invalid: 'Your sign-in is no longer valid. Please sign in again.',
+  flow_changed:
+    'The sign-in steps changed while you were signing in. Please sign in again.',
+  failed: 'Sign-in failed. Please sign in again.',
+  locked:
+    'Too many failed attempts, or the account is temporarily locked. Please try again later.',
+  too_many_failures: 'Too many failed attempts. Please sign in again.',
+  user_mismatch:
+    'You must finish signing in with the account you started with.',
+  not_set_up:
+    'Your account is not set up for a sign-in step this application requires. Please contact the administrator.',
+} as const;
+export type LoginNotice = keyof typeof LOGIN_NOTICES;
+const LOGIN_NOTICE_COOKIE = 'IDENPLANE_LOGIN_NOTICE';
 
 /**
  * The custom authentication-flow runtime. Behind the existing login
@@ -188,6 +205,39 @@ export class FlowRuntimeService {
   static readonly misconfiguredMessage = MISCONFIGURED_MESSAGE;
 
   /**
+   * The ACR the bound flow requires of `user`, for `/auth` to decide whether
+   * that user's SSO session may serve a client bound to it. The flow's
+   * conditions are evaluated for this user with the same context as at
+   * login; `risk.level` is only known during a login, so a step that depends
+   * on it counts as required (the user signs in again rather than skip it).
+   */
+  async ssoRequiredAcr(
+    realm: Realm,
+    flow: AuthenticationFlow,
+    user: User,
+    clientId: string,
+  ): Promise<string> {
+    const graph = graphOf(flow);
+    const context = await this.conditionContext(realm, user, {
+      oauthParams: { client_id: clientId },
+      riskLevel: null,
+    });
+    const types = [...new Set(graph.steps.map((s) => s.type))];
+    const able = new Map<string, boolean>();
+    for (const type of types) {
+      able.set(
+        type,
+        await this.canAttempt(realm, { ...graph.first, type }, user),
+      );
+    }
+    return graph.requiredAcrFor({
+      context,
+      unknownFields: SSO_UNKNOWN_CONDITION_FIELDS,
+      canAttempt: (step) => able.get(step.type) ?? true,
+    });
+  }
+
+  /**
    * Starts a login transaction for an authorization request that `/auth`
    * has validated, and sends the browser to its first step.
    */
@@ -220,7 +270,10 @@ export class FlowRuntimeService {
     // A realm without custom flows has nothing to resolve, unless this
     // browser still holds a transaction from when it had.
     if (!realm.authFlowsEnabled && !this.txnCookie(req)) return false;
-    const messages = { error: query['error'] ?? '', info: query['info'] ?? '' };
+    const messages = {
+      error: query['error'] || this.takeNotice(realm, req, res),
+      info: query['info'] ?? '',
+    };
 
     if (query['client_id']) {
       const client = await this.findClient(realm, query['client_id']);
@@ -456,7 +509,7 @@ export class FlowRuntimeService {
         this.restartReply(
           realm,
           { oauthParams: pickOAuthParams(form, TXN_OAUTH_KEYS) },
-          { error: INVALID_TXN_MESSAGE },
+          'invalid',
         ),
         req,
         res,
@@ -474,7 +527,7 @@ export class FlowRuntimeService {
       this.send(
         endpoint,
         realm,
-        this.restartReply(realm, {}, { error: INVALID_TXN_MESSAGE }),
+        this.restartReply(realm, {}, 'invalid'),
         req,
         res,
       );
@@ -532,7 +585,7 @@ export class FlowRuntimeService {
       : null;
     if (state.userId && (!pinned || !pinned.enabled)) {
       await this.end(txn.id, realm, res);
-      return this.restartReply(realm, state, { error: FAILED_MESSAGE });
+      return this.restartReply(realm, state, 'failed');
     }
 
     const ip = resolveClientIp(req);
@@ -545,7 +598,7 @@ export class FlowRuntimeService {
         err instanceof Error ? err.stack : String(err),
       );
       await this.end(txn.id, realm, res);
-      return this.restartReply(realm, state, { error: FAILED_MESSAGE });
+      return this.restartReply(realm, state, 'failed');
     }
 
     switch (outcome.kind) {
@@ -554,14 +607,12 @@ export class FlowRuntimeService {
           `Flow step '${step.id}' answered for another user; transaction ${txn.id} ends`,
         );
         await this.end(txn.id, realm, res);
-        return this.restartReply(realm, state, {
-          error: USER_MISMATCH_MESSAGE,
-        });
+        return this.restartReply(realm, state, 'user_mismatch');
 
       case 'locked':
         this.recordStepError(realm, state, step, ip, outcome.message);
         await this.end(txn.id, realm, res);
-        return this.restartReply(realm, state, { error: outcome.message });
+        return this.restartReply(realm, state, 'locked');
 
       case 'failed':
         this.recordStepError(realm, state, step, ip, outcome.message);
@@ -620,9 +671,7 @@ export class FlowRuntimeService {
     state.failures += 1;
     if (state.failures >= MAX_FLOW_FAILURES) {
       await this.end(active.txn.id, realm, res);
-      return this.restartReply(realm, state, {
-        error: TOO_MANY_FAILURES_MESSAGE,
-      });
+      return this.restartReply(realm, state, 'too_many_failures');
     }
     const fallback = state.synthetic
       ? undefined
@@ -655,7 +704,7 @@ export class FlowRuntimeService {
       outcome.user ?? (await this.loginService.findUserById(outcome.userId));
     if (!user) {
       await this.end(active.txn.id, realm, res);
-      return this.restartReply(realm, state, { error: FAILED_MESSAGE });
+      return this.restartReply(realm, state, 'failed');
     }
 
     if (identifying) {
@@ -753,10 +802,7 @@ export class FlowRuntimeService {
         return this.commitAndShow(realm, active, state, rotate, res);
       }
       await this.end(active.txn.id, realm, res);
-      return this.restartReply(realm, state, {
-        error:
-          'Your account is not set up for a sign-in step this application requires. Please contact the administrator.',
-      });
+      return this.restartReply(realm, state, 'not_set_up');
     }
     return this.finalise(realm, active, state, user, rotate, req, res);
   }
@@ -806,7 +852,7 @@ export class FlowRuntimeService {
   ): Promise<Reply> {
     if (!user.enabled) {
       await this.end(active.txn.id, realm, res);
-      return this.restartReply(realm, state, { error: FAILED_MESSAGE });
+      return this.restartReply(realm, state, 'failed');
     }
 
     let client: Client | null = null;
@@ -1024,7 +1070,7 @@ export class FlowRuntimeService {
       return this.send(
         'page',
         realm,
-        this.restartReply(realm, {}, { error: INVALID_TXN_MESSAGE }),
+        this.restartReply(realm, {}, 'invalid'),
         req,
         res,
       );
@@ -1044,7 +1090,7 @@ export class FlowRuntimeService {
       return this.send(
         'page',
         realm,
-        this.restartReply(realm, state, { error: 'Please sign in again.' }),
+        this.restartReply(realm, state, 'failed'),
         req,
         res,
       );
@@ -1139,7 +1185,7 @@ export class FlowRuntimeService {
       await this.end(txn.id, realm, res);
       return {
         kind: 'reply',
-        reply: this.restartReply(realm, txn.state, { error: EXPIRED_MESSAGE }),
+        reply: this.restartReply(realm, txn.state, 'expired'),
       };
     }
 
@@ -1155,9 +1201,7 @@ export class FlowRuntimeService {
       await this.end(txn.id, realm, res);
       return {
         kind: 'reply',
-        reply: this.restartReply(realm, txn.state, {
-          error: FLOW_CHANGED_MESSAGE,
-        }),
+        reply: this.restartReply(realm, txn.state, 'flow_changed'),
       };
     }
     return {
@@ -1257,6 +1301,11 @@ export class FlowRuntimeService {
         pageTitle: 'Sign In',
         registrationAllowed: realm.registrationAllowed && !pinned,
         webAuthnEnabled: passkey,
+        // A passkey step with no password fallback: the built-in themes
+        // hide their password form (posting it would end the login).
+        passkeyOnly:
+          step.type === 'webauthn' &&
+          (!fallback || STEP_ENDPOINT[fallback.type] !== 'password'),
         // The OAuth request lives in the transaction; the hidden fields
         // stay empty, and anything posted in them is ignored.
         client_id: '',
@@ -1284,7 +1333,7 @@ export class FlowRuntimeService {
   private async conditionContext(
     realm: Realm,
     user: User,
-    state: AuthnTxnState,
+    state: Pick<AuthnTxnState, 'oauthParams' | 'riskLevel'>,
   ): Promise<ConditionContext> {
     const [groups, roles, factors, webauthnEnrolled] = await Promise.all([
       this.prisma.userGroup.findMany({
@@ -1335,9 +1384,12 @@ export class FlowRuntimeService {
   // ─── Replies ───────────────────────────────────────────────
 
   /**
-   * Back to the login page with a fresh start: with the stored OAuth
-   * request when there is one (the page validates it and starts a new
-   * transaction), otherwise as a sign-in to the account console.
+   * A fresh start through the authorization endpoint, rebuilt from the
+   * stored (or posted) OAuth request, so a restart gets everything `/auth`
+   * does: validation, the binding, single sign-on and `prompt`. Without a
+   * client (a sign-in to the account console) there is no authorization
+   * request to rebuild, and the login page starts a new transaction.
+   * `notice` says why on the login page (a fixed message per code).
    */
   private restartReply(
     realm: Realm,
@@ -1346,18 +1398,19 @@ export class FlowRuntimeService {
       loginHint?: string | null;
       claims?: string | null;
     },
-    messages: { error?: string; info?: string },
+    notice: LoginNotice,
   ): Reply {
-    const qs = new URLSearchParams(
-      pickOAuthParams(from.oauthParams ?? {}, TXN_OAUTH_KEYS),
-    );
+    const params = pickOAuthParams(from.oauthParams ?? {}, TXN_OAUTH_KEYS);
+    if (!params['client_id']) {
+      return { kind: 'redirect', url: `/realms/${realm.name}/login`, notice };
+    }
+    const qs = new URLSearchParams(params);
     if (from.loginHint) qs.set('login_hint', from.loginHint);
     if (from.claims) qs.set('claims', from.claims);
-    if (messages.error) qs.set('error', messages.error);
-    if (messages.info) qs.set('info', messages.info);
     return {
       kind: 'redirect',
-      url: `/realms/${realm.name}/login?${qs.toString()}`,
+      url: `/realms/${realm.name}/protocol/openid-connect/auth?${qs.toString()}`,
+      notice,
     };
   }
 
@@ -1433,6 +1486,15 @@ export class FlowRuntimeService {
     req: Request,
     res: Response,
   ): void {
+    if (reply.kind === 'redirect' && reply.notice) {
+      res.cookie(LOGIN_NOTICE_COOKIE, reply.notice, {
+        httpOnly: true,
+        secure: true,
+        sameSite: 'lax',
+        maxAge: 60 * 1000,
+        path: `/realms/${realm.name}`,
+      });
+    }
     if (endpoint === 'webauthn') {
       // The challenge handle is single use, whatever the outcome.
       res.clearCookie(WEBAUTHN_LOGIN_COOKIE, { path: `/realms/${realm.name}` });
@@ -1453,6 +1515,18 @@ export class FlowRuntimeService {
   }
 
   // ─── Cookies and lookups ───────────────────────────────────
+
+  /** The restart notice for this page view, if any (shown once). */
+  private takeNotice(realm: Realm, req: Request, res: Response): string {
+    const code = (req.cookies as Record<string, string | undefined>)?.[
+      LOGIN_NOTICE_COOKIE
+    ];
+    if (!code) return '';
+    res.clearCookie(LOGIN_NOTICE_COOKIE, { path: `/realms/${realm.name}` });
+    return Object.prototype.hasOwnProperty.call(LOGIN_NOTICES, code)
+      ? LOGIN_NOTICES[code as LoginNotice]
+      : '';
+  }
 
   private txnCookie(req: Request): string | undefined {
     const value = (req.cookies as Record<string, string | undefined>)?.[
@@ -1499,6 +1573,11 @@ export class FlowRuntimeService {
     });
   }
 }
+
+/** Condition fields only a login knows (risk is assessed at sign-in). */
+const SSO_UNKNOWN_CONDITION_FIELDS: ReadonlySet<string> = new Set([
+  'risk.level',
+]);
 
 /** The OAuth request a transaction keeps (the form keys plus acr_values). */
 const TXN_OAUTH_KEYS = [...OAUTH_FORM_PARAM_KEYS, 'acr_values'] as const;

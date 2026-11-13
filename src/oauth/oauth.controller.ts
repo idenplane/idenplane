@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
-import type { AuthenticationFlow, Realm } from '@prisma/client';
+import type { Realm } from '@prisma/client';
 import { OAuthService } from './oauth.service.js';
 import { LoginService } from '../login/login.service.js';
 import { ConsentService } from '../consent/consent.service.js';
@@ -32,7 +32,6 @@ import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
 import { ThemeRenderService } from '../theme/theme-render.service.js';
 import { FlowRuntimeService } from '../auth-flow/flow-runtime.service.js';
-import { FlowGraph, runtimeSteps } from '../auth-flow/flow-graph.js';
 
 /**
  * Whether a sign-in at `authenticatedAt` is older than the request's
@@ -46,11 +45,6 @@ export function sessionTooOld(
   if (maxAge === undefined || !/^\d+$/.test(maxAge)) return false;
   if (!authenticatedAt) return true;
   return now - authenticatedAt.getTime() > Number(maxAge) * 1000;
-}
-
-/** The weakest ACR any run of `flow` ends with. */
-function impliedAcr(flow: AuthenticationFlow): string {
-  return new FlowGraph(runtimeSteps(flow.steps)).impliedAcr();
 }
 
 /** Keeps only string parameters, as a query string would carry. */
@@ -252,11 +246,19 @@ export class OAuthController {
           : ACR_PASSWORD;
 
         // A client bound to a flow is only served by a session at least as
-        // strong as that flow always is (its implied ACR). A weaker session
-        // signs in again through the flow.
+        // strong as that flow requires of this user (its conditions evaluated
+        // for them). A weaker session signs in again through the flow.
         if (
           boundFlow &&
-          !this.stepUpService.satisfiesAcr(sessionAcr, impliedAcr(boundFlow))
+          !this.stepUpService.satisfiesAcr(
+            sessionAcr,
+            await this.flowRuntime.ssoRequiredAcr(
+              realm,
+              boundFlow,
+              user,
+              client.clientId,
+            ),
+          )
         ) {
           if (silent) {
             return this.redirectWithError(

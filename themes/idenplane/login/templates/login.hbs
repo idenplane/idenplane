@@ -6,6 +6,8 @@
 <div class="auth-error">{{error}}</div>
 {{/if}}
 
+{{!-- passkeyOnly: a custom-flow passkey step with no password fallback --}}
+{{#unless passkeyOnly}}
 <form method="POST" action="/realms/{{realmName}}/login" class="auth-form">
   <div class="form-group">
     <label for="username">{{msg "loginUsername"}}</label>
@@ -40,6 +42,7 @@
 
   <button type="submit" class="btn-primary">{{msg "loginSignIn"}}</button>
 </form>
+{{/unless}}
 
 {{#if webAuthnEnabled}}
 <div style="margin-top: 1rem; text-align: center;">

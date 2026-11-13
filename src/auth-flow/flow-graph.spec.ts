@@ -34,65 +34,92 @@ describe('FlowGraph', () => {
     expect(g.chain(g.step('otp')!).map((s) => s.id)).toEqual(['otp', 'pw2']);
   });
 
-  describe('impliedAcr', () => {
-    it('password only → password', () => {
+  describe('requiredAcrFor (per-user SSO requirement)', () => {
+    const subject = (
+      overrides: Partial<{
+        groups: string[];
+        canAttempt: (s: RuntimeStep) => boolean;
+        unknown: string[];
+      }> = {},
+    ) => ({
+      context: {
+        user: { groups: overrides.groups ?? [] },
+        client: { clientId: 'app' },
+        risk: { level: null },
+      },
+      unknownFields: new Set(overrides.unknown ?? ['risk.level']),
+      canAttempt: overrides.canAttempt ?? (() => true),
+    });
+    const pwTotp = (totp: Partial<RuntimeStep>) =>
+      graph([
+        step({ id: 'pw', type: 'password', order: 1 }),
+        step({ id: 'otp', type: 'totp', order: 2, ...totp }),
+      ]);
+    const inGroupG = {
+      condition: {
+        field: 'user.groups',
+        operator: 'in' as const,
+        value: ['G'],
+      },
+    };
+
+    it('password only → password; password then a required TOTP → MFA', () => {
       expect(
-        graph([step({ id: 'pw', type: 'password', order: 1 })]).impliedAcr(),
+        graph([step({ id: 'pw', type: 'password', order: 1 })]).requiredAcrFor(
+          subject(),
+        ),
       ).toBe(ACR_PASSWORD);
+      expect(pwTotp({}).requiredAcrFor(subject())).toBe(ACR_MFA);
     });
 
-    it('password then a required TOTP → MFA', () => {
+    it('passkey only → WebAuthn; a password fallback lowers it to password', () => {
       expect(
-        graph([
-          step({ id: 'pw', type: 'password', order: 1 }),
-          step({ id: 'otp', type: 'totp', order: 2 }),
-        ]).impliedAcr(),
-      ).toBe(ACR_MFA);
-    });
-
-    it('passkey only → WebAuthn', () => {
-      expect(
-        graph([step({ id: 'pk', type: 'webauthn', order: 1 })]).impliedAcr(),
+        graph([step({ id: 'pk', type: 'webauthn', order: 1 })]).requiredAcrFor(
+          subject(),
+        ),
       ).toBe(ACR_WEBAUTHN);
-    });
-
-    it('a password fallback lowers a passkey flow to the password level', () => {
       expect(
         graph([
           step({ id: 'pk', type: 'webauthn', order: 1, fallbackStepId: 'pw' }),
           step({ id: 'pw', type: 'password', order: 2 }),
-        ]).impliedAcr(),
+        ]).requiredAcrFor(subject()),
       ).toBe(ACR_PASSWORD);
     });
 
-    it('an optional or conditional second factor may be skipped', () => {
-      expect(
-        graph([
-          step({ id: 'pw', type: 'password', order: 1 }),
-          step({ id: 'otp', type: 'totp', order: 2, required: false }),
-        ]).impliedAcr(),
-      ).toBe(ACR_PASSWORD);
-      expect(
-        graph([
-          step({ id: 'pw', type: 'password', order: 1 }),
-          step({
-            id: 'otp',
-            type: 'totp',
-            order: 2,
-            condition: { field: 'user.groups', operator: 'in', value: ['x'] },
-          }),
-        ]).impliedAcr(),
-      ).toBe(ACR_PASSWORD);
+    it('a TOTP step required only for group G: MFA for members, password for others', () => {
+      const g = pwTotp(inGroupG);
+      expect(g.requiredAcrFor(subject({ groups: ['G'] }))).toBe(ACR_MFA);
+      expect(g.requiredAcrFor(subject({ groups: ['other'] }))).toBe(
+        ACR_PASSWORD,
+      );
     });
 
-    it('takes the weakest alternative of each step', () => {
+    it('a condition that cannot be evaluated counts as applying (fail closed)', () => {
+      const g = pwTotp({
+        condition: { field: 'risk.level', operator: 'eq', value: 'high' },
+      });
+      expect(g.requiredAcrFor(subject())).toBe(ACR_MFA);
+      expect(g.requiredAcrFor(subject({ unknown: [] }))).toBe(ACR_PASSWORD);
+    });
+
+    it('an optional step counts only when the user can do it', () => {
+      const g = pwTotp({ required: false });
+      expect(g.requiredAcrFor(subject({ canAttempt: () => true }))).toBe(
+        ACR_MFA,
+      );
+      expect(g.requiredAcrFor(subject({ canAttempt: () => false }))).toBe(
+        ACR_PASSWORD,
+      );
+    });
+
+    it('takes the weakest alternative of each step that counts', () => {
       // pw → (otp | passkey): the weaker alternative is the code.
       expect(
         graph([
           step({ id: 'pw', type: 'password', order: 1 }),
           step({ id: 'otp', type: 'totp', order: 2, fallbackStepId: 'pk' }),
           step({ id: 'pk', type: 'webauthn', order: 3 }),
-        ]).impliedAcr(),
+        ]).requiredAcrFor(subject()),
       ).toBe(ACR_MFA);
     });
   });
