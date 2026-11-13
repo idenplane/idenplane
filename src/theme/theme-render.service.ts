@@ -91,10 +91,26 @@ function isSafeCspOrigin(source: string): boolean {
 }
 
 /**
- * The CSP of a themed page. Without `extra` it is exactly the base policy;
- * `extra` appends origins to the named directives (a `frame-src` is added
- * only when a page asks for one, as frames otherwise fall back to
- * default-src 'self').
+ * The CSP of a themed page. This header replaces the one helmet sets in
+ * main.ts, so it carries helmet's protective directives itself:
+ *
+ * - `frame-ancestors 'none'`: no themed page (login, registration,
+ *   consent, account, device) is ever framed, so none may be: this stops
+ *   clickjacking. helmet's own default is `'self'`; nothing in the server
+ *   or the admin console frames these pages (the theme builder previews
+ *   with an `srcdoc` iframe, not a served page), so the stricter value
+ *   applies.
+ * - `object-src 'none'`, `base-uri 'self'` and `script-src-attr 'none'`,
+ *   exactly as helmet sets them.
+ *
+ * `form-action 'self'` is deliberately NOT set, although helmet sets it
+ * globally. Chrome applies form-action to every redirect that follows a
+ * form submission, so the login form's POST → 302 to the client's
+ * `redirect_uri` (another origin) would be blocked and sign-in would break.
+ *
+ * Without `extra` it is exactly the base policy; `extra` appends origins to
+ * the named directives (a `frame-src` is added only when a page asks for
+ * one, as frames otherwise fall back to default-src 'self').
  */
 export function buildThemeCsp(
   scriptNonce: string,
@@ -107,10 +123,14 @@ export function buildThemeCsp(
   const directives = [
     "default-src 'self'",
     `script-src 'self' 'nonce-${scriptNonce}'${add('script-src')}`,
+    "script-src-attr 'none'",
     `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com${add('style-src')}`,
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: blob:",
     `connect-src 'self'${add('connect-src')}`,
+    "object-src 'none'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'",
   ];
   const frames = add('frame-src');
   if (frames) directives.push(`frame-src 'self'${frames}`);

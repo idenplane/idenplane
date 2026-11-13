@@ -391,6 +391,21 @@ describe('CAPTCHA enforcement on registration (e2e)', () => {
         expect(csp).not.toContain('frame-src');
       });
 
+      it.each(['login', 'register'])(
+        "keeps helmet's anti-framing directives on the %s page",
+        async (page) => {
+          const res = await new Browser(ctx.app).get(
+            `/realms/${REALM}/${page}`,
+          );
+          const csp = res.headers['content-security-policy'] as string;
+          expect(csp).toContain("frame-ancestors 'none'");
+          expect(csp).toContain("object-src 'none'");
+          expect(csp).toContain("base-uri 'self'");
+          expect(csp).toContain("script-src-attr 'none'");
+          expect(csp).not.toContain('form-action');
+        },
+      );
+
       it('re-renders with an error and creates no user when the token is missing', async () => {
         const browser = new Browser(ctx.app);
         const page = await browser.get(`/realms/${REALM}/register`);
@@ -522,7 +537,7 @@ describe('CAPTCHA enforcement on registration (e2e)', () => {
         expect(csp).not.toContain('hcaptcha');
         expect(csp).not.toContain('google.com');
         expect(csp).not.toContain('frame-src');
-        expect(csp).toMatch(/connect-src 'self'$/);
+        expect(csp).toContain("connect-src 'self';");
       });
 
       it('creates the user without a token', async () => {

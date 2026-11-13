@@ -442,15 +442,29 @@ describe('ThemeRenderService', () => {
   });
 
   describe('buildThemeCsp', () => {
-    it('is the unchanged base policy without extra sources', () => {
+    it('is exactly the base policy without extra sources', () => {
       const base =
         "default-src 'self'; script-src 'self' 'nonce-N'; " +
+        "script-src-attr 'none'; " +
         "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
         "font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; " +
-        "connect-src 'self'";
+        "connect-src 'self'; object-src 'none'; base-uri 'self'; " +
+        "frame-ancestors 'none'";
       expect(buildThemeCsp('N')).toBe(base);
       expect(buildThemeCsp('N', {})).toBe(base);
       expect(buildThemeCsp('N', { 'script-src': [] })).toBe(base);
+    });
+
+    it("keeps helmet's protective directives, but not form-action", () => {
+      const csp = buildThemeCsp('N', {
+        'frame-src': ['https://hcaptcha.com'],
+      });
+      expect(csp).toContain("frame-ancestors 'none'");
+      expect(csp).toContain("object-src 'none'");
+      expect(csp).toContain("base-uri 'self'");
+      // form-action would block the login POST's 302 to the client's
+      // redirect_uri in Chrome.
+      expect(csp).not.toContain('form-action');
     });
 
     it('appends sources to the named directives', () => {
