@@ -29,7 +29,9 @@ describe('OIDC silent authorization decisions', () => {
     consent={hasConsent:jest.fn().mockResolvedValue(true),storeConsentRequest:jest.fn().mockResolvedValue('consent-1')};
     stepUp={getLoginSessionAcr:jest.fn().mockResolvedValue(ACR_PASSWORD),getRiskRequiredAcr:jest.fn().mockResolvedValue(null),satisfiesAcr:jest.fn((a,b)=>strength(a)>=strength(b)),getAcrStrength:jest.fn(strength)};
     theme={render:jest.fn()};req={cookies:{IDENPLANE_SESSION:'session-token'}};res={status:jest.fn().mockReturnThis(),redirect:jest.fn()};
-    controller=new OAuthController(oauth as never,login as never,consent as never,stepUp as never,theme as never);
+    // The flow runtime is off: every login resolves to the built-in one.
+    const flowRuntime={resolveBinding:jest.fn().mockResolvedValue({kind:'legacy'})};
+    controller=new OAuthController(oauth as never,login as never,consent as never,stepUp as never,theme as never,flowRuntime as never);
   });
 
   async function authorize(){await controller.authorize(realm,query,req as never,res as never);}

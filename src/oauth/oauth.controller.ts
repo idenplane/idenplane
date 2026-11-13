@@ -7,11 +7,12 @@ import {
   Query,
   Req,
   Res,
+  ServiceUnavailableException,
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
-import type { Realm } from '@prisma/client';
+import type { AuthenticationFlow, Realm } from '@prisma/client';
 import { OAuthService } from './oauth.service.js';
 import { LoginService } from '../login/login.service.js';
 import { ConsentService } from '../consent/consent.service.js';
@@ -30,6 +31,8 @@ import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
 import { ThemeRenderService } from '../theme/theme-render.service.js';
+import { FlowRuntimeService } from '../auth-flow/flow-runtime.service.js';
+import { FlowGraph, runtimeSteps } from '../auth-flow/flow-graph.js';
 
 /**
  * Whether a sign-in at `authenticatedAt` is older than the request's
@@ -43,6 +46,11 @@ export function sessionTooOld(
   if (maxAge === undefined || !/^\d+$/.test(maxAge)) return false;
   if (!authenticatedAt) return true;
   return now - authenticatedAt.getTime() > Number(maxAge) * 1000;
+}
+
+/** The weakest ACR any run of `flow` ends with. */
+function impliedAcr(flow: AuthenticationFlow): string {
+  return new FlowGraph(runtimeSteps(flow.steps)).impliedAcr();
 }
 
 /** Keeps only string parameters, as a query string would carry. */
@@ -65,6 +73,7 @@ export class OAuthController {
     private readonly consentService: ConsentService,
     private readonly stepUpService: StepUpService,
     private readonly themeRender: ThemeRenderService,
+    private readonly flowRuntime: FlowRuntimeService,
   ) {}
 
   @Get('auth')
@@ -174,6 +183,18 @@ export class OAuthController {
       );
     }
 
+    // A login bound to a custom flow runs it; a misconfigured binding fails
+    // closed, before any SSO session can answer for it. (Without
+    // AUTH_FLOW_RUNTIME_ENABLED or the realm switch this is always legacy,
+    // decided without a database read.)
+    const flowBinding = await this.flowRuntime.resolveBinding(realm, client);
+    if (flowBinding.kind === 'misconfigured') {
+      throw new ServiceUnavailableException(
+        FlowRuntimeService.misconfiguredMessage,
+      );
+    }
+    const boundFlow = flowBinding.kind === 'bound' ? flowBinding.flow : null;
+
     // Check for existing SSO session cookie
     const sessionCookie = (req.cookies as Record<string, string>)?.[
       SESSION_COOKIE
@@ -185,6 +206,15 @@ export class OAuthController {
       );
       if (user) {
         if (prompts.includes('login')) {
+          if (boundFlow) {
+            return this.flowRuntime.beginFromAuthorize(
+              realm,
+              boundFlow,
+              query,
+              req,
+              res,
+            );
+          }
           return this.handlePromptLogin(res, realm.name, query);
         }
 
@@ -202,6 +232,15 @@ export class OAuthController {
               query['state'],
             );
           }
+          if (boundFlow) {
+            return this.flowRuntime.beginFromAuthorize(
+              realm,
+              boundFlow,
+              query,
+              req,
+              res,
+            );
+          }
           return this.handlePromptLogin(res, realm.name, query);
         }
 
@@ -211,6 +250,31 @@ export class OAuthController {
         const sessionAcr = loginSession
           ? await this.stepUpService.getLoginSessionAcr(loginSession)
           : ACR_PASSWORD;
+
+        // A client bound to a flow is only served by a session at least as
+        // strong as that flow always is (its implied ACR). A weaker session
+        // signs in again through the flow.
+        if (
+          boundFlow &&
+          !this.stepUpService.satisfiesAcr(sessionAcr, impliedAcr(boundFlow))
+        ) {
+          if (silent) {
+            return this.redirectWithError(
+              res,
+              query['redirect_uri'],
+              'interaction_required',
+              'Additional authentication is required',
+              query['state'],
+            );
+          }
+          return this.flowRuntime.beginFromAuthorize(
+            realm,
+            boundFlow,
+            query,
+            req,
+            res,
+          );
+        }
 
         // ── Step-up ACR check ────────────────────────────────────────────────
         //
@@ -347,6 +411,16 @@ export class OAuthController {
 
     if (silent) {
       return this.handlePromptNone(res, query['redirect_uri'], query['state']);
+    }
+
+    if (boundFlow) {
+      return this.flowRuntime.beginFromAuthorize(
+        realm,
+        boundFlow,
+        query,
+        req,
+        res,
+      );
     }
 
     // No valid session: redirect to login page with OAuth params.

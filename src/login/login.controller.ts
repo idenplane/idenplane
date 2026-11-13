@@ -52,6 +52,7 @@ import { CustomAttributesService } from '../custom-attributes/custom-attributes.
 import { PrimaryAuthGatesService } from './primary-auth-gates.service.js';
 import { SecondFactorVerifier } from './second-factor-verifier.service.js';
 import { CsrfService } from '../common/csrf/csrf.service.js';
+import { FlowRuntimeService } from '../auth-flow/flow-runtime.service.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 import {
   LoginDto,
@@ -95,6 +96,7 @@ export class LoginController {
     private readonly smsOtp: SmsOtpService,
     private readonly primaryAuthGates: PrimaryAuthGatesService,
     private readonly secondFactorVerifier: SecondFactorVerifier,
+    private readonly flowRuntime: FlowRuntimeService,
   ) {}
 
   // ─── CSRF HELPERS ──────────────────────────────────────
@@ -132,6 +134,9 @@ export class LoginController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    // A login bound to a custom flow renders that flow's current step.
+    if (await this.flowRuntime.showLoginPage(realm, query, req, res)) return;
+
     const csrfToken = this.setCsrfCookie(realm, res);
     // Build a properly percent-encoded register link so the hosted page does
     // not emit a URL with literal spaces (scope) or an unencoded redirect_uri,
@@ -204,6 +209,25 @@ export class LoginController {
   ) {
     this.validateCsrf(realm, body, req);
     const b = body as unknown as Record<string, string | undefined>;
+    // A bound login runs this as its password/ldap step (or refuses it).
+    if (
+      await this.flowRuntime.dispatch(
+        realm,
+        {
+          endpoint: 'password',
+          username: body.username,
+          password: body.password,
+          rememberMe: !!b['rememberMe'],
+          deviceFingerprint: body.device_fingerprint ?? null,
+          clientId: body.client_id,
+          form: b,
+        },
+        req,
+        res,
+      )
+    ) {
+      return;
+    }
     try {
       const user = await this.loginService.validateCredentials(
         realm,
@@ -271,6 +295,16 @@ export class LoginController {
     @Query('info') info?: string,
     @Query('method') method?: string,
   ) {
+    if (
+      await this.flowRuntime.showTotpPage(
+        realm,
+        { error, info, method },
+        req,
+        res,
+      )
+    ) {
+      return;
+    }
     const challengeToken = (
       req.cookies as Record<string, string | undefined>
     )?.[MFA_CHALLENGE_COOKIE];
@@ -333,6 +367,7 @@ export class LoginController {
     @Res() res: Response,
   ) {
     this.validateCsrf(realm, body, req);
+    if (await this.flowRuntime.sendSmsCode(realm, req, res)) return;
     const challengeToken = (
       req.cookies as Record<string, string | undefined>
     )?.[MFA_CHALLENGE_COOKIE];
@@ -382,6 +417,23 @@ export class LoginController {
     @Res() res: Response,
   ) {
     this.validateCsrf(realm, body, req);
+    // A bound login runs this as its totp step (authenticator, texted or
+    // recovery code).
+    if (
+      await this.flowRuntime.dispatch(
+        realm,
+        {
+          endpoint: 'totp',
+          code: body.code,
+          recoveryCode: body.recoveryCode,
+          smsCode: body.smsCode,
+        },
+        req,
+        res,
+      )
+    ) {
+      return;
+    }
     const challengeToken = (
       req.cookies as Record<string, string | undefined>
     )?.[MFA_CHALLENGE_COOKIE];
@@ -519,6 +571,11 @@ export class LoginController {
       : null;
     if (!enrollment || enrollment.realmId !== realm.id) {
       return loginAgain('Your sign-in expired. Please sign in again.');
+    }
+    if (enrollment.authnTxnId) {
+      // A detour of a custom-flow login: the flow goes on from here.
+      res.clearCookie(MFA_ENROLLMENT_COOKIE, { path: `/realms/${realm.name}` });
+      return this.flowRuntime.resumeAfterEnrolment(realm, enrollment, req, res);
     }
 
     const user = await this.loginService.findUserById(enrollment.userId);
