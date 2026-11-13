@@ -218,12 +218,15 @@ curl -X POST "http://localhost:3000/realms/master/protocol/openid-connect/token/
 For device code flow (RFC 8628), the device authorization endpoint is used to obtain device and user codes:
 
 ```
-POST /realms/:realmName/protocol/openid-connect/device/code
+POST /realms/:realmName/protocol/openid-connect/auth/device
 ```
 
+A confidential client authenticates here as at the token endpoint (secret, HTTP Basic or client certificate); a public client sends only its `client_id`.
+
 ```bash
-curl -X POST "http://localhost:3000/realms/master/protocol/openid-connect/device/code" \
-  -d "client_id=my-app"
+curl -X POST "http://localhost:3000/realms/master/protocol/openid-connect/auth/device" \
+  -d "client_id=my-app" \
+  -d "client_secret=my-app-secret"
 ```
 
 **Response:**
