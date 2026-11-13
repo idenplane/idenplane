@@ -10,6 +10,7 @@ import {
   Res,
   BadRequestException,
   ForbiddenException,
+  HttpException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiExcludeController } from '@nestjs/swagger';
@@ -60,6 +61,13 @@ import { SecondFactorVerifier } from './second-factor-verifier.service.js';
 import { CsrfService } from '../common/csrf/csrf.service.js';
 import { FlowRuntimeService } from '../auth-flow/flow-runtime.service.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
+import { CaptchaService } from '../captcha/captcha.service.js';
+import {
+  CAPTCHA_TOKEN_FIELD,
+  captchaCspSources,
+  captchaWidget,
+  isCaptchaProvider,
+} from '../captcha/captcha-config.js';
 import {
   CsrfOnlyDto,
   EmailOtpDto,
@@ -106,7 +114,25 @@ export class LoginController {
     private readonly primaryAuthGates: PrimaryAuthGatesService,
     private readonly secondFactorVerifier: SecondFactorVerifier,
     private readonly flowRuntime: FlowRuntimeService,
+    private readonly captcha: CaptchaService,
   ) {}
+
+  /**
+   * The host the hosted pages are served on (from BASE_URL, as the issuer
+   * is). A CAPTCHA solved on the hosted registration page must report it.
+   */
+  private hostedHostname(): string {
+    const baseUrl = this.config.get<string>(
+      'BASE_URL',
+      'http://localhost:3000',
+    );
+    try {
+      return new URL(baseUrl).hostname;
+    } catch {
+      // An unparsable BASE_URL matches no hostname, so verification fails closed.
+      return '';
+    }
+  }
 
   // ─── CSRF HELPERS ──────────────────────────────────────
 
@@ -1059,6 +1085,9 @@ export class LoginController {
       await this.customAttributesService.getRegistrationAttributes(realm.id);
 
     const csrfToken = this.setCsrfCookie(realm, res);
+    // With CAPTCHA on, the page renders the realm provider's widget and its
+    // CSP admits exactly that provider's origins (this page only).
+    const captcha = captchaWidget(realm);
     this.themeRender.render(
       res,
       realm,
@@ -1066,6 +1095,7 @@ export class LoginController {
       'register',
       {
         pageTitle: 'Create Account',
+        captcha,
         passwordMinLength: realm.passwordMinLength || 8,
         passwordHint: hints.length ? `Must contain ${hints.join(', ')}` : '',
         username: query['username'] ?? '',
@@ -1103,6 +1133,7 @@ export class LoginController {
         csrfToken,
       },
       req,
+      captcha ? { cspSources: captchaCspSources(captcha.provider) } : undefined,
     );
   }
 
@@ -1209,6 +1240,27 @@ export class LoginController {
       if (attr.required && !value) {
         return res.redirect(
           `/realms/${realm.name}/register?error=${encodeURIComponent(`'${attr.displayName}' is required.`)}${preserveFields}`,
+        );
+      }
+    }
+
+    // CAPTCHA, before any account lookup or write. The token field follows
+    // the realm's provider, never whichever field the request happens to send.
+    if (realm.captchaEnabled) {
+      const tokenField = isCaptchaProvider(realm.captchaProvider)
+        ? CAPTCHA_TOKEN_FIELD[realm.captchaProvider]
+        : undefined;
+      const token = tokenField ? body[tokenField] : undefined;
+      try {
+        await this.captcha.verifyForRealm(realm, token, {
+          action: 'register',
+          remoteIp: resolveClientIp(req),
+          expectedHostname: this.hostedHostname(),
+        });
+      } catch (err) {
+        if (!(err instanceof HttpException)) throw err;
+        return res.redirect(
+          `/realms/${realm.name}/register?error=${encodeURIComponent(err.message)}${preserveFields}`,
         );
       }
     }

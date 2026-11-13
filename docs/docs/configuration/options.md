@@ -81,6 +81,7 @@ POST   /admin/realms/{realm}/import
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `registrationAllowed` | boolean | `false` | Enable self-registration |
+| `captchaEnabled` | boolean | `false` | Require a CAPTCHA (reCAPTCHA v3 or hCaptcha) for self-registration; see [Self-Registration and CAPTCHA](/guides/registration-captcha) |
 | `registrationEmailAsUsername` | boolean | `false` | Use email as username |
 | `loginWithEmailAllowed` | boolean | `true` | Allow email-based login |
 | `duplicateEmailsAllowed` | boolean | `false` | Multiple users per email |

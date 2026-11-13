@@ -6,11 +6,14 @@ import {
   IsNumber,
   IsArray,
   IsEnum,
+  IsIn,
   IsObject,
   Min,
   Max,
   MinLength,
   Matches,
+  NotContains,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -21,6 +24,11 @@ import {
 } from '../../email/dto/email-config.dto.js';
 import { SmsProviderType } from '../../sms/dto/sms-config.dto.js';
 import { RealmSmsProviderConfigDto } from './sms-config.dto.js';
+import { CAPTCHA_PROVIDERS } from '../../captcha/captcha-config.js';
+import {
+  PLACEHOLDER_TYPED_OVER,
+  SECRET_PLACEHOLDER,
+} from '../secret-placeholder.js';
 
 export class CreateRealmDto {
   @ApiProperty({ example: 'my-app' })
@@ -585,11 +593,12 @@ export class CreateRealmDto {
   captchaEnabled?: boolean;
 
   @ApiPropertyOptional({
-    enum: ['recaptcha', 'hcaptcha'],
-    description: 'CAPTCHA provider to use',
+    enum: [...CAPTCHA_PROVIDERS],
+    description:
+      'CAPTCHA provider to use. Required, with its site key and secret key, when captchaEnabled is true.',
   })
   @IsOptional()
-  @IsString()
+  @IsIn(CAPTCHA_PROVIDERS)
   captchaProvider?: string;
 
   @ApiPropertyOptional({ description: 'reCAPTCHA site key for v3' })
@@ -598,10 +607,15 @@ export class CreateRealmDto {
   recaptchaSiteKey?: string;
 
   @ApiPropertyOptional({
-    description: 'reCAPTCHA secret key for v3 verification',
+    description:
+      'reCAPTCHA secret key for v3 verification (write-only: returned as the hidden-value placeholder, which on update means "unchanged")',
   })
   @IsOptional()
+  @ValidateIf(
+    (o: CreateRealmDto) => o.recaptchaSecretKey !== SECRET_PLACEHOLDER,
+  )
   @IsString()
+  @NotContains(SECRET_PLACEHOLDER, { message: PLACEHOLDER_TYPED_OVER })
   recaptchaSecretKey?: string;
 
   @ApiPropertyOptional({ description: 'hCaptcha site key' })
@@ -609,9 +623,14 @@ export class CreateRealmDto {
   @IsString()
   hcaptchaSiteKey?: string;
 
-  @ApiPropertyOptional({ description: 'hCaptcha secret key for verification' })
+  @ApiPropertyOptional({
+    description:
+      'hCaptcha secret key for verification (write-only: returned as the hidden-value placeholder, which on update means "unchanged")',
+  })
   @IsOptional()
+  @ValidateIf((o: CreateRealmDto) => o.hcaptchaSecretKey !== SECRET_PLACEHOLDER)
   @IsString()
+  @NotContains(SECRET_PLACEHOLDER, { message: PLACEHOLDER_TYPED_OVER })
   hcaptchaSecretKey?: string;
 
   @ApiPropertyOptional({

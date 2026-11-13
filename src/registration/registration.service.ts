@@ -14,7 +14,7 @@ import { EmailService } from '../email/email.service.js';
 import { ThemeEmailService } from '../theme/theme-email.service.js';
 import { PasswordPolicyService } from '../password-policy/password-policy.service.js';
 import { WebhooksService } from '../webhooks/webhooks.service.js';
-import { CaptchaService, CaptchaProvider } from './captcha.service.js';
+import { CaptchaService } from '../captcha/captcha.service.js';
 import {
   RegisterDto,
   ApproveRegistrationDto,
@@ -54,41 +54,30 @@ export class RegistrationService {
   ) {}
 
   /**
-   * Register a new user
+   * Register a new user. The realm's CAPTCHA, when enabled, is verified
+   * before anything is looked up or created; the provider is the realm's,
+   * never the caller's.
    */
   async register(
     realm: Realm,
     dto: RegisterDto,
-    captchaProvider?: CaptchaProvider,
+    options: { remoteIp?: string } = {},
   ): Promise<{
     userId: string;
     requiresApproval: boolean;
     emailSent: boolean;
   }> {
-    // Validate CAPTCHA if enabled
-    if (
-      captchaProvider &&
-      captchaProvider !== CaptchaProvider.NONE &&
-      dto.captchaToken
-    ) {
-      const captchaResult = await this.captchaService.verify(
-        dto.captchaToken,
-        captchaProvider,
-        'register',
-      );
-      if (!captchaResult.success) {
-        throw new BadRequestException(
-          `CAPTCHA verification failed: ${captchaResult.errorCodes?.join(', ') ?? 'invalid token'}`,
-        );
-      }
-    }
-
     // Check if registration is allowed
     if (!realm.registrationAllowed) {
       throw new ForbiddenException(
         'Self-registration is disabled for this realm',
       );
     }
+
+    await this.captchaService.verifyForRealm(realm, dto.captchaToken, {
+      action: 'register',
+      remoteIp: options.remoteIp,
+    });
 
     // Validate email domain if restrictions are configured
     if (realm.allowedEmailDomains && realm.allowedEmailDomains.length > 0) {

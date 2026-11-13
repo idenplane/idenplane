@@ -48,7 +48,8 @@ export class RegisterDto {
   lastName?: string;
 
   @ApiPropertyOptional({
-    description: 'CAPTCHA response token from reCAPTCHA or hCaptcha',
+    description:
+      "CAPTCHA response token from the realm's provider. Required when the realm has CAPTCHA enabled (reCAPTCHA v3 tokens must be generated with action `register`).",
   })
   @IsOptional()
   @IsString()

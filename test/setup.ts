@@ -12,7 +12,7 @@
  *   await cleanup();
  */
 
-import { Test, TestingModule } from '@nestjs/testing';
+import { Test, TestingModule, TestingModuleBuilder } from '@nestjs/testing';
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
@@ -60,7 +60,12 @@ export interface TestContext {
  * Creates and configures a NestJS application for E2E testing.
  * Mirrors the configuration in main.ts (ValidationPipe, cookieParser, exception filter).
  */
-export async function createTestApp(): Promise<TestContext> {
+export async function createTestApp(
+  options: {
+    /** Adjust the module before it compiles, e.g. `overrideProvider(...)`. */
+    configure?: (builder: TestingModuleBuilder) => TestingModuleBuilder;
+  } = {},
+): Promise<TestContext> {
   // Set admin API key for the test environment
   process.env['ADMIN_API_KEY'] = TEST_ADMIN_API_KEY;
 
@@ -81,9 +86,10 @@ export async function createTestApp(): Promise<TestContext> {
 
   let moduleFixture: TestingModule;
   try {
-    moduleFixture = await Test.createTestingModule({
+    const builder = Test.createTestingModule({
       imports: [AppModule],
-    }).compile();
+    });
+    moduleFixture = await (options.configure?.(builder) ?? builder).compile();
   } catch (err) {
     const message = err instanceof Error ? err.message : String(err);
     throw new Error(

@@ -6,7 +6,7 @@
 <div class="auth-error">{{error}}</div>
 {{/if}}
 
-<form method="POST" action="/realms/{{realmName}}/register" class="auth-form">
+<form method="POST" action="/realms/{{realmName}}/register" class="auth-form" id="register-form"{{#if captcha}} data-captcha-provider="{{captcha.provider}}" data-captcha-site-key="{{captcha.siteKey}}" data-captcha-error="{{msg "captchaUnavailable"}}" data-captcha-incomplete="{{msg "captchaIncomplete"}}"{{/if}}>
   <input type="hidden" name="_csrf" value="{{csrfToken}}">
   <input type="hidden" name="client_id" value="{{client_id}}">
   <input type="hidden" name="redirect_uri" value="{{redirect_uri}}">
@@ -107,8 +107,73 @@
   </div>
   {{/if}}
 
+  {{#if captcha}}
+  <div class="form-group" id="captcha-container">
+    {{#if captcha.isHcaptcha}}
+    <div class="h-captcha" data-sitekey="{{captcha.siteKey}}"></div>
+    {{/if}}
+    {{#if captcha.isRecaptcha}}
+    <input type="hidden" id="g-recaptcha-response" name="g-recaptcha-response" value="">
+    <small style="color: #6b7280; display: block;">{{msg "captchaRecaptchaNotice"}} <a href="https://policies.google.com/privacy" target="_blank" rel="noopener noreferrer" style="color: var(--primary-color);">{{msg "captchaPrivacy"}}</a> &middot; <a href="https://policies.google.com/terms" target="_blank" rel="noopener noreferrer" style="color: var(--primary-color);">{{msg "captchaTerms"}}</a></small>
+    {{/if}}
+    <noscript><div class="auth-error">{{msg "captchaNoScript"}}</div></noscript>
+  </div>
+  {{/if}}
+
   <button type="submit" class="btn-primary">{{msg "registerCreateAccount"}}</button>
 </form>
+
+{{#if captcha}}
+<script src="{{captcha.scriptUrl}}" async defer nonce="{{scriptNonce}}"></script>
+<script nonce="{{scriptNonce}}">
+  (function () {
+    var form = document.getElementById('register-form');
+    if (!form) return;
+    var provider = form.getAttribute('data-captcha-provider');
+    var siteKey = form.getAttribute('data-captcha-site-key');
+    var pending = false;
+    function showError(text) {
+      var box = document.getElementById('captcha-error');
+      if (!box) {
+        box = document.createElement('div');
+        box.id = 'captcha-error';
+        box.className = 'auth-error';
+        box.setAttribute('role', 'alert');
+        document.getElementById('captcha-container').appendChild(box);
+      }
+      box.textContent = text;
+    }
+    form.addEventListener('submit', function (event) {
+      if (provider === 'hcaptcha') {
+        var answer = form.querySelector('[name="h-captcha-response"]');
+        if (!answer || !answer.value) {
+          event.preventDefault();
+          showError(form.getAttribute('data-captcha-incomplete'));
+        }
+        return;
+      }
+      if (provider !== 'recaptcha') return;
+      // reCAPTCHA v3: fetch a fresh token for this submission, then submit.
+      event.preventDefault();
+      if (pending) return;
+      if (!window.grecaptcha || typeof window.grecaptcha.ready !== 'function') {
+        showError(form.getAttribute('data-captcha-error'));
+        return;
+      }
+      pending = true;
+      window.grecaptcha.ready(function () {
+        window.grecaptcha.execute(siteKey, { action: 'register' }).then(function (token) {
+          document.getElementById('g-recaptcha-response').value = token;
+          HTMLFormElement.prototype.submit.call(form);
+        }, function () {
+          pending = false;
+          showError(form.getAttribute('data-captcha-error'));
+        });
+      });
+    });
+  })();
+</script>
+{{/if}}
 
 <div style="text-align: center; margin-top: 1rem;">
   <a href="/realms/{{realmName}}/login?client_id={{client_id}}&redirect_uri={{redirect_uri}}&response_type={{response_type}}&scope={{scope}}&state={{state}}&nonce={{nonce}}&code_challenge={{code_challenge}}&code_challenge_method={{code_challenge_method}}" style="color: var(--primary-color); text-decoration: none; font-size: 0.85rem;">{{msg "registerSignInPrompt"}}</a>

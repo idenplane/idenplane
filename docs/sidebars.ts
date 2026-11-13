@@ -172,6 +172,11 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'doc',
+          id: 'guides/registration-captcha',
+          label: 'Self-Registration and CAPTCHA',
+        },
+        {
+          type: 'doc',
           id: 'guides/webhooks',
           label: 'Webhooks',
         },
