@@ -1,10 +1,11 @@
 /**
  * Operator switch for the custom auth-flow runtime.
  *
- * The runtime itself is not wired into login yet. Until it is, this flag only
- * changes what the binding resolver would answer and what the admin API
- * reports as `runtimeEnabled`. Both read it through this one helper so they
- * can never disagree.
+ * With it off, every login is the built-in one, whatever is bound: the
+ * binding resolver answers `legacy` before reading anything, so the runtime,
+ * `/auth` and SessionIssuer all stand aside. The admin API reports it as
+ * `runtimeEnabled`. Everything reads it through this one helper, at call
+ * time, so they can never disagree.
  *
  * Enabled only by the exact (case-insensitive) value `true`, matching the
  * other boolean env switches in this codebase. Unset, empty or anything else

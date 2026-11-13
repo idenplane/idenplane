@@ -31,6 +31,16 @@ export interface WebAuthnAuthenticationChallenge {
   options: PublicKeyCredentialRequestOptionsJSON;
 }
 
+/**
+ * The passkey is valid but belongs to someone other than the user the
+ * sign-in already identified. Callers that pin a user must fail closed.
+ */
+export class PasskeyUserMismatchError extends ForbiddenException {
+  constructor() {
+    super('This passkey belongs to a different account');
+  }
+}
+
 @Injectable()
 export class WebAuthnService {
   private readonly logger = new Logger(WebAuthnService.name);
@@ -253,6 +263,12 @@ export class WebAuthnService {
     binding?: string,
     /** Throws to refuse the user; runs after verification, before the counter is stored. */
     assertAllowed?: (user: User) => void,
+    /**
+     * The user the sign-in already identified. A passkey of anyone else is
+     * refused with {@link PasskeyUserMismatchError} before its signature is
+     * checked, so it cannot count as a use or a failure of that passkey.
+     */
+    expectedUserId?: string,
   ): Promise<{ user: User; credential: WebAuthnCredential }> {
     if (!realm.webAuthnEnabled) {
       throw new ForbiddenException('WebAuthn is not enabled for this realm');
@@ -272,6 +288,18 @@ export class WebAuthnService {
 
     if (credential.realmId !== realm.id) {
       throw new ForbiddenException('Passkey does not belong to this realm');
+    }
+
+    if (expectedUserId !== undefined && credential.userId !== expectedUserId) {
+      // Spend the challenge anyway: it was issued for this sign-in only.
+      if (binding) {
+        await this.consumeWebAuthnChallenge(
+          `login:${binding}`,
+          realm.id,
+          'authentication',
+        );
+      }
+      throw new PasskeyUserMismatchError();
     }
 
     // A bound sign-in uses only its own challenge. Otherwise try the

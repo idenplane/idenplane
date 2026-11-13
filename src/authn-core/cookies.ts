@@ -12,3 +12,10 @@ export const SAML_REQUEST_COOKIE = 'IDENPLANE_SAML_REQUEST';
 
 /** The browser's handle for its pending passkey sign-in challenge. */
 export const WEBAUTHN_LOGIN_COOKIE = 'IDENPLANE_WEBAUTHN_LOGIN';
+
+/**
+ * The browser's handle for its server-side login transaction while a bound
+ * authentication flow runs (see AuthnTransactionStore). The value is a random
+ * token; only its hash is stored, and it rotates once the user is identified.
+ */
+export const AUTHN_TXN_COOKIE = 'IDENPLANE_AUTHN_TXN';

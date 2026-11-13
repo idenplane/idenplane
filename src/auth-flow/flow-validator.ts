@@ -68,11 +68,10 @@ export const MAX_FLOW_STEPS = 20;
 export const MAX_STEP_ID_LENGTH = 100;
 
 /**
- * Step types a flow may use. Derived from what exists today: the DTO accepts
- * password, totp, webauthn, social, ldap, email_otp and consent, and the
- * executor type also lists magic_link — but only these four have a real
- * credential check (the others auto-pass in FlowExecutorService, and the
- * design makes consent a post-flow concern, not a step).
+ * Step types a flow may use: the ones the runtime (FlowStepHandlers) has a
+ * real credential check for. The DTO also accepts social, email_otp,
+ * magic_link and consent; those have no handler yet, and consent is a
+ * post-flow concern, not a step.
  */
 export const SUPPORTED_STEP_TYPES = [
   'password',

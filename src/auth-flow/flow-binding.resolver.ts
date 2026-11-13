@@ -30,8 +30,8 @@ export type ResolverClient = Pick<Client, 'authFlowId'>;
 
 /**
  * Decides which authentication flow (if any) a login for `client` in `realm`
- * runs. Not called by the login path yet — the runtime that consumes it lands
- * separately behind AUTH_FLOW_RUNTIME_ENABLED.
+ * runs. Consumed by the flow runtime (FlowRuntimeService), by `/auth`, and by
+ * SessionIssuer, which refuses any session the binding does not allow.
  *
  * Resolution order (fixed by the design; do not reorder):
  *   1. AUTH_FLOW_RUNTIME_ENABLED unset            → legacy

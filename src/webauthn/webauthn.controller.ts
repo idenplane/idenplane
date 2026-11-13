@@ -42,6 +42,7 @@ import type {
   AuthenticationResponseJSON,
 } from '@simplewebauthn/server';
 import { PostAuthService } from '../login/post-auth.service.js';
+import { FlowRuntimeService } from '../auth-flow/flow-runtime.service.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 import { EventsService } from '../events/events.service.js';
 import { LoginEventType } from '../events/event-types.js';
@@ -63,6 +64,7 @@ export class WebAuthnController {
     private readonly sessionIssuer: SessionIssuer,
     private readonly postAuth: PostAuthService,
     private readonly eventsService: EventsService,
+    private readonly flowRuntime: FlowRuntimeService,
   ) {}
 
   private async getSessionUser(realm: Realm, req: Request) {
@@ -154,11 +156,17 @@ export class WebAuthnController {
   async startAuthentication(
     @CurrentRealm() realm: Realm,
     @Body() body: StartAuthenticationDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
+    // Inside a custom-flow login, the challenge is for the user the flow has
+    // identified (if any), whatever the body names.
+    const flow = await this.flowRuntime.passkeyChallengeUser(realm, req);
     // Look up userId if username given (for autofill / non-resident-key flow)
     let userId: string | undefined;
-    if (body.username) {
+    if (flow.active) {
+      userId = flow.userId;
+    } else if (body.username) {
       const user = await this.loginService.findUserByUsername(
         realm,
         body.username,
@@ -204,6 +212,22 @@ export class WebAuthnController {
     @Res() res: Response,
   ) {
     const binding = req.cookies?.[WEBAUTHN_LOGIN_COOKIE] as string | undefined;
+    // A bound login runs this as its webauthn step (or refuses it).
+    if (
+      await this.flowRuntime.dispatch(
+        realm,
+        {
+          endpoint: 'webauthn',
+          response: body.response as AuthenticationResponseJSON,
+          binding,
+          clientId: body.client_id,
+        },
+        req,
+        res,
+      )
+    ) {
+      return;
+    }
     if (!binding) {
       throw new BadRequestException(
         'Authentication challenge expired or not found. Please try again.',
@@ -258,7 +282,9 @@ export class WebAuthnController {
     const authContext = { acr: ACR_WEBAUTHN, amr: ['hwk'] };
 
     // Create session (invalidating any pre-existing cookie to prevent session fixation)
-    await this.sessionIssuer.issue(realm, user, authContext, req, res);
+    await this.sessionIssuer.issue(realm, user, authContext, req, res, {
+      client,
+    });
     void this.eventsService.recordLoginEvent({
       realmId: realm.id,
       type: LoginEventType.LOGIN,

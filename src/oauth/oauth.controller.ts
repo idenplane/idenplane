@@ -7,6 +7,7 @@ import {
   Query,
   Req,
   Res,
+  ServiceUnavailableException,
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
@@ -30,6 +31,7 @@ import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
 import { ThemeRenderService } from '../theme/theme-render.service.js';
+import { FlowRuntimeService } from '../auth-flow/flow-runtime.service.js';
 
 /**
  * Whether a sign-in at `authenticatedAt` is older than the request's
@@ -65,6 +67,7 @@ export class OAuthController {
     private readonly consentService: ConsentService,
     private readonly stepUpService: StepUpService,
     private readonly themeRender: ThemeRenderService,
+    private readonly flowRuntime: FlowRuntimeService,
   ) {}
 
   @Get('auth')
@@ -174,6 +177,18 @@ export class OAuthController {
       );
     }
 
+    // A login bound to a custom flow runs it; a misconfigured binding fails
+    // closed, before any SSO session can answer for it. (Without
+    // AUTH_FLOW_RUNTIME_ENABLED or the realm switch this is always legacy,
+    // decided without a database read.)
+    const flowBinding = await this.flowRuntime.resolveBinding(realm, client);
+    if (flowBinding.kind === 'misconfigured') {
+      throw new ServiceUnavailableException(
+        FlowRuntimeService.misconfiguredMessage,
+      );
+    }
+    const boundFlow = flowBinding.kind === 'bound' ? flowBinding.flow : null;
+
     // Check for existing SSO session cookie
     const sessionCookie = (req.cookies as Record<string, string>)?.[
       SESSION_COOKIE
@@ -185,6 +200,15 @@ export class OAuthController {
       );
       if (user) {
         if (prompts.includes('login')) {
+          if (boundFlow) {
+            return this.flowRuntime.beginFromAuthorize(
+              realm,
+              boundFlow,
+              query,
+              req,
+              res,
+            );
+          }
           return this.handlePromptLogin(res, realm.name, query);
         }
 
@@ -202,6 +226,15 @@ export class OAuthController {
               query['state'],
             );
           }
+          if (boundFlow) {
+            return this.flowRuntime.beginFromAuthorize(
+              realm,
+              boundFlow,
+              query,
+              req,
+              res,
+            );
+          }
           return this.handlePromptLogin(res, realm.name, query);
         }
 
@@ -211,6 +244,39 @@ export class OAuthController {
         const sessionAcr = loginSession
           ? await this.stepUpService.getLoginSessionAcr(loginSession)
           : ACR_PASSWORD;
+
+        // A client bound to a flow is only served by a session at least as
+        // strong as that flow requires of this user (its conditions evaluated
+        // for them). A weaker session signs in again through the flow.
+        if (
+          boundFlow &&
+          !this.stepUpService.satisfiesAcr(
+            sessionAcr,
+            await this.flowRuntime.ssoRequiredAcr(
+              realm,
+              boundFlow,
+              user,
+              client.clientId,
+            ),
+          )
+        ) {
+          if (silent) {
+            return this.redirectWithError(
+              res,
+              query['redirect_uri'],
+              'interaction_required',
+              'Additional authentication is required',
+              query['state'],
+            );
+          }
+          return this.flowRuntime.beginFromAuthorize(
+            realm,
+            boundFlow,
+            query,
+            req,
+            res,
+          );
+        }
 
         // ── Step-up ACR check ────────────────────────────────────────────────
         //
@@ -347,6 +413,16 @@ export class OAuthController {
 
     if (silent) {
       return this.handlePromptNone(res, query['redirect_uri'], query['state']);
+    }
+
+    if (boundFlow) {
+      return this.flowRuntime.beginFromAuthorize(
+        realm,
+        boundFlow,
+        query,
+        req,
+        res,
+      );
     }
 
     // No valid session: redirect to login page with OAuth params.

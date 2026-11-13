@@ -63,6 +63,11 @@ export interface MfaEnrollmentData {
   verified?: boolean;
   /** Which factor was enrolled (absent on older rows: TOTP). */
   factor?: SecondFactorType;
+  /**
+   * Set when the enrolment is a detour of a custom-flow login transaction:
+   * finishing it resumes that transaction instead of the built-in login.
+   */
+  authnTxnId?: string;
 }
 
 export { MFA_ENROLLMENT_COOKIE } from '../authn-core/cookies.js';
@@ -687,7 +692,14 @@ export class MfaService {
   async cleanupExpiredActions(): Promise<void> {
     const { count } = await this.prisma.pendingAction.deleteMany({
       where: {
-        type: { in: ['mfa_challenge', 'mfa_enrollment', 'sms_enrollment'] },
+        type: {
+          in: [
+            'mfa_challenge',
+            'mfa_enrollment',
+            'sms_enrollment',
+            'authn_txn',
+          ],
+        },
         expiresAt: { lt: new Date() },
       },
     });

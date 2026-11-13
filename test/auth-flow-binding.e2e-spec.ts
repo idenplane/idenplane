@@ -4,7 +4,9 @@ import type { App } from 'supertest/types';
 import { createTestApp, TEST_ADMIN_API_KEY, type TestContext } from './setup';
 
 /**
- * Auth-flow binding model (admin API only — login does not read bindings yet).
+ * Auth-flow binding model through the admin API: validation on save,
+ * bindings, assign/unassign and delete protection. How login runs a bound
+ * flow is covered by auth-flow-runtime and auth-flow-tampering.
  */
 describe('Auth-flow bindings (e2e)', () => {
   let app: INestApplication<App>;

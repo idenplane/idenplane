@@ -19,21 +19,24 @@ function renderPanel() {
 }
 
 describe('FlowBindingsPanel', () => {
-  it('shows the "runtime not active yet" note while the server flag is off', async () => {
+  it('explains the server switch while the flow runtime is off', async () => {
     renderPanel();
-    expect(await screen.findByTestId('runtime-inactive-note')).toHaveTextContent(
-      /runtime not active yet/i,
-    );
+    const note = await screen.findByTestId('runtime-inactive-note');
+    expect(note).toHaveTextContent(/flow runtime off/i);
+    expect(note).toHaveTextContent('AUTH_FLOW_RUNTIME_ENABLED=true');
+    expect(screen.queryByTestId('runtime-active-note')).not.toBeInTheDocument();
   });
 
-  it('hides the note when the runtime is enabled', async () => {
+  it('says the runtime is active when the server runs it', async () => {
     server.use(
       http.get('/admin/realms/:name/auth-flows/bindings', () =>
         HttpResponse.json(makeFlowBindings({ runtimeEnabled: true })),
       ),
     );
     renderPanel();
-    await screen.findByLabelText(/realm browser flow/i);
+    expect(await screen.findByTestId('runtime-active-note')).toHaveTextContent(
+      /flow runtime active/i,
+    );
     expect(screen.queryByTestId('runtime-inactive-note')).not.toBeInTheDocument();
   });
 

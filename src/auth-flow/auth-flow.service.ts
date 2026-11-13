@@ -18,6 +18,7 @@ import {
   type FlowValidationError,
 } from './flow-validator.js';
 import { isAuthFlowRuntimeEnabled } from './auth-flow-runtime.js';
+import { evaluateFlowCondition } from './flow-graph.js';
 
 // ─── Types ─────────────────────────────────────────────────
 
@@ -583,79 +584,7 @@ export class AuthFlowService {
     return updated;
   }
 
-  // ── Step execution ──────────────────────────────────────
-
-  /**
-   * Execute a single step in the flow, returning the step definition and a
-   * status. The actual credential verification happens in FlowExecutorService;
-   * this method validates that the step exists and its condition is met.
-   */
-  async executeStep(
-    flowId: string,
-    stepId: string,
-    context: FlowContext,
-  ): Promise<{ step: FlowStep; conditionMet: boolean; skipped: boolean }> {
-    const flow = await this.prisma.authenticationFlow.findUnique({
-      where: { id: flowId },
-    });
-    if (!flow) {
-      throw new NotFoundException(`Authentication flow '${flowId}' not found`);
-    }
-
-    const steps = flow.steps as unknown as FlowStep[];
-    const step = steps.find((s) => s.id === stepId);
-    if (!step) {
-      throw new NotFoundException(
-        `Step '${stepId}' not found in flow '${flowId}'`,
-      );
-    }
-
-    const conditionMet = step.condition
-      ? this.evaluateCondition(step.condition, context)
-      : true;
-
-    // A non-required step whose condition is not met is skipped automatically
-    const skipped = !conditionMet && !step.required;
-
-    return { step, conditionMet, skipped };
-  }
-
-  /**
-   * Determine the next step to execute given the current step.
-   * Returns null when the flow is complete.
-   */
-  async getNextStep(
-    flowId: string,
-    currentStepId: string | null,
-    context: FlowContext,
-  ): Promise<FlowStep | null> {
-    const flow = await this.prisma.authenticationFlow.findUnique({
-      where: { id: flowId },
-    });
-    if (!flow) {
-      throw new NotFoundException(`Authentication flow '${flowId}' not found`);
-    }
-
-    const steps = (flow.steps as unknown as FlowStep[])
-      .slice()
-      .sort((a, b) => a.order - b.order);
-
-    if (currentStepId === null) {
-      // Return first applicable step
-      return this.firstApplicableStep(steps, context);
-    }
-
-    const currentIndex = steps.findIndex((s) => s.id === currentStepId);
-    if (currentIndex === -1) {
-      throw new BadRequestException(
-        `Step '${currentStepId}' not found in flow`,
-      );
-    }
-
-    // Look for the next applicable step after the current one
-    const remaining = steps.slice(currentIndex + 1);
-    return this.firstApplicableStep(remaining, context);
-  }
+  // ── Conditions ──────────────────────────────────────────
 
   /**
    * Evaluate a condition against the execution context.
@@ -665,47 +594,7 @@ export class AuthFlowService {
     condition: FlowStepCondition,
     context: FlowContext,
   ): boolean {
-    const rawValue = this.resolveField(condition.field, context);
-
-    switch (condition.operator) {
-      case 'exists':
-        return rawValue !== undefined && rawValue !== null;
-
-      case 'not_exists':
-        return rawValue === undefined || rawValue === null;
-
-      case 'eq':
-        return rawValue === condition.value;
-
-      case 'neq':
-        return rawValue !== condition.value;
-
-      case 'in': {
-        if (!Array.isArray(condition.value)) return false;
-        if (Array.isArray(rawValue)) {
-          return rawValue.some((v) =>
-            (condition.value as unknown[]).includes(v),
-          );
-        }
-        return (condition.value as unknown[]).includes(rawValue);
-      }
-
-      case 'not_in': {
-        if (!Array.isArray(condition.value)) return true;
-        if (Array.isArray(rawValue)) {
-          return !rawValue.some((v) =>
-            (condition.value as unknown[]).includes(v),
-          );
-        }
-        return !(condition.value as unknown[]).includes(rawValue);
-      }
-
-      default:
-        this.logger.warn(
-          `Unknown condition operator: ${(condition as FlowStepCondition & { operator: string }).operator}`,
-        );
-        return false;
-    }
+    return evaluateFlowCondition(condition, context);
   }
 
   // ── Seed default flows ──────────────────────────────────
@@ -804,42 +693,5 @@ export class AuthFlowService {
       },
       data: { isDefault: false },
     });
-  }
-
-  /**
-   * Resolve a dot-path field (e.g. "user.group") from the context object.
-   */
-  private resolveField(field: string, context: FlowContext): unknown {
-    const parts = field.split('.');
-    let current: unknown = context;
-    for (const part of parts) {
-      if (
-        current === null ||
-        current === undefined ||
-        typeof current !== 'object'
-      ) {
-        return undefined;
-      }
-      current = (current as Record<string, unknown>)[part];
-    }
-    return current;
-  }
-
-  /**
-   * Return the first step from a sorted list whose condition is met (or has no
-   * condition).  Returns null when no applicable step remains.
-   */
-  private firstApplicableStep(
-    steps: FlowStep[],
-    context: FlowContext,
-  ): FlowStep | null {
-    for (const step of steps) {
-      if (!step.condition) return step;
-      if (this.evaluateCondition(step.condition, context)) return step;
-      // If the step has a failed condition but is required, still include it so
-      // the executor can decide what to do (e.g. show an error).
-      if (step.required) return step;
-    }
-    return null;
   }
 }
