@@ -407,9 +407,11 @@ The Device Authorization grant (RFC 8628) is designed for devices with limited i
 ### Step 1: Request Device Code
 
 ```bash
-curl -X POST "http://localhost:3000/realms/my-realm/protocol/openid-connect/device/code" \
+curl -X POST "http://localhost:3000/realms/my-realm/protocol/openid-connect/auth/device" \
   -d "client_id=my-cli-tool"
 ```
+
+`my-cli-tool` is a public client, so its `client_id` is enough. A confidential client also sends its credentials, as it does at the token endpoint.
 
 **Response:**
 

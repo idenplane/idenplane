@@ -28,6 +28,9 @@ import {
   RateLimitByIp,
 } from '../rate-limit/rate-limit.guard.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
+import { ClientAuthenticator } from '../client-auth/client-authenticator.js';
+import { ClientCertificateSource } from '../mtls/client-certificate.source.js';
+import { OAuthTokenError } from '../auth/oauth-token-error.js';
 
 @ApiTags('Device Authorization')
 @Controller('realms/:realmName')
@@ -41,6 +44,8 @@ export class DeviceController {
     private readonly bruteForce: BruteForceService,
     private readonly themeRender: ThemeRenderService,
     private readonly csrfService: CsrfService,
+    private readonly clientAuthenticator: ClientAuthenticator,
+    private readonly clientCertificates: ClientCertificateSource,
   ) {}
 
   // ─── CSRF HELPERS ──────────────────────────────────────
@@ -80,18 +85,52 @@ export class DeviceController {
     description: 'Device authorization response with device_code and user_code',
   })
   @ApiResponse({
-    status: 400,
-    description: 'invalid_client — unknown or disabled client',
+    status: 401,
+    description:
+      'invalid_client — unknown or disabled client, or failed client authentication',
   })
   async initiateDevice(
     @CurrentRealm() realm: Realm,
-    @Body() body: { client_id: string; scope?: string },
+    @Body() body: Record<string, string>,
+    @Req() req: Request,
+    @Res({ passthrough: true }) res: Response,
   ) {
-    return this.deviceService.initiateDeviceAuth(
-      realm,
-      body.client_id,
-      body.scope,
-    );
+    res.set('Cache-Control', 'no-store');
+    try {
+      // RFC 8628 §3.1: a confidential client authenticates here exactly as at
+      // the token endpoint (secret, HTTP Basic or certificate); a public
+      // client sends its client_id.
+      const { client } = await this.clientAuthenticator.authenticate({
+        realm,
+        body,
+        authorization: req.headers['authorization'],
+        clientCert: this.clientCertificates.fromRequest(req),
+      });
+      return await this.deviceService.initiateDeviceAuth(
+        realm,
+        client,
+        body['scope'],
+      );
+    } catch (err) {
+      if (err instanceof OAuthTokenError) {
+        if (err.code === 'invalid_client') {
+          // RFC 6749 §5.2, as at the token endpoint.
+          res.set(
+            'WWW-Authenticate',
+            `Basic realm="${realm.name}", error="invalid_client"`,
+          );
+        }
+        if (err.retryAfterSeconds !== undefined) {
+          res.set('Retry-After', String(err.retryAfterSeconds));
+        }
+        res.status(err.httpStatus).json({
+          error: err.code,
+          ...(err.description ? { error_description: err.description } : {}),
+        });
+        return;
+      }
+      throw err;
+    }
   }
 
   @Get('device')

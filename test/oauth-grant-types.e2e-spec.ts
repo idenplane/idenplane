@@ -298,11 +298,61 @@ describe('OAuth 2.0 Grant Types (e2e)', () => {
   // ─── 3. DEVICE AUTHORIZATION GRANT ────────────────────────────────────────
 
   describe('Device Authorization Grant', () => {
+    it('authenticates a confidential client (RFC 8628 §3.1)', async () => {
+      const noSecret = await request(app.getHttpServer())
+        .post(DEVICE_AUTH_URL)
+        .send({ client_id: 'test-client' })
+        .expect(401);
+      expect(noSecret.body.error).toBe('invalid_client');
+      expect(noSecret.headers['www-authenticate']).toContain('Basic');
+
+      await request(app.getHttpServer())
+        .post(DEVICE_AUTH_URL)
+        .send({ client_id: 'test-client', client_secret: 'wrong-secret' })
+        .expect(401);
+
+      const basic = Buffer.from('test-client:test-client-secret').toString(
+        'base64',
+      );
+      const viaBasic = await request(app.getHttpServer())
+        .post(DEVICE_AUTH_URL)
+        .set('Authorization', `Basic ${basic}`)
+        .send({})
+        .expect(200);
+      expect(viaBasic.body).toHaveProperty('device_code');
+    });
+
+    it('answers invalid_client for an unknown client', async () => {
+      const res = await request(app.getHttpServer())
+        .post(DEVICE_AUTH_URL)
+        .send({ client_id: 'no-such-client' })
+        .expect(401);
+      expect(res.body.error).toBe('invalid_client');
+    });
+
+    it('lets a public client start with its client_id alone', async () => {
+      await ctx.prisma.client.create({
+        data: {
+          realmId: seeded.realm.id,
+          clientId: 'public-device',
+          clientType: 'PUBLIC',
+          redirectUris: [],
+          grantTypes: ['urn:ietf:params:oauth:grant-type:device_code'],
+        },
+      });
+      const res = await request(app.getHttpServer())
+        .post(DEVICE_AUTH_URL)
+        .send({ client_id: 'public-device' })
+        .expect(200);
+      expect(res.body).toHaveProperty('user_code');
+    });
+
     it('should initiate device authorization and return device_code and user_code', async () => {
       const res = await request(app.getHttpServer())
         .post(DEVICE_AUTH_URL)
         .send({
           client_id: 'test-client',
+          client_secret: 'test-client-secret',
           scope: 'openid',
         })
         .expect(200);
@@ -320,7 +370,7 @@ describe('OAuth 2.0 Grant Types (e2e)', () => {
       // Initiate the device flow
       const initRes = await request(app.getHttpServer())
         .post(DEVICE_AUTH_URL)
-        .send({ client_id: 'test-client' })
+        .send({ client_id: 'test-client', client_secret: 'test-client-secret' })
         .expect(200);
 
       const { device_code } = initRes.body;
@@ -345,7 +395,7 @@ describe('OAuth 2.0 Grant Types (e2e)', () => {
       // Initiate the device flow
       const initRes = await request(app.getHttpServer())
         .post(DEVICE_AUTH_URL)
-        .send({ client_id: 'test-client' })
+        .send({ client_id: 'test-client', client_secret: 'test-client-secret' })
         .expect(200);
 
       const { device_code, user_code } = initRes.body;
@@ -380,7 +430,7 @@ describe('OAuth 2.0 Grant Types (e2e)', () => {
     it('should return access_denied when device code is denied', async () => {
       const initRes = await request(app.getHttpServer())
         .post(DEVICE_AUTH_URL)
-        .send({ client_id: 'test-client' })
+        .send({ client_id: 'test-client', client_secret: 'test-client-secret' })
         .expect(200);
 
       const { user_code, device_code } = initRes.body;

@@ -27,7 +27,9 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
   }, 30_000);
 
   afterAll(async () => {
-    await ctx.prisma.realm.delete({ where: { name: REALM_NAME } }).catch(() => {});
+    await ctx.prisma.realm
+      .delete({ where: { name: REALM_NAME } })
+      .catch(() => {});
     await ctx.cleanup();
   });
 
@@ -154,7 +156,9 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
           username: 'mfa-test-user',
           email: 'mfa@example.com',
           enabled: true,
-          passwordHash: await import('argon2').then((h) => h.hash('TestPassword123!')),
+          passwordHash: await import('argon2').then((h) =>
+            h.hash('TestPassword123!'),
+          ),
         },
       });
       // TOTP is stored in UserCredential (not on User), enrolled here so the
@@ -202,9 +206,7 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
       });
 
       const res = await withKey(
-        request(app.getHttpServer()).delete(
-          `/admin/realms/${throwaway.name}`,
-        ),
+        request(app.getHttpServer()).delete(`/admin/realms/${throwaway.name}`),
       );
 
       // By design the static ADMIN_API_KEY is the product's root super-admin
@@ -238,7 +240,9 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
       // ACTUAL: May succeed - no realm boundary check for api-key:
       // BUG: Lines 59-70 skip validation for api-key: admins
       if (res.status === 200 || res.status === 201) {
-        console.log('BUG CONFIRMED: API key admin can impersonate across realms!');
+        console.log(
+          'BUG CONFIRMED: API key admin can impersonate across realms!',
+        );
       }
     });
   });
@@ -298,7 +302,6 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
       // This bug is subtle - if the revokedTokens map entry expires early,
       // an expired token could still be valid
       // Testing would require crafting an expired JWT with manipulated exp claim
-
       // For manual verification: Check that validateAdminToken at line 152-191
       // doesn't call jwkService.verifyJwt with exp validation option
     });
@@ -309,7 +312,7 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
   // GitHub Issue: #616
   // ═══════════════════════════════════════════════════════════════
 
-  describe('BUG #8: getUserSessions doesn\'t filter OAuth sessions by realm', () => {
+  describe("BUG #8: getUserSessions doesn't filter OAuth sessions by realm", () => {
     it('should filter OAuth sessions by realm — BUG: returns sessions from all realms', async () => {
       const otherRealm = await ctx.seedTestRealm('e2e-sessions-other-realm');
 
@@ -348,7 +351,9 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body)).toBe(true);
 
-      const ssoSessions = res.body.filter((s: { type: string }) => s.type === 'sso');
+      const ssoSessions = res.body.filter(
+        (s: { type: string }) => s.type === 'sso',
+      );
       expect(ssoSessions.length).toBeGreaterThanOrEqual(0);
     });
   });
@@ -407,7 +412,12 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
   describe('BUG #11: acr_values not validated against client requiredAcr', () => {
     it('should BLOCK client requesting ACR higher than its configured requiredAcr', async () => {
       await ctx.prisma.client.update({
-        where: { realmId_clientId: { realmId: seeded.realm.id, clientId: 'test-client' } },
+        where: {
+          realmId_clientId: {
+            realmId: seeded.realm.id,
+            clientId: 'test-client',
+          },
+        },
         data: { requiredAcr: 'acr_password' },
       });
 
@@ -425,7 +435,12 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
       // ACTUAL: May succeed - no validation at lines 59-62
       // BUG: Client could bypass its own security policy
       await ctx.prisma.client.update({
-        where: { realmId_clientId: { realmId: seeded.realm.id, clientId: 'test-client' } },
+        where: {
+          realmId_clientId: {
+            realmId: seeded.realm.id,
+            clientId: 'test-client',
+          },
+        },
         data: { requiredAcr: null },
       });
     });
@@ -559,7 +574,7 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
 
       const initRes = await request(app.getHttpServer())
         .post(`/realms/${REALM_NAME}/protocol/openid-connect/auth/device`)
-        .send({ client_id: 'test-client' })
+        .send({ client_id: 'test-client', client_secret: 'test-client-secret' })
         .expect(200);
 
       await ctx.prisma.deviceCode.update({
@@ -608,8 +623,13 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
   describe('BUG #16: MFA OTP grant allows legacy clients without grant type check', () => {
     it('should verify client has mfa-otp grant type — BUG: accepts undefined for legacy clients', async () => {
       await ctx.prisma.client.update({
-        where: { realmId_clientId: { realmId: seeded.realm.id, clientId: 'test-client' } },
-        data: { grantTypes: ['password'] },  // Only password grant
+        where: {
+          realmId_clientId: {
+            realmId: seeded.realm.id,
+            clientId: 'test-client',
+          },
+        },
+        data: { grantTypes: ['password'] }, // Only password grant
       });
 
       const res = await request(app.getHttpServer())
@@ -627,8 +647,20 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
       expect([400, 401]).toContain(res.status);
 
       await ctx.prisma.client.update({
-        where: { realmId_clientId: { realmId: seeded.realm.id, clientId: 'test-client' } },
-        data: { grantTypes: ['authorization_code', 'client_credentials', 'password', 'refresh_token'] },
+        where: {
+          realmId_clientId: {
+            realmId: seeded.realm.id,
+            clientId: 'test-client',
+          },
+        },
+        data: {
+          grantTypes: [
+            'authorization_code',
+            'client_credentials',
+            'password',
+            'refresh_token',
+          ],
+        },
       });
     });
   });
