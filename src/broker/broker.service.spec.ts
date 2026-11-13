@@ -8,6 +8,7 @@ import {
   MockPrismaService,
 } from '../prisma/prisma.mock.js';
 import type { Realm } from '@prisma/client';
+import { CryptoService } from '../crypto/crypto.service.js';
 
 describe('BrokerService', () => {
   let service: BrokerService;
@@ -107,6 +108,7 @@ describe('BrokerService', () => {
       prisma as any,
       jwkService as any,
       idpService as any,
+      new CryptoService(),
     );
 
     global.fetch = jest.fn();

@@ -15,12 +15,15 @@ import {
   MockPrismaService,
 } from '../prisma/prisma.mock.js';
 import { LdapClientWrapper } from './ldap.client.js';
+import { CryptoService } from '../crypto/crypto.service.js';
+import { SECRET_PLACEHOLDER } from '../realms/secret-placeholder.js';
 
 const MockLdapClientWrapper = LdapClientWrapper as jest.MockedClass<
   typeof LdapClientWrapper
 >;
 
 describe('UserFederationService', () => {
+  const crypto = new CryptoService();
   let service: UserFederationService;
   let prisma: MockPrismaService;
 
@@ -54,7 +57,7 @@ describe('UserFederationService', () => {
 
   beforeEach(() => {
     prisma = createMockPrismaService();
-    service = new UserFederationService(prisma as any);
+    service = new UserFederationService(prisma as any, crypto);
     MockLdapClientWrapper.mockClear();
   });
 
@@ -103,6 +106,13 @@ describe('UserFederationService', () => {
         }),
       });
       expect(result).toEqual(mockFederation);
+      const stored = (
+        prisma.userFederation.create.mock.calls[0][0] as {
+          data: { bindCredential: string };
+        }
+      ).data.bindCredential;
+      expect(stored).not.toBe('secret');
+      expect(crypto.decrypt(stored)).toBe('secret');
     });
 
     it('should create a federation with all fields provided', async () => {
@@ -247,6 +257,36 @@ describe('UserFederationService', () => {
       expect(result).toEqual(updated);
     });
 
+    it('keeps the stored credential when the placeholder is sent back', async () => {
+      prisma.userFederation.findUnique.mockResolvedValue(mockFederation);
+      prisma.userFederation.update.mockResolvedValue(mockFederation);
+
+      await service.update('test-realm', 'fed-1', {
+        bindCredential: SECRET_PLACEHOLDER,
+      });
+
+      const data = (
+        prisma.userFederation.update.mock.calls[0][0] as {
+          data: Record<string, unknown>;
+        }
+      ).data;
+      expect(data['bindCredential']).toBeUndefined();
+    });
+
+    it('encrypts a new credential on update', async () => {
+      prisma.userFederation.findUnique.mockResolvedValue(mockFederation);
+      prisma.userFederation.update.mockResolvedValue(mockFederation);
+
+      await service.update('test-realm', 'fed-1', { bindCredential: 'new' });
+
+      const data = (
+        prisma.userFederation.update.mock.calls[0][0] as {
+          data: { bindCredential: string };
+        }
+      ).data;
+      expect(crypto.decrypt(data.bindCredential)).toBe('new');
+    });
+
     it('should throw NotFoundException when federation not found', async () => {
       prisma.userFederation.findUnique.mockResolvedValue(null);
 
@@ -312,6 +352,26 @@ describe('UserFederationService', () => {
         }),
       );
       expect(result).toEqual({ success: true });
+    });
+
+    it('binds with the decrypted credential when it is stored encrypted', async () => {
+      prisma.userFederation.findUnique.mockResolvedValue({
+        ...mockFederation,
+        bindCredential: crypto.encryptSecret('secret'),
+      });
+      MockLdapClientWrapper.mockImplementationOnce(() => ({
+        testConnection: jest.fn().mockResolvedValue({ success: true }),
+        authenticate: jest.fn(),
+        searchUser: jest.fn(),
+        searchAllUsers: jest.fn(),
+      }));
+
+      await service.testConnection('test-realm', 'fed-1');
+
+      expect(MockLdapClientWrapper).toHaveBeenLastCalledWith(
+        expect.objectContaining({ bindCredential: 'secret' }),
+        expect.anything(),
+      );
     });
 
     it('should return failure when LDAP connection fails', async () => {

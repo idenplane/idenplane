@@ -346,7 +346,10 @@ Without `includeSecrets`, the file contains no secrets. With it, the file contai
 
 - each client's secret **hash**. The secret itself cannot be recovered; the hash keeps the same secret working after import;
 - the SMTP password, the CAPTCHA secret keys, and the email and SMS provider credentials, **decrypted**;
-- identity provider client secrets, LDAP bind credentials, webhook signing secrets (decrypted), audit stream HTTP headers and organization SSO connection configuration.
+- identity provider client secrets, LDAP bind credentials and webhook signing secrets, **decrypted**;
+- audit stream HTTP headers and organization SSO connection configuration, with their encrypted values **decrypted**. Without `includeSecrets` these two are left out whole.
+
+Realm signing keys and TOTP seeds are never exported; the imported realm gets a new key pair.
 
 Values encrypted at rest are exported decrypted. The importing server encrypts them again with its own `WEBHOOK_SECRET_KEY`, so the two servers do not need the same key.
 

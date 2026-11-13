@@ -23,6 +23,7 @@ import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { IdentityProvidersService } from './identity-providers.service.js';
 import { CreateIdentityProviderDto } from './dto/create-identity-provider.dto.js';
 import { UpdateIdentityProviderDto } from './dto/update-identity-provider.dto.js';
+import { idpSecrets } from './idp-secrets.js';
 
 @ApiTags('Identity Providers')
 @ApiSecurity('admin-api-key')
@@ -36,8 +37,11 @@ export class IdentityProvidersController {
   @ApiResponse({ status: 201, description: 'Created' })
   @ApiResponse({ status: 400, description: 'Invalid input' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  create(@CurrentRealm() realm: Realm, @Body() dto: CreateIdentityProviderDto) {
-    return this.idpService.create(realm, dto);
+  async create(
+    @CurrentRealm() realm: Realm,
+    @Body() dto: CreateIdentityProviderDto,
+  ) {
+    return idpSecrets.redact(await this.idpService.create(realm, dto));
   }
 
   @Get()
@@ -53,8 +57,11 @@ export class IdentityProvidersController {
   @ApiResponse({ status: 200, description: 'Identity provider details' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
-  findByAlias(@CurrentRealm() realm: Realm, @Param('alias') alias: string) {
-    return this.idpService.findByAlias(realm, alias);
+  async findByAlias(
+    @CurrentRealm() realm: Realm,
+    @Param('alias') alias: string,
+  ) {
+    return idpSecrets.redact(await this.idpService.findByAlias(realm, alias));
   }
 
   @Put(':alias')
@@ -62,12 +69,12 @@ export class IdentityProvidersController {
   @ApiResponse({ status: 200, description: 'Updated' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
-  update(
+  async update(
     @CurrentRealm() realm: Realm,
     @Param('alias') alias: string,
     @Body() dto: UpdateIdentityProviderDto,
   ) {
-    return this.idpService.update(realm, alias, dto);
+    return idpSecrets.redact(await this.idpService.update(realm, alias, dto));
   }
 
   @Delete(':alias')
@@ -76,7 +83,7 @@ export class IdentityProvidersController {
   @ApiResponse({ status: 204, description: 'Deleted' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
-  remove(@CurrentRealm() realm: Realm, @Param('alias') alias: string) {
-    return this.idpService.remove(realm, alias);
+  async remove(@CurrentRealm() realm: Realm, @Param('alias') alias: string) {
+    await this.idpService.remove(realm, alias);
   }
 }

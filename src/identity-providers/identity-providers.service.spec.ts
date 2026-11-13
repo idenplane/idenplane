@@ -7,10 +7,13 @@ import {
   MockPrismaService,
 } from '../prisma/prisma.mock.js';
 import type { Realm } from '@prisma/client';
+import { CryptoService } from '../crypto/crypto.service.js';
+import { SECRET_PLACEHOLDER } from '../realms/secret-placeholder.js';
 
 describe('IdentityProvidersService', () => {
   let service: IdentityProvidersService;
   let prisma: MockPrismaService;
+  const crypto = new CryptoService();
 
   const mockRealm: Realm = {
     id: 'realm-1',
@@ -57,7 +60,7 @@ describe('IdentityProvidersService', () => {
 
   beforeEach(() => {
     prisma = createMockPrismaService();
-    service = new IdentityProvidersService(prisma as any);
+    service = new IdentityProvidersService(prisma as any, crypto);
   });
 
   describe('create', () => {
@@ -77,9 +80,27 @@ describe('IdentityProvidersService', () => {
           alias: 'google',
           displayName: 'Google',
           clientId: 'google-client-id',
-          clientSecret: 'google-client-secret',
         }),
       });
+      // Stored encrypted, never as given.
+      const stored = (
+        prisma.identityProvider.create.mock.calls[0][0] as {
+          data: { clientSecret: string };
+        }
+      ).data.clientSecret;
+      expect(stored).not.toBe('google-client-secret');
+      expect(crypto.decrypt(stored)).toBe('google-client-secret');
+    });
+
+    it('refuses the placeholder as a new secret', async () => {
+      prisma.identityProvider.findUnique.mockResolvedValue(null);
+      await expect(
+        service.create(mockRealm, {
+          ...createDto,
+          clientSecret: SECRET_PLACEHOLDER,
+        }),
+      ).rejects.toThrow(/hidden-value marker/);
+      expect(prisma.identityProvider.create).not.toHaveBeenCalled();
     });
 
     it('should apply default values when optional fields are omitted', async () => {
@@ -202,6 +223,47 @@ describe('IdentityProvidersService', () => {
         where: { realmId_alias: { realmId: 'realm-1', alias: 'google' } },
         data: { displayName: 'Google SSO' },
       });
+    });
+
+    it('keeps the stored secret when the placeholder is sent back', async () => {
+      prisma.identityProvider.findUnique.mockResolvedValue(mockIdp);
+      prisma.identityProvider.update.mockResolvedValue(mockIdp);
+
+      await service.update(mockRealm, 'google', {
+        clientSecret: SECRET_PLACEHOLDER,
+        displayName: 'G',
+      });
+
+      const data = (
+        prisma.identityProvider.update.mock.calls[0][0] as {
+          data: Record<string, unknown>;
+        }
+      ).data;
+      expect(data['clientSecret']).toBeUndefined();
+      expect(data['displayName']).toBe('G');
+    });
+
+    it('encrypts a new secret on update', async () => {
+      prisma.identityProvider.findUnique.mockResolvedValue(mockIdp);
+      prisma.identityProvider.update.mockResolvedValue(mockIdp);
+
+      await service.update(mockRealm, 'google', { clientSecret: 'rotated' });
+
+      const data = (
+        prisma.identityProvider.update.mock.calls[0][0] as {
+          data: { clientSecret: string };
+        }
+      ).data;
+      expect(crypto.decrypt(data.clientSecret)).toBe('rotated');
+    });
+
+    it('refuses a secret typed after the placeholder', async () => {
+      prisma.identityProvider.findUnique.mockResolvedValue(mockIdp);
+      await expect(
+        service.update(mockRealm, 'google', {
+          clientSecret: `${SECRET_PLACEHOLDER}abc`,
+        }),
+      ).rejects.toThrow(/hidden-value marker/);
     });
 
     it('should throw NotFoundException when identity provider does not exist', async () => {

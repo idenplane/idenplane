@@ -11,6 +11,7 @@ import { join } from 'path';
 import { createLoggerConfig } from './common/logging/logger.config.js';
 import { PrismaModule } from './prisma/prisma.module.js';
 import { CryptoModule } from './crypto/crypto.module.js';
+import { SecretsAtRestModule } from './secrets-at-rest/secrets-at-rest.module.js';
 import { RealmsModule } from './realms/realms.module.js';
 import { SetupWizardModule } from './setup-wizard/setup-wizard.module.js';
 import { UsersModule } from './users/users.module.js';
@@ -118,6 +119,7 @@ import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
     CacheModule,
     PrismaModule,
     CryptoModule,
+    SecretsAtRestModule,
     EmailModule,
     SmsModule,
     VerificationModule,

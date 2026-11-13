@@ -391,7 +391,9 @@ describe('AdminEventInterceptor', () => {
         path: '/admin/realms',
         realm: null,
       });
-      const handler = { handle: () => of({ id: 'new-realm-id', name: 'new-realm' }) };
+      const handler = {
+        handle: () => of({ id: 'new-realm-id', name: 'new-realm' }),
+      };
 
       interceptor.intercept(context as any, handler).subscribe({
         complete: () => {

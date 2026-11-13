@@ -89,6 +89,21 @@ export class CryptoService implements OnModuleInit {
     ),
   );
 
+  /**
+   * True when WEBHOOK_SECRET_KEY and WEBHOOK_ENCRYPTION_SALT are both set to
+   * something other than the built-in development defaults.
+   */
+  usesConfiguredKey(): boolean {
+    const key = process.env['WEBHOOK_SECRET_KEY'];
+    const salt = process.env['WEBHOOK_ENCRYPTION_SALT'];
+    return (
+      !!key &&
+      key !== DEFAULT_WEBHOOK_SECRET_KEY &&
+      !!salt &&
+      salt !== DEFAULT_WEBHOOK_ENCRYPTION_SALT
+    );
+  }
+
   onModuleInit(): void {
     const key = process.env['WEBHOOK_SECRET_KEY'];
     const salt = process.env['WEBHOOK_ENCRYPTION_SALT'];
@@ -284,7 +299,12 @@ export class CryptoService implements OnModuleInit {
     const iv = packed.subarray(0, IV_BYTES);
     const tag = packed.subarray(IV_BYTES, IV_BYTES + TAG_BYTES);
     const encrypted = packed.subarray(IV_BYTES + TAG_BYTES);
-    const decipher = createDecipheriv(ALGORITHM, this.encryptionKey, iv);
+    // The full 128-bit tag: without authTagLength, GCM accepts a tag as
+    // short as 4 bytes, so a short plaintext value could pass for ciphertext
+    // far more often than a forged full tag would.
+    const decipher = createDecipheriv(ALGORITHM, this.encryptionKey, iv, {
+      authTagLength: TAG_BYTES,
+    });
     decipher.setAuthTag(tag);
     return decipher.update(encrypted).toString('utf8') + decipher.final('utf8');
   }

@@ -116,11 +116,20 @@ describe('RealmsService', () => {
               kid: 'kid-1',
               algorithm: 'RS256',
               publicKey: mockKeyPair.publicKeyPem,
-              privateKey: mockKeyPair.privateKeyPem,
+              // Encrypted at rest.
+              privateKey: expect.not.stringContaining('PRIVATE KEY'),
             },
           },
         },
       });
+      const stored = (
+        prisma.realm.create.mock.calls[0][0] as {
+          data: { signingKeys: { create: { privateKey: string } } };
+        }
+      ).data.signingKeys.create.privateKey;
+      expect(new CryptoService().decrypt(stored)).toBe(
+        mockKeyPair.privateKeyPem,
+      );
     });
 
     it('should throw ConflictException when realm name already exists', async () => {

@@ -50,6 +50,24 @@ model WizardState {
   @@map("wizard_states")
 }
 
+/// Ties the stored secrets to the key they are encrypted with
+/// (WEBHOOK_SECRET_KEY + WEBHOOK_ENCRYPTION_SALT). One row, written by the
+/// first start that encrypts secrets at rest; every start decrypts
+/// `keyCheck` and refuses to run with a different key, which would otherwise
+/// read ciphertext as legacy plaintext. See SecretsAtRestService.
+model EncryptionKeyCheck {
+  id           String    @id
+  keyCheck     String    @map("key_check")
+  /// Highest version of the full stored-secrets sweep that has completed.
+  sweepVersion Int       @default(0) @map("sweep_version")
+  /// When that sweep started: later sweeps only revisit TOTP rows from then on.
+  sweptAt      DateTime? @map("swept_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@map("encryption_key_check")
+}
+
 // ─── REALMS ───────────────────────────────────────────────
 
 model Realm {
@@ -495,17 +513,17 @@ model UserRole {
 // ─── SESSIONS & REFRESH TOKENS ────────────────────────────
 
 model Session {
-  id           String   @id @default(uuid())
-  userId       String   @map("user_id")
-  realmId      String   @default("") @map("realm_id")
-  clientId     String?  @map("client_id")
-  ipAddress    String?  @map("ip_address")
-  userAgent    String?  @map("user_agent")
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  realmId      String    @default("") @map("realm_id")
+  clientId     String?   @map("client_id")
+  ipAddress    String?   @map("ip_address")
+  userAgent    String?   @map("user_agent")
   /// The ACR level actually satisfied when this session was established.
   /// Lets the refresh_token grant preserve acr/amr across token rotation.
-  satisfiedAcr String?  @map("satisfied_acr")
+  satisfiedAcr String?   @map("satisfied_acr")
   /// The authentication methods (RFC 8176) actually performed for this session.
-  amr          String[] @default([]) @map("amr")
+  amr          String[]  @default([]) @map("amr")
   /// When the user authenticated (OIDC `auth_time`). Refreshed ID tokens keep
   /// it (OIDC Core §12.2); null for sessions created before it was recorded.
   authTime     DateTime? @map("auth_time")
@@ -522,15 +540,15 @@ model Session {
 }
 
 model RefreshToken {
-  id        String  @id @default(uuid())
-  sessionId String  @map("session_id")
-  tokenHash String  @unique @map("token_hash")
-  scope     String?
-  revoked   Boolean @default(false)
-  isOffline Boolean @default(false) @map("is_offline")
+  id         String  @id @default(uuid())
+  sessionId  String  @map("session_id")
+  tokenHash  String  @unique @map("token_hash")
+  scope      String?
+  revoked    Boolean @default(false)
+  isOffline  Boolean @default(false) @map("is_offline")
   /// The client that was granted this refresh token (security fix #456).
   /// Nullable for backwards compatibility with tokens created before this migration.
-  clientId  String? @map("client_id")
+  clientId   String? @map("client_id")
   /// RFC 8705 §4: the `x5t#S256` of the certificate a public client presented
   /// when this token was issued. A refresh must present the same certificate.
   /// Null for unbound tokens and for confidential clients, whose refreshed
@@ -549,31 +567,31 @@ model RefreshToken {
 // ─── AUTHORIZATION CODES ──────────────────────────────────
 
 model AuthorizationCode {
-  id                  String   @id @default(uuid())
-  code                String   @unique
-  clientId            String   @map("client_id")
-  userId              String   @map("user_id")
-  redirectUri         String   @map("redirect_uri")
+  id                  String    @id @default(uuid())
+  code                String    @unique
+  clientId            String    @map("client_id")
+  userId              String    @map("user_id")
+  redirectUri         String    @map("redirect_uri")
   scope               String?
-  codeChallenge       String?  @map("code_challenge")
-  codeChallengeMethod String?  @map("code_challenge_method")
+  codeChallenge       String?   @map("code_challenge")
+  codeChallengeMethod String?   @map("code_challenge_method")
   nonce               String?
   /// The ACR value(s) *requested* by the client at authorization time.
-  acrValues           String?  @map("acr_values")
+  acrValues           String?   @map("acr_values")
   /// The ACR level actually *satisfied* by the authentication that produced
   /// this code (password vs. password+MFA vs. WebAuthn). Read back at the
   /// code→token exchange so the issued tokens reflect the real auth context.
-  satisfiedAcr        String?  @map("satisfied_acr")
+  satisfiedAcr        String?   @map("satisfied_acr")
   /// The authentication methods (RFC 8176) actually performed.
-  amr                 String[] @default([]) @map("amr")
+  amr                 String[]  @default([]) @map("amr")
   /// When the end user actually authenticated (OIDC `auth_time`); a code
   /// issued from an SSO session carries the session's sign-in time.
   authTime            DateTime? @map("auth_time")
-  used                Boolean  @default(false)
+  used                Boolean   @default(false)
   /// The session created when the code was exchanged. A second exchange of
   /// the same code ends it, revoking the tokens issued the first time
   /// (RFC 6749 §4.1.2).
-  sessionId           String?  @map("session_id")
+  sessionId           String?   @map("session_id")
 
   createdAt DateTime @default(now()) @map("created_at")
   expiresAt DateTime @map("expires_at")
@@ -1477,9 +1495,9 @@ model SessionRiskProfile {
   behavioralSignals Json? @map("behavioral_signals")
 
   // Step-up state
-  stepUpRequired  Boolean   @default(false) @map("step_up_required")
-  stepUpReason    String?   @map("step_up_reason")
-  stepUpExpiresAt DateTime? @map("step_up_expires_at")
+  stepUpRequired   Boolean   @default(false) @map("step_up_required")
+  stepUpReason     String?   @map("step_up_reason")
+  stepUpExpiresAt  DateTime? @map("step_up_expires_at")
   /// When this risk episode's step-up was announced; cleared when it ends.
   stepUpNotifiedAt DateTime? @map("step_up_notified_at")
 

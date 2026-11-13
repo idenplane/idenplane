@@ -9,10 +9,7 @@ import {
   EXPORT_MODELS,
   type ModelExportSpec,
 } from '../src/realms/export/realm-export.fields';
-import {
-  enumValues,
-  parseFieldType,
-} from '../src/realms/export/field-codec';
+import { enumValues, parseFieldType } from '../src/realms/export/field-codec';
 import { CryptoService } from '../src/crypto/crypto.service';
 import { chain, issue } from '../src/client-auth/__mocks__/test-pki';
 import {
@@ -104,8 +101,7 @@ const ROWS_OF: Record<string, (e: Row) => Row[]> = {
   ClientScope: (e) => e.clientScopes,
   ProtocolMapper: (e) => e.clientScopes.flatMap((s: Row) => s.protocolMappers),
   Client: (e) => e.clients,
-  ClientTlsCertificate: (e) =>
-    e.clients.flatMap((c: Row) => c.tlsCertificates),
+  ClientTlsCertificate: (e) => e.clients.flatMap((c: Row) => c.tlsCertificates),
   RealmTlsTrustAnchor: (e) => e.tlsTrustAnchors,
   TlsRevokedCertificate: (e) => e.tlsRevokedCertificates,
   Role: (e) => e.roles,
@@ -139,7 +135,9 @@ const ROWS_OF: Record<string, (e: Row) => Row[]> = {
     ),
 };
 
-const PASSWORD_FLOW = [{ id: 'pw', type: 'password', required: true, order: 1 }];
+const PASSWORD_FLOW = [
+  { id: 'pw', type: 'password', required: true, order: 1 },
+];
 const PASSWORD_TOTP_FLOW = [
   { id: 'pw', type: 'password', required: true, order: 1 },
   { id: 'otp', type: 'totp', required: true, order: 2 },
@@ -287,7 +285,11 @@ describe('Realm export/import, format 2 (e2e)', () => {
         serviceAccountUserId: sa.id,
         authFlowId: clientFlow.id,
       },
-      { clientId: 'spa', clientType: 'PUBLIC', tokenEndpointAuthMethod: 'none' },
+      {
+        clientId: 'spa',
+        clientType: 'PUBLIC',
+        tokenEndpointAuthMethod: 'none',
+      },
     ];
     const clients = new Map<string, string>();
     for (const [i, c] of clientRows.entries()) {
@@ -463,7 +465,9 @@ describe('Realm export/import, format 2 (e2e)', () => {
         passwordHash: '$argon2id$v=19$m=65536,t=3,p=4$c2FsdA$aGFzaA',
       },
     });
-    await p.userRole.create({ data: { userId: user.id, roleId: realmRole.id } });
+    await p.userRole.create({
+      data: { userId: user.id, roleId: realmRole.id },
+    });
     await p.userGroup.create({ data: { userId: user.id, groupId: child.id } });
     await p.userAttribute.create({
       data: {
@@ -559,7 +563,9 @@ describe('Realm export/import, format 2 (e2e)', () => {
               (def === undefined || !isDeepStrictEqual(r[field], def)),
           );
           if (!shown) {
-            problems.push(`${model}.${field}: never exported with a non-default value`);
+            problems.push(
+              `${model}.${field}: never exported with a non-default value`,
+            );
           }
         }
       }
@@ -580,7 +586,8 @@ describe('Realm export/import, format 2 (e2e)', () => {
         groups: ['Group.name.0'],
       });
       expect(
-        e.clients.find((c: Row) => c.clientId === 'self-signed').tlsCertificates,
+        e.clients.find((c: Row) => c.clientId === 'self-signed')
+          .tlsCertificates,
       ).toHaveLength(2);
       expect(e.tlsTrustAnchors).toHaveLength(1);
       expect(e.tlsRevokedCertificates).toHaveLength(2);
@@ -615,7 +622,10 @@ describe('Realm export/import, format 2 (e2e)', () => {
       );
       expect(res.body.warnings).toEqual([]);
 
-      const again = await exportOf(COPY, '?includeUsers=true&includeSecrets=true');
+      const again = await exportOf(
+        COPY,
+        '?includeUsers=true&includeSecrets=true',
+      );
       const expected = renamed(exportWithSecrets, COPY);
       expected.omitted = [];
       expect(again).toEqual(expected);
@@ -631,15 +641,52 @@ describe('Realm export/import, format 2 (e2e)', () => {
       expect(crypto.decryptSecret(copy.hcaptchaSecretKey)).toBe(
         'hcaptcha-secret',
       );
-      expect(
-        (copy.emailProviderConfig as Row).resend.apiKey,
-      ).not.toBe('resend-key');
+      expect((copy.emailProviderConfig as Row).resend.apiKey).not.toBe(
+        'resend-key',
+      );
       expect(crypto.decrypt(copy.webhooks[0].secret)).toBe('hook-secret');
-      expect(
-        copy.clients.find((c) => c.clientId === 'svc')!.clientSecret,
-      ).toBe(clientSecretHash);
+      expect(copy.clients.find((c) => c.clientId === 'svc')!.clientSecret).toBe(
+        clientSecretHash,
+      );
       expect(copy.signingKeys).toHaveLength(1);
       expect(copy.signingKeys[0].kid).not.toBe('source-kid');
+      // The new key's private half is encrypted at rest too.
+      expect(copy.signingKeys[0].privateKey).not.toContain('PRIVATE KEY');
+      expect(crypto.decrypt(copy.signingKeys[0].privateKey)).toContain(
+        'PRIVATE KEY',
+      );
+    });
+
+    it('encrypts identity provider, LDAP, audit stream and SSO secrets at rest', async () => {
+      const copy = await ctx.prisma.realm.findUniqueOrThrow({
+        where: { name: COPY },
+        include: {
+          identityProviders: true,
+          userFederations: true,
+          auditLogStreams: true,
+          organizations: { include: { ssoConnections: true } },
+        },
+      });
+      const idp = copy.identityProviders[0];
+      expect(idp.clientSecret).not.toBe('idp-secret');
+      expect(crypto.decrypt(idp.clientSecret)).toBe('idp-secret');
+      const ldap = copy.userFederations[0];
+      expect(ldap.bindCredential).not.toBe('bind-secret');
+      expect(crypto.decrypt(ldap.bindCredential)).toBe('bind-secret');
+      const headers = copy.auditLogStreams.find((a) => a.httpHeaders)!
+        .httpHeaders as Row;
+      expect(headers.Authorization).not.toBe('Bearer audit-token');
+      expect(crypto.decrypt(headers.Authorization)).toBe('Bearer audit-token');
+      const sso = copy.organizations
+        .flatMap((o) => o.ssoConnections)
+        .find((c) => (c.config as Row).clientSecret)!;
+      expect((sso.config as Row).clientSecret).not.toBe('org-sso-secret');
+      expect(crypto.decrypt((sso.config as Row).clientSecret)).toBe(
+        'org-sso-secret',
+      );
+      expect(JSON.stringify(copy)).not.toMatch(
+        /idp-secret|bind-secret|audit-token|org-sso-secret/,
+      );
     });
   });
 
@@ -701,7 +748,9 @@ describe('Realm export/import, format 2 (e2e)', () => {
       expect(crypto.decrypt(r.webhooks[0].secret)).toHaveLength(64);
       expect(r.identityProviders[0].enabled).toBe(false);
       expect(r.userFederations[0].enabled).toBe(false);
-      expect(r.clients.find((c) => c.clientId === 'svc')!.clientSecret).toBeNull();
+      expect(
+        r.clients.find((c) => c.clientId === 'svc')!.clientSecret,
+      ).toBeNull();
     });
   });
 
@@ -768,7 +817,10 @@ describe('Realm export/import, format 2 (e2e)', () => {
         where: { name: COPY },
         select: { id: true },
       });
-      const before = await exportOf(COPY, '?includeUsers=true&includeSecrets=true');
+      const before = await exportOf(
+        COPY,
+        '?includeUsers=true&includeSecrets=true',
+      );
 
       const invalid = renamed(exportWithSecrets, COPY);
       invalid.groups[0].roles = [{ name: 'ghost', clientId: null }];

@@ -38,6 +38,12 @@ function createMockCryptoService() {
   return {
     generateSecret: jest.fn().mockReturnValue('ABCD1234'),
     sha256: jest.fn().mockImplementation((input: string) => 'hashed_' + input),
+    // Encryption at rest: a reversible stand-in, so the tests see the
+    // service store the sealed value and use the opened one.
+    encryptSecret: jest.fn((v: string) => (v ? `sealed:${v}` : v)),
+    decryptSecret: jest.fn((v: string) =>
+      v.startsWith('sealed:') ? v.slice('sealed:'.length) : v,
+    ),
   };
 }
 
@@ -91,7 +97,7 @@ describe('MfaService', () => {
         data: {
           userId: 'user-1',
           type: 'totp',
-          secretKey: 'MOCKED_BASE32_SECRET',
+          secretKey: 'sealed:MOCKED_BASE32_SECRET', // encrypted at rest
           algorithm: 'SHA1',
           digits: 6,
           period: 30,
@@ -397,6 +403,23 @@ describe('MfaService', () => {
           digits: 6,
           period: 30,
         }),
+      );
+    });
+
+    it('checks the code against the decrypted seed', async () => {
+      prisma.userCredential.findUnique.mockResolvedValue({
+        ...verifiedCredential,
+        secretKey: 'sealed:MOCKED_BASE32_SECRET',
+      } as any);
+      (OTPAuth.TOTP as jest.Mock).mockImplementationOnce(() => ({
+        toString: jest.fn(),
+        validate: jest.fn(() => 0),
+      }));
+
+      await service.verifyTotp('user-1', '123456');
+
+      expect(OTPAuth.Secret.fromBase32).toHaveBeenLastCalledWith(
+        'MOCKED_BASE32_SECRET',
       );
     });
   });

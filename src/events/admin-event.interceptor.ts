@@ -10,6 +10,8 @@ import { EventsService } from './events.service.js';
 import { ResourceType, OperationType } from './event-types.js';
 import type { OperationTypeValue, ResourceTypeValue } from './event-types.js';
 import { SENSITIVE_BODY_FIELDS } from '../common/security/sensitive-body-fields.js';
+import { redactSecretJson } from '../crypto/stored-secrets.js';
+import { SSO_CONFIG_SHAPE } from '../organizations/sso-connection-secrets.js';
 
 const RESOURCE_TYPE_MAP: Array<{ pattern: RegExp; type: ResourceTypeValue }> = [
   // More-specific patterns must come before broader ones to avoid mis-classification.
@@ -138,6 +140,18 @@ export class AdminEventInterceptor implements NestInterceptor {
     };
     for (const key of SENSITIVE_BODY_FIELDS) {
       if (key in redacted) redacted[key] = '[REDACTED]';
+    }
+    // A free-form config (organization SSO connections) can hold secrets
+    // under any key: mask the secret-named ones, as the API itself does.
+    if (redacted['config'] !== undefined) {
+      try {
+        redacted['config'] = redactSecretJson(
+          redacted['config'],
+          SSO_CONFIG_SHAPE,
+        );
+      } catch {
+        redacted['config'] = '[REDACTED]';
+      }
     }
     return redacted;
   }

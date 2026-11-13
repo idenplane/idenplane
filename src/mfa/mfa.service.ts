@@ -9,6 +9,7 @@ import { RedisService } from '../redis/redis.service.js';
 import { BruteForceService } from '../brute-force/brute-force.service.js';
 import { SmsOtpService, type SmsOtpPurpose } from '../sms/sms-otp.service.js';
 import type { Realm } from '@prisma/client';
+import { totpSecret } from './totp-secret.js';
 
 /** Credential types that count as a second factor. */
 export const SECOND_FACTOR_TYPES = ['totp', 'sms'] as const;
@@ -203,7 +204,7 @@ export class MfaService {
       data: {
         userId,
         type: 'totp',
-        secretKey: secret.base32,
+        secretKey: totpSecret.forCreate(this.crypto, secret.base32),
         algorithm: 'SHA1',
         digits: 6,
         period: 30,
@@ -232,7 +233,9 @@ export class MfaService {
     if (!credential || credential.verified) return null;
 
     const totp = new OTPAuth.TOTP({
-      secret: OTPAuth.Secret.fromBase32(credential.secretKey),
+      secret: OTPAuth.Secret.fromBase32(
+        totpSecret.base32(this.crypto, credential),
+      ),
       algorithm: credential.algorithm,
       digits: credential.digits,
       period: credential.period,
@@ -267,7 +270,9 @@ export class MfaService {
     }
 
     const totp = new OTPAuth.TOTP({
-      secret: OTPAuth.Secret.fromBase32(credential.secretKey),
+      secret: OTPAuth.Secret.fromBase32(
+        totpSecret.base32(this.crypto, credential),
+      ),
       algorithm: credential.algorithm,
       digits: credential.digits,
       period: credential.period,

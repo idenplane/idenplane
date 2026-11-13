@@ -21,7 +21,7 @@ Idenplane is configured entirely through environment variables. This reference d
 | `NODE_ENV` | `development` | No | Environment: `development`, `production` |
 | `BASE_URL` | `http://localhost:3000` | No | Public URL for redirects and emails |
 | `ADMIN_API_KEY` | — | Yes (prod) | API key for admin endpoints |
-| `WEBHOOK_SECRET_KEY` | — | Yes (prod) | AES-256-GCM key for webhook secrets |
+| `WEBHOOK_SECRET_KEY` | — | Yes (prod) | AES-256-GCM key for every secret stored encrypted (not only webhooks) |
 | `WEBHOOK_ENCRYPTION_SALT` | — | Yes (prod) | Salt for webhook key derivation |
 | `REDIS_URL` | — | No | Redis connection string |
 | `SESSION_STORE` | `database` | No | Session backend: `database` or `redis` |
@@ -106,8 +106,9 @@ ADMIN_PASSWORD=change_this_password
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
-| `WEBHOOK_SECRET_KEY` | — | Yes (prod) | 32-byte (or longer) AES-256-GCM key for encrypting webhook secrets at rest |
+| `WEBHOOK_SECRET_KEY` | — | Yes (prod) | 32-byte (or longer) key from which the AES-256-GCM key for every secret stored encrypted is derived: webhook, identity provider, LDAP, SMTP and provider secrets, audit stream headers, SSO connection secrets, signing keys and TOTP seeds. See [Production → Encryption at rest](../deployment/production.md#encryption-at-rest) |
 | `WEBHOOK_ENCRYPTION_SALT` | — | Yes (prod) | 16-byte salt used when deriving the AES key via scrypt |
+| `STORED_SECRETS_ACCEPT_KEY` | — | No | `true` for one start only: accept the configured key when the first start of encryption at rest finds stored values that look encrypted but do not decrypt (plaintext that merely looks like ciphertext). Never set it to get past a wrong key |
 
 ```bash
 # Generate webhook encryption key
@@ -124,7 +125,7 @@ WEBHOOK_ENCRYPTION_SALT=REPLACE_ME_WITH_A_UNIQUE_RANDOM_SALT
 ```
 
 :::warning
-If `WEBHOOK_SECRET_KEY` changes, all stored webhook secrets become unreadable. Always backup your existing key before rotating.
+`WEBHOOK_SECRET_KEY` and `WEBHOOK_ENCRYPTION_SALT` cannot change: every stored encrypted secret (signing keys and TOTP seeds included) would become unreadable, so Idenplane refuses to start with a different key. There is no key rotation; back both values up separately from the database.
 :::
 
 ---
