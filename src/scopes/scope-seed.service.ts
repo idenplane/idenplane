@@ -1,4 +1,5 @@
 import { Injectable, Logger } from '@nestjs/common';
+import type { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 
 // Exported so non-Nest contexts (prisma/seed.ts, migration scripts) can seed
@@ -89,6 +90,38 @@ export const OPTIONAL_SCOPES = [
   },
 ];
 
+/**
+ * Create the built-in scopes a realm is missing, through `db`: the Prisma
+ * client or an open transaction (a realm import seeds inside its own).
+ */
+export async function seedDefaultScopesIn(
+  db: Prisma.TransactionClient,
+  realmId: string,
+): Promise<void> {
+  for (const scopeDef of [...DEFAULT_SCOPES, ...OPTIONAL_SCOPES]) {
+    const existing = await db.clientScope.findUnique({
+      where: { realmId_name: { realmId, name: scopeDef.name } },
+    });
+    if (existing) continue;
+
+    await db.clientScope.create({
+      data: {
+        realmId,
+        name: scopeDef.name,
+        description: scopeDef.description,
+        builtIn: true,
+        protocolMappers: {
+          create: scopeDef.mappers.map((m) => ({
+            name: m.name,
+            mapperType: m.mapperType,
+            config: m.config,
+          })),
+        },
+      },
+    });
+  }
+}
+
 @Injectable()
 export class ScopeSeedService {
   private readonly logger = new Logger(ScopeSeedService.name);
@@ -96,32 +129,7 @@ export class ScopeSeedService {
   constructor(private readonly prisma: PrismaService) {}
 
   async seedDefaultScopes(realmId: string): Promise<void> {
-    const allScopes = [...DEFAULT_SCOPES, ...OPTIONAL_SCOPES];
-
-    for (const scopeDef of allScopes) {
-      const existing = await this.prisma.clientScope.findUnique({
-        where: { realmId_name: { realmId, name: scopeDef.name } },
-      });
-
-      if (existing) continue;
-
-      await this.prisma.clientScope.create({
-        data: {
-          realmId,
-          name: scopeDef.name,
-          description: scopeDef.description,
-          builtIn: true,
-          protocolMappers: {
-            create: scopeDef.mappers.map((m) => ({
-              name: m.name,
-              mapperType: m.mapperType,
-              config: m.config,
-            })),
-          },
-        },
-      });
-    }
-
+    await seedDefaultScopesIn(this.prisma, realmId);
     this.logger.log(`Seeded default scopes for realm ${realmId}`);
   }
 
