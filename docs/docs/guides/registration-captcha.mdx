@@ -75,7 +75,13 @@ The page's Content Security Policy admits the provider's origins on this page on
 | hCaptcha | `script-src`, `frame-src`, `style-src`, `connect-src` | `https://hcaptcha.com`, `https://*.hcaptcha.com` |
 | reCAPTCHA | `script-src`, `frame-src` | `https://www.google.com/recaptcha/`, `https://www.gstatic.com/recaptcha/` |
 
-The submit handler is an inline script carrying the page's CSP nonce (`scriptNonce`); the policy never allows `unsafe-inline` or `unsafe-eval` scripts.
+The submit handler is an inline script carrying the page's CSP nonce (`scriptNonce`); the policy never allows `unsafe-inline` or `unsafe-eval` scripts. Like every hosted page, it also sends `frame-ancestors 'none'`, `object-src 'none'` and `base-uri 'self'`, so it cannot be framed.
+
+### Your own sign-up page
+
+An app with its own sign-up form loads the provider's script itself, renders the widget with the realm's site key and sends the token as `captchaToken` (see below). Its own Content Security Policy must then admit the origins in the table above.
+
+The admin console contains a sign-up form component (`PublicRegistrationPage`) that does this, but the console does not route to it. It reads the realm with the admin API, and the console is served under the global policy (`script-src 'self'`, no provider origins), which would block the provider's script. Serving it publicly would need a public source for the provider and site key and a policy for that route admitting the provider's origins. Use the hosted page instead.
 
 ### Custom themes
 
