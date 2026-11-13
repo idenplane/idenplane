@@ -9,6 +9,7 @@ export type StepType =
   | 'social'
   | 'ldap'
   | 'email_otp'
+  | 'magic_link'
   | 'consent';
 
 export type ConditionOperator =

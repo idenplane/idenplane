@@ -12,6 +12,7 @@ const ALL_STEP_TYPES: StepType[] = [
   'social',
   'ldap',
   'email_otp',
+  'magic_link',
   'consent',
 ];
 
@@ -21,6 +22,9 @@ const SUPPORTED_STEP_TYPES: ReadonlySet<StepType> = new Set([
   'ldap',
   'totp',
   'webauthn',
+  'email_otp',
+  'magic_link',
+  'social',
 ]);
 
 export default function FlowStepPalette({ onAddStep }: FlowStepPaletteProps) {
@@ -50,7 +54,7 @@ export default function FlowStepPalette({ onAddStep }: FlowStepPaletteProps) {
             {!SUPPORTED_STEP_TYPES.has(type) && (
               <span
                 className="ml-auto text-xs text-subtle"
-                title="Not supported by the flow runtime yet; a flow using it cannot be saved."
+                title="Not a flow step: consent follows the flow. A flow using it cannot be saved."
               >
                 coming
               </span>

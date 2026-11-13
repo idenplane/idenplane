@@ -26,15 +26,20 @@ function validateSteps(steps: FlowStep[]): ValidationWarning[] {
     }
   }
 
-  // Warn if no password or webauthn step is present (typically required)
-  const hasCredentialStep = steps.some((s) =>
-    s.type === 'password' || s.type === 'webauthn' || s.type === 'social' || s.type === 'ldap',
+  // Warn if no step identifies the user (the server requires the first one to)
+  const hasCredentialStep = steps.some(
+    (s) =>
+      s.type === 'password' ||
+      s.type === 'webauthn' ||
+      s.type === 'social' ||
+      s.type === 'ldap' ||
+      s.type === 'magic_link',
   );
   if (steps.length > 0 && !hasCredentialStep) {
     warnings.push({
       type: 'missing_required',
       message:
-        'The flow has no credential step (password, WebAuthn, social, or LDAP). Users may not be able to authenticate.',
+        'The flow has no credential step (password, WebAuthn, social, LDAP or magic link). Users may not be able to authenticate.',
     });
   }
 
