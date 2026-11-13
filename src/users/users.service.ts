@@ -93,6 +93,7 @@ export class UsersService {
           firstName: dto.firstName,
           lastName: dto.lastName,
           enabled: dto.enabled,
+          emailVerified: dto.emailVerified,
           passwordHash,
           passwordChangedAt: passwordHash ? new Date() : undefined,
         },

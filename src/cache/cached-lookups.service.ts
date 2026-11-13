@@ -16,6 +16,7 @@ const USER_PROFILE_SELECT = {
   enabled: true,
   federationLink: true,
   createdAt: true,
+  updatedAt: true,
 } satisfies Prisma.UserSelect;
 
 export type UserProfile = Prisma.UserGetPayload<{

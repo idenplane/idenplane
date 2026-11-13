@@ -24,17 +24,16 @@ Local:      http://localhost:3000
 
 ## Swagger/OpenAPI
 
-Interactive API documentation is available via Swagger UI. This provides a visual interface to explore and test all API endpoints.
+Every Idenplane server publishes its own complete, always-current API reference, generated from the code it runs:
 
-<div class="swagger-container">
-  <div style={{textAlign: 'center', padding: '2rem', backgroundColor: '#f8f9fa', borderRadius: '8px', marginBottom: '1rem'}}>
-    <h3 style={{marginBottom: '0.5rem'}}>Swagger UI</h3>
-    <p style={{marginBottom: '1rem', color: '#666'}}>Interactive API documentation and testing</p>
-    <a href="/api/swagger" className="button button--primary button--lg" target="_blank">
-      Open Swagger UI
-    </a>
-  </div>
-</div>
+| Path | What it is |
+|---|---|
+| `/api` | Swagger UI, for exploring and trying every endpoint |
+| `/api-json` | The OpenAPI document as JSON, for client generators and diff tools |
+
+For a local server, open `http://localhost:3000/api`. Authorize with your admin API key (`x-admin-api-key`) or a bearer token to try the admin endpoints.
+
+The pages in this section, and the [`openapi.yaml`](https://github.com/idenplane/idenplane/blob/main/docs/docs/api/openapi.yaml) in the repository, describe the core endpoints only: realms, users, clients, groups, roles, the OAuth and OpenID Connect endpoints, and health. For everything else, such as auth flows, webhooks, organizations or client certificates, use the server's `/api`.
 
 ## Authentication
 

@@ -5,6 +5,8 @@ export interface UserClaimSource {
   emailVerified: boolean;
   firstName: string | null;
   lastName: string | null;
+  /** When the profile last changed; the OIDC `updated_at` claim. */
+  updatedAt: Date;
 }
 
 /**
@@ -30,6 +32,8 @@ export function resolveUserClaims(
         : (user.firstName ?? user.lastName ?? undefined),
     email: user.email ?? undefined,
     email_verified: user.emailVerified,
+    // Seconds since the epoch (OIDC Core §5.1).
+    updated_at: Math.floor(user.updatedAt.getTime() / 1000),
   };
 
   // `sub` is mandatory in every OIDC response — always include it.

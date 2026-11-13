@@ -24,6 +24,7 @@ import {
 } from './mtls/mtls-config.js';
 import { createTrustedProxyCertHeaderMiddleware } from './mtls/trusted-proxy-cert-header.middleware.js';
 import { MtlsServerService } from './mtls/mtls-server.js';
+import { APP_VERSION } from './versioning/app-version.js';
 
 /** Known-insecure / placeholder values that must never reach production. */
 const INSECURE_ADMIN_API_KEY_VALUES = new Set([
@@ -342,7 +343,7 @@ async function bootstrap() {
   const config = new DocumentBuilder()
     .setTitle('Idenplane')
     .setDescription('Open-source Identity and Access Management Server')
-    .setVersion('0.1.0')
+    .setVersion(APP_VERSION)
     .addApiKey(
       { type: 'apiKey', name: 'x-admin-api-key', in: 'header' },
       'admin-api-key',

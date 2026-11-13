@@ -25,6 +25,7 @@ const RESOURCE_TYPE_MAP: Array<{ pattern: RegExp; type: ResourceTypeValue }> = [
   { pattern: /\/custom-attributes/, type: ResourceType.CUSTOM_ATTRIBUTE },
   { pattern: /\/risk-assessments/, type: ResourceType.RISK_ASSESSMENT },
   { pattern: /\/auth-flows/, type: ResourceType.AUTH_FLOW },
+  { pattern: /\/themes/, type: ResourceType.THEME },
   { pattern: /\/organizations/, type: ResourceType.ORGANIZATION },
   { pattern: /\/brute-force/, type: ResourceType.BRUTE_FORCE },
   { pattern: /\/webhooks/, type: ResourceType.WEBHOOK },
