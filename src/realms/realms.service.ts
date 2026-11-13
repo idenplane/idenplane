@@ -20,9 +20,7 @@ import {
   redactSmsProviderConfig,
   SECRET_PLACEHOLDER,
 } from './realm-secrets.util.js';
-
-/** The realm administrators sign in to; it can be neither deleted nor disabled. */
-export const MASTER_REALM = 'master';
+import { MASTER_REALM } from './realm.constants.js';
 
 @Injectable()
 export class RealmsService {
