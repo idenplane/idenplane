@@ -1,4 +1,8 @@
-import { ThemeRenderService, sanitizeCss } from './theme-render.service.js';
+import {
+  ThemeRenderService,
+  buildThemeCsp,
+  sanitizeCss,
+} from './theme-render.service.js';
 
 describe('ThemeRenderService', () => {
   let service: ThemeRenderService;
@@ -420,6 +424,67 @@ describe('ThemeRenderService', () => {
       const nonce1 = mockRes.render.mock.calls[0][1].scriptNonce;
       const nonce2 = mockRes.render.mock.calls[1][1].scriptNonce;
       expect(nonce1).not.toBe(nonce2);
+    });
+
+    it('adds per-page CSP sources only when asked', () => {
+      service.render(
+        mockRes as any,
+        mockRealm,
+        'login',
+        'register',
+        {},
+        mockReq as any,
+        { cspSources: { 'frame-src': ['https://*.hcaptcha.com'] } },
+      );
+      const [, cspValue] = mockRes.setHeader.mock.calls[0];
+      expect(cspValue).toContain("frame-src 'self' https://*.hcaptcha.com");
+    });
+  });
+
+  describe('buildThemeCsp', () => {
+    it('is the unchanged base policy without extra sources', () => {
+      const base =
+        "default-src 'self'; script-src 'self' 'nonce-N'; " +
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+        "font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; " +
+        "connect-src 'self'";
+      expect(buildThemeCsp('N')).toBe(base);
+      expect(buildThemeCsp('N', {})).toBe(base);
+      expect(buildThemeCsp('N', { 'script-src': [] })).toBe(base);
+    });
+
+    it('appends sources to the named directives', () => {
+      const csp = buildThemeCsp('N', {
+        'script-src': ['https://a.example/x/'],
+        'style-src': ['https://b.example'],
+        'connect-src': ['https://*.c.example'],
+        'frame-src': ['https://d.example'],
+      });
+      expect(csp).toContain(
+        "script-src 'self' 'nonce-N' https://a.example/x/;",
+      );
+      expect(csp).toContain(
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://b.example;",
+      );
+      expect(csp).toContain("connect-src 'self' https://*.c.example");
+      expect(csp).toContain("frame-src 'self' https://d.example");
+    });
+
+    it('drops keywords and anything that could break out of a directive', () => {
+      const csp = buildThemeCsp('N', {
+        'script-src': [
+          "'unsafe-inline'",
+          "'unsafe-eval'",
+          'http://plain.example',
+          'https://a.example; script-src *',
+          'https://a.example *',
+          'https://ok.example',
+        ],
+      });
+      expect(csp).toContain("script-src 'self' 'nonce-N' https://ok.example;");
+      expect(csp).not.toContain('unsafe-eval');
+      expect(csp).not.toContain('plain.example');
+      expect(csp).not.toContain('a.example');
     });
   });
 
