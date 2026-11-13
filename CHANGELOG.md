@@ -41,6 +41,7 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 - **`NhiCertificateGuard`, `MtlsGuard` and `CertificateValidator`.** They protected no route; devices authenticate at the token endpoint with their certificates instead (see above).
 
 ### Fixed
+- **The `master` realm can no longer be deleted or disabled.** Every administrator signs in through it, so deleting or disabling it locked them all out of the console and the admin API. Both now return `400`.
 - **Federated sign-ins no longer claim a password.** The token endpoint turned an empty `amr` into `["pwd"]`, so a sign-in through an identity provider was reported as a password sign-in. Such tokens now carry no `amr` claim, because the provider's methods are not known. `acr` is unchanged.
 - **SAML responses name the ACS URL they are posted to.** `Recipient` and `Destination` always named the service provider's default ACS URL, even when the request used another of its allowed URLs, so a strict service provider rejected the response.
 - **The magic-link email no longer states a fixed lifetime.** The default theme had two contradictory sets of magic-link texts ("15 minutes" and "5 minutes"), and the lifetime is configurable anyway.

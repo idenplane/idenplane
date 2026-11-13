@@ -1,4 +1,8 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 
 // Mock JwkService module to avoid importing jose (ESM-only)
 jest.mock('../crypto/jwk.service.js', () => ({
@@ -475,6 +479,27 @@ describe('RealmsService', () => {
       await expect(service.remove('nonexistent')).rejects.toThrow(
         NotFoundException,
       );
+    });
+
+    it('refuses to delete the master realm', async () => {
+      await expect(service.remove('master')).rejects.toThrow(
+        BadRequestException,
+      );
+      expect(prisma.realm.delete).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('master realm', () => {
+    it('cannot be disabled', async () => {
+      prisma.realm.findUnique.mockResolvedValue({
+        ...mockRealm,
+        name: 'master',
+      });
+
+      await expect(
+        service.update('master', { enabled: false } as any),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.realm.update).not.toHaveBeenCalled();
     });
   });
 });
