@@ -62,7 +62,7 @@ describe('LoginFlowService', () => {
       oauthService as any,
       eventsService as any,
       mfaService as any,
-      new SessionIssuer(loginService as any),
+      new SessionIssuer(loginService as any, { resolve: jest.fn() } as any),
       new PostAuthService(oauthService as any, consentService as any),
     );
     res = { cookie: jest.fn(), redirect: jest.fn() };

@@ -15,6 +15,11 @@ export interface PrimaryAuthRequest {
   deviceFingerprint: string | null;
   /** The submitted login form; its OAuth fields survive a refusal. */
   form: Record<string, string | undefined>;
+  /**
+   * Skip the password-expiry gate: the user was identified without a
+   * password (a passkey), as the passkey sign-in has always done.
+   */
+  skipPasswordExpiry?: boolean;
 }
 
 export type PrimaryAuthGateResult =
@@ -22,7 +27,13 @@ export type PrimaryAuthGateResult =
    * The sign-in may go on. `riskStepUp` asks for a second factor even where
    * MFA is optional.
    */
-  | { kind: 'continue'; riskStepUp: boolean }
+  | {
+      kind: 'continue';
+      riskStepUp: boolean;
+      /** The risk assessment's score and level, when one ran. */
+      riskScore?: number;
+      riskLevel?: string;
+    }
   /** The sign-in stops here; the browser goes to `redirectUrl`. */
   | { kind: 'block'; redirectUrl: string };
 
@@ -50,6 +61,8 @@ export class PrimaryAuthGatesService {
 
     // ── Adaptive authentication / risk assessment ──────────────────────────
     let riskStepUp = false;
+    let riskScore: number | undefined;
+    let riskLevel: string | undefined;
     if (realm.adaptiveAuthEnabled && this.riskAssessmentService) {
       const riskContext = {
         userId: user.id,
@@ -94,6 +107,8 @@ export class PrimaryAuthGatesService {
       // STEP_UP is applied after the account gates below, so a risky
       // sign-in still has to pass email verification and password expiry.
       riskStepUp = assessment.action === 'STEP_UP';
+      riskScore = assessment.riskScore;
+      riskLevel = assessment.riskLevel;
 
       // Update the user's profile on ALLOW or STEP_UP (will learn from the login)
       void this.riskAssessmentService.updateUserProfile(
@@ -115,7 +130,10 @@ export class PrimaryAuthGatesService {
     }
 
     // Check password expiry
-    if (this.passwordPolicyService.isExpired(user, realm)) {
+    if (
+      !request.skipPasswordExpiry &&
+      this.passwordPolicyService.isExpired(user, realm)
+    ) {
       const changeToken = this.crypto.generateSecret(32);
       // Store a short-lived verification token for the change-password flow
       await this.verificationService.createTokenWithHash(
@@ -131,7 +149,7 @@ export class PrimaryAuthGatesService {
       };
     }
 
-    return { kind: 'continue', riskStepUp };
+    return { kind: 'continue', riskStepUp, riskScore, riskLevel };
   }
 
   /** The login page with an error, keeping the OAuth request. */

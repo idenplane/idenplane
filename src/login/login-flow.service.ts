@@ -188,6 +188,7 @@ export class LoginFlowService {
     // Session fixation: any session the browser already holds is replaced.
     await this.sessionIssuer.issue(realm, user, authContext, req, res, {
       rememberMe: options.rememberMe,
+      client,
     });
 
     void this.eventsService.recordLoginEvent({

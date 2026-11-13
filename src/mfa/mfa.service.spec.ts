@@ -1134,7 +1134,14 @@ describe('MfaService', () => {
 
       expect(prisma.pendingAction.deleteMany).toHaveBeenCalledWith({
         where: {
-          type: { in: ['mfa_challenge', 'mfa_enrollment', 'sms_enrollment'] },
+          type: {
+            in: [
+              'mfa_challenge',
+              'mfa_enrollment',
+              'sms_enrollment',
+              'authn_txn',
+            ],
+          },
           expiresAt: { lt: expect.any(Date) },
         },
       });
