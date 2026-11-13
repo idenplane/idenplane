@@ -108,9 +108,12 @@ export function v1Clients(
 export async function importV1(
   tx: Prisma.TransactionClient,
   payload: Record<string, unknown>,
+  /** The new realm's key pair, private key already encrypted at rest. */
   keyPair: V1SigningKey,
   /** clientId → stored secret (already hashed), from the caller. */
   clientSecrets: Map<string, string | null>,
+  /** Encrypts a secret at rest (CryptoService.encryptSecret). */
+  encryptSecret: (value: string) => string,
 ) {
   const realmData = payload['realm'] as Record<string, unknown>;
   const realmName = realmData['name'] as string;
@@ -292,7 +295,7 @@ export async function importV1(
         enabled: idp.enabled ?? true,
         providerType: idp.providerType ?? 'oidc',
         clientId: idp.clientId,
-        clientSecret: idp.clientSecret ?? '',
+        clientSecret: encryptSecret(idp.clientSecret ?? ''),
         authorizationUrl: idp.authorizationUrl,
         tokenUrl: idp.tokenUrl,
         userinfoUrl: idp.userinfoUrl ?? null,

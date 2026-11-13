@@ -22,6 +22,20 @@ import {
 } from '../../clients/client-auth-settings.js';
 import { validateFlowSteps } from '../../auth-flow/flow-validator.js';
 import { SECRET_PLACEHOLDER } from '../secret-placeholder.js';
+import {
+  SecretJsonTooDeepError,
+  secretJsonHasPlaceholder,
+  type SecretJsonShape,
+} from '../../crypto/stored-secrets.js';
+import { STREAM_HEADERS_SHAPE } from '../../events/audit-stream-secrets.js';
+import { SSO_CONFIG_SHAPE } from '../../organizations/sso-connection-secrets.js';
+import type { SecretJsonKind } from './realm-export.fields.js';
+
+/** Which strings of each kind of `encrypted-json` column are secrets. */
+const SECRET_JSON_SHAPES: Record<SecretJsonKind, SecretJsonShape> = {
+  'all-values': STREAM_HEADERS_SHAPE,
+  'secret-keys': SSO_CONFIG_SHAPE,
+};
 import { providerConfigSecrets } from '../realm-secrets.util.js';
 import { EXPORT_MODELS, type ModelExportSpec } from './realm-export.fields.js';
 import {
@@ -246,8 +260,35 @@ export function validateV2Import(payload: Item): ValidatedImport {
     }
   };
   const checkSecrets = (model: string, item: Item, path: string) => {
-    for (const name of Object.keys(spec[model].secrets ?? {})) {
-      notPlaceholder(item[name], `${path}.${name}`);
+    for (const [name, secret] of Object.entries(spec[model].secrets ?? {})) {
+      const value = item[name];
+      if (secret.kind !== 'encrypted-json') {
+        notPlaceholder(value, `${path}.${name}`);
+        continue;
+      }
+      if (value === undefined || value === null) continue;
+      const shape = SECRET_JSON_SHAPES[secret.json!];
+      if (shape.allSecret) {
+        // Every value is a secret and only strings can be encrypted.
+        if (
+          !isRecord(value) ||
+          Object.values(value).some((v) => typeof v !== 'string')
+        ) {
+          fail(`${path}.${name}`, 'must be an object of strings');
+          continue;
+        }
+      }
+      try {
+        if (secretJsonHasPlaceholder(value, shape)) {
+          fail(
+            `${path}.${name}`,
+            'holds the hidden-value placeholder, not a secret',
+          );
+        }
+      } catch (err) {
+        if (!(err instanceof SecretJsonTooDeepError)) throw err;
+        fail(`${path}.${name}`, err.message);
+      }
     }
   };
 
@@ -805,6 +846,11 @@ export function validateV2Import(payload: Item): ValidatedImport {
     row('Organization', o, path, ['ssoConnections', 'members']);
     list(o, 'ssoConnections', `${path}.ssoConnections`).forEach((s, j) => {
       row('OrganizationSsoConnection', s, `${path}.ssoConnections[${j}]`, []);
+      checkSecrets(
+        'OrganizationSsoConnection',
+        s,
+        `${path}.ssoConnections[${j}]`,
+      );
     });
     const members = list(o, 'members', `${path}.members`);
     members.forEach((m, j) => {

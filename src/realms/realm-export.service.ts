@@ -4,10 +4,17 @@ import { CryptoService } from '../crypto/crypto.service.js';
 import {
   EXPORT_MODELS,
   type ModelExportSpec,
+  type SecretJsonKind,
   type SecretSpec,
 } from './export/realm-export.fields.js';
 import { pickFields } from './export/field-codec.js';
 import { exportProviderConfig } from './realm-secrets.util.js';
+import {
+  openSecretJson,
+  type SecretJsonShape,
+} from '../crypto/stored-secrets.js';
+import { STREAM_HEADERS_SHAPE } from '../events/audit-stream-secrets.js';
+import { SSO_CONFIG_SHAPE } from '../organizations/sso-connection-secrets.js';
 
 export interface RealmExportOptions {
   includeUsers?: boolean;
@@ -37,6 +44,12 @@ function byKey<T>(key: (item: T) => string) {
 const byJson = byKey<unknown>((item) => JSON.stringify(item));
 const roleOrder = byKey<RoleKey>((r) => `${r.clientId ?? ''}\u0000${r.name}`);
 
+/** Which strings of each kind of `encrypted-json` column are secrets. */
+const SECRET_JSON_SHAPES: Record<SecretJsonKind, SecretJsonShape> = {
+  'all-values': STREAM_HEADERS_SHAPE,
+  'secret-keys': SSO_CONFIG_SHAPE,
+};
+
 @Injectable()
 export class RealmExportService {
   constructor(
@@ -46,6 +59,13 @@ export class RealmExportService {
 
   /** A secret as the export carries it (see SecretKind). */
   private exportSecret(secret: SecretSpec, value: unknown): unknown {
+    if (secret.kind === 'encrypted-json') {
+      return openSecretJson(
+        this.crypto,
+        value,
+        SECRET_JSON_SHAPES[secret.json!],
+      );
+    }
     if (typeof value !== 'string') return value;
     switch (secret.kind) {
       case 'encrypted':

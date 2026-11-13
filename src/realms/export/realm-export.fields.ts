@@ -34,13 +34,27 @@ export type FieldType = string;
  *   key on import, so the two instances' WEBHOOK_SECRET_KEY need not match.
  * - `encrypted-strict`: encrypted with CryptoService.encrypt and always read
  *   with decrypt (webhook secrets). Same as `encrypted` in transit.
+ * - `encrypted-json`: a Json column whose secret strings (which ones: see
+ *   `json`) are encrypted like `encrypted`, the rest kept readable. The whole
+ *   column is a secret in the export: left out without `includeSecrets`,
+ *   exported with its secrets decrypted with it, and re-encrypted on import.
  * - `plain`: stored as is. Exported and imported as is.
  */
-export type SecretKind = 'hash' | 'encrypted' | 'encrypted-strict' | 'plain';
+export type SecretKind =
+  'hash' | 'encrypted' | 'encrypted-strict' | 'encrypted-json' | 'plain';
+
+/** Which strings of an `encrypted-json` column are secrets. */
+export type SecretJsonKind =
+  /** Every string value (audit stream HTTP headers). */
+  | 'all-values'
+  /** Values under secret-named keys (organization SSO connection config). */
+  | 'secret-keys';
 
 export interface SecretSpec {
   type: FieldType;
   kind: SecretKind;
+  /** For `encrypted-json` only. */
+  json?: SecretJsonKind;
 }
 
 export interface ModelExportSpec {
@@ -372,7 +386,7 @@ export const EXPORT_MODELS = {
       syncUserProfile: 'Boolean @default',
       samlConfig: 'Json?',
     },
-    secrets: { clientSecret: { type: 'String', kind: 'plain' } },
+    secrets: { clientSecret: { type: 'String', kind: 'encrypted' } },
     excluded: {
       id: ID,
       realmId: REALM_ID,
@@ -426,7 +440,7 @@ export const EXPORT_MODELS = {
       importEnabled: 'Boolean @default',
       editMode: 'String @default',
     },
-    secrets: { bindCredential: { type: 'String', kind: 'plain' } },
+    secrets: { bindCredential: { type: 'String', kind: 'encrypted' } },
     excluded: {
       id: ID,
       realmId: REALM_ID,
@@ -482,8 +496,15 @@ export const EXPORT_MODELS = {
       syslogProtocol: 'String @default',
       syslogFacility: 'Int @default',
     },
-    // Headers of an HTTP stream usually carry the destination's credentials.
-    secrets: { httpHeaders: { type: 'Json?', kind: 'plain' } },
+    // Headers of an HTTP stream usually carry the destination's credentials;
+    // every header value is encrypted at rest.
+    secrets: {
+      httpHeaders: {
+        type: 'Json?',
+        kind: 'encrypted-json',
+        json: 'all-values',
+      },
+    },
     excluded: {
       id: ID,
       realmId: REALM_ID,
@@ -588,8 +609,11 @@ export const EXPORT_MODELS = {
       name: 'String',
       enabled: 'Boolean @default',
     },
-    // Provider configuration of free shape, which holds client secrets.
-    secrets: { config: { type: 'Json', kind: 'plain' } },
+    // Provider configuration of free shape, which holds client secrets; the
+    // secret-named keys are encrypted at rest.
+    secrets: {
+      config: { type: 'Json', kind: 'encrypted-json', json: 'secret-keys' },
+    },
     excluded: {
       id: ID,
       organizationId: 'implied by the organization it is nested in',
@@ -846,6 +870,8 @@ const LOG = 'event log, never exported';
 export const EXCLUDED_MODELS: Record<string, string> = {
   // Not realm data at all.
   WizardState: 'instance setup wizard, not realm data',
+  EncryptionKeyCheck:
+    'proves which key this instance encrypts secrets with; never leaves the instance',
   InstalledPlugin: 'instance-wide plugin registry, not realm data',
   UpgradeAuditLog: 'instance upgrade log, not realm data',
   RateLimitEntry: 'instance-wide rate limit counters',
@@ -856,8 +882,8 @@ export const EXCLUDED_MODELS: Record<string, string> = {
 
   // Keys and credentials.
   RealmSigningKey:
-    'private signing keys never leave the instance; the target realm gets a new key pair',
-  UserCredential: 'TOTP/SMS factors; ' + SECRET,
+    'private signing keys (encrypted at rest) never leave the instance; the target realm gets a new key pair',
+  UserCredential: 'TOTP/SMS factors (encrypted at rest); ' + SECRET,
   RecoveryCode: 'MFA recovery codes; ' + SECRET,
   WebAuthnCredential: 'passkeys; ' + SECRET,
   ApiKey: 'service account API keys (hashes); ' + SECRET,

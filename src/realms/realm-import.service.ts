@@ -32,6 +32,12 @@ import {
   encryptSmsProviderConfig,
 } from './realm-secrets.util.js';
 import { MASTER_REALM } from './realm.constants.js';
+import { signingKeySecrets } from '../crypto/signing-key-secrets.js';
+import { idpSecrets } from '../identity-providers/idp-secrets.js';
+import { federationSecrets } from '../user-federation/federation-secrets.js';
+import { STREAM_HEADERS_SHAPE } from '../events/audit-stream-secrets.js';
+import { SSO_CONFIG_SHAPE } from '../organizations/sso-connection-secrets.js';
+import { sealSecretJson } from '../crypto/stored-secrets.js';
 
 export interface ImportOptions {
   overwrite?: boolean;
@@ -276,7 +282,13 @@ export class RealmImportService {
     }
 
     return this.inTransaction(realmName, options, (tx) =>
-      importV1(tx, payload, keyPair, secrets),
+      importV1(
+        tx,
+        payload,
+        signingKeySecrets.sealPair(this.crypto, keyPair),
+        secrets,
+        (value) => this.crypto.encryptSecret(value),
+      ),
     );
   }
 
@@ -352,12 +364,7 @@ export class RealmImportService {
       data: {
         ...(realmData as Prisma.RealmCreateInput),
         signingKeys: {
-          create: {
-            kid: keyPair.kid,
-            algorithm: 'RS256',
-            publicKey: keyPair.publicKeyPem,
-            privateKey: keyPair.privateKeyPem,
-          },
+          create: signingKeySecrets.createData(this.crypto, keyPair),
         },
       },
       select: { id: true, name: true },
@@ -576,7 +583,12 @@ export class RealmImportService {
         idps,
         (idp) => {
           if (typeof idp['clientSecret'] === 'string') {
-            return { clientSecret: idp['clientSecret'] };
+            return {
+              clientSecret: idpSecrets.forCreate(
+                this.crypto,
+                idp['clientSecret'],
+              ),
+            };
           }
           warnings.push(
             `identity provider '${idp['alias'] as string}': no client secret in the export; imported disabled`,
@@ -605,7 +617,12 @@ export class RealmImportService {
         data: {
           ...createData(spec['UserFederation'], f),
           ...(hasSecret
-            ? { bindCredential: secret }
+            ? {
+                bindCredential: federationSecrets.forCreate(
+                  this.crypto,
+                  secret,
+                ),
+              }
             : { bindCredential: '', enabled: false }),
           realmId,
           mappers: {
@@ -680,7 +697,13 @@ export class RealmImportService {
           if (s['httpHeaders'] !== undefined) {
             return {
               httpHeaders:
-                s['httpHeaders'] === null ? Prisma.DbNull : s['httpHeaders'],
+                s['httpHeaders'] === null
+                  ? Prisma.DbNull
+                  : sealSecretJson(
+                      this.crypto,
+                      s['httpHeaders'],
+                      STREAM_HEADERS_SHAPE,
+                    ),
             };
           }
           if (!secretsIncluded && s['streamType'] === 'http') {
@@ -820,7 +843,14 @@ export class RealmImportService {
             create: items(o, 'ssoConnections').map((s) => {
               const data = createData(spec['OrganizationSsoConnection'], s);
               if (s['config'] !== undefined) {
-                return { ...data, config: s['config'] };
+                return {
+                  ...data,
+                  config: sealSecretJson(
+                    this.crypto,
+                    s['config'],
+                    SSO_CONFIG_SHAPE,
+                  ),
+                };
               }
               warnings.push(
                 `organization '${o['slug'] as string}' SSO connection '${s['name'] as string}': no configuration in the export; imported disabled`,
