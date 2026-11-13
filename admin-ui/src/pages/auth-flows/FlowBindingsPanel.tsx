@@ -189,15 +189,24 @@ export default function FlowBindingsPanel({ realmName, flows }: FlowBindingsPane
         </button>
       </div>
 
-      {!bindings.runtimeEnabled && (
+      {bindings.runtimeEnabled ? (
+        <div
+          data-testid="runtime-active-note"
+          className="mb-4 rounded-md border border-info-soft bg-info-soft p-3 text-sm text-info-fg"
+        >
+          <strong>Flow runtime active.</strong> With <em>Use custom flows in this realm</em> on,
+          sign-ins run the bound flow; a binding to a missing or invalid flow fails closed with an
+          error page. With it off, the built-in login is used.
+        </div>
+      ) : (
         <div
           data-testid="runtime-inactive-note"
           className="mb-4 rounded-md border border-warning-soft bg-warning-soft p-3 text-sm text-warning-fg"
         >
-          <strong>Runtime not active yet.</strong> This server runs without{' '}
-          <code className="font-mono">AUTH_FLOW_RUNTIME_ENABLED</code>, so login ignores these
-          bindings and keeps using the built-in login. You can configure and validate bindings
-          now; they take effect once the flow runtime ships and is enabled.
+          <strong>Flow runtime off.</strong> This server runs without{' '}
+          <code className="font-mono">AUTH_FLOW_RUNTIME_ENABLED=true</code>, so login ignores these
+          bindings and uses the built-in login. You can configure and validate bindings now; they
+          take effect once the server is started with that setting.
         </div>
       )}
 

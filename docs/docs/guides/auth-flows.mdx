@@ -207,7 +207,7 @@ The flow drives the same hosted pages and endpoints as the built-in login, so th
 
 - **A server-side login transaction.** `/auth` validates the request, starts a transaction and points the browser at it with the `IDENPLANE_AUTHN_TXN` cookie. The transaction lasts 10 minutes. It pins the flow's id and `version`, holds the OAuth request, the identified user, the current step and a receipt for each step passed. OAuth parameters posted in forms are ignored. The cookie value changes once the user is identified.
 - **Steps.** A step passes, or it fails and its fallback runs, or, with no fallback, the page shows an error. After five failed answers the login starts over. A locked account, a rate-limited second factor or an unexpected error ends the login; it never moves to the fallback.
-- **Declining a step.** Submitting the endpoint of the current step's own fallback (for example, the password form while a passkey step is current) counts as failing the current step, so the fallback runs.
+- **Declining a step.** Submitting to the endpoint of the current step's own, direct fallback (for example, the password form while a passkey step with a password fallback is current) counts as failing the current step, so the fallback runs. Any other endpoint is refused (see below).
 - **Conditions and `required`.** A step whose condition is false is skipped. A step without a condition applies; if the user has no credential for it (no authenticator app, no passkey), an optional step is skipped and a required one runs its fallback. A required `totp` step makes a user without a second factor enrol one first, as a realm that requires MFA does.
 - **Checks after identification.** Once the user is identified, the same checks as the built-in login run once: risk assessment (a block ends the login), email verification, and password expiry (not after a passkey).
 - **Never weaker than the built-in login.** The session's `acr` and `amr` come only from the steps actually passed. The login must reach the strongest of: the requested `acr_values` or `claims` acr, the client's required ACR, the risk level, and MFA when the client or realm requires it or the user has a second factor. If the flow fell short, the runtime adds a second-factor or passkey step the user can do, or sends a user without a second factor through MFA enrolment. A client's required ACR that the user cannot reach ends in `access_denied`.
@@ -215,20 +215,25 @@ The flow drives the same hosted pages and endpoints as the built-in login, so th
 
 ### Single sign-on
 
-An existing SSO session serves a client bound to a flow only if it is at least as strong as the weakest way through that flow. A weaker session signs in again through the flow; with `prompt=none` the response is `interaction_required`.
+An existing SSO session serves a client bound to a flow only if it is at least as strong as the flow requires **of that session's user**. At `/auth` the flow's conditions are evaluated for the user, with the same fields as at login (groups, roles, enrolled authenticator app or passkey, `client.clientId`), and the requirement is the weakest way through the steps that apply:
+
+- A required step counts when its condition holds (or it has none). An optional step counts when the user has the credential for it, since it would run at login.
+- A condition on a field that is only known during a login (`risk.level`) counts as holding, so the user signs in again rather than skipping the step.
+
+A weaker session signs in again through the flow; with `prompt=none` the response is `interaction_required`. For example, with *password, then TOTP for group `G`*, a password-level session serves a user outside `G` silently, while a member of `G` signs in again and passes the TOTP step.
 
 ### Failing closed
 
 - A binding to a missing or invalid flow shows a `503` error page at `/auth` and on the login page. It never falls back to the built-in login.
-- A transaction that has expired, or whose flow changed or was unbound, starts the login again on the current binding. The user sees the first step and a message.
+- A login that has to start again (expired, flow changed or unbound, a lockout, an error, another user, too many failures) goes back through `/auth` with the original authorization request, so the binding, single sign-on and `prompt` apply again; the login page then says why. A sign-in to the account console, which has no authorization request, starts again at the login page.
 - A submission for another step than the current one is refused with `400`, and the transaction ends.
 - A step after identification cannot switch user: another account's password or passkey ends the transaction.
 - Of two concurrent submissions of the same step, the second is refused with `409`. A finished transaction cannot be replayed.
-- Where a login is bound, the built-in sign-in paths cannot create a session: a stale login form starts again, and social sign-in returns `403` (social steps are not supported yet).
+- Where a login is bound, the built-in sign-in paths cannot create a session: a stale login form starts again, and a social (identity-provider) sign-in is refused with a themed `403` page as soon as it returns from the provider, before any second factor is asked for (social steps are not supported yet).
 
 ### Current limits
 
-- The login page template shows its password form on every login-page step, including a passkey-only step. Submitting it there ends the transaction unless the passkey step falls back to a password.
+- On a passkey step without a password fallback, the built-in themes hide the password form (the template gets `passkeyOnly`). A custom theme that does not check `passkeyOnly` still shows it, and submitting it there ends the transaction.
 - Identity-provider buttons are hidden on bound logins.
 
 ---
