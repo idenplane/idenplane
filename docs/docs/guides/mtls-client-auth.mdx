@@ -216,6 +216,110 @@ const payload = await verifyToken(token, config, { certificate: der });
 
 `verifyToken` rejects a bound token verified without a certificate, or with a different one, with `CertificateBindingError`.
 
+## Devices and workloads (NHI identities)
+
+A non-human identity (a device, a workload, a service) authenticates with **its own certificate** at the realm's token endpoint, as the identity's OAuth client. There is no custom route: the device does what any [`self_signed_tls_client_auth`](#self_signed_tls_client_auth) or [`tls_client_auth`](#tls_client_auth) client does, and always receives a [certificate-bound token](#certificate-bound-access-tokens).
+
+```
+device certificate ──TLS──▶ /realms/acme/protocol/openid-connect/token  (client_credentials)
+                             ├ the identity's OAuth client is found by client_id
+                             ├ one of the identity's certificate credentials accepts the certificate
+                             └▶ access token with cnf: {"x5t#S256": <thumbprint of that certificate>}
+```
+
+### 1. The identity and its certificate
+
+The identity must be enabled and `ACTIVE`. A `PROVISIONING`, `SUSPENDED` or `DECOMMISSIONED` identity authenticates nothing.
+
+```bash
+curl -X POST https://idp.example.com/admin/realms/acme/nhi \
+  -H "x-admin-api-key: $ADMIN_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"name": "sensor-17", "identityType": "IOT_DEVICE", "lifecycleStatus": "ACTIVE"}'
+# → { "id": "6f1c…", … }
+
+# Self-signed: the device's own certificate, pinned by its x5t#S256.
+curl -X POST https://idp.example.com/admin/realms/acme/nhi/6f1c…/credentials \
+  -H "x-admin-api-key: $ADMIN_API_KEY" -H 'Content-Type: application/json' \
+  -d "{\"name\": \"sensor-17 2026\", \"tlsAuthMode\": \"SELF_SIGNED\",
+       \"certificatePem\": $(jq -Rs . < sensor-17.crt)}"
+# → { "id": "…", "credentialType": "CERTIFICATE", "tlsAuthMode": "SELF_SIGNED",
+#     "certThumbprintS256": "…", "certSubject": "CN=sensor-17", "status": "active", … }
+```
+
+Or, for devices whose certificates your CA issues, a **PKI** credential: exactly one subject or SAN rule, matched like a client's `tlsClientAuth*` rule against certificates that chain to the realm's [trust anchors](#tls_client_auth):
+
+```bash
+-d '{"name": "fleet", "tlsAuthMode": "PKI", "tlsClientAuthSanUri": "spiffe://acme/sensor-17"}'
+```
+
+Certificate credentials (`CERTIFICATE`, `MTLS`) never take a private key: `privateKeyPem`, or a key inside `certificatePem`, is `400`. The device keeps its key. An identity holds at most 10 live certificate credentials.
+
+### 2. The OAuth client
+
+```bash
+curl -X POST https://idp.example.com/admin/realms/acme/nhi/6f1c…/oauth-client \
+  -H "x-admin-api-key: $ADMIN_API_KEY" -H 'Content-Type: application/json' -d '{}'
+# 201 → { "clientId": "nhi-6f1c…", "clientType": "CONFIDENTIAL",
+#         "grantTypes": ["client_credentials"],
+#         "tokenEndpointAuthMethod": "self_signed_tls_client_auth",
+#         "tlsClientCertificateBoundAccessTokens": true, "nhiIdentityId": "6f1c…",
+#         "tokenEndpoint": "/realms/acme/protocol/openid-connect/token",
+#         "mtlsClientAuthEnabled": true, … }
+```
+
+- The method follows the identity's credentials (SELF_SIGNED → `self_signed_tls_client_auth`, PKI → `tls_client_auth`). If it has none, or both kinds, pass `tokenEndpointAuthMethod`. `clientId` and `name` are optional.
+- Calling it again returns the same client with `200`. `GET` reads it, `DELETE` removes it.
+- The client has no secret and no service account: a token's `sub` is the client. Its method, type, grant types and binding cannot be changed through the clients API (`409`), and it gets no secret or client-table certificates.
+- **Deleting the identity deletes its client** (and its credentials). A client whose identity is gone could never authenticate.
+
+### 3. The token request
+
+```bash
+curl --cert sensor-17.crt --key sensor-17.key \
+  https://mtls.idp.example.com:8443/realms/acme/protocol/openid-connect/token \
+  -d grant_type=client_credentials -d client_id=nhi-6f1c…
+# → { "access_token": "eyJ…", "token_type": "Bearer", … }   cnf: {"x5t#S256": "<sensor-17.crt>"}
+```
+
+The responses are those of [the token request](#the-token-request). It needs `MTLS_ENABLED` and the realm's `mtlsClientAuthEnabled`, like every certificate client.
+
+### Credential status
+
+Each certificate credential shows a computed `status`. Only `active` and `grace` authenticate.
+
+| Status | Meaning |
+|---|---|
+| `active` | Usable. |
+| `grace` | Rotated; still usable until `rotationGraceUntil`. |
+| `expired` | Past its certificate's `notAfter`, its `expiresAt`, or the end of its grace period. |
+| `not_yet_valid` | Before its certificate's `notBefore`. |
+| `revoked` | Revoked (`POST …/credentials/:id/revoke`). |
+| `disabled` | Disabled. |
+| `identity_inactive` | The identity is disabled or not `ACTIVE`. |
+
+A credential without a `tlsAuthMode` (every certificate credential created before this feature) never authenticates: register the certificate again with a mode. Its stored certificate's thumbprint was backfilled into `certThumbprintS256` for reference.
+
+### Rotation with overlap
+
+```bash
+curl -X POST https://idp.example.com/admin/realms/acme/nhi/6f1c…/credentials/<old id>/rotate \
+  -H "x-admin-api-key: $ADMIN_API_KEY" -H 'Content-Type: application/json' \
+  -d "{\"certificatePem\": $(jq -Rs . < sensor-17-2027.crt), \"overlapSeconds\": 86400}"
+# → { "newCredential": { "status": "active", … },
+#     "oldCredential": { "id": "<old id>", "status": "grace", "rotationGraceUntil": "…" } }
+```
+
+In one transaction, the new credential is created and the old one is marked superseded, with `rotationGraceUntil` = now + the overlap. The overlap is `overlapSeconds` when given, else the `rotationOverlapSeconds` of the realm's highest-priority enabled credential policy for that credential type, else 24 hours. During the overlap both certificates authenticate, so the device can switch at its own pace. Afterwards the old one is `expired`. A PKI credential is rotated the same way with a new rule, or keeps its rule when none is given. A credential can be rotated once; rotate its replacement next. API keys rotate as before: the old key stops at once.
+
+### Introspection
+
+Introspecting a token of an NHI client does not look up a user. The token is active while the client is enabled, the realm still allows certificate authentication, the identity is `ACTIVE` and the binding still holds:
+
+- **SELF_SIGNED**: the credential with the token's `cnf` thumbprint is `active` or `grace`, and the certificate is not on the realm's deny-list.
+- **PKI**: the thumbprint is not on the deny-list and the identity still has an `active` or `grace` PKI credential. A deny-list entry by issuer and serial number takes effect at the device's next token request.
+
+Suspending the identity, revoking the credential or the end of a grace period therefore makes its outstanding tokens introspect as `{"active": false}` at once.
+
 ## Discovery
 
 For a realm with certificate authentication on (and `MTLS_ENABLED`), `token_endpoint_auth_methods_supported` lists `tls_client_auth` and `self_signed_tls_client_auth`, `tls_client_certificate_bound_access_tokens` is `true`, and, when `MTLS_BASE_URL` is set, `mtls_endpoint_aliases` points the token, introspection, revocation, userinfo and device authorization endpoints at it. Other realms are unchanged.
