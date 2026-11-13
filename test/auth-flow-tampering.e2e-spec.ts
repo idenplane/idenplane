@@ -69,6 +69,11 @@ describe('Auth-flow runtime tampering (e2e)', () => {
   const newUser = () =>
     createUser(ctx.prisma, seeded.realm.id, `tamper-user-${++userSeq}`);
 
+  const NOTICE_COOKIE = 'IDENPLANE_LOGIN_NOTICE';
+  const AUTH_RESTART = new RegExp(
+    `^/realms/${REALM}/protocol/openid-connect/auth\\?client_id=test-client`,
+  );
+
   const noSession = (browser: Browser) =>
     expect(browser.jar.has('IDENPLANE_SESSION')).toBe(false);
 
@@ -160,7 +165,8 @@ describe('Auth-flow runtime tampering (e2e)', () => {
     const res = await postPassword(replay, csrf, user.username);
     expect(res.status).toBe(302);
     expect(isCodeResponse(res.headers['location'])).toBe(false);
-    expect(res.headers['location']).toMatch(/error=/);
+    expect(res.headers['location']).toBe(`/realms/${REALM}/login`);
+    expect(replay.jar.get(NOTICE_COOKIE)).toBe('invalid');
     noSession(replay);
     expect(await codeCount(ctx.prisma, user.id)).toBe(1);
   });
@@ -232,7 +238,7 @@ describe('Auth-flow runtime tampering (e2e)', () => {
       _csrf: csrfB,
     });
     expect(isCodeResponse(stale.headers['location'])).toBe(false);
-    expect(stale.headers['location']).toMatch(/error=/);
+    expect(b.jar.get(NOTICE_COOKIE)).toBe('invalid');
     noSession(b);
 
     // The live value only ever completes Alice's sign-in: Bob's own valid
@@ -264,13 +270,16 @@ describe('Auth-flow runtime tampering (e2e)', () => {
     const res = await postPassword(browser, csrf, user.username);
     expect(res.status).toBe(302);
     expect(isCodeResponse(res.headers['location'])).toBe(false);
-    expect(res.headers['location']).toMatch(
-      new RegExp(`^/realms/${REALM}/login\\?.*client_id=test-client`),
-    );
-    expect(
-      decodeURIComponent(String(res.headers['location']).replace(/\+/g, ' ')),
-    ).toContain('Your sign-in expired');
+    // The restart goes through /auth, rebuilt from the stored request.
+    expect(res.headers['location']).toMatch(AUTH_RESTART);
+    expect(browser.jar.get(NOTICE_COOKIE)).toBe('expired');
     noSession(browser);
+    // The login page it leads to says why.
+    const auth = await browser.get(res.headers['location'] as string);
+    expect(auth.headers['location']).toBe(`/realms/${REALM}/login`);
+    const page = await browser.get(`/realms/${REALM}/login`);
+    expect(page.text).toContain('Your sign-in expired');
+    expect(browser.jar.has(NOTICE_COOKIE)).toBe(false);
     expect(await codeCount(ctx.prisma, user.id)).toBe(0);
   });
 
@@ -318,9 +327,8 @@ describe('Auth-flow runtime tampering (e2e)', () => {
       mallory.username,
     );
     expect(isCodeResponse(res.headers['location'])).toBe(false);
-    expect(
-      decodeURIComponent(String(res.headers['location']).replace(/\+/g, ' ')),
-    ).toContain('the account you started with');
+    expect(res.headers['location']).toMatch(AUTH_RESTART);
+    expect(browser.jar.get(NOTICE_COOKIE)).toBe('user_mismatch');
     expect(browser.jar.has(TXN_COOKIE)).toBe(false);
     noSession(browser);
     expect(await codeCount(ctx.prisma, alice.id)).toBe(0);

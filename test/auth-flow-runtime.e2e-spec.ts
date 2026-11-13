@@ -13,6 +13,8 @@ import {
   expectedOrigin,
   type RequestOptions,
 } from './helpers/soft-authenticator';
+const NOTICE_COOKIE = 'IDENPLANE_LOGIN_NOTICE';
+
 import {
   ACR,
   PASSKEY_OR_PASSWORD,
@@ -481,16 +483,20 @@ describe('Auth-flow runtime (e2e)', () => {
 
     const res = await postPassword(browser, csrf, user.username);
     expect(res.status).toBe(302);
+    // The restart goes back through /auth, rebuilt from the stored request.
     const restart = res.headers['location'] as string;
-    expect(restart).toMatch(new RegExp(`^/realms/${REALM}/login\\?`));
-    expect(restart).toContain('client_id=test-client');
-    expect(decodeURIComponent(restart.replace(/\+/g, ' '))).toContain(
-      'The sign-in steps changed',
+    expect(restart).toMatch(
+      new RegExp(`^/realms/${REALM}/protocol/openid-connect/auth\\?`),
     );
+    expect(restart).toContain('client_id=test-client');
+    expect(restart).toContain('state=xyz');
+    expect(browser.jar.get(NOTICE_COOKIE)).toBe('flow_changed');
     expect(browser.jar.has('IDENPLANE_SESSION')).toBe(false);
 
-    // The restart starts a new transaction pinned to the new version.
-    const page = await browser.get(restart);
+    // /auth starts a new transaction pinned to the new version.
+    const auth = await browser.get(restart);
+    expect(auth.headers['location']).toBe(`/realms/${REALM}/login`);
+    const page = await browser.get(`/realms/${REALM}/login`);
     expect(page.status).toBe(200);
     expect(page.text).toContain('The sign-in steps changed');
     expect(browser.jar.get(TXN_COOKIE)).not.toBe(oldTxn);
@@ -596,6 +602,177 @@ describe('Auth-flow runtime (e2e)', () => {
     expect(stolen.status).toBe(302);
     expect(String(stolen.headers['location'])).not.toMatch(/code=/);
     expect(thief.jar.has('IDENPLANE_SESSION')).toBe(false);
+  });
+
+  it('a restart goes through /auth: an SSO session that meets the new flow is used', async () => {
+    // test-client runs the realm's password flow; `other` is bound to
+    // password → TOTP, so the password session alone does not serve it.
+    const realmFlow = await createFlow(
+      ctx.prisma,
+      seeded.realm.id,
+      'rs-realm',
+      PASSWORD_ONLY,
+    );
+    const strong = await createFlow(
+      ctx.prisma,
+      seeded.realm.id,
+      'rs-strong',
+      PASSWORD_TOTP,
+    );
+    await bindRealm(ctx.prisma, seeded.realm.id, realmFlow.id);
+    const other = await createClient(
+      ctx.prisma,
+      seeded.realm.id,
+      `rs-${userSeq}`,
+      {
+        authFlowId: strong.id,
+      },
+    );
+    const user = await newUser();
+    const browser = new Browser(app);
+    codeFrom(
+      (await postPassword(browser, await start(browser), user.username))
+        .headers['location'],
+    );
+
+    // The session is too weak for `other`: a new sign-in through its flow.
+    const auth = await browser.get(
+      authorizeUrl(REALM, { client_id: other.clientId }),
+    );
+    expect(auth.headers['location']).toBe(`/realms/${REALM}/login`);
+    const page = await browser.get(`/realms/${REALM}/login`);
+
+    // Meanwhile the admin relaxes `other`'s flow to password only.
+    await ctx.prisma.authenticationFlow.update({
+      where: { id: strong.id },
+      data: { steps: PASSWORD_ONLY as never, version: { increment: 1 } },
+    });
+    const res = await postPassword(browser, csrfFrom(page.text), user.username);
+    const restart = res.headers['location'] as string;
+    expect(restart).toMatch(/\/protocol\/openid-connect\/auth\?/);
+
+    // Through /auth, the existing session now meets the flow: a code, silently.
+    const resumed = await browser.get(restart);
+    const claims = await idTokenClaims(
+      app,
+      REALM,
+      codeFrom(resumed.headers['location']),
+      other.clientId,
+    );
+    expect(claims['sub']).toBe(user.id);
+  });
+
+  it('SSO is decided per user: TOTP required only for group G', async () => {
+    // test-client: password only (realm flow). `gated`: password, then
+    // TOTP only for members of G.
+    const realmFlow = await createFlow(
+      ctx.prisma,
+      seeded.realm.id,
+      'g-realm',
+      PASSWORD_ONLY,
+    );
+    const gatedFlow = await createFlow(ctx.prisma, seeded.realm.id, 'g-gated', [
+      { id: 'pw', type: 'password', required: true, order: 1 },
+      {
+        id: 'otp',
+        type: 'totp',
+        required: true,
+        order: 2,
+        condition: { field: 'user.groups', operator: 'in', value: ['G'] },
+      },
+    ]);
+    await bindRealm(ctx.prisma, seeded.realm.id, realmFlow.id);
+    const gated = await createClient(
+      ctx.prisma,
+      seeded.realm.id,
+      `gated-${userSeq}`,
+      {
+        authFlowId: gatedFlow.id,
+      },
+    );
+    const group = await ctx.prisma.group.create({
+      data: { realmId: seeded.realm.id, name: 'G' },
+    });
+    const member = await newUser();
+    const outsider = await newUser();
+    await ctx.prisma.userGroup.create({
+      data: { userId: member.id, groupId: group.id },
+    });
+
+    // Both get a password-level session from test-client.
+    const signIn = async (username: string) => {
+      const b = new Browser(app);
+      codeFrom(
+        (await postPassword(b, await start(b), username)).headers['location'],
+      );
+      return b;
+    };
+    const m = await signIn(member.username);
+    const o = await signIn(outsider.username);
+    // The member enrols TOTP only now (else the MFA rule applied above).
+    const totp = await enrolTotp(
+      app,
+      ctx.prisma,
+      member.id,
+      REALM,
+      member.username,
+    );
+
+    // The outsider's session serves `gated` silently.
+    const silent = await o.get(
+      authorizeUrl(REALM, { client_id: gated.clientId, prompt: 'none' }),
+    );
+    const outsiderClaims = await idTokenClaims(
+      app,
+      REALM,
+      codeFrom(silent.headers['location']),
+      gated.clientId,
+    );
+    expect(outsiderClaims['sub']).toBe(outsider.id);
+    expect(outsiderClaims['acr']).toBe(ACR.password);
+
+    // The member's does not: interaction_required silently...
+    const refused = await m.get(
+      authorizeUrl(REALM, { client_id: gated.clientId, prompt: 'none' }),
+    );
+    const url = new URL(refused.headers['location'] as string);
+    expect(url.searchParams.get('error')).toBe('interaction_required');
+    expect(url.searchParams.get('code')).toBeNull();
+
+    // ...and interactively a sign-in through the flow, with the TOTP receipt.
+    const auth = await m.get(
+      authorizeUrl(REALM, { client_id: gated.clientId }),
+    );
+    expect(auth.headers['location']).toBe(`/realms/${REALM}/login`);
+    const page = await m.get(`/realms/${REALM}/login`);
+    const afterPassword = await postPassword(
+      m,
+      csrfFrom(page.text),
+      member.username,
+    );
+    expect(afterPassword.headers['location']).toBe(`/realms/${REALM}/totp`);
+    const done = await postTotp(m, await totp.code());
+    const memberClaims = await idTokenClaims(
+      app,
+      REALM,
+      codeFrom(done.headers['location']),
+      gated.clientId,
+    );
+    expect(memberClaims['acr']).toBe(ACR.mfa);
+    expect(memberClaims['amr']).toEqual(['pwd', 'otp']);
+  });
+
+  it('a passkey step without a password fallback hides the password form', async () => {
+    const flow = await createFlow(ctx.prisma, seeded.realm.id, 'pk-only', [
+      { id: 'pk', type: 'webauthn', required: true, order: 1 },
+    ]);
+    await bindRealm(ctx.prisma, seeded.realm.id, flow.id);
+    const browser = new Browser(app);
+    await browser.get(authorizeUrl(REALM));
+    const page = await browser.get(`/realms/${REALM}/login`);
+    expect(page.status).toBe(200);
+    expect(page.text).toContain('passkey-login-btn');
+    expect(page.text).not.toContain('name="password"');
   });
 
   it('SSO from a flow session serves a client bound to the same flow silently', async () => {
