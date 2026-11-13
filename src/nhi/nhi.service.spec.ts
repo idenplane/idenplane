@@ -236,7 +236,7 @@ describe('NhiService', () => {
       await service.remove(mockRealm, 'nhi-uuid-1');
 
       expect(prisma.nhiIdentity.delete).toHaveBeenCalledWith({
-        where: { id: 'nhi-uuid-1' },
+        where: { id: 'nhi-uuid-1', realmId: 'realm-1' },
       });
     });
 
@@ -266,7 +266,7 @@ describe('NhiService', () => {
       expect(result.lifecycleStatus).toBe('SUSPENDED');
       expect(prisma.nhiIdentity.update).toHaveBeenCalledWith(
         expect.objectContaining({
-          where: { id: 'nhi-uuid-1' },
+          where: { id: 'nhi-uuid-1', realmId: 'realm-1' },
           data: expect.objectContaining({
             lifecycleStatus: 'SUSPENDED',
             suspendedAt: expect.any(Date),
@@ -338,7 +338,7 @@ describe('NhiService', () => {
       expect(result.lifecycleStatus).toBe('DECOMMISSIONED');
       expect(result.enabled).toBe(false);
       expect(prisma.nhiCredential.updateMany).toHaveBeenCalledWith({
-        where: { nhiIdentityId: 'nhi-uuid-1' },
+        where: { nhiIdentityId: 'nhi-uuid-1', realmId: 'realm-1' },
         data: { revoked: true, revokedAt: expect.any(Date) },
       });
     });
@@ -391,38 +391,59 @@ describe('NhiService', () => {
 
     it('should create a certificate credential without generating a key', async () => {
       prisma.nhiIdentity.findFirst.mockResolvedValue(mockIdentity);
-      const certCredential = {
+      const { pem } = await makeTestCertificate({ name: 'legacy-cert' });
+      prisma.nhiCredential.create.mockImplementation(async (args: any) => ({
         ...mockCredential,
-        credentialType: 'CERTIFICATE',
-        certificatePem:
-          '-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----',
-      };
-      prisma.nhiCredential.create.mockResolvedValue(certCredential);
+        ...args.data,
+      }));
 
       const result = await service.createCredential(mockRealm, 'nhi-uuid-1', {
         credentialType: 'CERTIFICATE',
         name: 'cert-credential',
-        certificatePem:
-          '-----BEGIN CERTIFICATE-----\n...\n-----END CERTIFICATE-----',
+        certificatePem: pem,
       });
 
       expect(result.credentialType).toBe('CERTIFICATE');
-      expect(result.plainKey).toBeUndefined();
+      expect((result as any).plainKey).toBeUndefined();
       expect(cryptoService.generateSecret).not.toHaveBeenCalled();
+      // Without a tlsAuthMode it is recorded, thumbprint and all, but never
+      // authenticates a client.
+      const data = prisma.nhiCredential.create.mock.calls[0][0].data;
+      expect(data).toMatchObject({
+        realmId: 'realm-1',
+        tlsAuthMode: null,
+        certThumbprintS256: expect.stringMatching(/^[A-Za-z0-9_-]{43}$/),
+      });
+      expect(result.status).toBeNull();
     });
 
-    it('encrypts a supplied private key and never selects it back', async () => {
+    it('refuses a private key for a certificate credential', async () => {
+      prisma.nhiIdentity.findFirst.mockResolvedValue(mockIdentity);
+      for (const credentialType of ['CERTIFICATE', 'MTLS'] as const) {
+        await expect(
+          service.createCredential(mockRealm, 'nhi-uuid-1', {
+            credentialType,
+            name: 'cert-with-key',
+            privateKeyPem: 'PRIVATE',
+          }),
+        ).rejects.toThrow(BadRequestException);
+      }
+      expect(prisma.nhiCredential.create).not.toHaveBeenCalled();
+    });
+
+    it('encrypts a supplied private key of another type and never selects it back', async () => {
       prisma.nhiIdentity.findFirst.mockResolvedValue(mockIdentity);
       prisma.nhiCredential.create.mockResolvedValue(mockCredential);
 
       await service.createCredential(mockRealm, 'nhi-uuid-1', {
-        credentialType: 'CERTIFICATE',
-        name: 'cert-with-key',
+        credentialType: 'JWT',
+        name: 'jwt-with-key',
         privateKeyPem: 'PRIVATE',
       });
 
       const args = prisma.nhiCredential.create.mock.calls[0][0];
       expect(args.data.privateKeyPem).toBe('enc(PRIVATE)');
+      expect(args.data.realmId).toBe('realm-1');
       expect(args.select).not.toHaveProperty('privateKeyPem');
     });
 
@@ -442,9 +463,11 @@ describe('NhiService', () => {
 
       const result = await service.listCredentials(mockRealm, 'nhi-uuid-1');
 
-      expect(result).toEqual([mockCredential]);
+      expect(result).toEqual([{ ...mockCredential, status: null }]);
       expect(prisma.nhiCredential.findMany).toHaveBeenCalledWith(
-        expect.objectContaining({ where: { nhiIdentityId: 'nhi-uuid-1' } }),
+        expect.objectContaining({
+          where: { nhiIdentityId: 'nhi-uuid-1', realmId: 'realm-1' },
+        }),
       );
     });
 
@@ -471,11 +494,6 @@ describe('NhiService', () => {
   describe('revokeCredential', () => {
     it('should revoke an active credential', async () => {
       prisma.nhiIdentity.findFirst.mockResolvedValue(mockIdentity);
-      // findCredentialById uses findFirst with select
-      prisma.nhiCredential.findFirst.mockResolvedValueOnce({
-        ...mockCredential,
-      });
-      // revokeCredential does a second findFirst without select to check status
       prisma.nhiCredential.findFirst.mockResolvedValueOnce({
         ...mockCredential,
         revoked: false,
@@ -493,7 +511,7 @@ describe('NhiService', () => {
 
       expect(result.message).toMatch(/revoked successfully/i);
       expect(prisma.nhiCredential.update).toHaveBeenCalledWith({
-        where: { id: 'cred-uuid-1' },
+        where: { id: 'cred-uuid-1', realmId: 'realm-1' },
         data: { revoked: true, revokedAt: expect.any(Date) },
       });
     });
@@ -540,6 +558,7 @@ describe('NhiService', () => {
       };
       prisma.nhiCredential.create.mockResolvedValue(newCredential);
       prisma.nhiCredential.update.mockResolvedValue({});
+      prisma.$transaction.mockImplementation(async (fn: any) => fn(prisma));
 
       const result = await service.rotateCredential(
         mockRealm,
@@ -547,11 +566,50 @@ describe('NhiService', () => {
         'cred-uuid-1',
       );
 
-      expect(result.newCredential.plainKey).toBe(
+      expect(result.newCredential).toHaveProperty(
+        'plainKey',
         'newkey1234567890newkey1234567890newkey1234567890newkey1234567890',
       );
       expect(result.oldCredentialId).toBe('cred-uuid-1');
-      expect(prisma.nhiCredential.update).toHaveBeenCalledTimes(2);
+      // In one transaction: the new key, and the old one revoked at once.
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(prisma.nhiCredential.create.mock.calls[0][0].data.realmId).toBe(
+        'realm-1',
+      );
+      expect(prisma.nhiCredential.update).toHaveBeenCalledWith({
+        where: { id: 'cred-uuid-1', realmId: 'realm-1' },
+        data: {
+          revoked: true,
+          revokedAt: expect.any(Date),
+          rotatedAt: expect.any(Date),
+        },
+      });
+    });
+
+    it('refuses to rotate an API key that was already rotated (409, not a name collision)', async () => {
+      prisma.nhiIdentity.findFirst.mockResolvedValue(mockIdentity);
+      prisma.nhiCredential.findFirst.mockResolvedValue({
+        ...mockCredential,
+        revoked: true,
+        rotatedAt: new Date(),
+      });
+
+      await expect(
+        service.rotateCredential(mockRealm, 'nhi-uuid-1', 'cred-uuid-1'),
+      ).rejects.toThrow(/already rotated/);
+      expect(prisma.nhiCredential.create).not.toHaveBeenCalled();
+    });
+
+    it('answers a name collision on API-key rotation with 409', async () => {
+      prisma.nhiIdentity.findFirst.mockResolvedValue(mockIdentity);
+      prisma.nhiCredential.findFirst.mockResolvedValue(mockCredential);
+      cryptoService.generateSecret.mockReturnValue('k'.repeat(64));
+      cryptoService.hashPassword.mockResolvedValue('hash');
+      prisma.$transaction.mockRejectedValue({ code: 'P2002' });
+
+      await expect(
+        service.rotateCredential(mockRealm, 'nhi-uuid-1', 'cred-uuid-1'),
+      ).rejects.toThrow(ConflictException);
     });
 
     it('should throw ConflictException when credential is not an API_KEY', async () => {
@@ -686,7 +744,7 @@ describe('NhiService', () => {
       await service.removePolicy(mockRealm, 'policy-uuid-1');
 
       expect(prisma.nhiCredentialPolicy.delete).toHaveBeenCalledWith({
-        where: { id: 'policy-uuid-1' },
+        where: { id: 'policy-uuid-1', realmId: 'realm-1' },
       });
     });
 

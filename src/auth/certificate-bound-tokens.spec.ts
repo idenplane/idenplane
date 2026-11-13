@@ -4,7 +4,11 @@ jest.mock('../crypto/jwk.service.js', () => ({
   JwkService: jest.fn(),
 }));
 
-import { AuthService, certificateBindingFor } from './auth.service.js';
+import {
+  AuthService,
+  certificateBindingFor,
+  withProtectedClaims,
+} from './auth.service.js';
 import { OAuthTokenError } from './oauth-token-error.js';
 import {
   ClientAuthenticator,
@@ -422,6 +426,17 @@ describe('certificate-bound access tokens (RFC 8705 §3)', () => {
       expect(accessTokenPayload()['cnf']).toEqual(CNF);
     });
 
+    it('cannot add the certificate resolver claims (nhi_cid, nhi_crt) through a mapper or plugin', async () => {
+      executeMappers.mockReturnValue({ nhi_cid: 'forged' });
+      enrichToken.mockImplementation(async (payload) => ({
+        ...payload,
+        nhi_crt: { iss: 'x', sn: '1' },
+      }));
+      await issue();
+      expect(accessTokenPayload()).not.toHaveProperty('nhi_cid');
+      expect(accessTokenPayload()).not.toHaveProperty('nhi_crt');
+    });
+
     it('cannot bind an unbound client’s token through a mapper', async () => {
       useClient({ ...unboundClient, serviceAccountUserId: dbUser.id });
       executeMappers.mockReturnValue({ cnf: { 'x5t#S256': OTHER_X5T } });
@@ -626,6 +641,30 @@ describe('certificateBindingFor', () => {
         certificate: { x5tS256: X5T } as any,
       }),
     ).toEqual({ x5tS256: X5T, refreshToken: true });
+  });
+
+  it("carries the resolver's binding claims", () => {
+    expect(
+      certificateBindingFor({
+        ...base,
+        bindToCertificate: true,
+        x5tS256: X5T,
+        bindingClaims: { nhi_cid: 'cred-1' },
+      }),
+    ).toEqual({
+      x5tS256: X5T,
+      refreshToken: false,
+      claims: { nhi_cid: 'cred-1' },
+    });
+  });
+
+  it('protects the binding claims from mappers and plugins', () => {
+    expect(
+      withProtectedClaims(
+        { nhi_cid: 'forged', nhi_crt: 'forged', other: 1 },
+        { nhi_cid: 'cred-1' },
+      ),
+    ).toEqual({ nhi_cid: 'cred-1', other: 1 });
   });
 
   it('refuses a bound client without a certificate', () => {

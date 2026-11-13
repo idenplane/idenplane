@@ -264,6 +264,7 @@ model Realm {
   behavioralBiometricProfiles BehavioralBiometricProfile[]
   continuousRiskPolicies      ContinuousRiskPolicy[]
   nhiIdentities               NhiIdentity[]
+  nhiCredentials              NhiCredential[]
   nhiCredentialPolicies       NhiCredentialPolicy[]
   nhiAuditLogs                NhiAuditLog[]
   consentCategories           ConsentCategory[]
@@ -392,11 +393,18 @@ model Client {
   /// RFC 8705 §3 tls_client_certificate_bound_access_tokens (not used yet).
   tlsClientCertificateBoundAccessTokens Boolean                  @default(false) @map("tls_client_certificate_bound_access_tokens")
 
+  /// The NHI identity this client is the OAuth face of (RFC 8705 NHI
+  /// binding). Same realm as the client (enforced by a trigger). Deleting the
+  /// identity deletes the client. Its certificates are the identity's
+  /// NhiCredential rows, and its tokens are always certificate-bound.
+  nhiIdentityId String? @unique @map("nhi_identity_id")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   realm          Realm                 @relation(fields: [realmId], references: [id], onDelete: Cascade)
   authFlow       AuthenticationFlow?   @relation(fields: [authFlowId], references: [id], onDelete: NoAction)
+  nhiIdentity    NhiIdentity?          @relation(fields: [nhiIdentityId], references: [id], onDelete: Cascade)
   clientRoles    Role[]
   authCodes      AuthorizationCode[]
   consents       UserConsent[]
@@ -2094,6 +2102,16 @@ enum NhiCredentialType {
   MTLS
 }
 
+/// How a certificate credential authenticates its identity's OAuth client
+/// (RFC 8705 §2). null: it does not (legacy and non-certificate credentials).
+enum NhiTlsAuthMode {
+  /// self_signed_tls_client_auth: the certificate itself, by x5t#S256.
+  SELF_SIGNED
+  /// tls_client_auth: any certificate that chains to the realm's trust
+  /// anchors and matches this credential's one subject/SAN rule.
+  PKI
+}
+
 model NhiIdentity {
   id                     String             @id @default(uuid())
   realmId                String             @map("realm_id")
@@ -2118,6 +2136,7 @@ model NhiIdentity {
   realm       Realm           @relation(fields: [realmId], references: [id], onDelete: Cascade)
   credentials NhiCredential[]
   usageStats  NhiUsageStats?
+  oauthClient Client?
 
   @@unique([realmId, name])
   @@index([realmId])
@@ -2127,6 +2146,8 @@ model NhiIdentity {
 
 model NhiCredential {
   id                  String            @id @default(uuid())
+  /// Always the identity's realm (enforced by a trigger).
+  realmId             String            @map("realm_id")
   nhiIdentityId       String            @map("nhi_identity_id")
   credentialType      NhiCredentialType @default(API_KEY) @map("credential_type")
   name                String
@@ -2147,38 +2168,67 @@ model NhiCredential {
   lastUsedAt          DateTime?         @map("last_used_at")
   requestCount        Int               @default(0) @map("request_count")
   allowedIpRanges     String[]          @default([]) @map("allowed_ip_ranges")
-  createdAt           DateTime          @default(now()) @map("created_at")
-  updatedAt           DateTime          @updatedAt @map("updated_at")
 
-  nhiIdentity NhiIdentity @relation(fields: [nhiIdentityId], references: [id], onDelete: Cascade)
+  /// RFC 8705 client authentication mode; null never authenticates.
+  tlsAuthMode            NhiTlsAuthMode? @map("tls_auth_mode")
+  /// RFC 8705 x5t#S256 of certificatePem: base64url SHA-256 of the DER, no padding.
+  certThumbprintS256     String?         @map("cert_thumbprint_s256")
+  certSubject            String?         @map("cert_subject")
+  certIssuer             String?         @map("cert_issuer")
+  /// Lower-case hex without leading zeros.
+  certSerialNumber       String?         @map("cert_serial_number")
+  certNotBefore          DateTime?       @map("cert_not_before")
+  certNotAfter           DateTime?       @map("cert_not_after")
+  /// PKI mode, RFC 8705 §2.1.2: exactly one of these is set.
+  tlsClientAuthSubjectDn String?         @map("tls_client_auth_subject_dn")
+  tlsClientAuthSanDns    String?         @map("tls_client_auth_san_dns")
+  tlsClientAuthSanUri    String?         @map("tls_client_auth_san_uri")
+  tlsClientAuthSanIp     String?         @map("tls_client_auth_san_ip")
+  tlsClientAuthSanEmail  String?         @map("tls_client_auth_san_email")
+  /// Rotation with overlap: the credential that replaced this one, and until
+  /// when this one still authenticates.
+  supersededById         String?         @unique @map("superseded_by_id")
+  rotationGraceUntil     DateTime?       @map("rotation_grace_until")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  realm        Realm          @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  nhiIdentity  NhiIdentity    @relation(fields: [nhiIdentityId], references: [id], onDelete: Cascade)
+  supersededBy NhiCredential? @relation("NhiCredentialRotation", fields: [supersededById], references: [id], onDelete: SetNull)
+  supersedes   NhiCredential? @relation("NhiCredentialRotation")
 
   @@unique([nhiIdentityId, name])
   @@index([nhiIdentityId])
+  @@index([realmId, certThumbprintS256])
   @@index([keyPrefix])
   @@index([expiresAt])
   @@map("nhi_credentials")
 }
 
 model NhiCredentialPolicy {
-  id                   String            @id @default(uuid())
-  realmId              String            @map("realm_id")
-  name                 String
-  description          String?
-  enabled              Boolean           @default(true)
-  priority             Int               @default(0)
-  credentialType       NhiCredentialType @default(API_KEY) @map("credential_type")
-  rotationIntervalDays Int               @default(90) @map("rotation_interval_days")
-  rotationBeforeDays   Int               @default(7) @map("rotation_before_days")
-  autoRotate           Boolean           @default(false) @map("auto_rotate")
-  maxCredentialAgeDays Int               @default(365) @map("max_credential_age_days")
-  maxRequestsPerDay    Int?              @map("max_requests_per_day")
-  maxRequestsPerMonth  Int?              @map("max_requests_per_month")
-  rateLimitPerMinute   Int?              @map("rate_limit_per_minute")
-  requireCertificate   Boolean           @default(false) @map("require_certificate")
-  requireIpRestriction Boolean           @default(false) @map("require_ip_restriction")
-  requireAuditLogging  Boolean           @default(true) @map("require_audit_logging")
-  createdAt            DateTime          @default(now()) @map("created_at")
-  updatedAt            DateTime          @updatedAt @map("updated_at")
+  id                     String            @id @default(uuid())
+  realmId                String            @map("realm_id")
+  name                   String
+  description            String?
+  enabled                Boolean           @default(true)
+  priority               Int               @default(0)
+  credentialType         NhiCredentialType @default(API_KEY) @map("credential_type")
+  rotationIntervalDays   Int               @default(90) @map("rotation_interval_days")
+  rotationBeforeDays     Int               @default(7) @map("rotation_before_days")
+  autoRotate             Boolean           @default(false) @map("auto_rotate")
+  maxCredentialAgeDays   Int               @default(365) @map("max_credential_age_days")
+  maxRequestsPerDay      Int?              @map("max_requests_per_day")
+  maxRequestsPerMonth    Int?              @map("max_requests_per_month")
+  rateLimitPerMinute     Int?              @map("rate_limit_per_minute")
+  requireCertificate     Boolean           @default(false) @map("require_certificate")
+  requireIpRestriction   Boolean           @default(false) @map("require_ip_restriction")
+  requireAuditLogging    Boolean           @default(true) @map("require_audit_logging")
+  /// How long a rotated certificate credential keeps authenticating after
+  /// its replacement is created.
+  rotationOverlapSeconds Int               @default(86400) @map("rotation_overlap_seconds")
+  createdAt              DateTime          @default(now()) @map("created_at")
+  updatedAt              DateTime          @updatedAt @map("updated_at")
 
   realm Realm @relation(fields: [realmId], references: [id], onDelete: Cascade)
 

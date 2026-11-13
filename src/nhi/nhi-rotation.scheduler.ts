@@ -108,11 +108,12 @@ export class NhiRotationScheduler {
       // - Matching credential type
       const candidates = await this.prisma.nhiCredential.findMany({
         where: {
-          nhiIdentity: { realmId: realm.id },
+          realmId: realm.id,
           credentialType: policy.credentialType,
           revoked: false,
           enabled: true,
           rotatedAt: null,
+          supersededById: null,
           rotationRequired: false,
         },
         select: {
@@ -180,6 +181,7 @@ export class NhiRotationScheduler {
       const { count } = await this.prisma.nhiCredential.updateMany({
         where: {
           id: item.credentialId,
+          realmId: realm.id,
           revoked: false,
           rotationRequired: false,
         },

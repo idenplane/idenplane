@@ -16,6 +16,10 @@ import {
 } from '../client-auth/client-authenticator.js';
 import type { PresentedClientCertificate } from '../mtls/client-certificate.source.js';
 import { X5T_S256 } from '../mtls/certificate-binding.js';
+import {
+  CERTIFICATE_BINDING_CLAIMS,
+  type CertificateBindingClaims,
+} from '../client-auth/client-certificate-resolver.js';
 import { JwkService } from '../crypto/jwk.service.js';
 import { ScopesService } from '../scopes/scopes.service.js';
 import {
@@ -79,6 +83,8 @@ export interface CertificateBinding {
    * authentication instead and rebinds to the certificate it presents then.
    */
   refreshToken: boolean;
+  /** Private claims the certificate resolver attached (e.g. `nhi_cid`). */
+  claims?: CertificateBindingClaims;
 }
 
 interface IssueTokensOptions {
@@ -97,7 +103,8 @@ export function certificateBindingFor(
   auth: Pick<
     AuthenticatedClient,
     'client' | 'x5tS256' | 'certificate' | 'bindToCertificate'
-  >,
+  > &
+    Partial<Pick<AuthenticatedClient, 'bindingClaims'>>,
 ): CertificateBinding | null {
   const required =
     auth.bindToCertificate ||
@@ -105,12 +112,25 @@ export function certificateBindingFor(
   if (!required) return null;
   const x5tS256 = auth.x5tS256 ?? auth.certificate?.x5tS256 ?? null;
   if (!x5tS256) throw new ClientAuthError('bound_tokens_need_certificate');
-  return { x5tS256, refreshToken: auth.client.clientType === 'PUBLIC' };
+  return {
+    x5tS256,
+    refreshToken: auth.client.clientType === 'PUBLIC',
+    ...(auth.bindingClaims ? { claims: auth.bindingClaims } : {}),
+  };
 }
 
-/** The access token's `cnf` claim for a binding, or nothing. */
+/**
+ * The access token's `cnf` claim for a binding, with the resolver's binding
+ * claims (only the known names), or nothing.
+ */
 function cnfClaim(binding: CertificateBinding | null): JWTPayload {
-  return binding ? { cnf: { [X5T_S256]: binding.x5tS256 } } : {};
+  if (!binding) return {};
+  const extra: JWTPayload = {};
+  for (const name of CERTIFICATE_BINDING_CLAIMS) {
+    const value = binding.claims?.[name];
+    if (value !== undefined) extra[name] = value;
+  }
+  return { cnf: { [X5T_S256]: binding.x5tS256 }, ...extra };
 }
 
 /** See AuthService.newSession. */
@@ -141,6 +161,7 @@ const PROTECTED_ACCESS_TOKEN_CLAIMS = [
   'amr',
   'nbf',
   'cnf',
+  ...CERTIFICATE_BINDING_CLAIMS,
   'auth_time',
   'nonce',
 ] as const;

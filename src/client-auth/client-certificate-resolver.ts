@@ -6,12 +6,25 @@ import type { PresentedClientCertificate } from '../mtls/client-certificate.sour
 export type CertificateAuthMethod =
   'tls_client_auth' | 'self_signed_tls_client_auth';
 
+/**
+ * Private access-token claims a resolver may attach to a bound token, so
+ * that `bindingActive` can later check exactly what authenticated it. They
+ * are protected claims: no mapper or plugin can set, change or remove them.
+ */
+export const CERTIFICATE_BINDING_CLAIMS = ['nhi_cid', 'nhi_crt'] as const;
+
+export type CertificateBindingClaims = Partial<
+  Record<(typeof CERTIFICATE_BINDING_CLAIMS)[number], unknown>
+>;
+
 export interface ClientCertificateResolution {
   /** The client the certificate authenticates. */
   clientId: string;
   method: CertificateAuthMethod;
   /** When the client's tokens must be bound to the certificate (`cnf`). */
   bindToCertificate: boolean;
+  /** Claims for the bound access token (see CERTIFICATE_BINDING_CLAIMS). */
+  bindingClaims?: CertificateBindingClaims;
 }
 
 /**
@@ -24,7 +37,11 @@ export interface ClientCertificateRejection {
 }
 
 export interface ClientCertificateResolveInput {
-  realm: { id: string; mtlsTrustGlobalAnchors?: boolean };
+  realm: {
+    id: string;
+    mtlsClientAuthEnabled?: boolean;
+    mtlsTrustGlobalAnchors?: boolean;
+  };
   client: Client;
   method: CertificateAuthMethod;
   certificate: PresentedClientCertificate;
@@ -41,6 +58,22 @@ export interface ClientCertificateResolver {
   resolve(
     input: ClientCertificateResolveInput,
   ): Promise<ClientCertificateResolution | ClientCertificateRejection | null>;
+  /**
+   * Whether a token bound to `x5tS256` and issued to `client` may still be
+   * used (introspection): `true` or `false` when the client is one this
+   * resolver knows about, `null` otherwise. Optional: a resolver without it
+   * leaves the decision to the token's other checks.
+   */
+  bindingActive?(input: CertificateBindingInput): Promise<boolean | null>;
+}
+
+export interface CertificateBindingInput {
+  realm: ClientCertificateResolveInput['realm'];
+  client: Client;
+  /** The token's `cnf.x5t#S256`, or `null` for an unbound token. */
+  x5tS256: string | null;
+  /** The token's binding claims (CERTIFICATE_BINDING_CLAIMS), as verified. */
+  claims: CertificateBindingClaims;
 }
 
 /**
@@ -62,5 +95,18 @@ export class ClientCertificateResolverRegistry {
 
   resolvers(): readonly ClientCertificateResolver[] {
     return this.registered;
+  }
+
+  /**
+   * The first answer of a resolver that knows the client (see
+   * {@link ClientCertificateResolver.bindingActive}), or `null` when none
+   * does.
+   */
+  async bindingActive(input: CertificateBindingInput): Promise<boolean | null> {
+    for (const resolver of this.registered) {
+      const answer = (await resolver.bindingActive?.(input)) ?? null;
+      if (answer !== null) return answer;
+    }
+    return null;
   }
 }

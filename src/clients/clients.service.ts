@@ -43,9 +43,36 @@ const CLIENT_SELECT = {
   tlsClientAuthSanIp: true,
   tlsClientAuthSanEmail: true,
   tlsClientCertificateBoundAccessTokens: true,
+  nhiIdentityId: true,
   createdAt: true,
   updatedAt: true,
 } as const;
+
+/**
+ * The settings of an NHI-backed client that only the NHI binding may set: it
+ * is CONFIDENTIAL, `client_credentials` only, authenticates with its
+ * identity's certificates and always receives bound tokens.
+ */
+const NHI_LOCKED_FIELDS = [
+  'clientType',
+  'publicClient',
+  'tokenEndpointAuthMethod',
+  'tlsClientAuthSubjectDn',
+  'tlsClientAuthSanDns',
+  'tlsClientAuthSanUri',
+  'tlsClientAuthSanIp',
+  'tlsClientAuthSanEmail',
+  'tlsClientCertificateBoundAccessTokens',
+  'grantTypes',
+] as const;
+
+/** What the NHI binding asks for when it creates an identity's client. */
+export interface NhiBackedClientInput {
+  clientId: string;
+  name: string;
+  nhiIdentityId: string;
+  tokenEndpointAuthMethod: 'tls_client_auth' | 'self_signed_tls_client_auth';
+}
 
 /** The authentication fields a create or update may set. */
 const AUTH_FIELDS = [
@@ -192,6 +219,87 @@ export class ClientsService {
     };
   }
 
+  /**
+   * The OAuth client of an NHI identity (RFC 8705 NHI binding):
+   * CONFIDENTIAL, `client_credentials` only, no secret and no service
+   * account (its tokens' subject is the client itself), authenticated by a
+   * certificate method against the identity's credentials, and always
+   * issuing certificate-bound tokens. A database trigger refuses an identity
+   * of another realm. A taken `clientId` or an identity that already has a
+   * client is a unique violation (P2002), left to the caller.
+   */
+  async createForNhiIdentity(realm: Realm, input: NhiBackedClientInput) {
+    const client = await this.prisma.client.create({
+      data: {
+        realmId: realm.id,
+        clientId: input.clientId,
+        clientSecret: null,
+        clientType: 'CONFIDENTIAL',
+        name: input.name,
+        redirectUris: [],
+        postLogoutRedirectUris: [],
+        webOrigins: [],
+        grantTypes: ['client_credentials'],
+        requireConsent: false,
+        tokenEndpointAuthMethod: input.tokenEndpointAuthMethod,
+        tlsClientCertificateBoundAccessTokens: true,
+        nhiIdentityId: input.nhiIdentityId,
+      },
+      select: CLIENT_SELECT,
+    });
+    await this.assignBuiltInScopes(realm.id, client.id);
+    return client;
+  }
+
+  /** An NHI-backed client's identity, or `null` (from the row, not the cache). */
+  private async nhiIdentityOf(clientDbId: string): Promise<string | null> {
+    const row = await this.prisma.client.findUnique({
+      where: { id: clientDbId },
+      select: { nhiIdentityId: true },
+    });
+    return row?.nhiIdentityId ?? null;
+  }
+
+  /**
+   * Refuses an update of an NHI-backed client that would change how it
+   * authenticates or what it may ask for (NHI_LOCKED_FIELDS). Sending the
+   * value the binding gave a field is allowed.
+   */
+  private async assertNhiClientUpdate(
+    clientDbId: string,
+    dto: UpdateClientDto,
+  ): Promise<void> {
+    const values = dto as unknown as Record<string, unknown>;
+    const touched = NHI_LOCKED_FIELDS.filter((f) => values[f] !== undefined);
+    if (touched.length === 0) return;
+    if (!(await this.nhiIdentityOf(clientDbId))) return;
+    const unchanged = (field: (typeof NHI_LOCKED_FIELDS)[number]) => {
+      const value = values[field];
+      switch (field) {
+        case 'clientType':
+          return value === 'CONFIDENTIAL';
+        case 'publicClient':
+          return value === false;
+        case 'tlsClientCertificateBoundAccessTokens':
+          return value === true;
+        case 'grantTypes':
+          return (
+            Array.isArray(value) &&
+            value.length === 1 &&
+            value[0] === 'client_credentials'
+          );
+        default:
+          return false;
+      }
+    };
+    const locked = touched.filter((field) => !unchanged(field));
+    if (locked.length > 0) {
+      throw new ConflictException(
+        `This client is the OAuth client of an NHI identity; ${locked.join(', ')} cannot be changed. Manage it under /nhi/:id/oauth-client.`,
+      );
+    }
+  }
+
   async findAll(realm: Realm) {
     return this.prisma.client.findMany({
       where: { realmId: realm.id },
@@ -248,6 +356,7 @@ export class ClientsService {
     // Resolve the identifier (may be clientId string OR UUID)
     const existing = await this.findByClientId(realm, clientIdOrUuid);
     const resolvedClientId = existing.clientId;
+    await this.assertNhiClientUpdate(existing.id, dto);
 
     // The settings after this update, from the row itself rather than the
     // cached copy, which may predate these columns.
@@ -363,6 +472,11 @@ export class ClientsService {
     const client = await this.findByClientId(realm, clientIdOrUuid);
     if (client.clientType !== 'CONFIDENTIAL') {
       throw new ConflictException('Cannot generate secret for a PUBLIC client');
+    }
+    if (await this.nhiIdentityOf(client.id)) {
+      throw new ConflictException(
+        'The OAuth client of an NHI identity authenticates with certificates and has no secret',
+      );
     }
 
     const rawSecret = this.crypto.generateSecret();

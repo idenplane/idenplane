@@ -23,7 +23,9 @@ import {
  * - `tls_client_auth`: the certificate chains to one of the realm's trust
  *   anchors (PkiPathValidator), then matches the client's one subject rule.
  *
- * Both consult the realm's deny-list. Registers itself on startup.
+ * Both consult the realm's deny-list. Registers itself on startup. An
+ * NHI-backed client (`nhiIdentityId`) is not this resolver's: its
+ * certificates are its identity's credentials (NhiClientCertificateResolver).
  */
 @Injectable()
 export class ClientTableCertificateResolver
@@ -45,7 +47,8 @@ export class ClientTableCertificateResolver
 
   async resolve(
     input: ClientCertificateResolveInput,
-  ): Promise<ClientCertificateResolution | ClientCertificateRejection> {
+  ): Promise<ClientCertificateResolution | ClientCertificateRejection | null> {
+    if (input.client.nhiIdentityId) return null;
     return input.method === 'self_signed_tls_client_auth'
       ? this.selfSigned(input)
       : this.pki(input);

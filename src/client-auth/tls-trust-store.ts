@@ -78,6 +78,25 @@ export class TlsTrustStore implements OnModuleInit {
   }
 
   /**
+   * Whether the deny-list names a certificate known only by its
+   * {@link RevocationKey} (e.g. from a token's claims), in one query.
+   */
+  async isRevokedKey(realmId: string, key: RevocationKey): Promise<boolean> {
+    const count = await this.prisma.tlsRevokedCertificate.count({
+      where: {
+        realmId,
+        OR: [
+          { x5tS256: key.x5t },
+          ...(key.serial && key.issuer
+            ? [{ serialNumber: key.serial, issuerDn: key.issuer }]
+            : []),
+        ],
+      },
+    });
+    return count > 0;
+  }
+
+  /**
    * A synchronous deny-list check for these certificates, from one query:
    * a certificate is revoked when its thumbprint, or its issuer and serial
    * number, are listed.
@@ -86,16 +105,7 @@ export class TlsTrustStore implements OnModuleInit {
     realmId: string,
     certificates: readonly X509Certificate[],
   ): Promise<(certificate: X509Certificate) => boolean> {
-    const keyOf = (c: X509Certificate) => {
-      const serial = normalizeSerial(c.serialNumber) ?? '';
-      let issuer = '';
-      try {
-        issuer = canonicalDn(parseDerName(certificateNames(c.raw).issuer));
-      } catch {
-        // An unreadable issuer cannot match an issuer entry.
-      }
-      return { x5t: computeX5tS256(c.raw), serial, issuer };
-    };
+    const keyOf = revocationKey;
     const keys = certificates.map(keyOf);
     const rows = await this.prisma.tlsRevokedCertificate.findMany({
       where: {
@@ -125,6 +135,30 @@ export class TlsTrustStore implements OnModuleInit {
       );
     };
   }
+}
+
+/**
+ * What the deny-list matches a certificate by: its `x5t#S256`, and its
+ * canonical issuer DN and normalised serial number (empty when unreadable,
+ * which matches no issuer-and-serial entry).
+ */
+export interface RevocationKey {
+  x5t: string;
+  issuer: string;
+  serial: string;
+}
+
+export function revocationKey(certificate: X509Certificate): RevocationKey {
+  const serial = normalizeSerial(certificate.serialNumber) ?? '';
+  let issuer = '';
+  try {
+    issuer = canonicalDn(
+      parseDerName(certificateNames(certificate.raw).issuer),
+    );
+  } catch {
+    // An unreadable issuer cannot match an issuer entry.
+  }
+  return { x5t: computeX5tS256(certificate.raw), serial, issuer };
 }
 
 /** Every certificate in a PEM bundle; each must be a CA certificate. */

@@ -18,15 +18,13 @@ describe('NhiRotationScheduler', () => {
       realm: { findMany: jest.fn().mockResolvedValue([realm]) },
       nhiCredentialPolicy: { findMany: jest.fn().mockResolvedValue([policy]) },
       nhiCredential: {
-        findMany: jest
-          .fn()
-          .mockResolvedValue(
-            credentials.map((c) => ({
-              ...c,
-              nhiIdentityId: 'nhi-1',
-              rotationRequired: false,
-            })),
-          ),
+        findMany: jest.fn().mockResolvedValue(
+          credentials.map((c) => ({
+            ...c,
+            nhiIdentityId: 'nhi-1',
+            rotationRequired: false,
+          })),
+        ),
         updateMany: jest.fn().mockResolvedValue({ count: flipped }),
         create: jest.fn(),
         update: jest.fn(),
@@ -51,7 +49,12 @@ describe('NhiRotationScheduler', () => {
     await scheduler.processRotations();
 
     expect(prisma.nhiCredential.updateMany).toHaveBeenCalledWith({
-      where: { id: 'cred-1', revoked: false, rotationRequired: false },
+      where: {
+        id: 'cred-1',
+        realmId: 'realm-1',
+        revoked: false,
+        rotationRequired: false,
+      },
       data: { rotationRequired: true },
     });
     expect(webhooks.dispatchEvent).toHaveBeenCalledWith({

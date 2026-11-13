@@ -5,8 +5,28 @@ import {
   NotFoundException,
   BadRequestException,
 } from '@nestjs/common';
-import type { Realm } from '@prisma/client';
+import type {
+  NhiCredential,
+  NhiCredentialType,
+  NhiLifecycleStatus,
+  Realm,
+} from '@prisma/client';
 import { generateCertificate, parseCertificateInfo } from './certificate.js';
+import { configuredRules } from '../client-auth/certificate-checks.js';
+import {
+  isCertificateCredentialType,
+  liveCertificateCredentialFilter,
+  MAX_LIVE_CERTIFICATE_CREDENTIALS,
+  nhiCredentialStatus,
+} from './nhi-credential-status.js';
+import {
+  assertNoTlsFields,
+  certificateCredentialFields,
+  DEFAULT_ROTATION_OVERLAP_SECONDS,
+  pickRules,
+  withStatus,
+} from './nhi-certificate-credential.js';
+import { RotateNhiCredentialDto } from './dto/rotate-nhi-credential.dto.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { CreateNhiIdentityDto } from './dto/create-nhi.dto.js';
@@ -52,6 +72,7 @@ const NHI_IDENTITY_SELECT = {
 
 const NHI_CREDENTIAL_SELECT = {
   id: true,
+  realmId: true,
   nhiIdentityId: true,
   credentialType: true,
   name: true,
@@ -71,6 +92,20 @@ const NHI_CREDENTIAL_SELECT = {
   lastUsedAt: true,
   requestCount: true,
   allowedIpRanges: true,
+  tlsAuthMode: true,
+  certThumbprintS256: true,
+  certSubject: true,
+  certIssuer: true,
+  certSerialNumber: true,
+  certNotBefore: true,
+  certNotAfter: true,
+  tlsClientAuthSubjectDn: true,
+  tlsClientAuthSanDns: true,
+  tlsClientAuthSanUri: true,
+  tlsClientAuthSanIp: true,
+  tlsClientAuthSanEmail: true,
+  supersededById: true,
+  rotationGraceUntil: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -93,6 +128,7 @@ const NHI_CREDENTIAL_POLICY_SELECT = {
   requireCertificate: true,
   requireIpRestriction: true,
   requireAuditLogging: true,
+  rotationOverlapSeconds: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -169,7 +205,7 @@ export class NhiService {
     }
 
     return this.prisma.nhiIdentity.update({
-      where: { id },
+      where: { id, realmId: realm.id },
       data: {
         identityType: dto.identityType,
         name: dto.name,
@@ -190,9 +226,14 @@ export class NhiService {
     });
   }
 
+  /**
+   * Deletes the identity. Its credentials, and its OAuth client if it has
+   * one, go with it (foreign keys cascade; the client cache is invalidated
+   * by the database's change notifications).
+   */
   async remove(realm: Realm, id: string) {
     await this.findById(realm, id);
-    await this.prisma.nhiIdentity.delete({ where: { id } });
+    await this.prisma.nhiIdentity.delete({ where: { id, realmId: realm.id } });
   }
 
   // ── Lifecycle operations ───────────────────────────────────────────────────
@@ -200,7 +241,7 @@ export class NhiService {
   async suspend(realm: Realm, id: string) {
     await this.findById(realm, id);
     return this.prisma.nhiIdentity.update({
-      where: { id },
+      where: { id, realmId: realm.id },
       data: { lifecycleStatus: 'SUSPENDED', suspendedAt: new Date() },
       select: NHI_IDENTITY_SELECT,
     });
@@ -214,7 +255,7 @@ export class NhiService {
       );
     }
     return this.prisma.nhiIdentity.update({
-      where: { id },
+      where: { id, realmId: realm.id },
       data: { lifecycleStatus: 'ACTIVE', suspendedAt: null },
       select: NHI_IDENTITY_SELECT,
     });
@@ -224,11 +265,11 @@ export class NhiService {
     await this.findById(realm, id);
     // Revoke all credentials first
     await this.prisma.nhiCredential.updateMany({
-      where: { nhiIdentityId: id },
+      where: { nhiIdentityId: id, realmId: realm.id },
       data: { revoked: true, revokedAt: new Date() },
     });
     return this.prisma.nhiIdentity.update({
-      where: { id },
+      where: { id, realmId: realm.id },
       data: {
         lifecycleStatus: 'DECOMMISSIONED',
         decommissionedAt: new Date(),
@@ -245,7 +286,22 @@ export class NhiService {
     nhiIdentityId: string,
     dto: CreateNhiCredentialDto,
   ) {
-    await this.findById(realm, nhiIdentityId);
+    const identity = await this.findById(realm, nhiIdentityId);
+    const credentialType =
+      dto.credentialType ?? (dto.tlsAuthMode ? 'CERTIFICATE' : undefined);
+
+    if (credentialType && isCertificateCredentialType(credentialType)) {
+      return this.createCertificateCredential(realm, identity, {
+        ...dto,
+        credentialType,
+      });
+    }
+    if (dto.tlsAuthMode) {
+      throw new BadRequestException(
+        'tlsAuthMode needs credentialType CERTIFICATE or MTLS',
+      );
+    }
+    assertNoTlsFields(dto);
 
     // Generate API key if type is API_KEY
     let keyPrefix: string | undefined;
@@ -261,6 +317,7 @@ export class NhiService {
 
     const credential = await this.prisma.nhiCredential.create({
       data: {
+        realmId: realm.id,
         nhiIdentityId,
         credentialType: dto.credentialType,
         name: dto.name,
@@ -283,22 +340,164 @@ export class NhiService {
       select: NHI_CREDENTIAL_SELECT,
     });
 
+    const result = withStatus(credential, identity);
     return plainKey
       ? {
-          ...credential,
+          ...result,
           plainKey,
           keyWarning: 'Store this key securely. It will not be shown again.',
         }
-      : credential;
+      : result;
+  }
+
+  /**
+   * A CERTIFICATE or MTLS credential. Such a credential holds a certificate,
+   * never a private key. With a `tlsAuthMode` it authenticates the
+   * identity's OAuth client (RFC 8705): SELF_SIGNED pins `certificatePem` by
+   * its x5t#S256; PKI names one subject/SAN rule for certificates issued
+   * under the realm's trust anchors. The live-certificate cap and duplicate
+   * check run with the identity row locked, so concurrent uploads cannot
+   * exceed them.
+   */
+  private async createCertificateCredential(
+    realm: Realm,
+    identity: {
+      id: string;
+      enabled: boolean;
+      lifecycleStatus: NhiLifecycleStatus;
+    },
+    dto: CreateNhiCredentialDto & { credentialType: NhiCredentialType },
+  ) {
+    if (dto.privateKeyPem !== undefined) {
+      throw new BadRequestException(
+        'A certificate credential never takes a private key; upload the certificate only',
+      );
+    }
+    if (dto.certificateChain !== undefined && dto.tlsAuthMode) {
+      throw new BadRequestException(
+        'certificateChain is not used for client authentication; the client presents its chain in the TLS handshake',
+      );
+    }
+    const fields = certificateCredentialFields(dto.tlsAuthMode ?? null, dto);
+    const data = {
+      realmId: realm.id,
+      nhiIdentityId: identity.id,
+      credentialType: dto.credentialType,
+      name: dto.name,
+      certificateChain: dto.certificateChain,
+      expiresAt: dto.expiresAt ? new Date(dto.expiresAt) : undefined,
+      rotationRequired: dto.rotationRequired ?? false,
+      enabled: dto.enabled ?? true,
+      allowedIpRanges: dto.allowedIpRanges ?? [],
+      ...fields,
+    };
+
+    if (!dto.tlsAuthMode) {
+      const credential = await this.createUniqueName(() =>
+        this.prisma.nhiCredential.create({
+          data,
+          select: NHI_CREDENTIAL_SELECT,
+        }),
+      );
+      return withStatus(credential, identity);
+    }
+
+    const credential = await this.createUniqueName(() =>
+      this.prisma.$transaction(async (tx) => {
+        await this.lockIdentity(tx, realm, identity.id);
+        await this.assertCertificateCapacity(
+          tx,
+          realm,
+          identity.id,
+          fields.certThumbprintS256 ?? null,
+        );
+        return tx.nhiCredential.create({
+          data,
+          select: NHI_CREDENTIAL_SELECT,
+        });
+      }),
+    );
+    return withStatus(credential, identity);
+  }
+
+  /** Runs a create, answering a taken credential name with 409. */
+  private async createUniqueName<T>(create: () => Promise<T>): Promise<T> {
+    try {
+      return await create();
+    } catch (err) {
+      if ((err as { code?: string })?.code === 'P2002') {
+        throw new ConflictException(
+          'The identity already has a credential with this name',
+        );
+      }
+      throw err;
+    }
+  }
+
+  /**
+   * Locks the identity row for the rest of the transaction, so the
+   * live-certificate count and the write after it cannot interleave with
+   * another upload or rotation for the same identity.
+   */
+  private async lockIdentity(
+    tx: Prisma.TransactionClient,
+    realm: Realm,
+    nhiIdentityId: string,
+  ): Promise<void> {
+    const rows = await tx.$queryRaw<{ id: string }[]>`
+      SELECT "id" FROM "nhi_identities"
+       WHERE "id" = ${nhiIdentityId} AND "realm_id" = ${realm.id}
+       FOR UPDATE`;
+    if (rows.length === 0) {
+      throw new NotFoundException(`NHI identity '${nhiIdentityId}' not found`);
+    }
+  }
+
+  /**
+   * An identity holds at most MAX_LIVE_CERTIFICATE_CREDENTIALS live
+   * certificate credentials (a credential in its rotation grace period
+   * counts), and a certificate at most once among them.
+   */
+  private async assertCertificateCapacity(
+    tx: Prisma.TransactionClient,
+    realm: Realm,
+    nhiIdentityId: string,
+    thumbprint: string | null,
+  ): Promise<void> {
+    const live = liveCertificateCredentialFilter(new Date());
+    const count = await tx.nhiCredential.count({
+      where: { realmId: realm.id, nhiIdentityId, ...live },
+    });
+    if (count >= MAX_LIVE_CERTIFICATE_CREDENTIALS) {
+      throw new ConflictException(
+        `An identity can hold at most ${MAX_LIVE_CERTIFICATE_CREDENTIALS} live certificate credentials; revoke one first`,
+      );
+    }
+    if (thumbprint) {
+      const duplicate = await tx.nhiCredential.count({
+        where: {
+          realmId: realm.id,
+          nhiIdentityId,
+          certThumbprintS256: thumbprint,
+          ...live,
+        },
+      });
+      if (duplicate > 0) {
+        throw new ConflictException(
+          'This certificate is already registered for the identity',
+        );
+      }
+    }
   }
 
   async listCredentials(realm: Realm, nhiIdentityId: string) {
-    await this.findById(realm, nhiIdentityId);
-    return this.prisma.nhiCredential.findMany({
-      where: { nhiIdentityId },
+    const identity = await this.findById(realm, nhiIdentityId);
+    const credentials = await this.prisma.nhiCredential.findMany({
+      where: { nhiIdentityId, realmId: realm.id },
       select: NHI_CREDENTIAL_SELECT,
       orderBy: { createdAt: 'asc' },
     });
+    return credentials.map((credential) => withStatus(credential, identity));
   }
 
   async findCredentialById(
@@ -306,15 +505,15 @@ export class NhiService {
     nhiIdentityId: string,
     credentialId: string,
   ) {
-    await this.findById(realm, nhiIdentityId);
+    const identity = await this.findById(realm, nhiIdentityId);
     const credential = await this.prisma.nhiCredential.findFirst({
-      where: { id: credentialId, nhiIdentityId },
+      where: { id: credentialId, nhiIdentityId, realmId: realm.id },
       select: NHI_CREDENTIAL_SELECT,
     });
     if (!credential) {
       throw new NotFoundException(`Credential '${credentialId}' not found`);
     }
-    return credential;
+    return withStatus(credential, identity);
   }
 
   async revokeCredential(
@@ -322,75 +521,109 @@ export class NhiService {
     nhiIdentityId: string,
     credentialId: string,
   ) {
-    await this.findCredentialById(realm, nhiIdentityId, credentialId);
-    const credential = await this.prisma.nhiCredential.findFirst({
-      where: { id: credentialId, nhiIdentityId },
-    });
+    const credential = await this.findCredentialById(
+      realm,
+      nhiIdentityId,
+      credentialId,
+    );
 
-    if (credential?.revoked) {
+    if (credential.revoked) {
       return { message: 'Credential is already revoked' };
     }
 
     await this.prisma.nhiCredential.update({
-      where: { id: credentialId },
+      where: { id: credentialId, realmId: realm.id },
       data: { revoked: true, revokedAt: new Date() },
     });
 
     return { message: 'Credential revoked successfully' };
   }
 
+  /**
+   * Rotates a credential.
+   *
+   * - API_KEY: a new key replaces the old one, which is revoked at once (as
+   *   before). The new key is returned once.
+   * - A certificate credential with a `tlsAuthMode`: a new credential with
+   *   the new certificate (SELF_SIGNED) or rule (PKI; the old rule when none
+   *   is given) is created, and the old one keeps authenticating until
+   *   `rotationGraceUntil` = now + overlap. The overlap is `overlapSeconds`
+   *   when given, else the applicable policy's `rotationOverlapSeconds`,
+   *   else DEFAULT_ROTATION_OVERLAP_SECONDS.
+   *
+   * Either way it runs in one transaction. A certificate credential that was
+   * already rotated or revoked cannot be rotated (409).
+   */
   async rotateCredential(
     realm: Realm,
     nhiIdentityId: string,
     credentialId: string,
+    dto: RotateNhiCredentialDto = {},
   ) {
-    await this.findCredentialById(realm, nhiIdentityId, credentialId);
+    const identity = await this.findById(realm, nhiIdentityId);
     const oldCredential = await this.prisma.nhiCredential.findFirst({
-      where: { id: credentialId, nhiIdentityId },
+      where: { id: credentialId, nhiIdentityId, realmId: realm.id },
     });
 
     if (!oldCredential) {
       throw new NotFoundException(`Credential '${credentialId}' not found`);
     }
 
-    if (oldCredential.credentialType !== 'API_KEY') {
-      throw new ConflictException('Only API_KEY credentials can be rotated');
+    if (oldCredential.credentialType === 'API_KEY') {
+      return this.rotateApiKey(realm, oldCredential);
     }
+    if (
+      isCertificateCredentialType(oldCredential.credentialType) &&
+      oldCredential.tlsAuthMode
+    ) {
+      return this.rotateCertificate(realm, identity, oldCredential, dto);
+    }
+    throw new ConflictException(
+      'Only API_KEY credentials and certificate credentials with a tlsAuthMode can be rotated',
+    );
+  }
 
+  private async rotateApiKey(realm: Realm, oldCredential: NhiCredential) {
+    // A rotated key was revoked and replaced; its replacement is the one to
+    // rotate. (Rotating it again would also collide on the "(rotated)" name.)
+    if (oldCredential.rotatedAt) {
+      throw new ConflictException(
+        'This API key was already rotated; rotate its replacement instead',
+      );
+    }
     // Generate new key
     const newRaw = this.crypto.generateSecret(32);
     const newPrefix = newRaw.slice(0, 8);
     const newHash = await this.crypto.hashPassword(newRaw);
 
-    // Create new credential
-    const newCredential = await this.prisma.nhiCredential.create({
-      data: {
-        nhiIdentityId,
-        credentialType: 'API_KEY',
-        name: oldCredential.name
-          ? `${oldCredential.name} (rotated)`
-          : 'rotated credential',
-        keyPrefix: newPrefix,
-        keyHash: newHash,
-        expiresAt: oldCredential.expiresAt,
-        rotationRequired: false,
-        enabled: true,
-        allowedIpRanges: oldCredential.allowedIpRanges,
-      },
-      select: NHI_CREDENTIAL_SELECT,
-    });
-
-    // Revoke old credential
-    await this.prisma.nhiCredential.update({
-      where: { id: credentialId },
-      data: { revoked: true, revokedAt: new Date() },
-    });
-
-    // Update old credential's rotatedAt
-    await this.prisma.nhiCredential.update({
-      where: { id: credentialId },
-      data: { rotatedAt: new Date() },
-    });
+    const newCredential = await this.createUniqueName(() =>
+      this.prisma.$transaction(async (tx) => {
+        const created = await tx.nhiCredential.create({
+          data: {
+            realmId: realm.id,
+            nhiIdentityId: oldCredential.nhiIdentityId,
+            credentialType: 'API_KEY',
+            name: oldCredential.name
+              ? `${oldCredential.name} (rotated)`
+              : 'rotated credential',
+            keyPrefix: newPrefix,
+            keyHash: newHash,
+            expiresAt: oldCredential.expiresAt,
+            rotationRequired: false,
+            enabled: true,
+            allowedIpRanges: oldCredential.allowedIpRanges,
+          },
+          select: NHI_CREDENTIAL_SELECT,
+        });
+        // The old key stops working now.
+        const now = new Date();
+        await tx.nhiCredential.update({
+          where: { id: oldCredential.id, realmId: realm.id },
+          data: { revoked: true, revokedAt: now, rotatedAt: now },
+        });
+        return created;
+      }),
+    );
 
     return {
       newCredential: {
@@ -398,8 +631,124 @@ export class NhiService {
         plainKey: newRaw,
         keyWarning: 'Store this key securely. It will not be shown again.',
       },
-      oldCredentialId: credentialId,
+      oldCredentialId: oldCredential.id,
     };
+  }
+
+  private async rotateCertificate(
+    realm: Realm,
+    identity: {
+      id: string;
+      enabled: boolean;
+      lifecycleStatus: NhiLifecycleStatus;
+    },
+    oldCredential: NhiCredential,
+    dto: RotateNhiCredentialDto,
+  ) {
+    if (oldCredential.revoked) {
+      throw new ConflictException('A revoked credential cannot be rotated');
+    }
+    if (oldCredential.supersededById) {
+      throw new ConflictException(
+        'This credential was already rotated; rotate its replacement instead',
+      );
+    }
+    const mode = oldCredential.tlsAuthMode!;
+    const input =
+      mode === 'PKI' && configuredRules(dto).length === 0
+        ? { ...dto, ...pickRules(oldCredential) }
+        : dto;
+    const fields = certificateCredentialFields(mode, input);
+    const overlapSeconds =
+      dto.overlapSeconds ??
+      (await this.rotationOverlapSeconds(realm, oldCredential.credentialType));
+
+    const now = new Date();
+    const graceUntil = new Date(now.getTime() + overlapSeconds * 1000);
+    const newCredential = await this.createUniqueName(() =>
+      this.prisma.$transaction(async (tx) => {
+        await this.lockIdentity(tx, realm, identity.id);
+        await this.assertCertificateCapacity(
+          tx,
+          realm,
+          identity.id,
+          fields.certThumbprintS256 ?? null,
+        );
+        const created = await tx.nhiCredential.create({
+          data: {
+            realmId: realm.id,
+            nhiIdentityId: identity.id,
+            credentialType: oldCredential.credentialType,
+            name:
+              dto.name ??
+              `${oldCredential.name} (rotated ${now.toISOString()})`,
+            expiresAt: oldCredential.expiresAt,
+            rotationRequired: false,
+            enabled: true,
+            allowedIpRanges: oldCredential.allowedIpRanges,
+            ...fields,
+          },
+          select: NHI_CREDENTIAL_SELECT,
+        });
+        // Conditional: a concurrent rotation of the same credential, or a
+        // revocation, makes this one fail and roll back.
+        const { count } = await tx.nhiCredential.updateMany({
+          where: {
+            id: oldCredential.id,
+            realmId: realm.id,
+            supersededById: null,
+            revoked: false,
+          },
+          data: {
+            supersededById: created.id,
+            rotationGraceUntil: graceUntil,
+            rotatedAt: now,
+            rotationRequired: false,
+          },
+        });
+        if (count !== 1) {
+          throw new ConflictException(
+            'The credential was rotated or revoked meanwhile',
+          );
+        }
+        return created;
+      }),
+    );
+
+    return {
+      newCredential: withStatus(newCredential, identity),
+      oldCredentialId: oldCredential.id,
+      oldCredential: {
+        id: oldCredential.id,
+        supersededById: newCredential.id,
+        rotationGraceUntil: graceUntil,
+        status: nhiCredentialStatus(
+          {
+            ...oldCredential,
+            supersededById: newCredential.id,
+            rotationGraceUntil: graceUntil,
+          },
+          identity,
+          now,
+        ),
+      },
+    };
+  }
+
+  /**
+   * The overlap of the realm's highest-priority enabled policy for this
+   * credential type, else DEFAULT_ROTATION_OVERLAP_SECONDS.
+   */
+  private async rotationOverlapSeconds(
+    realm: Realm,
+    credentialType: NhiCredentialType,
+  ): Promise<number> {
+    const policy = await this.prisma.nhiCredentialPolicy.findFirst({
+      where: { realmId: realm.id, enabled: true, credentialType },
+      orderBy: [{ priority: 'asc' }, { createdAt: 'asc' }],
+      select: { rotationOverlapSeconds: true },
+    });
+    return policy?.rotationOverlapSeconds ?? DEFAULT_ROTATION_OVERLAP_SECONDS;
   }
 
   // ── Credential Policy CRUD ───────────────────────────────────────────────────
@@ -432,6 +781,8 @@ export class NhiService {
         requireCertificate: dto.requireCertificate ?? false,
         requireIpRestriction: dto.requireIpRestriction ?? false,
         requireAuditLogging: dto.requireAuditLogging ?? true,
+        rotationOverlapSeconds:
+          dto.rotationOverlapSeconds ?? DEFAULT_ROTATION_OVERLAP_SECONDS,
       },
       select: NHI_CREDENTIAL_POLICY_SELECT,
     });
@@ -475,7 +826,7 @@ export class NhiService {
     }
 
     return this.prisma.nhiCredentialPolicy.update({
-      where: { id: policyId },
+      where: { id: policyId, realmId: realm.id },
       data: {
         name: dto.name,
         description: dto.description,
@@ -492,6 +843,7 @@ export class NhiService {
         requireCertificate: dto.requireCertificate,
         requireIpRestriction: dto.requireIpRestriction,
         requireAuditLogging: dto.requireAuditLogging,
+        rotationOverlapSeconds: dto.rotationOverlapSeconds,
       },
       select: NHI_CREDENTIAL_POLICY_SELECT,
     });
@@ -499,7 +851,9 @@ export class NhiService {
 
   async removePolicy(realm: Realm, policyId: string) {
     await this.findPolicyById(realm, policyId);
-    await this.prisma.nhiCredentialPolicy.delete({ where: { id: policyId } });
+    await this.prisma.nhiCredentialPolicy.delete({
+      where: { id: policyId, realmId: realm.id },
+    });
   }
 
   /**
@@ -543,7 +897,7 @@ export class NhiService {
     }
 
     const credential = await this.prisma.nhiCredential.findFirst({
-      where: { id: credentialId, nhiIdentityId },
+      where: { id: credentialId, nhiIdentityId, realmId: realm.id },
     });
 
     if (!credential || credential.revoked || !credential.enabled) {
@@ -609,10 +963,11 @@ export class NhiService {
 
       const credentials = await this.prisma.nhiCredential.findMany({
         where: {
-          nhiIdentity: { realmId: realm.id },
+          realmId: realm.id,
           credentialType,
           revoked: false,
           enabled: true,
+          supersededById: null,
         },
         select: {
           id: true,
@@ -684,7 +1039,7 @@ export class NhiService {
     }
 
     return this.prisma.nhiIdentity.update({
-      where: { id: nhiIdentityId },
+      where: { id: nhiIdentityId, realmId: realm.id },
       data: {
         certificateSubject,
         certificateFingerprint,
@@ -794,7 +1149,7 @@ export class NhiService {
     }
 
     const credentials = await this.prisma.nhiCredential.findMany({
-      where: { nhiIdentityId },
+      where: { nhiIdentityId, realmId: realm.id },
       select: {
         id: true,
         name: true,
@@ -832,10 +1187,11 @@ export class NhiService {
 
     const credentials = await this.prisma.nhiCredential.findMany({
       where: {
-        nhiIdentity: { realmId: realm.id },
+        realmId: realm.id,
         credentialType: policy.credentialType,
         revoked: false,
         enabled: true,
+        supersededById: null,
       },
       select: {
         id: true,
@@ -943,10 +1299,11 @@ export class NhiService {
       policies.map(async (policy) => {
         const credentials = await this.prisma.nhiCredential.findMany({
           where: {
-            nhiIdentity: { realmId: realm.id },
+            realmId: realm.id,
             credentialType: policy.credentialType,
             revoked: false,
             enabled: true,
+            supersededById: null,
           },
           select: {
             id: true,

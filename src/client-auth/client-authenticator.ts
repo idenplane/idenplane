@@ -9,6 +9,7 @@ import { MTLS_CONFIG, type MtlsConfig } from '../mtls/mtls-config.js';
 import {
   ClientCertificateResolverRegistry,
   type CertificateAuthMethod,
+  type CertificateBindingClaims,
 } from './client-certificate-resolver.js';
 import { CertificateAuthFailureBudget } from './certificate-auth-failure-budget.js';
 
@@ -192,6 +193,8 @@ export interface AuthenticatedClient {
   x5tS256: string | null;
   /** The client's tokens must be bound to that certificate (RFC 8705 §3). */
   bindToCertificate: boolean;
+  /** Private claims the resolver attaches to the bound access token. */
+  bindingClaims?: CertificateBindingClaims;
 }
 
 /**
@@ -211,6 +214,8 @@ export interface AuthenticatedClient {
  *   too is `invalid_request`. Repeated failures with one certificate are
  *   429 (MTLS_AUTH_FAILURE_LIMIT_PER_MINUTE).
  * - A certificate presented by a client of any other method is ignored.
+ * - An NHI-backed client (`nhiIdentityId`) only ever authenticates with a
+ *   certificate method.
  * - An unknown or disabled client is `invalid_client`.
  */
 @Injectable()
@@ -290,6 +295,12 @@ export class ClientAuthenticator {
     // A registration that contradicts the client type authenticates nobody.
     if (registered.length === 0)
       throw new ClientAuthError('unsupported_method');
+
+    // An NHI-backed client authenticates with its identity's certificates
+    // only; whatever its row says otherwise, it has no secret to check.
+    if (client.nhiIdentityId && !registered.some(isCertificateMethod)) {
+      throw new ClientAuthError('unsupported_method');
+    }
 
     if (input.skipCredentialCheck) return done(registered[0]);
 
@@ -377,6 +388,9 @@ export class ClientAuthenticator {
           certificate,
           x5tS256: certificate.x5tS256,
           bindToCertificate: result.bindToCertificate,
+          ...(result.bindingClaims
+            ? { bindingClaims: result.bindingClaims }
+            : {}),
         };
       }
       rejection = 'resolver_mismatch';

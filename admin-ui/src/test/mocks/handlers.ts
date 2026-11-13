@@ -192,6 +192,34 @@ export const handlers = [
     ]);
   }),
 
+  // An NHI identity's OAuth client (RFC 8705 NHI binding): none by default.
+  http.get(`${BASE}/realms/:name/nhi/:id/oauth-client`, () => {
+    return HttpResponse.json(
+      { statusCode: 404, message: 'The NHI identity has no OAuth client' },
+      { status: 404 },
+    );
+  }),
+
+  http.post(`${BASE}/realms/:name/nhi/:id/oauth-client`, ({ params }) => {
+    return HttpResponse.json(
+      {
+        id: 'client-nhi-1',
+        clientId: `nhi-${String(params.id)}`,
+        name: 'sensor-gateway-01',
+        enabled: true,
+        clientType: 'CONFIDENTIAL',
+        grantTypes: ['client_credentials'],
+        tokenEndpointAuthMethod: 'self_signed_tls_client_auth',
+        tlsClientCertificateBoundAccessTokens: true,
+        nhiIdentityId: String(params.id),
+        tokenEndpoint: `/realms/${String(params.name)}/protocol/openid-connect/token`,
+        mtlsClientAuthEnabled: true,
+        createdAt: '2026-11-13T00:00:00.000Z',
+      },
+      { status: 201 },
+    );
+  }),
+
   // Stats
   http.get(`${BASE}/realms/:name/stats`, () => {
     return HttpResponse.json(makeStats());
