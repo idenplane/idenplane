@@ -24,7 +24,11 @@ export interface ClientCertificateRejection {
 }
 
 export interface ClientCertificateResolveInput {
-  realm: { id: string; mtlsTrustGlobalAnchors?: boolean };
+  realm: {
+    id: string;
+    mtlsClientAuthEnabled?: boolean;
+    mtlsTrustGlobalAnchors?: boolean;
+  };
   client: Client;
   method: CertificateAuthMethod;
   certificate: PresentedClientCertificate;
@@ -41,6 +45,20 @@ export interface ClientCertificateResolver {
   resolve(
     input: ClientCertificateResolveInput,
   ): Promise<ClientCertificateResolution | ClientCertificateRejection | null>;
+  /**
+   * Whether a token bound to `x5tS256` and issued to `client` may still be
+   * used (introspection): `true` or `false` when the client is one this
+   * resolver knows about, `null` otherwise. Optional: a resolver without it
+   * leaves the decision to the token's other checks.
+   */
+  bindingActive?(input: CertificateBindingInput): Promise<boolean | null>;
+}
+
+export interface CertificateBindingInput {
+  realm: ClientCertificateResolveInput['realm'];
+  client: Client;
+  /** The token's `cnf.x5t#S256`, or `null` for an unbound token. */
+  x5tS256: string | null;
 }
 
 /**
@@ -62,5 +80,18 @@ export class ClientCertificateResolverRegistry {
 
   resolvers(): readonly ClientCertificateResolver[] {
     return this.registered;
+  }
+
+  /**
+   * The first answer of a resolver that knows the client (see
+   * {@link ClientCertificateResolver.bindingActive}), or `null` when none
+   * does.
+   */
+  async bindingActive(input: CertificateBindingInput): Promise<boolean | null> {
+    for (const resolver of this.registered) {
+      const answer = (await resolver.bindingActive?.(input)) ?? null;
+      if (answer !== null) return answer;
+    }
+    return null;
   }
 }

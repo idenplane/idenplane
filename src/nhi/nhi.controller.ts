@@ -10,7 +10,9 @@ import {
   HttpCode,
   HttpStatus,
   UseGuards,
+  Res,
 } from '@nestjs/common';
+import type { Response } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -20,6 +22,9 @@ import {
 import type { Realm } from '@prisma/client';
 import { NhiService } from './nhi.service.js';
 import { NhiAuditService } from './nhi-audit.service.js';
+import { NhiOAuthClientService } from './nhi-oauth-client.service.js';
+import { NhiOAuthClientDto } from './dto/nhi-oauth-client.dto.js';
+import { RotateNhiCredentialDto } from './dto/rotate-nhi-credential.dto.js';
 import { CreateNhiIdentityDto } from './dto/create-nhi.dto.js';
 import { UpdateNhiIdentityDto } from './dto/update-nhi.dto.js';
 import { CreateNhiCredentialDto } from './dto/create-nhi-credential.dto.js';
@@ -41,6 +46,7 @@ export class NhiController {
   constructor(
     private readonly nhiService: NhiService,
     private readonly nhiAuditService: NhiAuditService,
+    private readonly oauthClients: NhiOAuthClientService,
   ) {}
 
   // ── NHI Identity endpoints ───────────────────────────────────────────────────
@@ -266,7 +272,9 @@ export class NhiController {
 
   @Delete(':id')
   @HttpCode(HttpStatus.NO_CONTENT)
-  @ApiOperation({ summary: 'Delete an NHI identity' })
+  @ApiOperation({
+    summary: 'Delete an NHI identity (its credentials and OAuth client too)',
+  })
   @ApiResponse({ status: 204, description: 'NHI identity deleted' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'NHI identity not found' })
@@ -355,9 +363,10 @@ export class NhiController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({
     summary:
-      'Rotate a credential (creates new key, keeps old active for grace period)',
+      'Rotate a credential. An API key is replaced and revoked at once; a certificate credential is replaced and the old one keeps authenticating for the overlap (rotationGraceUntil).',
   })
   @ApiResponse({ status: 200, description: 'Credential rotated' })
+  @ApiResponse({ status: 400, description: 'Invalid certificate or rule' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({
     status: 404,
@@ -365,14 +374,75 @@ export class NhiController {
   })
   @ApiResponse({
     status: 409,
-    description: 'Only API_KEY credentials can be rotated',
+    description:
+      'Not rotatable (type, already rotated or revoked), or the identity holds 10 live certificates',
   })
   rotateCredential(
     @CurrentRealm() realm: Realm,
     @Param('id') id: string,
     @Param('credentialId') credentialId: string,
+    @Body() dto: RotateNhiCredentialDto,
   ) {
-    return this.nhiService.rotateCredential(realm, id, credentialId);
+    return this.nhiService.rotateCredential(realm, id, credentialId, dto);
+  }
+
+  // ── OAuth client (RFC 8705 NHI binding) ───────────────────────────────────
+
+  @Post(':id/oauth-client')
+  @ApiOperation({
+    summary:
+      "Create the identity's OAuth client, or return the one it has. CONFIDENTIAL, client_credentials only, no secret; authenticates at the token endpoint with the identity's certificate credentials and always receives certificate-bound tokens.",
+  })
+  @ApiResponse({ status: 201, description: 'OAuth client created' })
+  @ApiResponse({ status: 200, description: 'The existing OAuth client' })
+  @ApiResponse({
+    status: 400,
+    description: 'No method given and none implied by the credentials',
+  })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({ status: 404, description: 'NHI identity not found' })
+  @ApiResponse({
+    status: 409,
+    description:
+      'Decommissioned identity, clientId taken, or a different method/clientId than the existing client',
+  })
+  async ensureOAuthClient(
+    @CurrentRealm() realm: Realm,
+    @Param('id') id: string,
+    @Body() dto: NhiOAuthClientDto,
+    @Res({ passthrough: true }) res: Response,
+  ) {
+    const { created, client } = await this.oauthClients.ensure(realm, id, dto);
+    res.status(created ? HttpStatus.CREATED : HttpStatus.OK);
+    return client;
+  }
+
+  @Get(':id/oauth-client')
+  @ApiOperation({ summary: "Get the identity's OAuth client" })
+  @ApiResponse({ status: 200, description: 'The OAuth client' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 404,
+    description: 'NHI identity not found, or it has no OAuth client',
+  })
+  getOAuthClient(@CurrentRealm() realm: Realm, @Param('id') id: string) {
+    return this.oauthClients.get(realm, id);
+  }
+
+  @Delete(':id/oauth-client')
+  @HttpCode(HttpStatus.NO_CONTENT)
+  @ApiOperation({
+    summary:
+      "Delete the identity's OAuth client. Its access tokens stop introspecting as active.",
+  })
+  @ApiResponse({ status: 204, description: 'OAuth client deleted' })
+  @ApiResponse({ status: 401, description: 'Unauthorized' })
+  @ApiResponse({
+    status: 404,
+    description: 'NHI identity not found, or it has no OAuth client',
+  })
+  removeOAuthClient(@CurrentRealm() realm: Realm, @Param('id') id: string) {
+    return this.oauthClients.remove(realm, id);
   }
 
   // ── Certificate management ─────────────────────────────────────────────────

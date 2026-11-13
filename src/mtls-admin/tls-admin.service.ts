@@ -82,6 +82,19 @@ export class TlsAdminService {
     return { id: client.id, clientId: client.clientId };
   }
 
+  /** An NHI-backed client's certificates are its identity's credentials. */
+  private async assertNotNhiBacked(clientDbId: string): Promise<void> {
+    const row = await this.prisma.client.findUnique({
+      where: { id: clientDbId },
+      select: { nhiIdentityId: true },
+    });
+    if (row?.nhiIdentityId) {
+      throw new ConflictException(
+        "This client is the OAuth client of an NHI identity; register its certificates as the identity's credentials",
+      );
+    }
+  }
+
   async listClientCertificates(realm: Realm, clientIdOrUuid: string) {
     const client = await this.clientRow(realm, clientIdOrUuid);
     return this.prisma.clientTlsCertificate.findMany({
@@ -107,6 +120,7 @@ export class TlsAdminService {
     pem: string,
   ) {
     const client = await this.clientRow(realm, clientIdOrUuid);
+    await this.assertNotNhiBacked(client.id);
     const certificate = readCertificate(pem);
     if (certificate.notAfter.getTime() <= Date.now()) {
       throw new BadRequestException('The certificate has expired');

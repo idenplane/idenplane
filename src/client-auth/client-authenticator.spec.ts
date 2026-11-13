@@ -75,6 +75,28 @@ describe('ClientAuthenticator', () => {
     throw new Error('expected authentication to fail');
   }
 
+  describe('NHI-backed clients', () => {
+    it('authenticate with a certificate method only, never a secret', async () => {
+      for (const patch of [
+        {},
+        { tokenEndpointAuthMethod: 'client_secret_post' },
+        { clientType: 'PUBLIC', clientSecret: null },
+      ]) {
+        clients.set('device', {
+          ...confidential,
+          clientId: 'device',
+          nhiIdentityId: 'nhi-1',
+          ...patch,
+        } as Client);
+        const err = await failure({
+          body: { client_id: 'device', client_secret: 'right' },
+        });
+        expect(err.reason).toBe('unsupported_method');
+      }
+      expect(verify).not.toHaveBeenCalled();
+    });
+  });
+
   describe('client_secret_basic', () => {
     it('authenticates a confidential client', async () => {
       const result = await run({ authorization: basic('backend', 'right') });

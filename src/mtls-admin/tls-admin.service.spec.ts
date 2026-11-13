@@ -37,6 +37,7 @@ describe('TlsAdminService', () => {
       clientTlsCertificate: table(),
       realmTlsTrustAnchor: table(),
       tlsRevokedCertificate: table(),
+      client: { findUnique: jest.fn(async () => ({ nhiIdentityId: null })) },
     };
     service = new TlsAdminService(
       prisma as never,
@@ -50,6 +51,16 @@ describe('TlsAdminService', () => {
   });
 
   describe('client certificates', () => {
+    it("refuses a certificate for an NHI-backed client: those are the identity's credentials", async () => {
+      prisma.client.findUnique.mockResolvedValueOnce({
+        nhiIdentityId: 'nhi-1',
+      });
+      await expect(
+        service.addClientCertificate(realm, 'device', leaf.pem),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.clientTlsCertificate.create).not.toHaveBeenCalled();
+    });
+
     it('registers a certificate and returns its x5tS256', async () => {
       const row = await service.addClientCertificate(realm, 'device', leaf.pem);
       expect(row).toMatchObject({

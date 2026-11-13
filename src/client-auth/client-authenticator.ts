@@ -211,6 +211,8 @@ export interface AuthenticatedClient {
  *   too is `invalid_request`. Repeated failures with one certificate are
  *   429 (MTLS_AUTH_FAILURE_LIMIT_PER_MINUTE).
  * - A certificate presented by a client of any other method is ignored.
+ * - An NHI-backed client (`nhiIdentityId`) only ever authenticates with a
+ *   certificate method.
  * - An unknown or disabled client is `invalid_client`.
  */
 @Injectable()
@@ -290,6 +292,12 @@ export class ClientAuthenticator {
     // A registration that contradicts the client type authenticates nobody.
     if (registered.length === 0)
       throw new ClientAuthError('unsupported_method');
+
+    // An NHI-backed client authenticates with its identity's certificates
+    // only; whatever its row says otherwise, it has no secret to check.
+    if (client.nhiIdentityId && !registered.some(isCertificateMethod)) {
+      throw new ClientAuthError('unsupported_method');
+    }
 
     if (input.skipCredentialCheck) return done(registered[0]);
 

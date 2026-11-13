@@ -24,6 +24,7 @@ import {
   X5T_S256,
   type PresentedCertificateInput,
 } from '../mtls/certificate-binding.js';
+import { ClientCertificateResolverRegistry } from '../client-auth/client-certificate-resolver.js';
 
 @Injectable()
 export class TokensService {
@@ -39,6 +40,7 @@ export class TokensService {
     private readonly backchannelLogout: BackchannelLogoutService,
     private readonly eventsService: EventsService,
     private readonly customAttributesService: CustomAttributesService,
+    private readonly certificateResolvers: ClientCertificateResolverRegistry,
   ) {}
 
   async introspect(realm: Realm, token: string) {
@@ -79,20 +81,34 @@ export class TokensService {
       // azp (authorized party) identifies the client the token was issued to.
       // RFC 7662 / OIDC clients rely on it (and client_id) to verify audience.
       const azp = payload['azp'] as string | undefined;
+      const client = azp ? await this.lookups.client(realm.id, azp) : null;
 
-      if (sub) {
+      if (client?.nhiIdentityId) {
+        // A token of an NHI-backed client (RFC 8705 NHI binding). Its subject
+        // is the client, never a user, so no user is looked up. It is active
+        // while the client is enabled and its certificate binding still
+        // holds: the realm allows certificate authentication, the identity
+        // is active and the bound credential is active or in its rotation
+        // grace period. With no resolver to ask, it is not active.
+        if (!client.enabled || client.id !== sub) return { active: false };
+        const cnf = payload['cnf'] as Record<string, unknown> | undefined;
+        const x5t = cnf?.[X5T_S256];
+        const bound = await this.certificateResolvers.bindingActive({
+          realm,
+          client,
+          x5tS256: typeof x5t === 'string' ? x5t : null,
+        });
+        if (bound !== true) return { active: false };
+      } else if (sub) {
         const user = await this.lookups.userProfile(sub);
         if (user) {
           if (!user.enabled) return { active: false };
           username = user.username;
-        } else {
+        } else if (!client || client.id !== sub || !client.enabled) {
           // A client_credentials token of a client without a service account
           // has the client as its subject. It is active while that client
           // exists and is enabled; a deleted user's token is not.
-          const client = azp ? await this.lookups.client(realm.id, azp) : null;
-          if (!client || client.id !== sub || !client.enabled) {
-            return { active: false };
-          }
+          return { active: false };
         }
       }
 
