@@ -1448,6 +1448,7 @@ export class FlowRuntimeService {
       client,
       state.oauthParams,
       authContext,
+      req,
     );
     return { kind: 'redirect', url };
   }

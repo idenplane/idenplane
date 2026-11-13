@@ -1,4 +1,6 @@
 import { Injectable } from '@nestjs/common';
+import type { Request } from 'express';
+import { SAML_REQUEST_COOKIE } from '../authn-core/cookies.js';
 import type { Client, Realm, User } from '@prisma/client';
 import { OAuthService } from '../oauth/oauth.service.js';
 import { ConsentService } from '../consent/consent.service.js';
@@ -52,9 +54,16 @@ export class PostAuthService {
     client: Client | null | undefined,
     oauthParams: Record<string, string>,
     authContext: AuthContext,
+    req?: Request,
   ): Promise<string> {
     if (!client) {
-      return `/realms/${realm.name}/account`;
+      // A SAML service provider's request waits for this sign-in: answer it.
+      const samlPending = (
+        req?.cookies as Record<string, string | undefined> | undefined
+      )?.[SAML_REQUEST_COOKIE];
+      return samlPending
+        ? `/realms/${realm.name}/protocol/saml/resume`
+        : `/realms/${realm.name}/account`;
     }
 
     // Fix auth_time now, when the user has just authenticated, so a consent

@@ -261,13 +261,15 @@ export class LoginFlowService {
       ipAddress: resolveClientIp(req),
     });
 
-    // Account page, client policy, consent screen or authorization code.
+    // Account page (or a pending SAML request), client policy, consent
+    // screen or authorization code.
     return this.postAuth.continueAuthorization(
       realm,
       user,
       client,
       oauthParams,
       authContext,
+      req,
     );
   }
 
