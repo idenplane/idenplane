@@ -62,13 +62,15 @@ describe('certificate interoperability and signed metadata', () => {
     expect(service.validateCertificate(pem).valid).toBe(false);
   });
 
-  it('reads the actual subject, SAN and dates from the signed DER', async () => {
+  it('reads the actual subject, SAN and dates from signed DER, ignoring appended text', async () => {
     const { pem } = await makeTestCertificate({
       name: 'real-device',
       dns: 'real-device.internal',
     });
     const cert = new X509Certificate(pem);
-    const info = service.getCertificateInfo(pem);
+    const info = service.getCertificateInfo(
+      pem + '\nCN=forged\nissuer=CN=forged\nbasicConstraints CA:true',
+    );
     expect(info.subject).toBe(cert.subject);
     expect(info.notAfter).toBe(new Date(cert.validTo).toISOString());
     expect(info.isCA).not.toBe(true);
