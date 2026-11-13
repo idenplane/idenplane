@@ -311,14 +311,17 @@ curl -X POST https://idp.example.com/admin/realms/acme/nhi/6f1c…/credentials/<
 
 In one transaction, the new credential is created and the old one is marked superseded, with `rotationGraceUntil` = now + the overlap. The overlap is `overlapSeconds` when given, else the `rotationOverlapSeconds` of the realm's highest-priority enabled credential policy for that credential type, else 24 hours. During the overlap both certificates authenticate, so the device can switch at its own pace. Afterwards the old one is `expired`. A PKI credential is rotated the same way with a new rule, or keeps its rule when none is given. A credential can be rotated once; rotate its replacement next. API keys rotate as before: the old key stops at once.
 
-### Introspection
+### Introspection, usage and audit
 
-Introspecting a token of an NHI client does not look up a user. The token is active while the client is enabled, the realm still allows certificate authentication, the identity is `ACTIVE` and the binding still holds:
+A token of an NHI client names the credential that accepted the certificate in a private claim, `nhi_cid`; a PKI token also carries the certificate's canonical issuer and serial number in `nhi_crt`. No mapper or plugin can set, change or remove either.
 
-- **SELF_SIGNED**: the credential with the token's `cnf` thumbprint is `active` or `grace`, and the certificate is not on the realm's deny-list.
-- **PKI**: the thumbprint is not on the deny-list and the identity still has an `active` or `grace` PKI credential. A deny-list entry by issuer and serial number takes effect at the device's next token request.
+Introspecting such a token does not look up a user. It is active while the client is enabled, the realm still allows certificate authentication, the identity is `ACTIVE` and **that credential** still accepts it:
 
-Suspending the identity, revoking the credential or the end of a grace period therefore makes its outstanding tokens introspect as `{"active": false}` at once.
+- its status is `active` or `grace`: revoking it ends its tokens at once, and a rotated-out credential's tokens end with its grace period, even while another credential of the identity still works;
+- for SELF_SIGNED, its thumbprint is the token's `cnf`;
+- the certificate is not on the realm's deny-list, by thumbprint or by issuer and serial number.
+
+Each certificate authentication updates the credential's `lastUsedAt` and `requestCount` and writes an NHI audit entry (`ACCESS_GRANTED`, or `ACCESS_DENIED` with the reason as `errorCode`; see `GET …/nhi/audit-logs`). These writes never delay the token response.
 
 ## Discovery
 
