@@ -10,6 +10,7 @@ import {
   registerDecorator,
   ValidationOptions,
   ValidationArguments as _ValidationArguments,
+  ValidateIf,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
 import {
@@ -74,6 +75,16 @@ function IsNoWildcardOrigin(validationOptions?: ValidationOptions) {
   };
 }
 
+/**
+ * Optional, but not nullable: an absent field is skipped, while `null` is
+ * validated, and refused by the type check that follows, instead of
+ * reaching a non-nullable column as a 500. `@IsOptional()` would let `null`
+ * through.
+ */
+function NotNullIfPresent(): PropertyDecorator {
+  return ValidateIf((_object: object, value: unknown) => value !== undefined);
+}
+
 export class CreateClientDto {
   @ApiProperty({ example: 'my-frontend' })
   @IsString()
@@ -108,12 +119,12 @@ export class CreateClientDto {
       "Shorthand for clientType: 'PUBLIC'. Ignored when clientType is set.",
     example: true,
   })
-  @IsOptional()
+  @NotNullIfPresent()
   @IsBoolean()
   publicClient?: boolean;
 
   @ApiPropertyOptional({ default: true })
-  @IsOptional()
+  @NotNullIfPresent()
   @IsBoolean()
   enabled?: boolean;
 
@@ -149,7 +160,7 @@ export class CreateClientDto {
   grantTypes?: string[];
 
   @ApiPropertyOptional({ default: false })
-  @IsOptional()
+  @NotNullIfPresent()
   @IsBoolean()
   requireConsent?: boolean;
 
@@ -159,7 +170,7 @@ export class CreateClientDto {
   backchannelLogoutUri?: string;
 
   @ApiPropertyOptional({ default: true })
-  @IsOptional()
+  @NotNullIfPresent()
   @IsBoolean()
   backchannelLogoutSessionRequired?: boolean;
 
@@ -238,7 +249,7 @@ export class CreateClientDto {
     description:
       'RFC 8705 §3 tls_client_certificate_bound_access_tokens: every access token issued to this client carries cnf.x5t#S256 of the certificate it presented at the token endpoint (any authentication method), and is accepted at userinfo and other resource endpoints only with that certificate. A token request without a certificate is invalid_client. For a PUBLIC client the refresh token is bound too. Needs MTLS_ENABLED and a certificate listener or trusted proxy.',
   })
-  @IsOptional()
+  @NotNullIfPresent()
   @IsBoolean()
   tlsClientCertificateBoundAccessTokens?: boolean;
 }
