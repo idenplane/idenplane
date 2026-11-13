@@ -1,5 +1,4 @@
 import { describe, it, expect, vi } from 'vitest';
-import { createHash, randomBytes } from 'node:crypto';
 import {
   assertCertificateBinding,
   boundCertificateThumbprint,
@@ -15,9 +14,21 @@ vi.mock('jose', () => ({
 const { jwtVerify } = await import('jose');
 const server = await import('../server.js');
 
+// Web Crypto only: the SDK is typechecked without Node's types.
+const randomBytes = (n: number) => crypto.getRandomValues(new Uint8Array(n));
+async function sha256Base64Url(bytes: Uint8Array): Promise<string> {
+  const digest = new Uint8Array(
+    await crypto.subtle.digest('SHA-256', new Uint8Array(bytes)),
+  );
+  return btoa(String.fromCharCode(...digest))
+    .replace(/\+/g, '-')
+    .replace(/\//g, '_')
+    .replace(/=+$/, '');
+}
+
 // Any bytes do: the thumbprint is a digest of the DER, whatever it encodes.
 const der = randomBytes(700);
-const x5t = createHash('sha256').update(der).digest('base64url');
+const x5t = await sha256Base64Url(der);
 const bound = { sub: 'u', cnf: { 'x5t#S256': x5t } };
 
 describe('computeX5tS256', () => {
@@ -27,17 +38,21 @@ describe('computeX5tS256', () => {
     expect(x5t).toMatch(/^[A-Za-z0-9_-]{43}$/);
   });
 
-  it('hashes only the view, not a pooled Buffer’s whole backing store', async () => {
-    const pooled = Buffer.from('abc');
-    expect(await computeX5tS256(pooled)).toBe(
-      createHash('sha256').update('abc').digest('base64url'),
+  it('hashes only the view, not its whole backing store', async () => {
+    // Like a pooled Node Buffer: 'abc' is a view in the middle of a larger store.
+    const store = new TextEncoder().encode('xxabcxx');
+    const view = new Uint8Array(store.buffer, 2, 3);
+    expect(await computeX5tS256(view)).toBe(
+      await sha256Base64Url(new TextEncoder().encode('abc')),
     );
   });
 });
 
 describe('assertCertificateBinding', () => {
   it('passes an unbound token with or without a certificate', async () => {
-    await expect(assertCertificateBinding({ sub: 'u' })).resolves.toBeUndefined();
+    await expect(
+      assertCertificateBinding({ sub: 'u' }),
+    ).resolves.toBeUndefined();
     await expect(
       assertCertificateBinding({ sub: 'u' }, { certificateThumbprint: x5t }),
     ).resolves.toBeUndefined();
@@ -47,7 +62,9 @@ describe('assertCertificateBinding', () => {
     await expect(
       assertCertificateBinding(bound, { certificateThumbprint: x5t }),
     ).resolves.toBeUndefined();
-    await expect(assertCertificateBinding(bound, { certificate: der })).resolves.toBeUndefined();
+    await expect(
+      assertCertificateBinding(bound, { certificate: der }),
+    ).resolves.toBeUndefined();
   });
 
   it('refuses a bound token without a certificate', async () => {
@@ -67,7 +84,9 @@ describe('assertCertificateBinding', () => {
   it.each([['x'], [null], [{ jkt: 'k' }], [{ 'x5t#S256': '' }]])(
     'refuses a cnf it cannot check: %j',
     async (cnf) => {
-      expect(() => boundCertificateThumbprint({ cnf })).toThrow(CertificateBindingError);
+      expect(() => boundCertificateThumbprint({ cnf })).toThrow(
+        CertificateBindingError,
+      );
     },
   );
 });
@@ -80,9 +99,9 @@ describe('verifyToken with a certificate-bound token', () => {
     await expect(
       server.verifyToken('t', config, { certificateThumbprint: x5t }),
     ).resolves.toEqual(bound);
-    await expect(server.verifyToken('t', config, { certificate: der })).resolves.toEqual(
-      bound,
-    );
+    await expect(
+      server.verifyToken('t', config, { certificate: der }),
+    ).resolves.toEqual(bound);
   });
 
   it('rejects it without a certificate, and in the request helpers', async () => {
@@ -99,7 +118,9 @@ describe('verifyToken with a certificate-bound token', () => {
 
   it('leaves unbound tokens unchanged', async () => {
     vi.mocked(jwtVerify).mockResolvedValue({ payload: { sub: 'u' } } as never);
-    await expect(server.verifyToken('t', config)).resolves.toEqual({ sub: 'u' });
+    await expect(server.verifyToken('t', config)).resolves.toEqual({
+      sub: 'u',
+    });
   });
 
   it('exports computeX5tS256', async () => {
