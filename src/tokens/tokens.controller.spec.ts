@@ -420,7 +420,11 @@ describe('TokensController', () => {
 
       const result = await controller.userinfo(realm, req);
 
-      expect(mockTokensService.userinfo).toHaveBeenCalledWith(realm, 'abc-123');
+      expect(mockTokensService.userinfo).toHaveBeenCalledWith(
+        realm,
+        'abc-123',
+        expect.any(Function),
+      );
       expect(result).toEqual(expected);
     });
 

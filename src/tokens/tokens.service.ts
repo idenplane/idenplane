@@ -19,6 +19,11 @@ import { BackchannelLogoutService } from './backchannel-logout.service.js';
 import { EventsService } from '../events/events.service.js';
 import { LoginEventType } from '../events/event-types.js';
 import { matchesRedirectUri } from '../common/redirect-uri.utils.js';
+import {
+  assertCertificateBinding,
+  X5T_S256,
+  type PresentedCertificateInput,
+} from '../mtls/certificate-binding.js';
 
 @Injectable()
 export class TokensService {
@@ -44,6 +49,7 @@ export class TokensService {
         return { active: false };
       }
 
+      // cert-binding: exempt: introspection reports cnf (RFC 8705 §3.2); the resource server enforces it
       const payload = await this.jwkService.verifyJwt(
         token,
         signingKey.publicKey,
@@ -105,6 +111,9 @@ export class TokensService {
         email: payload['email'],
         realm_access: payload['realm_access'],
         resource_access: payload['resource_access'],
+        // RFC 8705 §3.2: the resource server checks the binding itself.
+        // Absent (undefined, left out of the JSON) for an unbound token.
+        cnf: payload['cnf'] as Record<string, unknown> | undefined,
       };
     } catch {
       // Not a verifiable JWT (access/id token). Treat it as an opaque refresh
@@ -142,6 +151,8 @@ export class TokensService {
       scope: stored.scope ?? undefined,
       exp: Math.floor(stored.expiresAt.getTime() / 1000),
       iat: Math.floor(stored.createdAt.getTime() / 1000),
+      // A public client's refresh token bound to its certificate (RFC 8705 §4).
+      ...(stored.cnfX5tS256 ? { cnf: { [X5T_S256]: stored.cnfX5tS256 } } : {}),
     };
   }
 
@@ -184,6 +195,7 @@ export class TokensService {
       try {
         const signingKey = await this.lookups.activeSigningKey(realm.id);
         if (signingKey) {
+          // cert-binding: exempt: revocation ownership check, the token is not used for access
           const payload = await this.jwkService.verifyJwt(
             token,
             signingKey.publicKey,
@@ -234,6 +246,7 @@ export class TokensService {
       try {
         const signingKey = await this.lookups.activeSigningKey(realm.id);
         if (signingKey) {
+          // cert-binding: exempt: revocation reads jti to blacklist the token, it grants no access
           const payload = await this.jwkService.verifyJwt(
             token,
             signingKey.publicKey,
@@ -285,6 +298,7 @@ export class TokensService {
 
       if (!signingKey) return;
 
+      // cert-binding: exempt: id_token_hint, an ID token is never certificate-bound
       const payload = await this.jwkService.verifyJwt(
         idTokenHint,
         signingKey.publicKey,
@@ -343,6 +357,7 @@ export class TokensService {
     try {
       const signingKey = await this.lookups.activeSigningKey(realm.id);
       if (signingKey) {
+        // cert-binding: exempt: id_token_hint, an ID token is never certificate-bound
         const payload = await this.jwkService.verifyJwt(
           idTokenHint,
           signingKey.publicKey,
@@ -437,7 +452,17 @@ export class TokensService {
       });
   }
 
-  async userinfo(realm: Realm, accessToken: string) {
+  /**
+   * OIDC UserInfo. `presentedCert` is the certificate the request presented
+   * (see ClientCertificateSource), read only when the token is
+   * certificate-bound: a bound token without its certificate is 401
+   * `invalid_token` (RFC 8705 §3).
+   */
+  async userinfo(
+    realm: Realm,
+    accessToken: string,
+    presentedCert: PresentedCertificateInput = null,
+  ) {
     const signingKey = await this.lookups.activeSigningKey(realm.id);
 
     if (!signingKey) {
@@ -446,6 +471,7 @@ export class TokensService {
 
     let payload;
     try {
+      // cert-binding: enforced
       payload = await this.jwkService.verifyJwt(
         accessToken,
         signingKey.publicKey,
@@ -453,6 +479,7 @@ export class TokensService {
     } catch {
       throw new UnauthorizedException('Invalid access token');
     }
+    assertCertificateBinding(payload, presentedCert);
 
     // Check blacklist
     const jti = payload['jti'];
@@ -496,6 +523,7 @@ export class TokensService {
       throw new UnauthorizedException('No signing key');
     }
 
+    // cert-binding: exempt: back-channel logout token, signed by this server and never bound
     const payload = await this.jwkService.verifyJwt(
       logoutToken,
       signingKey.publicKey,

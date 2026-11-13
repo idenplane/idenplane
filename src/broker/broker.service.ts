@@ -163,6 +163,7 @@ export class BrokerService {
     const signingKey = await this.getActiveSigningKey(realm.id);
     let brokerState: BrokerState;
     try {
+      // cert-binding: exempt: broker state JWT this server round-trips through the browser, not an access token
       const payload = await this.jwkService.verifyJwt(
         stateJwt,
         signingKey.publicKey,

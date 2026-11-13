@@ -339,7 +339,20 @@ export class TokensController {
     description: 'invalid_token — missing or invalid Bearer token',
   })
   userinfo(@CurrentRealm() realm: Realm, @Req() req: Request) {
-    return this.tokensService.userinfo(realm, bearerToken(req, undefined));
+    return this.tokensService.userinfo(
+      realm,
+      bearerToken(req, undefined),
+      this.presentedCertificate(req),
+    );
+  }
+
+  /**
+   * The request's certificate, read only if the token turns out to be
+   * certificate-bound (RFC 8705 §3), so an unbound token's request is
+   * handled exactly as without mTLS.
+   */
+  private presentedCertificate(req: Request) {
+    return () => this.clientCertificates.fromRequest(req);
   }
 
   /**
@@ -367,7 +380,11 @@ export class TokensController {
       typeof body?.['access_token'] === 'string'
         ? body['access_token']
         : undefined;
-    return this.tokensService.userinfo(realm, bearerToken(req, formToken));
+    return this.tokensService.userinfo(
+      realm,
+      bearerToken(req, formToken),
+      this.presentedCertificate(req),
+    );
   }
 
   @Post('logout/backchannel')

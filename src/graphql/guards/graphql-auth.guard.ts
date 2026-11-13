@@ -12,6 +12,7 @@ import { AdminAuthService } from '../../admin-auth/admin-auth.service.js';
 import { RateLimitService } from '../../rate-limit/rate-limit.service.js';
 import { resolveClientIp } from '../../common/utils/proxy-ip.util.js';
 import { timingSafeEqual } from 'crypto';
+import { CertificateBindingError } from '../../mtls/certificate-binding.js';
 
 type AuthRequest = Request & {
   adminUser?: { userId: string; roles: string[] };
@@ -44,10 +45,16 @@ export class GraphQLAuthGuard implements CanActivate {
     if (authHeader && authHeader.startsWith('Bearer ')) {
       const token = authHeader.slice(7);
       try {
-        const adminUser = await this.adminAuthService.validateAdminToken(token);
+        const adminUser = await this.adminAuthService.validateAdminToken(
+          token,
+          request,
+        );
         request.adminUser = adminUser;
         return true;
-      } catch {
+      } catch (err) {
+        // A certificate-bound token without its certificate is refused
+        // outright (RFC 8705 §3).
+        if (err instanceof CertificateBindingError) throw err;
         // Fall through to API key check
       }
     }

@@ -10,6 +10,7 @@ jest.mock('../crypto/jwk.service.js', () => ({
 }));
 
 import { AdminAuthService } from './admin-auth.service.js';
+import { CertificateBindingError } from '../mtls/certificate-binding.js';
 import {
   createMockPrismaService,
   type MockPrismaService,
@@ -336,6 +337,61 @@ describe('AdminAuthService', () => {
   });
 
   // ─── validateAdminToken ───────────────────────────────
+
+  describe('validateAdminToken with a certificate-bound token (RFC 8705 §3)', () => {
+    const X5T = 'n4bQgYhMfWWaL-qgxVrQFaO_TxsrC4Is0V1sFbDwCgg';
+    const req = { headers: {}, socket: {} } as any;
+    const withSource = (fromRequest: jest.Mock) =>
+      new AdminAuthService(
+        lookupsBackedBy(prisma as any) as any,
+        prisma as any,
+        crypto as any,
+        jwkService as any,
+        rateLimitService as any,
+        bruteForceService as any,
+        { fromRequest } as any,
+      );
+    let other: AdminAuthService | undefined;
+
+    beforeEach(() => {
+      prisma.realm.findUnique.mockResolvedValue(masterRealm);
+      prisma.realmSigningKey.findFirst.mockResolvedValue(signingKey);
+      jwkService.verifyJwt.mockResolvedValue({
+        typ: 'admin',
+        sub: 'user-1',
+        realm_access: { roles: ['super-admin'] },
+        cnf: { 'x5t#S256': X5T },
+      });
+    });
+    afterEach(() => other?.onModuleDestroy());
+
+    it('accepts it with its certificate', async () => {
+      other = withSource(jest.fn().mockReturnValue({ x5tS256: X5T }));
+      await expect(other.validateAdminToken('t', req)).resolves.toEqual({
+        userId: 'user-1',
+        roles: ['super-admin'],
+      });
+    });
+
+    it('refuses it with another certificate', async () => {
+      other = withSource(
+        jest.fn().mockReturnValue({ x5tS256: 'x'.repeat(43) }),
+      );
+      await expect(other.validateAdminToken('t', req)).rejects.toBeInstanceOf(
+        CertificateBindingError,
+      );
+    });
+
+    it('refuses it without a request or certificate source', async () => {
+      await expect(service.validateAdminToken('t', req)).rejects.toBeInstanceOf(
+        CertificateBindingError,
+      );
+      other = withSource(jest.fn().mockReturnValue({ x5tS256: X5T }));
+      await expect(other.validateAdminToken('t')).rejects.toBeInstanceOf(
+        CertificateBindingError,
+      );
+    });
+  });
 
   describe('validateAdminToken', () => {
     it('should return userId and roles for a valid admin token', async () => {

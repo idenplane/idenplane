@@ -133,6 +133,78 @@ describe('SessionEventsGateway', () => {
     });
   });
 
+  describe('certificate-bound tokens (RFC 8705 §3)', () => {
+    const X5T = 'n4bQgYhMfWWaL-qgxVrQFaO_TxsrC4Is0V1sFbDwCgg';
+    const req = { headers: {}, socket: {} } as any;
+
+    function gatewayWith(fromRequest: jest.Mock | undefined) {
+      return new SessionEventsGateway(
+        lookupsBackedBy(prisma as any) as any,
+        prisma as any,
+        jwkService as any,
+        blacklist as any,
+        { onMessage: () => undefined, publish: async () => undefined } as any,
+        fromRequest ? ({ fromRequest } as any) : undefined,
+      );
+    }
+
+    const auth = (gateway: SessionEventsGateway) =>
+      (
+        gateway as unknown as {
+          authenticate: (
+            p: URLSearchParams,
+            r?: unknown,
+          ) => Promise<{ userId: string } | null>;
+        }
+      ).authenticate(
+        new URLSearchParams({ token: 'abc', realm: 'test-realm' }),
+        req,
+      );
+
+    beforeEach(() => {
+      prisma.realm.findUnique.mockResolvedValue(mockRealm);
+      prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
+      jwkService.verifyJwt.mockResolvedValue({
+        sub: 'user-1',
+        cnf: { 'x5t#S256': X5T },
+      });
+    });
+
+    it('accepts a bound token whose certificate the request presents', async () => {
+      const fromRequest = jest.fn().mockReturnValue({ x5tS256: X5T });
+      expect(await auth(gatewayWith(fromRequest))).toEqual({
+        userId: 'user-1',
+      });
+      expect(fromRequest).toHaveBeenCalledWith(req);
+    });
+
+    it.each([
+      ['no certificate', () => null],
+      ['another certificate', () => ({ x5tS256: `x${X5T.slice(1)}` })],
+      [
+        'a malformed proxy header',
+        () => {
+          throw new Error('Invalid client certificate header');
+        },
+      ],
+    ])('refuses a bound token with %s', async (_label, impl) => {
+      expect(await auth(gatewayWith(jest.fn(impl)))).toBeNull();
+    });
+
+    it('refuses a bound token when no certificate source is wired', async () => {
+      expect(await auth(gatewayWith(undefined))).toBeNull();
+    });
+
+    it('does not read the certificate for an unbound token', async () => {
+      jwkService.verifyJwt.mockResolvedValue({ sub: 'user-1' });
+      const fromRequest = jest.fn();
+      expect(await auth(gatewayWith(fromRequest))).toEqual({
+        userId: 'user-1',
+      });
+      expect(fromRequest).not.toHaveBeenCalled();
+    });
+  });
+
   describe('emitSessionTerminated', () => {
     it('does nothing when the user has no open connections', () => {
       expect(() =>
