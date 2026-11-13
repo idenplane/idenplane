@@ -586,6 +586,32 @@ describe('NhiService', () => {
       });
     });
 
+    it('refuses to rotate an API key that was already rotated (409, not a name collision)', async () => {
+      prisma.nhiIdentity.findFirst.mockResolvedValue(mockIdentity);
+      prisma.nhiCredential.findFirst.mockResolvedValue({
+        ...mockCredential,
+        revoked: true,
+        rotatedAt: new Date(),
+      });
+
+      await expect(
+        service.rotateCredential(mockRealm, 'nhi-uuid-1', 'cred-uuid-1'),
+      ).rejects.toThrow(/already rotated/);
+      expect(prisma.nhiCredential.create).not.toHaveBeenCalled();
+    });
+
+    it('answers a name collision on API-key rotation with 409', async () => {
+      prisma.nhiIdentity.findFirst.mockResolvedValue(mockIdentity);
+      prisma.nhiCredential.findFirst.mockResolvedValue(mockCredential);
+      cryptoService.generateSecret.mockReturnValue('k'.repeat(64));
+      cryptoService.hashPassword.mockResolvedValue('hash');
+      prisma.$transaction.mockRejectedValue({ code: 'P2002' });
+
+      await expect(
+        service.rotateCredential(mockRealm, 'nhi-uuid-1', 'cred-uuid-1'),
+      ).rejects.toThrow(ConflictException);
+    });
+
     it('should throw ConflictException when credential is not an API_KEY', async () => {
       prisma.nhiIdentity.findFirst.mockResolvedValue(mockIdentity);
       const certCredential = {

@@ -584,37 +584,46 @@ export class NhiService {
   }
 
   private async rotateApiKey(realm: Realm, oldCredential: NhiCredential) {
+    // A rotated key was revoked and replaced; its replacement is the one to
+    // rotate. (Rotating it again would also collide on the "(rotated)" name.)
+    if (oldCredential.rotatedAt) {
+      throw new ConflictException(
+        'This API key was already rotated; rotate its replacement instead',
+      );
+    }
     // Generate new key
     const newRaw = this.crypto.generateSecret(32);
     const newPrefix = newRaw.slice(0, 8);
     const newHash = await this.crypto.hashPassword(newRaw);
 
-    const newCredential = await this.prisma.$transaction(async (tx) => {
-      const created = await tx.nhiCredential.create({
-        data: {
-          realmId: realm.id,
-          nhiIdentityId: oldCredential.nhiIdentityId,
-          credentialType: 'API_KEY',
-          name: oldCredential.name
-            ? `${oldCredential.name} (rotated)`
-            : 'rotated credential',
-          keyPrefix: newPrefix,
-          keyHash: newHash,
-          expiresAt: oldCredential.expiresAt,
-          rotationRequired: false,
-          enabled: true,
-          allowedIpRanges: oldCredential.allowedIpRanges,
-        },
-        select: NHI_CREDENTIAL_SELECT,
-      });
-      // The old key stops working now.
-      const now = new Date();
-      await tx.nhiCredential.update({
-        where: { id: oldCredential.id, realmId: realm.id },
-        data: { revoked: true, revokedAt: now, rotatedAt: now },
-      });
-      return created;
-    });
+    const newCredential = await this.createUniqueName(() =>
+      this.prisma.$transaction(async (tx) => {
+        const created = await tx.nhiCredential.create({
+          data: {
+            realmId: realm.id,
+            nhiIdentityId: oldCredential.nhiIdentityId,
+            credentialType: 'API_KEY',
+            name: oldCredential.name
+              ? `${oldCredential.name} (rotated)`
+              : 'rotated credential',
+            keyPrefix: newPrefix,
+            keyHash: newHash,
+            expiresAt: oldCredential.expiresAt,
+            rotationRequired: false,
+            enabled: true,
+            allowedIpRanges: oldCredential.allowedIpRanges,
+          },
+          select: NHI_CREDENTIAL_SELECT,
+        });
+        // The old key stops working now.
+        const now = new Date();
+        await tx.nhiCredential.update({
+          where: { id: oldCredential.id, realmId: realm.id },
+          data: { revoked: true, revokedAt: now, rotatedAt: now },
+        });
+        return created;
+      }),
+    );
 
     return {
       newCredential: {
