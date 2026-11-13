@@ -12,6 +12,8 @@ import {
   Max,
   MinLength,
   Matches,
+  NotContains,
+  ValidateIf,
   ValidateNested,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
@@ -23,6 +25,10 @@ import {
 import { SmsProviderType } from '../../sms/dto/sms-config.dto.js';
 import { RealmSmsProviderConfigDto } from './sms-config.dto.js';
 import { CAPTCHA_PROVIDERS } from '../../captcha/captcha-config.js';
+import {
+  PLACEHOLDER_TYPED_OVER,
+  SECRET_PLACEHOLDER,
+} from '../secret-placeholder.js';
 
 export class CreateRealmDto {
   @ApiProperty({ example: 'my-app' })
@@ -601,10 +607,15 @@ export class CreateRealmDto {
   recaptchaSiteKey?: string;
 
   @ApiPropertyOptional({
-    description: 'reCAPTCHA secret key for v3 verification',
+    description:
+      'reCAPTCHA secret key for v3 verification (write-only: returned as the hidden-value placeholder, which on update means "unchanged")',
   })
   @IsOptional()
+  @ValidateIf(
+    (o: CreateRealmDto) => o.recaptchaSecretKey !== SECRET_PLACEHOLDER,
+  )
   @IsString()
+  @NotContains(SECRET_PLACEHOLDER, { message: PLACEHOLDER_TYPED_OVER })
   recaptchaSecretKey?: string;
 
   @ApiPropertyOptional({ description: 'hCaptcha site key' })
@@ -612,9 +623,14 @@ export class CreateRealmDto {
   @IsString()
   hcaptchaSiteKey?: string;
 
-  @ApiPropertyOptional({ description: 'hCaptcha secret key for verification' })
+  @ApiPropertyOptional({
+    description:
+      'hCaptcha secret key for verification (write-only: returned as the hidden-value placeholder, which on update means "unchanged")',
+  })
   @IsOptional()
+  @ValidateIf((o: CreateRealmDto) => o.hcaptchaSecretKey !== SECRET_PLACEHOLDER)
   @IsString()
+  @NotContains(SECRET_PLACEHOLDER, { message: PLACEHOLDER_TYPED_OVER })
   hcaptchaSecretKey?: string;
 
   @ApiPropertyOptional({

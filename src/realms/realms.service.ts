@@ -39,13 +39,16 @@ export class RealmsService {
 
   /**
    * Strip write-only secrets from a realm before it leaves the service: the
-   * SMTP password and the SMS provider credentials come back as
+   * SMTP password, the CAPTCHA secret keys and the SMS provider credentials come back as
    * SECRET_PLACEHOLDER, which update() in turn treats as "unchanged".
    */
   private redactSecrets(realm: Record<string, unknown> | null) {
     if (!realm) return realm;
     const out: Record<string, unknown> = { ...realm };
     if (out['smtpPassword']) out['smtpPassword'] = SECRET_PLACEHOLDER;
+    for (const field of ['recaptchaSecretKey', 'hcaptchaSecretKey']) {
+      if (out[field]) out[field] = SECRET_PLACEHOLDER;
+    }
     if ('smsProviderConfig' in out) {
       out['smsProviderConfig'] = redactSmsProviderConfig(
         out['smsProviderConfig'],
@@ -60,6 +63,10 @@ export class RealmsService {
   }
 
   async create(dto: CreateRealmDto) {
+    // The hidden-value placeholder (what GET returns for a stored secret)
+    // means "keep the stored secret": treat it as not sent.
+    const recaptchaSecretKey = withoutPlaceholder(dto.recaptchaSecretKey);
+    const hcaptchaSecretKey = withoutPlaceholder(dto.hcaptchaSecretKey);
     const existing = await this.prisma.realm.findUnique({
       where: { name: dto.name },
     });
@@ -71,9 +78,9 @@ export class RealmsService {
       captchaEnabled: dto.captchaEnabled ?? false,
       captchaProvider: dto.captchaProvider ?? null,
       recaptchaSiteKey: dto.recaptchaSiteKey ?? null,
-      recaptchaSecretKey: dto.recaptchaSecretKey ?? null,
+      recaptchaSecretKey: recaptchaSecretKey ?? null,
       hcaptchaSiteKey: dto.hcaptchaSiteKey ?? null,
-      hcaptchaSecretKey: dto.hcaptchaSecretKey ?? null,
+      hcaptchaSecretKey: hcaptchaSecretKey ?? null,
       captchaScoreThreshold: dto.captchaScoreThreshold ?? 0.5,
     });
 
@@ -187,9 +194,9 @@ export class RealmsService {
         captchaEnabled: dto.captchaEnabled,
         captchaProvider: dto.captchaProvider,
         recaptchaSiteKey: dto.recaptchaSiteKey,
-        recaptchaSecretKey: this.crypto.encryptSecret(dto.recaptchaSecretKey),
+        recaptchaSecretKey: this.crypto.encryptSecret(recaptchaSecretKey),
         hcaptchaSiteKey: dto.hcaptchaSiteKey,
-        hcaptchaSecretKey: this.crypto.encryptSecret(dto.hcaptchaSecretKey),
+        hcaptchaSecretKey: this.crypto.encryptSecret(hcaptchaSecretKey),
         captchaScoreThreshold: dto.captchaScoreThreshold,
         // SCIM provisioning
         scimEnabled: dto.scimEnabled,
@@ -261,6 +268,10 @@ export class RealmsService {
   }
 
   async update(name: string, dto: UpdateRealmDto) {
+    // The hidden-value placeholder (what GET returns for a stored secret)
+    // means "keep the stored secret": treat it as not sent.
+    const recaptchaSecretKey = withoutPlaceholder(dto.recaptchaSecretKey);
+    const hcaptchaSecretKey = withoutPlaceholder(dto.hcaptchaSecretKey);
     const existing = await this.findByNameRaw(name);
     if (name === MASTER_REALM && dto.enabled === false) {
       throw new BadRequestException(
@@ -284,10 +295,9 @@ export class RealmsService {
             ? dto.captchaProvider
             : existing.captchaProvider,
         recaptchaSiteKey: dto.recaptchaSiteKey ?? existing.recaptchaSiteKey,
-        recaptchaSecretKey:
-          dto.recaptchaSecretKey ?? existing.recaptchaSecretKey,
+        recaptchaSecretKey: recaptchaSecretKey ?? existing.recaptchaSecretKey,
         hcaptchaSiteKey: dto.hcaptchaSiteKey ?? existing.hcaptchaSiteKey,
-        hcaptchaSecretKey: dto.hcaptchaSecretKey ?? existing.hcaptchaSecretKey,
+        hcaptchaSecretKey: hcaptchaSecretKey ?? existing.hcaptchaSecretKey,
         captchaScoreThreshold:
           dto.captchaScoreThreshold ?? existing.captchaScoreThreshold,
       });
@@ -408,9 +418,9 @@ export class RealmsService {
       captchaEnabled: dto.captchaEnabled,
       captchaProvider: dto.captchaProvider,
       recaptchaSiteKey: dto.recaptchaSiteKey,
-      recaptchaSecretKey: this.crypto.encryptSecret(dto.recaptchaSecretKey),
+      recaptchaSecretKey: this.crypto.encryptSecret(recaptchaSecretKey),
       hcaptchaSiteKey: dto.hcaptchaSiteKey,
-      hcaptchaSecretKey: this.crypto.encryptSecret(dto.hcaptchaSecretKey),
+      hcaptchaSecretKey: this.crypto.encryptSecret(hcaptchaSecretKey),
       captchaScoreThreshold: dto.captchaScoreThreshold,
       // SCIM provisioning
       scimEnabled: dto.scimEnabled,
@@ -453,6 +463,11 @@ export class RealmsService {
     const deleted = await this.prisma.realm.delete({ where: { name } });
     return this.redactSecrets(deleted);
   }
+}
+
+/** A secret sent back as the placeholder is "unchanged", i.e. not sent. */
+function withoutPlaceholder(value: string | undefined): string | undefined {
+  return value === SECRET_PLACEHOLDER ? undefined : value;
 }
 
 const CAPTCHA_FIELDS = [

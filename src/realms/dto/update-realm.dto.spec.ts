@@ -1,6 +1,37 @@
 import { plainToInstance } from 'class-transformer';
 import { validate } from 'class-validator';
 import { UpdateRealmDto } from './update-realm.dto.js';
+import { SECRET_PLACEHOLDER } from '../secret-placeholder.js';
+
+describe('UpdateRealmDto CAPTCHA secret placeholder', () => {
+  const secretErrors = async (field: string, value: unknown) => {
+    const dto = plainToInstance(UpdateRealmDto, { [field]: value });
+    return (await validate(dto)).filter((e) => e.property === field);
+  };
+
+  it.each(['recaptchaSecretKey', 'hcaptchaSecretKey'])(
+    'accepts the exact placeholder for %s (means "unchanged")',
+    async (field) => {
+      expect(await secretErrors(field, SECRET_PLACEHOLDER)).toHaveLength(0);
+    },
+  );
+
+  it.each(['recaptchaSecretKey', 'hcaptchaSecretKey'])(
+    'refuses %s typed after the placeholder',
+    async (field) => {
+      const errors = await secretErrors(field, `${SECRET_PLACEHOLDER}abc`);
+      expect(errors).toHaveLength(1);
+      expect(JSON.stringify(errors[0].constraints)).toContain(
+        'hidden-value marker',
+      );
+    },
+  );
+
+  it('accepts a real secret and an empty string (clears it)', async () => {
+    expect(await secretErrors('hcaptchaSecretKey', 'real')).toHaveLength(0);
+    expect(await secretErrors('hcaptchaSecretKey', '')).toHaveLength(0);
+  });
+});
 
 /**
  * Regression guard for idenplane#1153.

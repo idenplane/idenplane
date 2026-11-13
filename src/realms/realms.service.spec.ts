@@ -297,6 +297,85 @@ describe('RealmsService', () => {
       );
     });
 
+    it('should return the CAPTCHA secret keys as the placeholder, never as ciphertext', async () => {
+      cacheService.getCachedRealmByName.mockResolvedValue(null);
+      prisma.realm.findUnique.mockResolvedValue({
+        ...mockRealm,
+        recaptchaSiteKey: 'rc-site',
+        recaptchaSecretKey: crypto.encryptSecret('rc-secret'),
+        hcaptchaSiteKey: null,
+        hcaptchaSecretKey: null,
+      });
+
+      const realm = (await service.findByName('test-realm')) as any;
+
+      expect(realm.recaptchaSecretKey).toBe(SECRET_PLACEHOLDER);
+      expect(realm.recaptchaSiteKey).toBe('rc-site');
+      // Nothing stored: nothing to hide.
+      expect(realm.hcaptchaSecretKey).toBeNull();
+    });
+
+    it('should keep the stored CAPTCHA secret when the placeholder is sent back', async () => {
+      const stored = crypto.encryptSecret('hc-secret');
+      prisma.realm.findUnique.mockResolvedValue({
+        ...mockRealm,
+        captchaEnabled: true,
+        captchaProvider: 'hcaptcha',
+        hcaptchaSiteKey: 'hc-site',
+        hcaptchaSecretKey: stored,
+        recaptchaSiteKey: null,
+        recaptchaSecretKey: null,
+        captchaScoreThreshold: 0.5,
+      });
+      // Like Prisma, an undefined field in `data` leaves the stored value.
+      prisma.realm.update.mockImplementation(({ data }: any) =>
+        Promise.resolve({
+          ...mockRealm,
+          hcaptchaSecretKey: stored,
+          ...Object.fromEntries(
+            Object.entries(data).filter(([, v]) => v !== undefined),
+          ),
+        }),
+      );
+
+      const result = (await service.update('test-realm', {
+        captchaEnabled: true,
+        captchaProvider: 'hcaptcha',
+        hcaptchaSiteKey: 'hc-site',
+        hcaptchaSecretKey: SECRET_PLACEHOLDER,
+        recaptchaSecretKey: SECRET_PLACEHOLDER,
+      })) as any;
+
+      const { data } = prisma.realm.update.mock.calls[0][0];
+      expect(data.hcaptchaSecretKey).toBeUndefined();
+      expect(data.recaptchaSecretKey).toBeUndefined();
+      expect(result.hcaptchaSecretKey).toBe(SECRET_PLACEHOLDER);
+    });
+
+    it('should not store the placeholder as a CAPTCHA secret on create', async () => {
+      prisma.realm.findUnique.mockResolvedValue(null);
+      jwkService.generateRsaKeyPair.mockResolvedValue(mockKeyPair);
+      prisma.realm.create.mockImplementation(({ data }: any) =>
+        Promise.resolve({ ...mockRealm, ...data }),
+      );
+      // With CAPTCHA on, a placeholder is no secret at all.
+      await expect(
+        service.create({
+          name: 'test-realm',
+          captchaEnabled: true,
+          captchaProvider: 'recaptcha',
+          recaptchaSiteKey: 'site',
+          recaptchaSecretKey: SECRET_PLACEHOLDER,
+        }),
+      ).rejects.toThrow(/recaptchaSecretKey/);
+      await service.create({
+        name: 'test-realm',
+        recaptchaSecretKey: SECRET_PLACEHOLDER,
+      });
+      const { data } = prisma.realm.create.mock.calls[0][0];
+      expect(data.recaptchaSecretKey).toBeUndefined();
+    });
+
     it('should never return SMS secrets from findByName', async () => {
       cacheService.getCachedRealmByName.mockResolvedValue(null);
       prisma.realm.findUnique.mockResolvedValue({
