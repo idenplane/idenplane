@@ -9,7 +9,11 @@ export default function RealmListPage() {
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const fileInputRef = useRef<HTMLInputElement>(null);
-  const [importStatus, setImportStatus] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
+  const [importStatus, setImportStatus] = useState<{
+    type: 'success' | 'warning' | 'error';
+    message: string;
+    details?: string[];
+  } | null>(null);
 
   const { data: realms, isLoading, error } = useQuery({
     queryKey: ['realms'],
@@ -24,7 +28,18 @@ export default function RealmListPage() {
       const text = await file.text();
       const payload = JSON.parse(text);
       const result = await importRealm(payload);
-      setImportStatus({ type: 'success', message: `Realm "${String(result.realmName ?? '')}" imported successfully.` });
+      // Things to follow up, e.g. secrets that were not in the file.
+      const warnings = Array.isArray(result.warnings) ? result.warnings.map(String) : [];
+      const name = String(result.realmName ?? '');
+      setImportStatus(
+        warnings.length
+          ? {
+              type: 'warning',
+              message: `Realm "${name}" imported. Check the following:`,
+              details: warnings,
+            }
+          : { type: 'success', message: `Realm "${name}" imported successfully.` },
+      );
       queryClient.invalidateQueries({ queryKey: ['realms'] });
     } catch (err: unknown) {
       setImportStatus({ type: 'error', message: getErrorMessage(err, 'Import failed.') });
@@ -72,12 +87,19 @@ export default function RealmListPage() {
 
       {importStatus && (
         <Alert
-          variant={importStatus.type === 'success' ? 'success' : 'danger'}
+          variant={importStatus.type === 'error' ? 'danger' : importStatus.type}
           aria-live={importStatus.type === 'error' ? 'assertive' : 'polite'}
           aria-atomic="true"
           className="mb-4"
         >
           {importStatus.message}
+          {importStatus.details && (
+            <ul className="mt-2 list-disc pl-5">
+              {importStatus.details.map((detail) => (
+                <li key={detail}>{detail}</li>
+              ))}
+            </ul>
+          )}
           <button
             onClick={() => setImportStatus(null)}
             aria-label="Dismiss notification"
