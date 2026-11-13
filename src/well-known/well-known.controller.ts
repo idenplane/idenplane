@@ -33,21 +33,23 @@ export class WellKnownController {
 
   /**
    * RFC 8705 metadata, only when certificate client authentication is on
-   * both globally and for this realm. `tls_client_certificate_bound_access_tokens`
-   * is not advertised: tokens are not bound yet.
+   * both globally and for this realm: the certificate methods, certificate-
+   * bound access tokens (§3.3) and, with MTLS_BASE_URL, the endpoint aliases.
    */
   private mtlsMetadata(realm: Realm): {
     methods: string[];
     aliases: Record<string, unknown>;
+    boundTokens: Record<string, unknown>;
   } {
     if (!this.mtls?.enabled || realm.mtlsClientAuthEnabled !== true) {
-      return { methods: [], aliases: {} };
+      return { methods: [], aliases: {}, boundTokens: {} };
     }
     const protocol = this.mtls.baseUrl
       ? `${this.mtls.baseUrl}/realms/${realm.name}/protocol/openid-connect`
       : undefined;
     return {
       methods: ['tls_client_auth', 'self_signed_tls_client_auth'],
+      boundTokens: { tls_client_certificate_bound_access_tokens: true },
       aliases: protocol
         ? {
             // RFC 8705 §5: where a client presents its certificate.
@@ -113,6 +115,7 @@ export class WellKnownController {
         'none',
         ...mtls.methods,
       ],
+      ...mtls.boundTokens,
       ...mtls.aliases,
       claims_supported: [
         'sub',

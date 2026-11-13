@@ -120,9 +120,7 @@ describe('WellKnownController', () => {
         device_authorization_endpoint:
           'https://mtls.example.com/realms/test-realm/protocol/openid-connect/auth/device',
       });
-      expect(result).not.toHaveProperty(
-        'tls_client_certificate_bound_access_tokens',
-      );
+      expect(result.tls_client_certificate_bound_access_tokens).toBe(true);
     });
 
     it('advertises the methods without aliases when MTLS_BASE_URL is unset', () => {
@@ -159,6 +157,17 @@ describe('WellKnownController', () => {
         'none',
       ]);
       expect(result).not.toHaveProperty('mtls_endpoint_aliases');
+      expect(result).not.toHaveProperty(
+        'tls_client_certificate_bound_access_tokens',
+      );
+    });
+
+    it('advertises bound tokens without aliases when MTLS_BASE_URL is unset', () => {
+      const result = make({ enabled: true }).discovery(mtlsRealm) as Record<
+        string,
+        any
+      >;
+      expect(result.tls_client_certificate_bound_access_tokens).toBe(true);
     });
   });
 

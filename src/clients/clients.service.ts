@@ -42,6 +42,7 @@ const CLIENT_SELECT = {
   tlsClientAuthSanUri: true,
   tlsClientAuthSanIp: true,
   tlsClientAuthSanEmail: true,
+  tlsClientCertificateBoundAccessTokens: true,
   createdAt: true,
   updatedAt: true,
 } as const;
@@ -164,6 +165,8 @@ export class ClientsService {
         serviceAccountUserId,
         requiredAcr: dto.requiredAcr,
         stepUpCacheDuration: dto.stepUpCacheDuration,
+        tlsClientCertificateBoundAccessTokens:
+          dto.tlsClientCertificateBoundAccessTokens,
         ...auth,
       },
       select: CLIENT_SELECT,
@@ -289,6 +292,8 @@ export class ClientsService {
         backchannelLogoutSessionRequired: dto.backchannelLogoutSessionRequired,
         requiredAcr: dto.requiredAcr,
         stepUpCacheDuration: dto.stepUpCacheDuration,
+        tlsClientCertificateBoundAccessTokens:
+          dto.tlsClientCertificateBoundAccessTokens,
         ...auth,
       },
       select: CLIENT_SELECT,

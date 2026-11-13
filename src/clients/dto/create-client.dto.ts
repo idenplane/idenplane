@@ -232,4 +232,13 @@ export class CreateClientDto {
   @IsOptional()
   @Satisfies(isValidSanEmail, 'must be an email address')
   tlsClientAuthSanEmail?: string | null;
+
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      'RFC 8705 §3 tls_client_certificate_bound_access_tokens: every access token issued to this client carries cnf.x5t#S256 of the certificate it presented at the token endpoint (any authentication method), and is accepted at userinfo and other resource endpoints only with that certificate. A token request without a certificate is invalid_client. For a PUBLIC client the refresh token is bound too. Needs MTLS_ENABLED and a certificate listener or trusted proxy.',
+  })
+  @IsOptional()
+  @IsBoolean()
+  tlsClientCertificateBoundAccessTokens?: boolean;
 }

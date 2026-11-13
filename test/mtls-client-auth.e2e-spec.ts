@@ -421,9 +421,7 @@ describe('RFC 8705 client authentication (e2e)', () => {
       expect(res.body.mtls_endpoint_aliases.token_endpoint).toBe(
         `${BASE_URL}/realms/${seeded.realm.name}/protocol/openid-connect/token`,
       );
-      expect(res.body).not.toHaveProperty(
-        'tls_client_certificate_bound_access_tokens',
-      );
+      expect(res.body.tls_client_certificate_bound_access_tokens).toBe(true);
     });
 
     it('advertises nothing for a realm that has not opted in', async () => {

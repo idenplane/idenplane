@@ -9,8 +9,13 @@ import {
 import { OAuthTokenError } from './oauth-token-error.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
-import { ClientAuthenticator } from '../client-auth/client-authenticator.js';
+import {
+  ClientAuthenticator,
+  ClientAuthError,
+  type AuthenticatedClient,
+} from '../client-auth/client-authenticator.js';
 import type { PresentedClientCertificate } from '../mtls/client-certificate.source.js';
+import { X5T_S256 } from '../mtls/certificate-binding.js';
 import { JwkService } from '../crypto/jwk.service.js';
 import { ScopesService } from '../scopes/scopes.service.js';
 import {
@@ -58,6 +63,54 @@ export interface TokenRequestContext {
   authorization?: string;
   /** The certificate the client presented, if any. */
   clientCert?: PresentedClientCertificate | null;
+}
+
+/**
+ * What a token request's tokens are bound to (RFC 8705 §3): the
+ * `x5t#S256` of the certificate the client presented.
+ */
+export interface CertificateBinding {
+  /** Goes into the access token's `cnf`. */
+  x5tS256: string;
+  /**
+   * Bind the refresh token as well, so a refresh must present the same
+   * certificate. For a public client, which has no other credential
+   * (RFC 8705 §4); a confidential client's refresh is bound to its client
+   * authentication instead and rebinds to the certificate it presents then.
+   */
+  refreshToken: boolean;
+}
+
+interface IssueTokensOptions {
+  binding?: CertificateBinding | null;
+}
+
+/**
+ * Decides the binding of the tokens a client is about to receive. Bound when
+ * a certificate method's resolver says so, or when the client is registered
+ * with `tlsClientCertificateBoundAccessTokens` and presented a certificate
+ * with any authentication method (RFC 8705 §3). A client that must receive
+ * bound tokens but presented no certificate is `invalid_client`: it never
+ * gets an unbound token instead.
+ */
+export function certificateBindingFor(
+  auth: Pick<
+    AuthenticatedClient,
+    'client' | 'x5tS256' | 'certificate' | 'bindToCertificate'
+  >,
+): CertificateBinding | null {
+  const required =
+    auth.bindToCertificate ||
+    auth.client.tlsClientCertificateBoundAccessTokens === true;
+  if (!required) return null;
+  const x5tS256 = auth.x5tS256 ?? auth.certificate?.x5tS256 ?? null;
+  if (!x5tS256) throw new ClientAuthError('bound_tokens_need_certificate');
+  return { x5tS256, refreshToken: auth.client.clientType === 'PUBLIC' };
+}
+
+/** The access token's `cnf` claim for a binding, or nothing. */
+function cnfClaim(binding: CertificateBinding | null): JWTPayload {
+  return binding ? { cnf: { [X5T_S256]: binding.x5tS256 } } : {};
 }
 
 /** See AuthService.newSession. */
@@ -285,7 +338,12 @@ export class AuthService {
 
     const { client_id, username, password, scope } = body;
 
-    await this.validateClient(realm, body, 'password', { ctx });
+    const { binding } = await this.validateClientForTokens(
+      realm,
+      body,
+      'password',
+      { ctx },
+    );
 
     if (!username || !password) {
       throw new OAuthTokenError(
@@ -471,6 +529,9 @@ export class AuthService {
       new Date(),
       ACR_PASSWORD,
       ['pwd'],
+      undefined,
+      false,
+      { binding },
     );
   }
 
@@ -490,7 +551,7 @@ export class AuthService {
     // also permitted by passing undefined (skipping the grant-type allowlist check)
     // because the user has already authenticated via the password grant and is
     // simply completing the second factor here.
-    await this.validateClient(
+    const { binding } = await this.validateClientForTokens(
       realm,
       body,
       'urn:ietf:params:oauth:grant-type:mfa-otp',
@@ -621,6 +682,9 @@ export class AuthService {
       new Date(),
       ACR_MFA,
       ['pwd', 'otp'],
+      undefined,
+      false,
+      { binding },
     );
   }
 
@@ -631,7 +695,7 @@ export class AuthService {
     ctx: TokenRequestContext = {},
   ): Promise<TokenResponse> {
     const { client_id, scope } = body;
-    const client = await this.validateClient(
+    const { client, binding } = await this.validateClientForTokens(
       realm,
       body,
       'client_credentials',
@@ -656,6 +720,11 @@ export class AuthService {
           scope,
           undefined,
           new Date(),
+          undefined,
+          undefined,
+          undefined,
+          false,
+          { binding },
         );
       }
     }
@@ -676,6 +745,8 @@ export class AuthService {
         scope: grantedScope,
         typ: 'Bearer',
         azp: client_id,
+        // No mapper or plugin runs on this path; cnf is set like the rest.
+        ...cnfClaim(binding),
       },
       signingKey.privateKey,
       signingKey.kid,
@@ -717,7 +788,12 @@ export class AuthService {
       );
     }
 
-    await this.validateClient(realm, body, 'refresh_token', { ctx });
+    const { binding } = await this.validateClientForTokens(
+      realm,
+      body,
+      'refresh_token',
+      { ctx },
+    );
 
     const tokenHash = this.crypto.sha256(refresh_token);
 
@@ -774,6 +850,28 @@ export class AuthService {
       throw new OAuthTokenError(
         'invalid_grant',
         'Refresh token was not issued to this client',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
+    // RFC 8705 §4: a bound refresh token (a public client's) is refreshed
+    // only with the certificate it is bound to, whatever the client's
+    // registration says now. Checked before rotation, so a request with the
+    // wrong certificate neither uses up the token nor revokes the session.
+    if (
+      storedToken.cnfX5tS256 &&
+      ctx.clientCert?.x5tS256 !== storedToken.cnfX5tS256
+    ) {
+      void this.eventsService.recordLoginEvent({
+        realmId: realm.id,
+        type: LoginEventType.TOKEN_REFRESH_ERROR,
+        clientId: client_id,
+        ipAddress: ip,
+        error: 'Refresh token bound to a different client certificate',
+      });
+      throw new OAuthTokenError(
+        'invalid_grant',
+        'The refresh token is bound to a different client certificate',
         HttpStatus.BAD_REQUEST,
       );
     }
@@ -863,6 +961,9 @@ export class AuthService {
       amr,
       undefined,
       storedToken.isOffline,
+      // RFC 8705 §3.1: the refreshed access token is bound to the
+      // certificate presented now (for a public client, the same one).
+      { binding },
     );
   }
 
@@ -883,7 +984,7 @@ export class AuthService {
       );
     }
 
-    const client = await this.validateClient(
+    const { client, binding } = await this.validateClientForTokens(
       realm,
       body,
       'authorization_code',
@@ -1046,6 +1147,7 @@ export class AuthService {
       amr,
       authCode.code,
       await this.clientAllowsOfflineAccess(client.id),
+      { binding },
     );
   }
 
@@ -1066,7 +1168,7 @@ export class AuthService {
       );
     }
 
-    const client = await this.validateClient(
+    const { client, binding } = await this.validateClientForTokens(
       realm,
       body,
       'urn:ietf:params:oauth:grant-type:device_code',
@@ -1209,6 +1311,7 @@ export class AuthService {
       undefined,
       undefined,
       await this.clientAllowsOfflineAccess(client.id),
+      { binding },
     );
   }
 
@@ -1320,8 +1423,32 @@ export class AuthService {
     body: Record<string, string>,
     grantType?: string,
     opts: { skipSecret?: boolean; ctx?: TokenRequestContext } = {},
-  ) {
-    const { client } = await this.clientAuthenticator.authenticate({
+  ): Promise<Client> {
+    return (await this.authenticateClient(realm, body, grantType, opts)).client;
+  }
+
+  /**
+   * {@link validateClient} for a grant that issues tokens: also decides what
+   * they are bound to (RFC 8705 §3), and refuses a client that must receive
+   * bound tokens but presented no certificate.
+   */
+  private async validateClientForTokens(
+    realm: Realm,
+    body: Record<string, string>,
+    grantType: string,
+    opts: { skipSecret?: boolean; ctx?: TokenRequestContext } = {},
+  ): Promise<{ client: Client; binding: CertificateBinding | null }> {
+    const auth = await this.authenticateClient(realm, body, grantType, opts);
+    return { client: auth.client, binding: certificateBindingFor(auth) };
+  }
+
+  private async authenticateClient(
+    realm: Realm,
+    body: Record<string, string>,
+    grantType: string | undefined,
+    opts: { skipSecret?: boolean; ctx?: TokenRequestContext },
+  ): Promise<AuthenticatedClient> {
+    return this.clientAuthenticator.authenticate({
       realm,
       body,
       authorization: opts.ctx?.authorization,
@@ -1331,7 +1458,6 @@ export class AuthService {
         ? (client) => assertGrantAllowed(client, grantType)
         : undefined,
     });
-    return client;
   }
 
   private async issueTokens(
@@ -1358,7 +1484,9 @@ export class AuthService {
      * refreshing a token that already is offline. Otherwise it is dropped.
      */
     offlineAccess = false,
+    options: IssueTokensOptions = {},
   ): Promise<TokenResponse> {
+    const binding = options.binding ?? null;
     const sessionId =
       typeof session === 'string' ? session : (session?.id ?? null);
     const signingKey = await this.getActiveSigningKey(realm.id);
@@ -1431,6 +1559,9 @@ export class AuthService {
       // Mirror the id_token resolution (default acr = password).
       acr: acr ?? ACR_PASSWORD,
       ...(amr && amr.length > 0 ? { amr } : {}),
+      // RFC 8705 §3.1. Protected, so withProtectedClaims restores it after
+      // mappers and plugins: none of them can rebind or unbind a token.
+      ...cnfClaim(binding),
     };
 
     const accessTokenPayload: JWTPayload = {
@@ -1489,6 +1620,9 @@ export class AuthService {
       expiresAt: new Date(Date.now() + refreshLifespan * 1000),
       isOffline,
       clientId,
+      // RFC 8705 §4: a public client's refresh token is bound too, so only
+      // the holder of the certificate can refresh it.
+      ...(binding?.refreshToken ? { cnfX5tS256: binding.x5tS256 } : {}),
     };
     if (typeof session === 'string') {
       try {

@@ -35,6 +35,7 @@ export type ClientAuthFailure =
   | 'credential_with_certificate_method'
   | 'missing_certificate'
   | 'invalid_certificate'
+  | 'bound_tokens_need_certificate'
   | 'too_many_failures';
 
 type FailureCode = 'invalid_client' | 'invalid_request' | 'slow_down';
@@ -95,6 +96,13 @@ const FAILURES: Record<
   invalid_certificate: {
     code: 'invalid_client',
     description: 'Invalid client certificate',
+  },
+  // RFC 8705 §3: a client registered for certificate-bound access tokens
+  // asked for a token without presenting a certificate to bind it to.
+  bound_tokens_need_certificate: {
+    code: 'invalid_client',
+    description:
+      'This client receives certificate-bound access tokens; present a client certificate over mutual TLS',
   },
   too_many_failures: {
     code: 'slow_down',
