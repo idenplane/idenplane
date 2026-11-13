@@ -3,6 +3,13 @@ import {
   boundCertificateThumbprint,
   CertificateBindingError,
 } from './certificate-binding.js';
+import { createHash, X509Certificate } from 'node:crypto';
+import {
+  ClientCertificateSource,
+  type CertificateRequest,
+} from './client-certificate.source.js';
+import { loadMtlsConfig } from './mtls-config.js';
+import { makeTestCertificate } from '../nhi/__mocks__/certificate.fixture.js';
 
 const X5T = 'n4bQgYhMfWWaL-qgxVrQFaO_TxsrC4Is0V1sFbDwCgg';
 const OTHER = 'AAAAgYhMfWWaL-qgxVrQFaO_TxsrC4Is0V1sFbDwCgg';
@@ -92,6 +99,43 @@ describe('assertCertificateBinding', () => {
     expect(err.wwwAuthenticate).toBe(
       'Bearer error="invalid_token", error_description="The access token is bound to a client certificate; present that certificate over mutual TLS"',
     );
+  });
+});
+
+describe('assertCertificateBinding with ClientCertificateSource', () => {
+  const source = new ClientCertificateSource(
+    loadMtlsConfig({
+      MTLS_ENABLED: 'true',
+      MTLS_PROXY_CERT_HEADER: 'X-Client-Cert',
+      MTLS_TRUSTED_PROXY_CIDRS: '10.0.0.0/8',
+    }),
+  );
+
+  async function forwarded(remoteAddress: string) {
+    const pem = (await makeTestCertificate({ name: 'device-1' })).pem;
+    const x5t = createHash('sha256')
+      .update(new X509Certificate(pem).raw)
+      .digest('base64url');
+    const req = {
+      headers: { 'x-client-cert': encodeURIComponent(pem) },
+      socket: { remoteAddress },
+    } as unknown as CertificateRequest;
+    return { req, payload: { sub: 'u', cnf: { 'x5t#S256': x5t } } };
+  }
+
+  it('accepts the right certificate from a trusted proxy', async () => {
+    const { req, payload } = await forwarded('10.0.0.5');
+    expect(() =>
+      assertCertificateBinding(payload, () => source.fromRequest(req)),
+    ).not.toThrow();
+  });
+
+  it('refuses even the right certificate from an untrusted peer (fail closed)', async () => {
+    const { req, payload } = await forwarded('198.51.100.7');
+    const err = refusal(() =>
+      assertCertificateBinding(payload, () => source.fromRequest(req)),
+    );
+    expect(err.reason).toBe('missing');
   });
 });
 
