@@ -18,6 +18,11 @@ import {
   MFA_ENROLLMENT_COOKIE,
 } from '../authn-core/cookies.js';
 import type { AuthorizeParams } from '../authn-core/oauth-params.js';
+import {
+  UNMET_AUTHENTICATION_REQUIREMENTS,
+  isEnforceAcrOnFreshLoginEnabled,
+} from '../authn-core/acr-enforcement.js';
+import { essentialAcrFromClaimsParam } from '../authn-core/flow-assurance.js';
 import { SessionIssuer } from './session-issuer.service.js';
 import { PostAuthService, authorizationError } from './post-auth.service.js';
 
@@ -111,10 +116,36 @@ export class LoginFlowService {
         ),
       );
     }
+    // With ENFORCE_ACR_ON_FRESH_LOGIN, an `acr` the request asks for as an
+    // Essential Claim is mandatory, like the client's own requirement: a
+    // level this path cannot reach (a passkey, an unknown value) ends with
+    // unmet_authentication_requirements, MFA makes the second factor (or
+    // its enrolment) required.
+    const essential =
+      client && isEnforceAcrOnFreshLoginEnabled()
+        ? essentialAcrFromClaimsParam(oauthParams['claims'])
+        : null;
+    if (
+      essential &&
+      (essential.kind === 'unsupported' ||
+        !satisfiesAcr(ACR_MFA, essential.acr))
+    ) {
+      return res.redirect(
+        302,
+        authorizationError(
+          oauthParams,
+          UNMET_AUTHENTICATION_REQUIREMENTS,
+          'The requested authentication level cannot be met by this sign-in',
+        ),
+      );
+    }
+    const essentialRequiresMfa =
+      essential?.kind === 'acr' && satisfiesAcr(essential.acr, ACR_MFA);
     const clientRequiresMfa =
       !!client?.requiredAcr && satisfiesAcr(client.requiredAcr, ACR_MFA);
     const mfaRequired =
       clientRequiresMfa ||
+      essentialRequiresMfa ||
       (await this.mfaService.isMfaRequired(realm, user.id));
     const mfaEnabled = await this.mfaService.isMfaEnabled(user.id);
 
@@ -180,6 +211,33 @@ export class LoginFlowService {
     authContext: AuthContext = {},
     options: { rememberMe?: boolean } = {},
   ): Promise<void> {
+    const redirectUrl = await this.finishLogin(
+      realm,
+      user,
+      oauthParams,
+      req,
+      res,
+      authContext,
+      options,
+    );
+    res.redirect(302, redirectUrl);
+  }
+
+  /**
+   * What `completeLogin` does, returning the URL to continue at instead of
+   * redirecting: for the passkey sign-in, whose script reads JSON. Every
+   * built-in sign-in that ends in a session finishes here, so the cookie,
+   * the event and the decisions after it are the same for all of them.
+   */
+  async finishLogin(
+    realm: Realm,
+    user: User,
+    oauthParams: Record<string, string>,
+    req: Request,
+    res: Response,
+    authContext: AuthContext = {},
+    options: { rememberMe?: boolean } = {},
+  ): Promise<string> {
     // Validate OAuth request (including redirect_uri) BEFORE creating session
     let client;
     if (oauthParams['client_id']) {
@@ -204,14 +262,13 @@ export class LoginFlowService {
     });
 
     // Account page, client policy, consent screen or authorization code.
-    const redirectUrl = await this.postAuth.continueAuthorization(
+    return this.postAuth.continueAuthorization(
       realm,
       user,
       client,
       oauthParams,
       authContext,
     );
-    res.redirect(302, redirectUrl);
   }
 
   /** The methods to record once TOTP completes a sign-in (RFC 8176). */

@@ -1,9 +1,7 @@
 import { Injectable, Optional } from '@nestjs/common';
 import type { Prisma, Realm, User } from '@prisma/client';
-import {
-  OAUTH_FORM_PARAM_KEYS,
-  pickOAuthParams,
-} from '../authn-core/oauth-params.js';
+import { pickOAuthParams } from '../authn-core/oauth-params.js';
+import { loginFormParamKeys } from '../authn-core/acr-enforcement.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { RiskAssessmentService } from '../risk-assessment/risk-assessment.service.js';
 import { PasswordPolicyService } from '../password-policy/password-policy.service.js';
@@ -175,7 +173,7 @@ export class PrimaryAuthGatesService {
         realmId: realm.id,
         oauthParams:
           request.resume?.oauthParams ??
-          pickOAuthParams(form, OAUTH_FORM_PARAM_KEYS),
+          pickOAuthParams(form, loginFormParamKeys()),
         rememberMe: request.resume?.rememberMe ?? !!form['rememberMe'],
       });
 
@@ -246,7 +244,7 @@ export class PrimaryAuthGatesService {
   ): PrimaryAuthGateResult {
     const params = new URLSearchParams();
     params.set('error', error);
-    for (const key of OAUTH_FORM_PARAM_KEYS) {
+    for (const key of loginFormParamKeys()) {
       if (form[key]) params.set(key, form[key]);
     }
     return {

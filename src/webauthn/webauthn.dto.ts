@@ -61,4 +61,18 @@ export class VerifyAuthenticationDto {
   @IsOptional()
   @IsString()
   prompt?: string;
+
+  // With ENFORCE_ACR_ON_FRESH_LOGIN: what the request asks of `acr`.
+  @IsOptional()
+  @IsString()
+  acr_values?: string;
+
+  @IsOptional()
+  @IsString()
+  claims?: string;
+
+  // The login page's "remember me" box, as the password form sends it.
+  @IsOptional()
+  @IsString()
+  rememberMe?: string;
 }

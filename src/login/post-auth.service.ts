@@ -5,6 +5,14 @@ import { ConsentService } from '../consent/consent.service.js';
 import { ACR_PASSWORD, satisfiesAcr } from '../authn-core/acr.js';
 import type { AuthContext } from '../authn-core/auth-context.js';
 import type { AuthorizeParams } from '../authn-core/oauth-params.js';
+import {
+  UNMET_AUTHENTICATION_REQUIREMENTS,
+  isEnforceAcrOnFreshLoginEnabled,
+} from '../authn-core/acr-enforcement.js';
+import {
+  essentialAcrFromClaimsParam,
+  meetsEssentialAcr,
+} from '../authn-core/flow-assurance.js';
 
 /** The redirect_uri with an OAuth error, as an authorization response. */
 export function authorizationError(
@@ -65,6 +73,19 @@ export class PostAuthService {
         'access_denied',
         'This application requires a stronger sign-in method',
       );
+    }
+
+    // With ENFORCE_ACR_ON_FRESH_LOGIN, an essential `acr` the sign-in did
+    // not reach never yields a code (OIDC Core §5.5.1.1).
+    if (isEnforceAcrOnFreshLoginEnabled()) {
+      const essential = essentialAcrFromClaimsParam(oauthParams['claims']);
+      if (essential && !meetsEssentialAcr(authContext.acr, essential)) {
+        return authorizationError(
+          oauthParams,
+          UNMET_AUTHENTICATION_REQUIREMENTS,
+          'The requested authentication level could not be met',
+        );
+      }
     }
 
     // prompt=consent asks again even when consent was given before.

@@ -23,15 +23,21 @@ import {
   resolveRequiredAcr,
 } from '../authn-core/acr.js';
 import { SESSION_COOKIE } from '../authn-core/cookies.js';
-import {
-  OAUTH_RELAY_PARAM_KEYS,
-  type AuthorizeParams,
-} from '../authn-core/oauth-params.js';
+import type { AuthorizeParams } from '../authn-core/oauth-params.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
 import { ThemeRenderService } from '../theme/theme-render.service.js';
 import { FlowRuntimeService } from '../auth-flow/flow-runtime.service.js';
+import {
+  UNMET_AUTHENTICATION_REQUIREMENTS,
+  isEnforceAcrOnFreshLoginEnabled,
+  relayParamKeys,
+} from '../authn-core/acr-enforcement.js';
+import {
+  acrFromClaimsParam,
+  essentialAcrFromClaimsParam,
+} from '../authn-core/flow-assurance.js';
 
 /**
  * Whether a sign-in at `authenticatedAt` is older than the request's
@@ -286,6 +292,24 @@ export class OAuthController {
         const requestedAcr = query['acr_values']
           ? query['acr_values'].split(' ')[0] // take the highest-preference value
           : null;
+        // With ENFORCE_ACR_ON_FRESH_LOGIN, the `claims` acr counts too, and
+        // an essential one no level here can meet is refused outright.
+        const enforceAcr = isEnforceAcrOnFreshLoginEnabled();
+        if (
+          enforceAcr &&
+          essentialAcrFromClaimsParam(query['claims'])?.kind === 'unsupported'
+        ) {
+          return this.redirectWithError(
+            res,
+            query['redirect_uri'],
+            UNMET_AUTHENTICATION_REQUIREMENTS,
+            'The requested authentication level is not supported',
+            query['state'],
+          );
+        }
+        const claimsAcr = enforceAcr
+          ? acrFromClaimsParam(query['claims'])
+          : null;
         const clientRequiredAcr = client.requiredAcr ?? null;
         //   3. Continuous verification: a session of this user flagged for
         //      step-up by risk (applies to this user only)
@@ -299,6 +323,7 @@ export class OAuthController {
         // The strongest of the three requirements
         const requiredAcr = resolveRequiredAcr(
           requestedAcr,
+          claimsAcr,
           clientRequiredAcr,
           riskRequiredAcr,
         );
@@ -428,7 +453,7 @@ export class OAuthController {
     // No valid session: redirect to login page with OAuth params.
     // Only relay params from the explicit allowlist to prevent open-redirect
     // and parameter-injection attacks via arbitrary query string forwarding.
-    const OAUTH_PARAM_ALLOWLIST = new Set<string>(OAUTH_RELAY_PARAM_KEYS);
+    const OAUTH_PARAM_ALLOWLIST = new Set<string>(relayParamKeys());
     const loginParams = new URLSearchParams();
     for (const [key, value] of Object.entries(query)) {
       if (value && OAUTH_PARAM_ALLOWLIST.has(key)) loginParams.set(key, value);
@@ -494,7 +519,7 @@ export class OAuthController {
     query: Record<string, string>,
   ): void {
     const loginParams = new URLSearchParams();
-    const allowlist = new Set<string>(OAUTH_RELAY_PARAM_KEYS);
+    const allowlist = new Set<string>(relayParamKeys());
     for (const [key, value] of Object.entries(query)) {
       if (value && allowlist.has(key)) loginParams.set(key, value);
     }

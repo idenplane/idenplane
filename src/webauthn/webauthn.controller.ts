@@ -24,7 +24,6 @@ import { WebAuthnService } from './webauthn.service.js';
 import { LoginService } from '../login/login.service.js';
 import { OAuthService } from '../oauth/oauth.service.js';
 import { ConsentService } from '../consent/consent.service.js';
-import { SessionIssuer } from '../login/session-issuer.service.js';
 import {
   StartRegistrationDto,
   VerifyRegistrationDto,
@@ -41,15 +40,12 @@ import type {
   RegistrationResponseJSON,
   AuthenticationResponseJSON,
 } from '@simplewebauthn/server';
-import { PostAuthService } from '../login/post-auth.service.js';
 import { FlowRuntimeService } from '../auth-flow/flow-runtime.service.js';
+import { LoginFlowService } from '../login/login-flow.service.js';
+import { PrimaryAuthGatesService } from '../login/primary-auth-gates.service.js';
+import { loginFormParamKeys } from '../authn-core/acr-enforcement.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
-import { EventsService } from '../events/events.service.js';
-import { LoginEventType } from '../events/event-types.js';
-import {
-  OAUTH_FORM_PARAM_KEYS,
-  pickOAuthParams,
-} from '../authn-core/oauth-params.js';
+import { pickOAuthParams } from '../authn-core/oauth-params.js';
 
 @ApiExcludeController()
 @Controller('realms/:realmName')
@@ -61,10 +57,9 @@ export class WebAuthnController {
     private readonly loginService: LoginService,
     private readonly oauthService: OAuthService,
     private readonly consentService: ConsentService,
-    private readonly sessionIssuer: SessionIssuer,
-    private readonly postAuth: PostAuthService,
-    private readonly eventsService: EventsService,
     private readonly flowRuntime: FlowRuntimeService,
+    private readonly loginFlow: LoginFlowService,
+    private readonly primaryAuthGates: PrimaryAuthGatesService,
   ) {}
 
   private async getSessionUser(realm: Realm, req: Request) {
@@ -254,18 +249,18 @@ export class WebAuthnController {
       },
     );
 
-    // The same OAuth parameters the login form carries, prompt included.
+    // The same OAuth parameters the login form carries, prompt included
+    // (and what is asked of `acr`, with ENFORCE_ACR_ON_FRESH_LOGIN).
     const oauthParams = pickOAuthParams(
       body as unknown as Record<string, string | undefined>,
-      OAUTH_FORM_PARAM_KEYS,
+      loginFormParamKeys(),
     );
 
     // Validate the authorization request before any session exists, as the
-    // password sign-in does.
-    let client = null;
+    // password sign-in does (its error goes back to the login page).
     if (oauthParams['client_id']) {
       try {
-        client = await this.oauthService.validateAuthRequest(
+        await this.oauthService.validateAuthRequest(
           realm,
           oauthParams as unknown as AuthorizeParams,
         );
@@ -277,30 +272,33 @@ export class WebAuthnController {
       }
     }
 
+    // The account gates of a password sign-in, in the same order: risk
+    // assessment (a block ends the sign-in; a step-up is met, a passkey being
+    // the strongest level) and email verification. Password expiry does not
+    // apply: no password was used.
+    const gates = await this.primaryAuthGates.evaluate(realm, user, {
+      ipAddress: resolveClientIp(req),
+      userAgent: req.headers['user-agent'] ?? null,
+      deviceFingerprint: null,
+      form: oauthParams,
+      skipPasswordExpiry: true,
+    });
+    if (gates.kind === 'block') {
+      return res.json({ redirectUrl: gates.redirectUrl });
+    }
+
     // Passwordless WebAuthn assertion: the hardware authenticator is the sole
     // factor, so amr is `['hwk']` (RFC 8176). ACR reflects the WebAuthn level.
-    const authContext = { acr: ACR_WEBAUTHN, amr: ['hwk'] };
-
-    // Create session (invalidating any pre-existing cookie to prevent session fixation)
-    await this.sessionIssuer.issue(realm, user, authContext, req, res, {
-      client,
-    });
-    void this.eventsService.recordLoginEvent({
-      realmId: realm.id,
-      type: LoginEventType.LOGIN,
-      userId: user.id,
-      clientId: oauthParams['client_id'],
-      ipAddress: resolveClientIp(req),
-    });
-
-    // Consent, the client's required ACR and the code: the same decisions as
-    // after a password sign-in.
-    const redirectUrl = await this.postAuth.continueAuthorization(
+    // Session, event, consent, the client's required ACR and the code: the
+    // same completion as a password sign-in.
+    const redirectUrl = await this.loginFlow.finishLogin(
       realm,
       user,
-      client,
       oauthParams,
-      authContext,
+      req,
+      res,
+      { acr: ACR_WEBAUTHN, amr: ['hwk'] },
+      { rememberMe: !!body.rememberMe },
     );
     return res.json({ redirectUrl });
   }

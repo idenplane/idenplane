@@ -1,3 +1,8 @@
+import {
+  OAUTH_FORM_PARAM_KEYS,
+  OAUTH_RELAY_PARAM_KEYS,
+} from './oauth-params.js';
+
 /**
  * Operator switch for enforcing a requested `acr` on a fresh sign-in.
  *
@@ -32,3 +37,28 @@ export const UNMET_AUTHENTICATION_REQUIREMENTS =
 
 /** The request parameters that carry what is asked of `acr`. */
 export const ACR_REQUEST_PARAM_KEYS = ['acr_values', 'claims'] as const;
+
+/**
+ * The parameters the authorization endpoint relays to the login page: the
+ * OAuth relay list, plus `claims` with the switch on (`acr_values` is
+ * relayed already).
+ */
+export function relayParamKeys(
+  env: NodeJS.ProcessEnv = process.env,
+): readonly string[] {
+  return isEnforceAcrOnFreshLoginEnabled(env)
+    ? [...OAUTH_RELAY_PARAM_KEYS, 'claims']
+    : OAUTH_RELAY_PARAM_KEYS;
+}
+
+/**
+ * The authorization-request parameters a built-in login form carries: the
+ * OAuth form fields, plus `acr_values` and `claims` with the switch on.
+ */
+export function loginFormParamKeys(
+  env: NodeJS.ProcessEnv = process.env,
+): readonly string[] {
+  return isEnforceAcrOnFreshLoginEnabled(env)
+    ? [...OAUTH_FORM_PARAM_KEYS, ...ACR_REQUEST_PARAM_KEYS]
+    : OAUTH_FORM_PARAM_KEYS;
+}

@@ -26,6 +26,10 @@ import {
   pickOAuthParams,
   type AuthorizeParams,
 } from '../authn-core/oauth-params.js';
+import {
+  isEnforceAcrOnFreshLoginEnabled,
+  loginFormParamKeys,
+} from '../authn-core/acr-enforcement.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
@@ -175,6 +179,7 @@ export class LoginController {
       };
     });
 
+    const enforceAcr = isEnforceAcrOnFreshLoginEnabled();
     this.themeRender.render(
       res,
       realm,
@@ -193,6 +198,10 @@ export class LoginController {
         code_challenge: query['code_challenge'] ?? '',
         code_challenge_method: query['code_challenge_method'] ?? '',
         prompt: query['prompt'] ?? '',
+        // What the request asks of `acr`, carried only with
+        // ENFORCE_ACR_ON_FRESH_LOGIN (the templates render them if set).
+        acr_values: enforceAcr ? (query['acr_values'] ?? '') : '',
+        claims: enforceAcr ? (query['claims'] ?? '') : '',
         error: query['error'] ?? '',
         info: query['info'] ?? '',
         login_hint: query['login_hint'] ?? '',
@@ -254,8 +263,9 @@ export class LoginController {
         return res.redirect(gates.redirectUrl);
       }
 
-      // Build OAuth params for later use
-      const oauthParams = pickOAuthParams(b, OAUTH_FORM_PARAM_KEYS);
+      // Build OAuth params for later use (with ENFORCE_ACR_ON_FRESH_LOGIN,
+      // what the request asks of `acr` too).
+      const oauthParams = pickOAuthParams(b, loginFormParamKeys());
 
       // A risk step-up (gates.riskStepUp) needs no branch of its own: a user
       // with a second factor always gets the challenge below, after the
@@ -283,7 +293,7 @@ export class LoginController {
 
       const params = new URLSearchParams();
       params.set('error', errMessage);
-      for (const key of OAUTH_FORM_PARAM_KEYS) {
+      for (const key of loginFormParamKeys()) {
         if (b[key]) params.set(key, b[key]);
       }
       res.redirect(`/realms/${realm.name}/login?${params.toString()}`);
