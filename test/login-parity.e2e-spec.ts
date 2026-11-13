@@ -499,35 +499,25 @@ describe('Login parity (e2e)', () => {
 
   it('asks for the second factor after an expired password is changed', async () => {
     await setRealm({ passwordMaxAgeDays: 30 });
+    // A user of its own: TOTP codes used earlier in the suite are replays.
+    const user = await enrolTotp(await createUser('expired-totp-user'));
     const browser = new Browser(app);
-    try {
-      const res = await signIn(browser, { username: users.totp.username });
-      const changed = await changeExpiredPassword(
-        browser,
-        res.headers['location'] as string,
-      );
-      expect(changed.status).toBe(302);
-      expect(changed.headers['location']).toBe(`/realms/${REALM}/totp`);
 
-      // Codes used earlier in this suite would be refused as replays.
-      await ctx.prisma.usedTotpCode.deleteMany({
-        where: { userId: users.totp.id },
-      });
-      const claims = await idTokenClaims(
-        codeFrom(
-          await answerSecondFactor(browser, {
-            code: users.totp.totp!.generate(),
-          }),
-        ),
-      );
-      expect(claims['acr']).toBe(ACR_MFA);
-      expect(claims['amr']).toEqual(['pwd', 'otp']);
-    } finally {
-      await ctx.prisma.usedTotpCode.deleteMany({
-        where: { userId: users.totp.id },
-      });
-      await resetPassword(users.totp.id);
-    }
+    const res = await signIn(browser, { username: user.username });
+    const changed = await changeExpiredPassword(
+      browser,
+      res.headers['location'] as string,
+    );
+    expect(changed.status).toBe(302);
+    expect(changed.headers['location']).toBe(`/realms/${REALM}/totp`);
+
+    const claims = await idTokenClaims(
+      codeFrom(
+        await answerSecondFactor(browser, { code: user.totp.generate() }),
+      ),
+    );
+    expect(claims['acr']).toBe(ACR_MFA);
+    expect(claims['amr']).toEqual(['pwd', 'otp']);
   });
 
   it('resumes the sign-in once: a replayed change token gets no code', async () => {
