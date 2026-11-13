@@ -1,5 +1,6 @@
 import { describe, it, expect } from 'vitest';
 import { screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../../test/mocks/server';
 import { render } from '../../../test/utils';
@@ -70,5 +71,63 @@ describe('RealmListPage', () => {
     render(<RealmListPage />, { initialUrl: '/console/realms' });
     await screen.findByText('master');
     expect(screen.getByRole('heading', { name: /realms/i })).toBeInTheDocument();
+  });
+
+  describe('import', () => {
+    const upload = async (content: unknown) => {
+      const user = userEvent.setup();
+      render(<RealmListPage />, { initialUrl: '/console/realms' });
+      await screen.findByText('master');
+      const input = screen.getByLabelText(/import realm json file/i);
+      await user.upload(
+        input,
+        new File([JSON.stringify(content)], 'realm.json', { type: 'application/json' }),
+      );
+    };
+
+    it('confirms a clean import', async () => {
+      server.use(
+        http.post('/admin/realms/import', () =>
+          HttpResponse.json({ realmName: 'copy', version: 2, warnings: [] }, { status: 201 }),
+        ),
+      );
+      await upload({ version: 2, realm: { name: 'copy' } });
+      expect(await screen.findByText(/realm "copy" imported successfully/i)).toBeInTheDocument();
+    });
+
+    it('lists the warnings of an import', async () => {
+      server.use(
+        http.post('/admin/realms/import', () =>
+          HttpResponse.json(
+            {
+              realmName: 'copy',
+              version: 2,
+              warnings: ['webhook https://hooks.example: imported disabled'],
+            },
+            { status: 201 },
+          ),
+        ),
+      );
+      await upload({ version: 2, realm: { name: 'copy' } });
+      expect(await screen.findByText(/check the following/i)).toBeInTheDocument();
+      expect(screen.getByText(/imported disabled/i)).toBeInTheDocument();
+    });
+
+    it('shows the problems of a rejected file', async () => {
+      server.use(
+        http.post('/admin/realms/import', () =>
+          HttpResponse.json(
+            {
+              statusCode: 400,
+              message: "Invalid realm import: clients[0].authFlow: no flow named 'x'",
+              errors: [{ path: 'clients[0].authFlow', message: "no flow named 'x'" }],
+            },
+            { status: 400 },
+          ),
+        ),
+      );
+      await upload({ version: 2, realm: { name: 'copy' } });
+      expect(await screen.findByText(/invalid realm import: .*authFlow: no flow named/i)).toBeInTheDocument();
+    });
   });
 });

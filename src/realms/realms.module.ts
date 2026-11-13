@@ -6,9 +6,10 @@ import { RealmImportService } from './realm-import.service.js';
 import { ThemeModule } from '../theme/theme.module.js';
 import { CacheModule } from '../cache/cache.module.js';
 import { CryptoModule } from '../crypto/crypto.module.js';
+import { CorsModule } from '../cors/cors.module.js';
 
 @Module({
-  imports: [ThemeModule, CacheModule, CryptoModule],
+  imports: [ThemeModule, CacheModule, CryptoModule, CorsModule],
   controllers: [RealmsController],
   providers: [RealmsService, RealmExportService, RealmImportService],
   exports: [RealmsService],
