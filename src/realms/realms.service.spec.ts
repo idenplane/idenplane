@@ -460,6 +460,139 @@ describe('RealmsService', () => {
     });
   });
 
+  describe('CAPTCHA settings validation', () => {
+    const savedEnv = { ...process.env };
+    beforeEach(() => {
+      delete process.env['RECAPTCHA_SECRET_KEY'];
+      delete process.env['HCAPTCHA_SECRET_KEY'];
+      jwkService.generateRsaKeyPair.mockResolvedValue(mockKeyPair);
+      prisma.realm.create.mockImplementation(({ data }: any) =>
+        Promise.resolve({ ...mockRealm, ...data }),
+      );
+      prisma.realm.update.mockImplementation(({ data }: any) =>
+        Promise.resolve({ ...mockRealm, ...data }),
+      );
+    });
+    afterEach(() => {
+      process.env = { ...savedEnv };
+    });
+
+    it('refuses to create a realm with CAPTCHA on and no provider', async () => {
+      prisma.realm.findUnique.mockResolvedValue(null);
+      await expect(
+        service.create({ name: 'test-realm', captchaEnabled: true }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.realm.create).not.toHaveBeenCalled();
+    });
+
+    it('refuses to create a realm with CAPTCHA on and no site key', async () => {
+      prisma.realm.findUnique.mockResolvedValue(null);
+      await expect(
+        service.create({
+          name: 'test-realm',
+          captchaEnabled: true,
+          captchaProvider: 'hcaptcha',
+          hcaptchaSecretKey: 'secret',
+        }),
+      ).rejects.toThrow(/hcaptchaSiteKey/);
+    });
+
+    it('refuses to create a realm with CAPTCHA on and no secret anywhere', async () => {
+      prisma.realm.findUnique.mockResolvedValue(null);
+      await expect(
+        service.create({
+          name: 'test-realm',
+          captchaEnabled: true,
+          captchaProvider: 'recaptcha',
+          recaptchaSiteKey: 'site',
+          // The other provider's keys do not count.
+          hcaptchaSiteKey: 'hc-site',
+          hcaptchaSecretKey: 'hc-secret',
+        }),
+      ).rejects.toThrow(/recaptchaSecretKey/);
+    });
+
+    it('creates a realm with complete CAPTCHA settings, or with the env secret', async () => {
+      prisma.realm.findUnique.mockResolvedValue(null);
+      await service.create({
+        name: 'test-realm',
+        captchaEnabled: true,
+        captchaProvider: 'recaptcha',
+        recaptchaSiteKey: 'site',
+        recaptchaSecretKey: 'secret',
+      });
+      process.env['HCAPTCHA_SECRET_KEY'] = 'env-secret';
+      await service.create({
+        name: 'test-realm',
+        captchaEnabled: true,
+        captchaProvider: 'hcaptcha',
+        hcaptchaSiteKey: 'site',
+      });
+      expect(prisma.realm.create).toHaveBeenCalledTimes(2);
+    });
+
+    it('accepts any CAPTCHA settings while CAPTCHA is off', async () => {
+      prisma.realm.findUnique.mockResolvedValue(null);
+      await service.create({
+        name: 'test-realm',
+        captchaEnabled: false,
+        captchaProvider: 'recaptcha',
+        recaptchaSiteKey: '',
+        recaptchaSecretKey: '',
+      });
+      expect(prisma.realm.create).toHaveBeenCalled();
+    });
+
+    it('validates an update against the stored settings it does not change', async () => {
+      const crypto = new CryptoService();
+      prisma.realm.findUnique.mockResolvedValue({
+        ...mockRealm,
+        captchaEnabled: false,
+        captchaProvider: 'hcaptcha',
+        hcaptchaSiteKey: 'stored-site',
+        hcaptchaSecretKey: crypto.encryptSecret('stored-secret'),
+        recaptchaSiteKey: null,
+        recaptchaSecretKey: null,
+        captchaScoreThreshold: 0.5,
+      });
+      // Turning it on with the stored keys is fine…
+      await service.update('test-realm', { captchaEnabled: true });
+      // …switching to a provider without keys is not…
+      await expect(
+        service.update('test-realm', {
+          captchaEnabled: true,
+          captchaProvider: 'recaptcha',
+        }),
+      ).rejects.toThrow(BadRequestException);
+      // …nor is clearing the secret while turning it on.
+      await expect(
+        service.update('test-realm', {
+          captchaEnabled: true,
+          hcaptchaSecretKey: '',
+        }),
+      ).rejects.toThrow(/hcaptchaSecretKey/);
+      expect(prisma.realm.update).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not block unrelated updates of a realm stored misconfigured', async () => {
+      prisma.realm.findUnique.mockResolvedValue({
+        ...mockRealm,
+        captchaEnabled: true,
+        captchaProvider: null,
+        recaptchaSiteKey: null,
+        recaptchaSecretKey: null,
+        hcaptchaSiteKey: null,
+        hcaptchaSecretKey: null,
+        captchaScoreThreshold: 0.5,
+      });
+      await service.update('test-realm', { displayName: 'Renamed' });
+      expect(prisma.realm.update).toHaveBeenCalled();
+      await expect(
+        service.update('test-realm', { recaptchaSiteKey: 'site' }),
+      ).rejects.toThrow(/captchaProvider/);
+    });
+  });
+
   describe('remove', () => {
     it('should delete the realm', async () => {
       prisma.realm.findUnique.mockResolvedValue(mockRealm);

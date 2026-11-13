@@ -21,6 +21,10 @@ import {
   SECRET_PLACEHOLDER,
 } from './realm-secrets.util.js';
 import { MASTER_REALM } from './realm.constants.js';
+import {
+  captchaConfigProblem,
+  type CaptchaRealmFields,
+} from '../captcha/captcha-config.js';
 
 @Injectable()
 export class RealmsService {
@@ -63,6 +67,15 @@ export class RealmsService {
       throw new ConflictException(`Realm '${dto.name}' already exists`);
     }
     assertSmsMfaDeliverable(dto.smsMfaEnabled, dto.smsProvider);
+    assertCaptchaConfigured({
+      captchaEnabled: dto.captchaEnabled ?? false,
+      captchaProvider: dto.captchaProvider ?? null,
+      recaptchaSiteKey: dto.recaptchaSiteKey ?? null,
+      recaptchaSecretKey: dto.recaptchaSecretKey ?? null,
+      hcaptchaSiteKey: dto.hcaptchaSiteKey ?? null,
+      hcaptchaSecretKey: dto.hcaptchaSecretKey ?? null,
+      captchaScoreThreshold: dto.captchaScoreThreshold ?? 0.5,
+    });
 
     const keyPair = await this.jwkService.generateRsaKeyPair();
 
@@ -260,6 +273,25 @@ export class RealmsService {
         dto.smsProvider ?? existing.smsProvider,
       );
     }
+    // Only when the request touches CAPTCHA, so unrelated updates of a realm
+    // stored before this check still go through. Omitted fields keep their
+    // stored values; an empty string clears a key (as the write below does).
+    if (CAPTCHA_FIELDS.some((field) => dto[field] !== undefined)) {
+      assertCaptchaConfigured({
+        captchaEnabled: dto.captchaEnabled ?? existing.captchaEnabled,
+        captchaProvider:
+          dto.captchaProvider !== undefined
+            ? dto.captchaProvider
+            : existing.captchaProvider,
+        recaptchaSiteKey: dto.recaptchaSiteKey ?? existing.recaptchaSiteKey,
+        recaptchaSecretKey:
+          dto.recaptchaSecretKey ?? existing.recaptchaSecretKey,
+        hcaptchaSiteKey: dto.hcaptchaSiteKey ?? existing.hcaptchaSiteKey,
+        hcaptchaSecretKey: dto.hcaptchaSecretKey ?? existing.hcaptchaSecretKey,
+        captchaScoreThreshold:
+          dto.captchaScoreThreshold ?? existing.captchaScoreThreshold,
+      });
+    }
 
     // Validate theme names against available themes
     const themeFields = [
@@ -421,6 +453,25 @@ export class RealmsService {
     const deleted = await this.prisma.realm.delete({ where: { name } });
     return this.redactSecrets(deleted);
   }
+}
+
+const CAPTCHA_FIELDS = [
+  'captchaEnabled',
+  'captchaProvider',
+  'recaptchaSiteKey',
+  'recaptchaSecretKey',
+  'hcaptchaSiteKey',
+  'hcaptchaSecretKey',
+] as const satisfies readonly (keyof UpdateRealmDto)[];
+
+/**
+ * CAPTCHA can only be switched on with a provider, its site key and a
+ * secret (the realm's, or the provider's environment fallback); otherwise
+ * every self-registration would be refused.
+ */
+function assertCaptchaConfigured(realm: CaptchaRealmFields): void {
+  const problem = captchaConfigProblem(realm, (key) => process.env[key]);
+  if (problem) throw new BadRequestException(problem);
 }
 
 /**

@@ -6,6 +6,7 @@ import {
   IsNumber,
   IsArray,
   IsEnum,
+  IsIn,
   IsObject,
   Min,
   Max,
@@ -21,6 +22,7 @@ import {
 } from '../../email/dto/email-config.dto.js';
 import { SmsProviderType } from '../../sms/dto/sms-config.dto.js';
 import { RealmSmsProviderConfigDto } from './sms-config.dto.js';
+import { CAPTCHA_PROVIDERS } from '../../captcha/captcha-config.js';
 
 export class CreateRealmDto {
   @ApiProperty({ example: 'my-app' })
@@ -585,11 +587,12 @@ export class CreateRealmDto {
   captchaEnabled?: boolean;
 
   @ApiPropertyOptional({
-    enum: ['recaptcha', 'hcaptcha'],
-    description: 'CAPTCHA provider to use',
+    enum: [...CAPTCHA_PROVIDERS],
+    description:
+      'CAPTCHA provider to use. Required, with its site key and secret key, when captchaEnabled is true.',
   })
   @IsOptional()
-  @IsString()
+  @IsIn(CAPTCHA_PROVIDERS)
   captchaProvider?: string;
 
   @ApiPropertyOptional({ description: 'reCAPTCHA site key for v3' })
