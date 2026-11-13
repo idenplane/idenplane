@@ -66,6 +66,10 @@ Passwords, client secrets, API keys, SCIM tokens and session tokens are hashed, 
 
 On every start, Idenplane checks that the key is the one the stored secrets were encrypted with, using a check value kept in the `encryption_key_check` table. With another key it **refuses to start** rather than read or rewrite secrets with the wrong key: restore the previous `WEBHOOK_SECRET_KEY` and `WEBHOOK_ENCRYPTION_SALT`. The same start encrypts any secret still stored in plaintext by an older version; it is safe with several replicas or workers starting at once. There is no key rotation yet, so these two values must be kept for the life of the database.
 
+:::warning Upgrading to the version that encrypts these secrets
+Its first start encrypts the values older versions stored in plaintext, and older versions cannot read them afterwards. Stop the old version before starting the new one (scale to zero, or the `Recreate` strategy) instead of a rolling update, and keep the pre-upgrade database backup: going back needs it. On the first start, if stored values that look encrypted do not decrypt with the configured key, Idenplane refuses to start. Restore the previous key; only if you are sure the key is right (the values are plaintext that merely looks like ciphertext), start once with `STORED_SECRETS_ACCEPT_KEY=true`.
+:::
+
 ---
 
 ## 3. Database: TLS with certificate verification

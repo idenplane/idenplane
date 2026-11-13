@@ -108,6 +108,7 @@ ADMIN_PASSWORD=change_this_password
 |----------|---------|----------|-------------|
 | `WEBHOOK_SECRET_KEY` | — | Yes (prod) | 32-byte (or longer) key from which the AES-256-GCM key for every secret stored encrypted is derived: webhook, identity provider, LDAP, SMTP and provider secrets, audit stream headers, SSO connection secrets, signing keys and TOTP seeds. See [Production → Encryption at rest](../deployment/production.md#encryption-at-rest) |
 | `WEBHOOK_ENCRYPTION_SALT` | — | Yes (prod) | 16-byte salt used when deriving the AES key via scrypt |
+| `STORED_SECRETS_ACCEPT_KEY` | — | No | `true` for one start only: accept the configured key when the first start of encryption at rest finds stored values that look encrypted but do not decrypt (plaintext that merely looks like ciphertext). Never set it to get past a wrong key |
 
 ```bash
 # Generate webhook encryption key

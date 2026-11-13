@@ -145,8 +145,22 @@ export class SecretsAtRestService implements OnApplicationBootstrap {
     for (;;) {
       const page = await this.prisma.$transaction(async (tx) => {
         await this.lock(tx);
+        // Several processes start together: once another one has completed
+        // a full pass while this one was running, this pass can stop.
+        const state = await tx.encryptionKeyCheck.findUnique({
+          where: { id: KEY_CHECK_ID },
+          select: { sweepVersion: true, updatedAt: true },
+        });
+        if (
+          state &&
+          state.sweepVersion >= SWEEP_VERSION &&
+          state.updatedAt >= startedAt
+        ) {
+          return { next: undefined, done: true };
+        }
         return this.sweepTotpBatch(tx, cursor, since, count);
       }, TX_OPTIONS);
+      if ('done' in page) return { encrypted, keyCheckCreated };
       if (!page.next) break;
       cursor = page.next;
     }
@@ -206,34 +220,35 @@ export class SecretsAtRestService implements OnApplicationBootstrap {
       };
     }
 
-    // First pass: these are always encrypted (CryptoService.encrypt), so
-    // they tell whether the key is right before anything is rewritten.
-    const [webhooks, nhi] = await Promise.all([
-      tx.webhook.findMany({ select: { id: true, secret: true }, take: 50 }),
-      tx.nhiCredential.findMany({
-        where: { privateKeyPem: { not: null } },
-        select: { id: true, privateKeyPem: true },
-        take: 50,
-      }),
-    ]);
-    const probes = [
-      ...webhooks.map((w) => ({ what: `webhook ${w.id}`, value: w.secret })),
-      ...nhi.map((n) => ({
-        what: `NHI credential ${n.id}`,
-        value: n.privateKeyPem!,
-      })),
-    ];
+    // First pass: find out whether the key is right before anything is
+    // rewritten. Webhook secrets and NHI private keys are always encrypted
+    // (CryptoService.encrypt). The realm secrets have been encrypted on write
+    // since an earlier release, so a realm value shaped like ciphertext was
+    // encrypted with the key of that time; it is a probe too, so that an
+    // instance without webhooks is checked as well.
+    const probes = await this.firstRunProbes(tx);
     const failed = probes.filter((p) => !this.decrypts(p.value));
-    if (probes.length > 0 && failed.length === probes.length) {
+    if (
+      probes.length > 0 &&
+      failed.length === probes.length &&
+      process.env['STORED_SECRETS_ACCEPT_KEY'] !== 'true'
+    ) {
       throw new StoredSecretsKeyError(
-        `None of the ${probes.length} stored webhook secrets / NHI private keys decrypt with the configured WEBHOOK_SECRET_KEY / WEBHOOK_ENCRYPTION_SALT. ` +
-          'Restore the key they were encrypted with; refusing to start so that no secret is rewritten with the wrong key.',
+        `None of the ${probes.length} stored secrets that look encrypted (${probes
+          .slice(0, 5)
+          .map((p) => p.what)
+          .join(
+            ', ',
+          )}${probes.length > 5 ? ', …' : ''}) decrypt with the configured WEBHOOK_SECRET_KEY / WEBHOOK_ENCRYPTION_SALT. ` +
+          'Restore the key they were encrypted with; refusing to start so that no secret is encrypted a second time with the wrong key. ' +
+          'If this key is right and those values are plaintext that only looks like ciphertext, start once with STORED_SECRETS_ACCEPT_KEY=true.',
       );
     }
-    if (failed.length > 0) {
-      // Some decrypt: the key is right and these rows are damaged.
+    if (failed.length > 0 && failed.length < probes.length) {
+      // Some decrypt: the key is right and these rows are damaged (or are
+      // plaintext shaped like ciphertext).
       this.logger.error(
-        `These stored secrets do not decrypt and are unusable: ${failed.map((f) => f.what).join(', ')}`,
+        `These stored secrets do not decrypt with the configured key: ${failed.map((f) => f.what).join(', ')}`,
       );
     }
     await tx.encryptionKeyCheck.create({
@@ -243,6 +258,72 @@ export class SecretsAtRestService implements OnApplicationBootstrap {
       },
     });
     return { keyCheckCreated: true, sweepVersion: 0, sweptAt: null };
+  }
+
+  /**
+   * Values that should decrypt with the key the secrets were encrypted
+   * with: webhook secrets, NHI private keys, and realm secrets shaped like
+   * ciphertext.
+   */
+  private async firstRunProbes(
+    tx: Tx,
+  ): Promise<Array<{ what: string; value: string }>> {
+    const [webhooks, nhi, realms] = await Promise.all([
+      tx.webhook.findMany({ select: { id: true, secret: true }, take: 50 }),
+      tx.nhiCredential.findMany({
+        where: { privateKeyPem: { not: null } },
+        select: { id: true, privateKeyPem: true },
+        take: 50,
+      }),
+      tx.realm.findMany({
+        select: {
+          name: true,
+          smtpPassword: true,
+          recaptchaSecretKey: true,
+          hcaptchaSecretKey: true,
+          emailProviderConfig: true,
+          smsProviderConfig: true,
+        },
+      }),
+    ]);
+    const probes = [
+      ...webhooks.map((w) => ({ what: `webhook ${w.id}`, value: w.secret })),
+      ...nhi.map((n) => ({
+        what: `NHI credential ${n.id}`,
+        value: n.privateKeyPem!,
+      })),
+    ];
+    for (const realm of realms) {
+      const values: Array<[string, unknown]> = [
+        ['smtpPassword', realm.smtpPassword],
+        ['recaptchaSecretKey', realm.recaptchaSecretKey],
+        ['hcaptchaSecretKey', realm.hcaptchaSecretKey],
+      ];
+      const email = realm.emailProviderConfig;
+      if (isRecord(email)) {
+        for (const [section, field] of Object.entries(EMAIL_SECRET_FIELDS)) {
+          const values_ = email[section];
+          if (isRecord(values_)) {
+            values.push([
+              `emailProviderConfig.${section}.${field}`,
+              values_[field],
+            ]);
+          }
+        }
+      }
+      const sms = realm.smsProviderConfig;
+      if (isRecord(sms)) {
+        for (const field of SMS_SECRET_FIELDS) {
+          values.push([`smsProviderConfig.${field}`, sms[field]]);
+        }
+      }
+      for (const [field, value] of values) {
+        if (typeof value === 'string' && looksEncrypted(value)) {
+          probes.push({ what: `realm ${realm.name} ${field}`, value });
+        }
+      }
+    }
+    return probes;
   }
 
   /** encryptSecret, and whether it changed anything. */
@@ -460,6 +541,16 @@ export class SecretsAtRestService implements OnApplicationBootstrap {
     }
     return rows.length === TOTP_BATCH ? { next: rows[rows.length - 1].id } : {};
   }
+}
+
+/**
+ * Shaped like CryptoService.encrypt output: canonical base64 of at least
+ * IV (12) + tag (16) + 1 bytes. Checked without a regular expression.
+ */
+export function looksEncrypted(value: string): boolean {
+  if (value.length < 40 || value.length % 4 !== 0) return false;
+  const bytes = Buffer.from(value, 'base64');
+  return bytes.length >= 29 && bytes.toString('base64') === value;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
