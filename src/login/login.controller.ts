@@ -22,7 +22,6 @@ import {
   MFA_ENROLLMENT_COOKIE,
 } from '../authn-core/cookies.js';
 import {
-  OAUTH_FORM_PARAM_KEYS,
   pickOAuthParams,
   type AuthorizeParams,
 } from '../authn-core/oauth-params.js';
@@ -151,8 +150,9 @@ export class LoginController {
     // Build a properly percent-encoded register link so the hosted page does
     // not emit a URL with literal spaces (scope) or an unencoded redirect_uri,
     // and so empty params are dropped rather than rendered as `nonce=`.
+    // With ENFORCE_ACR_ON_FRESH_LOGIN these carry acr_values and claims too.
     const registerParams = new URLSearchParams(
-      pickOAuthParams(query, OAUTH_FORM_PARAM_KEYS),
+      pickOAuthParams(query, loginFormParamKeys()),
     );
     const registerQs = registerParams.toString();
     const registerUrl = `/realms/${realm.name}/register${
@@ -1083,6 +1083,12 @@ export class LoginController {
         code_challenge: query['code_challenge'] ?? '',
         code_challenge_method: query['code_challenge_method'] ?? '',
         prompt: query['prompt'] ?? '',
+        acr_values: isEnforceAcrOnFreshLoginEnabled()
+          ? (query['acr_values'] ?? '')
+          : '',
+        claims: isEnforceAcrOnFreshLoginEnabled()
+          ? (query['claims'] ?? '')
+          : '',
         customAttributes: customAttributes.map((a) => ({
           name: a.name,
           displayName: a.displayName,
@@ -1124,7 +1130,8 @@ export class LoginController {
     const confirmPassword = body['confirmPassword'] ?? '';
 
     // Preserve OAuth params through registration redirects
-    const oauthParams = OAUTH_FORM_PARAM_KEYS.filter((p) => body[p])
+    const oauthParams = loginFormParamKeys()
+      .filter((p) => body[p])
       .map((p) => `${p}=${encodeURIComponent(body[p])}`)
       .join('&');
     const oauthSuffix = oauthParams ? `&${oauthParams}` : '';

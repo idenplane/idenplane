@@ -86,9 +86,25 @@ describe('ENFORCE_ACR_ON_FRESH_LOGIN (e2e)', () => {
     useThemeViews(app);
     await ctx.prisma.realm.delete({ where: { name: REALM } }).catch(() => {});
     seeded = await ctx.seedTestRealm(REALM);
+    await ctx.prisma.identityProvider.create({
+      data: {
+        realmId: seeded.realm.id,
+        alias: 'mockidp',
+        displayName: 'Mock IdP',
+        clientId: 'idenplane',
+        clientSecret: 'idp-secret',
+        authorizationUrl: 'https://idp.example.test/authorize',
+        tokenUrl: 'https://idp.example.test/token',
+        userinfoUrl: 'https://idp.example.test/userinfo',
+        trustEmail: true,
+      },
+    });
   }, 30_000);
 
-  afterEach(() => setFlag(previous));
+  afterEach(() => {
+    jest.restoreAllMocks();
+    setFlag(previous);
+  });
 
   afterAll(async () => {
     setFlag(previous);
@@ -234,5 +250,55 @@ describe('ENFORCE_ACR_ON_FRESH_LOGIN (e2e)', () => {
       await bindRealm(ctx.prisma, seeded.realm.id, null, false);
       restore();
     }
+  });
+
+  it('on: a federated sign-in is held to an essential acr too', async () => {
+    setFlag('true');
+    const user = await newUser();
+    const realFetch = global.fetch;
+    jest.spyOn(global, 'fetch').mockImplementation(async (input, init) => {
+      const url = typeof input === 'string' ? input : input.toString();
+      if (url === 'https://idp.example.test/token') {
+        return new Response(JSON.stringify({ access_token: 'at' }), {
+          status: 200,
+          headers: { 'Content-Type': 'application/json' },
+        });
+      }
+      if (url === 'https://idp.example.test/userinfo') {
+        return new Response(
+          JSON.stringify({
+            sub: `ext-${user.id}`,
+            email: user.email,
+            email_verified: true,
+          }),
+          { status: 200, headers: { 'Content-Type': 'application/json' } },
+        );
+      }
+      return realFetch(input, init);
+    });
+    const browser = new Browser(app);
+    const auth = await browser.get(
+      authorizeUrl(REALM, { claims: essential(ACR.webauthn) }),
+    );
+    const page = await browser.get(auth.headers['location'] as string);
+    const button = /href="(\/realms\/[^"]+\/broker\/mockidp\/login[^"]*)"/.exec(
+      page.text,
+    );
+    expect(button).not.toBeNull();
+    const href = (button as RegExpExecArray)[1]
+      .replaceAll('&amp;', '&')
+      .replaceAll('&#x3D;', '=');
+    expect(href).toContain('claims=');
+    const toIdp = await browser.get(href);
+    const state = new URL(toIdp.headers['location'] as string).searchParams.get(
+      'state',
+    ) as string;
+
+    const back = await browser.get(
+      `/realms/${REALM}/broker/mockidp/callback?code=c&state=${encodeURIComponent(state)}`,
+    );
+    expect(errorOf(back.headers['location'])).toBe(
+      'unmet_authentication_requirements',
+    );
   });
 });

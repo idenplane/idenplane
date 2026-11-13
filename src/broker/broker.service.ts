@@ -37,6 +37,9 @@ export interface BrokerState {
   nonce?: string;
   codeChallenge?: string;
   codeChallengeMethod?: string;
+  /** What the request asked of `acr` (with ENFORCE_ACR_ON_FRESH_LOGIN). */
+  acrValues?: string;
+  claims?: string;
   /** Set when a flow's social step started the sign-in. */
   flow?: BrokerFlowState;
 }
@@ -109,6 +112,8 @@ export class BrokerService {
       nonce?: string;
       code_challenge?: string;
       code_challenge_method?: string;
+      acr_values?: string;
+      claims?: string;
     },
   ): Promise<string> {
     if (!params.client_id) {
@@ -149,6 +154,8 @@ export class BrokerService {
       nonce: params.nonce,
       codeChallenge: params.code_challenge,
       codeChallengeMethod: params.code_challenge_method,
+      acrValues: params.acr_values,
+      claims: params.claims,
     };
 
     const stateJwt = await this.jwkService.signJwt(
@@ -362,6 +369,9 @@ export class BrokerService {
     if (brokerState.codeChallengeMethod) {
       oauthParams['code_challenge_method'] = brokerState.codeChallengeMethod;
     }
+    if (brokerState.acrValues)
+      oauthParams['acr_values'] = brokerState.acrValues;
+    if (brokerState.claims) oauthParams['claims'] = brokerState.claims;
 
     return { user, oauthParams };
   }
