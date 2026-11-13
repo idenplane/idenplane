@@ -449,6 +449,93 @@ describe('Login parity (e2e)', () => {
     expect(browser.jar.has('IDENPLANE_SESSION')).toBe(false);
   });
 
+  /** Changes the expired password on the page `location` leads to. */
+  const changeExpiredPassword = async (browser: Browser, location: string) => {
+    const page = await browser.get(location);
+    expect(page.status).toBe(200);
+    const token = new URL(location, 'http://x').searchParams.get('token');
+    return browser.post(`/realms/${REALM}/change-password`, {
+      token: token as string,
+      currentPassword: PASSWORD,
+      newPassword: NEW_PASSWORD,
+      confirmPassword: NEW_PASSWORD,
+      _csrf: csrfFrom(page.text),
+    });
+  };
+  const NEW_PASSWORD = 'NewPassword456!';
+  const resetPassword = async (userId: string) =>
+    ctx.prisma.user.update({
+      where: { id: userId },
+      data: {
+        passwordHash: await argon2.hash(PASSWORD),
+        passwordChangedAt: null,
+      },
+    });
+
+  it('continues to the application after the expired password is changed', async () => {
+    await setRealm({ passwordMaxAgeDays: 30 });
+    const browser = new Browser(app);
+    try {
+      const res = await signIn(browser, {
+        query: { nonce: 'n-expiry', prompt: 'login' },
+        form: { rememberMe: 'true' },
+      });
+      const changed = await changeExpiredPassword(
+        browser,
+        res.headers['location'] as string,
+      );
+
+      // The OAuth request was kept server-side: the code goes to the client
+      // with the original state, at the level the password proved.
+      const claims = await idTokenClaims(codeFrom(changed));
+      expect(claims['acr']).toBe(ACR_PASSWORD);
+      expect(claims['amr']).toEqual(['pwd']);
+      expect(claims['nonce']).toBe('n-expiry');
+      expect(browser.raw.get('IDENPLANE_SESSION')).toMatch(/Max-Age=2592000/);
+    } finally {
+      await resetPassword(seeded.user.id);
+    }
+  });
+
+  it('asks for the second factor after an expired password is changed', async () => {
+    await setRealm({ passwordMaxAgeDays: 30 });
+    // A user of its own: TOTP codes used earlier in the suite are replays.
+    const user = await enrolTotp(await createUser('expired-totp-user'));
+    const browser = new Browser(app);
+
+    const res = await signIn(browser, { username: user.username });
+    const changed = await changeExpiredPassword(
+      browser,
+      res.headers['location'] as string,
+    );
+    expect(changed.status).toBe(302);
+    expect(changed.headers['location']).toBe(`/realms/${REALM}/totp`);
+
+    const claims = await idTokenClaims(
+      codeFrom(
+        await answerSecondFactor(browser, { code: user.totp.generate() }),
+      ),
+    );
+    expect(claims['acr']).toBe(ACR_MFA);
+    expect(claims['amr']).toEqual(['pwd', 'otp']);
+  });
+
+  it('resumes the sign-in once: a replayed change token gets no code', async () => {
+    await setRealm({ passwordMaxAgeDays: 30 });
+    const browser = new Browser(app);
+    try {
+      const res = await signIn(browser);
+      const location = res.headers['location'] as string;
+      codeFrom(await changeExpiredPassword(browser, location));
+
+      const replay = await changeExpiredPassword(new Browser(app), location);
+      expect(replay.headers['location']).toContain(`/realms/${REALM}/login?`);
+      expect(replay.headers['location']).not.toContain('code=');
+    } finally {
+      await resetPassword(seeded.user.id);
+    }
+  });
+
   // ─── Risk ──────────────────────────────────────────────────────────────
 
   const mockRisk = (action: 'ALLOW' | 'STEP_UP' | 'BLOCK') => {
@@ -515,6 +602,27 @@ describe('Login parity (e2e)', () => {
 
     const url = new URL(res.headers['location'] as string);
     expect(url.searchParams.get('error')).toBe('access_denied');
+  });
+
+  it('applies password expiry before a risk step-up', async () => {
+    await setRealm({ adaptiveAuthEnabled: true, passwordMaxAgeDays: 30 });
+    mockRisk('STEP_UP');
+    const browser = new Browser(app);
+    try {
+      const res = await signIn(browser, { username: users.totp.username });
+
+      // The expired password is handled first; no second factor is asked
+      // for and no challenge is created.
+      expect(res.status).toBe(302);
+      const location = new URL(res.headers['location'] as string, 'http://x');
+      expect(location.pathname).toBe(`/realms/${REALM}/change-password`);
+      expect(browser.jar.has('IDENPLANE_MFA_CHALLENGE')).toBe(false);
+    } finally {
+      await ctx.prisma.user.update({
+        where: { id: users.totp.id },
+        data: { passwordChangedAt: null },
+      });
+    }
   });
 
   it('lets a risky sign-in through when there is no factor to step up with', async () => {

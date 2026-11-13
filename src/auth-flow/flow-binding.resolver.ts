@@ -2,6 +2,7 @@ import { Injectable } from '@nestjs/common';
 import type { AuthenticationFlow, Client, Realm } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { isAuthFlowRuntimeEnabled } from './auth-flow-runtime.js';
+import { loadFlowValidationContext } from './flow-validation-context.js';
 import {
   validateFlowSteps,
   type FlowValidationError,
@@ -37,7 +38,8 @@ export type ResolverClient = Pick<Client, 'authFlowId'>;
  *   1. AUTH_FLOW_RUNTIME_ENABLED unset            → legacy
  *   2. realm.authFlowsEnabled false               → legacy (even with bindings)
  *   3. client.authFlowId ?? realm.browserFlowId   → none → legacy
- *   4. load that flow *in this realm* and validate → any failure → misconfigured
+ *   4. load that flow *in this realm* and validate (against the realm's
+ *      identity providers too) → any failure → misconfigured
  *
  * `misconfigured` must fail closed (the caller shows an error page). It never
  * falls back to legacy login, to `isDefault`, or to "any flow of the realm":
@@ -71,7 +73,14 @@ export class FlowBindingResolver {
       };
     }
 
-    const errors = validateFlowSteps(flow.steps);
+    // Against the realm as it is now: a social step whose identity provider
+    // was deleted or disabled makes the binding misconfigured (fail closed).
+    const errors = validateFlowSteps(
+      flow.steps,
+      hasSocialStep(flow.steps)
+        ? await loadFlowValidationContext(this.prisma, realm.id)
+        : undefined,
+    );
     if (errors.length > 0) {
       return {
         kind: 'misconfigured',
@@ -84,4 +93,17 @@ export class FlowBindingResolver {
 
     return { kind: 'bound', flow, source };
   }
+}
+
+/** Whether a stored flow has a social step (which the realm must back). */
+function hasSocialStep(steps: unknown): boolean {
+  return (
+    Array.isArray(steps) &&
+    steps.some(
+      (s: unknown) =>
+        !!s &&
+        typeof s === 'object' &&
+        (s as { type?: unknown }).type === 'social',
+    )
+  );
 }

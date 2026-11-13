@@ -1,6 +1,8 @@
 import { Injectable, Optional } from '@nestjs/common';
-import type { Realm, User } from '@prisma/client';
-import { OAUTH_FORM_PARAM_KEYS } from '../authn-core/oauth-params.js';
+import type { Prisma, Realm, User } from '@prisma/client';
+import { pickOAuthParams } from '../authn-core/oauth-params.js';
+import { loginFormParamKeys } from '../authn-core/acr-enforcement.js';
+import { PrismaService } from '../prisma/prisma.service.js';
 import { RiskAssessmentService } from '../risk-assessment/risk-assessment.service.js';
 import { PasswordPolicyService } from '../password-policy/password-policy.service.js';
 import { VerificationService } from '../verification/verification.service.js';
@@ -20,6 +22,27 @@ export interface PrimaryAuthRequest {
    * password (a passkey), as the passkey sign-in has always done.
    */
   skipPasswordExpiry?: boolean;
+  /**
+   * The OAuth request (and remember-me) to resume once an expired password
+   * is changed. Kept server-side, keyed by the change token; defaults to
+   * the OAuth fields of `form`.
+   */
+  resume?: { oauthParams: Record<string, string>; rememberMe: boolean };
+}
+
+/** `PendingAction.type` of the sign-in to resume after a password change. */
+export const PASSWORD_CHANGE_RESUME_TYPE = 'password_change_resume';
+
+/** How long a forced password change may take (the change token's TTL). */
+export const PASSWORD_CHANGE_TTL_SECONDS = 300;
+
+/** The sign-in an expired-password change interrupted. */
+export interface PasswordChangeResume {
+  userId: string;
+  realmId: string;
+  /** The authorization request, or empty for an account-console sign-in. */
+  oauthParams: Record<string, string>;
+  rememberMe: boolean;
 }
 
 export type PrimaryAuthGateResult =
@@ -49,6 +72,7 @@ export class PrimaryAuthGatesService {
     private readonly verificationService: VerificationService,
     private readonly crypto: CryptoService,
     private readonly eventsService: EventsService,
+    private readonly prisma: PrismaService,
     @Optional() private readonly riskAssessmentService?: RiskAssessmentService,
   ) {}
 
@@ -139,9 +163,19 @@ export class PrimaryAuthGatesService {
       await this.verificationService.createTokenWithHash(
         user.id,
         'change_password',
-        300,
+        PASSWORD_CHANGE_TTL_SECONDS,
         this.crypto.sha256(changeToken),
       );
+      // The OAuth request waits server-side (never in the URL) so the
+      // sign-in can continue to the application once the password changed.
+      await this.storeResume(changeToken, {
+        userId: user.id,
+        realmId: realm.id,
+        oauthParams:
+          request.resume?.oauthParams ??
+          pickOAuthParams(form, loginFormParamKeys()),
+        rememberMe: request.resume?.rememberMe ?? !!form['rememberMe'],
+      });
 
       return {
         kind: 'block',
@@ -152,6 +186,56 @@ export class PrimaryAuthGatesService {
     return { kind: 'continue', riskStepUp, riskScore, riskLevel };
   }
 
+  /**
+   * Takes (single use) the sign-in an expired-password change interrupted,
+   * for the change token `changeToken`. Null when there is none, it expired,
+   * or it was for another realm or user.
+   */
+  async takePasswordChangeResume(
+    changeToken: string,
+    realmId: string,
+    userId: string,
+  ): Promise<PasswordChangeResume | null> {
+    const tokenHash = this.resumeHash(changeToken);
+    const row = await this.prisma.pendingAction.findUnique({
+      where: { tokenHash },
+    });
+    if (!row || row.type !== PASSWORD_CHANGE_RESUME_TYPE) return null;
+    const { count } = await this.prisma.pendingAction.deleteMany({
+      where: { id: row.id, type: PASSWORD_CHANGE_RESUME_TYPE },
+    });
+    if (count !== 1 || row.expiresAt.getTime() <= Date.now()) return null;
+    const data = row.data as unknown as PasswordChangeResume;
+    if (data.realmId !== realmId || data.userId !== userId) return null;
+    return data;
+  }
+
+  private async storeResume(
+    changeToken: string,
+    resume: PasswordChangeResume,
+  ): Promise<void> {
+    // One pending change per user, as for the change token itself.
+    await this.prisma.pendingAction.deleteMany({
+      where: {
+        type: PASSWORD_CHANGE_RESUME_TYPE,
+        data: { path: ['userId'], equals: resume.userId },
+      },
+    });
+    await this.prisma.pendingAction.create({
+      data: {
+        tokenHash: this.resumeHash(changeToken),
+        type: PASSWORD_CHANGE_RESUME_TYPE,
+        data: resume as unknown as Prisma.InputJsonValue,
+        expiresAt: new Date(Date.now() + PASSWORD_CHANGE_TTL_SECONDS * 1000),
+      },
+    });
+  }
+
+  /** Distinct from the change token's own hash (another table, another use). */
+  private resumeHash(changeToken: string): string {
+    return this.crypto.sha256(`${PASSWORD_CHANGE_RESUME_TYPE}:${changeToken}`);
+  }
+
   /** The login page with an error, keeping the OAuth request. */
   private backToLogin(
     realm: Realm,
@@ -160,7 +244,7 @@ export class PrimaryAuthGatesService {
   ): PrimaryAuthGateResult {
     const params = new URLSearchParams();
     params.set('error', error);
-    for (const key of OAUTH_FORM_PARAM_KEYS) {
+    for (const key of loginFormParamKeys()) {
       if (form[key]) params.set(key, form[key]);
     }
     return {

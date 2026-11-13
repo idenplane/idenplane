@@ -9,6 +9,7 @@ import {
   type CreationOptions,
   type RequestOptions,
 } from './helpers/soft-authenticator';
+import { RiskAssessmentService } from '../src/risk-assessment/risk-assessment.service.js';
 
 /**
  * A passkey registered through the account endpoints signs in without a
@@ -103,10 +104,11 @@ describe('WebAuthn passwordless login (e2e)', () => {
   }, 30_000);
 
   afterEach(async () => {
+    jest.restoreAllMocks();
     await setClient({ requireConsent: false });
     await ctx.prisma.realm.update({
       where: { id: seeded.realm.id },
-      data: { requireEmailVerification: false },
+      data: { requireEmailVerification: false, adaptiveAuthEnabled: false },
     });
     await ctx.prisma.user.update({
       where: { id: seeded.user.id },
@@ -253,5 +255,85 @@ describe('WebAuthn passwordless login (e2e)', () => {
     );
 
     expect(res.status).toBe(400);
+  });
+
+  // ─── Parity with the password sign-in ──────────────────────────────────
+
+  it('keeps "remember me" for 30 days, as the password form does', async () => {
+    const browser = new Browser(app);
+    const res = await passkeySignIn(browser, {
+      ...oauthBody,
+      rememberMe: 'true',
+    });
+
+    expect(res.status).toBe(200);
+    codeFrom((res.body as { redirectUrl: string }).redirectUrl);
+    expect(browser.raw.get('IDENPLANE_SESSION')).toMatch(/Max-Age=2592000/);
+  });
+
+  it('honours prompt=consent from the page', async () => {
+    const browser = new Browser(app);
+    const res = await passkeySignIn(browser, {
+      ...oauthBody,
+      prompt: 'consent',
+    });
+
+    expect((res.body as { redirectUrl: string }).redirectUrl).toMatch(
+      new RegExp(`^/realms/${REALM}/consent\\?req=`),
+    );
+  });
+
+  it('applies the risk gate: a blocked sign-in gets no session', async () => {
+    await ctx.prisma.realm.update({
+      where: { id: seeded.realm.id },
+      data: { adaptiveAuthEnabled: true },
+    });
+    const risk = app.get(RiskAssessmentService);
+    jest
+      .spyOn(risk, 'assessRisk')
+      .mockResolvedValue({ action: 'BLOCK', riskScore: 95 } as never);
+    jest
+      .spyOn(risk, 'sendBlockedLoginEmail')
+      .mockResolvedValue(undefined as never);
+    const browser = new Browser(app);
+
+    const res = await passkeySignIn(browser);
+
+    expect(res.status).toBe(200);
+    const target = new URL(
+      (res.body as { redirectUrl: string }).redirectUrl,
+      'http://x',
+    );
+    expect(target.pathname).toBe(`/realms/${REALM}/login`);
+    expect(target.searchParams.get('error')).toMatch(/suspicious activity/);
+    expect(target.searchParams.get('client_id')).toBe('test-client');
+    expect(browser.jar.has('IDENPLANE_SESSION')).toBe(false);
+  });
+
+  it('a risk step-up is met by the passkey itself', async () => {
+    await ctx.prisma.realm.update({
+      where: { id: seeded.realm.id },
+      data: { adaptiveAuthEnabled: true },
+    });
+    const risk = app.get(RiskAssessmentService);
+    jest
+      .spyOn(risk, 'assessRisk')
+      .mockResolvedValue({ action: 'STEP_UP', riskScore: 85 } as never);
+    jest.spyOn(risk, 'updateUserProfile').mockResolvedValue(undefined as never);
+
+    const res = await passkeySignIn(new Browser(app));
+
+    const claims = await idTokenClaims(
+      codeFrom((res.body as { redirectUrl: string }).redirectUrl),
+    );
+    expect(claims['acr']).toBe(ACR_WEBAUTHN);
+  });
+
+  it('the login page script sends prompt and remember-me with the passkey', async () => {
+    const page = await new Browser(app).get(
+      `/realms/${REALM}/login?${new URLSearchParams({ ...oauthBody, prompt: 'consent' }).toString()}`,
+    );
+    expect(page.text).toContain("['prompt', 'acr_values', 'claims'].forEach");
+    expect(page.text).toContain("body.rememberMe = 'true'");
   });
 });

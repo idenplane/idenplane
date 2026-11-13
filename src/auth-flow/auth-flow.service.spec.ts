@@ -64,6 +64,9 @@ const mockPrisma = {
     findMany: jest.fn(),
     update: jest.fn(),
   },
+  identityProvider: {
+    findMany: jest.fn().mockResolvedValue([]),
+  },
   $transaction: jest.fn(),
 };
 
@@ -79,6 +82,8 @@ describe('AuthFlowService', () => {
 
   beforeEach(async () => {
     jest.resetAllMocks();
+    // The realm's identity providers, for social steps (none by default).
+    mockPrisma.identityProvider.findMany.mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
@@ -402,13 +407,39 @@ describe('AuthFlowService', () => {
 
     it('reports errors of a flow saved before the stricter rules', async () => {
       mockPrisma.authenticationFlow.findFirst.mockResolvedValue(
-        makeFlow([makeStep({ type: 'social' as FlowStep['type'] })]),
+        makeFlow([makeStep({ type: 'consent' as FlowStep['type'] })]),
       );
       const r = await service.validateFlow('realm-id', 'flow-id');
       expect(r.valid).toBe(false);
       expect(r.errors[0]).toMatchObject({
         path: 'steps[0].type',
         code: 'unsupported_type',
+      });
+    });
+
+    it('checks a social step against the realm identity providers', async () => {
+      const social = makeStep({
+        type: 'social' as FlowStep['type'],
+        config: { providerAlias: 'google' },
+      });
+      mockPrisma.authenticationFlow.findFirst.mockResolvedValue(
+        makeFlow([social]),
+      );
+      const missing = await service.validateFlow('realm-id', 'flow-id');
+      expect(missing.errors).toEqual([
+        expect.objectContaining({ code: 'provider_not_found' }),
+      ]);
+      expect(mockPrisma.identityProvider.findMany).toHaveBeenCalledWith({
+        where: { realmId: 'realm-id', enabled: true },
+        select: { alias: true },
+      });
+
+      mockPrisma.identityProvider.findMany.mockResolvedValue([
+        { alias: 'google' },
+      ]);
+      expect(await service.validateFlow('realm-id', 'flow-id')).toEqual({
+        valid: true,
+        errors: [],
       });
     });
 

@@ -14,7 +14,7 @@ import {
 import { ConfigService } from '@nestjs/config';
 import { ApiExcludeController } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
-import { Prisma, type Realm } from '@prisma/client';
+import { Prisma, type Client, type Realm, type User } from '@prisma/client';
 import { ACR_MFA } from '../authn-core/acr.js';
 import { amrForFactor } from '../authn-core/auth-context.js';
 import {
@@ -22,10 +22,13 @@ import {
   MFA_ENROLLMENT_COOKIE,
 } from '../authn-core/cookies.js';
 import {
-  OAUTH_FORM_PARAM_KEYS,
   pickOAuthParams,
   type AuthorizeParams,
 } from '../authn-core/oauth-params.js';
+import {
+  isEnforceAcrOnFreshLoginEnabled,
+  loginFormParamKeys,
+} from '../authn-core/acr-enforcement.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
@@ -49,13 +52,19 @@ import { ThemeEmailService } from '../theme/theme-email.service.js';
 import { EventsService } from '../events/events.service.js';
 import { LoginEventType } from '../events/event-types.js';
 import { CustomAttributesService } from '../custom-attributes/custom-attributes.service.js';
-import { PrimaryAuthGatesService } from './primary-auth-gates.service.js';
+import {
+  PrimaryAuthGatesService,
+  type PasswordChangeResume,
+} from './primary-auth-gates.service.js';
 import { SecondFactorVerifier } from './second-factor-verifier.service.js';
 import { CsrfService } from '../common/csrf/csrf.service.js';
 import { FlowRuntimeService } from '../auth-flow/flow-runtime.service.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 import {
+  CsrfOnlyDto,
+  EmailOtpDto,
   LoginDto,
+  MagicLinkSendDto,
   TotpDto,
   ChangePasswordDto,
   ForgotPasswordDto,
@@ -141,8 +150,9 @@ export class LoginController {
     // Build a properly percent-encoded register link so the hosted page does
     // not emit a URL with literal spaces (scope) or an unencoded redirect_uri,
     // and so empty params are dropped rather than rendered as `nonce=`.
+    // With ENFORCE_ACR_ON_FRESH_LOGIN these carry acr_values and claims too.
     const registerParams = new URLSearchParams(
-      pickOAuthParams(query, OAUTH_FORM_PARAM_KEYS),
+      pickOAuthParams(query, loginFormParamKeys()),
     );
     const registerQs = registerParams.toString();
     const registerUrl = `/realms/${realm.name}/register${
@@ -169,6 +179,7 @@ export class LoginController {
       };
     });
 
+    const enforceAcr = isEnforceAcrOnFreshLoginEnabled();
     this.themeRender.render(
       res,
       realm,
@@ -187,6 +198,10 @@ export class LoginController {
         code_challenge: query['code_challenge'] ?? '',
         code_challenge_method: query['code_challenge_method'] ?? '',
         prompt: query['prompt'] ?? '',
+        // What the request asks of `acr`, carried only with
+        // ENFORCE_ACR_ON_FRESH_LOGIN (the templates render them if set).
+        acr_values: enforceAcr ? (query['acr_values'] ?? '') : '',
+        claims: enforceAcr ? (query['claims'] ?? '') : '',
         error: query['error'] ?? '',
         info: query['info'] ?? '',
         login_hint: query['login_hint'] ?? '',
@@ -248,8 +263,9 @@ export class LoginController {
         return res.redirect(gates.redirectUrl);
       }
 
-      // Build OAuth params for later use
-      const oauthParams = pickOAuthParams(b, OAUTH_FORM_PARAM_KEYS);
+      // Build OAuth params for later use (with ENFORCE_ACR_ON_FRESH_LOGIN,
+      // what the request asks of `acr` too).
+      const oauthParams = pickOAuthParams(b, loginFormParamKeys());
 
       // A risk step-up (gates.riskStepUp) needs no branch of its own: a user
       // with a second factor always gets the challenge below, after the
@@ -277,11 +293,115 @@ export class LoginController {
 
       const params = new URLSearchParams();
       params.set('error', errMessage);
-      for (const key of OAUTH_FORM_PARAM_KEYS) {
+      for (const key of loginFormParamKeys()) {
         if (b[key]) params.set(key, b[key]);
       }
       res.redirect(`/realms/${realm.name}/login?${params.toString()}`);
     }
+  }
+
+  // ─── CUSTOM-FLOW EMAIL STEPS ───────────────────────────────
+
+  /** Shown when a flow-only endpoint is reached without a sign-in. */
+  private noSignInInProgress(realm: Realm, req: Request, res: Response) {
+    res.status(400);
+    this.themeRender.render(
+      res,
+      realm,
+      'login',
+      'error',
+      {
+        pageTitle: 'Sign-in expired',
+        errorTitle: 'Sign-in expired',
+        errorMessage:
+          'There is no sign-in in progress in this browser. Please start again from the application.',
+      },
+      req,
+    );
+  }
+
+  /** `email_otp` step: email a code to the identified user. */
+  @Post('login/email-otp/send')
+  @UseGuards(RateLimitGuard)
+  @RateLimitByIp()
+  async sendFlowEmailOtp(
+    @CurrentRealm() realm: Realm,
+    @Body() body: CsrfOnlyDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    this.validateCsrf(realm, body, req);
+    if (await this.flowRuntime.sendEmailOtp(realm, req, res)) return;
+    this.noSignInInProgress(realm, req, res);
+  }
+
+  /** `email_otp` step: the code from the email. */
+  @Post('login/email-otp')
+  @UseGuards(RateLimitGuard)
+  @RateLimitByIp()
+  async verifyFlowEmailOtp(
+    @CurrentRealm() realm: Realm,
+    @Body() body: EmailOtpDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    this.validateCsrf(realm, body, req);
+    if (
+      await this.flowRuntime.dispatch(
+        realm,
+        { endpoint: 'email_otp', code: body.code },
+        req,
+        res,
+      )
+    ) {
+      return;
+    }
+    this.noSignInInProgress(realm, req, res);
+  }
+
+  /** `magic_link` step: email a sign-in link for this browser's sign-in. */
+  @Post('login/magic-link/send')
+  @UseGuards(RateLimitGuard)
+  @RateLimitByIp()
+  async sendFlowMagicLink(
+    @CurrentRealm() realm: Realm,
+    @Body() body: MagicLinkSendDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    this.validateCsrf(realm, body, req);
+    if (
+      await this.flowRuntime.sendMagicLink(
+        realm,
+        { email: body.email },
+        req,
+        res,
+      )
+    ) {
+      return;
+    }
+    this.noSignInInProgress(realm, req, res);
+  }
+
+  /**
+   * `magic_link` step: the link from the email. A GET, as links are, so it
+   * changes nothing unless this browser holds the sign-in that sent it.
+   */
+  @Get('login/magic-link')
+  @UseGuards(RateLimitGuard)
+  @RateLimitByIp()
+  async openFlowMagicLink(
+    @CurrentRealm() realm: Realm,
+    @Query('token') token: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    return this.flowRuntime.openMagicLink(
+      realm,
+      typeof token === 'string' ? token : undefined,
+      req,
+      res,
+    );
   }
 
   // ─── MFA / TOTP ───────────────────────────────────────────
@@ -748,7 +868,66 @@ export class LoginController {
     const info = encodeURIComponent(
       'Password changed successfully. You can now sign in.',
     );
-    res.redirect(`/realms/${realm.name}/login?info=${info}`);
+    const resume = await this.primaryAuthGates.takePasswordChangeResume(
+      token,
+      realm.id,
+      user.id,
+    );
+    const updated = resume
+      ? await this.loginService.findUserById(user.id)
+      : null;
+    if (!resume || !updated?.enabled) {
+      return res.redirect(`/realms/${realm.name}/login?info=${info}`);
+    }
+    return this.resumeAfterPasswordChange(realm, updated, resume, req, res);
+  }
+
+  /**
+   * The sign-in an expired password interrupted goes on once the password
+   * is changed: the user proved the old password and chose a new one, so it
+   * continues after the first factor (second factor, required enrolment,
+   * consent, the code), with the OAuth request kept server-side. Where the
+   * login is bound to a custom flow, the built-in path may not finish it:
+   * it starts again through the authorization endpoint instead.
+   */
+  private async resumeAfterPasswordChange(
+    realm: Realm,
+    user: User,
+    resume: PasswordChangeResume,
+    req: Request,
+    res: Response,
+  ) {
+    const info = encodeURIComponent(
+      'Password changed successfully. You can now sign in.',
+    );
+    const { oauthParams } = resume;
+    let client: Client | null = null;
+    if (oauthParams['client_id']) {
+      try {
+        client = await this.oauthService.validateAuthRequest(
+          realm,
+          oauthParams as unknown as AuthorizeParams,
+        );
+      } catch {
+        return res.redirect(`/realms/${realm.name}/login?info=${info}`);
+      }
+    }
+    const binding = await this.flowRuntime.resolveBinding(realm, client);
+    if (binding.kind !== 'legacy') {
+      return res.redirect(
+        client
+          ? `/realms/${realm.name}/protocol/openid-connect/auth?${new URLSearchParams(oauthParams).toString()}`
+          : `/realms/${realm.name}/login?info=${info}`,
+      );
+    }
+    return this.loginFlow.continueAfterPrimaryAuth(
+      realm,
+      user,
+      oauthParams,
+      { primaryAmr: ['pwd'], rememberMe: resume.rememberMe },
+      req,
+      res,
+    );
   }
 
   // ─── CONSENT ────────────────────────────────────────────
@@ -904,6 +1083,12 @@ export class LoginController {
         code_challenge: query['code_challenge'] ?? '',
         code_challenge_method: query['code_challenge_method'] ?? '',
         prompt: query['prompt'] ?? '',
+        acr_values: isEnforceAcrOnFreshLoginEnabled()
+          ? (query['acr_values'] ?? '')
+          : '',
+        claims: isEnforceAcrOnFreshLoginEnabled()
+          ? (query['claims'] ?? '')
+          : '',
         customAttributes: customAttributes.map((a) => ({
           name: a.name,
           displayName: a.displayName,
@@ -945,7 +1130,8 @@ export class LoginController {
     const confirmPassword = body['confirmPassword'] ?? '';
 
     // Preserve OAuth params through registration redirects
-    const oauthParams = OAUTH_FORM_PARAM_KEYS.filter((p) => body[p])
+    const oauthParams = loginFormParamKeys()
+      .filter((p) => body[p])
       .map((p) => `${p}=${encodeURIComponent(body[p])}`)
       .join('&');
     const oauthSuffix = oauthParams ? `&${oauthParams}` : '';

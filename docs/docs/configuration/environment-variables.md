@@ -150,6 +150,13 @@ If `WEBHOOK_SECRET_KEY` changes, all stored webhook secrets become unreadable. A
 
 ---
 
+### Sign-in
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `AUTH_FLOW_RUNTIME_ENABLED` | off | No | `true` lets realms run bound custom auth flows at login (see [Custom Auth Flows](/guides/auth-flows)). Off: every realm uses the built-in login. |
+| `ENFORCE_ACR_ON_FRESH_LOGIN` | off | No | `true` makes a fresh sign-in honour what the authorization request asks of `acr`: the login form carries `acr_values` and `claims`, and an `acr` requested as an Essential Claim (OIDC `claims` parameter) is mandatory. A sign-in that cannot meet it ends with `unmet_authentication_requirements` instead of a code at a weaker level. `acr_values` stays voluntary. Custom login themes should add the hidden fields `acr_values` and `claims` (see the built-in `login.hbs`). |
+
 ## In-process cache
 
 Every Idenplane process keeps in memory what most requests read:

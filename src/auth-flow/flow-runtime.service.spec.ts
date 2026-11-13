@@ -534,6 +534,8 @@ describe('FlowRuntimeService.dispatch', () => {
         expect.objectContaining({ id: 'client-pk' }),
         current.state.oauthParams,
         { acr: ACR_PASSWORD, amr: ['pwd'] },
+        // The request, for a pending SAML request of a client-less sign-in.
+        expect.objectContaining({ cookies: expect.any(Object) }),
       );
       expect(redirectedTo()).toBe('https://app.example/cb?code=c&state=st');
     });

@@ -34,6 +34,7 @@ describe('isAuthFlowRuntimeEnabled', () => {
 describe('FlowBindingResolver.resolve', () => {
   const original = process.env[AUTH_FLOW_RUNTIME_ENV];
   let findFirst: jest.Mock;
+  let idpFindMany: jest.Mock;
   let resolver: FlowBindingResolver;
 
   const enabledRealm = {
@@ -45,9 +46,46 @@ describe('FlowBindingResolver.resolve', () => {
   beforeEach(() => {
     process.env[AUTH_FLOW_RUNTIME_ENV] = 'true';
     findFirst = jest.fn();
+    idpFindMany = jest.fn().mockResolvedValue([]);
     resolver = new FlowBindingResolver({
       authenticationFlow: { findFirst },
+      identityProvider: { findMany: idpFindMany },
     } as never);
+  });
+
+  it('checks a social step against the realm providers (fail closed when gone)', async () => {
+    const steps = [
+      {
+        id: 's',
+        type: 'social',
+        required: true,
+        order: 1,
+        config: { providerAlias: 'google' },
+      },
+    ];
+    findFirst.mockResolvedValue(flow('realm-flow', steps));
+    const gone = await resolver.resolve(enabledRealm, null);
+    expect(gone).toMatchObject({
+      kind: 'misconfigured',
+      reason: 'flow_invalid',
+    });
+    expect(idpFindMany).toHaveBeenCalledWith({
+      where: { realmId: 'realm-a', enabled: true },
+      select: { alias: true },
+    });
+
+    idpFindMany.mockResolvedValue([{ alias: 'google' }]);
+    expect(await resolver.resolve(enabledRealm, null)).toMatchObject({
+      kind: 'bound',
+    });
+  });
+
+  it('reads no providers for a flow without a social step', async () => {
+    findFirst.mockResolvedValue(flow('realm-flow'));
+    expect(await resolver.resolve(enabledRealm, null)).toMatchObject({
+      kind: 'bound',
+    });
+    expect(idpFindMany).not.toHaveBeenCalled();
   });
 
   afterAll(() => {

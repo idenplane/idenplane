@@ -18,6 +18,7 @@ import {
   type FlowValidationError,
 } from './flow-validator.js';
 import { isAuthFlowRuntimeEnabled } from './auth-flow-runtime.js';
+import { loadFlowValidationContext } from './flow-validation-context.js';
 import { evaluateFlowCondition } from './flow-graph.js';
 
 // ─── Types ─────────────────────────────────────────────────
@@ -182,7 +183,7 @@ export class AuthFlowService {
   // ── CRUD ────────────────────────────────────────────────
 
   async create(realmId: string, dto: CreateAuthFlowDto) {
-    this.assertValidSteps(dto.steps);
+    await this.assertValidSteps(realmId, dto.steps);
 
     const existing = await this.prisma.authenticationFlow.findUnique({
       where: { realmId_name: { realmId, name: dto.name } },
@@ -229,7 +230,7 @@ export class AuthFlowService {
     await this.findOne(realmId, id); // throws if not found
 
     if (dto.steps !== undefined) {
-      this.assertValidSteps(dto.steps);
+      await this.assertValidSteps(realmId, dto.steps);
     }
 
     if (dto.name) {
@@ -292,7 +293,10 @@ export class AuthFlowService {
     id: string,
   ): Promise<{ valid: boolean; errors: FlowValidationError[] }> {
     const flow = await this.findOne(realmId, id);
-    const errors = validateFlowSteps(flow.steps);
+    const errors = validateFlowSteps(
+      flow.steps,
+      await loadFlowValidationContext(this.prisma, realmId),
+    );
     return { valid: errors.length === 0, errors };
   }
 
@@ -431,9 +435,10 @@ export class AuthFlowService {
         select: { id: true, name: true, steps: true },
       });
       const flowById = new Map(flows.map((f) => [f.id, f]));
+      const context = await loadFlowValidationContext(this.prisma, realmId);
       for (const [flowId, paths] of toCheck) {
         const flow = flowById.get(flowId);
-        const flowErrors = flow ? validateFlowSteps(flow.steps) : [];
+        const flowErrors = flow ? validateFlowSteps(flow.steps, context) : [];
         for (const path of paths) {
           if (!flow) {
             errors.push({
@@ -550,7 +555,10 @@ export class AuthFlowService {
       ]);
     }
 
-    const flowErrors = validateFlowSteps(flow.steps);
+    const flowErrors = validateFlowSteps(
+      flow.steps,
+      await loadFlowValidationContext(this.prisma, realmId),
+    );
     if (flowErrors.length > 0) throw flowInvalid(flowErrors);
 
     const updated = await this.prisma.client.update({
@@ -626,8 +634,14 @@ export class AuthFlowService {
   // ── Private helpers ─────────────────────────────────────
 
   /** Run the strict validator; 400 with the full error list on failure. */
-  private assertValidSteps(steps: unknown): void {
-    const errors = validateFlowSteps(steps);
+  private async assertValidSteps(
+    realmId: string,
+    steps: unknown,
+  ): Promise<void> {
+    const errors = validateFlowSteps(
+      steps,
+      await loadFlowValidationContext(this.prisma, realmId),
+    );
     if (errors.length > 0) throw flowInvalid(errors);
   }
 

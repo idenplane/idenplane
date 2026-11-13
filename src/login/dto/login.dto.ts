@@ -76,6 +76,47 @@ export class LoginDto {
   @IsOptional()
   @IsString()
   rememberMe?: string;
+
+  // What the request asks of `acr`, carried through the form only with
+  // ENFORCE_ACR_ON_FRESH_LOGIN (rendered only when present).
+  @IsOptional()
+  @IsString()
+  acr_values?: string;
+
+  @IsOptional()
+  @IsString()
+  claims?: string;
+}
+
+/** A form that posts nothing but its CSRF token. */
+export class CsrfOnlyDto {
+  @IsOptional()
+  @IsString()
+  _csrf?: string;
+}
+
+/** The code of a custom flow's `email_otp` step. */
+export class EmailOtpDto {
+  @IsOptional()
+  @IsString()
+  _csrf?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(/^[0-9\s]{0,16}$/, { message: 'code must be digits' })
+  code?: string;
+}
+
+/** The address a custom flow's `magic_link` step sends a link to. */
+export class MagicLinkSendDto {
+  @IsOptional()
+  @IsString()
+  _csrf?: string;
+
+  @IsOptional()
+  @IsString()
+  @Matches(NO_HTML, { message: `email ${NO_HTML_MSG}` })
+  email?: string;
 }
 
 // All login-flow forms (TOTP, change-password, etc.) include the same

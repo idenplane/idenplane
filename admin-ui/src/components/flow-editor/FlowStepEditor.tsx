@@ -17,6 +17,7 @@ const ALL_STEP_TYPES: StepType[] = [
   'social',
   'ldap',
   'email_otp',
+  'magic_link',
   'consent',
 ];
 
@@ -240,7 +241,7 @@ function StepConfigEditor({ type, config, onChange }: StepConfigEditorProps) {
     case 'social':
       return (
         <div className="space-y-3">
-          <ConfigField label="Provider Alias">
+          <ConfigField label="Provider Alias (required)">
             <input
               value={String(config.providerAlias ?? '')}
               onChange={(e) => set('providerAlias', e.target.value)}
@@ -248,6 +249,9 @@ function StepConfigEditor({ type, config, onChange }: StepConfigEditorProps) {
               className="w-full rounded-md border border-line-strong px-3 py-1.5 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             />
           </ConfigField>
+          <p className="text-xs text-subtle">
+            The alias of an enabled identity provider of this realm.
+          </p>
         </div>
       );
 
@@ -274,20 +278,40 @@ function StepConfigEditor({ type, config, onChange }: StepConfigEditorProps) {
               onChange={(e) => set('otpLength', Number(e.target.value))}
               className="w-full rounded-md border border-line-strong px-3 py-1.5 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             >
-              {[4, 6, 8].map((n) => (
+              {[6, 8].map((n) => (
                 <option key={n} value={n}>{n}</option>
               ))}
             </select>
           </ConfigField>
-          <ConfigField label="OTP Expiry (seconds)">
+          <ConfigField label="OTP Expiry (seconds, 60–600)">
             <input
               type="number"
               min={60}
+              max={600}
               value={Number(config.expirySeconds ?? 300)}
               onChange={(e) => set('expirySeconds', Number(e.target.value))}
               className="w-full rounded-md border border-line-strong px-3 py-1.5 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
             />
           </ConfigField>
+        </div>
+      );
+
+    case 'magic_link':
+      return (
+        <div className="space-y-3">
+          <ConfigField label="Link Expiry (seconds, 60–600)">
+            <input
+              type="number"
+              min={60}
+              max={600}
+              value={Number(config.expirySeconds ?? 600)}
+              onChange={(e) => set('expirySeconds', Number(e.target.value))}
+              className="w-full rounded-md border border-line-strong px-3 py-1.5 text-sm focus:border-accent focus:outline-none focus:ring-1 focus:ring-accent"
+            />
+          </ConfigField>
+          <p className="text-xs text-subtle">
+            The link works only in the browser that asked for it.
+          </p>
         </div>
       );
 
