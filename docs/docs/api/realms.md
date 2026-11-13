@@ -101,6 +101,11 @@ Creates a new realm. Requires `super-admin` role.
 | `displayNameHtml` | string | No | HTML-formatted display name |
 | `enabled` | boolean | No | Enable realm (default: true) |
 | `registrationAllowed` | boolean | No | Allow user self-registration |
+| `captchaEnabled` | boolean | No | Require a CAPTCHA for self-registration. When `true`, `captchaProvider` and that provider's site key and secret key are required (`400` otherwise); the secret may instead come from `RECAPTCHA_SECRET_KEY` / `HCAPTCHA_SECRET_KEY`. See [Self-Registration and CAPTCHA](/guides/registration-captcha) |
+| `captchaProvider` | string | No | `recaptcha` (reCAPTCHA v3) or `hcaptcha` |
+| `recaptchaSiteKey`, `recaptchaSecretKey` | string | No | reCAPTCHA v3 keys (the secret is encrypted at rest) |
+| `hcaptchaSiteKey`, `hcaptchaSecretKey` | string | No | hCaptcha keys (the secret is encrypted at rest) |
+| `captchaScoreThreshold` | number | No | Lowest reCAPTCHA v3 score accepted, 0 to 1 (default `0.5`) |
 | `loginWithEmailAllowed` | boolean | No | Allow login with email as username |
 | `duplicateEmailsAllowed` | boolean | No | Allow duplicate emails across users |
 | `passwordPolicy` | string | No | Password policy configuration |
