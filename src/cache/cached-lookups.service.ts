@@ -2,6 +2,8 @@ import { Injectable } from '@nestjs/common';
 import type { Client, Prisma, RealmSigningKey } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CacheService } from './cache.service.js';
+import { CryptoService } from '../crypto/crypto.service.js';
+import { signingKeySecrets } from '../crypto/signing-key-secrets.js';
 import type { UserGrants } from '../auth/user-grants.js';
 
 /** The user columns a token or an introspection response can carry. */
@@ -37,6 +39,7 @@ export class CachedLookupsService {
   constructor(
     private readonly prisma: PrismaService,
     private readonly cache: CacheService,
+    private readonly crypto: CryptoService,
   ) {}
 
   /** A realm's client by its client_id, or null. */
@@ -52,16 +55,22 @@ export class CachedLookupsService {
 
   /**
    * The realm's signing key for new tokens and for verifying them: the
-   * newest active one, or null if the realm has none.
+   * newest active one, or null if the realm has none. `privateKey` is the
+   * decrypted PEM (it is encrypted at rest); it stays in this process.
    */
   async activeSigningKey(realmId: string): Promise<RealmSigningKey | null> {
     const cached = this.cache.getLocalSigningKey<RealmSigningKey>(realmId);
     if (cached) return cached;
-    const key = await this.prisma.realmSigningKey.findFirst({
+    const stored = await this.prisma.realmSigningKey.findFirst({
       where: { realmId, active: true },
       orderBy: { createdAt: 'desc' },
     });
-    if (key) this.cache.setLocalSigningKey(realmId, key);
+    if (!stored) return null;
+    const key = {
+      ...stored,
+      privateKey: signingKeySecrets.privateKeyPem(this.crypto, stored),
+    };
+    this.cache.setLocalSigningKey(realmId, key);
     return key;
   }
 

@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import type { AuthentikExport, AuthentikUser } from './authentik-types.js';
 import { createEmptyReport, type MigrationReport } from './migration-report.js';
+import { idpSecrets } from '../identity-providers/idp-secrets.js';
 
 export interface AuthentikImportOptions {
   dryRun: boolean;
@@ -283,7 +284,10 @@ export class AuthentikImporterService {
               enabled: true,
               trustEmail: false,
               clientId: source.consumer_key ?? '',
-              clientSecret: source.consumer_secret ?? '',
+              clientSecret: idpSecrets.forCreate(
+                this.crypto,
+                source.consumer_secret ?? '',
+              ),
               authorizationUrl: source.authorization_url ?? '',
               tokenUrl: source.access_token_url ?? '',
             },

@@ -10,6 +10,10 @@
  * lives at a different path per provider (e.g. `resend.apiKey` vs.
  * `postmark.serverToken`), and both redaction mechanisms here only match on
  * top-level key name.
+ *
+ * A `config` object (organization SSO connections, among others) is not
+ * listed, as that would hide every protocol mapper config too: the admin
+ * event interceptor masks the secret-named keys inside it instead.
  */
 export const SENSITIVE_BODY_FIELDS = [
   'password',
@@ -23,4 +27,7 @@ export const SENSITIVE_BODY_FIELDS = [
   'hcaptchaSecretKey',
   'emailProviderConfig',
   'smsProviderConfig',
+  // LDAP bind password and audit stream headers (usually an auth token).
+  'bindCredential',
+  'httpHeaders',
 ] as const;

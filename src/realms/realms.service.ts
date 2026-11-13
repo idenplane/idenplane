@@ -25,6 +25,7 @@ import {
   captchaConfigProblem,
   type CaptchaRealmFields,
 } from '../captcha/captcha-config.js';
+import { signingKeySecrets } from '../crypto/signing-key-secrets.js';
 
 @Injectable()
 export class RealmsService {
@@ -204,12 +205,7 @@ export class RealmsService {
         mtlsClientAuthEnabled: dto.mtlsClientAuthEnabled,
         mtlsTrustGlobalAnchors: dto.mtlsTrustGlobalAnchors,
         signingKeys: {
-          create: {
-            kid: keyPair.kid,
-            algorithm: 'RS256',
-            publicKey: keyPair.publicKeyPem,
-            privateKey: keyPair.privateKeyPem,
-          },
+          create: signingKeySecrets.createData(this.crypto, keyPair),
         },
       },
     });

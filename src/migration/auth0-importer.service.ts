@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import type { Auth0Export, Auth0User } from './auth0-types.js';
 import { createEmptyReport, type MigrationReport } from './migration-report.js';
+import { idpSecrets } from '../identity-providers/idp-secrets.js';
 
 export interface Auth0ImportOptions {
   dryRun: boolean;
@@ -258,7 +259,10 @@ export class Auth0ImporterService {
               enabled: true,
               trustEmail: false,
               clientId: opts?.client_id ?? '',
-              clientSecret: opts?.client_secret ?? '',
+              clientSecret: idpSecrets.forCreate(
+                this.crypto,
+                opts?.client_secret ?? '',
+              ),
               authorizationUrl: opts?.authorization_endpoint ?? '',
               tokenUrl: opts?.token_endpoint ?? '',
             },

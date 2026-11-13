@@ -37,7 +37,10 @@ export class CreateUserFederationDto {
   @IsString()
   bindDn!: string;
 
-  @ApiProperty()
+  @ApiProperty({
+    description:
+      'LDAP bind password. Stored encrypted and returned as "••••••"; sending that value back on update keeps the stored password.',
+  })
   @IsString()
   bindCredential!: string;
 

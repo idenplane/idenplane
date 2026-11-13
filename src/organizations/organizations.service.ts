@@ -11,6 +11,8 @@ import { randomBytes, createHash } from 'crypto';
 import type { Realm } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { CryptoService } from '../crypto/crypto.service.js';
+import { ssoConnectionSecrets } from './sso-connection-secrets.js';
 import { CreateOrganizationDto } from './dto/create-organization.dto.js';
 import { UpdateOrganizationDto } from './dto/update-organization.dto.js';
 import { AddMemberDto } from './dto/add-member.dto.js';
@@ -28,7 +30,10 @@ const DNS_TXT_PREFIX = 'idenplane-domain-verification=';
 
 @Injectable()
 export class OrganizationsService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly crypto: CryptoService,
+  ) {}
 
   // ─── Organizations CRUD ──────────────────────────────────
 
@@ -421,7 +426,10 @@ export class OrganizationsService {
         type: dto.type,
         name: dto.name,
         enabled: dto.enabled ?? true,
-        config: dto.config as unknown as Prisma.InputJsonValue,
+        config: ssoConnectionSecrets.forWrite(
+          this.crypto,
+          dto.config,
+        ) as Prisma.InputJsonValue,
       },
     });
   }
@@ -458,9 +466,15 @@ export class OrganizationsService {
       data: {
         name: dto.name,
         enabled: dto.enabled,
+        // The config sent replaces the stored one; a secret sent back as the
+        // placeholder keeps the stored value at the same path.
         config:
           dto.config !== undefined
-            ? (dto.config as unknown as Prisma.InputJsonValue)
+            ? (ssoConnectionSecrets.forWrite(
+                this.crypto,
+                dto.config,
+                conn.config,
+              ) as Prisma.InputJsonValue)
             : undefined,
       },
     });

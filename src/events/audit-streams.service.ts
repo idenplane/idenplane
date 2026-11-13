@@ -1,6 +1,8 @@
 import { Injectable, Logger, NotFoundException } from '@nestjs/common';
 import type { Realm } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { CryptoService } from '../crypto/crypto.service.js';
+import { auditStreamSecrets } from './audit-stream-secrets.js';
 import {
   CreateAuditStreamDto,
   UpdateAuditStreamDto,
@@ -12,7 +14,10 @@ import * as net from 'node:net';
 export class AuditStreamsService {
   private readonly logger = new Logger(AuditStreamsService.name);
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly crypto: CryptoService,
+  ) {}
 
   // ─── CRUD ──────────────────────────────────────────────
 
@@ -24,7 +29,7 @@ export class AuditStreamsService {
         streamType: dto.streamType,
         enabled: dto.enabled ?? true,
         url: dto.url,
-        httpHeaders: (dto.httpHeaders as Record<string, string>) ?? undefined,
+        httpHeaders: auditStreamSecrets.forWrite(this.crypto, dto.httpHeaders),
         syslogHost: dto.syslogHost,
         syslogPort: dto.syslogPort,
         syslogProtocol: dto.syslogProtocol ?? 'udp',
@@ -51,14 +56,20 @@ export class AuditStreamsService {
   }
 
   async update(realm: Realm, id: string, dto: UpdateAuditStreamDto) {
-    await this.findOne(realm, id);
+    const stored = await this.findOne(realm, id);
     return this.prisma.auditLogStream.update({
       where: { id },
       data: {
         name: dto.name,
         enabled: dto.enabled,
         url: dto.url,
-        httpHeaders: (dto.httpHeaders as Record<string, string>) ?? undefined,
+        // The headers sent replace the stored ones; a value sent back as the
+        // placeholder keeps the stored value of that header.
+        httpHeaders: auditStreamSecrets.forWrite(
+          this.crypto,
+          dto.httpHeaders,
+          stored.httpHeaders,
+        ),
         syslogHost: dto.syslogHost,
         syslogPort: dto.syslogPort,
         syslogProtocol: dto.syslogProtocol,
@@ -138,10 +149,7 @@ export class AuditStreamsService {
       return;
     }
 
-    const extraHeaders: Record<string, string> =
-      stream.httpHeaders && typeof stream.httpHeaders === 'object'
-        ? (stream.httpHeaders as Record<string, string>)
-        : {};
+    const extraHeaders = auditStreamSecrets.headers(this.crypto, stream);
 
     const controller = new AbortController();
     const timeout = setTimeout(() => controller.abort(), 10_000);

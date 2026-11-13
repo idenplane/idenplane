@@ -17,6 +17,7 @@ import {
   ApiSecurity,
 } from '@nestjs/swagger';
 import type { Realm } from '@prisma/client';
+import { ssoConnectionSecrets } from './sso-connection-secrets.js';
 import { OrganizationsService } from './organizations.service.js';
 import { CreateOrganizationDto } from './dto/create-organization.dto.js';
 import { UpdateOrganizationDto } from './dto/update-organization.dto.js';
@@ -228,11 +229,13 @@ export class OrganizationsController {
   @ApiResponse({ status: 200, description: 'List of SSO connections' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
-  listSsoConnections(
+  async listSsoConnections(
     @CurrentRealm() realm: Realm,
     @Param('slug') slug: string,
   ) {
-    return this.organizationsService.listSsoConnections(realm, slug);
+    return (
+      await this.organizationsService.listSsoConnections(realm, slug)
+    ).map((c) => ssoConnectionSecrets.redact(c));
   }
 
   @Post(':slug/sso-connections')
@@ -241,12 +244,14 @@ export class OrganizationsController {
   @ApiResponse({ status: 400, description: 'Invalid input' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
-  createSsoConnection(
+  async createSsoConnection(
     @CurrentRealm() realm: Realm,
     @Param('slug') slug: string,
     @Body() dto: CreateSsoConnectionDto,
   ) {
-    return this.organizationsService.createSsoConnection(realm, slug, dto);
+    return ssoConnectionSecrets.redact(
+      await this.organizationsService.createSsoConnection(realm, slug, dto),
+    );
   }
 
   @Get(':slug/sso-connections/:connectionId')
@@ -254,15 +259,17 @@ export class OrganizationsController {
   @ApiResponse({ status: 200, description: 'SSO connection details' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
-  getSsoConnection(
+  async getSsoConnection(
     @CurrentRealm() realm: Realm,
     @Param('slug') slug: string,
     @Param('connectionId') connectionId: string,
   ) {
-    return this.organizationsService.getSsoConnection(
-      realm,
-      slug,
-      connectionId,
+    return ssoConnectionSecrets.redact(
+      await this.organizationsService.getSsoConnection(
+        realm,
+        slug,
+        connectionId,
+      ),
     );
   }
 
@@ -271,17 +278,19 @@ export class OrganizationsController {
   @ApiResponse({ status: 200, description: 'Updated' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Not found' })
-  updateSsoConnection(
+  async updateSsoConnection(
     @CurrentRealm() realm: Realm,
     @Param('slug') slug: string,
     @Param('connectionId') connectionId: string,
     @Body() dto: UpdateSsoConnectionDto,
   ) {
-    return this.organizationsService.updateSsoConnection(
-      realm,
-      slug,
-      connectionId,
-      dto,
+    return ssoConnectionSecrets.redact(
+      await this.organizationsService.updateSsoConnection(
+        realm,
+        slug,
+        connectionId,
+        dto,
+      ),
     );
   }
 

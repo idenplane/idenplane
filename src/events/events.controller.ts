@@ -23,6 +23,7 @@ import type { Response } from 'express';
 import { EventsService } from './events.service.js';
 import { AuditExportService } from './audit-export.service.js';
 import { AuditStreamsService } from './audit-streams.service.js';
+import { auditStreamSecrets } from './audit-stream-secrets.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { ExportEventsQueryDto } from './dto/export-events.dto.js';
@@ -170,19 +171,23 @@ export class EventsController {
   @ApiResponse({ status: 201, description: 'Audit stream created' })
   @ApiResponse({ status: 400, description: 'Invalid request body' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  createStream(
+  async createStream(
     @CurrentRealm() realm: Realm,
     @Body() dto: CreateAuditStreamDto,
   ) {
-    return this.auditStreamsService.create(realm, dto);
+    return auditStreamSecrets.redact(
+      await this.auditStreamsService.create(realm, dto),
+    );
   }
 
   @Get('audit-streams')
   @ApiOperation({ summary: 'List audit log streams for a realm' })
   @ApiResponse({ status: 200, description: 'List of audit streams' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  listStreams(@CurrentRealm() realm: Realm) {
-    return this.auditStreamsService.findAll(realm);
+  async listStreams(@CurrentRealm() realm: Realm) {
+    return (await this.auditStreamsService.findAll(realm)).map((s) =>
+      auditStreamSecrets.redact(s),
+    );
   }
 
   @Get('audit-streams/:id')
@@ -190,8 +195,10 @@ export class EventsController {
   @ApiResponse({ status: 200, description: 'Audit stream details' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Audit stream not found' })
-  getStream(@CurrentRealm() realm: Realm, @Param('id') id: string) {
-    return this.auditStreamsService.findOne(realm, id);
+  async getStream(@CurrentRealm() realm: Realm, @Param('id') id: string) {
+    return auditStreamSecrets.redact(
+      await this.auditStreamsService.findOne(realm, id),
+    );
   }
 
   @Put('audit-streams/:id')
@@ -200,12 +207,14 @@ export class EventsController {
   @ApiResponse({ status: 400, description: 'Invalid request body' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Audit stream not found' })
-  updateStream(
+  async updateStream(
     @CurrentRealm() realm: Realm,
     @Param('id') id: string,
     @Body() dto: UpdateAuditStreamDto,
   ) {
-    return this.auditStreamsService.update(realm, id, dto);
+    return auditStreamSecrets.redact(
+      await this.auditStreamsService.update(realm, id, dto),
+    );
   }
 
   @Delete('audit-streams/:id')

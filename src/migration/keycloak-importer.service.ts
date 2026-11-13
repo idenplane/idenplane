@@ -9,6 +9,7 @@ import type {
 } from './keycloak-types.js';
 import { createEmptyReport, type MigrationReport } from './migration-report.js';
 import type { Prisma } from '@prisma/client';
+import { idpSecrets } from '../identity-providers/idp-secrets.js';
 
 type PrismaTx = Prisma.TransactionClient;
 
@@ -507,7 +508,10 @@ export class KeycloakImporterService {
               enabled: idp.enabled ?? true,
               trustEmail: idp.trustEmail ?? false,
               clientId: idp.config?.clientId ?? '',
-              clientSecret: idp.config?.clientSecret ?? '',
+              clientSecret: idpSecrets.forCreate(
+                this.crypto,
+                idp.config?.clientSecret ?? '',
+              ),
               authorizationUrl: idp.config?.authorizationUrl ?? '',
               tokenUrl: idp.config?.tokenUrl ?? '',
               userinfoUrl: idp.config?.userInfoUrl,

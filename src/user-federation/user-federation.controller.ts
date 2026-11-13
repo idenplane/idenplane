@@ -14,6 +14,7 @@ import {
   ApiSecurity,
   ApiResponse,
 } from '@nestjs/swagger';
+import { federationSecrets } from './federation-secrets.js';
 import { UserFederationService } from './user-federation.service.js';
 import { CreateUserFederationDto } from './dto/create-user-federation.dto.js';
 import { UpdateUserFederationDto } from './dto/update-user-federation.dto.js';
@@ -40,11 +41,11 @@ export class UserFederationController {
     status: 401,
     description: 'Unauthorized — missing or invalid admin API key',
   })
-  create(
+  async create(
     @Param('realmName') realmName: string,
     @Body() dto: CreateUserFederationDto,
   ) {
-    return this.service.create(realmName, dto);
+    return federationSecrets.redact(await this.service.create(realmName, dto));
   }
 
   @Get()
@@ -57,8 +58,10 @@ export class UserFederationController {
     status: 401,
     description: 'Unauthorized — missing or invalid admin API key',
   })
-  findAll(@Param('realmName') realmName: string) {
-    return this.service.findAll(realmName);
+  async findAll(@Param('realmName') realmName: string) {
+    return (await this.service.findAll(realmName)).map((f) =>
+      federationSecrets.redact(f),
+    );
   }
 
   @Get(':id')
@@ -72,8 +75,11 @@ export class UserFederationController {
     status: 404,
     description: 'User federation provider not found',
   })
-  findOne(@Param('realmName') realmName: string, @Param('id') id: string) {
-    return this.service.findById(realmName, id);
+  async findOne(
+    @Param('realmName') realmName: string,
+    @Param('id') id: string,
+  ) {
+    return federationSecrets.redact(await this.service.findById(realmName, id));
   }
 
   @Put(':id')
@@ -88,12 +94,14 @@ export class UserFederationController {
     status: 404,
     description: 'User federation provider not found',
   })
-  update(
+  async update(
     @Param('realmName') realmName: string,
     @Param('id') id: string,
     @Body() dto: UpdateUserFederationDto,
   ) {
-    return this.service.update(realmName, id, dto);
+    return federationSecrets.redact(
+      await this.service.update(realmName, id, dto),
+    );
   }
 
   @Delete(':id')
@@ -107,8 +115,8 @@ export class UserFederationController {
     status: 404,
     description: 'User federation provider not found',
   })
-  remove(@Param('realmName') realmName: string, @Param('id') id: string) {
-    return this.service.remove(realmName, id);
+  async remove(@Param('realmName') realmName: string, @Param('id') id: string) {
+    return federationSecrets.redact(await this.service.remove(realmName, id));
   }
 
   @Post(':id/test-connection')

@@ -5,12 +5,17 @@ import {
 } from '@nestjs/common';
 import type { Realm } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { CryptoService } from '../crypto/crypto.service.js';
+import { idpSecrets } from './idp-secrets.js';
 import type { CreateIdentityProviderDto } from './dto/create-identity-provider.dto.js';
 import type { UpdateIdentityProviderDto } from './dto/update-identity-provider.dto.js';
 
 @Injectable()
 export class IdentityProvidersService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly crypto: CryptoService,
+  ) {}
 
   async create(realm: Realm, dto: CreateIdentityProviderDto) {
     const existing = await this.prisma.identityProvider.findUnique({
@@ -30,7 +35,7 @@ export class IdentityProvidersService {
         enabled: dto.enabled ?? true,
         providerType: dto.providerType ?? 'oidc',
         clientId: dto.clientId,
-        clientSecret: dto.clientSecret,
+        clientSecret: idpSecrets.forCreate(this.crypto, dto.clientSecret),
         authorizationUrl: dto.authorizationUrl,
         tokenUrl: dto.tokenUrl,
         userinfoUrl: dto.userinfoUrl,
@@ -65,6 +70,7 @@ export class IdentityProvidersService {
     });
   }
 
+  /** The stored row, client secret still encrypted (see idpSecrets). */
   async findByAlias(realm: Realm, alias: string) {
     const idp = await this.prisma.identityProvider.findUnique({
       where: { realmId_alias: { realmId: realm.id, alias } },
@@ -79,7 +85,10 @@ export class IdentityProvidersService {
     await this.findByAlias(realm, alias);
     return this.prisma.identityProvider.update({
       where: { realmId_alias: { realmId: realm.id, alias } },
-      data: dto,
+      data: {
+        ...dto,
+        clientSecret: idpSecrets.forUpdate(this.crypto, dto.clientSecret),
+      },
     });
   }
 

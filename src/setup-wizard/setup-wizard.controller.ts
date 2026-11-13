@@ -26,6 +26,7 @@ import {
   Min,
 } from 'class-validator';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
+import { wizardSecrets } from './wizard-secrets.js';
 
 class SaveAdminAccountDto {
   @ApiProperty({ example: 'admin' })
@@ -122,8 +123,8 @@ export class SetupWizardController {
   @Get('state')
   @ApiOperation({ summary: 'Get current wizard state' })
   @ApiResponse({ status: 200, description: 'Wizard state' })
-  getState() {
-    return this.wizardService.getWizardState();
+  async getState() {
+    return wizardSecrets.redact(await this.wizardService.getWizardState());
   }
 
   @Post('admin-account')
@@ -131,8 +132,8 @@ export class SetupWizardController {
   @ApiOperation({ summary: 'Save admin account (Step 1)' })
   @ApiResponse({ status: 200, description: 'Admin account saved' })
   @ApiResponse({ status: 400, description: 'Invalid request' })
-  saveAdminAccount(@Body() dto: SaveAdminAccountDto) {
-    return this.wizardService.saveAdminAccount(dto);
+  async saveAdminAccount(@Body() dto: SaveAdminAccountDto) {
+    return wizardSecrets.redact(await this.wizardService.saveAdminAccount(dto));
   }
 
   @Post('realm-settings')
@@ -143,8 +144,10 @@ export class SetupWizardController {
     status: 400,
     description: 'Invalid request or realm already exists',
   })
-  saveRealmSettings(@Body() dto: SaveRealmSettingsDto) {
-    return this.wizardService.saveRealmSettings(dto);
+  async saveRealmSettings(@Body() dto: SaveRealmSettingsDto) {
+    return wizardSecrets.redact(
+      await this.wizardService.saveRealmSettings(dto),
+    );
   }
 
   @Post('smtp-config')
@@ -152,8 +155,8 @@ export class SetupWizardController {
   @ApiOperation({ summary: 'Save SMTP configuration (Step 3)' })
   @ApiResponse({ status: 200, description: 'SMTP config saved' })
   @ApiResponse({ status: 400, description: 'Invalid SMTP configuration' })
-  saveSmtpConfig(@Body() dto: SaveSmtpConfigDto) {
-    return this.wizardService.saveSmtpConfig(dto);
+  async saveSmtpConfig(@Body() dto: SaveSmtpConfigDto) {
+    return wizardSecrets.redact(await this.wizardService.saveSmtpConfig(dto));
   }
 
   @Post('smtp/test')
@@ -200,16 +203,16 @@ export class SetupWizardController {
     status: 400,
     description: 'Invalid client configuration or realm not found',
   })
-  saveClient(@Body() dto: SaveClientDto) {
-    return this.wizardService.saveClient(dto);
+  async saveClient(@Body() dto: SaveClientDto) {
+    return wizardSecrets.redact(await this.wizardService.saveClient(dto));
   }
 
   @Post('sdk-generated')
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Mark SDK step as completed (Step 5)' })
   @ApiResponse({ status: 200, description: 'SDK step marked as completed' })
-  markSdkGenerated() {
-    return this.wizardService.markSdkGenerated();
+  async markSdkGenerated() {
+    return wizardSecrets.redact(await this.wizardService.markSdkGenerated());
   }
 
   @Post('complete')
@@ -228,8 +231,8 @@ export class SetupWizardController {
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Skip the wizard (for advanced users)' })
   @ApiResponse({ status: 200, description: 'Wizard skipped' })
-  skipWizard() {
-    return this.wizardService.skipWizard();
+  async skipWizard() {
+    return wizardSecrets.redact(await this.wizardService.skipWizard());
   }
 
   @Post('reset')

@@ -9,6 +9,8 @@ import type { Realm, IdentityProvider, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { JwkService } from '../crypto/jwk.service.js';
 import { IdentityProvidersService } from '../identity-providers/identity-providers.service.js';
+import { CryptoService } from '../crypto/crypto.service.js';
+import { idpSecrets } from '../identity-providers/idp-secrets.js';
 import { matchesRedirectUri } from '../common/redirect-uri.utils.js';
 
 /**
@@ -96,6 +98,7 @@ export class BrokerService {
     private readonly prisma: PrismaService,
     private readonly jwkService: JwkService,
     private readonly idpService: IdentityProvidersService,
+    private readonly crypto: CryptoService,
   ) {}
 
   /**
@@ -386,7 +389,7 @@ export class BrokerService {
       code,
       redirect_uri: redirectUri,
       client_id: idp.clientId,
-      client_secret: idp.clientSecret,
+      client_secret: idpSecrets.clientSecret(this.crypto, idp),
     });
 
     const response = await fetch(idp.tokenUrl, {

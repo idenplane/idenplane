@@ -1,4 +1,5 @@
 import { CachedLookupsService } from './cached-lookups.service.js';
+import { CryptoService } from '../crypto/crypto.service.js';
 
 const makeCache = () => {
   const rows = new Map<string, unknown>();
@@ -33,7 +34,11 @@ describe('CachedLookupsService', () => {
       realmSigningKey: { findFirst: jest.fn().mockResolvedValue(key) },
     };
     cache = makeCache();
-    lookups = new CachedLookupsService(prisma as any, cache as any);
+    lookups = new CachedLookupsService(
+      prisma as any,
+      cache as any,
+      new CryptoService(),
+    );
   });
 
   it('reads a client from the database once, then from the cache', async () => {
@@ -59,6 +64,29 @@ describe('CachedLookupsService', () => {
       where: { realmId: 'r1', active: true },
       orderBy: { createdAt: 'desc' },
     });
+  });
+
+  it('hands out the private key decrypted, read once', async () => {
+    const crypto = new CryptoService();
+    prisma.realmSigningKey.findFirst.mockResolvedValue({
+      ...key,
+      privateKey: crypto.encryptSecret('-----BEGIN PRIVATE KEY-----x'),
+    });
+    const got = await lookups.activeSigningKey('r1');
+    expect(got?.privateKey).toBe('-----BEGIN PRIVATE KEY-----x');
+    expect(cache.setLocalSigningKey).toHaveBeenCalledWith(
+      'r1',
+      expect.objectContaining({ privateKey: '-----BEGIN PRIVATE KEY-----x' }),
+    );
+  });
+
+  it('reads a legacy plaintext private key as is', async () => {
+    prisma.realmSigningKey.findFirst.mockResolvedValue({
+      ...key,
+      privateKey: '-----BEGIN PRIVATE KEY-----legacy',
+    });
+    const got = await lookups.activeSigningKey('r1');
+    expect(got?.privateKey).toBe('-----BEGIN PRIVATE KEY-----legacy');
   });
 
   it('does not cache a realm without a signing key', async () => {
