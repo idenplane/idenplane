@@ -118,11 +118,16 @@ describe('NhiClientCertificateResolver', () => {
   }[];
   let prisma: {
     nhiIdentity: { findFirst: jest.Mock };
-    nhiCredential: { findMany: jest.Mock };
+    nhiCredential: {
+      findMany: jest.Mock;
+      findFirst: jest.Mock;
+      update: jest.Mock;
+    };
     realmTlsTrustAnchor: { findMany: jest.Mock };
     tlsRevokedCertificate: { findMany: jest.Mock; count: jest.Mock };
   };
   let config: { enabled: boolean; maxChainDepth: number };
+  let audit: { recordAudit: jest.Mock };
   let registry: ClientCertificateResolverRegistry;
   let resolver: NhiClientCertificateResolver;
 
@@ -159,16 +164,28 @@ describe('NhiClientCertificateResolver', () => {
       },
       nhiCredential: {
         findMany: jest.fn(async ({ where }) => matching(credentials, where)),
+        findFirst: jest.fn(
+          async ({ where }) => matching(credentials, where)[0] ?? null,
+        ),
+        update: jest.fn(async () => ({ id: 'x' })),
       },
       realmTlsTrustAnchor: { findMany: jest.fn(async () => anchors) },
       tlsRevokedCertificate: {
         findMany: jest.fn(async () => revoked),
+        // isRevokedKey: OR of { x5tS256 } and { serialNumber, issuerDn }.
         count: jest.fn(
           async ({ where }) =>
-            revoked.filter((r) => r.x5tS256 === where.x5tS256).length,
+            revoked.filter((r) =>
+              (where.OR as Record<string, unknown>[]).some((c) =>
+                Object.entries(c).every(
+                  ([k, v]) => (r as Record<string, unknown>)[k] === v,
+                ),
+              ),
+            ).length,
         ),
       },
     };
+    audit = { recordAudit: jest.fn(async () => undefined) };
     config = { enabled: true, maxChainDepth: 5 };
     registry = new ClientCertificateResolverRegistry();
     resolver = new NhiClientCertificateResolver(
@@ -177,6 +194,7 @@ describe('NhiClientCertificateResolver', () => {
       new PkiPathValidator(),
       registry,
       config as never,
+      audit as never,
     );
     resolver.onModuleInit();
   });
@@ -234,6 +252,8 @@ describe('NhiClientCertificateResolver', () => {
         clientId: 'nhi-device',
         method: 'self_signed_tls_client_auth',
         bindToCertificate: true,
+        // The token names the credential that accepted the certificate.
+        bindingClaims: { nhi_cid: 'self-1' },
       });
     });
 
@@ -409,6 +429,15 @@ describe('NhiClientCertificateResolver', () => {
         clientId: 'nhi-device',
         method: 'tls_client_auth',
         bindToCertificate: true,
+        // The credential, and the certificate's issuer and serial for the
+        // deny-list check at introspection.
+        bindingClaims: {
+          nhi_cid: 'pki-1',
+          nhi_crt: {
+            iss: '2.5.4.3=test intermediate,2.5.4.10=test pki',
+            sn: expect.stringMatching(/^[0-9a-f]+$/),
+          },
+        },
       });
       expect(prisma.nhiCredential.findMany.mock.calls[0][0].where).toEqual({
         realmId: realm.id,
@@ -500,14 +529,65 @@ describe('NhiClientCertificateResolver', () => {
     });
   });
 
+  describe('usage and audit', () => {
+    it('records a successful use: one update of the credential and ACCESS_GRANTED', async () => {
+      await resolveSelfSigned();
+      expect(prisma.nhiCredential.update).toHaveBeenCalledWith({
+        where: { id: 'self-1', realmId: realm.id },
+        data: { lastUsedAt: expect.any(Date), requestCount: { increment: 1 } },
+        select: { id: true },
+      });
+      expect(audit.recordAudit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          realmId: realm.id,
+          nhiIdentityId: 'nhi-1',
+          action: 'ACCESS_GRANTED',
+          credentialId: 'self-1',
+        }),
+      );
+    });
+
+    it('records a refusal as ACCESS_DENIED with the reason', async () => {
+      credentials[0] = { ...credentials[0], revoked: true };
+      await resolveSelfSigned();
+      expect(prisma.nhiCredential.update).not.toHaveBeenCalled();
+      expect(audit.recordAudit).toHaveBeenCalledWith(
+        expect.objectContaining({
+          action: 'ACCESS_DENIED',
+          success: false,
+          errorCode: 'credential_revoked',
+        }),
+      );
+    });
+
+    it('does not audit a refusal that says nothing about the identity', async () => {
+      config.enabled = false;
+      await resolveSelfSigned();
+      expect(audit.recordAudit).not.toHaveBeenCalled();
+    });
+
+    it('a failed usage update never fails the authentication', async () => {
+      prisma.nhiCredential.update.mockRejectedValueOnce(new Error('db down'));
+      await expect(resolveSelfSigned()).resolves.toMatchObject({
+        bindToCertificate: true,
+      });
+    });
+  });
+
   describe('bindingActive (introspection)', () => {
     const x5t = () => computeX5tS256(device.certificate.raw);
     const ask = (
       patch: Partial<Client> = {},
       x5tS256: string | null = x5t(),
       r = realm,
+      claims: Record<string, unknown> = { nhi_cid: 'self-1' },
     ) =>
-      resolver.bindingActive({ realm: r, client: nhiClient(patch), x5tS256 });
+      resolver.bindingActive({
+        realm: r,
+        client: nhiClient(patch),
+        x5tS256,
+        claims,
+      });
 
     it('holds while the bound SELF_SIGNED credential is active or in grace', async () => {
       await expect(ask()).resolves.toBe(true);
@@ -517,6 +597,21 @@ describe('NhiClientCertificateResolver', () => {
         rotationGraceUntil: new Date(Date.now() + HOUR),
       };
       await expect(ask()).resolves.toBe(true);
+    });
+
+    it('checks exactly the credential the token names, in this realm and identity', async () => {
+      await ask();
+      expect(prisma.nhiCredential.findFirst.mock.calls[0][0].where).toEqual({
+        id: 'self-1',
+        realmId: realm.id,
+        nhiIdentityId: 'nhi-1',
+      });
+      await expect(ask({}, x5t(), realm, {})).resolves.toBe(false);
+      await expect(ask({}, x5t(), realm, { nhi_cid: 'unknown' })).resolves.toBe(
+        false,
+      );
+      // Another credential's thumbprint does not hold.
+      await expect(ask({}, 'other-thumbprint')).resolves.toBe(false);
     });
 
     it('ends when the credential is revoked or its grace period ends', async () => {
@@ -542,23 +637,84 @@ describe('NhiClientCertificateResolver', () => {
       await expect(ask()).resolves.toBe(false);
     });
 
+    it('SELF_SIGNED: a deny-list entry by issuer and serial ends it too', async () => {
+      await expect(ask()).resolves.toBe(true);
+      const issued = (await resolveSelfSigned()) as { bindingClaims?: unknown };
+      expect(issued.bindingClaims).toEqual({ nhi_cid: 'self-1' });
+      const { revocationKey } =
+        await import('../client-auth/tls-trust-store.js');
+      const key = revocationKey(device.certificate);
+      revoked = [
+        { x5tS256: null, issuerDn: key.issuer, serialNumber: key.serial },
+      ];
+      await expect(ask()).resolves.toBe(false);
+    });
+
     it('an NHI token without cnf is never active', async () => {
       await expect(ask({}, null)).resolves.toBe(false);
     });
 
-    it('PKI: holds while the identity has an active PKI credential', async () => {
-      credentials = [
+    describe('PKI', () => {
+      const pkiClient = { tokenEndpointAuthMethod: 'tls_client_auth' as const };
+      const pkiRow = (patch: Partial<Row>) =>
         row({
           tlsAuthMode: 'PKI',
           certNotBefore: null,
           certNotAfter: null,
           tlsClientAuthSanDns: 'x.example',
-        }),
-      ];
-      const pkiClient = { tokenEndpointAuthMethod: 'tls_client_auth' as const };
-      await expect(ask(pkiClient, 'any-thumbprint')).resolves.toBe(true);
-      credentials[0] = { ...credentials[0], revoked: true };
-      await expect(ask(pkiClient, 'any-thumbprint')).resolves.toBe(false);
+          ...patch,
+        });
+      const crt = { iss: 'CN=Issuing CA,O=Example', sn: '1a2b' };
+      const askPki = (cid = 'pki-old') =>
+        ask(pkiClient, 'leaf-thumbprint', realm, {
+          nhi_cid: cid,
+          nhi_crt: crt,
+        });
+
+      beforeEach(() => {
+        credentials = [
+          pkiRow({ id: 'pki-old' }),
+          pkiRow({ id: 'pki-new', tlsClientAuthSanDns: 'y.example' }),
+        ];
+      });
+
+      it('holds while the credential that issued the token is active', async () => {
+        await expect(askPki()).resolves.toBe(true);
+      });
+
+      it('a revoked credential ends its tokens at once, even with another PKI credential live', async () => {
+        credentials[0] = { ...credentials[0], revoked: true };
+        await expect(askPki()).resolves.toBe(false);
+        await expect(askPki('pki-new')).resolves.toBe(true);
+      });
+
+      it('a rotated-out credential holds through its grace period and ends after it', async () => {
+        credentials[0] = {
+          ...credentials[0],
+          supersededById: 'pki-new',
+          rotationGraceUntil: new Date(Date.now() + HOUR),
+        };
+        await expect(askPki()).resolves.toBe(true);
+        credentials[0] = {
+          ...credentials[0],
+          rotationGraceUntil: new Date(Date.now() - 1),
+        };
+        await expect(askPki()).resolves.toBe(false);
+      });
+
+      it('checks the deny-list by thumbprint and by the issuer and serial in the token', async () => {
+        revoked = [{ x5tS256: null, issuerDn: crt.iss, serialNumber: crt.sn }];
+        await expect(askPki()).resolves.toBe(false);
+        revoked = [
+          { x5tS256: 'leaf-thumbprint', issuerDn: null, serialNumber: null },
+        ];
+        await expect(askPki()).resolves.toBe(false);
+      });
+
+      it('a SELF_SIGNED credential id does not hold a PKI token', async () => {
+        credentials = [row({ id: 'self-1' })];
+        await expect(askPki('self-1')).resolves.toBe(false);
+      });
     });
   });
 });

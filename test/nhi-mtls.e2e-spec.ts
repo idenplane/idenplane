@@ -336,6 +336,31 @@ describe('NHI certificate binding (e2e)', () => {
       expect(row?.serviceAccountUserId).toBeNull();
     });
 
+    it('records the use on the credential and in the NHI audit log', async () => {
+      const row = await ctx.prisma.nhiCredential.findUniqueOrThrow({
+        where: { id: firstCredentialId },
+      });
+      expect(row.requestCount).toBeGreaterThanOrEqual(1);
+      expect(row.lastUsedAt).not.toBeNull();
+      expect(claims(firstToken).nhi_cid).toBe(firstCredentialId);
+
+      // A refused certificate is audited too (the writes do not block).
+      expect((await tokenFor(clientId, stranger)).status).toBe(401);
+      let actions: string[] = [];
+      for (let i = 0; i < 50 && !actions.includes('ACCESS_DENIED'); i++) {
+        const logs = await admin().get(
+          `/nhi/audit-logs?nhiIdentityId=${identityId}`,
+        );
+        actions = logs.body.map((l: { action: string }) => l.action);
+        if (!actions.includes('ACCESS_DENIED')) {
+          await new Promise((r) => setTimeout(r, 100));
+        }
+      }
+      expect(actions).toEqual(
+        expect.arrayContaining(['ACCESS_GRANTED', 'ACCESS_DENIED']),
+      );
+    });
+
     it('refuses no certificate, an unregistered certificate, and a secret', async () => {
       expect((await tokenFor(clientId)).status).toBe(401);
       const unknown = await tokenFor(clientId, stranger);
@@ -538,6 +563,7 @@ describe('NHI certificate binding (e2e)', () => {
   describe('a PKI device (tls_client_auth)', () => {
     let identityId: string;
     let clientId: string;
+    let ruleCredentialId: string;
 
     beforeAll(async () => {
       const anchor = await admin()
@@ -553,6 +579,7 @@ describe('NHI certificate binding (e2e)', () => {
           tlsClientAuthSanDns: 'sensor-pki.devices.example',
         });
       expect(credential.status).toBe(201);
+      ruleCredentialId = credential.body.id;
       const client = await admin()
         .post(`/nhi/${identityId}/oauth-client`)
         .send({});
@@ -586,6 +613,89 @@ describe('NHI certificate binding (e2e)', () => {
         san: [{ type: 'dns', value: 'sensor-pki.devices.example' }],
       });
       expect((await tokenFor(clientId, lookalike)).status).toBe(401);
+    });
+
+    describe('introspection checks the credential that issued the token', () => {
+      const leafToken = async () => {
+        const res = await tokenFor(clientId, pki.leaf, [pki.intermediate]);
+        expect(res.status).toBe(200);
+        return res.body.access_token as string;
+      };
+      const viaHttp = async (token: string) =>
+        (await introspect(clientId, token, pki.leaf, [pki.intermediate])).body;
+      const direct = async (token: string) => {
+        const realm = await ctx.prisma.realm.findUniqueOrThrow({
+          where: { id: seeded.realm.id },
+        });
+        return ctx.app.get(TokensService).introspect(realm, token);
+      };
+
+      let ruleToken: string;
+      let subjectCredentialId: string;
+      let subjectToken: string;
+
+      it('names the credential in the token (nhi_cid) with the issuer and serial (nhi_crt)', async () => {
+        ruleToken = await leafToken();
+        const payload = claims(ruleToken);
+        expect(payload.nhi_cid).toBe(ruleCredentialId);
+        expect(payload.nhi_crt).toEqual({
+          iss: expect.stringContaining('test intermediate'),
+          sn: expect.stringMatching(/^[0-9a-f]+$/),
+        });
+      });
+
+      it('after a rotation the old token holds through grace and ends after it', async () => {
+        const rotated = await admin()
+          .post(`/nhi/${identityId}/credentials/${ruleCredentialId}/rotate`)
+          .send({
+            tlsClientAuthSubjectDn: 'CN=sensor-pki,O=Example Devices',
+            overlapSeconds: 3600,
+          });
+        expect(rotated.status).toBe(200);
+        expect(rotated.body.oldCredential.status).toBe('grace');
+        subjectCredentialId = rotated.body.newCredential.id;
+
+        // New tokens come from the active credential, not the one in grace.
+        subjectToken = await leafToken();
+        expect(claims(subjectToken).nhi_cid).toBe(subjectCredentialId);
+        expect((await viaHttp(ruleToken)).active).toBe(true);
+
+        await ctx.prisma.nhiCredential.update({
+          where: { id: ruleCredentialId },
+          data: { rotationGraceUntil: new Date(Date.now() - 1000) },
+        });
+        // The same leaf still authenticates through the new credential, yet
+        // the token issued under the old one is no longer active.
+        expect(await viaHttp(ruleToken)).toEqual({ active: false });
+        expect((await viaHttp(subjectToken)).active).toBe(true);
+      });
+
+      it('a deny-list entry by issuer and serial ends the token at once', async () => {
+        const entry = await admin().post('/tls-revoked-certificates').send({
+          issuerDn: 'CN=Test Intermediate,O=Test PKI',
+          serialNumber: pki.leaf.certificate.serialNumber,
+        });
+        expect(entry.status).toBe(201);
+        try {
+          expect(await direct(subjectToken)).toEqual({ active: false });
+        } finally {
+          await admin()
+            .delete(`/tls-revoked-certificates/${entry.body.id}`)
+            .expect(204);
+        }
+        expect((await direct(subjectToken)).active).toBe(true);
+      });
+
+      it('revoking the credential ends its tokens at once', async () => {
+        const revoked = await admin().post(
+          `/nhi/${identityId}/credentials/${subjectCredentialId}/revoke`,
+        );
+        expect(revoked.status).toBe(200);
+        expect(await direct(subjectToken)).toEqual({ active: false });
+        expect(
+          (await tokenFor(clientId, pki.leaf, [pki.intermediate])).status,
+        ).toBe(401);
+      });
     });
   });
 });

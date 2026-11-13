@@ -9,6 +9,7 @@ import { MTLS_CONFIG, type MtlsConfig } from '../mtls/mtls-config.js';
 import {
   ClientCertificateResolverRegistry,
   type CertificateAuthMethod,
+  type CertificateBindingClaims,
 } from './client-certificate-resolver.js';
 import { CertificateAuthFailureBudget } from './certificate-auth-failure-budget.js';
 
@@ -192,6 +193,8 @@ export interface AuthenticatedClient {
   x5tS256: string | null;
   /** The client's tokens must be bound to that certificate (RFC 8705 §3). */
   bindToCertificate: boolean;
+  /** Private claims the resolver attaches to the bound access token. */
+  bindingClaims?: CertificateBindingClaims;
 }
 
 /**
@@ -385,6 +388,9 @@ export class ClientAuthenticator {
           certificate,
           x5tS256: certificate.x5tS256,
           bindToCertificate: result.bindToCertificate,
+          ...(result.bindingClaims
+            ? { bindingClaims: result.bindingClaims }
+            : {}),
         };
       }
       rejection = 'resolver_mismatch';

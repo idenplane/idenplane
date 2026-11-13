@@ -6,12 +6,25 @@ import type { PresentedClientCertificate } from '../mtls/client-certificate.sour
 export type CertificateAuthMethod =
   'tls_client_auth' | 'self_signed_tls_client_auth';
 
+/**
+ * Private access-token claims a resolver may attach to a bound token, so
+ * that `bindingActive` can later check exactly what authenticated it. They
+ * are protected claims: no mapper or plugin can set, change or remove them.
+ */
+export const CERTIFICATE_BINDING_CLAIMS = ['nhi_cid', 'nhi_crt'] as const;
+
+export type CertificateBindingClaims = Partial<
+  Record<(typeof CERTIFICATE_BINDING_CLAIMS)[number], unknown>
+>;
+
 export interface ClientCertificateResolution {
   /** The client the certificate authenticates. */
   clientId: string;
   method: CertificateAuthMethod;
   /** When the client's tokens must be bound to the certificate (`cnf`). */
   bindToCertificate: boolean;
+  /** Claims for the bound access token (see CERTIFICATE_BINDING_CLAIMS). */
+  bindingClaims?: CertificateBindingClaims;
 }
 
 /**
@@ -59,6 +72,8 @@ export interface CertificateBindingInput {
   client: Client;
   /** The token's `cnf.x5t#S256`, or `null` for an unbound token. */
   x5tS256: string | null;
+  /** The token's binding claims (CERTIFICATE_BINDING_CLAIMS), as verified. */
+  claims: CertificateBindingClaims;
 }
 
 /**

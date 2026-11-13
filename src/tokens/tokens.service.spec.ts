@@ -197,6 +197,8 @@ describe('TokensService', () => {
         exp: Math.floor(Date.now() / 1000) + 300,
         iat: Math.floor(Date.now() / 1000),
         ...(cnf ? { cnf } : {}),
+        nhi_cid: 'cred-1',
+        nhi_crt: { iss: '2.5.4.3=ca', sn: '1a' },
       });
       const nhiClient = {
         id: 'client-db-id',
@@ -226,6 +228,10 @@ describe('TokensService', () => {
           realm: mockRealm,
           client: nhiClient,
           x5tS256: 'thumb',
+          claims: {
+            nhi_cid: 'cred-1',
+            nhi_crt: { iss: '2.5.4.3=ca', sn: '1a' },
+          },
         });
       });
 

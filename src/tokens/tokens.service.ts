@@ -24,7 +24,10 @@ import {
   X5T_S256,
   type PresentedCertificateInput,
 } from '../mtls/certificate-binding.js';
-import { ClientCertificateResolverRegistry } from '../client-auth/client-certificate-resolver.js';
+import {
+  CERTIFICATE_BINDING_CLAIMS,
+  ClientCertificateResolverRegistry,
+} from '../client-auth/client-certificate-resolver.js';
 
 @Injectable()
 export class TokensService {
@@ -97,6 +100,9 @@ export class TokensService {
           realm,
           client,
           x5tS256: typeof x5t === 'string' ? x5t : null,
+          claims: Object.fromEntries(
+            CERTIFICATE_BINDING_CLAIMS.map((name) => [name, payload[name]]),
+          ),
         });
         if (bound !== true) return { active: false };
       } else if (sub) {
