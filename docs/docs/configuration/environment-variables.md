@@ -15,7 +15,7 @@ Idenplane is configured entirely through environment variables. This reference d
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
-| `DATABASE_URL` | — | Yes | PostgreSQL/MySQL/SQLite connection string |
+| `DATABASE_URL` | — | Yes | PostgreSQL connection string |
 | `DATABASE_MIGRATION_URL` | — | No | URL the Docker image uses for `prisma migrate deploy` only. Defaults to `DATABASE_URL`, with `sslmode=verify-full`/`verify-ca` and `sslrootcert` translated to Prisma's `sslmode=require&sslcert=…&sslaccept=strict` so migrations verify the database certificate too |
 | `PORT` | `3000` | No | Server port |
 | `NODE_ENV` | `development` | No | Environment: `development`, `production` |
@@ -34,34 +34,13 @@ Idenplane is configured entirely through environment variables. This reference d
 
 ## Database
 
-Idenplane supports three database providers. Set `DATABASE_URL` to the connection string matching your environment.
-
-### Supported Providers
-
-| Provider | Recommended For | Notes |
-|----------|-----------------|-------|
-| **PostgreSQL 16+** | Production | Recommended. Full feature set, excellent performance. |
-| **MySQL 8+ / MariaDB 10.5+** | Production | Alternative to PostgreSQL. Run `./scripts/use-mysql.sh` first. |
-| **SQLite** | Development / CI | No database server needed. Run `./scripts/use-sqlite.sh` first. |
-
-### Connection Strings
+Idenplane runs on **PostgreSQL 16 or later**, and only on PostgreSQL. A managed service works well: Amazon RDS or Aurora PostgreSQL, Google Cloud SQL, Azure Database for PostgreSQL, Supabase or Neon.
 
 ```bash
-# PostgreSQL (recommended for production)
 DATABASE_URL=postgresql://idenplane:idenplane@localhost:5432/idenplane
-
-# MySQL 8+ / MariaDB 10.5+
-DATABASE_URL=mysql://idenplane:idenplane@localhost:3306/idenplane
-
-# SQLite (development / CI only)
-DATABASE_URL=file:./dev.db
 ```
 
-:::tip
-Before switching databases, use the provided scripts to update your configuration:
-- `./scripts/use-mysql.sh` — Configure for MySQL
-- `./scripts/use-sqlite.sh` — Configure for SQLite
-:::
+In production, connect over TLS and verify the server certificate (`sslmode=verify-full`); see the [Production Checklist](../deployment/production.md).
 
 ---
 

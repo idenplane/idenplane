@@ -439,9 +439,9 @@ export function registerUpgradeCommand(program: Command): void {
                 console.error(chalk.dim(`    Restore from: ${backupStatus.path}`));
               }
             } else {
-              // PostgreSQL/MySQL restore via CLI
+              // PostgreSQL restore via CLI (Idenplane supports PostgreSQL only)
               const dbUrl = process.env.DATABASE_URL;
-              if (dbUrl && dbUrl.startsWith('postgresql://')) {
+              if (dbUrl && /^postgres(ql)?:\/\//.test(dbUrl)) {
                 console.log(chalk.dim('  Using pg_restore for PostgreSQL backup...'));
                 try {
                   execFileSync('pg_restore', ['-d', dbUrl, backupStatus.path], {
@@ -452,20 +452,8 @@ export function registerUpgradeCommand(program: Command): void {
                   console.error(chalk.red('    PostgreSQL restore failed. Manual intervention may be required.'));
                   console.error(chalk.dim(`    Restore from: ${backupStatus.path}`));
                 }
-              } else if (dbUrl && dbUrl.startsWith('mysql://')) {
-                console.log(chalk.dim('  Using mysql for MySQL backup...'));
-                try {
-                  execFileSync('mysql', [dbUrl.replace('mysql://', ''), '<', backupStatus.path], {
-                    shell: '/bin/bash',
-                    stdio: 'inherit',
-                  } as { encoding: 'utf-8'; stdio: 'pipe' | 'inherit' | 'pipe'; shell: string });
-                  success('  ✓ Database restored successfully.');
-                } catch {
-                  console.error(chalk.red('    MySQL restore failed. Manual intervention may be required.'));
-                  console.error(chalk.dim(`    Restore from: ${backupStatus.path}`));
-                }
               } else {
-                console.error(chalk.red('    No supported database CLI found. Manual intervention required.'));
+                console.error(chalk.red('    DATABASE_URL is not a PostgreSQL URL. Manual intervention required.'));
                 console.error(chalk.dim(`    Restore from: ${backupStatus.path}`));
               }
             }

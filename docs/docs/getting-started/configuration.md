@@ -17,27 +17,13 @@ Idenplane is configured through environment variables. This guide covers all ava
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
-| `DATABASE_URL` | — | Yes | PostgreSQL/MySQL/SQLite connection string |
-| `DATABASE_URL` | `file:./dev.db` | No | SQLite file path (development only) |
+| `DATABASE_URL` | — | Yes | PostgreSQL connection string |
 
-Idenplane supports three database providers:
+Idenplane runs on PostgreSQL 16 or later:
 
 ```bash
-# PostgreSQL (recommended for production)
 DATABASE_URL=postgresql://idenplane:idenplane@localhost:5432/idenplane
-
-# MySQL 8+ / MariaDB 10.5+
-DATABASE_URL=mysql://idenplane:idenplane@localhost:3306/idenplane
-
-# SQLite (development / CI only)
-DATABASE_URL=file:./dev.db
 ```
-
-:::tip
-Switch databases using the provided scripts:
-- `./scripts/use-mysql.sh` — Configure for MySQL
-- `./scripts/use-sqlite.sh` — Configure for SQLite
-:::
 
 ### Server
 
@@ -217,7 +203,7 @@ TRUSTED_PROXIES=10.0.0.1,172.16.0.0/12
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
-| `DATABASE_URL` | — | Yes | PostgreSQL/MySQL/SQLite connection string |
+| `DATABASE_URL` | — | Yes | PostgreSQL connection string |
 | `PORT` | `3000` | No | Server port |
 | `NODE_ENV` | `development` | No | Environment mode |
 | `BASE_URL` | `http://localhost:3000` | No | Public URL for redirects |

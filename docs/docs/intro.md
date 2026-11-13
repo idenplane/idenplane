@@ -79,7 +79,7 @@ Idenplane fills that gap with a complete, self-hosted solution with Docker Compo
 | **Rate Limiting** | Configurable throttling per endpoint/client/user |
 | **Horizontal Scaling** | Stateless design for multi-instance deployment |
 | **Redis Support** | Optional shared session storage |
-| **Multi-Database** | PostgreSQL, MySQL, and SQLite support |
+| **PostgreSQL** | PostgreSQL 16+, self-hosted or managed (RDS, Aurora, Cloud SQL, Azure, Supabase, Neon) |
 
 ## Architecture Overview
 
@@ -111,7 +111,7 @@ graph TB
 
         subgraph Storage["Data Layer"]
             Redis["Redis (Cache)"]
-            Postgres["PostgreSQL / MySQL"]
+            Postgres["PostgreSQL"]
         end
     end
 
@@ -144,7 +144,7 @@ graph TB
 | Layer | Technology |
 |-------|-----------|
 | **Backend** | NestJS 11, TypeScript 5.7, Node.js 22 |
-| **Database** | PostgreSQL 16 (primary), MySQL 8, SQLite — via Prisma 7 ORM |
+| **Database** | PostgreSQL 16+ via Prisma 7 ORM |
 | **Admin UI** | React 19, Vite 7, Tailwind CSS 4, React Query |
 | **Auth Pages** | Handlebars SSR with per-realm theming |
 | **Security** | Argon2id (passwords), JOSE (JWTs), Helmet (headers) |

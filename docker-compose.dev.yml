@@ -12,7 +12,7 @@ services:
   #     timeout: 3s
   #     retries: 5
 
-  # ── PostgreSQL (default / recommended for production) ─────────────────────
+  # ── PostgreSQL (the supported database) ───────────────────────────────────
   db:
     image: postgres:16-alpine
     environment:
@@ -29,34 +29,6 @@ services:
       timeout: 3s
       retries: 5
 
-  # ── MySQL 8 (alternative — uncomment and comment-out the postgres service) ─
-  # Before switching: run ./scripts/use-mysql.sh to activate the MySQL schema.
-  # mysql:
-  #   image: mysql:8.0
-  #   environment:
-  #     MYSQL_ROOT_PASSWORD: idenplane
-  #     MYSQL_DATABASE: idenplane
-  #     MYSQL_USER: idenplane
-  #     MYSQL_PASSWORD: idenplane
-  #   command: >
-  #     --character-set-server=utf8mb4
-  #     --collation-server=utf8mb4_unicode_ci
-  #   ports:
-  #     - "3306:3306"
-  #   volumes:
-  #     - mysqldata:/var/lib/mysql
-  #   healthcheck:
-  #     test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-u", "idenplane", "-pidenplane"]
-  #     interval: 5s
-  #     timeout: 3s
-  #     retries: 10
-
-  # ── SQLite (development only — no database service required) ──────────────
-  # SQLite requires no Docker service.  Simply set:
-  #   DATABASE_URL=file:./dev.db
-  # in your .env file and run: ./scripts/use-sqlite.sh
-  # Then: npx prisma migrate dev --name init
-
   app:
     build: .
     ports:
@@ -65,12 +37,7 @@ services:
       - .:/app
       - /app/node_modules
     environment:
-      # PostgreSQL (default):
       DATABASE_URL: postgresql://idenplane:idenplane@db:5432/idenplane
-      # MySQL — uncomment when using the mysql service above:
-      # DATABASE_URL: mysql://idenplane:idenplane@mysql:3306/idenplane
-      # SQLite — not recommended inside Docker; use host-mode dev instead:
-      # DATABASE_URL: file:./dev.db
       PORT: "3000"
       NODE_ENV: development
       ADMIN_API_KEY: ${ADMIN_API_KEY:-change-me-in-production}
@@ -89,4 +56,3 @@ services:
 
 volumes:
   pgdata:
-  # mysqldata:  # uncomment when using the MySQL service

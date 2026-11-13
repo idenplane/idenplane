@@ -19,12 +19,12 @@ Before installing Idenplane, ensure you have:
 |-------------|---------|-------------|
 | **Docker** | 20.10+ | 24.x+ |
 | **Docker Compose** | 2.20+ | 2.20+ |
-| **Database** | PostgreSQL 14 | PostgreSQL 16 |
+| **Database** | PostgreSQL 16 | PostgreSQL 17 |
 | **RAM** | 512 MB | 2 GB |
 | **Disk** | 1 GB | 10 GB |
 
 :::tip
-For local development, SQLite is supported without requiring a separate database server. See [From Source](#from-source) below.
+For local development, `docker compose -f docker-compose.dev.yml up -d db` starts a PostgreSQL container on `localhost:5432`.
 :::
 
 ---
@@ -121,41 +121,15 @@ npm run admin:dev
 
 ---
 
-## Database Options
+## Database
 
-Idenplane supports multiple database providers:
-
-### PostgreSQL (Recommended)
+Idenplane runs on **PostgreSQL 16 or later**, and only on PostgreSQL: it relies on PostgreSQL triggers, row locks and LISTEN/NOTIFY.
 
 ```bash
 DATABASE_URL=postgresql://idenplane:idenplane@localhost:5432/idenplane
 ```
 
-PostgreSQL is recommended for production deployments.
-
-### MySQL / MariaDB
-
-```bash
-# Before switching, run the conversion script
-./scripts/use-mysql.sh
-
-DATABASE_URL=mysql://idenplane:idenplane@localhost:3306/idenplane
-```
-
-Requires MySQL 8+ or MariaDB 10.5+.
-
-### SQLite (Development Only)
-
-```bash
-# Before switching, run the conversion script
-./scripts/use-sqlite.sh
-
-DATABASE_URL=file:./dev.db
-```
-
-:::warning
-SQLite is intended for development and CI only. It does not support production workloads with concurrent connections.
-:::
+A managed service works well: Amazon RDS or Aurora PostgreSQL, Google Cloud SQL, Azure Database for PostgreSQL, Supabase or Neon. For production settings (TLS with certificate verification, backups), see the [Production Checklist](../deployment/production.md).
 
 ---
 
