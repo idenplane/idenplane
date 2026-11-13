@@ -45,7 +45,9 @@ const statusColors: Record<NhiLifecycleStatus, string> = {
 const credentialTypeColors: Record<NhiCredentialType, string> = {
   API_KEY: 'bg-accent-soft text-accent',
   CERTIFICATE: 'bg-emerald-100 text-emerald-700',
-  JWT_BEARER: 'bg-rose-100 text-rose-700',
+  MTLS: 'bg-emerald-100 text-emerald-700',
+  JWT: 'bg-rose-100 text-rose-700',
+  OAUTH: 'bg-rose-100 text-rose-700',
 };
 
 const credentialStatusBadges: Record<NhiCredentialStatus, { label: string; className: string }> = {
@@ -745,7 +747,6 @@ export default function NhiDetailPage() {
                 >
                   <option value="API_KEY">API Key</option>
                   <option value="CERTIFICATE">Certificate</option>
-                  <option value="JWT_BEARER">JWT Bearer</option>
                 </select>
               </div>
 

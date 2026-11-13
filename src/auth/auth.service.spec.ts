@@ -1350,7 +1350,7 @@ describe('AuthService', () => {
       );
     });
 
-    it('defaults to password-level acr/amr when the code carries no satisfied context', async () => {
+    it('defaults to password-level acr and invents no amr when the code carries none', async () => {
       setupForTokenIssuance();
       prisma.authorizationCode.update.mockResolvedValue({
         ...authCode,
@@ -1375,7 +1375,8 @@ describe('AuthService', () => {
 
       const accessTokenPayload = jwkService.signJwt.mock.calls[0][0];
       expect(accessTokenPayload.acr).toBe(ACR_PASSWORD);
-      expect(accessTokenPayload.amr).toEqual(['pwd']);
+      // A federated sign-in records no method; claiming `pwd` would be false.
+      expect(accessTokenPayload).not.toHaveProperty('amr');
     });
 
     it('should throw invalid_request when code is missing', async () => {

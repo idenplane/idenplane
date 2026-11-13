@@ -361,6 +361,7 @@ export class SamlIdpController {
       sp,
       user,
       inResponseTo,
+      acsUrl,
     );
 
     // Clear the SAML request cookie
