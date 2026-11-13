@@ -25,8 +25,7 @@ describe('DeviceService', () => {
   });
 
   describe('initiateDeviceAuth', () => {
-    it('should successfully create device code when client is found with device_code grant type', async () => {
-      prisma.client.findUnique.mockResolvedValue(mockClient as any);
+    it('should create a device code for a client with the device_code grant type', async () => {
       prisma.deviceCode.create.mockResolvedValue({
         id: 'device-1',
         deviceCode: 'mock-device-code',
@@ -44,15 +43,10 @@ describe('DeviceService', () => {
 
       const result = await service.initiateDeviceAuth(
         mockRealm,
-        'test-client',
+        mockClient as any,
         'openid profile',
       );
 
-      expect(prisma.client.findUnique).toHaveBeenCalledWith({
-        where: {
-          realmId_clientId: { realmId: 'realm-1', clientId: 'test-client' },
-        },
-      });
       expect(prisma.deviceCode.create).toHaveBeenCalledWith({
         data: expect.objectContaining({
           deviceCode: expect.any(String),
@@ -76,42 +70,14 @@ describe('DeviceService', () => {
       });
     });
 
-    it('should throw NotFoundException when client is not found', async () => {
-      prisma.client.findUnique.mockResolvedValue(null);
-
-      await expect(
-        service.initiateDeviceAuth(mockRealm, 'non-existent-client'),
-      ).rejects.toThrow(NotFoundException);
-      await expect(
-        service.initiateDeviceAuth(mockRealm, 'non-existent-client'),
-      ).rejects.toThrow('Client not found');
-    });
-
-    it('should throw NotFoundException when client is disabled', async () => {
-      prisma.client.findUnique.mockResolvedValue({
-        ...mockClient,
-        enabled: false,
-      } as any);
-
-      await expect(
-        service.initiateDeviceAuth(mockRealm, 'test-client'),
-      ).rejects.toThrow(NotFoundException);
-      await expect(
-        service.initiateDeviceAuth(mockRealm, 'test-client'),
-      ).rejects.toThrow('Client not found');
-    });
-
     it('should throw BadRequestException when client does not support device_code grant', async () => {
-      prisma.client.findUnique.mockResolvedValue({
-        ...mockClient,
-        grantTypes: ['authorization_code'],
-      } as any);
+      const client = { ...mockClient, grantTypes: ['authorization_code'] };
 
       await expect(
-        service.initiateDeviceAuth(mockRealm, 'test-client'),
+        service.initiateDeviceAuth(mockRealm, client as any),
       ).rejects.toThrow(BadRequestException);
       await expect(
-        service.initiateDeviceAuth(mockRealm, 'test-client'),
+        service.initiateDeviceAuth(mockRealm, client as any),
       ).rejects.toThrow('Client does not support device authorization');
     });
   });

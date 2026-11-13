@@ -6,7 +6,7 @@ import {
 } from '@nestjs/common';
 import { randomBytes, randomInt } from 'crypto';
 import { Interval } from '@nestjs/schedule';
-import type { Realm } from '@prisma/client';
+import type { Client, Realm } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 
 @Injectable()
@@ -15,13 +15,11 @@ export class DeviceService {
 
   constructor(private readonly prisma: PrismaService) {}
 
-  async initiateDeviceAuth(realm: Realm, clientId: string, scope?: string) {
-    const client = await this.prisma.client.findUnique({
-      where: { realmId_clientId: { realmId: realm.id, clientId } },
-    });
-    if (!client || !client.enabled) {
-      throw new NotFoundException('Client not found');
-    }
+  /**
+   * Starts a device authorization (RFC 8628 §3.1) for a client the caller
+   * has already authenticated (see DeviceController).
+   */
+  async initiateDeviceAuth(realm: Realm, client: Client, scope?: string) {
     // Accept both the full RFC 8628 URN and the shorthand alias so that clients
     // stored with either value are permitted (issue #503).
     const supportsDeviceFlow =
