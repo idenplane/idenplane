@@ -96,6 +96,29 @@ export class SessionIssuer {
   }
 
   /**
+   * Throws (403) unless a built-in sign-in path may finish a login of
+   * `client` in `realm`: false only where the binding resolver says the
+   * login is bound to a flow (or misconfigured). Built-in paths call this
+   * before any side effect (an MFA challenge, a texted code), so a refused
+   * sign-in fails at its first step rather than after a consumed code.
+   * Without AUTH_FLOW_RUNTIME_ENABLED it returns without reading anything.
+   */
+  async assertBuiltInSignInAllowed(
+    realm: Realm,
+    client: ResolverClient | null,
+  ): Promise<void> {
+    if (!isAuthFlowRuntimeEnabled()) return;
+    const binding = await this.flowBinding.resolve(realm, client);
+    if (binding.kind === 'legacy') return;
+    this.logger.warn(
+      `Refused a built-in sign-in in realm ${realm.id}: the login is bound to a custom flow (${binding.kind})`,
+    );
+    throw new ForbiddenException(
+      'Sign-in must be completed through this application’s sign-in flow. Please start again.',
+    );
+  }
+
+  /**
    * Refuses a session the binding does not allow: built-in sign-in proof
    * where a flow is bound (or misconfigured), or flow proof that is not a
    * finalised transaction of the flow and version bound right now.
@@ -107,16 +130,7 @@ export class SessionIssuer {
     proof: SessionProof,
   ): Promise<void> {
     if (proof.kind === 'legacy') {
-      // The operator switch is off: the built-in login is the only login.
-      if (!isAuthFlowRuntimeEnabled()) return;
-      const binding = await this.flowBinding.resolve(realm, client);
-      if (binding.kind === 'legacy') return;
-      this.logger.warn(
-        `Refused a built-in sign-in session in realm ${realm.id}: the login is bound to a custom flow (${binding.kind})`,
-      );
-      throw new ForbiddenException(
-        'Sign-in must be completed through this application’s sign-in flow. Please start again.',
-      );
+      return this.assertBuiltInSignInAllowed(realm, client);
     }
 
     const binding = await this.flowBinding.resolve(realm, client);

@@ -95,6 +95,10 @@ export class LoginFlowService {
           oauthParams as unknown as AuthorizeParams,
         )
       : null;
+    // Where the login is bound to a custom flow, a built-in path (a
+    // federated sign-in) may not finish it: refuse now, before any second
+    // factor is challenged or consumed. No-op without the runtime switch.
+    await this.sessionIssuer.assertBuiltInSignInAllowed(realm, client);
     // A password with any second factor reaches MFA at most: a client that
     // requires more (a passkey) cannot be satisfied on this path at all.
     if (client?.requiredAcr && !satisfiesAcr(ACR_MFA, client.requiredAcr)) {

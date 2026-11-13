@@ -162,6 +162,55 @@ describe('LoginFlowService', () => {
     });
   });
 
+  describe('a login bound to a custom flow', () => {
+    const ENV = 'AUTH_FLOW_RUNTIME_ENABLED';
+    let previous: string | undefined;
+
+    beforeEach(() => {
+      previous = process.env[ENV];
+      process.env[ENV] = 'true';
+    });
+    afterEach(() => {
+      if (previous === undefined) delete process.env[ENV];
+      else process.env[ENV] = previous;
+    });
+
+    const boundFlow = () =>
+      new LoginFlowService(
+        oauthService as any,
+        eventsService as any,
+        mfaService as any,
+        new SessionIssuer(
+          loginService as any,
+          {
+            resolve: jest.fn().mockResolvedValue({
+              kind: 'bound',
+              flow: { id: 'f', version: 1 },
+            }),
+          } as any,
+        ),
+        new PostAuthService(oauthService as any, consentService as any),
+      );
+
+    it('refuses a built-in (e.g. federated) sign-in before any second factor is challenged', async () => {
+      mfaService.isMfaEnabled.mockResolvedValue(true);
+      await expect(
+        boundFlow().continueAfterPrimaryAuth(
+          realm,
+          user,
+          oauthParams,
+          { primaryAmr: [] },
+          req,
+          res as any,
+        ),
+      ).rejects.toMatchObject({ status: 403 });
+      expect(mfaService.createMfaChallenge).not.toHaveBeenCalled();
+      expect(mfaService.createMfaEnrollment).not.toHaveBeenCalled();
+      expect(loginService.createLoginSession).not.toHaveBeenCalled();
+      expect(res.cookie).not.toHaveBeenCalled();
+    });
+  });
+
   describe('completeLogin', () => {
     const mfa = { acr: 'urn:idenplane:acr:mfa', amr: ['otp'] };
 
