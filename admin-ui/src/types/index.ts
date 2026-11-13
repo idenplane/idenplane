@@ -375,6 +375,19 @@ export interface NhiIdentity {
   updatedAt: string;
 }
 
+/** How a certificate credential authenticates its identity's OAuth client (RFC 8705). */
+export type NhiTlsAuthMode = 'SELF_SIGNED' | 'PKI';
+
+/** Computed by the server; only `active` and `grace` authenticate. */
+export type NhiCredentialStatus =
+  | 'active'
+  | 'grace'
+  | 'revoked'
+  | 'expired'
+  | 'not_yet_valid'
+  | 'disabled'
+  | 'identity_inactive';
+
 export interface NhiCredential {
   id: string;
   name: string;
@@ -384,6 +397,14 @@ export interface NhiCredential {
   revoked: boolean;
   enabled: boolean;
   rotationRequired: boolean;
+  tlsAuthMode?: NhiTlsAuthMode | null;
+  /** `null` for credentials without a TLS mode (API keys, legacy certificates). */
+  status?: NhiCredentialStatus | null;
+  certThumbprintS256?: string | null;
+  certSubject?: string | null;
+  certNotAfter?: string | null;
+  supersededById?: string | null;
+  rotationGraceUntil?: string | null;
 }
 
 export interface NhiCredentialPolicy {
@@ -403,6 +424,8 @@ export interface NhiCredentialPolicy {
   requireCertificate: boolean;
   requireIpRestriction: boolean;
   requireAuditLogging: boolean;
+  /** Seconds a rotated certificate credential keeps authenticating. */
+  rotationOverlapSeconds?: number;
   createdAt: string;
   updatedAt: string;
 }
