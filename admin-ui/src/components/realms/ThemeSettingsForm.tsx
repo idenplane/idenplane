@@ -25,7 +25,8 @@ export default function ThemeSettingsForm({ realm }: ThemeSettingsFormProps) {
   });
 
   const [form, setForm] = useState(() => seedFromRealm(realm));
-  const loginWarnings = themes?.find((t) => t.name === form.loginTheme)?.warnings ?? [];
+  const loginWarnings =
+    (Array.isArray(themes) ? themes.find((t) => t.name === form.loginTheme)?.warnings : undefined) ?? [];
 
   // Reseed the editable form when the realm prop changes (e.g. after a refetch).
   // Adjusting state during render (vs. an effect) avoids an extra render pass.
