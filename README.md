@@ -469,7 +469,7 @@ sequenceDiagram
 | `BASE_URL` | `http://localhost:3000` | Public URL for redirects and emails |
 | `ADMIN_API_KEY` | *(required in production)* | API key for admin endpoints (32+ chars) |
 | `ADMIN_USER` | `admin` | Initial admin username |
-| `ADMIN_PASSWORD` | `admin` | Initial admin password |
+| `ADMIN_PASSWORD` | *(none; generated outside production)* | Initial admin password. Never defaults to `admin`: unset outside production, a random one is printed once in the first start's log; `admin` and placeholders are refused |
 | `WEBHOOK_SECRET_KEY` | *(required)* | 32-byte AES-256-GCM key (`openssl rand -hex 32`) |
 | `WEBHOOK_ENCRYPTION_SALT` | *(required)* | 16-byte salt (`openssl rand -hex 16`) |
 | `REDIS_URL` | *(optional)* | Redis connection string for cache and session store |
