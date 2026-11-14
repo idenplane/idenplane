@@ -10,6 +10,7 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 ## [Unreleased]
 
 ### Security
+- **Organization invitation tokens are stored only as a hash, and no longer leave the server after creation.** Since 0.2.0 the `token` column held a SHA-256 of the token, but `GET …/organizations/{slug}/invitations` returned that hash, and 0.1.0 rows still held raw tokens. The column is now `token_hash`. The list no longer returns it. The create call still returns the raw token, once, for the invitation link. The token of `POST …/invitations/{token}/accept` is replaced by `[REDACTED]` in the admin event path. Accepting now claims the invitation with a compare-and-set, so two concurrent accepts of one token cannot both succeed, and an empty or over-long token is refused without a lookup. **Migration:** the column and its unique index are renamed, keeping the stored hashes, so pending invitations stay valid. Rows created before 2026-03-27 (0.1.0, raw tokens, all long expired since invitations last 72 hours) get their token replaced by its SHA-256 in SQL.
 - **Secrets recorded by older admin events are removed.** The admin event trail (`admin_events.representation`) kept request bodies with only some fields redacted, so rows written by earlier versions can hold, in plaintext:
   - LDAP bind credentials, audit stream headers and organization SSO connection secrets (until the previous change);
   - email and SMS provider credentials and the CAPTCHA secret keys (from 2026-03-24 to 2026-08-01);

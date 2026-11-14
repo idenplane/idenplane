@@ -9,7 +9,10 @@ import type { Request } from 'express';
 import { EventsService } from './events.service.js';
 import { ResourceType, OperationType } from './event-types.js';
 import type { OperationTypeValue, ResourceTypeValue } from './event-types.js';
-import { redactAdminRepresentation } from './admin-event-redaction.js';
+import {
+  redactAdminRepresentation,
+  redactAdminResourcePath,
+} from './admin-event-redaction.js';
 
 const RESOURCE_TYPE_MAP: Array<{ pattern: RegExp; type: ResourceTypeValue }> = [
   // More-specific patterns must come before broader ones to avoid mis-classification.
@@ -106,7 +109,7 @@ export class AdminEventInterceptor implements NestInterceptor {
           adminUserId: adminUser.userId ?? adminUser.id ?? 'api-key',
           operationType,
           resourceType,
-          resourcePath: request.path,
+          resourcePath: redactAdminResourcePath(request.path),
           representation,
           ipAddress: request.ip,
         });

@@ -7,7 +7,7 @@ import {
   GoneException,
 } from '@nestjs/common';
 import { promises as dns } from 'dns';
-import { randomBytes, createHash } from 'crypto';
+import { createHash } from 'crypto';
 import type { Realm } from '@prisma/client';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -24,6 +24,20 @@ import { VerifyDomainDto } from './dto/verify-domain.dto.js';
 
 /** TTL for invitation tokens in milliseconds (72 h). */
 const INVITATION_TTL_MS = 72 * 60 * 60 * 1000;
+
+/** Longer presented tokens are not hashed: real ones are 64 characters. */
+const MAX_INVITATION_TOKEN_LENGTH = 256;
+
+/** What the admin API shows of an invitation: never its token hash. */
+const INVITATION_FIELDS = {
+  id: true,
+  organizationId: true,
+  email: true,
+  role: true,
+  expiresAt: true,
+  acceptedAt: true,
+  createdAt: true,
+} satisfies Prisma.OrganizationInvitationSelect;
 
 /** Prefix embedded in every DNS TXT verification value. */
 const DNS_TXT_PREFIX = 'idenplane-domain-verification=';
@@ -190,8 +204,9 @@ export class OrganizationsService {
   async createInvitation(realm: Realm, slug: string, dto: CreateInvitationDto) {
     const org = await this.findOne(realm, slug);
 
-    const rawToken = randomBytes(32).toString('hex');
-    const tokenHash = createHash('sha256').update(rawToken).digest('hex');
+    // 256 random bits: a plain SHA-256 is enough to store it (nothing to
+    // brute-force), and the lookup by hash needs no constant-time compare.
+    const rawToken = this.crypto.generateSecret(32);
     const expiresAt = new Date(Date.now() + INVITATION_TTL_MS);
 
     await this.prisma.organizationInvitation.create({
@@ -199,13 +214,13 @@ export class OrganizationsService {
         organizationId: org.id,
         email: dto.email.toLowerCase(),
         role: dto.role ?? 'member',
-        token: tokenHash,
+        tokenHash: this.crypto.sha256(rawToken),
         expiresAt,
       },
     });
 
-    // Return the raw token so callers can embed it in the invitation email link.
-    // The hash stored in the database is never exposed.
+    // The raw token, for the invitation link, is returned this once. Only
+    // its hash is stored, and no other response carries either.
     return { token: rawToken, expiresAt };
   }
 
@@ -217,10 +232,12 @@ export class OrganizationsService {
   ) {
     const org = await this.findOne(realm, slug);
 
-    const tokenHash = createHash('sha256').update(token).digest('hex');
-    const invitation = await this.prisma.organizationInvitation.findUnique({
-      where: { token: tokenHash },
-    });
+    const invitation =
+      token.length > 0 && token.length <= MAX_INVITATION_TOKEN_LENGTH
+        ? await this.prisma.organizationInvitation.findUnique({
+            where: { tokenHash: this.crypto.sha256(token) },
+          })
+        : null;
 
     if (!invitation || invitation.organizationId !== org.id) {
       throw new NotFoundException('Invitation not found');
@@ -270,13 +287,22 @@ export class OrganizationsService {
 
     const resolvedUserId = invitedUser.id;
 
-    // Mark accepted and add member in a single transaction.
-    const [, member] = await this.prisma.$transaction([
-      this.prisma.organizationInvitation.update({
-        where: { id: invitation.id },
+    // Mark accepted and add member in a single transaction. The invitation
+    // is claimed with a compare-and-set, so of two concurrent accepts of
+    // the same token only one gets through.
+    return this.prisma.$transaction(async (tx) => {
+      const { count } = await tx.organizationInvitation.updateMany({
+        where: {
+          id: invitation.id,
+          acceptedAt: null,
+          expiresAt: { gte: new Date() },
+        },
         data: { acceptedAt: new Date() },
-      }),
-      this.prisma.organizationMember.upsert({
+      });
+      if (count === 0) {
+        throw new GoneException('Invitation has already been accepted');
+      }
+      return tx.organizationMember.upsert({
         where: {
           organizationId_userId: {
             organizationId: org.id,
@@ -289,16 +315,16 @@ export class OrganizationsService {
           role: invitation.role,
         },
         update: {},
-      }),
-    ]);
-
-    return member;
+      });
+    });
   }
 
+  /** The invitations of an organization, without their token hashes. */
   async listInvitations(realm: Realm, slug: string) {
     const org = await this.findOne(realm, slug);
     return this.prisma.organizationInvitation.findMany({
       where: { organizationId: org.id },
+      select: INVITATION_FIELDS,
       orderBy: { createdAt: 'desc' },
     });
   }

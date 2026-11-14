@@ -6,6 +6,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { OrganizationsService } from './organizations.service.js';
+import { CryptoService } from '../crypto/crypto.service.js';
 import {
   createMockPrismaService,
   MockPrismaService,
@@ -21,6 +22,7 @@ jest.mock('dns', () => ({
 }));
 
 describe('OrganizationsService', () => {
+  const crypto = new CryptoService();
   let service: OrganizationsService;
   let prisma: MockPrismaService;
 
@@ -68,7 +70,7 @@ describe('OrganizationsService', () => {
     organizationId: 'org-1',
     email: 'alice@acme.com',
     role: 'member',
-    token: 'test-token-abc',
+    tokenHash: new CryptoService().sha256('test-token-abc'),
     expiresAt: new Date(Date.now() + 60_000),
     acceptedAt: null,
     createdAt: new Date(),
@@ -87,7 +89,7 @@ describe('OrganizationsService', () => {
 
   beforeEach(() => {
     prisma = createMockPrismaService();
-    service = new OrganizationsService(prisma as any);
+    service = new OrganizationsService(prisma as any, crypto);
     mockResolveTxt.mockReset();
   });
 
@@ -381,8 +383,11 @@ describe('OrganizationsService', () => {
       });
       const callArg =
         prisma.organizationInvitation.create.mock.calls[0][0].data;
-      expect(typeof callArg.token).toBe('string');
-      expect(callArg.token.length).toBeGreaterThan(0);
+      // Only the hash of the returned token is stored.
+      expect(result.token).toMatch(/^[0-9a-f]{64}$/);
+      expect(callArg.tokenHash).toBe(crypto.sha256(result.token));
+      expect(callArg).not.toHaveProperty('token');
+      expect(JSON.stringify(callArg)).not.toContain(result.token);
       expect(callArg.expiresAt).toBeInstanceOf(Date);
       expect(callArg.expiresAt.getTime()).toBeGreaterThan(Date.now());
     });
@@ -410,13 +415,8 @@ describe('OrganizationsService', () => {
         mockInvitation,
       );
       prisma.user.findFirst.mockResolvedValue(mockUser);
-      prisma.$transaction.mockImplementation(async (ops: any[]) => {
-        return Promise.all(ops.map((op) => op));
-      });
-      prisma.organizationInvitation.update.mockResolvedValue({
-        ...mockInvitation,
-        acceptedAt: new Date(),
-      });
+      prisma.$transaction.mockImplementation(async (fn: any) => fn(prisma));
+      prisma.organizationInvitation.updateMany.mockResolvedValue({ count: 1 });
       prisma.organizationMember.upsert.mockResolvedValue(mockMember);
 
       const result = await service.acceptInvitation(
@@ -427,6 +427,43 @@ describe('OrganizationsService', () => {
       );
 
       expect(result).toEqual(mockMember);
+      expect(prisma.organizationInvitation.findUnique).toHaveBeenCalledWith({
+        where: { tokenHash: crypto.sha256('test-token-abc') },
+      });
+      // Claimed only if still unused and unexpired.
+      expect(
+        prisma.organizationInvitation.updateMany.mock.calls[0][0].where,
+      ).toMatchObject({ id: 'inv-1', acceptedAt: null });
+    });
+
+    it('should throw GoneException when a concurrent accept claimed it first', async () => {
+      prisma.organization.findUnique.mockResolvedValue(mockOrg);
+      prisma.organizationInvitation.findUnique.mockResolvedValue(
+        mockInvitation,
+      );
+      prisma.user.findFirst.mockResolvedValue(mockUser);
+      prisma.$transaction.mockImplementation(async (fn: any) => fn(prisma));
+      prisma.organizationInvitation.updateMany.mockResolvedValue({ count: 0 });
+
+      await expect(
+        service.acceptInvitation(
+          mockRealm,
+          'acme-corp',
+          'test-token-abc',
+          'user-1',
+        ),
+      ).rejects.toThrow(GoneException);
+      expect(prisma.organizationMember.upsert).not.toHaveBeenCalled();
+    });
+
+    it('should not look up an empty or oversized token', async () => {
+      prisma.organization.findUnique.mockResolvedValue(mockOrg);
+      for (const token of ['', 'x'.repeat(257)]) {
+        await expect(
+          service.acceptInvitation(mockRealm, 'acme-corp', token, 'user-1'),
+        ).rejects.toThrow(NotFoundException);
+      }
+      expect(prisma.organizationInvitation.findUnique).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when invitation does not exist', async () => {

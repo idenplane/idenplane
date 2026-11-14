@@ -58,6 +58,21 @@ function walk(node: unknown, depth: number): unknown {
   return out;
 }
 
+/**
+ * The request path as an admin event keeps it: the organization invitation
+ * token of `…/invitations/{token}/accept` is replaced, so the trail never
+ * holds a token (it is stored nowhere else but hashed).
+ */
+export function redactAdminResourcePath(path: string): string {
+  const parts = path.split('/');
+  for (let i = 1; i + 1 < parts.length; i++) {
+    if (parts[i - 1] === 'invitations' && parts[i + 1] === 'accept') {
+      parts[i] = REDACTED;
+    }
+  }
+  return parts.join('/');
+}
+
 /** A free-form config: its secret-named keys masked, or all of it. */
 function redactConfig(config: Record<string, unknown>): unknown {
   try {
