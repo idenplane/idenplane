@@ -38,7 +38,7 @@ describe('OrganizationDetailPage invitations', () => {
       http.post(`${ORG}/invitations`, async ({ request }) => {
         sent = await request.json();
         return HttpResponse.json(
-          { token: 'raw-invite-token-123', expiresAt: '2026-11-17T10:00:00.000Z' },
+          { token: 'dummy-invite-token-123', expiresAt: '2026-11-17T10:00:00.000Z' },
           { status: 201 },
         );
       }),
@@ -59,7 +59,7 @@ describe('OrganizationDetailPage invitations', () => {
     expect(panel).toHaveTextContent('Invitation created for new@example.com');
     expect(panel).toHaveTextContent(/shown only once/i);
     expect(panel).toHaveTextContent('/invitations/<token>/accept');
-    expect(screen.getByLabelText('Invitation token')).toHaveValue('raw-invite-token-123');
+    expect(screen.getByLabelText('Invitation token')).toHaveValue('dummy-invite-token-123');
 
     fireEvent.click(screen.getByRole('button', { name: 'Done' }));
     expect(screen.queryByTestId('created-invitation')).not.toBeInTheDocument();

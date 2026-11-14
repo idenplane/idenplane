@@ -314,7 +314,7 @@ describe('Webhook Delivery (e2e)', () => {
       // Retrieve the service directly to verify the signing logic
       const webhooksService = app.get(WebhooksService);
 
-      const testSecret = 'my-webhook-signing-secret';
+      const testSecret = 'my-dummy-webhook-signing-secret';
       const testPayload = JSON.stringify({
         eventType: 'user.login',
         userId: 'user-123',
