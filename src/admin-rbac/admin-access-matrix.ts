@@ -11,6 +11,7 @@ import type { AdminRouteEntry } from './admin-route-inventory.js';
 
 /** What each kind of admin gets on a route, worked out by the real policy. */
 export interface AccessMatrixRow {
+  controller: string;
   method: string;
   path: string;
   scope: string;
@@ -46,6 +47,7 @@ export function accessMatrix(entries: AdminRouteEntry[]): AccessMatrixRow[] {
         ? `realm (:${entry.policy.scope.param})`
         : entry.policy.scope.kind;
     return {
+      controller: entry.controller,
       method: entry.method,
       path: entry.paths.join(', '),
       scope: entry.policy.sensitiveRead ? `${scope}, secret read` : scope,
@@ -65,12 +67,12 @@ export function accessMatrix(entries: AdminRouteEntry[]): AccessMatrixRow[] {
 export function accessMatrixMarkdown(rows: AccessMatrixRow[]): string {
   const mark = (v: boolean) => (v ? 'yes' : 'no');
   const lines = [
-    '| Method | Path | Policy | super-admin | API key | realm-admin (own realm) | realm-admin (other realm) | view-only |',
-    '|---|---|---|---|---|---|---|---|',
+    '| Controller | Method | Path | Policy | super-admin | API key | realm-admin (own realm) | realm-admin (other realm) | view-only |',
+    '|---|---|---|---|---|---|---|---|---|',
   ];
   for (const r of rows) {
     lines.push(
-      `| ${r.method} | \`${r.path}\` | ${r.scope} | ${mark(r.superAdmin)} | ${mark(r.apiKey)} | ${mark(r.realmAdminInScope)} | ${mark(r.realmAdminOutOfScope)} | ${mark(r.viewOnly)} |`,
+      `| ${r.controller} | ${r.method} | \`${r.path}\` | ${r.scope} | ${mark(r.superAdmin)} | ${mark(r.apiKey)} | ${mark(r.realmAdminInScope)} | ${mark(r.realmAdminOutOfScope)} | ${mark(r.viewOnly)} |`,
     );
   }
   return lines.join('\n');
