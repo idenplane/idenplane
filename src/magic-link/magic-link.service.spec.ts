@@ -10,7 +10,7 @@ import {
 } from '../prisma/prisma.mock.js';
 
 const mockCrypto = {
-  generateSecret: jest.fn().mockReturnValue('raw-magic-link-token'),
+  generateSecret: jest.fn().mockReturnValue('dummy-magic-link-token'),
   sha256: jest.fn().mockReturnValue('hashed-magic-link-token'),
   hmac: jest.fn((purpose: string, data: string) =>
     Buffer.from(`${purpose}:${data}`).toString('hex'),
@@ -32,7 +32,7 @@ const mockThemeEmail = {
   renderEmail: jest
     .fn()
     .mockReturnValue(
-      '<a href="https://app.example.com/magic-link?token=raw-magic-link-token">Sign In</a>',
+      '<a href="https://app.example.com/magic-link?token=dummy-magic-link-token">Sign In</a>',
     ),
 };
 
@@ -178,7 +178,7 @@ describe('MagicLinkService', () => {
         'magic-link',
         {
           magicLinkUrl:
-            'https://app.example.com/magic-link?token=raw-magic-link-token',
+            'https://app.example.com/magic-link?token=dummy-magic-link-token',
         },
       );
     });
@@ -303,7 +303,7 @@ describe('MagicLinkService', () => {
       expect(result.success).toBe(true);
       expect(result.message).toBe('Magic link sent successfully');
       expect(mockCrypto.generateSecret).toHaveBeenCalledWith(32);
-      expect(mockCrypto.sha256).toHaveBeenCalledWith('raw-magic-link-token');
+      expect(mockCrypto.sha256).toHaveBeenCalledWith('dummy-magic-link-token');
       expect(prisma.magicLinkRequest.create).toHaveBeenCalled();
       expect(mockThemeEmail.getSubject).toHaveBeenCalledWith(
         mockRealmFull,
@@ -314,7 +314,7 @@ describe('MagicLinkService', () => {
         'magic-link',
         {
           magicLinkUrl:
-            'https://app.example.com/magic-link?token=raw-magic-link-token',
+            'https://app.example.com/magic-link?token=dummy-magic-link-token',
         },
       );
       expect(mockEmail.sendEmail).toHaveBeenCalledWith(
@@ -443,9 +443,9 @@ describe('MagicLinkService', () => {
     it('should hash the raw token and look it up', async () => {
       prisma.magicLinkRequest.findUnique.mockResolvedValue(null);
 
-      await service.validateMagicLink('raw-magic-link-token');
+      await service.validateMagicLink('dummy-magic-link-token');
 
-      expect(mockCrypto.sha256).toHaveBeenCalledWith('raw-magic-link-token');
+      expect(mockCrypto.sha256).toHaveBeenCalledWith('dummy-magic-link-token');
       expect(prisma.magicLinkRequest.findUnique).toHaveBeenCalledWith({
         where: { tokenHash: 'hashed-magic-link-token' },
         include: {
@@ -474,7 +474,7 @@ describe('MagicLinkService', () => {
         expiresAt: new Date(Date.now() + 60_000),
       });
 
-      const result = await service.validateMagicLink('raw-magic-link-token');
+      const result = await service.validateMagicLink('dummy-magic-link-token');
 
       expect(result.valid).toBe(false);
       expect(result.error).toBe('Magic link authentication is not enabled');
@@ -491,7 +491,7 @@ describe('MagicLinkService', () => {
       });
 
       const result = await service.validateMagicLink(
-        'raw-magic-link-token',
+        'dummy-magic-link-token',
         'wrong-realm',
       );
 
@@ -509,7 +509,7 @@ describe('MagicLinkService', () => {
         expiresAt: new Date(Date.now() + 60_000),
       });
 
-      const result = await service.validateMagicLink('raw-magic-link-token');
+      const result = await service.validateMagicLink('dummy-magic-link-token');
 
       expect(result.valid).toBe(false);
       expect(result.error).toBe('User account is disabled');
@@ -525,7 +525,7 @@ describe('MagicLinkService', () => {
         expiresAt: new Date(Date.now() + 60_000),
       });
 
-      const result = await service.validateMagicLink('raw-magic-link-token');
+      const result = await service.validateMagicLink('dummy-magic-link-token');
 
       expect(result.valid).toBe(false);
       expect(result.error).toBe('This link has already been used');
@@ -541,7 +541,7 @@ describe('MagicLinkService', () => {
         expiresAt: new Date(Date.now() + 60_000),
       });
 
-      const result = await service.validateMagicLink('raw-magic-link-token');
+      const result = await service.validateMagicLink('dummy-magic-link-token');
 
       expect(result.valid).toBe(false);
       expect(result.error).toBe('This link has been cancelled');
@@ -557,7 +557,7 @@ describe('MagicLinkService', () => {
         expiresAt: new Date(Date.now() - 1000),
       });
 
-      const result = await service.validateMagicLink('raw-magic-link-token');
+      const result = await service.validateMagicLink('dummy-magic-link-token');
 
       expect(result.valid).toBe(false);
       expect(result.error).toBe('This link has expired');
@@ -574,7 +574,7 @@ describe('MagicLinkService', () => {
       });
       prisma.magicLinkRequest.update.mockResolvedValue({});
 
-      await service.validateMagicLink('raw-magic-link-token');
+      await service.validateMagicLink('dummy-magic-link-token');
 
       expect(prisma.magicLinkRequest.update).toHaveBeenCalledWith({
         where: { id: 'request-1' },
@@ -593,7 +593,7 @@ describe('MagicLinkService', () => {
       });
       prisma.magicLinkRequest.update.mockResolvedValue({});
 
-      const result = await service.validateMagicLink('raw-magic-link-token');
+      const result = await service.validateMagicLink('dummy-magic-link-token');
 
       expect(result.valid).toBe(true);
       expect(result.userId).toBe(mockUser.id);
@@ -612,7 +612,7 @@ describe('MagicLinkService', () => {
       });
       prisma.magicLinkRequest.update.mockResolvedValue({});
 
-      await service.validateMagicLink('raw-magic-link-token');
+      await service.validateMagicLink('dummy-magic-link-token');
 
       expect(prisma.magicLinkRequest.update).toHaveBeenCalledWith({
         where: { id: 'request-1' },
@@ -723,13 +723,13 @@ describe('MagicLinkService', () => {
       const data = prisma.magicLinkRequest.create.mock.calls[0][0].data;
       expect(data.tokenHash).toBe(link?.tokenHash);
       expect(data.tokenHash).not.toBe('hashed-magic-link-token');
-      expect(data.tokenHash).not.toContain('raw-magic-link-token');
+      expect(data.tokenHash).not.toContain('dummy-magic-link-token');
       expect(mockThemeEmail.renderEmail).toHaveBeenCalledWith(
         realm,
         'magic-link',
         {
           magicLinkUrl: expect.stringMatching(
-            /\/realms\/test-realm\/login\/magic-link\?token=raw-magic-link-token$/,
+            /\/realms\/test-realm\/login\/magic-link\?token=dummy-magic-link-token$/,
           ),
         },
       );

@@ -282,7 +282,7 @@ describe('SecretsAtRestService key rotation', () => {
   it('a webhook secret neither key decrypts is unreadable, whatever it looks like', async () => {
     const { prisma, writes } = fakeDb({
       keyCheck: underOld,
-      webhooks: [{ id: 'w', secret: 'not-ciphertext-at-all' }],
+      webhooks: [{ id: 'w', secret: 'dummy-not-ciphertext' }],
     });
     await expect(
       new SecretsAtRestService(prisma as any, rotating).run(),

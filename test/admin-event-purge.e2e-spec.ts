@@ -86,7 +86,7 @@ describe('Purge of secrets recorded by older admin events (e2e)', () => {
     {
       before: {
         url: 'https://hooks.example.test',
-        secret: 'webhook-signing-secret',
+        secret: 'dummy-webhook-signing-secret',
         eventTypes: ['user.login'],
       },
       after: {
@@ -110,7 +110,7 @@ describe('Purge of secrets recorded by older admin events (e2e)', () => {
   ];
   const CLEAN: Row = { name: 'no secrets here', enabled: true };
   const PLAINTEXT =
-    /ldap-bind-password|siem-token|sso-secret|hcaptcha-secret|re_secret|twilio-secret|webhook-signing-secret|scim-password|patched/;
+    /ldap-bind-password|siem-token|sso-secret|hcaptcha-secret|re_secret|twilio-secret|dummy-webhook-signing-secret|scim-password|patched/;
 
   let legacyIds: string[] = [];
   let cleanId: string;
@@ -244,7 +244,7 @@ describe('Purge of secrets recorded by older admin events (e2e)', () => {
       .set('x-admin-api-key', TEST_ADMIN_API_KEY)
       .send({
         url: 'https://hooks.example.com/new',
-        secret: 'a-new-signing-secret',
+        secret: 'dummy-new-signing-secret',
         eventTypes: ['user.login'],
       })
       .expect(201);
@@ -258,6 +258,6 @@ describe('Purge of secrets recorded by older admin events (e2e)', () => {
     }
     expect(events).toHaveLength(1);
     expect(events[0].representation).toMatchObject({ secret: REDACTED });
-    expect(JSON.stringify(events)).not.toContain('a-new-signing-secret');
+    expect(JSON.stringify(events)).not.toContain('dummy-new-signing-secret');
   });
 });
