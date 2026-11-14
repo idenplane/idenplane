@@ -12,6 +12,19 @@ import { readdir, readFile } from 'fs/promises';
 const mockedReaddir = readdir as jest.MockedFunction<typeof readdir>;
 const mockedReadFile = readFile as jest.MockedFunction<typeof readFile>;
 
+/** readFile answers from `files`, keyed by path under themes/; else ENOENT. */
+function serveFiles(files: Record<string, string>) {
+  mockedReadFile.mockImplementation((async (path: unknown) => {
+    const rel = String(path)
+      .split('\\')
+      .join('/')
+      .split('/themes/')
+      .pop() as string;
+    if (rel in files) return files[rel];
+    throw Object.assign(new Error('ENOENT'), { code: 'ENOENT' });
+  }) as any);
+}
+
 describe('ThemeService', () => {
   let service: ThemeService;
 
@@ -106,14 +119,14 @@ describe('ThemeService', () => {
       mockedReaddir.mockResolvedValue([
         { name: 'idenplane', isDirectory: () => true } as any,
       ]);
-      mockedReadFile.mockResolvedValue(
-        JSON.stringify({
+      serveFiles({
+        'idenplane/theme.json': JSON.stringify({
           name: 'idenplane',
           displayName: 'Idenplane',
           description: 'Default',
           colors: { primaryColor: '#2563eb' },
         }),
-      );
+      });
 
       await service.onModuleInit();
 
@@ -124,7 +137,75 @@ describe('ThemeService', () => {
         displayName: 'Idenplane',
         description: 'Default',
         colors: { primaryColor: '#2563eb' },
+        warnings: [],
       });
+    });
+  });
+
+  describe('login template warnings', () => {
+    const GOOD =
+      '{{#unless passwordFormHidden}}<form><input name="password"></form>{{/unless}}';
+    const IGNORES_FLAG =
+      '{{!-- passkeyOnly --}}<form><input name="password"></form>';
+
+    const theme = (name: string, parent: string | null = null) =>
+      JSON.stringify({ name, displayName: name, parent, colors: {} });
+
+    async function load(files: Record<string, string>) {
+      const dirs = [...new Set(Object.keys(files).map((f) => f.split('/')[0]))];
+      mockedReaddir.mockResolvedValue(
+        dirs.map((name) => ({ name, isDirectory: () => true })) as any,
+      );
+      serveFiles(files);
+      await service.onModuleInit();
+    }
+
+    const warningsOf = (name: string) =>
+      service.getAvailableThemes().find((t) => t.name === name)?.warnings;
+
+    it('warns about a theme whose own login.hbs ignores passkeyOnly and passwordFormHidden', async () => {
+      await load({
+        'brand/theme.json': theme('brand', 'base'),
+        'brand/login/templates/login.hbs': IGNORES_FLAG,
+        'base/theme.json': theme('base'),
+        'base/login/templates/login.hbs': GOOD,
+      });
+      expect(warningsOf('brand')).toEqual([
+        expect.stringMatching(/does not read passkeyOnly/),
+      ]);
+      expect(warningsOf('base')).toEqual([]);
+    });
+
+    it('does not warn about a theme that inherits a login.hbs honouring the flag', async () => {
+      await load({
+        'child/theme.json': theme('child', 'base'),
+        'child/login/resources/css/x.css': '',
+        'base/theme.json': theme('base'),
+        'base/login/templates/login.hbs': GOOD,
+      });
+      expect(warningsOf('child')).toEqual([]);
+    });
+
+    it('lists the warning of an inherited login.hbs, naming the theme that owns it', async () => {
+      await load({
+        'child/theme.json': theme('child', 'brand'),
+        'brand/theme.json': theme('brand'),
+        'brand/login/templates/login.hbs': IGNORES_FLAG,
+      });
+      expect(warningsOf('child')).toEqual([
+        expect.stringMatching(/^Inherited from theme "brand": login.hbs/),
+      ]);
+    });
+
+    it('never fails loading: a template that does not parse is a warning too', async () => {
+      await load({
+        'broken/theme.json': theme('broken'),
+        'broken/login/templates/login.hbs': '{{#if passkeyOnly}}',
+      });
+      expect(service.getTheme('broken')).toBeDefined();
+      expect(warningsOf('broken')).toEqual([
+        expect.stringMatching(/does not parse/),
+      ]);
     });
   });
 
@@ -286,6 +367,36 @@ describe('ThemeService', () => {
       );
 
       await service.onModuleInit();
+    });
+
+    it('inherits the colours a theme leaves out from its parent, then the defaults', async () => {
+      mockedReaddir.mockResolvedValue([
+        { name: 'base', isDirectory: () => true } as any,
+        { name: 'child', isDirectory: () => true } as any,
+      ]);
+      serveFiles({
+        'base/theme.json': JSON.stringify({
+          name: 'base',
+          colors: { primaryColor: '#111111', cardColor: '#222222' },
+        }),
+        'child/theme.json': JSON.stringify({
+          name: 'child',
+          parent: 'base',
+          colors: { primaryColor: '#333333' },
+        }),
+      });
+      await service.onModuleInit();
+
+      const colors = service.resolveColors('child', { theme: {} } as any);
+      expect(colors.primaryColor).toBe('#333333');
+      expect(colors.cardColor).toBe('#222222');
+      expect(colors.textColor).toBe('#1a1a2e');
+      expect(colors.primaryHoverColor).toMatch(/^#[0-9a-f]{6}$/);
+
+      // No colours at all: the defaults, never a crash.
+      expect(
+        service.resolveColors('missing', { theme: {} } as any).primaryColor,
+      ).toBe('#2563eb');
     });
 
     it('should return theme colors with defaults', () => {

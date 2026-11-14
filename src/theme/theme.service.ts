@@ -8,6 +8,7 @@ import type { Prisma, Realm } from '@prisma/client';
 import { join } from 'path';
 import { readdir, readFile } from 'fs/promises';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { lintLoginTemplate } from './theme-lint.js';
 import type {
   ThemeColors,
   ThemeDefinition,
@@ -34,6 +35,8 @@ function darkenHex(hex: string, percent: number): string {
 export class ThemeService implements OnModuleInit {
   private readonly logger = new Logger(ThemeService.name);
   private themes = new Map<string, ThemeDefinition>();
+  /** Template warnings per theme, found when the themes are loaded. */
+  private warnings = new Map<string, string[]>();
   private readonly themesDir = join(process.cwd(), 'themes');
 
   constructor(private readonly prisma: PrismaService) {}
@@ -84,11 +87,66 @@ export class ThemeService implements OnModuleInit {
       }
 
       this.logger.log(`Loaded ${this.themes.size} theme(s)`);
+      await this.lintThemes();
     } catch {
       this.logger.warn(
         `Themes directory not found at ${this.themesDir}, using defaults`,
       );
     }
+  }
+
+  /**
+   * Checks the login template each theme renders: its own `login.hbs`, or
+   * the one it inherits along its parent chain (the template lookup of
+   * ThemeTemplateService). Findings are warnings, logged once for the theme
+   * that owns the template and listed for every theme that uses it.
+   */
+  private async lintThemes(): Promise<void> {
+    const own = new Map<string, string[] | null>();
+    const lintOwn = async (name: string): Promise<string[] | null> => {
+      const cached = own.get(name);
+      if (cached !== undefined) return cached;
+      let source: unknown;
+      try {
+        source = await readFile(
+          join(this.themesDir, name, 'login', 'templates', 'login.hbs'),
+          'utf-8',
+        );
+      } catch {
+        source = undefined;
+      }
+      // null: the theme has no login.hbs of its own and inherits one.
+      const result =
+        typeof source === 'string' ? lintLoginTemplate(source) : null;
+      own.set(name, result);
+      if (result?.length) {
+        this.logger.warn(`Theme "${name}": ${result.join(' ')}`);
+      }
+      return result;
+    };
+
+    const warnings = new Map<string, string[]>();
+    for (const name of this.themes.keys()) {
+      for (const owner of this.getInheritanceChain(name)) {
+        const found = await lintOwn(owner);
+        if (found === null) continue;
+        if (found.length) {
+          warnings.set(
+            name,
+            owner === name
+              ? found
+              : found.map((w) => `Inherited from theme "${owner}": ${w}`),
+          );
+        }
+        break;
+      }
+    }
+    this.warnings = warnings;
+  }
+
+  /** Template warnings of a theme (empty when there are none). */
+  getThemeWarnings(name: string): string[] {
+    return this.warnings.get(name) ?? [];
   }
 
   getTheme(name: string): ThemeDefinition | undefined {
@@ -102,6 +160,7 @@ export class ThemeService implements OnModuleInit {
         displayName,
         description,
         colors,
+        warnings: this.getThemeWarnings(name),
       }),
     );
   }
@@ -150,8 +209,18 @@ export class ThemeService implements OnModuleInit {
    * Resolves colors for a given theme with per-realm overrides.
    */
   resolveColors(themeName: string, realm: Realm): ResolvedTheme {
-    const baseTheme = this.themes.get(themeName);
-    const baseColors = baseTheme?.colors ?? this.defaultColors;
+    // Defaults, then each theme from the root of the chain to this one: a
+    // theme sets only the colours it changes and inherits the rest.
+    const baseColors: ThemeColors = { ...this.defaultColors };
+    for (const name of [...this.getInheritanceChain(themeName)].reverse()) {
+      const colors = (this.themes.get(name)?.colors ?? {}) as Partial<
+        Record<keyof ThemeColors, unknown>
+      >;
+      for (const key of Object.keys(baseColors) as (keyof ThemeColors)[]) {
+        const value = colors[key];
+        if (typeof value === 'string' && value) baseColors[key] = value;
+      }
+    }
 
     // Per-realm overrides from the theme JSON field
     const realmTheme = (realm.theme ?? {}) as Record<string, unknown>;
