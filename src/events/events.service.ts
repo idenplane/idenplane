@@ -1,6 +1,7 @@
 import { Injectable, Logger, Optional } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { redactAdminRepresentation } from './admin-event-redaction.js';
 import type {
   LoginEventTypeValue,
   OperationTypeValue,
@@ -132,9 +133,13 @@ export class EventsService {
           operationType: params.operationType,
           resourceType: params.resourceType,
           resourcePath: params.resourcePath,
+          // Every writer (the admin API interceptor, SCIM, auth flows,
+          // impersonation) is redacted here, so none can record a secret.
           representation:
             params.representation !== undefined
-              ? (params.representation as unknown as Prisma.InputJsonValue)
+              ? (redactAdminRepresentation(
+                  params.representation,
+                ) as Prisma.InputJsonValue)
               : undefined,
           ipAddress: params.ipAddress,
         },
