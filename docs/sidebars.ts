@@ -177,6 +177,11 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'doc',
+          id: 'guides/custom-themes',
+          label: 'Custom Themes',
+        },
+        {
+          type: 'doc',
           id: 'guides/webhooks',
           label: 'Webhooks',
         },
