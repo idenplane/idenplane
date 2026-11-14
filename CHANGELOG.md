@@ -9,6 +9,35 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+**Before you upgrade:**
+- **Assign realms to your realm-admins.** A `realm-admin` now manages only the realms a super-admin assigns to it. **After the upgrade, existing realm-admins have no realms**, so they can sign in but can't read or change any realm. Assign their realms right after upgrading: Console → **Admin Accounts**, or `PUT /admin/admin-accounts/{userId}/realms` with `{"realms": [...]}`. The master realm can't be assigned. Use `super-admin` for an admin who should manage every realm.
+- **`view-only` admins lose change access.** Until now they could create, change and delete most things in every realm. They keep read access to every realm, except server-wide pages (plugins, upgrade, system version, metrics) and realm export, which are now super-admin only.
+- **Scripts that use the admin JWT of a non-super-admin may now get `403`.** Give the account the right role or realm assignment. The admin API key is unchanged and keeps full access.
+
+### Security
+- **Admin roles are enforced on every admin route.** Since 0.8.1 every admin route has required admin credentials, but most had no role check. A `view-only` admin could create, change and delete clients, roles, groups, organizations, NHI identities and more, and any admin could approve registrations. A global authorization step now runs right after authentication, on exactly the routes authentication covers, so new routes are covered by default:
+  - reads (`GET`, `HEAD`, `OPTIONS`): any admin role, but a realm-admin only in its realms;
+  - changes: `super-admin`, or a realm-admin in its realms;
+  - server-wide routes, and any route without a recognisable realm parameter: `super-admin` only. These are creating, importing, exporting and deleting realms; plugins; upgrade; system version; metrics; migration imports; the setup wizard; and admin accounts;
+  - reads that reveal secrets need change rights;
+  - the admin's own account (`GET /admin/auth/me`, the realm list filtered to what you can read, sign-out) is open to every admin;
+  - `@RequireAdminRoles` still applies, on handlers and controllers, and can only make a route stricter;
+  - the registration admin routes under `/realms/{realm}/registration` follow the same realm rules.
+
+  Roles and realm assignments are read from the database on every request. Taking a role away, removing an assignment or disabling an admin applies to the next request, even with a live token. A realm that doesn't exist answers `403` to anyone but a super-admin, so realm names can't be probed. A fitness test fails when an admin route has no resolvable policy. See [Admin Roles](https://idenplane.com/getting-started/admin-roles).
+- **Realm-admins are scoped to assigned realms.** A new `admin_realm_assignments` table stores them. A super-admin manages it through `/admin/admin-accounts` and the console's **Admin Accounts** page. A database trigger and the API both refuse the master realm, which would let a realm-admin grant itself `super-admin`. Assignments survive a realm rename and an overwriting realm import. They are never exported.
+- **Clearing login events or NHI audit logs is super-admin only**, so a realm-admin can't erase the audit trail of the realm it changes.
+- **Realm-admins can manage users, and view-only admins can read them.** The users and theme routes required a role named `admin`, which doesn't exist, so they were super-admin only in practice. Deleting a user or a theme stays super-admin only.
+
+### Fixed
+- `GET /admin/auth/me` always answered `401`, because it was marked public and so never authenticated. It now returns the admin's roles and realm scope: `{ userId, username, kind, roles, superAdmin, readAllRealms, writeAllRealms, managedRealms }`.
+
+### Changed
+- The admin console reads the signed-in admin's role and scope:
+  - it hides server-wide pages from everyone but super-admins;
+  - it marks realms you can't change as **Read only**, and hides or disables their create, save and delete actions;
+  - it shows a notice on any `403` instead of failing silently, without signing you out.
+
 ## [0.8.1] - 2026-11-14
 
 A security release. It closes a critical authorization bypass of the admin API, which affects every release since 0.1.0. It also fixes the two vulnerabilities EQSTLab reported: the unauthenticated setup wizard, and the remaining fallback to `admin`/`admin` bootstrap credentials outside production. Upgrade as soon as you can, and read *Before you upgrade*.
