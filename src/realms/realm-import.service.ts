@@ -191,8 +191,32 @@ export class RealmImportService {
                 `Realm '${realmName}' already exists. Use overwrite option to replace it.`,
               );
             }
+            // Realm-admin assignments are instance access control, not realm
+            // data: they survive the replacement instead of cascading away.
+            const admins = await tx.adminRealmAssignment.findMany({
+              where: { realmId: existing.id },
+              select: { userId: true, createdBy: true },
+            });
             await tx.realm.delete({ where: { id: existing.id } });
             replacedId = existing.id;
+            const out = await write(tx);
+            if (admins.length > 0) {
+              const replacement = await tx.realm.findUnique({
+                where: { name: realmName },
+                select: { id: true },
+              });
+              if (replacement) {
+                await tx.adminRealmAssignment.createMany({
+                  data: admins.map((a) => ({
+                    userId: a.userId,
+                    realmId: replacement.id,
+                    createdBy: a.createdBy,
+                  })),
+                  skipDuplicates: true,
+                });
+              }
+            }
+            return out;
           }
           return write(tx);
         },

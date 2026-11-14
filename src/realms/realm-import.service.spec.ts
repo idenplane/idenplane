@@ -209,6 +209,41 @@ describe('RealmImportService', () => {
       );
     });
 
+    it('keeps the realm-admin assignments of a replaced realm', async () => {
+      let deleted = false;
+      prisma.realm.findUnique.mockImplementation(() =>
+        Promise.resolve(
+          deleted
+            ? { id: 'replacement', name: 'imported-realm' }
+            : { id: 'existing', name: 'imported-realm' },
+        ),
+      );
+      prisma.realm.delete.mockImplementation(() => {
+        deleted = true;
+        return Promise.resolve({});
+      });
+      prisma.adminRealmAssignment.findMany.mockResolvedValue([
+        { userId: 'admin-1', createdBy: 'api-key:admin' },
+      ]);
+
+      await service.importRealm(validPayload, { overwrite: true });
+
+      expect(prisma.adminRealmAssignment.findMany).toHaveBeenCalledWith({
+        where: { realmId: 'existing' },
+        select: { userId: true, createdBy: true },
+      });
+      expect(prisma.adminRealmAssignment.createMany).toHaveBeenCalledWith({
+        data: [
+          {
+            userId: 'admin-1',
+            realmId: 'replacement',
+            createdBy: 'api-key:admin',
+          },
+        ],
+        skipDuplicates: true,
+      });
+    });
+
     it('creates nothing outside the transaction', async () => {
       await service.importRealm(validPayload);
 

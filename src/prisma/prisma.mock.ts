@@ -458,6 +458,11 @@ export function createMockPrismaService(): MockPrismaService {
       update: jest.fn(),
       delete: jest.fn(),
     },
+    adminRealmAssignment: {
+      findMany: jest.fn().mockResolvedValue([]),
+      createMany: jest.fn(),
+      deleteMany: jest.fn(),
+    },
     $connect: jest.fn(),
     $disconnect: jest.fn(),
     onBeforeDisconnect: jest.fn(),
