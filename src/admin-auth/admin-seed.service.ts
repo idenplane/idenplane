@@ -30,7 +30,7 @@ const INSECURE_ADMIN_PASSWORDS = new Set([
 const GENERATED_ADMIN_PASSWORD_BYTES = 24;
 
 /** The initial admin password, and whether it was generated (not configured). */
-interface InitialAdminPassword {
+interface SeedPassword {
   password: string;
   generated: boolean;
 }
@@ -188,7 +188,7 @@ export class AdminSeedService implements OnApplicationBootstrap {
    * `npm run start:prod` does not set NODE_ENV, so a deployment run from
    * source takes the second path: it gets a random password, never `admin`.
    */
-  private initialAdminPassword(): InitialAdminPassword {
+  private initialAdminPassword(): SeedPassword {
     const configured = this.config.get<string>('ADMIN_PASSWORD');
     const isInsecure =
       !!configured && INSECURE_ADMIN_PASSWORDS.has(configured.toLowerCase());

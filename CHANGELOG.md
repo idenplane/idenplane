@@ -9,6 +9,10 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-11-14
+
+A security release. It closes a critical authorization bypass of the admin API, which affects every release since 0.1.0. It also fixes the two vulnerabilities EQSTLab reported: the unauthenticated setup wizard, and the remaining fallback to `admin`/`admin` bootstrap credentials outside production. Upgrade as soon as you can, and read *Before you upgrade*.
+
 **Before you upgrade:**
 - **The setup wizard now needs an admin login.** Every `/setup-wizard/*` endpoint takes the Admin API credentials (an admin JWT or `x-admin-api-key`) and the `super-admin` role. Scripts that called it anonymously get `401`. The console page moved to `/console/setup` and asks you to sign in first. Once setup is completed or skipped, every wizard write answers `409`.
 - **`ADMIN_PASSWORD` no longer defaults to `admin`.** This only matters for a first start on an empty database. Outside production, an unset value now gets a random password that the first start prints once in its log, and `admin` or a documented placeholder stops the start unless `ALLOW_INSECURE_ADMIN_PASSWORD=true`. Existing admins and passwords are not changed.
@@ -22,7 +26,7 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
   - `state` and the write responses are built from an allowlist: never the admin's password hash or a client secret, and the SMTP password only as the placeholder;
   - the unused `WizardRequiredGuard` is removed.
   The console's wizard moved inside the signed-in routes (`/console/setup`; `/setup` redirects there), checks with the server first, and says setup is already complete instead of showing the form.
-- **Admin actions could be reached without credentials (affects 0.1.0 to 0.8.0).** `AdminApiKeyGuard` only enforced admin credentials when the request path began with `/admin`, compared case-sensitively. Two kinds of admin actions were open as a result:
+- **Admin actions could be reached without credentials (GHSA-cxj4-xh78-x373; affects 0.1.0 to 0.8.0).** `AdminApiKeyGuard` only enforced admin credentials when the request path began with `/admin`, compared case-sensitively. Two kinds of admin actions were open as a result:
   - **The admin API through a differently cased path.** Express matches routes case-insensitively, so such a request reached the admin handlers while the guard let it through. Handlers without a role requirement (most of the admin API) then ran with no authentication.
   - **The registration admin actions (0.3.0 to 0.8.0).** They live under `/realms/{realm}/registration`, not `/admin`, so their explicit `@UseGuards(AdminApiKeyGuard)` did nothing. Anyone could list pending registrations, approve or reject them, and list, create, change or delete the realm's registration fields.
 
