@@ -119,6 +119,21 @@ export default function RegistrationSettingsPage() {
                 />
                 <span className="ml-2 text-sm text-muted">Require email verification</span>
               </label>
+
+              {realm?.registrationAllowed && name && (
+                <p className="text-sm text-subtle">
+                  Sign-up page:{' '}
+                  <a
+                    href={`/console/register/${encodeURIComponent(name)}`}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="text-accent underline"
+                  >
+                    {`/console/register/${name}`}
+                  </a>{' '}
+                  (opens the realm's hosted sign-up page, with CAPTCHA, terms and custom attributes).
+                </p>
+              )}
             </div>
           </div>
 
