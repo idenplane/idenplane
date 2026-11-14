@@ -205,9 +205,9 @@ describe('Setup wizard access control (e2e)', () => {
 
     it('cannot be reached through a differently cased path', async () => {
       const res = await http().get('/SETUP-WIZARD/state');
-      expect([401, 404]).toContain(res.status);
+      expect(res.status).toBe(401);
       const complete = await http().post('/Setup-Wizard/complete');
-      expect([401, 404]).toContain(complete.status);
+      expect(complete.status).toBe(401);
     });
 
     it('creates no realm, user or wizard answers', async () => {
@@ -490,8 +490,33 @@ describe('Admin API path casing (e2e)', () => {
     await ctx.cleanup();
   });
 
-  it('does not serve admin routes through a differently cased prefix', async () => {
-    const res = await request(ctx.app.getHttpServer()).get('/ADMIN/realms');
-    expect(res.status).not.toBe(200);
+  // Express routes case-insensitively, so these paths reach admin handlers.
+  // The client handlers carry no role decorator: the guard's prefix check
+  // is their only protection.
+  it.each([
+    '/ADMIN/realms',
+    '/Admin/realms/master',
+    '/ADMIN/realms/master/clients',
+    '/admin/REALMS/master/clients',
+    '/aDmIn/realms/master/users',
+  ])('answers 401 to %s without credentials', async (path) => {
+    const res = await request(ctx.app.getHttpServer()).get(path);
+    expect(res.status).toBe(401);
+  });
+
+  it('answers 401 to a differently cased admin write without credentials', async () => {
+    const before = await ctx.prisma.realm.count();
+    const res = await request(ctx.app.getHttpServer())
+      .post('/ADMIN/realms')
+      .send({ name: 'wizard-e2e-casing', enabled: true });
+    expect(res.status).toBe(401);
+    expect(await ctx.prisma.realm.count()).toBe(before);
+  });
+
+  it('does not serve the admin API under the versioned prefix without credentials', async () => {
+    const res = await request(ctx.app.getHttpServer()).get(
+      '/api/v1/admin/realms',
+    );
+    expect([401, 404]).toContain(res.status);
   });
 });

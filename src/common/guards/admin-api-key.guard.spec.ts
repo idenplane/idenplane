@@ -176,6 +176,29 @@ describe('AdminApiKeyGuard', () => {
       'Invalid or missing admin credentials',
     );
   });
+  describe('differently cased /admin prefixes', () => {
+    // Express matches routes case-insensitively: these reach admin handlers.
+    it.each(['/ADMIN/realms', '/Admin/realms/x/clients', '/aDmIn', '/ADMIN/'])(
+      'rejects %s without credentials',
+      async (path) => {
+        reflector.getAllAndOverride.mockReturnValue(false);
+        configService.get.mockReturnValue('super-secret-key');
+        const ctx = createMockExecutionContext({}, path);
+
+        await expect(guard.canActivate(ctx)).rejects.toThrow(
+          UnauthorizedException,
+        );
+      },
+    );
+
+    it('still leaves /administrator-like non-admin paths alone', async () => {
+      reflector.getAllAndOverride.mockReturnValue(false);
+      const ctx = createMockExecutionContext({}, '/ADMINISTRATOR');
+
+      await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    });
+  });
+
   describe('@RequireAdminAuth() outside /admin', () => {
     function metadata(values: Record<string, boolean>) {
       reflector.getAllAndOverride.mockImplementation(

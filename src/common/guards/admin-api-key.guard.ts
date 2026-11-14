@@ -39,8 +39,11 @@ export class AdminApiKeyGuard implements CanActivate {
 
     // Enforce auth on admin routes (/admin exactly, or /admin/...) and on
     // any route that opts in with @RequireAdminAuth() (the setup wizard).
-    const isAdminRoute =
-      request.path === '/admin' || request.path.startsWith('/admin/');
+    // Express matches routes case-insensitively, so `/ADMIN/realms` reaches
+    // the `/admin/realms` handler while `request.path` keeps its casing:
+    // compare in lower case, or the prefix check is bypassed.
+    const path = request.path.toLowerCase();
+    const isAdminRoute = path === '/admin' || path.startsWith('/admin/');
     const requiresAdminAuth =
       this.reflector.getAllAndOverride<boolean>(REQUIRE_ADMIN_AUTH_KEY, [
         context.getHandler(),
