@@ -175,6 +175,12 @@ describe('key ring', () => {
     });
   });
 
+  it('treats a non-string value as no envelope', () => {
+    for (const value of [['ek1.'], { length: 40 }, 42, null, undefined]) {
+      expect(parseEnvelope(value as unknown as string)).toBeUndefined();
+    }
+  });
+
   describe('decryption', () => {
     it('reads legacy ciphertext with the current key', () => {
       const legacy = legacyEncrypt('key-a', 'salt-a', 'old-secret');

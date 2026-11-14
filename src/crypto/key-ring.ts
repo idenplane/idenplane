@@ -102,6 +102,9 @@ export function keyRingFromEnv(env: NodeJS.ProcessEnv): KeyRing {
 export function parseEnvelope(
   value: string,
 ): { keyId: string; aad: Buffer; packed: Buffer } | undefined {
+  // Values can come from request bodies (imports, admin APIs); an array or
+  // object must never be treated as an envelope.
+  if (typeof value !== 'string') return undefined;
   if (!value.startsWith(ENVELOPE_PREFIX)) return undefined;
   const dot = ENVELOPE_PREFIX.length + KEY_ID_LENGTH;
   if (value.charAt(dot) !== '.') return undefined;
