@@ -41,7 +41,10 @@ describe('parseSingleCertificatePem', () => {
     expect(() => parseSingleCertificatePem(hostile)).toThrow(
       CertificatePemError,
     );
-    expect(Date.now() - started).toBeLessThan(200);
+    // Linear parsing takes milliseconds; the backtracking regex it replaced
+    // took seconds to minutes on this input. The generous bound keeps the
+    // test meaningful on slow, busy CI machines (WSL ran it at over 200 ms).
+    expect(Date.now() - started).toBeLessThan(2000);
   });
 
   it.each([

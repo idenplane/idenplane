@@ -68,6 +68,21 @@ model EncryptionKeyCheck {
   @@map("encryption_key_check")
 }
 
+/// Progress of a one-off data task run at start-up, one row per task
+/// (e.g. AdminEventPurgeService): lets it resume, and skip once done.
+model MaintenanceTask {
+  id               String   @id
+  /// The task version that last completed (0: never).
+  completedVersion Int      @default(0) @map("completed_version")
+  /// Last row id of a walk in progress, if any.
+  cursor           String?
+  /// The task version that walk belongs to.
+  cursorVersion    Int      @default(0) @map("cursor_version")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("maintenance_tasks")
+}
+
 // ─── REALMS ───────────────────────────────────────────────
 
 model Realm {

@@ -872,6 +872,7 @@ export const EXCLUDED_MODELS: Record<string, string> = {
   WizardState: 'instance setup wizard, not realm data',
   EncryptionKeyCheck:
     'proves which key this instance encrypts secrets with; never leaves the instance',
+  MaintenanceTask: 'progress of instance start-up data tasks, not realm data',
   InstalledPlugin: 'instance-wide plugin registry, not realm data',
   UpgradeAuditLog: 'instance upgrade log, not realm data',
   RateLimitEntry: 'instance-wide rate limit counters',

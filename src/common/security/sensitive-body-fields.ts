@@ -30,4 +30,7 @@ export const SENSITIVE_BODY_FIELDS = [
   // LDAP bind password and audit stream headers (usually an auth token).
   'bindCredential',
   'httpHeaders',
+  // A webhook's signing secret and an NHI credential's private key.
+  'secret',
+  'privateKeyPem',
 ] as const;
