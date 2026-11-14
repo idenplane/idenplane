@@ -34,7 +34,20 @@ The TLS handshake proves the client holds the key. Whether the certificate is tr
 
 ### Direct: Idenplane's certificate listener
 
-Idenplane opens a second HTTPS port that asks every client for a certificate. It serves only the endpoints a client needs (discovery, token, introspection, revocation, userinfo, device authorization, JWKS, and the MFA SMS endpoint of the `mfa_otp` grant); everything else is 404 there, the session events WebSocket included.
+Idenplane opens a second HTTPS port that asks every client for a certificate. It serves only what a client needs: the endpoints for discovery, token, introspection, revocation, userinfo, device authorization, JWKS and the MFA SMS step of the `mfa_otp` grant, and the session events WebSocket (`/ws/events`). Everything else is 404 there, the admin API and login pages included.
+
+The WebSocket is upgraded on this port for the exact path `/ws/events` only (with its `realm` and `token` query parameters). An upgrade for any other path, an OAuth endpoint included, is refused with `404` before any token is read. The gateway reads the client certificate from the TLS handshake, as for the HTTP endpoints, so a certificate-bound token works here without a proxy:
+
+```js
+import WebSocket from 'ws';
+
+const ws = new WebSocket(
+  `wss://mtls.idp.example.com:8443/ws/events?realm=my-realm&token=${accessToken}`,
+  { cert: clientCertPem, key: clientKeyPem }, // the certificate the token is bound to
+);
+```
+
+On shutdown, open sockets get a close frame with code `1001` (going away), then the listener closes.
 
 ```bash
 MTLS_ENABLED=true
@@ -194,7 +207,7 @@ Every access token the client then gets from the token endpoint, with any grant 
 
 ### Where the binding is enforced
 
-Idenplane checks the binding wherever it accepts an access token: **userinfo** (GET and POST), the **session events WebSocket** (`/ws/events`) and **admin API bearer authentication**. The certificate must reach Idenplane the same way as for the token request: through the [certificate listener](#direct-idenplanes-certificate-listener) or a [trusted proxy's header](#behind-a-proxy-that-terminates-tls). The certificate listener serves userinfo but not the WebSocket or the admin API, so those see a certificate only through a trusted proxy.
+Idenplane checks the binding wherever it accepts an access token: **userinfo** (GET and POST), the **session events WebSocket** (`/ws/events`) and **admin API bearer authentication**. The certificate must reach Idenplane the same way as for the token request: through the [certificate listener](#direct-idenplanes-certificate-listener) or a [trusted proxy's header](#behind-a-proxy-that-terminates-tls). The certificate listener serves userinfo and the WebSocket, but not the admin API, which sees a certificate only through a trusted proxy.
 
 | Request with a bound token | Response |
 |---|---|
@@ -202,7 +215,7 @@ Idenplane checks the binding wherever it accepts an access token: **userinfo** (
 | No certificate, or a header from an untrusted peer | `401` `{"error":"invalid_token"}` |
 | A different certificate | `401` `{"error":"invalid_token"}` |
 
-Each `401` carries `WWW-Authenticate: Bearer error="invalid_token", error_description="…"` (RFC 6750 §3). Tokens of clients without the flag are not affected, and their requests never read a certificate.
+On the WebSocket, a refused token is a plain `HTTP/1.1 401 Unauthorized` answer to the upgrade, with no body. Each HTTP `401` carries `WWW-Authenticate: Bearer error="invalid_token", error_description="…"` (RFC 6750 §3). Tokens of clients without the flag are not affected, and their requests never read a certificate.
 
 Your own APIs must check the binding too. With the JavaScript SDK, pass the presented certificate to `verifyToken`:
 

@@ -4,6 +4,7 @@ jest.mock('../crypto/jwk.service.js', () => ({
   JwkService: jest.fn(),
 }));
 
+import { EventEmitter } from 'node:events';
 import { WebSocket } from 'ws';
 import { SessionEventsGateway } from './session-events.gateway.js';
 import {
@@ -306,6 +307,65 @@ describe('SessionEventsGateway', () => {
       });
 
       expect(socket.send).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('servers and upgrades', () => {
+    function fakeSocket() {
+      return Object.assign(new EventEmitter(), {
+        destroy: jest.fn(),
+        end: jest.fn(),
+      });
+    }
+
+    it('registers one upgrade handler per server, however often attached', () => {
+      const server = new EventEmitter();
+      service.attach(server);
+      service.attach(server);
+      expect(server.listenerCount('upgrade')).toBe(1);
+    });
+
+    it('serves several servers with one WebSocketServer', () => {
+      const wss = (service as any).wss;
+      const a = new EventEmitter();
+      const b = new EventEmitter();
+      service.attach(a);
+      service.attach(b);
+      expect(a.listenerCount('upgrade')).toBe(1);
+      expect(b.listenerCount('upgrade')).toBe(1);
+      expect((service as any).wss).toBe(wss);
+    });
+
+    it('destroys an upgrade for any other path without authenticating', () => {
+      const socket = fakeSocket();
+      service.handleUpgrade(
+        { url: '/ws/other?token=t&realm=r' } as any,
+        socket as any,
+        Buffer.alloc(0),
+      );
+      expect(socket.destroy).toHaveBeenCalled();
+      expect(prisma.realm.findUnique).not.toHaveBeenCalled();
+    });
+
+    it('answers 401 and upgrades nothing when the token is refused', async () => {
+      prisma.realm.findUnique.mockResolvedValue(null);
+      const socket = fakeSocket();
+      service.handleUpgrade(
+        { url: '/ws/events?token=t&realm=nope' } as any,
+        socket as any,
+        Buffer.alloc(0),
+      );
+      await new Promise((resolve) => setImmediate(resolve));
+      expect(socket.end).toHaveBeenCalledWith(
+        expect.stringMatching(/^HTTP\/1\.1 401 Unauthorized\r\n/),
+      );
+    });
+
+    it('sends every open socket a going-away close on shutdown', () => {
+      const ws = { close: jest.fn() };
+      (service as any).connections.set('user-1', new Set([ws]));
+      service.onModuleDestroy();
+      expect(ws.close).toHaveBeenCalledWith(1001, 'Server shutting down');
     });
   });
 });
