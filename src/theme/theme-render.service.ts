@@ -67,6 +67,76 @@ function withoutReservedLocals(
   return clean;
 }
 
+/** Extra origins, per directive, one themed page may load from. */
+export type ThemeCspSources = Partial<
+  Record<
+    'script-src' | 'frame-src' | 'style-src' | 'connect-src',
+    readonly string[]
+  >
+>;
+
+/**
+ * Only https origins, optionally with a leading `*.` host wildcard and a
+ * path — never a keyword such as 'unsafe-inline', and never anything that
+ * could end the directive (`;`, `,`, whitespace or quotes).
+ */
+function isSafeCspOrigin(source: string): boolean {
+  if (!source.startsWith('https://')) return false;
+  for (const ch of source) {
+    if (ch === ';' || ch === ',' || ch === "'" || ch === '"' || ch <= ' ') {
+      return false;
+    }
+  }
+  return true;
+}
+
+/**
+ * The CSP of a themed page. This header replaces the one helmet sets in
+ * main.ts, so it carries helmet's protective directives itself:
+ *
+ * - `frame-ancestors 'none'`: no themed page (login, registration,
+ *   consent, account, device) is ever framed, so none may be: this stops
+ *   clickjacking. helmet's own default is `'self'`; nothing in the server
+ *   or the admin console frames these pages (the theme builder previews
+ *   with an `srcdoc` iframe, not a served page), so the stricter value
+ *   applies.
+ * - `object-src 'none'`, `base-uri 'self'` and `script-src-attr 'none'`,
+ *   exactly as helmet sets them.
+ *
+ * `form-action 'self'` is deliberately NOT set, although helmet sets it
+ * globally. Chrome applies form-action to every redirect that follows a
+ * form submission, so the login form's POST → 302 to the client's
+ * `redirect_uri` (another origin) would be blocked and sign-in would break.
+ *
+ * Without `extra` it is exactly the base policy; `extra` appends origins to
+ * the named directives (a `frame-src` is added only when a page asks for
+ * one, as frames otherwise fall back to default-src 'self').
+ */
+export function buildThemeCsp(
+  scriptNonce: string,
+  extra?: ThemeCspSources,
+): string {
+  const add = (directive: keyof ThemeCspSources): string => {
+    const sources = (extra?.[directive] ?? []).filter(isSafeCspOrigin);
+    return sources.length ? ` ${sources.join(' ')}` : '';
+  };
+  const directives = [
+    "default-src 'self'",
+    `script-src 'self' 'nonce-${scriptNonce}'${add('script-src')}`,
+    "script-src-attr 'none'",
+    `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com${add('style-src')}`,
+    "font-src 'self' https://fonts.gstatic.com",
+    "img-src 'self' data: blob:",
+    `connect-src 'self'${add('connect-src')}`,
+    "object-src 'none'",
+    "base-uri 'self'",
+    "frame-ancestors 'none'",
+  ];
+  const frames = add('frame-src');
+  if (frames) directives.push(`frame-src 'self'${frames}`);
+  return directives.join('; ');
+}
+
 @Injectable()
 export class ThemeRenderService {
   constructor(
@@ -86,6 +156,8 @@ export class ThemeRenderService {
    * @param data - Page-specific template data (form fields, errors, etc.)
    * @param req - Optional Express request object used to detect locale from
    *              Accept-Language header or `?lang=` query parameter.
+   * @param options - `cspSources` adds origins to this page's CSP only
+   *              (e.g. a CAPTCHA provider on the registration page).
    */
   render(
     res: Response,
@@ -94,6 +166,7 @@ export class ThemeRenderService {
     templateName: string,
     data: Record<string, unknown>,
     req?: Request,
+    options?: { cspSources?: ThemeCspSources },
   ): void {
     const themeName = this.themeService.getRealmThemeName(realm, themeType);
     const templatePath = this.templateService.resolve(
@@ -152,14 +225,7 @@ export class ThemeRenderService {
     const scriptNonce = randomBytes(16).toString('base64');
     res.setHeader(
       'Content-Security-Policy',
-      [
-        "default-src 'self'",
-        `script-src 'self' 'nonce-${scriptNonce}'`,
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-        "font-src 'self' https://fonts.gstatic.com",
-        "img-src 'self' data: blob:",
-        "connect-src 'self'",
-      ].join('; '),
+      buildThemeCsp(scriptNonce, options?.cspSources),
     );
 
     res.render(relativeTemplate, {

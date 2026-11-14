@@ -27,13 +27,15 @@ import { UploadThemeAssetDto } from './dto/upload-theme-asset.dto.js';
 import { RenderThemePreviewDto } from './dto/render-theme-preview.dto.js';
 import { ThemeUploadService } from './theme-upload.service.js';
 import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
+import { RealmGuard } from '../common/guards/realm.guard.js';
 import { AdminRolesGuard } from '../common/guards/admin-roles.guard.js';
 import { RequireAdminRoles } from '../common/decorators/require-admin-roles.decorator.js';
 
 @ApiTags('Themes')
 @Controller('admin/realms/:realmName/themes')
 @ApiSecurity('admin-api-key')
-@UseGuards(AdminApiKeyGuard, AdminRolesGuard)
+// RealmGuard sets request.realm, which the admin event interceptor needs.
+@UseGuards(RealmGuard, AdminApiKeyGuard, AdminRolesGuard)
 export class ThemeController {
   constructor(
     private readonly themeService: ThemeService,

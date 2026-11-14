@@ -9,6 +9,7 @@ import { RedisService } from '../redis/redis.service.js';
 import { BruteForceService } from '../brute-force/brute-force.service.js';
 import { SmsOtpService, type SmsOtpPurpose } from '../sms/sms-otp.service.js';
 import type { Realm } from '@prisma/client';
+import { totpSecret } from './totp-secret.js';
 
 /** Credential types that count as a second factor. */
 export const SECOND_FACTOR_TYPES = ['totp', 'sms'] as const;
@@ -42,6 +43,8 @@ interface MfaChallengeData {
   oauthParams?: Record<string, string>;
   /** RFC 8176 methods of the first factor; absent means a password. */
   primaryAmr?: string[];
+  /** "Remember me" from the first factor, applied when the session is created. */
+  rememberMe?: boolean;
 }
 
 /**
@@ -61,6 +64,11 @@ export interface MfaEnrollmentData {
   verified?: boolean;
   /** Which factor was enrolled (absent on older rows: TOTP). */
   factor?: SecondFactorType;
+  /**
+   * Set when the enrolment is a detour of a custom-flow login transaction:
+   * finishing it resumes that transaction instead of the built-in login.
+   */
+  authnTxnId?: string;
 }
 
 export { MFA_ENROLLMENT_COOKIE } from '../authn-core/cookies.js';
@@ -196,7 +204,7 @@ export class MfaService {
       data: {
         userId,
         type: 'totp',
-        secretKey: secret.base32,
+        secretKey: totpSecret.forCreate(this.crypto, secret.base32),
         algorithm: 'SHA1',
         digits: 6,
         period: 30,
@@ -225,7 +233,9 @@ export class MfaService {
     if (!credential || credential.verified) return null;
 
     const totp = new OTPAuth.TOTP({
-      secret: OTPAuth.Secret.fromBase32(credential.secretKey),
+      secret: OTPAuth.Secret.fromBase32(
+        totpSecret.base32(this.crypto, credential),
+      ),
       algorithm: credential.algorithm,
       digits: credential.digits,
       period: credential.period,
@@ -260,7 +270,9 @@ export class MfaService {
     }
 
     const totp = new OTPAuth.TOTP({
-      secret: OTPAuth.Secret.fromBase32(credential.secretKey),
+      secret: OTPAuth.Secret.fromBase32(
+        totpSecret.base32(this.crypto, credential),
+      ),
       algorithm: credential.algorithm,
       digits: credential.digits,
       period: credential.period,
@@ -447,6 +459,7 @@ export class MfaService {
     oauthParams?: Record<string, string>,
     clientId?: string,
     primaryAmr?: string[],
+    rememberMe?: boolean,
   ): Promise<string> {
     const windowStart = new Date(
       Date.now() - MFA_CHALLENGE_RATE_LIMIT_WINDOW_SECONDS * 1000,
@@ -474,6 +487,7 @@ export class MfaService {
       clientId,
       oauthParams,
       primaryAmr,
+      rememberMe,
     };
     await this.prisma.pendingAction.create({
       data: {
@@ -493,6 +507,7 @@ export class MfaService {
     clientId?: string;
     oauthParams?: Record<string, string>;
     primaryAmr?: string[];
+    rememberMe?: boolean;
   } | null> {
     const tokenHash = this.crypto.sha256(challengeToken);
 
@@ -516,6 +531,7 @@ export class MfaService {
       clientId: data.clientId,
       oauthParams: data.oauthParams,
       primaryAmr: data.primaryAmr,
+      rememberMe: data.rememberMe,
     };
   }
 
@@ -552,6 +568,7 @@ export class MfaService {
     clientId?: string;
     oauthParams?: Record<string, string>;
     primaryAmr?: string[];
+    rememberMe?: boolean;
   } | null> {
     const tokenHash = this.crypto.sha256(challengeToken);
 
@@ -593,6 +610,7 @@ export class MfaService {
       clientId: data.clientId,
       oauthParams: data.oauthParams,
       primaryAmr: data.primaryAmr,
+      rememberMe: data.rememberMe,
     };
   }
 
@@ -679,7 +697,14 @@ export class MfaService {
   async cleanupExpiredActions(): Promise<void> {
     const { count } = await this.prisma.pendingAction.deleteMany({
       where: {
-        type: { in: ['mfa_challenge', 'mfa_enrollment', 'sms_enrollment'] },
+        type: {
+          in: [
+            'mfa_challenge',
+            'mfa_enrollment',
+            'sms_enrollment',
+            'authn_txn',
+          ],
+        },
         expiresAt: { lt: new Date() },
       },
     });

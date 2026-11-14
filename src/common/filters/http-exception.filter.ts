@@ -24,6 +24,28 @@ export class GlobalExceptionFilter implements ExceptionFilter {
 
     const isServerError = status >= 500;
 
+    // A throttled request says when to retry (e.g. OAuthTokenError 429).
+    const retryAfter = (exception as { retryAfterSeconds?: unknown })
+      ?.retryAfterSeconds;
+    if (
+      status === Number(HttpStatus.TOO_MANY_REQUESTS) &&
+      typeof retryAfter === 'number' &&
+      Number.isFinite(retryAfter)
+    ) {
+      response.setHeader('Retry-After', String(Math.ceil(retryAfter)));
+    }
+
+    // A refused bearer token carries its RFC 6750 §3 challenge (e.g. a
+    // certificate-bound token used without its certificate, RFC 8705 §3).
+    const challenge = (exception as { wwwAuthenticate?: unknown })
+      ?.wwwAuthenticate;
+    if (
+      status === Number(HttpStatus.UNAUTHORIZED) &&
+      typeof challenge === 'string'
+    ) {
+      response.setHeader('WWW-Authenticate', challenge);
+    }
+
     // Always log 5xx errors with full details server-side.
     if (isServerError) {
       this.logger.error(

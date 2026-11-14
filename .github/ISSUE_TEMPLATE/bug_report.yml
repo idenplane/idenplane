@@ -66,9 +66,8 @@ body:
     attributes:
       label: Database
       options:
-        - PostgreSQL
-        - MySQL / MariaDB
-        - SQLite
+        - PostgreSQL (self-hosted)
+        - PostgreSQL (managed service)
     validations:
       required: true
 

@@ -239,7 +239,15 @@ paths:
       tags:
         - Realms
       summary: Export a realm
-      description: Exports a realm configuration as JSON. Can optionally include users and secrets.
+      description: >-
+        Exports the realm configuration as JSON, format version 2: every realm and
+        client setting, authentication flows and their bindings, client scopes,
+        roles, groups and their role mappings, identity providers, LDAP federation,
+        TLS trust anchors, the certificate deny-list, client certificates,
+        organizations, webhooks and the other configuration tables. References use
+        names (flow name, clientId, scope name), never ids. Never exported: signing
+        keys, user credentials, sessions, tokens and event logs. See the Realms API
+        page for the full list.
       operationId: exportRealm
       parameters:
         - name: realmName
@@ -249,13 +257,18 @@ paths:
             type: string
         - name: includeUsers
           in: query
-          description: Include user data in export
+          description: Include users (never their password hashes or MFA factors)
           schema:
             type: boolean
             default: false
         - name: includeSecrets
           in: query
-          description: Include secrets (passwords, keys) in export
+          description: >-
+            Include secrets: client secret hashes, and the SMTP password, CAPTCHA
+            secret keys, email/SMS provider credentials, identity provider and LDAP
+            credentials, webhook secrets, audit stream headers and organization SSO
+            configuration. Values encrypted at rest are exported decrypted and
+            re-encrypted by the importing server.
           schema:
             type: boolean
             default: false
@@ -265,7 +278,7 @@ paths:
           content:
             application/json:
               schema:
-                type: object
+                $ref: '#/components/schemas/RealmExport'
         '401':
           $ref: '#/components/responses/Unauthorized'
         '404':
@@ -320,7 +333,11 @@ paths:
       tags:
         - Realms
       summary: Import a realm
-      description: Imports a realm from JSON configuration.
+      description: >-
+        Imports a realm export (format version 2, or version 1 as before). The
+        whole file is validated first; a 400 lists every problem with its path.
+        The import runs in one transaction: on failure nothing is created, and with
+        overwrite=true the existing realm is kept.
       operationId: importRealm
       parameters:
         - name: overwrite
@@ -334,16 +351,43 @@ paths:
         content:
           application/json:
             schema:
-              type: object
+              $ref: '#/components/schemas/RealmExport'
       responses:
         '201':
           description: Realm imported successfully
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/Realm'
+                type: object
+                properties:
+                  realmName:
+                    type: string
+                  version:
+                    type: integer
+                    description: 2 for a version 2 file (absent for version 1)
+                  clientsImported:
+                    type: integer
+                  rolesImported:
+                    type: integer
+                  groupsImported:
+                    type: integer
+                  scopesImported:
+                    type: integer
+                  idpsImported:
+                    type: integer
+                  usersImported:
+                    type: integer
+                  flowsImported:
+                    type: integer
+                  warnings:
+                    type: array
+                    items:
+                      type: string
+                    description: What needs attention, e.g. secrets missing from the file
         '400':
-          description: Invalid import data
+          description: Invalid import data. The errors array lists the path and message of every problem.
+        '409':
+          description: The realm exists and overwrite is not set
         '401':
           $ref: '#/components/responses/Unauthorized'
         '403':
@@ -2266,6 +2310,59 @@ components:
       description: JWT access token for user-facing endpoints
 
   schemas:
+    RealmExport:
+      type: object
+      description: >-
+        Realm export, format version 2 (imports also accept version 1). Each
+        section lists objects with their settings; see the Realms API page.
+      required:
+        - version
+        - realm
+      properties:
+        version:
+          type: integer
+          enum: [2]
+        secretsIncluded:
+          type: boolean
+        usersIncluded:
+          type: boolean
+        realm:
+          type: object
+          description: All realm settings, plus browserFlow (a flow name)
+        authenticationFlows: { type: array, items: { type: object } }
+        clientScopes: { type: array, items: { type: object } }
+        clients:
+          type: array
+          items:
+            type: object
+            description: >-
+              All client settings, plus authFlow (flow name), defaultScopes and
+              optionalScopes (scope names), serviceAccount and tlsCertificates
+        roles: { type: array, items: { type: object } }
+        groups: { type: array, items: { type: object } }
+        identityProviders: { type: array, items: { type: object } }
+        samlServiceProviders: { type: array, items: { type: object } }
+        userFederations: { type: array, items: { type: object } }
+        tlsTrustAnchors: { type: array, items: { type: object } }
+        tlsRevokedCertificates: { type: array, items: { type: object } }
+        customAttributes: { type: array, items: { type: object } }
+        registrationFields: { type: array, items: { type: object } }
+        organizations: { type: array, items: { type: object } }
+        webhooks: { type: array, items: { type: object } }
+        auditLogStreams: { type: array, items: { type: object } }
+        policies: { type: array, items: { type: object } }
+        continuousRiskPolicies: { type: array, items: { type: object } }
+        consentCategories: { type: array, items: { type: object } }
+        themes: { type: array, items: { type: object } }
+        scimAttributeMappings: { type: array, items: { type: object } }
+        serviceAccounts: { type: array, items: { type: object } }
+        nhiCredentialPolicies: { type: array, items: { type: object } }
+        proxyApplications: { type: array, items: { type: object } }
+        users: { type: array, items: { type: object } }
+        omitted:
+          type: array
+          description: What the export left out, and why (ignored on import)
+          items: { type: object }
     # ── Realm ──────────────────────────────────────────────────────────────────
     Realm:
       type: object

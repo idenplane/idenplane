@@ -17,7 +17,13 @@ import {
   ApiOperation,
   ApiSecurity,
   ApiResponse,
+  ApiBody,
+  ApiQuery,
 } from '@nestjs/swagger';
+import {
+  REALM_EXPORT_V2_SCHEMA,
+  REALM_IMPORT_RESULT_SCHEMA,
+} from './export/realm-export.openapi.js';
 import { RealmsService } from './realms.service.js';
 import { RealmExportService } from './realm-export.service.js';
 import { RealmImportService } from './realm-import.service.js';
@@ -132,8 +138,29 @@ export class RealmsController {
   }
 
   @Get(':realmName/export')
-  @ApiOperation({ summary: 'Export a realm to JSON' })
-  @ApiResponse({ status: 200, description: 'Realm export data' })
+  @ApiOperation({
+    summary: 'Export a realm to JSON',
+    description:
+      'Exports the realm configuration in format version 2: every realm and client setting, flows and their bindings, scopes, roles, groups and their role mappings, identity providers, federation, certificate trust, organizations, webhooks and the other configuration tables. Never exported: signing keys, user credentials, sessions, tokens and event logs.',
+  })
+  @ApiQuery({
+    name: 'includeUsers',
+    required: false,
+    type: Boolean,
+    description: 'Include users (no password hashes or MFA factors)',
+  })
+  @ApiQuery({
+    name: 'includeSecrets',
+    required: false,
+    type: Boolean,
+    description:
+      'Include secrets: client secret hashes, and decrypted SMTP, CAPTCHA, SMS/email provider, identity provider, LDAP, webhook and audit stream credentials',
+  })
+  @ApiResponse({
+    status: 200,
+    description: 'Realm export data',
+    schema: REALM_EXPORT_V2_SCHEMA,
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({ status: 404, description: 'Realm not found' })
   exportRealm(
@@ -149,9 +176,32 @@ export class RealmsController {
 
   @Post('import')
   @RequireAdminRoles(['super-admin'])
-  @ApiOperation({ summary: 'Import a realm from JSON' })
-  @ApiResponse({ status: 201, description: 'Realm imported successfully' })
-  @ApiResponse({ status: 400, description: 'Invalid import data' })
+  @ApiOperation({
+    summary: 'Import a realm from JSON',
+    description:
+      'Imports a realm export (format version 2, or version 1 as before). The whole file is validated first; a 400 lists every problem with its path. The import runs in one transaction: on any failure nothing is created, and with overwrite=true the existing realm is kept.',
+  })
+  @ApiQuery({
+    name: 'overwrite',
+    required: false,
+    type: Boolean,
+    description: 'Replace an existing realm of the same name',
+  })
+  @ApiBody({ schema: REALM_EXPORT_V2_SCHEMA })
+  @ApiResponse({
+    status: 201,
+    description: 'Realm imported successfully',
+    schema: REALM_IMPORT_RESULT_SCHEMA,
+  })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Invalid import data: `errors` lists `{ path, message }` for every problem',
+  })
+  @ApiResponse({
+    status: 409,
+    description: 'The realm exists and overwrite is not set',
+  })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
   @ApiResponse({
     status: 403,

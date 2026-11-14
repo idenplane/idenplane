@@ -131,4 +131,16 @@ export class CreateNhiCredentialPolicyDto {
   @IsBoolean()
   @IsOptional()
   requireAuditLogging?: boolean;
+
+  @ApiPropertyOptional({
+    description:
+      'How long, in seconds, a rotated certificate credential keeps authenticating after its replacement is created (0 to 30 days). Default 86400.',
+    minimum: 0,
+    maximum: 2592000,
+  })
+  @IsInt()
+  @Min(0)
+  @Max(2592000)
+  @IsOptional()
+  rotationOverlapSeconds?: number;
 }

@@ -7,6 +7,7 @@ import {
   Body,
   Param,
   Query,
+  Req,
   UseGuards,
   HttpCode,
   HttpStatus,
@@ -24,8 +25,9 @@ import {
   RateLimitGuard,
   RateLimitByIp,
 } from '../rate-limit/rate-limit.guard.js';
-import { CaptchaProvider } from './captcha.service.js';
+import type { Request } from 'express';
 import type { Realm } from '@prisma/client';
+import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 import { RegistrationService } from './registration.service.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
@@ -58,28 +60,33 @@ export class RegistrationController {
   @RateLimitByIp()
   @ApiOperation({ summary: 'Register a new user' })
   @ApiResponse({ status: 201, description: 'User registered successfully' })
-  @ApiResponse({ status: 400, description: 'Invalid input or CAPTCHA failed' })
+  @ApiResponse({
+    status: 400,
+    description:
+      'Invalid input, or the realm requires CAPTCHA and `captchaToken` is missing or fails verification',
+  })
   @ApiResponse({ status: 403, description: 'Registration is disabled' })
   @ApiResponse({ status: 409, description: 'Username or email already exists' })
+  @ApiResponse({
+    status: 503,
+    description:
+      'The realm requires CAPTCHA but its configuration is incomplete, or the provider is unreachable',
+  })
   async register(
     @CurrentRealm() realm: Realm,
     @Body() dto: RegisterDto,
-    @Query('captchaProvider') captchaProvider?: string,
+    @Req() req: Request,
   ) {
     // Validate terms acceptance if required
     if (realm.termsOfServiceUrl && !dto.acceptTerms) {
       throw new BadRequestException('You must accept the terms of service');
     }
 
-    const provider =
-      captchaProvider !== undefined
-        ? (captchaProvider as CaptchaProvider)
-        : undefined;
-    const result = await this.registrationService.register(
-      realm,
-      dto,
-      provider,
-    );
+    // CAPTCHA follows the realm's settings only. A `captchaProvider` query
+    // parameter (accepted by earlier versions) is ignored.
+    const result = await this.registrationService.register(realm, dto, {
+      remoteIp: resolveClientIp(req),
+    });
 
     return {
       message: result.requiresApproval

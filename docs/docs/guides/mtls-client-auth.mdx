@@ -1,0 +1,341 @@
+---
+id: mtls-client-auth
+title: mTLS Client Authentication (RFC 8705)
+description: Let OAuth clients authenticate with a TLS client certificate instead of a secret — tls_client_auth against a realm's CAs, or self_signed_tls_client_auth with pinned certificates — behind Idenplane's own listener or a TLS-terminating proxy.
+---
+
+# mTLS Client Authentication (RFC 8705)
+
+A client can prove who it is with a TLS client certificate instead of a `client_secret`. Idenplane implements both methods of [RFC 8705 §2](https://www.rfc-editor.org/rfc/rfc8705#section-2):
+
+| Method | The client is trusted when… | Good for |
+|---|---|---|
+| `tls_client_auth` | its certificate chains to one of the realm's **trust anchors** (CAs), and matches the **one subject rule** the client is registered with | Fleets of workloads or devices with certificates from your own PKI |
+| `self_signed_tls_client_auth` | its certificate's SHA-256 thumbprint (`x5t#S256`) is one the client **registered** in advance | A handful of clients, no PKI |
+
+Both work at the token, introspection and revocation endpoints, with any grant the client is allowed (typically `client_credentials`). A client can also receive [certificate-bound access tokens](#certificate-bound-access-tokens) (RFC 8705 §3), which are useless without its certificate.
+
+## Everything is off by default
+
+Certificate authentication needs **both** switches. With either one off, a client registered for a certificate method gets `401 invalid_client`, and discovery does not advertise the methods.
+
+1. The server: `MTLS_ENABLED=true`, plus a way for the certificate to reach it (below).
+2. The realm: `mtlsClientAuthEnabled: true`.
+
+```bash
+curl -X PATCH https://idp.example.com/admin/realms/acme \
+  -H "x-admin-api-key: $ADMIN_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"mtlsClientAuthEnabled": true}'
+```
+
+## Getting the certificate to Idenplane
+
+The TLS handshake proves the client holds the key. Whether the certificate is trusted is decided per realm, per request, the same way in both modes.
+
+### Direct: Idenplane's certificate listener
+
+Idenplane opens a second HTTPS port that asks every client for a certificate. It serves only what a client needs: the endpoints for discovery, token, introspection, revocation, userinfo, device authorization, JWKS and the MFA SMS step of the `mfa_otp` grant, and the session events WebSocket (`/ws/events`). Everything else is 404 there, the admin API and login pages included.
+
+The WebSocket is upgraded on this port for the exact path `/ws/events` only (with its `realm` and `token` query parameters). An upgrade for any other path, an OAuth endpoint included, is refused with `404` before any token is read. The gateway reads the client certificate from the TLS handshake, as for the HTTP endpoints, so a certificate-bound token works here without a proxy:
+
+```js
+import WebSocket from 'ws';
+
+const ws = new WebSocket(
+  `wss://mtls.idp.example.com:8443/ws/events?realm=my-realm&token=${accessToken}`,
+  { cert: clientCertPem, key: clientKeyPem }, // the certificate the token is bound to
+);
+```
+
+On shutdown, open sockets get a close frame with code `1001` (going away), then the listener closes.
+
+```bash
+MTLS_ENABLED=true
+MTLS_LISTEN_PORT=8443
+MTLS_TLS_CERT_FILE=/etc/idenplane/tls.crt
+MTLS_TLS_KEY_FILE=/etc/idenplane/tls.key
+# Optional: lists your client CAs in the handshake so clients pick the right certificate
+MTLS_HANDSHAKE_CA_FILE=/etc/idenplane/client-cas.pem
+# Published as mtls_endpoint_aliases in discovery
+MTLS_BASE_URL=https://mtls.idp.example.com:8443
+```
+
+A client sends its intermediates in the handshake (`cert` = leaf followed by intermediates).
+
+### Behind a proxy that terminates TLS
+
+The proxy asks for the certificate and forwards it in a header. Idenplane believes that header **only** from the addresses in `MTLS_TRUSTED_PROXY_CIDRS`, matched against the TCP peer. From anyone else it is rejected (`400`) or stripped.
+
+```bash
+MTLS_ENABLED=true
+MTLS_PROXY_CERT_HEADER=X-SSL-Client-Cert
+MTLS_PROXY_CERT_CHAIN_HEADER=X-SSL-Client-Cert-Chain   # only needed for tls_client_auth with intermediates
+MTLS_TRUSTED_PROXY_CIDRS=10.0.0.2/32
+MTLS_BASE_URL=https://mtls.idp.example.com
+```
+
+nginx, for example:
+
+```nginx
+server {
+    listen 443 ssl;
+    server_name mtls.idp.example.com;
+    ssl_verify_client optional_no_ca;     # Idenplane decides trust, per realm
+    location / {
+        proxy_set_header X-SSL-Client-Cert $ssl_client_escaped_cert;
+        proxy_pass http://idenplane:3000;
+    }
+}
+```
+
+:::warning
+The proxy must overwrite any `X-SSL-Client-Cert` a client sends. With `ssl_verify_client optional_no_ca`, nginx accepts any certificate, which is what you want: Idenplane checks it against the realm's anchors. Do not let traffic reach Idenplane's port without passing the proxy.
+:::
+
+## `self_signed_tls_client_auth`
+
+```bash
+# 1. The client
+curl -X POST https://idp.example.com/admin/realms/acme/clients \
+  -H "x-admin-api-key: $ADMIN_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"clientId": "billing-worker", "grantTypes": ["client_credentials"],
+       "tokenEndpointAuthMethod": "self_signed_tls_client_auth"}'
+
+# 2. Its certificate (public part only; a private key is refused)
+curl -X POST https://idp.example.com/admin/realms/acme/clients/billing-worker/tls-certificates \
+  -H "x-admin-api-key: $ADMIN_API_KEY" -H 'Content-Type: application/json' \
+  -d "{\"certificatePem\": $(jq -Rs . < worker.crt)}"
+# → { "id": "…", "x5tS256": "…", "subject": "CN=billing-worker", "notBefore": "…", "notAfter": "…" }
+```
+
+A client may register up to 10 certificates, so you can add the next one before removing the old one. A certificate authenticates only inside its validity window. A client with this method can be saved before any certificate is registered; it simply cannot authenticate until one is.
+
+## `tls_client_auth`
+
+```bash
+# 1. The CA that issues your client certificates (must be a CA certificate)
+curl -X POST https://idp.example.com/admin/realms/acme/tls-trust-anchors \
+  -H "x-admin-api-key: $ADMIN_API_KEY" -H 'Content-Type: application/json' \
+  -d "{\"certificatePem\": $(jq -Rs . < issuing-ca.crt)}"
+
+# 2. The client, with exactly one subject rule
+curl -X POST https://idp.example.com/admin/realms/acme/clients \
+  -H "x-admin-api-key: $ADMIN_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"clientId": "sensor-17", "grantTypes": ["client_credentials"],
+       "tokenEndpointAuthMethod": "tls_client_auth",
+       "tlsClientAuthSubjectDn": "CN=sensor-17,OU=Sensors,O=Acme,C=US"}'
+```
+
+The rule is exactly one of:
+
+| Field | RFC 8705 metadata | Matching |
+|---|---|---|
+| `tlsClientAuthSubjectDn` | `tls_client_auth_subject_dn` | RFC 4514 string, most specific RDN first (as `openssl x509 -subject -nameopt RFC2253` prints it). Compared as parsed RDNs: attribute types by OID, values ignoring case and extra spaces. |
+| `tlsClientAuthSanDns` | `tls_client_auth_san_dns` | A `dNSName` in the certificate, ignoring case. No wildcards. |
+| `tlsClientAuthSanUri` | `tls_client_auth_san_uri` | A URI in the certificate, exactly (e.g. a SPIFFE ID). |
+| `tlsClientAuthSanIp` | `tls_client_auth_san_ip` | An IP address in the certificate, IPv6 in any notation. |
+| `tlsClientAuthSanEmail` | `tls_client_auth_san_email` | An `rfc822Name` in the certificate, exactly. |
+
+Set a rule to `null` to clear it. The rules are only accepted with `tls_client_auth`.
+
+### What the certificate path must satisfy
+
+Idenplane builds a path from the client certificate through the intermediates it sent to one of the realm's anchors and checks every certificate on it:
+
+- the signatures and each validity window, at the time of the request;
+- every issuer is a CA (`basicConstraints cA`) and, when it has a key usage, may sign certificates (`keyCertSign`);
+- `pathLenConstraint`, and at most `MTLS_MAX_CHAIN_DEPTH` certificates below the anchor;
+- the client certificate is not a CA, and when it has an extended key usage, that includes `clientAuth` (`anyExtendedKeyUsage` alone is not enough);
+- no unrecognised **critical** extension (including certificate policies), and no `nameConstraints`, which are not supported: such a certificate is refused rather than half-checked;
+- nothing on the path is on the realm's deny-list.
+
+Set `mtlsTrustGlobalAnchors: true` on a realm to also trust the CAs in `MTLS_GLOBAL_TRUST_ANCHORS_FILE`.
+
+## Revoking a certificate
+
+CRL and OCSP are not checked. Each realm has a deny-list that applies to both methods and to every certificate in a path, intermediates included, from the next request on:
+
+```bash
+curl -X POST https://idp.example.com/admin/realms/acme/tls-revoked-certificates \
+  -H "x-admin-api-key: $ADMIN_API_KEY" -H 'Content-Type: application/json' \
+  -d "{\"certificatePem\": $(jq -Rs . < stolen.crt), \"reason\": \"key compromise\"}"
+# or by thumbprint: {"x5tS256": "…"}
+# or by issuer and serial: {"issuerDn": "CN=Acme Issuing CA,O=Acme", "serialNumber": "01:a2:ff"}
+```
+
+To retire a pinned certificate, you can also just delete it from the client.
+
+## The token request
+
+```bash
+curl --cert sensor-17.crt --key sensor-17.key \
+  https://mtls.idp.example.com:8443/realms/acme/protocol/openid-connect/token \
+  -d grant_type=client_credentials -d client_id=sensor-17
+```
+
+`client_id` is required. Send no `client_secret`, no HTTP Basic and no `client_assertion`: a certificate client that also sends one gets `400 invalid_request`.
+
+| Response | Meaning |
+|---|---|
+| `401 invalid_client` "A client certificate is required" | No certificate reached Idenplane (wrong port, or the proxy did not forward it). |
+| `401 invalid_client` "Invalid client certificate" | The certificate was not accepted. The response deliberately does not say why; the server log does. |
+| `401 invalid_client` "Client authentication method is not available" | `MTLS_ENABLED` or the realm's `mtlsClientAuthEnabled` is off. |
+| `429 slow_down` with `Retry-After` | This certificate failed `MTLS_AUTH_FAILURE_LIMIT_PER_MINUTE` times this minute in this realm. |
+
+A client that authenticates with a secret is not affected by a certificate it happens to present, unless it receives certificate-bound tokens (next section).
+
+## Certificate-bound access tokens
+
+A stolen bearer token works for whoever holds it. A **certificate-bound** token ([RFC 8705 §3](https://www.rfc-editor.org/rfc/rfc8705#section-3)) works only on a request that presents the client certificate it was issued to. Turn it on per client:
+
+```bash
+curl -X PUT https://idp.example.com/admin/realms/acme/clients/sensor-17 \
+  -H "x-admin-api-key: $ADMIN_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"tlsClientCertificateBoundAccessTokens": true}'
+```
+
+Every access token the client then gets from the token endpoint, with any grant (`authorization_code`, `refresh_token`, `client_credentials`, device code, `password`), carries the thumbprint of the certificate presented with the token request:
+
+```json
+{ "sub": "…", "azp": "sensor-17", "cnf": { "x5t#S256": "n4bQgYhMfWWaL-qgxVrQFaO_TxsrC4Is0V1sFbDwCgg" } }
+```
+
+- **Any authentication method.** The client may authenticate with a certificate method, with a secret, or as a public client (`none`): what counts is the certificate it presents over mutual TLS. A token request **without** a certificate is `401 invalid_client`; the client never silently gets an unbound token.
+- **Nothing can change the binding.** `cnf` is set after protocol mappers and token plugins, so a mapper or plugin that writes or deletes `cnf` has no effect.
+- **Refresh.** A confidential client's refreshed access token is bound to the certificate it presents *now*, so it can roll over to a new certificate. A public client has no other credential, so its refresh token is bound too: a refresh must present the **same** certificate, or it is `400 invalid_grant` (and the refresh token stays usable by its owner).
+- **Introspection** returns `cnf` for a bound access token, and for a public client's bound refresh token, so a resource server can check the binding itself.
+
+### Where the binding is enforced
+
+Idenplane checks the binding wherever it accepts an access token: **userinfo** (GET and POST), the **session events WebSocket** (`/ws/events`) and **admin API bearer authentication**. The certificate must reach Idenplane the same way as for the token request: through the [certificate listener](#direct-idenplanes-certificate-listener) or a [trusted proxy's header](#behind-a-proxy-that-terminates-tls). The certificate listener serves userinfo and the WebSocket, but not the admin API, which sees a certificate only through a trusted proxy.
+
+| Request with a bound token | Response |
+|---|---|
+| Same certificate | Accepted |
+| No certificate, or a header from an untrusted peer | `401` `{"error":"invalid_token"}` |
+| A different certificate | `401` `{"error":"invalid_token"}` |
+
+On the WebSocket, a refused token is a plain `HTTP/1.1 401 Unauthorized` answer to the upgrade, with no body. Each HTTP `401` carries `WWW-Authenticate: Bearer error="invalid_token", error_description="…"` (RFC 6750 §3). Tokens of clients without the flag are not affected, and their requests never read a certificate.
+
+Your own APIs must check the binding too. With the JavaScript SDK, pass the presented certificate to `verifyToken`:
+
+```ts
+import { verifyToken } from 'idenplane-sdk/server';
+
+const der = req.socket.getPeerX509Certificate()?.raw; // or from your proxy
+const payload = await verifyToken(token, config, { certificate: der });
+// or { certificateThumbprint: '<x5t#S256>' }; computeX5tS256(der) computes it
+```
+
+`verifyToken` rejects a bound token verified without a certificate, or with a different one, with `CertificateBindingError`.
+
+## Devices and workloads (NHI identities)
+
+A non-human identity (a device, a workload, a service) authenticates with **its own certificate** at the realm's token endpoint, as the identity's OAuth client. There is no custom route: the device does what any [`self_signed_tls_client_auth`](#self_signed_tls_client_auth) or [`tls_client_auth`](#tls_client_auth) client does, and always receives a [certificate-bound token](#certificate-bound-access-tokens).
+
+```
+device certificate ──TLS──▶ /realms/acme/protocol/openid-connect/token  (client_credentials)
+                             ├ the identity's OAuth client is found by client_id
+                             ├ one of the identity's certificate credentials accepts the certificate
+                             └▶ access token with cnf: {"x5t#S256": <thumbprint of that certificate>}
+```
+
+### 1. The identity and its certificate
+
+The identity must be enabled and `ACTIVE`. A `PROVISIONING`, `SUSPENDED` or `DECOMMISSIONED` identity authenticates nothing.
+
+```bash
+curl -X POST https://idp.example.com/admin/realms/acme/nhi \
+  -H "x-admin-api-key: $ADMIN_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"name": "sensor-17", "identityType": "IOT_DEVICE", "lifecycleStatus": "ACTIVE"}'
+# → { "id": "6f1c…", … }
+
+# Self-signed: the device's own certificate, pinned by its x5t#S256.
+curl -X POST https://idp.example.com/admin/realms/acme/nhi/6f1c…/credentials \
+  -H "x-admin-api-key: $ADMIN_API_KEY" -H 'Content-Type: application/json' \
+  -d "{\"name\": \"sensor-17 2026\", \"tlsAuthMode\": \"SELF_SIGNED\",
+       \"certificatePem\": $(jq -Rs . < sensor-17.crt)}"
+# → { "id": "…", "credentialType": "CERTIFICATE", "tlsAuthMode": "SELF_SIGNED",
+#     "certThumbprintS256": "…", "certSubject": "CN=sensor-17", "status": "active", … }
+```
+
+Or, for devices whose certificates your CA issues, a **PKI** credential: exactly one subject or SAN rule, matched like a client's `tlsClientAuth*` rule against certificates that chain to the realm's [trust anchors](#tls_client_auth):
+
+```bash
+-d '{"name": "fleet", "tlsAuthMode": "PKI", "tlsClientAuthSanUri": "spiffe://acme/sensor-17"}'
+```
+
+Certificate credentials (`CERTIFICATE`, `MTLS`) never take a private key: `privateKeyPem`, or a key inside `certificatePem`, is `400`. The device keeps its key. An identity holds at most 10 live certificate credentials.
+
+### 2. The OAuth client
+
+```bash
+curl -X POST https://idp.example.com/admin/realms/acme/nhi/6f1c…/oauth-client \
+  -H "x-admin-api-key: $ADMIN_API_KEY" -H 'Content-Type: application/json' -d '{}'
+# 201 → { "clientId": "nhi-6f1c…", "clientType": "CONFIDENTIAL",
+#         "grantTypes": ["client_credentials"],
+#         "tokenEndpointAuthMethod": "self_signed_tls_client_auth",
+#         "tlsClientCertificateBoundAccessTokens": true, "nhiIdentityId": "6f1c…",
+#         "tokenEndpoint": "/realms/acme/protocol/openid-connect/token",
+#         "mtlsClientAuthEnabled": true, … }
+```
+
+- The method follows the identity's credentials (SELF_SIGNED → `self_signed_tls_client_auth`, PKI → `tls_client_auth`). If it has none, or both kinds, pass `tokenEndpointAuthMethod`. `clientId` and `name` are optional.
+- Calling it again returns the same client with `200`. `GET` reads it, `DELETE` removes it.
+- The client has no secret and no service account: a token's `sub` is the client. Its method, type, grant types and binding cannot be changed through the clients API (`409`), and it gets no secret or client-table certificates.
+- **Deleting the identity deletes its client** (and its credentials). A client whose identity is gone could never authenticate.
+
+### 3. The token request
+
+```bash
+curl --cert sensor-17.crt --key sensor-17.key \
+  https://mtls.idp.example.com:8443/realms/acme/protocol/openid-connect/token \
+  -d grant_type=client_credentials -d client_id=nhi-6f1c…
+# → { "access_token": "eyJ…", "token_type": "Bearer", … }   cnf: {"x5t#S256": "<sensor-17.crt>"}
+```
+
+The responses are those of [the token request](#the-token-request). It needs `MTLS_ENABLED` and the realm's `mtlsClientAuthEnabled`, like every certificate client.
+
+### Credential status
+
+Each certificate credential shows a computed `status`. Only `active` and `grace` authenticate.
+
+| Status | Meaning |
+|---|---|
+| `active` | Usable. |
+| `grace` | Rotated; still usable until `rotationGraceUntil`. |
+| `expired` | Past its certificate's `notAfter`, its `expiresAt`, or the end of its grace period. |
+| `not_yet_valid` | Before its certificate's `notBefore`. |
+| `revoked` | Revoked (`POST …/credentials/:id/revoke`). |
+| `disabled` | Disabled. |
+| `identity_inactive` | The identity is disabled or not `ACTIVE`. |
+
+A credential without a `tlsAuthMode` (every certificate credential created before this feature) never authenticates: register the certificate again with a mode. Its stored certificate's thumbprint was backfilled into `certThumbprintS256` for reference.
+
+### Rotation with overlap
+
+```bash
+curl -X POST https://idp.example.com/admin/realms/acme/nhi/6f1c…/credentials/<old id>/rotate \
+  -H "x-admin-api-key: $ADMIN_API_KEY" -H 'Content-Type: application/json' \
+  -d "{\"certificatePem\": $(jq -Rs . < sensor-17-2027.crt), \"overlapSeconds\": 86400}"
+# → { "newCredential": { "status": "active", … },
+#     "oldCredential": { "id": "<old id>", "status": "grace", "rotationGraceUntil": "…" } }
+```
+
+In one transaction, the new credential is created and the old one is marked superseded, with `rotationGraceUntil` = now + the overlap. The overlap is `overlapSeconds` when given, else the `rotationOverlapSeconds` of the realm's highest-priority enabled credential policy for that credential type, else 24 hours. During the overlap both certificates authenticate, so the device can switch at its own pace. Afterwards the old one is `expired`. A PKI credential is rotated the same way with a new rule, or keeps its rule when none is given. A credential can be rotated once; rotate its replacement next. API keys rotate as before: the old key stops at once.
+
+### Introspection, usage and audit
+
+A token of an NHI client names the credential that accepted the certificate in a private claim, `nhi_cid`; a PKI token also carries the certificate's canonical issuer and serial number in `nhi_crt`. No mapper or plugin can set, change or remove either.
+
+Introspecting such a token does not look up a user. It is active while the client is enabled, the realm still allows certificate authentication, the identity is `ACTIVE` and **that credential** still accepts it:
+
+- its status is `active` or `grace`: revoking it ends its tokens at once, and a rotated-out credential's tokens end with its grace period, even while another credential of the identity still works;
+- for SELF_SIGNED, its thumbprint is the token's `cnf`;
+- the certificate is not on the realm's deny-list, by thumbprint or by issuer and serial number.
+
+Each certificate authentication updates the credential's `lastUsedAt` and `requestCount` and writes an NHI audit entry (`ACCESS_GRANTED`, or `ACCESS_DENIED` with the reason as `errorCode`; see `GET …/nhi/audit-logs`). These writes never delay the token response.
+
+## Discovery
+
+For a realm with certificate authentication on (and `MTLS_ENABLED`), `token_endpoint_auth_methods_supported` lists `tls_client_auth` and `self_signed_tls_client_auth`, `tls_client_certificate_bound_access_tokens` is `true`, and, when `MTLS_BASE_URL` is set, `mtls_endpoint_aliases` points the token, introspection, revocation, userinfo and device authorization endpoints at it. Other realms are unchanged.

@@ -20,6 +20,12 @@ import {
   redactSmsProviderConfig,
   SECRET_PLACEHOLDER,
 } from './realm-secrets.util.js';
+import { MASTER_REALM } from './realm.constants.js';
+import {
+  captchaConfigProblem,
+  type CaptchaRealmFields,
+} from '../captcha/captcha-config.js';
+import { signingKeySecrets } from '../crypto/signing-key-secrets.js';
 
 @Injectable()
 export class RealmsService {
@@ -34,13 +40,16 @@ export class RealmsService {
 
   /**
    * Strip write-only secrets from a realm before it leaves the service: the
-   * SMTP password and the SMS provider credentials come back as
+   * SMTP password, the CAPTCHA secret keys and the SMS provider credentials come back as
    * SECRET_PLACEHOLDER, which update() in turn treats as "unchanged".
    */
   private redactSecrets(realm: Record<string, unknown> | null) {
     if (!realm) return realm;
     const out: Record<string, unknown> = { ...realm };
     if (out['smtpPassword']) out['smtpPassword'] = SECRET_PLACEHOLDER;
+    for (const field of ['recaptchaSecretKey', 'hcaptchaSecretKey']) {
+      if (out[field]) out[field] = SECRET_PLACEHOLDER;
+    }
     if ('smsProviderConfig' in out) {
       out['smsProviderConfig'] = redactSmsProviderConfig(
         out['smsProviderConfig'],
@@ -55,6 +64,10 @@ export class RealmsService {
   }
 
   async create(dto: CreateRealmDto) {
+    // The hidden-value placeholder (what GET returns for a stored secret)
+    // means "keep the stored secret": treat it as not sent.
+    const recaptchaSecretKey = withoutPlaceholder(dto.recaptchaSecretKey);
+    const hcaptchaSecretKey = withoutPlaceholder(dto.hcaptchaSecretKey);
     const existing = await this.prisma.realm.findUnique({
       where: { name: dto.name },
     });
@@ -62,6 +75,15 @@ export class RealmsService {
       throw new ConflictException(`Realm '${dto.name}' already exists`);
     }
     assertSmsMfaDeliverable(dto.smsMfaEnabled, dto.smsProvider);
+    assertCaptchaConfigured({
+      captchaEnabled: dto.captchaEnabled ?? false,
+      captchaProvider: dto.captchaProvider ?? null,
+      recaptchaSiteKey: dto.recaptchaSiteKey ?? null,
+      recaptchaSecretKey: recaptchaSecretKey ?? null,
+      hcaptchaSiteKey: dto.hcaptchaSiteKey ?? null,
+      hcaptchaSecretKey: hcaptchaSecretKey ?? null,
+      captchaScoreThreshold: dto.captchaScoreThreshold ?? 0.5,
+    });
 
     const keyPair = await this.jwkService.generateRsaKeyPair();
 
@@ -173,19 +195,17 @@ export class RealmsService {
         captchaEnabled: dto.captchaEnabled,
         captchaProvider: dto.captchaProvider,
         recaptchaSiteKey: dto.recaptchaSiteKey,
-        recaptchaSecretKey: this.crypto.encryptSecret(dto.recaptchaSecretKey),
+        recaptchaSecretKey: this.crypto.encryptSecret(recaptchaSecretKey),
         hcaptchaSiteKey: dto.hcaptchaSiteKey,
-        hcaptchaSecretKey: this.crypto.encryptSecret(dto.hcaptchaSecretKey),
+        hcaptchaSecretKey: this.crypto.encryptSecret(hcaptchaSecretKey),
         captchaScoreThreshold: dto.captchaScoreThreshold,
         // SCIM provisioning
         scimEnabled: dto.scimEnabled,
+        // RFC 8705 certificate client authentication
+        mtlsClientAuthEnabled: dto.mtlsClientAuthEnabled,
+        mtlsTrustGlobalAnchors: dto.mtlsTrustGlobalAnchors,
         signingKeys: {
-          create: {
-            kid: keyPair.kid,
-            algorithm: 'RS256',
-            publicKey: keyPair.publicKeyPem,
-            privateKey: keyPair.privateKeyPem,
-          },
+          create: signingKeySecrets.createData(this.crypto, keyPair),
         },
       },
     });
@@ -244,12 +264,39 @@ export class RealmsService {
   }
 
   async update(name: string, dto: UpdateRealmDto) {
+    // The hidden-value placeholder (what GET returns for a stored secret)
+    // means "keep the stored secret": treat it as not sent.
+    const recaptchaSecretKey = withoutPlaceholder(dto.recaptchaSecretKey);
+    const hcaptchaSecretKey = withoutPlaceholder(dto.hcaptchaSecretKey);
     const existing = await this.findByNameRaw(name);
+    if (name === MASTER_REALM && dto.enabled === false) {
+      throw new BadRequestException(
+        'The master realm holds the administrators and cannot be disabled.',
+      );
+    }
     if (dto.smsMfaEnabled !== undefined || dto.smsProvider !== undefined) {
       assertSmsMfaDeliverable(
         dto.smsMfaEnabled ?? existing.smsMfaEnabled,
         dto.smsProvider ?? existing.smsProvider,
       );
+    }
+    // Only when the request touches CAPTCHA, so unrelated updates of a realm
+    // stored before this check still go through. Omitted fields keep their
+    // stored values; an empty string clears a key (as the write below does).
+    if (CAPTCHA_FIELDS.some((field) => dto[field] !== undefined)) {
+      assertCaptchaConfigured({
+        captchaEnabled: dto.captchaEnabled ?? existing.captchaEnabled,
+        captchaProvider:
+          dto.captchaProvider !== undefined
+            ? dto.captchaProvider
+            : existing.captchaProvider,
+        recaptchaSiteKey: dto.recaptchaSiteKey ?? existing.recaptchaSiteKey,
+        recaptchaSecretKey: recaptchaSecretKey ?? existing.recaptchaSecretKey,
+        hcaptchaSiteKey: dto.hcaptchaSiteKey ?? existing.hcaptchaSiteKey,
+        hcaptchaSecretKey: hcaptchaSecretKey ?? existing.hcaptchaSecretKey,
+        captchaScoreThreshold:
+          dto.captchaScoreThreshold ?? existing.captchaScoreThreshold,
+      });
     }
 
     // Validate theme names against available themes
@@ -367,9 +414,9 @@ export class RealmsService {
       captchaEnabled: dto.captchaEnabled,
       captchaProvider: dto.captchaProvider,
       recaptchaSiteKey: dto.recaptchaSiteKey,
-      recaptchaSecretKey: this.crypto.encryptSecret(dto.recaptchaSecretKey),
+      recaptchaSecretKey: this.crypto.encryptSecret(recaptchaSecretKey),
       hcaptchaSiteKey: dto.hcaptchaSiteKey,
-      hcaptchaSecretKey: this.crypto.encryptSecret(dto.hcaptchaSecretKey),
+      hcaptchaSecretKey: this.crypto.encryptSecret(hcaptchaSecretKey),
       captchaScoreThreshold: dto.captchaScoreThreshold,
       // SCIM provisioning
       scimEnabled: dto.scimEnabled,
@@ -380,6 +427,9 @@ export class RealmsService {
       adminEventRetentionDays: dto.adminEventRetentionDays,
       // User lifecycle
       deletionGracePeriodDays: dto.deletionGracePeriodDays,
+      // RFC 8705 certificate client authentication
+      mtlsClientAuthEnabled: dto.mtlsClientAuthEnabled,
+      mtlsTrustGlobalAnchors: dto.mtlsTrustGlobalAnchors,
     };
 
     // Only update password if a real value is provided (not the redacted placeholder)
@@ -398,11 +448,41 @@ export class RealmsService {
   }
 
   async remove(name: string) {
+    if (name === MASTER_REALM) {
+      // Every administrator signs in through it: deleting it locks them all out.
+      throw new BadRequestException(
+        'The master realm holds the administrators and cannot be deleted.',
+      );
+    }
     const existing = await this.findByNameRaw(name);
     await this.cache.invalidateRealmCache(existing.id, name);
     const deleted = await this.prisma.realm.delete({ where: { name } });
     return this.redactSecrets(deleted);
   }
+}
+
+/** A secret sent back as the placeholder is "unchanged", i.e. not sent. */
+function withoutPlaceholder(value: string | undefined): string | undefined {
+  return value === SECRET_PLACEHOLDER ? undefined : value;
+}
+
+const CAPTCHA_FIELDS = [
+  'captchaEnabled',
+  'captchaProvider',
+  'recaptchaSiteKey',
+  'recaptchaSecretKey',
+  'hcaptchaSiteKey',
+  'hcaptchaSecretKey',
+] as const satisfies readonly (keyof UpdateRealmDto)[];
+
+/**
+ * CAPTCHA can only be switched on with a provider, its site key and a
+ * secret (the realm's, or the provider's environment fallback); otherwise
+ * every self-registration would be refused.
+ */
+function assertCaptchaConfigured(realm: CaptchaRealmFields): void {
+  const problem = captchaConfigProblem(realm, (key) => process.env[key]);
+  if (problem) throw new BadRequestException(problem);
 }
 
 /**

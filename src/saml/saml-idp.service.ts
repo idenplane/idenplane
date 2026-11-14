@@ -147,6 +147,12 @@ export class SamlIdpService {
     sp: SamlServiceProvider,
     user: User,
     inResponseTo?: string,
+    /**
+     * The ACS URL the response is posted to: the request's (already checked
+     * against the SP's allowed URLs) or the SP's default. Recipient and
+     * Destination must name it, or the SP rejects the response.
+     */
+    acsUrl: string = sp.acsUrl,
   ): Promise<string> {
     const signingKey = await this.lookups.activeSigningKey(realm.id);
 
@@ -172,7 +178,7 @@ export class SamlIdpService {
   <saml:Subject>
     <saml:NameID Format="${this.escapeXml(sp.nameIdFormat)}">${this.escapeXml(nameId)}</saml:NameID>
     <saml:SubjectConfirmation Method="urn:oasis:names:tc:SAML:2.0:cm:bearer">
-      <saml:SubjectConfirmationData${inResponseTo ? ` InResponseTo="${this.escapeXml(inResponseTo)}"` : ''} NotOnOrAfter="${notOnOrAfter.toISOString()}" Recipient="${this.escapeXml(sp.acsUrl)}" />
+      <saml:SubjectConfirmationData${inResponseTo ? ` InResponseTo="${this.escapeXml(inResponseTo)}"` : ''} NotOnOrAfter="${notOnOrAfter.toISOString()}" Recipient="${this.escapeXml(acsUrl)}" />
     </saml:SubjectConfirmation>
   </saml:Subject>
   <saml:Conditions NotBefore="${notBefore.toISOString()}" NotOnOrAfter="${notOnOrAfter.toISOString()}">
@@ -198,7 +204,7 @@ export class SamlIdpService {
       );
     }
 
-    const response = `<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" Destination="${this.escapeXml(sp.acsUrl)}" ID="${responseId}"${inResponseTo ? ` InResponseTo="${this.escapeXml(inResponseTo)}"` : ''} IssueInstant="${now.toISOString()}" Version="2.0">
+    const response = `<samlp:Response xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" Destination="${this.escapeXml(acsUrl)}" ID="${responseId}"${inResponseTo ? ` InResponseTo="${this.escapeXml(inResponseTo)}"` : ''} IssueInstant="${now.toISOString()}" Version="2.0">
   <saml:Issuer xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion">${this.escapeXml(issuer)}</saml:Issuer>
   <samlp:Status>
     <samlp:StatusCode Value="urn:oasis:names:tc:SAML:2.0:status:Success" />

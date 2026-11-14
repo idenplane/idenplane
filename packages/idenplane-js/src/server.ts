@@ -22,7 +22,17 @@
 import { createRemoteJWKSet, jwtVerify, type JWTPayload } from 'jose';
 import { extractBearerToken, getRolesFromToken } from './token.js';
 
+import {
+  assertCertificateBinding,
+  type CertificateBindingOptions,
+} from './certificate-binding.js';
+
 export { extractBearerToken, getRolesFromToken } from './token.js';
+export {
+  computeX5tS256,
+  CertificateBindingError,
+  type CertificateBindingOptions,
+} from './certificate-binding.js';
 
 export interface IdenplaneServerConfig {
   /** Idenplane server base URL (e.g., 'http://localhost:3000') */
@@ -41,6 +51,8 @@ export interface IdenplaneTokenPayload extends JWTPayload {
   name?: string;
   realm_access?: { roles: string[] };
   resource_access?: Record<string, { roles: string[] }>;
+  /** RFC 8705 §3.1: the client certificate a bound token is tied to. */
+  cnf?: { 'x5t#S256'?: string };
 }
 
 // Cache JWKS instances per issuer with a TTL to support key rotation
@@ -58,17 +70,35 @@ function getJWKS(issuerUrl: string, realm: string) {
 
 /**
  * Verify an Idenplane JWT access token and return the decoded payload.
+ *
+ * A certificate-bound token (RFC 8705, `cnf.x5t#S256`) is accepted only when
+ * `options` names the client certificate the request presented, by
+ * `certificateThumbprint` or DER `certificate`, and it matches. A bound token
+ * verified without one is rejected with {@link CertificateBindingError}.
+ * Unbound tokens are unaffected.
+ *
+ * @example
+ * ```typescript
+ * // Behind mutual TLS (Node https server with requestCert: true)
+ * const der = req.socket.getPeerX509Certificate()?.raw;
+ * const payload = await verifyToken(token, config, { certificate: der });
+ * ```
  */
 export async function verifyToken(
   token: string,
   config: IdenplaneServerConfig,
+  options: VerifyTokenOptions = {},
 ): Promise<IdenplaneTokenPayload> {
   const JWKS = getJWKS(config.issuerUrl, config.realm);
   const issuer = `${config.issuerUrl}/realms/${config.realm}`;
 
   const { payload } = await jwtVerify(token, JWKS, { issuer });
+  await assertCertificateBinding(payload as Record<string, unknown>, options);
   return payload as IdenplaneTokenPayload;
 }
+
+/** Options of {@link verifyToken}. */
+export type VerifyTokenOptions = CertificateBindingOptions;
 
 /**
  * Check if a token payload has the required realm roles.

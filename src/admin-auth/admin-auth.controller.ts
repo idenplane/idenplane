@@ -146,7 +146,7 @@ export class AdminAuthController {
     }
 
     try {
-      await this.adminAuthService.validateAdminToken(token);
+      await this.adminAuthService.validateAdminToken(token, req);
     } catch {
       res.clearCookie(ADMIN_RT_COOKIE, { path: '/admin/auth' });
       throw new UnauthorizedException('Session expired');

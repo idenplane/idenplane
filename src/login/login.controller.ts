@@ -10,12 +10,12 @@ import {
   Res,
   BadRequestException,
   ForbiddenException,
-  Optional,
+  HttpException,
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { ApiExcludeController } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
-import { Prisma, type Realm } from '@prisma/client';
+import { Prisma, type Client, type Realm, type User } from '@prisma/client';
 import { ACR_MFA } from '../authn-core/acr.js';
 import { amrForFactor } from '../authn-core/auth-context.js';
 import {
@@ -23,10 +23,13 @@ import {
   MFA_ENROLLMENT_COOKIE,
 } from '../authn-core/cookies.js';
 import {
-  OAUTH_FORM_PARAM_KEYS,
   pickOAuthParams,
   type AuthorizeParams,
 } from '../authn-core/oauth-params.js';
+import {
+  isEnforceAcrOnFreshLoginEnabled,
+  loginFormParamKeys,
+} from '../authn-core/acr-enforcement.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
@@ -50,12 +53,26 @@ import { ThemeEmailService } from '../theme/theme-email.service.js';
 import { EventsService } from '../events/events.service.js';
 import { LoginEventType } from '../events/event-types.js';
 import { CustomAttributesService } from '../custom-attributes/custom-attributes.service.js';
-import { RiskAssessmentService } from '../risk-assessment/risk-assessment.service.js';
-import { BruteForceService } from '../brute-force/brute-force.service.js';
-import { CsrfService } from '../common/csrf/csrf.service.js';
-import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 import {
+  PrimaryAuthGatesService,
+  type PasswordChangeResume,
+} from './primary-auth-gates.service.js';
+import { SecondFactorVerifier } from './second-factor-verifier.service.js';
+import { CsrfService } from '../common/csrf/csrf.service.js';
+import { FlowRuntimeService } from '../auth-flow/flow-runtime.service.js';
+import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
+import { CaptchaService } from '../captcha/captcha.service.js';
+import {
+  CAPTCHA_TOKEN_FIELD,
+  captchaCspSources,
+  captchaWidget,
+  isCaptchaProvider,
+} from '../captcha/captcha-config.js';
+import {
+  CsrfOnlyDto,
+  EmailOtpDto,
   LoginDto,
+  MagicLinkSendDto,
   TotpDto,
   ChangePasswordDto,
   ForgotPasswordDto,
@@ -92,11 +109,30 @@ export class LoginController {
     private readonly eventsService: EventsService,
     private readonly customAttributesService: CustomAttributesService,
     private readonly csrfService: CsrfService,
-    private readonly bruteForceService: BruteForceService,
     private readonly loginFlow: LoginFlowService,
     private readonly smsOtp: SmsOtpService,
-    @Optional() private readonly riskAssessmentService?: RiskAssessmentService,
+    private readonly primaryAuthGates: PrimaryAuthGatesService,
+    private readonly secondFactorVerifier: SecondFactorVerifier,
+    private readonly flowRuntime: FlowRuntimeService,
+    private readonly captcha: CaptchaService,
   ) {}
+
+  /**
+   * The host the hosted pages are served on (from BASE_URL, as the issuer
+   * is). A CAPTCHA solved on the hosted registration page must report it.
+   */
+  private hostedHostname(): string {
+    const baseUrl = this.config.get<string>(
+      'BASE_URL',
+      'http://localhost:3000',
+    );
+    try {
+      return new URL(baseUrl).hostname;
+    } catch {
+      // An unparsable BASE_URL matches no hostname, so verification fails closed.
+      return '';
+    }
+  }
 
   // ─── CSRF HELPERS ──────────────────────────────────────
 
@@ -133,12 +169,16 @@ export class LoginController {
     @Req() req: Request,
     @Res() res: Response,
   ) {
+    // A login bound to a custom flow renders that flow's current step.
+    if (await this.flowRuntime.showLoginPage(realm, query, req, res)) return;
+
     const csrfToken = this.setCsrfCookie(realm, res);
     // Build a properly percent-encoded register link so the hosted page does
     // not emit a URL with literal spaces (scope) or an unencoded redirect_uri,
     // and so empty params are dropped rather than rendered as `nonce=`.
+    // With ENFORCE_ACR_ON_FRESH_LOGIN these carry acr_values and claims too.
     const registerParams = new URLSearchParams(
-      pickOAuthParams(query, OAUTH_FORM_PARAM_KEYS),
+      pickOAuthParams(query, loginFormParamKeys()),
     );
     const registerQs = registerParams.toString();
     const registerUrl = `/realms/${realm.name}/register${
@@ -165,6 +205,7 @@ export class LoginController {
       };
     });
 
+    const enforceAcr = isEnforceAcrOnFreshLoginEnabled();
     this.themeRender.render(
       res,
       realm,
@@ -183,6 +224,10 @@ export class LoginController {
         code_challenge: query['code_challenge'] ?? '',
         code_challenge_method: query['code_challenge_method'] ?? '',
         prompt: query['prompt'] ?? '',
+        // What the request asks of `acr`, carried only with
+        // ENFORCE_ACR_ON_FRESH_LOGIN (the templates render them if set).
+        acr_values: enforceAcr ? (query['acr_values'] ?? '') : '',
+        claims: enforceAcr ? (query['claims'] ?? '') : '',
         error: query['error'] ?? '',
         info: query['info'] ?? '',
         login_hint: query['login_hint'] ?? '',
@@ -205,6 +250,25 @@ export class LoginController {
   ) {
     this.validateCsrf(realm, body, req);
     const b = body as unknown as Record<string, string | undefined>;
+    // A bound login runs this as its password/ldap step (or refuses it).
+    if (
+      await this.flowRuntime.dispatch(
+        realm,
+        {
+          endpoint: 'password',
+          username: body.username,
+          password: body.password,
+          rememberMe: !!b['rememberMe'],
+          deviceFingerprint: body.device_fingerprint ?? null,
+          clientId: body.client_id,
+          form: b,
+        },
+        req,
+        res,
+      )
+    ) {
+      return;
+    }
     try {
       const user = await this.loginService.validateCredentials(
         realm,
@@ -213,114 +277,25 @@ export class LoginController {
         resolveClientIp(req),
       );
 
-      // ── Adaptive authentication / risk assessment ──────────────────────────
-      let riskStepUp = false;
-      if (realm.adaptiveAuthEnabled && this.riskAssessmentService) {
-        const riskContext = {
-          userId: user.id,
-          realmId: realm.id,
-          realmName: realm.name,
-          ipAddress: resolveClientIp(req),
-          userAgent: req.headers['user-agent'] ?? null,
-          deviceFingerprint: body.device_fingerprint ?? null,
-          timestamp: new Date(),
-        };
-
-        const assessment =
-          await this.riskAssessmentService.assessRisk(riskContext);
-
-        if (assessment.action === 'BLOCK') {
-          // Send email notification if user has an email address
-          if (user.email) {
-            void this.riskAssessmentService.sendBlockedLoginEmail(
-              realm.name,
-              user.email,
-              riskContext,
-              assessment.geoLocation,
-            );
-          }
-
-          void this.eventsService.recordLoginEvent({
-            realmId: realm.id,
-            type: LoginEventType.LOGIN_ERROR,
-            userId: user.id,
-            clientId: body.client_id,
-            ipAddress: resolveClientIp(req),
-            error: `Login blocked by risk assessment (score=${assessment.riskScore})`,
-          });
-
-          const params = new URLSearchParams();
-          params.set(
-            'error',
-            'Login blocked due to suspicious activity. Check your email for details.',
-          );
-          for (const key of OAUTH_FORM_PARAM_KEYS) {
-            if (b[key]) params.set(key, b[key]);
-          }
-          return res.redirect(
-            `/realms/${realm.name}/login?${params.toString()}`,
-          );
-        }
-
-        // STEP_UP is applied after the account gates below, so a risky
-        // sign-in still has to pass email verification and password expiry.
-        riskStepUp = assessment.action === 'STEP_UP';
-
-        // Update the user's profile on ALLOW or STEP_UP (will learn from the login)
-        void this.riskAssessmentService.updateUserProfile(
-          user.id,
-          realm.id,
-          riskContext,
-          assessment.geoLocation,
-        );
-      }
-      // ── End risk assessment ────────────────────────────────────────────────
-
-      // Check email verification requirement
-      if (realm.requireEmailVerification && user.email && !user.emailVerified) {
-        const params = new URLSearchParams();
-        params.set(
-          'error',
-          'Please verify your email address before signing in. Check your inbox for the verification link.',
-        );
-        for (const key of OAUTH_FORM_PARAM_KEYS) {
-          if (b[key]) params.set(key, b[key]);
-        }
-        return res.redirect(`/realms/${realm.name}/login?${params.toString()}`);
+      // Risk assessment, email verification and password expiry, in that
+      // order.
+      const gates = await this.primaryAuthGates.evaluate(realm, user, {
+        ipAddress: resolveClientIp(req),
+        userAgent: req.headers['user-agent'] ?? null,
+        deviceFingerprint: body.device_fingerprint ?? null,
+        form: b,
+      });
+      if (gates.kind === 'block') {
+        return res.redirect(gates.redirectUrl);
       }
 
-      // Build OAuth params for later use
-      const oauthParams = pickOAuthParams(b, OAUTH_FORM_PARAM_KEYS);
+      // Build OAuth params for later use (with ENFORCE_ACR_ON_FRESH_LOGIN,
+      // what the request asks of `acr` too).
+      const oauthParams = pickOAuthParams(b, loginFormParamKeys());
 
-      // Check password expiry
-      if (this.passwordPolicyService.isExpired(user, realm)) {
-        const changeToken = this.crypto.generateSecret(32);
-        // Store a short-lived verification token for the change-password flow
-        await this.verificationService.createTokenWithHash(
-          user.id,
-          'change_password',
-          300,
-          this.crypto.sha256(changeToken),
-        );
-
-        return res.redirect(
-          `/realms/${realm.name}/change-password?token=${changeToken}&info=${encodeURIComponent('Your password has expired and must be changed.')}`,
-        );
-      }
-
-      // Risk-based step-up: a second factor even where MFA is optional. With
-      // no factor enrolled there is nothing to step up with; the sign-in
-      // continues as usual.
-      if (riskStepUp && (await this.mfaService.isMfaEnabled(user.id))) {
-        return this.loginFlow.startSecondFactor(
-          realm,
-          user,
-          oauthParams,
-          ['pwd'],
-          res,
-        );
-      }
-
+      // A risk step-up (gates.riskStepUp) needs no branch of its own: a user
+      // with a second factor always gets the challenge below, after the
+      // client's policy; without one there is nothing to step up with.
       // Second factor / required enrolment / session — shared with every
       // other first-factor path (see LoginFlowService).
       return await this.loginFlow.continueAfterPrimaryAuth(
@@ -344,11 +319,115 @@ export class LoginController {
 
       const params = new URLSearchParams();
       params.set('error', errMessage);
-      for (const key of OAUTH_FORM_PARAM_KEYS) {
+      for (const key of loginFormParamKeys()) {
         if (b[key]) params.set(key, b[key]);
       }
       res.redirect(`/realms/${realm.name}/login?${params.toString()}`);
     }
+  }
+
+  // ─── CUSTOM-FLOW EMAIL STEPS ───────────────────────────────
+
+  /** Shown when a flow-only endpoint is reached without a sign-in. */
+  private noSignInInProgress(realm: Realm, req: Request, res: Response) {
+    res.status(400);
+    this.themeRender.render(
+      res,
+      realm,
+      'login',
+      'error',
+      {
+        pageTitle: 'Sign-in expired',
+        errorTitle: 'Sign-in expired',
+        errorMessage:
+          'There is no sign-in in progress in this browser. Please start again from the application.',
+      },
+      req,
+    );
+  }
+
+  /** `email_otp` step: email a code to the identified user. */
+  @Post('login/email-otp/send')
+  @UseGuards(RateLimitGuard)
+  @RateLimitByIp()
+  async sendFlowEmailOtp(
+    @CurrentRealm() realm: Realm,
+    @Body() body: CsrfOnlyDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    this.validateCsrf(realm, body, req);
+    if (await this.flowRuntime.sendEmailOtp(realm, req, res)) return;
+    this.noSignInInProgress(realm, req, res);
+  }
+
+  /** `email_otp` step: the code from the email. */
+  @Post('login/email-otp')
+  @UseGuards(RateLimitGuard)
+  @RateLimitByIp()
+  async verifyFlowEmailOtp(
+    @CurrentRealm() realm: Realm,
+    @Body() body: EmailOtpDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    this.validateCsrf(realm, body, req);
+    if (
+      await this.flowRuntime.dispatch(
+        realm,
+        { endpoint: 'email_otp', code: body.code },
+        req,
+        res,
+      )
+    ) {
+      return;
+    }
+    this.noSignInInProgress(realm, req, res);
+  }
+
+  /** `magic_link` step: email a sign-in link for this browser's sign-in. */
+  @Post('login/magic-link/send')
+  @UseGuards(RateLimitGuard)
+  @RateLimitByIp()
+  async sendFlowMagicLink(
+    @CurrentRealm() realm: Realm,
+    @Body() body: MagicLinkSendDto,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    this.validateCsrf(realm, body, req);
+    if (
+      await this.flowRuntime.sendMagicLink(
+        realm,
+        { email: body.email },
+        req,
+        res,
+      )
+    ) {
+      return;
+    }
+    this.noSignInInProgress(realm, req, res);
+  }
+
+  /**
+   * `magic_link` step: the link from the email. A GET, as links are, so it
+   * changes nothing unless this browser holds the sign-in that sent it.
+   */
+  @Get('login/magic-link')
+  @UseGuards(RateLimitGuard)
+  @RateLimitByIp()
+  async openFlowMagicLink(
+    @CurrentRealm() realm: Realm,
+    @Query('token') token: string | undefined,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    return this.flowRuntime.openMagicLink(
+      realm,
+      typeof token === 'string' ? token : undefined,
+      req,
+      res,
+    );
   }
 
   // ─── MFA / TOTP ───────────────────────────────────────────
@@ -362,6 +441,16 @@ export class LoginController {
     @Query('info') info?: string,
     @Query('method') method?: string,
   ) {
+    if (
+      await this.flowRuntime.showTotpPage(
+        realm,
+        { error, info, method },
+        req,
+        res,
+      )
+    ) {
+      return;
+    }
     const challengeToken = (
       req.cookies as Record<string, string | undefined>
     )?.[MFA_CHALLENGE_COOKIE];
@@ -424,6 +513,7 @@ export class LoginController {
     @Res() res: Response,
   ) {
     this.validateCsrf(realm, body, req);
+    if (await this.flowRuntime.sendSmsCode(realm, req, res)) return;
     const challengeToken = (
       req.cookies as Record<string, string | undefined>
     )?.[MFA_CHALLENGE_COOKIE];
@@ -473,6 +563,23 @@ export class LoginController {
     @Res() res: Response,
   ) {
     this.validateCsrf(realm, body, req);
+    // A bound login runs this as its totp step (authenticator, texted or
+    // recovery code).
+    if (
+      await this.flowRuntime.dispatch(
+        realm,
+        {
+          endpoint: 'totp',
+          code: body.code,
+          recoveryCode: body.recoveryCode,
+          smsCode: body.smsCode,
+        },
+        req,
+        res,
+      )
+    ) {
+      return;
+    }
     const challengeToken = (
       req.cookies as Record<string, string | undefined>
     )?.[MFA_CHALLENGE_COOKIE];
@@ -509,65 +616,29 @@ export class LoginController {
       );
     }
 
-    // Check TOTP rate limit before processing
-    const rateLimitCheck = await this.bruteForceService.checkTotpRateLimit(
+    // Rate limit, the factor itself, and the failure record and event.
+    const result = await this.secondFactorVerifier.verify(
       realm,
       challenge.userId,
+      {
+        code: body.code,
+        recoveryCode: body.recoveryCode,
+        smsCode: body.smsCode,
+      },
+      challengeToken,
+      resolveClientIp(req),
     );
-    if (rateLimitCheck.blocked) {
-      this.logger.warn(
-        `TOTP rate limit exceeded for user ${challenge.userId} in realm ${realm.id}`,
-      );
+    // Keep the user on the SMS form after an SMS attempt.
+    const retryMethod = body.smsCode ? '&method=sms' : '';
+    if (!result.ok && result.reason === 'rate_limited') {
       return res.redirect(
-        `/realms/${realm.name}/totp?error=${encodeURIComponent('Too many failed attempts. Please try again later.')}`,
+        `/realms/${realm.name}/totp?error=${encodeURIComponent('Too many failed attempts. Please try again later.')}${retryMethod}`,
       );
     }
-
-    const code = body.code;
-    const recoveryCode = body.recoveryCode;
-    const smsCode = body.smsCode;
-    // Keep the user on the SMS form after a wrong SMS code.
-    const retryMethod = smsCode ? '&method=sms' : '';
-
-    const { verified, factor } = smsCode
-      ? await this.mfaService.verifySecondFactor(challenge.userId, {
-          method: 'sms',
-          code: smsCode,
-          realmId: realm.id,
-          purpose: 'login',
-          binding: challengeToken,
-        })
-      : code
-        ? await this.mfaService.verifySecondFactor(challenge.userId, {
-            method: 'totp',
-            code,
-          })
-        : await this.mfaService.verifySecondFactor(challenge.userId, {
-            method: 'recovery',
-            code: recoveryCode ?? '',
-          });
-
-    if (!verified) {
-      await this.bruteForceService.recordTotpFailure(
-        realm,
-        challenge.userId,
-        resolveClientIp(req),
-      );
-      void this.eventsService.recordLoginEvent({
-        realmId: realm.id,
-        type: LoginEventType.MFA_VERIFY_ERROR,
-        userId: challenge.userId,
-        ipAddress: resolveClientIp(req),
-        error: 'Invalid MFA code',
-      });
-      const remainingCheck = await this.bruteForceService.checkTotpRateLimit(
-        realm,
-        challenge.userId,
-      );
-      const errorMsg =
-        remainingCheck.blocked || remainingCheck.remainingAttempts <= 2
-          ? 'Too many failed attempts. Please try again later.'
-          : 'Invalid code. Please try again.';
+    if (!result.ok) {
+      const errorMsg = result.tooManyAttempts
+        ? 'Too many failed attempts. Please try again later.'
+        : 'Invalid code. Please try again.';
       return res.redirect(
         `/realms/${realm.name}/totp?error=${encodeURIComponent(errorMsg)}${retryMethod}`,
       );
@@ -586,7 +657,11 @@ export class LoginController {
     }
 
     // Reset TOTP failure tracking on successful verification
-    await this.bruteForceService.resetTotpFailures(realm.id, challenge.userId);
+    await this.secondFactorVerifier.recordSuccess(
+      realm,
+      challenge.userId,
+      resolveClientIp(req),
+    );
 
     // MFA verified — complete login
     const user = await this.loginService.findUserById(challenge.userId);
@@ -605,8 +680,9 @@ export class LoginController {
       res,
       {
         acr: ACR_MFA,
-        amr: amrForFactor(challenge.primaryAmr, factor),
+        amr: amrForFactor(challenge.primaryAmr, result.factor),
       },
+      { rememberMe: !!challenge.rememberMe },
     );
   }
 
@@ -641,6 +717,11 @@ export class LoginController {
       : null;
     if (!enrollment || enrollment.realmId !== realm.id) {
       return loginAgain('Your sign-in expired. Please sign in again.');
+    }
+    if (enrollment.authnTxnId) {
+      // A detour of a custom-flow login: the flow goes on from here.
+      res.clearCookie(MFA_ENROLLMENT_COOKIE, { path: `/realms/${realm.name}` });
+      return this.flowRuntime.resumeAfterEnrolment(realm, enrollment, req, res);
     }
 
     const user = await this.loginService.findUserById(enrollment.userId);
@@ -813,7 +894,66 @@ export class LoginController {
     const info = encodeURIComponent(
       'Password changed successfully. You can now sign in.',
     );
-    res.redirect(`/realms/${realm.name}/login?info=${info}`);
+    const resume = await this.primaryAuthGates.takePasswordChangeResume(
+      token,
+      realm.id,
+      user.id,
+    );
+    const updated = resume
+      ? await this.loginService.findUserById(user.id)
+      : null;
+    if (!resume || !updated?.enabled) {
+      return res.redirect(`/realms/${realm.name}/login?info=${info}`);
+    }
+    return this.resumeAfterPasswordChange(realm, updated, resume, req, res);
+  }
+
+  /**
+   * The sign-in an expired password interrupted goes on once the password
+   * is changed: the user proved the old password and chose a new one, so it
+   * continues after the first factor (second factor, required enrolment,
+   * consent, the code), with the OAuth request kept server-side. Where the
+   * login is bound to a custom flow, the built-in path may not finish it:
+   * it starts again through the authorization endpoint instead.
+   */
+  private async resumeAfterPasswordChange(
+    realm: Realm,
+    user: User,
+    resume: PasswordChangeResume,
+    req: Request,
+    res: Response,
+  ) {
+    const info = encodeURIComponent(
+      'Password changed successfully. You can now sign in.',
+    );
+    const { oauthParams } = resume;
+    let client: Client | null = null;
+    if (oauthParams['client_id']) {
+      try {
+        client = await this.oauthService.validateAuthRequest(
+          realm,
+          oauthParams as unknown as AuthorizeParams,
+        );
+      } catch {
+        return res.redirect(`/realms/${realm.name}/login?info=${info}`);
+      }
+    }
+    const binding = await this.flowRuntime.resolveBinding(realm, client);
+    if (binding.kind !== 'legacy') {
+      return res.redirect(
+        client
+          ? `/realms/${realm.name}/protocol/openid-connect/auth?${new URLSearchParams(oauthParams).toString()}`
+          : `/realms/${realm.name}/login?info=${info}`,
+      );
+    }
+    return this.loginFlow.continueAfterPrimaryAuth(
+      realm,
+      user,
+      oauthParams,
+      { primaryAmr: ['pwd'], rememberMe: resume.rememberMe },
+      req,
+      res,
+    );
   }
 
   // ─── CONSENT ────────────────────────────────────────────
@@ -945,6 +1085,9 @@ export class LoginController {
       await this.customAttributesService.getRegistrationAttributes(realm.id);
 
     const csrfToken = this.setCsrfCookie(realm, res);
+    // With CAPTCHA on, the page renders the realm provider's widget and its
+    // CSP admits exactly that provider's origins (this page only).
+    const captcha = captchaWidget(realm);
     this.themeRender.render(
       res,
       realm,
@@ -952,6 +1095,7 @@ export class LoginController {
       'register',
       {
         pageTitle: 'Create Account',
+        captcha,
         passwordMinLength: realm.passwordMinLength || 8,
         passwordHint: hints.length ? `Must contain ${hints.join(', ')}` : '',
         username: query['username'] ?? '',
@@ -969,6 +1113,12 @@ export class LoginController {
         code_challenge: query['code_challenge'] ?? '',
         code_challenge_method: query['code_challenge_method'] ?? '',
         prompt: query['prompt'] ?? '',
+        acr_values: isEnforceAcrOnFreshLoginEnabled()
+          ? (query['acr_values'] ?? '')
+          : '',
+        claims: isEnforceAcrOnFreshLoginEnabled()
+          ? (query['claims'] ?? '')
+          : '',
         customAttributes: customAttributes.map((a) => ({
           name: a.name,
           displayName: a.displayName,
@@ -983,6 +1133,7 @@ export class LoginController {
         csrfToken,
       },
       req,
+      captcha ? { cspSources: captchaCspSources(captcha.provider) } : undefined,
     );
   }
 
@@ -1010,7 +1161,8 @@ export class LoginController {
     const confirmPassword = body['confirmPassword'] ?? '';
 
     // Preserve OAuth params through registration redirects
-    const oauthParams = OAUTH_FORM_PARAM_KEYS.filter((p) => body[p])
+    const oauthParams = loginFormParamKeys()
+      .filter((p) => body[p])
       .map((p) => `${p}=${encodeURIComponent(body[p])}`)
       .join('&');
     const oauthSuffix = oauthParams ? `&${oauthParams}` : '';
@@ -1088,6 +1240,27 @@ export class LoginController {
       if (attr.required && !value) {
         return res.redirect(
           `/realms/${realm.name}/register?error=${encodeURIComponent(`'${attr.displayName}' is required.`)}${preserveFields}`,
+        );
+      }
+    }
+
+    // CAPTCHA, before any account lookup or write. The token field follows
+    // the realm's provider, never whichever field the request happens to send.
+    if (realm.captchaEnabled) {
+      const tokenField = isCaptchaProvider(realm.captchaProvider)
+        ? CAPTCHA_TOKEN_FIELD[realm.captchaProvider]
+        : undefined;
+      const token = tokenField ? body[tokenField] : undefined;
+      try {
+        await this.captcha.verifyForRealm(realm, token, {
+          action: 'register',
+          remoteIp: resolveClientIp(req),
+          expectedHostname: this.hostedHostname(),
+        });
+      } catch (err) {
+        if (!(err instanceof HttpException)) throw err;
+        return res.redirect(
+          `/realms/${realm.name}/register?error=${encodeURIComponent(err.message)}${preserveFields}`,
         );
       }
     }

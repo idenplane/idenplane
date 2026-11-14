@@ -110,7 +110,7 @@ Most identity solutions are either too complex to self-host (Java, heavy runtime
 | **Rate Limiting** | Configurable request throttling per endpoint, per client, per user, and per IP |
 | **Horizontal Scaling** | Stateless design — run multiple instances behind a load balancer |
 | **Redis Support** | Optional Redis for session storage and caching (Sentinel support for HA) |
-| **Multi-Database** | PostgreSQL (primary), MySQL, and SQLite support |
+| **PostgreSQL** | PostgreSQL 16+, self-hosted or managed (RDS, Aurora, Cloud SQL, Azure, Supabase, Neon) |
 | **Guided Upgrades** | Pre-flight validation, automatic pre-upgrade backup, and rollback on failure — opt-in, see [Upgrading](https://docs.idenplane.io/deployment/upgrading) |
 | **API Versioning** | Versioned API with deprecation and sunset headers (RFC 8594) |
 | **CORS Management** | Dynamic origin validation with two-level caching (in-process + Redis) |
@@ -372,7 +372,7 @@ graph TB
 
         subgraph Storage["Data Layer"]
             Redis["Redis (Cache)"]
-            Postgres["PostgreSQL / MySQL"]
+            Postgres["PostgreSQL"]
         end
     end
 
@@ -427,7 +427,7 @@ sequenceDiagram
 | Layer | Technology |
 |-------|-----------|
 | **Backend** | NestJS 11, TypeScript 5.7, Node.js 22 |
-| **Database** | PostgreSQL 16 (primary), MySQL 8, SQLite — via Prisma 7 ORM (83 models) |
+| **Database** | PostgreSQL 16+ via Prisma 7 ORM |
 | **Admin UI** | React 19, Vite 7, Tailwind CSS 4, React Query |
 | **Auth Pages** | Handlebars SSR with per-realm theming and i18n |
 | **Security** | Argon2id (passwords), JOSE (JWTs), Helmet (headers), AES-256-GCM (webhooks) |
@@ -463,7 +463,7 @@ sequenceDiagram
 
 | Variable | Default | Description |
 |----------|---------|-------------|
-| `DATABASE_URL` | *(required)* | PostgreSQL / MySQL / SQLite connection string |
+| `DATABASE_URL` | *(required)* | PostgreSQL connection string |
 | `PORT` | `3000` | Server port |
 | `NODE_ENV` | `development` | Environment mode |
 | `BASE_URL` | `http://localhost:3000` | Public URL for redirects and emails |
@@ -606,7 +606,7 @@ Idenplane/
 ├── themes/                        # Login/account page themes
 │   ├── idenplane/                    # Default theme
 │   └── midnight/                  # Dark theme
-├── prisma/                        # Database schema (83 models) & migrations
+├── prisma/                        # Database schema & migrations
 ├── test/                          # E2E tests
 ├── docker-compose.yml             # Production (pulls from Docker Hub)
 ├── docker-compose.dev.yml         # Development (builds from source)
@@ -702,7 +702,7 @@ REDIS_URL=redis://your-redis:6379
 | Custom Auth Flows | Yes | Yes | No | No |
 | Plugin System | Yes | Yes | No | No |
 | Realm Theming | Yes | Yes | No | Yes |
-| Multi-Database | 3 (PG, MySQL, SQLite) | 2 (PG, MySQL) | N/A | N/A |
+| Database | PostgreSQL | PostgreSQL, MySQL, MariaDB, Oracle, SQL Server | Managed | Managed |
 | API Versioning | Yes | Yes | Yes | Yes |
 
 ---

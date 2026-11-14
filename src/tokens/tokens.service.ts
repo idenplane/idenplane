@@ -19,6 +19,15 @@ import { BackchannelLogoutService } from './backchannel-logout.service.js';
 import { EventsService } from '../events/events.service.js';
 import { LoginEventType } from '../events/event-types.js';
 import { matchesRedirectUri } from '../common/redirect-uri.utils.js';
+import {
+  assertCertificateBinding,
+  X5T_S256,
+  type PresentedCertificateInput,
+} from '../mtls/certificate-binding.js';
+import {
+  CERTIFICATE_BINDING_CLAIMS,
+  ClientCertificateResolverRegistry,
+} from '../client-auth/client-certificate-resolver.js';
 
 @Injectable()
 export class TokensService {
@@ -34,6 +43,7 @@ export class TokensService {
     private readonly backchannelLogout: BackchannelLogoutService,
     private readonly eventsService: EventsService,
     private readonly customAttributesService: CustomAttributesService,
+    private readonly certificateResolvers: ClientCertificateResolverRegistry,
   ) {}
 
   async introspect(realm: Realm, token: string) {
@@ -44,6 +54,7 @@ export class TokensService {
         return { active: false };
       }
 
+      // cert-binding: exempt: introspection reports cnf (RFC 8705 §3.2); the resource server enforces it
       const payload = await this.jwkService.verifyJwt(
         token,
         signingKey.publicKey,
@@ -73,20 +84,37 @@ export class TokensService {
       // azp (authorized party) identifies the client the token was issued to.
       // RFC 7662 / OIDC clients rely on it (and client_id) to verify audience.
       const azp = payload['azp'] as string | undefined;
+      const client = azp ? await this.lookups.client(realm.id, azp) : null;
 
-      if (sub) {
+      if (client?.nhiIdentityId) {
+        // A token of an NHI-backed client (RFC 8705 NHI binding). Its subject
+        // is the client, never a user, so no user is looked up. It is active
+        // while the client is enabled and its certificate binding still
+        // holds: the realm allows certificate authentication, the identity
+        // is active and the bound credential is active or in its rotation
+        // grace period. With no resolver to ask, it is not active.
+        if (!client.enabled || client.id !== sub) return { active: false };
+        const cnf = payload['cnf'] as Record<string, unknown> | undefined;
+        const x5t = cnf?.[X5T_S256];
+        const bound = await this.certificateResolvers.bindingActive({
+          realm,
+          client,
+          x5tS256: typeof x5t === 'string' ? x5t : null,
+          claims: Object.fromEntries(
+            CERTIFICATE_BINDING_CLAIMS.map((name) => [name, payload[name]]),
+          ),
+        });
+        if (bound !== true) return { active: false };
+      } else if (sub) {
         const user = await this.lookups.userProfile(sub);
         if (user) {
           if (!user.enabled) return { active: false };
           username = user.username;
-        } else {
+        } else if (!client || client.id !== sub || !client.enabled) {
           // A client_credentials token of a client without a service account
           // has the client as its subject. It is active while that client
           // exists and is enabled; a deleted user's token is not.
-          const client = azp ? await this.lookups.client(realm.id, azp) : null;
-          if (!client || client.id !== sub || !client.enabled) {
-            return { active: false };
-          }
+          return { active: false };
         }
       }
 
@@ -105,6 +133,9 @@ export class TokensService {
         email: payload['email'],
         realm_access: payload['realm_access'],
         resource_access: payload['resource_access'],
+        // RFC 8705 §3.2: the resource server checks the binding itself.
+        // Absent (undefined, left out of the JSON) for an unbound token.
+        cnf: payload['cnf'] as Record<string, unknown> | undefined,
       };
     } catch {
       // Not a verifiable JWT (access/id token). Treat it as an opaque refresh
@@ -142,6 +173,8 @@ export class TokensService {
       scope: stored.scope ?? undefined,
       exp: Math.floor(stored.expiresAt.getTime() / 1000),
       iat: Math.floor(stored.createdAt.getTime() / 1000),
+      // A public client's refresh token bound to its certificate (RFC 8705 §4).
+      ...(stored.cnfX5tS256 ? { cnf: { [X5T_S256]: stored.cnfX5tS256 } } : {}),
     };
   }
 
@@ -184,6 +217,7 @@ export class TokensService {
       try {
         const signingKey = await this.lookups.activeSigningKey(realm.id);
         if (signingKey) {
+          // cert-binding: exempt: revocation ownership check, the token is not used for access
           const payload = await this.jwkService.verifyJwt(
             token,
             signingKey.publicKey,
@@ -234,6 +268,7 @@ export class TokensService {
       try {
         const signingKey = await this.lookups.activeSigningKey(realm.id);
         if (signingKey) {
+          // cert-binding: exempt: revocation reads jti to blacklist the token, it grants no access
           const payload = await this.jwkService.verifyJwt(
             token,
             signingKey.publicKey,
@@ -285,6 +320,7 @@ export class TokensService {
 
       if (!signingKey) return;
 
+      // cert-binding: exempt: id_token_hint, an ID token is never certificate-bound
       const payload = await this.jwkService.verifyJwt(
         idTokenHint,
         signingKey.publicKey,
@@ -343,6 +379,7 @@ export class TokensService {
     try {
       const signingKey = await this.lookups.activeSigningKey(realm.id);
       if (signingKey) {
+        // cert-binding: exempt: id_token_hint, an ID token is never certificate-bound
         const payload = await this.jwkService.verifyJwt(
           idTokenHint,
           signingKey.publicKey,
@@ -437,7 +474,17 @@ export class TokensService {
       });
   }
 
-  async userinfo(realm: Realm, accessToken: string) {
+  /**
+   * OIDC UserInfo. `presentedCert` is the certificate the request presented
+   * (see ClientCertificateSource), read only when the token is
+   * certificate-bound: a bound token without its certificate is 401
+   * `invalid_token` (RFC 8705 §3).
+   */
+  async userinfo(
+    realm: Realm,
+    accessToken: string,
+    presentedCert: PresentedCertificateInput = null,
+  ) {
     const signingKey = await this.lookups.activeSigningKey(realm.id);
 
     if (!signingKey) {
@@ -446,6 +493,7 @@ export class TokensService {
 
     let payload;
     try {
+      // cert-binding: enforced
       payload = await this.jwkService.verifyJwt(
         accessToken,
         signingKey.publicKey,
@@ -453,6 +501,7 @@ export class TokensService {
     } catch {
       throw new UnauthorizedException('Invalid access token');
     }
+    assertCertificateBinding(payload, presentedCert);
 
     // Check blacklist
     const jti = payload['jti'];
@@ -496,6 +545,7 @@ export class TokensService {
       throw new UnauthorizedException('No signing key');
     }
 
+    // cert-binding: exempt: back-channel logout token, signed by this server and never bound
     const payload = await this.jwkService.verifyJwt(
       logoutToken,
       signingKey.publicKey,

@@ -1,4 +1,4 @@
-import { Controller, Get, UseGuards } from '@nestjs/common';
+import { Controller, Get, Inject, Optional, UseGuards } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
 import { SkipThrottle } from '@nestjs/throttler';
 import type { Realm } from '@prisma/client';
@@ -9,6 +9,7 @@ import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
 import { ACR_VALUES_SUPPORTED } from '../authn-core/acr.js';
+import { MTLS_CONFIG, type MtlsConfig } from '../mtls/mtls-config.js';
 import {
   RateLimitGuard,
   RateLimitByIp,
@@ -25,7 +26,44 @@ export class WellKnownController {
     private readonly prisma: PrismaService,
     private readonly jwkService: JwkService,
     private readonly cache: CacheService,
+    @Optional()
+    @Inject(MTLS_CONFIG)
+    private readonly mtls?: Pick<MtlsConfig, 'enabled' | 'baseUrl'>,
   ) {}
+
+  /**
+   * RFC 8705 metadata, only when certificate client authentication is on
+   * both globally and for this realm: the certificate methods, certificate-
+   * bound access tokens (§3.3) and, with MTLS_BASE_URL, the endpoint aliases.
+   */
+  private mtlsMetadata(realm: Realm): {
+    methods: string[];
+    aliases: Record<string, unknown>;
+    boundTokens: Record<string, unknown>;
+  } {
+    if (!this.mtls?.enabled || realm.mtlsClientAuthEnabled !== true) {
+      return { methods: [], aliases: {}, boundTokens: {} };
+    }
+    const protocol = this.mtls.baseUrl
+      ? `${this.mtls.baseUrl}/realms/${realm.name}/protocol/openid-connect`
+      : undefined;
+    return {
+      methods: ['tls_client_auth', 'self_signed_tls_client_auth'],
+      boundTokens: { tls_client_certificate_bound_access_tokens: true },
+      aliases: protocol
+        ? {
+            // RFC 8705 §5: where a client presents its certificate.
+            mtls_endpoint_aliases: {
+              token_endpoint: `${protocol}/token`,
+              introspection_endpoint: `${protocol}/token/introspect`,
+              revocation_endpoint: `${protocol}/revoke`,
+              userinfo_endpoint: `${protocol}/userinfo`,
+              device_authorization_endpoint: `${protocol}/auth/device`,
+            },
+          }
+        : {},
+    };
+  }
 
   @Get('.well-known/openid-configuration')
   @ApiOperation({ summary: 'OpenID Connect discovery document' })
@@ -38,6 +76,7 @@ export class WellKnownController {
     const baseUrl = process.env['BASE_URL'] ?? 'http://localhost:3000';
     const realmUrl = `${baseUrl}/realms/${realm.name}`;
     const protocolUrl = `${realmUrl}/protocol/openid-connect`;
+    const mtls = this.mtlsMetadata(realm);
 
     return {
       issuer: realmUrl,
@@ -74,7 +113,10 @@ export class WellKnownController {
         'client_secret_post',
         'client_secret_basic',
         'none',
+        ...mtls.methods,
       ],
+      ...mtls.boundTokens,
+      ...mtls.aliases,
       claims_supported: [
         'sub',
         'iss',
@@ -93,6 +135,7 @@ export class WellKnownController {
         'preferred_username',
         'given_name',
         'family_name',
+        'updated_at',
         'realm_access',
         'resource_access',
       ],

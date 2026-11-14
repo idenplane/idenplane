@@ -8,6 +8,7 @@ import {
   MockPrismaService,
 } from '../prisma/prisma.mock.js';
 import type { Realm } from '@prisma/client';
+import { CryptoService } from '../crypto/crypto.service.js';
 
 describe('BrokerService', () => {
   let service: BrokerService;
@@ -107,6 +108,7 @@ describe('BrokerService', () => {
       prisma as any,
       jwkService as any,
       idpService as any,
+      new CryptoService(),
     );
 
     global.fetch = jest.fn();
@@ -848,5 +850,143 @@ describe('BrokerService', () => {
         }),
       });
     });
+  });
+
+  // ─── Custom-flow social steps ─────────────────────────────────
+
+  describe('flow social steps', () => {
+    const identity = (external: Record<string, unknown>, idp = mockIdp) => ({
+      idp: idp as any,
+      external: { sub: 'ext-1', ...external } as any,
+    });
+
+    it('initiateFlowLogin signs a state naming the transaction, step and nonce only', async () => {
+      idpService.findByAlias.mockResolvedValue(mockIdp);
+      prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
+      jwkService.signJwt.mockResolvedValue('state-jwt');
+      const url = new URL(
+        await service.initiateFlowLogin(mockRealm, 'google', {
+          txn: 'txn-1',
+          step: 'social',
+          nonce: 'n-1',
+        }),
+      );
+      expect(url.searchParams.get('state')).toBe('state-jwt');
+      const [payload] = jwkService.signJwt.mock.calls[0];
+      expect(payload).toMatchObject({
+        typ: 'broker_state',
+        realmId: 'realm-1',
+        alias: 'google',
+        flow: { txn: 'txn-1', step: 'social', nonce: 'n-1' },
+      });
+      expect(payload.clientId).toBeUndefined();
+    });
+
+    it('fetchExternalIdentity refuses an answer without a subject', async () => {
+      idpService.findByAlias.mockResolvedValue(mockIdp);
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ access_token: 'at' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: async () => ({ email: 'x@example.com' }),
+        });
+      await expect(
+        service.fetchExternalIdentity(mockRealm, 'google', 'code'),
+      ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('fetchExternalIdentity refuses a provider disabled since the redirect', async () => {
+      idpService.findByAlias.mockResolvedValue({ ...mockIdp, enabled: false });
+      await expect(
+        service.fetchExternalIdentity(mockRealm, 'google', 'code'),
+      ).rejects.toThrow(BadRequestException);
+      expect(global.fetch).not.toHaveBeenCalled();
+    });
+
+    it('belongsToUser: an identity linked to the user', async () => {
+      prisma.federatedIdentity.findUnique.mockResolvedValue({
+        userId: 'user-1',
+      });
+      expect(await service.belongsToUser(identity({}), mockUser as any)).toBe(
+        'linked',
+      );
+      expect(prisma.federatedIdentity.create).not.toHaveBeenCalled();
+    });
+
+    it('belongsToUser: an identity linked to someone else', async () => {
+      prisma.federatedIdentity.findUnique.mockResolvedValue({
+        userId: 'other',
+      });
+      expect(
+        await service.belongsToUser(
+          identity(
+            { email: 'test@example.com', emailVerified: true },
+            {
+              ...mockIdp,
+              trustEmail: true,
+            },
+          ),
+          mockUser as any,
+        ),
+      ).toBe('other_user');
+      expect(prisma.federatedIdentity.create).not.toHaveBeenCalled();
+    });
+
+    it('belongsToUser: links through a verified email of a provider trusted for email', async () => {
+      prisma.federatedIdentity.findUnique.mockResolvedValue(null);
+      expect(
+        await service.belongsToUser(
+          identity(
+            { email: 'TEST@example.com', emailVerified: true },
+            {
+              ...mockIdp,
+              trustEmail: true,
+            },
+          ),
+          mockUser as any,
+        ),
+      ).toBe('linked');
+      expect(prisma.federatedIdentity.create).toHaveBeenCalledWith({
+        data: expect.objectContaining({
+          userId: 'user-1',
+          identityProviderId: 'idp-1',
+          externalUserId: 'ext-1',
+        }),
+      });
+    });
+
+    it.each([
+      [
+        'an untrusted provider',
+        { email: 'test@example.com', emailVerified: true },
+        false,
+      ],
+      [
+        'an unverified email',
+        { email: 'test@example.com', emailVerified: false },
+        true,
+      ],
+      [
+        'another email',
+        { email: 'other@example.com', emailVerified: true },
+        true,
+      ],
+    ])(
+      'belongsToUser: not linked for %s, and nothing is created',
+      async (_n, ext, trust) => {
+        prisma.federatedIdentity.findUnique.mockResolvedValue(null);
+        expect(
+          await service.belongsToUser(
+            identity(ext, { ...mockIdp, trustEmail: trust }),
+            mockUser as any,
+          ),
+        ).toBe('not_linked');
+        expect(prisma.federatedIdentity.create).not.toHaveBeenCalled();
+        expect(prisma.user.create).not.toHaveBeenCalled();
+      },
+    );
   });
 });

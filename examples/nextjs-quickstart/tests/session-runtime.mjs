@@ -10,6 +10,15 @@ import postgres from 'pg';
 import { createTlsFixture } from './session-tls-fixture.mjs';
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 import { chromium } from '../../../admin-ui/node_modules/@playwright/test/index.mjs';
+const playwrightVersion = JSON.parse(
+  fs.readFileSync(
+    new URL(
+      '../../../admin-ui/node_modules/@playwright/test/package.json',
+      import.meta.url,
+    ),
+    'utf8',
+  ),
+).version;
 const root = path.resolve(__dirname, '../../..'),
   dir = path.resolve(
     process.env.SESSION_TEST_ARTIFACTS ||
@@ -126,6 +135,7 @@ async function ready(url) {
             web: await port(),
             replica: await port(),
             plain: await port(),
+            browser: await port(),
           }
         : undefined;
     if (httpsMode) {
@@ -398,10 +408,9 @@ async function ready(url) {
       ready(replica + '/server-session'),
     ]);
     record('two_independent_nextjs_workers_ready');
-    browser = await chromium.launch({
-      headless: true,
-      args: tlsFixture?.browserArgs,
-    });
+    browser = tlsFixture
+      ? await tlsFixture.launchBrowser(chromium, playwrightVersion)
+      : await chromium.launch({ headless: true });
     const ctx = await browser.newContext(),
       page = await ctx.newPage(),
       errors = [],

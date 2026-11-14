@@ -1,0 +1,33 @@
+{{#if error}}
+<div class="auth-error">{{error}}</div>
+{{/if}}
+{{#if info}}
+<div class="auth-success">{{info}}</div>
+{{/if}}
+
+{{!-- A magic_link step of a custom sign-in flow: a sign-in link sent by email.
+      The link only works in this browser. --}}
+<h2 class="auth-subtitle">{{msg "magicLinkPageTitle"}}</h2>
+
+<form method="POST" action="/realms/{{realmName}}/login/magic-link/send" class="auth-form">
+  <input type="hidden" name="_csrf" value="{{csrfToken}}">
+  {{#if maskedEmail}}
+  <p class="consent-description">{{msgArgs "magicLinkSendTo" maskedEmail}}</p>
+  {{else}}
+  <p class="consent-description">{{msg "magicLinkInstruction"}}</p>
+  <div class="form-group">
+    <label for="email">{{msg "magicLinkEmail"}}</label>
+    <input type="email" id="email" name="email" value="{{login_hint}}" required autocomplete="email" autofocus placeholder="{{msg "magicLinkEmail"}}">
+  </div>
+  {{/if}}
+
+  <button type="submit" class="btn-primary">{{msg "magicLinkSend"}}</button>
+</form>
+
+<p class="consent-description" style="margin-top: 1rem;">{{msg "magicLinkSameBrowser"}}</p>
+
+{{#if passwordFallback}}
+<div class="auth-footer-link">
+  <a href="/realms/{{realmName}}/login?password=1">{{msg "magicLinkUsePassword"}}</a>
+</div>
+{{/if}}

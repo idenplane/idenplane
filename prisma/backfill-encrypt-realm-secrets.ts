@@ -1,4 +1,9 @@
 /**
+ * SUPERSEDED: the server now does this itself on every start, under an
+ * advisory lock and after checking the key (src/secrets-at-rest/), for these
+ * realm secrets and every other secret encrypted at rest. Kept for operators
+ * who still run it; it is harmless.
+ *
  * One-shot backfill: encrypts any realm secrets that are still plaintext
  * from before this fix (smtpPassword, recaptchaSecretKey, hcaptchaSecretKey,
  * and the apiKey/serverToken sub-fields of emailProviderConfig).
@@ -55,12 +60,18 @@ function encrypt(plaintext: string): string {
 }
 
 function isEncrypted(value: string): boolean {
+  // The `ek1.<key id>.<base64>` envelope the server writes since key
+  // rotation (src/crypto/key-ring.ts): never touched by this script, so it
+  // is not encrypted a second time.
+  if (value.startsWith('ek1.')) return true;
   try {
     const packed = Buffer.from(value, 'base64');
     const iv = packed.subarray(0, IV_BYTES);
     const tag = packed.subarray(IV_BYTES, IV_BYTES + TAG_BYTES);
     const encrypted = packed.subarray(IV_BYTES + TAG_BYTES);
-    const decipher = createDecipheriv(ALGORITHM, encryptionKey, iv);
+    const decipher = createDecipheriv(ALGORITHM, encryptionKey, iv, {
+      authTagLength: TAG_BYTES,
+    });
     decipher.setAuthTag(tag);
     decipher.update(encrypted);
     decipher.final();

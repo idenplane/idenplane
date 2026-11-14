@@ -12,9 +12,19 @@ import {
   revokeNhiCredential,
   rotateNhiCredential,
   createNhiCredential,
+  type NhiPkiRuleField,
 } from '../../api/nhi';
-import type { NhiIdentityType, NhiLifecycleStatus, NhiCredentialType } from '../../types';
+import type {
+  NhiIdentityType,
+  NhiLifecycleStatus,
+  NhiCredential,
+  NhiCredentialStatus,
+  NhiCredentialType,
+  NhiTlsAuthMode,
+} from '../../types';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import NhiOAuthClientPanel from './NhiOAuthClientPanel';
+import NhiRotateCertificateDialog from './NhiRotateCertificateDialog';
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -35,8 +45,35 @@ const statusColors: Record<NhiLifecycleStatus, string> = {
 const credentialTypeColors: Record<NhiCredentialType, string> = {
   API_KEY: 'bg-accent-soft text-accent',
   CERTIFICATE: 'bg-emerald-100 text-emerald-700',
-  JWT_BEARER: 'bg-rose-100 text-rose-700',
+  MTLS: 'bg-emerald-100 text-emerald-700',
+  JWT: 'bg-rose-100 text-rose-700',
+  OAUTH: 'bg-rose-100 text-rose-700',
 };
+
+const credentialStatusBadges: Record<NhiCredentialStatus, { label: string; className: string }> = {
+  active: { label: 'Active', className: 'bg-success-soft text-success-fg' },
+  grace: { label: 'Grace period', className: 'bg-warning-soft text-warning-fg' },
+  revoked: { label: 'Revoked', className: 'bg-danger-soft text-danger-fg' },
+  expired: { label: 'Expired', className: 'bg-sunken text-muted' },
+  not_yet_valid: { label: 'Not yet valid', className: 'bg-warning-soft text-warning-fg' },
+  disabled: { label: 'Disabled', className: 'bg-sunken text-muted' },
+  identity_inactive: { label: 'Identity inactive', className: 'bg-sunken text-muted' },
+};
+
+const pkiRuleLabels: Record<NhiPkiRuleField, string> = {
+  tlsClientAuthSubjectDn: 'Subject DN',
+  tlsClientAuthSanDns: 'SAN DNS name',
+  tlsClientAuthSanUri: 'SAN URI',
+  tlsClientAuthSanIp: 'SAN IP address',
+  tlsClientAuthSanEmail: 'SAN email',
+};
+
+/** A rotated or ended certificate credential cannot be rotated again. */
+function canRotate(cred: NhiCredential): boolean {
+  if (cred.revoked) return false;
+  if (!cred.tlsAuthMode) return cred.credentialType === 'API_KEY';
+  return !cred.supersededById && cred.status !== 'expired';
+}
 
 // ── Component ─────────────────────────────────────────────────────────────────
 
@@ -49,6 +86,7 @@ export default function NhiDetailPage() {
   const [showCreateCredential, setShowCreateCredential] = useState(false);
   const [selectedCredentialId, setSelectedCredentialId] = useState<string | null>(null);
   const [newCredentialResult, setNewCredentialResult] = useState<{ key: string } | null>(null);
+  const [rotatingCredential, setRotatingCredential] = useState<NhiCredential | null>(null);
 
   // Create credential form state
   const [credForm, setCredForm] = useState({
@@ -56,6 +94,10 @@ export default function NhiDetailPage() {
     name: '',
     expiresAt: '',
     rotationRequired: false,
+    tlsAuthMode: '' as '' | NhiTlsAuthMode,
+    certificatePem: '',
+    ruleField: 'tlsClientAuthSanDns' as NhiPkiRuleField,
+    ruleValue: '',
   });
 
   const { data: identity, isLoading } = useQuery({
@@ -157,11 +199,31 @@ export default function NhiDetailPage() {
         name: credForm.name,
         expiresAt: credForm.expiresAt || undefined,
         rotationRequired: credForm.rotationRequired,
+        ...(credForm.credentialType === 'CERTIFICATE' && credForm.tlsAuthMode
+          ? { tlsAuthMode: credForm.tlsAuthMode }
+          : {}),
+        ...(credForm.credentialType === 'CERTIFICATE' &&
+        credForm.tlsAuthMode !== 'PKI' &&
+        credForm.certificatePem
+          ? { certificatePem: credForm.certificatePem }
+          : {}),
+        ...(credForm.credentialType === 'CERTIFICATE' && credForm.tlsAuthMode === 'PKI'
+          ? { [credForm.ruleField]: credForm.ruleValue }
+          : {}),
       }),
     onSuccess: (data) => {
       queryClient.invalidateQueries({ queryKey: ['nhi-credentials', name, id] });
       setShowCreateCredential(false);
-      setCredForm({ credentialType: 'API_KEY', name: '', expiresAt: '', rotationRequired: false });
+      setCredForm({
+        credentialType: 'API_KEY',
+        name: '',
+        expiresAt: '',
+        rotationRequired: false,
+        tlsAuthMode: '',
+        certificatePem: '',
+        ruleField: 'tlsClientAuthSanDns',
+        ruleValue: '',
+      });
       if (data.keyPrefix) {
         setNewCredentialResult({ key: data.keyPrefix });
       }
@@ -437,6 +499,8 @@ export default function NhiDetailPage() {
         </div>
       )}
 
+      <NhiOAuthClientPanel realmName={name!} identityId={id!} readOnly={isDecommissioned} />
+
       {/* Credentials section */}
       <div className="space-y-4 rounded-lg border border-line bg-surface p-6 shadow-sm">
         <div className="flex items-center justify-between">
@@ -521,7 +585,22 @@ export default function NhiDetailPage() {
                         : 'Never'}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-sm">
-                      {cred.revoked ? (
+                      {cred.status ? (
+                        <span
+                          className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
+                            credentialStatusBadges[cred.status].className
+                          }`}
+                          title={
+                            cred.status === 'grace' && cred.rotationGraceUntil
+                              ? `Works until ${new Date(cred.rotationGraceUntil).toLocaleString()}`
+                              : cred.tlsAuthMode === 'SELF_SIGNED'
+                                ? `x5t#S256 ${cred.certThumbprintS256 ?? ''}`
+                                : undefined
+                          }
+                        >
+                          {credentialStatusBadges[cred.status].label}
+                        </span>
+                      ) : cred.revoked ? (
                         <span className="inline-flex rounded-full bg-danger-soft px-2 py-0.5 text-xs font-medium text-danger-fg">
                           Revoked
                         </span>
@@ -545,13 +624,19 @@ export default function NhiDetailPage() {
                     <td className="whitespace-nowrap px-4 py-3 text-right text-sm">
                       {!cred.revoked && !isDecommissioned && (
                         <div className="flex items-center justify-end gap-2">
-                          <button
-                            onClick={() => rotateCredentialMutation.mutate(cred.id)}
-                            disabled={rotateCredentialMutation.isPending}
-                            className="rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-muted hover:bg-hover disabled:opacity-50"
-                          >
-                            Rotate
-                          </button>
+                          {canRotate(cred) && (
+                            <button
+                              onClick={() =>
+                                cred.tlsAuthMode
+                                  ? setRotatingCredential(cred)
+                                  : rotateCredentialMutation.mutate(cred.id)
+                              }
+                              disabled={rotateCredentialMutation.isPending}
+                              className="rounded-md border border-line-strong px-2 py-1 text-xs font-medium text-muted hover:bg-hover disabled:opacity-50"
+                            >
+                              Rotate
+                            </button>
+                          )}
                           <button
                             onClick={() => setSelectedCredentialId(cred.id)}
                             className="rounded-md border border-danger-soft px-2 py-1 text-xs font-medium text-danger-fg hover:bg-danger-soft"
@@ -662,7 +747,6 @@ export default function NhiDetailPage() {
                 >
                   <option value="API_KEY">API Key</option>
                   <option value="CERTIFICATE">Certificate</option>
-                  <option value="JWT_BEARER">JWT Bearer</option>
                 </select>
               </div>
 
@@ -683,6 +767,71 @@ export default function NhiDetailPage() {
                   className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
                 />
               </div>
+
+              {credForm.credentialType === 'CERTIFICATE' && (
+                <>
+                  <div>
+                    <label htmlFor="field-cred-tls-mode" className="mb-1.5 block text-sm font-medium text-muted">
+                      Client authentication
+                    </label>
+                    <select
+                      id="field-cred-tls-mode"
+                      value={credForm.tlsAuthMode}
+                      onChange={(e) =>
+                        setCredForm({ ...credForm, tlsAuthMode: e.target.value as '' | NhiTlsAuthMode })
+                      }
+                      className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
+                    >
+                      <option value="">None (stored only)</option>
+                      <option value="SELF_SIGNED">Self-signed: this exact certificate</option>
+                      <option value="PKI">PKI: certificates from the realm&apos;s CAs matching a rule</option>
+                    </select>
+                  </div>
+                  {credForm.tlsAuthMode === 'PKI' ? (
+                    <div className="flex gap-2">
+                      <select
+                        aria-label="Rule"
+                        value={credForm.ruleField}
+                        onChange={(e) =>
+                          setCredForm({ ...credForm, ruleField: e.target.value as NhiPkiRuleField })
+                        }
+                        className="rounded-md border border-line-strong px-2 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
+                      >
+                        {(Object.keys(pkiRuleLabels) as NhiPkiRuleField[]).map((field) => (
+                          <option key={field} value={field}>
+                            {pkiRuleLabels[field]}
+                          </option>
+                        ))}
+                      </select>
+                      <input
+                        aria-label="Rule value"
+                        type="text"
+                        required
+                        value={credForm.ruleValue}
+                        onChange={(e) => setCredForm({ ...credForm, ruleValue: e.target.value })}
+                        placeholder="e.g., sensor-17.devices.example"
+                        className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
+                      />
+                    </div>
+                  ) : (
+                    <div>
+                      <label htmlFor="field-cred-pem" className="mb-1.5 block text-sm font-medium text-muted">
+                        Certificate (PEM)
+                      </label>
+                      <textarea
+                        id="field-cred-pem"
+                        rows={5}
+                        required={credForm.tlsAuthMode === 'SELF_SIGNED'}
+                        value={credForm.certificatePem}
+                        onChange={(e) => setCredForm({ ...credForm, certificatePem: e.target.value })}
+                        placeholder="-----BEGIN CERTIFICATE-----"
+                        className="w-full rounded-md border border-line-strong px-3 py-2 font-mono text-xs shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
+                      />
+                      <p className="mt-1 text-xs text-subtle">The certificate only. A private key is refused.</p>
+                    </div>
+                  )}
+                </>
+              )}
 
               <div>
                 <label
@@ -738,6 +887,18 @@ export default function NhiDetailPage() {
             </form>
           </div>
         </div>
+      )}
+
+      {rotatingCredential && (
+        <NhiRotateCertificateDialog
+          realmName={name!}
+          identityId={id!}
+          credential={rotatingCredential}
+          onClose={() => setRotatingCredential(null)}
+          onRotated={() =>
+            queryClient.invalidateQueries({ queryKey: ['nhi-credentials', name, id] })
+          }
+        />
       )}
 
       {/* Revoke confirmation */}

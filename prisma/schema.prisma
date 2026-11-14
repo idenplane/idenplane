@@ -1,30 +1,9 @@
 // ─────────────────────────────────────────────────────────────────────────────
-// Idenplane — primary Prisma schema (PostgreSQL)
+// Idenplane — Prisma schema
 //
-// This is the canonical schema used in production.  Two additional provider
-// variants live alongside it for alternative deployments:
-//
-//   prisma/schema.sqlite.prisma  — SQLite (development / CI, no Docker needed)
-//   prisma/schema.mysql.prisma   — MySQL 8+ / MariaDB 10.5+
-//
-// To switch providers use the helper scripts:
-//   ./scripts/use-sqlite.sh      activate SQLite (copies sqlite variant here)
-//   ./scripts/use-mysql.sh       activate MySQL  (copies mysql variant here)
-//   git checkout prisma/schema.prisma   revert to PostgreSQL
-//
-// Provider compatibility notes
-// ─────────────────────────────
-// The following Prisma / PostgreSQL features are NOT available in all providers
-// and are handled differently in the sqlite/mysql variants:
-//
-//   Feature              PostgreSQL      MySQL           SQLite
-//   ─────────────────────────────────────────────────────────────────────
-//   Json fields          native JSONB    native JSON     serialised String
-//   Bytes fields         native bytea    native LONGBLOB base64 String
-//   BigInt fields        native int8     native bigint   mapped to Int
-//   String[] arrays      native array    JSON column     JSON text String
-//   @db.VarChar(n)       supported       supported       ignored (omitted)
-//   enum types           native          native          stored as String
+// Idenplane runs on PostgreSQL 16 or later and nothing else: it relies on
+// PostgreSQL triggers, row locks (FOR UPDATE / FOR SHARE), LISTEN/NOTIFY for
+// cache invalidation across processes, and PostgreSQL-specific SQL.
 // ─────────────────────────────────────────────────────────────────────────────
 
 generator client {
@@ -71,6 +50,39 @@ model WizardState {
   @@map("wizard_states")
 }
 
+/// Ties the stored secrets to the key they are encrypted with
+/// (WEBHOOK_SECRET_KEY + WEBHOOK_ENCRYPTION_SALT). One row, written by the
+/// first start that encrypts secrets at rest; every start decrypts
+/// `keyCheck` and refuses to run with a different key, which would otherwise
+/// read ciphertext as legacy plaintext. See SecretsAtRestService.
+model EncryptionKeyCheck {
+  id           String    @id
+  keyCheck     String    @map("key_check")
+  /// Highest version of the full stored-secrets sweep that has completed.
+  sweepVersion Int       @default(0) @map("sweep_version")
+  /// When that sweep started: later sweeps only revisit TOTP rows from then on.
+  sweptAt      DateTime? @map("swept_at")
+  createdAt    DateTime  @default(now()) @map("created_at")
+  updatedAt    DateTime  @updatedAt @map("updated_at")
+
+  @@map("encryption_key_check")
+}
+
+/// Progress of a one-off data task run at start-up, one row per task
+/// (e.g. AdminEventPurgeService): lets it resume, and skip once done.
+model MaintenanceTask {
+  id               String   @id
+  /// The task version that last completed (0: never).
+  completedVersion Int      @default(0) @map("completed_version")
+  /// Last row id of a walk in progress, if any.
+  cursor           String?
+  /// The task version that walk belongs to.
+  cursorVersion    Int      @default(0) @map("cursor_version")
+  updatedAt        DateTime @updatedAt @map("updated_at")
+
+  @@map("maintenance_tasks")
+}
+
 // ─── REALMS ───────────────────────────────────────────────
 
 model Realm {
@@ -91,6 +103,15 @@ model Realm {
 
   emailProvider       String @default("smtp") @map("email_provider")
   emailProviderConfig Json?  @map("email_provider_config")
+
+  // Custom authentication flows (binding model). Inert until the runtime
+  // ships behind AUTH_FLOW_RUNTIME_ENABLED: nothing in the login path reads
+  // these yet. `browserFlowId` must reference a flow of this same realm; that
+  // is enforced by AuthFlowService (there is no composite FK). NoAction (not
+  // Restrict) so a realm delete can cascade both rows in one statement.
+  authFlowsEnabled Boolean             @default(false) @map("auth_flows_enabled")
+  browserFlowId    String?             @map("browser_flow_id")
+  browserFlow      AuthenticationFlow? @relation("RealmBrowserFlow", fields: [browserFlowId], references: [id], onDelete: NoAction)
 
   // Magic link / passwordless authentication
   magicLinkEnabled                Boolean @default(false) @map("magic_link_enabled")
@@ -211,6 +232,11 @@ model Realm {
   // GDPR account deletion
   deletionGracePeriodDays Int @default(14) @map("deletion_grace_period_days")
 
+  // RFC 8705 certificate client authentication (also needs MTLS_ENABLED)
+  mtlsClientAuthEnabled  Boolean @default(false) @map("mtls_client_auth_enabled")
+  /// Also trust the anchors in MTLS_GLOBAL_TRUST_ANCHORS_FILE.
+  mtlsTrustGlobalAnchors Boolean @default(false) @map("mtls_trust_global_anchors")
+
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
@@ -237,7 +263,7 @@ model Realm {
   impersonationSessions       ImpersonationSession[]
   policies                    Policy[]
   customAttributes            CustomAttribute[]
-  authenticationFlows         AuthenticationFlow[]
+  authenticationFlows         AuthenticationFlow[]         @relation("RealmAuthenticationFlows")
   loginRiskAssessments        LoginRiskAssessment[]
   userLoginProfiles           UserLoginProfile[]
   organizations               Organization[]
@@ -250,11 +276,15 @@ model Realm {
   behavioralBiometricProfiles BehavioralBiometricProfile[]
   continuousRiskPolicies      ContinuousRiskPolicy[]
   nhiIdentities               NhiIdentity[]
+  nhiCredentials              NhiCredential[]
   nhiCredentialPolicies       NhiCredentialPolicy[]
   nhiAuditLogs                NhiAuditLog[]
   consentCategories           ConsentCategory[]
   themes                      Theme[]
   proxyApplications           ProxyApplication[]
+  clientTlsCertificates       ClientTlsCertificate[]
+  tlsTrustAnchors             RealmTlsTrustAnchor[]
+  tlsRevokedCertificates      TlsRevokedCertificate[]
 
   @@map("realms")
 }
@@ -323,6 +353,15 @@ enum ClientType {
   PUBLIC
 }
 
+/// RFC 7591 token_endpoint_auth_method.
+enum TokenEndpointAuthMethod {
+  client_secret_basic
+  client_secret_post
+  none
+  tls_client_auth
+  self_signed_tls_client_auth
+}
+
 model Client {
   id             String     @id @default(uuid())
   realmId        String     @map("realm_id")
@@ -350,14 +389,34 @@ model Client {
   // Service account
   serviceAccountUserId String? @map("service_account_user_id")
 
-  // Auth flow assignment (optional override; falls back to realm default)
+  // Auth flow binding: per-client override of Realm.browserFlowId. Must be a
+  // flow of the same realm (enforced by AuthFlowService). Deleting a bound
+  // flow is refused (409 in the service; NoAction FK as the backstop).
   authFlowId String? @map("auth_flow_id")
+
+  /// null: inferred from clientType (client_secret_basic/post, or none).
+  tokenEndpointAuthMethod               TokenEndpointAuthMethod? @map("token_endpoint_auth_method")
+  /// RFC 8705 §2.1.2 tls_client_auth: exactly one of these is set.
+  tlsClientAuthSubjectDn                String?                  @map("tls_client_auth_subject_dn")
+  tlsClientAuthSanDns                   String?                  @map("tls_client_auth_san_dns")
+  tlsClientAuthSanUri                   String?                  @map("tls_client_auth_san_uri")
+  tlsClientAuthSanIp                    String?                  @map("tls_client_auth_san_ip")
+  tlsClientAuthSanEmail                 String?                  @map("tls_client_auth_san_email")
+  /// RFC 8705 §3 tls_client_certificate_bound_access_tokens (not used yet).
+  tlsClientCertificateBoundAccessTokens Boolean                  @default(false) @map("tls_client_certificate_bound_access_tokens")
+
+  /// The NHI identity this client is the OAuth face of (RFC 8705 NHI
+  /// binding). Same realm as the client (enforced by a trigger). Deleting the
+  /// identity deletes the client. Its certificates are the identity's
+  /// NhiCredential rows, and its tokens are always certificate-bound.
+  nhiIdentityId String? @unique @map("nhi_identity_id")
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
   realm          Realm                 @relation(fields: [realmId], references: [id], onDelete: Cascade)
-  authFlow       AuthenticationFlow?   @relation(fields: [authFlowId], references: [id], onDelete: SetNull)
+  authFlow       AuthenticationFlow?   @relation(fields: [authFlowId], references: [id], onDelete: NoAction)
+  nhiIdentity    NhiIdentity?          @relation(fields: [nhiIdentityId], references: [id], onDelete: Cascade)
   clientRoles    Role[]
   authCodes      AuthorizationCode[]
   consents       UserConsent[]
@@ -366,9 +425,67 @@ model Client {
   optionalScopes ClientOptionalScope[]
 
   proxyApplications ProxyApplication[]
+  tlsCertificates   ClientTlsCertificate[]
 
   @@unique([realmId, clientId])
+  @@index([authFlowId])
   @@map("clients")
+}
+
+/// A certificate registered for self_signed_tls_client_auth (RFC 8705 §2.2).
+model ClientTlsCertificate {
+  id             String   @id @default(uuid())
+  clientId       String   @map("client_id")
+  realmId        String   @map("realm_id")
+  /// RFC 8705 x5t#S256: base64url SHA-256 of the DER, no padding.
+  x5tS256        String   @map("x5t_s256")
+  certificatePem String   @map("certificate_pem")
+  subject        String
+  notBefore      DateTime @map("not_before")
+  notAfter       DateTime @map("not_after")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  client Client @relation(fields: [clientId], references: [id], onDelete: Cascade)
+  realm  Realm  @relation(fields: [realmId], references: [id], onDelete: Cascade)
+
+  @@unique([clientId, x5tS256])
+  @@index([realmId])
+  @@map("client_tls_certificates")
+}
+
+/// A CA the realm trusts to issue tls_client_auth client certificates.
+model RealmTlsTrustAnchor {
+  id             String   @id @default(uuid())
+  realmId        String   @map("realm_id")
+  certificatePem String   @map("certificate_pem")
+  subject        String
+  x5tS256        String   @map("x5t_s256")
+  notAfter       DateTime @map("not_after")
+  createdAt      DateTime @default(now()) @map("created_at")
+
+  realm Realm @relation(fields: [realmId], references: [id], onDelete: Cascade)
+
+  @@unique([realmId, x5tS256])
+  @@map("realm_tls_trust_anchors")
+}
+
+/// The realm's certificate deny-list: by x5t#S256, by issuer and serial, or both.
+model TlsRevokedCertificate {
+  id           String   @id @default(uuid())
+  realmId      String   @map("realm_id")
+  x5tS256      String?  @map("x5t_s256")
+  /// Canonical issuer DN (canonicalDn in src/client-auth/distinguished-name.ts).
+  issuerDn     String?  @map("issuer_dn")
+  /// Lower-case hex without leading zeros.
+  serialNumber String?  @map("serial_number")
+  reason       String?
+  createdAt    DateTime @default(now()) @map("created_at")
+
+  realm Realm @relation(fields: [realmId], references: [id], onDelete: Cascade)
+
+  @@index([realmId, x5tS256])
+  @@index([realmId, serialNumber])
+  @@map("tls_revoked_certificates")
 }
 
 // ─── ROLES ────────────────────────────────────────────────
@@ -411,17 +528,17 @@ model UserRole {
 // ─── SESSIONS & REFRESH TOKENS ────────────────────────────
 
 model Session {
-  id           String   @id @default(uuid())
-  userId       String   @map("user_id")
-  realmId      String   @default("") @map("realm_id")
-  clientId     String?  @map("client_id")
-  ipAddress    String?  @map("ip_address")
-  userAgent    String?  @map("user_agent")
+  id           String    @id @default(uuid())
+  userId       String    @map("user_id")
+  realmId      String    @default("") @map("realm_id")
+  clientId     String?   @map("client_id")
+  ipAddress    String?   @map("ip_address")
+  userAgent    String?   @map("user_agent")
   /// The ACR level actually satisfied when this session was established.
   /// Lets the refresh_token grant preserve acr/amr across token rotation.
-  satisfiedAcr String?  @map("satisfied_acr")
+  satisfiedAcr String?   @map("satisfied_acr")
   /// The authentication methods (RFC 8176) actually performed for this session.
-  amr          String[] @default([]) @map("amr")
+  amr          String[]  @default([]) @map("amr")
   /// When the user authenticated (OIDC `auth_time`). Refreshed ID tokens keep
   /// it (OIDC Core §12.2); null for sessions created before it was recorded.
   authTime     DateTime? @map("auth_time")
@@ -438,15 +555,20 @@ model Session {
 }
 
 model RefreshToken {
-  id        String  @id @default(uuid())
-  sessionId String  @map("session_id")
-  tokenHash String  @unique @map("token_hash")
-  scope     String?
-  revoked   Boolean @default(false)
-  isOffline Boolean @default(false) @map("is_offline")
+  id         String  @id @default(uuid())
+  sessionId  String  @map("session_id")
+  tokenHash  String  @unique @map("token_hash")
+  scope      String?
+  revoked    Boolean @default(false)
+  isOffline  Boolean @default(false) @map("is_offline")
   /// The client that was granted this refresh token (security fix #456).
   /// Nullable for backwards compatibility with tokens created before this migration.
-  clientId  String? @map("client_id")
+  clientId   String? @map("client_id")
+  /// RFC 8705 §4: the `x5t#S256` of the certificate a public client presented
+  /// when this token was issued. A refresh must present the same certificate.
+  /// Null for unbound tokens and for confidential clients, whose refreshed
+  /// access tokens are bound to whatever certificate authenticates the refresh.
+  cnfX5tS256 String? @map("cnf_x5t_s256")
 
   createdAt DateTime @default(now()) @map("created_at")
   expiresAt DateTime @map("expires_at")
@@ -460,31 +582,31 @@ model RefreshToken {
 // ─── AUTHORIZATION CODES ──────────────────────────────────
 
 model AuthorizationCode {
-  id                  String   @id @default(uuid())
-  code                String   @unique
-  clientId            String   @map("client_id")
-  userId              String   @map("user_id")
-  redirectUri         String   @map("redirect_uri")
+  id                  String    @id @default(uuid())
+  code                String    @unique
+  clientId            String    @map("client_id")
+  userId              String    @map("user_id")
+  redirectUri         String    @map("redirect_uri")
   scope               String?
-  codeChallenge       String?  @map("code_challenge")
-  codeChallengeMethod String?  @map("code_challenge_method")
+  codeChallenge       String?   @map("code_challenge")
+  codeChallengeMethod String?   @map("code_challenge_method")
   nonce               String?
   /// The ACR value(s) *requested* by the client at authorization time.
-  acrValues           String?  @map("acr_values")
+  acrValues           String?   @map("acr_values")
   /// The ACR level actually *satisfied* by the authentication that produced
   /// this code (password vs. password+MFA vs. WebAuthn). Read back at the
   /// code→token exchange so the issued tokens reflect the real auth context.
-  satisfiedAcr        String?  @map("satisfied_acr")
+  satisfiedAcr        String?   @map("satisfied_acr")
   /// The authentication methods (RFC 8176) actually performed.
-  amr                 String[] @default([]) @map("amr")
+  amr                 String[]  @default([]) @map("amr")
   /// When the end user actually authenticated (OIDC `auth_time`); a code
   /// issued from an SSO session carries the session's sign-in time.
   authTime            DateTime? @map("auth_time")
-  used                Boolean  @default(false)
+  used                Boolean   @default(false)
   /// The session created when the code was exchanged. A second exchange of
   /// the same code ends it, revoking the tokens issued the first time
   /// (RFC 6749 §4.1.2).
-  sessionId           String?  @map("session_id")
+  sessionId           String?   @map("session_id")
 
   createdAt DateTime @default(now()) @map("created_at")
   expiresAt DateTime @map("expires_at")
@@ -1278,16 +1400,20 @@ model UserAttribute {
 model AuthenticationFlow {
   id          String  @id @default(uuid())
   realmId     String  @map("realm_id")
-  realm       Realm   @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  realm       Realm   @relation("RealmAuthenticationFlows", fields: [realmId], references: [id], onDelete: Cascade)
   name        String
   description String?
+  /// Deprecated: never used for binding. Use Realm.browserFlowId instead.
   isDefault   Boolean @default(false) @map("is_default")
   steps       Json // Array of flow step definitions
+  /// Incremented on every update.
+  version     Int     @default(1)
 
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  clients Client[]
+  clients            Client[]
+  browserFlowOfRealm Realm[]  @relation("RealmBrowserFlow")
 
   @@unique([realmId, name])
   @@map("authentication_flows")
@@ -1384,9 +1510,9 @@ model SessionRiskProfile {
   behavioralSignals Json? @map("behavioral_signals")
 
   // Step-up state
-  stepUpRequired  Boolean   @default(false) @map("step_up_required")
-  stepUpReason    String?   @map("step_up_reason")
-  stepUpExpiresAt DateTime? @map("step_up_expires_at")
+  stepUpRequired   Boolean   @default(false) @map("step_up_required")
+  stepUpReason     String?   @map("step_up_reason")
+  stepUpExpiresAt  DateTime? @map("step_up_expires_at")
   /// When this risk episode's step-up was announced; cleared when it ends.
   stepUpNotifiedAt DateTime? @map("step_up_notified_at")
 
@@ -1757,7 +1883,9 @@ model OrganizationInvitation {
   organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   email          String
   role           String       @default("member")
-  token          String       @unique
+  /// SHA-256 (hex) of the invitation token. The token itself is returned
+  /// once, by the create call, and never stored.
+  tokenHash      String       @unique @map("token_hash")
   expiresAt      DateTime     @map("expires_at")
   acceptedAt     DateTime?    @map("accepted_at")
   createdAt      DateTime     @default(now()) @map("created_at")
@@ -1988,6 +2116,16 @@ enum NhiCredentialType {
   MTLS
 }
 
+/// How a certificate credential authenticates its identity's OAuth client
+/// (RFC 8705 §2). null: it does not (legacy and non-certificate credentials).
+enum NhiTlsAuthMode {
+  /// self_signed_tls_client_auth: the certificate itself, by x5t#S256.
+  SELF_SIGNED
+  /// tls_client_auth: any certificate that chains to the realm's trust
+  /// anchors and matches this credential's one subject/SAN rule.
+  PKI
+}
+
 model NhiIdentity {
   id                     String             @id @default(uuid())
   realmId                String             @map("realm_id")
@@ -2012,6 +2150,7 @@ model NhiIdentity {
   realm       Realm           @relation(fields: [realmId], references: [id], onDelete: Cascade)
   credentials NhiCredential[]
   usageStats  NhiUsageStats?
+  oauthClient Client?
 
   @@unique([realmId, name])
   @@index([realmId])
@@ -2021,6 +2160,8 @@ model NhiIdentity {
 
 model NhiCredential {
   id                  String            @id @default(uuid())
+  /// Always the identity's realm (enforced by a trigger).
+  realmId             String            @map("realm_id")
   nhiIdentityId       String            @map("nhi_identity_id")
   credentialType      NhiCredentialType @default(API_KEY) @map("credential_type")
   name                String
@@ -2041,38 +2182,67 @@ model NhiCredential {
   lastUsedAt          DateTime?         @map("last_used_at")
   requestCount        Int               @default(0) @map("request_count")
   allowedIpRanges     String[]          @default([]) @map("allowed_ip_ranges")
-  createdAt           DateTime          @default(now()) @map("created_at")
-  updatedAt           DateTime          @updatedAt @map("updated_at")
 
-  nhiIdentity NhiIdentity @relation(fields: [nhiIdentityId], references: [id], onDelete: Cascade)
+  /// RFC 8705 client authentication mode; null never authenticates.
+  tlsAuthMode            NhiTlsAuthMode? @map("tls_auth_mode")
+  /// RFC 8705 x5t#S256 of certificatePem: base64url SHA-256 of the DER, no padding.
+  certThumbprintS256     String?         @map("cert_thumbprint_s256")
+  certSubject            String?         @map("cert_subject")
+  certIssuer             String?         @map("cert_issuer")
+  /// Lower-case hex without leading zeros.
+  certSerialNumber       String?         @map("cert_serial_number")
+  certNotBefore          DateTime?       @map("cert_not_before")
+  certNotAfter           DateTime?       @map("cert_not_after")
+  /// PKI mode, RFC 8705 §2.1.2: exactly one of these is set.
+  tlsClientAuthSubjectDn String?         @map("tls_client_auth_subject_dn")
+  tlsClientAuthSanDns    String?         @map("tls_client_auth_san_dns")
+  tlsClientAuthSanUri    String?         @map("tls_client_auth_san_uri")
+  tlsClientAuthSanIp     String?         @map("tls_client_auth_san_ip")
+  tlsClientAuthSanEmail  String?         @map("tls_client_auth_san_email")
+  /// Rotation with overlap: the credential that replaced this one, and until
+  /// when this one still authenticates.
+  supersededById         String?         @unique @map("superseded_by_id")
+  rotationGraceUntil     DateTime?       @map("rotation_grace_until")
+
+  createdAt DateTime @default(now()) @map("created_at")
+  updatedAt DateTime @updatedAt @map("updated_at")
+
+  realm        Realm          @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  nhiIdentity  NhiIdentity    @relation(fields: [nhiIdentityId], references: [id], onDelete: Cascade)
+  supersededBy NhiCredential? @relation("NhiCredentialRotation", fields: [supersededById], references: [id], onDelete: SetNull)
+  supersedes   NhiCredential? @relation("NhiCredentialRotation")
 
   @@unique([nhiIdentityId, name])
   @@index([nhiIdentityId])
+  @@index([realmId, certThumbprintS256])
   @@index([keyPrefix])
   @@index([expiresAt])
   @@map("nhi_credentials")
 }
 
 model NhiCredentialPolicy {
-  id                   String            @id @default(uuid())
-  realmId              String            @map("realm_id")
-  name                 String
-  description          String?
-  enabled              Boolean           @default(true)
-  priority             Int               @default(0)
-  credentialType       NhiCredentialType @default(API_KEY) @map("credential_type")
-  rotationIntervalDays Int               @default(90) @map("rotation_interval_days")
-  rotationBeforeDays   Int               @default(7) @map("rotation_before_days")
-  autoRotate           Boolean           @default(false) @map("auto_rotate")
-  maxCredentialAgeDays Int               @default(365) @map("max_credential_age_days")
-  maxRequestsPerDay    Int?              @map("max_requests_per_day")
-  maxRequestsPerMonth  Int?              @map("max_requests_per_month")
-  rateLimitPerMinute   Int?              @map("rate_limit_per_minute")
-  requireCertificate   Boolean           @default(false) @map("require_certificate")
-  requireIpRestriction Boolean           @default(false) @map("require_ip_restriction")
-  requireAuditLogging  Boolean           @default(true) @map("require_audit_logging")
-  createdAt            DateTime          @default(now()) @map("created_at")
-  updatedAt            DateTime          @updatedAt @map("updated_at")
+  id                     String            @id @default(uuid())
+  realmId                String            @map("realm_id")
+  name                   String
+  description            String?
+  enabled                Boolean           @default(true)
+  priority               Int               @default(0)
+  credentialType         NhiCredentialType @default(API_KEY) @map("credential_type")
+  rotationIntervalDays   Int               @default(90) @map("rotation_interval_days")
+  rotationBeforeDays     Int               @default(7) @map("rotation_before_days")
+  autoRotate             Boolean           @default(false) @map("auto_rotate")
+  maxCredentialAgeDays   Int               @default(365) @map("max_credential_age_days")
+  maxRequestsPerDay      Int?              @map("max_requests_per_day")
+  maxRequestsPerMonth    Int?              @map("max_requests_per_month")
+  rateLimitPerMinute     Int?              @map("rate_limit_per_minute")
+  requireCertificate     Boolean           @default(false) @map("require_certificate")
+  requireIpRestriction   Boolean           @default(false) @map("require_ip_restriction")
+  requireAuditLogging    Boolean           @default(true) @map("require_audit_logging")
+  /// How long a rotated certificate credential keeps authenticating after
+  /// its replacement is created.
+  rotationOverlapSeconds Int               @default(86400) @map("rotation_overlap_seconds")
+  createdAt              DateTime          @default(now()) @map("created_at")
+  updatedAt              DateTime          @updatedAt @map("updated_at")
 
   realm Realm @relation(fields: [realmId], references: [id], onDelete: Cascade)
 

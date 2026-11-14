@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import type { ZitadelExport, ZitadelUser } from './zitadel-types.js';
 import { createEmptyReport, type MigrationReport } from './migration-report.js';
+import { idpSecrets } from '../identity-providers/idp-secrets.js';
 
 export interface ZitadelImportOptions {
   dryRun: boolean;
@@ -249,7 +250,10 @@ export class ZitadelImporterService {
               enabled: true,
               trustEmail: false,
               clientId: idp.oidcConfig.clientId ?? '',
-              clientSecret: idp.oidcConfig.clientSecret ?? '',
+              clientSecret: idpSecrets.forCreate(
+                this.crypto,
+                idp.oidcConfig.clientSecret ?? '',
+              ),
               authorizationUrl: idp.oidcConfig.authorizationEndpoint ?? '',
               tokenUrl: idp.oidcConfig.tokenEndpoint ?? '',
             },

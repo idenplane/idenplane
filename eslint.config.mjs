@@ -40,4 +40,20 @@ export default tseslint.config(
       "prettier/prettier": ["error", { endOfLine: "auto" }],
     },
   },
+  {
+    // SessionIssuer is the only place an SSO session is created, so every
+    // sign-in path records how it was established and sets the same cookie.
+    files: ['src/**/*.ts'],
+    ignores: ['src/login/session-issuer.service.ts'],
+    rules: {
+      'no-restricted-syntax': [
+        'error',
+        {
+          selector: "CallExpression[callee.property.name='createLoginSession']",
+          message:
+            'Create SSO sessions through SessionIssuer.issue() (src/login/session-issuer.service.ts).',
+        },
+      ],
+    },
+  },
 );

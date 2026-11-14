@@ -9,7 +9,10 @@ import type { Request } from 'express';
 import { EventsService } from './events.service.js';
 import { ResourceType, OperationType } from './event-types.js';
 import type { OperationTypeValue, ResourceTypeValue } from './event-types.js';
-import { SENSITIVE_BODY_FIELDS } from '../common/security/sensitive-body-fields.js';
+import {
+  redactAdminRepresentation,
+  redactAdminResourcePath,
+} from './admin-event-redaction.js';
 
 const RESOURCE_TYPE_MAP: Array<{ pattern: RegExp; type: ResourceTypeValue }> = [
   // More-specific patterns must come before broader ones to avoid mis-classification.
@@ -25,6 +28,7 @@ const RESOURCE_TYPE_MAP: Array<{ pattern: RegExp; type: ResourceTypeValue }> = [
   { pattern: /\/custom-attributes/, type: ResourceType.CUSTOM_ATTRIBUTE },
   { pattern: /\/risk-assessments/, type: ResourceType.RISK_ASSESSMENT },
   { pattern: /\/auth-flows/, type: ResourceType.AUTH_FLOW },
+  { pattern: /\/themes/, type: ResourceType.THEME },
   { pattern: /\/organizations/, type: ResourceType.ORGANIZATION },
   { pattern: /\/brute-force/, type: ResourceType.BRUTE_FORCE },
   { pattern: /\/webhooks/, type: ResourceType.WEBHOOK },
@@ -105,7 +109,7 @@ export class AdminEventInterceptor implements NestInterceptor {
           adminUserId: adminUser.userId ?? adminUser.id ?? 'api-key',
           operationType,
           resourceType,
-          resourcePath: request.path,
+          resourcePath: redactAdminResourcePath(request.path),
           representation,
           ipAddress: request.ip,
         });
@@ -132,12 +136,6 @@ export class AdminEventInterceptor implements NestInterceptor {
 
   private redactBody(body: unknown): Record<string, unknown> | undefined {
     if (!body || typeof body !== 'object') return undefined;
-    const redacted: Record<string, unknown> = {
-      ...(body as Record<string, unknown>),
-    };
-    for (const key of SENSITIVE_BODY_FIELDS) {
-      if (key in redacted) redacted[key] = '[REDACTED]';
-    }
-    return redacted;
+    return redactAdminRepresentation(body) as Record<string, unknown>;
   }
 }

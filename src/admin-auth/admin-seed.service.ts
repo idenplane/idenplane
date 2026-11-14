@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { JwkService } from '../crypto/jwk.service.js';
 import { ScopeSeedService } from '../scopes/scope-seed.service.js';
+import { signingKeySecrets } from '../crypto/signing-key-secrets.js';
 
 /** The advisory lock first-boot seeding takes (an arbitrary constant). */
 const MASTER_SEED_LOCK_KEY = 7_204_311_862;
@@ -86,12 +87,7 @@ export class AdminSeedService implements OnApplicationBootstrap {
             displayName: 'Master',
             enabled: true,
             signingKeys: {
-              create: {
-                kid: keyPair.kid,
-                algorithm: 'RS256',
-                publicKey: keyPair.publicKeyPem,
-                privateKey: keyPair.privateKeyPem,
-              },
+              create: signingKeySecrets.createData(this.crypto, keyPair),
             },
           },
         });

@@ -4,7 +4,7 @@ import { SMS_SECRET_FIELDS } from './dto/sms-config.dto.js';
 import { SECRET_PLACEHOLDER } from './secret-placeholder.js';
 
 /** The secret field of each email provider section. */
-const EMAIL_SECRET_FIELDS: Record<string, string> = {
+export const EMAIL_SECRET_FIELDS: Record<string, string> = {
   smtp: 'password',
   resend: 'apiKey',
   sendgrid: 'apiKey',
@@ -136,6 +136,68 @@ export function decryptSmsProviderConfig(
     }
   }
   return out;
+}
+
+/**
+ * A stored provider config as a realm export carries it: each secret
+ * decrypted (`includeSecrets`) or removed. Secrets of the email config sit
+ * one level down, under the provider's section.
+ */
+export function exportProviderConfig(
+  crypto: CryptoService,
+  kind: 'email-provider' | 'sms-provider',
+  config: unknown,
+  includeSecrets: boolean,
+): unknown {
+  if (!isRecord(config)) return config;
+  const reveal = (holder: Record<string, unknown>, field: string) => {
+    if (!(field in holder)) return;
+    if (includeSecrets && typeof holder[field] === 'string') {
+      try {
+        holder[field] = crypto.decryptSecret(holder[field]);
+      } catch {
+        // Encrypted with a key this instance no longer has: left out.
+        delete holder[field];
+      }
+    } else {
+      delete holder[field];
+    }
+  };
+  const out: Record<string, unknown> = { ...config };
+  if (kind === 'sms-provider') {
+    for (const field of SMS_SECRET_FIELDS) reveal(out, field);
+    return out;
+  }
+  for (const [section, field] of Object.entries(EMAIL_SECRET_FIELDS)) {
+    const values = out[section];
+    if (!isRecord(values)) continue;
+    const copy = { ...values };
+    reveal(copy, field);
+    out[section] = copy;
+  }
+  return out;
+}
+
+/** The paths of the secrets a provider config holds, for import checks. */
+export function providerConfigSecrets(
+  kind: 'email-provider' | 'sms-provider',
+  config: unknown,
+): Array<{ path: string; value: unknown }> {
+  if (!isRecord(config)) return [];
+  if (kind === 'sms-provider') {
+    return SMS_SECRET_FIELDS.filter((f) => f in config).map((f) => ({
+      path: f,
+      value: config[f],
+    }));
+  }
+  const found: Array<{ path: string; value: unknown }> = [];
+  for (const [section, field] of Object.entries(EMAIL_SECRET_FIELDS)) {
+    const values = config[section];
+    if (isRecord(values) && field in values) {
+      found.push({ path: `${section}.${field}`, value: values[field] });
+    }
+  }
+  return found;
 }
 
 function isEmptyJson(value: unknown): boolean {

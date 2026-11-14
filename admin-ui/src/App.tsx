@@ -50,6 +50,7 @@ const MigrationWizardPage = lazy(() => import('./pages/migration/MigrationWizard
 const PendingRegistrationsPage = lazy(() => import('./pages/registration/PendingRegistrationsPage'));
 const RegistrationFieldsPage = lazy(() => import('./pages/registration/RegistrationFieldsPage'));
 const RegistrationSettingsPage = lazy(() => import('./pages/registration/RegistrationSettingsPage'));
+const SignUpRedirectPage = lazy(() => import('./pages/registration/SignUpRedirectPage'));
 const ContinuousRiskDashboard = lazy(() => import('./pages/continuous-verification/ContinuousRiskDashboard'));
 const RiskPolicyListPage = lazy(() => import('./pages/continuous-verification/RiskPolicyListPage'));
 const SessionRiskDetailPage = lazy(() => import('./pages/continuous-verification/SessionRiskDetailPage'));
@@ -119,6 +120,8 @@ export default function App() {
     <Routes>
       <Route path="/console/login" element={<LoginPage />} />
       <Route path="/setup" element={<SetupWizardPage />} />
+      {/* Public: hands over to the hosted sign-up page of the realm. */}
+      <Route path="/console/register/:realm" element={<SignUpRedirectPage />} />
 
       <Route element={<ProtectedRoute />}>
         <Route element={<Layout />}>

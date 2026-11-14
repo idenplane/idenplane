@@ -6,6 +6,10 @@
 <div class="auth-error">{{error}}</div>
 {{/if}}
 
+{{!-- passwordFormHidden: a custom-flow step (passkey, social) whose sign-in is
+      not a password and has no password fallback; passkeyOnly says it is a
+      passkey step --}}
+{{#unless passwordFormHidden}}
 <form method="POST" action="/realms/{{realmName}}/login" class="auth-form">
   <div class="form-group">
     <label for="username">{{msg "loginUsername"}}</label>
@@ -37,9 +41,12 @@
   <input type="hidden" name="code_challenge" value="{{code_challenge}}">
   <input type="hidden" name="code_challenge_method" value="{{code_challenge_method}}">
   <input type="hidden" name="prompt" value="{{prompt}}">
+  {{#if acr_values}}<input type="hidden" name="acr_values" value="{{acr_values}}">{{/if}}
+  {{#if claims}}<input type="hidden" name="claims" value="{{claims}}">{{/if}}
 
   <button type="submit" class="btn-primary">{{msg "loginSignIn"}}</button>
 </form>
+{{/unless}}
 
 {{#if webAuthnEnabled}}
 <div style="margin-top: 1rem; text-align: center;">
@@ -74,6 +81,13 @@
     code_challenge: '{{code_challenge}}',
     code_challenge_method: '{{code_challenge_method}}'
   };
+  // The rest of the request the password form carries (prompt, and what is
+  // asked of acr), read from its hidden fields.
+  var _authForm = document.querySelector('form.auth-form');
+  ['prompt', 'acr_values', 'claims'].forEach(function(name) {
+    var field = _authForm && _authForm.querySelector('input[name="' + name + '"]');
+    if (field && field.value) oauthParams[name] = field.value;
+  });
 
   function showPasskeyStatus(msg, isError) {
     var el = document.getElementById('passkey-login-status');
@@ -118,6 +132,8 @@
 
       var response = encodeAssertion(assertion);
       var body = Object.assign({}, oauthParams, { response: response });
+      var rememberMe = document.getElementById('rememberMe');
+      if (rememberMe && rememberMe.checked) body.rememberMe = 'true';
 
       var verifyRes = await fetch('/realms/' + realmName + '/webauthn/authenticate/verify', {
         method: 'POST',
@@ -189,6 +205,12 @@
   {{#each identityProviders}}
   <a href="{{this.loginUrl}}" style="width: 100%; display: inline-flex; align-items: center; justify-content: center; gap: 0.5rem; background: #ffffff; color: #374151; border: 1px solid #d1d5db; border-radius: 6px; padding: 0.65rem 1.25rem; font-size: 0.95rem; text-decoration: none; font-weight: 500; margin-bottom: 0.5rem; box-sizing: border-box;">Sign in with {{this.displayName}}</a>
   {{/each}}
+</div>
+{{/if}}
+
+{{#if magicLinkFallback}}
+<div style="margin-top: 1rem; text-align: center;">
+  <a href="/realms/{{realmName}}/login?link=1" style="color: #2563eb; font-size: 0.85rem;">{{msg "loginEmailMeLink"}}</a>
 </div>
 {{/if}}
 

@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { ApiExcludeController, ApiResponse } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
-import type { Realm, SamlServiceProvider, User } from '@prisma/client';
+import type { Prisma, Realm, SamlServiceProvider, User } from '@prisma/client';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
@@ -20,6 +20,24 @@ import { SamlIdpService } from './saml-idp.service.js';
 import { SamlMetadataService } from './saml-metadata.service.js';
 import { LoginService } from '../login/login.service.js';
 import { SAML_REQUEST_COOKIE, SESSION_COOKIE } from '../authn-core/cookies.js';
+import { PrismaService } from '../prisma/prisma.service.js';
+import { CryptoService } from '../crypto/crypto.service.js';
+import { FlowRuntimeService } from '../auth-flow/flow-runtime.service.js';
+import { StepUpService } from '../step-up/step-up.service.js';
+
+/** `PendingAction.type` of an AuthnRequest waiting for a sign-in. */
+export const SAML_REQUEST_TYPE = 'saml_request';
+/** How long an AuthnRequest waits for the user to sign in. */
+const SAML_REQUEST_TTL_MS = 10 * 60 * 1000;
+
+/** What a pending AuthnRequest needs to be answered after the sign-in. */
+interface PendingSamlRequest {
+  realmId: string;
+  spId: string;
+  requestId: string;
+  acsUrl: string;
+  relayState: string;
+}
 
 @ApiExcludeController()
 @Controller('realms/:realmName/protocol/saml')
@@ -32,6 +50,10 @@ export class SamlIdpController {
     private readonly samlIdpService: SamlIdpService,
     private readonly samlMetadataService: SamlMetadataService,
     private readonly loginService: LoginService,
+    private readonly prisma: PrismaService,
+    private readonly crypto: CryptoService,
+    private readonly flowRuntime: FlowRuntimeService,
+    private readonly stepUpService: StepUpService,
   ) {}
 
   // ─── SSO ENDPOINT (HTTP-Redirect binding) ──────────────
@@ -76,6 +98,71 @@ export class SamlIdpController {
     @Res() res: Response,
   ) {
     return this.handleSsoRequest(realm, samlRequest, relayState, req, res);
+  }
+
+  // ─── RESUME AFTER SIGN-IN ──────────────────────────────
+
+  /**
+   * Where every sign-in without an OAuth client lands while an AuthnRequest
+   * waits (password, second factor, MFA enrolment, passkey, a custom flow):
+   * answers that request with the new session, once.
+   */
+  @Get('resume')
+  @ApiResponse({
+    status: 200,
+    description: 'Auto-POST SAMLResponse for the pending AuthnRequest',
+  })
+  @ApiResponse({
+    status: 302,
+    description:
+      'Back to the login page (no session yet) or the account page (nothing pending)',
+  })
+  async resume(
+    @CurrentRealm() realm: Realm,
+    @Req() req: Request,
+    @Res() res: Response,
+  ) {
+    const token = (req.cookies as Record<string, string | undefined>)?.[
+      SAML_REQUEST_COOKIE
+    ];
+    const pending = token ? await this.findPending(realm, token) : null;
+    if (!pending) {
+      this.clearSamlCookie(realm, res);
+      return res.redirect(302, `/realms/${realm.name}/account`);
+    }
+
+    const user = await this.sessionUser(realm, req);
+    if (!user) {
+      // Not signed in (or not strongly enough): sign in first, then back here.
+      return res.redirect(302, `/realms/${realm.name}/login?saml=1`);
+    }
+
+    // The service provider and its ACS URL are checked again: either may
+    // have changed while the user signed in.
+    const sp = await this.prisma.samlServiceProvider.findFirst({
+      where: { id: pending.data.spId, realmId: realm.id },
+    });
+    if (!sp || !sp.enabled || !this.acsUrlAllowed(sp, pending.data.acsUrl)) {
+      await this.deletePending(pending.id);
+      this.clearSamlCookie(realm, res);
+      throw new BadRequestException(
+        'The SAML service provider of this sign-in is no longer available',
+      );
+    }
+    // Single use: only one request answers the AuthnRequest.
+    if (!(await this.deletePending(pending.id))) {
+      this.clearSamlCookie(realm, res);
+      return res.redirect(302, `/realms/${realm.name}/account`);
+    }
+    return this.completeSamlLogin(
+      realm,
+      sp,
+      user,
+      pending.data.requestId,
+      pending.data.acsUrl,
+      pending.data.relayState,
+      res,
+    );
   }
 
   // ─── IDP METADATA ─────────────────────────────────────
@@ -145,51 +232,115 @@ export class SamlIdpController {
       }
     }
 
-    // Store SAML request info in a cookie so we can resume after login
-    const samlSessionData = JSON.stringify({
-      requestId: parsed.id,
-      issuer: parsed.issuer,
-      acsUrl: parsed.acsUrl ?? sp.acsUrl,
-      relayState: relayState ?? '',
-      spId: sp.id,
-    });
+    const acsUrl = parsed.acsUrl ?? sp.acsUrl;
 
-    res.cookie(
-      SAML_REQUEST_COOKIE,
-      Buffer.from(samlSessionData).toString('base64'),
-      {
-        httpOnly: true,
-        secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
-        sameSite: 'lax',
-        maxAge: 10 * 60 * 1000, // 10 minutes
-        path: `/realms/${realm.name}`,
-      },
-    );
-
-    // Check if the user already has an active login session
-    const sessionToken = req.cookies?.[SESSION_COOKIE] as string | undefined;
-    if (sessionToken) {
-      const user = await this.loginService.validateLoginSession(
+    // An existing session that may serve this realm answers at once.
+    const user = await this.sessionUser(realm, req);
+    if (user) {
+      this.clearSamlCookie(realm, res);
+      return this.completeSamlLogin(
         realm,
-        sessionToken,
+        sp,
+        user,
+        parsed.id,
+        acsUrl,
+        relayState ?? '',
+        res,
       );
-      if (user) {
-        // User is already logged in - produce SAML response directly
-        return this.completeSamlLogin(
-          realm,
-          sp,
-          user,
-          parsed.id,
-          parsed.acsUrl ?? sp.acsUrl,
-          relayState ?? '',
-          res,
-        );
-      }
     }
+
+    // Otherwise the request waits server-side (the browser holds only an
+    // opaque token) and the sign-in comes back to /resume.
+    const token = this.crypto.generateSecret(32);
+    const data: PendingSamlRequest = {
+      realmId: realm.id,
+      spId: sp.id,
+      requestId: parsed.id,
+      acsUrl,
+      relayState: relayState ?? '',
+    };
+    await this.prisma.pendingAction.create({
+      data: {
+        tokenHash: this.crypto.sha256(token),
+        type: SAML_REQUEST_TYPE,
+        data: data as unknown as Prisma.InputJsonValue,
+        expiresAt: new Date(Date.now() + SAML_REQUEST_TTL_MS),
+      },
+    });
+    res.cookie(SAML_REQUEST_COOKIE, token, {
+      httpOnly: true,
+      secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
+      // Lax: the service provider sends the browser here from another site.
+      sameSite: 'lax',
+      maxAge: SAML_REQUEST_TTL_MS,
+      path: `/realms/${realm.name}`,
+    });
 
     // Redirect to login page
     const loginUrl = `/realms/${realm.name}/login?saml=1`;
     res.redirect(302, loginUrl);
+  }
+
+  /**
+   * The user of the browser's SSO session, if it may serve a SAML request
+   * of this realm. Where the realm is bound to a custom flow, the session
+   * must be as strong as that flow requires of its user (as for an OAuth
+   * client), and a misconfigured binding serves no one.
+   */
+  private async sessionUser(realm: Realm, req: Request): Promise<User | null> {
+    const sessionToken = req.cookies?.[SESSION_COOKIE] as string | undefined;
+    if (!sessionToken) return null;
+    const user = await this.loginService.validateLoginSession(
+      realm,
+      sessionToken,
+    );
+    if (!user) return null;
+    const binding = await this.flowRuntime.resolveBinding(realm, null);
+    if (binding.kind === 'legacy') return user;
+    if (binding.kind === 'misconfigured') return null;
+    const loginSession = await this.loginService.findLoginSession(sessionToken);
+    if (!loginSession) return null;
+    const sessionAcr =
+      await this.stepUpService.getLoginSessionAcr(loginSession);
+    const required = await this.flowRuntime.ssoRequiredAcr(
+      realm,
+      binding.flow,
+      user,
+      '',
+    );
+    return this.stepUpService.satisfiesAcr(sessionAcr, required) ? user : null;
+  }
+
+  private async findPending(
+    realm: Realm,
+    token: string,
+  ): Promise<{ id: string; data: PendingSamlRequest } | null> {
+    const row = await this.prisma.pendingAction.findUnique({
+      where: { tokenHash: this.crypto.sha256(token) },
+    });
+    if (!row || row.type !== SAML_REQUEST_TYPE) return null;
+    const data = row.data as unknown as PendingSamlRequest;
+    if (data.realmId !== realm.id || row.expiresAt.getTime() <= Date.now()) {
+      return null;
+    }
+    return { id: row.id, data };
+  }
+
+  private async deletePending(id: string): Promise<boolean> {
+    const { count } = await this.prisma.pendingAction.deleteMany({
+      where: { id, type: SAML_REQUEST_TYPE },
+    });
+    return count === 1;
+  }
+
+  private acsUrlAllowed(sp: SamlServiceProvider, acsUrl: string): boolean {
+    return (
+      acsUrl === sp.acsUrl || (sp.validRedirectUris ?? []).includes(acsUrl)
+    );
+  }
+
+  private clearSamlCookie(realm: Realm, res: Response): void {
+    res.clearCookie(SAML_REQUEST_COOKIE, { path: `/realms/${realm.name}` });
   }
 
   /**
@@ -210,12 +361,11 @@ export class SamlIdpController {
       sp,
       user,
       inResponseTo,
+      acsUrl,
     );
 
     // Clear the SAML request cookie
-    res.clearCookie(SAML_REQUEST_COOKIE, {
-      path: `/realms/${realm.name}`,
-    });
+    this.clearSamlCookie(realm, res);
 
     // Send an auto-submitting HTML form (POST binding)
     const html = `<!DOCTYPE html>

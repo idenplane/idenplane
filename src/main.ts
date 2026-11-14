@@ -1,5 +1,9 @@
 import { NestFactory } from '@nestjs/core';
-import { ValidationPipe, VersioningType } from '@nestjs/common';
+import {
+  Logger as NestLogger,
+  ValidationPipe,
+  VersioningType,
+} from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Logger } from 'nestjs-pino';
@@ -13,6 +17,14 @@ import { createThemeViewEngine } from './theme/theme-view-engine.js';
 import { CorsOriginService } from './cors/cors-origin.service.js';
 import { NormalizeRoleBodyPipe } from './roles/pipes/normalize-role-body.pipe.js';
 import { SessionEventsGateway } from './realtime/session-events.gateway.js';
+import {
+  MtlsConfigError,
+  validateMtlsConfig,
+  type MtlsConfig,
+} from './mtls/mtls-config.js';
+import { createTrustedProxyCertHeaderMiddleware } from './mtls/trusted-proxy-cert-header.middleware.js';
+import { startCertificateListener } from './realtime/certificate-listener.js';
+import { APP_VERSION } from './versioning/app-version.js';
 
 /** Known-insecure / placeholder values that must never reach production. */
 const INSECURE_ADMIN_API_KEY_VALUES = new Set([
@@ -73,8 +85,25 @@ function validateAdminApiKey(): void {
   }
 }
 
+/**
+ * Client-certificate (mTLS) settings: refuse to start on an unsafe or
+ * incomplete one, such as a certificate header without trusted proxies.
+ */
+function checkMtlsConfig(): MtlsConfig {
+  try {
+    return validateMtlsConfig(process.env);
+  } catch (err) {
+    if (err instanceof MtlsConfigError) {
+      console.error(`[SECURITY] FATAL: ${err.message}`);
+      process.exit(1);
+    }
+    throw err;
+  }
+}
+
 async function bootstrap() {
   validateAdminApiKey();
+  const mtlsConfig = checkMtlsConfig();
 
   const app = await NestFactory.create<NestExpressApplication>(AppModule, {
     bufferLogs: true,
@@ -160,6 +189,18 @@ async function bootstrap() {
         .status(204)
         .end();
     });
+
+  // A client-certificate header counts only from a trusted proxy (the TCP
+  // peer, never X-Forwarded-For); from any other peer it is rejected, or
+  // stripped, before any route sees it.
+  if (mtlsConfig.proxy) {
+    const proxyHeaderLogger = new NestLogger('MtlsProxyHeader');
+    app.use(
+      createTrustedProxyCertHeaderMiddleware(mtlsConfig.proxy, {
+        warn: (message) => proxyHeaderLogger.warn(message),
+      }),
+    );
+  }
 
   // ── Reverse-proxy trust configuration ──────────────────────────────────────
   // Configure Express's built-in "trust proxy" setting to match the
@@ -302,7 +343,7 @@ async function bootstrap() {
   const config = new DocumentBuilder()
     .setTitle('Idenplane')
     .setDescription('Open-source Identity and Access Management Server')
-    .setVersion('0.1.0')
+    .setVersion(APP_VERSION)
     .addApiKey(
       { type: 'apiKey', name: 'x-admin-api-key', in: 'header' },
       'admin-api-key',
@@ -327,5 +368,11 @@ async function bootstrap() {
   await app.listen(port);
   console.log(`Idenplane is running on http://localhost:${port}`);
   console.log(`Swagger UI: http://localhost:${port}/api`);
+
+  // The certificate listener (MTLS_LISTEN_PORT) serves the OAuth endpoint
+  // aliases through the same Express application, and the session events
+  // WebSocket through the same gateway. Closed by the shutdown hooks with
+  // the rest of the application.
+  await startCertificateListener(app);
 }
 void bootstrap();

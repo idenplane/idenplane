@@ -1,5 +1,5 @@
 import { http, HttpResponse } from 'msw';
-import { makeRealm, makeUser, makeClient, makeLoginEvent, makeAdminEvent, makeStats, makeFailedLoginHeatmap, makeAuthFlow, makeUpgradeAuditEntry, makePreUpgradeValidationResult, makeUpgradeHealthResult, makeRollbackCapability, makeNhiIdentity, makeConsentCategory,
+import { makeRealm, makeUser, makeClient, makeLoginEvent, makeAdminEvent, makeStats, makeFailedLoginHeatmap, makeAuthFlow, makeFlowBindings, makeUpgradeAuditEntry, makePreUpgradeValidationResult, makeUpgradeHealthResult, makeRollbackCapability, makeNhiIdentity, makeConsentCategory,
   makeProxyApplication,
   makeProxyApplicationView,
 } from './data';
@@ -192,6 +192,34 @@ export const handlers = [
     ]);
   }),
 
+  // An NHI identity's OAuth client (RFC 8705 NHI binding): none by default.
+  http.get(`${BASE}/realms/:name/nhi/:id/oauth-client`, () => {
+    return HttpResponse.json(
+      { statusCode: 404, message: 'The NHI identity has no OAuth client' },
+      { status: 404 },
+    );
+  }),
+
+  http.post(`${BASE}/realms/:name/nhi/:id/oauth-client`, ({ params }) => {
+    return HttpResponse.json(
+      {
+        id: 'client-nhi-1',
+        clientId: `nhi-${String(params.id)}`,
+        name: 'sensor-gateway-01',
+        enabled: true,
+        clientType: 'CONFIDENTIAL',
+        grantTypes: ['client_credentials'],
+        tokenEndpointAuthMethod: 'self_signed_tls_client_auth',
+        tlsClientCertificateBoundAccessTokens: true,
+        nhiIdentityId: String(params.id),
+        tokenEndpoint: `/realms/${String(params.name)}/protocol/openid-connect/token`,
+        mtlsClientAuthEnabled: true,
+        createdAt: '2026-11-13T00:00:00.000Z',
+      },
+      { status: 201 },
+    );
+  }),
+
   // Stats
   http.get(`${BASE}/realms/:name/stats`, () => {
     return HttpResponse.json(makeStats());
@@ -243,6 +271,33 @@ export const handlers = [
       makeAuthFlow({ id: 'flow-1', name: 'Basic Login', isDefault: true }),
       makeAuthFlow({ id: 'flow-2', name: 'MFA Required', isDefault: false }),
     ]);
+  }),
+
+  // Declared before `auth-flows/:id` so "bindings" is not taken as an id.
+  http.get(`${BASE}/realms/:name/auth-flows/bindings`, () => {
+    return HttpResponse.json(makeFlowBindings());
+  }),
+
+  http.put(`${BASE}/realms/:name/auth-flows/bindings`, async ({ request }) => {
+    const body = await request.json() as {
+      browserFlowId?: string | null;
+      authFlowsEnabled?: boolean;
+      clients?: Array<{ clientId: string; authFlowId: string | null }>;
+    };
+    const current = makeFlowBindings();
+    return HttpResponse.json({
+      ...current,
+      ...(body.browserFlowId !== undefined && { browserFlowId: body.browserFlowId }),
+      ...(body.authFlowsEnabled !== undefined && { authFlowsEnabled: body.authFlowsEnabled }),
+      clients: current.clients.map((c) => {
+        const patch = body.clients?.find((p) => p.clientId === c.clientId);
+        return patch ? { ...c, authFlowId: patch.authFlowId } : c;
+      }),
+    });
+  }),
+
+  http.post(`${BASE}/realms/:name/auth-flows/:id/validate`, () => {
+    return HttpResponse.json({ valid: true, errors: [] });
   }),
 
   http.get(`${BASE}/realms/:name/auth-flows/:id`, ({ params }) => {

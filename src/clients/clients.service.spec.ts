@@ -260,6 +260,94 @@ describe('ClientsService', () => {
     });
   });
 
+  describe('token endpoint authentication', () => {
+    it('creates a tls_client_auth client without a secret', async () => {
+      prisma.client.findUnique.mockResolvedValue(null);
+      prisma.client.create.mockResolvedValue(mockClient);
+      const result = await service.create(mockRealm, {
+        clientId: 'device',
+        tokenEndpointAuthMethod: 'tls_client_auth',
+        tlsClientAuthSubjectDn: 'CN=device,O=Example',
+      });
+      expect(cryptoService.generateSecret).not.toHaveBeenCalled();
+      expect(result).not.toHaveProperty('clientSecret');
+      expect(prisma.client.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            clientSecret: undefined,
+            tokenEndpointAuthMethod: 'tls_client_auth',
+            tlsClientAuthSubjectDn: 'CN=device,O=Example',
+          }),
+        }),
+      );
+    });
+
+    it('refuses tls_client_auth without a rule, and a PUBLIC certificate client', async () => {
+      prisma.client.findUnique.mockResolvedValue(null);
+      await expect(
+        service.create(mockRealm, {
+          clientId: 'device',
+          tokenEndpointAuthMethod: 'tls_client_auth',
+        }),
+      ).rejects.toThrow(/exactly one/);
+      await expect(
+        service.create(mockRealm, {
+          clientId: 'device',
+          clientType: 'PUBLIC',
+          tokenEndpointAuthMethod: 'self_signed_tls_client_auth',
+        }),
+      ).rejects.toThrow(/CONFIDENTIAL/);
+      expect(prisma.client.create).not.toHaveBeenCalled();
+    });
+
+    it('validates an update against the stored row merged with the change', async () => {
+      prisma.client.findUnique.mockImplementation(async (args: any) =>
+        args.select?.tokenEndpointAuthMethod
+          ? {
+              clientType: 'CONFIDENTIAL',
+              tokenEndpointAuthMethod: 'tls_client_auth',
+              tlsClientAuthSubjectDn: 'CN=a',
+              tlsClientAuthSanDns: null,
+              tlsClientAuthSanUri: null,
+              tlsClientAuthSanIp: null,
+              tlsClientAuthSanEmail: null,
+            }
+          : mockClient,
+      );
+      prisma.client.update.mockResolvedValue(mockClient);
+
+      // A second rule on top of the stored one.
+      await expect(
+        service.update(mockRealm, 'my-app', {
+          tlsClientAuthSanDns: 'a.example',
+        }),
+      ).rejects.toThrow(/exactly one/);
+      // Replacing the rule, clearing the old one with null.
+      await service.update(mockRealm, 'my-app', {
+        tlsClientAuthSubjectDn: null,
+        tlsClientAuthSanDns: 'a.example',
+      });
+      expect(prisma.client.update).toHaveBeenLastCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            tlsClientAuthSubjectDn: null,
+            tlsClientAuthSanDns: 'a.example',
+          }),
+        }),
+      );
+      // Switching to a secret method while the stored rule remains.
+      await expect(
+        service.update(mockRealm, 'my-app', {
+          tokenEndpointAuthMethod: 'client_secret_basic',
+        }),
+      ).rejects.toThrow(/only to tls_client_auth/);
+      // Switching to PUBLIC while the stored method needs CONFIDENTIAL.
+      await expect(
+        service.update(mockRealm, 'my-app', { clientType: 'PUBLIC' }),
+      ).rejects.toThrow(/CONFIDENTIAL/);
+    });
+  });
+
   describe('update', () => {
     it('should update and return the client', async () => {
       prisma.client.findUnique.mockResolvedValue(mockClient);
@@ -384,6 +472,82 @@ describe('ClientsService', () => {
       await expect(
         service.regenerateSecret(mockRealm, 'nonexistent'),
       ).rejects.toThrow(NotFoundException);
+    });
+  });
+
+  describe('NHI-backed clients', () => {
+    const nhiClient = { ...mockClient, nhiIdentityId: 'nhi-1' };
+
+    it('creates a client_credentials client with no secret, no service account and bound tokens', async () => {
+      prisma.client.create.mockResolvedValue({ ...nhiClient, id: 'c-nhi' });
+
+      await service.createForNhiIdentity(mockRealm, {
+        clientId: 'nhi-sensor',
+        name: 'sensor',
+        nhiIdentityId: 'nhi-1',
+        tokenEndpointAuthMethod: 'self_signed_tls_client_auth',
+      });
+
+      expect(prisma.client.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            realmId: mockRealm.id,
+            clientId: 'nhi-sensor',
+            clientSecret: null,
+            clientType: 'CONFIDENTIAL',
+            grantTypes: ['client_credentials'],
+            tokenEndpointAuthMethod: 'self_signed_tls_client_auth',
+            tlsClientCertificateBoundAccessTokens: true,
+            nhiIdentityId: 'nhi-1',
+          }),
+        }),
+      );
+      const data = prisma.client.create.mock.calls[0][0].data;
+      expect(data.serviceAccountUserId).toBeUndefined();
+      expect(prisma.user.create).not.toHaveBeenCalled();
+      expect(cryptoService.generateSecret).not.toHaveBeenCalled();
+      // The built-in scopes, like any client.
+      expect((prisma.clientDefaultScope as any).createMany).toHaveBeenCalled();
+    });
+
+    it.each([
+      [
+        'tokenEndpointAuthMethod',
+        { tokenEndpointAuthMethod: 'client_secret_basic' },
+      ],
+      ['clientType', { clientType: 'PUBLIC' }],
+      [
+        'tlsClientCertificateBoundAccessTokens',
+        { tlsClientCertificateBoundAccessTokens: false },
+      ],
+      ['grantTypes', { grantTypes: ['client_credentials', 'password'] }],
+      ['a subject rule', { tlsClientAuthSanDns: 'device.example' }],
+    ])('refuses to change %s', async (_name, dto) => {
+      prisma.client.findUnique.mockResolvedValue(nhiClient);
+      await expect(
+        service.update(mockRealm, 'my-app', dto as never),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.client.update).not.toHaveBeenCalled();
+    });
+
+    it('allows other changes, and resending the values the binding set', async () => {
+      prisma.client.findUnique.mockResolvedValue(nhiClient);
+      prisma.client.update.mockResolvedValue(nhiClient);
+      await service.update(mockRealm, 'my-app', {
+        name: 'Sensor 7',
+        enabled: false,
+        grantTypes: ['client_credentials'],
+        tlsClientCertificateBoundAccessTokens: true,
+      } as never);
+      expect(prisma.client.update).toHaveBeenCalled();
+    });
+
+    it('never gives it a secret', async () => {
+      prisma.client.findUnique.mockResolvedValue(nhiClient);
+      await expect(
+        service.regenerateSecret(mockRealm, 'my-app'),
+      ).rejects.toThrow(ConflictException);
+      expect(prisma.client.update).not.toHaveBeenCalled();
     });
   });
 });

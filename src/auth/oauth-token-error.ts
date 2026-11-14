@@ -16,6 +16,8 @@ export class OAuthTokenError extends HttpException {
   readonly code: string;
   /** The human-readable `error_description`, when one is supplied. */
   readonly description?: string;
+  /** Sent as `Retry-After` (seconds) with a 429. */
+  retryAfterSeconds?: number;
 
   constructor(
     code: string,

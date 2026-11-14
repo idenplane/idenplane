@@ -4,6 +4,8 @@ import { CryptoService } from '../crypto/crypto.service.js';
 import { JwkService } from '../crypto/jwk.service.js';
 import { ScopeSeedService } from '../scopes/scope-seed.service.js';
 import type { WizardState } from '@prisma/client';
+import { signingKeySecrets } from '../crypto/signing-key-secrets.js';
+import { wizardSecrets } from './wizard-secrets.js';
 
 export interface WizardStatus {
   isFirstRun: boolean;
@@ -215,19 +217,25 @@ export class SetupWizardService {
    */
   async saveSmtpConfig(dto: SaveSmtpConfigDto): Promise<WizardState> {
     this.validateSmtpConfig(dto);
+    const state = await this.getWizardState();
 
     return this.prisma.wizardState.update({
-      where: { id: (await this.getWizardState()).id },
+      where: { id: state.id },
       data: {
         smtpConfig: {
           host: dto.host,
           port: dto.port,
           user: dto.user,
-          password: dto.password,
+          // Encrypted at rest; completeWizard copies it into the realm as is.
+          password: wizardSecrets.smtpPassword(
+            this.crypto,
+            dto.password,
+            state.smtpConfig,
+          ),
           from: dto.from,
           secure: dto.secure,
         },
-        currentStep: Math.max((await this.getWizardState()).currentStep, 3),
+        currentStep: Math.max(state.currentStep, 3),
       },
     });
   }
@@ -343,8 +351,12 @@ export class SetupWizardService {
             .port as number,
           smtpUser: (state.smtpConfig as Record<string, unknown>)
             .user as string,
-          smtpPassword: (state.smtpConfig as Record<string, unknown>)
-            .password as string,
+          // Already encrypted by saveSmtpConfig; encryptSecret leaves
+          // ciphertext as it is and encrypts a password saved before that.
+          smtpPassword: this.crypto.encryptSecret(
+            (state.smtpConfig as Record<string, unknown>).password as
+              string | undefined,
+          ),
           smtpFrom: (state.smtpConfig as Record<string, unknown>)
             .from as string,
           smtpSecure: (state.smtpConfig as Record<string, unknown>)
@@ -360,12 +372,7 @@ export class SetupWizardService {
         enabled: true,
         ...smtpData,
         signingKeys: {
-          create: {
-            kid: keyPair.kid,
-            algorithm: 'RS256',
-            publicKey: keyPair.publicKeyPem,
-            privateKey: keyPair.privateKeyPem,
-          },
+          create: signingKeySecrets.createData(this.crypto, keyPair),
         },
       },
     });

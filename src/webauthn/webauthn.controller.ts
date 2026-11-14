@@ -40,7 +40,12 @@ import type {
   RegistrationResponseJSON,
   AuthenticationResponseJSON,
 } from '@simplewebauthn/server';
+import { FlowRuntimeService } from '../auth-flow/flow-runtime.service.js';
+import { LoginFlowService } from '../login/login-flow.service.js';
+import { PrimaryAuthGatesService } from '../login/primary-auth-gates.service.js';
+import { loginFormParamKeys } from '../authn-core/acr-enforcement.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
+import { pickOAuthParams } from '../authn-core/oauth-params.js';
 
 @ApiExcludeController()
 @Controller('realms/:realmName')
@@ -52,6 +57,9 @@ export class WebAuthnController {
     private readonly loginService: LoginService,
     private readonly oauthService: OAuthService,
     private readonly consentService: ConsentService,
+    private readonly flowRuntime: FlowRuntimeService,
+    private readonly loginFlow: LoginFlowService,
+    private readonly primaryAuthGates: PrimaryAuthGatesService,
   ) {}
 
   private async getSessionUser(realm: Realm, req: Request) {
@@ -143,11 +151,17 @@ export class WebAuthnController {
   async startAuthentication(
     @CurrentRealm() realm: Realm,
     @Body() body: StartAuthenticationDto,
+    @Req() req: Request,
     @Res({ passthrough: true }) res: Response,
   ) {
+    // Inside a custom-flow login, the challenge is for the user the flow has
+    // identified (if any), whatever the body names.
+    const flow = await this.flowRuntime.passkeyChallengeUser(realm, req);
     // Look up userId if username given (for autofill / non-resident-key flow)
     let userId: string | undefined;
-    if (body.username) {
+    if (flow.active) {
+      userId = flow.userId;
+    } else if (body.username) {
       const user = await this.loginService.findUserByUsername(
         realm,
         body.username,
@@ -193,6 +207,22 @@ export class WebAuthnController {
     @Res() res: Response,
   ) {
     const binding = req.cookies?.[WEBAUTHN_LOGIN_COOKIE] as string | undefined;
+    // A bound login runs this as its webauthn step (or refuses it).
+    if (
+      await this.flowRuntime.dispatch(
+        realm,
+        {
+          endpoint: 'webauthn',
+          response: body.response as AuthenticationResponseJSON,
+          binding,
+          clientId: body.client_id,
+        },
+        req,
+        res,
+      )
+    ) {
+      return;
+    }
     if (!binding) {
       throw new BadRequestException(
         'Authentication challenge expired or not found. Please try again.',
@@ -203,105 +233,74 @@ export class WebAuthnController {
       realm,
       body.response as AuthenticationResponseJSON,
       binding,
+      // The same account gate as a password sign-in, checked before the
+      // sign-in counts as a use of the passkey. (Password expiry does not
+      // apply: no password was used.)
+      (candidate) => {
+        if (
+          realm.requireEmailVerification &&
+          candidate.email &&
+          !candidate.emailVerified
+        ) {
+          throw new ForbiddenException(
+            'Please verify your email address before signing in.',
+          );
+        }
+      },
     );
 
-    // The same account gate as a password sign-in. (Password expiry does not
-    // apply: no password was used.)
-    if (realm.requireEmailVerification && user.email && !user.emailVerified) {
-      throw new ForbiddenException(
-        'Please verify your email address before signing in.',
-      );
+    // The same OAuth parameters the login form carries, prompt included
+    // (and what is asked of `acr`, with ENFORCE_ACR_ON_FRESH_LOGIN).
+    const oauthParams = pickOAuthParams(
+      body as unknown as Record<string, string | undefined>,
+      loginFormParamKeys(),
+    );
+
+    // Validate the authorization request before any session exists, as the
+    // password sign-in does (its error goes back to the login page).
+    if (oauthParams['client_id']) {
+      try {
+        await this.oauthService.validateAuthRequest(
+          realm,
+          oauthParams as unknown as AuthorizeParams,
+        );
+      } catch (err: unknown) {
+        const message = err instanceof Error ? err.message : String(err);
+        return res.json({
+          redirectUrl: `/realms/${realm.name}/login?error=${encodeURIComponent(message)}`,
+        });
+      }
     }
 
-    // Build OAuth params from request body
-    const oauthParams: Record<string, string> = {};
-    const bodyAsRecord = body as unknown as Record<string, unknown>;
-    for (const key of [
-      'response_type',
-      'client_id',
-      'redirect_uri',
-      'scope',
-      'state',
-      'nonce',
-      'code_challenge',
-      'code_challenge_method',
-    ]) {
-      const val = bodyAsRecord[key];
-      if (typeof val === 'string' && val) oauthParams[key] = val;
+    // The account gates of a password sign-in, in the same order: risk
+    // assessment (a block ends the sign-in; a step-up is met, a passkey being
+    // the strongest level) and email verification. Password expiry does not
+    // apply: no password was used.
+    const gates = await this.primaryAuthGates.evaluate(realm, user, {
+      ipAddress: resolveClientIp(req),
+      userAgent: req.headers['user-agent'] ?? null,
+      deviceFingerprint: null,
+      form: oauthParams,
+      skipPasswordExpiry: true,
+    });
+    if (gates.kind === 'block') {
+      return res.json({ redirectUrl: gates.redirectUrl });
     }
 
     // Passwordless WebAuthn assertion: the hardware authenticator is the sole
     // factor, so amr is `['hwk']` (RFC 8176). ACR reflects the WebAuthn level.
-    const authContext = { acr: ACR_WEBAUTHN, amr: ['hwk'] };
-
-    // Create session (invalidating any pre-existing cookie to prevent session fixation)
-    const sessionToken = await this.loginService.createLoginSession(
+    // Session, event, consent, the client's required ACR and the code: the
+    // same completion as a password sign-in.
+    const redirectUrl = await this.loginFlow.finishLogin(
       realm,
       user,
-      resolveClientIp(req),
-      req.headers['user-agent'],
-      req.cookies?.[SESSION_COOKIE] as string | undefined,
-      authContext,
+      oauthParams,
+      req,
+      res,
+      { acr: ACR_WEBAUTHN, amr: ['hwk'] },
+      { rememberMe: !!body.rememberMe },
     );
-
-    res.cookie(SESSION_COOKIE, sessionToken, {
-      httpOnly: true,
-      secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
-      sameSite: 'lax',
-      path: `/realms/${realm.name}`,
-    });
-
-    // Determine redirect
-    if (!oauthParams['client_id']) {
-      return res.json({ redirectUrl: `/realms/${realm.name}/account` });
-    }
-
-    try {
-      const client = await this.oauthService.validateAuthRequest(
-        realm,
-        oauthParams as unknown as AuthorizeParams,
-      );
-
-      if (client.requireConsent) {
-        const scopes = (oauthParams['scope'] ?? 'openid')
-          .split(' ')
-          .filter(Boolean);
-        const hasConsent = await this.consentService.hasConsent(
-          user.id,
-          client.id,
-          scopes,
-        );
-
-        if (!hasConsent) {
-          const reqId = await this.consentService.storeConsentRequest({
-            userId: user.id,
-            clientId: client.id,
-            clientName: client.name ?? client.clientId,
-            realmName: realm.name,
-            scopes,
-            oauthParams,
-            satisfiedAcr: authContext.acr,
-            amr: authContext.amr,
-          });
-          return res.json({
-            redirectUrl: `/realms/${realm.name}/consent?req=${reqId}`,
-          });
-        }
-      }
-
-      const result = await this.oauthService.authorizeWithUser(
-        realm,
-        user,
-        oauthParams as unknown as AuthorizeParams,
-        authContext,
-      );
-      return res.json({ redirectUrl: result.redirectUrl });
-    } catch (err: unknown) {
-      const message = err instanceof Error ? err.message : String(err);
-      return res.json({
-        redirectUrl: `/realms/${realm.name}/login?error=${encodeURIComponent(message)}`,
-      });
-    }
+    return res.json({ redirectUrl });
   }
 
   // ─── Account — Credential Management ──────────────────────────

@@ -6,6 +6,8 @@ jest.mock('../crypto/jwk.service.js', () => ({
 
 import { AuthService } from './auth.service.js';
 import { OAuthTokenError } from './oauth-token-error.js';
+import { ClientAuthenticator } from '../client-auth/client-authenticator.js';
+import { ClientCertificateResolverRegistry } from '../client-auth/client-certificate-resolver.js';
 import {
   createMockPrismaService,
   type MockPrismaService,
@@ -206,8 +208,9 @@ describe('AuthService', () => {
         .mockResolvedValue({ authenticated: false }),
     };
 
+    const lookups = lookupsBackedBy(prisma as any) as any;
     service = new AuthService(
-      lookupsBackedBy(prisma as any) as any,
+      lookups,
       prisma as any,
       crypto as any,
       jwkService as any,
@@ -220,12 +223,21 @@ describe('AuthService', () => {
       metricsService as any,
       customAttributesService as any,
       userFederationService as any,
-      // Client secrets go through ClientSecretService, which has its own
-      // spec; here it defers to the same crypto mock the user password uses.
-      {
-        verify: (client: { clientSecret: string | null }, presented: string) =>
-          crypto.verifyPassword(client.clientSecret, presented),
-      } as any,
+      // Client authentication is the real ClientAuthenticator. Client secrets
+      // go through ClientSecretService, which has its own spec; here it defers
+      // to the same crypto mock the user password uses.
+      new ClientAuthenticator(
+        lookups,
+        {
+          verify: (
+            client: { clientSecret: string | null },
+            presented: string,
+          ) => crypto.verifyPassword(client.clientSecret, presented),
+        } as any,
+        new ClientCertificateResolverRegistry(),
+        { enabled: false },
+        { retryAfter: async () => null, recordFailure: async () => {} } as any,
+      ),
     );
   });
 
@@ -706,6 +718,82 @@ describe('AuthService', () => {
       });
 
       expect(result.scope).toBe('openid');
+    });
+
+    describe('HTTP Basic client authentication (ctx.authorization)', () => {
+      const basic = (id: string, secret: string) =>
+        `Basic ${Buffer.from(`${id}:${secret}`).toString('base64')}`;
+
+      it('authenticates the client and issues the token to it', async () => {
+        setupValidClient();
+        setupSigningKey();
+
+        await service.handleTokenRequest(
+          realm,
+          { grant_type: 'client_credentials' },
+          '127.0.0.1',
+          undefined,
+          { authorization: basic('my-client', 'correct-secret') },
+        );
+
+        expect(crypto.verifyPassword).toHaveBeenCalledWith(
+          dbClient.clientSecret,
+          'correct-secret',
+        );
+        expect(jwkService.signJwt.mock.calls[0][0]).toMatchObject({
+          azp: 'my-client',
+        });
+      });
+
+      it('rejects Basic together with client_secret before anything else', async () => {
+        await expectOAuthError(
+          service.handleTokenRequest(
+            realm,
+            { client_secret: 'correct-secret' },
+            undefined,
+            undefined,
+            { authorization: basic('my-client', 'correct-secret') },
+          ),
+          'invalid_request',
+          400,
+        );
+        expect(prisma.client.findUnique).not.toHaveBeenCalled();
+      });
+
+      it('rejects a malformed Basic header as invalid_client', async () => {
+        await expectOAuthError(
+          service.handleTokenRequest(
+            realm,
+            { grant_type: 'client_credentials' },
+            undefined,
+            undefined,
+            { authorization: 'Basic !!!' },
+          ),
+          'invalid_client',
+          401,
+        );
+      });
+
+      it('reports a disallowed grant as unauthorized_client whatever the secret', async () => {
+        prisma.client.findUnique.mockResolvedValue({
+          ...dbClient,
+          grantTypes: ['authorization_code'],
+        });
+        crypto.verifyPassword.mockResolvedValue(false);
+
+        await expectOAuthError(
+          service.handleTokenRequest(
+            realm,
+            { grant_type: 'client_credentials' },
+            undefined,
+            undefined,
+            { authorization: basic('my-client', 'wrong') },
+          ),
+          'unauthorized_client',
+          400,
+        );
+        expect(crypto.verifyPassword).not.toHaveBeenCalled();
+      });
     });
 
     it('should throw invalid_client when client_secret is wrong', async () => {
@@ -1262,7 +1350,7 @@ describe('AuthService', () => {
       );
     });
 
-    it('defaults to password-level acr/amr when the code carries no satisfied context', async () => {
+    it('defaults to password-level acr and invents no amr when the code carries none', async () => {
       setupForTokenIssuance();
       prisma.authorizationCode.update.mockResolvedValue({
         ...authCode,
@@ -1287,7 +1375,8 @@ describe('AuthService', () => {
 
       const accessTokenPayload = jwkService.signJwt.mock.calls[0][0];
       expect(accessTokenPayload.acr).toBe(ACR_PASSWORD);
-      expect(accessTokenPayload.amr).toEqual(['pwd']);
+      // A federated sign-in records no method; claiming `pwd` would be false.
+      expect(accessTokenPayload).not.toHaveProperty('amr');
     });
 
     it('should throw invalid_request when code is missing', async () => {

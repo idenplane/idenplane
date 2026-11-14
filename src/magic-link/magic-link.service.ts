@@ -7,6 +7,40 @@ import { ThemeEmailService } from '../theme/theme-email.service.js';
 import { matchesRedirectUri } from '../common/redirect-uri.utils.js';
 import type { RateLimitResult } from '../rate-limit/rate-limit.dto.js';
 import { MagicLinkStatus } from '@prisma/client';
+import type { Realm, User } from '@prisma/client';
+import { timingSafeEqual } from 'node:crypto';
+
+/**
+ * A sign-in link sent by a `magic_link` flow step. It lives in the login
+ * transaction's server-side state; the browser never sees the hash.
+ */
+export interface FlowMagicLink {
+  /** The `magic_link_requests` row (status, audit, per-address limit). */
+  requestId: string;
+  /** Keyed hash of the link's token (never the token itself). */
+  tokenHash: string;
+  /** The account the link was sent to. */
+  userId: string;
+  /** ISO time after which the link no longer works. */
+  expiresAt: string;
+}
+
+/** A refused flow-link send. `message` is safe to show to the user. */
+export class FlowMagicLinkError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = 'FlowMagicLinkError';
+  }
+}
+
+/**
+ * HMAC purpose of a flow link's token hash. Deliberately not the SHA-256
+ * the standalone `/magic-link/verify` looks up, so a link sent for a login
+ * transaction can only ever resume that transaction.
+ */
+const HMAC_FLOW_LINK = 'flow-magic-link';
+/** The per-address window of `magicLinkRateLimitPerEmail`. */
+const EMAIL_WINDOW_MS = 900 * 1000;
 
 export interface MagicLinkRequestResult {
   success: boolean;
@@ -311,6 +345,158 @@ export class MagicLinkService {
       },
     });
     return result.count;
+  }
+
+  // ── Links of a login transaction (the magic_link flow step) ──
+
+  /**
+   * Sends a sign-in link for login transaction `txnId`, to `target`: the
+   * account already identified, or the one account whose (verified) address
+   * is `email`. Returns null, without telling the caller why, when no link
+   * was sent: no such account, an unverified address, a disabled account or
+   * the per-address limit. The page says the same thing either way.
+   *
+   * The link points at this server's `/login/magic-link`, never at a client
+   * URL, and works only in the browser holding that transaction.
+   *
+   * @throws FlowMagicLinkError when this IP address is rate-limited.
+   */
+  async sendFlowLink(params: {
+    realm: Realm;
+    target: { user: User } | { email: string };
+    expirySeconds: number;
+    ipAddress?: string;
+    userAgent?: string;
+    now?: Date;
+  }): Promise<FlowMagicLink | null> {
+    const { realm } = params;
+    const now = params.now ?? new Date();
+    if (params.ipAddress) {
+      const ipLimit = await this.rateLimit.checkIpLimit(
+        params.ipAddress,
+        realm.id,
+      );
+      if (!ipLimit.allowed) {
+        throw new FlowMagicLinkError(
+          'Too many requests. Please try again later.',
+        );
+      }
+    }
+
+    const user =
+      'user' in params.target
+        ? params.target.user
+        : await this.findByEmail(realm.id, params.target.email);
+    if (!user || !user.enabled || !user.email || !user.emailVerified) {
+      return null;
+    }
+    const email = user.email.toLowerCase();
+
+    const recent = await this.prisma.magicLinkRequest.count({
+      where: {
+        realmId: realm.id,
+        email,
+        createdAt: { gte: new Date(now.getTime() - EMAIL_WINDOW_MS) },
+      },
+    });
+    if (recent >= (realm.magicLinkRateLimitPerEmail ?? 5)) {
+      this.logger.warn(
+        `Sign-in link limit reached for user ${user.id} in realm ${realm.name}`,
+      );
+      return null;
+    }
+
+    const rawToken = this.crypto.generateSecret(32);
+    const tokenHash = this.crypto.hmac(HMAC_FLOW_LINK, rawToken);
+    const expiresAt = new Date(now.getTime() + params.expirySeconds * 1000);
+    const row = await this.prisma.magicLinkRequest.create({
+      data: {
+        realmId: realm.id,
+        userId: user.id,
+        email,
+        tokenHash,
+        expiresAt,
+        ipAddress: params.ipAddress,
+        userAgent: params.userAgent,
+      },
+    });
+
+    const baseUrl = process.env['BASE_URL'] ?? 'http://localhost:3000';
+    const url = `${baseUrl}/realms/${encodeURIComponent(realm.name)}/login/magic-link?token=${rawToken}`;
+    const html = this.themeEmail.renderEmail(realm, 'magic-link', {
+      magicLinkUrl: url,
+    });
+    await this.emailService.sendEmail(
+      realm.name,
+      user.email,
+      this.themeEmail.getSubject(realm, 'magicLinkSubject'),
+      html,
+    );
+    this.logger.log(`Sign-in link sent to user ${user.id} (flow step)`);
+
+    return {
+      requestId: row.id,
+      tokenHash,
+      userId: user.id,
+      expiresAt: expiresAt.toISOString(),
+    };
+  }
+
+  /** Whether `rawToken` is the token of `link` (constant time) and unexpired. */
+  matchesFlowLink(
+    rawToken: string | undefined,
+    link: FlowMagicLink | null | undefined,
+    now = new Date(),
+  ): boolean {
+    if (!rawToken || !link) return false;
+    const expected = Buffer.from(link.tokenHash, 'hex');
+    const actual = Buffer.from(
+      this.crypto.hmac(HMAC_FLOW_LINK, rawToken),
+      'hex',
+    );
+    return (
+      expected.length === actual.length &&
+      timingSafeEqual(expected, actual) &&
+      new Date(link.expiresAt).getTime() > now.getTime()
+    );
+  }
+
+  /**
+   * Marks a flow link used. Single use: true only for the one request that
+   * moved it from pending to completed before it expired.
+   */
+  async completeFlowLink(
+    requestId: string,
+    now = new Date(),
+  ): Promise<boolean> {
+    const { count } = await this.prisma.magicLinkRequest.updateMany({
+      where: {
+        id: requestId,
+        status: MagicLinkStatus.PENDING,
+        expiresAt: { gt: now },
+      },
+      data: { status: MagicLinkStatus.COMPLETED, completedAt: now },
+    });
+    return count === 1;
+  }
+
+  /** Cancels a flow link that a newer one replaces. */
+  async cancelFlowLink(requestId: string): Promise<void> {
+    await this.prisma.magicLinkRequest.updateMany({
+      where: { id: requestId, status: MagicLinkStatus.PENDING },
+      data: { status: MagicLinkStatus.CANCELLED },
+    });
+  }
+
+  /** The one account of the realm with this address (any letter case). */
+  private async findByEmail(realmId: string, email: string) {
+    const address = (email ?? '').trim();
+    if (!address || address.length > 320) return null;
+    const users = await this.prisma.user.findMany({
+      where: { realmId, email: { equals: address, mode: 'insensitive' } },
+      take: 2,
+    });
+    return users.length === 1 ? users[0] : null;
   }
 
   // ── Private helpers ─────────────────────────────────────

@@ -181,7 +181,7 @@ Returns the OpenID Connect discovery document with endpoint locations and capabi
   "request_uri_parameter_supported": false,
   "require_request_uri_registration": false,
   "token_endpoint_auth_methods_supported": ["client_secret_post", "client_secret_basic", "none"],
-  "device_authorization_endpoint": "http://localhost:3000/realms/master/protocol/openid-connect/device/code"
+  "device_authorization_endpoint": "http://localhost:3000/realms/master/protocol/openid-connect/auth/device"
 }
 ```
 

@@ -95,6 +95,7 @@ describe('Auth0ImporterService', () => {
           useValue: {
             hashPassword: jest.fn().mockResolvedValue('hashed'),
             hashSecret: jest.fn().mockResolvedValue('hashed'),
+            encryptSecret: jest.fn((v: string) => (v ? `sealed:${v}` : v)),
           },
         },
       ],

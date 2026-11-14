@@ -29,6 +29,8 @@ export interface ThemeInfo {
   displayName: string;
   description: string;
   colors: ThemeColors;
+  /** Template warnings found when the theme was loaded (never errors). */
+  warnings: string[];
 }
 
 export interface ResolvedTheme {

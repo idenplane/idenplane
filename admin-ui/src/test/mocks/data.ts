@@ -5,7 +5,7 @@ import type { Realm, User, Client, Role, NhiIdentity, ConsentCategory,
 import type { LoginEvent, AdminEvent } from '../../api/events';
 import type { RealmStats, FailedLoginHeatmap } from '../../api/stats';
 import type { LockedUser } from '../../api/bruteForce';
-import type { AuthFlow } from '../../api/authFlows';
+import type { AuthFlow, FlowBindings } from '../../api/authFlows';
 import type { UpgradeAuditEntry, PreUpgradeValidationResult, UpgradeHealthResult, RollbackCapability } from '../../api/upgrade';
 import type { NhiIdentityType, NhiLifecycleStatus } from '../../api/nhi';
 
@@ -200,6 +200,7 @@ export function makeAuthFlow(overrides: Partial<AuthFlow> = {}): AuthFlow {
         config: {},
       },
     ],
+    version: 1,
     createdAt: '2024-01-01T00:00:00.000Z',
     updatedAt: '2024-01-01T00:00:00.000Z',
     ...overrides,
@@ -337,6 +338,19 @@ export function makeProxyApplicationView(
     application,
     callbackUrl: `https://auth.example.com/realms/test-realm/proxy/${application.slug}/callback`,
     callbackRegistered: true,
+    ...overrides,
+  };
+}
+
+export function makeFlowBindings(overrides: Partial<FlowBindings> = {}): FlowBindings {
+  return {
+    runtimeEnabled: false,
+    authFlowsEnabled: false,
+    browserFlowId: null,
+    clients: [
+      { id: 'client-pk-1', clientId: 'web', name: 'Web App', authFlowId: null },
+      { id: 'client-pk-2', clientId: 'cli', name: null, authFlowId: null },
+    ],
     ...overrides,
   };
 }

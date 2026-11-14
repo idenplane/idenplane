@@ -29,7 +29,6 @@ export interface OrgInvitation {
   organizationId: string;
   email: string;
   role: 'owner' | 'admin' | 'member';
-  token: string;
   expiresAt: string | null;
   acceptedAt: string | null;
   createdAt: string;
@@ -141,12 +140,18 @@ export async function getOrgInvitations(
   return data;
 }
 
+/** The create call returns the invitation token, once; it is stored only hashed. */
+export interface CreatedOrgInvitation {
+  token: string;
+  expiresAt: string;
+}
+
 export async function createOrgInvitation(
   realmName: string,
   slug: string,
   payload: { email: string; role?: 'owner' | 'admin' | 'member' },
-): Promise<OrgInvitation> {
-  const { data } = await apiClient.post<OrgInvitation>(
+): Promise<CreatedOrgInvitation> {
+  const { data } = await apiClient.post<CreatedOrgInvitation>(
     `/realms/${realmName}/organizations/${slug}/invitations`,
     payload,
   );

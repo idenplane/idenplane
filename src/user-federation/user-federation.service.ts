@@ -3,14 +3,20 @@ import {
   NotFoundException,
   ConflictException,
 } from '@nestjs/common';
+import type { UserFederation } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { CryptoService } from '../crypto/crypto.service.js';
+import { federationSecrets } from './federation-secrets.js';
 import { LdapClientWrapper } from './ldap.client.js';
 import { CreateUserFederationDto } from './dto/create-user-federation.dto.js';
 import { UpdateUserFederationDto } from './dto/update-user-federation.dto.js';
 
 @Injectable()
 export class UserFederationService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly crypto: CryptoService,
+  ) {}
 
   async create(realmName: string, dto: CreateUserFederationDto) {
     const realm = await this.prisma.realm.findUnique({
@@ -33,7 +39,10 @@ export class UserFederationService {
         priority: dto.priority ?? 0,
         connectionUrl: dto.connectionUrl,
         bindDn: dto.bindDn,
-        bindCredential: dto.bindCredential,
+        bindCredential: federationSecrets.forCreate(
+          this.crypto,
+          dto.bindCredential,
+        ),
         startTls: dto.startTls ?? false,
         connectionTimeout: dto.connectionTimeout ?? 5000,
         usersDn: dto.usersDn,
@@ -65,7 +74,9 @@ export class UserFederationService {
   async findById(realmName: string, id: string) {
     const federation = await this.prisma.userFederation.findUnique({
       where: { id },
-      include: { realm: true, mappers: true },
+      // Only the realm's name: the full realm row (settings, encrypted
+      // secrets) must never reach the admin API response.
+      include: { realm: { select: { name: true } }, mappers: true },
     });
     if (!federation || federation.realm.name !== realmName) {
       throw new NotFoundException('User federation not found');
@@ -85,7 +96,10 @@ export class UserFederationService {
         priority: dto.priority,
         connectionUrl: dto.connectionUrl,
         bindDn: dto.bindDn,
-        bindCredential: dto.bindCredential,
+        bindCredential: federationSecrets.forUpdate(
+          this.crypto,
+          dto.bindCredential,
+        ),
         startTls: dto.startTls,
         connectionTimeout: dto.connectionTimeout,
         usersDn: dto.usersDn,
@@ -213,13 +227,15 @@ export class UserFederationService {
     return { authenticated: false };
   }
 
-  /* eslint-disable @typescript-eslint/no-unsafe-member-access,@typescript-eslint/no-unsafe-assignment -- LDAP federation config from DB */
-  private createLdapClient(federation: any): LdapClientWrapper {
+  private createLdapClient(federation: UserFederation): LdapClientWrapper {
     return new LdapClientWrapper(
       {
         connectionUrl: federation.connectionUrl,
         bindDn: federation.bindDn,
-        bindCredential: federation.bindCredential,
+        bindCredential: federationSecrets.bindCredential(
+          this.crypto,
+          federation,
+        ),
         startTls: federation.startTls,
         connectionTimeout: federation.connectionTimeout,
       },

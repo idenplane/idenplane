@@ -486,7 +486,7 @@ roles;                          // string[] — all realm roles
 
 ### Server (`idenplane-sdk/server`)
 
-#### `verifyToken(token, config)`
+#### `verifyToken(token, config, options?)`
 
 Verifies a JWT access token using the server's JWKS endpoint.
 
@@ -496,6 +496,36 @@ const payload = await verifyToken(accessToken, {
   realm: 'my-realm',
 });
 ```
+
+**Certificate-bound tokens (RFC 8705).** A client registered with
+`tlsClientCertificateBoundAccessTokens` receives tokens carrying
+`cnf: { "x5t#S256": … }`, valid only together with the mutual-TLS client
+certificate they were issued to. Pass the certificate the request presented,
+as its DER bytes or its thumbprint:
+
+```typescript
+import { verifyToken, computeX5tS256 } from 'idenplane-sdk/server';
+
+// Node https server with requestCert: true
+const der = req.socket.getPeerX509Certificate()?.raw;
+const payload = await verifyToken(accessToken, config, { certificate: der });
+
+// or, behind a proxy that forwards the thumbprint you trust
+const payload2 = await verifyToken(accessToken, config, {
+  certificateThumbprint: await computeX5tS256(der),
+});
+```
+
+A bound token verified without a certificate, or with a different one, is
+rejected with `CertificateBindingError` (`code: 'invalid_token'`); answer it
+with `401` and `WWW-Authenticate: Bearer error="invalid_token"`. Unbound
+tokens verify exactly as before. `getServerSideAuth`, `createNextMiddleware`,
+`createIdenplaneMiddleware` and `createIdenplaneGuard` pass no certificate, so
+they reject bound tokens: call `verifyToken` yourself on routes that accept
+them.
+
+`computeX5tS256(der)` returns the RFC 8705 thumbprint (base64url SHA-256 of
+the DER, unpadded). It uses Web Crypto, so it also runs in edge runtimes.
 
 #### `getServerSideAuth(req, config)`
 

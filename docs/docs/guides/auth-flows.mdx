@@ -1,103 +1,295 @@
 ---
 id: auth-flows
 title: Custom Auth Flows
-description: Define multi-step authentication flows with conditional branching and fallback logic, and manage them from the Admin API or the visual flow editor.
+description: Define, validate and bind multi-step authentication flows with conditions and fallbacks, from the Admin API or the visual flow editor, and run them at login behind AUTH_FLOW_RUNTIME_ENABLED.
 ---
 
 # Custom Auth Flows
 
-An authentication flow is an ordered list of steps stored on an `AuthenticationFlow` record. Each step has a type (`password`, `totp`, `webauthn`, ...), whether it's required, a position in the sequence, an optional condition that decides whether the step applies, and an optional fallback step to jump to if it fails. Flows are created and edited per realm, either through the Admin API or the visual flow editor in the admin console, and can be assigned to individual clients.
+An authentication flow is an ordered list of steps stored on an `AuthenticationFlow` record. Each step has a type (`password`, `totp`, `webauthn`, ...), whether it's required, a position in the sequence, an optional condition that decides whether the step applies, and an optional fallback step to run if it fails. Flows are created and edited per realm, through the Admin API or the visual flow editor in the admin console, and are **bound** explicitly: to the realm as its browser flow, or to individual clients as overrides.
 
-:::note What's live today
-Everything on this page — creating flows, the step/condition/fallback model, assigning a flow to a client, the visual editor — is implemented and reachable over the Admin API. The step-execution engine described below (`FlowExecutorService`) contains the logic to walk a flow's steps, evaluate conditions, and dispatch each step type, but it is not currently invoked by any HTTP endpoint or by the hosted `/protocol/openid-connect/auth` login page. Today, defining and assigning flows is a real, working feature; driving an end-user login through one requires your own integration against the types this module exports.
+:::note Off by default
+The login runtime is opt-in at every level: the server switch `AUTH_FLOW_RUNTIME_ENABLED=true`, the realm's `authFlowsEnabled`, and an explicit binding. Without all three, every sign-in uses the built-in login, whatever is bound. See [Running Flows at Login](#running-flows-at-login).
 :::
 
 ---
 
 ## The Flow Model
 
-A flow is a `name`, an optional `description`, an `isDefault` flag, and an ordered array of steps:
+A flow is a `name`, an optional `description`, a `version`, and an ordered array of steps:
 
 ```typescript
 interface FlowStep {
-  id: string;                       // unique within the flow
-  type: 'password' | 'totp' | 'webauthn' | 'social' | 'ldap' | 'email_otp' | 'consent';
+  id: string;                       // unique within the flow, max 100 characters
+  type:
+    | 'password' | 'ldap' | 'webauthn' | 'magic_link' | 'social' // identify the user
+    | 'totp' | 'email_otp';                                      // second factors
   required: boolean;
-  order: number;                    // lower runs first
+  order: number;                    // integer >= 1, unique; lower runs first
   condition?: {
-    field: string;                  // dot-path into the execution context, e.g. "user.group"
+    field: string;                  // one of the whitelisted fields below
     operator: 'eq' | 'neq' | 'in' | 'not_in' | 'exists' | 'not_exists';
     value?: unknown;
   } | null;
-  fallbackStepId?: string | null;   // step to jump to if this one fails
+  fallbackStepId?: string | null;   // step to run instead if this one fails
   config?: Record<string, unknown>; // step-type-specific settings
 }
 ```
 
+`version` starts at 1 and the server increments it on every update.
+
+`isDefault` still exists on flows but is **deprecated**: it is informational only and is never used to decide which flow a login runs. Bind flows explicitly (see [Binding Flows](#binding-flows)).
+
 ### Step Types
 
-| Type | What it dispatches to |
-|---|---|
-| `password` | Username/password verification via the login service (also used for LDAP-federated users) |
-| `totp` | TOTP or recovery-code verification via the MFA service |
-| `webauthn` | Accepts an assertion result already placed on the execution context by the WebAuthn ceremony |
-| `ldap` | Routed through the same password-verification path as `password` |
-| `social`, `email_otp`, `consent` | Marked as "pending" — these require an external redirect or UI step that a dedicated controller completes |
+| Type | Identifies the user | Config keys |
+|---|---|---|
+| `password` | Yes | none |
+| `ldap` | Yes | `federationProviderId` (string) |
+| `webauthn` | Yes (passwordless) or second factor | `rpName` (string), `userVerification` (`required`, `preferred`, `discouraged`) |
+| `magic_link` | Yes (a sign-in link sent to the account's email) | `expirySeconds` (integer, 60–600) |
+| `social` | Yes (a sign-in at a realm identity provider) | `providerAlias` (**required**: an enabled identity provider of the realm) |
+| `totp` | No (second factor) | `issuer` (string), `digits` (`6` or `8`), `algorithm` (`SHA1`, `SHA256`, `SHA512`) |
+| `email_otp` | No (second factor: a code sent to the account's email) | `otpLength` (`6` or `8`), `expirySeconds` (integer, 60–600) |
 
-These seven are the only step types the Admin API accepts (`CreateAuthFlowDto` validates `type` against this exact list). The internal `FlowStep` type also recognizes a `magic_link` step, and the executor has a branch for it, but it isn't in the accepted list — a flow containing a `magic_link` step is rejected by the API today.
+`consent` is recognised but is not a flow step: a flow that uses it is rejected with `unsupported_type`. Consent is handled after the flow, as for every sign-in.
 
 ### Conditions
 
-A condition gates whether a step applies. `field` is a dot-path resolved against the execution context (e.g. `user.group` reads `context.user.group`); `operator` is one of `eq`, `neq`, `in`, `not_in`, `exists`, `not_exists`; `value` is the comparand for everything except `exists`/`not_exists`. A non-required step whose condition isn't met is skipped automatically; a required step whose condition isn't met is still surfaced so the caller can decide what to do.
+A condition gates whether a step applies. `field` must be one of:
 
-### Fallbacks
+`user.username`, `user.email`, `user.emailVerified`, `user.groups`, `user.roles`, `user.totpEnrolled`, `user.webauthnEnrolled`, `client.clientId`, `risk.level`
 
-`fallbackStepId` points at another step in the same flow. The server validates that the ID actually exists in the flow — creating or updating a flow with a fallback that points nowhere is rejected with a 400.
+`eq`/`neq` take a string, number or boolean; `in`/`not_in` take a non-empty array (at most 100) of those; `exists`/`not_exists` take no value. The first step may not have a condition.
 
-### Server-Side Validation
+### Fallbacks and the Execution Model
 
-`POST`/`PUT` on a flow enforces:
+The validation rules below assume this model, and the runtime follows it:
 
-- At least one step
-- Step `id` values unique within the flow
-- Step `order` values unique within the flow
-- Every `fallbackStepId` resolves to a step in the same flow
+- The **main path** is every step that is not the fallback target of another step, run in ascending `order`. The first step (lowest `order`) always starts the flow.
+- A **fallback step** (the target of some `fallbackStepId`) is an alternative: it runs only when the step that names it fails, never by advancing along the main path.
+- The **identification phase** is the first step plus every step reachable from it through fallbacks. These are the identifying steps.
+
+### Validation
+
+Every create and update runs the same strict validator; a failing flow is rejected with `400` and the full list of problems:
+
+```json
+{
+  "statusCode": 400,
+  "message": "Authentication flow is invalid",
+  "errors": [
+    { "path": "steps[0].type", "code": "first_step_not_identifying", "message": "The first step must identify the user (password, ldap, webauthn, magic_link, social); 'totp' does not" }
+  ]
+}
+```
+
+The rules:
+
+- 1 to 20 steps; step `id`s unique and non-empty; `order`s unique integers ≥ 1.
+- Supported step types only (see above).
+- The first step identifies the user (`password`, `ldap`, `webauthn`, `magic_link` or `social`), is required, and has no condition. So `email_otp`, like `totp`, only runs after the user is identified.
+- Every `fallbackStepId` points at another existing step of the flow, not at the first step; the fallback graph has no cycles; and no step is unreachable.
+- Identifying steps may only fall back to identifying steps.
+- Conditions use only the whitelisted fields, a known operator, and a value of the right shape.
+- Each step's `config` contains only the keys listed for its type, with valid values, and the required ones (`config_missing_key`).
+- A `social` step names an identity provider that exists in the realm and is enabled (`provider_not_found`). This is checked again at every login: deleting or disabling the provider makes the binding fail closed (`503`), never fall back.
+
+Flows saved before these rules may not pass them. `POST …/auth-flows/{id}/validate` checks a stored flow without changing it, and a flow that fails validation cannot be bound.
 
 ---
 
-## Assigning a Flow
+## Binding Flows
 
-A client can be pinned to a specific flow via `client.authFlowId`. Resolution order when a caller asks "which flow applies to this client":
+Bindings are explicit and opt-in at every level:
 
-1. The flow referenced by `client.authFlowId`, if it still exists
-2. Otherwise, the realm's flow with `isDefault: true`
-3. Otherwise, the oldest flow in the realm
-4. If the realm has no flows at all, a 404
+| Setting | Where | Meaning |
+|---|---|---|
+| `AUTH_FLOW_RUNTIME_ENABLED` | server environment | Operator switch. Unset (or anything but `true`): every realm uses the built-in login. |
+| `authFlowsEnabled` | realm | Per-realm switch, off by default. Off: built-in login, even with flows bound. |
+| `browserFlowId` | realm | The realm's browser flow. |
+| `authFlowId` | client | Per-client override of the realm's browser flow. |
+
+A login resolves its flow in this order:
+
+1. `AUTH_FLOW_RUNTIME_ENABLED` unset → built-in login.
+2. The realm's `authFlowsEnabled` is off → built-in login.
+3. Take the client's `authFlowId`, else the realm's `browserFlowId`. Neither set → built-in login.
+4. Load that flow from the same realm and validate it. If it is missing or invalid, the login **fails closed** with an error page. It never falls back to the built-in login, to an `isDefault` flow, or to another flow.
+
+A bound flow must belong to the same realm as the realm or client it is bound to; the server checks this on every write. A flow that is bound to the realm or to any client cannot be deleted: `DELETE` returns `409` with the list of bindings, so unbind it first.
+
+### Bindings API
+
+```bash
+curl http://localhost:3000/admin/realms/my-realm/auth-flows/bindings \
+  -H "x-admin-api-key: $ADMIN_API_KEY"
+```
+
+```json
+{
+  "runtimeEnabled": false,
+  "authFlowsEnabled": false,
+  "browserFlowId": null,
+  "clients": [
+    { "id": "6f1c…", "clientId": "my-web-app", "name": "Web App", "authFlowId": null }
+  ]
+}
+```
+
+`runtimeEnabled` reports the server's `AUTH_FLOW_RUNTIME_ENABLED` and is read-only.
+
+`PUT` takes the same fields and updates only the ones you send. `clients` patches only the listed clients, identified by their OAuth `client_id`; send `"authFlowId": null` to remove an override.
+
+```bash
+curl -X PUT http://localhost:3000/admin/realms/my-realm/auth-flows/bindings \
+  -H "x-admin-api-key: $ADMIN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "browserFlowId": "{flowId}",
+    "authFlowsEnabled": true,
+    "clients": [{ "clientId": "my-web-app", "authFlowId": "{otherFlowId}" }]
+  }'
+```
+
+Every flow the request binds must exist in the realm and pass validation. When the result has `authFlowsEnabled: true`, every binding that would then be in effect is checked, including client overrides not in the request. Otherwise the request is rejected with `400` and nothing is written:
+
+```json
+{
+  "statusCode": 400,
+  "message": "Flow binding rejected",
+  "errors": [
+    { "path": "clients[0].authFlowId", "code": "flow_invalid", "flowId": "…", "message": "Flow 'Legacy' is invalid: …", "flowErrors": [ … ] }
+  ]
+}
+```
+
+Other binding error codes: `flow_not_found`, `client_not_found`, `client_duplicate` and `flow_id_required`.
+
+### Assigning One Client
+
+`PUT …/auth-flows/{flowId}/assign-client/{clientId}` binds the flow in the path to one client. Here `{clientId}` is the client's primary key (`id`), not its OAuth `client_id`. The request:
+
+- returns `404` if the flow or the client is not in the realm;
+- returns `400` if the body names a different `authFlowId`, or if the flow fails validation.
+
+To remove the assignment, send `DELETE` to the same path.
 
 ### Default Flows
 
-`POST .../auth-flows/seed-defaults` seeds three built-in flows for a realm (skipping any that already exist by name):
+`POST .../auth-flows/seed-defaults` seeds three built-in flows for a realm, skipping any that already exist by name. All three pass validation. Seeding binds nothing.
 
-| Name | Steps | Default? |
+| Name | Steps |
+|---|---|
+| Simple Login | `password` |
+| MFA Required | `password` → `totp` |
+| Passwordless | `webauthn` |
+
+---
+
+## Running Flows at Login
+
+### Enabling the runtime
+
+1. Start the server with `AUTH_FLOW_RUNTIME_ENABLED=true`. Only the exact value `true` (any case) turns it on.
+2. Bind a flow to the realm (`browserFlowId`) and/or to clients (`authFlowId`).
+3. Turn on the realm's `authFlowsEnabled`. The bindings API checks every binding that would take effect before it accepts the switch.
+
+```bash
+curl -X PUT http://localhost:3000/admin/realms/my-realm/auth-flows/bindings   -H "x-admin-api-key: $ADMIN_API_KEY"   -H "Content-Type: application/json"   -d '{ "browserFlowId": "{flowId}", "authFlowsEnabled": true }'
+```
+
+To switch back to the built-in login, turn `authFlowsEnabled` off for the realm, or unset `AUTH_FLOW_RUNTIME_ENABLED` for the whole server. A login already in progress may have to be started again from the application.
+
+### How a login runs
+
+The flow drives the same hosted pages and endpoints as the built-in login, so themes keep working:
+
+| Step type | Page | Endpoint |
 |---|---|---|
-| Simple Login | `password` | Yes |
-| MFA Required | `password` → `totp` | No |
-| Passwordless | `webauthn` | No |
+| `password`, `ldap` | login page | `POST /realms/{realm}/login` |
+| `totp` | second-factor page (authenticator, texted or recovery code) | `POST /realms/{realm}/totp` |
+| `webauthn` | login page, *Sign in with a passkey* | `POST /realms/{realm}/webauthn/authenticate/verify` |
+| `email_otp` | email-code page (`email-otp`) | `POST /realms/{realm}/login/email-otp/send`, then `POST /realms/{realm}/login/email-otp` |
+| `magic_link` | sign-in-link page (`magic-link`) | `POST /realms/{realm}/login/magic-link/send`, then the link: `GET /realms/{realm}/login/magic-link?token=…` |
+| `social` | login page, *Sign in with* the provider's name | `GET /realms/{realm}/broker/{alias}/login`, back at `GET /realms/{realm}/broker/{alias}/callback` |
+
+- **A server-side login transaction.** `/auth` validates the request, starts a transaction and points the browser at it with the `IDENPLANE_AUTHN_TXN` cookie. The transaction lasts 10 minutes. It pins the flow's id and `version`, holds the OAuth request, the identified user, the current step and a receipt for each step passed. OAuth parameters posted in forms are ignored. The cookie value changes once the user is identified.
+- **Steps.** A step passes, or it fails and its fallback runs, or, with no fallback, the page shows an error. After five failed answers the login starts over. A locked account, a rate-limited second factor or an unexpected error ends the login; it never moves to the fallback.
+- **Declining a step.** Submitting to the endpoint of the current step's own, direct fallback (for example, the password form while a passkey step with a password fallback is current) counts as failing the current step, so the fallback runs. Any other endpoint is refused (see below).
+- **Conditions and `required`.** A step whose condition is false is skipped. A step without a condition applies; if the user has no credential for it (no authenticator app, no passkey), an optional step is skipped and a required one runs its fallback. A required `totp` step makes a user without a second factor enrol one first, as a realm that requires MFA does.
+- **Checks after identification.** Once the user is identified, the same checks as the built-in login run once, in this order: risk assessment (a block ends the login), email verification, and password expiry (only after a `password` or `ldap` step). A risk step-up is applied after these checks. After a forced password change the login starts again through `/auth` with the original request.
+- **Never weaker than the built-in login.** The session's `acr` and `amr` come only from the steps actually passed. The login must reach the strongest of: the requested `acr_values` or `claims` acr, the client's required ACR, the risk level, and MFA when the client or realm requires it or the user has a second factor. If the flow fell short, the runtime adds a second-factor or passkey step the user can do, or sends a user without a second factor through MFA enrolment. A client's required ACR that the user cannot reach ends in `access_denied`. With `ENFORCE_ACR_ON_FRESH_LOGIN=true`, an `acr` requested as an Essential Claim (OIDC `claims` parameter) is mandatory too, and one the user cannot reach ends in `unmet_authentication_requirements`, as for the built-in login.
+- **After the flow.** The transaction is claimed once, the SSO session is created, and consent and the authorization code follow as for every sign-in. Consent is not a flow step.
+
+### Email, link and social steps
+
+- **`email_otp`.** The page offers *Send a code*; nothing is sent when the page is only viewed. The code goes to the identified user's address, which must be verified, and only if the realm can send email (otherwise the user cannot do the step: an optional one is skipped, a required one runs its fallback). Only a keyed hash of the code is stored, bound to this login transaction. Each guess is counted before the code is compared (in constant time), and a correct code works once. A code expires after `expirySeconds` (default 300), never after the transaction. Limits: 5 guesses and 5 codes per transaction, 30 seconds between two codes, and per user 10 codes and 10 wrong guesses in 15 minutes across transactions. Running out of guesses ends the login (it never runs a fallback).
+- **`magic_link`.** The page asks for an email address, or, after identification, offers to send the link to the user's own. The answer is the same whether or not an account has that address, and nothing is sent to an unverified address. The link points at this server and works **only in the browser that asked for it**, while that login is in progress: the link's token is checked against the transaction the browser's `IDENPLANE_AUTHN_TXN` cookie points to. Opened anywhere else (another browser, a mail client's preview, a security scanner), it shows an error page and changes nothing, so it still works in the right browser. A link works once, expires after `expirySeconds` (default: the realm's magic-link expiry, at most 10 minutes), and a newer link replaces it. Per transaction, 3 links at most, 30 seconds apart; the realm's per-address limit (`magicLinkRateLimitPerEmail`) and IP limit apply. The token is stored only as a keyed hash, and the standalone `/magic-link/verify` API never accepts a flow link.
+- **`social`.** The login page offers the step's provider. The redirect to the provider carries a signed state naming this transaction, the step and a single-use nonce kept in the transaction; the callback finishes the step only in the browser holding that transaction, once. The client's `state`, `nonce` and PKCE challenge stay in the transaction. As the first step, the provider's account signs in as its linked account (or, as for the built-in federated sign-in, an account matched by a verified email of a provider trusted for email, or a new one unless the provider is link-only). After identification, the provider's account must already be linked to the user (or be linkable through such a verified email); no account is created, and an account linked to someone else ends the login. A cancelled or failed sign-in at the provider is a failed step, so its fallback can run.
+- **Declining.** A password step whose fallback is a sign-in link shows *Email me a sign-in link instead*, a link step whose fallback is a password shows *Use your password instead*, and a step whose fallback is a social step shows that provider: using the alternative counts as failing the current step, as for a passkey step.
+
+#### Strength (`acr`) and methods (`amr`)
+
+How strong a flow sign-in is depends on the kind of each step passed, never on the `amr` values:
+
+| Steps passed | `acr` | `amr` |
+|---|---|---|
+| a passkey (alone or with others) | WebAuthn | `hwk`, … |
+| an identifying step and a second factor (`totp`, `email_otp`, MFA enrolment) | MFA | e.g. `pwd`, `otp` |
+| a sign-in link and an emailed code (one mailbox) | password | `otp` |
+| two identifying steps (password and social, password and sign-in link) | password | e.g. `pwd` |
+| an identifying step alone | password | `pwd` (password, LDAP), `otp` (sign-in link), none (social) |
+
+:::caution Email codes are a weaker second factor
+A flow with `email_otp` as its second factor meets an MFA requirement, including a client's `requiredAcr` and a user who has an authenticator app enrolled. Whoever controls the user's mailbox holds that factor, and NIST SP 800-63B does not accept email as an authenticator at AAL2. Use `email_otp` where reach matters more than strength. For clients that need strong assurance, bind a flow that uses `totp` or `webauthn` instead.
+:::
+
+`email_otp` records `otp` (RFC 8176). A sign-in link records `otp` too: RFC 8176 has no value for it, and a link carries a single-use secret delivered out of band. A social step records no method, as the built-in federated sign-in does (the provider's methods are not known), so its tokens carry no `amr` claim.
+
+### Single sign-on
+
+An existing SSO session serves a client bound to a flow only if it is at least as strong as the flow requires **of that session's user**. At `/auth` the flow's conditions are evaluated for the user, with the same fields as at login (groups, roles, enrolled authenticator app or passkey, `client.clientId`), and the requirement is the weakest way through the steps that apply:
+
+- A required step counts when its condition holds (or it has none). An optional step counts when the user has the credential for it, since it would run at login.
+- A condition on a field that is only known during a login (`risk.level`) counts as holding, so the user signs in again rather than skipping the step.
+
+A weaker session signs in again through the flow; with `prompt=none` the response is `interaction_required`. For example, with *password, then TOTP for group `G`*, a password-level session serves a user outside `G` silently, while a member of `G` signs in again and passes the TOTP step.
+
+### Failing closed
+
+- A binding to a missing or invalid flow shows a `503` error page at `/auth` and on the login page. It never falls back to the built-in login.
+- A login that has to start again (expired, flow changed or unbound, a lockout, an error, another user, too many failures) goes back through `/auth` with the original authorization request, so the binding, single sign-on and `prompt` apply again; the login page then says why. A sign-in to the account console, which has no authorization request, starts again at the login page.
+- A submission for another step than the current one is refused with `400`, and the transaction ends. One exception: a password posted on a passkey or social step without a password fallback (a custom theme showed its password form there) is not checked; the same step is shown again with a message, and the transaction goes on.
+- A step after identification cannot switch user: another account's password or passkey ends the transaction.
+- Of two concurrent submissions of the same step, the second is refused with `409`. A finished transaction cannot be replayed.
+- Where a login is bound, the built-in sign-in paths cannot create a session: a stale login form starts again, and an identity-provider sign-in that a `social` step did not start is refused with a themed `403` page as soon as it returns from the provider, before any second factor is asked for. A callback, sign-in link or code for another browser's login is refused there and changes nothing.
+
+### Current limits
+
+- On a passkey step without a password fallback, the built-in themes hide the password form (the template gets `passkeyOnly` and `passwordFormHidden`). A custom theme that checks neither still shows it; submitting it there brings the user back to the passkey step with a message, and the server logs a warning about the theme when it starts. See [Custom Themes](./custom-themes.mdx).
+- On bound logins, the login page offers only the identity providers of the current step (or its fallback), never the realm's other providers.
+- The same applies to a social step without a password fallback: the built-in themes hide the password form (`passwordFormHidden`); a custom theme that does not check it still shows it, and submitting it brings the user back to the step with a message.
+- `email-otp` and `magic-link` are new pages. A custom theme without them uses the built-in theme's.
 
 ---
 
 ## Admin API
 
-Base path: `/admin/realms/{realm}/auth-flows`, protected by the admin API key. `{realm}` accepts either the realm's UUID or its name.
+Base path: `/admin/realms/{realm}/auth-flows`, protected by the admin API key. `{realm}` accepts either the realm's UUID or its name. Every write is recorded as an admin event (resource type `AUTH_FLOW`) when the realm has admin events enabled.
 
 | Method | Path | Purpose |
 |---|---|---|
-| `POST` | `/admin/realms/{realm}/auth-flows` | Create a flow |
-| `GET` | `/admin/realms/{realm}/auth-flows` | List flows (default flow first, then oldest to newest) |
+| `POST` | `/admin/realms/{realm}/auth-flows` | Create a flow (validated) |
+| `GET` | `/admin/realms/{realm}/auth-flows` | List flows |
+| `GET` | `/admin/realms/{realm}/auth-flows/bindings` | Get the realm's bindings |
+| `PUT` | `/admin/realms/{realm}/auth-flows/bindings` | Update the realm's bindings (validated) |
 | `GET` | `/admin/realms/{realm}/auth-flows/{id}` | Get one flow |
-| `PUT` | `/admin/realms/{realm}/auth-flows/{id}` | Update a flow |
-| `DELETE` | `/admin/realms/{realm}/auth-flows/{id}` | Delete a flow |
-| `PUT` | `/admin/realms/{realm}/auth-flows/{id}/assign-client/{clientId}` | Assign (or clear, with `authFlowId: null`) a flow on a client |
+| `POST` | `/admin/realms/{realm}/auth-flows/{id}/validate` | Validate a stored flow: `{ valid, errors }` |
+| `PUT` | `/admin/realms/{realm}/auth-flows/{id}` | Update a flow (validated; increments `version`) |
+| `DELETE` | `/admin/realms/{realm}/auth-flows/{id}` | Delete a flow (`409` with `bindings` while bound) |
+| `PUT` | `/admin/realms/{realm}/auth-flows/{id}/assign-client/{clientId}` | Bind the flow to one client |
+| `DELETE` | `/admin/realms/{realm}/auth-flows/{id}/assign-client/{clientId}` | Remove that client's binding |
 | `POST` | `/admin/realms/{realm}/auth-flows/seed-defaults` | Seed the three built-in flows |
 
 ### Create a Flow
@@ -114,8 +306,7 @@ curl -X POST http://localhost:3000/admin/realms/my-realm/auth-flows \
         "id": "step-password",
         "type": "password",
         "required": true,
-        "order": 1,
-        "fallbackStepId": null
+        "order": 1
       },
       {
         "id": "step-totp",
@@ -123,7 +314,7 @@ curl -X POST http://localhost:3000/admin/realms/my-realm/auth-flows \
         "required": true,
         "order": 2,
         "condition": {
-          "field": "user.group",
+          "field": "user.groups",
           "operator": "in",
           "value": ["employees", "contractors"]
         },
@@ -139,29 +330,30 @@ curl -X POST http://localhost:3000/admin/realms/my-realm/auth-flows \
   }'
 ```
 
-### Assign the Flow to a Client
-
-```bash
-curl -X PUT http://localhost:3000/admin/realms/my-realm/auth-flows/{flowId}/assign-client/{clientId} \
-  -H "x-admin-api-key: $ADMIN_API_KEY" \
-  -H "Content-Type: application/json" \
-  -d '{ "authFlowId": "{flowId}" }'
-```
-
-Send `{ "authFlowId": null }` to clear the assignment and fall back to the realm default.
+Here `step-webauthn` is a fallback step. It runs only when `step-totp` fails, not after `step-totp` succeeds.
 
 ---
 
 ## Admin Console
 
-**Auth Flows**, under the realm's *Sign-in behaviour* section, opens a canvas-based editor:
+**Auth Flows**, under the realm's *Sign-in behaviour* section, lists the realm's flows under a **Flow bindings** panel.
 
-- A step palette (password, TOTP, WebAuthn, social, LDAP, email OTP, consent) — drag a step onto the canvas or click to append it
-- Fallback connections render as dashed lines between steps
-- A **Preview** mode that walks the flow top to bottom the way the executor would
-- Client-side warnings while editing: a fallback pointing at a step that no longer exists, no credential step (`password`/`webauthn`/`social`/`ldap`) present in the flow, or every step being conditional (so the flow could be entirely skipped)
+The **Flow bindings** panel has:
 
-These editor warnings are advisory and run in the browser; the server-side checks described above (unique IDs/order, valid fallback references) are what's actually enforced when you save.
+- the realm browser flow;
+- the *Use custom flows in this realm* switch;
+- a per-client override for each client.
+
+While the server runs without `AUTH_FLOW_RUNTIME_ENABLED`, the panel shows a note that login ignores the bindings. Validation errors from the server appear next to the field they concern.
+
+Opening a flow opens a canvas-based editor:
+
+- **Step palette.** Drag a step onto the canvas, or click it to append it. *Consent*, which is not a flow step, is marked *coming*.
+- **Fallback connections.** These render as dashed lines between steps.
+- **Preview mode.** Walks the flow top to bottom.
+- **Validation errors on save.** Errors are listed per step.
+
+The editor's client-side warnings are advisory. The server-side validation above is what's enforced.
 
 ---
 

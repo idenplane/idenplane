@@ -9,6 +9,7 @@ export type StepType =
   | 'social'
   | 'ldap'
   | 'email_otp'
+  | 'magic_link'
   | 'consent';
 
 export type ConditionOperator =
@@ -40,8 +41,11 @@ export interface AuthFlow {
   realmId: string;
   name: string;
   description?: string | null;
+  /** @deprecated Informational only; never used for binding. */
   isDefault: boolean;
   steps: FlowStep[];
+  /** Incremented by the server on every update. */
+  version?: number;
   createdAt: string;
   updatedAt: string;
 }
@@ -107,4 +111,91 @@ export async function deleteAuthFlow(
   id: string,
 ): Promise<void> {
   await apiClient.delete(`/realms/${realmName}/auth-flows/${id}`);
+}
+
+export async function validateAuthFlow(
+  realmName: string,
+  id: string,
+): Promise<FlowValidationResult> {
+  const { data } = await apiClient.post<FlowValidationResult>(
+    `/realms/${realmName}/auth-flows/${id}/validate`,
+  );
+  return data;
+}
+
+// ─── Validation & bindings ───────────────────────────────────
+
+/** One validation problem, as returned by the server. */
+export interface FlowValidationError {
+  path: string;
+  code: string;
+  message: string;
+  /** Present on binding errors that concern a flow. */
+  flowId?: string;
+  flowErrors?: FlowValidationError[];
+}
+
+export interface FlowValidationResult {
+  valid: boolean;
+  errors: FlowValidationError[];
+}
+
+export interface ClientFlowBinding {
+  id: string;
+  clientId: string;
+  name: string | null;
+  authFlowId: string | null;
+}
+
+export interface FlowBindings {
+  /** Server flag AUTH_FLOW_RUNTIME_ENABLED; while false, login ignores bindings. */
+  runtimeEnabled: boolean;
+  authFlowsEnabled: boolean;
+  browserFlowId: string | null;
+  clients: ClientFlowBinding[];
+}
+
+export interface UpdateFlowBindingsPayload {
+  browserFlowId?: string | null;
+  authFlowsEnabled?: boolean;
+  clients?: Array<{ clientId: string; authFlowId: string | null }>;
+}
+
+export async function getFlowBindings(realmName: string): Promise<FlowBindings> {
+  const { data } = await apiClient.get<FlowBindings>(
+    `/realms/${realmName}/auth-flows/bindings`,
+  );
+  return data;
+}
+
+export async function updateFlowBindings(
+  realmName: string,
+  payload: UpdateFlowBindingsPayload,
+): Promise<FlowBindings> {
+  const { data } = await apiClient.put<FlowBindings>(
+    `/realms/${realmName}/auth-flows/bindings`,
+    payload,
+  );
+  return data;
+}
+
+/** Where a flow is bound (409 body on delete). */
+export type FlowBindingRef =
+  | { kind: 'realm'; realmId: string; realmName: string }
+  | { kind: 'client'; id: string; clientId: string };
+
+/** The `errors` list of a 400 validation / binding response, if any. */
+export function getFlowValidationErrors(err: unknown): FlowValidationError[] {
+  const data = (err as { response?: { status?: number; data?: { errors?: unknown } } })
+    ?.response?.data;
+  return Array.isArray(data?.errors) ? (data.errors as FlowValidationError[]) : [];
+}
+
+/** The `bindings` list of a 409 delete response, if any. */
+export function getFlowBindingConflicts(err: unknown): FlowBindingRef[] {
+  const res = (err as { response?: { status?: number; data?: { bindings?: unknown } } })
+    ?.response;
+  return res?.status === 409 && Array.isArray(res.data?.bindings)
+    ? (res.data.bindings as FlowBindingRef[])
+    : [];
 }

@@ -7,6 +7,7 @@ import { NhiAuditService } from './nhi-audit.service.js';
 import type { Realm } from '@prisma/client';
 
 describe('NhiController', () => {
+  let oauthClients: { ensure: jest.Mock; get: jest.Mock; remove: jest.Mock };
   let controller: NhiController;
   let nhiService: {
     create: jest.Mock;
@@ -101,7 +102,63 @@ describe('NhiController', () => {
       queryAuditLogs: jest.fn(),
       clearAuditLogs: jest.fn(),
     };
-    controller = new NhiController(nhiService as any, nhiAuditService as any);
+    oauthClients = {
+      ensure: jest.fn(),
+      get: jest.fn(),
+      remove: jest.fn(),
+    };
+    controller = new NhiController(
+      nhiService as any,
+      nhiAuditService as any,
+      oauthClients as any,
+    );
+  });
+
+  // ── OAuth client (RFC 8705 NHI binding) ──────────────────────────────────
+
+  describe('oauth-client', () => {
+    const client = { clientId: 'nhi-1', nhiIdentityId: 'nhi-uuid-1' };
+    const response = () => ({ status: jest.fn() });
+
+    it('answers 201 when it creates the client', async () => {
+      oauthClients.ensure.mockResolvedValue({ created: true, client });
+      const res = response();
+      const body = {
+        tokenEndpointAuthMethod: 'self_signed_tls_client_auth' as const,
+      };
+
+      await expect(
+        controller.ensureOAuthClient(mockRealm, 'nhi-uuid-1', body, res as any),
+      ).resolves.toEqual(client);
+      expect(oauthClients.ensure).toHaveBeenCalledWith(
+        mockRealm,
+        'nhi-uuid-1',
+        body,
+      );
+      expect(res.status).toHaveBeenCalledWith(201);
+    });
+
+    it('answers 200 with the client the identity already has', async () => {
+      oauthClients.ensure.mockResolvedValue({ created: false, client });
+      const res = response();
+
+      await controller.ensureOAuthClient(
+        mockRealm,
+        'nhi-uuid-1',
+        {},
+        res as any,
+      );
+      expect(res.status).toHaveBeenCalledWith(200);
+    });
+
+    it('gets and deletes through the service', async () => {
+      oauthClients.get.mockResolvedValue(client);
+      await expect(
+        controller.getOAuthClient(mockRealm, 'nhi-uuid-1'),
+      ).resolves.toEqual(client);
+      await controller.removeOAuthClient(mockRealm, 'nhi-uuid-1');
+      expect(oauthClients.remove).toHaveBeenCalledWith(mockRealm, 'nhi-uuid-1');
+    });
   });
 
   // ── Identity endpoints ───────────────────────────────────────────────────
@@ -292,6 +349,7 @@ describe('NhiController', () => {
         mockRealm,
         'nhi-uuid-1',
         'cred-uuid-1',
+        { overlapSeconds: 60 },
       );
 
       expect(result).toEqual(rotated);
@@ -299,6 +357,7 @@ describe('NhiController', () => {
         mockRealm,
         'nhi-uuid-1',
         'cred-uuid-1',
+        { overlapSeconds: 60 },
       );
     });
   });

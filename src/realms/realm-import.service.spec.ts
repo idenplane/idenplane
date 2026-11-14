@@ -15,7 +15,18 @@ describe('RealmImportService', () => {
   let service: RealmImportService;
   let prisma: MockPrismaService;
   let jwkService: { generateRsaKeyPair: jest.Mock };
-  let scopeSeedService: { seedDefaultScopes: jest.Mock };
+  let cache: {
+    invalidateRealmCache: jest.Mock;
+    invalidateCorsOrigins: jest.Mock;
+  };
+  let cors: { invalidateLocalCache: jest.Mock };
+
+  /** The built-in scopes seeded through the transaction. */
+  const seededScopeNames = () =>
+    prisma.clientScope.create.mock.calls
+      .map((c) => c[0].data)
+      .filter((d) => d.builtIn === true && d.protocolMappers)
+      .map((d) => d.name);
 
   const keyPair = {
     kid: 'kid-1',
@@ -92,15 +103,23 @@ describe('RealmImportService', () => {
   beforeEach(() => {
     prisma = createMockPrismaService();
     jwkService = { generateRsaKeyPair: jest.fn().mockResolvedValue(keyPair) };
-    scopeSeedService = {
-      seedDefaultScopes: jest.fn().mockResolvedValue(undefined),
+    cache = {
+      invalidateRealmCache: jest.fn().mockResolvedValue(undefined),
+      invalidateCorsOrigins: jest.fn().mockResolvedValue(undefined),
     };
+    cors = { invalidateLocalCache: jest.fn() };
+    // The import runs in one interactive transaction; the mock runs it
+    // against the same mock client.
+    prisma.$transaction.mockImplementation((fn: (tx: unknown) => unknown) =>
+      fn(prisma),
+    );
 
     service = new RealmImportService(
       prisma as any,
       jwkService as any,
-      scopeSeedService as any,
       new CryptoService(),
+      cache as any,
+      cors as any,
     );
 
     // Default mock return values
@@ -156,6 +175,19 @@ describe('RealmImportService', () => {
       );
     });
 
+    it('refuses to replace the master realm, even with overwrite', async () => {
+      prisma.realm.findUnique.mockResolvedValue({ id: 'm', name: 'master' });
+      const payload = {
+        ...validPayload,
+        realm: { ...(validPayload['realm'] as object), name: 'master' },
+      };
+
+      await expect(
+        service.importRealm(payload, { overwrite: true }),
+      ).rejects.toThrow(BadRequestException);
+      expect(prisma.realm.delete).not.toHaveBeenCalled();
+    });
+
     it('should delete existing realm when overwrite is true', async () => {
       prisma.realm.findUnique.mockResolvedValue({
         id: 'existing',
@@ -166,9 +198,44 @@ describe('RealmImportService', () => {
       await service.importRealm(validPayload, { overwrite: true });
 
       expect(prisma.realm.delete).toHaveBeenCalledWith({
-        where: { name: 'imported-realm' },
+        where: { id: 'existing' },
       });
       expect(prisma.realm.create).toHaveBeenCalled();
+      // Inside the transaction, so a failed import keeps the old realm.
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(cache.invalidateRealmCache).toHaveBeenCalledWith(
+        'existing',
+        'imported-realm',
+      );
+    });
+
+    it('creates nothing outside the transaction', async () => {
+      await service.importRealm(validPayload);
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
+      const [, txOptions] = prisma.$transaction.mock.calls[0];
+      expect(txOptions.timeout).toBeGreaterThan(5000);
+    });
+
+    it('rejects a version it does not know', async () => {
+      await expect(
+        service.importRealm({ ...validPayload, version: 3 }),
+      ).rejects.toThrow('Unsupported export version');
+    });
+
+    it("accepts version 1 written as '1.0'", async () => {
+      const result = await service.importRealm({
+        ...validPayload,
+        version: '1.0',
+      });
+      expect(result.realmName).toBe('imported-realm');
+    });
+
+    it('rejects a section that is not an array', async () => {
+      await expect(
+        service.importRealm({ ...validPayload, clients: { a: 1 } }),
+      ).rejects.toThrow('clients: must be an array');
+      expect(prisma.$transaction).not.toHaveBeenCalled();
     });
 
     it('should create realm with signing key', async () => {
@@ -213,15 +280,15 @@ describe('RealmImportService', () => {
 
       await service.importRealm(payloadNoScopes);
 
-      expect(scopeSeedService.seedDefaultScopes).toHaveBeenCalledWith(
-        'new-realm-id',
+      expect(seededScopeNames()).toEqual(
+        expect.arrayContaining(['openid', 'profile', 'email']),
       );
     });
 
     it('should not seed default scopes if scopes are provided', async () => {
       await service.importRealm(validPayload);
 
-      expect(scopeSeedService.seedDefaultScopes).not.toHaveBeenCalled();
+      expect(seededScopeNames()).toEqual([]);
     });
 
     it('should import clients', async () => {
@@ -350,7 +417,7 @@ describe('RealmImportService', () => {
       expect(result.rolesImported).toBe(0);
       expect(result.groupsImported).toBe(0);
       expect(result.usersImported).toBe(0);
-      expect(scopeSeedService.seedDefaultScopes).toHaveBeenCalledWith('min-id');
+      expect(seededScopeNames()).toContain('openid');
     });
   });
 });

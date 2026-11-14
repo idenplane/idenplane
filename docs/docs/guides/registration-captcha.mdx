@@ -1,0 +1,119 @@
+---
+sidebar_position: 9
+title: Self-Registration and CAPTCHA
+description: Let users create their own accounts, and protect sign-up with reCAPTCHA v3 or hCaptcha.
+---
+
+# Self-Registration and CAPTCHA
+
+A realm with `registrationAllowed: true` lets people create their own accounts, in two ways:
+
+- the **hosted registration page**, `GET`/`POST /realms/<realm>/register`, linked from the hosted login page;
+- the **registration API**, `POST /realms/<realm>/registration/register`, for apps that build their own sign-up form.
+
+Both go through the same CAPTCHA check when the realm turns CAPTCHA on.
+
+## Turning on CAPTCHA
+
+CAPTCHA is a realm setting. Set it in the admin console under **Registration Settings → CAPTCHA Protection**, or with the admin API:
+
+```bash
+curl -X PATCH "https://idp.example.com/admin/realms/my-realm" \
+  -H "x-admin-api-key: $ADMIN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "captchaEnabled": true,
+    "captchaProvider": "hcaptcha",
+    "hcaptchaSiteKey": "<your site key>",
+    "hcaptchaSecretKey": "<your secret key>"
+  }'
+```
+
+| Field | Description |
+|-------|-------------|
+| `captchaEnabled` | Require a CAPTCHA for every self-registration. |
+| `captchaProvider` | `recaptcha` (Google reCAPTCHA **v3**) or `hcaptcha`. |
+| `recaptchaSiteKey`, `recaptchaSecretKey` | reCAPTCHA v3 keys. |
+| `hcaptchaSiteKey`, `hcaptchaSecretKey` | hCaptcha keys. |
+| `captchaScoreThreshold` | reCAPTCHA v3 only: the lowest score accepted, from 0 to 1. Default `0.5`. |
+
+Secret keys are encrypted at rest. If a realm has no secret for its provider, the server falls back to the environment variable `RECAPTCHA_SECRET_KEY` or `HCAPTCHA_SECRET_KEY` (see [Environment Variables](/configuration/environment-variables)). The site key always comes from the realm.
+
+Turning CAPTCHA on without a provider, without that provider's site key, or without a secret (in the realm or the environment) is refused with `400`. Keys set for the other provider don't count.
+
+## How tokens are checked
+
+The server verifies a token with the provider the realm names, never one named by the request. It then applies these rules:
+
+- With CAPTCHA off, nothing is checked and no provider is called.
+- A missing or empty token is refused with `400 CAPTCHA required`.
+- The token is sent to the provider's `siteverify` endpoint together with the user's IP (`remoteip`). For hCaptcha, the realm's site key (`sitekey`) is sent as well, so a token from another site key is refused.
+- **reCAPTCHA v3:** the response must carry the action `register` and a score at or above `captchaScoreThreshold`. A v2 key answers without a score and is refused.
+- **hCaptcha:** a successful response is enough. The `score` of hCaptcha Enterprise is a risk score, where higher means more likely a bot, so `captchaScoreThreshold` is not applied to it.
+- A refused token gets `400 CAPTCHA verification failed`. The provider's error codes go to the server log, not to the user.
+- The check **fails closed**. If the provider can't be reached within 5 seconds, answers with an HTTP error or sends something that isn't JSON, the registration is refused with `503`. The same happens when the realm's configuration is incomplete (for example, a realm saved before this check existed); the server logs the exact problem.
+
+### Hostname check
+
+On the hosted page the widget always runs on this server's host, so the server also requires the provider to report the hostname of `BASE_URL`. A token solved on another site is refused.
+
+The registration API does **not** check the hostname. Its callers render the widget on their own domains or in mobile apps, and a realm has no list of those hosts to check against. Restrict the domains allowed for your site key in the provider's console instead.
+
+## The hosted registration page
+
+When CAPTCHA is on, the built-in themes (`idenplane` and `midnight`) render the provider's widget on the register page:
+
+- **hCaptcha:** the checkbox widget, which posts `h-captcha-response`.
+- **reCAPTCHA v3:** the reCAPTCHA script loaded with the site key. On submit, the page runs `grecaptcha.execute(siteKey, {action: 'register'})` and puts the token in the hidden field `g-recaptcha-response`.
+
+The server reads the field for the realm's provider only. A missing or refused token sends the user back to the form with an error, and no account is created.
+
+The page's Content Security Policy admits the provider's origins on this page only, and only while CAPTCHA is on:
+
+| Provider | Directives | Origins |
+|----------|-----------|---------|
+| hCaptcha | `script-src`, `frame-src`, `style-src`, `connect-src` | `https://hcaptcha.com`, `https://*.hcaptcha.com` |
+| reCAPTCHA | `script-src`, `frame-src` | `https://www.google.com/recaptcha/`, `https://www.gstatic.com/recaptcha/` |
+
+The submit handler is an inline script carrying the page's CSP nonce (`scriptNonce`); the policy never allows `unsafe-inline` or `unsafe-eval` scripts. Like every hosted page, it also sends `frame-ancestors 'none'`, `object-src 'none'` and `base-uri 'self'`, so it cannot be framed.
+
+### Your own sign-up page
+
+An app with its own sign-up form loads the provider's script itself, renders the widget with the realm's site key and sends the token as `captchaToken` (see below). Its own Content Security Policy must then admit the origins in the table above.
+
+### Linking to sign-up from the admin console
+
+The admin console has a public sign-up entry, `/console/register/<realm>`. It needs no console sign-in and only sends the browser on to the hosted registration page, `/realms/<realm>/register`, keeping the query string, so a link like `/console/register/my-realm?client_id=web&redirect_uri=…` reaches the hosted page with those parameters. The console has no sign-up form of its own: the hosted page is the one implementation, with the CAPTCHA widget, the Content Security Policy above, terms of service and custom attributes. **Registration Settings** in the console shows the link while self-registration is on.
+
+A name that cannot be a realm path segment (empty, `.`, `..`, or with characters other than letters, digits, `-`, `.`, `_` and `~`) is not redirected.
+
+### Custom themes
+
+A custom `register.hbs` receives `captcha` when CAPTCHA is on. It has these fields: `provider`, `siteKey`, `scriptUrl`, `isHcaptcha`, `isRecaptcha` and `tokenField`. Render the widget the way the built-in `register.hbs` does. Without it, nobody can register on a realm with CAPTCHA on.
+
+## The registration API
+
+```bash
+curl -X POST "https://idp.example.com/realms/my-realm/registration/register" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "username": "jane",
+    "email": "jane@example.com",
+    "password": "a-strong-password",
+    "captchaToken": "<token from the widget>"
+  }'
+```
+
+| Status | Meaning |
+|--------|---------|
+| `201` | Account created. |
+| `400` | Invalid input, `CAPTCHA required`, or `CAPTCHA verification failed`. |
+| `403` | Self-registration is off for the realm. |
+| `409` | The username or email is taken. |
+| `503` | The realm's CAPTCHA configuration is incomplete, or the provider could not be reached. |
+
+With reCAPTCHA v3, generate the token with the action `register`, right before you submit (tokens expire after two minutes and work once).
+
+:::note Changed in this release
+Earlier versions verified a CAPTCHA only when the caller added `?captchaProvider=…` **and** sent a token, so leaving out either one skipped the check. The query parameter is gone: it is ignored if sent, and the realm's settings decide.
+:::

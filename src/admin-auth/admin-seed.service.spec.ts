@@ -11,7 +11,7 @@ import {
 describe('AdminSeedService', () => {
   let service: AdminSeedService;
   let prisma: MockPrismaService;
-  let crypto: { hashPassword: jest.Mock };
+  let crypto: { hashPassword: jest.Mock; encryptSecret: jest.Mock };
   let jwkService: { generateRsaKeyPair: jest.Mock };
   let config: { get: jest.Mock };
   let scopeSeedService: { seedDefaultScopes: jest.Mock };
@@ -30,7 +30,10 @@ describe('AdminSeedService', () => {
       async (fn: (tx: typeof prisma) => Promise<unknown>) => fn(prisma),
     );
     (prisma as any).$executeRawUnsafe = jest.fn().mockResolvedValue(0);
-    crypto = { hashPassword: jest.fn().mockResolvedValue('hashed-password') };
+    crypto = {
+      hashPassword: jest.fn().mockResolvedValue('hashed-password'),
+      encryptSecret: jest.fn((v: string) => `sealed:${v}`),
+    };
     jwkService = { generateRsaKeyPair: jest.fn().mockResolvedValue(keyPair) };
     config = {
       get: jest.fn((key: string, defaultValue?: string) => {

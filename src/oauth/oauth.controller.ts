@@ -7,6 +7,7 @@ import {
   Query,
   Req,
   Res,
+  ServiceUnavailableException,
   UseGuards,
 } from '@nestjs/common';
 import { ApiTags, ApiOperation, ApiResponse } from '@nestjs/swagger';
@@ -22,14 +23,21 @@ import {
   resolveRequiredAcr,
 } from '../authn-core/acr.js';
 import { SESSION_COOKIE } from '../authn-core/cookies.js';
-import {
-  OAUTH_RELAY_PARAM_KEYS,
-  type AuthorizeParams,
-} from '../authn-core/oauth-params.js';
+import type { AuthorizeParams } from '../authn-core/oauth-params.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
 import { ThemeRenderService } from '../theme/theme-render.service.js';
+import { FlowRuntimeService } from '../auth-flow/flow-runtime.service.js';
+import {
+  UNMET_AUTHENTICATION_REQUIREMENTS,
+  isEnforceAcrOnFreshLoginEnabled,
+  relayParamKeys,
+} from '../authn-core/acr-enforcement.js';
+import {
+  acrFromClaimsParam,
+  essentialAcrFromClaimsParam,
+} from '../authn-core/flow-assurance.js';
 
 /**
  * Whether a sign-in at `authenticatedAt` is older than the request's
@@ -65,6 +73,7 @@ export class OAuthController {
     private readonly consentService: ConsentService,
     private readonly stepUpService: StepUpService,
     private readonly themeRender: ThemeRenderService,
+    private readonly flowRuntime: FlowRuntimeService,
   ) {}
 
   @Get('auth')
@@ -174,6 +183,18 @@ export class OAuthController {
       );
     }
 
+    // A login bound to a custom flow runs it; a misconfigured binding fails
+    // closed, before any SSO session can answer for it. (Without
+    // AUTH_FLOW_RUNTIME_ENABLED or the realm switch this is always legacy,
+    // decided without a database read.)
+    const flowBinding = await this.flowRuntime.resolveBinding(realm, client);
+    if (flowBinding.kind === 'misconfigured') {
+      throw new ServiceUnavailableException(
+        FlowRuntimeService.misconfiguredMessage,
+      );
+    }
+    const boundFlow = flowBinding.kind === 'bound' ? flowBinding.flow : null;
+
     // Check for existing SSO session cookie
     const sessionCookie = (req.cookies as Record<string, string>)?.[
       SESSION_COOKIE
@@ -185,6 +206,15 @@ export class OAuthController {
       );
       if (user) {
         if (prompts.includes('login')) {
+          if (boundFlow) {
+            return this.flowRuntime.beginFromAuthorize(
+              realm,
+              boundFlow,
+              query,
+              req,
+              res,
+            );
+          }
           return this.handlePromptLogin(res, realm.name, query);
         }
 
@@ -202,6 +232,15 @@ export class OAuthController {
               query['state'],
             );
           }
+          if (boundFlow) {
+            return this.flowRuntime.beginFromAuthorize(
+              realm,
+              boundFlow,
+              query,
+              req,
+              res,
+            );
+          }
           return this.handlePromptLogin(res, realm.name, query);
         }
 
@@ -212,6 +251,39 @@ export class OAuthController {
           ? await this.stepUpService.getLoginSessionAcr(loginSession)
           : ACR_PASSWORD;
 
+        // A client bound to a flow is only served by a session at least as
+        // strong as that flow requires of this user (its conditions evaluated
+        // for them). A weaker session signs in again through the flow.
+        if (
+          boundFlow &&
+          !this.stepUpService.satisfiesAcr(
+            sessionAcr,
+            await this.flowRuntime.ssoRequiredAcr(
+              realm,
+              boundFlow,
+              user,
+              client.clientId,
+            ),
+          )
+        ) {
+          if (silent) {
+            return this.redirectWithError(
+              res,
+              query['redirect_uri'],
+              'interaction_required',
+              'Additional authentication is required',
+              query['state'],
+            );
+          }
+          return this.flowRuntime.beginFromAuthorize(
+            realm,
+            boundFlow,
+            query,
+            req,
+            res,
+          );
+        }
+
         // ── Step-up ACR check ────────────────────────────────────────────────
         //
         // Determine the highest required ACR from two sources:
@@ -219,6 +291,24 @@ export class OAuthController {
         //   2. The client's `requiredAcr` configuration (server-enforced policy)
         const requestedAcr = query['acr_values']
           ? query['acr_values'].split(' ')[0] // take the highest-preference value
+          : null;
+        // With ENFORCE_ACR_ON_FRESH_LOGIN, the `claims` acr counts too, and
+        // an essential one no level here can meet is refused outright.
+        const enforceAcr = isEnforceAcrOnFreshLoginEnabled();
+        if (
+          enforceAcr &&
+          essentialAcrFromClaimsParam(query['claims'])?.kind === 'unsupported'
+        ) {
+          return this.redirectWithError(
+            res,
+            query['redirect_uri'],
+            UNMET_AUTHENTICATION_REQUIREMENTS,
+            'The requested authentication level is not supported',
+            query['state'],
+          );
+        }
+        const claimsAcr = enforceAcr
+          ? acrFromClaimsParam(query['claims'])
           : null;
         const clientRequiredAcr = client.requiredAcr ?? null;
         //   3. Continuous verification: a session of this user flagged for
@@ -233,6 +323,7 @@ export class OAuthController {
         // The strongest of the three requirements
         const requiredAcr = resolveRequiredAcr(
           requestedAcr,
+          claimsAcr,
           clientRequiredAcr,
           riskRequiredAcr,
         );
@@ -349,10 +440,20 @@ export class OAuthController {
       return this.handlePromptNone(res, query['redirect_uri'], query['state']);
     }
 
+    if (boundFlow) {
+      return this.flowRuntime.beginFromAuthorize(
+        realm,
+        boundFlow,
+        query,
+        req,
+        res,
+      );
+    }
+
     // No valid session: redirect to login page with OAuth params.
     // Only relay params from the explicit allowlist to prevent open-redirect
     // and parameter-injection attacks via arbitrary query string forwarding.
-    const OAUTH_PARAM_ALLOWLIST = new Set<string>(OAUTH_RELAY_PARAM_KEYS);
+    const OAUTH_PARAM_ALLOWLIST = new Set<string>(relayParamKeys());
     const loginParams = new URLSearchParams();
     for (const [key, value] of Object.entries(query)) {
       if (value && OAUTH_PARAM_ALLOWLIST.has(key)) loginParams.set(key, value);
@@ -418,7 +519,7 @@ export class OAuthController {
     query: Record<string, string>,
   ): void {
     const loginParams = new URLSearchParams();
-    const allowlist = new Set<string>(OAUTH_RELAY_PARAM_KEYS);
+    const allowlist = new Set<string>(relayParamKeys());
     for (const [key, value] of Object.entries(query)) {
       if (value && allowlist.has(key)) loginParams.set(key, value);
     }

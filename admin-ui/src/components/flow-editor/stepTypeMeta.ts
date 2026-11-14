@@ -39,6 +39,11 @@ export const STEP_TYPE_META: Record<StepType, StepMeta> = {
     icon: '📧',
     color: 'bg-warning-soft border-warning-soft',
   },
+  magic_link: {
+    label: 'Magic Link',
+    icon: '🔗',
+    color: 'bg-info-soft border-info-soft',
+  },
   consent: {
     label: 'Consent',
     icon: '✅',

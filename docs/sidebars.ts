@@ -167,6 +167,21 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'doc',
+          id: 'guides/mtls-client-auth',
+          label: 'mTLS Client Authentication',
+        },
+        {
+          type: 'doc',
+          id: 'guides/registration-captcha',
+          label: 'Self-Registration and CAPTCHA',
+        },
+        {
+          type: 'doc',
+          id: 'guides/custom-themes',
+          label: 'Custom Themes',
+        },
+        {
+          type: 'doc',
           id: 'guides/webhooks',
           label: 'Webhooks',
         },

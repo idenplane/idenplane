@@ -21,12 +21,29 @@ import { TokensService } from './tokens.service.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
-import { CachedLookupsService } from '../cache/cached-lookups.service.js';
-import { ClientSecretService } from '../clients/client-secret.service.js';
+import {
+  ClientAuthenticator,
+  ClientAuthError,
+  type ClientAuthFailure,
+} from '../client-auth/client-authenticator.js';
+import { ClientCertificateSource } from '../mtls/client-certificate.source.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 import { SESSION_COOKIE } from '../authn-core/cookies.js';
 import { RateLimitGuard, RateLimitBy } from '../rate-limit/rate-limit.guard.js';
-import { parseBasicClientCredentials } from '../common/utils/basic-client-auth.util.js';
+
+/**
+ * The `error_description` introspection and revocation have always sent for
+ * each client authentication failure; the token endpoint words them
+ * differently. Failures not listed keep the authenticator's wording.
+ */
+const CLIENT_AUTH_DESCRIPTIONS: Partial<Record<ClientAuthFailure, string>> = {
+  missing_client_id:
+    'Client authentication is required. Provide client_id/client_secret or use HTTP Basic.',
+  unknown_client: 'Invalid client_id or client is disabled.',
+  missing_secret: 'client_secret is required for confidential clients.',
+  no_secret_configured: 'Client has no secret configured.',
+  invalid_secret: 'Invalid client credentials.',
+};
 
 /**
  * The access token of a UserInfo request: `Authorization: Bearer` (any case,
@@ -52,6 +69,22 @@ function bearerToken(req: Request, formToken: string | undefined): string {
   return token;
 }
 
+/**
+ * Rethrows a failed client authentication as introspection and revocation
+ * always answered it: `invalid_client` as an UnauthorizedException with their
+ * own wording. Anything else (`invalid_request`) is rethrown as is.
+ */
+function withTokensEndpointWording(err: unknown): never {
+  if (err instanceof ClientAuthError && err.code === 'invalid_client') {
+    throw new UnauthorizedException({
+      error: 'invalid_client',
+      error_description:
+        CLIENT_AUTH_DESCRIPTIONS[err.reason] ?? err.description,
+    });
+  }
+  throw err;
+}
+
 @ApiTags('Tokens')
 @Controller('realms/:realmName/protocol/openid-connect')
 @SkipThrottle()
@@ -61,8 +94,8 @@ function bearerToken(req: Request, formToken: string | undefined): string {
 export class TokensController {
   constructor(
     private readonly tokensService: TokensService,
-    private readonly lookups: CachedLookupsService,
-    private readonly clientSecrets: ClientSecretService,
+    private readonly clientAuthenticator: ClientAuthenticator,
+    private readonly clientCertificates: ClientCertificateSource,
   ) {}
 
   @Post('token/introspect')
@@ -85,12 +118,16 @@ export class TokensController {
     @Body() body: { token: string; client_id?: string; client_secret?: string },
     @Req() req: Request,
   ) {
-    const callerClientId = await this.authenticateClient(
-      realm,
-      body.client_id,
-      body.client_secret,
-      req,
-    );
+    // RFC 7662 §2.1 / RFC 7009 §2.1: the same client authentication as the
+    // token endpoint; a public client sends only its client_id.
+    const { clientId: callerClientId } = await this.clientAuthenticator
+      .authenticate({
+        realm,
+        body,
+        authorization: req.headers['authorization'],
+        clientCert: this.clientCertificates.fromRequest(req),
+      })
+      .catch(withTokensEndpointWording);
     const result = await this.tokensService.introspect(realm, body.token);
 
     // If the token is active, verify it was issued to the calling client.
@@ -151,12 +188,16 @@ export class TokensController {
     ) {
       throw new BadRequestException('token is required');
     }
-    const callerClientId = await this.authenticateClient(
-      realm,
-      body.client_id,
-      body.client_secret,
-      req,
-    );
+    // RFC 7662 §2.1 / RFC 7009 §2.1: the same client authentication as the
+    // token endpoint; a public client sends only its client_id.
+    const { clientId: callerClientId } = await this.clientAuthenticator
+      .authenticate({
+        realm,
+        body,
+        authorization: req.headers['authorization'],
+        clientCert: this.clientCertificates.fromRequest(req),
+      })
+      .catch(withTokensEndpointWording);
     await this.tokensService.assertTokenBelongsToClient(
       realm,
       body.token,
@@ -164,75 +205,6 @@ export class TokensController {
       body.token_type_hint,
     );
     return this.tokensService.revoke(realm, body.token, body.token_type_hint);
-  }
-
-  /**
-   * Authenticate the calling client via client_id/client_secret in the body
-   * or via HTTP Basic Authentication (RFC 6749 §2.3.1).
-   * Public clients are allowed with only client_id (no secret required).
-   *
-   * Returns the resolved clientId so callers can enforce token-ownership checks.
-   */
-  private async authenticateClient(
-    realm: Realm,
-    clientId?: string,
-    clientSecret?: string,
-    req?: Request,
-  ): Promise<string> {
-    let cId = clientId;
-    let cSecret = clientSecret;
-
-    // Fall back to HTTP Basic Authentication
-    if (!cId && req) {
-      const basic = parseBasicClientCredentials(req.headers['authorization']);
-      if (basic && basic !== 'malformed') {
-        cId = basic.clientId;
-        cSecret = basic.clientSecret;
-      }
-    }
-
-    if (!cId) {
-      throw new UnauthorizedException({
-        error: 'invalid_client',
-        error_description:
-          'Client authentication is required. Provide client_id/client_secret or use HTTP Basic.',
-      });
-    }
-
-    const client = await this.lookups.client(realm.id, cId);
-
-    if (!client || !client.enabled) {
-      throw new UnauthorizedException({
-        error: 'invalid_client',
-        error_description: 'Invalid client_id or client is disabled.',
-      });
-    }
-
-    // Confidential clients must provide a valid secret
-    if (client.clientType === 'CONFIDENTIAL') {
-      if (!cSecret) {
-        throw new UnauthorizedException({
-          error: 'invalid_client',
-          error_description:
-            'client_secret is required for confidential clients.',
-        });
-      }
-      if (!client.clientSecret) {
-        throw new UnauthorizedException({
-          error: 'invalid_client',
-          error_description: 'Client has no secret configured.',
-        });
-      }
-      const valid = await this.clientSecrets.verify(client, cSecret);
-      if (!valid) {
-        throw new UnauthorizedException({
-          error: 'invalid_client',
-          error_description: 'Invalid client credentials.',
-        });
-      }
-    }
-
-    return cId;
   }
 
   @Post('logout')
@@ -367,7 +339,20 @@ export class TokensController {
     description: 'invalid_token — missing or invalid Bearer token',
   })
   userinfo(@CurrentRealm() realm: Realm, @Req() req: Request) {
-    return this.tokensService.userinfo(realm, bearerToken(req, undefined));
+    return this.tokensService.userinfo(
+      realm,
+      bearerToken(req, undefined),
+      this.presentedCertificate(req),
+    );
+  }
+
+  /**
+   * The request's certificate, read only if the token turns out to be
+   * certificate-bound (RFC 8705 §3), so an unbound token's request is
+   * handled exactly as without mTLS.
+   */
+  private presentedCertificate(req: Request) {
+    return () => this.clientCertificates.fromRequest(req);
   }
 
   /**
@@ -395,7 +380,11 @@ export class TokensController {
       typeof body?.['access_token'] === 'string'
         ? body['access_token']
         : undefined;
-    return this.tokensService.userinfo(realm, bearerToken(req, formToken));
+    return this.tokensService.userinfo(
+      realm,
+      bearerToken(req, formToken),
+      this.presentedCertificate(req),
+    );
   }
 
   @Post('logout/backchannel')

@@ -3,6 +3,10 @@ jest.mock('../crypto/jwk.service.js', () => ({ JwkService: jest.fn() }));
 
 import { UnauthorizedException, BadRequestException } from '@nestjs/common';
 import { TokensController } from './tokens.controller.js';
+import { ClientAuthenticator } from '../client-auth/client-authenticator.js';
+import { ClientCertificateResolverRegistry } from '../client-auth/client-certificate-resolver.js';
+import { ClientCertificateSource } from '../mtls/client-certificate.source.js';
+import { loadMtlsConfig } from '../mtls/mtls-config.js';
 import type { Realm } from '@prisma/client';
 
 describe('TokensController', () => {
@@ -70,8 +74,14 @@ describe('TokensController', () => {
 
     controller = new TokensController(
       mockTokensService as any,
-      lookupsBackedBy(mockPrisma as any) as any,
-      mockClientSecrets as any,
+      new ClientAuthenticator(
+        lookupsBackedBy(mockPrisma as any) as any,
+        mockClientSecrets as any,
+        new ClientCertificateResolverRegistry(),
+        { enabled: false },
+        { retryAfter: async () => null, recordFailure: async () => {} } as any,
+      ),
+      new ClientCertificateSource(loadMtlsConfig({})),
     );
   });
 
@@ -141,6 +151,84 @@ describe('TokensController', () => {
 
       expect(mockTokensService.introspect).toHaveBeenCalled();
     });
+
+    it('keeps its own error wording for a wrong secret', async () => {
+      mockPrisma.client.findUnique.mockResolvedValue(confidentialClient);
+      mockClientSecrets.verify.mockResolvedValue(false);
+
+      await expect(
+        controller.introspect(
+          realm,
+          { token: 'tok', client_id: 'confidential-app', client_secret: 'bad' },
+          mockReq(),
+        ),
+      ).rejects.toMatchObject({
+        response: {
+          error: 'invalid_client',
+          error_description: 'Invalid client credentials.',
+        },
+      });
+    });
+
+    it('requires the secret of a confidential client', async () => {
+      mockPrisma.client.findUnique.mockResolvedValue(confidentialClient);
+
+      await expect(
+        controller.introspect(
+          realm,
+          { token: 'tok', client_id: 'confidential-app' },
+          mockReq(),
+        ),
+      ).rejects.toMatchObject({
+        response: {
+          error: 'invalid_client',
+          error_description:
+            'client_secret is required for confidential clients.',
+        },
+      });
+    });
+
+    it('rejects HTTP Basic together with client_secret as invalid_request', async () => {
+      mockPrisma.client.findUnique.mockResolvedValue(confidentialClient);
+      const basicAuth = Buffer.from('confidential-app:raw-secret').toString(
+        'base64',
+      );
+
+      await expect(
+        controller.introspect(
+          realm,
+          { token: 'tok', client_secret: 'raw-secret' },
+          mockReq({ headers: { authorization: `Basic ${basicAuth}` } }),
+        ),
+      ).rejects.toMatchObject({
+        status: 400,
+        response: { error: 'invalid_request' },
+      });
+      expect(mockTokensService.introspect).not.toHaveBeenCalled();
+    });
+
+    it('authenticates a confidential client with HTTP Basic', async () => {
+      mockPrisma.client.findUnique.mockResolvedValue(confidentialClient);
+      mockTokensService.introspect.mockResolvedValue({
+        active: true,
+        azp: 'confidential-app',
+      });
+      const basicAuth = Buffer.from('confidential-app:raw-secret').toString(
+        'base64',
+      );
+
+      const result = await controller.introspect(
+        realm,
+        { token: 'tok' },
+        mockReq({ headers: { authorization: `Basic ${basicAuth}` } }),
+      );
+
+      expect(mockClientSecrets.verify).toHaveBeenCalledWith(
+        confidentialClient,
+        'raw-secret',
+      );
+      expect(result).toEqual({ active: true, azp: 'confidential-app' });
+    });
   });
 
   describe('revoke', () => {
@@ -164,6 +252,44 @@ describe('TokensController', () => {
       await expect(
         controller.revoke(realm, { token: 'some-token' }, mockReq()),
       ).rejects.toThrow(UnauthorizedException);
+    });
+
+    it('rejects HTTP Basic together with client_secret as invalid_request', async () => {
+      const basicAuth = Buffer.from('confidential-app:raw-secret').toString(
+        'base64',
+      );
+
+      await expect(
+        controller.revoke(
+          realm,
+          { token: 'some-token', client_secret: 'raw-secret' },
+          mockReq({ headers: { authorization: `Basic ${basicAuth}` } }),
+        ),
+      ).rejects.toMatchObject({
+        status: 400,
+        response: { error: 'invalid_request' },
+      });
+      expect(mockTokensService.revoke).not.toHaveBeenCalled();
+    });
+
+    it('rejects a disabled client', async () => {
+      mockPrisma.client.findUnique.mockResolvedValue({
+        ...publicClient,
+        enabled: false,
+      });
+
+      await expect(
+        controller.revoke(
+          realm,
+          { token: 'some-token', client_id: 'public-app' },
+          mockReq(),
+        ),
+      ).rejects.toMatchObject({
+        response: {
+          error: 'invalid_client',
+          error_description: 'Invalid client_id or client is disabled.',
+        },
+      });
     });
   });
 
@@ -294,7 +420,11 @@ describe('TokensController', () => {
 
       const result = await controller.userinfo(realm, req);
 
-      expect(mockTokensService.userinfo).toHaveBeenCalledWith(realm, 'abc-123');
+      expect(mockTokensService.userinfo).toHaveBeenCalledWith(
+        realm,
+        'abc-123',
+        expect.any(Function),
+      );
       expect(result).toEqual(expected);
     });
 

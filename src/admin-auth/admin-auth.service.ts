@@ -6,7 +6,13 @@ import {
   HttpException,
   HttpStatus,
   OnModuleDestroy,
+  Optional,
 } from '@nestjs/common';
+import {
+  ClientCertificateSource,
+  type CertificateRequest,
+} from '../mtls/client-certificate.source.js';
+import { assertCertificateBinding } from '../mtls/certificate-binding.js';
 import { timingSafeEqual } from 'node:crypto';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
@@ -27,6 +33,7 @@ export class AdminAuthService implements OnModuleDestroy {
     private readonly jwkService: JwkService,
     private readonly rateLimitService: RateLimitService,
     private readonly bruteForceService: BruteForceService,
+    @Optional() private readonly certificates?: ClientCertificateSource,
   ) {
     this.cleanupInterval = setInterval(() => {
       this.cleanup().catch((err: unknown) =>
@@ -269,8 +276,16 @@ export class AdminAuthService implements OnModuleDestroy {
     }
   }
 
+  /**
+   * Verifies an admin bearer token. `request` is the HTTP request it came
+   * with: a certificate-bound token (RFC 8705 §3) is accepted only when that
+   * request presents its certificate. Without a request, a bound token is
+   * refused. Throws UnauthorizedException, or CertificateBindingError for a
+   * bound token without its certificate.
+   */
   async validateAdminToken(
     token: string,
+    request?: CertificateRequest,
   ): Promise<{ userId: string; roles: string[] }> {
     const masterRealm = await this.prisma.realm.findUnique({
       where: { name: 'master' },
@@ -288,10 +303,18 @@ export class AdminAuthService implements OnModuleDestroy {
 
     let payload: Record<string, unknown>;
     try {
+      // cert-binding: enforced
       payload = await this.jwkService.verifyJwt(token, signingKey.publicKey);
     } catch {
       throw new UnauthorizedException('Invalid admin token');
     }
+    // Admin login never binds its tokens; this keeps any bound token that
+    // reaches here from being used without its certificate.
+    assertCertificateBinding(payload, () =>
+      request && this.certificates
+        ? this.certificates.fromRequest(request)
+        : null,
+    );
 
     if (payload['typ'] !== 'admin') {
       throw new UnauthorizedException('Not an admin token');

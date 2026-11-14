@@ -34,7 +34,10 @@ export class CreateIdentityProviderDto {
   @IsString()
   clientId!: string;
 
-  @ApiProperty()
+  @ApiProperty({
+    description:
+      'Stored encrypted and returned as "••••••"; sending that value back on update keeps the stored secret.',
+  })
   @IsString()
   clientSecret!: string;
 

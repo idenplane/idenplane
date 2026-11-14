@@ -2,6 +2,7 @@ import { UnauthorizedException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { AdminApiKeyGuard } from './admin-api-key.guard.js';
+import { CertificateBindingError } from '../../mtls/certificate-binding.js';
 
 function createMockExecutionContext(
   headers: Record<string, string> = {},
@@ -128,6 +129,23 @@ describe('AdminApiKeyGuard', () => {
     await expect(guard.canActivate(ctx)).resolves.toBe(true);
     expect(adminAuthService.validateAdminToken).toHaveBeenCalledWith(
       'valid-jwt-token',
+      expect.anything(),
+    );
+  });
+
+  it('refuses a certificate-bound token without its certificate, even with an API key (RFC 8705 §3)', async () => {
+    reflector.getAllAndOverride.mockReturnValue(false);
+    adminAuthService.validateAdminToken.mockRejectedValue(
+      new CertificateBindingError('missing'),
+    );
+    configService.get.mockReturnValue('my-key');
+    const ctx = createMockExecutionContext({
+      authorization: 'Bearer bound-token',
+      'x-admin-api-key': 'my-key',
+    });
+
+    await expect(guard.canActivate(ctx)).rejects.toBeInstanceOf(
+      CertificateBindingError,
     );
   });
 

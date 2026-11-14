@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { screen } from '@testing-library/react';
+import { screen, fireEvent, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { server } from '../../../test/mocks/server';
 import { render } from '../../../test/utils';
@@ -45,15 +45,58 @@ describe('AuthFlowListPage', () => {
     expect(screen.getByRole('button', { name: /create flow/i })).toBeInTheDocument();
   });
 
-  it('shows Default badge for the default flow', async () => {
+  it('shows Default badge for the default flow, with the column marked deprecated', async () => {
     renderPage();
     await screen.findByText('Basic Login');
-    // There are two elements with text "Default": the table header and the badge span
-    const defaults = screen.getAllByText('Default');
-    expect(defaults.length).toBeGreaterThanOrEqual(2);
-    // The badge span has the green styling
-    const badge = defaults.find((el) => el.tagName === 'SPAN');
+    expect(screen.getByText('Default (deprecated)')).toBeInTheDocument();
+    const badge = screen.getAllByText('Default').find((el) => el.tagName === 'SPAN');
     expect(badge).toBeInTheDocument();
+  });
+
+  it('renders the flow bindings panel', async () => {
+    renderPage();
+    expect(await screen.findByRole('heading', { name: /flow bindings/i })).toBeInTheDocument();
+  });
+
+  it('creates new flows with a valid starter step', async () => {
+    let body: { steps?: unknown[] } | undefined;
+    server.use(
+      http.post('/admin/realms/:name/auth-flows', async ({ request }) => {
+        body = (await request.json()) as { steps?: unknown[] };
+        return HttpResponse.json(makeAuthFlow({ id: 'new-flow-1' }), { status: 201 });
+      }),
+    );
+    renderPage();
+    await screen.findByText('Basic Login');
+    fireEvent.click(screen.getByRole('button', { name: /create flow/i }));
+    fireEvent.change(screen.getByLabelText(/flow name/i), { target: { value: 'New' } });
+    fireEvent.click(screen.getByRole('button', { name: /^create$/i }));
+    await waitFor(() => expect(body).toBeDefined());
+    expect(body?.steps).toEqual([expect.objectContaining({ type: 'password', order: 1 })]);
+  });
+
+  it('explains a 409 when deleting a bound flow', async () => {
+    server.use(
+      http.delete('/admin/realms/:name/auth-flows/:id', () =>
+        HttpResponse.json(
+          {
+            statusCode: 409,
+            message: 'bound',
+            bindings: [
+              { kind: 'realm', realmId: 'r1', realmName: 'test-realm' },
+              { kind: 'client', id: 'c1', clientId: 'web' },
+            ],
+          },
+          { status: 409 },
+        ),
+      ),
+    );
+    renderPage();
+    await screen.findByText('Basic Login');
+    fireEvent.click(screen.getAllByRole('button', { name: /^delete$/i })[0]);
+    const dialog = await screen.findByRole('alertdialog');
+    fireEvent.click(within(dialog).getByRole('button', { name: /confirm/i }));
+    expect(await screen.findByText(/still bound to realm test-realm, client web/i)).toBeInTheDocument();
   });
 
   it('shows the step count for each flow', async () => {

@@ -99,10 +99,3 @@ export async function deleteRegistrationField(
 ): Promise<void> {
   await rootClient.delete(`/realms/${realmName}/registration/admin/fields/${fieldId}`);
 }
-
-export async function getPublicRegistrationFields(realmName: string): Promise<Partial<RegistrationField>[]> {
-  const { data } = await rootClient.get<Partial<RegistrationField>[]>(
-    `/realms/${realmName}/registration/fields`,
-  );
-  return data;
-}

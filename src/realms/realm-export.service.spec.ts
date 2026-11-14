@@ -1,308 +1,243 @@
 import { NotFoundException } from '@nestjs/common';
 import { RealmExportService } from './realm-export.service.js';
-import {
-  createMockPrismaService,
-  type MockPrismaService,
-} from '../prisma/prisma.mock.js';
+import { CryptoService } from '../crypto/crypto.service.js';
+
+/**
+ * A Prisma stand-in: every model's findMany resolves to its fixture rows
+ * (none by default), so the export can read all the tables it needs.
+ */
+function fakePrisma(rows: Record<string, unknown[]>, realm: unknown) {
+  const models = new Map<string, Record<string, jest.Mock>>();
+  return new Proxy(
+    {},
+    {
+      get(_target, model: string) {
+        let m = models.get(model);
+        if (!m) {
+          m = {
+            findMany: jest.fn().mockResolvedValue(rows[model] ?? []),
+            findUnique: jest.fn().mockResolvedValue(
+              model === 'realm' ? realm : null,
+            ),
+          };
+          models.set(model, m);
+        }
+        return m;
+      },
+    },
+  ) as any;
+}
 
 describe('RealmExportService', () => {
-  let service: RealmExportService;
-  let prisma: MockPrismaService;
+  const crypto = new CryptoService();
 
-  const mockRealm = {
+  const realm = {
     id: 'realm-1',
     name: 'test-realm',
     displayName: 'Test Realm',
     enabled: true,
-    accessTokenLifespan: 300,
-    refreshTokenLifespan: 1800,
-    offlineTokenLifespan: 2592000,
-    smtpHost: null,
-    smtpPort: 587,
-    smtpUser: null,
-    smtpFrom: null,
-    smtpSecure: false,
-    passwordMinLength: 8,
-    passwordRequireUppercase: false,
-    passwordRequireLowercase: false,
-    passwordRequireDigits: false,
-    passwordRequireSpecialChars: false,
-    passwordHistoryCount: 0,
-    passwordMaxAgeDays: 0,
-    bruteForceEnabled: false,
-    maxLoginFailures: 5,
-    lockoutDuration: 900,
-    failureResetTime: 600,
-    permanentLockoutAfter: 0,
-    mfaRequired: false,
-    eventsEnabled: false,
-    eventsExpiration: 604800,
-    adminEventsEnabled: false,
-    theme: {},
+    smtpPassword: crypto.encryptSecret('smtp-pass'),
+    recaptchaSecretKey: null,
+    hcaptchaSecretKey: crypto.encryptSecret('hcaptcha-secret'),
+    emailProvider: 'resend',
+    emailProviderConfig: { resend: { apiKey: crypto.encryptSecret('re_x') } },
+    smsProvider: 'twilio',
+    smsProviderConfig: {
+      twilioAccountSid: 'AC1',
+      twilioAuthToken: crypto.encryptSecret('tw-token'),
+    },
+    browserFlowId: 'flow-1',
+    mfaRequired: true,
+    rateLimitEnabled: true,
+    mtlsClientAuthEnabled: true,
+    createdAt: new Date(),
+    updatedAt: new Date(),
   };
 
-  const mockClient = {
+  const client = (over: Record<string, unknown> = {}) => ({
     id: 'client-db-1',
     realmId: 'realm-1',
     clientId: 'my-app',
     clientType: 'CONFIDENTIAL',
-    clientSecret: 'secret-value',
-    name: 'My App',
-    description: 'Test client',
-    enabled: true,
-    requireConsent: false,
+    clientSecret: 'sha256$abc',
     redirectUris: ['http://localhost/callback'],
-    webOrigins: ['http://localhost'],
-    grantTypes: ['authorization_code'],
-    backchannelLogoutUri: null,
-    backchannelLogoutSessionRequired: true,
-  };
-
-  const mockRole = {
-    id: 'role-1',
-    realmId: 'realm-1',
-    clientId: null,
-    name: 'admin',
-    description: 'Admin role',
-  };
-
-  const mockClientRole = {
-    id: 'role-2',
-    realmId: 'realm-1',
-    clientId: 'client-db-1',
-    name: 'client-admin',
-    description: 'Client admin role',
-  };
-
-  const mockGroup = {
-    id: 'group-1',
-    realmId: 'realm-1',
-    name: 'developers',
-    description: 'Dev group',
-    parentId: null,
-  };
-
-  const mockScope = {
-    id: 'scope-1',
-    realmId: 'realm-1',
-    name: 'openid',
-    description: 'OpenID scope',
-    protocol: 'openid-connect',
-    builtIn: true,
-    protocolMappers: [
-      {
-        name: 'sub',
-        protocol: 'openid-connect',
-        mapperType: 'oidc-usermodel-attribute-mapper',
-        config: {},
-      },
-    ],
-  };
-
-  const mockIdp = {
-    id: 'idp-1',
-    realmId: 'realm-1',
-    alias: 'google',
-    displayName: 'Google',
-    enabled: true,
-    providerType: 'oidc',
-    clientId: 'google-client-id',
-    clientSecret: 'google-secret',
-    authorizationUrl: 'https://accounts.google.com/o/oauth2/v2/auth',
-    tokenUrl: 'https://oauth2.googleapis.com/token',
-    userinfoUrl: null,
-    jwksUrl: null,
-    issuer: null,
-    defaultScopes: 'openid email profile',
-    trustEmail: true,
-    linkOnly: false,
-    syncUserProfile: true,
-  };
-
-  beforeEach(() => {
-    prisma = createMockPrismaService();
-    service = new RealmExportService(prisma as any);
+    webOrigins: [],
+    grantTypes: ['client_credentials'],
+    authFlowId: 'flow-1',
+    serviceAccountUserId: 'sa-user',
+    nhiIdentityId: null,
+    requiredAcr: 'urn:acr:2',
+    tlsClientCertificateBoundAccessTokens: true,
+    ...over,
   });
 
-  describe('exportRealm', () => {
-    it('should throw NotFoundException when realm does not exist', async () => {
-      prisma.realm.findUnique.mockResolvedValue(null);
+  const rows = () => ({
+    authenticationFlow: [{ id: 'flow-1', name: 'browser', steps: [] }],
+    clientScope: [{ id: 'scope-1', name: 'openid', protocolMappers: [] }],
+    client: [
+      client(),
+      client({
+        id: 'client-db-2',
+        clientId: 'device-1',
+        nhiIdentityId: 'nhi-1',
+        serviceAccountUserId: null,
+      }),
+    ],
+    role: [
+      { id: 'role-1', name: 'admin', clientId: null },
+      { id: 'role-2', name: 'client-admin', clientId: 'client-db-1' },
+      { id: 'role-3', name: 'device-role', clientId: 'client-db-2' },
+    ],
+    group: [
+      { id: 'g1', name: 'parent', parentId: null },
+      { id: 'g2', name: 'child', parentId: 'g1' },
+    ],
+    groupRole: [
+      { groupId: 'g2', roleId: 'role-2' },
+      { groupId: 'g2', roleId: 'role-3' },
+    ],
+    clientDefaultScope: [{ clientId: 'client-db-1', clientScopeId: 'scope-1' }],
+    identityProvider: [
+      { alias: 'google', clientId: 'g', clientSecret: 'google-secret' },
+    ],
+    webhook: [
+      { url: 'https://hooks.example', secret: crypto.encrypt('hook-secret') },
+    ],
+    organization: [],
+    userFederation: [],
+    consentCategory: [],
+    user: [
+      {
+        id: 'sa-user',
+        username: 'service-account-my-app',
+        enabled: true,
+        userRoles: [{ roleId: 'role-1' }],
+        userGroups: [],
+      },
+    ],
+  });
 
-      await expect(service.exportRealm('nonexistent')).rejects.toThrow(
-        NotFoundException,
-      );
-      await expect(service.exportRealm('nonexistent')).rejects.toThrow(
-        "Realm 'nonexistent' not found",
-      );
+  const make = (realmRow: unknown = realm) =>
+    new RealmExportService(fakePrisma(rows(), realmRow), crypto);
+
+  it('throws NotFoundException when the realm does not exist', async () => {
+    await expect(make(null).exportRealm('nonexistent')).rejects.toThrow(
+      NotFoundException,
+    );
+  });
+
+  it('exports version 2 with references as natural keys', async () => {
+    const out: any = await make().exportRealm('test-realm');
+
+    expect(out.version).toBe(2);
+    expect(out.realm.name).toBe('test-realm');
+    expect(out.realm.browserFlow).toBe('browser');
+    expect(out.realm.mfaRequired).toBe(true);
+    expect(out.realm.mtlsClientAuthEnabled).toBe(true);
+    expect(out.realm).not.toHaveProperty('id');
+    expect(out.realm).not.toHaveProperty('browserFlowId');
+
+    expect(out.clients).toHaveLength(1);
+    const c = out.clients[0];
+    expect(c.clientId).toBe('my-app');
+    expect(c.authFlow).toBe('browser');
+    expect(c.requiredAcr).toBe('urn:acr:2');
+    expect(c.defaultScopes).toEqual(['openid']);
+    expect(c.serviceAccount).toEqual({
+      username: 'service-account-my-app',
+      enabled: true,
+      roles: [{ name: 'admin', clientId: null }],
+      groups: [],
+    });
+    expect(c).not.toHaveProperty('authFlowId');
+    expect(c).not.toHaveProperty('serviceAccountUserId');
+
+    expect(out.roles).toEqual([
+      { name: 'admin', description: undefined, clientId: null },
+      { name: 'client-admin', description: undefined, clientId: 'my-app' },
+    ]);
+    // Sorted by name, so two exports of one realm compare equal.
+    expect(out.groups.map((g: any) => g.name)).toEqual(['child', 'parent']);
+    expect(out.groups[1].parentName).toBeNull();
+    expect(out.groups[0].parentName).toBe('parent');
+    expect(out.groups[0].roles).toEqual([
+      { name: 'client-admin', clientId: 'my-app' },
+    ]);
+  });
+
+  it('leaves out clients of NHI identities, and says so', async () => {
+    const out: any = await make().exportRealm('test-realm');
+
+    expect(out.clients.map((c: any) => c.clientId)).toEqual(['my-app']);
+    expect(out.roles.map((r: any) => r.name)).not.toContain('device-role');
+    expect(out.omitted).toEqual([
+      expect.objectContaining({ type: 'client', key: 'device-1' }),
+    ]);
+  });
+
+  it('leaves every secret out by default', async () => {
+    const out: any = await make().exportRealm('test-realm');
+
+    expect(out.secretsIncluded).toBe(false);
+    expect(out.realm).not.toHaveProperty('smtpPassword');
+    expect(out.realm).not.toHaveProperty('hcaptchaSecretKey');
+    expect(out.realm.emailProviderConfig).toEqual({ resend: {} });
+    expect(out.realm.smsProviderConfig).toEqual({ twilioAccountSid: 'AC1' });
+    expect(out.clients[0]).not.toHaveProperty('clientSecret');
+    expect(out.identityProviders[0]).not.toHaveProperty('clientSecret');
+    expect(out.webhooks[0]).not.toHaveProperty('secret');
+  });
+
+  it('exports secrets decrypted with includeSecrets, hashes as they are', async () => {
+    const out: any = await make().exportRealm('test-realm', {
+      includeSecrets: true,
     });
 
-    it('should export realm with all entities', async () => {
-      prisma.realm.findUnique.mockResolvedValue(mockRealm);
-      prisma.client.findMany.mockResolvedValue([mockClient]);
-      prisma.role.findMany.mockResolvedValue([mockRole, mockClientRole]);
-      prisma.group.findMany.mockResolvedValue([mockGroup]);
-      prisma.clientScope.findMany.mockResolvedValue([mockScope]);
-      prisma.identityProvider.findMany.mockResolvedValue([mockIdp]);
-      prisma.clientDefaultScope.findMany.mockResolvedValue([
-        { clientId: 'client-db-1', clientScopeId: 'scope-1' },
-      ]);
-      prisma.clientOptionalScope.findMany.mockResolvedValue([]);
-
-      const result = await service.exportRealm('test-realm');
-
-      expect(result['version']).toBe(1);
-      expect(result['realm']).toBeDefined();
-      expect((result['realm'] as any).name).toBe('test-realm');
-
-      // Clients
-      const clients = result['clients'] as any[];
-      expect(clients).toHaveLength(1);
-      expect(clients[0].clientId).toBe('my-app');
-
-      // Roles
-      const roles = result['roles'] as any[];
-      expect(roles).toHaveLength(2);
-      expect(roles[0].name).toBe('admin');
-      expect(roles[0].clientId).toBeNull();
-      expect(roles[1].name).toBe('client-admin');
-      expect(roles[1].clientId).toBe('my-app'); // mapped to natural key
-
-      // Groups
-      expect(result['groups'] as any[]).toHaveLength(1);
-
-      // Client scopes
-      const scopes = result['clientScopes'] as any[];
-      expect(scopes).toHaveLength(1);
-      expect(scopes[0].protocolMappers).toHaveLength(1);
-
-      // IDPs
-      expect(result['identityProviders'] as any[]).toHaveLength(1);
-
-      // Scope assignments
-      const assignments = result['clientScopeAssignments'] as any[];
-      expect(assignments).toHaveLength(1);
-      expect(assignments[0].defaultScopes).toContain('openid');
+    expect(out.secretsIncluded).toBe(true);
+    expect(out.realm.smtpPassword).toBe('smtp-pass');
+    expect(out.realm.hcaptchaSecretKey).toBe('hcaptcha-secret');
+    expect(out.realm.recaptchaSecretKey).toBeNull();
+    expect(out.realm.emailProviderConfig).toEqual({
+      resend: { apiKey: 're_x' },
     });
+    expect(out.realm.smsProviderConfig.twilioAuthToken).toBe('tw-token');
+    expect(out.clients[0].clientSecret).toBe('sha256$abc');
+    expect(out.identityProviders[0].clientSecret).toBe('google-secret');
+    expect(out.webhooks[0].secret).toBe('hook-secret');
+  });
 
-    it('should exclude secrets by default', async () => {
-      prisma.realm.findUnique.mockResolvedValue(mockRealm);
-      prisma.client.findMany.mockResolvedValue([mockClient]);
-      prisma.role.findMany.mockResolvedValue([]);
-      prisma.group.findMany.mockResolvedValue([]);
-      prisma.clientScope.findMany.mockResolvedValue([]);
-      prisma.identityProvider.findMany.mockResolvedValue([mockIdp]);
-      prisma.clientDefaultScope.findMany.mockResolvedValue([]);
-      prisma.clientOptionalScope.findMany.mockResolvedValue([]);
+  it('includes users only when asked, without service accounts', async () => {
+    const without: any = await make().exportRealm('test-realm');
+    expect(without.users).toBeUndefined();
 
-      const result = await service.exportRealm('test-realm');
-
-      const clients = result['clients'] as any[];
-      expect(clients[0].clientSecret).toBeUndefined();
-
-      const idps = result['identityProviders'] as any[];
-      expect(idps[0].clientSecret).toBeUndefined();
-    });
-
-    it('should include secrets when option is set', async () => {
-      prisma.realm.findUnique.mockResolvedValue(mockRealm);
-      prisma.client.findMany.mockResolvedValue([mockClient]);
-      prisma.role.findMany.mockResolvedValue([]);
-      prisma.group.findMany.mockResolvedValue([]);
-      prisma.clientScope.findMany.mockResolvedValue([]);
-      prisma.identityProvider.findMany.mockResolvedValue([mockIdp]);
-      prisma.clientDefaultScope.findMany.mockResolvedValue([]);
-      prisma.clientOptionalScope.findMany.mockResolvedValue([]);
-
-      const result = await service.exportRealm('test-realm', {
-        includeSecrets: true,
-      });
-
-      const clients = result['clients'] as any[];
-      expect(clients[0].clientSecret).toBe('secret-value');
-
-      const idps = result['identityProviders'] as any[];
-      expect(idps[0].clientSecret).toBe('google-secret');
-    });
-
-    it('should include users when option is set', async () => {
-      prisma.realm.findUnique.mockResolvedValue(mockRealm);
-      prisma.client.findMany.mockResolvedValue([mockClient]);
-      prisma.role.findMany.mockResolvedValue([mockRole]);
-      prisma.group.findMany.mockResolvedValue([mockGroup]);
-      prisma.clientScope.findMany.mockResolvedValue([]);
-      prisma.identityProvider.findMany.mockResolvedValue([]);
-      prisma.clientDefaultScope.findMany.mockResolvedValue([]);
-      prisma.clientOptionalScope.findMany.mockResolvedValue([]);
-      prisma.user.findMany.mockResolvedValue([
-        {
-          username: 'testuser',
-          email: 'test@example.com',
-          emailVerified: true,
-          firstName: 'Test',
-          lastName: 'User',
-          enabled: true,
-          userRoles: [{ role: { name: 'admin', clientId: null } }],
-          userGroups: [{ group: { name: 'developers' } }],
-        },
-      ]);
-
-      const result = await service.exportRealm('test-realm', {
-        includeUsers: true,
-      });
-
-      const users = result['users'] as any[];
-      expect(users).toHaveLength(1);
-      expect(users[0].username).toBe('testuser');
-      expect(users[0].roles).toHaveLength(1);
-      expect(users[0].groups).toContain('developers');
-    });
-
-    it('should not include users by default', async () => {
-      prisma.realm.findUnique.mockResolvedValue(mockRealm);
-      prisma.client.findMany.mockResolvedValue([]);
-      prisma.role.findMany.mockResolvedValue([]);
-      prisma.group.findMany.mockResolvedValue([]);
-      prisma.clientScope.findMany.mockResolvedValue([]);
-      prisma.identityProvider.findMany.mockResolvedValue([]);
-      prisma.clientDefaultScope.findMany.mockResolvedValue([]);
-      prisma.clientOptionalScope.findMany.mockResolvedValue([]);
-
-      const result = await service.exportRealm('test-realm');
-
-      expect(result['users']).toBeUndefined();
-      expect(prisma.user.findMany).not.toHaveBeenCalled();
-    });
-
-    it('should handle groups with parent references', async () => {
-      const parentGroup = {
-        id: 'g1',
-        name: 'parent',
-        description: null,
-        parentId: null,
-        realmId: 'realm-1',
-      };
-      const childGroup = {
-        id: 'g2',
-        name: 'child',
-        description: null,
-        parentId: 'g1',
-        realmId: 'realm-1',
-      };
-
-      prisma.realm.findUnique.mockResolvedValue(mockRealm);
-      prisma.client.findMany.mockResolvedValue([]);
-      prisma.role.findMany.mockResolvedValue([]);
-      prisma.group.findMany.mockResolvedValue([parentGroup, childGroup]);
-      prisma.clientScope.findMany.mockResolvedValue([]);
-      prisma.identityProvider.findMany.mockResolvedValue([]);
-      prisma.clientDefaultScope.findMany.mockResolvedValue([]);
-      prisma.clientOptionalScope.findMany.mockResolvedValue([]);
-
-      const result = await service.exportRealm('test-realm');
-
-      const groups = result['groups'] as any[];
-      expect(groups[0].parentName).toBeNull();
-      expect(groups[1].parentName).toBe('parent');
-    });
+    const prisma = fakePrisma(
+      {
+        ...rows(),
+        user: [
+          {
+            id: 'u1',
+            username: 'alice',
+            passwordHash: '$argon2id$x',
+            userRoles: [{ roleId: 'role-1' }],
+            userGroups: [{ groupId: 'g1' }],
+          },
+        ],
+      },
+      realm,
+    );
+    const out: any = await new RealmExportService(prisma, crypto).exportRealm(
+      'test-realm',
+      { includeUsers: true },
+    );
+    expect(out.users).toHaveLength(1);
+    expect(out.users[0].username).toBe('alice');
+    expect(out.users[0]).not.toHaveProperty('passwordHash');
+    expect(out.users[0].roles).toEqual([{ name: 'admin', clientId: null }]);
+    expect(out.users[0].groups).toEqual(['parent']);
+    // Service-account users are queried out: they travel with their client.
+    const userQuery = prisma.user.findMany.mock.calls.find(
+      (call: any[]) => call[0]?.where?.id?.notIn,
+    );
+    expect(userQuery[0].where.id.notIn).toEqual(['sa-user']);
   });
 });

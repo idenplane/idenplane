@@ -10,7 +10,9 @@ import {
   FlowStepCondition,
   DEFAULT_FLOWS,
 } from './auth-flow.service.js';
+import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { CacheService } from '../cache/cache.service.js';
 
 // ─── Helpers ───────────────────────────────────────────────
 
@@ -54,7 +56,23 @@ const mockPrisma = {
   },
   client: {
     findFirst: jest.fn(),
+    findMany: jest.fn(),
+    update: jest.fn(),
   },
+  realm: {
+    findUnique: jest.fn(),
+    findMany: jest.fn(),
+    update: jest.fn(),
+  },
+  identityProvider: {
+    findMany: jest.fn().mockResolvedValue([]),
+  },
+  $transaction: jest.fn(),
+};
+
+const mockCache = {
+  invalidateRealmCache: jest.fn(),
+  invalidateClientCache: jest.fn(),
 };
 
 // ─── Tests ─────────────────────────────────────────────────
@@ -63,12 +81,15 @@ describe('AuthFlowService', () => {
   let service: AuthFlowService;
 
   beforeEach(async () => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
+    // The realm's identity providers, for social steps (none by default).
+    mockPrisma.identityProvider.findMany.mockResolvedValue([]);
 
     const module: TestingModule = await Test.createTestingModule({
       providers: [
         AuthFlowService,
         { provide: PrismaService, useValue: mockPrisma },
+        { provide: CacheService, useValue: mockCache },
       ],
     }).compile();
 
@@ -217,172 +238,6 @@ describe('AuthFlowService', () => {
     });
   });
 
-  // ── getNextStep ─────────────────────────────────────────
-
-  describe('getNextStep', () => {
-    it('returns first step when currentStepId is null', async () => {
-      const steps: FlowStep[] = [
-        makeStep({ id: 'step-1', order: 1 }),
-        makeStep({ id: 'step-2', type: 'totp', order: 2 }),
-      ];
-      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(
-        makeFlow(steps),
-      );
-
-      const next = await service.getNextStep('flow-id', null, {});
-      expect(next?.id).toBe('step-1');
-    });
-
-    it('returns the step following the current one', async () => {
-      const steps: FlowStep[] = [
-        makeStep({ id: 'step-1', order: 1 }),
-        makeStep({ id: 'step-2', type: 'totp', order: 2 }),
-      ];
-      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(
-        makeFlow(steps),
-      );
-
-      const next = await service.getNextStep('flow-id', 'step-1', {});
-      expect(next?.id).toBe('step-2');
-    });
-
-    it('returns null after the last step', async () => {
-      const steps: FlowStep[] = [makeStep({ id: 'step-1', order: 1 })];
-      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(
-        makeFlow(steps),
-      );
-
-      const next = await service.getNextStep('flow-id', 'step-1', {});
-      expect(next).toBeNull();
-    });
-
-    it('skips steps whose conditions are not met (non-required)', async () => {
-      const steps: FlowStep[] = [
-        makeStep({ id: 'step-1', order: 1 }),
-        makeStep({
-          id: 'step-totp',
-          type: 'totp',
-          required: false,
-          order: 2,
-          condition: { field: 'user.mfaEnabled', operator: 'eq', value: true },
-        }),
-        makeStep({ id: 'step-3', type: 'consent', order: 3 }),
-      ];
-      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(
-        makeFlow(steps),
-      );
-
-      // mfaEnabled is false → skip totp, return step-3
-      const next = await service.getNextStep('flow-id', 'step-1', {
-        user: { mfaEnabled: false },
-      });
-      expect(next?.id).toBe('step-3');
-    });
-
-    it('does NOT skip required steps even when condition is unmet', async () => {
-      const steps: FlowStep[] = [
-        makeStep({ id: 'step-1', order: 1 }),
-        makeStep({
-          id: 'step-totp',
-          type: 'totp',
-          required: true,
-          order: 2,
-          condition: { field: 'user.mfaEnabled', operator: 'eq', value: true },
-        }),
-      ];
-      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(
-        makeFlow(steps),
-      );
-
-      const next = await service.getNextStep('flow-id', 'step-1', {
-        user: { mfaEnabled: false },
-      });
-      expect(next?.id).toBe('step-totp');
-    });
-
-    it('throws NotFoundException for unknown flow', async () => {
-      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(null);
-      await expect(service.getNextStep('no-flow', null, {})).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-
-    it('throws BadRequestException for unknown currentStepId', async () => {
-      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(makeFlow());
-      await expect(
-        service.getNextStep('flow-id', 'ghost-step', {}),
-      ).rejects.toThrow(BadRequestException);
-    });
-
-    it('respects step ordering by order field (not insertion order)', async () => {
-      // steps provided in reverse order
-      const steps: FlowStep[] = [
-        makeStep({ id: 'step-2', type: 'totp', order: 2 }),
-        makeStep({ id: 'step-1', order: 1 }),
-      ];
-      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(
-        makeFlow(steps),
-      );
-
-      const first = await service.getNextStep('flow-id', null, {});
-      expect(first?.id).toBe('step-1');
-    });
-  });
-
-  // ── executeStep ─────────────────────────────────────────
-
-  describe('executeStep', () => {
-    it('returns conditionMet=true and skipped=false for step without condition', async () => {
-      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(makeFlow());
-      const result = await service.executeStep('flow-id', 'step-1', {});
-      expect(result.conditionMet).toBe(true);
-      expect(result.skipped).toBe(false);
-    });
-
-    it('returns conditionMet=false and skipped=true for non-required step with unmet condition', async () => {
-      const steps: FlowStep[] = [
-        makeStep({
-          id: 'step-1',
-          required: false,
-          condition: { field: 'user.group', operator: 'eq', value: 'admin' },
-        }),
-      ];
-      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(
-        makeFlow(steps),
-      );
-      const result = await service.executeStep('flow-id', 'step-1', {
-        user: { group: 'user' },
-      });
-      expect(result.conditionMet).toBe(false);
-      expect(result.skipped).toBe(true);
-    });
-
-    it('returns skipped=false for required step with unmet condition', async () => {
-      const steps: FlowStep[] = [
-        makeStep({
-          id: 'step-1',
-          required: true,
-          condition: { field: 'user.group', operator: 'eq', value: 'admin' },
-        }),
-      ];
-      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(
-        makeFlow(steps),
-      );
-      const result = await service.executeStep('flow-id', 'step-1', {
-        user: { group: 'user' },
-      });
-      expect(result.conditionMet).toBe(false);
-      expect(result.skipped).toBe(false);
-    });
-
-    it('throws NotFoundException for unknown step', async () => {
-      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(makeFlow());
-      await expect(service.executeStep('flow-id', 'ghost', {})).rejects.toThrow(
-        NotFoundException,
-      );
-    });
-  });
-
   // ── create ──────────────────────────────────────────────
 
   describe('create', () => {
@@ -470,38 +325,497 @@ describe('AuthFlowService', () => {
     });
   });
 
-  // ── getFlowForClient ─────────────────────────────────────
+  // ── strict validation on save ───────────────────────────
 
-  describe('getFlowForClient', () => {
-    it('returns client-assigned flow when present', async () => {
-      mockPrisma.client.findFirst.mockResolvedValue({ authFlowId: 'flow-id' });
-      mockPrisma.authenticationFlow.findFirst.mockResolvedValueOnce(makeFlow());
+  describe('validation on create/update', () => {
+    async function badRequestBody(p: Promise<unknown>) {
+      const err = await p.then(
+        () => {
+          throw new Error('expected a BadRequestException');
+        },
+        (e: unknown) => e,
+      );
+      expect(err).toBeInstanceOf(BadRequestException);
+      return (err as BadRequestException).getResponse() as {
+        message: string;
+        errors: Array<{ path: string; code: string; message: string }>;
+      };
+    }
 
-      const result = await service.getFlowForClient('client-id', 'realm-id');
-      expect(result.id).toBe('flow-id');
+    it('create returns 400 with the full {path, code, message} list', async () => {
+      mockPrisma.authenticationFlow.findUnique.mockResolvedValue(null);
+      const body = await badRequestBody(
+        service.create('realm-id', {
+          name: 'X',
+          steps: [
+            makeStep({ id: 'otp', type: 'totp', order: 1 }),
+            makeStep({ id: 'c', type: 'consent', order: 2 }),
+          ],
+        }),
+      );
+      expect(body.message).toBe('Authentication flow is invalid');
+      expect(body.errors.map((e) => e.code).sort()).toEqual([
+        'first_step_not_identifying',
+        'unsupported_type',
+      ]);
+      expect(mockPrisma.authenticationFlow.create).not.toHaveBeenCalled();
     });
 
-    it('falls back to realm default when client has no flow assigned', async () => {
-      mockPrisma.client.findFirst.mockResolvedValue({ authFlowId: null });
+    it('update validates new steps and writes nothing when invalid', async () => {
       mockPrisma.authenticationFlow.findFirst.mockResolvedValueOnce(makeFlow());
-
-      const result = await service.getFlowForClient('client-id', 'realm-id');
-      expect(result).toBeDefined();
+      const body = await badRequestBody(
+        service.update('realm-id', 'flow-id', {
+          steps: [
+            makeStep({ condition: { field: 'x', operator: 'eq', value: 1 } }),
+          ],
+        }),
+      );
+      expect(body.errors.map((e) => e.code)).toContain(
+        'first_step_conditional',
+      );
+      expect(mockPrisma.authenticationFlow.update).not.toHaveBeenCalled();
     });
 
-    it('throws NotFoundException when client does not exist', async () => {
-      mockPrisma.client.findFirst.mockResolvedValue(null);
+    it('update increments the version on every update', async () => {
+      mockPrisma.authenticationFlow.findFirst
+        .mockResolvedValueOnce(makeFlow())
+        .mockResolvedValueOnce(null);
+      mockPrisma.authenticationFlow.update.mockResolvedValue(makeFlow());
+
+      await service.update('realm-id', 'flow-id', { name: 'Renamed' });
+
+      expect(mockPrisma.authenticationFlow.update).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ version: { increment: 1 } }),
+        }),
+      );
+    });
+  });
+
+  // ── validateFlow ────────────────────────────────────────
+
+  describe('validateFlow', () => {
+    it('returns {valid:true, errors:[]} for a valid stored flow', async () => {
+      mockPrisma.authenticationFlow.findFirst.mockResolvedValue(makeFlow());
       await expect(
-        service.getFlowForClient('bad-client', 'realm-id'),
-      ).rejects.toThrow(NotFoundException);
+        service.validateFlow('realm-id', 'flow-id'),
+      ).resolves.toEqual({
+        valid: true,
+        errors: [],
+      });
     });
 
-    it('throws NotFoundException when no flows exist for realm', async () => {
-      mockPrisma.client.findFirst.mockResolvedValue({ authFlowId: null });
+    it('reports errors of a flow saved before the stricter rules', async () => {
+      mockPrisma.authenticationFlow.findFirst.mockResolvedValue(
+        makeFlow([makeStep({ type: 'consent' as FlowStep['type'] })]),
+      );
+      const r = await service.validateFlow('realm-id', 'flow-id');
+      expect(r.valid).toBe(false);
+      expect(r.errors[0]).toMatchObject({
+        path: 'steps[0].type',
+        code: 'unsupported_type',
+      });
+    });
+
+    it('checks a social step against the realm identity providers', async () => {
+      const social = makeStep({
+        type: 'social' as FlowStep['type'],
+        config: { providerAlias: 'google' },
+      });
+      mockPrisma.authenticationFlow.findFirst.mockResolvedValue(
+        makeFlow([social]),
+      );
+      const missing = await service.validateFlow('realm-id', 'flow-id');
+      expect(missing.errors).toEqual([
+        expect.objectContaining({ code: 'provider_not_found' }),
+      ]);
+      expect(mockPrisma.identityProvider.findMany).toHaveBeenCalledWith({
+        where: { realmId: 'realm-id', enabled: true },
+        select: { alias: true },
+      });
+
+      mockPrisma.identityProvider.findMany.mockResolvedValue([
+        { alias: 'google' },
+      ]);
+      expect(await service.validateFlow('realm-id', 'flow-id')).toEqual({
+        valid: true,
+        errors: [],
+      });
+    });
+
+    it('404s for a flow of another realm', async () => {
+      mockPrisma.authenticationFlow.findFirst.mockResolvedValue(null);
+      await expect(service.validateFlow('realm-id', 'x')).rejects.toThrow(
+        NotFoundException,
+      );
+      expect(mockPrisma.authenticationFlow.findFirst).toHaveBeenCalledWith({
+        where: { id: 'x', realmId: 'realm-id' },
+      });
+    });
+  });
+
+  // ── remove ──────────────────────────────────────────────
+
+  describe('remove', () => {
+    beforeEach(() => {
+      mockPrisma.authenticationFlow.findFirst.mockResolvedValue(makeFlow());
+      mockPrisma.realm.findMany.mockResolvedValue([]);
+      mockPrisma.client.findMany.mockResolvedValue([]);
+    });
+
+    it('deletes an unbound flow', async () => {
+      await service.remove('realm-id', 'flow-id');
+      expect(mockPrisma.authenticationFlow.delete).toHaveBeenCalledWith({
+        where: { id: 'flow-id' },
+      });
+    });
+
+    it('409s with the binding list when the realm and clients use the flow', async () => {
+      mockPrisma.realm.findMany.mockResolvedValue([
+        { id: 'realm-id', name: 'acme' },
+      ]);
+      mockPrisma.client.findMany.mockResolvedValue([
+        { id: 'c1', clientId: 'web' },
+      ]);
+      const err = await service.remove('realm-id', 'flow-id').catch((e) => e);
+      expect(err).toBeInstanceOf(ConflictException);
+      expect((err as ConflictException).getResponse()).toMatchObject({
+        bindings: [
+          { kind: 'realm', realmId: 'realm-id', realmName: 'acme' },
+          { kind: 'client', id: 'c1', clientId: 'web' },
+        ],
+      });
+      expect(mockPrisma.authenticationFlow.delete).not.toHaveBeenCalled();
+    });
+
+    it('maps an FK violation raced in after the check to 409', async () => {
+      mockPrisma.authenticationFlow.delete.mockRejectedValue(
+        new Prisma.PrismaClientKnownRequestError('fk', {
+          code: 'P2003',
+          clientVersion: 'test',
+        }),
+      );
+      await expect(service.remove('realm-id', 'flow-id')).rejects.toThrow(
+        ConflictException,
+      );
+    });
+  });
+
+  // ── bindings ────────────────────────────────────────────
+
+  describe('bindings', () => {
+    const realmRow = {
+      id: 'realm-id',
+      name: 'acme',
+      authFlowsEnabled: false,
+      browserFlowId: null as string | null,
+    };
+    const clients = [
+      {
+        id: 'c1',
+        clientId: 'web',
+        name: 'Web',
+        authFlowId: null as string | null,
+      },
+      {
+        id: 'c2',
+        clientId: 'cli',
+        name: null,
+        authFlowId: null as string | null,
+      },
+    ];
+    const originalEnv = process.env['AUTH_FLOW_RUNTIME_ENABLED'];
+
+    beforeEach(() => {
+      mockPrisma.realm.findUnique.mockResolvedValue({ ...realmRow });
+      mockPrisma.client.findMany.mockResolvedValue(
+        clients.map((c) => ({ ...c })),
+      );
+      mockPrisma.authenticationFlow.findMany.mockResolvedValue([
+        { id: 'good', name: 'Good', steps: [makeStep()] },
+        {
+          id: 'bad',
+          name: 'Bad',
+          steps: [makeStep({ type: 'totp' })],
+        },
+      ]);
+      mockPrisma.$transaction.mockResolvedValue([]);
+    });
+
+    afterAll(() => {
+      if (originalEnv === undefined)
+        delete process.env['AUTH_FLOW_RUNTIME_ENABLED'];
+      else process.env['AUTH_FLOW_RUNTIME_ENABLED'] = originalEnv;
+    });
+
+    it('getBindings reports runtimeEnabled from the env flag', async () => {
+      delete process.env['AUTH_FLOW_RUNTIME_ENABLED'];
+      await expect(service.getBindings('realm-id')).resolves.toMatchObject({
+        runtimeEnabled: false,
+        authFlowsEnabled: false,
+        browserFlowId: null,
+        clients: [{ clientId: 'web' }, { clientId: 'cli' }],
+      });
+      process.env['AUTH_FLOW_RUNTIME_ENABLED'] = 'true';
+      await expect(service.getBindings('realm-id')).resolves.toMatchObject({
+        runtimeEnabled: true,
+      });
+    });
+
+    async function rejected(
+      dto: Parameters<AuthFlowService['updateBindings']>[1],
+    ) {
+      const err = await service.updateBindings('realm-id', dto).catch((e) => e);
+      expect(err).toBeInstanceOf(BadRequestException);
+      expect(mockPrisma.$transaction).not.toHaveBeenCalled();
+      return (
+        (err as BadRequestException).getResponse() as {
+          errors: Array<{ path: string; code: string }>;
+        }
+      ).errors;
+    }
+
+    it('binds a valid realm flow and per-client override, then busts caches', async () => {
+      await service.updateBindings('realm-id', {
+        browserFlowId: 'good',
+        authFlowsEnabled: true,
+        clients: [{ clientId: 'web', authFlowId: 'good' }],
+      });
+      expect(mockPrisma.authenticationFlow.findMany).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { realmId: 'realm-id', id: { in: ['good'] } },
+        }),
+      );
+      expect(mockPrisma.realm.update).toHaveBeenCalledWith({
+        where: { id: 'realm-id' },
+        data: {
+          browserFlow: { connect: { id: 'good' } },
+          authFlowsEnabled: true,
+        },
+      });
+      expect(mockPrisma.client.update).toHaveBeenCalledWith({
+        where: { id: 'c1' },
+        data: { authFlowId: 'good' },
+      });
+      expect(mockPrisma.$transaction).toHaveBeenCalledTimes(1);
+      expect(mockCache.invalidateRealmCache).toHaveBeenCalledWith(
+        'realm-id',
+        'acme',
+      );
+      expect(mockCache.invalidateClientCache).toHaveBeenCalledWith(
+        'realm-id:web',
+      );
+      expect(mockCache.invalidateClientCache).toHaveBeenCalledWith(
+        'realm-id:c1',
+      );
+    });
+
+    it('unbinds with null', async () => {
+      mockPrisma.realm.findUnique.mockResolvedValue({
+        ...realmRow,
+        browserFlowId: 'good',
+      });
+      await service.updateBindings('realm-id', { browserFlowId: null });
+      expect(mockPrisma.realm.update).toHaveBeenCalledWith({
+        where: { id: 'realm-id' },
+        data: { browserFlow: { disconnect: true } },
+      });
+    });
+
+    it('rejects an invalid flow with its validator errors', async () => {
+      const errors = await rejected({ browserFlowId: 'bad' });
+      expect(errors).toEqual([
+        expect.objectContaining({
+          path: 'browserFlowId',
+          code: 'flow_invalid',
+          flowId: 'bad',
+          flowErrors: [
+            expect.objectContaining({ code: 'first_step_not_identifying' }),
+          ],
+        }),
+      ]);
+    });
+
+    it('rejects a flow that is not in this realm', async () => {
+      const errors = await rejected({
+        clients: [{ clientId: 'cli', authFlowId: 'other-realm-flow' }],
+      });
+      expect(errors).toEqual([
+        expect.objectContaining({
+          path: 'clients[0].authFlowId',
+          code: 'flow_not_found',
+        }),
+      ]);
+    });
+
+    it('rejects unknown, duplicate and incomplete client entries', async () => {
+      const errors = await rejected({
+        clients: [
+          { clientId: 'nope', authFlowId: 'good' },
+          { clientId: 'web', authFlowId: 'good' },
+          { clientId: 'web', authFlowId: null },
+          { clientId: 'cli' } as never,
+        ],
+      });
+      expect(errors.map((e) => [e.path, e.code])).toEqual([
+        ['clients[0].clientId', 'client_not_found'],
+        ['clients[2].clientId', 'client_duplicate'],
+        ['clients[3].authFlowId', 'flow_id_required'],
+      ]);
+    });
+
+    it('enabling checks existing bindings that are not in the request', async () => {
+      mockPrisma.realm.findUnique.mockResolvedValue({
+        ...realmRow,
+        browserFlowId: 'good',
+      });
+      mockPrisma.client.findMany.mockResolvedValue([
+        { ...clients[0], authFlowId: 'bad' },
+        clients[1],
+      ]);
+      const errors = await rejected({ authFlowsEnabled: true });
+      expect(errors).toEqual([
+        expect.objectContaining({
+          path: 'clients[clientId=web].authFlowId',
+          code: 'flow_invalid',
+        }),
+      ]);
+    });
+
+    it('does not re-check untouched bindings while the realm stays disabled', async () => {
+      mockPrisma.client.findMany.mockResolvedValue([
+        { ...clients[0], authFlowId: 'bad' },
+        clients[1],
+      ]);
+      await service.updateBindings('realm-id', {
+        clients: [{ clientId: 'cli', authFlowId: null }],
+      });
+      expect(mockPrisma.authenticationFlow.findMany).not.toHaveBeenCalled();
+      expect(mockPrisma.client.update).toHaveBeenCalledWith({
+        where: { id: 'c2' },
+        data: { authFlowId: null },
+      });
+    });
+  });
+
+  // ── assign / unassign ───────────────────────────────────
+
+  describe('assignToClient', () => {
+    it('404s for a flow of another realm', async () => {
       mockPrisma.authenticationFlow.findFirst.mockResolvedValue(null);
       await expect(
-        service.getFlowForClient('client-id', 'realm-id'),
+        service.assignToClient('realm-id', 'flow-b', 'c1', undefined),
       ).rejects.toThrow(NotFoundException);
+      expect(mockPrisma.authenticationFlow.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'flow-b', realmId: 'realm-id' },
+        }),
+      );
+    });
+
+    it('404s for a client of another realm', async () => {
+      mockPrisma.authenticationFlow.findFirst.mockResolvedValue(makeFlow());
+      mockPrisma.client.findFirst.mockResolvedValue(null);
+      await expect(
+        service.assignToClient('realm-id', 'flow-id', 'client-b', undefined),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockPrisma.client.findFirst).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { id: 'client-b', realmId: 'realm-id' },
+        }),
+      );
+    });
+
+    it.each([
+      ['another flow', 'other-flow'],
+      ['null (clear)', null],
+    ])('400s when the body names %s', async (_n, bodyFlowId) => {
+      mockPrisma.authenticationFlow.findFirst.mockResolvedValue(makeFlow());
+      mockPrisma.client.findFirst.mockResolvedValue({
+        id: 'c1',
+        clientId: 'web',
+        authFlowId: null,
+      });
+      await expect(
+        service.assignToClient('realm-id', 'flow-id', 'c1', bodyFlowId),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.client.update).not.toHaveBeenCalled();
+    });
+
+    it('400s when the flow is invalid', async () => {
+      mockPrisma.authenticationFlow.findFirst.mockResolvedValue(
+        makeFlow([makeStep({ type: 'totp' })]),
+      );
+      mockPrisma.client.findFirst.mockResolvedValue({
+        id: 'c1',
+        clientId: 'web',
+        authFlowId: null,
+      });
+      await expect(
+        service.assignToClient('realm-id', 'flow-id', 'c1', 'flow-id'),
+      ).rejects.toThrow(BadRequestException);
+      expect(mockPrisma.client.update).not.toHaveBeenCalled();
+    });
+
+    it('binds the path flow and reports the previous one', async () => {
+      mockPrisma.authenticationFlow.findFirst.mockResolvedValue(makeFlow());
+      mockPrisma.client.findFirst.mockResolvedValue({
+        id: 'c1',
+        clientId: 'web',
+        authFlowId: 'old',
+      });
+      mockPrisma.client.update.mockResolvedValue({
+        id: 'c1',
+        clientId: 'web',
+        authFlowId: 'flow-id',
+      });
+      await expect(
+        service.assignToClient('realm-id', 'flow-id', 'c1', undefined),
+      ).resolves.toEqual({
+        id: 'c1',
+        clientId: 'web',
+        authFlowId: 'flow-id',
+        previousAuthFlowId: 'old',
+      });
+      expect(mockPrisma.client.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { authFlowId: 'flow-id' } }),
+      );
+      expect(mockCache.invalidateClientCache).toHaveBeenCalledWith(
+        'realm-id:web',
+      );
+    });
+  });
+
+  describe('unassignFromClient', () => {
+    it('clears the override when the client is bound to this flow', async () => {
+      mockPrisma.authenticationFlow.findFirst.mockResolvedValue(makeFlow());
+      mockPrisma.client.findFirst.mockResolvedValue({
+        id: 'c1',
+        clientId: 'web',
+        authFlowId: 'flow-id',
+      });
+      mockPrisma.client.update.mockResolvedValue({
+        id: 'c1',
+        clientId: 'web',
+        authFlowId: null,
+      });
+      await service.unassignFromClient('realm-id', 'flow-id', 'c1');
+      expect(mockPrisma.client.update).toHaveBeenCalledWith(
+        expect.objectContaining({ data: { authFlowId: null } }),
+      );
+    });
+
+    it('404s when the client is bound to another flow', async () => {
+      mockPrisma.authenticationFlow.findFirst.mockResolvedValue(makeFlow());
+      mockPrisma.client.findFirst.mockResolvedValue({
+        id: 'c1',
+        clientId: 'web',
+        authFlowId: 'other',
+      });
+      await expect(
+        service.unassignFromClient('realm-id', 'flow-id', 'c1'),
+      ).rejects.toThrow(NotFoundException);
+      expect(mockPrisma.client.update).not.toHaveBeenCalled();
     });
   });
 

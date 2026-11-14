@@ -6,6 +6,18 @@ The subset of these with the broadest relevance for contributors is written up a
 
 ---
 
+## 2026-11-13: PostgreSQL is the only supported database
+
+**Decision**: Support PostgreSQL 16+ only. Remove the MySQL and SQLite schema variants, switch scripts and the unused database-provider layer.
+
+**Rationale**:
+- The server already worked only on PostgreSQL. It uses `@prisma/adapter-pg`, PostgreSQL-only SQL, triggers that enforce realm isolation, row locks against replay, and LISTEN/NOTIFY for cache invalidation. The MySQL and SQLite schemas had fallen behind.
+- Each extra database would multiply the security-critical code paths and the test matrix.
+- Managed PostgreSQL is available on every major cloud.
+- MySQL support can be planned later if users need it.
+
+---
+
 ## 2026-05-04: Security Issues Resolution
 
 ### Decision: User Enumeration Prevention
@@ -179,7 +191,7 @@ The subset of these with the broadest relevance for contributors is written up a
 **Rationale**:
 - Type-safe queries
 - Migration management
-- Easy database switching (PostgreSQL/MySQL/SQLite)
+- Migration management on PostgreSQL (see the 2026-11-13 decision below)
 
 ---
 

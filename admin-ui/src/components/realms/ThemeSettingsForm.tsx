@@ -25,6 +25,8 @@ export default function ThemeSettingsForm({ realm }: ThemeSettingsFormProps) {
   });
 
   const [form, setForm] = useState(() => seedFromRealm(realm));
+  const loginWarnings =
+    (Array.isArray(themes) ? themes.find((t) => t.name === form.loginTheme)?.warnings : undefined) ?? [];
 
   // Reseed the editable form when the realm prop changes (e.g. after a refetch).
   // Adjusting state during render (vs. an effect) avoids an extra render pass.
@@ -107,6 +109,16 @@ export default function ThemeSettingsForm({ realm }: ThemeSettingsFormProps) {
               <p className="mt-1 text-xs text-subtle">Applied to verification and password reset emails</p>
             </div>
           </div>
+          {loginWarnings.length > 0 && (
+            <div role="alert" className="rounded-md border border-warning-soft bg-warning-soft p-3 text-sm text-warning-fg">
+              <p className="font-medium">Login theme warnings</p>
+              <ul className="mt-1 list-disc space-y-1 pl-5">
+                {loginWarnings.map((w) => (
+                  <li key={w}>{w}</li>
+                ))}
+              </ul>
+            </div>
+          )}
         </div>
       )}
 

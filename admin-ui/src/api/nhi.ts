@@ -1,11 +1,19 @@
 import apiClient from './client';
-import type { NhiIdentity, NhiCredential, NhiCredentialPolicy, NhiUsageStats, NhiAuditLog } from '../types';
+import type {
+  NhiIdentity,
+  NhiCredential,
+  NhiCredentialPolicy,
+  NhiUsageStats,
+  NhiAuditLog,
+  NhiTlsAuthMode,
+} from '../types';
 
 // ── Types ────────────────────────────────────────────────────────────────────
 
 export type NhiIdentityType = 'IOT_DEVICE' | 'AI_AGENT' | 'BOT' | 'MACHINE_TO_MACHINE';
 export type NhiLifecycleStatus = 'PROVISIONING' | 'ACTIVE' | 'SUSPENDED' | 'DECOMMISSIONED';
-export type NhiCredentialType = 'API_KEY' | 'CERTIFICATE' | 'JWT_BEARER';
+/** The server's NhiCredentialType. Only API_KEY and CERTIFICATE authenticate. */
+export type NhiCredentialType = 'API_KEY' | 'CERTIFICATE' | 'JWT' | 'OAUTH' | 'MTLS';
 
 export interface CreateNhiIdentityDto {
   name: string;
@@ -27,12 +35,52 @@ export interface UpdateNhiIdentityDto {
   tags?: string[];
 }
 
-export interface CreateNhiCredentialDto {
+/** The one subject/SAN rule of a PKI certificate credential. */
+export type NhiPkiRuleField =
+  | 'tlsClientAuthSubjectDn'
+  | 'tlsClientAuthSanDns'
+  | 'tlsClientAuthSanUri'
+  | 'tlsClientAuthSanIp'
+  | 'tlsClientAuthSanEmail';
+
+export interface CreateNhiCredentialDto
+  extends Partial<Record<NhiPkiRuleField, string>> {
   credentialType?: NhiCredentialType;
   name: string;
   expiresAt?: string;
   allowedIpRanges?: string[];
   rotationRequired?: boolean;
+  /** RFC 8705: SELF_SIGNED pins certificatePem; PKI names one rule. */
+  tlsAuthMode?: NhiTlsAuthMode;
+  /** The certificate only; a private key is refused. */
+  certificatePem?: string;
+}
+
+export interface RotateNhiCredentialDto
+  extends Partial<Record<NhiPkiRuleField, string>> {
+  name?: string;
+  /** SELF_SIGNED: the new certificate. */
+  certificatePem?: string;
+  /** Seconds the old certificate keeps working. Default: the policy's, else 86400. */
+  overlapSeconds?: number;
+}
+
+export type NhiClientAuthMethod = 'self_signed_tls_client_auth' | 'tls_client_auth';
+
+/** The OAuth client of an NHI identity (RFC 8705 NHI binding). */
+export interface NhiOAuthClient {
+  id: string;
+  clientId: string;
+  name: string | null;
+  enabled: boolean;
+  clientType: 'CONFIDENTIAL';
+  grantTypes: string[];
+  tokenEndpointAuthMethod: NhiClientAuthMethod;
+  tlsClientCertificateBoundAccessTokens: true;
+  nhiIdentityId: string;
+  tokenEndpoint: string;
+  mtlsClientAuthEnabled: boolean;
+  createdAt: string;
 }
 
 export interface SetCertificateDto {
@@ -243,11 +291,52 @@ export async function rotateNhiCredential(
   realmName: string,
   identityId: string,
   credentialId: string,
-): Promise<{ newCredential: NhiCredential; oldCredential: NhiCredential }> {
-  const { data } = await apiClient.post<{ newCredential: NhiCredential; oldCredential: NhiCredential }>(
+  dto: RotateNhiCredentialDto = {},
+): Promise<{ newCredential: NhiCredential; oldCredential?: NhiCredential }> {
+  const { data } = await apiClient.post<{ newCredential: NhiCredential; oldCredential?: NhiCredential }>(
     `/realms/${realmName}/nhi/${identityId}/credentials/${credentialId}/rotate`,
+    dto,
   );
   return data;
+}
+
+// ── OAuth client (RFC 8705 NHI binding) ───────────────────────────────────────
+
+/** The identity's OAuth client, or `null` when it has none. */
+export async function getNhiOAuthClient(
+  realmName: string,
+  identityId: string,
+): Promise<NhiOAuthClient | null> {
+  try {
+    const { data } = await apiClient.get<NhiOAuthClient>(
+      `/realms/${realmName}/nhi/${identityId}/oauth-client`,
+    );
+    return data;
+  } catch (err) {
+    if ((err as { response?: { status?: number } }).response?.status === 404) {
+      return null;
+    }
+    throw err;
+  }
+}
+
+export async function createNhiOAuthClient(
+  realmName: string,
+  identityId: string,
+  dto: { tokenEndpointAuthMethod?: NhiClientAuthMethod } = {},
+): Promise<NhiOAuthClient> {
+  const { data } = await apiClient.post<NhiOAuthClient>(
+    `/realms/${realmName}/nhi/${identityId}/oauth-client`,
+    dto,
+  );
+  return data;
+}
+
+export async function deleteNhiOAuthClient(
+  realmName: string,
+  identityId: string,
+): Promise<void> {
+  await apiClient.delete(`/realms/${realmName}/nhi/${identityId}/oauth-client`);
 }
 
 // ── Certificate API functions ──────────────────────────────────────────────────

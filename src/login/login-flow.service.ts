@@ -1,9 +1,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Request, Response } from 'express';
 import type { Realm, User } from '@prisma/client';
-import { LoginService } from './login.service.js';
 import { OAuthService } from '../oauth/oauth.service.js';
-import { ConsentService } from '../consent/consent.service.js';
 import { EventsService } from '../events/events.service.js';
 import { LoginEventType } from '../events/event-types.js';
 import { MfaService, MFA_ENROLLMENT_TTL_SECONDS } from '../mfa/mfa.service.js';
@@ -18,9 +16,15 @@ import {
 import {
   MFA_CHALLENGE_COOKIE,
   MFA_ENROLLMENT_COOKIE,
-  SESSION_COOKIE,
 } from '../authn-core/cookies.js';
 import type { AuthorizeParams } from '../authn-core/oauth-params.js';
+import {
+  UNMET_AUTHENTICATION_REQUIREMENTS,
+  isEnforceAcrOnFreshLoginEnabled,
+} from '../authn-core/acr-enforcement.js';
+import { essentialAcrFromClaimsParam } from '../authn-core/flow-assurance.js';
+import { SessionIssuer } from './session-issuer.service.js';
+import { PostAuthService, authorizationError } from './post-auth.service.js';
 
 export { MFA_CHALLENGE_COOKIE };
 
@@ -34,27 +38,14 @@ export { MFA_CHALLENGE_COOKIE };
  * event, the consent screen and the authorization code. Keeping this in one
  * place is what stops a second sign-in path from silently skipping MFA.
  */
-/** The redirect_uri with an OAuth error, as an authorization response. */
-function authorizationError(
-  oauthParams: Record<string, string>,
-  error: string,
-  description: string,
-): string {
-  const url = new URL(oauthParams['redirect_uri']);
-  url.searchParams.set('error', error);
-  url.searchParams.set('error_description', description);
-  if (oauthParams['state']) url.searchParams.set('state', oauthParams['state']);
-  return url.toString();
-}
-
 @Injectable()
 export class LoginFlowService {
   constructor(
-    private readonly loginService: LoginService,
     private readonly oauthService: OAuthService,
-    private readonly consentService: ConsentService,
     private readonly eventsService: EventsService,
     private readonly mfaService: MfaService,
+    private readonly sessionIssuer: SessionIssuer,
+    private readonly postAuth: PostAuthService,
   ) {}
 
   /**
@@ -72,6 +63,7 @@ export class LoginFlowService {
     oauthParams: Record<string, string>,
     primaryAmr: string[],
     res: Response,
+    rememberMe = false,
   ): Promise<void> {
     const challengeToken = await this.mfaService.createMfaChallenge(
       user.id,
@@ -79,6 +71,7 @@ export class LoginFlowService {
       oauthParams,
       undefined,
       primaryAmr,
+      rememberMe,
     );
     res.cookie(MFA_CHALLENGE_COOKIE, challengeToken, {
       httpOnly: true,
@@ -107,6 +100,10 @@ export class LoginFlowService {
           oauthParams as unknown as AuthorizeParams,
         )
       : null;
+    // Where the login is bound to a custom flow, a built-in path (a
+    // federated sign-in) may not finish it: refuse now, before any second
+    // factor is challenged or consumed. No-op without the runtime switch.
+    await this.sessionIssuer.assertBuiltInSignInAllowed(realm, client);
     // A password with any second factor reaches MFA at most: a client that
     // requires more (a passkey) cannot be satisfied on this path at all.
     if (client?.requiredAcr && !satisfiesAcr(ACR_MFA, client.requiredAcr)) {
@@ -119,10 +116,36 @@ export class LoginFlowService {
         ),
       );
     }
+    // With ENFORCE_ACR_ON_FRESH_LOGIN, an `acr` the request asks for as an
+    // Essential Claim is mandatory, like the client's own requirement: a
+    // level this path cannot reach (a passkey, an unknown value) ends with
+    // unmet_authentication_requirements, MFA makes the second factor (or
+    // its enrolment) required.
+    const essential =
+      client && isEnforceAcrOnFreshLoginEnabled()
+        ? essentialAcrFromClaimsParam(oauthParams['claims'])
+        : null;
+    if (
+      essential &&
+      (essential.kind === 'unsupported' ||
+        !satisfiesAcr(ACR_MFA, essential.acr))
+    ) {
+      return res.redirect(
+        302,
+        authorizationError(
+          oauthParams,
+          UNMET_AUTHENTICATION_REQUIREMENTS,
+          'The requested authentication level cannot be met by this sign-in',
+        ),
+      );
+    }
+    const essentialRequiresMfa =
+      essential?.kind === 'acr' && satisfiesAcr(essential.acr, ACR_MFA);
     const clientRequiresMfa =
       !!client?.requiredAcr && satisfiesAcr(client.requiredAcr, ACR_MFA);
     const mfaRequired =
       clientRequiresMfa ||
+      essentialRequiresMfa ||
       (await this.mfaService.isMfaRequired(realm, user.id));
     const mfaEnabled = await this.mfaService.isMfaEnabled(user.id);
 
@@ -134,6 +157,7 @@ export class LoginFlowService {
         oauthParams,
         options.primaryAmr,
         res,
+        !!options.rememberMe,
       );
     }
 
@@ -187,6 +211,33 @@ export class LoginFlowService {
     authContext: AuthContext = {},
     options: { rememberMe?: boolean } = {},
   ): Promise<void> {
+    const redirectUrl = await this.finishLogin(
+      realm,
+      user,
+      oauthParams,
+      req,
+      res,
+      authContext,
+      options,
+    );
+    res.redirect(302, redirectUrl);
+  }
+
+  /**
+   * What `completeLogin` does, returning the URL to continue at instead of
+   * redirecting: for the passkey sign-in, whose script reads JSON. Every
+   * built-in sign-in that ends in a session finishes here, so the cookie,
+   * the event and the decisions after it are the same for all of them.
+   */
+  async finishLogin(
+    realm: Realm,
+    user: User,
+    oauthParams: Record<string, string>,
+    req: Request,
+    res: Response,
+    authContext: AuthContext = {},
+    options: { rememberMe?: boolean } = {},
+  ): Promise<string> {
     // Validate OAuth request (including redirect_uri) BEFORE creating session
     let client;
     if (oauthParams['client_id']) {
@@ -196,27 +247,10 @@ export class LoginFlowService {
       );
     }
 
-    const sessionToken = await this.loginService.createLoginSession(
-      realm,
-      user,
-      resolveClientIp(req),
-      req.headers['user-agent'],
-      req.cookies?.[SESSION_COOKIE] as string | undefined,
-      // Recorded on the session so silent SSO later reports the real acr/amr
-      // (and an MFA-required realm accepts the session).
-      authContext,
-    );
-
-    res.cookie(SESSION_COOKIE, sessionToken, {
-      httpOnly: true,
-      secure: true, // session/auth cookies must never traverse plain HTTP (localhost is a secure context)
-      // Lax, not Strict: applications on other sites send the browser here
-      // with a top-level GET (authorization, logout), and a Strict cookie
-      // would not come along, so single sign-on and sign-out would not see
-      // the session. Every state-changing form still carries a CSRF token.
-      sameSite: 'lax',
-      maxAge: options.rememberMe ? 30 * 24 * 60 * 60 * 1000 : undefined,
-      path: `/realms/${realm.name}`,
+    // Session fixation: any session the browser already holds is replaced.
+    await this.sessionIssuer.issue(realm, user, authContext, req, res, {
+      rememberMe: options.rememberMe,
+      client,
     });
 
     void this.eventsService.recordLoginEvent({
@@ -227,62 +261,16 @@ export class LoginFlowService {
       ipAddress: resolveClientIp(req),
     });
 
-    if (!client) {
-      return res.redirect(302, `/realms/${realm.name}/account`);
-    }
-
-    // The client's own policy: a sign-in weaker than its required ACR never
-    // yields a code for it (the session still exists for other clients).
-    if (
-      client.requiredAcr &&
-      !satisfiesAcr(authContext.acr ?? ACR_PASSWORD, client.requiredAcr)
-    ) {
-      return res.redirect(
-        302,
-        authorizationError(
-          oauthParams,
-          'access_denied',
-          'This application requires a stronger sign-in method',
-        ),
-      );
-    }
-
-    // prompt=consent asks again even when consent was given before.
-    const forceConsent = (oauthParams['prompt'] ?? '')
-      .split(' ')
-      .includes('consent');
-    if (client.requireConsent || forceConsent) {
-      const scopes = (oauthParams['scope'] ?? 'openid')
-        .split(' ')
-        .filter(Boolean);
-      const hasConsent =
-        !forceConsent &&
-        (await this.consentService.hasConsent(user.id, client.id, scopes));
-
-      if (!hasConsent) {
-        const reqId = await this.consentService.storeConsentRequest({
-          userId: user.id,
-          clientId: client.id,
-          clientName: client.name ?? client.clientId,
-          realmName: realm.name,
-          scopes,
-          oauthParams,
-          // Carry the satisfied auth context across the consent round-trip so
-          // the code issued after consent reflects the real acr/amr.
-          satisfiedAcr: authContext.acr,
-          amr: authContext.amr,
-        });
-        return res.redirect(302, `/realms/${realm.name}/consent?req=${reqId}`);
-      }
-    }
-
-    const result = await this.oauthService.authorizeWithUser(
+    // Account page (or a pending SAML request), client policy, consent
+    // screen or authorization code.
+    return this.postAuth.continueAuthorization(
       realm,
       user,
-      oauthParams as unknown as AuthorizeParams,
+      client,
+      oauthParams,
       authContext,
+      req,
     );
-    res.redirect(302, result.redirectUrl);
   }
 
   /** The methods to record once TOTP completes a sign-in (RFC 8176). */

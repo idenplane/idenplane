@@ -40,6 +40,11 @@ export class CreateUserDto {
   @IsBoolean()
   enabled?: boolean;
 
+  @ApiPropertyOptional({ default: false })
+  @IsOptional()
+  @IsBoolean()
+  emailVerified?: boolean;
+
   @ApiPropertyOptional()
   @IsOptional()
   @IsString()

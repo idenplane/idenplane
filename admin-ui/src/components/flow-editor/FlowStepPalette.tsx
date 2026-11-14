@@ -12,8 +12,20 @@ const ALL_STEP_TYPES: StepType[] = [
   'social',
   'ldap',
   'email_otp',
+  'magic_link',
   'consent',
 ];
+
+/** Step types the server accepts today; others are rejected on save. */
+const SUPPORTED_STEP_TYPES: ReadonlySet<StepType> = new Set([
+  'password',
+  'ldap',
+  'totp',
+  'webauthn',
+  'email_otp',
+  'magic_link',
+  'social',
+]);
 
 export default function FlowStepPalette({ onAddStep }: FlowStepPaletteProps) {
   return (
@@ -39,6 +51,14 @@ export default function FlowStepPalette({ onAddStep }: FlowStepPaletteProps) {
               {meta.icon}
             </span>
             <span className="text-muted">{meta.label}</span>
+            {!SUPPORTED_STEP_TYPES.has(type) && (
+              <span
+                className="ml-auto text-xs text-subtle"
+                title="Not a flow step: consent follows the flow. A flow using it cannot be saved."
+              >
+                coming
+              </span>
+            )}
           </button>
         );
       })}
