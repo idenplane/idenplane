@@ -1,11 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import type { App } from 'supertest/types';
-import {
-  createTestApp,
-  type SeededRealm,
-  type TestContext,
-} from './setup';
+import { createTestApp, type SeededRealm, type TestContext } from './setup';
 
 describe('Rate Limiting (e2e)', () => {
   let app: INestApplication<App>;
@@ -21,14 +17,11 @@ describe('Rate Limiting (e2e)', () => {
    * rate-limit bucket.
    */
   const tokenRequest = () =>
-    request(app.getHttpServer())
-      .post(TOKEN_URL)
-      .type('form')
-      .send({
-        grant_type: 'client_credentials',
-        client_id: 'test-client',
-        client_secret: 'test-client-secret',
-      });
+    request(app.getHttpServer()).post(TOKEN_URL).type('form').send({
+      grant_type: 'client_credentials',
+      client_id: 'test-client',
+      client_secret: 'test-client-secret',
+    });
 
   beforeAll(async () => {
     ctx = await createTestApp();
@@ -56,11 +49,36 @@ describe('Rate Limiting (e2e)', () => {
     });
   };
 
+  /**
+   * A realm change reaches the guard through the realm cache, which the
+   * database announces asynchronously. Wait until the token endpoint reports
+   * `limit` (or no limit, for null) before a test relies on it; requests
+   * sent earlier would be checked against the old settings.
+   */
+  const waitForRealmLimit = async (limit: number | null) => {
+    for (let attempt = 0; attempt < 100; attempt++) {
+      const res = await tokenRequest();
+      const header = res.headers['x-ratelimit-limit'] as string | undefined;
+      if (limit === null ? header === undefined : header === String(limit)) {
+        return;
+      }
+      await new Promise((resolve) => setTimeout(resolve, 50));
+    }
+    throw new Error(`The realm's rate limit did not become ${limit}`);
+  };
+
+  /** Apply realm settings, wait until they are in force, start from zero. */
+  const applyRealmLimits = async (
+    data: Parameters<typeof ctx.prisma.realm.update>[0]['data'],
+    expectedLimit: number | null,
+  ) => {
+    await ctx.prisma.realm.update({ where: { name: REALM_NAME }, data });
+    await waitForRealmLimit(expectedLimit);
+    await resetRateLimitStore();
+  };
+
   const disableRateLimit = () =>
-    ctx.prisma.realm.update({
-      where: { name: REALM_NAME },
-      data: { rateLimitEnabled: false },
-    });
+    applyRealmLimits({ rateLimitEnabled: false }, null);
 
   // ─── 1. RATE LIMIT HEADERS ARE PRESENT WHEN ENABLED ─────────────────
 
@@ -71,16 +89,16 @@ describe('Rate Limiting (e2e)', () => {
       // guard surfaces headers for whichever bucket has the smallest
       // `remaining`. Set the client cap well above the IP cap so the IP
       // limiter is the binding one in this block (headers reflect IP=100).
-      await ctx.prisma.realm.update({
-        where: { name: REALM_NAME },
-        data: {
+      await applyRealmLimits(
+        {
           rateLimitEnabled: true,
           ipRateLimitPerMinute: 100,
           ipRateLimitPerHour: 1000,
           clientRateLimitPerMinute: 10_000,
           clientRateLimitPerHour: 100_000,
         },
-      });
+        100,
+      );
     });
 
     afterAll(disableRateLimit);
@@ -130,10 +148,7 @@ describe('Rate Limiting (e2e)', () => {
   describe('Rate limit headers absent when rate limiting is disabled', () => {
     beforeAll(async () => {
       await resetRateLimitStore();
-      await ctx.prisma.realm.update({
-        where: { name: REALM_NAME },
-        data: { rateLimitEnabled: false },
-      });
+      await applyRealmLimits({ rateLimitEnabled: false }, null);
     });
 
     it('should NOT include X-RateLimit-* headers when rate limiting is off', async () => {
@@ -154,14 +169,14 @@ describe('Rate Limiting (e2e)', () => {
 
     beforeAll(async () => {
       await resetRateLimitStore();
-      await ctx.prisma.realm.update({
-        where: { name: REALM_NAME },
-        data: {
+      await applyRealmLimits(
+        {
           rateLimitEnabled: true,
           ipRateLimitPerMinute: LOW_LIMIT,
           ipRateLimitPerHour: 1000,
         },
-      });
+        LOW_LIMIT,
+      );
     });
 
     afterAll(disableRateLimit);
@@ -201,14 +216,14 @@ describe('Rate Limiting (e2e)', () => {
 
     beforeAll(async () => {
       await resetRateLimitStore();
-      await ctx.prisma.realm.update({
-        where: { name: REALM_NAME },
-        data: {
+      await applyRealmLimits(
+        {
           rateLimitEnabled: true,
           ipRateLimitPerMinute: LOW_LIMIT,
           ipRateLimitPerHour: 1000,
         },
-      });
+        LOW_LIMIT,
+      );
     });
 
     afterAll(disableRateLimit);
@@ -243,14 +258,14 @@ describe('Rate Limiting (e2e)', () => {
       // Seed the second realm
       seeded2 = await ctx.seedTestRealm(SECOND_REALM_NAME);
 
-      await ctx.prisma.realm.update({
-        where: { name: REALM_NAME },
-        data: {
+      await applyRealmLimits(
+        {
           rateLimitEnabled: true,
           ipRateLimitPerMinute: LOW_LIMIT,
           ipRateLimitPerHour: 1000,
         },
-      });
+        LOW_LIMIT,
+      );
 
       // Second realm has rate limiting disabled — it must remain accessible
       // regardless of the first realm's exhausted bucket.
@@ -354,14 +369,11 @@ describe('Rate Limiting (e2e)', () => {
     });
 
     const clientCredsRequest = (clientId: string, clientSecret: string) =>
-      request(app.getHttpServer())
-        .post(TOKEN_URL)
-        .type('form')
-        .send({
-          grant_type: 'client_credentials',
-          client_id: clientId,
-          client_secret: clientSecret,
-        });
+      request(app.getHttpServer()).post(TOKEN_URL).type('form').send({
+        grant_type: 'client_credentials',
+        client_id: clientId,
+        client_secret: clientSecret,
+      });
 
     it('returns 429 on the (N+1)th request from the SAME client_id', async () => {
       for (let i = 0; i < PER_CLIENT_LIMIT; i++) {
