@@ -10,7 +10,7 @@ import {
 import { pickFields } from './export/field-codec.js';
 import { exportProviderConfig } from './realm-secrets.util.js';
 import {
-  openSecretJson,
+  mapSecretStrings,
   type SecretJsonShape,
 } from '../crypto/stored-secrets.js';
 import { STREAM_HEADERS_SHAPE } from '../events/audit-stream-secrets.js';
@@ -59,17 +59,30 @@ export class RealmExportService {
 
   /** A secret as the export carries it (see SecretKind). */
   private exportSecret(secret: SecretSpec, value: unknown): unknown {
+    // A secret encrypted with a key this instance no longer has (left in
+    // place with STORED_SECRETS_ACCEPT_UNREADABLE) is useless anywhere: it
+    // is left out, so the import treats it as missing.
     if (secret.kind === 'encrypted-json') {
-      return openSecretJson(
-        this.crypto,
+      return mapSecretStrings(
         value,
         SECRET_JSON_SHAPES[secret.json!],
+        (stored) => {
+          try {
+            return this.crypto.decryptSecret(stored);
+          } catch {
+            return undefined;
+          }
+        },
       );
     }
     if (typeof value !== 'string') return value;
     switch (secret.kind) {
       case 'encrypted':
-        return this.crypto.decryptSecret(value);
+        try {
+          return this.crypto.decryptSecret(value);
+        } catch {
+          return undefined;
+        }
       case 'encrypted-strict':
         // Ciphertext this instance cannot decrypt is useless anywhere: left
         // out, so the import treats the secret as missing.

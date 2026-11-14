@@ -153,7 +153,12 @@ export function exportProviderConfig(
   const reveal = (holder: Record<string, unknown>, field: string) => {
     if (!(field in holder)) return;
     if (includeSecrets && typeof holder[field] === 'string') {
-      holder[field] = crypto.decryptSecret(holder[field]);
+      try {
+        holder[field] = crypto.decryptSecret(holder[field]);
+      } catch {
+        // Encrypted with a key this instance no longer has: left out.
+        delete holder[field];
+      }
     } else {
       delete holder[field];
     }
