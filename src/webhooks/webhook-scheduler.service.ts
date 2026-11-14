@@ -68,11 +68,15 @@ interface QueuedEvent {
 @Injectable()
 export class WebhookSchedulerService {
   private readonly logger = new Logger(WebhookSchedulerService.name);
+  private stopping = false;
+  private inFlight: Promise<void> | null = null;
 
   constructor(
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
-  ) {}
+  ) {
+    prisma.onBeforeDisconnect(() => this.stop());
+  }
 
   /**
    * Typed accessor for the webhookEvent table.
@@ -90,7 +94,25 @@ export class WebhookSchedulerService {
   // ─── Scheduler tick ───────────────────────────────────────────────────────
 
   @Interval(10_000) // every 10 seconds
-  async processQueue(): Promise<void> {
+  processQueue(): Promise<void> {
+    // On shutdown, no new tick starts, and the pool closes only after the
+    // tick in flight is done: a tick that outlived the pool reopened it (or,
+    // in tests, ran after the environment was torn down).
+    if (this.stopping) return Promise.resolve();
+    if (this.inFlight) return this.inFlight;
+    this.inFlight = this.drainQueue().finally(() => {
+      this.inFlight = null;
+    });
+    return this.inFlight;
+  }
+
+  /** Stops new ticks and waits for the one in flight. */
+  async stop(): Promise<void> {
+    this.stopping = true;
+    await this.inFlight?.catch(() => undefined);
+  }
+
+  private async drainQueue(): Promise<void> {
     const now = new Date();
     const leaseExpired = new Date(now.getTime() - LEASE_MS);
 

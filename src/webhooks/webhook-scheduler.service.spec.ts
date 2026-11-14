@@ -78,6 +78,35 @@ describe('WebhookSchedulerService', () => {
 
   // ─── processQueue ─────────────────────────────────────────────────────────
 
+  describe('shutdown', () => {
+    it('waits for the tick in flight, then starts no new one', async () => {
+      let release!: (rows: unknown[]) => void;
+      prisma.webhookEvent.findMany.mockReturnValue(
+        new Promise((resolve) => {
+          release = resolve;
+        }),
+      );
+      const tick = service.processQueue();
+      // A tick that fires while one runs joins it instead of overlapping.
+      expect(service.processQueue()).toBe(tick);
+
+      let stopped = false;
+      const stopping = service.stop().then(() => {
+        stopped = true;
+      });
+      await Promise.resolve();
+      expect(stopped).toBe(false);
+
+      release([]);
+      await stopping;
+      expect(stopped).toBe(true);
+
+      prisma.webhookEvent.findMany.mockClear();
+      await service.processQueue();
+      expect(prisma.webhookEvent.findMany).not.toHaveBeenCalled();
+    });
+  });
+
   describe('processQueue', () => {
     it('should do nothing when the queue is empty', async () => {
       prisma.webhookEvent.findMany.mockResolvedValue([]);
