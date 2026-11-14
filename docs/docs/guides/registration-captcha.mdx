@@ -81,7 +81,11 @@ The submit handler is an inline script carrying the page's CSP nonce (`scriptNon
 
 An app with its own sign-up form loads the provider's script itself, renders the widget with the realm's site key and sends the token as `captchaToken` (see below). Its own Content Security Policy must then admit the origins in the table above.
 
-The admin console contains a sign-up form component (`PublicRegistrationPage`) that does this, but the console does not route to it. It reads the realm with the admin API, and the console is served under the global policy (`script-src 'self'`, no provider origins), which would block the provider's script. Serving it publicly would need a public source for the provider and site key and a policy for that route admitting the provider's origins. Use the hosted page instead.
+### Linking to sign-up from the admin console
+
+The admin console has a public sign-up entry, `/console/register/<realm>`. It needs no console sign-in and only sends the browser on to the hosted registration page, `/realms/<realm>/register`, keeping the query string, so a link like `/console/register/my-realm?client_id=web&redirect_uri=…` reaches the hosted page with those parameters. The console has no sign-up form of its own: the hosted page is the one implementation, with the CAPTCHA widget, the Content Security Policy above, terms of service and custom attributes. **Registration Settings** in the console shows the link while self-registration is on.
+
+A name that cannot be a realm path segment (empty, `.`, `..`, or with characters other than letters, digits, `-`, `.`, `_` and `~`) is not redirected.
 
 ### Custom themes
 
