@@ -53,7 +53,8 @@ const NAV_PATHS: string[] = [
  */
 const ROUTE_NAV_WHITELIST = new Set([
   '/console/login',
-  '/setup',
+  '/setup',                       // redirects to /console/setup
+  '/console/setup',                // first-run setup wizard (super-admin)
   '/console/register/:realm',      // public sign-up entry — redirects to the hosted page
   '/console/realms/:name',         // realm overview — clicked from the realm list
   '/console/realms/:name/nhi-analytics', // NHI analytics — linked from NHI list page

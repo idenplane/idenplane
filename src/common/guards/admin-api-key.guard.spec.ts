@@ -3,6 +3,8 @@ import { ConfigService } from '@nestjs/config';
 import { Reflector } from '@nestjs/core';
 import { AdminApiKeyGuard } from './admin-api-key.guard.js';
 import { CertificateBindingError } from '../../mtls/certificate-binding.js';
+import { IS_PUBLIC_KEY } from '../decorators/public.decorator.js';
+import { REQUIRE_ADMIN_AUTH_KEY } from '../decorators/require-admin-auth.decorator.js';
 
 function createMockExecutionContext(
   headers: Record<string, string> = {},
@@ -173,5 +175,118 @@ describe('AdminApiKeyGuard', () => {
     await expect(guard.canActivate(ctx)).rejects.toThrow(
       'Invalid or missing admin credentials',
     );
+  });
+  describe('differently cased /admin prefixes', () => {
+    // Express matches routes case-insensitively: these reach admin handlers.
+    it.each(['/ADMIN/realms', '/Admin/realms/x/clients', '/aDmIn', '/ADMIN/'])(
+      'rejects %s without credentials',
+      async (path) => {
+        reflector.getAllAndOverride.mockReturnValue(false);
+        configService.get.mockReturnValue('super-secret-key');
+        const ctx = createMockExecutionContext({}, path);
+
+        await expect(guard.canActivate(ctx)).rejects.toThrow(
+          UnauthorizedException,
+        );
+      },
+    );
+
+    it('still leaves /administrator-like non-admin paths alone', async () => {
+      reflector.getAllAndOverride.mockReturnValue(false);
+      const ctx = createMockExecutionContext({}, '/ADMINISTRATOR');
+
+      await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    });
+  });
+
+  describe('@RequireAdminAuth() outside /admin', () => {
+    function metadata(values: Record<string, boolean>) {
+      reflector.getAllAndOverride.mockImplementation(
+        (key: string) => values[key] ?? undefined,
+      );
+    }
+
+    it('rejects a non-admin path without credentials', async () => {
+      metadata({ [REQUIRE_ADMIN_AUTH_KEY]: true });
+      configService.get.mockReturnValue('super-secret-key');
+      const ctx = createMockExecutionContext({}, '/setup-wizard/state');
+
+      await expect(guard.canActivate(ctx)).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('rejects a non-admin path with the wrong API key', async () => {
+      metadata({ [REQUIRE_ADMIN_AUTH_KEY]: true });
+      configService.get.mockReturnValue('super-secret-key');
+      const ctx = createMockExecutionContext(
+        { 'x-admin-api-key': 'nope' },
+        '/setup-wizard/complete',
+      );
+
+      await expect(guard.canActivate(ctx)).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('accepts the API key and sets a super-admin principal', async () => {
+      metadata({ [REQUIRE_ADMIN_AUTH_KEY]: true });
+      configService.get.mockReturnValue('super-secret-key');
+      const ctx = createMockExecutionContext(
+        { 'x-admin-api-key': 'super-secret-key' },
+        '/setup-wizard/state',
+      );
+
+      await expect(guard.canActivate(ctx)).resolves.toBe(true);
+      const req = ctx.switchToHttp().getRequest();
+      expect(req.adminUser).toEqual({
+        userId: 'api-key:admin',
+        roles: ['super-admin'],
+      });
+    });
+
+    it('accepts a valid admin JWT', async () => {
+      metadata({ [REQUIRE_ADMIN_AUTH_KEY]: true });
+      adminAuthService.validateAdminToken.mockResolvedValue({
+        userId: 'u1',
+        roles: ['view-only'],
+      });
+      const ctx = createMockExecutionContext(
+        { authorization: 'Bearer good' },
+        '/setup-wizard/state',
+      );
+
+      await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    });
+
+    it('is enforced whatever the path casing', async () => {
+      metadata({ [REQUIRE_ADMIN_AUTH_KEY]: true });
+      configService.get.mockReturnValue('super-secret-key');
+      const ctx = createMockExecutionContext({}, '/SETUP-WIZARD/state');
+
+      await expect(guard.canActivate(ctx)).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('rejects when ADMIN_API_KEY is not configured', async () => {
+      metadata({ [REQUIRE_ADMIN_AUTH_KEY]: true });
+      configService.get.mockReturnValue(undefined);
+      const ctx = createMockExecutionContext(
+        { 'x-admin-api-key': 'anything' },
+        '/setup-wizard/state',
+      );
+
+      await expect(guard.canActivate(ctx)).rejects.toThrow(
+        UnauthorizedException,
+      );
+    });
+
+    it('leaves non-admin paths without the metadata open', async () => {
+      metadata({ [IS_PUBLIC_KEY]: false });
+      const ctx = createMockExecutionContext({}, '/realms/x/account');
+
+      await expect(guard.canActivate(ctx)).resolves.toBe(true);
+    });
   });
 });

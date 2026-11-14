@@ -86,7 +86,8 @@ The following variables are **required in production**. Idenplane will refuse to
 |----------|---------|----------|-------------|
 | `ADMIN_API_KEY` | — | Yes (prod) | Secret API key for admin endpoints (32+ characters recommended) |
 | `ADMIN_USER` | `admin` | No | Initial admin username (only used on first run) |
-| `ADMIN_PASSWORD` | `admin` outside production | Production, first start | Initial admin password (only used on first run). With `NODE_ENV=production` the first start refuses a missing, default or shorter-than-12-character value |
+| `ADMIN_PASSWORD` | None: generated outside production | Production, first start | Initial admin password (only used on first run). There is no default password. Outside production, an unset value gets a random password that is printed once in the log of the first start. `admin` and the documented placeholders are refused (outside production, `ALLOW_INSECURE_ADMIN_PASSWORD=true` accepts them for a throwaway local instance). With `NODE_ENV=production` the first start refuses a missing, default or shorter-than-12-character value |
+| `ALLOW_INSECURE_ADMIN_PASSWORD` | `false` | No | Outside production only: accept `admin` or a documented placeholder as `ADMIN_PASSWORD`. Never set it on an instance anyone else can reach |
 
 Generate a secure key:
 
@@ -99,8 +100,19 @@ openssl rand -hex 32
 # Production example
 ADMIN_API_KEY=REPLACE_ME_WITH_A_STRONG_RANDOM_SECRET
 ADMIN_USER=admin
-ADMIN_PASSWORD=change_this_password
+ADMIN_PASSWORD=REPLACE_WITH_OUTPUT_OF_openssl_rand_hex_24
 ```
+
+#### How the first admin password is chosen
+
+The first start creates the `master` realm and its admin (`ADMIN_USER`, default `admin`). Its password is:
+
+- `ADMIN_PASSWORD`, when it is set to a unique value. It is never written to the log.
+- Outside production, when `ADMIN_PASSWORD` is unset: a random password. The first start prints it **once** in a warning. Sign in with it and change it in the console. It is never printed again, so if you miss it, set `ADMIN_PASSWORD` on a fresh database or sign in with `ADMIN_API_KEY` and reset the password.
+- `admin` and the documented placeholders (`password`, `changeme`, `change_this_password`, `REPLACE_ME_WITH_A_STRONG_PASSWORD`) are refused, and the start fails. Outside production only, `ALLOW_INSECURE_ADMIN_PASSWORD=true` accepts them.
+- With `NODE_ENV=production`, a missing or shorter-than-12-character value is refused as well.
+
+`npm run start:prod` does not set `NODE_ENV`, so an instance run from source follows the non-production rules: it still never gets a known password. `node scripts/setup-env.cjs`, the Docker Compose files and the Helm chart all set a random `ADMIN_PASSWORD` for you.
 
 ### Webhook Encryption
 

@@ -54,10 +54,13 @@ export class AdminAuthController {
     if (this.config.get<string>('DEMO_MODE') !== 'true') {
       return { demo: false };
     }
+    // No fallback password: without ADMIN_PASSWORD the first admin got a
+    // generated one, which is never handed out here.
+    const password = this.config.get<string>('ADMIN_PASSWORD');
     return {
       demo: true,
       username: this.config.get<string>('ADMIN_USER', 'admin'),
-      password: this.config.get<string>('ADMIN_PASSWORD', 'admin'),
+      ...(password ? { password } : {}),
     };
   }
 

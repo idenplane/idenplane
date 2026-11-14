@@ -55,6 +55,9 @@ jobs:
   e2e-tests:
     name: E2E Tests
     runs-on: ubuntu-latest
+    # A hung run (out of memory in the single jest process) used to sit for
+    # the 6-hour default; a normal run takes about 6 minutes.
+    timeout-minutes: 30
     services:
       postgres:
         image: postgres:16-alpine
@@ -119,6 +122,9 @@ jobs:
           ADMIN_API_KEY: test-admin-key
           BASE_URL: http://localhost:3000
           NODE_ENV: test
+          # The suite runs in one process (maxWorkers: 1) and, at ~750 tests,
+          # outgrew Node's default heap; it then stalled instead of failing.
+          NODE_OPTIONS: --max-old-space-size=6144
         run: npm run test:e2e -- --no-cache
 
   admin-ui-tests:

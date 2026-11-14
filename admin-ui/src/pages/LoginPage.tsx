@@ -1,5 +1,5 @@
 import { useState, useEffect, type FormEvent } from 'react';
-import { useNavigate } from 'react-router';
+import { useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../hooks/useAuth';
 import apiClient from '../api/client';
 import PasswordInput from '../components/PasswordInput';
@@ -8,6 +8,29 @@ import { Button, Icons } from '../components/ui';
 const FIELD_CLASS =
   'w-full h-11 rounded-lg border border-line-strong bg-surface px-3 text-[13.5px] text-fg outline-none transition-all duration-150 placeholder:text-subtle focus:border-accent focus:shadow-[var(--shadow-focus)]';
 const LABEL_CLASS = 'mb-1.5 block text-[12.5px] font-medium text-fg';
+
+/**
+ * Where to go after signing in: the console page ProtectedRoute sent the
+ * admin here from (for example /console/setup), else the dashboard. Only a
+ * same-origin path under /console/ is accepted, never a URL.
+ */
+// eslint-disable-next-line react-refresh/only-export-components -- small pure helper, exported for its unit test.
+export function returnPath(state: unknown): string {
+  const from =
+    typeof state === 'object' && state !== null
+      ? (state as { from?: unknown }).from
+      : undefined;
+  if (
+    typeof from !== 'string' ||
+    !from.startsWith('/console/') ||
+    from.startsWith('/console/login') ||
+    from.includes('//') ||
+    from.includes('\\')
+  ) {
+    return '/console';
+  }
+  return from;
+}
 
 export default function LoginPage() {
   const [mode, setMode] = useState<'credentials' | 'apikey'>('credentials');
@@ -19,6 +42,7 @@ export default function LoginPage() {
   const [isDemo, setIsDemo] = useState(false);
   const { login, loginWithCredentials, clearAuthState } = useAuth();
   const navigate = useNavigate();
+  const location = useLocation();
 
   // On demo deployments (DEMO_MODE=true) the server returns the demo
   // credentials so we can prefill them and let visitors sign in instantly.
@@ -57,7 +81,7 @@ export default function LoginPage() {
     }
 
     if (success) {
-      navigate('/console');
+      navigate(returnPath(location.state));
     }
     setLoading(false);
   }

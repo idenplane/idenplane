@@ -6,19 +6,96 @@ import {
   HttpException,
   HttpStatus,
 } from '@nestjs/common';
+import { GUARDS_METADATA, PATH_METADATA } from '@nestjs/common/constants';
 import { ConfigService } from '@nestjs/config';
 import type { Request, Response } from 'express';
 import { Reflector } from '@nestjs/core';
 import { timingSafeEqual } from 'crypto';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator.js';
+import { REQUIRE_ADMIN_AUTH_KEY } from '../decorators/require-admin-auth.decorator.js';
 import { AdminAuthService } from '../../admin-auth/admin-auth.service.js';
 import { RateLimitService } from '../../rate-limit/rate-limit.service.js';
 import type { RateLimitResult } from '../../rate-limit/rate-limit.dto.js';
 import { resolveClientIp } from '../utils/proxy-ip.util.js';
 import { CertificateBindingError } from '../../mtls/certificate-binding.js';
 
+/** Reads metadata from a handler or class; nothing for anything else. */
+function metadataOf(key: string, target: unknown): unknown {
+  return typeof target === 'function' || (typeof target === 'object' && target)
+    ? Reflect.getMetadata(key, target)
+    : undefined;
+}
+
+/** `admin` or `admin/...`, ignoring leading slashes and case. */
+function isAdminPath(path: string): boolean {
+  let start = 0;
+  while (path[start] === '/') start += 1;
+  const normalized = path.slice(start).toLowerCase();
+  return normalized === 'admin' || normalized.startsWith('admin/');
+}
+
 @Injectable()
 export class AdminApiKeyGuard implements CanActivate {
+  /**
+   * Whether this request needs admin credentials. Fails closed: any one of
+   * these is enough.
+   *
+   * 1. The request path, in lower case, is `/admin` or under `/admin/`.
+   *    Express matches routes case-insensitively, so `/ADMIN/realms`
+   *    reaches the `/admin/realms` handler with `request.path` unchanged.
+   * 2. The matched controller is declared under `admin` — whatever form the
+   *    URL took, the handler that runs is an admin handler.
+   * 3. The handler or controller has `@RequireAdminAuth()`.
+   * 4. The handler or controller names this guard in `@UseGuards(...)`: an
+   *    explicit `@UseGuards(AdminApiKeyGuard)` always means admin auth,
+   *    whatever the path (it used to do nothing off `/admin`).
+   *
+   * `@Public()` is checked before this and still wins.
+   */
+  private mustEnforce(context: ExecutionContext, request: Request): boolean {
+    const handler: unknown = context.getHandler();
+    const controller: unknown = context.getClass();
+
+    // 1. The URL.
+    if (isAdminPath(request.path ?? '')) return true;
+
+    // 2. The controller's declared path (a string or an array of them).
+    const declared = metadataOf(PATH_METADATA, controller);
+    const paths = Array.isArray(declared) ? declared : [declared];
+    if (paths.some((p) => typeof p === 'string' && isAdminPath(p))) {
+      return true;
+    }
+
+    // 3. @RequireAdminAuth().
+    if (
+      this.reflector.getAllAndOverride<boolean>(REQUIRE_ADMIN_AUTH_KEY, [
+        handler as never,
+        controller as never,
+      ]) === true
+    ) {
+      return true;
+    }
+
+    // 4. An explicit @UseGuards(AdminApiKeyGuard), as the class or an instance.
+    for (const target of [handler, controller]) {
+      const guards = metadataOf(GUARDS_METADATA, target);
+      if (
+        Array.isArray(guards) &&
+        guards.some(
+          (g: unknown) =>
+            g === AdminApiKeyGuard ||
+            g instanceof AdminApiKeyGuard ||
+            (typeof g === 'function' &&
+              g.prototype instanceof AdminApiKeyGuard),
+        )
+      ) {
+        return true;
+      }
+    }
+
+    return false;
+  }
+
   constructor(
     private readonly configService: ConfigService,
     private readonly reflector: Reflector,
@@ -36,10 +113,7 @@ export class AdminApiKeyGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<Request>();
     const response = context.switchToHttp().getResponse<Response>();
 
-    // Only enforce auth on admin routes: /admin exactly, or /admin/...
-    const isAdminRoute =
-      request.path === '/admin' || request.path.startsWith('/admin/');
-    if (!isAdminRoute) {
+    if (!this.mustEnforce(context, request)) {
       return true;
     }
 

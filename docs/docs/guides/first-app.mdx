@@ -14,11 +14,11 @@ If you have not installed Idenplane yet, start with [Installation](/getting-star
 
 ## The fast path: the setup wizard
 
-A fresh instance serves a six-step wizard at **`/setup`** that does all of this for you:
+A fresh instance serves a six-step wizard in the admin console at **`/console/setup`** that does all of this for you. Sign in first as a super-admin: the initial admin from `ADMIN_USER` / `ADMIN_PASSWORD`, or the `ADMIN_API_KEY`. The wizard API (`/setup-wizard/*`) accepts the same credentials as the Admin API and only the `super-admin` role.
 
 | Step | What it does |
 |---|---|
-| 1. Create Admin Account | Replaces the default `admin` / `admin` |
+| 1. Create Admin Account | The admin user of the new realm |
 | 2. Configure Realm Settings | Names the realm and sets its basics |
 | 3. Setup SMTP | Optional — skip it if you are not sending email yet |
 | 4. Create First Client | Registers a public OAuth client |
@@ -26,6 +26,8 @@ A fresh instance serves a six-step wizard at **`/setup`** that does all of this 
 | 6. Test Authentication | Runs a login against what you just built |
 
 Step 6 is the part worth not skipping: it proves the whole chain works before you write any of your own code.
+
+The wizard runs once. After it is completed or skipped, every write to it answers `409 Conflict` ("Setup is already complete") and the console page links to the console instead of showing the form. `POST /setup-wizard/reset` only clears the answers of a wizard still in progress; it never touches realms or users, and it is refused after setup too.
 
 The rest of this page is the same thing done by hand — useful if the wizard has already been completed, or if you are scripting a new environment.
 

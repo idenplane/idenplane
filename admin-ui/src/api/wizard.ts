@@ -17,6 +17,10 @@ export interface WizardStepInfo {
   required: boolean;
 }
 
+/**
+ * The wizard state as the server returns it. It never carries the admin's
+ * password hash or a client secret; the SMTP password is a placeholder.
+ */
 export interface WizardState {
   id: string;
   completed: boolean;
@@ -24,12 +28,10 @@ export interface WizardState {
   currentStep: number;
   adminUsername: string | null;
   adminEmail: string | null;
-  adminPasswordHash: string | null;
   realmName: string | null;
   realmDisplayName: string | null;
   smtpConfig: SmtpConfig | null;
   clientId: string | null;
-  clientSecret: string | null;
   redirectUris: string[] | null;
   sdkGenerated: boolean;
   createdAt: string;
@@ -133,8 +135,11 @@ export async function testSmtp(testData: SmtpTestData): Promise<SmtpTestResult> 
   return data;
 }
 
-export async function saveClient(client: ClientData): Promise<WizardState> {
-  const { data } = await rootClient.post<WizardState>(
+/** The wizard state plus the new client's secret, shown this once. */
+export type SavedClient = WizardState & { clientSecret: string };
+
+export async function saveClient(client: ClientData): Promise<SavedClient> {
+  const { data } = await rootClient.post<SavedClient>(
     '/setup-wizard/client',
     client,
   );
@@ -158,8 +163,9 @@ export async function skipWizard(): Promise<WizardState> {
   return data;
 }
 
-export async function resetWizard(): Promise<{ message: string }> {
-  const { data } = await rootClient.post<{ message: string }>(
+/** Clears the answers of a wizard in progress; refused once setup is done. */
+export async function resetWizard(): Promise<WizardState> {
+  const { data } = await rootClient.post<WizardState>(
     '/setup-wizard/reset',
   );
   return data;

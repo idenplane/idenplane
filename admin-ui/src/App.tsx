@@ -1,4 +1,4 @@
-import { Routes, Route, Navigate, Outlet } from 'react-router';
+import { Routes, Route, Navigate, Outlet, useLocation } from 'react-router';
 import { lazy, Suspense, useEffect } from 'react';
 import ErrorBoundary from './components/ErrorBoundary';
 import Layout from './components/Layout';
@@ -45,7 +45,7 @@ const LoginEventsPage = lazy(() => import('./pages/events/LoginEventsPage'));
 const AdminEventsPage = lazy(() => import('./pages/events/AdminEventsPage'));
 const AuthFlowListPage = lazy(() => import('./pages/auth-flows/AuthFlowListPage'));
 const AuthFlowEditorPage = lazy(() => import('./pages/auth-flows/AuthFlowEditorPage'));
-const SetupWizardPage = lazy(() => import('./pages/setup-wizard/SetupWizardPage'));
+const SetupWizardRoute = lazy(() => import('./pages/setup-wizard/SetupWizardRoute'));
 const MigrationWizardPage = lazy(() => import('./pages/migration/MigrationWizardPage'));
 const PendingRegistrationsPage = lazy(() => import('./pages/registration/PendingRegistrationsPage'));
 const RegistrationFieldsPage = lazy(() => import('./pages/registration/RegistrationFieldsPage'));
@@ -82,6 +82,7 @@ const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 
 function ProtectedRoute() {
   const { bootstrapped } = useAuthContext();
+  const location = useLocation();
   // Wait for the bootstrap refresh call to complete before deciding to redirect.
   // Without this, a page reload would always redirect to login even when a valid
   // admin_rt cookie exists (fixes #1095).
@@ -89,7 +90,9 @@ function ProtectedRoute() {
     return null;
   }
   if (!hasCredentials()) {
-    return <Navigate to="/console/login" replace />;
+    // Remember where the admin was going, so signing in returns there
+    // (for example to /console/setup).
+    return <Navigate to="/console/login" replace state={{ from: location.pathname }} />;
   }
   return <Outlet />;
 }
@@ -119,11 +122,15 @@ export default function App() {
     <Suspense fallback={<PageFallback />}>
     <Routes>
       <Route path="/console/login" element={<LoginPage />} />
-      <Route path="/setup" element={<SetupWizardPage />} />
       {/* Public: hands over to the hosted sign-up page of the realm. */}
       <Route path="/console/register/:realm" element={<SignUpRedirectPage />} />
 
       <Route element={<ProtectedRoute />}>
+        {/* The setup wizard is super-admin only: sign in first, then the
+            page checks with the server whether setup is still open. Full
+            screen, so outside Layout. */}
+        <Route path="/console/setup" element={<SetupWizardRoute />} />
+        <Route path="/setup" element={<Navigate to="/console/setup" replace />} />
         <Route element={<Layout />}>
           <Route path="/console" element={<DashboardPage />} />
           <Route path="/console/realms" element={<RealmListPage />} />
