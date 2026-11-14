@@ -1,6 +1,7 @@
 import type { Params } from 'nestjs-pino';
 import { randomUUID } from 'crypto';
 import { SENSITIVE_BODY_FIELDS } from '../security/sensitive-body-fields.js';
+import { redactUrl } from './redact-url.js';
 
 /**
  * Which requests get an access-log line (LOG_ACCESS):
@@ -64,7 +65,8 @@ export function createLoggerConfig(): Params {
         ) => ({
           id: req.id,
           method: req.method,
-          url: req.url,
+          // Tokens, codes and secrets in the URL never reach the log.
+          url: redactUrl(req.url),
         }),
         res: (res: { statusCode?: number }) => ({
           statusCode: res.statusCode,
