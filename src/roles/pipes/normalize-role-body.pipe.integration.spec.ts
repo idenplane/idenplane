@@ -26,6 +26,10 @@ class ProbeController {
 @Module({ controllers: [ProbeController] })
 class ProbeModule {}
 
+// A full Nest HTTP app per suite: the first request after init can take
+// several seconds on slow CI machines (it timed out at 5 s on macOS).
+jest.setTimeout(30_000);
+
 describe('NormalizeRoleBodyPipe (integration — full HTTP pipeline)', () => {
   let app: INestApplication;
 
