@@ -70,6 +70,15 @@ export class GroupsService {
     if (dto.parentId === groupId) {
       throw new ConflictException('A group cannot be its own parent');
     }
+    // A parent id alone could name a group of any realm, whose roles the
+    // members would then inherit.
+    if (dto.parentId) {
+      const parent = await this.prisma.group.findFirst({
+        where: { id: dto.parentId, realmId: realm.id },
+        select: { id: true },
+      });
+      if (!parent) throw new NotFoundException('Parent group not found');
+    }
 
     return this.prisma.group.update({
       where: { id: groupId },
@@ -138,8 +147,14 @@ export class GroupsService {
   }
 
   async removeUserFromGroup(realm: Realm, userId: string, groupId: string) {
+    // Both ids must be of this realm: either could name another realm's.
     await this.prisma.userGroup.deleteMany({
-      where: { userId, groupId },
+      where: {
+        userId,
+        groupId,
+        user: { realmId: realm.id },
+        group: { realmId: realm.id },
+      },
     });
   }
 

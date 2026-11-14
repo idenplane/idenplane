@@ -98,6 +98,12 @@ describe('Admin RBAC (e2e)', () => {
 
     realmAId = (await ctx.seedTestRealm(REALM_A)).realm.id;
     realmBId = (await ctx.seedTestRealm(REALM_B)).realm.id;
+    // So that impersonating a user of another realm fails on the user, not
+    // on the realm setting (set before any request caches the realm).
+    await ctx.prisma.realm.update({
+      where: { id: realmAId },
+      data: { impersonationEnabled: true },
+    });
 
     const master = await masterRealm();
     const roleId = (name: string) => {
@@ -346,6 +352,122 @@ describe('Admin RBAC (e2e)', () => {
       await get('realmAdmin', `/realms/${REALM_B}/registration/pending`).expect(
         403,
       );
+    });
+  });
+
+  describe('child ids from another realm', () => {
+    // A realm-admin of A puts A in the path and an id from B or master in
+    // the rest: every such request must miss, and change nothing.
+    it('cannot reach users of another realm through its own', async () => {
+      const a = `/admin/realms/${REALM_A}/users/${ids.super}`;
+      await put('realmAdmin', `${a}/reset-password`, {
+        password: 'Sample-Reset-Pa55word!',
+      }).expect(404);
+      await post('realmAdmin', `${a}/impersonate`).expect(404);
+      await post('realmAdmin', `${a}/role-mappings/realm`, [
+        { name: 'offline_access' },
+      ]).expect(404);
+      await get(
+        'realmAdmin',
+        `/admin/realms/${REALM_A}/continuous-verification/behavioral/${ids.super}`,
+      ).expect(404);
+      await get(
+        'realmAdmin',
+        `/admin/realms/${REALM_A}/continuous-verification/user/${ids.super}/summary`,
+      ).expect(404);
+      // The super-admin can still sign in with its own password.
+      await login(USERS.super);
+    });
+
+    it('cannot change groups, mappers, themes or SCIM mappings of another realm', async () => {
+      const userB = await ctx.prisma.user.findFirstOrThrow({
+        where: { realmId: realmBId, username: 'testuser' },
+      });
+      const groupB = await ctx.prisma.group.create({
+        data: { realmId: realmBId, name: `b-group-${Date.now()}` },
+      });
+      await ctx.prisma.userGroup.create({
+        data: { userId: userB.id, groupId: groupB.id },
+      });
+      const groupA = await ctx.prisma.group.create({
+        data: { realmId: realmAId, name: `a-group-${Date.now()}` },
+      });
+      const scopeA = await ctx.prisma.clientScope.create({
+        data: { realmId: realmAId, name: `a-scope-${Date.now()}` },
+      });
+      const scopeB = await ctx.prisma.clientScope.create({
+        data: { realmId: realmBId, name: `b-scope-${Date.now()}` },
+      });
+      const mapperB = await ctx.prisma.protocolMapper.create({
+        data: {
+          clientScopeId: scopeB.id,
+          name: 'b-mapper',
+          mapperType: 'oidc-usermodel-attribute-mapper',
+          config: { 'claim.name': 'sample' },
+        },
+      });
+      const themeB = await ctx.prisma.theme.create({
+        data: { realmId: realmBId, name: `b-theme-${Date.now()}` },
+      });
+      const a = `/admin/realms/${REALM_A}`;
+
+      // Removing a membership is idempotent (204), and here removes nothing.
+      await del(
+        'realmAdmin',
+        `${a}/users/${userB.id}/groups/${groupB.id}`,
+      ).expect(204);
+      expect(
+        await ctx.prisma.userGroup.count({
+          where: { userId: userB.id, groupId: groupB.id },
+        }),
+      ).toBe(1);
+
+      await put('realmAdmin', `${a}/groups/${groupA.id}`, {
+        parentId: groupB.id,
+      }).expect(404);
+      expect(
+        (await ctx.prisma.group.findUniqueOrThrow({ where: { id: groupA.id } }))
+          .parentId,
+      ).toBeNull();
+
+      const mapperPath = `${a}/client-scopes/${scopeA.id}/protocol-mappers/${mapperB.id}`;
+      await put('realmAdmin', mapperPath, {
+        name: 'taken-over',
+        config: { 'claim.name': 'sub' },
+      }).expect(404);
+      await del('realmAdmin', mapperPath).expect(404);
+      expect(
+        await ctx.prisma.protocolMapper.findUniqueOrThrow({
+          where: { id: mapperB.id },
+        }),
+      ).toMatchObject({ name: 'b-mapper', config: { 'claim.name': 'sample' } });
+
+      await put('realmAdmin', `${a}/themes/${themeB.id}`, {
+        displayName: 'taken-over',
+      }).expect(404);
+      await post('realmAdmin', `${a}/themes/${themeB.id}/publish`).expect(404);
+      await get('realmAdmin', `${a}/themes/${themeB.id}/versions`).expect(404);
+      expect(
+        await ctx.prisma.theme.findUniqueOrThrow({ where: { id: themeB.id } }),
+      ).toMatchObject({ published: false });
+
+      const mappingB = await ctx.prisma.scimAttributeMapping.create({
+        data: {
+          realmId: realmBId,
+          resourceType: 'User',
+          scimAttribute: 'title',
+          idenplaneAttribute: 'title',
+        },
+      });
+      await del(
+        'realmAdmin',
+        `${a}/scim/attribute-mappings/${mappingB.id}`,
+      ).expect(404);
+      expect(
+        await ctx.prisma.scimAttributeMapping.count({
+          where: { id: mappingB.id },
+        }),
+      ).toBe(1);
     });
   });
 

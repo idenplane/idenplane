@@ -44,6 +44,21 @@ export class ThemeController {
     private readonly uploadService: ThemeUploadService,
   ) {}
 
+  /**
+   * 404 unless the theme is one of this realm's: a theme id alone could
+   * name another realm's theme.
+   */
+  private async requireTheme(realmName: string, themeId: string) {
+    const realmId = await this.getRealmId(realmName);
+    const theme = await this.prisma.theme.findFirst({
+      where: { id: themeId, realmId },
+      select: { id: true },
+    });
+    if (!theme) {
+      throw new NotFoundException(`Theme with ID '${themeId}' not found`);
+    }
+  }
+
   private async getRealmId(realmName: string): Promise<string> {
     const realm = await this.prisma.realm.findUnique({
       where: { name: realmName },
@@ -99,9 +114,9 @@ export class ThemeController {
     @Param('realmName') realmName: string,
     @Param('themeId') themeId: string,
   ) {
-    await this.getRealmId(realmName); // Verify realm exists
+    const realmId = await this.getRealmId(realmName);
     const theme = await this.themeService.findById(themeId);
-    if (!theme) {
+    if (!theme || theme.realmId !== realmId) {
       return { error: 'Theme not found' };
     }
     return theme;
@@ -121,7 +136,7 @@ export class ThemeController {
     @Param('themeId') themeId: string,
     @Body() dto: UpdateThemeDto,
   ) {
-    await this.getRealmId(realmName); // Verify realm exists
+    await this.requireTheme(realmName, themeId);
     return this.themeService.updateTheme(themeId, dto);
   }
 
@@ -142,7 +157,7 @@ export class ThemeController {
     @Param('realmName') realmName: string,
     @Param('themeId') themeId: string,
   ) {
-    await this.getRealmId(realmName); // Verify realm exists
+    await this.requireTheme(realmName, themeId);
     await this.themeService.deleteTheme(themeId);
   }
 
@@ -159,7 +174,7 @@ export class ThemeController {
     @Param('realmName') realmName: string,
     @Param('themeId') themeId: string,
   ) {
-    await this.getRealmId(realmName); // Verify realm exists
+    await this.requireTheme(realmName, themeId);
     return this.themeService.publishTheme(themeId);
   }
 
@@ -174,7 +189,7 @@ export class ThemeController {
     @Param('realmName') realmName: string,
     @Param('themeId') themeId: string,
   ) {
-    await this.getRealmId(realmName); // Verify realm exists
+    await this.requireTheme(realmName, themeId);
     return this.themeService.getVersionHistory(themeId);
   }
 
@@ -193,7 +208,7 @@ export class ThemeController {
     @Param('themeId') themeId: string,
     @Param('version') version: number,
   ) {
-    await this.getRealmId(realmName); // Verify realm exists
+    await this.requireTheme(realmName, themeId);
     return this.themeService.restoreVersion(themeId, version);
   }
 

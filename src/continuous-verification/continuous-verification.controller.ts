@@ -6,6 +6,7 @@ import {
   Query,
   Body,
   NotFoundException,
+  BadRequestException,
   ParseIntPipe,
   DefaultValuePipe,
 } from '@nestjs/common';
@@ -386,7 +387,8 @@ export class ContinuousVerificationController {
     @Param('realmName') realmName: string,
     @Param('userId') userId: string,
   ) {
-    const _realm = await this.requireRealm(realmName);
+    const realm = await this.requireRealm(realmName);
+    await this.requireUserInRealm(realm.id, userId);
 
     const profile = await this.prisma.behavioralBiometricProfile.findUnique({
       where: { userId },
@@ -422,6 +424,7 @@ export class ContinuousVerificationController {
     @Param('userId') userId: string,
   ) {
     const realm = await this.requireRealm(realmName);
+    await this.requireUserInRealm(realm.id, userId);
     const since = new Date(Date.now() - 30 * 24 * 60 * 60 * 1000);
 
     const [sessionProfiles, behavioralProfile, recentEvents, biometricSamples] =
@@ -553,11 +556,15 @@ export class ContinuousVerificationController {
     },
   ) {
     const realm = await this.requireRealm(realmName);
+    const session = await this.requireSessionInRealm(realm.id, body.sessionId);
+    if (body.userId !== undefined && body.userId !== session.userId) {
+      throw new BadRequestException('userId does not match the session');
+    }
 
     await this.riskAssessment.recordDevicePosture(
       body.sessionId,
       realm.id,
-      body.userId,
+      session.userId,
       body.deviceFingerprint,
       {
         osType: body.osType,
@@ -646,13 +653,11 @@ export class ContinuousVerificationController {
   ) {
     const realm = await this.requireRealm(realmName);
 
-    // Get session info to find userId
-    const session = await this.prisma.session.findUnique({
-      where: { id: body.sessionId },
-      select: { userId: true },
-    });
-
-    const userId = session?.userId ?? 'unknown';
+    // The session must be of this realm: its user's baseline is what changes.
+    const { userId } = await this.requireSessionInRealm(
+      realm.id,
+      body.sessionId,
+    );
 
     // Record each sample
     for (const sample of body.samples) {
@@ -726,14 +731,11 @@ export class ContinuousVerificationController {
   ) {
     const realm = await this.requireRealm(realmName);
 
-    // Get session info
-    const session = await this.prisma.session.findUnique({
-      where: { id: body.sessionId },
-      select: { userId: true },
-    });
+    // The session must be of this realm.
+    const session = await this.requireSessionInRealm(realm.id, body.sessionId);
 
     // Record via network context service
-    if (body.ipAddress && session?.userId) {
+    if (body.ipAddress) {
       await this.networkContext.captureNetworkContext(
         body.sessionId,
         realm.id,
@@ -749,6 +751,28 @@ export class ContinuousVerificationController {
   }
 
   // ── Private ────────────────────────────────────────────────────────────────
+
+  /** 404 unless the user is of this realm: a user id alone could be any realm's. */
+  private async requireUserInRealm(realmId: string, userId: string) {
+    const user = await this.prisma.user.findFirst({
+      where: { id: userId, realmId },
+      select: { id: true },
+    });
+    if (!user) throw new NotFoundException(`User '${userId}' not found`);
+  }
+
+  /** The session, if it is a session of a user of this realm; 404 otherwise. */
+  private async requireSessionInRealm(realmId: string, sessionId: unknown) {
+    const session =
+      typeof sessionId === 'string' && sessionId.length > 0
+        ? await this.prisma.session.findFirst({
+            where: { id: sessionId, user: { realmId } },
+            select: { userId: true },
+          })
+        : null;
+    if (!session) throw new NotFoundException('Session not found');
+    return session;
+  }
 
   private async requireRealm(realmName: string) {
     const realm = await this.prisma.realm.findUnique({

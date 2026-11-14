@@ -211,6 +211,7 @@ export function createMockPrismaService(): MockPrismaService {
     },
     protocolMapper: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       findMany: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),

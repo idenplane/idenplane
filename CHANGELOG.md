@@ -26,6 +26,13 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
   Roles and realm assignments are read from the database on every request. Taking a role away, removing an assignment or disabling an admin applies to the next request, even with a live token. A realm that doesn't exist answers `403` to anyone but a super-admin, so realm names can't be probed. A fitness test fails when an admin route has no resolvable policy. See [Admin Roles](https://idenplane.com/getting-started/admin-roles).
 - **Realm-admins are scoped to assigned realms.** A new `admin_realm_assignments` table stores them. A super-admin manages it through `/admin/admin-accounts` and the console's **Admin Accounts** page. A database trigger and the API both refuse the master realm, which would let a realm-admin grant itself `super-admin`. Assignments survive a realm rename and an overwriting realm import. They are never exported.
+- **Ids in a realm route must belong to that realm.** With realm scope, `/admin/realms/A/...` must never reach another realm's data. Some routes checked only the realm in the path and then used the child id alone, so an admin could act on another realm's data through a realm it was allowed to manage. They now check the child id too, and answer `404` for an id from another realm:
+  - updating or deleting a protocol mapper (`client-scopes/{scopeId}/protocol-mappers/{mapperId}`);
+  - removing a user from a group;
+  - setting a group's `parentId`, which would have let members inherit roles from another realm's group;
+  - reading, updating, publishing, listing versions of, or restoring a theme;
+  - deleting a SCIM attribute mapping;
+  - the continuous-verification reads of a user's behavioral biometrics and risk summary, and the posture, behavioral-sample and network-context writes for a session.
 - **Clearing login events or NHI audit logs is super-admin only**, so a realm-admin can't erase the audit trail of the realm it changes.
 - **Realm-admins can manage users, and view-only admins can read them.** The users and theme routes required a role named `admin`, which doesn't exist, so they were super-admin only in practice. Deleting a user or a theme stays super-admin only.
 

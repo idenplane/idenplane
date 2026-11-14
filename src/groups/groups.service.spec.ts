@@ -206,6 +206,21 @@ describe('GroupsService', () => {
         service.update(mockRealm, 'group-1', { parentId: 'group-1' }),
       ).rejects.toThrow(ConflictException);
     });
+
+    it('refuses a parent group of another realm', async () => {
+      prisma.group.findFirst
+        .mockResolvedValueOnce(mockGroup) // the group itself, in this realm
+        .mockResolvedValueOnce(null); // the parent, not in this realm
+
+      await expect(
+        service.update(mockRealm, 'group-1', { parentId: 'foreign-group' }),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.group.findFirst).toHaveBeenLastCalledWith({
+        where: { id: 'foreign-group', realmId: mockRealm.id },
+        select: { id: true },
+      });
+      expect(prisma.group.update).not.toHaveBeenCalled();
+    });
   });
 
   // ─── delete ─────────────────────────────────────────────
@@ -301,8 +316,14 @@ describe('GroupsService', () => {
 
       await service.removeUserFromGroup(mockRealm, 'user-1', 'group-1');
 
+      // Both ids are tied to the path realm.
       expect(prisma.userGroup.deleteMany).toHaveBeenCalledWith({
-        where: { userId: 'user-1', groupId: 'group-1' },
+        where: {
+          userId: 'user-1',
+          groupId: 'group-1',
+          user: { realmId: mockRealm.id },
+          group: { realmId: mockRealm.id },
+        },
       });
     });
   });
