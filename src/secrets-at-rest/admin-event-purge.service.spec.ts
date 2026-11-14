@@ -59,6 +59,7 @@ function fakeDb(events: Array<{ id: string; representation: unknown }>) {
   });
   const prisma = {
     $transaction: jest.fn((fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
+    onBeforeDisconnect: jest.fn(),
   };
   return { prisma, updates, task: () => task };
 }
@@ -110,6 +111,18 @@ describe('AdminEventPurgeService', () => {
     (prisma.$transaction as jest.Mock).mockImplementation(tx);
     const resumed = await service.run();
     expect(resumed.scanned).toBe(10);
+  });
+
+  it('stops before the pool closes: no batch starts after shutdown', async () => {
+    const { prisma } = fakeDb(events(ADMIN_EVENT_PURGE_BATCH * 3, 1));
+    const service = new AdminEventPurgeService(prisma as any);
+    const stop = (prisma.onBeforeDisconnect as jest.Mock).mock.calls[0][0];
+    service.onApplicationBootstrap();
+    await stop();
+    const batches = (prisma.$transaction as jest.Mock).mock.calls.length;
+    expect(batches).toBeLessThan(3);
+    await new Promise((r) => setImmediate(r));
+    expect((prisma.$transaction as jest.Mock).mock.calls.length).toBe(batches);
   });
 
   it('starts over when the stored walk belongs to an older version', async () => {

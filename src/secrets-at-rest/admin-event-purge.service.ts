@@ -2,7 +2,7 @@ import {
   Injectable,
   Logger,
   OnApplicationBootstrap,
-  OnApplicationShutdown,
+  OnModuleDestroy,
 } from '@nestjs/common';
 import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -62,13 +62,17 @@ export interface PurgeResult {
  */
 @Injectable()
 export class AdminEventPurgeService
-  implements OnApplicationBootstrap, OnApplicationShutdown
+  implements OnApplicationBootstrap, OnModuleDestroy
 {
   private readonly logger = new Logger(AdminEventPurgeService.name);
   private running?: Promise<void>;
   private stopping = false;
 
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(private readonly prisma: PrismaService) {
+    // Stop before the pool closes: a batch started after it would reopen
+    // the pool and keep the process alive.
+    prisma.onBeforeDisconnect(() => this.onModuleDestroy());
+  }
 
   onApplicationBootstrap(): void {
     this.running = this.run().then(
@@ -87,8 +91,8 @@ export class AdminEventPurgeService
     );
   }
 
-  /** Lets an in-flight batch finish before the connection pool closes. */
-  async onApplicationShutdown(): Promise<void> {
+  /** Lets an in-flight batch finish, and starts no other. */
+  async onModuleDestroy(): Promise<void> {
     this.stopping = true;
     await this.running;
   }
