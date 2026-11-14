@@ -3,6 +3,7 @@ import { useQuery, keepPreviousData } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router';
 import { getUsers } from '../../api/users';
 import { getErrorMessage } from '../../utils/getErrorMessage';
+import { CanWrite } from '../../components/PermissionGate';
 import { SectionHeader, Button, Card, Badge, Alert, EmptyState, Icons, cn } from '../../components/ui';
 
 const PAGE_SIZE = 20;
@@ -47,12 +48,14 @@ export default function UserListPage() {
           </>
         }
         action={
-          <Button
-            icon={Icons.Plus}
-            onClick={() => navigate(`/console/realms/${name}/users/create`)}
-          >
-            Create User
-          </Button>
+          <CanWrite>
+            <Button
+              icon={Icons.Plus}
+              onClick={() => navigate(`/console/realms/${name}/users/create`)}
+            >
+              Create User
+            </Button>
+          </CanWrite>
         }
       />
 

@@ -25,6 +25,14 @@ import { RateLimitGuard } from '../rate-limit/rate-limit.guard.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 import { AdminLoginDto } from './dto/login.dto.js';
 import { AdminApiKeyLoginDto } from './dto/api-key-login.dto.js';
+import { AdminScope } from '../common/decorators/admin-access.decorator.js';
+import { AdminPrincipalService } from '../admin-rbac/admin-principal.service.js';
+import {
+  REALM_ADMIN,
+  SUPER_ADMIN,
+  VIEW_ONLY,
+  type AdminPrincipal,
+} from '../admin-rbac/admin-access-policy.js';
 
 const ADMIN_RT_COOKIE = 'admin_rt';
 const TOKEN_TTL_MS = 3600 * 1000;
@@ -38,6 +46,7 @@ export class AdminAuthController {
   constructor(
     private readonly adminAuthService: AdminAuthService,
     private readonly config: ConfigService,
+    private readonly principals: AdminPrincipalService,
   ) {}
 
   @Get('demo-info')
@@ -186,18 +195,37 @@ export class AdminAuthController {
     return { message: 'Logged out' };
   }
 
+  /**
+   * Who am I: the signed-in admin's roles and realm scope, as the
+   * authorization step sees them (from the database, not the token). Not
+   * public: authentication must run so that there is someone to describe.
+   */
   @Get('me')
-  @Public()
-  @ApiOperation({ summary: 'Get current admin user info' })
+  @AdminScope('self')
+  @ApiOperation({ summary: 'Get the signed-in admin, its roles and scope' })
   @ApiResponse({ status: 200, description: 'Current admin user info' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  getMe(@Req() req: Request) {
-    const adminUser = (
-      req as Request & { adminUser?: { userId: string; roles: string[] } }
-    )['adminUser'];
-    if (!adminUser) {
+  async getMe(@Req() req: Request) {
+    const principal = (req as Request & { adminPrincipal?: AdminPrincipal })
+      .adminPrincipal;
+    if (!principal) {
       throw new UnauthorizedException('Not authenticated');
     }
-    return adminUser;
+    const superAdmin = principal.roles.includes(SUPER_ADMIN);
+    return {
+      userId: principal.userId,
+      username: principal.username,
+      kind: principal.kind,
+      roles: principal.roles,
+      superAdmin,
+      /** Reads every realm (super-admin or view-only). */
+      readAllRealms: superAdmin || principal.roles.includes(VIEW_ONLY),
+      /** Changes every realm and runs server-wide operations. */
+      writeAllRealms: superAdmin,
+      /** Realms managed as a realm-admin (never master). */
+      managedRealms: principal.roles.includes(REALM_ADMIN)
+        ? await this.principals.realmNames(principal.realmIds)
+        : [],
+    };
   }
 }

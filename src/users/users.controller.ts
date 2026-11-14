@@ -79,7 +79,6 @@ export class UsersController {
   constructor(private readonly usersService: UsersService) {}
 
   @Post()
-  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({ summary: 'Create a user in a realm' })
   @ApiResponse({ status: 201, description: 'User created successfully' })
   @ApiResponse({ status: 400, description: 'Invalid request body' })
@@ -89,7 +88,6 @@ export class UsersController {
   }
 
   @Get()
-  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({ summary: 'List users in a realm' })
   @ApiResponse({ status: 200, description: 'List of users' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -134,7 +132,6 @@ export class UsersController {
   }
 
   @Get(':userId')
-  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({ summary: 'Get a user by ID' })
   @ApiResponse({ status: 200, description: 'User details' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -144,7 +141,6 @@ export class UsersController {
   }
 
   @Put(':userId')
-  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({ summary: 'Update a user' })
   @ApiResponse({ status: 200, description: 'User updated successfully' })
   @ApiResponse({ status: 400, description: 'Invalid request body' })
@@ -159,7 +155,6 @@ export class UsersController {
   }
 
   @Patch(':userId')
-  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({ summary: 'Partially update a user' })
   @ApiResponse({ status: 200, description: 'User updated successfully' })
   @ApiResponse({ status: 400, description: 'Invalid request body' })
@@ -185,7 +180,6 @@ export class UsersController {
   }
 
   @Put(':userId/reset-password')
-  @RequireAdminRoles(['super-admin', 'admin'])
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Set a user password' })
   @ApiResponse({ status: 204, description: 'Password updated successfully' })
@@ -201,7 +195,6 @@ export class UsersController {
   }
 
   @Post(':userId/send-verification-email')
-  @RequireAdminRoles(['super-admin', 'admin'])
   @HttpCode(HttpStatus.OK)
   @ApiOperation({ summary: 'Send or resend verification email to a user' })
   @ApiResponse({ status: 200, description: 'Verification email sent' })
@@ -233,7 +226,6 @@ export class UsersController {
   }
 
   @Get(':userId/offline-sessions')
-  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({ summary: 'List offline sessions for a user' })
   @ApiResponse({ status: 200, description: 'List of offline sessions' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -246,7 +238,6 @@ export class UsersController {
   }
 
   @Delete(':userId/offline-sessions/:tokenId')
-  @RequireAdminRoles(['super-admin', 'admin'])
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Revoke an offline session' })
   @ApiResponse({ status: 204, description: 'Offline session revoked' })
@@ -261,7 +252,6 @@ export class UsersController {
   }
 
   @Get(':userId/consents')
-  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({ summary: 'List all consents for a user' })
   @ApiResponse({ status: 200, description: 'List of user consents' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -274,7 +264,6 @@ export class UsersController {
   }
 
   @Get(':userId/consents/history')
-  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({ summary: 'Get consent history for a user' })
   @ApiResponse({ status: 200, description: 'User consent history' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -292,7 +281,6 @@ export class UsersController {
   }
 
   @Delete(':userId/consents')
-  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({
     summary:
       "Revoke all of a user's stored consents (after-compromise lockout)",
@@ -308,7 +296,6 @@ export class UsersController {
   }
 
   @Delete(':userId/consents/:clientId')
-  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({ summary: "Revoke a user's consent for a single client" })
   @ApiResponse({ status: 200, description: 'Revoked consent count (0 or 1)' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })

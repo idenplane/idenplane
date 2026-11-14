@@ -12,6 +12,7 @@ import {
 import { getErrorMessage } from '../../utils/getErrorMessage';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { useState } from 'react';
+import { useCanWriteRealm } from '../../hooks/usePermissions';
 
 // ─── Formatters ───────────────────────────────────────────────────────────────
 
@@ -342,6 +343,7 @@ function RecentEventsTable({ events }: { events: ContinuousRiskEvent[] }) {
 // ─── Main Component ───────────────────────────────────────────────────────────
 
 export default function SessionRiskDetailPage() {
+  const canWrite = useCanWriteRealm();
   const { name: realmName, sessionId } = useParams<{ name: string; sessionId: string }>();
   const queryClient = useQueryClient();
   const [showReevaluateConfirm, setShowReevaluateConfirm] = useState(false);
@@ -424,7 +426,7 @@ export default function SessionRiskDetailPage() {
         <div className="flex gap-3">
           <button
             onClick={() => setShowReevaluateConfirm(true)}
-            disabled={reevaluateMutation.isPending}
+            disabled={!canWrite || reevaluateMutation.isPending}
             className="rounded-md border border-line-strong bg-surface px-4 py-2 text-sm font-medium text-muted hover:bg-hover disabled:opacity-50"
           >
             {reevaluateMutation.isPending ? 'Re-evaluating...' : 'Re-evaluate Risk'}

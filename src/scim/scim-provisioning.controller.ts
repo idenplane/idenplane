@@ -14,7 +14,7 @@ import {
   Query as _Query,
   UseGuards,
   Logger,
-  NotFoundException as _NotFoundException,
+  NotFoundException,
 } from '@nestjs/common';
 import {
   ApiTags,
@@ -176,9 +176,13 @@ export class ScimProvisioningController {
     @CurrentRealm() realm: Realm,
     @Param('mappingId') mappingId: string,
   ) {
-    await this.prisma.scimAttributeMapping.delete({
-      where: { id: mappingId },
+    // The realm too: a mapping id alone could name another realm's mapping.
+    const { count } = await this.prisma.scimAttributeMapping.deleteMany({
+      where: { id: mappingId, realmId: realm.id },
     });
+    if (count === 0) {
+      throw new NotFoundException(`Attribute mapping '${mappingId}' not found`);
+    }
   }
 
   // ══════════════════════════════════════════════════════════════

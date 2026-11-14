@@ -11,6 +11,7 @@ import {
   removeUserClientRoles,
 } from '../../api/roles';
 import { getClients } from '../../api/clients';
+import { useCanWriteRealm } from '../../hooks/usePermissions';
 
 type UserRolesSectionProps = {
   realmName: string;
@@ -18,6 +19,7 @@ type UserRolesSectionProps = {
 };
 
 export default function UserRolesSection({ realmName, userId }: UserRolesSectionProps) {
+  const canWrite = useCanWriteRealm(realmName);
   const [selectedRole, setSelectedRole] = useState('');
   const [selectedClientId, setSelectedClientId] = useState('');
   const [selectedClientRole, setSelectedClientRole] = useState('');
@@ -100,15 +102,17 @@ export default function UserRolesSection({ realmName, userId }: UserRolesSection
                   className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-3 py-1 text-sm font-medium text-accent"
                 >
                   {role.name}
-                  <button
-                    type="button"
-                    onClick={() => removeRoleMutation.mutate(role.name)}
-                    className="ml-1 text-accent hover:text-accent"
-                  >
-                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+                  {canWrite && (
+                    <button
+                      type="button"
+                      onClick={() => removeRoleMutation.mutate(role.name)}
+                      className="ml-1 text-accent hover:text-accent"
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
                 </span>
               ))}
             </div>
@@ -118,7 +122,7 @@ export default function UserRolesSection({ realmName, userId }: UserRolesSection
         </div>
 
         {/* Add role */}
-        {availableRoles.length > 0 && (
+        {canWrite && availableRoles.length > 0 && (
           <div className="flex items-end gap-3 border-t border-line pt-4">
             <div className="flex-1">
               <label htmlFor="field-user-addRole" className="mb-1.5 block text-sm font-medium text-muted">
@@ -190,15 +194,17 @@ export default function UserRolesSection({ realmName, userId }: UserRolesSection
                       className="inline-flex items-center gap-1 rounded-full bg-violet-100 px-3 py-1 text-sm font-medium text-violet-700"
                     >
                       {role.name}
-                      <button
-                        type="button"
-                        onClick={() => removeClientRoleMutation.mutate(role.name)}
-                        className="ml-1 text-violet-400 hover:text-violet-600"
-                      >
-                        <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                        </svg>
-                      </button>
+                      {canWrite && (
+                        <button
+                          type="button"
+                          onClick={() => removeClientRoleMutation.mutate(role.name)}
+                          className="ml-1 text-violet-400 hover:text-violet-600"
+                        >
+                          <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                            <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                          </svg>
+                        </button>
+                      )}
                     </span>
                   ))}
                 </div>
@@ -208,7 +214,7 @@ export default function UserRolesSection({ realmName, userId }: UserRolesSection
             </div>
 
             {/* Add client role */}
-            {availableClientRoles.length > 0 && (
+            {canWrite && availableClientRoles.length > 0 && (
               <div className="flex items-end gap-3 border-t border-line pt-4">
                 <div className="flex-1">
                   <label htmlFor="field-user-addClientRole" className="mb-1.5 block text-sm font-medium text-muted">

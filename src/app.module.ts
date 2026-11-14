@@ -72,6 +72,8 @@ import { ContinuousVerificationModule } from './continuous-verification/continuo
 import { UpgradeModule } from './upgrade/upgrade.module.js';
 import { ProxyAuthModule } from './proxy-auth/proxy-auth.module.js';
 import { AdminApiKeyGuard } from './common/guards/admin-api-key.guard.js';
+import { AdminAuthorizationGuard } from './common/guards/admin-authorization.guard.js';
+import { AdminRbacModule } from './admin-rbac/admin-rbac.module.js';
 import { AdminEventInterceptor } from './events/admin-event.interceptor.js';
 import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
 
@@ -128,6 +130,7 @@ import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
     BruteForceAdminModule,
     MfaModule,
     AdminAuthModule,
+    AdminRbacModule,
     RealmsModule,
     SetupWizardModule,
     UsersModule,
@@ -174,6 +177,8 @@ import { MetricsInterceptor } from './metrics/metrics.interceptor.js';
   providers: [
     { provide: APP_GUARD, useClass: ThrottlerGuard },
     { provide: APP_GUARD, useClass: AdminApiKeyGuard },
+    // Authorization runs after authentication: global guards run in order.
+    { provide: APP_GUARD, useClass: AdminAuthorizationGuard },
     { provide: APP_INTERCEPTOR, useClass: AdminEventInterceptor },
     { provide: APP_INTERCEPTOR, useClass: MetricsInterceptor },
   ],

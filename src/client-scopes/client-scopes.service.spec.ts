@@ -262,6 +262,7 @@ describe('ClientScopesService', () => {
   describe('updateMapper', () => {
     it('should update a protocol mapper', async () => {
       prisma.clientScope.findFirst.mockResolvedValue(mockScope);
+      prisma.protocolMapper.findFirst.mockResolvedValue({ id: 'mapper-1' });
       const updatedMapper = { ...mockMapper, name: 'renamed-mapper' };
       prisma.protocolMapper.update.mockResolvedValue(updatedMapper);
 
@@ -277,6 +278,22 @@ describe('ClientScopesService', () => {
         where: { id: 'mapper-1' },
         data: { name: 'renamed-mapper', config: undefined },
       });
+      expect(prisma.protocolMapper.findFirst).toHaveBeenCalledWith({
+        where: { id: 'mapper-1', clientScopeId: mockScope.id },
+        select: { id: true },
+      });
+    });
+
+    it('refuses a mapper of another scope or realm', async () => {
+      prisma.clientScope.findFirst.mockResolvedValue(mockScope);
+      prisma.protocolMapper.findFirst.mockResolvedValue(null);
+
+      await expect(
+        service.updateMapper(mockRealm, 'scope-1', 'foreign-mapper', {
+          name: 'x',
+        }),
+      ).rejects.toThrow(NotFoundException);
+      expect(prisma.protocolMapper.update).not.toHaveBeenCalled();
     });
 
     it('should throw NotFoundException when scope does not exist', async () => {
@@ -295,6 +312,7 @@ describe('ClientScopesService', () => {
   describe('removeMapper', () => {
     it('should delete a protocol mapper', async () => {
       prisma.clientScope.findFirst.mockResolvedValue(mockScope);
+      prisma.protocolMapper.findFirst.mockResolvedValue({ id: 'mapper-1' });
       prisma.protocolMapper.delete.mockResolvedValue(mockMapper);
 
       await service.removeMapper(mockRealm, 'scope-1', 'mapper-1');

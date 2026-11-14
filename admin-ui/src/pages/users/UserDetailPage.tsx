@@ -8,6 +8,7 @@ import UserSecuritySection from '../../components/users/UserSecuritySection';
 import UserRolesSection from '../../components/users/UserRolesSection';
 import UserGroupsSection from '../../components/users/UserGroupsSection';
 import UserSessionsSection from '../../components/users/UserSessionsSection';
+import { usePermissions } from '../../hooks/usePermissions';
 
 export default function UserDetailPage() {
   const { name, id } = useParams<{ name: string; id: string }>();
@@ -15,6 +16,8 @@ export default function UserDetailPage() {
   const queryClient = useQueryClient();
   const [showDelete, setShowDelete] = useState(false);
   const [impersonationResult, setImpersonationResult] = useState<ImpersonationResult | null>(null);
+  const { canManageServer, canWriteRealm } = usePermissions();
+  const canWrite = canWriteRealm(name);
 
   const { data: user, isLoading } = useQuery({
     queryKey: ['user', name, id],
@@ -60,19 +63,23 @@ export default function UserDetailPage() {
           <p className="mt-1 text-sm text-subtle">{user.email}</p>
         </div>
         <div className="flex items-center gap-2">
-          <button
-            onClick={() => impersonateMutation.mutate()}
-            disabled={impersonateMutation.isPending}
-            className="rounded-md border border-warning-soft bg-warning-soft px-4 py-2 text-sm font-medium text-warning-fg hover:bg-warning-soft disabled:opacity-50"
-          >
-            {impersonateMutation.isPending ? 'Generating...' : 'Impersonate'}
-          </button>
-          <button
-            onClick={() => setShowDelete(true)}
-            className="rounded-md border border-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger-soft"
-          >
-            Delete User
-          </button>
+          {canWrite && (
+            <button
+              onClick={() => impersonateMutation.mutate()}
+              disabled={impersonateMutation.isPending}
+              className="rounded-md border border-warning-soft bg-warning-soft px-4 py-2 text-sm font-medium text-warning-fg hover:bg-warning-soft disabled:opacity-50"
+            >
+              {impersonateMutation.isPending ? 'Generating...' : 'Impersonate'}
+            </button>
+          )}
+          {canManageServer && (
+            <button
+              onClick={() => setShowDelete(true)}
+              className="rounded-md border border-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger-soft"
+            >
+              Delete User
+            </button>
+          )}
         </div>
       </div>
 

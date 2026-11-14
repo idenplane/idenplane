@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router';
 import { getProxyApplications } from '../../api/proxyApplications';
 import { getErrorMessage } from '../../utils/getErrorMessage';
+import { CanWrite } from '../../components/PermissionGate';
 
 export default function ProxyApplicationListPage() {
   const { name } = useParams<{ name: string }>();
@@ -44,14 +45,16 @@ export default function ProxyApplicationListPage() {
             in the application itself
           </p>
         </div>
-        <button
-          onClick={() =>
-            navigate(`/console/realms/${name}/proxy-applications/new`)
-          }
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
-        >
-          Add Application
-        </button>
+        <CanWrite>
+          <button
+            onClick={() =>
+              navigate(`/console/realms/${name}/proxy-applications/new`)
+            }
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
+          >
+            Add Application
+          </button>
+        </CanWrite>
       </div>
 
       <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-sm">

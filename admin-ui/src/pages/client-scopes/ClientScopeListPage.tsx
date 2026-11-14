@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router';
 import type { ClientScope } from '../../types';
 import { getClientScopes } from '../../api/clientScopes';
+import { CanWrite } from '../../components/PermissionGate';
 
 export default function ClientScopeListPage() {
   const { name } = useParams<{ name: string }>();
@@ -38,12 +39,14 @@ export default function ClientScopeListPage() {
             Manage client scopes in <span className="font-medium">{name}</span>
           </p>
         </div>
-        <button
-          onClick={() => navigate(`/console/realms/${name}/client-scopes/create`)}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
-        >
-          Create Client Scope
-        </button>
+        <CanWrite>
+          <button
+            onClick={() => navigate(`/console/realms/${name}/client-scopes/create`)}
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
+          >
+            Create Client Scope
+          </button>
+        </CanWrite>
       </div>
 
       <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-sm">

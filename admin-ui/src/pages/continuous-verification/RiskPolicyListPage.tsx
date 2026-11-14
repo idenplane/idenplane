@@ -4,6 +4,7 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import apiClient from '../../api/client';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { getErrorMessage } from '../../utils/getErrorMessage';
+import { useCanWriteRealm } from '../../hooks/usePermissions';
 
 // ─── Types ───────────────────────────────────────────────────────────────────
 
@@ -121,6 +122,7 @@ function ActionBadge({ action }: { action: string }) {
 // ─── Main Component ──────────────────────────────────────────────────────────
 
 export default function RiskPolicyListPage() {
+  const canWrite = useCanWriteRealm();
   const { name: realmName } = useParams<{ name: string }>();
   const queryClient = useQueryClient();
 
@@ -265,12 +267,14 @@ export default function RiskPolicyListPage() {
           >
             Dashboard
           </Link>
-          <button
-            onClick={() => setShowCreate(true)}
-            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
-          >
-            Create Policy
-          </button>
+          {canWrite && (
+            <button
+              onClick={() => setShowCreate(true)}
+              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
+            >
+              Create Policy
+            </button>
+          )}
         </div>
       </div>
 
@@ -406,7 +410,7 @@ export default function RiskPolicyListPage() {
             </button>
             <button
               type="submit"
-              disabled={createMutation.isPending}
+              disabled={!canWrite || createMutation.isPending}
               className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               {createMutation.isPending ? 'Creating...' : 'Create'}
@@ -471,7 +475,7 @@ export default function RiskPolicyListPage() {
                   <td className="whitespace-nowrap px-4 py-4">
                     <button
                       onClick={() => toggleMutation.mutate({ id: policy.id, enabled: !policy.enabled })}
-                      disabled={toggleMutation.isPending}
+                      disabled={!canWrite || toggleMutation.isPending}
                       className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${
                         policy.enabled
                           ? 'bg-success-soft text-success-fg'
@@ -486,18 +490,22 @@ export default function RiskPolicyListPage() {
                   </td>
                   <td className="whitespace-nowrap px-4 py-4 text-right">
                     <div className="flex justify-end gap-3">
-                      <button
-                        onClick={() => startEditing(policy)}
-                        className="text-sm font-medium text-accent hover:text-accent"
-                      >
-                        Edit
-                      </button>
-                      <button
-                        onClick={() => setDeleteTarget(policy)}
-                        className="text-sm font-medium text-danger hover:text-danger-fg"
-                      >
-                        Delete
-                      </button>
+                      {canWrite && (
+                        <button
+                          onClick={() => startEditing(policy)}
+                          className="text-sm font-medium text-accent hover:text-accent"
+                        >
+                          Edit
+                        </button>
+                      )}
+                      {canWrite && (
+                        <button
+                          onClick={() => setDeleteTarget(policy)}
+                          className="text-sm font-medium text-danger hover:text-danger-fg"
+                        >
+                          Delete
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>
@@ -623,7 +631,7 @@ export default function RiskPolicyListPage() {
                 </button>
                 <button
                   type="submit"
-                  disabled={updateMutation.isPending}
+                  disabled={!canWrite || updateMutation.isPending}
                   className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
                 >
                   {updateMutation.isPending ? 'Saving...' : 'Save Changes'}

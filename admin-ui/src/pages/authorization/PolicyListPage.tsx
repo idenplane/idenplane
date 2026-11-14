@@ -2,6 +2,7 @@ import { Link, useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { getPolicies } from '../../api/authorization';
 import { getErrorMessage } from '../../utils/getErrorMessage';
+import { CanWrite } from '../../components/PermissionGate';
 
 export default function PolicyListPage() {
   const { name } = useParams<{ name: string }>();
@@ -16,12 +17,14 @@ export default function PolicyListPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-fg">Authorization Policies</h1>
-        <Link
-          to={`/console/realms/${name}/authorization-policies/new`}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
-        >
-          Create Policy
-        </Link>
+        <CanWrite>
+          <Link
+            to={`/console/realms/${name}/authorization-policies/new`}
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
+          >
+            Create Policy
+          </Link>
+        </CanWrite>
       </div>
 
       {error && (

@@ -37,6 +37,7 @@ import { UpdateNhiCredentialPolicyDto } from './dto/update-nhi-credential-policy
 import { BulkRegistrationDto } from './dto/bulk-registration.dto.js';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
+import { RequireAdminRoles } from '../common/decorators/require-admin-roles.decorator.js';
 
 @ApiTags('NHI Identities')
 @Controller('admin/realms/:realmName/nhi')
@@ -231,6 +232,7 @@ export class NhiController {
   }
 
   @Delete('audit-logs')
+  @RequireAdminRoles(['super-admin'])
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Clear NHI audit logs' })
   @ApiResponse({ status: 204, description: 'NHI audit logs cleared' })

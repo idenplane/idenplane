@@ -9,10 +9,12 @@ import {
   type RegistrationField,
 } from '../../api/registration';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import { useCanWriteRealm } from '../../hooks/usePermissions';
 
 const FIELD_TYPES = ['text', 'email', 'password', 'number', 'select', 'checkbox'] as const;
 
 export default function RegistrationFieldsPage() {
+  const canWrite = useCanWriteRealm();
   const { name } = useParams<{ name: string }>();
   const queryClient = useQueryClient();
   const [showCreate, setShowCreate] = useState(false);
@@ -136,12 +138,14 @@ export default function RegistrationFieldsPage() {
             Configure custom fields to collect during self-registration
           </p>
         </div>
-        <button
-          onClick={() => { resetForm(); setShowCreate(true); }}
-          className="mt-4 sm:mt-0 px-4 py-2 bg-accent text-white rounded-md hover:bg-accent-hover"
-        >
-          Add Field
-        </button>
+        {canWrite && (
+          <button
+            onClick={() => { resetForm(); setShowCreate(true); }}
+            className="mt-4 sm:mt-0 px-4 py-2 bg-accent text-white rounded-md hover:bg-accent-hover"
+          >
+            Add Field
+          </button>
+        )}
       </div>
 
       {(showCreate || editingField) && (
@@ -273,7 +277,7 @@ export default function RegistrationFieldsPage() {
             </button>
             <button
               onClick={() => editingField ? updateMutation.mutate() : createMutation.mutate()}
-              disabled={createMutation.isPending || updateMutation.isPending}
+              disabled={!canWrite || createMutation.isPending || updateMutation.isPending}
               className="px-4 py-2 bg-accent text-white rounded-md hover:bg-accent-hover disabled:opacity-50"
             >
               {editingField ? 'Update' : 'Create'}
@@ -330,18 +334,22 @@ export default function RegistrationFieldsPage() {
                     )}
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      onClick={() => startEdit(field)}
-                      className="text-accent hover:text-accent mr-4"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => setDeleteFieldId(field.id)}
-                      className="text-danger hover:text-danger-fg"
-                    >
-                      Delete
-                    </button>
+                    {canWrite && (
+                      <button
+                        onClick={() => startEdit(field)}
+                        className="text-accent hover:text-accent mr-4"
+                      >
+                        Edit
+                      </button>
+                    )}
+                    {canWrite && (
+                      <button
+                        onClick={() => setDeleteFieldId(field.id)}
+                        className="text-danger hover:text-danger-fg"
+                      >
+                        Delete
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

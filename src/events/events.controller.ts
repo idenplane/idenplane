@@ -31,6 +31,7 @@ import {
   CreateAuditStreamDto,
   UpdateAuditStreamDto,
 } from './dto/audit-stream.dto.js';
+import { RequireAdminRoles } from '../common/decorators/require-admin-roles.decorator.js';
 
 @ApiTags('Events')
 @Controller('admin/realms/:realmName')
@@ -72,6 +73,7 @@ export class EventsController {
   }
 
   @Delete('events')
+  @RequireAdminRoles(['super-admin'])
   @HttpCode(HttpStatus.NO_CONTENT)
   @ApiOperation({ summary: 'Clear login events' })
   @ApiResponse({ status: 204, description: 'Login events cleared' })

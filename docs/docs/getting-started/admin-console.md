@@ -41,9 +41,12 @@ The console has two levels of navigation.
 |---|---|
 | **Dashboard** | Instance overview |
 | **Realms** | List of realms, and the entry point to everything below |
-| **Plugins** | Installed plugins, enable and disable |
-| **System Status** | Health of the server and its dependencies |
-| **Upgrade** | Version upgrades — see [Upgrading](/deployment/upgrading) |
+| **Admin Accounts** | Admins, their roles, and the realms each realm-admin manages (super-admin) |
+| **Plugins** | Installed plugins, enable and disable (super-admin) |
+| **System Status** | Health of the server and its dependencies (super-admin) |
+| **Upgrade** | Version upgrades — see [Upgrading](/deployment/upgrading) (super-admin) |
+
+What you see and can change depends on your admin role — see [Admin Roles](/getting-started/admin-roles).
 
 **Per-realm**, once you pick a realm. Almost all configuration lives here, because almost everything in Idenplane is scoped to a realm.
 

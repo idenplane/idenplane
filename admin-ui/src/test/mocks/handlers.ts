@@ -26,6 +26,33 @@ export const handlers = [
     return HttpResponse.json({ demo: false });
   }),
 
+  // Who am I — a super-admin by default; permission tests override it.
+  http.get(`${BASE}/auth/me`, () => {
+    return HttpResponse.json({
+      userId: 'admin-1',
+      username: 'admin',
+      kind: 'user',
+      roles: ['super-admin'],
+      superAdmin: true,
+      readAllRealms: true,
+      writeAllRealms: true,
+      managedRealms: [],
+    });
+  }),
+
+  // Admin accounts and realm-admin assignments
+  http.get(`${BASE}/admin-accounts`, () => {
+    return HttpResponse.json([
+      { id: 'admin-1', username: 'admin', email: null, enabled: true, roles: ['super-admin'], realms: [] },
+      { id: 'ra-1', username: 'ops-sample', email: 'ops@example.com', enabled: true, roles: ['realm-admin'], realms: [] },
+    ]);
+  }),
+
+  http.put(`${BASE}/admin-accounts/:userId/realms`, async ({ request }) => {
+    const body = (await request.json()) as { realms: string[] };
+    return HttpResponse.json({ realms: body.realms });
+  }),
+
   // Realms
   http.get(`${BASE}/realms`, () => {
     return HttpResponse.json([

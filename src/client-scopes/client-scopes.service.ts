@@ -135,7 +135,7 @@ export class ClientScopesService {
       config?: Record<string, unknown>;
     },
   ) {
-    await this.findById(realm, scopeId);
+    await this.requireMapper(realm, scopeId, mapperId);
     return this.prisma.protocolMapper.update({
       where: { id: mapperId },
       data: {
@@ -146,8 +146,23 @@ export class ClientScopesService {
   }
 
   async removeMapper(realm: Realm, scopeId: string, mapperId: string) {
-    await this.findById(realm, scopeId);
+    await this.requireMapper(realm, scopeId, mapperId);
     await this.prisma.protocolMapper.delete({ where: { id: mapperId } });
+  }
+
+  /**
+   * The mapper must belong to this scope, and the scope to this realm: a
+   * mapper id alone could name a mapper of any realm.
+   */
+  private async requireMapper(realm: Realm, scopeId: string, mapperId: string) {
+    const scope = await this.findById(realm, scopeId);
+    const mapper = await this.prisma.protocolMapper.findFirst({
+      where: { id: mapperId, clientScopeId: scope.id },
+      select: { id: true },
+    });
+    if (!mapper) {
+      throw new NotFoundException(`Protocol mapper '${mapperId}' not found`);
+    }
   }
 
   // ── Client scope assignments ────────────────────────────────

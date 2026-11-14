@@ -1,0 +1,108 @@
+---
+id: admin-roles
+title: Admin Roles and Realm Scope
+sidebar_position: 4
+description: What super-admin, realm-admin and view-only may do in the Admin API and console, how a realm-admin is scoped to realms, and how every admin route is authorized.
+---
+
+# Admin Roles and Realm Scope
+
+Every Admin API route checks two things. Authentication asks who you are: an admin JWT or the `x-admin-api-key` header. Authorization asks what your admin role allows. The console uses the same API, so it is held to the same rules, and it hides what your role can't do.
+
+## The roles
+
+Admins are users of the **master** realm. Their admin role is one of the master realm's roles, mapped to them directly.
+
+| Role | Can do |
+|---|---|
+| `super-admin` | Everything: every realm, including master, and every server-wide operation. |
+| `realm-admin` | Reads and changes **only the realms assigned to it**. It never gets master and never gets server-wide operations. |
+| `view-only` | Reads every realm. Changes nothing. |
+| Admin API key (`ADMIN_API_KEY`) | Same as `super-admin`. |
+
+Roles and realm assignments are read from the database on every request. When you take a role away, remove an assignment or disable an admin, it applies to that admin's next request, not when their token expires.
+
+## Realm-admin scope
+
+A realm-admin manages the realms a super-admin assigns to it, and no others. **A realm-admin with no assigned realm manages nothing.** It can sign in, but sees no realm. To let an admin manage every realm, make it a `super-admin`.
+
+The master realm can't be assigned. A realm-admin of master could grant itself `super-admin`.
+
+Assign realms in the console under **Admin Accounts** (super-admins only), or through the API:
+
+```bash
+# List admin accounts with their roles and realms
+curl https://idp.example.com/admin/admin-accounts -H "x-admin-api-key: $ADMIN_API_KEY"
+
+# Replace the realms a realm-admin manages
+curl -X PUT https://idp.example.com/admin/admin-accounts/USER_ID/realms \
+  -H "x-admin-api-key: $ADMIN_API_KEY" -H 'Content-Type: application/json' \
+  -d '{"realms": ["acme", "example-shop"]}'
+```
+
+The `PUT` replaces the whole set, and either every name is valid or nothing changes. The request fails in these cases:
+
+- `409` if the account doesn't have the `realm-admin` role.
+- `400` for `master` or an unknown realm.
+
+## What each role may call
+
+| Route | super-admin / API key | realm-admin | view-only |
+|---|---|---|---|
+| Reads in a realm (`GET`, `HEAD`, `OPTIONS` under `/admin/realms/<realm>/…`) | yes | its realms | every realm |
+| Changes in a realm (`POST`, `PUT`, `PATCH`, `DELETE`) | yes | its realms | no |
+| Reads that reveal a secret | yes | its realms | no |
+| Server-wide: creating, importing, exporting or deleting realms; plugins; upgrade; system version; metrics; migration imports; the setup wizard; admin accounts | yes | no | no |
+| Your own account: `GET /admin/auth/me`, the realm list (filtered to what you can read), sign-out | yes | yes | yes |
+
+The default has a few stricter exceptions:
+
+| Action | Who |
+|---|---|
+| Changing realm settings (`PUT`/`PATCH /admin/realms/<realm>`) | super-admin |
+| Deleting a user | super-admin |
+| Deleting a theme | super-admin |
+| Clearing a realm's login events | super-admin |
+| Clearing NHI audit logs | super-admin |
+
+The registration admin routes under `/realms/<realm>/registration` (pending list, approve, reject, fields) follow the same realm rules as the routes under `/admin/realms/<realm>`.
+
+A refused request answers `403` with `Your admin role does not allow this action`. For anyone but a super-admin, a realm that doesn't exist also answers `403`, so realm names can't be probed.
+
+`GET /admin/auth/me` tells you what you may do:
+
+```json
+{
+  "userId": "4f1c…",
+  "username": "ops",
+  "kind": "user",
+  "roles": ["realm-admin"],
+  "superAdmin": false,
+  "readAllRealms": false,
+  "writeAllRealms": false,
+  "managedRealms": ["acme"]
+}
+```
+
+## In the console
+
+What the console shows depends on your role:
+
+- **Navigation.**
+  - Plugins, System Status, Upgrade, Admin Accounts and the Migration Wizard appear only for super-admins.
+  - The realm switcher lists only the realms you can read.
+- **Realms you can't change.** The header shows a **Read only** badge, and create, save and delete actions are hidden or disabled.
+- **A refused request.** If anything still answers `403`, a notice says so and names your role. You stay signed in.
+
+## For contributors: how a route gets its policy
+
+Authorization runs globally (`AdminAuthorizationGuard`) right after authentication, on exactly the routes authentication covers. A new route is covered without any code. Its policy comes from its metadata:
+
+- A `:realmName` or `:realm` parameter in the path makes the route realm-scoped.
+- `@AdminScope('global')` makes it server-wide, super-admin only.
+- `@AdminScope('self')` opens it to every admin. Use it only for the caller's own account. A fitness test pins the list of these routes.
+- `@AdminRealmParam('param', 'id-or-name')` names another realm parameter, or another way to look the realm up.
+- `@AdminSensitiveRead()` marks a `GET` that returns a secret, so it needs change rights.
+- `@RequireAdminRoles([...])` can only make a route stricter. It is checked on the handler and the controller.
+
+A route without a recognisable realm parameter is treated as server-wide. The fitness test `src/admin-rbac/admin-route-policy.fitness.spec.ts` fails until you mark it. Set `ADMIN_RBAC_MATRIX_OUT=matrix.md` to make the same test write the full access matrix, one row per route.

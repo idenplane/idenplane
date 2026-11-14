@@ -10,6 +10,7 @@ import {
 } from '../../api/webhooks';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import PasswordInput from '../../components/PasswordInput';
+import { useCanWriteRealm } from '../../hooks/usePermissions';
 
 const EVENT_TYPES = [
   'user.created',
@@ -26,6 +27,7 @@ const EVENT_TYPES = [
 ];
 
 export default function WebhookDetailPage() {
+  const canWrite = useCanWriteRealm();
   const { name, webhookId: id } = useParams<{ name: string; webhookId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -137,17 +139,19 @@ export default function WebhookDetailPage() {
               setTestResult(null);
               testMutation.mutate();
             }}
-            disabled={testMutation.isPending}
+            disabled={!canWrite || testMutation.isPending}
             className="rounded-md border border-accent-soft px-4 py-2 text-sm font-medium text-accent hover:bg-accent-soft disabled:opacity-50"
           >
             {testMutation.isPending ? 'Testing...' : 'Test Webhook'}
           </button>
-          <button
-            onClick={() => setShowDelete(true)}
-            className="rounded-md border border-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger-soft"
-          >
-            Delete
-          </button>
+          {canWrite && (
+            <button
+              onClick={() => setShowDelete(true)}
+              className="rounded-md border border-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger-soft"
+            >
+              Delete
+            </button>
+          )}
         </div>
       </div>
 
@@ -238,10 +242,13 @@ export default function WebhookDetailPage() {
           </div>
         )}
 
+        {!canWrite && (
+          <p className="text-xs text-subtle">Read-only: your admin role can't change this realm.</p>
+        )}
         <div className="flex justify-end border-t border-line pt-4">
           <button
             type="submit"
-            disabled={updateMutation.isPending}
+            disabled={!canWrite || updateMutation.isPending}
             className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {updateMutation.isPending ? 'Saving...' : 'Save Changes'}

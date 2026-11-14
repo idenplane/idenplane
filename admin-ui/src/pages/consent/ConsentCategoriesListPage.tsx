@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router';
 import type { ConsentCategory } from '../../types';
 import { getConsentCategories } from '../../api/consent';
+import { CanWrite } from '../../components/PermissionGate';
 
 export default function ConsentCategoriesListPage() {
   const { name } = useParams<{ name: string }>();
@@ -39,14 +40,16 @@ export default function ConsentCategoriesListPage() {
             <span className="font-medium">{name}</span>
           </p>
         </div>
-        <button
-          onClick={() =>
-            navigate(`/console/realms/${name}/consent-categories/new`)
-          }
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
-        >
-          Create Consent Category
-        </button>
+        <CanWrite>
+          <button
+            onClick={() =>
+              navigate(`/console/realms/${name}/consent-categories/new`)
+            }
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
+          >
+            Create Consent Category
+          </button>
+        </CanWrite>
       </div>
 
       <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-sm">
