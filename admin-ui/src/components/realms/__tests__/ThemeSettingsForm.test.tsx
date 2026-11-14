@@ -55,4 +55,29 @@ describe('ThemeSettingsForm', () => {
       emailTheme: 'default',
     });
   });
+
+  it('shows the warnings of the selected login theme, and none for a clean one', async () => {
+    server.use(
+      http.get('/admin/realms/themes', () =>
+        HttpResponse.json([
+          { name: 'idenplane', displayName: 'Idenplane', warnings: [] },
+          {
+            name: 'brand',
+            displayName: 'Brand',
+            warnings: ['login.hbs does not read passkeyOnly (or passwordFormHidden).'],
+          },
+        ]),
+      ),
+    );
+    const user = userEvent.setup();
+    render(<ThemeSettingsForm realm={makeRealm({ loginTheme: 'idenplane' })} />);
+
+    const [loginSelect] = await screen.findAllByRole('combobox');
+    expect(screen.queryByText('Login theme warnings')).toBeNull();
+
+    await user.selectOptions(loginSelect, 'brand');
+    expect(await screen.findByRole('alert')).toHaveTextContent(
+      'login.hbs does not read passkeyOnly (or passwordFormHidden).',
+    );
+  });
 });

@@ -55,6 +55,11 @@ export interface ThemeInfo {
   name: string;
   displayName: string;
   description: string;
+  /**
+   * Problems found when the server loaded the theme's templates, e.g. a
+   * login.hbs that ignores passkeyOnly. Warnings only: the theme works.
+   */
+  warnings?: string[];
   colors: {
     primaryColor: string;
     backgroundColor: string;

@@ -1,0 +1,106 @@
+---
+sidebar_position: 10
+title: Custom Themes
+description: Write a Handlebars theme for the hosted login pages, inherit from a built-in theme, and honour the login template's passkeyOnly and passwordFormHidden flags.
+---
+
+# Custom Themes
+
+The hosted pages (login, registration, second factor, consent, account and email) are Handlebars templates from a **theme**. Idenplane ships two, `idenplane` and `midnight`. A custom theme is a directory next to them, under `themes/` in the server's working directory, read when the server starts.
+
+A realm picks its theme per page type with `loginTheme`, `accountTheme` and `emailTheme` (or `themeName` for all three), in the admin console on the realm's **Theme** tab, or with the admin API.
+
+:::note Theme builder
+The admin console's theme builder stores colours, styles and components in the database. It does not supply templates, so nothing in this guide applies to it.
+:::
+
+## Layout and inheritance
+
+```text
+themes/
+  my-theme/
+    theme.json
+    login/
+      templates/
+        login.hbs        # overrides the parent's login page
+      resources/css/my.css
+      messages/          # optional message bundles
+```
+
+```json title="themes/my-theme/theme.json"
+{
+  "name": "my-theme",
+  "displayName": "My Theme",
+  "description": "Our brand",
+  "parent": "idenplane",
+  "colors": { "primaryColor": "#0f766e" },
+  "types": { "login": { "css": ["css/my.css"] } }
+}
+```
+
+The directory name must match `name`. A template is looked up in the theme first and then along its `parent` chain, so a theme overrides only the templates it contains and **inherits every other one** from its parent: a theme without `login.hbs` uses its parent's, flags included. If no theme in the chain has a template, the `idenplane` one is used. CSS files load parent first, child last, and `colors` set only what the theme changes: the others come from the parent chain, then the defaults.
+
+## The login template and the password form
+
+On a login bound to a [custom auth flow](./auth-flows.mdx), some steps don't take a password. The login template gets two flags for them:
+
+| Value | True when |
+|-------|-----------|
+| `passkeyOnly` | The current step is a passkey (`webauthn`) step with no password fallback. |
+| `passwordFormHidden` | The current step takes no password and has no password fallback: a passkey-only step, or a social step. |
+
+On these steps the template should not show its password form. The built-in themes wrap it in `passwordFormHidden`, which covers both cases:
+
+```handlebars title="themes/my-theme/login/templates/login.hbs"
+{{#if error}}<div class="auth-error">{{error}}</div>{{/if}}
+
+{{#unless passwordFormHidden}}
+<form method="POST" action="/realms/{{realmName}}/login" class="auth-form">
+  <input type="text" name="username" value="{{login_hint}}" required autocomplete="username">
+  <input type="password" name="password" required autocomplete="current-password">
+  <input type="hidden" name="_csrf" value="{{csrfToken}}">
+  <!-- the OAuth hidden fields, as in the built-in login.hbs -->
+  <button type="submit">Sign in</button>
+</form>
+{{/unless}}
+
+{{#if passkeyOnly}}
+<p>Sign in with your passkey.</p>
+{{/if}}
+
+{{#if webAuthnEnabled}}
+  <!-- the passkey button and script, as in the built-in login.hbs -->
+{{/if}}
+```
+
+A theme that checks only `passkeyOnly` hides the form on passkey steps but still shows it on a social step without a password fallback.
+
+If a theme shows the password form anyway and the user submits it on such a step, the password is not checked and the sign-in is **not** ended. The server sends the user back to the same step with a message the page shows through `error`: "This step signs in with a passkey. Use your passkey to continue." on a passkey-only step, or "This step signs in with an identity provider. Use one of the sign-in buttons to continue." on a social step. Nothing about the step changes and no failed attempt is counted, so the user can go on with the passkey or the provider.
+
+### Warning at startup
+
+When the server loads a theme whose own `login.hbs` reads neither `passkeyOnly` nor `passwordFormHidden`, it logs a warning, and the admin console shows it under the theme pickers on the realm's **Theme** tab. It is a warning, not an error: the theme still loads and works. The check parses the template, so a mention in a Handlebars comment does not count. It does not follow partials: if your form lives in a partial that checks the flag, the warning can be ignored. A theme that inherits its parent's `login.hbs` is checked through that parent.
+
+## Login template context
+
+The values the login template receives, on the built-in login and on a bound flow:
+
+| Value | Description |
+|-------|-------------|
+| `realmName`, `realmDisplayName` | The realm. |
+| `pageTitle` | The page title. |
+| `error`, `info` | A message to show, or empty. |
+| `csrfToken` | The CSRF token; post it as `_csrf`. |
+| `login_hint` | The username to prefill. |
+| `client_id`, `redirect_uri`, `response_type`, `scope`, `state`, `nonce`, `code_challenge`, `code_challenge_method`, `prompt` | OAuth parameters for the hidden fields. Empty on a bound flow, where the login transaction holds the request. |
+| `acr_values`, `claims` | Set only with `ENFORCE_ACR_ON_FRESH_LOGIN`; render them as hidden fields when set. |
+| `registrationAllowed`, `registerUrl` | Whether to link to registration, and where. |
+| `webAuthnEnabled` | Whether to offer the passkey button. |
+| `identityProviders` | "Sign in with …" buttons: `alias`, `displayName`, `loginUrl`. |
+| `passkeyOnly` | Bound flow only: a passkey step without a password fallback. |
+| `passwordFormHidden` | Bound flow only: a step that takes no password and has no password fallback. |
+| `magicLinkFallback` | Bound flow only: the password step can fall back to a sign-in link. |
+| `scriptNonce` | The CSP nonce; every inline `<script>` needs `nonce="{{scriptNonce}}"`. |
+| `locale`, `dir`, `isRtl`, `languageSwitcher` | Localisation. Use the `msg` helper for message bundle strings. |
+
+Inline scripts without the nonce are blocked: the hosted pages' Content Security Policy never allows `unsafe-inline` or `unsafe-eval` scripts.
