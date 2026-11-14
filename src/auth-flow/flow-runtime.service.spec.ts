@@ -310,6 +310,63 @@ describe('FlowRuntimeService.dispatch', () => {
       );
     });
 
+    it.each([
+      ['webauthn', 'This step signs in with a passkey'],
+      ['social', 'This step signs in with an identity provider'],
+    ])(
+      'answers a password on a %s step with no password fallback with the same step and a message, keeping the transaction',
+      async (type, message) => {
+        steps = [
+          step({
+            id: 'only',
+            type: type as RuntimeStep['type'],
+            order: 1,
+            ...(type === 'social' ? { config: { providerAlias: 'gh' } } : {}),
+          }),
+        ];
+        current.state = txnState({ mainStepId: 'only', currentStepId: 'only' });
+        expect(await dispatch(password())).toBe(true);
+
+        const url = new URL(redirectedTo(), 'https://idp.test');
+        expect(url.pathname).toBe('/realms/acme/login');
+        expect(url.searchParams.get('error')).toContain(message);
+        // Nothing verified, locked, counted, committed or ended.
+        expect(handlers.password).not.toHaveBeenCalled();
+        expect(store.begin).not.toHaveBeenCalled();
+        expect(store.commit).not.toHaveBeenCalled();
+        expect(store.destroy).not.toHaveBeenCalled();
+        expect(res.clearCookie).not.toHaveBeenCalled();
+      },
+    );
+
+    it('answers a password on a passkey step whose fallback is not a password the same way', async () => {
+      steps = [
+        step({ id: 'pk', type: 'webauthn', order: 1, fallbackStepId: 'ml' }),
+        step({ id: 'ml', type: 'magic_link', order: 2 }),
+      ];
+      current.state = txnState({ mainStepId: 'pk', currentStepId: 'pk' });
+      await dispatch(password());
+      expect(redirectedTo()).toMatch(/^\/realms\/acme\/login\?error=/);
+      expect(handlers.password).not.toHaveBeenCalled();
+      expect(store.destroy).not.toHaveBeenCalled();
+    });
+
+    it('still ends the transaction for a password posted on a second-factor step', async () => {
+      steps = [
+        step({ id: 'pw', type: 'password', order: 1 }),
+        step({ id: 'otp', type: 'totp', order: 2 }),
+      ];
+      current.state = txnState({
+        mainStepId: 'pw',
+        currentStepId: 'otp',
+        userId: alice.id,
+      });
+      await dispatch(password());
+      expect(renderedStatus()).toBe(400);
+      expect(store.destroy).toHaveBeenCalledWith('txn-1');
+      expect(handlers.password).not.toHaveBeenCalled();
+    });
+
     it('treats the endpoint of the current step’s fallback as declining it', async () => {
       steps = [
         step({ id: 'pk', type: 'webauthn', order: 1, fallbackStepId: 'pw' }),

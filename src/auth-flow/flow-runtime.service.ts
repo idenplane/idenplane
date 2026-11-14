@@ -155,6 +155,15 @@ const UNEXPECTED_STEP_MESSAGE =
   'This sign-in step was not expected. Please sign in again.';
 const CONCURRENT_MESSAGE =
   'This sign-in is already being processed. Please wait a moment and reload the page.';
+/**
+ * A password posted on a step the login page renders without a password
+ * form (`passwordFormHidden`): a theme that ignores the flag showed one.
+ */
+const NO_PASSWORD_STEP_MESSAGES: Readonly<Partial<Record<string, string>>> = {
+  webauthn: 'This step signs in with a passkey. Use your passkey to continue.',
+  social:
+    'This step signs in with an identity provider. Use one of the sign-in buttons to continue.',
+};
 const OTHER_BROWSER_MESSAGE =
   'This sign-in link works only in the browser where you asked for it, while that sign-in is in progress. Open it there, or sign in again.';
 const LINK_SENT_MESSAGE =
@@ -972,6 +981,22 @@ export class FlowRuntimeService {
     if (STEP_ENDPOINT[step.type] !== submission.endpoint) {
       const fallback = state.synthetic ? undefined : graph.fallbackOf(step);
       if (!fallback || STEP_ENDPOINT[fallback.type] !== submission.endpoint) {
+        // A password posted where the login page has no password form (a
+        // passkey or social step without a password fallback): a custom
+        // theme that ignores passkeyOnly / passwordFormHidden showed one.
+        // Nothing is verified, counted or changed (no handler, no lock, no
+        // commit), so the step cannot be skipped or probed; the same step
+        // is shown again with a message instead of a dead end.
+        const message =
+          submission.endpoint === 'password'
+            ? NO_PASSWORD_STEP_MESSAGES[step.type]
+            : undefined;
+        if (message) {
+          return {
+            kind: 'redirect',
+            url: this.pageOf(realm, active, { error: message }),
+          };
+        }
         await this.end(active.txn.id, realm, res);
         return this.unexpectedStep();
       }
