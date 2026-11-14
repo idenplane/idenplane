@@ -260,16 +260,16 @@ A weaker session signs in again through the flow; with `prompt=none` the respons
 
 - A binding to a missing or invalid flow shows a `503` error page at `/auth` and on the login page. It never falls back to the built-in login.
 - A login that has to start again (expired, flow changed or unbound, a lockout, an error, another user, too many failures) goes back through `/auth` with the original authorization request, so the binding, single sign-on and `prompt` apply again; the login page then says why. A sign-in to the account console, which has no authorization request, starts again at the login page.
-- A submission for another step than the current one is refused with `400`, and the transaction ends.
+- A submission for another step than the current one is refused with `400`, and the transaction ends. One exception: a password posted on a passkey or social step without a password fallback (a custom theme showed its password form there) is not checked; the same step is shown again with a message, and the transaction goes on.
 - A step after identification cannot switch user: another account's password or passkey ends the transaction.
 - Of two concurrent submissions of the same step, the second is refused with `409`. A finished transaction cannot be replayed.
 - Where a login is bound, the built-in sign-in paths cannot create a session: a stale login form starts again, and an identity-provider sign-in that a `social` step did not start is refused with a themed `403` page as soon as it returns from the provider, before any second factor is asked for. A callback, sign-in link or code for another browser's login is refused there and changes nothing.
 
 ### Current limits
 
-- On a passkey step without a password fallback, the built-in themes hide the password form (the template gets `passkeyOnly`). A custom theme that does not check `passkeyOnly` still shows it, and submitting it there ends the transaction.
+- On a passkey step without a password fallback, the built-in themes hide the password form (the template gets `passkeyOnly` and `passwordFormHidden`). A custom theme that checks neither still shows it; submitting it there brings the user back to the passkey step with a message, and the server logs a warning about the theme when it starts. See [Custom Themes](./custom-themes.mdx).
 - On bound logins, the login page offers only the identity providers of the current step (or its fallback), never the realm's other providers.
-- The same applies to a social step without a password fallback: the built-in themes hide the password form (`passwordFormHidden`); a custom theme that does not check it still shows it, and submitting it ends the transaction.
+- The same applies to a social step without a password fallback: the built-in themes hide the password form (`passwordFormHidden`); a custom theme that does not check it still shows it, and submitting it brings the user back to the step with a message.
 - `email-otp` and `magic-link` are new pages. A custom theme without them uses the built-in theme's.
 
 ---
