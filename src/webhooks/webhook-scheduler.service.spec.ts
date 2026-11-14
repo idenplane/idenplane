@@ -86,9 +86,9 @@ describe('WebhookSchedulerService', () => {
           release = resolve;
         }),
       );
-      const tick = service.processQueue();
-      // A tick that fires while one runs joins it instead of overlapping.
-      expect(service.processQueue()).toBe(tick);
+      // Two overlapping ticks, both still querying.
+      void service.processQueue();
+      void service.processQueue();
 
       let stopped = false;
       const stopping = service.stop().then(() => {

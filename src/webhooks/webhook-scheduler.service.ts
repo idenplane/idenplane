@@ -69,7 +69,7 @@ interface QueuedEvent {
 export class WebhookSchedulerService {
   private readonly logger = new Logger(WebhookSchedulerService.name);
   private stopping = false;
-  private inFlight: Promise<void> | null = null;
+  private readonly inFlight = new Set<Promise<void>>();
 
   constructor(
     private readonly prisma: PrismaService,
@@ -96,20 +96,21 @@ export class WebhookSchedulerService {
   @Interval(10_000) // every 10 seconds
   processQueue(): Promise<void> {
     // On shutdown, no new tick starts, and the pool closes only after the
-    // tick in flight is done: a tick that outlived the pool reopened it (or,
-    // in tests, ran after the environment was torn down).
+    // ticks in flight are done: a tick that outlived the pool reopened it (or,
+    // in tests, ran after the environment was torn down). Ticks may overlap
+    // as before; the claim on each row keeps a webhook from being sent twice.
     if (this.stopping) return Promise.resolve();
-    if (this.inFlight) return this.inFlight;
-    this.inFlight = this.drainQueue().finally(() => {
-      this.inFlight = null;
+    const tick = this.drainQueue().finally(() => {
+      this.inFlight.delete(tick);
     });
-    return this.inFlight;
+    this.inFlight.add(tick);
+    return tick;
   }
 
-  /** Stops new ticks and waits for the one in flight. */
+  /** Stops new ticks and waits for the ones in flight. */
   async stop(): Promise<void> {
     this.stopping = true;
-    await this.inFlight?.catch(() => undefined);
+    await Promise.allSettled([...this.inFlight]);
   }
 
   private async drainQueue(): Promise<void> {
