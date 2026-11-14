@@ -9,6 +9,30 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+## [0.8.1] - 2026-11-14
+
+A security release. It closes a critical authorization bypass of the admin API, which affects every release since 0.1.0. It also fixes the two vulnerabilities EQSTLab reported: the unauthenticated setup wizard, and the remaining fallback to `admin`/`admin` bootstrap credentials outside production. Upgrade as soon as you can, and read *Before you upgrade*.
+
+**Before you upgrade:**
+- **The setup wizard now needs an admin login.** Every `/setup-wizard/*` endpoint takes the Admin API credentials (an admin JWT or `x-admin-api-key`) and the `super-admin` role. Scripts that called it anonymously get `401`. The console page moved to `/console/setup` and asks you to sign in first. Once setup is completed or skipped, every wizard write answers `409`.
+- **`ADMIN_PASSWORD` no longer defaults to `admin`.** This only matters for a first start on an empty database. Outside production, an unset value now gets a random password that the first start prints once in its log, and `admin` or a documented placeholder stops the start unless `ALLOW_INSECURE_ADMIN_PASSWORD=true`. Existing admins and passwords are not changed.
+
+### Security
+- **The setup wizard was reachable without authentication (GHSA-2463-97f9-hw7j, reported by EQSTLab).** The `/setup-wizard/*` endpoints sat outside `/admin`, so no guard applied to them, and the service never checked whether setup was already done. Anyone who could reach an instance could read the wizard state, use the SMTP test, skip or reset the wizard, and complete it to create a new realm with a super-admin user of their choosing. Now:
+  - every wizard endpoint, `status` and `state` included, requires the same credentials as the Admin API and the `super-admin` role (a new `@RequireAdminAuth()` metadata makes `AdminApiKeyGuard` enforce off the `/admin` prefix; the guard never got weaker);
+  - once the wizard is completed or skipped, `admin-account`, `realm-settings`, `smtp-config`, `smtp/test`, `client`, `sdk-generated`, `complete`, `skip` and `reset` answer `409 Conflict` ("Setup is already complete");
+  - each write runs in a transaction that locks the wizard state row and checks it is still open, so two concurrent `complete` calls create one realm and the other gets `409`, and completing is all-or-nothing;
+  - `reset` only clears the answers of a wizard still in progress, never realms or users, and is refused after setup;
+  - `state` and the write responses are built from an allowlist: never the admin's password hash or a client secret, and the SMTP password only as the placeholder;
+  - the unused `WizardRequiredGuard` is removed.
+  The console's wizard moved inside the signed-in routes (`/console/setup`; `/setup` redirects there), checks with the server first, and says setup is already complete instead of showing the form.
+- **Admin actions could be reached without credentials (GHSA-cxj4-xh78-x373; affects 0.1.0 to 0.8.0).** `AdminApiKeyGuard` only enforced admin credentials when the request path began with `/admin`, compared case-sensitively. Two kinds of admin actions were open as a result:
+  - **The admin API through a differently cased path.** Express matches routes case-insensitively, so such a request reached the admin handlers while the guard let it through. Handlers without a role requirement (most of the admin API) then ran with no authentication.
+  - **The registration admin actions (0.3.0 to 0.8.0).** They live under `/realms/{realm}/registration`, not `/admin`, so their explicit `@UseGuards(AdminApiKeyGuard)` did nothing. Anyone could list pending registrations, approve or reject them, and list, create, change or delete the realm's registration fields.
+
+  The guard now enforces admin credentials when any of these holds: the path, in lower case, is under `/admin`; the matched controller is declared under `admin`; the route has `@RequireAdminAuth()`; or the route names `AdminApiKeyGuard` in `@UseGuards`. `@Public()` routes, including the public registration routes, stay open. Admin events are recorded for differently cased writes too.
+- **No more `admin` / `admin` bootstrap credentials (GHSA-jfx3-gv42-6qwv, reported by EQSTLab).** 0.7.0 refused a weak `ADMIN_PASSWORD` in production, but any other `NODE_ENV` (including `npm run start:prod`, which sets none) still created the first admin as `admin` / `admin` when `ADMIN_PASSWORD` was unset. Now the first admin never gets a known password: unset outside production, a random 32-character password is generated and printed once, only by the instance whose seed was stored (a configured password is never logged); `admin`, `password`, `changeme`, `change_this_password` and `.env.example`'s `REPLACE_ME_WITH_A_STRONG_PASSWORD` are refused everywhere unless `ALLOW_INSECURE_ADMIN_PASSWORD=true` outside production. Production's rules are unchanged, and also refuse the `.env.example` placeholder. `GET /admin/auth/demo-info` no longer falls back to `admin` either. The E2E suite sets explicit test credentials. The docs no longer mention a default password.
+
 ## [0.8.0] - 2026-11-14
 
 A security and features release. Custom authentication flows now run at login, with email-code, sign-in-link and social steps. OAuth clients and NHI identities can authenticate with TLS client certificates (RFC 8705), and their access tokens can be bound to the certificate. Secrets that were stored in plaintext are encrypted at rest, and the key can be rotated. The release also closes a CAPTCHA bypass, a clickjacking gap on the hosted pages, unauthenticated device authorization for confidential clients, and leaks of secrets through admin responses, admin events and request logs. Realm export and import now keep every security setting. PostgreSQL 16 or later is the only supported database. Read *Before you upgrade*: this upgrade can't be rolling.

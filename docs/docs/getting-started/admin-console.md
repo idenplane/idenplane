@@ -15,17 +15,19 @@ The admin console is served by the same process as the API, at **`/console`**. E
 
 Go to `http://localhost:3000/console`. The login page offers two modes:
 
-**Admin credentials** — the username and password of an admin account. This is the normal way in. The initial account comes from `ADMIN_USER` and `ADMIN_PASSWORD`, which default to `admin` / `admin`.
+**Admin credentials** — the username and password of an admin account. This is the normal way in. The initial account is `ADMIN_USER` (default `admin`) with the password from `ADMIN_PASSWORD`. There is no default password: if `ADMIN_PASSWORD` is unset outside production, the first start generates one and prints it once in its log. See [How the first admin password is chosen](/configuration/environment-variables#how-the-first-admin-password-is-chosen).
 
-**API key** — the value of `ADMIN_API_KEY`. Useful when you have not created an admin account yet, or for a break-glass login.
+**API key** — the value of `ADMIN_API_KEY`. Useful for automation, or for a break-glass login.
 
 :::warning
-Change the default `admin` / `admin` credentials before exposing an instance to anything. See [Configuration](/getting-started/configuration#api-authentication).
+Change the initial admin password after the first sign-in, especially if it was generated and printed in the log.
 :::
 
 ### First run
 
-On a fresh install, `/setup` runs a six-step wizard that takes you from an empty database to a working login. Start there rather than with the console — see [Your First Application](/guides/first-app).
+On a fresh install, sign in as a super-admin (the initial admin, or with the API key) and open **`/console/setup`**: a six-step wizard that takes you to a working login. See [Your First Application](/guides/first-app).
+
+The wizard is for super-admins only, and it runs once: after it is completed or skipped, the page says setup is already complete and links to the console.
 
 ---
 

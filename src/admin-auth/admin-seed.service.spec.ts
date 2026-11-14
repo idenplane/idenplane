@@ -38,7 +38,7 @@ describe('AdminSeedService', () => {
     config = {
       get: jest.fn((key: string, defaultValue?: string) => {
         if (key === 'ADMIN_USER') return 'admin';
-        if (key === 'ADMIN_PASSWORD') return 'admin';
+        if (key === 'ADMIN_PASSWORD') return 'configured-dev-password';
         return defaultValue;
       }),
     };
@@ -119,7 +119,7 @@ describe('AdminSeedService', () => {
       expect(scopeSeedService.seedDefaultScopes).toHaveBeenCalledWith(
         'new-realm',
       );
-      expect(crypto.hashPassword).toHaveBeenCalledWith('admin');
+      expect(crypto.hashPassword).toHaveBeenCalledWith('configured-dev-password');
     });
 
     it('should use configured admin credentials', async () => {
@@ -196,6 +196,7 @@ describe('AdminSeedService', () => {
       'Admin',
       'change_this_password',
       'short-pass',
+      'REPLACE_ME_WITH_A_STRONG_PASSWORD',
     ])('refuses to seed the first admin with %p', async (password) => {
       configure(password, 'production');
 
@@ -226,15 +227,135 @@ describe('AdminSeedService', () => {
       await expect(service.onApplicationBootstrap()).resolves.toBeUndefined();
     });
 
-    it('keeps the admin default outside production', async () => {
-      configure(undefined, 'development');
+  });
+
+  describe('initial admin password outside production', () => {
+    let warn: jest.SpyInstance;
+    let log: jest.SpyInstance;
+
+    const configure = (
+      password: string | undefined,
+      nodeEnv: string | undefined,
+      extra: Record<string, string> = {},
+    ) => {
+      config.get.mockImplementation((key: string, defaultValue?: string) => {
+        if (key === 'ADMIN_USER') return 'admin';
+        if (key === 'ADMIN_PASSWORD') return password;
+        if (key === 'NODE_ENV') return nodeEnv;
+        if (key in extra) return extra[key];
+        return defaultValue;
+      });
+      prisma.realm.findUnique.mockResolvedValue(null);
       prisma.realm.create.mockResolvedValue({ id: 'realm-1' });
       prisma.role.create.mockResolvedValue({ id: 'role-1' });
       prisma.user.create.mockResolvedValue({ id: 'user-1' });
+    };
+
+    const logged = () =>
+      [...warn.mock.calls, ...log.mock.calls]
+        .map((args) => String(args[0]))
+        .join('\n');
+
+    beforeEach(() => {
+      const logger = (service as any).logger;
+      warn = jest.spyOn(logger, 'warn').mockImplementation(() => undefined);
+      log = jest.spyOn(logger, 'log').mockImplementation(() => undefined);
+    });
+
+    it.each([undefined, 'development', 'test'])(
+      'generates a strong random password when unset (NODE_ENV=%p) and logs it once',
+      async (nodeEnv) => {
+        configure(undefined, nodeEnv);
+
+        await service.onApplicationBootstrap();
+
+        const password = crypto.hashPassword.mock.calls[0][0] as string;
+        expect(password).not.toBe('admin');
+        expect(password.length).toBeGreaterThanOrEqual(32);
+        const mentions = [...warn.mock.calls, ...log.mock.calls].filter(
+          (args) => String(args[0]).includes(password),
+        );
+        expect(mentions).toHaveLength(1);
+        expect(String(mentions[0][0])).toMatch(/change it/i);
+      },
+    );
+
+    it('generates a different password on each first seed', async () => {
+      configure(undefined, undefined);
+      await service.onApplicationBootstrap();
+      await service.onApplicationBootstrap();
+
+      const [[first], [second]] = crypto.hashPassword.mock.calls;
+      expect(first).not.toBe(second);
+    });
+
+    it('does not log a generated password when another instance seeded first', async () => {
+      configure(undefined, undefined);
+      (prisma.$transaction as jest.Mock).mockRejectedValue(
+        Object.assign(new Error('Unique constraint failed'), { code: 'P2002' }),
+      );
+
+      await service.onApplicationBootstrap();
+
+      const password = crypto.hashPassword.mock.calls[0][0] as string;
+      expect(logged()).not.toContain(password);
+    });
+
+    it('generates nothing and logs nothing once the master realm exists', async () => {
+      configure(undefined, undefined);
+      prisma.realm.findUnique.mockResolvedValue({ id: 'master' });
+
+      await service.onApplicationBootstrap();
+
+      expect(crypto.hashPassword).not.toHaveBeenCalled();
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('never logs a configured password', async () => {
+      configure('my-own-dev-password', 'development');
+
+      await service.onApplicationBootstrap();
+
+      expect(crypto.hashPassword).toHaveBeenCalledWith('my-own-dev-password');
+      expect(logged()).not.toContain('my-own-dev-password');
+    });
+
+    it.each([
+      'admin',
+      'ADMIN',
+      'password',
+      'changeme',
+      'change_this_password',
+      'REPLACE_ME_WITH_A_STRONG_PASSWORD',
+    ])('refuses the known value %p', async (password) => {
+      configure(password, undefined);
+
+      await expect(service.onApplicationBootstrap()).rejects.toThrow(
+        /default or placeholder/,
+      );
+      expect(crypto.hashPassword).not.toHaveBeenCalled();
+      expect(prisma.realm.create).not.toHaveBeenCalled();
+    });
+
+    it('accepts a known value only with ALLOW_INSECURE_ADMIN_PASSWORD=true', async () => {
+      configure('admin', 'development', {
+        ALLOW_INSECURE_ADMIN_PASSWORD: 'true',
+      });
 
       await service.onApplicationBootstrap();
 
       expect(crypto.hashPassword).toHaveBeenCalledWith('admin');
+      expect(logged()).toMatch(/ALLOW_INSECURE_ADMIN_PASSWORD/);
+    });
+
+    it('ignores ALLOW_INSECURE_ADMIN_PASSWORD in production', async () => {
+      configure('admin', 'production', {
+        ALLOW_INSECURE_ADMIN_PASSWORD: 'true',
+      });
+
+      await expect(service.onApplicationBootstrap()).rejects.toThrow(
+        /ADMIN_PASSWORD must be set/,
+      );
     });
   });
 });

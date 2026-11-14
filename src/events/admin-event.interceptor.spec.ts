@@ -60,6 +60,26 @@ describe('AdminEventInterceptor', () => {
       });
     });
 
+    it('records a write sent with a differently cased /ADMIN prefix', (done) => {
+      // Express routes case-insensitively, so this reaches the admin handler.
+      const context = createContext({
+        method: 'DELETE',
+        path: '/ADMIN/Realms/test/USERS/u1',
+      });
+
+      interceptor.intercept(context as any, nextHandler).subscribe({
+        complete: () => {
+          expect(eventsService.recordAdminEvent).toHaveBeenCalledWith(
+            expect.objectContaining({
+              operationType: OperationType.DELETE,
+              resourceType: ResourceType.USER,
+            }),
+          );
+          done();
+        },
+      });
+    });
+
     it('should record UPDATE for PUT method', (done) => {
       const context = createContext({
         method: 'PUT',

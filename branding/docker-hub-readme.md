@@ -31,7 +31,7 @@ Then open:
 | `http://localhost:3000/health/live` | Liveness probe |
 | `http://localhost:3000/metrics` | Prometheus metrics |
 
-Default admin: `admin` / value of `$ADMIN_PASSWORD`.
+Sign in as `admin` with the value of `$ADMIN_PASSWORD`. There is no default password: `admin` and placeholders are refused.
 
 ---
 

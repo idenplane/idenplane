@@ -62,16 +62,16 @@ export class AdminEventInterceptor implements NestInterceptor {
 
     if (!['POST', 'PUT', 'PATCH', 'DELETE'].includes(method))
       return next.handle();
-    if (!request.path.startsWith('/admin/')) return next.handle();
+    // Express routes case-insensitively; compare the path in lower case so
+    // `/ADMIN/...` cannot keep a write out of the audit trail.
+    const path = request.path.toLowerCase();
+    if (!path.startsWith('/admin/')) return next.handle();
 
     // Skip events API and auth endpoints
-    if (
-      request.path.includes('/events') ||
-      request.path.includes('/admin-events')
-    ) {
+    if (path.includes('/events') || path.includes('/admin-events')) {
       return next.handle();
     }
-    if (request.path.includes('/admin/auth/')) return next.handle();
+    if (path.includes('/admin/auth/')) return next.handle();
 
     type AdminRequest = Request & {
       realm?: { id: string };
@@ -85,15 +85,14 @@ export class AdminEventInterceptor implements NestInterceptor {
     // RealmGuard to resolve, so `realm` is never set for it — the one admin
     // write with no pre-existing realm to attach the event to. Special-case
     // it: the new realm's id is in the response body once creation succeeds.
-    const isRealmCreation =
-      method === 'POST' && request.path === '/admin/realms';
+    const isRealmCreation = method === 'POST' && path === '/admin/realms';
 
     if ((!realm && !isRealmCreation) || !adminUser) return next.handle();
 
     const operationType = METHOD_TO_OPERATION[method];
     if (!operationType) return next.handle();
 
-    const resourceType = this.resolveResourceType(request.path);
+    const resourceType = this.resolveResourceType(path);
     if (!resourceType) return next.handle();
 
     const representation =
