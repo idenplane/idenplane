@@ -283,7 +283,7 @@ describe('stored secrets', () => {
         wizardRow({
           adminUsername: 'admin',
           adminPasswordHash: '$argon2id$v=19$m=65536,t=3,p=4$abc$def',
-          clientSecret: 'legacy-plaintext-client-secret',
+          clientSecret: 'dummy-legacy-client-secret',
           smtpConfig: { host: 'h', password: 'x', extra: 'leak' },
         }),
       );
@@ -293,7 +293,7 @@ describe('stored secrets', () => {
       expect(shown.smtpConfig).not.toHaveProperty('extra');
       const json = JSON.stringify(shown);
       expect(json).not.toContain('argon2id');
-      expect(json).not.toContain('legacy-plaintext-client-secret');
+      expect(json).not.toContain('dummy-legacy-client-secret');
     });
   });
 });

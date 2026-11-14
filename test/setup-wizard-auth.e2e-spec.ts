@@ -30,7 +30,7 @@ describe('Setup wizard access control (e2e)', () => {
     host: 'smtp.example.com',
     port: 587,
     user: 'mailer',
-    password: 'smtp-password-sentinel',
+    password: 'dummy-smtp-password-sentinel',
     from: 'noreply@example.com',
   };
   const CLIENT = {
@@ -418,8 +418,8 @@ describe('Setup wizard access control (e2e)', () => {
   describe('state never contains secrets', () => {
     const SENTINELS = {
       hash: '$argon2id$v=19$m=65536,t=3,p=4$SENTINELHASH',
-      clientSecret: 'SENTINEL-legacy-client-secret',
-      smtpPassword: 'SENTINEL-smtp-password',
+      clientSecret: 'SENTINEL-dummy-legacy-client-secret',
+      smtpPassword: 'SENTINEL-dummy-smtp-password',
     };
 
     it('redacts the SMTP password and drops the hash and client secret', async () => {
