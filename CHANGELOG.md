@@ -9,13 +9,23 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+## [0.9.0] - 2026-11-14
+
+A security release that enforces admin roles. Until now most admin routes checked only that the caller was an admin: `view-only` admins could change everything, and `realm-admin` accounts were not limited to any realm (GHSA-424c-q96v-g3q7). Now:
+- `view-only` admins can only read;
+- realm-admins manage only the realms a super-admin assigns them, on the new **Admin Accounts** page;
+- server-wide operations are for super-admins only;
+- the admin console shows each admin only what their role may do.
+
+Read *Before you upgrade*: realm-admins need their realms assigned.
+
 **Before you upgrade:**
 - **Assign realms to your realm-admins.** A `realm-admin` now manages only the realms a super-admin assigns to it. **After the upgrade, existing realm-admins have no realms**, so they can sign in but can't read or change any realm. Assign their realms right after upgrading: Console → **Admin Accounts**, or `PUT /admin/admin-accounts/{userId}/realms` with `{"realms": [...]}`. The master realm can't be assigned. Use `super-admin` for an admin who should manage every realm.
 - **`view-only` admins lose change access.** Until now they could create, change and delete most things in every realm. They keep read access to every realm, except server-wide pages (plugins, upgrade, system version, metrics) and realm export, which are now super-admin only.
 - **Scripts that use the admin JWT of a non-super-admin may now get `403`.** Give the account the right role or realm assignment. The admin API key is unchanged and keeps full access.
 
 ### Security
-- **Admin roles are enforced on every admin route.** Since 0.8.1 every admin route has required admin credentials, but most had no role check. A `view-only` admin could create, change and delete clients, roles, groups, organizations, NHI identities and more, and any admin could approve registrations. A global authorization step now runs right after authentication, on exactly the routes authentication covers, so new routes are covered by default:
+- **Admin roles are enforced on every admin route (GHSA-424c-q96v-g3q7).** Since 0.8.1 every admin route has required admin credentials, but most had no role check. A `view-only` admin could create, change and delete clients, roles, groups, organizations, NHI identities and more, and any admin could approve registrations. A global authorization step now runs right after authentication, on exactly the routes authentication covers, so new routes are covered by default:
   - reads (`GET`, `HEAD`, `OPTIONS`): any admin role, but a realm-admin only in its realms;
   - changes: `super-admin`, or a realm-admin in its realms;
   - server-wide routes, and any route without a recognisable realm parameter: `super-admin` only. These are creating, importing, exporting and deleting realms; plugins; upgrade; system version; metrics; migration imports; the setup wizard; and admin accounts;
