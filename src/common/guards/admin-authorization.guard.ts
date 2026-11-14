@@ -109,7 +109,8 @@ export class AdminAuthorizationGuard implements CanActivate {
     admin.roles = [...principal.roles];
 
     const policy = this.policyFor(controller, handler);
-    const access = accessForMethod(request.method ?? 'GET', policy);
+    // No method is not a read: fail closed.
+    const access = accessForMethod(request.method ?? 'POST', policy);
 
     let realm: ResolvedRealm | null = null;
     if (policy.scope.kind === 'realm' && !isSuperAdmin(principal)) {
