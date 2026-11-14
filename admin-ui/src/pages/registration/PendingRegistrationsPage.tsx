@@ -3,8 +3,10 @@ import { useParams } from 'react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getPendingRegistrations, approveRegistration, rejectRegistration } from '../../api/registration';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import { useCanWriteRealm } from '../../hooks/usePermissions';
 
 export default function PendingRegistrationsPage() {
+  const canWrite = useCanWriteRealm();
   const { name } = useParams<{ name: string }>();
   const queryClient = useQueryClient();
   const [rejectReason, setRejectReason] = useState('');
@@ -111,20 +113,24 @@ export default function PendingRegistrationsPage() {
                     </div>
                   </td>
                   <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium">
-                    <button
-                      onClick={() => approveMutation.mutate(user.id)}
-                      disabled={approveMutation.isPending}
-                      className="text-success hover:text-green-900 mr-4 disabled:opacity-50"
-                    >
-                      {approveMutation.isPending && approveMutation.variables === user.id ? 'Approving...' : 'Approve'}
-                    </button>
-                    <button
-                      onClick={() => setPendingReject(user.id)}
-                      disabled={rejectMutation.isPending}
-                      className="text-danger hover:text-danger-fg disabled:opacity-50"
-                    >
-                      Reject
-                    </button>
+                    {canWrite && (
+                      <button
+                        onClick={() => approveMutation.mutate(user.id)}
+                        disabled={approveMutation.isPending}
+                        className="text-success hover:text-green-900 mr-4 disabled:opacity-50"
+                      >
+                        {approveMutation.isPending && approveMutation.variables === user.id ? 'Approving...' : 'Approve'}
+                      </button>
+                    )}
+                    {canWrite && (
+                      <button
+                        onClick={() => setPendingReject(user.id)}
+                        disabled={rejectMutation.isPending}
+                        className="text-danger hover:text-danger-fg disabled:opacity-50"
+                      >
+                        Reject
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

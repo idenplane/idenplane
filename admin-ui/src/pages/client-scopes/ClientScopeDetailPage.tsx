@@ -3,8 +3,10 @@ import { useParams, useNavigate } from 'react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getClientScopeById, updateClientScope, deleteClientScope, addMapper, deleteMapper } from '../../api/clientScopes'
 import ConfirmDialog from '../../components/ConfirmDialog'
+import { useCanWriteRealm } from '../../hooks/usePermissions'
 
 export default function ClientScopeDetailPage() {
+  const canWrite = useCanWriteRealm()
   const { name, scopeId } = useParams<{ name: string; scopeId: string }>()
   const navigate = useNavigate()
   const queryClient = useQueryClient()
@@ -157,13 +159,15 @@ export default function ClientScopeDetailPage() {
             </span>
           )}
         </div>
-        <button
-          onClick={() => setShowDeleteDialog(true)}
-          disabled={scope.builtIn}
-          className="rounded-md border border-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger-soft disabled:opacity-50"
-        >
-          Delete
-        </button>
+        {canWrite && (
+          <button
+            onClick={() => setShowDeleteDialog(true)}
+            disabled={scope.builtIn}
+            className="rounded-md border border-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger-soft disabled:opacity-50"
+          >
+            Delete
+          </button>
+        )}
       </div>
 
       {/* Success/Error Messages */}
@@ -207,10 +211,13 @@ export default function ClientScopeDetailPage() {
               className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
             />
           </div>
+          {!canWrite && (
+            <p className="text-xs text-subtle">Read-only: your admin role can't change this realm.</p>
+          )}
           <div>
             <button
               type="submit"
-              disabled={updateMutation.isPending}
+              disabled={!canWrite || updateMutation.isPending}
               className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               {updateMutation.isPending ? 'Saving...' : 'Save'}
@@ -250,12 +257,14 @@ export default function ClientScopeDetailPage() {
                       {mapper.mapperType}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-right text-sm">
-                      <button
-                        onClick={() => handleDeleteMapper(mapper.id)}
-                        className="text-danger hover:text-danger-fg"
-                      >
-                        Delete
-                      </button>
+                      {canWrite && (
+                        <button
+                          onClick={() => handleDeleteMapper(mapper.id)}
+                          className="text-danger hover:text-danger-fg"
+                        >
+                          Delete
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -315,7 +324,7 @@ export default function ClientScopeDetailPage() {
             <div>
               <button
                 type="submit"
-                disabled={addMapperMutation.isPending}
+                disabled={!canWrite || addMapperMutation.isPending}
                 className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
               >
                 {addMapperMutation.isPending ? 'Adding...' : 'Add Mapper'}

@@ -8,8 +8,10 @@ import {
   revokeProxyApplicationSessions,
 } from '../../api/proxyApplications';
 import { getErrorMessage } from '../../utils/getErrorMessage';
+import { useCanWriteRealm } from '../../hooks/usePermissions';
 
 export default function ProxyApplicationDetailPage() {
+  const canWrite = useCanWriteRealm();
   const { name, slug } = useParams<{ name: string; slug: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -227,33 +229,35 @@ export default function ProxyApplicationDetailPage() {
         <div className="flex flex-wrap gap-3">
           <button
             onClick={() => toggleEnabled.mutate(!application.enabled)}
-            disabled={toggleEnabled.isPending}
+            disabled={!canWrite || toggleEnabled.isPending}
             className="rounded-md border border-line px-4 py-2 text-sm font-medium text-fg hover:bg-hover disabled:opacity-50"
           >
             {application.enabled ? 'Disable' : 'Enable'}
           </button>
           <button
             onClick={() => revoke.mutate()}
-            disabled={revoke.isPending}
+            disabled={!canWrite || revoke.isPending}
             className="rounded-md border border-line px-4 py-2 text-sm font-medium text-fg hover:bg-hover disabled:opacity-50"
           >
             {revoke.isPending ? 'Revoking...' : 'Revoke all sessions'}
           </button>
-          <button
-            onClick={() => {
-              if (
-                window.confirm(
-                  `Delete "${application.name}"? Its live sessions are deleted with it, and your proxy will start getting 404s from ${verifyUrl}.`,
-                )
-              ) {
-                remove.mutate();
-              }
-            }}
-            disabled={remove.isPending}
-            className="rounded-md bg-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:opacity-80 disabled:opacity-50"
-          >
-            Delete
-          </button>
+          {canWrite && (
+            <button
+              onClick={() => {
+                if (
+                  window.confirm(
+                    `Delete "${application.name}"? Its live sessions are deleted with it, and your proxy will start getting 404s from ${verifyUrl}.`,
+                  )
+                ) {
+                  remove.mutate();
+                }
+              }}
+              disabled={remove.isPending}
+              className="rounded-md bg-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:opacity-80 disabled:opacity-50"
+            >
+              Delete
+            </button>
+          )}
         </div>
       </div>
     </div>

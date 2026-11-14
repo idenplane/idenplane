@@ -8,6 +8,7 @@ import { getErrorMessage } from '../utils/getErrorMessage';
 import { Card, Badge, Icons } from '../components/ui';
 import FailedLoginHeatmap from '../components/dashboard/FailedLoginHeatmap';
 import LockedUsersPanel from '../components/dashboard/LockedUsersPanel';
+import { CanWrite, SuperAdminOnly } from '../components/PermissionGate';
 
 // ─── Stat Card ────────────────────────────────────────────────────────────────
 
@@ -277,18 +278,20 @@ function RealmStatsSection({ realmName }: { realmName: string }) {
       <div>
         <h2 className="mb-3 text-base font-semibold text-fg">Quick Actions</h2>
         <div className="grid gap-3 sm:grid-cols-2 lg:grid-cols-3">
-          <QuickAction
-            label="Create User"
-            description={`Add a new user to ${realmName}`}
-            onClick={() => navigate(`/console/realms/${realmName}/users/create`)}
-            icon={<Icons.User className="h-5 w-5" />}
-          />
-          <QuickAction
-            label="Create Client"
-            description={`Register a new application in ${realmName}`}
-            onClick={() => navigate(`/console/realms/${realmName}/clients/new`)}
-            icon={<Icons.Clients className="h-5 w-5" />}
-          />
+          <CanWrite realm={realmName}>
+            <QuickAction
+              label="Create User"
+              description={`Add a new user to ${realmName}`}
+              onClick={() => navigate(`/console/realms/${realmName}/users/create`)}
+              icon={<Icons.User className="h-5 w-5" />}
+            />
+            <QuickAction
+              label="Create Client"
+              description={`Register a new application in ${realmName}`}
+              onClick={() => navigate(`/console/realms/${realmName}/clients/new`)}
+              icon={<Icons.Clients className="h-5 w-5" />}
+            />
+          </CanWrite>
           <QuickAction
             label="View Logs"
             description="Browse login and admin events"
@@ -404,12 +407,14 @@ export default function DashboardPage() {
         ) : (
           <Card className="text-center">
             <p className="text-muted">No realms yet.</p>
-            <button
-              onClick={() => navigate('/console/realms/create')}
-              className="mt-3 text-sm font-medium text-accent hover:text-accent-hover"
-            >
-              Create your first realm
-            </button>
+            <SuperAdminOnly>
+              <button
+                onClick={() => navigate('/console/realms/create')}
+                className="mt-3 text-sm font-medium text-accent hover:text-accent-hover"
+              >
+                Create your first realm
+              </button>
+            </SuperAdminOnly>
           </Card>
         )}
       </div>

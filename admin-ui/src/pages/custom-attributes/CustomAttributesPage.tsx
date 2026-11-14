@@ -10,6 +10,7 @@ import {
 import type { CustomAttribute, AttributeType } from '../../api/customAttributes';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { getErrorMessage } from '../../utils/getErrorMessage';
+import { useCanWriteRealm } from '../../hooks/usePermissions';
 
 const ATTRIBUTE_TYPES: AttributeType[] = ['text', 'number', 'boolean', 'select', 'multi-select'];
 
@@ -303,6 +304,7 @@ function AttributeForm({
 }
 
 export default function CustomAttributesPage() {
+  const canWrite = useCanWriteRealm();
   const { name } = useParams<{ name: string }>();
   const queryClient = useQueryClient();
 
@@ -371,16 +373,18 @@ export default function CustomAttributesPage() {
     <div>
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-2xl font-bold text-fg">Custom Attributes</h1>
-        <button
-          onClick={() => {
-            setEditingId(null);
-            setCreateForm(emptyForm);
-            setShowCreate(true);
-          }}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
-        >
-          Add Attribute
-        </button>
+        {canWrite && (
+          <button
+            onClick={() => {
+              setEditingId(null);
+              setCreateForm(emptyForm);
+              setShowCreate(true);
+            }}
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
+          >
+            Add Attribute
+          </button>
+        )}
       </div>
 
       {showCreate && (
@@ -461,18 +465,22 @@ export default function CustomAttributesPage() {
                     )}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-right">
-                    <button
-                      onClick={() => startEdit(attr)}
-                      className="mr-4 text-sm font-medium text-accent hover:text-accent"
-                    >
-                      Edit
-                    </button>
-                    <button
-                      onClick={() => setDeleteTarget(attr)}
-                      className="text-sm font-medium text-danger hover:text-danger-fg"
-                    >
-                      Delete
-                    </button>
+                    {canWrite && (
+                      <button
+                        onClick={() => startEdit(attr)}
+                        className="mr-4 text-sm font-medium text-accent hover:text-accent"
+                      >
+                        Edit
+                      </button>
+                    )}
+                    {canWrite && (
+                      <button
+                        onClick={() => setDeleteTarget(attr)}
+                        className="text-sm font-medium text-danger hover:text-danger-fg"
+                      >
+                        Delete
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

@@ -10,8 +10,10 @@ import {
 } from '../../api/userFederation';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import PasswordInput from '../../components/PasswordInput';
+import { useCanWriteRealm } from '../../hooks/usePermissions';
 
 export default function FederationDetailPage() {
+  const canWrite = useCanWriteRealm();
   const { name, id } = useParams<{ name: string; id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -170,12 +172,14 @@ export default function FederationDetailPage() {
             {federation.providerType.toUpperCase()} Federation Provider
           </p>
         </div>
-        <button
-          onClick={() => setShowDelete(true)}
-          className="rounded-md border border-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger-soft"
-        >
-          Delete
-        </button>
+        {canWrite && (
+          <button
+            onClick={() => setShowDelete(true)}
+            className="rounded-md border border-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger-soft"
+          >
+            Delete
+          </button>
+        )}
       </div>
 
       {/* Actions */}
@@ -185,7 +189,7 @@ export default function FederationDetailPage() {
             setActionStatus(null);
             testMutation.mutate();
           }}
-          disabled={testMutation.isPending}
+          disabled={!canWrite || testMutation.isPending}
           className="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-muted hover:bg-hover disabled:opacity-50"
         >
           {testMutation.isPending ? 'Testing...' : 'Test Connection'}
@@ -195,7 +199,7 @@ export default function FederationDetailPage() {
             setActionStatus(null);
             syncMutation.mutate();
           }}
-          disabled={syncMutation.isPending}
+          disabled={!canWrite || syncMutation.isPending}
           className="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-muted hover:bg-hover disabled:opacity-50"
         >
           {syncMutation.isPending ? 'Syncing...' : 'Sync Users'}
@@ -487,10 +491,13 @@ export default function FederationDetailPage() {
           </div>
         )}
 
+        {!canWrite && (
+          <p className="text-xs text-subtle">Read-only: your admin role can't change this realm.</p>
+        )}
         <div className="flex justify-end border-t border-line pt-4">
           <button
             type="submit"
-            disabled={updateMutation.isPending}
+            disabled={!canWrite || updateMutation.isPending}
             className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {updateMutation.isPending ? 'Saving...' : 'Save Changes'}

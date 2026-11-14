@@ -8,8 +8,10 @@ import {
 } from '../../api/identityProviders';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import PasswordInput from '../../components/PasswordInput';
+import { useCanWriteRealm } from '../../hooks/usePermissions';
 
 export default function IdpDetailPage() {
+  const canWrite = useCanWriteRealm();
   const { name, alias } = useParams<{ name: string; alias: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -118,12 +120,14 @@ export default function IdpDetailPage() {
             <p className="mt-1 text-sm text-subtle">{idp.displayName}</p>
           )}
         </div>
-        <button
-          onClick={() => setShowDelete(true)}
-          className="rounded-md border border-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger-soft"
-        >
-          Delete
-        </button>
+        {canWrite && (
+          <button
+            onClick={() => setShowDelete(true)}
+            className="rounded-md border border-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger-soft"
+          >
+            Delete
+          </button>
+        )}
       </div>
 
       <form onSubmit={handleSubmit} className="space-y-6 rounded-lg border border-line bg-surface p-6 shadow-sm">
@@ -328,10 +332,13 @@ export default function IdpDetailPage() {
           </div>
         )}
 
+        {!canWrite && (
+          <p className="text-xs text-subtle">Read-only: your admin role can't change this realm.</p>
+        )}
         <div className="flex justify-end border-t border-line pt-4">
           <button
             type="submit"
-            disabled={updateMutation.isPending}
+            disabled={!canWrite || updateMutation.isPending}
             className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {updateMutation.isPending ? 'Saving...' : 'Save Changes'}

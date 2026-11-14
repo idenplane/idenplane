@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router';
 import { getClients } from '../../api/clients';
 import { getErrorMessage } from '../../utils/getErrorMessage';
+import { CanWrite } from '../../components/PermissionGate';
 
 export default function ClientListPage() {
   const { name } = useParams<{ name: string }>();
@@ -38,12 +39,14 @@ export default function ClientListPage() {
             Manage clients in <span className="font-medium">{name}</span>
           </p>
         </div>
-        <button
-          onClick={() => navigate(`/console/realms/${name}/clients/new`)}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
-        >
-          Create Client
-        </button>
+        <CanWrite>
+          <button
+            onClick={() => navigate(`/console/realms/${name}/clients/new`)}
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
+          >
+            Create Client
+          </button>
+        </CanWrite>
       </div>
 
       <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-sm">

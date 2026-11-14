@@ -12,6 +12,7 @@ import {
 import { getErrorMessage } from '../../utils/getErrorMessage';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import FlowBindingsPanel from './FlowBindingsPanel';
+import { useCanWriteRealm } from '../../hooks/usePermissions';
 
 /** A new flow starts valid: the server rejects flows without an identifying first step. */
 const NEW_FLOW_STEPS: FlowStep[] = [
@@ -27,6 +28,7 @@ const NEW_FLOW_STEPS: FlowStep[] = [
 ];
 
 export default function AuthFlowListPage() {
+  const canWrite = useCanWriteRealm();
   const { name } = useParams<{ name: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -132,13 +134,15 @@ export default function AuthFlowListPage() {
             <span className="font-medium">{name}</span>
           </p>
         </div>
-        <button
-          onClick={handleCreate}
-          disabled={createMutation.isPending}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-60"
-        >
-          {createMutation.isPending ? 'Creating...' : 'Create Flow'}
-        </button>
+        {canWrite && (
+          <button
+            onClick={handleCreate}
+            disabled={createMutation.isPending}
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-60"
+          >
+            {createMutation.isPending ? 'Creating...' : 'Create Flow'}
+          </button>
+        )}
       </div>
 
       {createError && (
@@ -218,19 +222,23 @@ export default function AuthFlowListPage() {
                       >
                         Edit
                       </button>
-                      <button
-                        onClick={() => duplicateMutation.mutate(flow)}
-                        disabled={duplicateMutation.isPending}
-                        className="rounded px-2 py-1 text-xs font-medium text-muted hover:bg-hover"
-                      >
-                        Duplicate
-                      </button>
-                      <button
-                        onClick={() => setDeleteTarget(flow)}
-                        className="rounded px-2 py-1 text-xs font-medium text-danger hover:bg-danger-soft"
-                      >
-                        Delete
-                      </button>
+                      {canWrite && (
+                        <button
+                          onClick={() => duplicateMutation.mutate(flow)}
+                          disabled={duplicateMutation.isPending}
+                          className="rounded px-2 py-1 text-xs font-medium text-muted hover:bg-hover"
+                        >
+                          Duplicate
+                        </button>
+                      )}
+                      {canWrite && (
+                        <button
+                          onClick={() => setDeleteTarget(flow)}
+                          className="rounded px-2 py-1 text-xs font-medium text-danger hover:bg-danger-soft"
+                        >
+                          Delete
+                        </button>
+                      )}
                     </div>
                   </td>
                 </tr>

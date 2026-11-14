@@ -3,8 +3,10 @@ import { useParams } from 'react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getRealmByName, updateRealm } from '../../api/realms';
 import type { Realm } from '../../types';
+import { usePermissions } from '../../hooks/usePermissions';
 
 export default function RegistrationSettingsPage() {
+  const { canManageServer } = usePermissions();
   const { name } = useParams<{ name: string }>();
   const queryClient = useQueryClient();
 
@@ -270,10 +272,13 @@ export default function RegistrationSettingsPage() {
             </div>
           </div>
 
+          {!canManageServer && (
+            <p className="text-xs text-subtle">Read-only: only a super-admin can change realm settings.</p>
+          )}
           <div className="flex justify-end">
             <button
               type="submit"
-              disabled={mutation.isPending}
+              disabled={!canManageServer || mutation.isPending}
               className="px-4 py-2 bg-accent text-white rounded-md hover:bg-accent-hover disabled:opacity-50"
             >
               {mutation.isPending ? 'Saving...' : 'Save Changes'}

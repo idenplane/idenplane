@@ -14,6 +14,7 @@ import {
 } from '../../api/organizations';
 import type { OrgMember } from '../../api/organizations';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import { useCanWriteRealm } from '../../hooks/usePermissions';
 
 type OrgRole = 'owner' | 'admin' | 'member';
 
@@ -37,6 +38,7 @@ const ROLE_SELECT_CLS =
   'rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none';
 
 export default function OrganizationDetailPage() {
+  const canWrite = useCanWriteRealm();
   const { name, slug } = useParams<{ name: string; slug: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -220,12 +222,14 @@ export default function OrganizationDetailPage() {
             <p className="mt-1 text-sm text-subtle">{org.displayName}</p>
           )}
         </div>
-        <button
-          onClick={() => setShowDelete(true)}
-          className="rounded-md border border-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger-soft"
-        >
-          Delete
-        </button>
+        {canWrite && (
+          <button
+            onClick={() => setShowDelete(true)}
+            className="rounded-md border border-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger-soft"
+          >
+            Delete
+          </button>
+        )}
       </div>
 
       {/* Settings */}
@@ -336,10 +340,13 @@ export default function OrganizationDetailPage() {
           </div>
         )}
 
+        {!canWrite && (
+          <p className="text-xs text-subtle">Read-only: your admin role can't change this realm.</p>
+        )}
         <div className="flex justify-end border-t border-line pt-4">
           <button
             type="submit"
-            disabled={updateMutation.isPending}
+            disabled={!canWrite || updateMutation.isPending}
             className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
@@ -400,18 +407,20 @@ export default function OrganizationDetailPage() {
                               role: pendingRoles[member.userId] ?? member.role,
                             })
                           }
-                          disabled={updateMemberMutation.isPending}
+                          disabled={!canWrite || updateMemberMutation.isPending}
                           className="rounded-md bg-accent px-2 py-1 text-xs font-medium text-white hover:bg-accent-hover disabled:opacity-50"
                         >
                           Update
                         </button>
-                        <button
-                          type="button"
-                          onClick={() => setRemovingMemberId(member.userId)}
-                          className="rounded-md border border-danger-soft px-2 py-1 text-xs font-medium text-danger-fg hover:bg-danger-soft"
-                        >
-                          Remove
-                        </button>
+                        {canWrite && (
+                          <button
+                            type="button"
+                            onClick={() => setRemovingMemberId(member.userId)}
+                            className="rounded-md border border-danger-soft px-2 py-1 text-xs font-medium text-danger-fg hover:bg-danger-soft"
+                          >
+                            Remove
+                          </button>
+                        )}
                       </div>
                     </td>
                   </tr>
@@ -456,7 +465,7 @@ export default function OrganizationDetailPage() {
             </div>
             <button
               type="submit"
-              disabled={addMemberMutation.isPending}
+              disabled={!canWrite || addMemberMutation.isPending}
               className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               {addMemberMutation.isPending ? 'Adding...' : 'Add'}
@@ -550,7 +559,7 @@ export default function OrganizationDetailPage() {
             </div>
             <button
               type="submit"
-              disabled={inviteMutation.isPending}
+              disabled={!canWrite || inviteMutation.isPending}
               className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               {inviteMutation.isPending ? 'Creating...' : 'Create invitation'}

@@ -3,6 +3,7 @@ import { useParams } from 'react-router'
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query'
 import { getLoginEvents, clearLoginEvents, type LoginEvent } from '../../api/events'
 import ConfirmDialog from '../../components/ConfirmDialog'
+import { usePermissions } from '../../hooks/usePermissions'
 
 const EVENT_TYPES = [
   'LOGIN',
@@ -46,6 +47,7 @@ function getTypeBadgeClasses(type: string): string {
 }
 
 export default function LoginEventsPage() {
+  const { canManageServer } = usePermissions()
   const { name } = useParams<{ name: string }>()
   const queryClient = useQueryClient()
 
@@ -95,14 +97,16 @@ export default function LoginEventsPage() {
             View login events for realm <span className="font-medium">{name}</span>
           </p>
         </div>
-        <button
-          type="button"
-          onClick={handleClearEvents}
-          disabled={clearMutation.isPending}
-          className="inline-flex items-center rounded-md border border-danger-soft bg-surface px-4 py-2 text-sm font-medium text-danger-fg shadow-sm hover:bg-danger-soft focus:outline-none focus:ring-2 focus:ring-danger focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
-        >
-          {clearMutation.isPending ? 'Clearing...' : 'Clear Events'}
-        </button>
+        {canManageServer && (
+          <button
+            type="button"
+            onClick={handleClearEvents}
+            disabled={clearMutation.isPending}
+            className="inline-flex items-center rounded-md border border-danger-soft bg-surface px-4 py-2 text-sm font-medium text-danger-fg shadow-sm hover:bg-danger-soft focus:outline-none focus:ring-2 focus:ring-danger focus:ring-offset-2 disabled:opacity-50 disabled:cursor-not-allowed"
+          >
+            {clearMutation.isPending ? 'Clearing...' : 'Clear Events'}
+          </button>
+        )}
       </div>
 
       {/* Filter Bar */}

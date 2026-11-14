@@ -4,6 +4,7 @@ import { useNavigate } from 'react-router';
 import { getAllRealms, importRealm } from '../../api/realms';
 import { getErrorMessage } from '../../utils/getErrorMessage';
 import { SectionHeader, Button, Card, Badge, Alert, EmptyState, Icons } from '../../components/ui';
+import { SuperAdminOnly } from '../../components/PermissionGate';
 
 export default function RealmListPage() {
   const navigate = useNavigate();
@@ -75,12 +76,14 @@ export default function RealmListPage() {
               aria-label="Import realm JSON file"
               className="hidden"
             />
-            <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>
-              Import Realm
-            </Button>
-            <Button icon={Icons.Plus} onClick={() => navigate('/console/realms/create')}>
-              Create Realm
-            </Button>
+            <SuperAdminOnly>
+              <Button variant="secondary" onClick={() => fileInputRef.current?.click()}>
+                Import Realm
+              </Button>
+              <Button icon={Icons.Plus} onClick={() => navigate('/console/realms/create')}>
+                Create Realm
+              </Button>
+            </SuperAdminOnly>
           </div>
         }
       />

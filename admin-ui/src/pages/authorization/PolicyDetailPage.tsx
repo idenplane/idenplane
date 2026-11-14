@@ -4,8 +4,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getPolicy, updatePolicy, deletePolicy, testPolicy } from '../../api/authorization';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { getErrorMessage } from '../../utils/getErrorMessage';
+import { useCanWriteRealm } from '../../hooks/usePermissions';
 
 export default function PolicyDetailPage() {
+  const canWrite = useCanWriteRealm();
   const { name, policyId } = useParams<{ name: string; policyId: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -123,12 +125,14 @@ export default function PolicyDetailPage() {
     <div className="space-y-8">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-fg">{policy.name}</h1>
-        <button
-          onClick={() => setShowDelete(true)}
-          className="rounded-md border border-danger-soft bg-surface px-4 py-2 text-sm font-medium text-danger hover:bg-danger-soft"
-        >
-          Delete Policy
-        </button>
+        {canWrite && (
+          <button
+            onClick={() => setShowDelete(true)}
+            className="rounded-md border border-danger-soft bg-surface px-4 py-2 text-sm font-medium text-danger hover:bg-danger-soft"
+          >
+            Delete Policy
+          </button>
+        )}
       </div>
 
       {/* Edit form */}
@@ -234,10 +238,13 @@ export default function PolicyDetailPage() {
           </div>
         )}
 
+        {!canWrite && (
+          <p className="text-xs text-subtle">Read-only: your admin role can't change this realm.</p>
+        )}
         <div className="flex justify-end">
           <button
             type="submit"
-            disabled={updateMutation.isPending || !!conditionsError}
+            disabled={!canWrite || updateMutation.isPending || !!conditionsError}
             className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
@@ -281,7 +288,7 @@ export default function PolicyDetailPage() {
 
           <button
             type="submit"
-            disabled={testMutation.isPending || !!testInputError}
+            disabled={!canWrite || testMutation.isPending || !!testInputError}
             className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {testMutation.isPending ? 'Running...' : 'Run Test'}

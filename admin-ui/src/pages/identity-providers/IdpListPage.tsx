@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { getIdentityProviders } from '../../api/identityProviders';
+import { CanWrite } from '../../components/PermissionGate';
 
 export default function IdpListPage() {
   const { name } = useParams<{ name: string }>();
@@ -15,12 +16,14 @@ export default function IdpListPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-fg">Identity Providers</h1>
-        <Link
-          to={`/console/realms/${name}/identity-providers/create`}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
-        >
-          Add Provider
-        </Link>
+        <CanWrite>
+          <Link
+            to={`/console/realms/${name}/identity-providers/create`}
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
+          >
+            Add Provider
+          </Link>
+        </CanWrite>
       </div>
 
       {error && (

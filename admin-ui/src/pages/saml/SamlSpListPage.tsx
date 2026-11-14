@@ -1,6 +1,7 @@
 import { Link, useParams } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { getSamlSps } from '../../api/samlServiceProviders';
+import { CanWrite } from '../../components/PermissionGate';
 
 export default function SamlSpListPage() {
   const { name } = useParams<{ name: string }>();
@@ -15,12 +16,14 @@ export default function SamlSpListPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-fg">SAML Service Providers</h1>
-        <Link
-          to={`/console/realms/${name}/saml-providers/create`}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
-        >
-          Add Service Provider
-        </Link>
+        <CanWrite>
+          <Link
+            to={`/console/realms/${name}/saml-providers/create`}
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
+          >
+            Add Service Provider
+          </Link>
+        </CanWrite>
       </div>
 
       {error && (

@@ -11,8 +11,10 @@ import {
 } from '../../api/authFlows';
 import { getErrorMessage } from '../../utils/getErrorMessage';
 import FlowCanvas from '../../components/flow-editor/FlowCanvas';
+import { useCanWriteRealm } from '../../hooks/usePermissions';
 
 export default function AuthFlowEditorPage() {
+  const canWrite = useCanWriteRealm();
   const { name, flowId } = useParams<{ name: string; flowId: string }>();
   const navigate = useNavigate();
   const qc = useQueryClient();
@@ -184,7 +186,7 @@ export default function AuthFlowEditorPage() {
         {!isPreview && (
           <button
             onClick={handleSave}
-            disabled={saveMutation.isPending || !isDirty}
+            disabled={!canWrite || saveMutation.isPending || !isDirty}
             className="rounded-md bg-accent px-4 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {saveMutation.isPending ? 'Saving...' : 'Save'}

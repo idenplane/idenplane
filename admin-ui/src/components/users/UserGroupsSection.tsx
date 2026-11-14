@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import { useQuery, useMutation } from '@tanstack/react-query';
 import { getUserGroups, getGroups, addUserToGroup, removeUserFromGroup } from '../../api/groups';
+import { useCanWriteRealm } from '../../hooks/usePermissions';
 
 type UserGroupsSectionProps = {
   realmName: string;
@@ -8,6 +9,7 @@ type UserGroupsSectionProps = {
 };
 
 export default function UserGroupsSection({ realmName, userId }: UserGroupsSectionProps) {
+  const canWrite = useCanWriteRealm(realmName);
   const [selectedGroup, setSelectedGroup] = useState('');
 
   const { data: userGroups, refetch: refetchUserGroups } = useQuery({
@@ -51,15 +53,17 @@ export default function UserGroupsSection({ realmName, userId }: UserGroupsSecti
                 className="inline-flex items-center gap-1 rounded-full bg-emerald-100 px-3 py-1 text-sm font-medium text-emerald-700"
               >
                 {group.name}
-                <button
-                  type="button"
-                  onClick={() => removeGroupMutation.mutate(group.id)}
-                  className="ml-1 text-emerald-400 hover:text-emerald-600"
-                >
-                  <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                    <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                  </svg>
-                </button>
+                {canWrite && (
+                  <button
+                    type="button"
+                    onClick={() => removeGroupMutation.mutate(group.id)}
+                    className="ml-1 text-emerald-400 hover:text-emerald-600"
+                  >
+                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                    </svg>
+                  </button>
+                )}
               </span>
             ))}
           </div>
@@ -69,7 +73,7 @@ export default function UserGroupsSection({ realmName, userId }: UserGroupsSecti
       </div>
 
       {/* Add to group */}
-      {availableGroups.length > 0 && (
+      {canWrite && availableGroups.length > 0 && (
         <div className="flex items-end gap-3 border-t border-line pt-4">
           <div className="flex-1">
             <label htmlFor="field-user-addToGroup" className="mb-1.5 block text-sm font-medium text-muted">

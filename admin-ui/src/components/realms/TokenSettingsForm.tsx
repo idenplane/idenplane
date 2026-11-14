@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { Realm } from '../../types';
 import { updateRealm } from '../../api/realms';
 import { formatDuration } from '../../utils/formatDuration';
+import { usePermissions } from '../../hooks/usePermissions';
 
 type TokenSettingsFormProps = {
   realm: Realm;
@@ -17,6 +18,7 @@ function seedFromRealm(realm: Realm) {
 }
 
 export default function TokenSettingsForm({ realm }: TokenSettingsFormProps) {
+  const { canManageServer } = usePermissions();
   const queryClient = useQueryClient();
 
   const [form, setForm] = useState(() => seedFromRealm(realm));
@@ -142,10 +144,13 @@ export default function TokenSettingsForm({ realm }: TokenSettingsFormProps) {
         </div>
       )}
 
+      {!canManageServer && (
+        <p className="text-xs text-subtle">Read-only: only a super-admin can change realm settings.</p>
+      )}
       <div className="flex justify-end border-t border-line pt-4">
         <button
           type="submit"
-          disabled={updateMutation.isPending}
+          disabled={!canManageServer || updateMutation.isPending}
           className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
         >
           {updateMutation.isPending ? 'Saving...' : 'Save Changes'}

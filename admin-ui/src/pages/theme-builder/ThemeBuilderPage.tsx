@@ -22,6 +22,7 @@ import StyleEditor from './StyleEditor';
 import ImageUploader from './ImageUploader';
 import ThemeTemplates from './ThemeTemplates';
 import ThemeVersionHistory from './ThemeVersionHistory';
+import { useCanWriteRealm } from '../../hooks/usePermissions';
 
 // ─── Viewport type ─────────────────────────────────────────────────────────────
 
@@ -38,6 +39,7 @@ type EditorPanel = 'palette' | 'canvas' | 'styles' | 'assets' | 'templates' | 'h
 // ─── Component ────────────────────────────────────────────────────────────────
 
 export default function ThemeBuilderPage() {
+  const canWrite = useCanWriteRealm();
   const { name: realmName } = useParams<{ name: string }>();
 
   // ── Theme state (shared across all sections) ──────────────────────────────
@@ -86,6 +88,8 @@ export default function ThemeBuilderPage() {
   const handleSave = useCallback(async (reason: 'manual' | 'auto-save' = 'manual') => {
     if (isSaving) return;
     if (!themeId) return;
+    // A read-only admin can edit locally but the server refuses saves.
+    if (!canWrite) return;
 
     setIsSaving(true);
     setSaveError(null);
@@ -110,7 +114,7 @@ export default function ThemeBuilderPage() {
     } finally {
       setIsSaving(false);
     }
-  }, [realmName, themeId, isSaving]);
+  }, [realmName, themeId, isSaving, canWrite]);
 
   // Ref to track the latest handleSave for use in effect
   const handleSaveRef = useRef(handleSave);
@@ -380,7 +384,7 @@ export default function ThemeBuilderPage() {
           {/* Save button */}
           <button
             onClick={() => handleSave('manual')}
-            disabled={isSaving || !hasUnsavedChanges}
+            disabled={!canWrite || isSaving || !hasUnsavedChanges}
             className="rounded-md border border-line-strong bg-surface px-3 py-1.5 text-sm font-medium text-muted hover:bg-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isSaving ? (
@@ -395,7 +399,7 @@ export default function ThemeBuilderPage() {
           {/* Publish button */}
           <button
             onClick={handlePublish}
-            disabled={isPublishing || isSaving}
+            disabled={!canWrite || isPublishing || isSaving}
             className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:cursor-not-allowed disabled:opacity-50"
           >
             {isPublishing ? (
@@ -596,7 +600,7 @@ export default function ThemeBuilderPage() {
                   themeId={themeId}
                   realmName={realmName || ''}
                   currentVersion={currentVersion}
-                  onRollback={handleRollback}
+                  onRollback={canWrite ? handleRollback : undefined}
                 />
                 {/* Rollback notifications */}
                 {rollbackError && (

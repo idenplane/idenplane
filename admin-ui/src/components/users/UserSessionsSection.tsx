@@ -2,6 +2,7 @@ import { useQuery, useMutation } from '@tanstack/react-query';
 import { getUserSessions, revokeSession, revokeAllUserSessions } from '../../api/sessions';
 import type { SessionInfo } from '../../api/sessions';
 import { getOfflineSessions, revokeOfflineSession } from '../../api/users';
+import { useCanWriteRealm } from '../../hooks/usePermissions';
 
 type UserSessionsSectionProps = {
   realmName: string;
@@ -9,6 +10,7 @@ type UserSessionsSectionProps = {
 };
 
 export default function UserSessionsSection({ realmName, userId }: UserSessionsSectionProps) {
+  const canWrite = useCanWriteRealm(realmName);
   const { data: userSessions, refetch: refetchSessions } = useQuery({
     queryKey: ['userSessions', realmName, userId],
     queryFn: () => getUserSessions(realmName, userId),
@@ -40,7 +42,7 @@ export default function UserSessionsSection({ realmName, userId }: UserSessionsS
       <div className="space-y-4 rounded-lg border border-line bg-surface p-6 shadow-sm">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-fg">Active Sessions</h2>
-          {userSessions && userSessions.length > 0 && (
+          {canWrite && userSessions && userSessions.length > 0 && (
             <button
               onClick={() => revokeAllMutation.mutate()}
               disabled={revokeAllMutation.isPending}
@@ -83,12 +85,14 @@ export default function UserSessionsSection({ realmName, userId }: UserSessionsS
                       {new Date(session.createdAt).toLocaleString()}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right">
-                      <button
-                        onClick={() => revokeSessionMutation.mutate(session)}
-                        className="text-sm text-danger hover:text-danger-fg"
-                      >
-                        Revoke
-                      </button>
+                      {canWrite && (
+                        <button
+                          onClick={() => revokeSessionMutation.mutate(session)}
+                          className="text-sm text-danger hover:text-danger-fg"
+                        >
+                          Revoke
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -131,12 +135,14 @@ export default function UserSessionsSection({ realmName, userId }: UserSessionsS
                       {new Date(session.createdAt).toLocaleString()}
                     </td>
                     <td className="whitespace-nowrap px-4 py-3 text-right">
-                      <button
-                        onClick={() => revokeOfflineMutation.mutate(session.id)}
-                        className="text-sm text-danger hover:text-danger-fg"
-                      >
-                        Revoke
-                      </button>
+                      {canWrite && (
+                        <button
+                          onClick={() => revokeOfflineMutation.mutate(session.id)}
+                          className="text-sm text-danger hover:text-danger-fg"
+                        >
+                          Revoke
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

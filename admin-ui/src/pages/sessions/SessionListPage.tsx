@@ -1,6 +1,7 @@
 import { useParams, Link } from 'react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getRealmSessions, revokeSession } from '../../api/sessions';
+import { useCanWriteRealm } from '../../hooks/usePermissions';
 
 function formatDate(date: string) {
   return new Date(date).toLocaleString();
@@ -14,6 +15,7 @@ function parseUserAgent(ua: string | null): string {
 }
 
 export default function SessionListPage() {
+  const canWrite = useCanWriteRealm();
   const { name } = useParams<{ name: string }>();
   const queryClient = useQueryClient();
 
@@ -102,19 +104,21 @@ export default function SessionListPage() {
                     {formatDate(session.expiresAt)}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-right">
-                    <button
-                      onClick={() =>
-                        revokeMutation.mutate({
-                          sessionId: session.id,
-                          type: session.type,
-                        })
-                      }
-                      disabled={revokeMutation.isPending}
-                      aria-label={`Revoke session for ${session.username}`}
-                      className="text-sm text-danger hover:text-danger-fg disabled:opacity-50"
-                    >
-                      Revoke
-                    </button>
+                    {canWrite && (
+                      <button
+                        onClick={() =>
+                          revokeMutation.mutate({
+                            sessionId: session.id,
+                            type: session.type,
+                          })
+                        }
+                        disabled={revokeMutation.isPending}
+                        aria-label={`Revoke session for ${session.username}`}
+                        className="text-sm text-danger hover:text-danger-fg disabled:opacity-50"
+                      >
+                        Revoke
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))}

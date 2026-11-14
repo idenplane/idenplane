@@ -4,8 +4,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getRealmRoles, createRealmRole, deleteRealmRole } from '../../api/roles';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { getErrorMessage } from '../../utils/getErrorMessage';
+import { useCanWriteRealm } from '../../hooks/usePermissions';
 
 export default function RoleListPage() {
+  const canWrite = useCanWriteRealm();
   const { name } = useParams<{ name: string }>();
   const queryClient = useQueryClient();
 
@@ -66,12 +68,14 @@ export default function RoleListPage() {
             Manage realm roles for <span className="font-medium">{name}</span>
           </p>
         </div>
-        <button
-          onClick={() => setShowCreate(true)}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
-        >
-          Create Role
-        </button>
+        {canWrite && (
+          <button
+            onClick={() => setShowCreate(true)}
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
+          >
+            Create Role
+          </button>
+        )}
       </div>
 
       {/* Create role inline form */}
@@ -130,7 +134,7 @@ export default function RoleListPage() {
             </button>
             <button
               type="submit"
-              disabled={createMutation.isPending}
+              disabled={!canWrite || createMutation.isPending}
               className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               {createMutation.isPending ? 'Creating...' : 'Create'}
@@ -172,12 +176,14 @@ export default function RoleListPage() {
                     {new Date(role.createdAt).toLocaleDateString()}
                   </td>
                   <td className="whitespace-nowrap px-6 py-4 text-right">
-                    <button
-                      onClick={() => setDeleteTarget(role.name)}
-                      className="text-sm font-medium text-danger hover:text-danger-fg"
-                    >
-                      Delete
-                    </button>
+                    {canWrite && (
+                      <button
+                        onClick={() => setDeleteTarget(role.name)}
+                        className="text-sm font-medium text-danger hover:text-danger-fg"
+                      >
+                        Delete
+                      </button>
+                    )}
                   </td>
                 </tr>
               ))
