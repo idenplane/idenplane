@@ -19,6 +19,29 @@ import { idpSecrets } from '../identity-providers/idp-secrets.js';
 import { federationSecrets } from '../user-federation/federation-secrets.js';
 import { totpSecret } from '../mfa/totp-secret.js';
 import { wizardSecrets } from '../setup-wizard/wizard-secrets.js';
+import type { WizardState } from '@prisma/client';
+
+function wizardRow(overrides: Partial<WizardState> = {}): WizardState {
+  return {
+    id: 'wizard',
+    completed: false,
+    skipped: false,
+    currentStep: 0,
+    adminUsername: null,
+    adminEmail: null,
+    adminPasswordHash: null,
+    realmName: null,
+    realmDisplayName: null,
+    smtpConfig: null,
+    clientId: null,
+    clientSecret: null,
+    redirectUris: [],
+    sdkGenerated: false,
+    createdAt: new Date(0),
+    updatedAt: new Date(0),
+    ...overrides,
+  } as WizardState;
+}
 
 describe('stored secrets', () => {
   const crypto = new CryptoService();
@@ -249,18 +272,28 @@ describe('stored secrets', () => {
         }),
       ).toBe(stored);
       expect(
-        wizardSecrets.redact({ smtpConfig: { host: 'h', password: stored } }),
-      ).toEqual({ smtpConfig: { host: 'h', password: SECRET_PLACEHOLDER } });
+        wizardSecrets.publicState(
+          wizardRow({ smtpConfig: { host: 'h', password: stored } }),
+        ).smtpConfig,
+      ).toMatchObject({ host: 'h', password: SECRET_PLACEHOLDER });
     });
 
-    it('never returns the admin password hash', () => {
-      const redacted = wizardSecrets.redact({
-        adminUsername: 'admin',
-        adminPasswordHash: '$argon2id$v=19$m=65536,t=3,p=4$abc$def',
-        smtpConfig: null,
-      });
-      expect(redacted).toEqual({ adminUsername: 'admin', smtpConfig: null });
-      expect(redacted).not.toHaveProperty('adminPasswordHash');
+    it('never returns the admin password hash, the client secret or unknown fields', () => {
+      const shown = wizardSecrets.publicState(
+        wizardRow({
+          adminUsername: 'admin',
+          adminPasswordHash: '$argon2id$v=19$m=65536,t=3,p=4$abc$def',
+          clientSecret: 'legacy-plaintext-client-secret',
+          smtpConfig: { host: 'h', password: 'x', extra: 'leak' },
+        }),
+      );
+      expect(shown.adminUsername).toBe('admin');
+      expect(shown).not.toHaveProperty('adminPasswordHash');
+      expect(shown).not.toHaveProperty('clientSecret');
+      expect(shown.smtpConfig).not.toHaveProperty('extra');
+      const json = JSON.stringify(shown);
+      expect(json).not.toContain('argon2id');
+      expect(json).not.toContain('legacy-plaintext-client-secret');
     });
   });
 });

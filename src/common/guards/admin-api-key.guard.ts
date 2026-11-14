@@ -11,6 +11,7 @@ import type { Request, Response } from 'express';
 import { Reflector } from '@nestjs/core';
 import { timingSafeEqual } from 'crypto';
 import { IS_PUBLIC_KEY } from '../decorators/public.decorator.js';
+import { REQUIRE_ADMIN_AUTH_KEY } from '../decorators/require-admin-auth.decorator.js';
 import { AdminAuthService } from '../../admin-auth/admin-auth.service.js';
 import { RateLimitService } from '../../rate-limit/rate-limit.service.js';
 import type { RateLimitResult } from '../../rate-limit/rate-limit.dto.js';
@@ -36,10 +37,16 @@ export class AdminApiKeyGuard implements CanActivate {
     const request = context.switchToHttp().getRequest<Request>();
     const response = context.switchToHttp().getResponse<Response>();
 
-    // Only enforce auth on admin routes: /admin exactly, or /admin/...
+    // Enforce auth on admin routes (/admin exactly, or /admin/...) and on
+    // any route that opts in with @RequireAdminAuth() (the setup wizard).
     const isAdminRoute =
       request.path === '/admin' || request.path.startsWith('/admin/');
-    if (!isAdminRoute) {
+    const requiresAdminAuth =
+      this.reflector.getAllAndOverride<boolean>(REQUIRE_ADMIN_AUTH_KEY, [
+        context.getHandler(),
+        context.getClass(),
+      ]) === true;
+    if (!isAdminRoute && !requiresAdminAuth) {
       return true;
     }
 

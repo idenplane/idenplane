@@ -1,11 +1,24 @@
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import {
+  Injectable,
+  Logger,
+  BadRequestException,
+  ConflictException,
+} from '@nestjs/common';
+import { Prisma } from '@prisma/client';
+import type { WizardState } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { JwkService } from '../crypto/jwk.service.js';
-import { ScopeSeedService } from '../scopes/scope-seed.service.js';
-import type { WizardState } from '@prisma/client';
+import { seedDefaultScopesIn } from '../scopes/scope-seed.service.js';
 import { signingKeySecrets } from '../crypto/signing-key-secrets.js';
 import { wizardSecrets } from './wizard-secrets.js';
+
+/** The answer to any wizard write once setup is completed or skipped. */
+export const SETUP_COMPLETE_MESSAGE = 'Setup is already complete';
+
+function setupComplete(): ConflictException {
+  return new ConflictException(SETUP_COMPLETE_MESSAGE);
+}
 
 export interface WizardStatus {
   isFirstRun: boolean;
@@ -85,6 +98,20 @@ const WIZARD_STEPS = [
 /** The id of the one wizard state row created from now on. */
 const WIZARD_STATE_ID = 'wizard';
 
+/**
+ * Completing creates a realm with a signing key, roles, a user and the
+ * default scopes in one transaction; give it more than Prisma's 5s default.
+ */
+const TX_OPTIONS = { maxWait: 10_000, timeout: 60_000 };
+
+/**
+ * The first-run setup wizard.
+ *
+ * Every write runs under the wizard state row's lock and is refused with 409
+ * once setup is completed or skipped, so the wizard can never be used to
+ * create a realm or an admin on an instance that is already set up. Access
+ * control (super-admin only) is the controller's job.
+ */
 @Injectable()
 export class SetupWizardService {
   private readonly logger = new Logger(SetupWizardService.name);
@@ -93,7 +120,6 @@ export class SetupWizardService {
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
     private readonly jwkService: JwkService,
-    private readonly scopeSeedService: ScopeSeedService,
   ) {}
 
   /**
@@ -168,47 +194,77 @@ export class SetupWizardService {
     return state;
   }
 
+  /** Throws 409 once setup is completed or skipped. */
+  private assertOpen(state: WizardState): void {
+    if (state.completed || state.skipped) throw setupComplete();
+  }
+
+  /**
+   * Runs one wizard write in a transaction that holds the state row's lock
+   * and has checked, under that lock, that setup is still open. Completing
+   * and skipping take the same lock, so a write can never land after or
+   * interleave with them: whichever comes second sees the flag and gets 409.
+   */
+  private async withOpenState<T>(
+    write: (tx: Prisma.TransactionClient, state: WizardState) => Promise<T>,
+  ): Promise<T> {
+    const { id } = await this.getWizardState();
+    return this.prisma.$transaction(async (tx) => {
+      await tx.$queryRaw`
+        SELECT "id" FROM "wizard_states" WHERE "id" = ${id} FOR UPDATE`;
+      const state = await tx.wizardState.findUniqueOrThrow({ where: { id } });
+      this.assertOpen(state);
+      return write(tx, state);
+    }, TX_OPTIONS);
+  }
+
   /**
    * Save admin account credentials (Step 1)
    */
   async saveAdminAccount(dto: SaveAdminAccountDto): Promise<WizardState> {
+    // Checked first, so a closed wizard answers 409 whatever the input.
+    this.assertOpen(await this.getWizardState());
     this.validateAdminAccount(dto);
 
     const passwordHash = await this.crypto.hashPassword(dto.password);
 
-    return this.prisma.wizardState.update({
-      where: { id: (await this.getWizardState()).id },
-      data: {
-        adminUsername: dto.username,
-        adminEmail: dto.email,
-        adminPasswordHash: passwordHash,
-        currentStep: Math.max((await this.getWizardState()).currentStep, 1),
-      },
-    });
+    return this.withOpenState((tx, state) =>
+      tx.wizardState.update({
+        where: { id: state.id },
+        data: {
+          adminUsername: dto.username,
+          adminEmail: dto.email,
+          adminPasswordHash: passwordHash,
+          currentStep: Math.max(state.currentStep, 1),
+        },
+      }),
+    );
   }
 
   /**
    * Save realm settings (Step 2)
    */
   async saveRealmSettings(dto: SaveRealmSettingsDto): Promise<WizardState> {
+    this.assertOpen(await this.getWizardState());
     this.validateRealmSettings(dto);
 
-    // Check if realm name already exists
-    const existing = await this.prisma.realm.findUnique({
-      where: { name: dto.name },
-    });
+    return this.withOpenState(async (tx, state) => {
+      const existing = await tx.realm.findUnique({
+        where: { name: dto.name },
+        select: { id: true },
+      });
+      if (existing) {
+        throw new BadRequestException(`Realm '${dto.name}' already exists`);
+      }
 
-    if (existing) {
-      throw new BadRequestException(`Realm '${dto.name}' already exists`);
-    }
-
-    return this.prisma.wizardState.update({
-      where: { id: (await this.getWizardState()).id },
-      data: {
-        realmName: dto.name,
-        realmDisplayName: dto.displayName,
-        currentStep: Math.max((await this.getWizardState()).currentStep, 2),
-      },
+      return tx.wizardState.update({
+        where: { id: state.id },
+        data: {
+          realmName: dto.name,
+          realmDisplayName: dto.displayName,
+          currentStep: Math.max(state.currentStep, 2),
+        },
+      });
     });
   }
 
@@ -216,93 +272,118 @@ export class SetupWizardService {
    * Save SMTP configuration (Step 3)
    */
   async saveSmtpConfig(dto: SaveSmtpConfigDto): Promise<WizardState> {
+    this.assertOpen(await this.getWizardState());
     this.validateSmtpConfig(dto);
-    const state = await this.getWizardState();
 
-    return this.prisma.wizardState.update({
-      where: { id: state.id },
-      data: {
-        smtpConfig: {
-          host: dto.host,
-          port: dto.port,
-          user: dto.user,
-          // Encrypted at rest; completeWizard copies it into the realm as is.
-          password: wizardSecrets.smtpPassword(
-            this.crypto,
-            dto.password,
-            state.smtpConfig,
-          ),
-          from: dto.from,
-          secure: dto.secure,
+    return this.withOpenState((tx, state) =>
+      tx.wizardState.update({
+        where: { id: state.id },
+        data: {
+          smtpConfig: {
+            host: dto.host,
+            port: dto.port,
+            user: dto.user,
+            // Encrypted at rest; completeWizard copies it into the realm as is.
+            password: wizardSecrets.smtpPassword(
+              this.crypto,
+              dto.password,
+              state.smtpConfig,
+            ),
+            from: dto.from,
+            secure: dto.secure,
+          },
+          currentStep: Math.max(state.currentStep, 3),
         },
-        currentStep: Math.max(state.currentStep, 3),
-      },
-    });
+      }),
+    );
+  }
+
+  /**
+   * Checks the saved SMTP settings (Step 3). Only while setup is open: once
+   * it is done, the realm-level SMTP test in the admin API takes over. It
+   * uses the stored settings only and sends nothing.
+   */
+  async testSmtp(): Promise<{ message: string; host: unknown; port: unknown }> {
+    const state = await this.getWizardState();
+    this.assertOpen(state);
+
+    const smtpConfig = state.smtpConfig as Record<string, unknown> | null;
+    if (!smtpConfig || !smtpConfig['host'] || !smtpConfig['port']) {
+      throw new BadRequestException(
+        'SMTP is not configured. Please save SMTP config first.',
+      );
+    }
+
+    return {
+      message: 'SMTP configuration appears valid',
+      host: smtpConfig['host'],
+      port: smtpConfig['port'],
+    };
   }
 
   /**
    * Save client application (Step 4)
    */
-  async saveClient(dto: SaveClientDto): Promise<WizardState> {
+  async saveClient(
+    dto: SaveClientDto,
+  ): Promise<WizardState & { clientSecret: string }> {
+    this.assertOpen(await this.getWizardState());
     this.validateClientConfig(dto);
-
-    const state = await this.getWizardState();
-
-    // Validate realm exists
-    if (!state.realmName) {
-      throw new BadRequestException(
-        'Realm must be created before adding a client',
-      );
-    }
-
-    const realm = await this.prisma.realm.findUnique({
-      where: { name: state.realmName },
-    });
-
-    if (!realm) {
-      throw new BadRequestException(
-        'Realm not found. Please complete Step 2 first.',
-      );
-    }
-
-    // Check if client already exists
-    const existingClient = await this.prisma.client.findUnique({
-      where: {
-        realmId_clientId: { realmId: realm.id, clientId: dto.clientId },
-      },
-    });
-
-    if (existingClient) {
-      throw new BadRequestException(
-        `Client '${dto.clientId}' already exists in realm '${realm.name}'`,
-      );
-    }
 
     // Generate client secret. Only its hash is stored, as for any client;
     // the plaintext goes back in this response once and is never persisted.
     const clientSecret = this.crypto.generateSecret();
+    const clientSecretHash = await this.crypto.hashSecret(clientSecret);
 
-    // Create the client
-    await this.prisma.client.create({
-      data: {
-        realmId: realm.id,
-        clientId: dto.clientId,
-        clientSecret: await this.crypto.hashSecret(clientSecret),
-        clientType: 'CONFIDENTIAL',
-        name: dto.clientId,
-        enabled: true,
-        redirectUris: dto.redirectUris,
-        grantTypes: ['authorization_code'],
-      },
-    });
+    const updated = await this.withOpenState(async (tx, state) => {
+      if (!state.realmName) {
+        throw new BadRequestException(
+          'Realm must be created before adding a client',
+        );
+      }
 
-    const updated = await this.prisma.wizardState.update({
-      where: { id: state.id },
-      data: {
-        clientId: dto.clientId,
-        redirectUris: dto.redirectUris,
-        currentStep: Math.max(state.currentStep, 4),
-      },
+      const realm = await tx.realm.findUnique({
+        where: { name: state.realmName },
+      });
+      if (!realm) {
+        throw new BadRequestException(
+          'Realm not found. Please complete Step 2 first.',
+        );
+      }
+
+      const existingClient = await tx.client.findUnique({
+        where: {
+          realmId_clientId: { realmId: realm.id, clientId: dto.clientId },
+        },
+        select: { id: true },
+      });
+      if (existingClient) {
+        throw new BadRequestException(
+          `Client '${dto.clientId}' already exists in realm '${realm.name}'`,
+        );
+      }
+
+      await tx.client.create({
+        data: {
+          realmId: realm.id,
+          clientId: dto.clientId,
+          clientSecret: clientSecretHash,
+          clientType: 'CONFIDENTIAL',
+          name: dto.clientId,
+          enabled: true,
+          redirectUris: dto.redirectUris,
+          grantTypes: ['authorization_code'],
+        },
+      });
+
+      return tx.wizardState.update({
+        where: { id: state.id },
+        data: {
+          clientId: dto.clientId,
+          redirectUris: dto.redirectUris,
+          currentStep: Math.max(state.currentStep, 4),
+        },
+      });
     });
     return { ...updated, clientSecret };
   }
@@ -311,153 +392,195 @@ export class SetupWizardService {
    * Mark SDK step as completed (Step 5)
    */
   async markSdkGenerated(): Promise<WizardState> {
-    return this.prisma.wizardState.update({
-      where: { id: (await this.getWizardState()).id },
-      data: {
-        sdkGenerated: true,
-        currentStep: Math.max((await this.getWizardState()).currentStep, 5),
-      },
-    });
+    return this.withOpenState((tx, state) =>
+      tx.wizardState.update({
+        where: { id: state.id },
+        data: {
+          sdkGenerated: true,
+          currentStep: Math.max(state.currentStep, 5),
+        },
+      }),
+    );
   }
 
   /**
-   * Complete the wizard and finalize the setup
+   * Complete the wizard and finalize the setup.
+   *
+   * One transaction under the state row's lock: it checks that setup is
+   * still open, creates the realm, its roles, the admin and the default
+   * scopes, and marks the wizard completed. Two completions at once
+   * serialize on the lock; the second sees `completed` and gets 409, and a
+   * failure anywhere rolls everything back.
    */
   async completeWizard(): Promise<{ success: boolean; message: string }> {
-    const state = await this.getWizardState();
+    const before = await this.getWizardState();
+    this.assertOpen(before);
+    this.assertCompletable(before);
 
-    // Validate all required steps are completed
+    // The slow part happens before the lock is taken.
+    const keyPair = await this.jwkService.generateRsaKeyPair();
+
+    let created: { realmName: string; adminUsername: string };
+    try {
+      created = await this.withOpenState(async (tx, state) => {
+        // Checked again under the lock: the answers may have changed.
+        const { realmName, adminUsername, adminPasswordHash } =
+          this.assertCompletable(state);
+
+        const smtpConfig = state.smtpConfig as Record<string, unknown> | null;
+        const smtpData = smtpConfig
+          ? {
+              smtpHost: smtpConfig['host'] as string,
+              smtpPort: smtpConfig['port'] as number,
+              smtpUser: smtpConfig['user'] as string,
+              // Already encrypted by saveSmtpConfig; encryptSecret leaves
+              // ciphertext as it is and encrypts a password saved before that.
+              smtpPassword: this.crypto.encryptSecret(
+                smtpConfig['password'] as string | undefined,
+              ),
+              smtpFrom: smtpConfig['from'] as string,
+              smtpSecure: smtpConfig['secure'] as boolean,
+            }
+          : {};
+
+        const realm = await tx.realm.create({
+          data: {
+            name: realmName,
+            displayName: state.realmDisplayName || realmName,
+            enabled: true,
+            ...smtpData,
+            signingKeys: {
+              create: signingKeySecrets.createData(this.crypto, keyPair),
+            },
+          },
+        });
+
+        const superAdmin = await tx.role.create({
+          data: {
+            realmId: realm.id,
+            name: 'super-admin',
+            description: 'Full access to all realms and settings',
+          },
+        });
+        await tx.role.create({
+          data: {
+            realmId: realm.id,
+            name: 'realm-admin',
+            description: 'Manage specific realms',
+          },
+        });
+        await tx.role.create({
+          data: {
+            realmId: realm.id,
+            name: 'view-only',
+            description: 'Read-only access',
+          },
+        });
+
+        const adminUser = await tx.user.create({
+          data: {
+            realmId: realm.id,
+            username: adminUsername,
+            email: state.adminEmail,
+            enabled: true,
+            passwordHash: adminPasswordHash,
+            passwordChangedAt: new Date(),
+          },
+        });
+        await tx.userRole.create({
+          data: { userId: adminUser.id, roleId: superAdmin.id },
+        });
+
+        await seedDefaultScopesIn(tx, realm.id);
+
+        await tx.wizardState.update({
+          where: { id: state.id },
+          data: { completed: true, currentStep: WIZARD_STEPS.length },
+        });
+
+        return { realmName: realm.name, adminUsername };
+      });
+    } catch (err) {
+      if ((err as { code?: string }).code === 'P2002') {
+        throw new ConflictException(
+          `Realm '${before.realmName}' already exists`,
+        );
+      }
+      throw err;
+    }
+
+    this.logger.log(
+      `Wizard completed. Realm '${created.realmName}' created with admin user '${created.adminUsername}'`,
+    );
+
+    return {
+      success: true,
+      message: `Setup completed successfully. Realm '${created.realmName}' created with admin user '${created.adminUsername}'`,
+    };
+  }
+
+  /** The answers completing needs, or 400 naming the missing step. */
+  private assertCompletable(state: WizardState): {
+    realmName: string;
+    adminUsername: string;
+    adminPasswordHash: string;
+  } {
     if (!state.adminUsername || !state.adminPasswordHash) {
       throw new BadRequestException(
         'Admin account must be created before completing the wizard',
       );
     }
-
     if (!state.realmName) {
       throw new BadRequestException(
         'Realm must be created before completing the wizard',
       );
     }
-
-    // Create master realm with signing key
-    const keyPair = await this.jwkService.generateRsaKeyPair();
-
-    // Build SMTP data if config exists
-    const smtpData = state.smtpConfig
-      ? {
-          smtpHost: (state.smtpConfig as Record<string, unknown>)
-            .host as string,
-          smtpPort: (state.smtpConfig as Record<string, unknown>)
-            .port as number,
-          smtpUser: (state.smtpConfig as Record<string, unknown>)
-            .user as string,
-          // Already encrypted by saveSmtpConfig; encryptSecret leaves
-          // ciphertext as it is and encrypts a password saved before that.
-          smtpPassword: this.crypto.encryptSecret(
-            (state.smtpConfig as Record<string, unknown>).password as
-              string | undefined,
-          ),
-          smtpFrom: (state.smtpConfig as Record<string, unknown>)
-            .from as string,
-          smtpSecure: (state.smtpConfig as Record<string, unknown>)
-            .secure as boolean,
-        }
-      : {};
-
-    // Create realm
-    const realm = await this.prisma.realm.create({
-      data: {
-        name: state.realmName,
-        displayName: state.realmDisplayName || state.realmName,
-        enabled: true,
-        ...smtpData,
-        signingKeys: {
-          create: signingKeySecrets.createData(this.crypto, keyPair),
-        },
-      },
-    });
-
-    // Create admin roles
-    const superAdmin = await this.prisma.role.create({
-      data: {
-        realmId: realm.id,
-        name: 'super-admin',
-        description: 'Full access to all realms and settings',
-      },
-    });
-
-    await this.prisma.role.create({
-      data: {
-        realmId: realm.id,
-        name: 'realm-admin',
-        description: 'Manage specific realms',
-      },
-    });
-
-    await this.prisma.role.create({
-      data: {
-        realmId: realm.id,
-        name: 'view-only',
-        description: 'Read-only access',
-      },
-    });
-
-    // Create admin user
-    const adminUser = await this.prisma.user.create({
-      data: {
-        realmId: realm.id,
-        username: state.adminUsername,
-        email: state.adminEmail,
-        enabled: true,
-        passwordHash: state.adminPasswordHash,
-        passwordChangedAt: new Date(),
-      },
-    });
-
-    // Assign super-admin role
-    await this.prisma.userRole.create({
-      data: { userId: adminUser.id, roleId: superAdmin.id },
-    });
-
-    // Seed default scopes
-    await this.scopeSeedService.seedDefaultScopes(realm.id);
-
-    // Mark wizard as completed
-    await this.prisma.wizardState.update({
-      where: { id: state.id },
-      data: {
-        completed: true,
-        currentStep: WIZARD_STEPS.length,
-      },
-    });
-
-    this.logger.log(
-      `Wizard completed. Realm '${realm.name}' created with admin user '${state.adminUsername}'`,
-    );
-
     return {
-      success: true,
-      message: `Setup completed successfully. Realm '${realm.name}' created with admin user '${state.adminUsername}'`,
+      realmName: state.realmName,
+      adminUsername: state.adminUsername,
+      adminPasswordHash: state.adminPasswordHash,
     };
   }
 
   /**
-   * Skip the wizard (for advanced users)
+   * Skip the wizard (for advanced users). Final, like completing it.
    */
   async skipWizard(): Promise<WizardState> {
-    return this.prisma.wizardState.update({
-      where: { id: (await this.getWizardState()).id },
-      data: {
-        skipped: true,
-      },
-    });
+    return this.withOpenState((tx, state) =>
+      tx.wizardState.update({
+        where: { id: state.id },
+        data: { skipped: true },
+      }),
+    );
   }
 
   /**
-   * Reset wizard state (for development/testing)
+   * Clears the answers of a wizard that is still in progress.
+   *
+   * It only ever touches the wizard's own state row, never realms, users or
+   * clients. Once setup is completed or skipped it is refused with 409 like
+   * every other write: resetting a finished wizard would reopen it and let
+   * it create another realm and admin.
    */
-  async resetWizard(): Promise<void> {
-    await this.prisma.wizardState.deleteMany({});
+  async resetWizard(): Promise<WizardState> {
+    return this.withOpenState((tx, state) =>
+      tx.wizardState.update({
+        where: { id: state.id },
+        data: {
+          currentStep: 0,
+          adminUsername: null,
+          adminEmail: null,
+          adminPasswordHash: null,
+          realmName: null,
+          realmDisplayName: null,
+          smtpConfig: Prisma.DbNull,
+          clientId: null,
+          clientSecret: null,
+          redirectUris: [],
+          sdkGenerated: false,
+        },
+      }),
+    );
   }
 
   private validateAdminAccount(dto: SaveAdminAccountDto): void {

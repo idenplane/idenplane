@@ -1,9 +1,54 @@
+import type { WizardState } from '@prisma/client';
 import type { CryptoService } from '../crypto/crypto.service.js';
 import { SECRET_PLACEHOLDER } from '../realms/secret-placeholder.js';
 import { redactSecret, sealSecret } from '../crypto/stored-secrets.js';
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value);
+}
+
+/** The SMTP settings the API returns, with the password as the placeholder. */
+export interface PublicSmtpConfig {
+  host: unknown;
+  port: unknown;
+  user: unknown;
+  password: string | undefined;
+  from: unknown;
+  secure: unknown;
+}
+
+/** The wizard state the API returns. */
+export interface PublicWizardState {
+  id: string;
+  completed: boolean;
+  skipped: boolean;
+  currentStep: number;
+  adminUsername: string | null;
+  adminEmail: string | null;
+  realmName: string | null;
+  realmDisplayName: string | null;
+  smtpConfig: PublicSmtpConfig | null;
+  clientId: string | null;
+  redirectUris: string[];
+  sdkGenerated: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+}
+
+function publicSmtpConfig(config: unknown): PublicSmtpConfig | null {
+  if (!isRecord(config)) return null;
+  const password = config['password'];
+  return {
+    host: config['host'],
+    port: config['port'],
+    user: config['user'],
+    password:
+      typeof password === 'string' && password
+        ? redactSecret(password)
+        : undefined,
+    from: config['from'],
+    secure: config['secure'],
+  };
 }
 
 /**
@@ -29,20 +74,27 @@ export const wizardSecrets = {
   },
 
   /**
-   * A wizard state as the API returns it: the SMTP password as the
-   * placeholder, and never the admin's password hash.
+   * A wizard state as the API returns it. An allowlist, so a column added to
+   * WizardState later stays private until it is listed here: never the
+   * admin's password hash, never the legacy `clientSecret` column, and the
+   * SMTP password only as the placeholder.
    */
-  redact<T extends { smtpConfig?: unknown; adminPasswordHash?: unknown }>(
-    state: T,
-  ): Omit<T, 'adminPasswordHash'> {
-    const { adminPasswordHash: _hash, ...rest } = state;
-    const config = rest.smtpConfig;
-    if (!isRecord(config) || typeof config['password'] !== 'string') {
-      return rest;
-    }
+  publicState(state: WizardState): PublicWizardState {
     return {
-      ...rest,
-      smtpConfig: { ...config, password: redactSecret(config['password']) },
+      id: state.id,
+      completed: state.completed,
+      skipped: state.skipped,
+      currentStep: state.currentStep,
+      adminUsername: state.adminUsername,
+      adminEmail: state.adminEmail,
+      realmName: state.realmName,
+      realmDisplayName: state.realmDisplayName,
+      smtpConfig: publicSmtpConfig(state.smtpConfig),
+      clientId: state.clientId,
+      redirectUris: state.redirectUris,
+      sdkGenerated: state.sdkGenerated,
+      createdAt: state.createdAt,
+      updatedAt: state.updatedAt,
     };
   },
 };
