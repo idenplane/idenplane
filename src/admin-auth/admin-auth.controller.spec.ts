@@ -194,6 +194,17 @@ describe('AdminAuthController', () => {
     });
   });
 
+  describe('getDemoInfo without ADMIN_PASSWORD', () => {
+    it('never falls back to a default password', () => {
+      configService.get.mockImplementation((key: string, def?: string) =>
+        key === 'DEMO_MODE' ? 'true' : def,
+      );
+      const info = controller.getDemoInfo();
+      expect(info).toEqual({ demo: true, username: 'admin' });
+      expect(info).not.toHaveProperty('password');
+    });
+  });
+
   describe('getMe', () => {
     it('should return admin user from request', async () => {
       const adminUser = { userId: 'user-1', roles: ['super-admin'] };

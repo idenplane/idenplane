@@ -17,6 +17,13 @@ process.env['THROTTLE_LIMIT'] = process.env['THROTTLE_LIMIT'] ?? '1000000';
 process.env['THROTTLE_TTL'] = process.env['THROTTLE_TTL'] ?? '1000';
 process.env['NODE_ENV'] = process.env['NODE_ENV'] ?? 'test';
 
+// Explicit test credentials for the master admin AdminSeedService creates.
+// There is no built-in default any more (an unset ADMIN_PASSWORD gets a
+// random one), so the suite names its own, as CI does.
+process.env['ADMIN_USER'] = process.env['ADMIN_USER'] ?? 'admin';
+process.env['ADMIN_PASSWORD'] =
+  process.env['ADMIN_PASSWORD'] ?? 'e2e-test-admin-password';
+
 // The admin guards enforce per-IP limits on the static admin API key
 // (prod defaults 15/min, 100/hour). The single-IP E2E harness issues far
 // more than that; raise them for the test run only. Prod is unaffected.
