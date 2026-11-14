@@ -361,7 +361,7 @@ describe('Admin RBAC (e2e)', () => {
     it('cannot reach users of another realm through its own', async () => {
       const a = `/admin/realms/${REALM_A}/users/${ids.super}`;
       await put('realmAdmin', `${a}/reset-password`, {
-        password: 'Sample-Reset-Pa55word!',
+        password: 'sample-Reset-Pa55word!',
       }).expect(404);
       await post('realmAdmin', `${a}/impersonate`).expect(404);
       await post('realmAdmin', `${a}/role-mappings/realm`, {
