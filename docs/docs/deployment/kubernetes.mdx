@@ -153,6 +153,8 @@ kubectl create secret generic idenplane-app-keys --namespace idenplane \
 Then set `secrets.existingSecret: idenplane-app-keys`, and likewise `postgresql.auth.existingSecret` (key `password`) for the bundled database.
 :::
 
+To [rotate the encryption key](production.md#rotating-the-encryption-key), set the new values as `secrets.WEBHOOK_SECRET_KEY` / `secrets.WEBHOOK_ENCRYPTION_SALT` and the old ones as `secrets.WEBHOOK_SECRET_KEY_PREVIOUS` / `secrets.WEBHOOK_ENCRYPTION_SALT_PREVIOUS` (with `secrets.existingSecret`, add those two keys to your Secret instead). The chart never generates the previous key. Once the log reports `Key rotation complete`, remove the previous values and upgrade again. Keep the new ones set explicitly, or leave them empty: the Secret now holds the new values, and the chart keeps them.
+
 Rendering fails on the old placeholders (`change-me-in-production`, `REPLACE_WITH_STRONG_SECRET`, `REPLACE_WITH_STRONG_DB_PASSWORD`), on an admin API key shorter than 32 characters and on an admin password shorter than 12.
 
 ### 3. Install the Chart

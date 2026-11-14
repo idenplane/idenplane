@@ -108,7 +108,10 @@ ADMIN_PASSWORD=change_this_password
 |----------|---------|----------|-------------|
 | `WEBHOOK_SECRET_KEY` | — | Yes (prod) | 32-byte (or longer) key from which the AES-256-GCM key for every secret stored encrypted is derived: webhook, identity provider, LDAP, SMTP and provider secrets, audit stream headers, SSO connection secrets, signing keys and TOTP seeds. See [Production → Encryption at rest](../deployment/production.md#encryption-at-rest) |
 | `WEBHOOK_ENCRYPTION_SALT` | — | Yes (prod) | 16-byte salt used when deriving the AES key via scrypt |
+| `WEBHOOK_SECRET_KEY_PREVIOUS` | — | No | Only while [rotating the encryption key](../deployment/production.md#rotating-the-encryption-key): the old `WEBHOOK_SECRET_KEY`. Decrypts only; on start, every value under it is re-encrypted with the current key. Defaults to `WEBHOOK_SECRET_KEY` when only the salt changes. Remove it once the log reports `Key rotation complete`. Never generated |
+| `WEBHOOK_ENCRYPTION_SALT_PREVIOUS` | — | No | Only while rotating: the old `WEBHOOK_ENCRYPTION_SALT`. Defaults to `WEBHOOK_ENCRYPTION_SALT` when only the key changes |
 | `STORED_SECRETS_ACCEPT_KEY` | — | No | `true` for one start only: accept the configured key when the first start of encryption at rest finds stored values that look encrypted but do not decrypt (plaintext that merely looks like ciphertext). Never set it to get past a wrong key |
+| `STORED_SECRETS_ACCEPT_UNREADABLE` | — | No | `true` for one start only: start although some stored secrets decrypt with no configured key (with neither key during a rotation). They are left as they are and logged; set each again. Without it, such a value stops the start and nothing is rewritten |
 
 ```bash
 # Generate webhook encryption key
@@ -125,7 +128,7 @@ WEBHOOK_ENCRYPTION_SALT=REPLACE_ME_WITH_A_UNIQUE_RANDOM_SALT
 ```
 
 :::warning
-`WEBHOOK_SECRET_KEY` and `WEBHOOK_ENCRYPTION_SALT` cannot change: every stored encrypted secret (signing keys and TOTP seeds included) would become unreadable, so Idenplane refuses to start with a different key. There is no key rotation; back both values up separately from the database.
+`WEBHOOK_SECRET_KEY` and `WEBHOOK_ENCRYPTION_SALT` cannot simply be replaced: every stored encrypted secret (signing keys and TOTP seeds included) would become unreadable, so Idenplane refuses to start with a different key. To change them, [rotate the key](../deployment/production.md#rotating-the-encryption-key) with `WEBHOOK_SECRET_KEY_PREVIOUS` / `WEBHOOK_ENCRYPTION_SALT_PREVIOUS`. Back both values up separately from the database.
 :::
 
 ---
@@ -378,6 +381,11 @@ WEBHOOK_SECRET_KEY=REPLACE_ME_WITH_A_STRONG_RANDOM_SECRET
 # REQUIRED: Salt used when deriving the AES key from WEBHOOK_SECRET_KEY via
 # scrypt.  Generate one with: openssl rand -hex 16
 WEBHOOK_ENCRYPTION_SALT=REPLACE_ME_WITH_A_UNIQUE_RANDOM_SALT
+
+# Only while rotating the encryption key: the old key and salt. Remove them
+# once the log reports "Key rotation complete".
+# WEBHOOK_SECRET_KEY_PREVIOUS=
+# WEBHOOK_ENCRYPTION_SALT_PREVIOUS=
 
 # ─── Rate Limiting ─────────────────────────────────────────────────────────────
 THROTTLE_TTL=60000

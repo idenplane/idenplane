@@ -247,9 +247,17 @@ secrets:
   ADMIN_API_KEY: ""
   # Password of the initial `admin` user, used only on the first start.
   ADMIN_PASSWORD: ""
-  # Encrypts webhook secrets at rest. Never change it after the first install.
+  # Encrypts every stored secret at rest (not only webhook secrets). Change it
+  # only by rotating: set the new values here and the old ones below.
   WEBHOOK_SECRET_KEY: ""
   WEBHOOK_ENCRYPTION_SALT: ""
+  # Only while rotating the encryption key: the old WEBHOOK_SECRET_KEY and
+  # WEBHOOK_ENCRYPTION_SALT (either may stay empty if unchanged). On start,
+  # every stored secret is re-encrypted with the new key. Remove both once
+  # the log reports "Key rotation complete". Never generated. With
+  # existingSecret, add these keys to that Secret instead.
+  WEBHOOK_SECRET_KEY_PREVIOUS: ""
+  WEBHOOK_ENCRYPTION_SALT_PREVIOUS: ""
 
   # Database connection string. When postgresql.enabled is true the chart
   # auto-constructs this from the postgresql sub-chart credentials; set an
