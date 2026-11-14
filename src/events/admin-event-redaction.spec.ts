@@ -1,6 +1,7 @@
 import {
   REDACTED,
   redactAdminRepresentation,
+  redactAdminResourcePath,
 } from './admin-event-redaction.js';
 import { SECRET_PLACEHOLDER } from '../realms/secret-placeholder.js';
 
@@ -92,5 +93,22 @@ describe('redactAdminRepresentation', () => {
     expect(JSON.stringify(redactAdminRepresentation(deep))).not.toContain(
       '"x"',
     );
+  });
+});
+
+describe('redactAdminResourcePath', () => {
+  it('hides the invitation token of an accept call, and nothing else', () => {
+    expect(
+      redactAdminResourcePath(
+        '/admin/realms/r/organizations/acme/invitations/abc123/accept',
+      ),
+    ).toBe(`/admin/realms/r/organizations/acme/invitations/${REDACTED}/accept`);
+    for (const path of [
+      '/admin/realms/r/organizations/acme/invitations',
+      '/admin/realms/r/users/u1',
+      '/admin/realms/r/organizations/acme/invitations/abc/other',
+    ]) {
+      expect(redactAdminResourcePath(path)).toBe(path);
+    }
   });
 });
