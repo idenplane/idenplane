@@ -1,23 +1,17 @@
-import { test, expect, type APIRequestContext } from '@playwright/test';
+import { test, expect } from '@playwright/test';
 
-// Requires a live backend on :3000 with DEMO_MODE=true (see login.spec.ts).
+// Requires a live backend on :3000 and its ADMIN_API_KEY (as in CI). Admin
+// calls use the API key, not a console sign-in: admin sign-ins are limited
+// per IP and minute, and the other specs need them.
 // The console's public sign-up entry hands over to the hosted, themed
 // sign-up page, which renders the realm's CAPTCHA provider under a CSP that
 // admits that provider on that page only.
 
-async function adminToken(request: APIRequestContext): Promise<string> {
-  const demo = await (await request.get('/admin/auth/demo-info')).json();
-  const login = await request.post('/admin/auth/login', {
-    data: { username: demo.username, password: demo.password },
-  });
-  expect(login.ok()).toBeTruthy();
-  return (await login.json()).access_token as string;
-}
-
 test('the console sign-up entry opens the hosted page with CAPTCHA on', async ({ page, request }) => {
   const realmName = `e2e-signup-${test.info().workerIndex}-${Date.now()}`;
-  const token = await adminToken(request);
-  const headers = { Authorization: `Bearer ${token}` };
+  const key = process.env.ADMIN_API_KEY;
+  if (!key) throw new Error('Set ADMIN_API_KEY for the disposable E2E backend');
+  const headers = { 'x-admin-api-key': key };
 
   const created = await request.post('/admin/realms', { headers, data: { name: realmName } });
   expect(created.ok()).toBeTruthy();
