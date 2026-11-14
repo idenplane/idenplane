@@ -149,14 +149,35 @@ export default function OrganizationDetailPage() {
     },
   });
 
+  // The token is returned once, by the create call; the server keeps only its
+  // hash. Keep it on screen until the admin dismisses it.
+  const [createdInvite, setCreatedInvite] = useState<{
+    email: string;
+    token: string;
+    expiresAt: string;
+  } | null>(null);
+  const [inviteCopied, setInviteCopied] = useState(false);
+
   const inviteMutation = useMutation({
     mutationFn: () =>
       createOrgInvitation(name!, slug!, { email: inviteForm.email, role: inviteForm.role }),
-    onSuccess: () => {
+    onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ['org-invitations', name, slug] });
+      setCreatedInvite({ email: inviteForm.email, ...created });
+      setInviteCopied(false);
       setInviteForm({ email: '', role: 'member' });
     },
   });
+
+  async function copyInviteToken() {
+    if (!createdInvite) return;
+    try {
+      await navigator.clipboard.writeText(createdInvite.token);
+      setInviteCopied(true);
+    } catch {
+      setInviteCopied(false);
+    }
+  }
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
@@ -532,12 +553,55 @@ export default function OrganizationDetailPage() {
               disabled={inviteMutation.isPending}
               className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
-              {inviteMutation.isPending ? 'Sending...' : 'Send'}
+              {inviteMutation.isPending ? 'Creating...' : 'Create invitation'}
             </button>
           </form>
           {inviteMutation.isError && (
             <div className="mt-2 rounded-md bg-danger-soft p-2 text-xs text-danger-fg">
-              Failed to send invitation.
+              Failed to create the invitation.
+            </div>
+          )}
+          {createdInvite && (
+            <div
+              role="status"
+              data-testid="created-invitation"
+              className="mt-3 space-y-2 rounded-md border border-line bg-hover p-3 text-sm"
+            >
+              <p className="font-medium text-fg">
+                Invitation created for {createdInvite.email}
+              </p>
+              <p className="text-xs text-muted">
+                Copy this token now. It is shown only once; Idenplane stores only its hash. Your
+                application accepts the invitation for the signed-in user with{' '}
+                <code>
+                  POST /admin/realms/{name}/organizations/{slug}/invitations/&lt;token&gt;/accept
+                </code>
+                . Expires {new Date(createdInvite.expiresAt).toLocaleString()}.
+              </p>
+              <div className="flex items-center gap-2">
+                <input
+                  id="field-invite-token"
+                  aria-label="Invitation token"
+                  readOnly
+                  value={createdInvite.token}
+                  onFocus={(e) => e.currentTarget.select()}
+                  className={`${INPUT_CLS} font-mono text-xs`}
+                />
+                <button
+                  type="button"
+                  onClick={copyInviteToken}
+                  className="rounded-md border border-line px-3 py-2 text-xs font-medium text-fg hover:bg-surface"
+                >
+                  {inviteCopied ? 'Copied' : 'Copy'}
+                </button>
+                <button
+                  type="button"
+                  onClick={() => setCreatedInvite(null)}
+                  className="rounded-md px-3 py-2 text-xs text-muted hover:text-fg"
+                >
+                  Done
+                </button>
+              </div>
             </div>
           )}
         </div>
