@@ -6,6 +6,17 @@
 # Number of Idenplane pod replicas.
 replicaCount: 1
 
+# How Kubernetes replaces pods on an upgrade.
+# Recreate stops every old pod before the new ones start. Upgrading to 0.8.0
+# needs it: 0.8.0 encrypts stored secrets (including the token signing key)
+# that older versions cannot read, so old and new pods must not run together.
+# Once every release runs 0.8.0 or later you can switch to rolling updates:
+#   strategy:
+#     type: RollingUpdate
+#     rollingUpdate: { maxUnavailable: 0, maxSurge: 1 }
+strategy:
+  type: Recreate
+
 # ── Image ─────────────────────────────────────────────────────────────────────
 image:
   repository: islamawad/idenplane

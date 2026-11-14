@@ -10,6 +10,14 @@
       "default": 1,
       "description": "Number of Idenplane pod replicas."
     },
+    "strategy": {
+      "type": "object",
+      "description": "Deployment update strategy. Recreate (the default) stops old pods before new ones start; required when upgrading to 0.8.0.",
+      "properties": {
+        "type": { "type": "string", "enum": ["Recreate", "RollingUpdate"] },
+        "rollingUpdate": { "type": "object" }
+      }
+    },
     "image": {
       "type": "object",
       "description": "Container image configuration.",
