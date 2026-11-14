@@ -364,9 +364,9 @@ describe('Admin RBAC (e2e)', () => {
         password: 'Sample-Reset-Pa55word!',
       }).expect(404);
       await post('realmAdmin', `${a}/impersonate`).expect(404);
-      await post('realmAdmin', `${a}/role-mappings/realm`, [
-        { name: 'offline_access' },
-      ]).expect(404);
+      await post('realmAdmin', `${a}/role-mappings/realm`, {
+        roleNames: ['offline_access'],
+      }).expect(404);
       await get(
         'realmAdmin',
         `/admin/realms/${REALM_A}/continuous-verification/behavioral/${ids.super}`,
