@@ -58,6 +58,7 @@ export const ResourceType = {
   MIGRATION: 'MIGRATION',
   SCIM_TOKEN: 'SCIM_TOKEN',
   SCIM_ATTRIBUTE_MAPPING: 'SCIM_ATTRIBUTE_MAPPING',
+  ADMIN_REALM_ASSIGNMENT: 'ADMIN_REALM_ASSIGNMENT',
 } as const;
 
 export type ResourceTypeValue =

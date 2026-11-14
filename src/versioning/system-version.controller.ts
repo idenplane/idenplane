@@ -7,9 +7,11 @@ import {
 } from '@nestjs/swagger';
 import { MigrationCheckService } from './migration-check.service.js';
 import { APP_VERSION } from './app-version.js';
+import { AdminScope } from '../common/decorators/admin-access.decorator.js';
 
 @ApiTags('System')
 @Controller('admin/system')
+@AdminScope('global')
 @ApiSecurity('admin-api-key')
 export class SystemVersionController {
   constructor(private readonly migrationCheck: MigrationCheckService) {}

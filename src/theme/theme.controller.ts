@@ -55,7 +55,6 @@ export class ThemeController {
   }
 
   @Post()
-  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({ summary: 'Create a new theme' })
   @ApiResponse({ status: 201, description: 'Theme created successfully' })
   @ApiResponse({ status: 400, description: 'Invalid request body' })
@@ -109,7 +108,6 @@ export class ThemeController {
   }
 
   @Put(':themeId')
-  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({ summary: 'Update a theme' })
   @ApiResponse({ status: 200, description: 'Theme updated successfully' })
   @ApiResponse({ status: 400, description: 'Invalid request body' })
@@ -150,7 +148,6 @@ export class ThemeController {
 
   @Post(':themeId/publish')
   @HttpCode(HttpStatus.OK)
-  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({ summary: 'Publish a theme' })
   @ApiResponse({ status: 200, description: 'Theme published successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -183,7 +180,6 @@ export class ThemeController {
 
   @Post(':themeId/restore/:version')
   @HttpCode(HttpStatus.OK)
-  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({ summary: 'Restore a theme to a specific version' })
   @ApiResponse({ status: 200, description: 'Theme restored successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -227,7 +223,6 @@ export class ThemeController {
 
   @Post('assets/upload')
   @HttpCode(HttpStatus.CREATED)
-  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({ summary: 'Upload theme assets (logos, favicons, etc.)' })
   @ApiResponse({ status: 201, description: 'Asset(s) uploaded successfully' })
   @ApiResponse({ status: 400, description: 'Invalid request body' })

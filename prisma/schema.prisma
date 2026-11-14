@@ -285,6 +285,7 @@ model Realm {
   clientTlsCertificates       ClientTlsCertificate[]
   tlsTrustAnchors             RealmTlsTrustAnchor[]
   tlsRevokedCertificates      TlsRevokedCertificate[]
+  adminAssignments            AdminRealmAssignment[]
 
   @@map("realms")
 }
@@ -339,6 +340,7 @@ model User {
   consentHistory             UserConsentHistory[]
   pendingDeletion            PendingDeletion?
   proxySessions              ProxySession[]
+  adminRealmAssignments      AdminRealmAssignment[]
 
   @@unique([realmId, username])
   @@unique([realmId, email])
@@ -1923,6 +1925,26 @@ model AdminRevokedToken {
 
   @@index([expiresAt])
   @@map("admin_revoked_tokens")
+}
+
+/// The realms a `realm-admin` (a user of the master realm) may manage.
+/// Managed by a super-admin through /admin/admin-accounts. A realm-admin
+/// with no row manages no realm. A database trigger refuses a row whose
+/// user is not in the master realm, or whose realm is the master realm.
+model AdminRealmAssignment {
+  id        String   @id @default(uuid())
+  userId    String   @map("user_id")
+  realmId   String   @map("realm_id")
+  /// Who made the assignment (an admin user id or `api-key:admin`).
+  createdBy String?  @map("created_by")
+  createdAt DateTime @default(now()) @map("created_at")
+
+  user  User  @relation(fields: [userId], references: [id], onDelete: Cascade)
+  realm Realm @relation(fields: [realmId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, realmId])
+  @@index([realmId])
+  @@map("admin_realm_assignments")
 }
 
 model ServiceAccount {

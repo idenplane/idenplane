@@ -14,9 +14,11 @@ import {
   ApiResponse,
 } from '@nestjs/swagger';
 import { PluginManagerService } from './plugin-manager.service.js';
+import { AdminScope } from '../common/decorators/admin-access.decorator.js';
 
 @ApiTags('Plugins')
 @Controller('admin/plugins')
+@AdminScope('global')
 @ApiSecurity('admin-api-key')
 export class PluginsController {
   constructor(private readonly pluginManager: PluginManagerService) {}

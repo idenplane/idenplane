@@ -42,6 +42,7 @@ describe('AdminAuthController', () => {
     revokeToken: jest.Mock;
   };
   let configService: { get: jest.Mock };
+  let principals: { realmNames: jest.Mock };
 
   beforeEach(() => {
     // Ensure no leftover TRUSTED_PROXIES env from other tests
@@ -52,9 +53,11 @@ describe('AdminAuthController', () => {
       revokeToken: jest.fn(),
     };
     configService = { get: jest.fn() };
+    principals = { realmNames: jest.fn().mockResolvedValue([]) };
     controller = new AdminAuthController(
       adminAuthService as any,
       configService as any,
+      principals as any,
     );
   });
 
@@ -206,19 +209,58 @@ describe('AdminAuthController', () => {
   });
 
   describe('getMe', () => {
-    it('should return admin user from request', async () => {
-      const adminUser = { userId: 'user-1', roles: ['super-admin'] };
-      const req = { adminUser } as any;
-
-      const result = await controller.getMe(req);
-      expect(result).toEqual(adminUser);
+    const principal = (roles: string[], realmIds: string[] = []) => ({
+      kind: 'user',
+      userId: 'user-1',
+      username: 'sample-admin',
+      roles,
+      realmIds: new Set(realmIds),
     });
 
-    it('should throw UnauthorizedException if no admin user on request', () => {
-      const req = {} as any;
+    it('describes a super-admin from the resolved principal', async () => {
+      const req = { adminPrincipal: principal(['super-admin']) } as any;
+      expect(await controller.getMe(req)).toEqual({
+        userId: 'user-1',
+        username: 'sample-admin',
+        kind: 'user',
+        roles: ['super-admin'],
+        superAdmin: true,
+        readAllRealms: true,
+        writeAllRealms: true,
+        managedRealms: [],
+      });
+    });
 
-      expect(() => controller.getMe(req)).toThrow(UnauthorizedException);
-      expect(() => controller.getMe(req)).toThrow('Not authenticated');
+    it('lists the realms a realm-admin manages', async () => {
+      principals.realmNames.mockResolvedValue(['realm-a']);
+      const req = {
+        adminPrincipal: principal(['realm-admin'], ['id-a']),
+      } as any;
+      const me = await controller.getMe(req);
+      expect(me).toMatchObject({
+        superAdmin: false,
+        readAllRealms: false,
+        writeAllRealms: false,
+        managedRealms: ['realm-a'],
+      });
+      expect(principals.realmNames).toHaveBeenCalledWith(new Set(['id-a']));
+    });
+
+    it('reads all realms as view-only and changes none', async () => {
+      const req = { adminPrincipal: principal(['view-only']) } as any;
+      expect(await controller.getMe(req)).toMatchObject({
+        readAllRealms: true,
+        writeAllRealms: false,
+        managedRealms: [],
+      });
+    });
+
+    it('should throw UnauthorizedException without a resolved admin', async () => {
+      const req = { adminUser: { userId: 'user-1', roles: [] } } as any;
+      await expect(controller.getMe(req)).rejects.toThrow(
+        UnauthorizedException,
+      );
+      await expect(controller.getMe(req)).rejects.toThrow('Not authenticated');
     });
   });
 });

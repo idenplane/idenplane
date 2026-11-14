@@ -31,6 +31,7 @@ import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
 import { AdminRolesGuard } from '../common/guards/admin-roles.guard.js';
 import { RequireAdminAuth } from '../common/decorators/require-admin-auth.decorator.js';
 import { RequireAdminRoles } from '../common/decorators/require-admin-roles.decorator.js';
+import { AdminScope } from '../common/decorators/admin-access.decorator.js';
 
 class SaveAdminAccountDto {
   @ApiProperty({ example: 'admin' })
@@ -123,6 +124,7 @@ const SUPER_ADMIN = ['super-admin'];
  */
 @ApiTags('Setup Wizard')
 @Controller('setup-wizard')
+@AdminScope('global')
 @RequireAdminAuth()
 @UseGuards(AdminApiKeyGuard, AdminRolesGuard)
 @ApiSecurity('admin-api-key')

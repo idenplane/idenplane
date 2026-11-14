@@ -55,6 +55,7 @@ import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
 import { AdminRolesGuard } from '../common/guards/admin-roles.guard.js';
 import { RequireAdminRoles } from '../common/decorators/require-admin-roles.decorator.js';
 import { UpgradeEnabledGuard } from './guards/upgrade-enabled.guard.js';
+import { AdminScope } from '../common/decorators/admin-access.decorator.js';
 
 class UpgradeRequestDto {
   @ApiProperty({ description: 'Target version, e.g. "0.4.0"' })
@@ -119,6 +120,7 @@ class RollbackRequestDto {
 @ApiSecurity('admin-api-key')
 @UseGuards(AdminApiKeyGuard, AdminRolesGuard)
 @Controller('admin/upgrade')
+@AdminScope('global')
 export class UpgradeController {
   private readonly logger = new Logger(UpgradeController.name);
 

@@ -32,6 +32,7 @@ import {
   AssignFlowToClientDto,
   UpdateFlowBindingsDto,
 } from './auth-flow.dto.js';
+import { AdminRealmParam } from '../common/decorators/admin-access.decorator.js';
 
 type AdminRequest = Request & {
   adminUser?: { userId?: string; id?: string };
@@ -41,6 +42,7 @@ type AdminRequest = Request & {
 @ApiBearerAuth()
 @UseGuards(AdminApiKeyGuard)
 @Controller('admin/realms/:realm/auth-flows')
+@AdminRealmParam('realm', 'id-or-name')
 export class AuthFlowController {
   constructor(
     private readonly authFlowService: AuthFlowService,

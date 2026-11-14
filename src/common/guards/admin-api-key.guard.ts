@@ -27,73 +27,86 @@ function metadataOf(key: string, target: unknown): unknown {
 }
 
 /** `admin` or `admin/...`, ignoring leading slashes and case. */
-function isAdminPath(path: string): boolean {
+export function isAdminPath(path: string): boolean {
   let start = 0;
   while (path[start] === '/') start += 1;
   const normalized = path.slice(start).toLowerCase();
   return normalized === 'admin' || normalized.startsWith('admin/');
 }
 
-@Injectable()
-export class AdminApiKeyGuard implements CanActivate {
-  /**
-   * Whether this request needs admin credentials. Fails closed: any one of
-   * these is enough.
-   *
-   * 1. The request path, in lower case, is `/admin` or under `/admin/`.
-   *    Express matches routes case-insensitively, so `/ADMIN/realms`
-   *    reaches the `/admin/realms` handler with `request.path` unchanged.
-   * 2. The matched controller is declared under `admin` — whatever form the
-   *    URL took, the handler that runs is an admin handler.
-   * 3. The handler or controller has `@RequireAdminAuth()`.
-   * 4. The handler or controller names this guard in `@UseGuards(...)`: an
-   *    explicit `@UseGuards(AdminApiKeyGuard)` always means admin auth,
-   *    whatever the path (it used to do nothing off `/admin`).
-   *
-   * `@Public()` is checked before this and still wins.
-   */
-  private mustEnforce(context: ExecutionContext, request: Request): boolean {
-    const handler: unknown = context.getHandler();
-    const controller: unknown = context.getClass();
+/**
+ * Whether a request to this handler needs admin credentials. Fails closed:
+ * any one of these is enough. AdminApiKeyGuard (authentication) and
+ * AdminAuthorizationGuard (authorization) both use this one function, so
+ * they always agree on which routes are admin routes.
+ *
+ * 1. The request path, in lower case, is `/admin` or under `/admin/`.
+ *    Express matches routes case-insensitively, so `/ADMIN/realms`
+ *    reaches the `/admin/realms` handler with `request.path` unchanged.
+ * 2. The matched controller is declared under `admin` — whatever form the
+ *    URL took, the handler that runs is an admin handler.
+ * 3. The handler or controller has `@RequireAdminAuth()`.
+ * 4. The handler or controller names AdminApiKeyGuard in `@UseGuards(...)`:
+ *    an explicit `@UseGuards(AdminApiKeyGuard)` always means admin auth,
+ *    whatever the path (it used to do nothing off `/admin`).
+ *
+ * `@Public()` is checked before this and still wins.
+ */
+export function adminAuthenticationRequired(
+  handler: unknown,
+  controller: unknown,
+  path: string,
+  reflector: Reflector,
+): boolean {
+  // 1. The URL.
+  if (isAdminPath(path)) return true;
 
-    // 1. The URL.
-    if (isAdminPath(request.path ?? '')) return true;
+  // 2. The controller's declared path (a string or an array of them).
+  const declared = metadataOf(PATH_METADATA, controller);
+  const paths = Array.isArray(declared) ? declared : [declared];
+  if (paths.some((p) => typeof p === 'string' && isAdminPath(p))) {
+    return true;
+  }
 
-    // 2. The controller's declared path (a string or an array of them).
-    const declared = metadataOf(PATH_METADATA, controller);
-    const paths = Array.isArray(declared) ? declared : [declared];
-    if (paths.some((p) => typeof p === 'string' && isAdminPath(p))) {
-      return true;
-    }
+  // 3. @RequireAdminAuth().
+  if (
+    reflector.getAllAndOverride<boolean>(REQUIRE_ADMIN_AUTH_KEY, [
+      handler as never,
+      controller as never,
+    ]) === true
+  ) {
+    return true;
+  }
 
-    // 3. @RequireAdminAuth().
+  // 4. An explicit @UseGuards(AdminApiKeyGuard), as the class or an instance.
+  for (const target of [handler, controller]) {
+    const guards = metadataOf(GUARDS_METADATA, target);
     if (
-      this.reflector.getAllAndOverride<boolean>(REQUIRE_ADMIN_AUTH_KEY, [
-        handler as never,
-        controller as never,
-      ]) === true
+      Array.isArray(guards) &&
+      guards.some(
+        (g: unknown) =>
+          g === AdminApiKeyGuard ||
+          g instanceof AdminApiKeyGuard ||
+          (typeof g === 'function' && g.prototype instanceof AdminApiKeyGuard),
+      )
     ) {
       return true;
     }
+  }
 
-    // 4. An explicit @UseGuards(AdminApiKeyGuard), as the class or an instance.
-    for (const target of [handler, controller]) {
-      const guards = metadataOf(GUARDS_METADATA, target);
-      if (
-        Array.isArray(guards) &&
-        guards.some(
-          (g: unknown) =>
-            g === AdminApiKeyGuard ||
-            g instanceof AdminApiKeyGuard ||
-            (typeof g === 'function' &&
-              g.prototype instanceof AdminApiKeyGuard),
-        )
-      ) {
-        return true;
-      }
-    }
+  return false;
+}
 
-    return false;
+@Injectable()
+export class AdminApiKeyGuard implements CanActivate {
+  /** See {@link adminAuthenticationRequired}. */
+  private mustEnforce(context: ExecutionContext, request: Request): boolean {
+    return adminAuthenticationRequired(
+      context.getHandler(),
+      context.getClass(),
+      request.path ?? '',
+      this.reflector,
+    );
   }
 
   constructor(

@@ -55,14 +55,44 @@ describe('RealmsController', () => {
   });
 
   describe('findAll', () => {
-    it('should call realmsService.findAll', () => {
-      const expected = [{ id: 'r1' }, { id: 'r2' }];
-      realmsService.findAll.mockReturnValue(expected);
+    const realms = [
+      { id: 'r1', name: 'realm-one' },
+      { id: 'r2', name: 'realm-two' },
+      { id: 'm', name: 'master' },
+    ];
+    const principal = (roles: string[], realmIds: string[] = []) => ({
+      adminPrincipal: {
+        kind: 'user',
+        userId: 'sample',
+        username: 'sample',
+        roles,
+        realmIds: new Set(realmIds),
+      },
+    });
 
-      const result = controller.findAll();
-
+    it('lists every realm for a super-admin or view-only admin', async () => {
+      realmsService.findAll.mockResolvedValue(realms);
+      expect(
+        await controller.findAll(principal(['super-admin']) as any),
+      ).toEqual(realms);
+      expect(await controller.findAll(principal(['view-only']) as any)).toEqual(
+        realms,
+      );
       expect(realmsService.findAll).toHaveBeenCalledWith();
-      expect(result).toEqual(expected);
+    });
+
+    it('lists only the assigned realms for a realm-admin', async () => {
+      realmsService.findAll.mockResolvedValue(realms);
+      expect(
+        await controller.findAll(
+          principal(['realm-admin'], ['r2', 'm']) as any,
+        ),
+      ).toEqual([{ id: 'r2', name: 'realm-two' }]);
+    });
+
+    it('lists nothing without a principal', async () => {
+      realmsService.findAll.mockResolvedValue(realms);
+      expect(await controller.findAll({} as any)).toEqual([]);
     });
   });
 
