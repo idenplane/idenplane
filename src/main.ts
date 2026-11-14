@@ -23,7 +23,7 @@ import {
   type MtlsConfig,
 } from './mtls/mtls-config.js';
 import { createTrustedProxyCertHeaderMiddleware } from './mtls/trusted-proxy-cert-header.middleware.js';
-import { MtlsServerService } from './mtls/mtls-server.js';
+import { startCertificateListener } from './realtime/certificate-listener.js';
 import { APP_VERSION } from './versioning/app-version.js';
 
 /** Known-insecure / placeholder values that must never reach production. */
@@ -370,8 +370,9 @@ async function bootstrap() {
   console.log(`Swagger UI: http://localhost:${port}/api`);
 
   // The certificate listener (MTLS_LISTEN_PORT) serves the OAuth endpoint
-  // aliases through the same Express application. Closed by the shutdown
-  // hooks with the rest of the application.
-  await app.get(MtlsServerService).start(app.getHttpAdapter().getInstance());
+  // aliases through the same Express application, and the session events
+  // WebSocket through the same gateway. Closed by the shutdown hooks with
+  // the rest of the application.
+  await startCertificateListener(app);
 }
 void bootstrap();
