@@ -615,12 +615,22 @@
         "WEBHOOK_SECRET_KEY": {
           "type": "string",
           "default": "",
-          "description": "Encrypts webhook secrets at rest. Empty: generated. Never change it after install."
+          "description": "Encrypts every stored secret at rest. Empty: generated. Change it only by rotating (see WEBHOOK_SECRET_KEY_PREVIOUS)."
         },
         "WEBHOOK_ENCRYPTION_SALT": {
           "type": "string",
           "default": "",
-          "description": "Salt for the webhook encryption key. Empty: generated."
+          "description": "Salt for the encryption key. Empty: generated."
+        },
+        "WEBHOOK_SECRET_KEY_PREVIOUS": {
+          "type": "string",
+          "default": "",
+          "description": "Only while rotating the encryption key: the old WEBHOOK_SECRET_KEY. Never generated; remove once the rotation is complete."
+        },
+        "WEBHOOK_ENCRYPTION_SALT_PREVIOUS": {
+          "type": "string",
+          "default": "",
+          "description": "Only while rotating the encryption key: the old WEBHOOK_ENCRYPTION_SALT. Never generated."
         },
         "DATABASE_URL": {
           "type": "string",

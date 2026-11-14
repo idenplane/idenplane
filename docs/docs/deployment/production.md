@@ -39,8 +39,8 @@ Four values protect the installation. Generate each one once and keep it.
 |---|---|---|
 | `ADMIN_PASSWORD` | The initial `admin` user, created on the first start | Only used once. Afterwards, change the password in the console. |
 | `ADMIN_API_KEY` | The static admin API credential (at least 32 characters) | Yes. Clients using it must be updated. |
-| `WEBHOOK_SECRET_KEY` | Encrypts every stored secret at rest (see below) | **No.** Stored secrets become unreadable, and Idenplane refuses to start. |
-| `WEBHOOK_ENCRYPTION_SALT` | Derives the key above | **No.** |
+| `WEBHOOK_SECRET_KEY` | Encrypts every stored secret at rest (see below) | Only by [rotating the encryption key](#rotating-the-encryption-key). Simply replacing it makes stored secrets unreadable, and Idenplane refuses to start. |
+| `WEBHOOK_ENCRYPTION_SALT` | Derives the key above | Only by rotating the encryption key, as above. |
 
 Keep them in a secret manager, not in a file on the server:
 
@@ -64,7 +64,44 @@ Keep them in a secret manager, not in a file on the server:
 
 Passwords, client secrets, API keys, SCIM tokens and session tokens are hashed, not encrypted, and need no key. The admin API never returns an encrypted secret: it returns `••••••`, and sending `••••••` back on an update keeps the stored value.
 
-On every start, Idenplane checks that the key is the one the stored secrets were encrypted with, using a check value kept in the `encryption_key_check` table. With another key it **refuses to start** rather than read or rewrite secrets with the wrong key: restore the previous `WEBHOOK_SECRET_KEY` and `WEBHOOK_ENCRYPTION_SALT`. The same start encrypts any secret still stored in plaintext by an older version; it is safe with several replicas or workers starting at once. There is no key rotation yet, so these two values must be kept for the life of the database.
+On every start, Idenplane checks that the key is the one the stored secrets were encrypted with, using a check value kept in the `encryption_key_check` table. With another key it **refuses to start** rather than read or rewrite secrets with the wrong key: restore the previous `WEBHOOK_SECRET_KEY` and `WEBHOOK_ENCRYPTION_SALT`, or rotate to the new key as described below. The same start encrypts any secret still stored in plaintext by an older version; it is safe with several replicas or workers starting at once.
+
+Each value encrypted by this version starts with `ek1.` and a short key id (8 hex characters derived from the key, never the key itself), so Idenplane knows which key opens it. Values written by earlier versions have no key id and stay readable.
+
+### Rotating the encryption key
+
+To replace `WEBHOOK_SECRET_KEY` (and, if you like, `WEBHOOK_ENCRYPTION_SALT`) with new values, for example after a leak or under a key-rotation policy, keep the old pair available as the *previous* key while Idenplane re-encrypts every stored secret with the new one.
+
+1. **Back up** the database and the current `WEBHOOK_SECRET_KEY` and `WEBHOOK_ENCRYPTION_SALT`. The server must already have started once on this version, with the current key.
+2. **Generate a new key**, and a new salt if you want to change it too: `openssl rand -hex 32` and `openssl rand -hex 16`.
+3. **Stop every replica and worker** (scale to zero, or use the `Recreate` strategy). A process still running with only the old key cannot read what is re-encrypted, and what it writes stays under the old key.
+4. **Configure both keys** and start Idenplane:
+   - `WEBHOOK_SECRET_KEY` and `WEBHOOK_ENCRYPTION_SALT`: the new values;
+   - `WEBHOOK_SECRET_KEY_PREVIOUS` and `WEBHOOK_ENCRYPTION_SALT_PREVIOUS`: the old values. Leave out either one if it is unchanged; it defaults to the current one.
+5. **Wait for the start to finish.** Before it serves requests, Idenplane:
+   - checks that the old key decrypts the `encryption_key_check` row. If neither key does, it refuses to start and writes nothing;
+   - reads every encrypted value. If one decrypts with neither key, it refuses to start, names the value, and writes nothing (see below);
+   - re-encrypts every value under the old key with the new key, in batches, each value only if it was not changed meanwhile;
+   - rewrites the key check row with the new key, last. If the start is interrupted, the next one simply continues: values already moved are skipped.
+
+   When it is done, it logs `Key rotation complete: every stored secret is encrypted with the current key (id …)`.
+6. **Remove `WEBHOOK_SECRET_KEY_PREVIOUS` and `WEBHOOK_ENCRYPTION_SALT_PREVIOUS`** and restart. From now on only the new key is needed. Keep the old one with the pre-rotation backup only, since that backup needs it.
+
+What it covers: every value listed above, in the configuration tables, webhook secrets, NHI private keys, SMS phone numbers and all TOTP seeds. It does not cover short-lived state:
+
+- A pending SMS phone enrolment or SMS code keeps working while the previous key is configured.
+- One-time codes (email and SMS) and custom-flow sign-in links are hashed with a key derived from the current key. Those issued before the restart stop matching, so users request a new one.
+- The per-phone and per-IP SMS sending limits start a new window.
+
+**How long it takes.** The start reads every encrypted value twice (a read-only check, then the rewrite). Measured on PostgreSQL 16 on a developer machine, about 5,000 TOTP or SMS factors per second, so roughly 10 seconds for 50,000 enrolled users and 3 to 4 minutes per million. The chart's startup probe allows 5 minutes. With more than about a million TOTP users, raise `startupProbe.failureThreshold` for the rotation. While a previous key stays configured, every start reads all values again (about 4 seconds per 50,000), which is one more reason to remove it in step 6.
+
+**A value that decrypts with neither key** stops the start with a list of where it is (table, row id and field). That value was encrypted with a third key, or is damaged. Configure the key it was encrypted with as the previous key if you have it. If it is lost for good, start once with `STORED_SECRETS_ACCEPT_UNREADABLE=true`. The rotation then completes, leaves those values as they are, and logs them. Set each of them again in the admin console, then remove the variable.
+
+**Without downtime.** If you cannot stop every replica, roll out in two steps, so that every process can always read both keys:
+
+1. Roll out the old key as current and the new one as previous: `WEBHOOK_SECRET_KEY`=old, `WEBHOOK_SECRET_KEY_PREVIOUS`=new.
+2. Roll out the swap: `WEBHOOK_SECRET_KEY`=new, `WEBHOOK_SECRET_KEY_PREVIOUS`=old.
+3. When the rollout has finished, restart once more: this picks up values that an old-config replica wrote during step 2. Wait for the log line from step 5, then remove the previous key as in step 6.
 
 :::warning Upgrading to the version that encrypts these secrets
 Its first start encrypts the values older versions stored in plaintext, and older versions cannot read them afterwards. Stop the old version before starting the new one (scale to zero, or the `Recreate` strategy) instead of a rolling update, and keep the pre-upgrade database backup: going back needs it. On the first start, if stored values that look encrypted do not decrypt with the configured key, Idenplane refuses to start. Restore the previous key; only if you are sure the key is right (the values are plaintext that merely looks like ciphertext), start once with `STORED_SECRETS_ACCEPT_KEY=true`.

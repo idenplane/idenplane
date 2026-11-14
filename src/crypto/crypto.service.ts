@@ -8,11 +8,8 @@ import * as argon2 from 'argon2';
 import {
   randomBytes,
   createHash,
-  createCipheriv,
-  createDecipheriv,
   createHmac,
   hkdfSync,
-  scryptSync,
   timingSafeEqual,
 } from 'crypto';
 import {
@@ -20,6 +17,18 @@ import {
   workerCount,
 } from '../common/utils/cpu-count.util.js';
 import { createConcurrencyLimiter } from '../common/utils/concurrency-limiter.util.js';
+import {
+  DEFAULT_WEBHOOK_ENCRYPTION_SALT,
+  DEFAULT_WEBHOOK_SECRET_KEY,
+  isEnvelope,
+  keyRingFromEnv,
+  parseEnvelope,
+  seal,
+  tryOpen,
+  UnreadableSecretError,
+  type KeyRing,
+  type KeySlot,
+} from './key-ring.js';
 
 /** Maximum password length accepted by hashPassword / verifyPassword.
  *  Argon2 has no built-in length limit; feeding it a multi-megabyte string
@@ -43,11 +52,6 @@ const DEFAULT_ARGON2_MAX_CONCURRENCY = Math.max(
   Math.floor(effectiveCpuCount() / workerCount()),
 );
 
-// Algorithm constants for AES-256-GCM symmetric encryption.
-const ALGORITHM = 'aes-256-gcm';
-const IV_BYTES = 12; // 96-bit IV recommended for GCM
-const TAG_BYTES = 16; // 128-bit authentication tag
-
 /** Storage prefix for fast-hashed generated secrets; see hashSecret. */
 const SHA256_SECRET_PREFIX = 'sha256$';
 
@@ -55,30 +59,22 @@ const SHA256_SECRET_PREFIX = 'sha256$';
 const isGeneratedSecret = (secret: string): boolean =>
   /^[0-9a-f]{64}$/.test(secret);
 
-/** Default/placeholder values that must never be used in production. */
-const DEFAULT_WEBHOOK_SECRET_KEY = 'dev-webhook-secret-key-replace-me';
-const DEFAULT_WEBHOOK_ENCRYPTION_SALT = 'idenplane-webhook-salt';
-
 @Injectable()
 export class CryptoService implements OnModuleInit {
   private readonly logger = new Logger(CryptoService.name);
 
   /**
-   * 32-byte key derived from the WEBHOOK_SECRET_KEY environment variable.
-   * The raw env value is run through scrypt so operators can supply any
-   * length string without having to produce exactly 32 bytes themselves.
-   * Falls back to a deterministic development key when the variable is
-   * absent – startup should be blocked by env validation in production.
+   * The keys that encrypt secrets at rest (see key-ring.ts): the current
+   * one, derived with scrypt from WEBHOOK_SECRET_KEY and
+   * WEBHOOK_ENCRYPTION_SALT, and during a rotation the previous one, from
+   * WEBHOOK_SECRET_KEY_PREVIOUS / WEBHOOK_ENCRYPTION_SALT_PREVIOUS. Falls
+   * back to a deterministic development key when the variable is absent;
+   * production refuses to start without one.
    */
-  private readonly encryptionKey: Buffer = (() => {
-    const raw = process.env['WEBHOOK_SECRET_KEY'] ?? DEFAULT_WEBHOOK_SECRET_KEY;
-    // scrypt: N=2^14, r=8, p=1 → 32-byte key
-    // Salt is read from WEBHOOK_ENCRYPTION_SALT so operators can rotate it;
-    // falls back to the original hardcoded value for backwards compatibility.
-    const salt =
-      process.env['WEBHOOK_ENCRYPTION_SALT'] ?? DEFAULT_WEBHOOK_ENCRYPTION_SALT;
-    return scryptSync(raw, salt, 32);
-  })();
+  private readonly keyRing: KeyRing = keyRingFromEnv(process.env);
+
+  /** The current key: it encrypts, and keys {@link hmac}. */
+  private readonly encryptionKey: Buffer = this.keyRing.current.key;
 
   /** Bounds concurrent Argon2 hash/verify calls; see DEFAULT_ARGON2_MAX_CONCURRENCY. */
   private readonly limitArgon2Concurrency = createConcurrencyLimiter(
@@ -104,7 +100,27 @@ export class CryptoService implements OnModuleInit {
     );
   }
 
+  /** The id of the current key, as written in each envelope. */
+  get currentKeyId(): string {
+    return this.keyRing.current.id;
+  }
+
+  /** The id of the previous key, if one is configured. */
+  get previousKeyId(): string | undefined {
+    return this.keyRing.previous?.id;
+  }
+
+  /** A previous key is configured: a rotation may have values to move. */
+  hasPreviousKey(): boolean {
+    return this.keyRing.previous !== undefined;
+  }
+
   onModuleInit(): void {
+    if (this.keyRing.previousIsCurrent) {
+      this.logger.warn(
+        'WEBHOOK_SECRET_KEY_PREVIOUS / WEBHOOK_ENCRYPTION_SALT_PREVIOUS derive the same key as the current ones and are ignored; remove them.',
+      );
+    }
     const key = process.env['WEBHOOK_SECRET_KEY'];
     const salt = process.env['WEBHOOK_ENCRYPTION_SALT'];
     const isProduction = process.env['NODE_ENV'] === 'production';
@@ -251,6 +267,11 @@ export class CryptoService implements OnModuleInit {
    * every 6-digit code or phone number and match. The key never leaves this
    * service and is derived with HKDF under `purpose`, so a hash made for one
    * purpose can't be replayed as another. Hex output, fixed length.
+   *
+   * Always keyed by the current key. After a key rotation, values hashed
+   * before it (pending one-time codes, flow sign-in links, the SMS per-phone
+   * and per-IP rate-limit windows) no longer match: codes and links fail
+   * closed and must be requested again. All of them are short-lived.
    */
   hmac(purpose: string, data: string): string {
     let key = this.hmacKeys.get(purpose);
@@ -270,69 +291,65 @@ export class CryptoService implements OnModuleInit {
   }
 
   /**
-   * Encrypt a plaintext string with AES-256-GCM.
+   * Encrypt a plaintext string with AES-256-GCM under the current key.
    *
-   * Output format (base64-encoded):  <12-byte IV> | <ciphertext> | <16-byte tag>
-   *
+   * Output: `ek1.<key id>.<base64(iv | tag | ciphertext)>` (see key-ring.ts).
    * A fresh random IV is generated on every call, so encrypting the same
    * plaintext twice will produce different ciphertext.
    */
   encrypt(plaintext: string): string {
-    const iv = randomBytes(IV_BYTES);
-    const cipher = createCipheriv(ALGORITHM, this.encryptionKey, iv);
-    const encrypted = Buffer.concat([
-      cipher.update(plaintext, 'utf8'),
-      cipher.final(),
-    ]);
-    const tag = cipher.getAuthTag();
-    // Pack: iv (12) + tag (16) + ciphertext
-    const packed = Buffer.concat([iv, tag, encrypted]);
-    return packed.toString('base64');
+    return seal(this.keyRing, plaintext);
   }
 
   /**
-   * Decrypt a value produced by {@link encrypt}.
-   * Throws if the authentication tag does not match (tampering detected).
+   * Decrypt a value produced by {@link encrypt}, or by an older version (no
+   * key id), with the current or the previous key. Throws if no configured
+   * key opens it (another key, plaintext, or tampering).
    */
   decrypt(ciphertext: string): string {
-    const packed = Buffer.from(ciphertext, 'base64');
-    const iv = packed.subarray(0, IV_BYTES);
-    const tag = packed.subarray(IV_BYTES, IV_BYTES + TAG_BYTES);
-    const encrypted = packed.subarray(IV_BYTES + TAG_BYTES);
-    // The full 128-bit tag: without authTagLength, GCM accepts a tag as
-    // short as 4 bytes, so a short plaintext value could pass for ciphertext
-    // far more often than a forged full tag would.
-    const decipher = createDecipheriv(ALGORITHM, this.encryptionKey, iv, {
-      authTagLength: TAG_BYTES,
-    });
-    decipher.setAuthTag(tag);
-    return decipher.update(encrypted).toString('utf8') + decipher.final('utf8');
+    const opened = tryOpen(this.keyRing, ciphertext);
+    if (opened) return opened.plaintext;
+    const envelope = parseEnvelope(ciphertext);
+    if (envelope) throw new UnreadableSecretError(envelope.keyId);
+    throw new Error('Unsupported state or unable to authenticate data');
   }
 
   /**
-   * True if `value` is ciphertext this service can decrypt. GCM's auth tag
-   * makes this reliable in both directions: real ciphertext always decrypts,
-   * and plaintext can only fail to decrypt (a false-positive would require
-   * forging the tag), so this doubles as a "not already encrypted" check.
+   * Decrypt with whichever configured key `value` belongs to and say which
+   * ('current' or 'previous'), or undefined if neither opens it.
+   */
+  open(value: string): { plaintext: string; slot: KeySlot } | undefined {
+    return tryOpen(this.keyRing, value);
+  }
+
+  /** True for a value in the envelope format, whether or not it opens. */
+  isEnvelope(value: string): boolean {
+    return isEnvelope(value);
+  }
+
+  /**
+   * True if `value` is ciphertext this service can decrypt, with the current
+   * or the previous key. GCM's auth tag makes this reliable in both
+   * directions: real ciphertext always decrypts, and plaintext can only fail
+   * to decrypt (a false-positive would require forging the tag), so this
+   * doubles as a "not already encrypted" check.
    */
   private isEncrypted(value: string): boolean {
-    try {
-      this.decrypt(value);
-      return true;
-    } catch {
-      return false;
-    }
+    return tryOpen(this.keyRing, value) !== undefined;
   }
 
   /**
    * Encrypt a secret before writing it to the database, unless it is already
-   * an encrypted envelope — e.g. a value round-tripped unchanged through a
-   * GET followed by a PATCH of the same realm. Nullish/empty values pass
-   * through so "field omitted" and "clear the field" both behave as before.
+   * ciphertext (under the current or the previous key), e.g. a stored value
+   * kept by an update. Nullish/empty values pass through so "field omitted"
+   * and "clear the field" both behave as before. An envelope that no
+   * configured key opens is ciphertext under another key: it is kept as it
+   * is rather than encrypted a second time.
    */
   encryptSecret<T extends string | null | undefined>(value: T): T {
     if (!value) return value;
     if (this.isEncrypted(value)) return value;
+    if (isEnvelope(value)) return value;
     return this.encrypt(value) as T;
   }
 
@@ -342,13 +359,16 @@ export class CryptoService implements OnModuleInit {
    * on those (it can't mistake plaintext for a valid ciphertext+tag), so
    * falling back to the raw value on failure is safe and lets old rows keep
    * working until they're next written (encryptSecret then encrypts them).
+   *
+   * An envelope (`ek1.…`) is never plaintext: one that no configured key
+   * opens throws UnreadableSecretError rather than being used as the secret.
    */
   decryptSecret<T extends string | null | undefined>(value: T): T {
     if (!value) return value;
-    try {
-      return this.decrypt(value) as T;
-    } catch {
-      return value;
-    }
+    const opened = tryOpen(this.keyRing, value);
+    if (opened) return opened.plaintext as T;
+    const envelope = parseEnvelope(value);
+    if (envelope) throw new UnreadableSecretError(envelope.keyId);
+    return value;
   }
 }

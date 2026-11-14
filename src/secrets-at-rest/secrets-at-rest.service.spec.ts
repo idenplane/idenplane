@@ -29,6 +29,13 @@ function fakeDb(opts: {
   keyCheck?: { keyCheck: string; sweepVersion: number } | null;
 }) {
   const writes: string[] = [];
+  const updates: Record<string, Array<{ data: Record<string, any> }>> = {};
+  const record = (name: string, result: unknown) =>
+    jest.fn((args: { data: Record<string, any> }) => {
+      writes.push(name);
+      (updates[name] ??= []).push(args);
+      return Promise.resolve(result);
+    });
   const empty = () => Promise.resolve([]);
   const tx = {
     $executeRawUnsafe: jest.fn(() => Promise.resolve(0)),
@@ -40,23 +47,17 @@ function fakeDb(opts: {
             : null,
         ),
       ),
-      create: jest.fn(() => {
-        writes.push('encryptionKeyCheck.create');
-        return Promise.resolve({});
-      }),
-      update: jest.fn(() => {
-        writes.push('encryptionKeyCheck.update');
-        return Promise.resolve({});
-      }),
+      create: record('encryptionKeyCheck.create', {}),
+      update: record('encryptionKeyCheck.update', {}),
     },
-    webhook: { findMany: jest.fn(() => Promise.resolve(opts.webhooks ?? [])) },
+    webhook: {
+      findMany: jest.fn(() => Promise.resolve(opts.webhooks ?? [])),
+      updateMany: record('webhook.updateMany', { count: 1 }),
+    },
     nhiCredential: { findMany: jest.fn(empty) },
     realm: {
       findMany: jest.fn(() => Promise.resolve(opts.realms ?? [])),
-      updateMany: jest.fn(() => {
-        writes.push('realm.updateMany');
-        return Promise.resolve({ count: 1 });
-      }),
+      updateMany: record('realm.updateMany', { count: 1 }),
     },
     identityProvider: { findMany: jest.fn(empty) },
     userFederation: { findMany: jest.fn(empty) },
@@ -70,7 +71,7 @@ function fakeDb(opts: {
     ...tx,
     $transaction: jest.fn((fn: (t: typeof tx) => Promise<unknown>) => fn(tx)),
   };
-  return { prisma, writes };
+  return { prisma, writes, updates };
 }
 
 describe('SecretsAtRestService', () => {
@@ -175,5 +176,170 @@ describe('SecretsAtRestService', () => {
     ]) {
       expect(looksEncrypted(plain)).toBe(false);
     }
+  });
+});
+
+describe('SecretsAtRestService key rotation', () => {
+  const oldKey = cryptoWithKey('the-old-key');
+  const unknown = cryptoWithKey('a-third-key');
+  const rotating = (() => {
+    const saved = process.env['WEBHOOK_SECRET_KEY_PREVIOUS'];
+    process.env['WEBHOOK_SECRET_KEY_PREVIOUS'] = 'the-old-key';
+    try {
+      return cryptoWithKey('the-new-key');
+    } finally {
+      if (saved === undefined)
+        delete process.env['WEBHOOK_SECRET_KEY_PREVIOUS'];
+      else process.env['WEBHOOK_SECRET_KEY_PREVIOUS'] = saved;
+    }
+  })();
+  const realmRow = (smtpPassword: string | null) => ({
+    id: 'r1',
+    name: 'acme',
+    updatedAt: new Date(0),
+    smtpPassword,
+    recaptchaSecretKey: null,
+    hcaptchaSecretKey: null,
+    emailProviderConfig: null,
+    smsProviderConfig: null,
+  });
+  const underOld = {
+    keyCheck: oldKey.encrypt(KEY_CHECK_PLAINTEXT),
+    sweepVersion: 1,
+  };
+  const savedAccept = process.env['STORED_SECRETS_ACCEPT_UNREADABLE'];
+  afterEach(() => {
+    if (savedAccept === undefined)
+      delete process.env['STORED_SECRETS_ACCEPT_UNREADABLE'];
+    else process.env['STORED_SECRETS_ACCEPT_UNREADABLE'] = savedAccept;
+  });
+
+  it('re-encrypts values under the previous key, then moves the key check last', async () => {
+    const { prisma, writes, updates } = fakeDb({
+      keyCheck: underOld,
+      realms: [realmRow(oldKey.encrypt('smtp-pass'))],
+      webhooks: [{ id: 'w', secret: oldKey.encrypt('hook') }],
+    });
+    const result = await new SecretsAtRestService(
+      prisma as any,
+      rotating,
+    ).run();
+    expect(writes).toEqual([
+      'webhook.updateMany',
+      'realm.updateMany',
+      'encryptionKeyCheck.update',
+    ]);
+    expect(result.rotated).toBe(true);
+    expect(result.encrypted).toEqual({ webhooks: 1, realms: 1 });
+    const realmData = updates['realm.updateMany'][0].data;
+    expect(rotating.open(realmData.smtpPassword)).toEqual({
+      plaintext: 'smtp-pass',
+      slot: 'current',
+    });
+    const keyCheck = updates['encryptionKeyCheck.update'][0].data.keyCheck;
+    expect(rotating.open(keyCheck)?.slot).toBe('current');
+    expect(rotating.decrypt(keyCheck)).toBe(KEY_CHECK_PLAINTEXT);
+  });
+
+  it('leaves values already under the current key alone', async () => {
+    const { prisma, writes } = fakeDb({
+      keyCheck: {
+        keyCheck: rotating.encrypt(KEY_CHECK_PLAINTEXT),
+        sweepVersion: 1,
+      },
+      realms: [realmRow(rotating.encrypt('smtp-pass'))],
+    });
+    await new SecretsAtRestService(prisma as any, rotating).run();
+    expect(writes).toEqual(['encryptionKeyCheck.update']);
+  });
+
+  it('refuses a previous key that is not the one in use, writing nothing', async () => {
+    const { prisma, writes } = fakeDb({
+      keyCheck: {
+        keyCheck: unknown.encrypt(KEY_CHECK_PLAINTEXT),
+        sweepVersion: 1,
+      },
+      realms: [realmRow(unknown.encrypt('smtp-pass'))],
+    });
+    await expect(
+      new SecretsAtRestService(prisma as any, rotating).run(),
+    ).rejects.toThrow(/WEBHOOK_SECRET_KEY_PREVIOUS/);
+    expect(writes).toEqual([]);
+  });
+
+  it('refuses a value neither key decrypts before writing anything', async () => {
+    const { prisma, writes } = fakeDb({
+      keyCheck: underOld,
+      realms: [realmRow(unknown.encrypt('smtp-pass'))],
+      webhooks: [{ id: 'w', secret: oldKey.encrypt('hook') }],
+    });
+    await expect(
+      new SecretsAtRestService(prisma as any, rotating).run(),
+    ).rejects.toThrow(/realms acme smtpPassword/);
+    expect(writes).toEqual([]);
+  });
+
+  it('a webhook secret neither key decrypts is unreadable, whatever it looks like', async () => {
+    const { prisma, writes } = fakeDb({
+      keyCheck: underOld,
+      webhooks: [{ id: 'w', secret: 'not-ciphertext-at-all' }],
+    });
+    await expect(
+      new SecretsAtRestService(prisma as any, rotating).run(),
+    ).rejects.toThrow(/webhooks w secret/);
+    expect(writes).toEqual([]);
+  });
+
+  it('STORED_SECRETS_ACCEPT_UNREADABLE leaves such values as they are and completes', async () => {
+    process.env['STORED_SECRETS_ACCEPT_UNREADABLE'] = 'true';
+    const { prisma, writes } = fakeDb({
+      keyCheck: underOld,
+      realms: [realmRow(unknown.encrypt('smtp-pass'))],
+    });
+    const result = await new SecretsAtRestService(
+      prisma as any,
+      rotating,
+    ).run();
+    expect(result.unreadable).toEqual(['realms acme smtpPassword']);
+    expect(writes).toEqual(['encryptionKeyCheck.update']);
+  });
+
+  it('still encrypts legacy plaintext while rotating', async () => {
+    const { prisma, writes, updates } = fakeDb({
+      keyCheck: underOld,
+      realms: [realmRow('plain-pass')],
+    });
+    await new SecretsAtRestService(prisma as any, rotating).run();
+    expect(writes).toContain('realm.updateMany');
+    expect(
+      rotating.decrypt(updates['realm.updateMany'][0].data.smtpPassword),
+    ).toBe('plain-pass');
+  });
+
+  it('will not rotate a database that never ran encryption at rest', async () => {
+    const { prisma, writes } = fakeDb({
+      realms: [realmRow(oldKey.encrypt('smtp-pass'))],
+    });
+    await expect(
+      new SecretsAtRestService(prisma as any, rotating).run(),
+    ).rejects.toThrow(/never run on this database/);
+    expect(writes).toEqual([]);
+  });
+
+  it('without a previous key, an envelope of an unknown key fails the start', async () => {
+    const { prisma, writes } = fakeDb({
+      keyCheck: {
+        keyCheck: rotating.encrypt(KEY_CHECK_PLAINTEXT),
+        sweepVersion: 1,
+      },
+      realms: [realmRow(oldKey.encrypt('smtp-pass'))],
+    });
+    await expect(
+      new SecretsAtRestService(
+        prisma as any,
+        cryptoWithKey('the-new-key'),
+      ).run(),
+    ).rejects.toThrow(StoredSecretsKeyError);
+    expect(writes).toEqual([]);
   });
 });

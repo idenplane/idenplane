@@ -60,6 +60,10 @@ function encrypt(plaintext: string): string {
 }
 
 function isEncrypted(value: string): boolean {
+  // The `ek1.<key id>.<base64>` envelope the server writes since key
+  // rotation (src/crypto/key-ring.ts): never touched by this script, so it
+  // is not encrypted a second time.
+  if (value.startsWith('ek1.')) return true;
   try {
     const packed = Buffer.from(value, 'base64');
     const iv = packed.subarray(0, IV_BYTES);

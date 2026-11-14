@@ -1,4 +1,5 @@
 import { CryptoService } from './crypto.service.js';
+import { UnreadableSecretError } from './key-ring.js';
 import {
   MAX_SECRET_JSON_DEPTH,
   PlaceholderTypedOverError,
@@ -59,9 +60,18 @@ describe('stored secrets', () => {
       if (prevKey === undefined) delete process.env['WEBHOOK_SECRET_KEY'];
       else process.env['WEBHOOK_SECRET_KEY'] = prevKey;
 
+      // An envelope names its key: one this instance lacks is never used
+      // as the secret, nor encrypted a second time.
       const foreign = other.encryptSecret('x');
-      // This is why SecretsAtRestService checks the key before any sweep.
-      expect(crypto.decryptSecret(foreign)).toBe(foreign);
+      expect(() => crypto.decryptSecret(foreign)).toThrow(
+        UnreadableSecretError,
+      );
+      expect(crypto.encryptSecret(foreign)).toBe(foreign);
+
+      // Legacy ciphertext (no key id) cannot be told from plaintext. This is
+      // why SecretsAtRestService checks the key before any sweep.
+      const legacy = foreign.slice(foreign.lastIndexOf('.') + 1);
+      expect(crypto.decryptSecret(legacy)).toBe(legacy);
     });
 
     it('rejects the placeholder as a new value', () => {

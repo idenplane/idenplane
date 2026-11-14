@@ -76,7 +76,7 @@ WEBHOOK_ENCRYPTION_SALT=$(openssl rand -hex 16)
 ```
 
 :::warning
-If `WEBHOOK_SECRET_KEY` changes, all stored webhook secrets become unreadable. Rotate with care.
+If `WEBHOOK_SECRET_KEY` or `WEBHOOK_ENCRYPTION_SALT` is simply replaced, every stored secret becomes unreadable and Idenplane refuses to start. To change them, follow [Rotating the encryption key](../deployment/production.md#rotating-the-encryption-key).
 :::
 
 ---
