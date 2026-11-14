@@ -10,6 +10,7 @@ import { getGroups } from '../../api/groups';
 import { getClientScopes } from '../../api/clientScopes';
 import { getRealmSessions } from '../../api/sessions';
 import { getIdentityProviders } from '../../api/identityProviders';
+import { usePermissions } from '../../hooks/usePermissions';
 
 type GeneralSettingsFormProps = {
   realm: Realm;
@@ -24,6 +25,7 @@ function seedFromRealm(realm: Realm) {
 }
 
 export default function GeneralSettingsForm({ realm }: GeneralSettingsFormProps) {
+  const { canManageServer } = usePermissions();
   const queryClient = useQueryClient();
   const name = realm.name;
 
@@ -190,10 +192,13 @@ export default function GeneralSettingsForm({ realm }: GeneralSettingsFormProps)
           </div>
         )}
 
+        {!canManageServer && (
+          <p className="text-xs text-subtle">Read-only: only a super-admin can change realm settings.</p>
+        )}
         <div className="flex justify-end border-t border-line pt-4">
           <button
             type="submit"
-            disabled={updateMutation.isPending}
+            disabled={!canManageServer || updateMutation.isPending}
             className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {updateMutation.isPending ? 'Saving...' : 'Save Changes'}

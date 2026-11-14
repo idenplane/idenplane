@@ -31,6 +31,11 @@ const sidebars: SidebarsConfig = {
           id: 'getting-started/admin-console',
           label: 'Admin Console',
         },
+        {
+          type: 'doc',
+          id: 'getting-started/admin-roles',
+          label: 'Admin Roles',
+        },
       ],
     },
     {

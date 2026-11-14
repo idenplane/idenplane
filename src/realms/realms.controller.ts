@@ -11,7 +11,9 @@ import {
   HttpCode,
   HttpStatus,
   UseGuards,
+  Req,
 } from '@nestjs/common';
+import type { Request } from 'express';
 import {
   ApiTags,
   ApiOperation,
@@ -35,6 +37,14 @@ import { UpdateRealmDto } from './dto/update-realm.dto.js';
 import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
 import { AdminRolesGuard } from '../common/guards/admin-roles.guard.js';
 import { RequireAdminRoles } from '../common/decorators/require-admin-roles.decorator.js';
+import {
+  AdminScope,
+  AdminSensitiveRead,
+} from '../common/decorators/admin-access.decorator.js';
+import {
+  canReadRealm,
+  type AdminPrincipal,
+} from '../admin-rbac/admin-access-policy.js';
 
 @ApiTags('Realms')
 @Controller('admin/realms')
@@ -51,6 +61,7 @@ export class RealmsController {
   ) {}
 
   @Post()
+  @AdminScope('global')
   @RequireAdminRoles(['super-admin'])
   @ApiOperation({ summary: 'Create a new realm' })
   @ApiResponse({ status: 201, description: 'Realm created successfully' })
@@ -64,15 +75,30 @@ export class RealmsController {
     return this.realmsService.create(dto);
   }
 
+  /**
+   * Every admin may list realms; the list holds only the realms the caller
+   * may read (a realm-admin sees its own realms).
+   */
   @Get()
-  @ApiOperation({ summary: 'List all realms' })
+  @AdminScope('self')
+  @ApiOperation({ summary: 'List the realms the caller may read' })
   @ApiResponse({ status: 200, description: 'List of realms' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
-  findAll() {
-    return this.realmsService.findAll();
+  async findAll(@Req() req: Request & { adminPrincipal?: AdminPrincipal }) {
+    const principal = req.adminPrincipal;
+    if (!principal) return [];
+    const realms = await this.realmsService.findAll();
+    return realms.filter(
+      (realm) =>
+        realm !== null &&
+        typeof realm['id'] === 'string' &&
+        typeof realm['name'] === 'string' &&
+        canReadRealm(principal, { id: realm['id'], name: realm['name'] }),
+    );
   }
 
   @Get('themes')
+  @AdminScope('self')
   @ApiOperation({ summary: 'List available themes' })
   @ApiResponse({ status: 200, description: 'List of available themes' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -124,6 +150,7 @@ export class RealmsController {
 
   @Delete(':realmName')
   @HttpCode(HttpStatus.NO_CONTENT)
+  @AdminScope('global')
   @RequireAdminRoles(['super-admin'])
   @ApiOperation({ summary: 'Delete a realm' })
   @ApiResponse({ status: 204, description: 'Realm deleted successfully' })
@@ -138,6 +165,8 @@ export class RealmsController {
   }
 
   @Get(':realmName/export')
+  @AdminScope('global')
+  @AdminSensitiveRead()
   @ApiOperation({
     summary: 'Export a realm to JSON',
     description:
@@ -175,6 +204,7 @@ export class RealmsController {
   }
 
   @Post('import')
+  @AdminScope('global')
   @RequireAdminRoles(['super-admin'])
   @ApiOperation({
     summary: 'Import a realm from JSON',

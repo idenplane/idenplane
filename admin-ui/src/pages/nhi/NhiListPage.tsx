@@ -2,6 +2,7 @@ import { useQuery } from '@tanstack/react-query';
 import { useParams, useNavigate } from 'react-router';
 import { getNhiIdentities } from '../../api/nhi';
 import type { NhiIdentityType, NhiLifecycleStatus } from '../../types';
+import { CanWrite } from '../../components/PermissionGate';
 
 const identityTypeColors: Record<NhiIdentityType, string> = {
   IOT_DEVICE: 'bg-info-soft text-info-fg',
@@ -52,12 +53,14 @@ export default function NhiListPage() {
             Manage machine identities in <span className="font-medium">{name}</span>
           </p>
         </div>
-        <button
-          onClick={() => navigate(`/console/realms/${name}/nhi/new`)}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
-        >
-          Create Identity
-        </button>
+        <CanWrite>
+          <button
+            onClick={() => navigate(`/console/realms/${name}/nhi/new`)}
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
+          >
+            Create Identity
+          </button>
+        </CanWrite>
       </div>
 
       <div className="overflow-hidden rounded-lg border border-line bg-surface shadow-sm">

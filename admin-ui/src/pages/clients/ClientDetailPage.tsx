@@ -12,8 +12,10 @@ import {
   removeClientOptionalScope,
 } from '../../api/clientScopes';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import { useCanWriteRealm } from '../../hooks/usePermissions';
 
 export default function ClientDetailPage() {
+  const canWrite = useCanWriteRealm();
   const { name, id } = useParams<{ name: string; id: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -199,12 +201,14 @@ export default function ClientDetailPage() {
             </span>
           </p>
         </div>
-        <button
-          onClick={() => setShowDelete(true)}
-          className="rounded-md border border-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger-soft"
-        >
-          Delete Client
-        </button>
+        {canWrite && (
+          <button
+            onClick={() => setShowDelete(true)}
+            className="rounded-md border border-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger-soft"
+          >
+            Delete Client
+          </button>
+        )}
       </div>
 
       {/* Settings form */}
@@ -366,10 +370,13 @@ export default function ClientDetailPage() {
           </div>
         )}
 
+        {!canWrite && (
+          <p className="text-xs text-subtle">Read-only: your admin role can't change this realm.</p>
+        )}
         <div className="flex justify-end border-t border-line pt-4">
           <button
             type="submit"
-            disabled={updateMutation.isPending}
+            disabled={!canWrite || updateMutation.isPending}
             className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {updateMutation.isPending ? 'Saving...' : 'Save Changes'}
@@ -406,7 +413,7 @@ export default function ClientDetailPage() {
 
           <button
             onClick={() => regenerateMutation.mutate()}
-            disabled={regenerateMutation.isPending}
+            disabled={!canWrite || regenerateMutation.isPending}
             className="rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
           >
             {regenerateMutation.isPending ? 'Regenerating...' : 'Regenerate Secret'}
@@ -430,15 +437,17 @@ export default function ClientDetailPage() {
                   className="inline-flex items-center gap-1 rounded-full bg-accent-soft px-3 py-1 text-sm font-medium text-accent"
                 >
                   {scope.name}
-                  <button
-                    type="button"
-                    onClick={() => removeDefaultScopeMutation.mutate(scope.id)}
-                    className="ml-1 text-accent hover:text-accent"
-                  >
-                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+                  {canWrite && (
+                    <button
+                      type="button"
+                      onClick={() => removeDefaultScopeMutation.mutate(scope.id)}
+                      className="ml-1 text-accent hover:text-accent"
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
                 </span>
               ))}
             </div>
@@ -466,7 +475,7 @@ export default function ClientDetailPage() {
             <button
               type="button"
               onClick={() => selectedDefaultScope && addDefaultScopeMutation.mutate(selectedDefaultScope)}
-              disabled={!selectedDefaultScope || addDefaultScopeMutation.isPending}
+              disabled={!canWrite || !selectedDefaultScope || addDefaultScopeMutation.isPending}
               className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               Assign
@@ -486,15 +495,17 @@ export default function ClientDetailPage() {
                   className="inline-flex items-center gap-1 rounded-full bg-warning-soft px-3 py-1 text-sm font-medium text-warning-fg"
                 >
                   {scope.name}
-                  <button
-                    type="button"
-                    onClick={() => removeOptionalScopeMutation.mutate(scope.id)}
-                    className="ml-1 text-amber-400 hover:text-warning"
-                  >
-                    <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
-                      <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
-                    </svg>
-                  </button>
+                  {canWrite && (
+                    <button
+                      type="button"
+                      onClick={() => removeOptionalScopeMutation.mutate(scope.id)}
+                      className="ml-1 text-amber-400 hover:text-warning"
+                    >
+                      <svg className="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+                        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
+                      </svg>
+                    </button>
+                  )}
                 </span>
               ))}
             </div>
@@ -522,7 +533,7 @@ export default function ClientDetailPage() {
             <button
               type="button"
               onClick={() => selectedOptionalScope && addOptionalScopeMutation.mutate(selectedOptionalScope)}
-              disabled={!selectedOptionalScope || addOptionalScopeMutation.isPending}
+              disabled={!canWrite || !selectedOptionalScope || addOptionalScopeMutation.isPending}
               className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               Assign

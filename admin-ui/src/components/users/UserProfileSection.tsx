@@ -3,6 +3,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import type { User } from '../../types';
 import { updateUser } from '../../api/users';
 import { useFormSeed } from '../../hooks/useFormSeed';
+import { useCanWriteRealm } from '../../hooks/usePermissions';
 
 type UserProfileSectionProps = {
   realmName: string;
@@ -21,6 +22,7 @@ function seedFromUser(user: User) {
 }
 
 export default function UserProfileSection({ realmName, userId, user }: UserProfileSectionProps) {
+  const canWrite = useCanWriteRealm(realmName);
   const queryClient = useQueryClient();
   const [form, setForm] = useFormSeed(user, seedFromUser);
 
@@ -125,10 +127,13 @@ export default function UserProfileSection({ realmName, userId, user }: UserProf
         </div>
       )}
 
+      {!canWrite && (
+        <p className="text-xs text-subtle">Read-only: your admin role can't change this realm.</p>
+      )}
       <div className="flex justify-end border-t border-line pt-4">
         <button
           type="submit"
-          disabled={updateMutation.isPending}
+          disabled={!canWrite || updateMutation.isPending}
           className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
         >
           {updateMutation.isPending ? 'Saving...' : 'Save Changes'}

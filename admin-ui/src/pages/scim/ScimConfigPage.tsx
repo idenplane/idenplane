@@ -17,10 +17,13 @@ import type { ScimTokenCreateResult } from '../../api/scim';
 import { getRealmByName, updateRealm } from '../../api/realms';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { getErrorMessage } from '../../utils/getErrorMessage';
+import { usePermissions, useCanWriteRealm } from '../../hooks/usePermissions';
 
 const SCIM_SCOPES = ['users:read', 'users:write', 'groups:read', 'groups:write'];
 
 export default function ScimConfigPage() {
+  const { canManageServer } = usePermissions();
+  const canWrite = useCanWriteRealm();
   const { name } = useParams<{ name: string }>();
   const queryClient = useQueryClient();
 
@@ -201,7 +204,7 @@ export default function ScimConfigPage() {
             <button
               type="button"
               onClick={() => updateRealmMutation.mutate({ scimEnabled: scimEnabledToggle, scimUserAutocreate, scimGroupSyncEnabled })}
-              disabled={updateRealmMutation.isPending}
+              disabled={!canManageServer || updateRealmMutation.isPending}
               className="rounded-md bg-accent px-3 py-1.5 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               {updateRealmMutation.isPending ? 'Saving...' : 'Save'}
@@ -271,12 +274,14 @@ export default function ScimConfigPage() {
       <section className="space-y-4">
         <div className="flex items-center justify-between">
           <h2 className="text-lg font-semibold text-fg">Tokens</h2>
-          <button
-            onClick={() => setShowCreateToken(true)}
-            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
-          >
-            Create Token
-          </button>
+          {canWrite && (
+            <button
+              onClick={() => setShowCreateToken(true)}
+              className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
+            >
+              Create Token
+            </button>
+          )}
         </div>
 
         {newPlainToken && (
@@ -377,7 +382,7 @@ export default function ScimConfigPage() {
               </button>
               <button
                 type="submit"
-                disabled={createTokenMutation.isPending}
+                disabled={!canWrite || createTokenMutation.isPending}
                 className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
               >
                 {createTokenMutation.isPending ? 'Creating...' : 'Create'}
@@ -431,7 +436,7 @@ export default function ScimConfigPage() {
                       {token.expiresAt ? new Date(token.expiresAt).toLocaleDateString() : 'Never'}
                     </td>
                     <td className="whitespace-nowrap px-6 py-4 text-right text-sm">
-                      {token.enabled ? (
+                      {canWrite && (token.enabled ? (
                         <button
                           onClick={() => disableTokenMutation.mutate(token.id)}
                           className="mr-3 font-medium text-muted hover:text-fg"
@@ -445,8 +450,8 @@ export default function ScimConfigPage() {
                         >
                           Enable
                         </button>
-                      )}
-                      {!token.revoked && (
+                      ))}
+                      {!token.revoked && canWrite && (
                         <button
                           onClick={() => revokeTokenMutation.mutate(token.id)}
                           className="mr-3 font-medium text-warning hover:text-warning-fg"
@@ -454,12 +459,14 @@ export default function ScimConfigPage() {
                           Revoke
                         </button>
                       )}
-                      <button
-                        onClick={() => setDeleteTokenTarget(token.id)}
-                        className="font-medium text-danger hover:text-danger-fg"
-                      >
-                        Delete
-                      </button>
+                      {canWrite && (
+                        <button
+                          onClick={() => setDeleteTokenTarget(token.id)}
+                          className="font-medium text-danger hover:text-danger-fg"
+                        >
+                          Delete
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}
@@ -528,7 +535,7 @@ export default function ScimConfigPage() {
           </div>
           <button
             type="submit"
-            disabled={createMappingMutation.isPending}
+            disabled={!canWrite || createMappingMutation.isPending}
             className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             Add
@@ -573,12 +580,14 @@ export default function ScimConfigPage() {
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-muted">{mapping.idenplaneAttribute}</td>
                     <td className="whitespace-nowrap px-6 py-4 text-sm text-subtle">{mapping.direction}</td>
                     <td className="whitespace-nowrap px-6 py-4 text-right">
-                      <button
-                        onClick={() => setDeleteMappingTarget(mapping.id)}
-                        className="text-sm font-medium text-danger hover:text-danger-fg"
-                      >
-                        Delete
-                      </button>
+                      {canWrite && (
+                        <button
+                          onClick={() => setDeleteMappingTarget(mapping.id)}
+                          className="text-sm font-medium text-danger hover:text-danger-fg"
+                        >
+                          Delete
+                        </button>
+                      )}
                     </td>
                   </tr>
                 ))}

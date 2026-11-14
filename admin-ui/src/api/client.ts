@@ -53,6 +53,33 @@ export async function refreshSession(): Promise<string | null> {
 }
 
 // ---------------------------------------------------------------------------
+// 403 announcements
+// ---------------------------------------------------------------------------
+/** The window event ForbiddenNotice listens for. */
+export const FORBIDDEN_EVENT = 'idenplane:forbidden';
+
+export interface ForbiddenDetail {
+  message: string;
+}
+
+/** Tells the console a request was refused with 403, with the server's reason. */
+export function announceForbidden(body: unknown) {
+  const raw =
+    body && typeof body === 'object' && 'message' in body
+      ? (body as { message: unknown }).message
+      : undefined;
+  const message =
+    typeof raw === 'string' && raw.length > 0
+      ? raw
+      : Array.isArray(raw) && typeof raw[0] === 'string'
+        ? raw[0]
+        : 'Your admin role does not allow this action';
+  window.dispatchEvent(
+    new CustomEvent<ForbiddenDetail>(FORBIDDEN_EVENT, { detail: { message } }),
+  );
+}
+
+// ---------------------------------------------------------------------------
 // Axios instances
 // ---------------------------------------------------------------------------
 // Both instances share the same in-memory credential injection and 401
@@ -80,6 +107,11 @@ function createClient(baseURL: string) {
       if (error.response?.status === 401 && !isOnLoginPage) {
         clearCredentials();
         window.location.href = '/console/login';
+      }
+      // 403: signed in, but the admin role doesn't allow it. Tell the admin
+      // (ForbiddenNotice) and keep the session; the page still gets the error.
+      if (error.response?.status === 403) {
+        announceForbidden(error.response?.data);
       }
       return Promise.reject(error);
     },

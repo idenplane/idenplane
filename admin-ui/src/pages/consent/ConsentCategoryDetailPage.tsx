@@ -10,6 +10,7 @@ import {
 } from '../../api/consent';
 import type { ConsentCategory } from '../../types';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import { useCanWriteRealm } from '../../hooks/usePermissions';
 
 const isCreateMode = (categoryId: string | undefined) =>
   !categoryId || categoryId === 'new';
@@ -45,6 +46,7 @@ const parseScopes = (raw: string): string[] =>
     .filter(Boolean);
 
 export default function ConsentCategoryDetailPage() {
+  const canWrite = useCanWriteRealm();
   const { name, categoryId } = useParams<{ name: string; categoryId?: string }>();
   const navigate = useNavigate();
   const queryClient = useQueryClient();
@@ -184,7 +186,7 @@ export default function ConsentCategoryDetailPage() {
             </span>
           )}
         </div>
-        {isEdit && (
+        {isEdit && canWrite && (
           <button
             onClick={() => setShowDeleteDialog(true)}
             className="rounded-md border border-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger-soft"
@@ -325,10 +327,13 @@ export default function ConsentCategoryDetailPage() {
               </span>
             </label>
           </div>
+          {!canWrite && (
+            <p className="text-xs text-subtle">Read-only: your admin role can't change this realm.</p>
+          )}
           <div>
             <button
               type="submit"
-              disabled={updateMutation.isPending || createMutation.isPending}
+              disabled={!canWrite || updateMutation.isPending || createMutation.isPending}
               className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               {isEdit

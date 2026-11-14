@@ -8,6 +8,7 @@ import {
 } from '../../api/users';
 import ConfirmDialog from '../ConfirmDialog';
 import PasswordInput from '../PasswordInput';
+import { useCanWriteRealm } from '../../hooks/usePermissions';
 
 type UserSecuritySectionProps = {
   realmName: string;
@@ -16,6 +17,7 @@ type UserSecuritySectionProps = {
 };
 
 export default function UserSecuritySection({ realmName, userId, username }: UserSecuritySectionProps) {
+  const canWrite = useCanWriteRealm(realmName);
   const queryClient = useQueryClient();
   const [showResetMfa, setShowResetMfa] = useState(false);
   const [showResetSms, setShowResetSms] = useState(false);
@@ -95,10 +97,13 @@ export default function UserSecuritySection({ realmName, userId, username }: Use
           </div>
         )}
 
+        {!canWrite && (
+          <p className="text-xs text-subtle">Read-only: your admin role can't change this realm.</p>
+        )}
         <div className="flex justify-end">
           <button
             type="submit"
-            disabled={resetPwMutation.isPending}
+            disabled={!canWrite || resetPwMutation.isPending}
             className="rounded-md bg-amber-600 px-4 py-2 text-sm font-medium text-white hover:bg-amber-700 disabled:opacity-50"
           >
             {resetPwMutation.isPending ? 'Resetting...' : 'Reset Password'}
@@ -126,7 +131,7 @@ export default function UserSecuritySection({ realmName, userId, username }: Use
                     {METHOD_LABELS[m] ?? m}
                   </span>
                 ))}
-                {methods.includes('sms') && methods.length > 1 && (
+                {canWrite && methods.includes('sms') && methods.length > 1 && (
                   <button
                     type="button"
                     onClick={() => setShowResetSms(true)}
@@ -135,13 +140,15 @@ export default function UserSecuritySection({ realmName, userId, username }: Use
                     Remove phone
                   </button>
                 )}
-                <button
-                  type="button"
-                  onClick={() => setShowResetMfa(true)}
-                  className="rounded-md border border-danger-soft px-3 py-1.5 text-sm font-medium text-danger-fg hover:bg-danger-soft"
-                >
-                  Reset MFA
-                </button>
+                {canWrite && (
+                  <button
+                    type="button"
+                    onClick={() => setShowResetMfa(true)}
+                    className="rounded-md border border-danger-soft px-3 py-1.5 text-sm font-medium text-danger-fg hover:bg-danger-soft"
+                  >
+                    Reset MFA
+                  </button>
+                )}
               </>
             ) : (
               <span className="inline-flex rounded-full bg-warning-soft px-2.5 py-0.5 text-xs font-medium text-warning-fg">

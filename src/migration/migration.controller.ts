@@ -13,6 +13,7 @@ import { AuthentikImporterService } from './authentik-importer.service.js';
 import type { MigrationReport } from './migration-report.js';
 import type { KeycloakRealmExport } from './keycloak-types.js';
 import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
+import { AdminScope } from '../common/decorators/admin-access.decorator.js';
 
 class KeycloakImportDto {
   @IsObject()
@@ -101,6 +102,7 @@ class AuthentikImportDto {
 @ApiSecurity('admin-api-key')
 @UseGuards(AdminApiKeyGuard)
 @Controller('admin/migration')
+@AdminScope('global')
 export class MigrationController {
   constructor(
     private readonly keycloakImporter: KeycloakImporterService,

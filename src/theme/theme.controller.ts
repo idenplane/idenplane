@@ -44,6 +44,21 @@ export class ThemeController {
     private readonly uploadService: ThemeUploadService,
   ) {}
 
+  /**
+   * 404 unless the theme is one of this realm's: a theme id alone could
+   * name another realm's theme.
+   */
+  private async requireTheme(realmName: string, themeId: string) {
+    const realmId = await this.getRealmId(realmName);
+    const theme = await this.prisma.theme.findFirst({
+      where: { id: themeId, realmId },
+      select: { id: true },
+    });
+    if (!theme) {
+      throw new NotFoundException(`Theme with ID '${themeId}' not found`);
+    }
+  }
+
   private async getRealmId(realmName: string): Promise<string> {
     const realm = await this.prisma.realm.findUnique({
       where: { name: realmName },
@@ -55,7 +70,6 @@ export class ThemeController {
   }
 
   @Post()
-  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({ summary: 'Create a new theme' })
   @ApiResponse({ status: 201, description: 'Theme created successfully' })
   @ApiResponse({ status: 400, description: 'Invalid request body' })
@@ -100,16 +114,15 @@ export class ThemeController {
     @Param('realmName') realmName: string,
     @Param('themeId') themeId: string,
   ) {
-    await this.getRealmId(realmName); // Verify realm exists
+    const realmId = await this.getRealmId(realmName);
     const theme = await this.themeService.findById(themeId);
-    if (!theme) {
+    if (!theme || theme.realmId !== realmId) {
       return { error: 'Theme not found' };
     }
     return theme;
   }
 
   @Put(':themeId')
-  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({ summary: 'Update a theme' })
   @ApiResponse({ status: 200, description: 'Theme updated successfully' })
   @ApiResponse({ status: 400, description: 'Invalid request body' })
@@ -123,7 +136,7 @@ export class ThemeController {
     @Param('themeId') themeId: string,
     @Body() dto: UpdateThemeDto,
   ) {
-    await this.getRealmId(realmName); // Verify realm exists
+    await this.requireTheme(realmName, themeId);
     return this.themeService.updateTheme(themeId, dto);
   }
 
@@ -144,13 +157,12 @@ export class ThemeController {
     @Param('realmName') realmName: string,
     @Param('themeId') themeId: string,
   ) {
-    await this.getRealmId(realmName); // Verify realm exists
+    await this.requireTheme(realmName, themeId);
     await this.themeService.deleteTheme(themeId);
   }
 
   @Post(':themeId/publish')
   @HttpCode(HttpStatus.OK)
-  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({ summary: 'Publish a theme' })
   @ApiResponse({ status: 200, description: 'Theme published successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -162,7 +174,7 @@ export class ThemeController {
     @Param('realmName') realmName: string,
     @Param('themeId') themeId: string,
   ) {
-    await this.getRealmId(realmName); // Verify realm exists
+    await this.requireTheme(realmName, themeId);
     return this.themeService.publishTheme(themeId);
   }
 
@@ -177,13 +189,12 @@ export class ThemeController {
     @Param('realmName') realmName: string,
     @Param('themeId') themeId: string,
   ) {
-    await this.getRealmId(realmName); // Verify realm exists
+    await this.requireTheme(realmName, themeId);
     return this.themeService.getVersionHistory(themeId);
   }
 
   @Post(':themeId/restore/:version')
   @HttpCode(HttpStatus.OK)
-  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({ summary: 'Restore a theme to a specific version' })
   @ApiResponse({ status: 200, description: 'Theme restored successfully' })
   @ApiResponse({ status: 401, description: 'Unauthorized' })
@@ -197,7 +208,7 @@ export class ThemeController {
     @Param('themeId') themeId: string,
     @Param('version') version: number,
   ) {
-    await this.getRealmId(realmName); // Verify realm exists
+    await this.requireTheme(realmName, themeId);
     return this.themeService.restoreVersion(themeId, version);
   }
 
@@ -227,7 +238,6 @@ export class ThemeController {
 
   @Post('assets/upload')
   @HttpCode(HttpStatus.CREATED)
-  @RequireAdminRoles(['super-admin', 'admin'])
   @ApiOperation({ summary: 'Upload theme assets (logos, favicons, etc.)' })
   @ApiResponse({ status: 201, description: 'Asset(s) uploaded successfully' })
   @ApiResponse({ status: 400, description: 'Invalid request body' })

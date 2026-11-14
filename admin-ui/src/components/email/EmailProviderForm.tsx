@@ -10,6 +10,7 @@ import {
   MutationStatusBanner,
   type ProviderOption,
 } from '../ui';
+import { usePermissions } from '../../hooks/usePermissions';
 
 type EmailProviderFormProps = {
   realm: Realm;
@@ -405,6 +406,8 @@ function ProviderFields({
 // ── Main component ─────────────────────────────────────────────────────────
 
 export default function EmailProviderForm({ realm }: EmailProviderFormProps) {
+  const { canManageServer, canWriteRealm } = usePermissions();
+  const canWrite = canWriteRealm(realm.name);
   const queryClient = useQueryClient();
   const [form, setForm] = useState<EmailFormState>(() => seedFromRealm(realm));
   const [testEmailTo, setTestEmailTo] = useState('');
@@ -484,10 +487,13 @@ export default function EmailProviderForm({ realm }: EmailProviderFormProps) {
           errorFallback="Failed to save email settings."
         />
 
+        {!canManageServer && (
+          <p className="text-xs text-subtle">Read-only: only a super-admin can change realm settings.</p>
+        )}
         <div className="flex justify-end border-t border-line pt-4">
           <button
             type="submit"
-            disabled={updateMutation.isPending}
+            disabled={!canManageServer || updateMutation.isPending}
             className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {updateMutation.isPending ? 'Saving…' : 'Save Changes'}
@@ -516,7 +522,7 @@ export default function EmailProviderForm({ realm }: EmailProviderFormProps) {
             <button
               type="button"
               onClick={() => { testMutation.reset(); testMutation.mutate(); }}
-              disabled={testMutation.isPending || !testEmailTo}
+              disabled={!canWrite || testMutation.isPending || !testEmailTo}
               className="rounded-md bg-gray-800 px-4 py-2 text-sm font-medium text-white hover:bg-gray-700 disabled:opacity-50"
             >
               {testMutation.isPending ? 'Sending…' : 'Send Test'}
@@ -546,7 +552,7 @@ export default function EmailProviderForm({ realm }: EmailProviderFormProps) {
             <button
               type="button"
               onClick={() => { smtpTestMutation.reset(); smtpTestMutation.mutate(); }}
-              disabled={smtpTestMutation.isPending}
+              disabled={!canWrite || smtpTestMutation.isPending}
               className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
             >
               {smtpTestMutation.isPending ? 'Testing…' : 'Test Connection'}

@@ -4,9 +4,12 @@ import { useQuery } from '@tanstack/react-query';
 import { getAllRealms } from '../api/realms';
 import { useAuth } from '../hooks/useAuth';
 import Breadcrumbs from './Breadcrumbs';
-import { Icons, cn } from './ui';
+import { Badge, Icons, cn } from './ui';
 import type { IconProps } from './ui';
 import PageFallback from './PageFallback';
+import ForbiddenNotice from './ForbiddenNotice';
+import { usePermissions } from '../hooks/usePermissions';
+import { roleLabel } from '../auth/permissions';
 
 type NavItem = { to: string; label: string; icon: (p: IconProps) => React.JSX.Element; end?: boolean };
 
@@ -21,6 +24,7 @@ export default function Layout() {
     routeRealm ?? location.pathname.match(/^\/console\/realms\/([^/]+)/)?.[1];
   const navigate = useNavigate();
   const { logout } = useAuth();
+  const permissions = usePermissions();
   const [realmDropdownOpen, setRealmDropdownOpen] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const dropdownRef = useRef<HTMLDivElement>(null);
@@ -71,17 +75,27 @@ export default function Layout() {
         { to: `/console/realms/${currentRealm}/authorization-policies`, label: 'Authorization', icon: Icons.Roles },
         { to: `/console/realms/${currentRealm}/theme-builder`, label: 'Theme Builder', icon: Icons.Sun },
         { to: `/console/realms/${currentRealm}/nhi`, label: 'Non-Human Identity', icon: Icons.Server },
-        { to: `/console/realms/${currentRealm}/migration`, label: 'Migration Wizard', icon: Icons.Download },
+        // Imports run through /admin/migration, a server-wide (super-admin) API.
+        ...(permissions.canManageServer
+          ? [{ to: `/console/realms/${currentRealm}/migration`, label: 'Migration Wizard', icon: Icons.Download }]
+          : []),
       ]
     : [];
 
+  // Server-wide pages are for super-admins only; the server refuses the rest.
   const globalNav: NavItem[] = [
     { to: '/console', label: 'Dashboard', icon: Icons.Dashboard, end: true },
     { to: '/console/realms', label: 'Realms', icon: Icons.Realms, end: false },
-    { to: '/console/plugins', label: 'Plugins', icon: Icons.Zap, end: false },
-    { to: '/console/system-status', label: 'System Status', icon: Icons.Server, end: false },
-    { to: '/console/upgrade', label: 'Upgrade', icon: Icons.Upgrade, end: false },
+    ...(permissions.canManageServer
+      ? [
+          { to: '/console/admin-accounts', label: 'Admin Accounts', icon: Icons.Shield, end: false },
+          { to: '/console/plugins', label: 'Plugins', icon: Icons.Zap, end: false },
+          { to: '/console/system-status', label: 'System Status', icon: Icons.Server, end: false },
+          { to: '/console/upgrade', label: 'Upgrade', icon: Icons.Upgrade, end: false },
+        ]
+      : []),
   ];
+  const realmReadOnly = !!currentRealm && permissions.known && !permissions.canWriteRealm(currentRealm);
 
   const navLinkClass = ({ isActive }: { isActive: boolean }) =>
     cn(
@@ -244,8 +258,22 @@ export default function Layout() {
             {currentRealm && (
               <span className="hidden font-mono text-xs text-subtle md:inline">{currentRealm}</span>
             )}
+            {realmReadOnly && (
+              <span title="Your admin role can't make changes in this realm">
+                <Badge variant="warning" size="sm">
+                  <Icons.Lock className="h-3 w-3" /> Read only
+                </Badge>
+              </span>
+            )}
           </div>
 
+          <div className="flex items-center gap-3">
+          {permissions.known && (
+            <span className="hidden text-xs text-muted sm:inline" data-testid="signed-in-as">
+              {permissions.username ?? 'API key'}
+              <Badge variant="neutral" size="sm" className="ml-2">{roleLabel(permissions)}</Badge>
+            </span>
+          )}
           <button
             onClick={logout}
             className="inline-flex h-9 items-center gap-2 rounded-lg border border-line-strong bg-surface px-3.5 text-[13.5px] font-medium text-fg shadow-soft transition-all duration-150 hover:border-subtle hover:bg-hover focus-visible:outline-none focus-visible:shadow-[var(--shadow-focus)]"
@@ -253,7 +281,9 @@ export default function Layout() {
             <Icons.Logout className="h-4 w-4" />
             Logout
           </button>
+          </div>
         </header>
+        <ForbiddenNotice />
 
         {/* Page content */}
         <main id="main-content" className="flex-1 overflow-y-auto p-4 sm:p-6" tabIndex={-1}>

@@ -10,6 +10,7 @@ import {
   type UpdateFlowBindingsPayload,
 } from '../../api/authFlows';
 import { getErrorMessage } from '../../utils/getErrorMessage';
+import { useCanWriteRealm } from '../../hooks/usePermissions';
 
 interface FlowBindingsPanelProps {
   realmName: string;
@@ -78,6 +79,7 @@ function ErrorList({ errors }: { errors: FlowValidationError[] }) {
  * once the server runs with AUTH_FLOW_RUNTIME_ENABLED.
  */
 export default function FlowBindingsPanel({ realmName, flows }: FlowBindingsPanelProps) {
+  const canWrite = useCanWriteRealm(realmName);
   const qc = useQueryClient();
   const { data: bindings, isLoading, error } = useQuery({
     queryKey: ['auth-flow-bindings', realmName],
@@ -178,11 +180,14 @@ export default function FlowBindingsPanel({ realmName, flows }: FlowBindingsPane
           <p className="mt-1 text-sm text-subtle">
             Choose which flow runs at login for this realm, and override it per client.
           </p>
+          {!canWrite && (
+            <p className="mt-1 text-xs text-subtle">Read-only: your admin role can't change this realm.</p>
+          )}
         </div>
         <button
           type="button"
           onClick={handleSave}
-          disabled={!isDirty || saveMutation.isPending}
+          disabled={!canWrite || !isDirty || saveMutation.isPending}
           className="shrink-0 rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
         >
           {saveMutation.isPending ? 'Saving...' : 'Save bindings'}

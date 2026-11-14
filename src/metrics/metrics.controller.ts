@@ -7,9 +7,11 @@ import {
 } from '@nestjs/swagger';
 import { MetricsService } from './metrics.service.js';
 import { AdminApiKeyGuard } from '../common/guards/admin-api-key.guard.js';
+import { AdminScope } from '../common/decorators/admin-access.decorator.js';
 
 @ApiTags('Metrics')
 @Controller('admin/metrics')
+@AdminScope('global')
 @UseGuards(AdminApiKeyGuard)
 @ApiSecurity('admin-api-key')
 export class MetricsController {

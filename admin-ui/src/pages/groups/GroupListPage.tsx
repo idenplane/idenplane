@@ -3,6 +3,7 @@ import { useQuery } from '@tanstack/react-query';
 import { getGroups } from '../../api/groups';
 import type { Group } from '../../types';
 import { getErrorMessage } from '../../utils/getErrorMessage';
+import { CanWrite } from '../../components/PermissionGate';
 
 function buildTree(groups: Group[]): (Group & { depth: number })[] {
   const map = new Map<string, Group>();
@@ -56,12 +57,14 @@ export default function GroupListPage() {
     <div className="space-y-6">
       <div className="flex items-center justify-between">
         <h1 className="text-2xl font-bold text-fg">Groups</h1>
-        <Link
-          to={`/console/realms/${name}/groups/create`}
-          className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
-        >
-          Create Group
-        </Link>
+        <CanWrite>
+          <Link
+            to={`/console/realms/${name}/groups/create`}
+            className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover"
+          >
+            Create Group
+          </Link>
+        </CanWrite>
       </div>
 
       {isLoading ? (

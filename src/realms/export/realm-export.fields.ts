@@ -878,6 +878,8 @@ export const EXCLUDED_MODELS: Record<string, string> = {
   RateLimitEntry: 'instance-wide rate limit counters',
   RevokedToken: 'token deny-list; ' + RUNTIME,
   AdminRevokedToken: 'admin token deny-list; ' + RUNTIME,
+  AdminRealmAssignment:
+    'which master realm admins manage the realm: instance access control, not realm data',
   PendingAction: 'in-flight login/MFA/consent state; ' + RUNTIME,
   StepUpRecord: 'step-up session state; ' + RUNTIME,
 

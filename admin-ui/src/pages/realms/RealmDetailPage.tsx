@@ -3,6 +3,7 @@ import { useParams, useNavigate } from 'react-router';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getRealmByName, deleteRealm, exportRealm } from '../../api/realms';
 import ConfirmDialog from '../../components/ConfirmDialog';
+import { SuperAdminOnly } from '../../components/PermissionGate';
 import MagicLinkSettingsForm from '../../components/magic-link/MagicLinkSettingsForm';
 import EmailProviderForm from '../../components/email/EmailProviderForm';
 import SmsProviderForm from '../../components/sms/SmsProviderForm';
@@ -72,29 +73,31 @@ export default function RealmDetailPage() {
             {realm.displayName || 'Realm settings and overview'}
           </p>
         </div>
-        <div className="flex items-center gap-3">
-          <button
-            onClick={async () => {
-              const data = await exportRealm(name!, { includeUsers: true });
-              const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
-              const url = URL.createObjectURL(blob);
-              const a = document.createElement('a');
-              a.href = url;
-              a.download = `${name}-realm-export.json`;
-              a.click();
-              URL.revokeObjectURL(url);
-            }}
-            className="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-muted hover:bg-hover"
-          >
-            Export Realm
-          </button>
-          <button
-            onClick={() => setShowDelete(true)}
-            className="rounded-md border border-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger-soft"
-          >
-            Delete Realm
-          </button>
-        </div>
+        <SuperAdminOnly>
+          <div className="flex items-center gap-3">
+            <button
+              onClick={async () => {
+                const data = await exportRealm(name!, { includeUsers: true });
+                const blob = new Blob([JSON.stringify(data, null, 2)], { type: 'application/json' });
+                const url = URL.createObjectURL(blob);
+                const a = document.createElement('a');
+                a.href = url;
+                a.download = `${name}-realm-export.json`;
+                a.click();
+                URL.revokeObjectURL(url);
+              }}
+              className="rounded-md border border-line-strong px-4 py-2 text-sm font-medium text-muted hover:bg-hover"
+            >
+              Export Realm
+            </button>
+            <button
+              onClick={() => setShowDelete(true)}
+              className="rounded-md border border-danger-soft px-4 py-2 text-sm font-medium text-danger-fg hover:bg-danger-soft"
+            >
+              Delete Realm
+            </button>
+          </div>
+        </SuperAdminOnly>
       </div>
 
       {/* Tabs */}

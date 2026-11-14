@@ -211,6 +211,7 @@ export function createMockPrismaService(): MockPrismaService {
     },
     protocolMapper: {
       findUnique: jest.fn(),
+      findFirst: jest.fn(),
       findMany: jest.fn(),
       create: jest.fn(),
       update: jest.fn(),
@@ -457,6 +458,11 @@ export function createMockPrismaService(): MockPrismaService {
       create: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
+    },
+    adminRealmAssignment: {
+      findMany: jest.fn().mockResolvedValue([]),
+      createMany: jest.fn(),
+      deleteMany: jest.fn(),
     },
     $connect: jest.fn(),
     $disconnect: jest.fn(),
