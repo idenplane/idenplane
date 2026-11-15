@@ -27,7 +27,6 @@ import {
   DEFAULT_VUS,
   DEFAULT_DURATION,
   DEFAULT_RAMP_UP,
-  errorRate,
 } from './shared-scenarios.js';
 import http from 'k6/http';
 import { check, group, sleep } from 'k6';
