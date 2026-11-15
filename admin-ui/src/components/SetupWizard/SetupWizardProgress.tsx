@@ -88,7 +88,6 @@ function StepIndicator({
         type="button"
         onClick={onClick}
         className={`${baseClasses}${stateClasses}${clickableClasses} w-full text-left`}
-        aria-current={isCurrent ? 'step' : undefined}
       >
         {content}
       </button>
