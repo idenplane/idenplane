@@ -9,6 +9,9 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+### Fixed
+- **Next.js quickstart session restore no longer crashes on a read error.** `scripts/session-maintenance.mjs restore` piped `pg_restore`'s output into `psql` with `.pipe()`, which ignores errors on the source stream. A read error escaped as an unhandled `'error'` event and killed the process instead of reporting a failed restore. The restore now uses `stream/promises` `pipeline`. On any stream error it stops `pg_restore`, never commits the transaction, and fails with the usual "transaction was not committed" message. The underlying error is kept as its `cause`.
+
 ## [0.9.0] - 2026-11-14
 
 A security release that enforces admin roles. Until now most admin routes checked only that the caller was an admin: `view-only` admins could change everything, and `realm-admin` accounts were not limited to any realm (GHSA-424c-q96v-g3q7). Now:
