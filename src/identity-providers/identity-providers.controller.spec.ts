@@ -25,11 +25,13 @@ describe('IdentityProvidersController', () => {
   });
 
   describe('create', () => {
-    it('should call service.create with realm and dto', () => {
+    it('should call service.create with realm and dto and return the created provider', async () => {
       const dto = { alias: 'google', providerType: 'oidc', clientId: 'gid' };
       idpService.create.mockResolvedValue({ id: 'idp-1' });
 
-      const result = controller.create(realm, dto as any);
+      await expect(controller.create(realm, dto as any)).resolves.toMatchObject(
+        { id: 'idp-1' },
+      );
 
       expect(idpService.create).toHaveBeenCalledWith(realm, dto);
     });

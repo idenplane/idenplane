@@ -31,6 +31,7 @@ describe('TokensService', () => {
     parseAndValidate: jest.Mock;
     getClaimsForScopes: jest.Mock;
   };
+  let certificateResolvers: { bindingActive: jest.Mock };
 
   const mockRealm: Realm = {
     id: 'realm-1',

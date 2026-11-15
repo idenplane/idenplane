@@ -256,6 +256,7 @@ describe('PluginManagerService', () => {
 
       const result = await service.enablePlugin('test-listener');
 
+      expect(result).toMatchObject({ name: 'test-listener', enabled: true });
       expect(prisma.installedPlugin.update).toHaveBeenCalledWith({
         where: { name: 'test-listener' },
         data: { enabled: true },

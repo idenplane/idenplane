@@ -10,11 +10,7 @@ const mockPrisma = {
   },
 };
 
-import {
-  RollbackService,
-  RollbackResult,
-  RollbackCapability,
-} from './rollback.service.js';
+import { RollbackService } from './rollback.service.js';
 import { DatabaseBackupService } from './database-backup.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 

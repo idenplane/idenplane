@@ -1,4 +1,4 @@
-import { SessionsService, SessionInfo } from './sessions.service.js';
+import { SessionsService } from './sessions.service.js';
 import {
   createMockPrismaService,
   type MockPrismaService,
