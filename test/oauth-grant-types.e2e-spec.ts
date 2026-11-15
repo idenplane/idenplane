@@ -1,13 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import type { App } from 'supertest/types';
-import { createHmac } from 'crypto';
-import {
-  createTestApp,
-  TEST_ADMIN_API_KEY,
-  type SeededRealm,
-  type TestContext,
-} from './setup';
+import { createTestApp, type SeededRealm, type TestContext } from './setup';
 
 describe('OAuth 2.0 Grant Types (e2e)', () => {
   let app: INestApplication<App>;
@@ -17,10 +11,6 @@ describe('OAuth 2.0 Grant Types (e2e)', () => {
   const REALM_NAME = 'e2e-grant-types-realm';
   const TOKEN_URL = `/realms/${REALM_NAME}/protocol/openid-connect/token`;
   const DEVICE_AUTH_URL = `/realms/${REALM_NAME}/protocol/openid-connect/auth/device`;
-  const API_KEY_HEADER = 'x-admin-api-key';
-
-  const withKey = (req: request.Test) =>
-    req.set(API_KEY_HEADER, TEST_ADMIN_API_KEY);
 
   beforeAll(async () => {
     ctx = await createTestApp();

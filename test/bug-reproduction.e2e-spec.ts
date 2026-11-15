@@ -194,6 +194,21 @@ describe('Bug Reproduction Tests (e2e)', () => {
       // The bug manifests as: sessions deleted but new refresh tokens from concurrent
       // logins remain active and usable
       expect(orphanRefreshTokens).toBe(0);
+
+      // And neither session's refresh token can be used any more.
+      for (const tokens of [tokens1, tokens2]) {
+        const refreshed = await request(app.getHttpServer())
+          .post(TOKEN_URL)
+          .type('form')
+          .send({
+            grant_type: 'refresh_token',
+            client_id: 'test-client',
+            client_secret: 'test-client-secret',
+            refresh_token: tokens.body.refresh_token,
+          });
+        expect(refreshed.status).toBe(400);
+        expect(refreshed.body.error).toBe('invalid_grant');
+      }
     });
   });
 
