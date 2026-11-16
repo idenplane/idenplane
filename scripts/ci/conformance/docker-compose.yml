@@ -14,6 +14,8 @@ services:
     image: mongo:6.0.13
   nginx:
     # Same release as the FROM line in Dockerfile.suite; run.sh checks the tag.
+    # Dependabot bumps only Dockerfile.suite, so update this line by hand in
+    # the same PR (see the comment there).
     image: registry.gitlab.com/openid/conformance-suite/nginx:release-v5.3.4@sha256:9a7850826fcc8690cd43373528f50e9551ba33bf8e4a40b67b13267b0aca3675
     networks:
       default:

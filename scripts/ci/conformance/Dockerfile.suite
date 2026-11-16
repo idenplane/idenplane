@@ -4,8 +4,11 @@
 # Pinned by tag and index digest. This line is the single source of the suite
 # release: run.sh reads the tag from it to clone run-test-plan.py from the same
 # release, and checks that the nginx image in docker-compose.yml carries the
-# same tag. Bump the tag and the digest together (Dependabot's docker entry for
-# /scripts/ci/conformance does both).
+# same tag. Dependabot's docker entry for /scripts/ci/conformance bumps the tag
+# and digest here, but it does not read docker-compose.yml: in the same PR, set
+# the nginx image there to the new tag and its digest
+# (`docker buildx imagetools inspect registry.gitlab.com/openid/conformance-suite/nginx:<tag>`),
+# or run.sh refuses to start.
 FROM registry.gitlab.com/openid/conformance-suite:release-v5.3.4@sha256:dcc4bd1fb7e9c00f048a67373fe2bec5ecf9feb45a6b5d55e237e5c30e5312c6
 COPY certs/ca.crt /tmp/ca.crt
 RUN keytool -importcert -cacerts -storepass changeit -noprompt -alias conformance-idp-ca -file /tmp/ca.crt
