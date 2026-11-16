@@ -2,9 +2,10 @@ name: Publish Docker image
 
 # Builds and pushes islamawad/idenplane to Docker Hub.
 #
-#   - every push to main  -> :latest and :main-<sha>   (keeps the public image
-#     and the demo deployment from ever going stale again)
-#   - every v* git tag    -> :X.Y.Z and :X.Y           (release images)
+#   - every push to main  -> :main-<sha>
+#   - every v* git tag    -> :X.Y.Z and :X.Y, plus :latest for a stable
+#     vX.Y.Z (main only moves at a release, so :latest stays current and is
+#     the very image, digest and signing identity of the release)
 #   - manual dispatch      -> on demand (e.g. to publish the first fresh image);
 #     with `dry_run` ticked it builds, attests and signs exactly as a release
 #     does, but pushes to a throwaway registry inside the runner instead of
@@ -104,8 +105,14 @@ jobs:
           # which is dev here, not main — so it never matched a push to main and every
           # such push failed with "tag is needed when pushing to registry" (no tags
           # generated at all). Check the actual ref pushed to instead.
+          #
+          # `latest` moves only with a release tag (vX.Y.Z, no pre-release
+          # suffix), so it is the same image, digest and signing identity as
+          # the version tag. A push to main still gets `main-<sha>`.
+          flavor: |
+            latest=false
           tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' && env.DRY_RUN != 'true' }}
+            type=raw,value=latest,enable=${{ startsWith(github.ref, 'refs/tags/v') && !contains(github.ref, '-') && env.DRY_RUN != 'true' }}
             type=sha,prefix=main-,enable=${{ github.ref == 'refs/heads/main' && env.DRY_RUN != 'true' }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}

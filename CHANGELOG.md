@@ -9,6 +9,9 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+### Changed
+- **`:latest` now moves only with a release.** It used to be rebuilt from every push to `main`, so it had a different digest from the release tag and was signed with the `main` identity. It is now the same image as the newest `vX.Y.Z` tag, verifiable with the release identity. Pushes to `main` still publish `:main-<sha>`.
+
 ## [0.10.1] - 2026-11-16
 
 A maintenance release. It removes two dependency trees that Idenplane never used: the GraphQL admin module, which was never mounted, and `@node-saml/node-saml`. With them goes a high-severity advisory in `@graphql-tools/utils` (GHSA-c4qx-w738-7hr3) that was not reachable. Other dependencies are updated.

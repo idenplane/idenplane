@@ -46,7 +46,7 @@ On success, cosign prints the verified payload as JSON and lists the checks it m
 
 The identity has to match exactly. It proves the image was signed by `docker-publish.yml` from the `idenplane/idenplane` repository, running for the tag `v0.10.0`, and not by a fork or another workflow.
 
-Images built from `main` (`:latest`, `:main-<sha>`) are signed too, with the identity `…/docker-publish.yml@refs/heads/main`. To accept either a release or `main`:
+From 0.10.2, `:latest` is the image of the latest release: the same digest as its version tag, signed with that release's identity, so the command above verifies it. Images built from `main` (`:main-<sha>`, and `:latest` up to 0.10.1) are signed with the identity `…/docker-publish.yml@refs/heads/main`. To accept either a release or `main`:
 
 ```bash
 cosign verify "$IMAGE@$DIGEST" \
