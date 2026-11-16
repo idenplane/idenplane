@@ -22,6 +22,7 @@ const { jwtVerify } = await import('jose');
 const SERVER_CONFIG: IdenplaneServerConfig = {
   issuerUrl: 'http://localhost:3000',
   realm: 'test',
+  audience: 'test-client',
 };
 
 function makePayload(overrides: Partial<IdenplaneTokenPayload> = {}): IdenplaneTokenPayload {
@@ -29,6 +30,7 @@ function makePayload(overrides: Partial<IdenplaneTokenPayload> = {}): IdenplaneT
     sub: 'user-123',
     iss: 'http://localhost:3000/realms/test',
     aud: 'test-client',
+    typ: 'Bearer',
     iat: Math.floor(Date.now() / 1000),
     exp: Math.floor(Date.now() / 1000) + 3600,
     realm_access: { roles: ['user', 'admin'] },

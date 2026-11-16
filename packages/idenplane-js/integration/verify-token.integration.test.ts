@@ -94,8 +94,18 @@ describe.skipIf(await skipReason())('verifyToken against a live server', () => {
     const payload = await verifyToken(accessToken, {
       issuerUrl: IDENPLANE_URL,
       realm: TEST_REALM,
+      audience: TEST_CLIENT_ID,
     });
 
+    expect(payload.typ).toBe('Bearer');
+
+    await expect(
+      verifyToken(accessToken, {
+        issuerUrl: IDENPLANE_URL,
+        realm: TEST_REALM,
+        audience: 'some-other-client',
+      }),
+    ).rejects.toThrow();
     expect(payload.azp).toBe(TEST_CLIENT_ID);
     expect(payload.iss).toBe(`${IDENPLANE_URL}/realms/${TEST_REALM}`);
     expect(typeof payload.exp).toBe('number');
@@ -117,7 +127,7 @@ describe.skipIf(await skipReason())('verifyToken against a live server', () => {
     const { access_token: accessToken } = await tokenRes.json();
 
     await expect(
-      verifyToken(accessToken, { issuerUrl: IDENPLANE_URL, realm: 'master' }),
+      verifyToken(accessToken, { issuerUrl: IDENPLANE_URL, realm: 'master', audience: TEST_CLIENT_ID }),
     ).rejects.toThrow();
   });
 
@@ -138,7 +148,7 @@ describe.skipIf(await skipReason())('verifyToken against a live server', () => {
     const tampered = accessToken.slice(0, -4) + 'abcd';
 
     await expect(
-      verifyToken(tampered, { issuerUrl: IDENPLANE_URL, realm: TEST_REALM }),
+      verifyToken(tampered, { issuerUrl: IDENPLANE_URL, realm: TEST_REALM, audience: TEST_CLIENT_ID }),
     ).rejects.toThrow();
   });
 });

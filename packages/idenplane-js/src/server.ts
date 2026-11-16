@@ -15,6 +15,7 @@
  * app.use('/api', createIdenplaneMiddleware({
  *   issuerUrl: 'http://localhost:3000',
  *   realm: 'my-realm',
+ *   audience: 'my-spa', // client ID(s) whose tokens this API accepts
  * }));
  * ```
  */
@@ -39,6 +40,19 @@ export interface IdenplaneServerConfig {
   issuerUrl: string;
   /** Realm name */
   realm: string;
+  /**
+   * The audience, or audiences, this API accepts. Required.
+   *
+   * An Idenplane access token's `aud` is the `client_id` of the client that
+   * requested it (for example your SPA's client ID), so list the client IDs
+   * whose tokens this API should honour. A token whose `aud` contains none of
+   * them is rejected.
+   *
+   * Without this check, any access token the realm issued to any client (a
+   * different application in the same realm, a test tool, a third-party
+   * integration) would be accepted by this API.
+   */
+  audience: string | string[];
   /** Optional: required roles to access (realm roles) */
   requiredRoles?: string[];
   /** Optional: custom claim to extract roles from (default: 'realm_access.roles') */
@@ -89,12 +103,77 @@ export async function verifyToken(
   config: IdenplaneServerConfig,
   options: VerifyTokenOptions = {},
 ): Promise<IdenplaneTokenPayload> {
-  const JWKS = getJWKS(config.issuerUrl, config.realm);
-  const issuer = `${config.issuerUrl}/realms/${config.realm}`;
+  const audience = assertServerConfig(config);
+  const issuerUrl = config.issuerUrl.replace(/\/+$/, '');
+  const JWKS = getJWKS(issuerUrl, config.realm);
+  const issuer = `${issuerUrl}/realms/${config.realm}`;
 
-  const { payload } = await jwtVerify(token, JWKS, { issuer });
+  const { payload } = await jwtVerify(token, JWKS, {
+    issuer,
+    audience,
+    algorithms: ASYMMETRIC_ALGORITHMS,
+    requiredClaims: ['iss', 'aud', 'sub', 'exp'],
+  });
+  // The realm signs ID tokens (`typ: "ID"`), logout tokens and, in the master
+  // realm, admin tokens with the same key as access tokens, so a valid
+  // signature alone does not make a JWT an access token (RFC 8725 §3.11).
+  if (payload['typ'] !== ACCESS_TOKEN_TYP) {
+    throw new InvalidTokenTypeError(payload['typ']);
+  }
   await assertCertificateBinding(payload as Record<string, unknown>, options);
   return payload as IdenplaneTokenPayload;
+}
+
+/** The `typ` claim of every access token Idenplane issues. */
+export const ACCESS_TOKEN_TYP = 'Bearer';
+
+/**
+ * Asymmetric JWS algorithms only: `none` and the HMAC family are never
+ * accepted, whatever the token header says.
+ */
+const ASYMMETRIC_ALGORITHMS = [
+  'RS256', 'RS384', 'RS512',
+  'PS256', 'PS384', 'PS512',
+  'ES256', 'ES384', 'ES512',
+  'EdDSA',
+];
+
+/**
+ * Thrown by {@link verifyToken} when a correctly signed JWT is not an access
+ * token, for example an ID token (`typ: "ID"`), a logout token or an admin
+ * token. Answer it like any invalid token: `401`.
+ */
+export class InvalidTokenTypeError extends Error {
+  readonly code = 'invalid_token';
+  constructor(readonly typ: unknown) {
+    super(
+      `Idenplane: expected an access token (typ "${ACCESS_TOKEN_TYP}"), got typ ${JSON.stringify(typ ?? null)}`,
+    );
+    this.name = 'InvalidTokenTypeError';
+  }
+}
+
+/**
+ * Validate the parts of the configuration the verification depends on and
+ * return the audience list. Throws a configuration error (not a token error),
+ * so a missing `audience` fails loudly instead of silently accepting tokens
+ * issued to any client of the realm.
+ */
+function assertServerConfig(config: IdenplaneServerConfig): string[] {
+  if (!config || typeof config.issuerUrl !== 'string' || !config.issuerUrl) {
+    throw new TypeError('Idenplane: `issuerUrl` is required');
+  }
+  if (typeof config.realm !== 'string' || !config.realm) {
+    throw new TypeError('Idenplane: `realm` is required');
+  }
+  const raw = (config as { audience?: unknown }).audience;
+  const list = Array.isArray(raw) ? raw : [raw];
+  if (list.length === 0 || !list.every((a) => typeof a === 'string' && a.length > 0)) {
+    throw new TypeError(
+      'Idenplane: `audience` is required: the client ID (or IDs) whose access tokens this API accepts',
+    );
+  }
+  return list as string[];
 }
 
 /** Options of {@link verifyToken}. */
@@ -142,6 +221,7 @@ export interface IdenplaneRequest {
  * const idenplane = createIdenplaneMiddleware({
  *   issuerUrl: 'http://localhost:3000',
  *   realm: 'my-realm',
+ *   audience: 'my-spa', // client ID(s) whose tokens this API accepts
  * });
  *
  * app.get('/api/profile', idenplane, (req, res) => {
@@ -150,6 +230,7 @@ export interface IdenplaneRequest {
  * ```
  */
 export function createIdenplaneMiddleware(config: IdenplaneServerConfig) {
+  assertServerConfig(config);
   return async (
     req: IdenplaneRequest,
     res: { status: (code: number) => { json: (body: unknown) => void } },
@@ -210,6 +291,7 @@ class HttpError extends Error {
  * const IdenplaneGuard = createIdenplaneGuard({
  *   issuerUrl: 'http://localhost:3000',
  *   realm: 'my-realm',
+ *   audience: 'my-spa', // client ID(s) whose tokens this API accepts
  * });
  *
  * @Controller('api')
@@ -223,6 +305,7 @@ class HttpError extends Error {
  * ```
  */
 export function createIdenplaneGuard(config: IdenplaneServerConfig) {
+  assertServerConfig(config);
   return class IdenplaneGuard {
     async canActivate(context: {
       switchToHttp: () => { getRequest: () => IdenplaneRequest };
@@ -291,6 +374,7 @@ export interface ServerSideAuthResult {
  *   const { user, isAuthenticated } = await getServerSideAuth(req, {
  *     issuerUrl: 'http://localhost:3000',
  *     realm: 'my-realm',
+ *     audience: 'my-spa', // client ID(s) whose tokens this API accepts
  *   });
  *
  *   if (!isAuthenticated) {
@@ -316,6 +400,7 @@ export async function getServerSideAuth(
   req: { headers: Record<string, string | string[] | undefined> },
   config: IdenplaneServerConfig,
 ): Promise<ServerSideAuthResult> {
+  assertServerConfig(config);
   const authHeader = req.headers['authorization'] ?? req.headers['Authorization'];
   const token = extractBearerToken(authHeader);
 
@@ -347,6 +432,7 @@ export async function getServerSideAuth(
  * const authMiddleware = createNextMiddleware({
  *   issuerUrl: 'http://localhost:3000',
  *   realm: 'my-realm',
+ *   audience: 'my-spa', // client ID(s) whose tokens this API accepts
  *   protectedPaths: ['/dashboard', '/api/protected'],
  *   loginPath: '/login',
  * });
@@ -368,6 +454,7 @@ export interface NextMiddlewareConfig extends IdenplaneServerConfig {
 }
 
 export function createNextMiddleware(middlewareConfig: NextMiddlewareConfig) {
+  assertServerConfig(middlewareConfig);
   return async function authMiddleware(request: NextRequest) {
     const { protectedPaths = [], loginPath = '/login', forbiddenPath } = middlewareConfig;
     const pathname = request.nextUrl?.pathname ?? request.url ?? '/';

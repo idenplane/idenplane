@@ -58,7 +58,7 @@ function assertSecureServerUrl(url: string, allowInsecureHttp: boolean | undefin
  * ```html
  * <!-- public/silent-callback.html -->
  * <script type="module">
- *   import { handleSilentCallback } from '@idenplane/js';
+ *   import { handleSilentCallback } from 'idenplane-sdk';
  *   handleSilentCallback();
  * </script>
  * ```
