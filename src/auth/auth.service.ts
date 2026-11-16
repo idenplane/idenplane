@@ -811,6 +811,23 @@ export class AuthService {
     };
   }
 
+  /**
+   * A refresh token was presented again after it had been redeemed: the
+   * token may be stolen (RFC 9700 §4.14). Revoking the session's refresh
+   * tokens is not enough on its own: a concurrent request that won the race
+   * may not have stored its new refresh token yet, and would store it after
+   * the revocation. Ending the session closes that window: the winner's
+   * insert then fails (the session is gone, which issueTokens reports as
+   * invalid_grant), or, if it already ran, the token goes with the session.
+   */
+  private async endSessionOnRefreshTokenReuse(sessionId: string): Promise<void> {
+    await this.prisma.refreshToken.updateMany({
+      where: { sessionId },
+      data: { revoked: true },
+    });
+    await this.prisma.session.deleteMany({ where: { id: sessionId } });
+  }
+
   private async handleRefreshTokenGrant(
     realm: Realm,
     body: Record<string, string>,
@@ -855,10 +872,7 @@ export class AuthService {
       storedToken.session.expiresAt < now
     ) {
       if (storedToken?.revoked && storedToken.session) {
-        await this.prisma.refreshToken.updateMany({
-          where: { sessionId: storedToken.sessionId },
-          data: { revoked: true },
-        });
+        await this.endSessionOnRefreshTokenReuse(storedToken.sessionId);
       }
       void this.eventsService.recordLoginEvent({
         realmId: realm.id,
@@ -953,10 +967,7 @@ export class AuthService {
       data: { revoked: true },
     });
     if (count === 0) {
-      await this.prisma.refreshToken.updateMany({
-        where: { sessionId: storedToken.sessionId },
-        data: { revoked: true },
-      });
+      await this.endSessionOnRefreshTokenReuse(storedToken.sessionId);
       void this.eventsService.recordLoginEvent({
         realmId: realm.id,
         type: LoginEventType.TOKEN_REFRESH_ERROR,

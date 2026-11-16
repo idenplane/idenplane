@@ -9,6 +9,9 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+### Security
+- **A reused refresh token now ends its session.** When a refresh token is presented again after it was redeemed, every refresh token of the session was revoked, but a concurrent request that redeemed the same token could store its new refresh token right after that revocation, and that token kept working. The session is now ended as well, so the new token cannot be stored, or is removed with the session.
+
 ## [0.11.0] - 2026-11-16
 
 A security release. Admin console sign-in gets a second factor (TOTP or passkeys), with an optional server-wide requirement. Five vulnerabilities are fixed, each with a GitHub Security Advisory: XML signature wrapping and replay of SAML AuthnRequests, authorization policies that failed open, and, in the client SDKs, an Angular interceptor that sent the access token to every origin and a `verifyToken` that accepted ID tokens and other clients' tokens. Offline tokens now last their configured lifetime, redirect URIs are matched exactly (RFC 9700), recovery codes are 120-bit, users migrated from Keycloak can sign in, and `matches` policy conditions are protected against ReDoS.
