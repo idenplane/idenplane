@@ -116,6 +116,43 @@ describe('BruteForceService', () => {
       expect(prisma.loginFailure.create).toHaveBeenCalledTimes(1);
     });
 
+    it('locks the user row before counting, so concurrent failures queue instead of aborting', async () => {
+      const order: string[] = [];
+      (prisma.$queryRaw as jest.Mock).mockImplementation(async () => {
+        order.push('lock');
+        return [];
+      });
+      prisma.loginFailure.create.mockImplementation(async () => {
+        order.push('create');
+        return {};
+      });
+      prisma.loginFailure.count.mockImplementation(async () => {
+        order.push('count');
+        return 1;
+      });
+
+      await service.recordFailure(mockRealm, 'user-1', '10.0.0.1');
+
+      expect(order).toEqual(['lock', 'create', 'count']);
+      expect((prisma.$transaction as jest.Mock).mock.calls[0][1]).toEqual({
+        isolationLevel: 'ReadCommitted',
+      });
+    });
+
+    it('retries a deadlock as well', async () => {
+      const real = (prisma.$transaction as jest.Mock).getMockImplementation()!;
+      (prisma.$transaction as jest.Mock)
+        .mockRejectedValueOnce(
+          Object.assign(new Error('deadlock detected'), { code: '40P01' }),
+        )
+        .mockImplementation(real);
+      prisma.loginFailure.count.mockResolvedValue(1);
+
+      await service.recordFailure(mockRealm, 'user-1', '10.0.0.1');
+
+      expect(prisma.$transaction).toHaveBeenCalledTimes(2);
+    });
+
     it('does not retry other errors', async () => {
       (prisma.$transaction as jest.Mock).mockRejectedValueOnce(
         new Error('boom'),

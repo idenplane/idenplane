@@ -29,6 +29,11 @@ A security hardening release. New realms are now secure by default: brute-force 
 - **Back-channel logout and audit-stream deliveries no longer follow redirects**, so a logout token or audit record goes only to the configured URL.
 - **`/health/ready` no longer returns the database driver's error text.** The endpoint is public, and the message could name database hosts and users. It is logged instead.
 - **Every temporary lockout is logged** at `warn` level, not only permanent ones.
+- **Simultaneous failed sign-ins are all counted.** Failures were counted in a serializable transaction, which PostgreSQL aborts under a burst of concurrent guesses; after the retries ran out a failure could go uncounted. The transaction now locks the user's row first, so concurrent failures for one user queue instead of aborting.
+- **A user deactivated or deleted through SCIM is signed out everywhere.** Their sessions end and their refresh tokens are revoked, and their access tokens stop passing introspection and userinfo. Before, Entra ID's deactivation was ignored entirely (see *Fixed*), and even a working deactivation left sessions open. Re-activating the user does not bring the old tokens back.
+- **SCIM filters can no longer read arbitrary user columns.** Any attribute name went straight into the database query, so a SCIM token could filter on `passwordHash` (testing hash prefixes) or override `realmId` to list another realm's users. Only the documented attributes are filterable now; anything else is a 400 `invalidFilter`.
+- **SCIM no longer writes `externalId` into `federationLink`**, the LDAP federation link, which made SCIM users look LDAP-federated at sign-in. Users provisioned before this release keep the old value; clear `federationLink` on users that are not from an LDAP federation.
+- **Passwords sent over SCIM are left out of the admin audit event.**
 - **Malformed requests no longer crash endpoints.** An OWASP ZAP scan of the API made about 30 endpoints answer 500. The causes:
   - a request with no body: Express 5 leaves the body undefined, so revoke, back-channel logout, device, step-up, the risk policies, SCIM mappings and protocol mappers crashed;
   - a NUL character in any field, which PostgreSQL rejects;
@@ -79,6 +84,15 @@ A security hardening release. New realms are now secure by default: brute-force 
 ### Fixed
 - **API reference:** `openapi.yaml` gave the licence as Apache 2.0 (it is AGPL-3.0), a contact address that doesn't exist and a `/api/v1` server URL; it now points to SUPPORT.md and `http://localhost:3000`.
 - **README:** the comparison table's idle memory now comes from the published benchmark instead of unsourced figures.
+- **SCIM request bodies sent as `application/scim+json`** (Entra ID, Okta, OneLogin) are parsed. Only `application/json` was, so every SCIM create, replace and patch from a real client failed.
+- **SCIM PATCH and Bulk read `Operations`**, the name RFC 7644 uses (lowercase `operations` still works), and PATCH op names are case-insensitive. Real clients' PATCH and Bulk requests were ignored or failed.
+- **SCIM user PATCH honours `path`.** Simple and sub-attributes (`active`, `userName`, `name.givenName`…), `emails[type eq "work"].value`, no-path objects with dotted or nested keys, and `remove` all work, and `"True"`/`"False"` strings are read as booleans. Entra ID's `{"op":"Replace","path":"active","value":"False"}` did nothing before. Attributes with no column (`displayName`, `title`, enterprise extension…) are accepted and ignored instead of failing the request with a 500; unknown paths are a 400 `invalidPath`. A PATCH applies in full or not at all. *Guides → SCIM* lists the supported paths.
+- **SCIM group PATCH** adds, removes and replaces members in the forms Entra ID and Okta send (`members[value eq "<id>"]` with double quotes, and `remove` with a value list), and renames the group.
+- **SCIM create honours `"active": false`** and refuses a missing `userName` with a 400.
+- **SCIM responses use the 2.0 URNs** (`urn:ietf:params:scim:...:2.0:...`) instead of SCIM 1.0 ones, errors use the RFC 7644 error body with `scimType` (for example 409 `uniqueness` for a duplicate `userName`), `meta.location` is an absolute URL that includes the realm, and responses are sent as `application/scim+json`.
+- **A SCIM filter that can't be parsed is a 400 `invalidFilter`**, not an empty list that a client reads as "no such user". Compound `and`/`or` filters, which were misread, are refused the same way.
+- **SCIM Bulk** answers with `Operations` and each operation's own status and SCIM error, honours `failOnErrors`, and refuses `PUT`, `PATCH` or `DELETE` without an id.
+- **SCIM discovery** (`ServiceProviderConfig`, `Schemas`, `ResourceTypes`) is also served under the realm base URL clients are configured with, and `/Schemas` and `/ResourceTypes` return a `ListResponse`. `ServiceProviderConfig` no longer claims ETag support.
 
 ## [0.9.1] - 2026-11-16
 

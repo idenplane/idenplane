@@ -13,8 +13,9 @@ import { escapeHtml } from '../common/utils/html-escape.util.js';
 
 /**
  * PostgreSQL aborted a transaction as a serialization conflict (SQLSTATE
- * 40001). Prisma reports it as P2034; through the pg driver adapter it
- * arrives as a DriverAdapterError whose cause is a TransactionWriteConflict.
+ * 40001) or a deadlock (40P01). Prisma reports both as P2034 ("write conflict
+ * or a deadlock"); through the pg driver adapter it arrives as a
+ * DriverAdapterError whose cause is a TransactionWriteConflict.
  */
 function isSerializationConflict(err: unknown): boolean {
   const e = err as {
@@ -26,10 +27,15 @@ function isSerializationConflict(err: unknown): boolean {
   return (
     e?.code === 'P2034' ||
     e?.code === '40001' ||
+    e?.code === '40P01' ||
     e?.cause?.kind === 'TransactionWriteConflict' ||
     e?.cause?.originalCode === '40001' ||
+    e?.cause?.originalCode === '40P01' ||
     e?.cause?.code === '40001' ||
-    /TransactionWriteConflict|could not serialize access/.test(e?.message ?? '')
+    e?.cause?.code === '40P01' ||
+    /TransactionWriteConflict|could not serialize access|write conflict or a deadlock|deadlock detected/.test(
+      e?.message ?? '',
+    )
   );
 }
 
@@ -68,13 +74,18 @@ export class BruteForceService {
     const lockoutDuration = realm.lockoutDuration;
     const permanentLockoutAfter = realm.permanentLockoutAfter;
 
-    // Serializable, so concurrent failures for one user count correctly; it
-    // aborts one of two conflicting transactions (P2034), which is retried
-    // so that no failure goes uncounted. The notification goes out once the
+    // Concurrent failures for one user are counted one after another: the
+    // transaction first locks the user's row, so the next one waits for it
+    // to commit and then sees its failure (READ COMMITTED takes a new
+    // snapshot per statement). Serializable isolation aborted transactions
+    // under a burst of simultaneous guesses, and a burst is exactly what an
+    // attack produces. A conflict or deadlock that still happens is retried,
+    // so no failure goes uncounted. The notification goes out once the
     // lockout has committed, never from inside a transaction that may rerun.
     const outcome = await this.withSerializationRetry(() =>
       this.prisma.$transaction(
         async (tx): Promise<'none' | 'locked' | 'permanent'> => {
+          await tx.$queryRaw`SELECT 1 FROM "users" WHERE "id" = ${userId} FOR UPDATE`;
           await tx.loginFailure.create({
             data: { realmId: realm.id, userId, ipAddress: ipAddress ?? null },
           });
@@ -124,7 +135,7 @@ export class BruteForceService {
           return 'locked';
         },
         {
-          isolationLevel: Prisma.TransactionIsolationLevel.Serializable,
+          isolationLevel: Prisma.TransactionIsolationLevel.ReadCommitted,
         },
       ),
     );

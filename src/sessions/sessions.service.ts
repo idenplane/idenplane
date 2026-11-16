@@ -160,7 +160,10 @@ export class SessionsService {
     throw new NotFoundException('Session not found');
   }
 
-  async revokeAllUserSessions(realm: Realm, userId: string): Promise<void> {
+  async revokeAllUserSessions(
+    realm: Pick<Realm, 'id'>,
+    userId: string,
+  ): Promise<void> {
     // Explicit user-realm verification: only act when the user belongs to
     // the realm that appears in the request URL, preventing cross-realm IDOR.
     // If the user is not in this realm the findMany below returns an empty

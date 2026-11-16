@@ -11,7 +11,7 @@ import type {
 
 // User Schema - RFC 7643 Section 4.1
 export const USER_SCHEMA: ScimSchema = {
-  id: 'urn:scim:schemas:core:1.0:User',
+  id: 'urn:ietf:params:scim:schemas:core:2.0:User',
   name: 'User',
   description: 'User Account',
   attributes: [
@@ -373,7 +373,7 @@ export const USER_SCHEMA: ScimSchema = {
 
 // Group Schema - RFC 7643 Section 4.2
 export const GROUP_SCHEMA: ScimSchema = {
-  id: 'urn:scim:schemas:core:1.0:Group',
+  id: 'urn:ietf:params:scim:schemas:core:2.0:Group',
   name: 'Group',
   description: 'Group',
   attributes: [
@@ -477,7 +477,7 @@ export const GROUP_SCHEMA: ScimSchema = {
 
 // Enterprise User Schema Extension - RFC 7643 Section 4.3
 export const ENTERPRISE_USER_SCHEMA: ScimSchema = {
-  id: 'urn:scim:schemas:extension:enterprise:1.0',
+  id: 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User',
   name: 'EnterpriseUser',
   description: 'Enterprise User Extension',
   attributes: [
@@ -550,31 +550,34 @@ export const ENTERPRISE_USER_SCHEMA: ScimSchema = {
 
 // User Resource Type
 export const USER_RESOURCE_TYPE: ScimResourceType = {
-  schemas: ['urn:scim:schemas:core:1.0:ResourceType'],
+  schemas: ['urn:ietf:params:scim:schemas:core:2.0:ResourceType'],
   id: 'User',
   name: 'User',
   description: 'User Account',
   endpoint: '/Users',
-  schema: 'urn:scim:schemas:core:1.0:User',
+  schema: 'urn:ietf:params:scim:schemas:core:2.0:User',
   schemaExtensions: [
-    { schema: 'urn:scim:schemas:extension:enterprise:1.0', required: false },
+    {
+      schema: 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User',
+      required: false,
+    },
   ],
 };
 
 // Group Resource Type
 export const GROUP_RESOURCE_TYPE: ScimResourceType = {
-  schemas: ['urn:scim:schemas:core:1.0:ResourceType'],
+  schemas: ['urn:ietf:params:scim:schemas:core:2.0:ResourceType'],
   id: 'Group',
   name: 'Group',
   description: 'Group',
   endpoint: '/Groups',
-  schema: 'urn:scim:schemas:core:1.0:Group',
+  schema: 'urn:ietf:params:scim:schemas:core:2.0:Group',
   schemaExtensions: [],
 };
 
 // Service Provider Configuration - RFC 7644 Section 4
 export const SERVICE_PROVIDER_CONFIG: ScimServiceProviderConfig = {
-  schemas: ['urn:scim:schemas:core:1.0:ServiceProviderConfig'],
+  schemas: ['urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig'],
   documentationUri: 'https://idenplane.example.com/docs/scim',
   patch: { supported: true },
   bulk: {
@@ -585,11 +588,22 @@ export const SERVICE_PROVIDER_CONFIG: ScimServiceProviderConfig = {
   filter: {
     supported: true,
     maxResults: 100,
-    supportedOperators: ['eq', 'ne', 'co', 'sw', 'ew', 'gt', 'lt', 'le'],
+    supportedOperators: [
+      'eq',
+      'ne',
+      'co',
+      'sw',
+      'ew',
+      'gt',
+      'ge',
+      'lt',
+      'le',
+      'pr',
+    ],
   },
   changePassword: { supported: false },
   sort: { supported: false },
-  etag: { supported: true },
+  etag: { supported: false },
   authenticationSchemes: [
     {
       name: 'OAuth Bearer Token',

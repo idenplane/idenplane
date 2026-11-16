@@ -3,20 +3,19 @@
  * Implements RFC 7644 Section 3.3 - Group Operations
  */
 
-import {
-  Injectable,
-  NotFoundException,
-  ConflictException,
-  Logger,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { EventsService } from '../events/events.service.js';
 import { ScimFilterParserService } from './filter-parser.service.js';
+import { planGroupPatch, memberIds } from './group-patch.js';
+import { scimBadRequest, scimConflict } from './scim-errors.js';
+import { normalizePagination, scimLocation } from './scim-resource.js';
+import { SCIM_SCHEMAS } from './types/scim.types.js';
 import type {
   ScimGroup,
   ScimListResponse,
-  ScimMember,
-  ScimPatchOperation,
+  ScimRealmRef,
+  NormalizedScimPatchOperation,
 } from './types/scim.types.js';
 
 /**
@@ -36,6 +35,12 @@ interface DbGroupWithUserGroups {
   }>;
 }
 
+const WITH_MEMBERS = {
+  userGroups: {
+    include: { user: true },
+  },
+} as const;
+
 @Injectable()
 export class ScimGroupsService {
   private readonly logger = new Logger(ScimGroupsService.name);
@@ -50,15 +55,20 @@ export class ScimGroupsService {
    * Create a new group (SCIM POST /Groups)
    * RFC 7644 Section 3.3
    */
-  async create(realmId: string, scimGroup: ScimGroup): Promise<ScimGroup> {
-    const name = scimGroup.displayName;
+  async create(realm: ScimRealmRef, scimGroup: ScimGroup): Promise<ScimGroup> {
+    const realmId = realm.id;
+    const name = requireDisplayName(scimGroup);
+    const members =
+      scimGroup.members === undefined || scimGroup.members === null
+        ? []
+        : memberIds(scimGroup.members);
 
     // Check for existing group
     const existing = await this.prisma.group.findFirst({
       where: { realmId, name },
     });
     if (existing) {
-      throw new ConflictException(`Group '${name}' already exists`);
+      throw scimConflict(`Group '${name}' already exists`);
     }
 
     // Create group in database
@@ -66,14 +76,12 @@ export class ScimGroupsService {
       data: {
         realmId,
         name,
-        description: scimGroup.displayName,
+        description: name,
       },
     });
 
     // Add members if provided
-    if (scimGroup.members && scimGroup.members.length > 0) {
-      await this.addMembers(realmId, group.id, scimGroup.members);
-    }
+    await this.addMembers(realmId, group.id, members);
 
     // Log SCIM provisioning event
     await this.eventsService.recordAdminEvent({
@@ -87,36 +95,36 @@ export class ScimGroupsService {
 
     this.logger.log(`SCIM: Created group ${group.id} in realm ${realmId}`);
 
-    return this.toScimGroup(group);
+    return this.findById(realm, group.id);
   }
 
   /**
    * Get a group by ID (SCIM GET /Groups/{id})
-   * RFC 7644 Section 3.3
+   * RFC 7644 Section 3.4.1
    */
-  async findById(realmId: string, groupId: string): Promise<ScimGroup> {
+  async findById(
+    realm: ScimRealmRef,
+    groupId: string,
+    excludedAttributes?: string[],
+  ): Promise<ScimGroup> {
     const group = await this.prisma.group.findFirst({
-      where: { id: groupId, realmId },
-      include: {
-        userGroups: {
-          include: { user: true },
-        },
-      },
+      where: { id: requireId(groupId), realmId: realm.id },
+      include: WITH_MEMBERS,
     });
 
     if (!group) {
       throw new NotFoundException(`Group '${groupId}' not found`);
     }
 
-    return this.toScimGroup(group);
+    return this.toScimGroup(group, realm, excludedAttributes);
   }
 
   /**
    * Get all groups with pagination and filtering (SCIM GET /Groups)
-   * RFC 7644 Section 3.3
+   * RFC 7644 Section 3.4.2
    */
   async findAll(
-    realmId: string,
+    realm: ScimRealmRef,
     options: {
       startIndex?: number;
       count?: number;
@@ -125,102 +133,77 @@ export class ScimGroupsService {
       excludedAttributes?: string[];
     } = {},
   ): Promise<ScimListResponse<ScimGroup>> {
-    const { startIndex = 1, count = 100, filter } = options;
+    const { startIndex, count } = normalizePagination(
+      options.startIndex,
+      options.count,
+    );
 
-    // Build where clause
-    let where: Record<string, unknown> = { realmId };
+    // An unsupported or malformed filter is a 400 invalidFilter.
+    const where: Record<string, unknown> = options.filter
+      ? this.filterParser.toPrismaWhereGroup(options.filter, realm.id)
+      : { realmId: realm.id };
 
-    if (filter) {
-      try {
-        where = {
-          ...where,
-          ...this.filterParser.toPrismaWhereGroup(filter, realmId),
-        };
-      } catch {
-        // Ignore invalid filter - return empty result
-        return this.emptyListResponse(startIndex, count);
-      }
-    }
-
-    // Get total count
     const totalResults = await this.prisma.group.count({ where });
 
-    // Get groups with pagination
-    const groups = await this.prisma.group.findMany({
-      where,
-      include: {
-        userGroups: {
-          include: { user: true },
-        },
-      },
-      skip: Math.max(0, startIndex - 1),
-      take: Math.min(count, 100),
-      orderBy: { name: 'asc' },
-    });
+    const groups =
+      count === 0
+        ? []
+        : await this.prisma.group.findMany({
+            where,
+            include: WITH_MEMBERS,
+            skip: startIndex - 1,
+            take: count,
+            orderBy: { name: 'asc' },
+          });
 
     return {
-      schemas: ['urn:scim:schemas:core:1.0:ListResponse'],
+      schemas: [SCIM_SCHEMAS.LIST_RESPONSE],
       totalResults,
       startIndex,
       itemsPerPage: groups.length,
-      Resources: groups.map((g) => this.toScimGroup(g)),
+      Resources: groups.map((g) =>
+        this.toScimGroup(g, realm, options.excludedAttributes),
+      ),
     };
   }
 
   /**
    * Update a group (SCIM PUT /Groups/{id})
-   * RFC 7644 Section 3.3
+   * RFC 7644 Section 3.5.1
    */
   async update(
-    realmId: string,
+    realm: ScimRealmRef,
     groupId: string,
     scimGroup: ScimGroup,
   ): Promise<ScimGroup> {
+    const realmId = realm.id;
     const existing = await this.prisma.group.findFirst({
-      where: { id: groupId, realmId },
-      include: {
-        userGroups: {
-          include: { user: true },
-        },
-      },
+      where: { id: requireId(groupId), realmId },
     });
 
     if (!existing) {
       throw new NotFoundException(`Group '${groupId}' not found`);
     }
 
-    // Check for name conflict
-    if (scimGroup.displayName !== existing.name) {
-      const nameExists = await this.prisma.group.findFirst({
-        where: { realmId, name: scimGroup.displayName, NOT: { id: groupId } },
-      });
-      if (nameExists) {
-        throw new ConflictException(
-          `Group name '${scimGroup.displayName}' already exists`,
-        );
-      }
-    }
+    const name = requireDisplayName(scimGroup);
+    const members =
+      scimGroup.members === undefined || scimGroup.members === null
+        ? undefined
+        : memberIds(scimGroup.members);
 
-    const _group = await this.prisma.group.update({
-      where: { id: groupId },
+    await this.assertNameFree(realmId, existing.id, existing.name, name);
+
+    await this.prisma.group.update({
+      where: { id: existing.id },
       data: {
-        name: scimGroup.displayName,
-        description: scimGroup.displayName,
-      },
-      include: {
-        userGroups: {
-          include: { user: true },
-        },
+        name,
+        description: name,
       },
     });
 
-    // Update members if provided
-    if (scimGroup.members) {
-      // Clear existing members and add new ones
-      await this.prisma.userGroup.deleteMany({
-        where: { groupId },
-      });
-      await this.addMembers(realmId, groupId, scimGroup.members);
+    // Replace the members if the request lists them
+    if (members) {
+      await this.setMembers(realmId, existing.id, members);
     }
 
     await this.eventsService.recordAdminEvent({
@@ -234,42 +217,60 @@ export class ScimGroupsService {
 
     this.logger.log(`SCIM: Updated group ${groupId} in realm ${realmId}`);
 
-    return this.findById(realmId, groupId);
+    return this.findById(realm, existing.id);
   }
 
   /**
    * Patch a group (SCIM PATCH /Groups/{id})
-   * RFC 7644 Section 3.6
+   * RFC 7644 Section 3.5.2. Every operation is validated before anything
+   * is written.
    */
   async patch(
-    realmId: string,
+    realm: ScimRealmRef,
     groupId: string,
-    operations: ScimPatchOperation[],
+    operations: NormalizedScimPatchOperation[],
   ): Promise<ScimGroup> {
+    const realmId = realm.id;
     const group = await this.prisma.group.findFirst({
-      where: { id: groupId, realmId },
+      where: { id: requireId(groupId), realmId },
     });
 
     if (!group) {
       throw new NotFoundException(`Group '${groupId}' not found`);
     }
 
-    for (const op of operations) {
-      switch (op.op) {
+    const plan = planGroupPatch(operations);
+
+    if (plan.displayName !== undefined && plan.displayName !== group.name) {
+      await this.assertNameFree(
+        realmId,
+        group.id,
+        group.name,
+        plan.displayName,
+      );
+      await this.prisma.group.update({
+        where: { id: group.id },
+        data: { name: plan.displayName, description: plan.displayName },
+      });
+    }
+
+    for (const step of plan.members) {
+      switch (step.kind) {
         case 'add':
-        case 'replace':
-          if (op.path === 'members' && Array.isArray(op.value)) {
-            await this.addMembers(realmId, groupId, op.value as ScimMember[]);
-          }
+          await this.addMembers(realmId, group.id, step.userIds);
+          break;
+        case 'set':
+          await this.setMembers(realmId, group.id, step.userIds);
           break;
         case 'remove':
-          if (op.path) {
-            // Parse path to extract member value to remove
-            const memberValue = this.extractMemberValueFromPath(op.path);
-            if (memberValue) {
-              await this.removeMember(realmId, groupId, memberValue);
-            }
-          }
+          await this.prisma.userGroup.deleteMany({
+            where: { groupId: group.id, userId: { in: step.userIds } },
+          });
+          break;
+        case 'clear':
+          await this.prisma.userGroup.deleteMany({
+            where: { groupId: group.id },
+          });
           break;
       }
     }
@@ -285,16 +286,17 @@ export class ScimGroupsService {
 
     this.logger.log(`SCIM: Patched group ${groupId} in realm ${realmId}`);
 
-    return this.findById(realmId, groupId);
+    return this.findById(realm, group.id);
   }
 
   /**
    * Delete a group (SCIM DELETE /Groups/{id})
-   * RFC 7644 Section 3.3
+   * RFC 7644 Section 3.6
    */
-  async delete(realmId: string, groupId: string): Promise<void> {
+  async delete(realm: ScimRealmRef, groupId: string): Promise<void> {
+    const realmId = realm.id;
     const group = await this.prisma.group.findFirst({
-      where: { id: groupId, realmId },
+      where: { id: requireId(groupId), realmId },
     });
 
     if (!group) {
@@ -302,7 +304,7 @@ export class ScimGroupsService {
     }
 
     await this.prisma.group.delete({
-      where: { id: groupId },
+      where: { id: group.id },
     });
 
     await this.eventsService.recordAdminEvent({
@@ -318,11 +320,11 @@ export class ScimGroupsService {
   }
 
   /**
-   * Search groups using POST /Groups with filter
-   * RFC 7644 Section 3.3
+   * Search groups using POST /Groups/.search
+   * RFC 7644 Section 3.4.3
    */
   async search(
-    realmId: string,
+    realm: ScimRealmRef,
     request: {
       filter?: string;
       attributes?: string[];
@@ -331,7 +333,7 @@ export class ScimGroupsService {
       count?: number;
     },
   ): Promise<ScimListResponse<ScimGroup>> {
-    return this.findAll(realmId, {
+    return this.findAll(realm, {
       startIndex: request.startIndex,
       count: request.count,
       filter: request.filter,
@@ -341,103 +343,103 @@ export class ScimGroupsService {
   }
 
   /**
-   * Add members to a group
+   * Add users to a group. Ids that are not users of this realm are
+   * skipped, as before.
    */
   private async addMembers(
     realmId: string,
     groupId: string,
-    members: ScimMember[],
+    userIds: string[],
   ): Promise<void> {
-    for (const member of members) {
-      if (!member.value) continue;
-
-      // Validate user exists
-      const user = await this.prisma.user.findFirst({
-        where: { id: member.value, realmId },
-      });
-
-      if (user) {
-        await this.prisma.userGroup.upsert({
-          where: {
-            userId_groupId: { userId: user.id, groupId },
-          },
-          create: {
-            userId: user.id,
-            groupId,
-          },
-          update: {},
-        });
-      }
-    }
-  }
-
-  /**
-   * Remove a member from a group
-   */
-  private async removeMember(
-    realmId: string,
-    groupId: string,
-    memberValue: string,
-  ): Promise<void> {
-    await this.prisma.userGroup.deleteMany({
-      where: {
-        groupId,
-        userId: memberValue,
-      },
+    if (userIds.length === 0) return;
+    const users = await this.prisma.user.findMany({
+      where: { id: { in: userIds }, realmId },
+      select: { id: true },
+    });
+    if (users.length === 0) return;
+    await this.prisma.userGroup.createMany({
+      data: users.map((u) => ({ userId: u.id, groupId })),
+      skipDuplicates: true,
     });
   }
 
-  /**
-   * Extract member value from SCIM path (e.g., "members[value eq '123']")
-   */
-  private extractMemberValueFromPath(path: string): string | null {
-    // Handle path like "members[value eq 'user-123']"
-    const match = path.match(/members\[value eq '([^']+)'\]$/);
-    return match ? match[1] : null;
+  /** Make the group's members exactly these users. */
+  private async setMembers(
+    realmId: string,
+    groupId: string,
+    userIds: string[],
+  ): Promise<void> {
+    await this.prisma.userGroup.deleteMany({
+      where: { groupId, userId: { notIn: userIds } },
+    });
+    await this.addMembers(realmId, groupId, userIds);
+  }
+
+  /** 409 uniqueness when another group of the realm has this name. */
+  private async assertNameFree(
+    realmId: string,
+    groupId: string,
+    currentName: string,
+    name: string,
+  ): Promise<void> {
+    if (name === currentName) return;
+    const taken = await this.prisma.group.findFirst({
+      where: { realmId, name, NOT: { id: groupId } },
+      select: { id: true },
+    });
+    if (taken) {
+      throw scimConflict(`Group name '${name}' already exists`);
+    }
   }
 
   /**
    * Convert database group to SCIM Group format
    */
-  private toScimGroup(group: DbGroupWithUserGroups): ScimGroup {
+  private toScimGroup(
+    group: DbGroupWithUserGroups,
+    realm: ScimRealmRef,
+    excludedAttributes?: string[],
+  ): ScimGroup {
     const scimGroup: ScimGroup = {
-      schemas: ['urn:scim:schemas:core:1.0:Group'],
+      schemas: [SCIM_SCHEMAS.GROUP],
       id: group.id,
       displayName: group.name,
-      externalId: group.id,
       meta: {
-        resourceType: 'GROUP',
+        resourceType: 'Group',
         created: group.createdAt?.toISOString(),
         lastModified: group.updatedAt?.toISOString(),
-        location: `/scim/v2/Groups/${group.id}`,
+        location: scimLocation(realm, 'Groups', group.id),
       },
     };
 
-    // Add members if available
-    if (group.userGroups && group.userGroups.length > 0) {
-      scimGroup.members = group.userGroups.map((ug) => ({
+    const withoutMembers = excludedAttributes?.some(
+      (a) => a.trim().toLowerCase() === 'members',
+    );
+    if (!withoutMembers) {
+      scimGroup.members = (group.userGroups ?? []).map((ug) => ({
         value: ug.user.id,
         display: ug.user.username,
         type: 'User',
+        $ref: scimLocation(realm, 'Users', ug.user.id),
       }));
     }
 
     return scimGroup;
   }
+}
 
-  /**
-   * Return empty list response
-   */
-  private emptyListResponse(
-    startIndex: number,
-    _count: number,
-  ): ScimListResponse<ScimGroup> {
-    return {
-      schemas: ['urn:scim:schemas:core:1.0:ListResponse'],
-      totalResults: 0,
-      startIndex,
-      itemsPerPage: 0,
-      Resources: [],
-    };
+/** A missing id would make `findFirst` match any group of the realm. */
+function requireId(id: string | undefined): string {
+  if (typeof id !== 'string' || id === '') {
+    throw new NotFoundException('A group id is required');
   }
+  return id;
+}
+
+function requireDisplayName(scimGroup: ScimGroup | undefined): string {
+  const name = (scimGroup as Partial<ScimGroup> | undefined)?.displayName;
+  if (typeof name !== 'string' || name.trim() === '') {
+    throw scimBadRequest('invalidValue', '"displayName" is required');
+  }
+  return name;
 }

@@ -24,10 +24,11 @@ import { ScimFilterParserService } from './filter-parser.service.js';
 import { PrismaModule } from '../prisma/prisma.module.js';
 import { EventsModule } from '../events/events.module.js';
 import { CryptoModule } from '../crypto/crypto.module.js';
+import { SessionsModule } from '../sessions/sessions.module.js';
 
 @Global()
 @Module({
-  imports: [PrismaModule, EventsModule, CryptoModule],
+  imports: [PrismaModule, EventsModule, CryptoModule, SessionsModule],
   controllers: [ScimController, ScimProvisioningController],
   providers: [
     ScimServiceProviderConfigService,

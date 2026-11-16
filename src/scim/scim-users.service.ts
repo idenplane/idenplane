@@ -3,25 +3,27 @@
  * Implements RFC 7644 Section 3.2 - User Operations
  */
 
-import {
-  Injectable,
-  NotFoundException,
-  ConflictException,
-  Logger,
-  BadRequestException,
-} from '@nestjs/common';
+import { Injectable, NotFoundException, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { CryptoService } from '../crypto/crypto.service.js';
 import { EventsService } from '../events/events.service.js';
+import { SessionsService } from '../sessions/sessions.service.js';
 import { ScimFilterParserService } from './filter-parser.service.js';
+import { coerceScimBoolean } from './patch-request.js';
+import { scimBadRequest, scimConflict } from './scim-errors.js';
+import {
+  normalizePagination,
+  scimLocation,
+  withoutPassword,
+} from './scim-resource.js';
+import { applyUserPatch, type ScimUserState } from './user-patch.js';
+import { SCIM_SCHEMAS } from './types/scim.types.js';
 import type {
   ScimUser,
   ScimListResponse,
-  ScimMeta as _ScimMeta,
-  ScimPatchOperation,
   ScimEmail,
+  ScimRealmRef,
+  NormalizedScimPatchOperation,
 } from './types/scim.types.js';
-import { DEFAULT_USER_ATTRIBUTE_MAPPING as _DEFAULT_USER_ATTRIBUTE_MAPPING } from './schemas/scim.schemas.js';
 
 /**
  * Database user with included relations for SCIM conversion
@@ -32,13 +34,7 @@ interface DbUserWithGroups {
   email: string | null;
   firstName: string | null;
   lastName: string | null;
-  displayName?: string | null;
   enabled: boolean;
-  title?: string | null;
-  preferredLanguage?: string | null;
-  locale?: string | null;
-  timezone?: string | null;
-  federationLink?: string | null;
   createdAt: Date;
   updatedAt: Date;
   userGroups?: Array<{
@@ -49,102 +45,94 @@ interface DbUserWithGroups {
   }>;
 }
 
+const WITH_GROUPS = {
+  userGroups: {
+    include: { group: true },
+  },
+} as const;
+
 @Injectable()
 export class ScimUsersService {
   private readonly logger = new Logger(ScimUsersService.name);
 
   constructor(
     private readonly prisma: PrismaService,
-    private readonly crypto: CryptoService,
     private readonly eventsService: EventsService,
     private readonly filterParser: ScimFilterParserService,
+    private readonly sessions: SessionsService,
   ) {}
 
   /**
    * Create a new user (SCIM POST /Users)
-   * RFC 7644 Section 3.2
+   * RFC 7644 Section 3.3
    */
-  async create(realmId: string, scimUser: ScimUser): Promise<ScimUser> {
-    const username = scimUser.userName;
-    const email =
-      scimUser.emails?.find((e) => e.primary)?.value ||
-      scimUser.emails?.[0]?.value;
-
-    // Check for existing user
-    const existing = await this.prisma.user.findFirst({
-      where: { realmId, username },
-    });
-    if (existing) {
-      throw new ConflictException(`User '${username}' already exists`);
+  async create(realm: ScimRealmRef, scimUser: ScimUser): Promise<ScimUser> {
+    const body = (scimUser ?? {}) as Partial<ScimUser>;
+    const username = body.userName;
+    if (typeof username !== 'string' || username.trim() === '') {
+      throw scimBadRequest('invalidValue', '"userName" is required');
     }
+    const email = primaryEmail(body.emails);
+    const enabled =
+      body.active === undefined || body.active === null
+        ? true
+        : coerceScimBoolean(body.active, 'active');
 
-    if (email) {
-      const emailExists = await this.prisma.user.findFirst({
-        where: { realmId, email },
-      });
-      if (emailExists) {
-        throw new ConflictException(`Email '${email}' is already in use`);
-      }
-    }
+    await this.assertUnique(realm.id, null, { username, email });
 
-    // Create user in database
     const user = await this.prisma.user.create({
       data: {
-        realmId,
+        realmId: realm.id,
         username,
-        email: email || null,
-        firstName: scimUser.name?.givenName || null,
-        lastName: scimUser.name?.familyName || null,
-        federationLink: scimUser.externalId || null,
+        email,
+        firstName: optionalText(body.name?.givenName),
+        lastName: optionalText(body.name?.familyName),
+        enabled,
       },
     });
 
     // Log SCIM provisioning event
     await this.eventsService.recordAdminEvent({
-      realmId,
+      realmId: realm.id,
       adminUserId: 'scim',
       operationType: 'CREATE',
       resourceType: 'USER',
       resourcePath: `/scim/v2/Users/${user.id}`,
-      representation: { scimUser },
+      representation: { scimUser: withoutPassword(scimUser) },
     });
 
-    this.logger.log(`SCIM: Created user ${user.id} in realm ${realmId}`);
+    this.logger.log(`SCIM: Created user ${user.id} in realm ${realm.id}`);
 
-    return this.toScimUser(user);
+    return this.toScimUser(user, realm);
   }
 
   /**
    * Get a user by ID (SCIM GET /Users/{id})
-   * RFC 7644 Section 3.2
+   * RFC 7644 Section 3.4.1
    */
   async findById(
-    realmId: string,
+    realm: ScimRealmRef,
     userId: string,
     attributes?: string[],
   ): Promise<ScimUser> {
     const user = await this.prisma.user.findFirst({
-      where: { id: userId, realmId },
-      include: {
-        userGroups: {
-          include: { group: true },
-        },
-      },
+      where: { id: requireId(userId), realmId: realm.id },
+      include: WITH_GROUPS,
     });
 
     if (!user) {
       throw new NotFoundException(`User '${userId}' not found`);
     }
 
-    return this.toScimUser(user, attributes);
+    return this.toScimUser(user, realm, attributes);
   }
 
   /**
    * Get all users with pagination and filtering (SCIM GET /Users)
-   * RFC 7644 Section 3.2
+   * RFC 7644 Section 3.4.2
    */
   async findAll(
-    realmId: string,
+    realm: ScimRealmRef,
     options: {
       startIndex?: number;
       count?: number;
@@ -153,198 +141,189 @@ export class ScimUsersService {
       excludedAttributes?: string[];
     } = {},
   ): Promise<ScimListResponse<ScimUser>> {
-    const { startIndex = 1, count = 100, filter } = options;
+    const { startIndex, count } = normalizePagination(
+      options.startIndex,
+      options.count,
+    );
 
-    // Build where clause
-    let where: Record<string, unknown> = { realmId };
+    // An unsupported or malformed filter is a 400 invalidFilter
+    // (RFC 7644 §3.4.2.2), never an empty list: a client that reads "no
+    // match" would go on to create a duplicate.
+    const where: Record<string, unknown> = options.filter
+      ? this.filterParser.toPrismaWhereUser(options.filter, realm.id)
+      : { realmId: realm.id };
 
-    if (filter) {
-      try {
-        where = {
-          ...where,
-          ...this.filterParser.toPrismaWhereUser(filter, realmId),
-        };
-      } catch {
-        // Ignore invalid filter - return empty result
-        return this.emptyListResponse(startIndex, count);
-      }
-    }
-
-    // Get total count
     const totalResults = await this.prisma.user.count({ where });
 
-    // Get users with pagination
-    const users = await this.prisma.user.findMany({
-      where,
-      include: {
-        userGroups: {
-          include: { group: true },
-        },
-      },
-      skip: Math.max(0, startIndex - 1),
-      take: Math.min(count, 100),
-      orderBy: { username: 'asc' },
-    });
+    const users =
+      count === 0
+        ? []
+        : await this.prisma.user.findMany({
+            where,
+            include: WITH_GROUPS,
+            skip: startIndex - 1,
+            take: count,
+            orderBy: { username: 'asc' },
+          });
 
     return {
-      schemas: ['urn:scim:schemas:core:1.0:ListResponse'],
+      schemas: [SCIM_SCHEMAS.LIST_RESPONSE],
       totalResults,
       startIndex,
       itemsPerPage: users.length,
-      Resources: users.map((u) => this.toScimUser(u, options.attributes)),
+      Resources: users.map((u) =>
+        this.toScimUser(u, realm, options.attributes),
+      ),
     };
   }
 
   /**
    * Update a user (SCIM PUT /Users/{id})
-   * RFC 7644 Section 3.2
+   * RFC 7644 Section 3.5.1
    */
   async update(
-    realmId: string,
+    realm: ScimRealmRef,
     userId: string,
     scimUser: ScimUser,
   ): Promise<ScimUser> {
     const existing = await this.prisma.user.findFirst({
-      where: { id: userId, realmId },
+      where: { id: requireId(userId), realmId: realm.id },
     });
 
     if (!existing) {
       throw new NotFoundException(`User '${userId}' not found`);
     }
 
-    const email =
-      scimUser.emails?.find((e) => e.primary)?.value ||
-      scimUser.emails?.[0]?.value;
-
-    // Check for conflicts
-    if (scimUser.userName !== existing.username) {
-      const usernameExists = await this.prisma.user.findFirst({
-        where: { realmId, username: scimUser.userName, NOT: { id: userId } },
-      });
-      if (usernameExists) {
-        throw new ConflictException(
-          `UserName '${scimUser.userName}' already exists`,
-        );
-      }
+    const body = (scimUser ?? {}) as Partial<ScimUser>;
+    if (typeof body.userName !== 'string' || body.userName.trim() === '') {
+      throw scimBadRequest('invalidValue', '"userName" is required');
     }
+    const email = primaryEmail(body.emails) ?? existing.email;
+    const enabled =
+      body.active === undefined || body.active === null
+        ? existing.enabled
+        : coerceScimBoolean(body.active, 'active');
 
-    if (email && email !== existing.email) {
-      const emailExists = await this.prisma.user.findFirst({
-        where: { realmId, email, NOT: { id: userId } },
-      });
-      if (emailExists) {
-        throw new ConflictException(`Email '${email}' is already in use`);
-      }
-    }
+    await this.assertUnique(
+      realm.id,
+      userId,
+      {
+        username: body.userName,
+        email,
+      },
+      existing,
+    );
 
     const user = await this.prisma.user.update({
-      where: { id: userId },
+      where: { id: existing.id },
       data: {
-        username: scimUser.userName,
-        email: email || existing.email,
-        firstName: scimUser.name?.givenName ?? existing.firstName,
-        lastName: scimUser.name?.familyName ?? existing.lastName,
-        enabled: scimUser.active ?? existing.enabled,
-        federationLink: scimUser.externalId ?? existing.federationLink,
+        username: body.userName,
+        email,
+        firstName:
+          body.name?.givenName !== undefined
+            ? optionalText(body.name.givenName)
+            : existing.firstName,
+        lastName:
+          body.name?.familyName !== undefined
+            ? optionalText(body.name.familyName)
+            : existing.lastName,
+        enabled,
       },
-      include: {
-        userGroups: {
-          include: { group: true },
-        },
-      },
+      include: WITH_GROUPS,
     });
 
+    if (existing.enabled && !enabled) {
+      await this.endSessions(realm, existing.id);
+    }
+
     await this.eventsService.recordAdminEvent({
-      realmId,
+      realmId: realm.id,
       adminUserId: 'scim',
       operationType: 'UPDATE',
       resourceType: 'USER',
       resourcePath: `/scim/v2/Users/${userId}`,
-      representation: { scimUser },
+      representation: { scimUser: withoutPassword(scimUser) },
     });
 
-    this.logger.log(`SCIM: Updated user ${userId} in realm ${realmId}`);
+    this.logger.log(`SCIM: Updated user ${userId} in realm ${realm.id}`);
 
-    return this.toScimUser(user);
+    return this.toScimUser(user, realm);
   }
 
   /**
    * Patch a user (SCIM PATCH /Users/{id})
-   * RFC 7644 Section 3.6
+   * RFC 7644 Section 3.5.2. Every operation is validated before anything
+   * is written, so a request applies in full or not at all.
    */
   async patch(
-    realmId: string,
+    realm: ScimRealmRef,
     userId: string,
-    operations: ScimPatchOperation[],
+    operations: NormalizedScimPatchOperation[],
   ): Promise<ScimUser> {
     const user = await this.prisma.user.findFirst({
-      where: { id: userId, realmId },
-      include: {
-        userGroups: {
-          include: { group: true },
-        },
-      },
+      where: { id: requireId(userId), realmId: realm.id },
     });
 
     if (!user) {
       throw new NotFoundException(`User '${userId}' not found`);
     }
 
-    // Apply PATCH operations
-    const updateData: Record<string, unknown> = {};
-    const patches: string[] = [];
+    const current: ScimUserState = {
+      username: user.username,
+      email: user.email,
+      firstName: user.firstName,
+      lastName: user.lastName,
+      enabled: user.enabled,
+    };
+    const next = applyUserPatch(current, operations);
 
-    for (const op of operations) {
-      switch (op.op) {
-        case 'add':
-        case 'replace':
-          if (typeof op.value === 'object' && op.value !== null) {
-            const patchData = this.applyPatchValue(
-              op.value as Record<string, unknown>,
-              patches,
-            );
-            Object.assign(updateData, patchData);
-          }
-          break;
-        case 'remove':
-          // Remove is handled by path
-          this.logger.debug(
-            `SCIM PATCH remove for ${op.path || 'whole resource'}`,
-          );
-          break;
+    const data: Partial<ScimUserState> = {};
+    for (const key of Object.keys(next) as Array<keyof ScimUserState>) {
+      if (next[key] !== current[key]) {
+        (data as Record<string, unknown>)[key] = next[key];
       }
     }
 
-    if (Object.keys(updateData).length > 0) {
+    if (Object.keys(data).length > 0) {
+      await this.assertUnique(
+        realm.id,
+        user.id,
+        { username: next.username, email: next.email },
+        user,
+      );
       await this.prisma.user.update({
-        where: { id: userId },
-        data: updateData,
+        where: { id: user.id },
+        data,
       });
+    }
+
+    if (current.enabled && !next.enabled) {
+      await this.endSessions(realm, user.id);
     }
 
     // Log event
     await this.eventsService.recordAdminEvent({
-      realmId,
+      realmId: realm.id,
       adminUserId: 'scim',
       operationType: 'PATCH',
       resourceType: 'USER',
       resourcePath: `/scim/v2/Users/${userId}`,
-      representation: { operations },
+      representation: { operations: withoutPassword(operations) },
     });
 
-    this.logger.log(`SCIM: Patched user ${userId} in realm ${realmId}`);
+    this.logger.log(`SCIM: Patched user ${userId} in realm ${realm.id}`);
 
     // Return updated user
-    return this.findById(realmId, userId);
+    return this.findById(realm, userId);
   }
 
   /**
    * Delete a user (SCIM DELETE /Users/{id})
-   * RFC 7644 Section 3.2
+   * RFC 7644 Section 3.6
    */
-  async delete(realmId: string, userId: string): Promise<void> {
+  async delete(realm: ScimRealmRef, userId: string): Promise<void> {
     const user = await this.prisma.user.findFirst({
-      where: { id: userId, realmId },
+      where: { id: requireId(userId), realmId: realm.id },
     });
 
     if (!user) {
@@ -354,12 +333,13 @@ export class ScimUsersService {
     // Instead of hard delete, we disable the user (deprovisioning)
     // This follows SCIM deprovisioning semantics
     await this.prisma.user.update({
-      where: { id: userId },
+      where: { id: user.id },
       data: { enabled: false },
     });
+    await this.endSessions(realm, user.id);
 
     await this.eventsService.recordAdminEvent({
-      realmId,
+      realmId: realm.id,
       adminUserId: 'scim',
       operationType: 'DELETE',
       resourceType: 'USER',
@@ -367,15 +347,15 @@ export class ScimUsersService {
       representation: { userId },
     });
 
-    this.logger.log(`SCIM: Deprovisioned user ${userId} in realm ${realmId}`);
+    this.logger.log(`SCIM: Deprovisioned user ${userId} in realm ${realm.id}`);
   }
 
   /**
-   * Search users using POST /Users with filter
-   * RFC 7644 Section 3.2
+   * Search users using POST /Users/.search
+   * RFC 7644 Section 3.4.3
    */
   async search(
-    realmId: string,
+    realm: ScimRealmRef,
     request: {
       filter?: string;
       attributes?: string[];
@@ -384,7 +364,7 @@ export class ScimUsersService {
       count?: number;
     },
   ): Promise<ScimListResponse<ScimUser>> {
-    return this.findAll(realmId, {
+    return this.findAll(realm, {
       startIndex: request.startIndex,
       count: request.count,
       filter: request.filter,
@@ -394,33 +374,72 @@ export class ScimUsersService {
   }
 
   /**
+   * A deactivated or deprovisioned user is signed out everywhere: every
+   * session ends and its refresh tokens are revoked, through the same code
+   * as the admin API's "sign out all sessions". Access tokens already
+   * issued stop passing introspection and userinfo because the user is
+   * disabled.
+   */
+  private async endSessions(realm: ScimRealmRef, userId: string) {
+    await this.sessions.revokeAllUserSessions(realm, userId);
+  }
+
+  /** 409 uniqueness when userName or email is taken by another user. */
+  private async assertUnique(
+    realmId: string,
+    userId: string | null,
+    next: { username: string; email: string | null },
+    existing?: { username: string; email: string | null },
+  ): Promise<void> {
+    const notSelf = userId ? { NOT: { id: userId } } : {};
+    if (!existing || next.username !== existing.username) {
+      const taken = await this.prisma.user.findFirst({
+        where: { realmId, username: next.username, ...notSelf },
+        select: { id: true },
+      });
+      if (taken) {
+        throw scimConflict(`User '${next.username}' already exists`);
+      }
+    }
+    if (next.email && (!existing || next.email !== existing.email)) {
+      const taken = await this.prisma.user.findFirst({
+        where: { realmId, email: next.email, ...notSelf },
+        select: { id: true },
+      });
+      if (taken) {
+        throw scimConflict(`Email '${next.email}' is already in use`);
+      }
+    }
+  }
+
+  /**
    * Convert database user to SCIM User format
    */
-  private toScimUser(user: DbUserWithGroups, attributes?: string[]): ScimUser {
+  private toScimUser(
+    user: DbUserWithGroups,
+    realm: ScimRealmRef,
+    attributes?: string[],
+  ): ScimUser {
+    const formatted = [user.firstName, user.lastName].filter(Boolean).join(' ');
     const scimUser: ScimUser = {
-      schemas: ['urn:scim:schemas:core:1.0:User'],
+      schemas: [SCIM_SCHEMAS.USER],
       id: user.id,
       userName: user.username,
       name: {
         givenName: user.firstName ?? undefined,
         familyName: user.lastName ?? undefined,
-        formatted: [user.firstName, user.lastName].filter(Boolean).join(' '),
+        formatted: formatted || undefined,
       },
-      displayName:
-        user.displayName ||
-        [user.firstName, user.lastName].filter(Boolean).join(' '),
-      emails: user.email ? [{ value: user.email, primary: true }] : [],
+      displayName: formatted || undefined,
+      emails: user.email
+        ? [{ value: user.email, type: 'work', primary: true }]
+        : [],
       active: user.enabled,
-      title: user.title ?? undefined,
-      preferredLanguage: user.preferredLanguage ?? undefined,
-      locale: user.locale ?? undefined,
-      timezone: user.timezone ?? undefined,
-      externalId: user.federationLink ?? undefined,
       meta: {
         resourceType: 'User',
         created: user.createdAt?.toISOString(),
         lastModified: user.updatedAt?.toISOString(),
-        location: `/scim/v2/Users/${user.id}`,
+        location: scimLocation(realm, 'Users', user.id),
       },
     };
 
@@ -455,9 +474,9 @@ export class ScimUsersService {
     };
 
     for (const attr of attributes) {
-      const value = this.getNestedValue(user, attr);
+      const value = this.getNestedValue(user, attr.trim());
       if (value !== undefined) {
-        this.setNestedValue(filtered, attr, value);
+        this.setNestedValue(filtered, attr.trim(), value);
       }
     }
 
@@ -468,12 +487,12 @@ export class ScimUsersService {
    * Get nested value from object using dot notation
    */
   private getNestedValue(obj: unknown, path: string): unknown {
-    return path
-      .split('.')
-      .reduce(
-        (current, key) => (current as Record<string, unknown>)?.[key],
-        obj,
-      );
+    return path.split('.').reduce((current, key) => {
+      if (typeof current !== 'object' || current === null) return undefined;
+      return Object.hasOwn(current, key)
+        ? (current as Record<string, unknown>)[key]
+        : undefined;
+    }, obj);
   }
 
   /**
@@ -487,7 +506,10 @@ export class ScimUsersService {
     // SCIM attribute names.
     const safeKey = (key: string): string => {
       if (key === '__proto__' || key === 'constructor' || key === 'prototype') {
-        throw new BadRequestException(`Invalid attribute path segment: ${key}`);
+        throw scimBadRequest(
+          'invalidValue',
+          `Invalid attribute path segment: ${key}`,
+        );
       }
       return key;
     };
@@ -506,73 +528,37 @@ export class ScimUsersService {
     );
     target[lastKey] = value;
   }
+}
 
-  /**
-   * Apply PATCH operation value
-   */
-  private applyPatchValue(
-    value: Record<string, unknown>,
-    patches: string[],
-  ): Record<string, unknown> {
-    const result: Record<string, unknown> = {};
-
-    for (const [key, val] of Object.entries(value)) {
-      switch (key) {
-        case 'userName':
-          result['username'] = val;
-          patches.push(`userName = ${String(val)}`);
-          break;
-        case 'name.givenName':
-          result['firstName'] = val;
-          break;
-        case 'name.familyName':
-          result['lastName'] = val;
-          break;
-        case 'displayName':
-          result['displayName'] = val;
-          break;
-        case 'emails':
-          if (Array.isArray(val) && val.length > 0) {
-            const primaryEmail =
-              (val as ScimEmail[]).find((e) => e.primary) ||
-              (val[0] as ScimEmail);
-            result['email'] = primaryEmail.value;
-          }
-          break;
-        case 'active':
-          result['enabled'] = val;
-          break;
-        case 'title':
-          result['title'] = val;
-          break;
-        case 'preferredLanguage':
-          result['preferredLanguage'] = val;
-          break;
-        case 'locale':
-          result['locale'] = val;
-          break;
-        case 'timezone':
-          result['timezone'] = val;
-          break;
-      }
-    }
-
-    return result;
+/** The primary email of a SCIM `emails` list, or the first one. */
+function primaryEmail(emails: unknown): string | null {
+  if (emails === undefined || emails === null) return null;
+  if (!Array.isArray(emails)) {
+    throw scimBadRequest('invalidValue', '"emails" must be an array');
   }
-
-  /**
-   * Return empty list response
-   */
-  private emptyListResponse(
-    startIndex: number,
-    _count: number,
-  ): ScimListResponse<ScimUser> {
-    return {
-      schemas: ['urn:scim:schemas:core:1.0:ListResponse'],
-      totalResults: 0,
-      startIndex,
-      itemsPerPage: 0,
-      Resources: [],
-    };
+  const list = emails as ScimEmail[];
+  const chosen =
+    list.find((e) => {
+      const primary = (e as { primary?: unknown })?.primary;
+      return primary === true || String(primary).toLowerCase() === 'true';
+    }) ?? list[0];
+  if (chosen === undefined) return null;
+  const value = (chosen as { value?: unknown })?.value;
+  if (value !== undefined && value !== null && typeof value !== 'string') {
+    throw scimBadRequest('invalidValue', 'An email "value" must be a string');
   }
+  return optionalText(value);
+}
+
+function optionalText(value: unknown): string | null {
+  if (typeof value !== 'string') return null;
+  return value.trim() === '' ? null : value;
+}
+
+/** A missing id would make `findFirst` match any user of the realm. */
+function requireId(id: string | undefined): string {
+  if (typeof id !== 'string' || id === '') {
+    throw new NotFoundException('A user id is required');
+  }
+  return id;
 }
