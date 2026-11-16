@@ -8,6 +8,9 @@ vi.mock('idenplane-sdk/server', async (importOriginal) => {
 const { verifyToken } = await import('idenplane-sdk/server');
 const { withAuth, withAuthHandler } = await import('../api.js');
 
+const PLACEHOLDER_ACCESS_TOKEN = 'placeholder.access.token';
+const PLACEHOLDER_ID_TOKEN = 'placeholder.id.token';
+
 describe('withAuth / withAuthHandler config validation', () => {
   const base = { realm: 'test', audience: 'demo-app' };
   const handler = () => {};
@@ -63,11 +66,11 @@ describe('withAuthHandler token verification', () => {
 
     const res = await route(
       new Request('https://app.example.com/api/me', {
-        headers: { authorization: 'Bearer placeholder.access.token' },
+        headers: { authorization: `Bearer ${PLACEHOLDER_ACCESS_TOKEN}` },
       }),
     );
     expect(res.status).toBe(200);
-    expect(verifyToken).toHaveBeenCalledWith('placeholder.access.token', {
+    expect(verifyToken).toHaveBeenCalledWith(PLACEHOLDER_ACCESS_TOKEN, {
       issuerUrl: 'https://auth.example.com',
       realm: 'demo',
       audience: 'demo-app',
@@ -82,7 +85,7 @@ describe('withAuthHandler token verification', () => {
     const inner = vi.fn(() => Response.json({}));
     const res = await withAuthHandler(config, inner)(
       new Request('https://app.example.com/api/me', {
-        headers: { authorization: 'Bearer placeholder.id.token' },
+        headers: { authorization: `Bearer ${PLACEHOLDER_ID_TOKEN}` },
       }),
     );
     expect(res.status).toBe(401);
