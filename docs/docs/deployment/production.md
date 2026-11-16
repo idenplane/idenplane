@@ -181,7 +181,7 @@ spec:
 
 Set the bucket's lifecycle rule to your retention, for example 30 daily copies and 12 monthly ones. Turn on object versioning or object lock so that a compromised server cannot delete its own backups. With Docker Compose, run the same commands from a host cron job, or use your provider's scheduled database backups.
 
-**Check, at least every quarter:** restore the latest dump into a fresh database with `pg_restore --clean --if-exists --no-owner`. Start an Idenplane container against it, using the same webhook keys, and sign in. A backup you have never restored is unproven.
+**Check, at least every quarter:** restore the latest dump into a fresh database with `pg_restore --clean --if-exists --no-owner`. Start an Idenplane container against it, using the same webhook keys, and sign in. A backup you have never restored is unproven. The project runs this drill weekly in CI ([`scripts/ci/restore-drill.sh`](https://github.com/idenplane/idenplane/blob/main/scripts/ci/restore-drill.sh)), and you can read the script as a worked example of the commands.
 
 ---
 
