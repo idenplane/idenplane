@@ -177,6 +177,13 @@ export async function createTestApp(
         name: realmName,
         displayName: 'Test Realm',
         enabled: true,
+        // A fixture, not a "new realm": pinned to the pre-0.10 behaviour so
+        // a suite that is not about lockout or events never trips over them.
+        // Suites that test them turn them on; the new-realm defaults are
+        // covered by test/secure-realm-defaults.e2e-spec.ts.
+        bruteForceEnabled: false,
+        eventsEnabled: false,
+        adminEventsEnabled: false,
         signingKeys: {
           create: {
             kid,

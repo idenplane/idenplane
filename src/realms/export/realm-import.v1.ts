@@ -1,6 +1,7 @@
 import { Logger } from '@nestjs/common';
 import { Prisma, type ClientType } from '@prisma/client';
 import { seedDefaultScopesIn } from '../../scopes/scope-seed.service.js';
+import { NEW_REALM_SECURITY_DEFAULTS as SECURE } from '../realm-security-defaults.js';
 
 /**
  * Import of a version 1 realm export: the mapping the import has always
@@ -145,16 +146,26 @@ export async function importV1(
         (realmData['passwordRequireSpecialChars'] as boolean) ?? false,
       passwordHistoryCount: (realmData['passwordHistoryCount'] as number) ?? 0,
       passwordMaxAgeDays: (realmData['passwordMaxAgeDays'] as number) ?? 0,
-      bruteForceEnabled: (realmData['bruteForceEnabled'] as boolean) ?? false,
-      maxLoginFailures: (realmData['maxLoginFailures'] as number) ?? 5,
-      lockoutDuration: (realmData['lockoutDuration'] as number) ?? 900,
-      failureResetTime: (realmData['failureResetTime'] as number) ?? 600,
+      // A field the export does not carry gets today's secure default; a
+      // value the export does carry (even `false`) is kept as exported.
+      bruteForceEnabled:
+        (realmData['bruteForceEnabled'] as boolean) ?? SECURE.bruteForceEnabled,
+      maxLoginFailures:
+        (realmData['maxLoginFailures'] as number) ?? SECURE.maxLoginFailures,
+      lockoutDuration:
+        (realmData['lockoutDuration'] as number) ?? SECURE.lockoutDuration,
+      failureResetTime:
+        (realmData['failureResetTime'] as number) ?? SECURE.failureResetTime,
       permanentLockoutAfter:
-        (realmData['permanentLockoutAfter'] as number) ?? 0,
+        (realmData['permanentLockoutAfter'] as number) ??
+        SECURE.permanentLockoutAfter,
       mfaRequired: (realmData['mfaRequired'] as boolean) ?? false,
-      eventsEnabled: (realmData['eventsEnabled'] as boolean) ?? false,
+      eventsEnabled:
+        (realmData['eventsEnabled'] as boolean) ?? SECURE.eventsEnabled,
       eventsExpiration: (realmData['eventsExpiration'] as number) ?? 604800,
-      adminEventsEnabled: (realmData['adminEventsEnabled'] as boolean) ?? false,
+      adminEventsEnabled:
+        (realmData['adminEventsEnabled'] as boolean) ??
+        SECURE.adminEventsEnabled,
       theme: (realmData['theme'] as Prisma.InputJsonValue) ?? {},
       signingKeys: {
         create: {

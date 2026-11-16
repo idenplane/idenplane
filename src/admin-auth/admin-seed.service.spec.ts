@@ -111,6 +111,18 @@ describe('AdminSeedService', () => {
       await service.onApplicationBootstrap();
 
       expect(prisma.realm.create).toHaveBeenCalledTimes(1);
+      // A fresh install's master realm has brute-force protection on, with a
+      // temporary lockout only (a permanent one could lock admins out).
+      expect(prisma.realm.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            name: 'master',
+            bruteForceEnabled: true,
+            permanentLockoutAfter: 0,
+            adminEventsEnabled: true,
+          }),
+        }),
+      );
       expect(prisma.role.create).toHaveBeenCalledTimes(3);
       expect(prisma.user.create).toHaveBeenCalledTimes(1);
       expect(prisma.userRole.create).toHaveBeenCalledWith({

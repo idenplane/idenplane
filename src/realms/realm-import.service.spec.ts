@@ -289,6 +289,35 @@ describe('RealmImportService', () => {
       );
     });
 
+    it('turns brute-force protection on when the file does not set it', async () => {
+      await service.importRealm(validPayload);
+
+      expect(prisma.realm.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            bruteForceEnabled: true,
+            maxLoginFailures: 10,
+            lockoutDuration: 300,
+            failureResetTime: 900,
+            permanentLockoutAfter: 0,
+          }),
+        }),
+      );
+    });
+
+    it('keeps brute-force protection off when the file says so', async () => {
+      await service.importRealm({
+        ...validPayload,
+        realm: { ...validPayload.realm, bruteForceEnabled: false },
+      });
+
+      expect(prisma.realm.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({ bruteForceEnabled: false }),
+        }),
+      );
+    });
+
     it('should import client scopes with protocol mappers', async () => {
       await service.importRealm(validPayload);
 

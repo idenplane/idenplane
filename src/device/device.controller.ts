@@ -216,7 +216,8 @@ export class DeviceController {
         },
       });
 
-      if (!user || !user.passwordHash) {
+      // A disabled user gets the same answer as an unknown one.
+      if (!user || !user.enabled || !user.passwordHash) {
         return this.themeRender.render(
           res,
           realm,

@@ -20,10 +20,12 @@ function seedFromRealm(realm: Realm) {
     passwordHistoryCount: realm.passwordHistoryCount ?? 0,
     passwordMaxAgeDays: realm.passwordMaxAgeDays ?? 0,
     // Brute Force Protection
-    bruteForceEnabled: realm.bruteForceEnabled ?? false,
-    maxLoginFailures: realm.maxLoginFailures ?? 5,
+    // Fallbacks match the server's new-realm defaults
+    // (src/realms/realm-security-defaults.ts).
+    bruteForceEnabled: realm.bruteForceEnabled ?? true,
+    maxLoginFailures: realm.maxLoginFailures ?? 10,
     lockoutDuration: realm.lockoutDuration ?? 300,
-    failureResetTime: realm.failureResetTime ?? 600,
+    failureResetTime: realm.failureResetTime ?? 900,
     permanentLockoutAfter: realm.permanentLockoutAfter ?? 0,
     // MFA
     mfaRequired: realm.mfaRequired ?? false,
@@ -229,6 +231,21 @@ export default function SecuritySettingsForm({ realm }: SecuritySettingsFormProp
           </label>
         </div>
 
+        {!form.bruteForceEnabled && (
+          <div
+            role="alert"
+            data-testid="brute-force-off-warning"
+            className="rounded-md border border-warning-soft bg-warning-soft p-3 text-sm text-warning-fg"
+          >
+            <p className="font-medium">Brute-force protection is off</p>
+            <p className="mt-1">
+              Nothing limits how many passwords can be tried against an account in this realm.
+              New realms have it on; realms created before 0.10.0 keep their old setting until
+              you turn it on here.
+            </p>
+          </div>
+        )}
+
         <div>
           <label className="mb-1.5 block text-sm font-medium text-muted">
             Max Login Failures
@@ -309,6 +326,12 @@ export default function SecuritySettingsForm({ realm }: SecuritySettingsFormProp
           <p className="mt-1 text-xs text-subtle">
             0 = disabled. Number of temporary lockouts before the account is permanently locked.
           </p>
+          {form.bruteForceEnabled && form.permanentLockoutAfter > 0 && (
+            <p role="alert" data-testid="permanent-lockout-warning" className="mt-2 text-xs text-warning-fg">
+              A permanent lockout disables the account. Anyone who knows a username can trigger it,
+              so it can be used to switch accounts off. Temporary lockout (0) is recommended.
+            </p>
+          )}
         </div>
       </div>
 

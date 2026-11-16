@@ -159,6 +159,12 @@ describe('AuthService', () => {
   let crypto: ReturnType<typeof createMockCryptoService>;
   let jwkService: ReturnType<typeof createMockJwkService>;
   let scopesService: ReturnType<typeof createMockScopesService>;
+  let bruteForceService: {
+    checkLocked: jest.Mock;
+    recordFailure: jest.Mock;
+    resetFailures: jest.Mock;
+  };
+  let userFederationService: { authenticateViaFederation: jest.Mock };
 
   beforeEach(() => {
     prisma = createMockPrismaService();
@@ -166,7 +172,7 @@ describe('AuthService', () => {
     jwkService = createMockJwkService();
     scopesService = createMockScopesService();
 
-    const bruteForceService = {
+    bruteForceService = {
       checkLocked: jest.fn().mockReturnValue({ locked: false }),
       recordFailure: jest.fn().mockResolvedValue(undefined),
       resetFailures: jest.fn().mockResolvedValue(undefined),
@@ -202,7 +208,7 @@ describe('AuthService', () => {
       getOidcClaimsForUser: jest.fn().mockResolvedValue({}),
     };
 
-    const userFederationService = {
+    userFederationService = {
       authenticateViaFederation: jest
         .fn()
         .mockResolvedValue({ authenticated: false }),
@@ -483,6 +489,90 @@ describe('AuthService', () => {
   // -----------------------------------------------------------------------
 
   describe('password grant', () => {
+    const passwordGrant = (password: string) =>
+      service.handleTokenRequest(
+        realm,
+        {
+          grant_type: 'password',
+          client_id: 'my-client',
+          client_secret: 'correct-secret',
+          username: 'testuser',
+          password,
+        },
+        '127.0.0.1',
+      );
+
+    describe('a locked account', () => {
+      const ldapUser = {
+        ...dbUser,
+        passwordHash: null,
+        federationLink: 'ldap-demo',
+      };
+
+      it('is refused before the LDAP bind, so the answer does not depend on the password', async () => {
+        setupValidClient();
+        prisma.user.findUnique.mockResolvedValue(ldapUser);
+        bruteForceService.checkLocked.mockReturnValue({
+          locked: true,
+          lockedUntil: new Date(Date.now() + 60_000),
+        });
+        userFederationService.authenticateViaFederation.mockResolvedValue({
+          authenticated: true,
+          userId: ldapUser.id,
+        });
+
+        const right = await passwordGrant('placeholder-right').catch((e) => e);
+        userFederationService.authenticateViaFederation.mockResolvedValue({
+          authenticated: false,
+        });
+        const wrong = await passwordGrant('placeholder-wrong').catch((e) => e);
+
+        expect(right).toBeInstanceOf(OAuthTokenError);
+        expect(wrong).toBeInstanceOf(OAuthTokenError);
+        expect(right.error).toBe(wrong.error);
+        expect(right.message).toBe(wrong.message);
+        expect(
+          userFederationService.authenticateViaFederation,
+        ).not.toHaveBeenCalled();
+      });
+
+      it('is refused before the local password check', async () => {
+        setupValidClient();
+        prisma.user.findUnique.mockResolvedValue(dbUser);
+        bruteForceService.checkLocked.mockReturnValue({ locked: true });
+        crypto.verifyPassword.mockClear();
+
+        await expectOAuthError(
+          passwordGrant('placeholder-any'),
+          'invalid_grant',
+          400,
+        );
+        // Only the client secret was verified, never the user's password.
+        expect(crypto.verifyPassword).toHaveBeenCalledTimes(1);
+        expect(bruteForceService.recordFailure).not.toHaveBeenCalled();
+      });
+    });
+
+    it('counts a failed LDAP bind as a brute-force failure', async () => {
+      setupValidClient();
+      prisma.user.findUnique.mockResolvedValue({
+        ...dbUser,
+        passwordHash: null,
+        federationLink: 'ldap-demo',
+      });
+
+      await expectOAuthError(
+        passwordGrant('placeholder-wrong'),
+        'invalid_grant',
+        400,
+      );
+      expect(bruteForceService.recordFailure).toHaveBeenCalledWith(
+        realm,
+        dbUser.id,
+        '127.0.0.1',
+      );
+    });
+
     it('signs in even when evicting older sessions at the cap fails', async () => {
       setupForTokenIssuance();
       prisma.user.findUnique.mockResolvedValue(dbUser);

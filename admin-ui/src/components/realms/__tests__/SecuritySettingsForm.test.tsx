@@ -25,6 +25,31 @@ describe('SecuritySettingsForm', () => {
     expect(screen.getByDisplayValue('90')).toBeInTheDocument();
   });
 
+  it('warns when brute-force protection is off', () => {
+    render(<SecuritySettingsForm realm={makeRealm({ bruteForceEnabled: false })} />);
+    expect(screen.getByTestId('brute-force-off-warning')).toHaveTextContent(
+      'Brute-force protection is off',
+    );
+  });
+
+  it('shows no brute-force warning when protection is on', () => {
+    render(<SecuritySettingsForm realm={makeRealm({ bruteForceEnabled: true, permanentLockoutAfter: 0 })} />);
+    expect(screen.queryByTestId('brute-force-off-warning')).not.toBeInTheDocument();
+    expect(screen.queryByTestId('permanent-lockout-warning')).not.toBeInTheDocument();
+  });
+
+  it('shows the warning as soon as protection is switched off', async () => {
+    const user = userEvent.setup();
+    render(<SecuritySettingsForm realm={makeRealm({ bruteForceEnabled: true })} />);
+    await user.click(screen.getByLabelText('Enable brute force protection'));
+    expect(screen.getByTestId('brute-force-off-warning')).toBeInTheDocument();
+  });
+
+  it('warns that permanent lockout can be used to disable accounts', () => {
+    render(<SecuritySettingsForm realm={makeRealm({ bruteForceEnabled: true, permanentLockoutAfter: 3 })} />);
+    expect(screen.getByTestId('permanent-lockout-warning')).toBeInTheDocument();
+  });
+
   it('hides WebAuthn, rate-limit, and impersonation fields when their toggles are off', () => {
     render(
       <SecuritySettingsForm

@@ -148,31 +148,39 @@ export class CreateRealmDto {
   @Min(0)
   passwordMaxAgeDays?: number;
 
-  // Brute force
-  @ApiPropertyOptional({ default: false })
+  // Brute force. Defaults: src/realms/realm-security-defaults.ts.
+  @ApiPropertyOptional({
+    default: true,
+    description:
+      'Temporary account lockout after repeated failed sign-ins. On for new realms.',
+  })
   @IsOptional()
   @IsBoolean()
   bruteForceEnabled?: boolean;
 
-  @ApiPropertyOptional({ default: 5 })
+  @ApiPropertyOptional({ default: 10 })
   @IsOptional()
   @IsInt()
   @Min(1)
   maxLoginFailures?: number;
 
-  @ApiPropertyOptional({ default: 900 })
+  @ApiPropertyOptional({ default: 300, description: 'Seconds' })
   @IsOptional()
   @IsInt()
   @Min(1)
   lockoutDuration?: number;
 
-  @ApiPropertyOptional({ default: 600 })
+  @ApiPropertyOptional({ default: 900, description: 'Seconds' })
   @IsOptional()
   @IsInt()
   @Min(1)
   failureResetTime?: number;
 
-  @ApiPropertyOptional({ default: 0 })
+  @ApiPropertyOptional({
+    default: 0,
+    description:
+      'Lockouts before the account is disabled for good. 0 = never. Anyone who knows a username can trigger it, so leave it at 0 unless you accept that.',
+  })
   @IsOptional()
   @IsInt()
   @Min(0)
@@ -259,7 +267,7 @@ export class CreateRealmDto {
   offlineTokenLifespan?: number;
 
   // Events configuration
-  @ApiPropertyOptional({ default: false })
+  @ApiPropertyOptional({ default: true })
   @IsOptional()
   @IsBoolean()
   eventsEnabled?: boolean;
@@ -270,7 +278,7 @@ export class CreateRealmDto {
   @Min(60)
   eventsExpiration?: number;
 
-  @ApiPropertyOptional({ default: false })
+  @ApiPropertyOptional({ default: true })
   @IsOptional()
   @IsBoolean()
   adminEventsEnabled?: boolean;

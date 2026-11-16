@@ -9,6 +9,7 @@ import { Prisma } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { EmailService } from '../email/email.service.js';
 import type { Realm, User } from '@prisma/client';
+import { escapeHtml } from '../common/utils/html-escape.util.js';
 
 /**
  * PostgreSQL aborted a transaction as a serialization conflict (SQLSTATE
@@ -115,6 +116,11 @@ export class BruteForceService {
             where: { id: userId },
             data: { lockedUntil },
           });
+          // A security event (ASVS V16.3.3): logged on every lockout, not only
+          // on the permanent one, whether or not realm events are recorded.
+          this.logger.warn(
+            `User ${userId} in realm ${realm.id} locked until ${lockedUntil.toISOString()} after ${failureCount} failed sign-ins`,
+          );
           return 'locked';
         },
         {
@@ -308,15 +314,19 @@ export class BruteForceService {
 
     if (!user?.email) return;
 
+    // Usernames can come from SCIM, LDAP or an external IdP without any
+    // character rules, so escape them like every other email body.
+    const username = escapeHtml(user.username);
+    const realmName = escapeHtml(realm.name);
     const html = permanent
       ? `
         <h2>Account Permanently Locked</h2>
-        <p>Your account <strong>${user.username}</strong> in realm <strong>${realm.name}</strong> has been permanently locked due to multiple failed login attempts.</p>
+        <p>Your account <strong>${username}</strong> in realm <strong>${realmName}</strong> has been permanently locked due to multiple failed login attempts.</p>
         <p>Please contact your administrator to regain access to your account.</p>
       `
       : `
         <h2>Account Temporarily Locked</h2>
-        <p>Your account <strong>${user.username}</strong> in realm <strong>${realm.name}</strong> has been temporarily locked due to multiple failed login attempts.</p>
+        <p>Your account <strong>${username}</strong> in realm <strong>${realmName}</strong> has been temporarily locked due to multiple failed login attempts.</p>
         <p>The lockout will automatically expire after the configured duration. If you did not attempt to log in, please contact your administrator.</p>
       `;
 
