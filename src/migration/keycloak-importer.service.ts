@@ -3,11 +3,11 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import type {
   KeycloakRealmExport,
-  KeycloakUser,
   KeycloakClient,
   KeycloakGroup,
 } from './keycloak-types.js';
 import { createEmptyReport, type MigrationReport } from './migration-report.js';
+import { keycloakPassword } from './password-import.js';
 import type { Prisma } from '@prisma/client';
 import { idpSecrets } from '../identity-providers/idp-secrets.js';
 import { REALM_BRUTE_FORCE_DEFAULTS } from '../realms/realm-security-defaults.js';
@@ -421,15 +421,18 @@ export class KeycloakImporterService {
           continue;
         }
 
-        const {
-          hash: rawHash,
-          algorithm,
-          needsHashing,
-        } = this.extractKeycloakPassword(user);
+        const imported = keycloakPassword(user.credentials);
+        if (imported.warning) {
+          report.warnings.push({
+            entity: 'user',
+            message: `User '${user.username}': ${imported.warning}`,
+          });
+        }
         const hash =
-          needsHashing && rawHash
-            ? await this.crypto.hashPassword(rawHash)
-            : rawHash;
+          imported.plaintext !== undefined
+            ? await this.crypto.hashPassword(imported.plaintext)
+            : imported.hash;
+        const algorithm = imported.algorithm;
 
         if (!dryRun) {
           const created = await db.user.create({
@@ -473,33 +476,6 @@ export class KeycloakImporterService {
         });
       }
     }
-  }
-
-  private extractKeycloakPassword(user: KeycloakUser): {
-    hash: string | null;
-    algorithm: string;
-    needsHashing?: boolean;
-  } {
-    const passwordCred = user.credentials?.find((c) => c.type === 'password');
-    if (!passwordCred) return { hash: null, algorithm: 'argon2' };
-
-    if (passwordCred.hashedSaltedValue && passwordCred.salt) {
-      // PBKDF2 format: iterations$salt$hash
-      const iterations = passwordCred.hashIterations ?? 27500;
-      const hash = `${iterations}$${passwordCred.salt}$${passwordCred.hashedSaltedValue}`;
-      return { hash, algorithm: 'pbkdf2-sha256' };
-    }
-
-    if (passwordCred.value) {
-      // Plain text password (rare) — hash it with Argon2
-      return {
-        hash: passwordCred.value,
-        algorithm: 'argon2',
-        needsHashing: true,
-      };
-    }
-
-    return { hash: null, algorithm: 'argon2' };
   }
 
   private async importIdentityProviders(

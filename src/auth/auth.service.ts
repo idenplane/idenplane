@@ -9,6 +9,7 @@ import {
 import { OAuthTokenError } from './oauth-token-error.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
+import { PasswordVerificationService } from '../crypto/password-verification.service.js';
 import {
   ClientAuthenticator,
   ClientAuthError,
@@ -255,6 +256,7 @@ export class AuthService {
     private readonly customAttributesService: CustomAttributesService,
     private readonly userFederationService: UserFederationService,
     private readonly clientAuthenticator: ClientAuthenticator,
+    private readonly passwords: PasswordVerificationService,
     @Optional() private readonly stepUpService?: StepUpService,
     @Optional() private readonly pluginManager?: PluginManagerService,
     @Optional() private readonly smsOtp?: SmsOtpService,
@@ -456,10 +458,12 @@ export class AuthService {
     // Skip local password check for federated users — already authenticated
     // via LDAP above; no `passwordHash` to compare against.
     const skipLocalPwdCheck = !user.passwordHash && !!user.federationLink;
+    // Argon2, bcrypt or a migrated PBKDF2 hash (the same check as the login
+    // page); a migrated one is moved to Argon2id on success.
     const valid =
       skipLocalPwdCheck ||
-      (user.passwordHash &&
-        (await this.crypto.verifyPassword(user.passwordHash, password)));
+      (!!user.passwordHash &&
+        (await this.passwords.verifyUserPassword(user, password)));
     if (!valid) {
       await this.bruteForceService.recordFailure(realm, user.id, ip);
       void this.eventsService.recordLoginEvent({

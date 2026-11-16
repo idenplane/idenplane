@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
-import type { Auth0Export, Auth0User } from './auth0-types.js';
+import type { Auth0Export } from './auth0-types.js';
 import { createEmptyReport, type MigrationReport } from './migration-report.js';
+import { auth0Password } from './password-import.js';
 import { idpSecrets } from '../identity-providers/idp-secrets.js';
 
 export interface Auth0ImportOptions {
@@ -178,8 +179,14 @@ export class Auth0ImporterService {
           report.summary.users.skipped++;
           continue;
         }
+        const { hash, algorithm, warning } = auth0Password(user);
+        if (warning) {
+          report.warnings.push({
+            entity: 'user',
+            message: `User '${username}': ${warning}`,
+          });
+        }
         if (!dryRun) {
-          const { hash, algorithm } = this.extractAuth0Password(user);
           await this.prisma.user.create({
             data: {
               realmId,
@@ -204,24 +211,6 @@ export class Auth0ImporterService {
         });
       }
     }
-  }
-
-  private extractAuth0Password(user: Auth0User): {
-    hash: string | null;
-    algorithm: string;
-  } {
-    // Auth0 exports bcrypt hashes in password_hash field
-    if (user.password_hash) {
-      return { hash: user.password_hash, algorithm: 'bcrypt' };
-    }
-    // Custom password hash format
-    if (user.custom_password_hash) {
-      const cph = user.custom_password_hash;
-      if (cph.algorithm === 'bcrypt') {
-        return { hash: cph.hash.value, algorithm: 'bcrypt' };
-      }
-    }
-    return { hash: null, algorithm: 'argon2' };
   }
 
   private async importConnections(

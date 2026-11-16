@@ -2,7 +2,6 @@ import { Module } from '@nestjs/common';
 import { LoginService } from './login.service.js';
 import { SessionIssuer } from './session-issuer.service.js';
 import { UserFederationModule } from '../user-federation/user-federation.module.js';
-import { MigrationModule } from '../migration/migration.module.js';
 import { CsrfService } from '../common/csrf/csrf.service.js';
 import { AuthFlowCoreModule } from '../auth-flow/auth-flow-core.module.js';
 
@@ -12,7 +11,7 @@ import { AuthFlowCoreModule } from '../auth-flow/auth-flow-core.module.js';
  * LoginModule, so no controller module depends on another.
  */
 @Module({
-  imports: [UserFederationModule, MigrationModule, AuthFlowCoreModule],
+  imports: [UserFederationModule, AuthFlowCoreModule],
   providers: [LoginService, SessionIssuer, CsrfService],
   exports: [LoginService, SessionIssuer, CsrfService],
 })
