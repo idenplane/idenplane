@@ -11,9 +11,11 @@ import { CryptoService } from '../crypto/crypto.service.js';
 import { CreateSamlSpDto } from './dto/create-saml-sp.dto.js';
 import { UpdateSamlSpDto } from './dto/update-saml-sp.dto.js';
 import { LeaderService } from '../cache/leader.service.js';
+import { samlSsoEndpoint } from './saml-metadata.service.js';
 import {
   SamlRequestError,
   assertNoXmlSignature,
+  q,
   parseAuthnRequest,
   spVerificationKey,
   verifyEnvelopedSignature,
@@ -225,7 +227,7 @@ export class SamlIdpService {
     const value = request.issueInstant;
     if (!value || !XS_DATE_TIME.test(value)) {
       throw new SamlRequestError(
-        `IssueInstant "${value ?? ''}" is missing or not an xs:dateTime`,
+        `IssueInstant ${q(value)} is missing or not an xs:dateTime`,
         'AuthnRequest IssueInstant is missing or invalid',
       );
     }
@@ -233,7 +235,7 @@ export class SamlIdpService {
     const time = Date.parse(zoned);
     if (Number.isNaN(time)) {
       throw new SamlRequestError(
-        `IssueInstant "${value}" is not a date`,
+        `IssueInstant ${q(value)} is not a date`,
         'AuthnRequest IssueInstant is missing or invalid',
       );
     }
@@ -247,25 +249,25 @@ export class SamlIdpService {
     const now = Date.now();
     if (issued > now + skew || issued < now - maxAge - skew) {
       throw new SamlRequestError(
-        `IssueInstant ${request.issueInstant} is outside the accepted window`,
+        `IssueInstant ${q(request.issueInstant)} is outside the accepted window`,
         'AuthnRequest has expired or is not yet valid',
       );
     }
   }
 
-  /** The SSO endpoint of a realm, as its metadata publishes it. */
+  /** The SSO endpoint of a realm, exactly as its metadata publishes it. */
   ssoEndpoint(realm: Realm): string {
-    const baseUrl = (
-      process.env['BASE_URL'] ?? 'http://localhost:3000'
-    ).replace(/\/+$/, '');
-    return `${baseUrl}/realms/${realm.name}/protocol/saml`;
+    return samlSsoEndpoint(
+      process.env['BASE_URL'] ?? 'http://localhost:3000',
+      realm.name,
+    );
   }
 
   private checkDestination(realm: Realm, request: SamlAuthnRequest): void {
     if (request.destination === null) return;
     if (request.destination !== this.ssoEndpoint(realm)) {
       throw new SamlRequestError(
-        `Destination ${request.destination} is not ${this.ssoEndpoint(realm)}`,
+        `Destination ${q(request.destination)} is not ${q(this.ssoEndpoint(realm))}`,
         'AuthnRequest Destination does not match this endpoint',
       );
     }
@@ -305,7 +307,7 @@ export class SamlIdpService {
     });
     if (count === 0) {
       this.logger.warn(
-        `SAMLRequest refused: request ID ${request.id} from ${sp.entityId} was already used`,
+        `SAMLRequest refused: request ID ${q(request.id)} from ${q(sp.entityId)} was already used`,
       );
       throw new BadRequestException('AuthnRequest has already been used');
     }

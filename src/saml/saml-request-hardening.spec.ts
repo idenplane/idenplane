@@ -10,6 +10,7 @@ import {
   type MockPrismaService,
 } from '../prisma/prisma.mock.js';
 import { SamlIdpService } from './saml-idp.service.js';
+import { SamlMetadataService } from './saml-metadata.service.js';
 import { parseRedirectQuery } from './saml-request-verifier.js';
 
 /**
@@ -698,6 +699,18 @@ describe('SAML AuthnRequest hardening', () => {
           'AuthnRequest Destination does not match this endpoint',
         ),
       );
+    });
+
+    it('accepts the Location the metadata publishes, whatever BASE_URL looks like', async () => {
+      process.env['BASE_URL'] = 'https://idp.example.com/';
+      const metadata = await new SamlMetadataService(
+        lookupsBackedBy(prisma as any) as any,
+      ).generateMetadata(REALM, process.env['BASE_URL']);
+      const location = /Location="([^"]+)"/.exec(metadata)?.[1];
+      expect(location).toBe(
+        'https://idp.example.com//realms/test-realm/protocol/saml',
+      );
+      await expect(unsigned({ destination: location })).resolves.toBeTruthy();
     });
 
     it('accepts this endpoint as Destination, and no Destination', async () => {

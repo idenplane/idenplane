@@ -107,6 +107,11 @@ export class SamlRequestError extends Error {
 
 const SIGNATURE_FAILED = 'AuthnRequest signature validation failed';
 
+/** A value from the request, quoted and cut short for a log line. */
+export function q(value: string | null | undefined): string {
+  return JSON.stringify(value ?? '').slice(0, 200);
+}
+
 /** The fields of an AuthnRequest, read from one element. */
 export interface SamlAuthnRequest {
   id: string;
@@ -148,7 +153,9 @@ export function parseStrictXml(xml: string): Document {
     throw new SamlRequestError('the document has a DTD');
   }
   const fail = (msg: unknown): never => {
-    throw new SamlRequestError(`malformed XML: ${String(msg)}`);
+    throw new SamlRequestError(
+      `malformed XML: ${q(typeof msg === 'string' ? msg : 'parser error')}`,
+    );
   };
   let doc: Document;
   try {
@@ -157,7 +164,7 @@ export function parseStrictXml(xml: string): Document {
     }).parseFromString(xml, 'text/xml');
   } catch (err) {
     if (err instanceof SamlRequestError) throw err;
-    throw new SamlRequestError(`malformed XML: ${(err as Error).message}`);
+    throw new SamlRequestError(`malformed XML: ${q((err as Error).message)}`);
   }
   checkDocumentStructure(doc);
   return doc;
@@ -201,7 +208,7 @@ function checkDocumentStructure(doc: Document): void {
             if (!ID_ATTRIBUTE_NAMES.has(attr.localName ?? attr.name)) continue;
             if (ids.has(attr.value)) {
               throw new SamlRequestError(
-                `ID "${attr.value}" is used more than once`,
+                `ID ${q(attr.value)} is used more than once`,
               );
             }
             ids.add(attr.value);
@@ -284,7 +291,7 @@ export function extractAuthnRequest(root: Element): SamlAuthnRequest {
   }
   const version = attr(root, 'Version');
   if (version !== null && version !== '2.0') {
-    throw new SamlRequestError(`unsupported SAML version ${version}`);
+    throw new SamlRequestError(`unsupported SAML version ${q(version)}`);
   }
 
   const found = new Map<string, Element>();
@@ -295,12 +302,12 @@ export function extractAuthnRequest(root: Element): SamlAuthnRequest {
     );
     if (index < 0) {
       throw new SamlRequestError(
-        `unexpected element {${child.namespaceURI}}${child.localName} in AuthnRequest`,
+        `unexpected element ${q(`{${child.namespaceURI ?? ''}}${child.localName}`)} in AuthnRequest`,
       );
     }
     if (index <= lastIndex) {
       throw new SamlRequestError(
-        `${child.localName} is repeated or out of order in AuthnRequest`,
+        `${q(child.localName)} is repeated or out of order in AuthnRequest`,
       );
     }
     lastIndex = index;
@@ -341,7 +348,7 @@ export function extractAuthnRequest(root: Element): SamlAuthnRequest {
         classRefs.push(textOf(child, 'AuthnContextClassRef'));
       } else if (!is(child, SAML_ASSERTION_NS, 'AuthnContextDeclRef')) {
         throw new SamlRequestError(
-          `unexpected element ${child.localName} in RequestedAuthnContext`,
+          `unexpected element ${q(child.localName)} in RequestedAuthnContext`,
         );
       }
     }
@@ -442,7 +449,7 @@ function checkEnvelopedSignatureShape(root: Element): Element {
       !is(child, XMLDSIG_NS, 'KeyInfo')
     ) {
       throw new SamlRequestError(
-        `unexpected element ${child.localName} in Signature`,
+        `unexpected element ${q(child.localName)} in Signature`,
         SIGNATURE_FAILED,
       );
     }
@@ -455,7 +462,7 @@ function checkEnvelopedSignatureShape(root: Element): Element {
   );
   if (!ALLOWED_C14N_ALGORITHMS.has(c14n)) {
     throw new SamlRequestError(
-      `canonicalization ${c14n} is not allowed`,
+      `canonicalization ${q(c14n)} is not allowed`,
       SIGNATURE_FAILED,
     );
   }
@@ -464,7 +471,7 @@ function checkEnvelopedSignatureShape(root: Element): Element {
   );
   if (!(sigAlg in ALLOWED_SIGNATURE_ALGORITHMS)) {
     throw new SamlRequestError(
-      `signature algorithm ${sigAlg} is not allowed`,
+      `signature algorithm ${q(sigAlg)} is not allowed`,
       SIGNATURE_FAILED,
     );
   }
@@ -474,14 +481,14 @@ function checkEnvelopedSignatureShape(root: Element): Element {
   const uri = reference.getAttribute('URI');
   if (!rootId || uri !== `#${rootId}`) {
     throw new SamlRequestError(
-      `the signature references "${uri ?? ''}", not the root element`,
+      `the signature references ${q(uri)}, not the root element`,
       SIGNATURE_FAILED,
     );
   }
   const digest = algorithmOf(onlyChild(reference, XMLDSIG_NS, 'DigestMethod'));
   if (!ALLOWED_DIGEST_ALGORITHMS.has(digest)) {
     throw new SamlRequestError(
-      `digest algorithm ${digest} is not allowed`,
+      `digest algorithm ${q(digest)} is not allowed`,
       SIGNATURE_FAILED,
     );
   }
@@ -499,7 +506,7 @@ function checkEnvelopedSignatureShape(root: Element): Element {
       !ALLOWED_TRANSFORMS.has(algorithmOf(transform))
     ) {
       throw new SamlRequestError(
-        `transform ${algorithmOf(transform)} is not allowed`,
+        `transform ${q(algorithmOf(transform))} is not allowed`,
         SIGNATURE_FAILED,
       );
     }
@@ -621,7 +628,7 @@ export function parseRedirectQuery(rawQuery: string): RedirectQuery {
     if (!REDIRECT_PARAMS.includes(name)) continue;
     const key = name as keyof RedirectQuery['raw'];
     if (raw[key] !== undefined) {
-      throw new SamlRequestError(`${name} appears more than once`);
+      throw new SamlRequestError(`${q(name)} appears more than once`);
     }
     raw[key] = eq < 0 ? '' : part.slice(eq + 1);
   }
@@ -655,7 +662,7 @@ export function verifyRedirectSignature(
   const digest = ALLOWED_SIGNATURE_ALGORITHMS[query.sigAlg ?? ''];
   if (!digest) {
     throw new SamlRequestError(
-      `signature algorithm ${query.sigAlg ?? ''} is not allowed`,
+      `signature algorithm ${q(query.sigAlg)} is not allowed`,
       SIGNATURE_FAILED,
     );
   }

@@ -13,6 +13,7 @@ import { SamlIdpService } from '../src/saml/saml-idp.service';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { CachedLookupsService } from '../src/cache/cached-lookups.service';
 import { CryptoService } from '../src/crypto/crypto.service';
+import { LeaderService } from '../src/cache/leader.service';
 import type { SamlServiceProvider } from '@prisma/client';
 
 /**
@@ -204,6 +205,9 @@ describe('SAML AuthnRequest replay and signatures (e2e)', () => {
       where: { spId: unsignedSp.id, requestId: id },
       data: { expiresAt: new Date(Date.now() - 1000) },
     });
+    // The clean-up runs on the elected leader only; this app may not be it
+    // while other test files' apps hold the lock.
+    jest.spyOn(app.get(LeaderService), 'isLeader').mockReturnValue(true);
     await service.cleanupExpiredRequestIds();
     expect(
       await ctx.prisma.samlRequestId.count({

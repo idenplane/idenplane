@@ -2,6 +2,14 @@ import { Injectable } from '@nestjs/common';
 import type { Realm } from '@prisma/client';
 import { CachedLookupsService } from '../cache/cached-lookups.service.js';
 
+/**
+ * A realm's SAML SSO endpoint: the Location the metadata publishes, and so
+ * the only Destination an AuthnRequest may name.
+ */
+export function samlSsoEndpoint(baseUrl: string, realmName: string): string {
+  return `${baseUrl}/realms/${realmName}/protocol/saml`;
+}
+
 @Injectable()
 export class SamlMetadataService {
   constructor(private readonly lookups: CachedLookupsService) {}
@@ -10,7 +18,7 @@ export class SamlMetadataService {
     const signingKey = await this.lookups.activeSigningKey(realm.id);
 
     const entityId = `${baseUrl}/realms/${realm.name}`;
-    const ssoUrl = `${baseUrl}/realms/${realm.name}/protocol/saml`;
+    const ssoUrl = samlSsoEndpoint(baseUrl, realm.name);
 
     // Extract PEM body (strip header/footer and whitespace) for the certificate
     let certBody = '';
