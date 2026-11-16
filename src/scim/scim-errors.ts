@@ -67,6 +67,15 @@ export function isUniqueViolation(error: unknown): boolean {
  * request. 5xx details are hidden in production.
  */
 export function toScimError(exception: unknown): ScimError {
+  const body = describe(exception);
+  if (Number(body.status) >= 500 && process.env.NODE_ENV === 'production') {
+    // As the global filter does: never leak a 5xx's detail in production.
+    return scimErrorBody(Number(body.status), 'Internal server error');
+  }
+  return body;
+}
+
+function describe(exception: unknown): ScimError {
   if (exception instanceof ScimException) {
     return exception.getResponse() as ScimError;
   }
@@ -89,9 +98,8 @@ export function toScimError(exception: unknown): ScimError {
       status === 409 ? 'uniqueness' : undefined,
     );
   }
-  const detail =
-    process.env.NODE_ENV === 'production' || !(exception instanceof Error)
-      ? 'Internal server error'
-      : exception.message;
-  return scimErrorBody(500, detail);
+  return scimErrorBody(
+    500,
+    exception instanceof Error ? exception.message : 'Internal server error',
+  );
 }

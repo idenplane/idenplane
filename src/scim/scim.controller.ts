@@ -30,6 +30,7 @@ import {
   ApiOperation,
   ApiSecurity,
   ApiResponse,
+  ApiParam,
 } from '@nestjs/swagger';
 import type { Request, Response } from 'express';
 import { ScimAuthGuard } from './guards/scim-auth.guard.js';
@@ -100,6 +101,11 @@ function listOf<T>(items: T[]): ScimListResponse<T> {
 
 @ApiTags('SCIM 2.0')
 @Controller('scim/v2')
+@ApiParam({
+  name: 'realmName',
+  required: true,
+  description: 'Realm name (on the realm-scoped routes)',
+})
 @UseFilters(ScimExceptionFilter)
 @UseInterceptors(ScimContentTypeInterceptor)
 export class ScimController {

@@ -107,7 +107,12 @@ export class ScimBulkService {
     }
 
     const resourceType = match[1] as 'Users' | 'Groups';
-    const resourceId = match[2] ? decodeURIComponent(match[2]) : undefined;
+    let resourceId: string | undefined;
+    try {
+      resourceId = match[2] ? decodeURIComponent(match[2]) : undefined;
+    } catch {
+      throw scimBadRequest('invalidPath', `Invalid path: ${path}`);
+    }
     const isUsers = resourceType === 'Users';
     const base = { ...(bulkId ? { bulkId } : {}), method };
 
