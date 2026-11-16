@@ -2,6 +2,14 @@ import { useState, useEffect, type FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
 import { useAuth } from '../hooks/useAuth';
 import apiClient from '../api/client';
+import {
+  loginPasskeyOptions,
+  loginWithCode,
+  loginWithPasskey,
+  type AdminMfaMethod,
+} from '../api/adminMfa';
+import { getPasskey, passkeysSupported } from '../utils/webauthn';
+import { MFA_PAGE } from '../components/StepUpPrompt';
 import PasswordInput from '../components/PasswordInput';
 import { Button, Icons } from '../components/ui';
 
@@ -32,15 +40,38 @@ export function returnPath(state: unknown): string {
   return from;
 }
 
+/** The second step of a sign-in: which factor the admin answers with. */
+interface SecondStep {
+  mfaToken: string;
+  methods: AdminMfaMethod[];
+  method: 'totp' | 'recovery';
+}
+
+/** What a refused second-step answer means for the admin. */
+function secondStepError(err: unknown): { message: string; restart: boolean } {
+  const response = (err as { response?: { status?: number; data?: { message?: unknown } } })
+    .response;
+  const message = typeof response?.data?.message === 'string' ? response.data.message : '';
+  if (response?.status === 429) {
+    return { message: 'Too many attempts. Wait a few minutes and sign in again.', restart: true };
+  }
+  if (/expired|too many attempts|already completed/i.test(message)) {
+    return { message: 'This sign-in has expired. Sign in again.', restart: true };
+  }
+  return { message: 'That code or passkey was not accepted. Try again.', restart: false };
+}
+
 export default function LoginPage() {
   const [mode, setMode] = useState<'credentials' | 'apikey'>('credentials');
+  const [second, setSecond] = useState<SecondStep | null>(null);
+  const [code, setCode] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [apiKey, setApiKey] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [isDemo, setIsDemo] = useState(false);
-  const { login, loginWithCredentials, clearAuthState } = useAuth();
+  const { login, loginWithCredentials, keepToken, clearAuthState } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -69,9 +100,27 @@ export default function LoginPage() {
 
     let success: boolean;
     if (mode === 'credentials') {
-      success = await loginWithCredentials(username, password);
+      const outcome = await loginWithCredentials(username, password);
+      if (outcome.kind === 'mfa') {
+        setSecond({
+          mfaToken: outcome.mfaToken,
+          methods: outcome.methods,
+          method: outcome.methods.includes('totp') ? 'totp' : 'recovery',
+        });
+        setLoading(false);
+        return;
+      }
+      if (outcome.kind === 'signed-in' && outcome.enrolmentRequired) {
+        navigate(MFA_PAGE);
+        return;
+      }
+      success = outcome.kind === 'signed-in';
       if (!success) {
-        setError('Invalid username or password. Please try again.');
+        setError(
+          outcome.kind === 'failed' && outcome.status === 429
+            ? 'Too many attempts. Wait a few minutes and try again.'
+            : 'Invalid username or password. Please try again.',
+        );
       }
     } else {
       success = await login(apiKey);
@@ -84,6 +133,42 @@ export default function LoginPage() {
       navigate(returnPath(location.state));
     }
     setLoading(false);
+  }
+
+  async function answer(submit: () => Promise<string>) {
+    if (!second) return;
+    setError('');
+    setLoading(true);
+    try {
+      keepToken(await submit());
+      navigate(returnPath(location.state));
+    } catch (err) {
+      const refused = secondStepError(err);
+      setError(refused.message);
+      if (refused.restart) {
+        setSecond(null);
+        setPassword('');
+      }
+      setCode('');
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  function submitCode(e: FormEvent) {
+    e.preventDefault();
+    if (!second) return;
+    void answer(() => loginWithCode(second.mfaToken, second.method, code.trim()));
+  }
+
+  function signInWithPasskey() {
+    if (!second) return;
+    void answer(async () =>
+      loginWithPasskey(
+        second.mfaToken,
+        await getPasskey(await loginPasskeyOptions(second.mfaToken)),
+      ),
+    );
   }
 
   function toggleMode() {
@@ -113,9 +198,11 @@ export default function LoginPage() {
             </div>
             <h1 className="text-2xl font-bold tracking-[-0.02em] text-fg">Idenplane Admin</h1>
             <p className="mt-2 text-sm text-muted">
-              {mode === 'credentials'
-                ? 'Sign in with your admin credentials'
-                : 'Enter your admin API key to continue'}
+              {second
+                ? 'Verify it’s you'
+                : mode === 'credentials'
+                  ? 'Sign in with your admin credentials'
+                  : 'Enter your admin API key to continue'}
             </p>
           </div>
 
@@ -132,77 +219,170 @@ export default function LoginPage() {
             </div>
           )}
 
-          <form onSubmit={handleSubmit} className="flex flex-col gap-4">
-            {mode === 'credentials' ? (
-              <>
+          {second ? (
+            <form onSubmit={submitCode} className="flex flex-col gap-4" aria-label="Second factor">
+              <p className="text-sm text-muted">
+                {second.method === 'totp'
+                  ? 'Enter the six-digit code from your authenticator app.'
+                  : 'Enter one of your recovery codes. Each code works once.'}
+              </p>
+              {(second.methods.includes('totp') || second.methods.includes('recovery')) && (
                 <div>
-                  <label htmlFor="username" className={LABEL_CLASS}>
-                    Username
+                  <label htmlFor="mfa-code" className={LABEL_CLASS}>
+                    {second.method === 'totp' ? 'Authenticator code' : 'Recovery code'}
                   </label>
                   <input
-                    id="username"
+                    id="mfa-code"
                     type="text"
-                    value={username}
-                    onChange={(e) => setUsername(e.target.value)}
-                    required
-                    placeholder="Enter your username"
+                    value={code}
+                    onChange={(e) => setCode(e.target.value)}
+                    autoComplete="one-time-code"
+                    inputMode={second.method === 'totp' ? 'numeric' : 'text'}
+                    placeholder={second.method === 'totp' ? '123456' : 'xxxxxx-xxxxxx-xxxxxx-xxxxxx'}
+                    autoFocus
                     className={FIELD_CLASS}
                   />
                 </div>
+              )}
+
+              {error && (
+                <div
+                  role="alert"
+                  aria-live="assertive"
+                  aria-atomic="true"
+                  className="rounded-lg border border-danger-soft bg-danger-soft p-3 text-sm text-danger-fg"
+                >
+                  {error}
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                size="lg"
+                full
+                disabled={loading || !code.trim()}
+                iconRight={loading ? undefined : Icons.ArrowR}
+              >
+                {loading ? 'Verifying...' : 'Verify'}
+              </Button>
+              {second.methods.includes('passkey') && passkeysSupported() && (
+                <Button
+                  type="button"
+                  size="lg"
+                  full
+                  variant="secondary"
+                  icon={Icons.Keys}
+                  onClick={signInWithPasskey}
+                  disabled={loading}
+                >
+                  Use a passkey
+                </Button>
+              )}
+              <div className="flex flex-wrap justify-between gap-2 text-sm">
+                {second.methods.includes('totp') && second.methods.includes('recovery') && (
+                  <button
+                    type="button"
+                    className="font-medium text-accent hover:text-accent-hover"
+                    onClick={() => {
+                      setCode('');
+                      setError('');
+                      setSecond({
+                        ...second,
+                        method: second.method === 'totp' ? 'recovery' : 'totp',
+                      });
+                    }}
+                  >
+                    {second.method === 'totp'
+                      ? 'Use a recovery code instead'
+                      : 'Use the authenticator app'}
+                  </button>
+                )}
+                <button
+                  type="button"
+                  className="font-medium text-muted hover:text-fg"
+                  onClick={() => {
+                    setSecond(null);
+                    setCode('');
+                    setError('');
+                  }}
+                >
+                  Start over
+                </button>
+              </div>
+            </form>
+          ) : (
+            <form onSubmit={handleSubmit} className="flex flex-col gap-4">
+              {mode === 'credentials' ? (
+                <>
+                  <div>
+                    <label htmlFor="username" className={LABEL_CLASS}>
+                      Username
+                    </label>
+                    <input
+                      id="username"
+                      type="text"
+                      value={username}
+                      onChange={(e) => setUsername(e.target.value)}
+                      required
+                      placeholder="Enter your username"
+                      className={FIELD_CLASS}
+                    />
+                  </div>
+                  <div>
+                    <label htmlFor="password" className={LABEL_CLASS}>
+                      Password
+                    </label>
+                    <PasswordInput
+                      id="password"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      placeholder="Enter your password"
+                      className={FIELD_CLASS}
+                    />
+                  </div>
+                </>
+              ) : (
                 <div>
-                  <label htmlFor="password" className={LABEL_CLASS}>
-                    Password
+                  <label htmlFor="apiKey" className={LABEL_CLASS}>
+                    Admin API Key
                   </label>
                   <PasswordInput
-                    id="password"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
+                    id="apiKey"
+                    value={apiKey}
+                    onChange={(e) => setApiKey(e.target.value)}
                     required
-                    placeholder="Enter your password"
+                    placeholder="Enter your API key"
                     className={FIELD_CLASS}
                   />
                 </div>
-              </>
-            ) : (
-              <div>
-                <label htmlFor="apiKey" className={LABEL_CLASS}>
-                  Admin API Key
-                </label>
-                <PasswordInput
-                  id="apiKey"
-                  value={apiKey}
-                  onChange={(e) => setApiKey(e.target.value)}
-                  required
-                  placeholder="Enter your API key"
-                  className={FIELD_CLASS}
-                />
-              </div>
-            )}
+              )}
 
-            {error && (
-              <div
-                role="alert"
-                aria-live="assertive"
-                aria-atomic="true"
-                className="rounded-lg border border-danger-soft bg-danger-soft p-3 text-sm text-danger-fg"
+              {error && (
+                <div
+                  role="alert"
+                  aria-live="assertive"
+                  aria-atomic="true"
+                  className="rounded-lg border border-danger-soft bg-danger-soft p-3 text-sm text-danger-fg"
+                >
+                  {error}
+                </div>
+              )}
+
+              <Button
+                type="submit"
+                size="lg"
+                full
+                disabled={loading || (mode === 'credentials' ? !username || !password : !apiKey)}
+                iconRight={loading ? undefined : Icons.ArrowR}
+                className="mt-1"
               >
-                {error}
-              </div>
-            )}
+                {loading ? 'Verifying...' : 'Sign In'}
+              </Button>
+            </form>
+          )}
 
-            <Button
-              type="submit"
-              size="lg"
-              full
-              disabled={loading || (mode === 'credentials' ? !username || !password : !apiKey)}
-              iconRight={loading ? undefined : Icons.ArrowR}
-              className="mt-1"
-            >
-              {loading ? 'Verifying...' : 'Sign In'}
-            </Button>
-          </form>
-
-          <div className="mt-5 border-t border-line pt-5 text-center">
+          <div className="mt-5 border-t border-line pt-5 text-center" hidden={!!second}>
             <button
               type="button"
               onClick={toggleMode}
