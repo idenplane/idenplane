@@ -248,8 +248,12 @@ describe('matchesRedirectUri (property-based)', () => {
           const reg = `http://${host}${registeredPort === undefined ? '' : `:${registeredPort}`}${rest}`;
           const used = `http://${host}:${usedPort}${rest}`;
           expect(matchesRedirectUri(used, [reg])).toBe(true);
-          // Anything else that differs still fails: more text, https.
-          expect(matchesRedirectUri(`${used}${extra}`, [reg])).toBe(false);
+          // Anything else that differs still fails: more text, https. With
+          // no path, appended digits only extend the port (`:1` + `0` is
+          // port 10), which is the same loopback URI on another port.
+          if (!(rest === '' && /^\d/.test(extra))) {
+            expect(matchesRedirectUri(`${used}${extra}`, [reg])).toBe(false);
+          }
           expect(
             matchesRedirectUri(`https://${host}:${usedPort}${rest}`, [reg]),
           ).toBe(false);
