@@ -22,7 +22,7 @@ Most realm endpoints require super-admin role access:
 -H "x-admin-api-key: your-api-key-here"
 ```
 
-Realms with `super-admin` role can manage all realms. Regular admin users can only manage their assigned realm.
+Admins with the `super-admin` role (and the admin API key) can manage all realms. A realm admin can list and read the realms assigned to them; creating, updating, deleting and importing realms needs `super-admin`.
 
 ## List Realms
 
@@ -30,7 +30,7 @@ Realms with `super-admin` role can manage all realms. Regular admin users can on
 GET /admin/realms
 ```
 
-Returns all realms in the system.
+Returns the realms the caller may read, as a JSON array.
 
 ### Request Example
 
@@ -42,47 +42,24 @@ curl -X GET "http://localhost:3000/admin/realms" \
 ### Response
 
 ```json
-{
-  "data": [
-    {
-      "id": "realm-uuid-123",
-      "name": "master",
-      "displayName": "Master Realm",
-      "displayNameHtml": "<b>Master Realm</b>",
-      "enabled": true,
-      "registrationAllowed": true,
-      "loginWithEmailAllowed": true,
-      "duplicateEmailsAllowed": false,
-      "passwordPolicy": "length(8) and specialChar(1) and digit(1)",
-      "accessTokenLifespan": 300,
-      "refreshTokenLifespan": 1800,
-      "ssoSessionIdleTimeout": 1800,
-      "ssoSessionMaxLifespan": 36000,
-      "offlineSessionIdleTimeout": 2592000,
-      "createdAt": "2023-01-01T00:00:00Z",
-      "updatedAt": "2024-01-01T00:00:00Z"
-    },
-    {
-      "id": "realm-uuid-456",
-      "name": "acme-corp",
-      "displayName": "ACME Corporation",
-      "displayNameHtml": "<b>ACME Corporation</b>",
-      "enabled": true,
-      "registrationAllowed": false,
-      "loginWithEmailAllowed": true,
-      "duplicateEmailsAllowed": false,
-      "passwordPolicy": "length(12) and specialChar(2) and upperChar(1)",
-      "accessTokenLifespan": 600,
-      "refreshTokenLifespan": 3600,
-      "ssoSessionIdleTimeout": 3600,
-      "ssoSessionMaxLifespan": 86400,
-      "offlineSessionIdleTimeout": 604800,
-      "createdAt": "2024-01-15T00:00:00Z",
-      "updatedAt": "2024-01-15T00:00:00Z"
-    }
-  ]
-}
+[
+  {
+    "id": "realm-uuid-123",
+    "name": "master",
+    "displayName": "Master Realm",
+    "enabled": true,
+    "registrationAllowed": true,
+    "accessTokenLifespan": 300,
+    "refreshTokenLifespan": 1800,
+    "offlineTokenLifespan": 2592000,
+    "...": "...",
+    "createdAt": "2023-01-01T00:00:00Z",
+    "updatedAt": "2024-01-01T00:00:00Z"
+  }
+]
 ```
+
+Each entry carries all realm settings except secrets; the example is shortened.
 
 ## Create Realm
 
@@ -98,28 +75,31 @@ Creates a new realm. Requires `super-admin` role.
 |-------|------|---------|-------------|
 | `name` | string | Yes | Unique realm name (lowercase, no spaces) |
 | `displayName` | string | No | Human-readable name |
-| `displayNameHtml` | string | No | HTML-formatted display name |
 | `enabled` | boolean | No | Enable realm (default: true) |
-| `registrationAllowed` | boolean | No | Allow user self-registration |
+| `registrationAllowed` | boolean | No | Allow user self-registration (default: **true**) |
 | `captchaEnabled` | boolean | No | Require a CAPTCHA for self-registration. When `true`, `captchaProvider` and that provider's site key and secret key are required (`400` otherwise); the secret may instead come from `RECAPTCHA_SECRET_KEY` / `HCAPTCHA_SECRET_KEY`. See [Self-Registration and CAPTCHA](/guides/registration-captcha) |
 | `captchaProvider` | string | No | `recaptcha` (reCAPTCHA v3) or `hcaptcha` |
 | `recaptchaSiteKey`, `recaptchaSecretKey` | string | No | reCAPTCHA v3 keys (the secret is encrypted at rest) |
 | `hcaptchaSiteKey`, `hcaptchaSecretKey` | string | No | hCaptcha keys (the secret is encrypted at rest) |
 | `captchaScoreThreshold` | number | No | Lowest reCAPTCHA v3 score accepted, 0 to 1 (default `0.5`) |
-| `loginWithEmailAllowed` | boolean | No | Allow login with email as username |
-| `duplicateEmailsAllowed` | boolean | No | Allow duplicate emails across users |
-| `passwordPolicy` | string | No | Password policy configuration |
-| `accessTokenLifespan` | integer | No | Access token lifetime in seconds |
-| `refreshTokenLifespan` | integer | No | Refresh token lifetime in seconds |
-| `ssoSessionIdleTimeout` | integer | No | SSO session idle timeout |
-| `ssoSessionMaxLifespan` | integer | No | Maximum SSO session lifetime |
-| `offlineSessionIdleTimeout` | integer | No | Offline session idle timeout |
+| `passwordMinLength` | integer | No | Minimum password length (default `8`) |
+| `passwordRequireUppercase`, `passwordRequireLowercase`, `passwordRequireDigits`, `passwordRequireSpecialChars` | boolean | No | Character class requirements (default `false`) |
+| `passwordHistoryCount` | integer | No | Previous passwords that cannot be reused (default `0`) |
+| `passwordMaxAgeDays` | integer | No | Password expiry in days (default `0`, never) |
+| `accessTokenLifespan` | integer | No | Access token lifetime in seconds (default `300`) |
+| `refreshTokenLifespan` | integer | No | Refresh token lifetime in seconds (default `1800`) |
+| `offlineTokenLifespan` | integer | No | Offline (`offline_access`) refresh token lifetime in seconds (default `2592000`) |
+| `maxSessionsPerUser` | integer | No | Concurrent sessions per user (default `10`) |
 | `bruteForceEnabled` | boolean | No | Temporary lockout after repeated failed sign-ins. Defaults to `true` for a new realm. |
 | `maxLoginFailures` | integer | No | Failures within `failureResetTime` that lock the account (default `10`) |
 | `lockoutDuration` | integer | No | Lockout length in seconds (default `300`) |
 | `failureResetTime` | integer | No | Window in seconds in which failures are counted (default `900`) |
-| `smtpConfig` | object | No | SMTP configuration |
-| `theme` | object | No | Theme configuration |
+| `permanentLockoutAfter` | integer | No | Lockouts after which the account is disabled; `0` (default) never disables it |
+| `smtpHost`, `smtpPort`, `smtpUser`, `smtpPassword`, `smtpFrom`, `smtpSecure` | | No | SMTP settings (`smtpPort` default `587`) |
+| `emailProvider`, `emailProviderConfig` | | No | `smtp`, `resend`, `sendgrid`, `mailgun` or `postmark`, and its settings |
+| `themeName`, `loginTheme`, `accountTheme`, `emailTheme`, `theme` | | No | Theme selection and color overrides |
+
+The DTO has more settings (MFA, WebAuthn, SMS, magic links, events, locales, sessions, CAPTCHA above); the server's `/api` lists them all. A field the DTO does not know is rejected with `400`.
 
 ### Request Example
 
@@ -131,8 +111,8 @@ curl -X POST "http://localhost:3000/admin/realms" \
     "name": "partner-portal",
     "displayName": "Partner Portal",
     "registrationAllowed": false,
-    "loginWithEmailAllowed": true,
-    "passwordPolicy": "length(10) and specialChar(1)",
+    "passwordMinLength": 10,
+    "passwordRequireSpecialChars": true,
     "accessTokenLifespan": 600,
     "bruteForceEnabled": true,
     "maxLoginFailures": 5
@@ -148,17 +128,17 @@ curl -X POST "http://localhost:3000/admin/realms" \
   "displayName": "Partner Portal",
   "enabled": true,
   "registrationAllowed": false,
-  "loginWithEmailAllowed": true,
-  "duplicateEmailsAllowed": false,
-  "passwordPolicy": "length(10) and specialChar(1)",
   "accessTokenLifespan": 600,
   "refreshTokenLifespan": 1800,
-  "ssoSessionIdleTimeout": 1800,
-  "ssoSessionMaxLifespan": 36000,
-  "offlineSessionIdleTimeout": 2592000,
+  "offlineTokenLifespan": 2592000,
+  "passwordMinLength": 10,
+  "passwordRequireSpecialChars": true,
   "bruteForceEnabled": true,
   "maxLoginFailures": 5,
-  "failureResetTime": 300,
+  "lockoutDuration": 300,
+  "failureResetTime": 900,
+  "permanentLockoutAfter": 0,
+  "...": "...",
   "createdAt": "2024-02-01T10:00:00Z",
   "updatedAt": "2024-02-01T10:00:00Z"
 }
@@ -186,20 +166,19 @@ curl -X GET "http://localhost:3000/admin/realms/partner-portal" \
   "id": "realm-uuid-789",
   "name": "partner-portal",
   "displayName": "Partner Portal",
-  "displayNameHtml": "<b>Partner Portal</b>",
   "enabled": true,
   "registrationAllowed": false,
-  "loginWithEmailAllowed": true,
-  "duplicateEmailsAllowed": false,
-  "passwordPolicy": "length(10) and specialChar(1)",
   "accessTokenLifespan": 600,
   "refreshTokenLifespan": 1800,
-  "ssoSessionIdleTimeout": 1800,
-  "ssoSessionMaxLifespan": 36000,
-  "offlineSessionIdleTimeout": 2592000,
+  "offlineTokenLifespan": 2592000,
+  "passwordMinLength": 10,
+  "passwordRequireSpecialChars": true,
   "bruteForceEnabled": true,
   "maxLoginFailures": 5,
-  "failureResetTime": 300,
+  "lockoutDuration": 300,
+  "failureResetTime": 900,
+  "permanentLockoutAfter": 0,
+  "...": "...",
   "createdAt": "2024-02-01T10:00:00Z",
   "updatedAt": "2024-02-01T10:00:00Z"
 }
@@ -211,7 +190,7 @@ curl -X GET "http://localhost:3000/admin/realms/partner-portal" \
 PUT /admin/realms/:realmName
 ```
 
-Updates an existing realm. Requires `super-admin` role. Replaces all configuration.
+Updates an existing realm. Requires `super-admin` role. Only the fields you send change: `PUT` and `PATCH` behave the same. The name cannot be changed; sending `name` is rejected with `400`.
 
 ### Request Example
 
@@ -220,12 +199,9 @@ curl -X PUT "http://localhost:3000/admin/realms/partner-portal" \
   -H "x-admin-api-key: your-api-key-here" \
   -H "Content-Type: application/json" \
   -d '{
-    "name": "partner-portal",
     "displayName": "Partner Portal Updated",
-    "enabled": true,
     "registrationAllowed": false,
-    "loginWithEmailAllowed": true,
-    "passwordPolicy": "length(12) and specialChar(2)"
+    "passwordMinLength": 12
   }'
 ```
 
@@ -245,7 +221,7 @@ curl -X PATCH "http://localhost:3000/admin/realms/partner-portal" \
   -H "Content-Type: application/json" \
   -d '{
     "registrationAllowed": true,
-    "passwordPolicy": "length(8)"
+    "passwordMinLength": 8
   }'
 ```
 
@@ -486,21 +462,25 @@ curl -X GET "http://localhost:3000/admin/realms/themes" \
 ### Response
 
 ```json
-{
-  "data": [
-    {
-      "name": "idenplane",
-      "displayName": "Idenplane Default",
-      "types": ["login", "account", "email"]
-    },
-    {
-      "name": "keycloak",
-      "displayName": "Keycloak Compatible",
-      "types": ["login", "account", "email"]
-    }
-  ]
-}
+[
+  {
+    "name": "idenplane",
+    "displayName": "Idenplane (Default)",
+    "description": "...",
+    "colors": { "...": "..." },
+    "warnings": []
+  },
+  {
+    "name": "midnight",
+    "displayName": "Midnight",
+    "description": "...",
+    "colors": { "...": "..." },
+    "warnings": []
+  }
+]
 ```
+
+The built-in themes are `idenplane` and `midnight`.
 
 ## Send Test Email
 
@@ -533,9 +513,12 @@ curl -X POST "http://localhost:3000/admin/realms/partner-portal/email/test" \
 
 ```json
 {
+  "success": true,
   "message": "Test email sent successfully"
 }
 ```
+
+A missing `to` or a realm without e-mail settings also returns HTTP 200, with `{"success": false, "error": "..."}`. `POST /admin/realms/:realmName/smtp/test` sends a test message to the realm's own sender address.
 
 ## Realm Object Schema
 
@@ -544,32 +527,32 @@ curl -X POST "http://localhost:3000/admin/realms/partner-portal/email/test" \
   "id": "string (UUID)",
   "name": "string",
   "displayName": "string",
-  "displayNameHtml": "string",
   "enabled": "boolean",
   "registrationAllowed": "boolean",
-  "loginWithEmailAllowed": "boolean",
-  "duplicateEmailsAllowed": "boolean",
-  "passwordPolicy": "string",
+  "passwordMinLength": "integer",
+  "passwordRequireUppercase": "boolean",
+  "passwordRequireLowercase": "boolean",
+  "passwordRequireDigits": "boolean",
+  "passwordRequireSpecialChars": "boolean",
+  "passwordHistoryCount": "integer",
+  "passwordMaxAgeDays": "integer",
   "accessTokenLifespan": "integer (seconds)",
   "refreshTokenLifespan": "integer (seconds)",
-  "ssoSessionIdleTimeout": "integer (seconds)",
-  "ssoSessionMaxLifespan": "integer (seconds)",
-  "offlineSessionIdleTimeout": "integer (seconds)",
+  "offlineTokenLifespan": "integer (seconds)",
+  "maxSessionsPerUser": "integer",
   "bruteForceEnabled": "boolean",
   "maxLoginFailures": "integer",
+  "lockoutDuration": "integer (seconds)",
   "failureResetTime": "integer (seconds)",
-  "smtpConfig": {
-    "host": "string",
-    "port": "integer",
-    "from": "string",
-    "fromName": "string",
-    "replyTo": "string"
-  },
-  "theme": {
-    "login": "string",
-    "account": "string",
-    "email": "string"
-  },
+  "permanentLockoutAfter": "integer",
+  "smtpHost": "string",
+  "smtpPort": "integer",
+  "smtpFrom": "string",
+  "smtpSecure": "boolean",
+  "loginTheme": "string",
+  "accountTheme": "string",
+  "emailTheme": "string",
+  "...": "more settings; see /api",
   "createdAt": "string (ISO 8601)",
   "updatedAt": "string (ISO 8601)"
 }
@@ -585,23 +568,18 @@ curl -X POST "http://localhost:3000/admin/realms/partner-portal/email/test" \
 | 404 | `NotFound` | Realm not found |
 | 409 | `Conflict` | Realm name already exists |
 
-## Password Policy Syntax
+## Password Policy
 
-Password policies use a simple DSL format:
+The password policy is a set of realm fields, not a policy string:
 
-| Policy | Example | Description |
-|--------|---------|-------------|
-| `length(N)` | `length(8)` | Minimum password length |
-| `specialChar(N)` | `specialChar(1)` | Required special characters |
-| `upperChar(N)` | `upperChar(1)` | Required uppercase letters |
-| `digit(N)` | `digit(1)` | Required digits |
-| `lowerChar(N)` | `lowerChar(1)` | Required lowercase letters |
-| `regex(PATTERN)` | `regex([a-z])` | Regex pattern requirement |
-| `notUsername()` | `notUsername()` | Cannot contain username |
-| `notEmail()` | `notEmail()` | Cannot contain email |
+| Field | Default | Description |
+|-------|---------|-------------|
+| `passwordMinLength` | `8` | Minimum password length |
+| `passwordRequireUppercase` | `false` | At least one uppercase letter |
+| `passwordRequireLowercase` | `false` | At least one lowercase letter |
+| `passwordRequireDigits` | `false` | At least one digit |
+| `passwordRequireSpecialChars` | `false` | At least one special character |
+| `passwordHistoryCount` | `0` | Previous passwords that cannot be reused |
+| `passwordMaxAgeDays` | `0` | Days until a password expires; `0` never |
 
-Combine with `and`:
-
-```
-passwordPolicy: "length(8) and specialChar(1) and digit(1) and notUsername()"
-```
+Passwords are hashed with Argon2id.
