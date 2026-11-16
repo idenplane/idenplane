@@ -880,6 +880,8 @@ export const EXCLUDED_MODELS: Record<string, string> = {
   AdminRevokedToken: 'admin token deny-list; ' + RUNTIME,
   AdminRealmAssignment:
     'which master realm admins manage the realm: instance access control, not realm data',
+  AdminSecurityPolicy:
+    'server-wide admin console MFA requirement: instance security policy, not realm data',
   PendingAction: 'in-flight login/MFA/consent state; ' + RUNTIME,
   StepUpRecord: 'step-up session state; ' + RUNTIME,
 
