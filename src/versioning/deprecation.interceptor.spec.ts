@@ -56,8 +56,9 @@ describe('DeprecationInterceptor', () => {
 
         expect(response.headers['Deprecation']).toBeDefined();
         expect(response.headers['Sunset']).toBeDefined();
-        expect(response.headers['Link']).toContain('/api/v1' + path);
-        expect(response.headers['Link']).toContain('successor-version');
+        // /api/v1/admin/* is not served yet, so there is no successor to
+        // link to; a Link header would point at a 404.
+        expect(response.headers['Link']).toBeUndefined();
       },
     );
   });

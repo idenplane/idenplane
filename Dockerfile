@@ -5,8 +5,9 @@
 # surfaced because docker-publish.yml's actual tag-generation bug (fixed
 # separately) had been silently preventing this stage from ever running on a
 # push to main. Tracked upstream: https://github.com/prisma/prisma/issues/29464.
-# Pinned to 22 (not just reverted) to match what CI's actions/setup-node already
-# tests against everywhere else in this repo — re-bump once that issue closes.
+# The image stays on Node 24 (the LTS every CI job tests with through
+# actions/setup-node) rather than 25; move on once that issue is closed and a
+# newer LTS is tested in CI.
 # Stage 1: Dependencies
 FROM node:24-alpine AS deps
 WORKDIR /app
@@ -59,16 +60,24 @@ WORKDIR /app
 # server — the rollback is broken exactly when it is needed. An older client is
 # no better: pg_dump refuses to dump a newer server outright.
 #
-# Alpine's default postgresql-client tracks the newest release, so pinning is
-# required rather than optional. PG_MAJOR must match the PostgreSQL server this
-# image will be pointed at; docker-compose.yml ships postgres:16-alpine.
-# The application also verifies this at runtime (pre-validation check
-# `pg_client_version`) and refuses to upgrade on a mismatch, so a wrong value
-# here fails loudly rather than silently disabling rollback.
-ARG PG_MAJOR=16
-RUN apk add --no-cache "postgresql${PG_MAJOR}-client" \
-    && pg_dump --version \
-    && pg_restore --version
+# Idenplane supports PostgreSQL 16 and later, and docker-compose.yml ships 16
+# while the Helm chart's bundled database is 17. So the image installs one
+# client per supported server major, side by side: Alpine keeps each under
+# /usr/libexec/postgresqlN. At runtime DatabaseBackupService reads the server's
+# major version and runs the matching pg_dump / pg_restore from that directory
+# (PG_BIN_DIR overrides it). The pre-validation check `pg_client_version` still
+# compares the chosen client with the server and refuses to upgrade on a
+# mismatch, so an unsupported server major fails loudly rather than silently
+# disabling rollback.
+ARG PG_CLIENT_MAJORS="16 17 18"
+RUN set -eux; \
+    for v in ${PG_CLIENT_MAJORS}; do \
+      apk add --no-cache "postgresql${v}-client"; \
+      "/usr/libexec/postgresql${v}/pg_dump" --version | grep -q " ${v}\."; \
+      "/usr/libexec/postgresql${v}/pg_restore" --version | grep -q " ${v}\."; \
+    done; \
+    pg_dump --version; \
+    pg_restore --version
 
 # Manifests + prisma schema/config first, so `npm ci`'s postinstall
 # (`prisma generate`) has what it needs; then a clean production-only
