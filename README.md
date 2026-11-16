@@ -61,7 +61,6 @@ Most identity solutions are either too complex to self-host (Java, heavy runtime
 | **Custom Auth Flows (experimental)** | Flow configuration and execution engine; not yet integrated into the normal login path |
 | **Single Sign-On** | Browser-based SSO across all clients in a realm |
 | **SCIM 2.0** | Complete Identity provisioning with Users, Groups, and Service Providers |
-| **GraphQL API** | Full GraphQL API for users, realms, clients, and organizations |
 
 ### Identity Management
 
@@ -571,7 +570,6 @@ Idenplane/
 │   ├── stats/                     # Analytics & statistics
 │   ├── sms/                       # SMS OTP provider
 │   ├── metrics/                   # Prometheus metrics
-│   ├── graphql/                   # GraphQL API
 │   ├── health/                    # Health checks
 │   ├── email/                     # SMTP email service
 │   ├── verification/              # Email verification

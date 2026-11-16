@@ -46,7 +46,7 @@ The backend has around 60 NestJS modules under `src/`, each a self-contained `*.
 | **Non-human identity** | `nhi`, `service-accounts`, `organizations` |
 | **Extensibility** | `plugins`, `theme`, `custom-attributes` |
 | **Admin-facing** | `admin-auth`, `authorization` (admin RBAC), `webhooks`, `events`, `stats`, `consent`, `setup-wizard` |
-| **Infrastructure** | `prisma`, `redis`, `cache`, `crypto`, `rate-limit`, `cors`, `email`, `sms`, `graphql`, `metrics`, `health`, `database`, `upgrade`, `versioning`, `verification` |
+| **Infrastructure** | `prisma`, `redis`, `cache`, `crypto`, `rate-limit`, `cors`, `email`, `sms`, `metrics`, `health`, `database`, `upgrade`, `versioning`, `verification` |
 | **Cross-cutting** | `common` (guards, decorators, filters, utils shared across modules) |
 
 If you're not sure which module owns something, `grep -rl` for the Prisma model name is usually faster than guessing from the list above — most modules map closely to one or two Prisma models.

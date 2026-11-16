@@ -69,9 +69,8 @@ export class AdminAuthorizationGuard implements CanActivate {
   }
 
   async canActivate(context: ExecutionContext): Promise<boolean> {
-    // Only HTTP admin routes exist. The GraphQL admin module (src/graphql)
-    // is not mounted, and /ws/events is a raw WebSocket for end users, not a
-    // Nest gateway. Anything else that ever reaches a guard is refused until
+    // Only HTTP admin routes exist: there is no GraphQL or RPC admin API, and
+    // /ws/events is a raw WebSocket for end users, not a Nest gateway. Anything else that ever reaches a guard is refused until
     // it gets an authorization design of its own.
     if (context.getType() !== 'http') {
       throw new ForbiddenException('Admin authorization covers HTTP only');
