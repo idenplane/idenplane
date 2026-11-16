@@ -113,7 +113,7 @@ func (d *DiscoveryClient) fetch(ctx context.Context) (*OpenIDConfiguration, erro
 
 	resp, err := d.config.httpClient().Do(req)
 	if err != nil {
-		return nil, ErrNetworkError("discovery fetch failed", err)
+		return nil, requestError(ctx, "discovery fetch failed", err)
 	}
 	defer resp.Body.Close()
 
@@ -123,7 +123,7 @@ func (d *DiscoveryClient) fetch(ctx context.Context) (*OpenIDConfiguration, erro
 
 	body, err := io.ReadAll(resp.Body)
 	if err != nil {
-		return nil, ErrNetworkError("read discovery body", err)
+		return nil, requestError(ctx, "read discovery body", err)
 	}
 
 	var cfg OpenIDConfiguration

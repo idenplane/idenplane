@@ -251,7 +251,7 @@ func (c *Client) doRequest(ctx context.Context, method, path string, body any) (
 	}
 	resp, err := c.config.httpClient().Do(req)
 	if err != nil {
-		return nil, ErrNetworkError("request failed", err)
+		return nil, requestError(ctx, "request failed", err)
 	}
 	return resp, nil
 }
@@ -264,6 +264,11 @@ type Error struct {
 	Message string
 	// Cause is the underlying error, if any.
 	Cause error
+
+	// callerContextDone records that the caller's context was already
+	// cancelled or past its deadline when the request failed, so retrying
+	// with that context cannot succeed.
+	callerContextDone bool
 }
 
 // ErrorCode represents an Idenplane error code.
@@ -360,14 +365,52 @@ func ErrGroupNotFound(id string) *Error {
 	return &Error{Code: ErrCodeGroupNotFound, Message: fmt.Sprintf("Group not found: %s", id)}
 }
 
-// IsRetryable returns true if the error is retryable (network error or server error).
+// requestError wraps a failure to send a request or read its response. If
+// the caller's context is already done, the failure is the caller's doing
+// (cancellation or their deadline), not the network's, and the error is
+// marked as not retryable.
+func requestError(ctx context.Context, message string, cause error) *Error {
+	e := ErrNetworkError(message, cause)
+	if ctx != nil && ctx.Err() != nil {
+		e.callerContextDone = true
+	}
+	return e
+}
+
+// payloadError reports a response body that could not be decoded. A body cut
+// short because the caller's context ended is reported like requestError;
+// anything else is a server error, as before.
+func payloadError(ctx context.Context, message string, cause error) *Error {
+	if ctx != nil && ctx.Err() != nil {
+		return requestError(ctx, message, cause)
+	}
+	return ErrServerError(message + ": " + cause.Error())
+}
+
+// IsRetryable reports whether retrying the operation may succeed: network
+// errors and server errors are retryable.
+//
+// It returns false when the failure was caused by the caller's own context:
+// context.Canceled, or context.DeadlineExceeded of the context passed to the
+// SDK call. Retrying with the same context would fail again, and a cancelled
+// operation was not meant to continue. A timeout of the HTTP client itself
+// (http.Client.Timeout) is still a retryable network error.
+//
+// For an error that did not come from this SDK, IsRetryable returns false for
+// context.Canceled and context.DeadlineExceeded and true otherwise.
 func IsRetryable(err error) bool {
 	if err == nil {
 		return false
 	}
+	if errors.Is(err, context.Canceled) {
+		return false
+	}
 	var idenplaneErr *Error
 	if errors.As(err, &idenplaneErr) {
+		if idenplaneErr.callerContextDone {
+			return false
+		}
 		return idenplaneErr.Code == ErrCodeNetworkError || idenplaneErr.Code == ErrCodeServerError
 	}
-	return true
+	return !errors.Is(err, context.DeadlineExceeded)
 }
