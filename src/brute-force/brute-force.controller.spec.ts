@@ -55,13 +55,15 @@ describe('BruteForceController', () => {
   });
 
   describe('getLockedUsers', () => {
-    it('should call service.getLockedUsers with realm id', () => {
+    it('should call service.getLockedUsers with realm id and return its result', async () => {
       const lockedUsers = [
         { userId: 'user-1', username: 'locked-user', failures: 5 },
       ];
       bruteForceService.getLockedUsers.mockResolvedValue(lockedUsers);
 
-      const result = controller.getLockedUsers(realm);
+      await expect(controller.getLockedUsers(realm)).resolves.toEqual(
+        lockedUsers,
+      );
 
       expect(bruteForceService.getLockedUsers).toHaveBeenCalledWith('realm-1');
     });

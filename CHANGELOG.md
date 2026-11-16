@@ -9,6 +9,37 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-16
+
+A maintenance release:
+- all open GitHub Code Quality findings are resolved, which uncovered two real bugs: `idenplane upgrade` could restore the backup after a successful migration, and the Next.js example's session restore crashed on a read error;
+- dependencies are updated, including NestJS 12.5 and `@peculiar/x509` 3.
+
+No configuration or upgrade steps are needed when coming from 0.9.0.
+
+### Changed
+- **Dependencies updated.** None of these updates closes a known vulnerability: there were no open Dependabot alerts.
+  - **`@peculiar/x509` 2.2.0 → 3.1.0.** It parses and generates the certificates for mTLS client authentication (RFC 8705), certificate-bound tokens and NHI certificates. Version 3 is ESM-only and loads through Node 24's `require(esm)`. It also rejects DER input that has data after the certificate. Every certificate Idenplane passes to it has already been parsed and re-encoded by Node's `X509Certificate`, so mTLS and NHI behaviour is unchanged. `@simplewebauthn/server` still uses x509 2 and its own copy of the ASN.1 libraries. A unit test now checks that the two versions stay separate in `node_modules` and don't share or duplicate the schema registry.
+  - **Server:**
+    - NestJS (`@nestjs/common`, `core`, `platform-express`, `testing`) 12.4.0 → 12.5.0. NestJS now caps multipart requests at 1000 parts by default.
+    - `@simplewebauthn/server` 14.0.3 → 14.1.0.
+    - `nodemailer` 10.3.1 → 10.5.0.
+    - Dev tools: `prettier` 3.10.1, `supertest` 7.3.2, `typescript-eslint` 8.72.2.
+  - **Admin console:**
+    - `@tanstack/react-query` 5.107.1.
+    - `axios` 1.21.1.
+    - Dev tools: `vite` 8.3.8, `@vitejs/plugin-react` 6.3.0, `msw` 3.0.5, `@testing-library/user-event` 14.6.10, `typescript-eslint` 8.72.2.
+  - **Java SDK:**
+    - Jackson 2.22 → 2.23. `jackson-databind`, `jackson-core` and `jackson-annotations` are updated together.
+    - The Maven wrapper uses Maven 3.10.1.
+  - **Examples:**
+    - The Next.js quickstart uses `next` and `eslint-config-next` 16.4.6.
+    - The vanilla JS quickstart uses `idenplane-sdk` 1.1.0.
+
+### Fixed
+- **Next.js quickstart session restore no longer crashes on a read error.** `scripts/session-maintenance.mjs restore` piped `pg_restore`'s output into `psql` with `.pipe()`, which ignores errors on the source stream. A read error escaped as an unhandled `'error'` event and killed the process instead of reporting a failed restore. The restore now uses `stream/promises` `pipeline`. On any stream error it stops `pg_restore`, never commits the transaction, and fails with the usual "transaction was not committed" message. The underlying error is kept as its `cause`.
+- **`idenplane upgrade` no longer restores the backup after a successful migration.** The CLI wrapped `prisma migrate deploy` and the post-upgrade health report in one `try`. Its `catch` is the "migration failed" path, which restores the pre-upgrade backup. So any error while checking or printing health after the migrations were applied would have restored the old backup over the upgraded database. Only a failed `prisma migrate deploy` now triggers the restore. A later failure reports that the migrations were applied, attempts no rollback, and exits with code 1.
+
 ## [0.9.0] - 2026-11-14
 
 A security release that enforces admin roles. Until now most admin routes checked only that the caller was an admin: `view-only` admins could change everything, and `realm-admin` accounts were not limited to any realm (GHSA-424c-q96v-g3q7). Now:

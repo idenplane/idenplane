@@ -9,7 +9,7 @@
  */
 
 import http from 'k6/http';
-import { check, group, sleep } from 'k6';
+import { check } from 'k6';
 import { Rate, Trend, Gauge, Counter } from 'k6/metrics';
 
 // ─── Custom Metrics ────────────────────────────────────────────────────────────

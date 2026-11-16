@@ -1,7 +1,7 @@
 import type { INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import type { App } from 'supertest/types';
-import { createTestApp, TEST_ADMIN_API_KEY, type SeededRealm, type TestContext } from './setup';
+import { createTestApp, type SeededRealm, type TestContext } from './setup';
 
 describe('OAuth2 / OIDC Token Flows (e2e)', () => {
   let app: INestApplication<App>;

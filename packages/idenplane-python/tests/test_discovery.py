@@ -71,14 +71,14 @@ class TestDiscoveryCache:
 
     def test_concurrent_access_is_safe(self) -> None:
         cache = DiscoveryCache(ttl_seconds=60)
-        errors: list[BaseException] = []
+        errors: list[Exception] = []
 
         def worker(n: int) -> None:
             try:
                 for _ in range(100):
                     cache.set(f"realm-{n}", {"issuer": f"https://{n}"})  # type: ignore[arg-type]
                     cache.get_cached(f"realm-{n}")
-            except BaseException as exc:
+            except Exception as exc:
                 errors.append(exc)
 
         threads = [threading.Thread(target=worker, args=(i,)) for i in range(10)]

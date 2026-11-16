@@ -32,7 +32,6 @@ import {
   requestClientCredentialsToken,
   introspectToken,
   revokeToken,
-  checkResponse,
   FORM_HEADERS,
   DEFAULT_TARGET_URL,
   DEFAULT_REALM,
@@ -43,12 +42,10 @@ import {
   TEST_CLIENT_SECRET,
   TEST_USERNAME,
   TEST_PASSWORD,
-  tokenStore,
-  errorRate,
   formEncode,
 } from './shared-scenarios.js';
 import http from 'k6/http';
-import { Rate, Trend, Counter, Gauge } from 'k6/metrics';
+import { Rate, Trend, Counter } from 'k6/metrics';
 import { check, group, sleep } from 'k6';
 
 // ─── Custom Metrics ────────────────────────────────────────────────────────────
@@ -58,7 +55,6 @@ const invalidTokenIntrospectionRate = new Rate('invalid_token_introspection_rate
 const revokedTokenIntrospectionRate = new Rate('revoked_token_introspection_rate');
 
 const introspectionDuration = new Trend('introspection_duration');
-const tokenValidationDuration = new Trend('token_validation_duration');
 
 const introspectionRequests = new Counter('introspection_requests_total');
 const introspectionActiveTrue = new Counter('introspection_active_true');
@@ -259,7 +255,7 @@ export default function () {
         headers: FORM_HEADERS,
       });
 
-      check(res, {
+      const rejected = check(res, {
         'malformed token returns active=false': () => {
           if (res.status === 200) {
             const body = JSON.parse(res.body);
@@ -268,6 +264,7 @@ export default function () {
           return res.status >= 400; // Also accept error response
         },
       });
+      invalidTokenIntrospectionRate.add(rejected ? 1 : 0);
 
       introspectionRequests.add(1);
     });

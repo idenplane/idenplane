@@ -18,7 +18,7 @@
  */
 
 import http from 'k6/http';
-import { Rate, Trend, Counter, Gauge } from 'k6/metrics';
+import { Rate, Trend, Counter } from 'k6/metrics';
 import { check, group, sleep } from 'k6';
 import {
   buildOAuthUrls,
@@ -29,7 +29,6 @@ import {
   DEFAULT_VUS,
   DEFAULT_DURATION,
   DEFAULT_RAMP_UP,
-  errorRate,
 } from './shared-scenarios.js';
 
 // ─── Custom Metrics ────────────────────────────────────────────────────────────
@@ -129,6 +128,11 @@ export default function () {
         'has id_token_signing_alg_values_supported': () => Array.isArray(metadata.id_token_signing_alg_values_supported) && metadata.id_token_signing_alg_values_supported.length > 0,
         'has grant_types_supported': () => Array.isArray(metadata.grant_types_supported) && metadata.grant_types_supported.length > 0,
         'has token_endpoint_auth_methods_supported': () => Array.isArray(metadata.token_endpoint_auth_methods_supported),
+        'supports client_secret_basic and client_secret_post': () =>
+          Array.isArray(metadata.token_endpoint_auth_methods_supported) &&
+          REQUIRED_TOKEN_ENDPOINT_AUTH_METHODS.every((method) =>
+            metadata.token_endpoint_auth_methods_supported.includes(method),
+          ),
       });
 
       if (missingFields.length > 0) {
@@ -278,7 +282,6 @@ export default function () {
 
 export function setup() {
   // Validate configuration before running tests
-  const urls = buildOAuthUrls(REALM_NAME, TARGET_URL);
 
   // Verify the server is reachable
   const healthRes = http.get(`${TARGET_URL}/health`);

@@ -1,6 +1,5 @@
 import { PluginLoaderService } from './plugin-loader.service.js';
 import * as fs from 'fs';
-import * as path from 'path';
 
 // Mock the entire 'fs' module so we don't touch the real filesystem
 jest.mock('fs', () => ({

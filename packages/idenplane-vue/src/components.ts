@@ -28,7 +28,6 @@
 import {
   defineComponent,
   provide,
-  h,
   onUnmounted,
 } from 'vue';
 import { IdenplaneClient } from 'idenplane-sdk';

@@ -31,7 +31,6 @@ import {
   buildOAuthUrls,
   requestPasswordToken,
   callUserinfo,
-  checkResponse,
   getBearerHeaders,
   FORM_HEADERS,
   DEFAULT_TARGET_URL,
@@ -43,12 +42,10 @@ import {
   TEST_CLIENT_SECRET,
   TEST_USERNAME,
   TEST_PASSWORD,
-  tokenStore,
-  errorRate,
   formEncode,
 } from './shared-scenarios.js';
 import http from 'k6/http';
-import { Rate, Trend, Counter, Gauge } from 'k6/metrics';
+import { Rate, Trend, Counter } from 'k6/metrics';
 import { check, group, sleep } from 'k6';
 
 // ─── Custom Metrics ────────────────────────────────────────────────────────────

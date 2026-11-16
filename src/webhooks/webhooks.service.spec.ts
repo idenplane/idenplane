@@ -38,25 +38,6 @@ describe('WebhooksService', () => {
     enabled: true,
   } as Realm;
 
-  /**
-   * Build a mock webhook record where the secret is already encrypted.
-   * The helper uses the real CryptoService so encrypt/decrypt round-trips
-   * work correctly in all tests.
-   */
-  function makeWebhookRecord(plaintextSecret: string) {
-    return {
-      id: 'webhook-1',
-      realmId: 'realm-1',
-      url: 'https://example.com/hook',
-      secret: crypto.encrypt(plaintextSecret),
-      enabled: true,
-      eventTypes: ['user.login', 'user.created'],
-      description: 'Test webhook',
-      createdAt: new Date(),
-      updatedAt: new Date(),
-    };
-  }
-
   // WEBHOOK_SELECT projection omits the secret field
   const mockWebhookPublic = {
     id: 'webhook-1',

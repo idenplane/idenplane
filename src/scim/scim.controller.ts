@@ -15,7 +15,6 @@ import {
   Body,
   Param,
   Query,
-  Headers,
   Req,
   HttpCode,
   HttpStatus,

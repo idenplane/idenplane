@@ -21,7 +21,7 @@
  *   TEST_PASSWORD      - Test password (default: TestPassword123!)
  */
 
-import { Rate, Trend, Counter, Gauge } from 'k6/metrics';
+import { Rate, Trend, Counter } from 'k6/metrics';
 import {
   buildOAuthUrls,
   requestPasswordToken,
@@ -38,7 +38,6 @@ import {
   TEST_USERNAME,
   TEST_PASSWORD,
   tokenStore,
-  errorRate,
   formEncode,
 } from './shared-scenarios.js';
 import http from 'k6/http';
@@ -50,7 +49,6 @@ const revocationSuccessRate = new Rate('revocation_success_rate');
 const revocationDuration = new Trend('revocation_duration');
 const revocationAttempts = new Counter('revocation_attempts');
 const tokenRevokedCount = new Counter('token_revoked_count');
-const tokensInCirculation = new Gauge('tokens_in_circulation');
 
 // ─── Configuration ──────────────────────────────────────────────────────────────
 
@@ -308,7 +306,6 @@ export default function () {
 
 export function setup() {
   // Validate configuration before running tests
-  const urls = buildOAuthUrls(REALM_NAME, TARGET_URL);
 
   // Verify the server is reachable
   const healthRes = http.get(`${TARGET_URL}/health`);

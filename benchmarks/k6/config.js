@@ -169,7 +169,6 @@ const TEST_REALM = __ENV.TEST_REALM || 'test-realm';
 // ─── Main Test Function ─────────────────────────────────────────────────────────
 
 export default function () {
-  const vuId = String(__VU);
 
   // Update active VUs gauge
   activeVUsGauge.add(__VU);

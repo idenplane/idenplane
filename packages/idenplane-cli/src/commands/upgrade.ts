@@ -76,6 +76,34 @@ interface HealthCheckResult {
 }
 
 /**
+ * Applies the migrations, then runs the post-upgrade checks.
+ *
+ * `recover` (restoring the pre-upgrade backup) runs only when `deploy`
+ * throws. Once the migrations are applied, restoring the backup would throw
+ * away the upgraded database, so a failure in `verify` goes to
+ * `verifyFailed` instead and never triggers recovery.
+ */
+export async function deployThenVerify(steps: {
+  deploy: () => void;
+  verify: () => Promise<void>;
+  recover: (deployError: unknown) => Promise<void>;
+  verifyFailed: (verifyError: unknown) => void;
+}): Promise<'applied' | 'deploy-failed'> {
+  try {
+    steps.deploy();
+  } catch (deployError) {
+    await steps.recover(deployError);
+    return 'deploy-failed';
+  }
+  try {
+    await steps.verify();
+  } catch (verifyError) {
+    steps.verifyFailed(verifyError);
+  }
+  return 'applied';
+}
+
+/**
  * Registers `idenplane upgrade`, which runs pre-flight checks (server
  * connectivity, backup status, pending migrations, pre-upgrade validation,
  * config compatibility) and then applies pending database migrations via
@@ -321,159 +349,170 @@ export function registerUpgradeCommand(program: Command): void {
       const totalMigrations = pendingMigrations.length;
       console.log(chalk.dim(`  Applying ${totalMigrations} migration(s)...`));
 
-      let migrationSuccess = false;
-      let appliedCount = 0;
-      try {
-        const output = execSync('npx prisma migrate deploy', {
-          encoding: 'utf-8',
-          stdio: ['inherit', 'pipe', 'pipe'],
-        });
-        appliedCount = totalMigrations;
-        migrationSuccess = true;
-        console.log(`  ${chalk.green('✓')} All ${totalMigrations} migration(s) applied successfully.`);
-
-        // ------------------------------------------------------------------ //
-        // Step 7: Post-upgrade health verification                             //
-        // ------------------------------------------------------------------ //
-        process.stdout.write(chalk.dim('\n  Verifying system health after upgrade... '));
-        let healthResult: HealthCheckResult;
-        try {
-          const client = new HttpClient();
-          healthResult = await client.get<HealthCheckResult>('/admin/system/health');
-          console.log(chalk.green('OK'));
-        } catch (healthError) {
-          console.log(chalk.yellow('WARNING'));
-          console.error(chalk.yellow('    Could not verify system health after upgrade. Please check the server manually.'));
-          if (Boolean(opts.json)) {
-            console.log(JSON.stringify({ healthCheckError: String(healthError) }, null, 2));
-          }
-          healthResult = {
-            healthy: false,
-            timestamp: new Date().toISOString(),
-            duration: 0,
-            checks: {
-              database: { status: 'error' as const },
-              cache: { status: 'error' as const },
-              storage: { status: 'error' as const },
-            },
-          };
-        }
-
-        // Display health check results
-        console.log(chalk.dim('  ─────────────────────────────────────────────'));
-        const dbStatus = healthResult.checks.database;
-        const cacheStatus = healthResult.checks.cache;
-        const storageStatus = healthResult.checks.storage;
-
-        const dbIcon = dbStatus.status === 'ok' ? chalk.green('✓') : chalk.red('✗');
-        const cacheIcon = cacheStatus.status === 'ok' ? chalk.green('✓') : cacheStatus.status === 'degraded' ? chalk.yellow('!') : chalk.red('✗');
-        const storageIcon = storageStatus.status === 'ok' ? chalk.green('✓') : storageStatus.status === 'warning' ? chalk.yellow('!') : chalk.red('✗');
-
-        console.log(`  ${dbIcon} Database  ${dbStatus.status === 'ok' ? chalk.green('OK') : chalk.red('ERROR')}${dbStatus.latency !== undefined ? chalk.dim(` (${dbStatus.latency}ms)`) : ''}`);
-        console.log(`  ${cacheIcon} Cache     ${cacheStatus.status === 'ok' ? chalk.green('OK') : cacheStatus.status === 'degraded' ? chalk.yellow('DEGRADED') : chalk.red('ERROR')}${cacheStatus.latency !== undefined ? chalk.dim(` (${cacheStatus.latency}ms)`) : ''}`);
-        console.log(`  ${storageIcon} Storage   ${storageStatus.status === 'ok' ? chalk.green('OK') : storageStatus.status === 'warning' ? chalk.yellow('WARNING') : chalk.red('ERROR')}${storageStatus.latency !== undefined ? chalk.dim(` (${storageStatus.latency}ms)`) : ''}`);
-        console.log(chalk.dim('  ─────────────────────────────────────────────'));
-
-        const healthTime = new Date(healthResult.timestamp).toLocaleTimeString();
-        console.log(`  Health check at ${chalk.bold(healthTime)}  ${chalk.dim(`(${healthResult.duration}ms)`)}`);
-
-        if (!healthResult.healthy) {
-          warn('\n  ⚠ System health check reported issues. The upgrade completed, but please verify the system is functioning correctly.');
-          if (opts.json) {
-            console.log(JSON.stringify({ migrationSuccess: true, healthIssues: healthResult }, null, 2));
-          }
-        } else {
-          if (opts.json) {
-            console.log(JSON.stringify({ migrationSuccess: true, healthOk: true, health: healthResult }, null, 2));
-          }
-        }
-
-        if (opts.json) {
-          console.log(JSON.stringify({ applied: pendingMigrations }, null, 2));
-        }
-      } catch (err: unknown) {
-        const msg =
-          err instanceof Error && 'stderr' in err
-            ? String((err as NodeJS.ErrnoException & { stderr?: Buffer }).stderr)
-            : String(err);
-        console.error(chalk.red('\n  Migration failed:\n'));
-        console.error(chalk.red(msg));
-
-        // ------------------------------------------------------------------ //
-        // Automatic rollback on failure                                      //
-        // ------------------------------------------------------------------ //
-        console.log(chalk.yellow('\n  ⚠ Upgrade failed — initiating rollback...\n'));
-
-        // Attempt to restore from backup if available
-        if (backupStatus.exists && backupStatus.path) {
-          console.log(chalk.dim(`  Backup found: ${backupStatus.path}`));
-          console.log(chalk.dim('  Restoring from backup...\n'));
-
+      // Only a failed `prisma migrate deploy` may restore the backup. Once the
+      // migrations are applied, a failure in a later step must never restore
+      // the pre-upgrade backup over the upgraded database.
+      await deployThenVerify({
+        deploy: () => {
+          execSync('npx prisma migrate deploy', {
+            encoding: 'utf-8',
+            stdio: ['inherit', 'ignore', 'pipe'],
+          });
+          console.log(`  ${chalk.green('✓')} All ${totalMigrations} migration(s) applied successfully.`);
+        },
+        verify: async () => {
+          // ------------------------------------------------------------------ //
+          // Step 7: Post-upgrade health verification                             //
+          // ------------------------------------------------------------------ //
+          process.stdout.write(chalk.dim('\n  Verifying system health after upgrade... '));
+          let healthResult: HealthCheckResult;
           try {
-            // Try server-side backup restore first
             const client = new HttpClient();
-            const restoreResult = await client.post<{ success: boolean; message: string }>(
-              '/admin/backup/restore',
-              { backupPath: backupStatus.path },
-            );
-
-            if (restoreResult.success) {
-              success('  ✓ Backup restored successfully.');
-              console.log(chalk.dim(`    ${restoreResult.message}`));
-            } else {
-              warn('  ⚠ Backup restore completed with warnings. Please verify data integrity.');
-              console.log(chalk.dim(`    ${restoreResult.message}`));
+            healthResult = await client.get<HealthCheckResult>('/admin/system/health');
+            console.log(chalk.green('OK'));
+          } catch (healthError) {
+            console.log(chalk.yellow('WARNING'));
+            console.error(chalk.yellow('    Could not verify system health after upgrade. Please check the server manually.'));
+            if (Boolean(opts.json)) {
+              console.log(JSON.stringify({ healthCheckError: String(healthError) }, null, 2));
             }
-          } catch {
-            // Server-side restore unavailable, attempt CLI restore
-            console.log(chalk.yellow('  Server-side restore unavailable, attempting CLI restore...'));
+            healthResult = {
+              healthy: false,
+              timestamp: new Date().toISOString(),
+              duration: 0,
+              checks: {
+                database: { status: 'error' as const },
+                cache: { status: 'error' as const },
+                storage: { status: 'error' as const },
+              },
+            };
+          }
 
-            if (process.platform === 'win32') {
-              try {
-                execFileSync('cmd', ['/c', 'sqlcmd', '-b', '-E', '-i', 'restore.sql'], {
-                  stdio: 'inherit',
-                });
-                success('  ✓ Database restored from CLI backup.');
-              } catch {
-                console.error(chalk.red('    CLI restore failed. Manual intervention may be required.'));
-                console.error(chalk.dim(`    Restore from: ${backupStatus.path}`));
+          // Display health check results
+          console.log(chalk.dim('  ─────────────────────────────────────────────'));
+          const dbStatus = healthResult.checks.database;
+          const cacheStatus = healthResult.checks.cache;
+          const storageStatus = healthResult.checks.storage;
+
+          const dbIcon = dbStatus.status === 'ok' ? chalk.green('✓') : chalk.red('✗');
+          const cacheIcon = cacheStatus.status === 'ok' ? chalk.green('✓') : cacheStatus.status === 'degraded' ? chalk.yellow('!') : chalk.red('✗');
+          const storageIcon = storageStatus.status === 'ok' ? chalk.green('✓') : storageStatus.status === 'warning' ? chalk.yellow('!') : chalk.red('✗');
+
+          console.log(`  ${dbIcon} Database  ${dbStatus.status === 'ok' ? chalk.green('OK') : chalk.red('ERROR')}${dbStatus.latency !== undefined ? chalk.dim(` (${dbStatus.latency}ms)`) : ''}`);
+          console.log(`  ${cacheIcon} Cache     ${cacheStatus.status === 'ok' ? chalk.green('OK') : cacheStatus.status === 'degraded' ? chalk.yellow('DEGRADED') : chalk.red('ERROR')}${cacheStatus.latency !== undefined ? chalk.dim(` (${cacheStatus.latency}ms)`) : ''}`);
+          console.log(`  ${storageIcon} Storage   ${storageStatus.status === 'ok' ? chalk.green('OK') : storageStatus.status === 'warning' ? chalk.yellow('WARNING') : chalk.red('ERROR')}${storageStatus.latency !== undefined ? chalk.dim(` (${storageStatus.latency}ms)`) : ''}`);
+          console.log(chalk.dim('  ─────────────────────────────────────────────'));
+
+          const healthTime = new Date(healthResult.timestamp).toLocaleTimeString();
+          console.log(`  Health check at ${chalk.bold(healthTime)}  ${chalk.dim(`(${healthResult.duration}ms)`)}`);
+
+          if (!healthResult.healthy) {
+            warn('\n  ⚠ System health check reported issues. The upgrade completed, but please verify the system is functioning correctly.');
+            if (opts.json) {
+              console.log(JSON.stringify({ migrationSuccess: true, healthIssues: healthResult }, null, 2));
+            }
+          } else {
+            if (opts.json) {
+              console.log(JSON.stringify({ migrationSuccess: true, healthOk: true, health: healthResult }, null, 2));
+            }
+          }
+
+          if (opts.json) {
+            console.log(JSON.stringify({ applied: pendingMigrations }, null, 2));
+          }
+        },
+        recover: async (err: unknown) => {
+          const msg =
+            err instanceof Error && 'stderr' in err
+              ? String((err as NodeJS.ErrnoException & { stderr?: Buffer }).stderr)
+              : String(err);
+          console.error(chalk.red('\n  Migration failed:\n'));
+          console.error(chalk.red(msg));
+
+          // ------------------------------------------------------------------ //
+          // Automatic rollback on failure                                      //
+          // ------------------------------------------------------------------ //
+          console.log(chalk.yellow('\n  ⚠ Upgrade failed — initiating rollback...\n'));
+
+          // Attempt to restore from backup if available
+          if (backupStatus.exists && backupStatus.path) {
+            console.log(chalk.dim(`  Backup found: ${backupStatus.path}`));
+            console.log(chalk.dim('  Restoring from backup...\n'));
+
+            try {
+              // Try server-side backup restore first
+              const client = new HttpClient();
+              const restoreResult = await client.post<{ success: boolean; message: string }>(
+                '/admin/backup/restore',
+                { backupPath: backupStatus.path },
+              );
+
+              if (restoreResult.success) {
+                success('  ✓ Backup restored successfully.');
+                console.log(chalk.dim(`    ${restoreResult.message}`));
+              } else {
+                warn('  ⚠ Backup restore completed with warnings. Please verify data integrity.');
+                console.log(chalk.dim(`    ${restoreResult.message}`));
               }
-            } else {
-              // PostgreSQL restore via CLI (Idenplane supports PostgreSQL only)
-              const dbUrl = process.env.DATABASE_URL;
-              if (dbUrl && /^postgres(ql)?:\/\//.test(dbUrl)) {
-                console.log(chalk.dim('  Using pg_restore for PostgreSQL backup...'));
+            } catch {
+              // Server-side restore unavailable, attempt CLI restore
+              console.log(chalk.yellow('  Server-side restore unavailable, attempting CLI restore...'));
+
+              if (process.platform === 'win32') {
                 try {
-                  execFileSync('pg_restore', ['-d', dbUrl, backupStatus.path], {
+                  execFileSync('cmd', ['/c', 'sqlcmd', '-b', '-E', '-i', 'restore.sql'], {
                     stdio: 'inherit',
                   });
-                  success('  ✓ Database restored successfully.');
+                  success('  ✓ Database restored from CLI backup.');
                 } catch {
-                  console.error(chalk.red('    PostgreSQL restore failed. Manual intervention may be required.'));
+                  console.error(chalk.red('    CLI restore failed. Manual intervention may be required.'));
                   console.error(chalk.dim(`    Restore from: ${backupStatus.path}`));
                 }
               } else {
-                console.error(chalk.red('    DATABASE_URL is not a PostgreSQL URL. Manual intervention required.'));
-                console.error(chalk.dim(`    Restore from: ${backupStatus.path}`));
+                // PostgreSQL restore via CLI (Idenplane supports PostgreSQL only)
+                const dbUrl = process.env.DATABASE_URL;
+                if (dbUrl && /^postgres(ql)?:\/\//.test(dbUrl)) {
+                  console.log(chalk.dim('  Using pg_restore for PostgreSQL backup...'));
+                  try {
+                    execFileSync('pg_restore', ['-d', dbUrl, backupStatus.path], {
+                      stdio: 'inherit',
+                    });
+                    success('  ✓ Database restored successfully.');
+                  } catch {
+                    console.error(chalk.red('    PostgreSQL restore failed. Manual intervention may be required.'));
+                    console.error(chalk.dim(`    Restore from: ${backupStatus.path}`));
+                  }
+                } else {
+                  console.error(chalk.red('    DATABASE_URL is not a PostgreSQL URL. Manual intervention required.'));
+                  console.error(chalk.dim(`    Restore from: ${backupStatus.path}`));
+                }
               }
             }
+          } else {
+            // No backup available
+            warn('  ⚠ No backup available for automatic restore.');
+            console.log(chalk.dim('\n  Manual recovery options:'));
+            console.log(chalk.dim('    1. Create a manual backup of current state'));
+            console.log(chalk.dim('    2. Run: idenplane upgrade --rollback'));
+            console.log(chalk.dim('    3. Restore from any existing backups in the backup directory'));
+            console.log(chalk.dim('\n  After recovery, review migration logs and retry the upgrade.'));
           }
-        } else {
-          // No backup available
-          warn('  ⚠ No backup available for automatic restore.');
-          console.log(chalk.dim('\n  Manual recovery options:'));
-          console.log(chalk.dim('    1. Create a manual backup of current state'));
-          console.log(chalk.dim('    2. Run: idenplane upgrade --rollback'));
-          console.log(chalk.dim('    3. Restore from any existing backups in the backup directory'));
-          console.log(chalk.dim('\n  After recovery, review migration logs and retry the upgrade.'));
-        }
 
-        console.log(chalk.yellow('\n  Upgrade process completed with errors. System state unchanged.'));
-        if (opts.json) {
-          console.log(JSON.stringify({ upgradeFailed: true, rolledBack: backupStatus.exists, backupPath: backupStatus.path }, null, 2));
-        }
-        process.exitCode = 1;
-      }
+          console.log(chalk.yellow('\n  Upgrade process completed with errors. System state unchanged.'));
+          if (opts.json) {
+            console.log(JSON.stringify({ upgradeFailed: true, rolledBack: backupStatus.exists, backupPath: backupStatus.path }, null, 2));
+          }
+          process.exitCode = 1;
+        },
+        verifyFailed: (err: unknown) => {
+          console.error(chalk.red(`\n  The migrations were applied, but the post-upgrade check failed: ${err instanceof Error ? err.message : String(err)}`));
+          console.error(chalk.dim('  No rollback was attempted. Verify the server manually.\n'));
+          if (opts.json) {
+            console.log(JSON.stringify({ migrationSuccess: true, postUpgradeCheckError: String(err) }, null, 2));
+          }
+          process.exitCode = 1;
+        },
+      });
     });
 }
 

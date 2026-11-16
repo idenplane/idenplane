@@ -33,7 +33,6 @@ const httpsMode = process.env.SESSION_TEST_HTTPS === 'true';
 let fetch = globalThis.fetch,
   tlsFixture;
 let browser,
-  fixture,
   cleanup = false,
   failed = true,
   rootPool,
@@ -680,7 +679,6 @@ async function ready(url) {
   } finally {
     if (failed) saveContainerLogs();
     if (browser) await browser.close();
-    if (fixture) await new Promise((r) => fixture.close(r));
     await sessionPool?.end();
     await rootPool?.end();
     for (const name of names) {

@@ -371,8 +371,8 @@ export class ConfigCompatibilityService {
           type: 'error',
           path,
           message: `Expected type ${rules.type} but got ${actualType}`,
-          currentValue:
-            value != null ? (JSON.stringify(value) ?? undefined) : undefined,
+          // `value` is set here: unset values returned above.
+          currentValue: JSON.stringify(value),
         };
       }
     }

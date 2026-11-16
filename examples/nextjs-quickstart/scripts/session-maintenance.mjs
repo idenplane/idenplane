@@ -18,8 +18,10 @@ const MAGIC = Buffer.from('IDENPLANE-BFF-1\n');
 const STATUS_DIRECTORY = path.join(os.tmpdir(), 'idenplane-session-ops');
 const STATUS_FILE = path.join(STATUS_DIRECTORY, 'cleanup-status.json');
 const TOOL_TIMEOUT = 15 * 60 * 1000;
-const fail = (message) => {
-  throw Object.assign(new Error(message), { safeMaintenanceMessage: true });
+const fail = (message, cause) => {
+  throw Object.assign(new Error(message, cause ? { cause } : undefined), {
+    safeMaintenanceMessage: true,
+  });
 };
 const integer = (value, fallback, min, max) => {
   const number = value === undefined ? fallback : Number(value);
@@ -336,10 +338,12 @@ export async function openBackup(input, env = process.env) {
   }
 }
 
-async function restoreTransaction(context, archive) {
+export async function restoreTransaction(context, archive) {
   // No restored session is ever committed. A failed restore rolls back its DDL
   // and data; successful restore commits only the clean session schema.
-  const consumer = spawn(
+  // `context.spawn` lets tests stand in for the PostgreSQL client tools.
+  const spawnTool = context.spawn ?? spawn;
+  const consumer = spawnTool(
     'psql',
     ['-X', '--no-password', '--set', 'ON_ERROR_STOP=1', '--quiet'],
     {
@@ -348,7 +352,7 @@ async function restoreTransaction(context, archive) {
       windowsHide: true,
     },
   );
-  const producer = spawn(
+  const producer = spawnTool(
     'pg_restore',
     ['--no-owner', '--no-acl', '--file=-', archive],
     {
@@ -386,12 +390,24 @@ async function restoreTransaction(context, archive) {
   }, TOOL_TIMEOUT);
   try {
     consumer.stdin.write('BEGIN;\n');
-    producer.stdout.pipe(consumer.stdin, { end: false });
-    const code = await produced;
-    if (code !== 0 || producerError) {
-      consumer.stdin.end('\nROLLBACK;\n');
+    // Unlike .pipe(), pipeline() handles an error on either stream: it
+    // destroys both and rejects, so a failed read of pg_restore's output is
+    // reported here instead of escaping as an unhandled 'error' event.
+    // `end: false` keeps psql's stdin open for the closing statement.
+    const piped = pipeline(producer.stdout, consumer.stdin, {
+      end: false,
+    }).then(
+      () => undefined,
+      (error) => error,
+    );
+    const [code, pipeError] = await Promise.all([produced, piped]);
+    if (code !== 0 || producerError || pipeError) {
+      producer.kill();
+      // If the pipeline destroyed psql's stdin, psql reads end of input inside
+      // the open transaction and PostgreSQL rolls it back: never COMMIT here.
+      if (!consumer.stdin.destroyed) consumer.stdin.end('\nROLLBACK;\n');
       await consumed;
-      fail('Session restore failed; transaction was not committed');
+      fail('Session restore failed; transaction was not committed', pipeError);
     }
     if (!consumer.stdin.destroyed)
       consumer.stdin.end('\nTRUNCATE TABLE public.bff_sessions;\nCOMMIT;\n');
