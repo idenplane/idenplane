@@ -11,6 +11,7 @@ import { CryptoService } from '../crypto/crypto.service.js';
 import { ScopeSeedService } from '../scopes/scope-seed.service.js';
 import { CacheService } from '../cache/cache.service.js';
 import { CorsOriginService } from '../cors/cors-origin.service.js';
+import { redirectUriListProblem } from '../common/redirect-uri.utils.js';
 import { CreateClientDto } from './dto/create-client.dto.js';
 import { UpdateClientDto } from './dto/update-client.dto.js';
 import {
@@ -28,6 +29,7 @@ const CLIENT_SELECT = {
   enabled: true,
   redirectUris: true,
   postLogoutRedirectUris: true,
+  allowInsecureWildcardRedirectUris: true,
   webOrigins: true,
   grantTypes: true,
   requireConsent: true,
@@ -98,6 +100,25 @@ function authFieldsFrom(dto: UpdateClientDto): Partial<AuthFieldValues> {
   return values;
 }
 
+/**
+ * Redirect URIs match exactly since 0.11.0 (RFC 9700): a wildcard is saved
+ * only on a client that opts into insecure wildcards, and a fragment never.
+ */
+function assertRedirectUris(
+  redirectUris: readonly string[] | undefined,
+  postLogoutRedirectUris: readonly string[] | undefined,
+  allowWildcard: boolean,
+): void {
+  const problem =
+    redirectUriListProblem('redirectUris', redirectUris, allowWildcard) ??
+    redirectUriListProblem(
+      'postLogoutRedirectUris',
+      postLogoutRedirectUris,
+      allowWildcard,
+    );
+  if (problem) throw new BadRequestException(problem);
+}
+
 function assertAuthSettings(settings: ClientAuthSettings): void {
   const problem = clientAuthSettingsProblem(settings);
   if (problem) throw new BadRequestException(problem);
@@ -115,6 +136,11 @@ export class ClientsService {
 
   async create(realm: Realm, dto: CreateClientDto) {
     this.rejectWildcardOrigins(dto.webOrigins);
+    assertRedirectUris(
+      dto.redirectUris,
+      dto.postLogoutRedirectUris,
+      dto.allowInsecureWildcardRedirectUris ?? false,
+    );
     const existing = await this.prisma.client.findUnique({
       where: {
         realmId_clientId: { realmId: realm.id, clientId: dto.clientId },
@@ -184,6 +210,8 @@ export class ClientsService {
         enabled: dto.enabled,
         redirectUris: dto.redirectUris ?? [],
         postLogoutRedirectUris: dto.postLogoutRedirectUris ?? [],
+        allowInsecureWildcardRedirectUris:
+          dto.allowInsecureWildcardRedirectUris ?? false,
         webOrigins: dto.webOrigins ?? [],
         grantTypes,
         requireConsent: dto.requireConsent ?? false,
@@ -357,6 +385,21 @@ export class ClientsService {
     const existing = await this.findByClientId(realm, clientIdOrUuid);
     const resolvedClientId = existing.clientId;
     await this.assertNhiClientUpdate(existing.id, dto);
+    // Check the lists as they will be after the update, whenever the update
+    // touches them or the opt-in: turning the opt-in off while a wildcard is
+    // still registered would leave a URI that silently never matches.
+    if (
+      dto.redirectUris !== undefined ||
+      dto.postLogoutRedirectUris !== undefined ||
+      dto.allowInsecureWildcardRedirectUris !== undefined
+    ) {
+      assertRedirectUris(
+        dto.redirectUris ?? existing.redirectUris,
+        dto.postLogoutRedirectUris ?? existing.postLogoutRedirectUris,
+        dto.allowInsecureWildcardRedirectUris ??
+          existing.allowInsecureWildcardRedirectUris,
+      );
+    }
 
     // The settings after this update, from the row itself rather than the
     // cached copy, which may predate these columns.
@@ -394,6 +437,8 @@ export class ClientsService {
         enabled: dto.enabled,
         redirectUris: dto.redirectUris,
         postLogoutRedirectUris: dto.postLogoutRedirectUris,
+        allowInsecureWildcardRedirectUris:
+          dto.allowInsecureWildcardRedirectUris ?? undefined,
         webOrigins: dto.webOrigins,
         grantTypes: dto.grantTypes,
         requireConsent: dto.requireConsent,

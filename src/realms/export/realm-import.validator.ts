@@ -38,6 +38,7 @@ const SECRET_JSON_SHAPES: Record<SecretJsonKind, SecretJsonShape> = {
 };
 import { providerConfigSecrets } from '../realm-secrets.util.js';
 import { EXPORT_MODELS, type ModelExportSpec } from './realm-export.fields.js';
+import { redirectUriListProblem } from '../../common/redirect-uri.utils.js';
 import {
   checkFields,
   checkUnknownKeys,
@@ -465,6 +466,23 @@ export function validateV2Import(payload: Item): ValidatedImport {
           string | null,
       });
       if (problem) fail(`${path}.tokenEndpointAuthMethod`, problem);
+    }
+
+    // Redirect URIs, as the client admin API checks them. An export without
+    // the opt-in (from before 0.11.0) is let through: the import gives a
+    // wildcard client the opt-in, as the upgrade does.
+    const allowWildcard =
+      c['allowInsecureWildcardRedirectUris'] === undefined ||
+      c['allowInsecureWildcardRedirectUris'] === true;
+    for (const field of ['redirectUris', 'postLogoutRedirectUris']) {
+      const uris = c[field];
+      if (!Array.isArray(uris)) continue;
+      const problem = redirectUriListProblem(
+        field,
+        uris.filter((u): u is string => typeof u === 'string'),
+        allowWildcard,
+      );
+      if (problem) fail(`${path}.${field}`, problem);
     }
 
     if (Array.isArray(c['webOrigins']) && c['webOrigins'].includes('*')) {

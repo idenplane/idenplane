@@ -217,6 +217,55 @@ describe('KeycloakImporterService', () => {
       expect(report.summary.clients.created).toBe(1);
     });
 
+    it('imports exact redirect URIs with exact matching', async () => {
+      await service.importRealm(mockKeycloakExport, { dryRun: false });
+      expect(prisma.client.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            clientId: 'my-app',
+            allowInsecureWildcardRedirectUris: false,
+          }),
+        }),
+      );
+    });
+
+    it('keeps a Keycloak wildcard client working through the insecure opt-in, and reports it', async () => {
+      const report = await service.importRealm(
+        {
+          ...mockKeycloakExport,
+          clients: [
+            {
+              clientId: 'wild-app',
+              enabled: true,
+              publicClient: true,
+              redirectUris: ['https://app.example.com/*'],
+              standardFlowEnabled: true,
+            },
+          ],
+        },
+        { dryRun: false },
+      );
+      expect(prisma.client.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            clientId: 'wild-app',
+            redirectUris: ['https://app.example.com/*'],
+            allowInsecureWildcardRedirectUris: true,
+          }),
+        }),
+      );
+      expect(report.warnings).toEqual(
+        expect.arrayContaining([
+          expect.objectContaining({
+            entity: 'client',
+            message: expect.stringContaining(
+              'allowInsecureWildcardRedirectUris',
+            ),
+          }),
+        ]),
+      );
+    });
+
     it('should skip Keycloak built-in roles', async () => {
       const report = await service.importRealm(mockKeycloakExport, {
         dryRun: false,

@@ -46,6 +46,10 @@ import type { PluginManagerService } from '../plugins/plugin-manager.service.js'
 import type { Client, Prisma, Realm } from '@prisma/client';
 import { randomUUID } from 'node:crypto';
 import type { JWTPayload } from 'jose';
+import {
+  refreshTokenExpiresAt,
+  sessionExpiresAt,
+} from '../sessions/session-lifetime.js';
 
 export interface TokenResponse {
   access_token: string;
@@ -89,6 +93,11 @@ export interface CertificateBinding {
 
 interface IssueTokensOptions {
   binding?: CertificateBinding | null;
+  /**
+   * The expiry of the existing session a refresh token is issued into (the
+   * refresh grant). A refresh token never outlives its session.
+   */
+  sessionExpiresAt?: Date;
 }
 
 /**
@@ -832,10 +841,14 @@ export class AuthService {
       },
     });
 
+    // The session's own expiry is checked here too, not left to the hourly
+    // clean-up: a session ends when it expires, not up to an hour later.
+    const now = new Date();
     if (
       !storedToken ||
       storedToken.revoked ||
-      storedToken.expiresAt < new Date()
+      storedToken.expiresAt < now ||
+      storedToken.session.expiresAt < now
     ) {
       if (storedToken?.revoked && storedToken.session) {
         await this.prisma.refreshToken.updateMany({
@@ -991,7 +1004,7 @@ export class AuthService {
       storedToken.isOffline,
       // RFC 8705 §3.1: the refreshed access token is bound to the
       // certificate presented now (for a public client, the same one).
-      { binding },
+      { binding, sessionExpiresAt: session.expiresAt },
     );
   }
 
@@ -1665,9 +1678,23 @@ export class AuthService {
 
     // Determine if this is an offline token
     const isOffline = effectiveScopes.includes('offline_access');
-    const refreshLifespan = isOffline
-      ? realm.offlineTokenLifespan
-      : realm.refreshTokenLifespan;
+
+    // A new session granted offline_access is an offline session: it lives
+    // for the offline lifespan, not the normal session lifespan the grant
+    // that created it asked for (see sessions/session-lifetime.ts). Without
+    // this the hourly clean-up deleted it, and its offline tokens with it,
+    // after refreshTokenLifespan.
+    let sessionExpiry: Date | null = options.sessionExpiresAt ?? null;
+    if (session && typeof session !== 'string') {
+      if (isOffline) {
+        session.data.expiresAt = sessionExpiresAt(
+          realm,
+          true,
+          session.data.createdAt as Date,
+        );
+      }
+      sessionExpiry = new Date(session.data.expiresAt);
+    }
 
     // Generate opaque refresh token
     const rawRefreshToken = this.crypto.generateSecret(64);
@@ -1676,7 +1703,7 @@ export class AuthService {
     const refreshToken = {
       tokenHash: refreshTokenHash,
       scope: validatedScope,
-      expiresAt: new Date(Date.now() + refreshLifespan * 1000),
+      expiresAt: refreshTokenExpiresAt(realm, isOffline, sessionExpiry),
       isOffline,
       clientId,
       // RFC 8705 §4: a public client's refresh token is bound too, so only
