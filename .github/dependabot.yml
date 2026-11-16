@@ -153,6 +153,11 @@ updates:
       # verified, not just amd64 CI).
       - dependency-name: "node"
         versions: ["25.x", "25"]
+      # A new Node major (24 -> 26) changes the runtime every CI job tests
+      # with; it is bumped deliberately, together with CI. Digest and minor
+      # updates within node:24-alpine still come through.
+      - dependency-name: "node"
+        update-types: ["version-update:semver-major"]
 
   # Documentation site (was unmonitored — a transitive uuid advisory sat here
   # with no fix PR because Dependabot wasn't watching this directory).
