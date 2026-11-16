@@ -92,7 +92,7 @@ jobs:
       # mechanics unverified while still reporting green.
       #
       # The client major must EQUAL the service container's (postgres:16), the
-      # same rule the Dockerfile pins with PG_MAJOR. A newer pg_dump writes
+      # rule DatabaseBackupService follows when it picks a client. A newer pg_dump writes
       # `SET transaction_timeout` (PG 17+) into the archive, which a 16 server
       # rejects on restore. Install the versioned package from the PostgreSQL
       # apt repo instead of the distro's `postgresql-client`, whose major
@@ -661,6 +661,12 @@ jobs:
         run: |
           docker run --rm --entrypoint pg_dump idenplane:ci --version
           docker run --rm --entrypoint pg_restore idenplane:ci --version
+          # One client per supported server major, where DatabaseBackupService
+          # looks for them (/usr/libexec/postgresqlN).
+          for v in 16 17 18; do
+            docker run --rm --entrypoint "/usr/libexec/postgresql${v}/pg_dump" idenplane:ci --version \
+              | grep -q " ${v}\." || { echo "::error::pg_dump ${v} missing from the image"; exit 1; }
+          done
 
       # The forward-auth demo, run for real against this image: Traefik in
       # front, a browser-style sign-in, and the protected app must receive the

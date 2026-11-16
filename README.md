@@ -686,7 +686,7 @@ REDIS_URL=redis://your-redis:6379
 |---------|--------|----------|-------|-------|
 | Self-hosted | Yes | Yes | No | No |
 | Open source | Yes | Yes | No | No |
-| Memory usage | ~150 MB | ~1 GB+ | N/A | N/A |
+| Memory at idle ([measured](docs/docs/benchmarks.md)) | 194 MiB | 464 MiB | N/A | N/A |
 | Language | TypeScript | Java | N/A | N/A |
 | OAuth 2.0 + OIDC | Yes | Yes | Yes | Yes |
 | SAML 2.0 | Yes | Yes | Yes | No |

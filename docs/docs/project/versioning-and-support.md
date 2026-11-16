@@ -68,17 +68,16 @@ Deprecated today, with no removal release set:
 
 ### `Deprecation` and `Sunset` headers on the admin API
 
-`DeprecationInterceptor` (`src/versioning/deprecation.interceptor.ts`) adds three headers to successful responses for an unversioned admin path, meaning any path under `/admin` that does not start with `/api/v`. Requests refused by authentication or authorization, and requests that end in an error, don't get them:
+`DeprecationInterceptor` (`src/versioning/deprecation.interceptor.ts`) adds two headers to successful responses for an unversioned admin path, meaning any path under `/admin` that does not start with `/api/v`. Requests refused by authentication or authorization, and requests that end in an error, don't get them:
 
 ```http
 Deprecation: Tue, 01 Jan 2027 00:00:00 GMT
 Sunset: Sat, 01 Jan 2028 00:00:00 GMT
-Link: </api/v1/admin/...>; rel="successor-version"
 ```
 
 The `Sunset` header follows RFC 8594. The `Deprecation` value is an HTTP date.
 
-As of 0.9.1, **no admin route is served under `/api/v1`**. URI versioning is turned on in `main.ts`, but no controller declares a version, so the path in the `Link` header returns `404`. The unversioned `/admin/...` paths are the admin API. Keep using them, and don't move scripts to `/api/v1`.
+**No admin route is served under `/api/v1`.** URI versioning is turned on in `main.ts`, but no controller declares a version. Up to 0.9.1 a third header, `Link: </api/v1/admin/...>; rel="successor-version"`, pointed at that path and got a `404`; 0.10.0 stops sending it until a versioned admin API ships. The unversioned `/admin/...` paths are the admin API. Keep using them, and don't move scripts to `/api/v1`.
 
 The unversioned admin paths will not be removed before both of these are true:
 
@@ -108,5 +107,5 @@ Where each column comes from:
 - **Kubernetes:** the *Helm install (kind)* job uses whatever node image the `helm/kind-action` default provides. The version is not pinned. In the runs for 0.8.0, 0.8.1, 0.9.0 and 0.9.1 it was kind v0.31.0 with `kindest/node:v1.35.0`. The chart sets no `kubeVersion`. No other Kubernetes version is tested.
 
 :::note PostgreSQL client in the image
-The image ships the PostgreSQL **16** client (`ARG PG_MAJOR=16` in the `Dockerfile`). The built-in [upgrade API](/deployment/upgrading) refuses to run when the client and server majors differ. So with the chart's bundled PostgreSQL 17, or any server other than 16, use your own backup and upgrade procedure, or build the image with a matching `PG_MAJOR`.
+From 0.10.0 the image ships the PostgreSQL **16, 17 and 18** clients side by side (`ARG PG_CLIENT_MAJORS` in the `Dockerfile`). The built-in [upgrade API](/deployment/upgrading) reads the server's major version and uses the matching `pg_dump` and `pg_restore`, so it works with the compose files' PostgreSQL 16 and the chart's bundled PostgreSQL 17 alike. It still refuses to run when no matching client is installed. Up to 0.9.1 the image had only the 16 client.
 :::

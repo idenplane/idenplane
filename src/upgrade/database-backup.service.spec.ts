@@ -237,6 +237,54 @@ describe('DatabaseBackupService', () => {
     });
   });
 
+  describe('client tool selection (pgBinDir)', () => {
+    const noPgBinDir = { PG_BIN_DIR: undefined };
+    // path.join uses backslashes when the suite runs on Windows.
+    const posix = (p: unknown) => String(p).split('\\').join('/');
+
+    it('uses PATH while the server major is unknown', () => {
+      const service = buildService(noPgBinDir);
+      expect(service.pgBinDir()).toBeNull();
+      service.clientMajorVersion();
+      expect(mockExec.mock.calls[0][0]).toBe('pg_dump');
+    });
+
+    it('uses the Alpine directory for the server major when it is installed', () => {
+      const service = buildService(noPgBinDir);
+      mockFs.existsSync.mockImplementation(
+        (p) => posix(p) === '/usr/libexec/postgresql17/pg_dump',
+      );
+      service.setServerMajor(17);
+
+      expect(service.pgBinDir()).toBe('/usr/libexec/postgresql17');
+      service.createBackup('t');
+      const dump = mockExec.mock.calls.find((c) =>
+        String(c[0]).endsWith('pg_dump'),
+      );
+      expect(posix(dump?.[0])).toBe(
+        '/usr/libexec/postgresql17/pg_dump',
+      );
+    });
+
+    it('falls back to the Debian directory, then to PATH', () => {
+      const service = buildService(noPgBinDir);
+      mockFs.existsSync.mockImplementation(
+        (p) => posix(p) === '/usr/lib/postgresql/16/bin/pg_dump',
+      );
+      service.setServerMajor(16);
+      expect(service.pgBinDir()).toBe('/usr/lib/postgresql/16/bin');
+
+      mockFs.existsSync.mockReturnValue(false);
+      expect(service.pgBinDir()).toBeNull();
+    });
+
+    it('lets PG_BIN_DIR override the detected directory', () => {
+      const service = buildService({ PG_BIN_DIR: '/opt/pg/bin' });
+      service.setServerMajor(17);
+      expect(service.pgBinDir()).toBe('/opt/pg/bin');
+    });
+  });
+
   describe('pgToolsAvailable', () => {
     it('reports available when both binaries respond', () => {
       expect(buildService().pgToolsAvailable().available).toBe(true);

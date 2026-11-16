@@ -53,6 +53,12 @@ A security hardening release. New realms are now secure by default: brute-force 
 - **Importing a Keycloak realm** keeps `bruteForceProtected: false` when the export says so, and otherwise turns protection on with Idenplane's defaults (`failureFactor` still sets `maxLoginFailures`).
 - **Docs:** the brute-force, session and event settings in *Configuration options* and *API → Realms* described Keycloak fields that Idenplane doesn't have (`bruteForceProtected`, `failureFactor`, `waitIncrementSeconds`, `ssoSessionIdleTimeout`…). They now list the real fields and defaults. The Terraform provider's descriptions of `lockout_duration` and `failure_reset_time` said minutes; they are seconds.
 - **Migration** `20261116120000_secure_realm_defaults` changes the defaults of six `realms` columns. It updates no row.
+- **The Docker image ships the PostgreSQL 16, 17 and 18 clients**, and the built-in upgrade picks the `pg_dump` and `pg_restore` matching the server's major version (`PG_BIN_DIR` overrides it). The image had only the 16 client, so on the Helm chart's bundled PostgreSQL 17 the upgrade's pre-validation always failed with a client/server mismatch. See *Deployment → Upgrading*.
+- **Admin API responses no longer carry `Link: </api/v1/admin/...>; rel="successor-version"`.** No admin route is served under `/api/v1`, so the link pointed at a `404`. The `Deprecation` and `Sunset` headers are unchanged.
+
+### Fixed
+- **API reference:** `openapi.yaml` gave the licence as Apache 2.0 (it is AGPL-3.0), a contact address that doesn't exist and a `/api/v1` server URL; it now points to SUPPORT.md and `http://localhost:3000`.
+- **README:** the comparison table's idle memory now comes from the published benchmark instead of unsourced figures.
 
 ## [0.9.1] - 2026-11-16
 

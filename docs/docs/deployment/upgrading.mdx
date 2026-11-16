@@ -42,7 +42,7 @@ The upgrade shells out to them. If they are missing, pre-validation fails with:
 
 > Backup tooling is missing — an upgrade cannot be rolled back
 
-The official Docker image ships them. On bare metal, install the PostgreSQL client package.
+The official Docker image ships them for PostgreSQL 16, 17 and 18. On bare metal, install the PostgreSQL client package.
 
 ### 2. The client major version must equal the server major version
 
@@ -52,7 +52,13 @@ A dump written by `pg_dump` 18 cannot be restored onto a PostgreSQL 16 server, a
 pg client and server majors match (16)
 ```
 
-Check yours:
+Idenplane reads the server's major version and picks the matching client by itself, in this order:
+
+1. `PG_BIN_DIR`, if you set it (for example `PG_BIN_DIR=/usr/lib/postgresql/17/bin`);
+2. `/usr/libexec/postgresqlN` (Alpine, which the official image uses) or `/usr/lib/postgresql/N/bin` (Debian and Ubuntu), where `N` is the server major;
+3. `pg_dump` and `pg_restore` on `PATH`.
+
+On bare metal with a single client installed, check that it matches:
 
 ```bash
 pg_dump --version

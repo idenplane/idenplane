@@ -53,7 +53,9 @@ export class DeprecationInterceptor implements NestInterceptor {
           DeprecationInterceptor.DEPRECATION_DATE,
         );
         response.setHeader('Sunset', DeprecationInterceptor.SUNSET_DATE);
-        response.setHeader('Link', `</api/v1${path}>; rel="successor-version"`);
+        // No `Link: rel="successor-version"` yet: no admin route is served
+        // under /api/v1, so the link pointed at a 404. Add it back in the
+        // release that ships the versioned admin API.
       }),
     );
   }
