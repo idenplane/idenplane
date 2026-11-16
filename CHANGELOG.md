@@ -9,6 +9,9 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+### Changed
+- **Dependencies updated** (none closes a known vulnerability): NestJS packages `@nestjs/apollo` and `@nestjs/graphql` 14.2.1, `@nestjs/schedule` 12.0.4, `@nestjs/swagger` 12.1.2, `@nestjs/cli` 12.0.13; `@apollo/server` 5.5.2; `fast-xml-parser` 5.12.1; admin console `jsdom` 31.0.1; Next.js example `idenplane-sdk` 1.2.0 and `jose` 6.2.17.
+
 ## [0.10.0] - 2026-11-16
 
 A security hardening release. New realms are now secure by default: brute-force protection and audit events are on. The release also publishes a threat model and an OWASP ASVS 5.0 Level 2 self-assessment, and closes the gaps the assessment found that could be fixed safely: token-type confusion at userinfo, a password-oracle path for locked LDAP users, sessions that survived a password reset, and more. Read *Before you upgrade*: existing realms are not changed.
