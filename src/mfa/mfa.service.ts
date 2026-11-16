@@ -114,8 +114,11 @@ export class MfaService {
    * on several) cannot both succeed. A row whose window has passed but that
    * the cleanup job has not deleted yet is taken over by a conditional
    * update, so a code that comes round again later still works.
+   *
+   * Public for the admin console, which claims the code an authenticator is
+   * activated with, so it cannot be replayed as a sign-in code.
    */
-  private async claimTotpCode(userId: string, code: string): Promise<boolean> {
+  async claimTotpCode(userId: string, code: string): Promise<boolean> {
     const key = `totp:used:${userId}:${code}`;
     const codeHash = this.crypto.sha256(code);
     const now = new Date();

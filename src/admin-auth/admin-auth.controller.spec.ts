@@ -43,6 +43,7 @@ describe('AdminAuthController', () => {
   };
   let configService: { get: jest.Mock };
   let principals: { realmNames: jest.Mock };
+  let adminMfa: { policy: jest.Mock };
 
   beforeEach(() => {
     // Ensure no leftover TRUSTED_PROXIES env from other tests
@@ -54,10 +55,16 @@ describe('AdminAuthController', () => {
     };
     configService = { get: jest.fn() };
     principals = { realmNames: jest.fn().mockResolvedValue([]) };
+    adminMfa = {
+      policy: jest
+        .fn()
+        .mockResolvedValue({ required: true, source: 'setting' }),
+    };
     controller = new AdminAuthController(
       adminAuthService as any,
       configService as any,
       principals as any,
+      adminMfa as any,
     );
   });
 
@@ -228,7 +235,42 @@ describe('AdminAuthController', () => {
         readAllRealms: true,
         writeAllRealms: true,
         managedRealms: [],
+        mfa: {
+          enrolled: false,
+          required: true,
+          verified: false,
+          amr: [],
+          authTime: null,
+        },
       });
+    });
+
+    it('says whether the session proved a second factor', async () => {
+      const req = {
+        adminPrincipal: { ...principal(['super-admin']), mfaEnrolled: true },
+        adminUser: {
+          userId: 'user-1',
+          roles: [],
+          acr: 'urn:idenplane:acr:webauthn',
+          amr: ['pwd', 'hwk', 'mfa'],
+          authTime: 1700000000,
+        },
+      } as any;
+      expect((await controller.getMe(req)).mfa).toEqual({
+        enrolled: true,
+        required: true,
+        verified: true,
+        amr: ['pwd', 'hwk', 'mfa'],
+        authTime: 1700000000,
+      });
+    });
+
+    it('has no MFA view for the API key', async () => {
+      const req = {
+        adminPrincipal: { ...principal(['super-admin']), kind: 'api-key' },
+      } as any;
+      expect((await controller.getMe(req)).mfa).toBeNull();
+      expect(adminMfa.policy).not.toHaveBeenCalled();
     });
 
     it('lists the realms a realm-admin manages', async () => {

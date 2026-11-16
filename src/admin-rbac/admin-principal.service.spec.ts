@@ -20,6 +20,8 @@ function user(overrides: Record<string, unknown> = {}) {
       { realmId: 'id-a', realm: { name: 'realm-a' } },
       { realmId: MASTER_ID, realm: { name: 'master' } },
     ],
+    userCredentials: [],
+    webAuthnCredentials: [],
     ...overrides,
   };
 }
@@ -27,17 +29,20 @@ function user(overrides: Record<string, unknown> = {}) {
 describe('AdminPrincipalService', () => {
   let findFirst: jest.Mock;
   let findUnique: jest.Mock;
+  let policyFindUnique: jest.Mock;
   let env: Record<string, string | undefined>;
   let service: AdminPrincipalService;
 
   beforeEach(() => {
     findFirst = jest.fn();
     findUnique = jest.fn();
+    policyFindUnique = jest.fn().mockResolvedValue(null);
     env = { ADMIN_API_KEY: 'sample-api-key-placeholder' };
     service = new AdminPrincipalService(
       {
         user: { findFirst },
         realm: { findUnique, findMany: jest.fn() },
+        adminSecurityPolicy: { findUnique: policyFindUnique },
       } as unknown as PrismaService,
       { get: (k: string) => env[k] } as unknown as ConfigService,
     );
@@ -100,6 +105,63 @@ describe('AdminPrincipalService', () => {
     expect(await service.resolveRealm('id-a', 'id-or-name')).toEqual({
       id: 'id-a',
       name: 'realm-a',
+    });
+  });
+
+  it('says whether the admin has a console second factor', async () => {
+    findFirst.mockResolvedValue(user());
+    expect((await service.load({ userId: 'u1', roles: [] })).mfaEnrolled).toBe(
+      false,
+    );
+    findFirst.mockResolvedValue(user({ userCredentials: [{ id: 'c1' }] }));
+    expect((await service.load({ userId: 'u1', roles: [] })).mfaEnrolled).toBe(
+      true,
+    );
+    findFirst.mockResolvedValue(user({ webAuthnCredentials: [{ id: 'w1' }] }));
+    expect((await service.load({ userId: 'u1', roles: [] })).mfaEnrolled).toBe(
+      true,
+    );
+    // Only a verified TOTP counts, read in the same query.
+    expect(findFirst.mock.calls[0][0].select.userCredentials).toEqual({
+      where: { type: 'totp', verified: true },
+      select: { id: true },
+    });
+  });
+
+  describe('adminMfaPolicy', () => {
+    it('is off without a stored row (an upgraded install)', async () => {
+      await expect(service.adminMfaPolicy()).resolves.toEqual({
+        required: false,
+        source: 'setting',
+      });
+    });
+
+    it('reads the stored setting', async () => {
+      policyFindUnique.mockResolvedValue({ mfaRequired: true });
+      await expect(service.adminMfaPolicy()).resolves.toEqual({
+        required: true,
+        source: 'setting',
+      });
+    });
+
+    it('lets ADMIN_MFA_REQUIRED fix it either way', async () => {
+      policyFindUnique.mockResolvedValue({ mfaRequired: true });
+      env['ADMIN_MFA_REQUIRED'] = 'false';
+      await expect(service.adminMfaPolicy()).resolves.toEqual({
+        required: false,
+        source: 'environment',
+      });
+      policyFindUnique.mockResolvedValue({ mfaRequired: false });
+      env['ADMIN_MFA_REQUIRED'] = ' TRUE ';
+      await expect(service.adminMfaPolicy()).resolves.toEqual({
+        required: true,
+        source: 'environment',
+      });
+      env['ADMIN_MFA_REQUIRED'] = 'maybe';
+      await expect(service.adminMfaPolicy()).resolves.toEqual({
+        required: false,
+        source: 'setting',
+      });
     });
   });
 });

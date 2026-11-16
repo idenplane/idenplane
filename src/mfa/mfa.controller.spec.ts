@@ -160,7 +160,36 @@ describe('MfaController', () => {
 
       await expect(
         controller.resetMfa(realm, 'user-1', reqWithoutSession),
-      ).rejects.toThrow('No active session found');
+      ).rejects.toThrow('verify your second factor in the admin console');
+    });
+
+    it('accepts the console step-up: an admin token with a recent MFA check', async () => {
+      const req = {
+        adminUser: {
+          userId: 'user-1',
+          acr: 'urn:idenplane:acr:mfa',
+          authTime: Math.floor(Date.now() / 1000) - 60,
+        },
+      } as any;
+
+      await controller.resetMfa(realm, 'user-1', req);
+
+      expect(mockMfaService.disableAllFactors).toHaveBeenCalledWith('user-1');
+      expect(mockLoginService.validateLoginSession).not.toHaveBeenCalled();
+    });
+
+    it('does not accept a stale admin MFA check', async () => {
+      const req = {
+        adminUser: {
+          userId: 'user-1',
+          acr: 'urn:idenplane:acr:mfa',
+          authTime: Math.floor(Date.now() / 1000) - 3600,
+        },
+      } as any;
+
+      await expect(controller.resetMfa(realm, 'user-1', req)).rejects.toThrow(
+        'MFA step-up is required',
+      );
     });
 
     it('should throw UnauthorizedException when session ACR does not satisfy MFA', async () => {

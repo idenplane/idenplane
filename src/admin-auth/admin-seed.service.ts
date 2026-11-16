@@ -147,6 +147,21 @@ export class AdminSeedService implements OnApplicationBootstrap {
           data: { userId: adminUser.id, roleId: superAdmin.id },
         });
 
+        // A new install requires a second factor for every admin: the first
+        // admin signs in with the password and goes straight to enrolment.
+        // An upgraded install has no row (not required). Not on a shared
+        // demo, where every visitor would be sent to enrolment.
+        // See docs/docs/security/admin-mfa.md.
+        await tx.adminSecurityPolicy.upsert({
+          where: { id: 1 },
+          create: {
+            id: 1,
+            mfaRequired: this.config.get<string>('DEMO_MODE') !== 'true',
+            updatedBy: 'seed',
+          },
+          update: {},
+        });
+
         return masterRealm.id;
       });
     } catch (err) {
