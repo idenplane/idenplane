@@ -148,7 +148,7 @@ Every row below has its own recommendation.
 | V3.3.3 | 2 | **Fail** | Cookie names IDENPLANE\_SESSION, XSRF-TOKEN-\{realm\}, admin\_rt with Path=/realms/\{realm\} | Path scoping rules out \_\_Host-. **Recommendation:** \_\_Host-IDENPLANE\_SESSION-\{realm\} with Path=/ (M). |
 | V3.3.4 | 2 | Partial | src/admin-auth/admin-auth.controller.ts:99,107,170 | admin\_rt is HttpOnly but holds the same token returned in the JSON body. **Recommendation:** A refresh-only token in the cookie (M). |
 | V3.4.1 | 1 | Pass | src/main.ts:251-254 (HSTS max-age 1y, includeSubDomains, preload) |  |
-| V3.4.2 | 1 | Pass | src/main.ts:140-170 (origin allowlist); src/clients/dto/create-client.dto.ts:48 (no wildcard) | http://localhost:PORT stays allowed in production. |
+| V3.4.2 | 1 | Pass | src/main.ts:140-170 (origin allowlist); src/clients/dto/create-client.dto.ts:48 (no wildcard) | `http://localhost:PORT` stays allowed in production. |
 | V3.4.3 | 2 | Partial | helmet defaults; src/theme/theme-render.service.ts:132 (nonce CSP, base-uri self) | object-src none; base-uri is self, not none. **Recommendation:** base-uri none for themed pages (S). |
 | V3.4.4 | 2 | Pass | helmet nosniff (src/main.ts) |  |
 | V3.4.5 | 2 | Pass | helmet Referrer-Policy no-referrer |  |
@@ -339,7 +339,7 @@ Every row below has its own recommendation.
 | V12.1.3 | 2 | Pass | src/mtls/mtls-server.ts:92,142; src/main.ts checkMtlsConfig | Cert validated per realm per request. |
 | V12.2.1 | 1 | Partial | src/main.ts helmet HSTS; secure cookies | HTTPS redirect is left to the proxy. **Recommendation:** Document it (S). |
 | V12.2.2 | 1 | N/A |  | Certificates live at the proxy. |
-| V12.3.1 | 2 | **Fail** | src/risk-assessment/impossible-travel.service.ts:43,85; src/continuous-verification/network-context.service.ts:331 (http://ip-api.com) | End-user IPs sent over plain HTTP to a third party; SMTP STARTTLS not required. **Recommendation:** Opt-in geo-IP over HTTPS or a local DB; requireTLS for SMTP (S/M). |
+| V12.3.1 | 2 | **Fail** | src/risk-assessment/impossible-travel.service.ts:43,85; src/continuous-verification/network-context.service.ts:331 (`http://ip-api.com`) | End-user IPs sent over plain HTTP to a third party; SMTP STARTTLS not required. **Recommendation:** Opt-in geo-IP over HTTPS or a local DB; requireTLS for SMTP (S/M). |
 | V12.3.2 | 2 | Pass | src/user-federation/ldap.client.ts:49,69 (rejectUnauthorized true) |  |
 | V12.3.3 | 2 | Partial | docker-compose.production.yml:64,75 | Internal DB/Redis links plaintext by default. **Recommendation:** Document sslmode=require and rediss (S). |
 | V12.3.4 | 2 | Partial | — | No option to trust only an internal CA for DB/Redis/SMTP. **Recommendation:** (M) |
