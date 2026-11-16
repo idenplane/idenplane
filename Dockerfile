@@ -8,8 +8,13 @@
 # The image stays on Node 24 (the LTS every CI job tests with through
 # actions/setup-node) rather than 25; move on once that issue is closed and a
 # newer LTS is tested in CI.
+#
+# Every stage pins the same node:24-alpine index by digest, so a build is
+# reproducible and a re-pushed tag cannot change what ships. Dependabot's
+# docker ecosystem (.github/dependabot.yml) proposes the new digest as soon as
+# the tag moves, which is how base-image security fixes arrive.
 # Stage 1: Dependencies
-FROM node:24-alpine AS deps
+FROM node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 # --ignore-scripts: the root "postinstall" runs `prisma generate`, which needs
@@ -18,13 +23,13 @@ COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
 
 # Stage 1b: Admin UI dependencies
-FROM node:24-alpine AS admin-deps
+FROM node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS admin-deps
 WORKDIR /app/admin-ui
 COPY admin-ui/package.json admin-ui/package-lock.json ./
 RUN npm ci
 
 # Stage 2: Build
-FROM node:24-alpine AS build
+FROM node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=admin-deps /app/admin-ui/node_modules ./admin-ui/node_modules
@@ -38,7 +43,7 @@ RUN npm run build
 RUN cp -r admin-ui/dist dist/admin-ui
 
 # Stage 3: Production
-FROM node:24-alpine AS production
+FROM node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS production
 WORKDIR /app
 
 # pg_dump / pg_restore, used by the upgrade flow to take a backup before running
