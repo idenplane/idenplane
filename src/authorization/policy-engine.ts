@@ -6,6 +6,11 @@
  */
 
 import { BlockList, isIP } from 'node:net';
+import {
+  MAX_SUBJECT_LENGTH,
+  regexPatternProblem,
+  safeRegexTest,
+} from './safe-regex.js';
 
 // ─── Condition types ─────────────────────────────────────────────────────────
 
@@ -251,12 +256,7 @@ export function conditionProblem(raw: unknown): string | null {
       if (typeof value !== 'string') {
         return 'operator "matches" needs a regular expression string';
       }
-      try {
-        new RegExp(value);
-        return null;
-      } catch {
-        return `invalid regular expression "${value}"`;
-      }
+      return regexPatternProblem(value);
     case 'ipInRange':
       return parseIpRange(value)
         ? null
@@ -444,7 +444,15 @@ export function evaluateCondition(
           reason: `"${c.field}" is not a string`,
         };
       }
-      const passed = new RegExp(String(expected)).test(actual);
+      const passed = safeRegexTest(String(expected), actual);
+      if (passed === null) {
+        // Too long to test within the ReDoS bounds: fail closed.
+        return {
+          passed: false,
+          indeterminate: true,
+          reason: `"${c.field}" is longer than ${MAX_SUBJECT_LENGTH} characters`,
+        };
+      }
       return {
         passed,
         reason: passed

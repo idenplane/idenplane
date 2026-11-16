@@ -150,7 +150,7 @@ Idenplane supports the following condition operators. Each condition is `{ "fiel
 
 | Operator | Description | `value` |
 |----------|-------------|---------|
-| `matches` | Regex match, e.g. `email matches .*@company.com` | a valid JavaScript regular expression |
+| `matches` | Regex match, e.g. `email matches ^[^@]+@company\.com$` | a JavaScript regular expression of at most 256 characters, without backreferences or nested repetition (see below) |
 | `ipInRange` | The IP address is in the range | an IPv4 or IPv6 address, or a CIDR block: `10.0.0.0/8`, `2001:db8::/32`, `203.0.113.7` |
 
 `ipInRange` handles IPv4 and IPv6. An IPv4-mapped IPv6 address (`::ffff:10.1.2.3`, which is how a dual-stack server reports an IPv4 client) matches the IPv4 range it belongs to, so a rule on `10.0.0.0/8` applies whichever form your application passes. An IPv4 address never matches an IPv6 range, and the other way round.
@@ -160,6 +160,8 @@ A condition on a field the request does not carry is false (for example `ipInRan
 ### Validation and fail-closed evaluation
 
 Every condition is checked when a policy is created or updated (and when a realm is imported): an unknown operator such as `equal` or `contain`, a missing `field` or `value`, an array for `equals`, `in` without an array, a non-numeric bound, an invalid regular expression or an invalid CIDR is refused with a `400` that names the condition, for example `subjectConditions[1]: unknown operator "contain" (expected one of: ...)`.
+
+**Regular expressions (`matches`).** The pattern runs against values from the request, so a pattern with catastrophic backtracking would let any caller of the evaluate endpoint stall the server (ReDoS). A pattern is accepted only if it is at most 256 characters, uses no backreferences (``, `\k<name>`), and never repeats a group that itself repeats or alternates: `(a+)+`, `(a*)*`, `(a|b)*` and `(\w+\s?)*` are refused; `(ab)+`, `^(read|write):` and `[a-z]+@` are fine. A value longer than 2,048 characters is not tested: the condition is indeterminate and fails closed.
 
 A stored policy that still cannot be evaluated (one saved by a version before 0.11.0, or written to the database directly) **fails closed**:
 
