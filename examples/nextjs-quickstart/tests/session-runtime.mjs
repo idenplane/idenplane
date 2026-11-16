@@ -104,12 +104,21 @@ const save = (error) =>
       2,
     ),
   );
+// Ports handed out in this run. The kernel can give the same ephemeral port
+// to two listen(0) calls once the first socket is closed, and two containers
+// mapped to one host port fail with "port is already allocated" (seen in CI).
+const takenPorts = new Set();
 async function port() {
-  const s = net.createServer();
-  await new Promise((r) => s.listen(0, '127.0.0.1', r));
-  const p = s.address().port;
-  await new Promise((r) => s.close(r));
-  return p;
+  for (;;) {
+    const s = net.createServer();
+    await new Promise((r) => s.listen(0, '127.0.0.1', r));
+    const p = s.address().port;
+    await new Promise((r) => s.close(r));
+    if (!takenPorts.has(p)) {
+      takenPorts.add(p);
+      return p;
+    }
+  }
 }
 async function ready(url) {
   for (let n = 0; n < 120; n++) {

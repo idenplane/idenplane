@@ -9,6 +9,17 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+## [0.11.1] - 2026-11-17
+
+A security patch: a refresh token presented twice at the same moment could leave a valid refresh token behind after reuse was detected. No configuration or upgrade steps are needed when coming from 0.11.0. A client that presents a refresh token it has already redeemed now loses the whole session, not just its refresh tokens, and must sign the user in again.
+
+### Security
+- **A reused refresh token now ends its session.** When a refresh token is presented again after it was redeemed, every refresh token of the session was revoked, but a concurrent request that redeemed the same token could store its new refresh token right after that revocation, and that token kept working. The session is now ended as well, so the new token cannot be stored, or is removed with the session.
+
+### Changed
+- **Release workflow:** the publish job retries the SBOM attestation check for a few minutes, since Docker Hub can list a new attestation late (the v0.11.0 publish failed that check although the attestation was fine).
+- **Tests:** the session-integration test no longer hands out the same host port twice in one run, which made it fail intermittently.
+
 ## [0.11.0] - 2026-11-16
 
 A security release. Admin console sign-in gets a second factor (TOTP or passkeys), with an optional server-wide requirement. Five vulnerabilities are fixed, each with a GitHub Security Advisory: XML signature wrapping and replay of SAML AuthnRequests, authorization policies that failed open, and, in the client SDKs, an Angular interceptor that sent the access token to every origin and a `verifyToken` that accepted ID tokens and other clients' tokens. Offline tokens now last their configured lifetime, redirect URIs are matched exactly (RFC 9700), recovery codes are 120-bit, users migrated from Keycloak can sign in, and `matches` policy conditions are protected against ReDoS.
@@ -743,7 +754,8 @@ The foundation release: core IAM server with OAuth, OIDC, SAML, MFA, and the ini
 - `removeUserRealmRoles` returning 200 instead of 204
 - Login error messages never displayed on failed login
 
-[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.11.0...HEAD
+[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.11.1...HEAD
+[0.11.1]: https://github.com/idenplane/idenplane/releases/tag/v0.11.1
 [0.11.0]: https://github.com/idenplane/idenplane/releases/tag/v0.11.0
 [0.10.1]: https://github.com/idenplane/idenplane/releases/tag/v0.10.1
 [0.10.0]: https://github.com/idenplane/idenplane/releases/tag/v0.10.0
