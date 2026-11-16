@@ -31,7 +31,7 @@
     "backfill:encrypt-realm-secrets": "npx ts-node prisma/backfill-encrypt-realm-secrets.ts"
   },
   "dependencies": {
-    "@apollo/server": "^5.0.0",
+    "@apollo/server": "^5.5.2",
     "@nestjs/apollo": "^14.2.0",
     "@nestjs/common": "^12.5.0",
     "@nestjs/config": "^12.1.1",
