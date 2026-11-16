@@ -1,0 +1,122 @@
+name: Release assets
+
+# Attaches the supply-chain evidence for a server release to its GitHub
+# release:
+#
+#   idenplane-X.Y.Z.spdx.json          the SPDX SBOM, taken from the image's
+#                                      signed cosign attestation (so it is
+#                                      byte-for-byte the SBOM that was signed)
+#   idenplane-X.Y.Z-image-digests.txt  the image index digest and the digest
+#                                      of every platform image
+#   SHA256SUMS                         checksums of the two files above
+#   SHA256SUMS.sigstore.json           keyless cosign signature bundle for
+#                                      SHA256SUMS
+#
+# The image is built by docker-publish.yml on the same v* tag. A release can
+# be published before or after that build finishes, so this waits for the
+# image (up to an hour) and verifies its signature before using it.
+# workflow_dispatch backfills an existing release.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to (re)build the assets for, e.g. v0.10.0'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-assets-${{ github.event.release.tag_name || inputs.tag }}
+  cancel-in-progress: false
+
+env:
+  COSIGN_VERSION: v3.1.4
+  IMAGE: islamawad/idenplane
+
+jobs:
+  assets:
+    name: SBOM, digests and checksums
+    if: startsWith(github.event.release.tag_name || inputs.tag, 'v')
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    permissions:
+      contents: write   # gh release upload
+      id-token: write   # cosign sign-blob (keyless)
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - name: Validate the tag
+        run: |
+          set -euo pipefail
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+([.-][0-9A-Za-z.-]+)?$ ]] || { echo "::error::'$TAG' is not a release tag"; exit 1; }
+          echo "VERSION=${TAG#v}" >> "$GITHUB_ENV"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+
+      - name: Wait for the release image
+        run: |
+          set -euo pipefail
+          for i in $(seq 1 120); do
+            if digest="$(docker buildx imagetools inspect "${IMAGE}:${VERSION}" --format '{{ json .Manifest }}' 2>/dev/null | jq -r .digest)" && [ -n "$digest" ] && [ "$digest" != null ]; then
+              echo "DIGEST=$digest" >> "$GITHUB_ENV"
+              echo "${IMAGE}:${VERSION} is ${digest}"
+              exit 0
+            fi
+            echo "waiting for ${IMAGE}:${VERSION} ($i/120)"; sleep 30
+          done
+          echo "::error::${IMAGE}:${VERSION} did not appear within an hour; is docker-publish.yml green for ${TAG}?"
+          exit 1
+
+      # Only an image signed by docker-publish.yml for this very tag counts.
+      # The signature can land a minute after the tag does, so retry briefly.
+      - name: Verify the image signature and extract the signed SBOM
+        env:
+          IDENTITY: https://github.com/${{ github.repository }}/.github/workflows/docker-publish.yml@refs/tags/${{ env.TAG }}
+        run: |
+          set -euo pipefail
+          REF="${IMAGE}@${DIGEST}"
+          for i in $(seq 1 20); do
+            cosign verify "$REF" --certificate-identity "$IDENTITY" \
+              --certificate-oidc-issuer https://token.actions.githubusercontent.com > /dev/null && break
+            [ "$i" = 20 ] && { echo "::error::no valid signature on $REF from $IDENTITY"; exit 1; }
+            sleep 30
+          done
+          for i in $(seq 1 20); do
+            if cosign verify-attestation "$REF" --type spdxjson --certificate-identity "$IDENTITY" \
+                --certificate-oidc-issuer https://token.actions.githubusercontent.com > attestation.jsonl; then
+              break
+            fi
+            [ "$i" = 20 ] && { echo "::error::no valid SPDX attestation on $REF"; exit 1; }
+            sleep 30
+          done
+          head -n1 attestation.jsonl | jq -r '.payload // .dsseEnvelope.payload' | base64 -d | jq '.predicate' > "idenplane-${VERSION}.spdx.json"
+          jq -e '.spdxVersion' "idenplane-${VERSION}.spdx.json" > /dev/null
+
+      - name: Write digests and checksums
+        run: |
+          set -euo pipefail
+          {
+            echo "# ${IMAGE}:${VERSION}"
+            echo "index ${IMAGE}@${DIGEST}"
+            docker buildx imagetools inspect "${IMAGE}@${DIGEST}" --format '{{ json .Manifest }}' \
+              | jq -r '.manifests[] | select(.platform.os != "unknown") | "\(.platform.os)/\(.platform.architecture) \(env.IMAGE)@\(.digest)"'
+          } > "idenplane-${VERSION}-image-digests.txt"
+          cat "idenplane-${VERSION}-image-digests.txt"
+          sha256sum "idenplane-${VERSION}.spdx.json" "idenplane-${VERSION}-image-digests.txt" > SHA256SUMS
+          cat SHA256SUMS
+          cosign sign-blob --yes --bundle SHA256SUMS.sigstore.json SHA256SUMS
+
+      - name: Attach to the release
+        run: |
+          gh release upload "$TAG" --repo "${{ github.repository }}" --clobber \
+            "idenplane-${VERSION}.spdx.json" "idenplane-${VERSION}-image-digests.txt" \
+            SHA256SUMS SHA256SUMS.sigstore.json
+          echo "Attached SBOM, digests and signed checksums to ${TAG} (${IMAGE}@${DIGEST})" >> "$GITHUB_STEP_SUMMARY"

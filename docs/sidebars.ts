@@ -232,6 +232,11 @@ const sidebars: SidebarsConfig = {
           id: 'security/asvs-assessment',
           label: 'OWASP ASVS Assessment',
         },
+        {
+          type: 'doc',
+          id: 'security/verify-releases',
+          label: 'Verifying Releases',
+        },
       ],
     },
     {
