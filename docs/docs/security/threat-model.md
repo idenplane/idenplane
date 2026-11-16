@@ -151,8 +151,8 @@ Each table lists the STRIDE category (S spoofing, T tampering, R repudiation, I 
 | | Threat | Mitigation | Residual risk |
 |---|---|---|---|
 | S | Code interception or injection | Codes live 60 s and are single-use (atomic update, replay revokes the session); PKCE `S256` required for public clients (`src/oauth/oauth.service.ts`, `src/auth/auth.service.ts`) | PKCE is optional for confidential clients |
-| S | Open redirect via `redirect_uri` | Registered URIs only (`src/common/redirect-uri.utils.ts`) | A registered URI ending in `/*` matches any path below it (ASVS V10.4.1) |
-| S | Refresh token theft | Rotation on every use; reuse revokes the session; tokens bound to the client and optionally to a client certificate (RFC 8705) | Absolute session expiry is enforced by an hourly job, not at refresh |
+| S | Open redirect via `redirect_uri` | Exact string matching of registered URIs since 0.11.0, loopback port excepted (RFC 8252); fragments refused (`src/common/redirect-uri.utils.ts`) | Clients upgraded with `allowInsecureWildcardRedirectUris` still match any path below a `/*` entry until an admin turns it off; `/admin/upgrade/health` lists them |
+| S | Refresh token theft | Rotation on every use; reuse revokes the session; tokens bound to the client and optionally to a client certificate (RFC 8705); the session's absolute expiry is checked at every refresh (`src/sessions/session-lifetime.ts`) | An offline token is valid for `offlineTokenLifespan` (30 days by default) from sign-in, with no idle timeout; RP-initiated logout and the admin and reset paths end it, but a stolen one is usable until then |
 | E | Token confusion: ID, logout or admin tokens used as access tokens | userinfo, introspection and the WebSocket accept only `typ: Bearer` (`src/tokens/access-token-type.ts`); admin API requires `typ: admin` | No audience or issuer check at verification (ASVS V9.2.3) |
 | S | Client impersonation | Secrets hashed; one auth method per request; `tls_client_auth` / `self_signed_tls_client_auth` with per-realm trust anchors (`src/client-auth/`) | The password grant can still be enabled per client |
 | T | SAML request tampering, XML attacks, signature wrapping | When the SP has a certificate, every AuthnRequest must be signed. HTTP-POST: one signature, on the root, referencing the root's `ID`, and every field read from the signed bytes; HTTP-Redirect: signature over the raw query bytes. No DTD, comments, processing instructions or duplicate IDs; SHA-1 refused; size limit before and during inflation (`src/saml/saml-request-verifier.ts`, `src/saml/saml-request-hardening.spec.ts`) | SPs without a certificate send unsigned requests, which anyone can forge (the response still goes only to a registered ACS URL) |
@@ -245,8 +245,8 @@ Each table lists the STRIDE category (S spoofing, T tampering, R repudiation, I 
 
 The highest residual risks, all tracked in the [ASVS assessment](./asvs-assessment.md#remaining-gaps):
 
-1. Wildcard redirect URIs.
-2. Installs upgraded to 0.11.0 that have not turned on the admin MFA requirement. `/admin/upgrade/health` warns and names the admins without a second factor.
+1. Installs upgraded to 0.11.0 that have not turned on the admin MFA requirement. `/admin/upgrade/health` warns and names the admins without a second factor.
+2. Clients still on the legacy wildcard redirect URI opt-in (`allowInsecureWildcardRedirectUris`, set by the 0.11.0 upgrade on clients that had `/*` entries). `/admin/upgrade/health` lists them.
 3. Realms created before 0.10.0 with brute-force protection or events still off. `/admin/upgrade/health` lists them.
 4. SSRF guard not applied to every outbound call; geo-IP over plain HTTP.
-5. No SSO idle timeout; absolute session expiry enforced by a job.
+5. No SSO idle timeout, and no idle timeout for offline sessions: an offline token lives for `offlineTokenLifespan` from sign-in.

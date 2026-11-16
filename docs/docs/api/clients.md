@@ -88,7 +88,9 @@ Creates a new OAuth client application.
 | `enabled` | boolean | No | Whether client is enabled (default: true) |
 | `rootUrl` | string | No | Application root URL |
 | `baseUrl` | string | No | Default URL within the application |
-| `redirectUris` | string[] | No | Allowed redirect URIs |
+| `redirectUris` | string[] | No | Allowed redirect URIs, matched exactly. See [Redirect URI matching](#redirect-uri-matching). |
+| `postLogoutRedirectUris` | string[] | No | Allowed `post_logout_redirect_uri` values, matched exactly. Falls back to `redirectUris` when empty. |
+| `allowInsecureWildcardRedirectUris` | boolean | No | **Insecure, for migration only.** Lets an entry ending in `/*` match any path below it, as before 0.11.0. Default `false`. |
 | `webOrigins` | string[] | No | Allowed CORS origins |
 | `protocol` | string | No | Protocol (default: "openid-connect") |
 | `publicClient` | boolean | No | Public client (no client secret) |
@@ -136,6 +138,31 @@ curl -X POST "http://localhost:3000/admin/realms/master/clients" \
   "createdAt": "2024-02-01T10:00:00Z"
 }
 ```
+
+### Redirect URI matching
+
+Since 0.11.0 a `redirect_uri` (and a `post_logout_redirect_uri`) must equal one of the client's registered values **character for character**, as the OAuth 2.0 Security BCP (RFC 9700 §2.1) and OAuth 2.1 require:
+
+- Nothing is normalised. A different case in the scheme or host, a trailing slash, a `..` or `.` segment, a percent-encoded character or a query string that is not registered all fail.
+- A redirect URI with a fragment (`#...`) is always refused, and cannot be registered (RFC 6749 §3.1.2).
+- **Loopback redirect URIs of native apps match on any port** (RFC 8252 §7.3): `http://127.0.0.1/callback` registered allows `http://127.0.0.1:51234/callback`, and the same for `http://[::1]/...`. Only the port may differ, only for `http`, and only for these IP literals: `localhost` gets no such exception (RFC 8252 §8.3).
+- A `*` is refused at registration, unless the client has `allowInsecureWildcardRedirectUris`.
+
+**`allowInsecureWildcardRedirectUris` is insecure.** With it, a registered `https://app.example.com/app/*` matches any path below `/app/` (and `https://app.example.com/app` itself), so any page there, including an open redirect or user-controlled content, can receive the authorization code. Idenplane still refuses fragments, other origins, `..` and `.` segments and encoded `/`, `.` or `\` in the path of such a match, but that does not make it safe. It exists so that clients registered with wildcards before 0.11.0 keep working while they are moved to exact URIs: the 0.11.0 upgrade turns it on for every client that already had a `/*` entry, and `GET /admin/upgrade/health` lists those clients in the `wildcard_redirect_uris` warning. To move a client off it, register each exact callback URL your application sends, then set `allowInsecureWildcardRedirectUris` to `false` in the same update:
+
+```bash
+curl -X PUT "http://localhost:3000/admin/realms/my-realm/clients/my-web-app" \
+  -H "x-admin-api-key: $ADMIN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "redirectUris": ["https://myapp.com/callback", "https://myapp.com/silent-renew"],
+    "allowInsecureWildcardRedirectUris": false
+  }'
+```
+
+Turning the option off while a `/*` entry is still registered is refused with `400`, because that entry would silently never match.
+
+Web origins (`webOrigins`, CORS) are unchanged: they are whole origins, compared exactly, and `*` is refused.
 
 ## Get Client
 
@@ -317,7 +344,9 @@ curl -X GET "http://localhost:3000/admin/realms/master/clients/client-uuid-123/s
   "enabled": "boolean",
   "rootUrl": "string (URL)",
   "baseUrl": "string (URL)",
-  "redirectUris": "string[] (URLs)",
+  "redirectUris": "string[] (URLs, matched exactly)",
+  "postLogoutRedirectUris": "string[] (URLs, matched exactly)",
+  "allowInsecureWildcardRedirectUris": "boolean (insecure, legacy; default false)",
   "webOrigins": "string[] (origins)",
   "protocol": "string (openid-connect|saml)",
   "publicClient": "boolean",

@@ -52,10 +52,10 @@ Idenplane rotates refresh tokens on every use — each one is single-use, and a 
 
 There are two different `redirect_uri` checks, and they are not equally strict:
 
-1. **At `/authorize`** — `redirect_uri` is checked with `matchesRedirectUri()` against the client's registered `redirectUris`. This allows a trailing-wildcard pattern: a registered `https://app.example.com/*` matches any path under that origin (and the bare origin itself).
-2. **At `/token`** — the `redirect_uri` you send must be **byte-identical** to the exact string that was submitted at `/authorize` (stored on the authorization code). No wildcard matching happens here.
+1. **At `/authorize`** — `redirect_uri` is checked with `matchesRedirectUri()` against the client's registered `redirectUris`: it must be one of them exactly, except that a loopback IP URI (`http://127.0.0.1/...`, `http://[::1]/...`) may use any port. Only a client with the insecure `allowInsecureWildcardRedirectUris` opt-in also matches paths below a `/*` entry.
+2. **At `/token`** — the `redirect_uri` you send must be **byte-identical** to the exact string that was submitted at `/authorize` (stored on the authorization code).
 
-So it's possible to pass authorization with a wildcard-registered URI and then fail token exchange with `redirect_uri mismatch` simply because the two requests used a different exact string (different path, trailing slash, query string, or scheme). Always send the identical `redirect_uri` value to both endpoints.
+Always send the identical `redirect_uri` value to both endpoints.
 
 ### `invalid_client` / `unauthorized_client`
 
@@ -66,12 +66,15 @@ So it's possible to pass authorization with a wildcard-registered URI and then f
 
 ## `redirect_uri`, CORS, and Origin Mismatches
 
-### Exact vs. wildcard matching
+### Exact matching
 
-`redirectUris` on a client are matched with `matchesRedirectUri()`:
+Since 0.11.0 `redirectUris` and `postLogoutRedirectUris` are matched with `matchesRedirectUri()`, **exactly**:
 
-- A plain entry (no `/*` suffix) must match **exactly** — different port, scheme, or trailing slash all fail.
-- An entry ending in `/*` matches the bare origin and anything under that path prefix. For example, `http://localhost:4000/*` matches both `http://localhost:4000` and `http://localhost:4000/callback`.
+- A different port, scheme, host case, path, trailing slash or query string fails. So does any `redirect_uri` with a fragment (`#`).
+- A loopback IP entry such as `http://127.0.0.1/callback` matches on any port (`http://127.0.0.1:51234/callback`), for native apps (RFC 8252). `localhost` does not get this.
+- An entry ending in `/*` matches nothing but itself, unless the client has `allowInsecureWildcardRedirectUris` on. The 0.11.0 upgrade turned that on for clients that already had such an entry; `GET /admin/upgrade/health` lists them under `wildcard_redirect_uris`. See [Redirect URI matching](./api/clients.md#redirect-uri-matching).
+
+**`Invalid redirect_uri` after upgrading to 0.11.0:** the application sends a URI that differs from the registered one, often by a trailing slash or a query string, or the client relies on a wildcard that was not upgraded with it (for example, one added by hand in the database afterwards). Register the exact URI.
 
 ### How quickly `redirect_uri` and CORS (`webOrigins`) changes take effect
 
@@ -271,7 +274,7 @@ The SMTP provider (`nodemailer` under the hood) only treats itself as configured
 `redirect_uri` is checked against the database on every request. `webOrigins` (CORS) are kept in memory by every process and reloaded as soon as the database announces a change, see [redirect_uri, CORS, and Origin Mismatches](#redirect_uri-cors-and-origin-mismatches).
 
 **Why does my authorization request succeed but the token exchange fails with `redirect_uri mismatch`?**
-`/authorize` allows wildcard-registered redirect URIs (`https://app.example.com/*`); `/token` requires the exact string you sent to `/authorize`, byte-for-byte. See [redirect_uri exactness at token exchange](#redirect_uri-exactness-at-token-exchange).
+`/token` requires the exact string you sent to `/authorize`, byte-for-byte. A loopback URI may use any port at `/authorize`, and a client with the legacy wildcard opt-in any path below a `/*` entry, but the token request must repeat the one that was used. See [redirect_uri exactness at token exchange](#redirect_uri-exactness-at-token-exchange).
 
 **My refresh token suddenly stopped working and now the whole session is dead — why?**
 You (or a concurrent request from the same client) reused an already-rotated refresh token. Reuse detection revokes every refresh token on that session as a compromise precaution, not just the one that was reused. See [Refresh token rotation and reuse](#refresh-token-rotation-and-reuse).

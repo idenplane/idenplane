@@ -145,10 +145,26 @@ describe('OAuthService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should accept redirect_uri matching a wildcard pattern', async () => {
+    it('refuses a redirect_uri under a wildcard entry for a normal client (exact matching)', async () => {
       prisma.client.findUnique.mockResolvedValue({
         ...mockClient,
         redirectUris: ['http://localhost:4000/*'],
+      });
+      const params = {
+        ...validParams,
+        redirect_uri: 'http://localhost:4000/callback',
+      };
+
+      await expect(
+        service.validateAuthRequest(mockRealm, params),
+      ).rejects.toThrow(BadRequestException);
+    });
+
+    it('accepts a redirect_uri under a wildcard entry for a client with the insecure opt-in', async () => {
+      prisma.client.findUnique.mockResolvedValue({
+        ...mockClient,
+        redirectUris: ['http://localhost:4000/*'],
+        allowInsecureWildcardRedirectUris: true,
       });
       const params = {
         ...validParams,
@@ -163,6 +179,7 @@ describe('OAuthService', () => {
       prisma.client.findUnique.mockResolvedValue({
         ...mockClient,
         redirectUris: ['http://localhost:4000/*'],
+        allowInsecureWildcardRedirectUris: true,
       });
       const params = {
         ...validParams,

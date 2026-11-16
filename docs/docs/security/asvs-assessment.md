@@ -8,7 +8,7 @@ description: Idenplane assessed against OWASP ASVS 5.0.0 Level 2, requirement by
 
 This is a self-assessment of the Idenplane server, admin console and themes against the [OWASP Application Security Verification Standard 5.0.0](https://github.com/OWASP/ASVS/releases/tag/v5.0.0_release), **Level 2**. It covers every Level 1 and Level 2 requirement (253), taken from the official release CSV.
 
-- **Version assessed:** 0.10.0 (branch `feat/security-hardening-0.10`), November 2026. Updated for 0.11.0 (admin console MFA, stronger recovery codes): the rows that changed say "FIXED in 0.11.0".
+- **Version assessed:** 0.10.0 (branch `feat/security-hardening-0.10`), November 2026. Rows changed by 0.11.0 (admin console MFA, stronger recovery codes, SAML request verification, V3.7.2, V7.1.1, V7.3.2, V10.4.1, V10.4.8) are updated and say "FIXED in 0.11.0".
 - **Method:** each verdict comes from reading the code, not the docs. Evidence is a file and line, a test, or configuration. Requirements about documentation were judged against what the docs actually say.
 - **Not a certification.** Nobody outside the project has reviewed it. Treat it as a map of where the controls are and where they are missing.
 - **Machine-readable copy:** [asvs-5.0-l2-assessment.csv](pathname:///security/asvs-5.0-l2-assessment.csv), one row per requirement with the requirement text, status, evidence, notes and recommendation.
@@ -35,10 +35,10 @@ Idenplane terminates TLS at a reverse proxy, so transport requirements about the
 | V4 API and Web Service | 4 | 3 | 1 | 2 | 10 |
 | V5 File Handling | 4 | 2 | 3 | 0 | 9 |
 | V6 Authentication | 20 | 10 | 4 | 1 | 35 |
-| V7 Session Management | 7 | 10 | 1 | 0 | 18 |
+| V7 Session Management | 8 | 9 | 1 | 0 | 18 |
 | V8 Authorization | 5 | 2 | 0 | 0 | 7 |
 | V9 Self-contained Tokens | 6 | 1 | 0 | 0 | 7 |
-| V10 OAuth and OIDC | 10 | 12 | 2 | 5 | 29 |
+| V10 OAuth and OIDC | 12 | 11 | 1 | 5 | 29 |
 | V11 Cryptography | 10 | 3 | 1 | 0 | 14 |
 | V12 Secure Communication | 2 | 3 | 1 | 3 | 9 |
 | V13 Configuration | 4 | 9 | 0 | 0 | 13 |
@@ -46,7 +46,7 @@ Idenplane terminates TLS at a reverse proxy, so transport requirements about the
 | V15 Secure Coding and Architecture | 6 | 5 | 2 | 0 | 13 |
 | V16 Security Logging and Error Handling | 8 | 6 | 1 | 1 | 16 |
 | V17 WebRTC | 0 | 0 | 0 | 7 | 7 |
-| **All** | **114** | **90** | **20** | **29** | **253** |
+| **All** | **117** | **88** | **19** | **29** | **253** |
 
 ### Fixed in 0.11.0
 
@@ -77,20 +77,26 @@ The assessment found these gaps and 0.10.0 closes them, with tests:
 | V6.1.1, V7.1.1 | The brute-force and session docs described Keycloak settings that do not exist. | — |
 | V11.1.2 | A cryptographic inventory now exists, in the [threat model](./threat-model.md#cryptographic-inventory). | — |
 
+### Fixed in 0.11.0
+
+| Requirement | Fix | Test |
+|---|---|---|
+| V10.4.1 | Redirect URIs and post-logout redirect URIs are matched exactly (RFC 9700), except the port of a loopback IP URI (RFC 8252). Fragments are refused. A `/*` wildcard needs the per-client, insecure `allowInsecureWildcardRedirectUris`, which the upgrade sets only on clients that already had one, and which `/admin/upgrade/health` reports. | `redirect-uri.utils.spec.ts`, `redirect-uri.property.spec.ts`, `test/redirect-uri-exact.e2e-spec.ts` |
+| V7.3.2, V10.4.8 | An offline session lives for `offlineTokenLifespan`; it was deleted, with its offline tokens, after `refreshTokenLifespan`. The session's absolute expiry is checked at every refresh and introspection, and a refresh token never outlives its session. | `session-lifetime.spec.ts`, `sessions-cleanup.service.spec.ts`, `test/offline-sessions.e2e-spec.ts` |
+
 ### Remaining gaps
 
 These are left open on purpose. Most would change behaviour that existing deployments rely on, or need a design of their own, and half a fix would be worse than a documented gap. A few are small but touch admin-only input (theme uploads, custom CSS) and were left for a focused change. In rough priority order:
 
-1. **Wildcard redirect URIs** (V10.4.1). A registered URI ending in `/*` matches any path below it. Removing this breaks clients registered that way; it needs a deprecation period with a warning first.
-2. **No common, breached or context-word password checks** (V6.2.4, V6.2.11, V6.2.12).
-3. **Geo-IP lookups send end-user IPs over plain HTTP to ip-api.com** (V12.3.1, V14.2.3) when adaptive authentication or continuous verification is on. Needs an HTTPS provider or a local database, and an explicit opt-in.
-4. **Session lifetime** (V7.3.1, V7.3.2, V10.4.8). There is no idle timeout for SSO sessions, and the absolute session expiry is enforced by an hourly clean-up job, not at refresh time. A related finding: an offline token's session gets the normal session expiry, so the clean-up deletes offline tokens after `refreshTokenLifespan` (plus up to an hour), not after `offlineTokenLifespan`. Fixing this changes how long existing sessions live, so it needs its own change.
-5. **RP-initiated logout without `id_token_hint`** ends the session with no confirmation (V10.6.2).
-6. **WebSocket upgrade has no Origin check** (V4.4.2).
-7. **Theme asset uploads trust the declared MIME type** (V5.2.2) and store SVG unsanitized (V1.3.4).
-8. **RSA 2048 signing keys** (V11.2.3). New keys should be 3072-bit; that changes JWKS consumers' expectations only slightly but needs a rotation story.
-9. **Users cannot list or end their own sessions, or revoke consents** (V7.5.2, V10.7.3).
-10. **Documentation-only gaps:** input validation rules (V2.1.x), file handling (V5.1.1), data classification (V14.1.x), log inventory (V16.1.1), SBOM (V15.1.2).
+1. **No common, breached or context-word password checks** (V6.2.4, V6.2.11, V6.2.12).
+2. **Geo-IP lookups send end-user IPs over plain HTTP to ip-api.com** (V12.3.1, V14.2.3) when adaptive authentication or continuous verification is on. Needs an HTTPS provider or a local database, and an explicit opt-in.
+3. **Session idle timeout** (V7.3.1). There is no idle timeout for SSO sessions, nor for offline sessions, which live for `offlineTokenLifespan` from sign-in. (The absolute expiry and the offline lifetime were fixed in 0.11.0.)
+4. **RP-initiated logout without `id_token_hint`** ends the session with no confirmation (V10.6.2).
+5. **WebSocket upgrade has no Origin check** (V4.4.2).
+6. **Theme asset uploads trust the declared MIME type** (V5.2.2) and store SVG unsanitized (V1.3.4).
+7. **RSA 2048 signing keys** (V11.2.3). New keys should be 3072-bit; that changes JWKS consumers' expectations only slightly but needs a rotation story.
+8. **Users cannot list or end their own sessions, or revoke consents** (V7.5.2, V10.7.3).
+9. **Documentation-only gaps:** input validation rules (V2.1.x), file handling (V5.1.1), data classification (V14.1.x), log inventory (V16.1.1), SBOM (V15.1.2).
 
 Every row below has its own recommendation.
 
@@ -166,7 +172,7 @@ Every row below has its own recommendation.
 | V3.5.4 | 2 | Partial | src/app.module.ts:116 (admin console served on the same origin as realm pages) | No origin separation between admin and end-user UI. **Recommendation:** Optional separate admin hostname (L). |
 | V3.5.5 | 2 | N/A |  | No postMessage listeners. |
 | V3.7.1 | 2 | Pass | React SPA, no plugins |  |
-| V3.7.2 | 2 | Pass | src/tokens/tokens.service.ts:413; src/common/redirect-uri.utils.ts | Redirects only to registered URIs (wildcards: see V10.4.1). |
+| V3.7.2 | 2 | Pass | src/tokens/tokens.service.ts (validatePostLogoutRedirectUri); src/common/redirect-uri.utils.ts | Redirects only to registered URIs, matched exactly since 0.11.0 (see V10.4.1). |
 
 ### V4 API and Web Service
 
@@ -241,7 +247,7 @@ Every row below has its own recommendation.
 
 | Req | L | Status | Evidence | Notes and recommendation |
 |---|---|---|---|---|
-| V7.1.1 | 2 | Partial | docs/docs/security/secure-defaults.md (session lifetimes); prisma/schema.prisma (accessTokenLifespan, refreshTokenLifespan, offlineTokenLifespan) | FIXED in part: the real settings are now documented; there is no idle timeout to document (V7.3.1). |
+| V7.1.1 | 2 | Partial | docs/docs/security/secure-defaults.md (session lifetimes); docs/docs/configuration/options.md; prisma/schema.prisma (accessTokenLifespan, refreshTokenLifespan, offlineTokenLifespan) | FIXED in part: the real settings are documented, including the offline session lifetime (0.11.0); there is no idle timeout to document (V7.3.1). |
 | V7.1.2 | 2 | Pass | docs/docs/guides/authentication.mdx; src/login/login.service.ts:157-182 | maxSessionsPerUser documented and enforced. |
 | V7.1.3 | 2 | Partial | docs/docs/api/oauth.md (backchannel logout) |  |
 | V7.2.1 | 1 | Pass | src/login/login.service.ts:187-215 | Session token looked up by hash server-side. |
@@ -249,7 +255,7 @@ Every row below has its own recommendation.
 | V7.2.3 | 1 | Pass | src/crypto/crypto.service.ts:191; src/login/login.service.ts:140 | 256-bit session tokens, stored hashed. |
 | V7.2.4 | 1 | Partial | src/login/login.service.ts:129-138; src/step-up/step-up.service.ts:165 | New token at login; step-up keeps the same token. **Recommendation:** Rotate after step-up (S). |
 | V7.3.1 | 2 | Partial | prisma/schema.prisma (LoginSession has no last-activity field) | Refresh tokens slide; SSO and admin sessions have no idle timeout. **Recommendation:** lastSeenAt plus an idle-timeout setting (M). |
-| V7.3.2 | 2 | Partial | src/auth/auth.service.ts:820-843; src/sessions/sessions-cleanup.service.ts:11-19 | Absolute session expiry is enforced by the hourly cleanup, not at refresh. Offline tokens are deleted with their session after refreshTokenLifespan (finding). **Recommendation:** Check session.expiresAt at refresh, and give offline sessions their own expiry (M). |
+| V7.3.2 | 2 | Pass | src/sessions/session-lifetime.ts; src/auth/auth.service.ts (handleRefreshTokenGrant); src/tokens/tokens.service.ts (introspectRefreshToken); src/login/login.service.ts (SSO expiresAt); src/admin-auth/admin-auth.controller.ts (admin token: 1 h, refresh returns the same token); test/offline-sessions.e2e-spec.ts | FIXED in 0.11.0: the absolute session expiry is checked at refresh and introspection, not left to the hourly clean-up, and offline sessions get their own expiry (offlineTokenLifespan) instead of being deleted after refreshTokenLifespan. |
 | V7.4.1 | 1 | Pass | src/tokens/tokens.service.ts:427-475 | Logout deletes sessions; later sid checks fail. |
 | V7.4.2 | 1 | Pass | src/users/users.service.ts; src/auth/auth.service.ts (code and device grants check enabled); src/tokens/tokens.service.ts:525 | FIXED gap: the code exchange did not check enabled. |
 | V7.4.3 | 2 | Partial | src/login/login.controller.ts endAllSessions; test/theme-views.e2e-spec.ts (reset ends sessions) | FIXED in part: a password reset ends every session. Self-service change and admin set do not offer the option. **Recommendation:** Add "sign out other sessions" to password change (S). |
@@ -296,14 +302,14 @@ Every row below has its own recommendation.
 | V10.3.2 | 2 | Pass | src/tokens/tokens.service.ts:518-533 |  |
 | V10.3.3 | 2 | Pass | src/tokens/tokens.service.ts:518 | sub is a per-realm UUID. |
 | V10.3.4 | 2 | N/A |  | No resource endpoint requires a particular acr. |
-| V10.4.1 | 1 | **Fail** | src/common/redirect-uri.utils.ts:12-15 | Registered URIs ending in /\* match any path by prefix. **Recommendation:** Exact matching; refuse wildcards at registration (S, breaks configs that use them). |
+| V10.4.1 | 1 | Pass | src/common/redirect-uri.utils.ts (matchesRedirectUri); src/common/redirect-uri.utils.spec.ts; src/common/redirect-uri.property.spec.ts; test/redirect-uri-exact.e2e-spec.ts | FIXED in 0.11.0: exact string comparison, loopback port excepted (RFC 8252); fragments refused; wildcards refused at registration. Clients that had `/*` entries before the upgrade keep them through the per-client `allowInsecureWildcardRedirectUris` opt-in, reported by `/admin/upgrade/health` (`wildcard_redirect_uris`) until an admin turns it off. |
 | V10.4.2 | 1 | Pass | src/auth/auth.service.ts (atomic single use, replay revokes the session); test/oidc-conformance.e2e-spec.ts |  |
 | V10.4.3 | 1 | Pass | src/oauth/oauth.service.ts:133 (60 s) |  |
 | V10.4.4 | 1 | Partial | src/clients/dto/create-client.dto.ts:157-160 | No implicit flow; the password grant can still be enabled per client. **Recommendation:** Allowlist grantTypes; gate password (S). |
 | V10.4.5 | 1 | Pass | src/auth/auth.service.ts:820-940; test/refresh-rotation.e2e-spec.ts | Rotation with reuse detection. |
 | V10.4.6 | 2 | Partial | src/oauth/oauth.service.ts:71-86 | S256 only; required for public clients only. **Recommendation:** Realm flag to require PKCE for every client (S). |
 | V10.4.7 | 2 | N/A |  | No dynamic client registration. |
-| V10.4.8 | 2 | Partial | src/auth/auth.service.ts:1679 | Refresh expiry slides; the absolute cap is the hourly session cleanup. **Recommendation:** See V7.3.2. |
+| V10.4.8 | 2 | Pass | src/sessions/session-lifetime.ts (refreshTokenExpiresAt); src/auth/auth.service.ts (handleRefreshTokenGrant checks session.expiresAt); test/offline-sessions.e2e-spec.ts | FIXED in 0.11.0: a rotated refresh token never outlives its session, and the session's absolute expiry (refreshTokenLifespan, or offlineTokenLifespan for an offline session) is checked at every refresh. |
 | V10.4.9 | 2 | Pass | src/users/users.controller.ts:240; src/sessions/sessions.controller.ts |  |
 | V10.4.10 | 2 | Pass | src/client-auth/client-authenticator.ts:425 |  |
 | V10.4.11 | 2 | Partial | src/scopes/scopes.service.ts:53-80 | A client with no scopes assigned can request any supported scope. **Recommendation:** Grant assigned scopes only (S). |

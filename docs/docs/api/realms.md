@@ -58,7 +58,7 @@ curl -X GET "http://localhost:3000/admin/realms" \
       "refreshTokenLifespan": 1800,
       "ssoSessionIdleTimeout": 1800,
       "ssoSessionMaxLifespan": 36000,
-      "offlineSessionIdleTimeout": 2592000,
+      "offlineTokenLifespan": 2592000,
       "createdAt": "2023-01-01T00:00:00Z",
       "updatedAt": "2024-01-01T00:00:00Z"
     },
@@ -76,7 +76,7 @@ curl -X GET "http://localhost:3000/admin/realms" \
       "refreshTokenLifespan": 3600,
       "ssoSessionIdleTimeout": 3600,
       "ssoSessionMaxLifespan": 86400,
-      "offlineSessionIdleTimeout": 604800,
+      "offlineTokenLifespan": 604800,
       "createdAt": "2024-01-15T00:00:00Z",
       "updatedAt": "2024-01-15T00:00:00Z"
     }
@@ -113,7 +113,7 @@ Creates a new realm. Requires `super-admin` role.
 | `refreshTokenLifespan` | integer | No | Refresh token lifetime in seconds |
 | `ssoSessionIdleTimeout` | integer | No | SSO session idle timeout |
 | `ssoSessionMaxLifespan` | integer | No | Maximum SSO session lifetime |
-| `offlineSessionIdleTimeout` | integer | No | Offline session idle timeout |
+| `offlineTokenLifespan` | integer | No | Lifetime of an offline session and its `offline_access` refresh tokens, counted from sign-in (default `2592000`, 30 days). There is no separate offline idle timeout. |
 | `bruteForceEnabled` | boolean | No | Temporary lockout after repeated failed sign-ins. Defaults to `true` for a new realm. |
 | `maxLoginFailures` | integer | No | Failures within `failureResetTime` that lock the account (default `10`) |
 | `lockoutDuration` | integer | No | Lockout length in seconds (default `300`) |
@@ -155,7 +155,7 @@ curl -X POST "http://localhost:3000/admin/realms" \
   "refreshTokenLifespan": 1800,
   "ssoSessionIdleTimeout": 1800,
   "ssoSessionMaxLifespan": 36000,
-  "offlineSessionIdleTimeout": 2592000,
+  "offlineTokenLifespan": 2592000,
   "bruteForceEnabled": true,
   "maxLoginFailures": 5,
   "failureResetTime": 300,
@@ -196,7 +196,7 @@ curl -X GET "http://localhost:3000/admin/realms/partner-portal" \
   "refreshTokenLifespan": 1800,
   "ssoSessionIdleTimeout": 1800,
   "ssoSessionMaxLifespan": 36000,
-  "offlineSessionIdleTimeout": 2592000,
+  "offlineTokenLifespan": 2592000,
   "bruteForceEnabled": true,
   "maxLoginFailures": 5,
   "failureResetTime": 300,
@@ -554,7 +554,7 @@ curl -X POST "http://localhost:3000/admin/realms/partner-portal/email/test" \
   "refreshTokenLifespan": "integer (seconds)",
   "ssoSessionIdleTimeout": "integer (seconds)",
   "ssoSessionMaxLifespan": "integer (seconds)",
-  "offlineSessionIdleTimeout": "integer (seconds)",
+  "offlineTokenLifespan": "integer (seconds)",
   "bruteForceEnabled": "boolean",
   "maxLoginFailures": "integer",
   "failureResetTime": "integer (seconds)",

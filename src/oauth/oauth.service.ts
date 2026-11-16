@@ -58,7 +58,11 @@ export class OAuthService {
       throw new NotFoundException('Client not found');
     }
 
-    if (!matchesRedirectUri(params.redirect_uri, client.redirectUris)) {
+    if (
+      !matchesRedirectUri(params.redirect_uri, client.redirectUris, {
+        allowWildcard: client.allowInsecureWildcardRedirectUris,
+      })
+    ) {
       throw new BadRequestException('Invalid redirect_uri');
     }
 

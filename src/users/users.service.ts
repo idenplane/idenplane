@@ -18,6 +18,7 @@ import { ConsentService } from '../consent/consent.service.js';
 import { CreateUserDto } from './dto/create-user.dto.js';
 import { UpdateUserDto } from './dto/update-user.dto.js';
 import type { Realm } from '@prisma/client';
+import { SessionsService } from '../sessions/sessions.service.js';
 
 const USER_SELECT = {
   id: true,
@@ -46,6 +47,7 @@ export class UsersService {
     private readonly themeEmail: ThemeEmailService,
     private readonly bruteForceService: BruteForceService,
     private readonly consentService: ConsentService,
+    private readonly sessions: SessionsService,
   ) {}
 
   async create(realm: Realm, dto: CreateUserDto) {
@@ -245,7 +247,7 @@ export class UsersService {
       }
     }
 
-    return this.prisma.user.update({
+    const updated = await this.prisma.user.update({
       where: { id: userId },
       data: {
         email: dto.email,
@@ -256,6 +258,17 @@ export class UsersService {
       },
       select: USER_SELECT,
     });
+
+    // Disabling a user signs them out everywhere, as SCIM deactivation does:
+    // every session ends and its refresh tokens (offline ones included) are
+    // revoked. Refusing them only while the user is disabled would let an
+    // offline token work again, for up to offlineTokenLifespan, the moment
+    // the user is re-enabled.
+    if (dto.enabled === false && user.enabled) {
+      await this.sessions.revokeAllUserSessions(realm, userId);
+    }
+
+    return updated;
   }
 
   async remove(realm: Realm, userId: string) {

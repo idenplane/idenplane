@@ -13,6 +13,7 @@ import { seedDefaultScopesIn } from '../scopes/scope-seed.service.js';
 import { signingKeySecrets } from '../crypto/signing-key-secrets.js';
 import { wizardSecrets } from './wizard-secrets.js';
 import { NEW_REALM_SECURITY_DEFAULTS } from '../realms/realm-security-defaults.js';
+import { redirectUriListProblem } from '../common/redirect-uri.utils.js';
 
 /** The answer to any wizard write once setup is completed or skipped. */
 export const SETUP_COMPLETE_MESSAGE = 'Setup is already complete';
@@ -652,5 +653,12 @@ export class SetupWizardService {
         throw new BadRequestException(`Invalid redirect URI format: ${uri}`);
       }
     }
+    // A new client has no reason to start with an insecure wildcard.
+    const problem = redirectUriListProblem(
+      'redirectUris',
+      dto.redirectUris,
+      false,
+    );
+    if (problem) throw new BadRequestException(problem);
   }
 }

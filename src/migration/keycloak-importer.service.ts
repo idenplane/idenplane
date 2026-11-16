@@ -11,6 +11,7 @@ import { createEmptyReport, type MigrationReport } from './migration-report.js';
 import type { Prisma } from '@prisma/client';
 import { idpSecrets } from '../identity-providers/idp-secrets.js';
 import { REALM_BRUTE_FORCE_DEFAULTS } from '../realms/realm-security-defaults.js';
+import { wildcardRedirectUris } from '../common/redirect-uri.utils.js';
 
 type PrismaTx = Prisma.TransactionClient;
 
@@ -346,6 +347,19 @@ export class KeycloakImporterService {
           report.summary.clients.skipped++;
           continue;
         }
+        // Keycloak allows `/*` wildcards; Idenplane matches redirect URIs
+        // exactly since 0.11.0. A wildcard client is imported with the
+        // insecure opt-in so it keeps working, and the report says so.
+        const wildcards = wildcardRedirectUris(client.redirectUris ?? []);
+        if (wildcards.length > 0) {
+          report.warnings.push({
+            entity: 'client',
+            message:
+              `Client '${client.clientId}' has wildcard redirect URIs (${wildcards.join(', ')}). ` +
+              'They keep working through allowInsecureWildcardRedirectUris, which is insecure: ' +
+              'register the exact redirect URIs and turn it off.',
+          });
+        }
         if (!dryRun) {
           const grantTypes = this.mapKeycloakGrantTypes(client);
           const secretHash = client.secret
@@ -360,6 +374,7 @@ export class KeycloakImporterService {
               clientType: client.publicClient ? 'PUBLIC' : 'CONFIDENTIAL',
               clientSecret: secretHash,
               redirectUris: client.redirectUris ?? [],
+              allowInsecureWildcardRedirectUris: wildcards.length > 0,
               webOrigins: (client.webOrigins ?? []).filter((o: string) => {
                 if (o === '*') {
                   this.logger.warn(

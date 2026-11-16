@@ -2,6 +2,7 @@ import { Logger } from '@nestjs/common';
 import { Prisma, type ClientType } from '@prisma/client';
 import { seedDefaultScopesIn } from '../../scopes/scope-seed.service.js';
 import { NEW_REALM_SECURITY_DEFAULTS as SECURE } from '../realm-security-defaults.js';
+import { wildcardRedirectUris } from '../../common/redirect-uri.utils.js';
 
 /**
  * Import of a version 1 realm export: the mapping the import has always
@@ -43,6 +44,17 @@ export interface ImportedV1Client {
   grantTypes?: string[];
   backchannelLogoutUri?: string;
   backchannelLogoutSessionRequired?: boolean;
+}
+
+function wildcardOptIn(c: ImportedV1Client, logger: Logger): boolean {
+  const wildcards = wildcardRedirectUris(c.redirectUris ?? []);
+  if (wildcards.length === 0) return false;
+  logger.warn(
+    `Imported client '${c.clientId}' has wildcard redirect URIs (${wildcards.join(', ')}); ` +
+      'they keep working through allowInsecureWildcardRedirectUris, which is insecure. ' +
+      'Register exact URIs and turn it off.',
+  );
+  return true;
 }
 
 interface ImportedGroup {
@@ -229,6 +241,9 @@ export async function importV1(
         enabled: c.enabled ?? true,
         requireConsent: c.requireConsent ?? false,
         redirectUris: c.redirectUris ?? [],
+        // A version 1 export predates exact redirect URI matching (0.11.0).
+        // A client with a `/*` entry keeps working, as on upgrade.
+        allowInsecureWildcardRedirectUris: wildcardOptIn(c, logger),
         webOrigins: (c.webOrigins ?? []).filter((o: string) => {
           if (o === '*') {
             logger.warn(

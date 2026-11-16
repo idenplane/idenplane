@@ -90,6 +90,47 @@ describe('UpgradeHealthService.checkBruteForceProtection', () => {
   });
 });
 
+describe('UpgradeHealthService.checkWildcardRedirectUris', () => {
+  const build = async (queryRaw: jest.Mock) => {
+    const { UpgradeHealthService } =
+      await import('./upgrade-health.service.js');
+    return new UpgradeHealthService({ $queryRaw: queryRaw } as never);
+  };
+
+  it('passes when no client has a wildcard redirect URI', async () => {
+    const svc = await build(jest.fn().mockResolvedValue([]));
+    await expect(svc.checkWildcardRedirectUris()).resolves.toMatchObject({
+      name: 'wildcard_redirect_uris',
+      status: 'pass',
+    });
+  });
+
+  it('warns and names the clients, flagging a wildcard without the opt-in', async () => {
+    const svc = await build(
+      jest.fn().mockResolvedValue([
+        { realm: 'demo', client_id: 'legacy-spa', opt_in: true },
+        { realm: 'sample', client_id: 'imported', opt_in: false },
+      ]),
+    );
+    const check = await svc.checkWildcardRedirectUris();
+    expect(check.name).toBe('wildcard_redirect_uris');
+    expect(check.status).toBe('warn');
+    expect(check.message).toContain('2 client(s)');
+    expect(check.message).toContain('allowInsecureWildcardRedirectUris');
+    expect(check.details).toBe(
+      'demo/legacy-spa, sample/imported (opt-in off: the wildcard matches nothing)',
+    );
+  });
+
+  it('only warns, never fails, when the query errors', async () => {
+    const svc = await build(jest.fn().mockRejectedValue(new Error('boom')));
+    await expect(svc.checkWildcardRedirectUris()).resolves.toMatchObject({
+      name: 'wildcard_redirect_uris',
+      status: 'warn',
+    });
+  });
+});
+
 describe('UpgradeHealthService admin MFA checks', () => {
   const build = async (prisma: object) => {
     const { UpgradeHealthService } =

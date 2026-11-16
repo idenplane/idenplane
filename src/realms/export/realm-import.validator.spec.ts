@@ -1,7 +1,9 @@
 import { validateV2Import, isRealmSlug } from './realm-import.validator';
 import { SECRET_PLACEHOLDER } from '../secret-placeholder';
 
-const PASSWORD_FLOW = [{ id: 'pw', type: 'password', required: true, order: 1 }];
+const PASSWORD_FLOW = [
+  { id: 'pw', type: 'password', required: true, order: 1 },
+];
 
 function base(): Record<string, any> {
   return {
@@ -34,6 +36,30 @@ const paths = (payload: Record<string, unknown>) =>
 describe('validateV2Import', () => {
   it('accepts a consistent file', () => {
     expect(validateV2Import(base()).problems).toEqual([]);
+  });
+
+  it('checks redirect URIs as the client API does (exact matching since 0.11.0)', () => {
+    // An export from before 0.11.0 has no opt-in: the import grandfathers
+    // a wildcard client, so the file is valid.
+    const legacy = base();
+    legacy['clients'][0].redirectUris = ['https://app.example/*'];
+    expect(validateV2Import(legacy).problems).toEqual([]);
+
+    // With the opt-in explicitly off, a wildcard is refused.
+    const off = base();
+    off['clients'][0].redirectUris = ['https://app.example/*'];
+    off['clients'][0].allowInsecureWildcardRedirectUris = false;
+    expect(paths(off)).toContain('clients[0].redirectUris');
+
+    const on = base();
+    on['clients'][0].postLogoutRedirectUris = ['https://app.example/*'];
+    on['clients'][0].allowInsecureWildcardRedirectUris = true;
+    expect(validateV2Import(on).problems).toEqual([]);
+
+    // A fragment is never allowed.
+    const frag = base();
+    frag['clients'][0].redirectUris = ['https://app.example/cb#x'];
+    expect(paths(frag)).toContain('clients[0].redirectUris');
   });
 
   it('reports a reference that does not resolve, with its path', () => {

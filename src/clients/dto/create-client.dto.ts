@@ -128,7 +128,11 @@ export class CreateClientDto {
   @IsBoolean()
   enabled?: boolean;
 
-  @ApiPropertyOptional({ example: ['http://localhost:3000/callback'] })
+  @ApiPropertyOptional({
+    example: ['http://localhost:3000/callback'],
+    description:
+      'Matched exactly (RFC 9700), except that a loopback IP URI (http://127.0.0.1/..., http://[::1]/...) matches on any port (RFC 8252). No fragments. A trailing `/*` wildcard is accepted only with allowInsecureWildcardRedirectUris.',
+  })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
@@ -136,13 +140,22 @@ export class CreateClientDto {
 
   @ApiPropertyOptional({
     description:
-      'Allowed post_logout_redirect_uri values for RP-Initiated Logout. Falls back to redirectUris when empty.',
+      'Allowed post_logout_redirect_uri values for RP-Initiated Logout, matched exactly. Falls back to redirectUris when empty.',
     example: ['http://localhost:3000/after-logout'],
   })
   @IsOptional()
   @IsArray()
   @IsString({ each: true })
   postLogoutRedirectUris?: string[];
+
+  @ApiPropertyOptional({
+    default: false,
+    description:
+      'INSECURE, for migration only. Since 0.11.0 redirect URIs (and post-logout redirect URIs) must match a registered value exactly (RFC 9700). When true, a registered entry ending in `/*` also matches any path below it, as before 0.11.0, so any page under that path can receive authorization codes. Set by the 0.11.0 upgrade on clients that already had such an entry; turn it off once they are registered with exact URIs.',
+  })
+  @NotNullIfPresent()
+  @IsBoolean()
+  allowInsecureWildcardRedirectUris?: boolean;
 
   @ApiPropertyOptional({ example: ['http://localhost:3000'] })
   @IsOptional()

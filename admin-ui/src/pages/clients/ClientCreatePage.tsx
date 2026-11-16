@@ -4,6 +4,7 @@ import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createClient } from '../../api/clients';
 import { getErrorMessage } from '../../utils/getErrorMessage';
 import { CLIENT_TEMPLATES, type ClientTemplate } from '../../data/clientTemplates';
+import { redirectUriProblems, splitLines } from '../../utils/redirectUris';
 
 const TEMPLATE_CATEGORIES = Array.from(new Set(CLIENT_TEMPLATES.map((t) => t.category)));
 
@@ -52,10 +53,7 @@ export default function ClientCreatePage() {
         name: form.name,
         description: form.description,
         clientType: form.clientType,
-        redirectUris: form.redirectUris
-          .split('\n')
-          .map((s) => s.trim())
-          .filter(Boolean),
+        redirectUris: splitLines(form.redirectUris),
         webOrigins: form.webOrigins
           .split('\n')
           .map((s) => s.trim())
@@ -77,8 +75,13 @@ export default function ClientCreatePage() {
     },
   });
 
+  // A new client always gets exact redirect URI matching: a wildcard is
+  // refused here, before the server refuses it too.
+  const redirectProblems = redirectUriProblems(splitLines(form.redirectUris), false);
+
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (redirectProblems.length > 0) return;
     mutation.mutate();
   }
 
@@ -248,8 +251,26 @@ export default function ClientCreatePage() {
             onChange={(e) => setForm({ ...form, redirectUris: e.target.value })}
             rows={3}
             placeholder={"https://app.example.com/callback\nhttp://localhost:3000/callback"}
+            aria-invalid={redirectProblems.length > 0}
+            aria-describedby="redirectUris-help"
             className="w-full rounded-md border border-line-strong px-3 py-2 text-sm font-mono shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
           />
+          <p id="redirectUris-help" className="mt-1 text-xs text-subtle">
+            Each URI must match the one your app sends exactly. Wildcards such as{' '}
+            <code>/*</code> are not accepted. A loopback URI (<code>http://127.0.0.1/callback</code>)
+            matches on any port.
+          </p>
+          {redirectProblems.length > 0 && (
+            <ul
+              role="alert"
+              data-testid="redirect-uri-problems"
+              className="mt-2 space-y-1 rounded-md bg-danger-soft p-3 text-sm text-danger-fg"
+            >
+              {redirectProblems.map((p) => (
+                <li key={p}>{p}</li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <div>
@@ -325,7 +346,7 @@ export default function ClientCreatePage() {
           </button>
           <button
             type="submit"
-            disabled={mutation.isPending}
+            disabled={mutation.isPending || redirectProblems.length > 0}
             className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {mutation.isPending ? 'Creating...' : 'Create Client'}

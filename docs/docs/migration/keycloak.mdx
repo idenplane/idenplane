@@ -212,12 +212,16 @@ Consider using Idenplane's bulk email feature to notify affected users before tr
 | `clientId` | Client ID |
 | `name` | Client name |
 | `description` | Client description |
-| `redirectUris` | Valid redirect URIs |
+| `redirectUris` | Valid redirect URIs (see below about wildcards) |
 | `webOrigins` | Web origins |
 | `publicClient` | Public client flag |
 | `standardFlowEnabled` | Authorization code flow |
 | `implicitFlowEnabled` | Implicit flow |
 | `directAccessGrantsEnabled` | Direct access grants |
+
+### Wildcard redirect URIs
+
+Keycloak allows redirect URIs ending in `/*`. Idenplane matches redirect URIs exactly (RFC 9700), so a client imported with such an entry gets `allowInsecureWildcardRedirectUris`, which keeps the Keycloak behaviour, and the migration report lists it as a warning. That option is insecure: replace the wildcards with the exact callback URLs after the import and turn it off. See [Redirect URI matching](../api/clients.md#redirect-uri-matching). A `*` web origin is not imported.
 
 ### Built-in Clients
 
