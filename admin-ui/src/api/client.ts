@@ -80,6 +80,47 @@ export function announceForbidden(body: unknown) {
 }
 
 // ---------------------------------------------------------------------------
+// Admin console MFA
+// ---------------------------------------------------------------------------
+/**
+ * The window event StepUpPrompt listens for: the server refused a request
+ * because of admin MFA (`detail.code`).
+ */
+export const ADMIN_MFA_EVENT = 'idenplane:admin-mfa';
+/** Fired by StepUpPrompt when a step-up ends: `detail.ok` says how. */
+export const STEP_UP_DONE_EVENT = 'idenplane:step-up-done';
+
+const ADMIN_MFA_CODES = new Set([
+  'admin_mfa_enrolment_required',
+  'admin_mfa_step_up_required',
+  'admin_recent_mfa_required',
+]);
+
+export interface AdminMfaEventDetail {
+  code: string;
+}
+
+/** The admin-MFA refusal code in a 403 body, if there is one. */
+export function adminMfaCodeOf(body: unknown): string | null {
+  const code =
+    body && typeof body === 'object' && 'code' in body
+      ? (body as { code: unknown }).code
+      : undefined;
+  return typeof code === 'string' && ADMIN_MFA_CODES.has(code) ? code : null;
+}
+
+/** Resolves when the step-up the server asked for ends: true if verified. */
+export function waitForStepUp(): Promise<boolean> {
+  return new Promise((resolve) => {
+    const done = (event: Event) => {
+      window.removeEventListener(STEP_UP_DONE_EVENT, done);
+      resolve((event as CustomEvent<{ ok: boolean }>).detail?.ok === true);
+    };
+    window.addEventListener(STEP_UP_DONE_EVENT, done);
+  });
+}
+
+// ---------------------------------------------------------------------------
 // Axios instances
 // ---------------------------------------------------------------------------
 // Both instances share the same in-memory credential injection and 401
@@ -110,8 +151,19 @@ function createClient(baseURL: string) {
       }
       // 403: signed in, but the admin role doesn't allow it. Tell the admin
       // (ForbiddenNotice) and keep the session; the page still gets the error.
+      // An admin-MFA refusal goes to StepUpPrompt instead: enrol, or verify
+      // the second factor again.
       if (error.response?.status === 403) {
-        announceForbidden(error.response?.data);
+        const mfaCode = adminMfaCodeOf(error.response?.data);
+        if (mfaCode) {
+          window.dispatchEvent(
+            new CustomEvent<AdminMfaEventDetail>(ADMIN_MFA_EVENT, {
+              detail: { code: mfaCode },
+            }),
+          );
+        } else {
+          announceForbidden(error.response?.data);
+        }
       }
       return Promise.reject(error);
     },

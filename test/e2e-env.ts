@@ -24,6 +24,13 @@ process.env['ADMIN_USER'] = process.env['ADMIN_USER'] ?? 'admin';
 process.env['ADMIN_PASSWORD'] =
   process.env['ADMIN_PASSWORD'] ?? 'e2e-test-admin-password';
 
+// A fresh database gets the 0.11.0 default: a second factor required for
+// every admin. The suites that sign admins in with a password only would be
+// confined to enrolment; fix it off for the run. admin-mfa.e2e-spec.ts
+// clears this and drives the stored setting itself.
+process.env['ADMIN_MFA_REQUIRED'] =
+  process.env['ADMIN_MFA_REQUIRED'] ?? 'false';
+
 // The admin guards enforce per-IP limits on the static admin API key
 // (prod defaults 15/min, 100/hour). The single-IP E2E harness issues far
 // more than that; raise them for the test run only. Prod is unaffected.

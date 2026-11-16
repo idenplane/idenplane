@@ -14,6 +14,33 @@ import {
 export interface AuthenticatedAdmin {
   userId: string;
   roles: string[];
+  /** The token's `acr`; absent: password only (or the API key). */
+  acr?: string;
+  /** The token's RFC 8176 `amr`. */
+  amr?: string[];
+  /** The token's `auth_time` (seconds): when its factors were checked. */
+  authTime?: number;
+}
+
+/** Where the admin MFA requirement comes from. */
+export type AdminMfaPolicySource = 'environment' | 'setting';
+
+export interface AdminMfaPolicy {
+  required: boolean;
+  source: AdminMfaPolicySource;
+}
+
+/**
+ * ADMIN_MFA_REQUIRED: `true` or `false` fixes the requirement; anything
+ * else (unset) leaves it to the stored setting.
+ */
+export function adminMfaRequiredFromEnv(
+  value: string | undefined,
+): boolean | null {
+  const v = value?.trim().toLowerCase();
+  if (v === 'true') return true;
+  if (v === 'false') return false;
+  return null;
 }
 
 /** The `sub` of the API key and of sessions minted from it. */
@@ -64,6 +91,12 @@ export class AdminPrincipalService {
         adminRealmAssignments: {
           select: { realmId: true, realm: { select: { name: true } } },
         },
+        // Console second factors: a verified TOTP or any passkey.
+        userCredentials: {
+          where: { type: 'totp', verified: true },
+          select: { id: true },
+        },
+        webAuthnCredentials: { select: { id: true }, take: 1 },
       },
     });
 
@@ -95,7 +128,26 @@ export class AdminPrincipalService {
           .filter((a) => a.realm.name !== MASTER_REALM)
           .map((a) => a.realmId),
       ),
+      mfaEnrolled:
+        user.userCredentials.length > 0 || user.webAuthnCredentials.length > 0,
     };
+  }
+
+  /**
+   * Whether every admin must have a console second factor: ADMIN_MFA_REQUIRED
+   * when set to true or false, else the stored setting. No stored row (an
+   * upgraded install) means not required.
+   */
+  async adminMfaPolicy(): Promise<AdminMfaPolicy> {
+    const fromEnv = adminMfaRequiredFromEnv(
+      this.config.get<string>('ADMIN_MFA_REQUIRED'),
+    );
+    if (fromEnv !== null) return { required: fromEnv, source: 'environment' };
+    const row = await this.prisma.adminSecurityPolicy.findUnique({
+      where: { id: 1 },
+      select: { mfaRequired: true },
+    });
+    return { required: row?.mfaRequired ?? false, source: 'setting' };
   }
 
   /**

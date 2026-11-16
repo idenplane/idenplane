@@ -88,6 +88,9 @@ The following variables are **required in production**. Idenplane will refuse to
 | `ADMIN_USER` | `admin` | No | Initial admin username (only used on first run) |
 | `ADMIN_PASSWORD` | None: generated outside production | Production, first start | Initial admin password (only used on first run). There is no default password. Outside production, an unset value gets a random password that is printed once in the log of the first start. `admin` and the documented placeholders are refused (outside production, `ALLOW_INSECURE_ADMIN_PASSWORD=true` accepts them for a throwaway local instance). With `NODE_ENV=production` the first start refuses a missing, default or shorter-than-12-character value |
 | `ALLOW_INSECURE_ADMIN_PASSWORD` | `false` | No | Outside production only: accept `admin` or a documented placeholder as `ADMIN_PASSWORD`. Never set it on an instance anyone else can reach |
+| `ADMIN_MFA_REQUIRED` | unset | No | `true` requires a second factor (authenticator app or passkey) for every admin, and the console cannot turn it off. `false` turns the requirement off whatever is stored; use it only to recover. Unset: the **Require a second factor for every admin** setting decides, which is on for installs created with 0.11.0 or later and off after an upgrade. See [Admin console MFA](/security/admin-mfa) |
+| `ADMIN_WEBAUTHN_RP_ID` | master realm's WebAuthn RP ID, else the host of `BASE_URL` | No | Relying-party ID of the admin console's passkeys |
+| `ADMIN_WEBAUTHN_ORIGINS` | origin of `BASE_URL` | No | Comma-separated origins the console is served from, for its passkeys. Set it when the console is reached on another host name |
 
 Generate a secure key:
 

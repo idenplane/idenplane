@@ -3,6 +3,9 @@ import {
   canReadRealm,
   canWriteRealm,
   decideAdminAccess,
+  decideAdminMfa,
+  hasRecentAdminMfa,
+  RECENT_ADMIN_MFA_SECONDS,
   type AdminPrincipal,
   type AdminRole,
 } from './admin-access-policy.js';
@@ -35,16 +38,22 @@ const realmRoute: AdminRoutePolicy = {
   scope: { kind: 'realm', param: 'realmName', lookup: 'name' },
   sensitiveRead: false,
   requiredRoles: [],
+  mfaExempt: null,
+  recentMfa: false,
 };
 const globalRoute: AdminRoutePolicy = {
   scope: { kind: 'global' },
   sensitiveRead: false,
   requiredRoles: [],
+  mfaExempt: null,
+  recentMfa: false,
 };
 const selfRoute: AdminRoutePolicy = {
   scope: { kind: 'self' },
   sensitiveRead: false,
   requiredRoles: [],
+  mfaExempt: null,
+  recentMfa: false,
 };
 
 const allowed = (
@@ -198,5 +207,94 @@ describe('admin access policy', () => {
       expect(canReadRealm(viewer, MASTER)).toBe(true);
       expect(canWriteRealm(masterScoped, MASTER)).toBe(false);
     });
+  });
+});
+
+describe('decideAdminMfa', () => {
+  const now = 1_800_000_000;
+  const base = { tokenMfa: false, now, enrolled: false, required: false };
+  const route = (
+    mfaExempt: 'always' | 'first-factor' | null = null,
+    recentMfa = false,
+  ) => ({ mfaExempt, recentMfa });
+
+  it('allows everything to an admin without a factor while not required', () => {
+    expect(decideAdminMfa(base, route())).toBeNull();
+    expect(decideAdminMfa(base, route('first-factor'))).toBeNull();
+  });
+
+  it('asks an admin without a factor for one before a sensitive action', () => {
+    expect(decideAdminMfa(base, route(null, true))).toBe(
+      'admin_recent_mfa_required',
+    );
+  });
+
+  it('confines to exempt routes while required and not enrolled', () => {
+    const ctx = { ...base, required: true };
+    expect(decideAdminMfa(ctx, route())).toBe('admin_mfa_enrolment_required');
+    expect(decideAdminMfa(ctx, route('always'))).toBeNull();
+    expect(decideAdminMfa(ctx, route('first-factor'))).toBeNull();
+    expect(
+      decideAdminMfa({ ...ctx, tokenMfa: true, authTime: now }, route()),
+    ).toBe('admin_mfa_enrolment_required');
+  });
+
+  it('sends a password-only token of an enrolled admin to step-up', () => {
+    const ctx = { ...base, enrolled: true };
+    expect(decideAdminMfa(ctx, route())).toBe('admin_mfa_step_up_required');
+    expect(decideAdminMfa(ctx, route('first-factor'))).toBe(
+      'admin_mfa_step_up_required',
+    );
+    expect(decideAdminMfa(ctx, route('always'))).toBeNull();
+  });
+
+  it('counts a check as recent for 15 minutes, and not from the future', () => {
+    const ctx = { ...base, enrolled: true, tokenMfa: true };
+    const at = (authTime: number) =>
+      decideAdminMfa({ ...ctx, authTime }, route(null, true));
+    expect(at(now - RECENT_ADMIN_MFA_SECONDS)).toBeNull();
+    expect(at(now - RECENT_ADMIN_MFA_SECONDS - 1)).toBe(
+      'admin_recent_mfa_required',
+    );
+    expect(at(now + 3600)).toBe('admin_recent_mfa_required');
+    expect(
+      decideAdminMfa({ ...ctx, authTime: undefined }, route(null, true)),
+    ).toBe('admin_recent_mfa_required');
+  });
+
+  it('asks an enrolled admin for a recent check before adding a factor', () => {
+    const ctx = { ...base, enrolled: true, tokenMfa: true };
+    expect(
+      decideAdminMfa({ ...ctx, authTime: now - 3000 }, route('first-factor')),
+    ).toBe('admin_recent_mfa_required');
+    expect(
+      decideAdminMfa({ ...ctx, authTime: now - 10 }, route('first-factor')),
+    ).toBeNull();
+  });
+});
+
+describe('hasRecentAdminMfa', () => {
+  const now = 1_800_000_000;
+  it('is true only for a recent MFA token of an admin user', () => {
+    const mfa = 'urn:idenplane:acr:mfa';
+    expect(
+      hasRecentAdminMfa({ userId: 'u', acr: mfa, authTime: now - 60 }, now),
+    ).toBe(true);
+    expect(
+      hasRecentAdminMfa({ userId: 'u', acr: mfa, authTime: now - 3600 }, now),
+    ).toBe(false);
+    expect(
+      hasRecentAdminMfa(
+        { userId: 'u', acr: 'urn:idenplane:acr:password', authTime: now },
+        now,
+      ),
+    ).toBe(false);
+    expect(
+      hasRecentAdminMfa(
+        { userId: 'api-key:admin', acr: mfa, authTime: now },
+        now,
+      ),
+    ).toBe(false);
+    expect(hasRecentAdminMfa(undefined, now)).toBe(false);
   });
 });

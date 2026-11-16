@@ -1,5 +1,6 @@
 import type { AdminRolesOptions } from '../common/decorators/require-admin-roles.decorator.js';
 import type { AdminRoutePolicy } from './admin-route-policy.js';
+import { ACR_MFA, ACR_PASSWORD, satisfiesAcr } from '../authn-core/acr.js';
 
 export const SUPER_ADMIN = 'super-admin';
 export const REALM_ADMIN = 'realm-admin';
@@ -29,6 +30,11 @@ export interface AdminPrincipal {
    * manages no realm at all.
    */
   realmIds: ReadonlySet<string>;
+  /**
+   * The admin has a console second factor: a verified TOTP or a passkey.
+   * Always false for the API key.
+   */
+  mfaEnrolled?: boolean;
 }
 
 export type AdminAccess = 'read' | 'write';
@@ -152,4 +158,99 @@ export function decideAdminAccess(
           };
     }
   }
+}
+
+// ─── Admin console MFA ──────────────────────────────────────────────────
+
+/** How long a second-factor check counts as recent (step-up), in seconds. */
+export const RECENT_ADMIN_MFA_SECONDS = 15 * 60;
+
+/** The machine-readable reason an admin request was refused for MFA. */
+export type AdminMfaRefusal =
+  /** MFA is required and the admin has no factor: enrol one. */
+  | 'admin_mfa_enrolment_required'
+  /** The admin has a factor but the token is password-only: step up. */
+  | 'admin_mfa_step_up_required'
+  /** The route needs a second factor checked in the last 15 minutes. */
+  | 'admin_recent_mfa_required';
+
+/** What the console shows for each refusal; `code` is what it acts on. */
+export const ADMIN_MFA_REFUSAL_MESSAGES: Record<AdminMfaRefusal, string> = {
+  admin_mfa_enrolment_required:
+    'Set up a second factor (authenticator app or passkey) to use the admin console',
+  admin_mfa_step_up_required:
+    'Verify your second factor to continue: this session was signed in with a password only',
+  admin_recent_mfa_required:
+    'This action needs your second factor verified in the last 15 minutes',
+};
+
+export interface AdminMfaContext {
+  /** The token records a second factor (`acr` at MFA level or above). */
+  tokenMfa: boolean;
+  /** The token's `auth_time`, in seconds. */
+  authTime?: number;
+  /** Now, in seconds. */
+  now: number;
+  /** The admin has a factor now (from the database). */
+  enrolled: boolean;
+  /** MFA is required for every admin (setting or ADMIN_MFA_REQUIRED). */
+  required: boolean;
+}
+
+/**
+ * Admin console MFA, for an admin user (never the API key). Pure: the guard
+ * reads the token, the factors and the setting; this decides. `null`
+ * allows the request.
+ *
+ * 1. MFA required and no factor: only exempt routes (`always` and
+ *    `first-factor`) until a factor is enrolled, whatever the token says
+ *    (so an MFA reset confines the admin at once).
+ * 2. A password-only token of an admin who has a factor (issued before the
+ *    upgrade or before enrolment): only `always` routes, to step up.
+ * 3. `@RequireRecentAdminMfa()`, and adding a factor when the admin has
+ *    one, need a second factor checked within RECENT_ADMIN_MFA_SECONDS.
+ */
+export function decideAdminMfa(
+  ctx: AdminMfaContext,
+  policy: Pick<AdminRoutePolicy, 'mfaExempt' | 'recentMfa'>,
+): AdminMfaRefusal | null {
+  if (ctx.required && !ctx.enrolled) {
+    return policy.mfaExempt ? null : 'admin_mfa_enrolment_required';
+  }
+  if (!ctx.tokenMfa && ctx.enrolled && policy.mfaExempt !== 'always') {
+    return 'admin_mfa_step_up_required';
+  }
+  const needsRecent =
+    policy.recentMfa || (policy.mfaExempt === 'first-factor' && ctx.enrolled);
+  if (!needsRecent) return null;
+  const recent =
+    ctx.tokenMfa &&
+    typeof ctx.authTime === 'number' &&
+    ctx.authTime >= ctx.now - RECENT_ADMIN_MFA_SECONDS &&
+    ctx.authTime <= ctx.now + 60;
+  return recent ? null : 'admin_recent_mfa_required';
+}
+
+/**
+ * Whether an admin token records a second factor checked within
+ * RECENT_ADMIN_MFA_SECONDS: the console's step-up. Never true for the API
+ * key, which has no second factor.
+ */
+export function hasRecentAdminMfa(
+  admin: { userId: string; acr?: string; authTime?: number } | undefined,
+  now: number = Math.floor(Date.now() / 1000),
+): boolean {
+  if (!admin || admin.userId.startsWith('api-key:')) return false;
+  return (
+    decideAdminMfa(
+      {
+        tokenMfa: satisfiesAcr(admin.acr ?? ACR_PASSWORD, ACR_MFA),
+        authTime: admin.authTime,
+        now,
+        enrolled: false,
+        required: false,
+      },
+      { mfaExempt: null, recentMfa: true },
+    ) === null
+  );
 }

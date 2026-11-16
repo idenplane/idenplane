@@ -9,7 +9,11 @@ import {
 import { Reflector } from '@nestjs/core';
 import { AdminAuthorizationGuard } from './admin-authorization.guard.js';
 import { Public } from '../decorators/public.decorator.js';
-import { AdminScope } from '../decorators/admin-access.decorator.js';
+import {
+  AdminMfaExempt,
+  AdminScope,
+  RequireRecentAdminMfa,
+} from '../decorators/admin-access.decorator.js';
 import type { AdminPrincipalService } from '../../admin-rbac/admin-principal.service.js';
 import type { AdminPrincipal } from '../../admin-rbac/admin-access-policy.js';
 
@@ -37,6 +41,21 @@ class Me {
   @Get('me')
   @AdminScope('self')
   me() {}
+
+  @Get('mfa')
+  @AdminScope('self')
+  @AdminMfaExempt('always')
+  status() {}
+
+  @Get('mfa/totp')
+  @AdminScope('self')
+  @AdminMfaExempt('first-factor')
+  enrol() {}
+
+  @Delete('mfa/totp')
+  @AdminScope('self')
+  @RequireRecentAdminMfa()
+  removeTotp() {}
 }
 
 @Controller('realms/:realmName/account')
@@ -63,14 +82,19 @@ function principal(
 describe('AdminAuthorizationGuard', () => {
   let load: jest.Mock;
   let resolveRealm: jest.Mock;
+  let adminMfaPolicy: jest.Mock;
   let guard: AdminAuthorizationGuard;
 
   beforeEach(() => {
     load = jest.fn();
     resolveRealm = jest.fn().mockResolvedValue(REALM_A);
+    adminMfaPolicy = jest
+      .fn()
+      .mockResolvedValue({ required: false, source: 'setting' });
     guard = new AdminAuthorizationGuard(new Reflector(), {
       load,
       resolveRealm,
+      adminMfaPolicy,
     } as unknown as AdminPrincipalService);
   });
 
@@ -238,5 +262,116 @@ describe('AdminAuthorizationGuard', () => {
     await expect(guard.canActivate(ctx(Me, 'me', r))).rejects.toBeInstanceOf(
       ForbiddenException,
     );
+  });
+
+  describe('admin console MFA', () => {
+    const MFA = 'urn:idenplane:acr:mfa';
+    const now = () => Math.floor(Date.now() / 1000);
+    const as = (
+      who: Partial<{ acr: string; authTime: number }>,
+      method: string,
+      path: string,
+      params = {},
+    ) => ({
+      method,
+      path,
+      params,
+      adminUser: { userId: 'sample-user', roles: ['super-admin'], ...who },
+    });
+    const code = async (p: Promise<boolean>) => {
+      try {
+        await p;
+        return 'allowed';
+      } catch (err) {
+        if (!(err instanceof ForbiddenException)) throw err;
+        return (err.getResponse() as { code?: string }).code ?? 'role';
+      }
+    };
+    const realmList = (who: Partial<{ acr: string; authTime: number }>) =>
+      guard.canActivate(
+        ctx(
+          Things,
+          'list',
+          as(who, 'GET', '/admin/realms/realm-a/things', {
+            realmName: 'realm-a',
+          }),
+        ),
+      );
+    const self = (
+      handler: string,
+      who: Partial<{ acr: string; authTime: number }>,
+    ) => guard.canActivate(ctx(Me, handler, as(who, 'GET', '/admin/auth/x')));
+
+    it('leaves an admin without a factor alone while MFA is not required', async () => {
+      load.mockResolvedValue(principal(['super-admin']));
+      expect(await code(realmList({}))).toBe('allowed');
+    });
+
+    it('confines an admin without a factor to enrolment when MFA is required', async () => {
+      load.mockResolvedValue(principal(['super-admin']));
+      adminMfaPolicy.mockResolvedValue({ required: true, source: 'setting' });
+      expect(await code(realmList({}))).toBe('admin_mfa_enrolment_required');
+      // Even with an MFA token: a reset admin must enrol again.
+      expect(await code(realmList({ acr: MFA, authTime: now() }))).toBe(
+        'admin_mfa_enrolment_required',
+      );
+      expect(await code(self('me', {}))).toBe('admin_mfa_enrolment_required');
+      expect(await code(self('status', {}))).toBe('allowed');
+      expect(await code(self('enrol', {}))).toBe('allowed');
+      expect(await code(self('removeTotp', {}))).toBe(
+        'admin_mfa_enrolment_required',
+      );
+    });
+
+    it('sends a password-only session of an enrolled admin to step-up', async () => {
+      load.mockResolvedValue({
+        ...principal(['super-admin']),
+        mfaEnrolled: true,
+      });
+      expect(await code(realmList({}))).toBe('admin_mfa_step_up_required');
+      expect(await code(self('status', {}))).toBe('allowed');
+      expect(await code(self('enrol', {}))).toBe('admin_mfa_step_up_required');
+      expect(await code(realmList({ acr: MFA, authTime: now() - 3000 }))).toBe(
+        'allowed',
+      );
+      // The policy is not read for an admin who has a factor.
+      expect(adminMfaPolicy).not.toHaveBeenCalled();
+    });
+
+    it('asks for a recent check on sensitive routes and for a further factor', async () => {
+      load.mockResolvedValue({
+        ...principal(['super-admin']),
+        mfaEnrolled: true,
+      });
+      const stale = { acr: MFA, authTime: now() - 16 * 60 };
+      const fresh = { acr: MFA, authTime: now() - 60 };
+      expect(await code(self('removeTotp', stale))).toBe(
+        'admin_recent_mfa_required',
+      );
+      expect(await code(self('removeTotp', fresh))).toBe('allowed');
+      expect(await code(self('enrol', stale))).toBe(
+        'admin_recent_mfa_required',
+      );
+      expect(await code(self('enrol', fresh))).toBe('allowed');
+    });
+
+    it('never applies to the admin API key', async () => {
+      load.mockResolvedValue({
+        kind: 'api-key',
+        userId: 'api-key:admin',
+        username: null,
+        roles: ['super-admin'],
+        realmIds: new Set(),
+      });
+      adminMfaPolicy.mockResolvedValue({ required: true, source: 'setting' });
+      expect(await code(realmList({}))).toBe('allowed');
+      expect(await code(self('removeTotp', {}))).toBe('allowed');
+    });
+
+    it('still gives a disabled admin the role refusal', async () => {
+      load.mockResolvedValue(principal([]));
+      adminMfaPolicy.mockResolvedValue({ required: true, source: 'setting' });
+      expect(await code(realmList({}))).toBe('role');
+    });
   });
 });

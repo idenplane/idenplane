@@ -4,7 +4,7 @@ import { saveConfig } from '../config.js';
 import { HttpClient } from '../http.js';
 import { ask, askPassword, confirm, select } from '../prompt.js';
 import { printResult, success } from '../output.js';
-import type { LoginResponse } from '../types.js';
+import { adminLogin } from '../admin-login.js';
 
 /**
  * Registers `idenplane init`, an interactive setup wizard that walks through
@@ -32,17 +32,9 @@ export function registerInitCommand(program: Command): void {
         const username = await ask('Admin username: ');
         const password = await askPassword('Admin password: ');
 
-        const res = await fetch(`${serverUrl}/admin/auth/login`, {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, password }),
+        const data = await adminLogin(serverUrl, username, password, ask).catch(() => {
+          throw new Error(chalk.red('Login failed. Check your credentials, code and server URL.'));
         });
-
-        if (!res.ok) {
-          throw new Error(chalk.red('Login failed. Check your credentials and server URL.'));
-        }
-
-        const data = (await res.json()) as LoginResponse;
         saveConfig({ serverUrl, accessToken: data.access_token });
       }
       success('Connected to server.');

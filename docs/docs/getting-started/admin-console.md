@@ -19,6 +19,8 @@ Go to `http://localhost:3000/console`. The login page offers two modes:
 
 **API key** — the value of `ADMIN_API_KEY`. Useful for automation, or for a break-glass login.
 
+**Second factor.** Once you have set up an authenticator app or a passkey (**Two-factor** in the header, or `/console/mfa`), the console asks for it after the password. A new install requires one for every admin: the first sign-in takes you straight to the setup page, and you save your recovery codes there. See [Admin console MFA](/security/admin-mfa).
+
 :::warning
 Change the initial admin password after the first sign-in, especially if it was generated and printed in the log.
 :::
