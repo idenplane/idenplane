@@ -72,6 +72,11 @@ describe('IdenplanePlugin with a shared client', () => {
     expect(client.init).toHaveBeenCalledOnce();
   });
 
+  it('also accepts the client passed directly', () => {
+    const client = makeClient();
+    expect(resolvePluginClient(client as never)).toBe(client);
+  });
+
   it('still accepts a configuration object', () => {
     const resolved = resolvePluginClient({
       url: 'http://localhost:3000',

@@ -45,17 +45,24 @@ import { getOrStartInit } from './init.js';
 export const IDENPLANE_KEY = Symbol('idenplane');
 
 /**
- * Options accepted by the Vue plugin: either an `IdenplaneConfig` (the plugin
- * creates the client) or `{ client }`, an existing client to share with code
- * outside components, such as a router guard.
+ * Options accepted by the Vue plugin: an `IdenplaneConfig` (the plugin creates
+ * the client), or an existing client to share with code outside components,
+ * such as a router guard — as `{ client }` or passed directly.
  */
-export type IdenplanePluginOptions = IdenplaneConfig | { client: IdenplaneClient };
+export type IdenplanePluginOptions = IdenplaneConfig | { client: IdenplaneClient } | IdenplaneClient;
+
+// Duck-typed rather than instanceof: an app can end up with two copies of
+// idenplane-sdk.
+function isClient(value: unknown): value is IdenplaneClient {
+  const v = value as Partial<IdenplaneClient> | null;
+  return !!v && typeof v.init === 'function' && typeof v.getAccessToken === 'function';
+}
 
 /** Resolve plugin options to a client. */
 export function resolvePluginClient(options: IdenplanePluginOptions): IdenplaneClient {
-  if (options && 'client' in options && options.client) {
-    // Duck-typed: an app can end up with two copies of idenplane-sdk.
-    if (typeof (options.client as Partial<IdenplaneClient>).init !== 'function') {
+  if (isClient(options)) return options;
+  if (options && 'client' in options && options.client !== undefined) {
+    if (!isClient(options.client)) {
       throw new TypeError('[idenplane-vue] IdenplanePlugin: `client` must be an IdenplaneClient');
     }
     return options.client;
