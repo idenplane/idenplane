@@ -16,25 +16,33 @@ import {
   Param,
   Query,
   Req,
+  Res,
   HttpCode,
   HttpStatus,
   UseGuards,
-  Logger,
-  BadRequestException,
+  UseFilters,
+  UseInterceptors,
+  NotFoundException,
+  UnauthorizedException,
 } from '@nestjs/common';
 import {
   ApiTags,
   ApiOperation,
   ApiSecurity,
   ApiResponse,
-  ApiExcludeEndpoint as _ApiExcludeEndpoint,
 } from '@nestjs/swagger';
-import type { Request } from 'express';
+import type { Request, Response } from 'express';
 import { ScimAuthGuard } from './guards/scim-auth.guard.js';
 import { ScimServiceProviderConfigService } from './service-provider-config.service.js';
 import { ScimUsersService } from './scim-users.service.js';
 import { ScimGroupsService } from './scim-groups.service.js';
 import { ScimBulkService } from './scim-bulk.service.js';
+import {
+  ScimContentTypeInterceptor,
+  ScimExceptionFilter,
+} from './scim-exception.filter.js';
+import { getPatchOperations } from './patch-request.js';
+import { SCIM_SCHEMAS } from './types/scim.types.js';
 import type {
   ScimServiceProviderConfig,
   ScimUser,
@@ -44,22 +52,57 @@ import type {
   ScimPatchRequest,
   ScimBulkRequest,
   ScimBulkResponse,
+  ScimRealmRef,
+  ScimSchema,
+  ScimResourceType,
 } from './types/scim.types.js';
-import { ALL_SCHEMAS, ALL_RESOURCE_TYPES } from './schemas/scim.schemas.js';
 
 interface ScimRequest extends Request {
   scimRealm?: {
     id: string;
+    name: string;
     scimUserAutocreate?: boolean;
     scimGroupSyncEnabled?: boolean;
   };
 }
 
+/** The realm the guard authenticated the request for. */
+function scimRealm(req: ScimRequest | undefined): ScimRealmRef {
+  const realm = req?.scimRealm;
+  if (!realm) throw new UnauthorizedException('SCIM realm not resolved');
+  return { id: realm.id, name: realm.name };
+}
+
+function intParam(value: string | undefined): number | undefined {
+  if (value === undefined || value === '') return undefined;
+  const n = Number.parseInt(value, 10);
+  return Number.isFinite(n) ? n : undefined;
+}
+
+function listParam(value: string | undefined): string[] | undefined {
+  if (!value) return undefined;
+  return value
+    .split(',')
+    .map((v) => v.trim())
+    .filter(Boolean);
+}
+
+/** RFC 7644 §4: `/Schemas` and `/ResourceTypes` answer with a ListResponse. */
+function listOf<T>(items: T[]): ScimListResponse<T> {
+  return {
+    schemas: [SCIM_SCHEMAS.LIST_RESPONSE],
+    totalResults: items.length,
+    startIndex: 1,
+    itemsPerPage: items.length,
+    Resources: items,
+  };
+}
+
 @ApiTags('SCIM 2.0')
 @Controller('scim/v2')
+@UseFilters(ScimExceptionFilter)
+@UseInterceptors(ScimContentTypeInterceptor)
 export class ScimController {
-  private readonly logger = new Logger(ScimController.name);
-
   constructor(
     private readonly configService: ScimServiceProviderConfigService,
     private readonly usersService: ScimUsersService,
@@ -69,7 +112,8 @@ export class ScimController {
 
   // ══════════════════════════════════════════════════════════════
   // Service Provider Configuration Endpoints
-  // RFC 7644 Section 4
+  // RFC 7644 Section 4. Served both at /scim/v2 and under each realm's
+  // base URL (/scim/v2/{realm}), where SCIM clients look for them.
   // ══════════════════════════════════════════════════════════════
 
   @Get('ServiceProviderConfig')
@@ -79,47 +123,76 @@ export class ScimController {
     return this.configService.getConfig();
   }
 
-  // ══════════════════════════════════════════════════════════════
-  // Schema Endpoints
-  // RFC 7644 Section 4
-  // ══════════════════════════════════════════════════════════════
-
   @Get('Schemas')
   @ApiOperation({ summary: 'Get all SCIM schemas' })
   @ApiResponse({ status: 200, description: 'List of all schemas' })
-  getSchemas() {
-    return ALL_SCHEMAS;
+  getSchemas(): ScimListResponse<ScimSchema> {
+    return listOf(this.configService.getSchemas().map(withSchemaUrn));
   }
 
   @Get('Schemas/:schemaId')
   @ApiOperation({ summary: 'Get a specific schema' })
   @ApiResponse({ status: 200, description: 'Schema details' })
-  getSchemaById(@Param('schemaId') schemaId: string) {
+  getSchemaById(@Param('schemaId') schemaId: string): ScimSchema {
     const schema = this.configService.getSchemaById(schemaId);
     if (!schema) {
-      throw new BadRequestException(`Schema '${schemaId}' not found`);
+      throw new NotFoundException(`Schema '${schemaId}' not found`);
     }
-    return schema;
+    return withSchemaUrn(schema);
   }
 
   @Get('ResourceTypes')
   @ApiOperation({ summary: 'Get all SCIM resource types' })
   @ApiResponse({ status: 200, description: 'List of all resource types' })
-  getResourceTypes() {
-    return ALL_RESOURCE_TYPES;
+  getResourceTypes(): ScimListResponse<ScimResourceType> {
+    return listOf(this.configService.getResourceTypes());
   }
 
   @Get('ResourceTypes/:resourceTypeId')
   @ApiOperation({ summary: 'Get a specific resource type' })
   @ApiResponse({ status: 200, description: 'Resource type details' })
-  getResourceTypeById(@Param('resourceTypeId') resourceTypeId: string) {
+  getResourceTypeById(
+    @Param('resourceTypeId') resourceTypeId: string,
+  ): ScimResourceType {
     const rt = this.configService.getResourceTypeByName(resourceTypeId);
     if (!rt) {
-      throw new BadRequestException(
+      throw new NotFoundException(
         `Resource type '${resourceTypeId}' not found`,
       );
     }
     return rt;
+  }
+
+  @Get(':realmName/ServiceProviderConfig')
+  @ApiOperation({ summary: 'Service Provider Configuration (realm base URL)' })
+  getRealmServiceProviderConfig(): ScimServiceProviderConfig {
+    return this.getServiceProviderConfig();
+  }
+
+  @Get(':realmName/Schemas')
+  @ApiOperation({ summary: 'All SCIM schemas (realm base URL)' })
+  getRealmSchemas(): ScimListResponse<ScimSchema> {
+    return this.getSchemas();
+  }
+
+  @Get(':realmName/Schemas/:schemaId')
+  @ApiOperation({ summary: 'A specific schema (realm base URL)' })
+  getRealmSchemaById(@Param('schemaId') schemaId: string): ScimSchema {
+    return this.getSchemaById(schemaId);
+  }
+
+  @Get(':realmName/ResourceTypes')
+  @ApiOperation({ summary: 'All SCIM resource types (realm base URL)' })
+  getRealmResourceTypes(): ScimListResponse<ScimResourceType> {
+    return this.getResourceTypes();
+  }
+
+  @Get(':realmName/ResourceTypes/:resourceTypeId')
+  @ApiOperation({ summary: 'A specific resource type (realm base URL)' })
+  getRealmResourceTypeById(
+    @Param('resourceTypeId') resourceTypeId: string,
+  ): ScimResourceType {
+    return this.getResourceTypeById(resourceTypeId);
   }
 
   // ══════════════════════════════════════════════════════════════
@@ -132,19 +205,19 @@ export class ScimController {
   @ApiOperation({ summary: 'Get all users (with filtering and pagination)' })
   @ApiSecurity('bearer')
   async getUsers(
-    @Param('realmName') realmName: string,
     @Query('startIndex') startIndex?: string,
     @Query('count') count?: string,
     @Query('filter') filter?: string,
     @Query('attributes') attributes?: string,
+    @Query('excludedAttributes') excludedAttributes?: string,
     @Req() req?: ScimRequest,
   ): Promise<ScimListResponse<ScimUser>> {
-    const realmId = req?.scimRealm?.id || realmName;
-    return this.usersService.findAll(realmId, {
-      startIndex: startIndex ? parseInt(startIndex, 10) : undefined,
-      count: count ? parseInt(count, 10) : undefined,
+    return this.usersService.findAll(scimRealm(req), {
+      startIndex: intParam(startIndex),
+      count: intParam(count),
       filter,
-      attributes: attributes?.split(','),
+      attributes: listParam(attributes),
+      excludedAttributes: listParam(excludedAttributes),
     });
   }
 
@@ -154,12 +227,13 @@ export class ScimController {
   @ApiOperation({ summary: 'Create a new user' })
   @ApiSecurity('bearer')
   async createUser(
-    @Param('realmName') realmName: string,
     @Body() scimUser: ScimUser,
-    @Req() req?: ScimRequest,
+    @Req() req: ScimRequest,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<ScimUser> {
-    const realmId = req?.scimRealm?.id || realmName;
-    return this.usersService.create(realmId, scimUser);
+    const user = await this.usersService.create(scimRealm(req), scimUser);
+    if (user.meta?.location) res.setHeader('Location', user.meta.location);
+    return user;
   }
 
   @Get(':realmName/Users/:id')
@@ -167,13 +241,15 @@ export class ScimController {
   @ApiOperation({ summary: 'Get a user by ID' })
   @ApiSecurity('bearer')
   async getUserById(
-    @Param('realmName') realmName: string,
     @Param('id') id: string,
     @Query('attributes') attributes?: string,
     @Req() req?: ScimRequest,
   ): Promise<ScimUser> {
-    const realmId = req?.scimRealm?.id || realmName;
-    return this.usersService.findById(realmId, id, attributes?.split(','));
+    return this.usersService.findById(
+      scimRealm(req),
+      id,
+      listParam(attributes),
+    );
   }
 
   @Put(':realmName/Users/:id')
@@ -181,13 +257,11 @@ export class ScimController {
   @ApiOperation({ summary: 'Update a user (full replacement)' })
   @ApiSecurity('bearer')
   async updateUser(
-    @Param('realmName') realmName: string,
     @Param('id') id: string,
     @Body() scimUser: ScimUser,
     @Req() req?: ScimRequest,
   ): Promise<ScimUser> {
-    const realmId = req?.scimRealm?.id || realmName;
-    return this.usersService.update(realmId, id, scimUser);
+    return this.usersService.update(scimRealm(req), id, scimUser);
   }
 
   @Patch(':realmName/Users/:id')
@@ -195,13 +269,15 @@ export class ScimController {
   @ApiOperation({ summary: 'Patch a user (partial update)' })
   @ApiSecurity('bearer')
   async patchUser(
-    @Param('realmName') realmName: string,
     @Param('id') id: string,
     @Body() patchRequest: ScimPatchRequest,
     @Req() req?: ScimRequest,
   ): Promise<ScimUser> {
-    const realmId = req?.scimRealm?.id || realmName;
-    return this.usersService.patch(realmId, id, patchRequest.operations);
+    return this.usersService.patch(
+      scimRealm(req),
+      id,
+      getPatchOperations(patchRequest),
+    );
   }
 
   @Delete(':realmName/Users/:id')
@@ -210,12 +286,10 @@ export class ScimController {
   @ApiOperation({ summary: 'Delete a user (deprovision)' })
   @ApiSecurity('bearer')
   async deleteUser(
-    @Param('realmName') realmName: string,
     @Param('id') id: string,
     @Req() req?: ScimRequest,
   ): Promise<void> {
-    const realmId = req?.scimRealm?.id || realmName;
-    return this.usersService.delete(realmId, id);
+    return this.usersService.delete(scimRealm(req), id);
   }
 
   @Post(':realmName/Users/.search')
@@ -224,17 +298,15 @@ export class ScimController {
   @ApiOperation({ summary: 'Search users using POST' })
   @ApiSecurity('bearer')
   async searchUsers(
-    @Param('realmName') realmName: string,
     @Body() searchRequest: ScimSearchRequest,
     @Req() req?: ScimRequest,
   ): Promise<ScimListResponse<ScimUser>> {
-    const realmId = req?.scimRealm?.id || realmName;
-    return this.usersService.search(realmId, {
-      filter: searchRequest.filter,
-      attributes: searchRequest.attributes,
-      excludedAttributes: searchRequest.excludedAttributes,
-      startIndex: searchRequest.startIndex,
-      count: searchRequest.count,
+    return this.usersService.search(scimRealm(req), {
+      filter: searchRequest?.filter,
+      attributes: searchRequest?.attributes,
+      excludedAttributes: searchRequest?.excludedAttributes,
+      startIndex: searchRequest?.startIndex,
+      count: searchRequest?.count,
     });
   }
 
@@ -248,19 +320,19 @@ export class ScimController {
   @ApiOperation({ summary: 'Get all groups (with filtering and pagination)' })
   @ApiSecurity('bearer')
   async getGroups(
-    @Param('realmName') realmName: string,
     @Query('startIndex') startIndex?: string,
     @Query('count') count?: string,
     @Query('filter') filter?: string,
     @Query('attributes') attributes?: string,
+    @Query('excludedAttributes') excludedAttributes?: string,
     @Req() req?: ScimRequest,
   ): Promise<ScimListResponse<ScimGroup>> {
-    const realmId = req?.scimRealm?.id || realmName;
-    return this.groupsService.findAll(realmId, {
-      startIndex: startIndex ? parseInt(startIndex, 10) : undefined,
-      count: count ? parseInt(count, 10) : undefined,
+    return this.groupsService.findAll(scimRealm(req), {
+      startIndex: intParam(startIndex),
+      count: intParam(count),
       filter,
-      attributes: attributes?.split(','),
+      attributes: listParam(attributes),
+      excludedAttributes: listParam(excludedAttributes),
     });
   }
 
@@ -270,12 +342,13 @@ export class ScimController {
   @ApiOperation({ summary: 'Create a new group' })
   @ApiSecurity('bearer')
   async createGroup(
-    @Param('realmName') realmName: string,
     @Body() scimGroup: ScimGroup,
-    @Req() req?: ScimRequest,
+    @Req() req: ScimRequest,
+    @Res({ passthrough: true }) res: Response,
   ): Promise<ScimGroup> {
-    const realmId = req?.scimRealm?.id || realmName;
-    return this.groupsService.create(realmId, scimGroup);
+    const group = await this.groupsService.create(scimRealm(req), scimGroup);
+    if (group.meta?.location) res.setHeader('Location', group.meta.location);
+    return group;
   }
 
   @Get(':realmName/Groups/:id')
@@ -283,12 +356,15 @@ export class ScimController {
   @ApiOperation({ summary: 'Get a group by ID' })
   @ApiSecurity('bearer')
   async getGroupById(
-    @Param('realmName') realmName: string,
     @Param('id') id: string,
+    @Query('excludedAttributes') excludedAttributes?: string,
     @Req() req?: ScimRequest,
   ): Promise<ScimGroup> {
-    const realmId = req?.scimRealm?.id || realmName;
-    return this.groupsService.findById(realmId, id);
+    return this.groupsService.findById(
+      scimRealm(req),
+      id,
+      listParam(excludedAttributes),
+    );
   }
 
   @Put(':realmName/Groups/:id')
@@ -296,13 +372,11 @@ export class ScimController {
   @ApiOperation({ summary: 'Update a group (full replacement)' })
   @ApiSecurity('bearer')
   async updateGroup(
-    @Param('realmName') realmName: string,
     @Param('id') id: string,
     @Body() scimGroup: ScimGroup,
     @Req() req?: ScimRequest,
   ): Promise<ScimGroup> {
-    const realmId = req?.scimRealm?.id || realmName;
-    return this.groupsService.update(realmId, id, scimGroup);
+    return this.groupsService.update(scimRealm(req), id, scimGroup);
   }
 
   @Patch(':realmName/Groups/:id')
@@ -310,13 +384,15 @@ export class ScimController {
   @ApiOperation({ summary: 'Patch a group (partial update)' })
   @ApiSecurity('bearer')
   async patchGroup(
-    @Param('realmName') realmName: string,
     @Param('id') id: string,
     @Body() patchRequest: ScimPatchRequest,
     @Req() req?: ScimRequest,
   ): Promise<ScimGroup> {
-    const realmId = req?.scimRealm?.id || realmName;
-    return this.groupsService.patch(realmId, id, patchRequest.operations);
+    return this.groupsService.patch(
+      scimRealm(req),
+      id,
+      getPatchOperations(patchRequest),
+    );
   }
 
   @Delete(':realmName/Groups/:id')
@@ -325,12 +401,10 @@ export class ScimController {
   @ApiOperation({ summary: 'Delete a group' })
   @ApiSecurity('bearer')
   async deleteGroup(
-    @Param('realmName') realmName: string,
     @Param('id') id: string,
     @Req() req?: ScimRequest,
   ): Promise<void> {
-    const realmId = req?.scimRealm?.id || realmName;
-    return this.groupsService.delete(realmId, id);
+    return this.groupsService.delete(scimRealm(req), id);
   }
 
   @Post(':realmName/Groups/.search')
@@ -339,17 +413,15 @@ export class ScimController {
   @ApiOperation({ summary: 'Search groups using POST' })
   @ApiSecurity('bearer')
   async searchGroups(
-    @Param('realmName') realmName: string,
     @Body() searchRequest: ScimSearchRequest,
     @Req() req?: ScimRequest,
   ): Promise<ScimListResponse<ScimGroup>> {
-    const realmId = req?.scimRealm?.id || realmName;
-    return this.groupsService.search(realmId, {
-      filter: searchRequest.filter,
-      attributes: searchRequest.attributes,
-      excludedAttributes: searchRequest.excludedAttributes,
-      startIndex: searchRequest.startIndex,
-      count: searchRequest.count,
+    return this.groupsService.search(scimRealm(req), {
+      filter: searchRequest?.filter,
+      attributes: searchRequest?.attributes,
+      excludedAttributes: searchRequest?.excludedAttributes,
+      startIndex: searchRequest?.startIndex,
+      count: searchRequest?.count,
     });
   }
 
@@ -364,11 +436,14 @@ export class ScimController {
   @ApiOperation({ summary: 'Execute bulk operations' })
   @ApiSecurity('bearer')
   async bulkOperations(
-    @Param('realmName') realmName: string,
     @Body() bulkRequest: ScimBulkRequest,
     @Req() req?: ScimRequest,
   ): Promise<ScimBulkResponse> {
-    const realmId = req?.scimRealm?.id || realmName;
-    return this.bulkService.processBulk(realmId, bulkRequest);
+    return this.bulkService.processBulk(scimRealm(req), bulkRequest);
   }
+}
+
+/** A schema resource carries its own `schemas` (RFC 7643 §7). */
+function withSchemaUrn(schema: ScimSchema): ScimSchema {
+  return { schemas: [SCIM_SCHEMAS.SCHEMA], ...schema };
 }

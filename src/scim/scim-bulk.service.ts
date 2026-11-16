@@ -3,16 +3,25 @@
  * Implements RFC 7644 Section 3.7 - Bulk Operations
  */
 
-import { Injectable, Logger, BadRequestException } from '@nestjs/common';
+import { Injectable, Logger } from '@nestjs/common';
 import { ScimUsersService } from './scim-users.service.js';
 import { ScimGroupsService } from './scim-groups.service.js';
+import { getPatchOperations } from './patch-request.js';
+import { ScimException, scimBadRequest, toScimError } from './scim-errors.js';
+import { scimLocation } from './scim-resource.js';
+import { SERVICE_PROVIDER_CONFIG } from './schemas/scim.schemas.js';
+import { SCIM_SCHEMAS } from './types/scim.types.js';
 import type {
+  ScimBulkOperation,
   ScimBulkRequest,
   ScimBulkResponse,
   ScimBulkResponseOperation,
   ScimUser,
   ScimGroup,
+  ScimRealmRef,
 } from './types/scim.types.js';
+
+const MAX_OPERATIONS = SERVICE_PROVIDER_CONFIG.bulk?.maxOperations ?? 1000;
 
 @Injectable()
 export class ScimBulkService {
@@ -25,35 +34,56 @@ export class ScimBulkService {
 
   /**
    * Process bulk operations
-   * RFC 7644 Section 3.7
+   * RFC 7644 Section 3.7. The RFC names the list `Operations`; lowercase
+   * `operations` is still read for older clients.
    */
   async processBulk(
-    realmId: string,
+    realm: ScimRealmRef,
     request: ScimBulkRequest,
   ): Promise<ScimBulkResponse> {
-    const results: ScimBulkResponseOperation[] = [];
+    const body: ScimBulkRequest = request ?? {};
+    const operations: unknown = body.Operations ?? body.operations;
+    if (!Array.isArray(operations)) {
+      throw scimBadRequest(
+        'invalidSyntax',
+        'The bulk request must contain an "Operations" array',
+      );
+    }
+    if (operations.length > MAX_OPERATIONS) {
+      throw new ScimException(
+        413,
+        'tooMany',
+        `A bulk request may contain at most ${MAX_OPERATIONS} operations`,
+      );
+    }
+    const failOnErrors =
+      typeof body.failOnErrors === 'number' && body.failOnErrors > 0
+        ? body.failOnErrors
+        : Infinity;
 
-    for (const operation of request.operations) {
+    const results: ScimBulkResponseOperation[] = [];
+    let errors = 0;
+
+    for (const operation of operations as ScimBulkOperation[]) {
+      const method = String(operation?.method ?? '').toUpperCase();
       try {
-        const result = await this.processOperation(realmId, operation);
-        results.push(result);
+        results.push(await this.processOperation(realm, method, operation));
       } catch (error) {
+        const scimError = toScimError(error);
         results.push({
-          bulkId: operation.bulkId || '',
-          status: '400',
-          operationType: operation.method,
-          response: {
-            schemas: ['urn:scim:schemas:core:1.0:Error'],
-            status: '400',
-            detail: error instanceof Error ? error.message : 'Unknown error',
-          },
+          ...(operation?.bulkId ? { bulkId: operation.bulkId } : {}),
+          method,
+          status: scimError.status,
+          response: scimError,
         });
+        errors++;
+        if (errors >= failOnErrors) break;
       }
     }
 
     return {
-      schemas: ['urn:scim:schemas:core:1.0:BulkResponse'],
-      operations: results,
+      schemas: [SCIM_SCHEMAS.BULK_RESPONSE],
+      Operations: results,
     };
   }
 
@@ -61,184 +91,79 @@ export class ScimBulkService {
    * Process a single bulk operation
    */
   private async processOperation(
-    realmId: string,
-    operation: {
-      method: string;
-      path: string;
-      data?: unknown;
-      bulkId?: string;
-    },
+    realm: ScimRealmRef,
+    method: string,
+    operation: ScimBulkOperation,
   ): Promise<ScimBulkResponseOperation> {
-    const { method, path, data, bulkId } = operation;
+    const { path, data, bulkId } = operation ?? ({} as ScimBulkOperation);
 
-    // Extract resource type and ID from path
-    // Path format: /Users or /Users/{id}
-    const match = path.match(/^\/(Users|Groups)(?:\/(.+))?$/);
+    // Path format: /Users, /Users/{id}, /Groups or /Groups/{id}
+    const match =
+      typeof path === 'string'
+        ? path.match(/^\/(Users|Groups)(?:\/([^/]+))?$/)
+        : null;
     if (!match) {
-      throw new BadRequestException(`Invalid path: ${path}`);
+      throw scimBadRequest('invalidPath', `Invalid path: ${String(path)}`);
     }
 
-    const [, resourceType, resourceId] = match;
+    const resourceType = match[1] as 'Users' | 'Groups';
+    const resourceId = match[2] ? decodeURIComponent(match[2]) : undefined;
+    const isUsers = resourceType === 'Users';
+    const base = { ...(bulkId ? { bulkId } : {}), method };
+
+    if (method === 'POST') {
+      if (resourceId) {
+        throw scimBadRequest('invalidPath', 'POST takes a path with no id');
+      }
+      const created = isUsers
+        ? await this.usersService.create(realm, data as ScimUser)
+        : await this.groupsService.create(realm, data as ScimGroup);
+      return {
+        ...base,
+        status: '201',
+        location: scimLocation(realm, resourceType, created.id!),
+      };
+    }
+
+    if (!resourceId) {
+      throw scimBadRequest('invalidPath', `${method} needs a resource id`);
+    }
 
     switch (method) {
-      case 'POST':
-        /* eslint-disable @typescript-eslint/no-unsafe-argument */
-        return this.handlePost(
-          realmId,
-          resourceType,
-          data as any,
-          bulkId || '',
-        );
-      case 'PUT':
-        /* eslint-disable @typescript-eslint/no-unsafe-argument */
-        return this.handlePut(
-          realmId,
-          resourceType,
-          resourceId,
-          data as any,
-          bulkId || '',
-        );
-      case 'PATCH':
-        /* eslint-disable @typescript-eslint/no-unsafe-argument */
-        return this.handlePatch(
-          realmId,
-          resourceType,
-          resourceId,
-          data as any,
-          bulkId || '',
-        );
+      case 'PUT': {
+        const updated = isUsers
+          ? await this.usersService.update(realm, resourceId, data as ScimUser)
+          : await this.groupsService.update(
+              realm,
+              resourceId,
+              data as ScimGroup,
+            );
+        return {
+          ...base,
+          status: '200',
+          location: scimLocation(realm, resourceType, updated.id!),
+        };
+      }
+      case 'PATCH': {
+        const operations = getPatchOperations(data);
+        const patched = isUsers
+          ? await this.usersService.patch(realm, resourceId, operations)
+          : await this.groupsService.patch(realm, resourceId, operations);
+        return {
+          ...base,
+          status: '200',
+          location: scimLocation(realm, resourceType, patched.id!),
+        };
+      }
       case 'DELETE':
-        return this.handleDelete(
-          realmId,
-          resourceType,
-          resourceId,
-          bulkId || '',
-        );
+        if (isUsers) {
+          await this.usersService.delete(realm, resourceId);
+        } else {
+          await this.groupsService.delete(realm, resourceId);
+        }
+        return { ...base, status: '204' };
       default:
-        throw new BadRequestException(`Unsupported method: ${method}`);
+        throw scimBadRequest('invalidSyntax', `Unsupported method: ${method}`);
     }
-  }
-
-  /**
-   * Handle POST (create) operation
-   */
-  private async handlePost(
-    realmId: string,
-    resourceType: string,
-    data: ScimUser | ScimGroup,
-    bulkId: string,
-  ): Promise<ScimBulkResponseOperation> {
-    let location: string;
-
-    if (resourceType === 'Users') {
-      const user = await this.usersService.create(realmId, data as ScimUser);
-      location = `/scim/v2/Users/${user.id}`;
-    } else {
-      const group = await this.groupsService.create(realmId, data as ScimGroup);
-      location = `/scim/v2/Groups/${group.id}`;
-    }
-
-    return {
-      bulkId,
-      status: '201',
-      operationType: 'POST',
-      location,
-    };
-  }
-
-  /**
-   * Handle PUT (full update) operation
-   */
-  private async handlePut(
-    realmId: string,
-    resourceType: string,
-    resourceId: string,
-    data: ScimUser | ScimGroup,
-    bulkId: string,
-  ): Promise<ScimBulkResponseOperation> {
-    let location: string;
-
-    if (resourceType === 'Users') {
-      const user = await this.usersService.update(
-        realmId,
-        resourceId,
-        data as ScimUser,
-      );
-      location = `/scim/v2/Users/${user.id}`;
-    } else {
-      const group = await this.groupsService.update(
-        realmId,
-        resourceId,
-        data as ScimGroup,
-      );
-      location = `/scim/v2/Groups/${group.id}`;
-    }
-
-    return {
-      bulkId,
-      status: '200',
-      operationType: 'PUT',
-      location,
-    };
-  }
-
-  /**
-   * Handle PATCH (partial update) operation
-   */
-  private async handlePatch(
-    realmId: string,
-    resourceType: string,
-    resourceId: string,
-    data: { operations: any[] },
-    bulkId: string,
-  ): Promise<ScimBulkResponseOperation> {
-    let location: string;
-
-    if (resourceType === 'Users') {
-      /* eslint-disable @typescript-eslint/no-unsafe-argument */
-      const user = await this.usersService.patch(
-        realmId,
-        resourceId,
-        data.operations,
-      );
-      location = `/scim/v2/Users/${user.id}`;
-    } else {
-      /* eslint-disable @typescript-eslint/no-unsafe-argument */
-      const group = await this.groupsService.patch(
-        realmId,
-        resourceId,
-        data.operations,
-      );
-      location = `/scim/v2/Groups/${group.id}`;
-    }
-
-    return {
-      bulkId,
-      status: '200',
-      operationType: 'PATCH',
-      location,
-    };
-  }
-
-  /**
-   * Handle DELETE operation
-   */
-  private async handleDelete(
-    realmId: string,
-    resourceType: string,
-    resourceId: string,
-    bulkId: string,
-  ): Promise<ScimBulkResponseOperation> {
-    if (resourceType === 'Users') {
-      await this.usersService.delete(realmId, resourceId);
-    } else {
-      await this.groupsService.delete(realmId, resourceId);
-    }
-
-    return {
-      bulkId,
-      status: '204',
-      operationType: 'DELETE',
-    };
   }
 }
