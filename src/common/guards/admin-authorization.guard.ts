@@ -112,10 +112,33 @@ export class AdminAuthorizationGuard implements CanActivate {
 
     const policy = this.policyFor(controller, handler);
 
-    // Admin console MFA (docs/docs/security/admin-mfa.md): an admin user
-    // only, never the API key; and only an admin who has a role, so that a
-    // disabled account still gets the role refusal below.
-    if (principal.kind === 'user' && principal.roles.length > 0) {
+    // No method is not a read: fail closed.
+    const access = accessForMethod(request.method ?? 'POST', policy);
+
+    let realm: ResolvedRealm | null = null;
+    if (policy.scope.kind === 'realm' && !isSuperAdmin(principal)) {
+      const raw: unknown = request.params?.[policy.scope.param];
+      const value = Array.isArray(raw) ? (raw[0] as unknown) : raw;
+      realm =
+        typeof value === 'string' && value.length > 0
+          ? await this.principals.resolveRealm(value, policy.scope.lookup)
+          : null;
+    }
+
+    const decision = decideAdminAccess(principal, policy, access, realm);
+    if (!decision.allowed) {
+      this.logger.warn(
+        `Admin ${principal.userId} refused ${request.method} ${request.path}: ${decision.reason}`,
+      );
+      throw new ForbiddenException(
+        'Your admin role does not allow this action',
+      );
+    }
+
+    // Admin console MFA (docs/docs/security/admin-mfa.md), for an admin user
+    // only, never the API key. After the role check: a second factor would
+    // not change a role refusal, so that one is the answer.
+    if (principal.kind === 'user') {
       const enrolled = principal.mfaEnrolled === true;
       const refusal = decideAdminMfa(
         {
@@ -142,29 +165,6 @@ export class AdminAuthorizationGuard implements CanActivate {
           message: ADMIN_MFA_REFUSAL_MESSAGES[refusal],
         });
       }
-    }
-
-    // No method is not a read: fail closed.
-    const access = accessForMethod(request.method ?? 'POST', policy);
-
-    let realm: ResolvedRealm | null = null;
-    if (policy.scope.kind === 'realm' && !isSuperAdmin(principal)) {
-      const raw: unknown = request.params?.[policy.scope.param];
-      const value = Array.isArray(raw) ? (raw[0] as unknown) : raw;
-      realm =
-        typeof value === 'string' && value.length > 0
-          ? await this.principals.resolveRealm(value, policy.scope.lookup)
-          : null;
-    }
-
-    const decision = decideAdminAccess(principal, policy, access, realm);
-    if (!decision.allowed) {
-      this.logger.warn(
-        `Admin ${principal.userId} refused ${request.method} ${request.path}: ${decision.reason}`,
-      );
-      throw new ForbiddenException(
-        'Your admin role does not allow this action',
-      );
     }
     return true;
   }
