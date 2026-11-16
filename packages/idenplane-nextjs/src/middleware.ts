@@ -8,7 +8,7 @@
  * ```typescript
  * // middleware.ts
  * import { NextResponse } from 'next/server';
- * import { createAuthMiddleware } from '@idenplane/nextjs/middleware';
+ * import { createAuthMiddleware } from 'idenplane-nextjs/middleware';
  *
  * const authMiddleware = createAuthMiddleware({
  *   serverUrl: 'https://auth.example.com',

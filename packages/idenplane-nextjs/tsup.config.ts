@@ -6,6 +6,7 @@ export default defineConfig({
     middleware: 'src/middleware.ts',
     server: 'src/server.ts',
     api: 'src/api.ts',
+    session: 'src/session.ts',
   },
   format: ['cjs', 'esm'],
   dts: true,
