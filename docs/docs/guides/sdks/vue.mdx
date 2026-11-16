@@ -18,23 +18,33 @@ npm install idenplane-vue idenplane-sdk vue
 
 ## Quick Start
 
-### 1. Install the Plugin
+### 1. Create One Client and Install the Plugin
+
+Create the client in its own module, so the plugin, the router guard and your components share one instance (one session, one `init()`):
+
+```typescript
+// auth.ts
+import { IdenplaneClient } from 'idenplane-vue';
+
+export const idenplane = new IdenplaneClient({
+  url: 'http://localhost:3000',
+  realm: 'my-realm',
+  clientId: 'my-app',
+  redirectUri: 'http://localhost:5173/callback',
+});
+```
 
 ```typescript
 // main.ts
 import { createApp } from 'vue';
 import { IdenplanePlugin } from 'idenplane-vue';
 import App from './App.vue';
+import router from './router';
+import { idenplane } from './auth';
 
 const app = createApp(App);
-
-app.use(IdenplanePlugin, {
-  url: 'http://localhost:3000',
-  realm: 'my-realm',
-  clientId: 'my-app',
-  redirectUri: 'http://localhost:5173/callback',
-});
-
+app.use(IdenplanePlugin, { client: idenplane });
+app.use(router);
 app.mount('#app');
 ```
 
@@ -65,19 +75,13 @@ const { isAuthenticated, user, login, logout, isLoading } = useAuth();
 // router/index.ts
 import { createRouter, createWebHistory } from 'vue-router';
 import { createAuthGuard } from 'idenplane-vue';
-import { IdenplaneClient } from 'idenplane-sdk';
-
-const authClient = new IdenplaneClient({
-  url: 'http://localhost:3000',
-  realm: 'my-realm',
-  clientId: 'my-app',
-  redirectUri: 'http://localhost:5173/callback',
-});
+import { idenplane } from '../auth'; // the client the plugin was given
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', component: Home },
+    { path: '/login', component: Login },
     {
       path: '/dashboard',
       component: Dashboard,
@@ -91,7 +95,7 @@ const router = createRouter({
   ],
 });
 
-router.beforeEach(createAuthGuard({ loginRoute: '/login' }, authClient));
+router.beforeEach(createAuthGuard({ loginRoute: '/login' }, idenplane));
 
 export default router;
 ```
@@ -100,7 +104,7 @@ export default router;
 
 ## IdenplanePlugin
 
-The `IdenplanePlugin` is a Vue 3 plugin that initializes authentication and provides auth state globally via composables.
+The `IdenplanePlugin` is a Vue 3 plugin that provides one `IdenplaneClient` to every component (for the composables) and starts its `init()` (discovery and session restore) right away. Give it an existing client — `app.use(IdenplanePlugin, { client })` or `app.use(IdenplanePlugin, client)` — to share that client with code outside components, such as the router guard. Or give it a configuration and let it create the client.
 
 ### Plugin Options
 
@@ -110,8 +114,8 @@ The `IdenplanePlugin` is a Vue 3 plugin that initializes authentication and prov
 | `realm` | `string` | Yes | Realm name |
 | `clientId` | `string` | Yes | OAuth2 client ID |
 | `redirectUri` | `string` | Yes | Redirect URI after login |
-| `scope` | `string[]` | No | OAuth2 scopes (default: `['openid', 'profile', 'email']`) |
-| `storage` | `'sessionStorage' \| 'localStorage' \| 'memory'` | No | Token storage type (default: `sessionStorage`) |
+| `scopes` | `string[]` | No | OAuth2 scopes (default: `['openid', 'profile', 'email']`) |
+| `storage` | `'sessionStorage' \| 'localStorage' \| 'memory'` | No | Token storage type (default: `memory`) |
 | `autoRefresh` | `boolean` | No | Enable automatic token refresh (default: `true`) |
 | `refreshBuffer` | `number` | No | Seconds before expiry to trigger refresh (default: `30`) |
 | `onLogin` | `(tokens: TokenResponse) => void` | No | Called on successful login |
@@ -133,7 +137,7 @@ app.use(IdenplanePlugin, {
   realm: 'my-realm',
   clientId: 'my-app',
   redirectUri: 'http://localhost:5173/callback',
-  scope: ['openid', 'profile', 'email', 'custom:scope'],
+  scopes: ['openid', 'profile', 'email', 'custom:scope'],
   storage: 'localStorage',
   autoRefresh: true,
   refreshBuffer: 30,
@@ -150,13 +154,13 @@ app.mount('#app');
 
 ### With Pre-built Client
 
-For more control over the client configuration:
+For more control over the client configuration, or to share it with a router guard:
 
 ```typescript
 // main.ts
 import { createApp } from 'vue';
 import { IdenplanePlugin } from 'idenplane-vue';
-import { IdenplaneClient } from 'idenplane-sdk';
+import { IdenplaneClient } from 'idenplane-vue';
 import App from './App.vue';
 
 const authClient = new IdenplaneClient({
@@ -171,7 +175,7 @@ const authClient = new IdenplaneClient({
 
 const app = createApp(App);
 
-app.use(IdenplanePlugin, authClient);
+app.use(IdenplanePlugin, { client: authClient });
 
 app.mount('#app');
 ```
@@ -400,16 +404,19 @@ const canAccessModeration = hasAllRoles(['moderator', 'content-editor']);
 The `createAuthGuard` function creates a Vue Router navigation guard for route protection:
 
 ```typescript
-const guard = createAuthGuard(options?, authClient?);
+const guard = createAuthGuard(options?, client?);
 ```
+
+Pass the client as the second argument — the same instance you gave the plugin or `<AuthProvider :client>`. A guard registered in `router/index.ts` runs outside any component, where `inject()` cannot reach the plugin's client, so the explicit client is the reliable way to share it. (On Vue 3.3+ with vue-router 4.2+, a guard created without a client looks it up from the app when it runs.)
+
+Routes without `requiresAuth` or `roles`, and the login route itself, are never redirected. If no client can be found for a protected route, the guard fails closed and redirects to the login route with `?next=<path>`. A user without the required roles is sent to the login route with `?error=forbidden`.
 
 ### Guard Options
 
 | Option | Type | Required | Description |
 |--------|------|----------|-------------|
 | `loginRoute` | `string` | No | Redirect path for unauthenticated users (default: `'/login'`) |
-| `roles` | `string[]` | No | Global required roles |
-| `excludePaths` | `string[]` | No | Routes to skip auth check |
+| `roles` | `string[]` | No | Roles required on every route (except the login route); `meta.roles` overrides it per route |
 
 ### Basic Usage
 
@@ -417,6 +424,7 @@ const guard = createAuthGuard(options?, authClient?);
 // router/index.ts
 import { createRouter, createWebHistory } from 'vue-router';
 import { createAuthGuard } from 'idenplane-vue';
+import { idenplane } from '../auth';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -431,7 +439,7 @@ const router = createRouter({
   ],
 });
 
-router.beforeEach(createAuthGuard({ loginRoute: '/login' }));
+router.beforeEach(createAuthGuard({ loginRoute: '/login' }, idenplane));
 
 export default router;
 ```
@@ -442,6 +450,7 @@ export default router;
 // router/index.ts
 import { createRouter, createWebHistory } from 'vue-router';
 import { createAuthGuard } from 'idenplane-vue';
+import { idenplane } from '../auth';
 
 const router = createRouter({
   history: createWebHistory(),
@@ -466,39 +475,7 @@ const router = createRouter({
   ],
 });
 
-router.beforeEach(createAuthGuard({ loginRoute: '/login' }));
-
-export default router;
-```
-
-### Using with Pre-built Client
-
-```typescript
-// router/index.ts
-import { createRouter, createWebHistory } from 'vue-router';
-import { createAuthGuard } from 'idenplane-vue';
-import { IdenplaneClient } from 'idenplane-sdk';
-
-const authClient = new IdenplaneClient({
-  url: 'http://localhost:3000',
-  realm: 'my-realm',
-  clientId: 'my-app',
-  redirectUri: 'http://localhost:5173/callback',
-});
-
-const router = createRouter({
-  history: createWebHistory(),
-  routes: [
-    { path: '/', component: Home },
-    {
-      path: '/dashboard',
-      component: Dashboard,
-      meta: { requiresAuth: true },
-    },
-  ],
-});
-
-router.beforeEach(createAuthGuard({ loginRoute: '/login' }, authClient));
+router.beforeEach(createAuthGuard({ loginRoute: '/login' }, idenplane));
 
 export default router;
 ```
@@ -507,7 +484,7 @@ export default router;
 
 ## AuthProvider Component
 
-The `AuthProvider` component provides scoped authentication context to a component subtree, useful when you need multiple auth configurations or want isolated auth state:
+The `AuthProvider` component provides a client to a component subtree, instead of the plugin, and starts its `init()` (discovery and session restore) in the browser. Use it when you need multiple auth configurations or isolated auth state:
 
 ```vue
 <!-- App.vue -->
@@ -531,13 +508,14 @@ import { AuthProvider } from 'idenplane-vue';
 
 | Prop | Type | Required | Description |
 |------|------|----------|-------------|
-| `url` | `string` | Yes | Idenplane server URL |
-| `realm` | `string` | Yes | Realm name |
-| `clientId` | `string` | Yes | OAuth2 client ID |
-| `redirectUri` | `string` | Yes | Redirect URI after login |
-| `client` | `IdenplaneClient` | Yes* | Pre-built client instance |
-| `scope` | `string[]` | No | OAuth2 scopes |
-| `auto-handle-callback` | `boolean` | No | Auto-handle callback (default: `true`) |
+| `client` | `IdenplaneClient` | Yes* | Pre-built client instance (for example the one your router guard uses) |
+| `url` | `string` | Yes* | Idenplane server URL |
+| `realm` | `string` | Yes* | Realm name |
+| `client-id` | `string` | Yes* | OAuth2 client ID |
+| `redirect-uri` | `string` | Yes* | Redirect URI after login |
+| `scopes` | `string[]` | No | OAuth2 scopes |
+| `storage` | `'sessionStorage' \| 'localStorage' \| 'memory'` | No | Token storage (default: `sessionStorage`) |
+| `auto-refresh` | `boolean` | No | Automatic token refresh (default: `true`) |
 
 *Either a `client` prop or all of `url`, `realm`, `clientId`, and `redirectUri` are required.
 
@@ -553,14 +531,7 @@ import { AuthProvider } from 'idenplane-vue';
 
 <script setup lang="ts">
 import { AuthProvider } from 'idenplane-vue';
-import { IdenplaneClient } from 'idenplane-sdk';
-
-const authClient = new IdenplaneClient({
-  url: 'http://localhost:3000',
-  realm: 'my-realm',
-  clientId: 'my-app',
-  redirectUri: 'http://localhost:5173/callback',
-});
+import { idenplane as authClient } from './auth'; // shared with the router guard
 </script>
 ```
 
@@ -572,7 +543,7 @@ const authClient = new IdenplaneClient({
 
 | Export | Description |
 |--------|-------------|
-| `IdenplanePlugin` | Vue 3 plugin, call `app.use(IdenplanePlugin, IdenplaneConfig)` |
+| `IdenplanePlugin` | Vue 3 plugin: `app.use(IdenplanePlugin, { client })` to provide an existing client, or `app.use(IdenplanePlugin, IdenplaneConfig)` |
 
 ### Composables
 
@@ -586,13 +557,13 @@ const authClient = new IdenplaneClient({
 
 | Export | Description |
 |--------|-------------|
-| `createAuthGuard(options?, client?)` | Creates a `NavigationGuard` for Vue Router |
+| `createAuthGuard(options?, client?)` | Creates a `NavigationGuard` for Vue Router; pass the shared client |
 
 ### Components
 
 | Export | Description |
 |--------|-------------|
-| `AuthProvider` | Provides scoped auth context to a component subtree |
+| `AuthProvider` | Provides a client to a component subtree and calls its `init()` |
 
 ### Types
 

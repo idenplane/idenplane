@@ -182,6 +182,8 @@ if idenplane.IsRetryable(err) {
 }
 ```
 
+`IsRetryable` returns `false` when the call failed because of your own context: `context.Canceled`, or the deadline of the `ctx` you passed. Retrying with that context would fail again. A timeout of the HTTP client itself (`http.Client.Timeout`) is still retryable.
+
 | Code | Meaning |
 |---|---|
 | `ErrCodeInvalidConfig` | Missing or invalid `Config` field |
