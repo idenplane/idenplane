@@ -209,7 +209,7 @@ export class RealmsController {
   @ApiOperation({
     summary: 'Import a realm from JSON',
     description:
-      'Imports a realm export (format version 2, or version 1 as before). The whole file is validated first; a 400 lists every problem with its path. The import runs in one transaction: on any failure nothing is created, and with overwrite=true the existing realm is kept.',
+      'Imports a realm export (format version 2, or version 1 as before). The whole file is validated first; a 400 lists every problem with its path. The import runs in one transaction: on any failure nothing is created, and with overwrite=true the existing realm is kept. The request body may be up to 10 MB (other endpoints: 100 KB); a larger one gets a 413.',
   })
   @ApiQuery({
     name: 'overwrite',

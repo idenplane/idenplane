@@ -1,6 +1,15 @@
+/**
+ * A credential in a Keycloak realm export. Keycloak 7+ writes `secretData`
+ * and `credentialData` (JSON strings); older exports have the hash fields
+ * directly on the credential.
+ */
 export interface KeycloakCredential {
   type: string;
   value?: string;
+  /** Keycloak 7+: JSON `{"value":"<base64 hash>","salt":"<base64 salt>"}`. */
+  secretData?: string;
+  /** Keycloak 7+: JSON `{"hashIterations":n,"algorithm":"pbkdf2-sha256",…}`. */
+  credentialData?: string;
   hashedSaltedValue?: string;
   salt?: string;
   hashIterations?: number;

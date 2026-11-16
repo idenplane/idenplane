@@ -244,6 +244,14 @@ describe('AuthService', () => {
         { enabled: false },
         { retryAfter: async () => null, recordFailure: async () => {} } as any,
       ),
+      // PasswordVerificationService has its own spec; the user password
+      // check defers to the same crypto mock.
+      {
+        verifyUserPassword: (
+          user: { passwordHash: string },
+          password: string,
+        ) => crypto.verifyPassword(user.passwordHash, password),
+      } as any,
     );
   });
 

@@ -17,7 +17,7 @@ describe('Auth0ImporterService', () => {
         given_name: 'Alice',
         family_name: 'Smith',
         password_hash:
-          '$2b$10$abcdefghijklmnopqrstuuABCDEFGHIJKLMNOPQRSTUVWXYZ01',
+          '$2b$04$XmzY2qBKv0SBOsetdHF1sOwH1wnNPx2DbYFMo1ix6d49ueEoxKCLS',
       },
       {
         user_id: 'auth0|456',

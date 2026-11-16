@@ -1,6 +1,7 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { prismaMigrateStatus } from './migrate-status.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { policyProblems } from '../authorization/policy-engine.js';
 import { adminMfaRequiredFromEnv } from '../admin-rbac/admin-principal.service.js';
 import {
   ADMIN_ROLES,
@@ -149,6 +150,13 @@ export class UpgradeHealthService {
       if (check.status === 'pass') passed++;
       else warnings++;
     }
+
+    // 11. Authorization policies the engine cannot evaluate. Also only ever
+    // a warning.
+    const policyCheck = await this.checkInvalidPolicies();
+    checks.push(policyCheck);
+    if (policyCheck.status === 'pass') passed++;
+    else warnings++;
 
     const healthy = failures === 0;
 
@@ -358,6 +366,66 @@ export class UpgradeHealthService {
         name: 'wildcard_redirect_uris',
         status: 'warn',
         message: 'Could not check redirect URIs',
+        details: (error as Error).message,
+      };
+    }
+  }
+
+  /**
+   * Warns about authorization policies with a condition the engine cannot
+   * evaluate: an unknown operator (a typo such as `equal`), a value the
+   * operator cannot use (an invalid CIDR or regex, `in` without an array),
+   * or an unknown `effect` / `logic`. Before 0.11.0 these were saved
+   * unchecked and evaluated as "no match", so such a DENY never denied.
+   * Since 0.11.0 they fail closed: a DENY denies every request it applies
+   * to, an ALLOW never allows. Each is listed as `realm/policy` with what is
+   * wrong, so the operator can fix it.
+   */
+  async checkInvalidPolicies(): Promise<UpgradeHealthCheck> {
+    try {
+      const policies = await this.prisma.policy.findMany({
+        select: {
+          name: true,
+          effect: true,
+          logic: true,
+          subjectConditions: true,
+          resourceConditions: true,
+          actionConditions: true,
+          environmentConditions: true,
+          realm: { select: { name: true } },
+        },
+        orderBy: [{ realm: { name: 'asc' } }, { name: 'asc' }],
+      });
+      const invalid = policies
+        .map((p) => ({ p, problems: policyProblems(p) }))
+        .filter((x) => x.problems.length > 0);
+      if (invalid.length === 0) {
+        return {
+          name: 'invalid_authorization_policies',
+          status: 'pass',
+          message: 'Every authorization policy can be evaluated',
+        };
+      }
+      return {
+        name: 'invalid_authorization_policies',
+        status: 'warn',
+        message:
+          `${invalid.length} authorization polic${invalid.length === 1 ? 'y has' : 'ies have'} ` +
+          'a condition that cannot be evaluated. They now fail closed: a DENY denies ' +
+          'every request it applies to, an ALLOW never allows. Fix or delete them.',
+        details: invalid
+          .map(
+            ({ p, problems }) =>
+              `${p.realm.name}/${p.name} (${p.effect}): ` +
+              problems.map((x) => `${x.path}: ${x.message}`).join('; '),
+          )
+          .join(', '),
+      };
+    } catch (error) {
+      return {
+        name: 'invalid_authorization_policies',
+        status: 'warn',
+        message: 'Could not check authorization policies',
         details: (error as Error).message,
       };
     }

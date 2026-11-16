@@ -1,5 +1,6 @@
 import { Test } from '@nestjs/testing';
 import { pbkdf2Sync } from 'crypto';
+import { parsePbkdf2, verifyPbkdf2 } from '../crypto/password-hash-formats.js';
 import * as argon2 from 'argon2';
 import { AuthentikImporterService } from './authentik-importer.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -145,21 +146,16 @@ describe('AuthentikImporterService', () => {
 
     // The transformed hash must actually verify against the real password —
     // not just "some string", since a wrong transform fails silently at login.
-    const [iterations, saltB64, hashB64] =
-      aliceCall[0].data.passwordHash.split('$');
-    const salt = Buffer.from(saltB64, 'base64');
-    const derived = pbkdf2Sync(
-      'CorrectHorseBatteryStaple1',
-      salt,
-      parseInt(iterations, 10),
-      32,
-      'sha256',
-    );
-    expect(derived.toString('base64')).toBe(hashB64);
+    const stored = parsePbkdf2(aliceCall[0].data.passwordHash);
+    expect(stored).toMatchObject({ digest: 'sha256', iterations: 260000 });
+    await expect(
+      verifyPbkdf2('CorrectHorseBatteryStaple1', stored!),
+    ).resolves.toBe(true);
+    await expect(verifyPbkdf2('wrong-example', stored!)).resolves.toBe(false);
   });
 
   it('should drop unsupported password hashers with a null hash', async () => {
-    await service.importData(mockExport, {
+    const report = await service.importData(mockExport, {
       dryRun: false,
       targetRealm: 'test',
     });
@@ -173,6 +169,14 @@ describe('AuthentikImporterService', () => {
           enabled: false,
         }),
       }),
+    );
+    expect(report.warnings).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          entity: 'user',
+          message: expect.stringMatching(/^User 'bob': .*not supported/),
+        }),
+      ]),
     );
   });
 

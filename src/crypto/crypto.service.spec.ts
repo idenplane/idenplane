@@ -318,8 +318,14 @@ describe('CryptoService', () => {
         .mockReturnValueOnce(first.promise as Promise<boolean>)
         .mockReturnValueOnce(second.promise as Promise<boolean>);
 
-      const call1 = limitedService.verifyPassword('hash-one', 'password-one');
-      const call2 = limitedService.verifyPassword('hash-two', 'password-two');
+      const call1 = limitedService.verifyPassword(
+        '$argon2id$hash-one',
+        'password-one',
+      );
+      const call2 = limitedService.verifyPassword(
+        '$argon2id$hash-two',
+        'password-two',
+      );
 
       await Promise.resolve();
       await Promise.resolve();

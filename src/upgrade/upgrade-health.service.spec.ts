@@ -198,3 +198,83 @@ describe('UpgradeHealthService admin MFA checks', () => {
     });
   });
 });
+
+describe('UpgradeHealthService.checkInvalidPolicies', () => {
+  const build = async (findMany: jest.Mock) => {
+    const { UpgradeHealthService } =
+      await import('./upgrade-health.service.js');
+    return new UpgradeHealthService({ policy: { findMany } } as never);
+  };
+  const stored = (overrides: Record<string, unknown>) => ({
+    name: 'p',
+    effect: 'ALLOW',
+    logic: 'AND',
+    subjectConditions: null,
+    resourceConditions: null,
+    actionConditions: null,
+    environmentConditions: null,
+    realm: { name: 'demo' },
+    ...overrides,
+  });
+
+  it('passes when every policy can be evaluated', async () => {
+    const svc = await build(
+      jest.fn().mockResolvedValue([
+        stored({
+          actionConditions: [
+            { field: 'action', operator: 'in', value: ['read'] },
+          ],
+        }),
+      ]),
+    );
+    await expect(svc.checkInvalidPolicies()).resolves.toMatchObject({
+      name: 'invalid_authorization_policies',
+      status: 'pass',
+    });
+  });
+
+  it('warns and names each invalid policy with what is wrong', async () => {
+    const svc = await build(
+      jest.fn().mockResolvedValue([
+        stored({
+          name: 'block-contractors',
+          effect: 'DENY',
+          subjectConditions: [
+            { field: 'subject.roles', operator: 'contain', value: 'x' },
+          ],
+        }),
+        stored({ name: 'fine' }),
+        stored({
+          name: 'office',
+          realm: { name: 'sample' },
+          environmentConditions: [
+            {
+              field: 'environment.ip',
+              operator: 'ipInRange',
+              value: '10.0.0.0/40',
+            },
+          ],
+        }),
+      ]),
+    );
+    const check = await svc.checkInvalidPolicies();
+    expect(check.status).toBe('warn');
+    expect(check.message).toContain('2 authorization policies');
+    expect(check.message).toContain('fail closed');
+    expect(check.details).toContain(
+      'demo/block-contractors (DENY): subjectConditions[0]: unknown operator "contain"',
+    );
+    expect(check.details).toContain(
+      'sample/office (ALLOW): environmentConditions[0]',
+    );
+    expect(check.details).not.toContain('fine');
+  });
+
+  it('only warns, never fails, when the query errors', async () => {
+    const svc = await build(jest.fn().mockRejectedValue(new Error('boom')));
+    await expect(svc.checkInvalidPolicies()).resolves.toMatchObject({
+      name: 'invalid_authorization_policies',
+      status: 'warn',
+    });
+  });
+});
