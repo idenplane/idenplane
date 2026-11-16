@@ -45,6 +45,13 @@ A security hardening release. New realms are now secure by default: brute-force 
   - `Permissions-Policy` turns off camera, microphone, geolocation, payment, USB and similar features. Passkeys, the clipboard and fullscreen stay available to Idenplane's own pages.
   - `Cross-Origin-Resource-Policy: same-origin` everywhere, except `cross-origin` for `/themes/`, so client apps and webmail can still show realm logos.
   - `Cache-Control: no-store` by default on dynamic responses: hosted pages, the account page and admin API responses. Before, shared caches could store them. Static assets, discovery and JWKS stay cacheable.
+- **Dependencies with known advisories** (none in the server's runtime dependencies):
+  - Terraform provider: `golang.org/x/net` 0.58.0 → 0.62.0 (GO-2026-6603, -6610, -6611, -6612, -6617, -6860, -6866). Its `go` directive moves from 1.25.0 to 1.26.0, which x/net 0.62.0 requires.
+  - Terraform provider and Go SDK: `toolchain go1.26.11`, so CI builds and tests with a standard library that has the net/http HTTP/2 fixes from go1.26.9. The Go SDK still supports Go 1.24.
+  - Docs site: `webpack-dev-middleware` 7.4.5 → 7.4.6 (GHSA-g84c-rxfj-3j2c); `uuid` 8.3.2 → 11.1.1 under `sockjs` (GHSA-w5hq-g745-h8pq), through an override because sockjs 0.3.24, its last release, asks for `^8.3.2`.
+  - Next.js SDK (dev): `nanoid` 3.3.16 → 3.3.20 (GHSA-2v37-7h3g-55p8).
+  - Vue SDK (dev): `glob` 10.5.0 → 14.0.6 under `js-beautify` (GHSA-3g3m-2fjr-6pw4), through an override because even the latest js-beautify asks for glob `^13`, which the advisory still covers.
+  - `deepmerge` (GHSA-gcqx-w48m-w2h4) has no fixed release. It is used only by Jest's config loader and the docs build's SVG loader, on this repository's own configuration, and is ignored with that reason in `osv-scanner.toml` and `docs/osv-scanner.toml` until 2027-05-16.
 
 ### Added
 - **Threat model** (*Security → Threat model*, `docs/docs/security/threat-model.md`): assets, trust boundaries, data flows, STRIDE threats per boundary with the mitigation in the code and the residual risk, and a cryptographic inventory.
@@ -80,6 +87,14 @@ A security hardening release. New realms are now secure by default: brute-force 
 - **Admin API responses no longer carry `Link: </api/v1/admin/...>; rel="successor-version"`.** No admin route is served under `/api/v1`, so the link pointed at a `404`. The `Deprecation` and `Sunset` headers are unchanged.
 - Every GitHub Action is pinned to a commit SHA, with Dependabot keeping the pins current. `sync-dev-to-main.yml` grants `contents: write` only to its job. The WSL dev-setup job adds the NodeSource repository directly instead of piping a script into bash.
 - The two e2e suites that use the real `pg_dump`/`pg_restore` fail instead of skipping when CI sets `REQUIRE_PG_TOOLS` and the tools are missing.
+- **Pinned build inputs** (OpenSSF Scorecard *Pinned-Dependencies*):
+  - the Next.js quickstart's Dockerfiles pin `node:24-alpine` by digest, like the root Dockerfile;
+  - the conformance run pins the OpenID conformance-suite image and its nginx image by digest, and `run.sh` reads the suite release from `Dockerfile.suite`, so `SUITE_VERSION` can no longer be overridden;
+  - Dependabot's docker entry now also covers `/examples/nextjs-quickstart` and `/scripts/ci/conformance`, so those digests keep moving;
+  - the breaking-change check installs oasdiff 1.35.0 from its release tarball, checked against its SHA-256, instead of piping `install.sh` from oasdiff's main branch into bash;
+  - the dev setup guide, README, CONTRIBUTING and `verify-dev-setup.sh` install with `npm ci`.
+- **Gradle wrapper validation.** The Android SDK and android-quickstart CI jobs and the Android publish workflow check both `gradle-wrapper.jar` files against Gradle's published checksums before running them.
+- **Property-based tests** with fast-check for the SCIM filter parser, redirect URI matching and HTML escaping (`*.property.spec.ts`, part of the normal Jest run).
 
 ### Fixed
 - **API reference:** `openapi.yaml` gave the licence as Apache 2.0 (it is AGPL-3.0), a contact address that doesn't exist and a `/api/v1` server URL; it now points to SUPPORT.md and `http://localhost:3000`.

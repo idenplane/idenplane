@@ -70,6 +70,9 @@
   },
   "overrides": {
     "esbuild": "^0.28.1",
-    "minimatch@^9": "^11.0.1"
+    "minimatch@^9": "^11.0.1",
+    "js-beautify": {
+      "glob": "^14.0.2"
+    }
   }
 }

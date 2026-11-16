@@ -26,7 +26,7 @@ git merge upstream/dev
 
 1. **Install dependencies**
 ```bash
-npm install
+npm ci
 ```
 
 2. **Set up environment**

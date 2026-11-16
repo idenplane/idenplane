@@ -40,10 +40,12 @@ Clone **inside** the WSL filesystem (`~/code/idenplane`), not under `/mnt/c/`. N
 
 They're independent. Most changes need only one.
 
+Each one installs with `npm ci`, not `npm install`: it installs exactly the versions in `package-lock.json` and stops if `package.json` disagrees with the lockfile, so you build what CI builds. Reach for `npm install <package>` only when you mean to change a dependency.
+
 ### Backend (NestJS, port 3000)
 
 ```bash
-npm install
+npm ci
 node scripts/setup-env.cjs  # writes .env — see below
 docker compose up -d db     # Postgres on 127.0.0.1:5432
 npm run db:setup            # migrate + seed
@@ -56,7 +58,7 @@ npm run start:dev
 
 ```bash
 cd admin-ui
-npm install
+npm ci
 npm run dev
 ```
 
@@ -66,7 +68,7 @@ It proxies to the backend on 3000, so run that first, or you'll get a console fu
 
 ```bash
 cd docs
-npm install
+npm ci
 npm start
 ```
 

@@ -43,8 +43,8 @@ npm --version
 git --version
 node -e 'const [maj] = process.versions.node.split("."); if (+maj < 22) { console.error("Node 22+ required"); process.exit(1); }'
 
-step "Backend: npm install"
-npm install --no-audit --no-fund
+step "Backend: npm ci"
+npm ci --no-audit --no-fund
 
 step "Backend: node scripts/setup-env.cjs"
 if [ -e .env ]; then
@@ -85,10 +85,10 @@ pids+=($!)
 wait_for http://localhost:3000/health/ready 240 /tmp/idenplane-backend.log
 echo "backend is up"
 
-step "Admin console: cd admin-ui && npm install && npm run dev"
+step "Admin console: cd admin-ui && npm ci && npm run dev"
 (
   cd admin-ui
-  npm install --no-audit --no-fund
+  npm ci --no-audit --no-fund
   npm run dev -- --strictPort > /tmp/idenplane-console.log 2>&1 &
   echo $! > /tmp/idenplane-console.pid
 )
@@ -101,10 +101,10 @@ echo "console is up and proxies to the backend"
 step "Tests: npm test (no database needed)"
 npm test -- --silent
 
-step "Docs: cd docs && npm install && npm run build"
+step "Docs: cd docs && npm ci && npm run build"
 (
   cd docs
-  npm install --no-audit --no-fund
+  npm ci --no-audit --no-fund
   npm run build
 )
 

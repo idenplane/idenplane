@@ -1,4 +1,5 @@
-FROM node:24-alpine
+# node:24-alpine, pinned by index digest; Dependabot bumps it.
+FROM node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5
 RUN apk add --no-cache postgresql16-client \
     && pg_dump --version | grep -q ' 16\.' \
     && pg_restore --version | grep -q ' 16\.'

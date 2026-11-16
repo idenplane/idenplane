@@ -150,10 +150,26 @@ jobs:
         run: git checkout HEAD -- .
 
       - name: Install oasdiff
+        # A pinned release tarball, checked against its SHA-256 before it is
+        # unpacked. This used to pipe install.sh from oasdiff's main branch
+        # into bash (Scorecard Pinned-Dependencies: downloadThenRun) and fell
+        # back silently to a path-count heuristic when that failed. A checksum
+        # mismatch now fails the job. Dependabot can't see this pin: to bump,
+        # take the new release's line for linux_amd64.tar.gz from its
+        # checksums.txt.
+        env:
+          OASDIFF_VERSION: 1.35.0
+          OASDIFF_SHA256: a8023002fcb2eaa7f5758148a9303cb63d33b939886df312268bc0fc7b939140
         run: |
-          # Try to install oasdiff binary; fall back silently if unavailable
-          curl -sL https://raw.githubusercontent.com/Tufin/oasdiff/main/install.sh \
-            | bash -s -- /usr/local/bin || true
+          set -euo pipefail
+          tarball="oasdiff_${OASDIFF_VERSION}_linux_amd64.tar.gz"
+          cd "$RUNNER_TEMP"
+          curl -fsSL --retry 3 -o "$tarball" \
+            "https://github.com/oasdiff/oasdiff/releases/download/v${OASDIFF_VERSION}/${tarball}"
+          echo "${OASDIFF_SHA256}  ${tarball}" | sha256sum -c -
+          tar -xzf "$tarball" oasdiff
+          sudo install -m 0755 oasdiff /usr/local/bin/oasdiff
+          oasdiff --version
 
       - name: Compare OpenAPI specs for breaking changes
         run: |

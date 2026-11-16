@@ -6,10 +6,12 @@
 #                     [server_metadata=discovery][client_registration=static_client]
 #             config  oidcc-config-certification-test-plan
 #   IDENPLANE_IMAGE   image to test (default: build this checkout)
-#   SUITE_VERSION     conformance-suite release; the image and the scripts
-#                     (run-test-plan.py) are taken from the same release
 #   OUT_DIR           results (default ./conformance-out): results.json,
 #                     summary.md, the suite's exported plan archives, logs
+#
+# The conformance-suite release is pinned, by tag and digest, on the FROM line
+# of Dockerfile.suite. The scripts (run-test-plan.py) are cloned from that same
+# release, and docker-compose.yml's suite nginx image must carry the same tag.
 #
 # Topology, all on one private Docker network with nothing published:
 #   suite: server (trusts a throwaway CA) + nginx + mongo
@@ -22,9 +24,20 @@ set -euo pipefail
 source "$(dirname "$0")/../lib/common.sh"
 
 PLANS="${PLANS:-basic config}"
-SUITE_VERSION="${SUITE_VERSION:-release-v5.3.4}"
 OUT_DIR="${OUT_DIR:-$PWD/conformance-out}"
 HERE="$CI_DIR/conformance"
+# Read the release from the pinned image rather than the environment, so the
+# scripts and the images can't come from different releases.
+SUITE_REPO='registry.gitlab.com/openid/conformance-suite'
+SUITE_VERSION="$(sed -n "s|^FROM ${SUITE_REPO}:\([^@]*\)@sha256:.*|\1|p" "$HERE/Dockerfile.suite")"
+if [ -z "$SUITE_VERSION" ]; then
+  echo "Dockerfile.suite has no digest-pinned ${SUITE_REPO} FROM line" >&2
+  exit 1
+fi
+if ! grep -qF "image: ${SUITE_REPO}/nginx:${SUITE_VERSION}@sha256:" "$HERE/docker-compose.yml"; then
+  echo "docker-compose.yml's suite nginx image is not pinned to ${SUITE_VERSION}" >&2
+  exit 1
+fi
 WORK_DIR="$(mktemp -d)"
 SUITE_DIR="$WORK_DIR/suite"
 mkdir -p "$OUT_DIR/export" "$WORK_DIR/export" && chmod -R 777 "$OUT_DIR" "$WORK_DIR"
