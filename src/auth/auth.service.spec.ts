@@ -1083,6 +1083,11 @@ describe('AuthService', () => {
         where: { sessionId: storedRefreshToken.sessionId },
         data: { revoked: true },
       });
+      // And the session ends, so the winning request's new refresh token,
+      // stored after this revocation, cannot outlive it.
+      expect(prisma.session.deleteMany).toHaveBeenCalledWith({
+        where: { id: storedRefreshToken.sessionId },
+      });
       expect(prisma.refreshToken.create).not.toHaveBeenCalled();
     });
 
@@ -1332,6 +1337,9 @@ describe('AuthService', () => {
       expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
         where: { sessionId: storedRefreshToken.sessionId },
         data: { revoked: true },
+      });
+      expect(prisma.session.deleteMany).toHaveBeenCalledWith({
+        where: { id: storedRefreshToken.sessionId },
       });
     });
 
