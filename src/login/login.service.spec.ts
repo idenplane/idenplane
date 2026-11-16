@@ -98,6 +98,17 @@ function createMockFederationService() {
 // Test suite
 // ---------------------------------------------------------------------------
 
+/**
+ * PasswordVerificationService has its own spec; here it defers to the
+ * crypto mock so these tests keep driving the result with verifyPassword.
+ */
+function passwordsBackedBy(crypto: { verifyPassword: jest.Mock }) {
+  return {
+    verifyUserPassword: (user: { passwordHash: string }, password: string) =>
+      crypto.verifyPassword(user.passwordHash, password),
+  };
+}
+
 describe('LoginService', () => {
   let service: LoginService;
   let prisma: MockPrismaService;
@@ -115,6 +126,7 @@ describe('LoginService', () => {
       prisma as any,
       crypto as any,
       bruteForce as any,
+      passwordsBackedBy(crypto) as any,
       federation as any,
     );
   });
@@ -508,6 +520,7 @@ describe('LoginService', () => {
           prisma as any,
           crypto as any,
           bruteForce as any,
+          passwordsBackedBy(crypto) as any,
           undefined, // no federation service
         );
 
@@ -527,6 +540,7 @@ describe('LoginService', () => {
           prisma as any,
           crypto as any,
           bruteForce as any,
+          passwordsBackedBy(crypto) as any,
           undefined,
         );
 
@@ -571,6 +585,7 @@ describe('LoginService', () => {
           prisma as any,
           crypto as any,
           bruteForce as any,
+          passwordsBackedBy(crypto) as any,
           undefined,
         );
 

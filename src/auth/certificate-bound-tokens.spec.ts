@@ -204,6 +204,12 @@ describe('certificate-bound access tokens (RFC 8705 §3)', () => {
         { enabled: true },
         { retryAfter: async () => null, recordFailure: async () => {} } as any,
       ),
+      // The user password check (PasswordVerificationService has its own
+      // spec) defers to the same crypto mock.
+      {
+        verifyUserPassword: (user: { passwordHash: string }, pw: string) =>
+          crypto.verifyPassword(user.passwordHash, pw),
+      } as any,
       undefined,
       { enrichToken } as any,
       smsOtp as any,

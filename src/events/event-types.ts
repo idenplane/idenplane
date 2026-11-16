@@ -59,6 +59,8 @@ export const ResourceType = {
   SCIM_TOKEN: 'SCIM_TOKEN',
   SCIM_ATTRIBUTE_MAPPING: 'SCIM_ATTRIBUTE_MAPPING',
   ADMIN_REALM_ASSIGNMENT: 'ADMIN_REALM_ASSIGNMENT',
+  /** An admin's console second factors, and the admin MFA requirement. */
+  ADMIN_MFA: 'ADMIN_MFA',
 } as const;
 
 export type ResourceTypeValue =

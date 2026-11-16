@@ -45,6 +45,7 @@ import { VerificationService } from '../verification/verification.service.js';
 import { EmailService } from '../email/email.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
+import { PasswordVerificationService } from '../crypto/password-verification.service.js';
 import { PasswordPolicyService } from '../password-policy/password-policy.service.js';
 import { MfaService } from '../mfa/mfa.service.js';
 import { SmsOtpService, SmsOtpError } from '../sms/sms-otp.service.js';
@@ -115,6 +116,7 @@ export class LoginController {
     private readonly secondFactorVerifier: SecondFactorVerifier,
     private readonly flowRuntime: FlowRuntimeService,
     private readonly captcha: CaptchaService,
+    private readonly passwords: PasswordVerificationService,
   ) {}
 
   /**
@@ -307,8 +309,19 @@ export class LoginController {
         res,
       );
     } catch (err: unknown) {
-      const errMessage =
-        err instanceof Error ? err.message : 'Invalid credentials';
+      // Only a message meant for the user (an HTTP 4xx, e.g. "Invalid
+      // credentials" or the lockout notice) is shown. Anything else is an
+      // internal error: log it, show a generic message, never its text.
+      let errMessage: string;
+      if (err instanceof HttpException && err.getStatus() < 500) {
+        errMessage = err.message;
+      } else {
+        this.logger.error(
+          `Sign-in failed with an internal error in realm "${realm.name}"`,
+          err instanceof Error ? err.stack : String(err),
+        );
+        errMessage = 'Sign-in failed. Please try again.';
+      }
       void this.eventsService.recordLoginEvent({
         realmId: realm.id,
         type: LoginEventType.LOGIN_ERROR,
@@ -840,8 +853,8 @@ export class LoginController {
     }
 
     // Verify current password
-    const valid = await this.crypto.verifyPassword(
-      user.passwordHash,
+    const valid = await this.passwords.verifyUserPassword(
+      user,
       currentPassword,
     );
     if (!valid) {

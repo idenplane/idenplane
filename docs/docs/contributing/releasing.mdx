@@ -6,20 +6,22 @@ description: How each Idenplane artifact is published — the tags that trigger 
 
 # Releasing
 
-Six artifacts publish to four registries, each from its own tag. Nothing publishes from a branch push except the Docker `latest` image.
+Six artifacts publish to three registries (Docker Hub, Maven Central and npm), each from its own tag. A push to `main` publishes only a `main-<sha>` Docker image.
 
 ## What publishes, and from what
 
 | artifact | registry | trigger |
 |---|---|---|
-| Docker image `:latest` | Docker Hub | **push to `main`** |
-| Docker image `:x.y.z` | Docker Hub | tag `v*` |
+| Docker image `:main-<sha>` | Docker Hub | push to `main` |
+| Docker image `:x.y.z`, `:x.y` and `:latest` | Docker Hub | tag `v*` (`latest` only for a stable `vX.Y.Z`) |
 | `idenplane-java-core` | Maven Central | tag `java-v*` |
 | `idenplane-mcp` | npm | tag `mcp-v*` |
 | `idenplane-sdk` (JavaScript SDK) | npm | tag `sdk-v*` |
 | Android SDK | Maven Central | tag `android-v*` |
 
-Merging `dev` → `main` therefore **does** update the Docker `latest` tag that the quickstart docs tell people to pull. It does **not** touch Maven Central or npm — those need an explicit tag.
+Merging `dev` → `main` therefore does **not** move the Docker `latest` tag that the quickstart docs tell people to pull, and does not touch Maven Central or npm: each needs its tag.
+
+The Android tag, like the Java one, only uploads a **validated** deployment to the Central Portal (`publish-android.yml`); someone has to press Publish there, as described for Java below.
 
 ## Server release (`v*`)
 
@@ -36,7 +38,7 @@ git tag -a v0.4.1 -m "0.4.1"
 git push origin v0.4.1
 ```
 
-A mismatch between the tag, `package.json`, the chart and the changelog fails the check before the image builds, rather than after.
+A mismatch between the tag, `package.json`, the chart and the changelog fails the check. The check runs alongside `docker-publish.yml` and does not stop it, so the image may still be pushed: get the versions right before you tag.
 
 ## Java SDK release (`java-v*`)
 
@@ -57,7 +59,7 @@ git push origin java-v1.1.0
 ### The tag does not finish the release
 
 :::warning One deliberate manual step
-`autoPublish` is **`false`** in `idenplane-java-core/pom.xml`. The tag builds, signs and uploads the bundle, and it lands in the Central Portal as a **validated** deployment — not a public one.
+`autoPublish` is **`false`** in the parent `packages/idenplane-java/pom.xml`. The tag builds, signs and uploads the bundle, and it lands in the Central Portal as a **validated** deployment — not a public one.
 
 Someone then has to press Publish at **[central.sonatype.com/publishing/deployments](https://central.sonatype.com/publishing/deployments)**.
 

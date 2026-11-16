@@ -18,7 +18,7 @@ info:
     ## Rate Limiting
 
     Some endpoints are rate-limited. See specific endpoint documentation for details.
-  version: 0.10.1
+  version: 0.11.0
   contact:
     name: Idenplane Project
     url: https://github.com/idenplane/idenplane/blob/main/SUPPORT.md
@@ -2677,19 +2677,23 @@ components:
             - PUBLIC
             - CONFIDENTIAL
           description: Client type (PUBLIC or CONFIDENTIAL)
-        publicClient:
+        requireConsent:
           type: boolean
-        consentRequired:
-          type: boolean
-        standardFlowEnabled:
-          type: boolean
-        implicitFlowEnabled:
-          type: boolean
-        directAccessGrantsEnabled:
-          type: boolean
-        serviceAccountsEnabled:
-          type: boolean
+        grantTypes:
+          type: array
+          items:
+            type: string
+            enum:
+              - authorization_code
+              - refresh_token
+              - client_credentials
+              - password
+              - urn:ietf:params:oauth:grant-type:device_code
         redirectUris:
+          type: array
+          items:
+            type: string
+        postLogoutRedirectUris:
           type: array
           items:
             type: string
@@ -2697,12 +2701,16 @@ components:
           type: array
           items:
             type: string
-        scopes:
-          type: array
-          items:
-            type: string
+        serviceAccountUserId:
+          type: string
+          format: uuid
+          nullable: true
+        tokenEndpointAuthMethod:
+          type: string
+          nullable: true
         requiredAcr:
           type: string
+          nullable: true
         createdAt:
           type: string
           format: date-time
@@ -2729,37 +2737,48 @@ components:
           enum:
             - PUBLIC
             - CONFIDENTIAL
-          default: PUBLIC
-        consentRequired:
+          default: CONFIDENTIAL
+        publicClient:
+          type: boolean
+          description: Shorthand for clientType PUBLIC; ignored when clientType is set
+        requireConsent:
           type: boolean
           default: false
-        standardFlowEnabled:
-          type: boolean
-          default: true
-        implicitFlowEnabled:
-          type: boolean
-          default: false
-        directAccessGrantsEnabled:
-          type: boolean
-          default: false
-        serviceAccountsEnabled:
-          type: boolean
-          default: false
+        grantTypes:
+          type: array
+          items:
+            type: string
+            enum:
+              - authorization_code
+              - refresh_token
+              - client_credentials
+              - password
+              - urn:ietf:params:oauth:grant-type:device_code
+          description: Allowed grants (default authorization_code only)
         redirectUris:
           type: array
           items:
             type: string
           description: Allowed redirect URIs
+        postLogoutRedirectUris:
+          type: array
+          items:
+            type: string
         webOrigins:
           type: array
           items:
             type: string
-          description: Allowed CORS origins
-        scopes:
-          type: array
-          items:
-            type: string
-          description: Assigned scope names
+          description: Allowed CORS origins ("*" is refused)
+        requiredAcr:
+          type: string
+        tokenEndpointAuthMethod:
+          type: string
+          enum:
+            - client_secret_basic
+            - client_secret_post
+            - none
+            - tls_client_auth
+            - self_signed_tls_client_auth
 
     UpdateClientRequest:
       type: object
@@ -2770,17 +2789,28 @@ components:
           type: string
         enabled:
           type: boolean
-        consentRequired:
+        clientType:
+          type: string
+          enum:
+            - PUBLIC
+            - CONFIDENTIAL
+        requireConsent:
           type: boolean
-        standardFlowEnabled:
-          type: boolean
-        implicitFlowEnabled:
-          type: boolean
-        directAccessGrantsEnabled:
-          type: boolean
-        serviceAccountsEnabled:
-          type: boolean
+        grantTypes:
+          type: array
+          items:
+            type: string
+            enum:
+              - authorization_code
+              - refresh_token
+              - client_credentials
+              - password
+              - urn:ietf:params:oauth:grant-type:device_code
         redirectUris:
+          type: array
+          items:
+            type: string
+        postLogoutRedirectUris:
           type: array
           items:
             type: string
@@ -2788,10 +2818,8 @@ components:
           type: array
           items:
             type: string
-        scopes:
-          type: array
-          items:
-            type: string
+        requiredAcr:
+          type: string
 
     # ── Group ───────────────────────────────────────────────────────────────────
     Group:

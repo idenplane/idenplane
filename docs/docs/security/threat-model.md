@@ -6,7 +6,7 @@ description: STRIDE threat model of the Idenplane server - assets, trust boundar
 
 # Threat model
 
-This is a STRIDE threat model of an Idenplane deployment: the server (`src/`), the admin console (`admin-ui/`), the hosted login and account pages (`themes/`), and what they talk to. It is written from the code as of 0.10.0. Each mitigation names the file or feature that implements it; each residual risk is what is left after it.
+This is a STRIDE threat model of an Idenplane deployment: the server (`src/`), the admin console (`admin-ui/`), the hosted login and account pages (`themes/`), and what they talk to. It is written from the code as of 0.10.0 and updated for 0.11.0 (admin console MFA). Each mitigation names the file or feature that implements it; each residual risk is what is left after it.
 
 It complements the [OWASP ASVS self-assessment](./asvs-assessment.md), which goes requirement by requirement, and the [secure defaults](./secure-defaults.md).
 
@@ -50,9 +50,9 @@ It complements the [OWASP ASVS self-assessment](./asvs-assessment.md), which goe
 | Opaque tokens (refresh, session, codes, reset, magic link) | 256- to 512-bit values from `crypto.randomBytes`, stored as SHA-256 | `src/crypto/crypto.service.ts` |
 | OTP codes | `crypto.randomInt`, 6+ digits; SMS codes bound to the flow with HMAC-SHA256 | `src/sms/sms-otp.service.ts`, `src/auth-flow/email-otp.service.ts` |
 | TOTP | RFC 6238, HMAC-SHA1 (authenticator-app compatibility), 160-bit secret | `src/mfa/mfa.service.ts` |
-| Recovery codes | 32-bit random, unsalted SHA-256 (**gap**, see ASVS V6.5.2) | `src/mfa/mfa.service.ts` |
+| Recovery codes | 120-bit random (base32), SHA-256 with an `rc2$` prefix; codes from before 0.11.0 rewrapped as Argon2id(old SHA-256) | `src/mfa/recovery-codes.ts`, `src/mfa/recovery-code-rewrap.service.ts` |
 | Webhook signatures | HMAC-SHA256 | `src/webhooks/` |
-| SAML | XML-DSig with RSA-SHA256 | `src/saml/saml-idp.service.ts` |
+| SAML | Assertions and responses signed with XML-DSig RSA-SHA256. AuthnRequests verified with RSA-SHA256 or RSA-SHA512 (SHA-256/512 digests); SHA-1 refused | `src/saml/saml-idp.service.ts`, `src/saml/saml-request-verifier.ts` |
 | mTLS | X.509 path validation per realm, `x5t#S256` thumbprints, TLS 1.2+ on the listener | `src/client-auth/`, `src/mtls/` |
 
 ## Trust boundaries and data flows
@@ -126,7 +126,7 @@ sequenceDiagram
   RP->>I: GET /userinfo (Bearer access token, typ checked)
 ```
 
-Admin flow: the console signs in at `POST /admin/auth/login` against the `master` realm (lockout checked first), gets a one-hour admin JWT (`typ: admin`) and an HttpOnly refresh cookie. Every admin request goes through `AdminApiKeyGuard` (authentication) and `AdminAuthorizationGuard` (role and realm scope, read from the database on each request).
+Admin flow: the console signs in at `POST /admin/auth/login` against the `master` realm (lockout checked first). An admin with a second factor answers it at `/admin/auth/login/mfa` or `/login/passkey` (0.11.0); then the console gets a one-hour admin JWT (`typ: admin`, with `amr`, `acr` and `auth_time`) and an HttpOnly refresh cookie. Every admin request goes through `AdminApiKeyGuard` (authentication) and `AdminAuthorizationGuard` (role and realm scope, read from the database on each request).
 
 ## Threats by boundary
 
@@ -144,18 +144,19 @@ Each table lists the STRIDE category (S spoofing, T tampering, R repudiation, I 
 | S | Session fixation and theft | New session token at sign-in, token stored hashed, `HttpOnly; Secure; SameSite=Lax` cookie scoped to the realm path (`src/login/session-issuer.service.ts`) | No idle timeout for SSO sessions; no `__Host-` prefix |
 | I | Account enumeration through reset and registration | Generic answers on forgot-password; rate limits | Timing differs between known and unknown usernames (ASVS L3) |
 | S | Old sessions survive a password reset | A reset ends every session and revokes refresh tokens (`src/login/login.controller.ts`) | A self-service password change does not end other sessions |
-| E | Second-factor bypass | Server-side pending-action state, single-use challenges, TOTP replay protection (`src/mfa/`, `test/totp-replay.e2e-spec.ts`) | Recovery codes are weak if the database leaks |
+| E | Second-factor bypass | Server-side pending-action state, single-use challenges, TOTP replay protection (`src/mfa/`, `test/totp-replay.e2e-spec.ts`); 120-bit recovery codes (0.11.0) | — |
 
 ### 2. Relying-party apps to OAuth, OIDC and SAML endpoints
 
 | | Threat | Mitigation | Residual risk |
 |---|---|---|---|
 | S | Code interception or injection | Codes live 60 s and are single-use (atomic update, replay revokes the session); PKCE `S256` required for public clients (`src/oauth/oauth.service.ts`, `src/auth/auth.service.ts`) | PKCE is optional for confidential clients |
-| S | Open redirect via `redirect_uri` | Registered URIs only (`src/common/redirect-uri.utils.ts`) | A registered URI ending in `/*` matches any path below it (ASVS V10.4.1) |
-| S | Refresh token theft | Rotation on every use; reuse revokes the session; tokens bound to the client and optionally to a client certificate (RFC 8705) | Absolute session expiry is enforced by an hourly job, not at refresh |
+| S | Open redirect via `redirect_uri` | Exact string matching of registered URIs since 0.11.0, loopback port excepted (RFC 8252); fragments refused (`src/common/redirect-uri.utils.ts`) | Clients upgraded with `allowInsecureWildcardRedirectUris` still match any path below a `/*` entry until an admin turns it off; `/admin/upgrade/health` lists them |
+| S | Refresh token theft | Rotation on every use; reuse revokes the session; tokens bound to the client and optionally to a client certificate (RFC 8705); the session's absolute expiry is checked at every refresh (`src/sessions/session-lifetime.ts`) | An offline token is valid for `offlineTokenLifespan` (30 days by default) from sign-in, with no idle timeout; RP-initiated logout and the admin and reset paths end it, but a stolen one is usable until then |
 | E | Token confusion: ID, logout or admin tokens used as access tokens | userinfo, introspection and the WebSocket accept only `typ: Bearer` (`src/tokens/access-token-type.ts`); admin API requires `typ: admin` | No audience or issuer check at verification (ASVS V9.2.3) |
 | S | Client impersonation | Secrets hashed; one auth method per request; `tls_client_auth` / `self_signed_tls_client_auth` with per-realm trust anchors (`src/client-auth/`) | The password grant can still be enabled per client |
-| T | SAML request tampering, XML attacks | Signed AuthnRequests verified when the SP has a certificate; no external entities; size limit applied before and during inflation (`src/saml/saml-idp.service.ts`) | Signature check does not confirm it covers the parsed root (wrapping) |
+| T | SAML request tampering, XML attacks, signature wrapping | When the SP has a certificate, every AuthnRequest must be signed. HTTP-POST: one signature, on the root, referencing the root's `ID`, and every field read from the signed bytes; HTTP-Redirect: signature over the raw query bytes. No DTD, comments, processing instructions or duplicate IDs; SHA-1 refused; size limit before and during inflation (`src/saml/saml-request-verifier.ts`, `src/saml/saml-request-hardening.spec.ts`) | SPs without a certificate send unsigned requests, which anyone can forge (the response still goes only to a registered ACS URL) |
+| S | Replay of a captured AuthnRequest | `IssueInstant` at most 5 minutes old (plus 3 minutes of skew); `Destination` checked; each request `ID` accepted once per SP, by a unique row in PostgreSQL shared by every replica and worker (`saml_request_ids`, `test/saml-request-replay.e2e-spec.ts`) | `ForceAuthn` and `IsPassive` are not acted on; SAML logout is not implemented |
 | R | Denying a sign-in or token issuance | Login events on by default for new realms (`src/events/`) | Older realms may have events off |
 | I | Forced logout via RP-initiated logout | `post_logout_redirect_uri` checked | GET logout without `id_token_hint` needs no confirmation (ASVS V10.6.2) |
 
@@ -163,9 +164,10 @@ Each table lists the STRIDE category (S spoofing, T tampering, R repudiation, I 
 
 | | Threat | Mitigation | Residual risk |
 |---|---|---|---|
-| S | Admin password guessing | Master realm lockout on by default, per-IP admin login limit (`src/admin-auth/admin-auth.service.ts`), random initial password, weak passwords refused in production (`src/admin-auth/admin-seed.service.ts`) | **No MFA on console sign-in** (ASVS V6.3.3) |
+| S | Admin password guessing or a stolen admin password | Master realm lockout on by default, per-IP admin login limit (`src/admin-auth/admin-auth.service.ts`), random initial password, weak passwords refused in production (`src/admin-auth/admin-seed.service.ts`). Since 0.11.0 a second factor at console sign-in (TOTP, passkey or recovery code) once the admin has one; wrong codes count towards the lockout. A server-wide requirement, on for new installs, confines an admin without a factor to enrolment (`src/admin-mfa/`, `src/common/guards/admin-authorization.guard.ts`, [Admin console MFA](./admin-mfa.md)) | Off after an upgrade until a super-admin or `ADMIN_MFA_REQUIRED` turns it on (`/admin/upgrade/health` warns). While required, someone with the password of an admin who has no factor yet can enrol their own |
 | E | A realm-admin or view-only admin reaching other realms or the master realm | Global `AdminAuthorizationGuard`, roles and realm assignments read from the database per request, master never in a realm-admin scope, DB trigger on assignments, child ids confined to the path realm (`src/admin-rbac/`, `test/admin-rbac.e2e-spec.ts`) | — |
-| S | Leaked `ADMIN_API_KEY` | Placeholder keys refused in production; per-IP limits on API-key use; sensitive operations need MFA step-up | The key is static and grants super-admin |
+| S | Leaked `ADMIN_API_KEY` | Placeholder keys refused in production; per-IP limits on API-key use; end-user MFA resets and unlocks refuse the key. Its admin MFA reset (break-glass) is always recorded as an admin event | The key is static and grants super-admin, including resetting an admin's MFA |
+| E | Stolen admin session used for sensitive changes | Removing a factor, new recovery codes, resetting another admin's MFA, turning the MFA requirement off, end-user MFA resets and unlocks need a second factor checked in the last 15 minutes (step-up, 0.11.0); the requirement can be pinned with `ADMIN_MFA_REQUIRED=true` | An admin MFA reset does not end that admin's open sessions; they expire within an hour |
 | T | Changing a client, IdP or flow to take over a realm | Role checks; admin events on by default for new realms; clearing events is super-admin only | A compromised super-admin can do anything |
 | I | Secrets read back through the API | GETs mask secrets; export with secrets is super-admin only | — |
 | T | Admin XSS | React rendering; theme preview iframe sandboxed without same origin | Console shares an origin with realm pages |
@@ -174,7 +176,7 @@ Each table lists the STRIDE category (S spoofing, T tampering, R repudiation, I 
 
 | | Threat | Mitigation | Residual risk |
 |---|---|---|---|
-| I | Database dump or backup leaks | Passwords argon2id; tokens and codes hashed; signing keys, TOTP secrets, phone numbers and provider secrets encrypted with AES-256-GCM; encryption key not in the database | Emails and other PII are plaintext; recovery codes are weak |
+| I | Database dump or backup leaks | Passwords argon2id; tokens and codes hashed (recovery codes 120-bit since 0.11.0, older ones rewrapped in Argon2id); signing keys, TOTP secrets, phone numbers and provider secrets encrypted with AES-256-GCM; encryption key not in the database | Emails and other PII are plaintext |
 | T | SQL injection | Prisma throughout; raw SQL only with constants | — |
 | T | Race conditions on counters and single-use values | Serializable transactions with retry for lockout counting (`test/brute-force-concurrency.e2e-spec.ts`); atomic `used=false` updates for codes | Registration and password reset are not one transaction |
 | E | Over-privileged database role | — | One role runs migrations and the app |
@@ -243,9 +245,8 @@ Each table lists the STRIDE category (S spoofing, T tampering, R repudiation, I 
 
 The highest residual risks, all tracked in the [ASVS assessment](./asvs-assessment.md#remaining-gaps):
 
-1. No MFA on admin console sign-in.
-2. Wildcard redirect URIs.
-3. Weak recovery codes if the database leaks.
-4. Realms created before 0.10.0 with brute-force protection or events still off. `/admin/upgrade/health` lists them.
-5. SSRF guard not applied to every outbound call; geo-IP over plain HTTP.
-6. No SSO idle timeout; absolute session expiry enforced by a job.
+1. Installs upgraded to 0.11.0 that have not turned on the admin MFA requirement. `/admin/upgrade/health` warns and names the admins without a second factor.
+2. Clients still on the legacy wildcard redirect URI opt-in (`allowInsecureWildcardRedirectUris`, set by the 0.11.0 upgrade on clients that had `/*` entries). `/admin/upgrade/health` lists them.
+3. Realms created before 0.10.0 with brute-force protection or events still off. `/admin/upgrade/health` lists them.
+4. SSRF guard not applied to every outbound call; geo-IP over plain HTTP.
+5. No SSO idle timeout, and no idle timeout for offline sessions: an offline token lives for `offlineTokenLifespan` from sign-in.

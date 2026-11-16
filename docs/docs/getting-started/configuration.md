@@ -7,7 +7,7 @@ description: Complete reference for all Idenplane configuration options and envi
 
 # Configuration
 
-Idenplane is configured through environment variables. This guide covers all available options.
+Idenplane is configured through environment variables. This guide covers the main ones; the full reference is [Environment Variables](../configuration/environment-variables.md).
 
 ---
 
@@ -51,7 +51,7 @@ The following variables are **required in production**. Startup will be blocked 
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
-| `ADMIN_API_KEY` | — | Yes (prod) | API key for admin endpoints (32+ characters) |
+| `ADMIN_API_KEY` | — | Yes (prod) | API key for admin endpoints. In production at least 32 characters and not a placeholder, or the server exits at startup |
 | `ADMIN_USER` | `admin` | No | Initial admin username |
 | `ADMIN_PASSWORD` | None (generated) | Yes (prod) | Initial admin password. There is no default: outside production an unset value gets a random password, printed once in the first start's log. `admin` and placeholders are refused. See [How the first admin password is chosen](../configuration/environment-variables.md#how-the-first-admin-password-is-chosen) |
 
@@ -64,7 +64,7 @@ ADMIN_API_KEY=$(openssl rand -hex 32)
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
-| `WEBHOOK_SECRET_KEY` | — | Yes (prod) | 32-byte AES-256-GCM key for encrypting webhook secrets |
+| `WEBHOOK_SECRET_KEY` | — | Yes (prod) | Key from which the AES-256-GCM key for every stored secret is derived (not only webhooks) |
 | `WEBHOOK_ENCRYPTION_SALT` | — | Yes (prod) | 16-byte salt for key derivation |
 
 ```bash
@@ -165,7 +165,7 @@ Here's a complete production `.env` file:
 
 ```bash
 # ─── Database ──────────────────────────────────────────────────────────────────
-# PostgreSQL (recommended for production):
+# PostgreSQL 16+ (the only supported database):
 DATABASE_URL=postgresql://idenplane:secure_password@db.example.com:5432/idenplane
 
 # ─── Server ────────────────────────────────────────────────────────────────────
@@ -174,8 +174,12 @@ NODE_ENV=production
 BASE_URL=https://auth.example.com
 
 # ─── Security (REQUIRED) ───────────────────────────────────────────────────────
-# Generate with: openssl rand -hex 32
-ADMIN_API_KEY=your_secure_admin_api_key_here
+# Generate with: openssl rand -hex 32 (production needs 32+ characters)
+ADMIN_API_KEY=REPLACE_ME_WITH_A_STRONG_RANDOM_SECRET
+
+# Required on the first production start (12+ characters)
+# Generate with: openssl rand -hex 16
+ADMIN_PASSWORD=REPLACE_ME_WITH_A_STRONG_PASSWORD
 
 # Generate with: openssl rand -hex 32
 WEBHOOK_SECRET_KEY=your_webhook_secret_key_here
@@ -199,7 +203,7 @@ TRUSTED_PROXIES=10.0.0.1,172.16.0.0/12
 
 ## Environment Variable Reference
 
-### Complete List
+### Main Variables
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
@@ -210,11 +214,11 @@ TRUSTED_PROXIES=10.0.0.1,172.16.0.0/12
 | `ADMIN_API_KEY` | — | Yes (prod) | Admin API key |
 | `ADMIN_USER` | `admin` | No | Initial admin username |
 | `ADMIN_PASSWORD` | None (generated) | Yes (prod) | Initial admin password; never defaults to `admin` |
-| `WEBHOOK_SECRET_KEY` | — | Yes (prod) | AES-256-GCM webhook encryption key |
+| `WEBHOOK_SECRET_KEY` | — | Yes (prod) | Key for the encryption of stored secrets |
 | `WEBHOOK_ENCRYPTION_SALT` | — | Yes (prod) | Key derivation salt |
 | `REDIS_URL` | — | No | Redis connection string |
 | `REDIS_SENTINEL_HOSTS` | — | No | Comma-separated Sentinel nodes |
-| `REDIS_SENTINEL_NAME` | — | No | Sentinel master name |
+| `REDIS_SENTINEL_NAME` | `mymaster` | No | Sentinel master name |
 | `SESSION_STORE` | `database` | No | `database` or `redis` |
 | `THROTTLE_TTL` | `60000` | No | Rate limit window (ms) |
 | `THROTTLE_LIMIT` | `100` | No | Max requests per window |

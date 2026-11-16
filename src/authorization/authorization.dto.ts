@@ -9,14 +9,51 @@ import {
   MinLength,
   Min,
   ValidateNested,
+  Validate,
+  ValidatorConstraint,
+  type ValidatorConstraintInterface,
+  type ValidationArguments,
 } from 'class-validator';
 import { Type } from 'class-transformer';
 import { ApiProperty, ApiPropertyOptional } from '@nestjs/swagger';
-import type {
-  PolicySubject,
-  PolicyResource,
-  PolicyEnvironment,
+import {
+  CONDITION_OPERATORS,
+  conditionProblem,
+  type PolicySubject,
+  type PolicyResource,
+  type PolicyEnvironment,
 } from './policy-engine.js';
+
+/**
+ * Every condition of a policy must be one the engine can evaluate: a known
+ * operator with the kind of value it needs (see `conditionProblem`). A
+ * typo would otherwise be stored, and a DENY with it would never match.
+ */
+@ValidatorConstraint({ name: 'policyConditions' })
+class PolicyConditionsConstraint implements ValidatorConstraintInterface {
+  validate(value: unknown): boolean {
+    return (
+      Array.isArray(value) && value.every((c) => conditionProblem(c) === null)
+    );
+  }
+
+  defaultMessage(args: ValidationArguments): string {
+    const value: unknown = args.value;
+    if (!Array.isArray(value)) return `${args.property} must be an array`;
+    return value
+      .map((c, i) => {
+        const problem = conditionProblem(c);
+        return problem ? `${args.property}[${i}]: ${problem}` : null;
+      })
+      .filter((m): m is string => m !== null)
+      .join('; ');
+  }
+}
+
+const CONDITIONS_HELP =
+  ' Each entry: { field, operator, value }. Operators: ' +
+  CONDITION_OPERATORS.join(', ') +
+  '. An unknown operator, or a value the operator cannot use, is refused with a 400.';
 
 // ─── CRUD DTOs ────────────────────────────────────────────
 
@@ -59,37 +96,44 @@ export class CreatePolicyDto {
   @ApiPropertyOptional({
     description:
       'Conditions on the subject (user). Each entry: { field, operator, value }. ' +
-      'field uses dot-notation within the subject context, e.g. "subject.roles".',
+      'field uses dot-notation within the subject context, e.g. "subject.roles".' +
+      CONDITIONS_HELP,
     example: [{ field: 'subject.roles', operator: 'contains', value: 'admin' }],
   })
   @IsOptional()
   @IsArray()
+  @Validate(PolicyConditionsConstraint)
   subjectConditions?: object[];
 
   @ApiPropertyOptional({
-    description: 'Conditions on the resource',
+    description: 'Conditions on the resource.' + CONDITIONS_HELP,
     example: [{ field: 'resource.type', operator: 'equals', value: 'report' }],
   })
   @IsOptional()
   @IsArray()
+  @Validate(PolicyConditionsConstraint)
   resourceConditions?: object[];
 
   @ApiPropertyOptional({
-    description: 'Conditions on the action',
+    description: 'Conditions on the action.' + CONDITIONS_HELP,
     example: [{ field: 'action', operator: 'in', value: ['read', 'list'] }],
   })
   @IsOptional()
   @IsArray()
+  @Validate(PolicyConditionsConstraint)
   actionConditions?: object[];
 
   @ApiPropertyOptional({
-    description: 'Conditions on the environment (IP, time, etc.)',
+    description:
+      'Conditions on the environment (IP, time, etc.). ipInRange takes an IPv4 or IPv6 address or CIDR block.' +
+      CONDITIONS_HELP,
     example: [
       { field: 'environment.ip', operator: 'ipInRange', value: '10.0.0.0/8' },
     ],
   })
   @IsOptional()
   @IsArray()
+  @Validate(PolicyConditionsConstraint)
   environmentConditions?: object[];
 
   @ApiPropertyOptional({
@@ -105,7 +149,9 @@ export class CreatePolicyDto {
 
   @ApiPropertyOptional({
     description:
-      'Scope this policy to a specific client ID (clientId string, not DB id)',
+      'Scope this policy to a specific client ID (clientId string, not DB id). ' +
+      'A scoped policy applies only to evaluations that pass the same clientId; ' +
+      'an evaluation without clientId gets the unscoped (global) policies only.',
   })
   @IsOptional()
   @IsString()
@@ -143,21 +189,25 @@ export class UpdatePolicyDto {
   @ApiPropertyOptional()
   @IsOptional()
   @IsArray()
+  @Validate(PolicyConditionsConstraint)
   subjectConditions?: object[];
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsArray()
+  @Validate(PolicyConditionsConstraint)
   resourceConditions?: object[];
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsArray()
+  @Validate(PolicyConditionsConstraint)
   actionConditions?: object[];
 
   @ApiPropertyOptional()
   @IsOptional()
   @IsArray()
+  @Validate(PolicyConditionsConstraint)
   environmentConditions?: object[];
 
   @ApiPropertyOptional({ enum: ['AND', 'OR'] })
@@ -253,7 +303,10 @@ export class EvaluatePolicyDto {
 
   @ApiPropertyOptional({
     example: 'my-frontend',
-    description: 'Scope evaluation to a specific client',
+    description:
+      'The client the request is for. Policies scoped to this client apply ' +
+      'in addition to the global ones; without clientId only the global ' +
+      '(unscoped) policies apply.',
   })
   @IsOptional()
   @IsString()

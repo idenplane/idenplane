@@ -19,6 +19,7 @@ export function mockMe(overrides: Partial<AdminMe>) {
     readAllRealms: true,
     writeAllRealms: false,
     managedRealms: [],
+    mfa: null,
     ...overrides,
   };
   server.use(http.get('/admin/auth/me', () => HttpResponse.json(me)));

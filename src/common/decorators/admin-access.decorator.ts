@@ -62,3 +62,30 @@ export const AdminRealmParam = (
  */
 export const AdminSensitiveRead = () =>
   SetMetadata(ADMIN_SENSITIVE_READ_KEY, true);
+
+export const ADMIN_MFA_EXEMPT_KEY = 'adminMfaExempt';
+export const RECENT_ADMIN_MFA_KEY = 'recentAdminMfa';
+
+/**
+ * Routes a password-only admin token may still reach when the admin has a
+ * second factor or MFA is required for every admin (see
+ * docs/docs/security/admin-mfa.md). Only on `@AdminScope('self')` routes;
+ * the fitness test pins the list.
+ *
+ * - `always`: who am I, MFA status and step-up.
+ * - `first-factor`: enrolling a factor. Open to an admin with no factor
+ *   yet; an admin who has one needs a recent MFA check instead.
+ */
+export type AdminMfaExemption = 'always' | 'first-factor';
+
+export const AdminMfaExempt = (exemption: AdminMfaExemption) =>
+  SetMetadata(ADMIN_MFA_EXEMPT_KEY, exemption);
+
+/**
+ * The admin's second factor must have been checked within the last
+ * RECENT_ADMIN_MFA_SECONDS (token `acr` at MFA level or above and a recent
+ * `auth_time`). Applies to admin users; the admin API key is not a user and
+ * is not affected (a route that must refuse it does so itself).
+ */
+export const RequireRecentAdminMfa = () =>
+  SetMetadata(RECENT_ADMIN_MFA_KEY, true);

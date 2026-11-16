@@ -11,39 +11,88 @@ The Idenplane Next.js SDK provides seamless integration with Next.js application
 ## Installation
 
 ```bash
-npm install idenplane-nextjs idenplane-sdk
+npm install idenplane-nextjs idenplane-sdk jose
 ```
+
+`jose` is used by the server-side helpers (`idenplane-nextjs/server`, `/api` and `/session`) to verify tokens against the realm's JWKS.
+
+---
+
+## How the pieces fit
+
+Sign-in happens in the browser: `AuthProvider` runs the authorization code flow with PKCE and keeps the tokens in the browser. Nothing sends those tokens to your Next.js server on page navigation, so the server-side helpers get them in one of two ways:
+
+| Helper | Where it reads the access token |
+|---|---|
+| `withAuth`, `withAuthHandler` (`idenplane-nextjs/api`) | `Authorization: Bearer` header, sent by your browser code with `getToken()` |
+| `createAuthMiddleware` (`idenplane-nextjs/middleware`), `getServerAuth`, `getServerUser` (`idenplane-nextjs/server`) | the HttpOnly cookie `idenplane_access_token`, set by the `idenplane-nextjs/session` route handler and kept up to date by `syncSessionCookie` |
+
+Every server-side helper takes an `audience`: the client ID (or IDs) whose access tokens it accepts. An Idenplane access token's `aud` is the `client_id` of the client that requested it, so this is usually your app's own client ID. Tokens issued to other clients of the realm, and ID tokens, are refused.
+
+If the browser should never hold tokens at all, use the server-session (BFF) mode of the [Next.js quickstart](https://github.com/idenplane/idenplane/tree/dev/examples/nextjs-quickstart) instead: tokens stay in an encrypted server-side session and the browser only gets an opaque cookie.
 
 ---
 
 ## Quick Start
 
-### 1. Wrap Your App with AuthProvider
+### 1. Create the client, sync the cookie, and wrap your app
+
+```tsx
+// app/providers.tsx
+'use client';
+import { useEffect, useState, type ReactNode } from 'react';
+import { AuthProvider, IdenplaneClient, syncSessionCookie } from 'idenplane-nextjs';
+
+export function Providers({ children }: { children: ReactNode }) {
+  const [client] = useState(
+    () =>
+      new IdenplaneClient({
+        url: 'http://localhost:3000',
+        realm: 'my-realm',
+        clientId: 'my-app',
+        redirectUri: 'http://localhost:3001/callback',
+      }),
+  );
+
+  // Store the access token in the HttpOnly session cookie after sign-in and
+  // every refresh; clear it on sign-out.
+  useEffect(() => syncSessionCookie(client), [client]);
+
+  return <AuthProvider client={client}>{children}</AuthProvider>;
+}
+```
 
 ```tsx
 // app/layout.tsx
-'use client';
-import { AuthProvider } from 'idenplane-nextjs';
+import { Providers } from './providers';
 
 export default function RootLayout({ children }: { children: React.ReactNode }) {
   return (
     <html>
       <body>
-        <AuthProvider
-          serverUrl="http://localhost:3000"
-          realm="my-realm"
-          clientId="my-app"
-          redirectUri="http://localhost:3000/callback"
-        >
-          {children}
-        </AuthProvider>
+        <Providers>{children}</Providers>
       </body>
     </html>
   );
 }
 ```
 
-### 2. Use Auth State in Client Components
+### 2. Mount the session cookie route
+
+```typescript
+// app/api/auth/session/route.ts
+import { createSessionCookieHandlers } from 'idenplane-nextjs/session';
+
+export const { POST, DELETE } = createSessionCookieHandlers({
+  serverUrl: 'http://localhost:3000',
+  realm: 'my-realm',
+  audience: 'my-app',
+});
+```
+
+`POST` verifies the access token (signature, issuer, audience, expiry and `typ: "Bearer"`) and sets `idenplane_access_token` as `HttpOnly; Secure; SameSite=Lax; Path=/`, expiring with the token. `DELETE` clears it. Both refuse cross-site requests (checked with `Sec-Fetch-Site` and `Origin`), so another site cannot plant its own token in a user's browser.
+
+### 3. Use auth state in client components
 
 ```tsx
 'use client';
@@ -63,7 +112,7 @@ export function NavBar() {
 }
 ```
 
-### 3. Protect Routes with Middleware
+### 4. Redirect signed-out users with middleware
 
 ```typescript
 // middleware.ts
@@ -75,7 +124,7 @@ const authMiddleware = createAuthMiddleware({
   serverUrl: 'http://localhost:3000',
   realm: 'my-realm',
   clientId: 'my-app',
-  protectedPaths: ['/dashboard', '/api/protected'],
+  protectedPaths: ['/dashboard'],
   loginPath: '/login',
 });
 
@@ -88,7 +137,7 @@ export const config = {
 };
 ```
 
-### 4. Server Components
+### 5. Server Components
 
 ```tsx
 // app/dashboard/page.tsx
@@ -97,10 +146,10 @@ import { getServerUser } from 'idenplane-nextjs/server';
 import { redirect } from 'next/navigation';
 
 export default async function DashboardPage() {
-  const cookieStore = cookies();
-  const user = await getServerUser(cookieStore, {
+  const user = await getServerUser(await cookies(), {
     serverUrl: 'http://localhost:3000',
     realm: 'my-realm',
+    audience: 'my-app',
   });
 
   if (!user) redirect('/login');
@@ -307,34 +356,29 @@ export function TokenDisplay() {
 
 ---
 
+## Session cookie
+
+`createSessionCookieHandlers(config)` from `idenplane-nextjs/session` returns `{ POST, DELETE }` App Router route handlers.
+
+| Option | Type | Required | Description |
+|--------|------|----------|-------------|
+| `serverUrl` | `string` | Yes | Idenplane server URL |
+| `realm` | `string` | Yes | Realm name |
+| `audience` | `string \| string[]` | Yes | Client ID(s) whose access tokens may be stored |
+| `cookieName` | `string` | No | Cookie name (default: `idenplane_access_token`) |
+| `secure` | `boolean` | No | Set the `Secure` attribute (default: `true`; browsers accept Secure cookies from `http://localhost`) |
+| `allowedOrigins` | `string[]` | No | Public origins to accept from browsers that do not send `Sec-Fetch-Site`, when a reverse proxy changes the origin Next.js sees |
+| `allowInsecureHttp` | `boolean` | No | Allow an `http://` `serverUrl` on a non-loopback host |
+
+`syncSessionCookie(client, { endpoint?, onError? })` from `idenplane-nextjs` subscribes to the client: it POSTs the access token after sign-in, after a session is restored and after every refresh, and DELETEs the cookie on sign-out, one request at a time and in order. `endpoint` defaults to `/api/auth/session`. It returns a function that stops syncing.
+
+Browsers cap a cookie at about 4 KB. Keep access tokens below that (very long role lists can exceed it).
+
+---
+
 ## Middleware (Route Protection)
 
-Protect your routes at the edge with the `createAuthMiddleware` function:
-
-### Basic Middleware Setup
-
-```typescript
-// middleware.ts
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
-import { createAuthMiddleware } from 'idenplane-nextjs/middleware';
-
-const authMiddleware = createAuthMiddleware({
-  serverUrl: 'http://localhost:3000',
-  realm: 'my-realm',
-  clientId: 'my-app',
-  protectedPaths: ['/dashboard', '/profile', '/settings'],
-  loginPath: '/login',
-});
-
-export default function middleware(request: NextRequest) {
-  return authMiddleware(request as never, NextResponse as never);
-}
-
-export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico).*)'],
-};
-```
+`createAuthMiddleware` redirects signed-out users away from protected paths, at the edge. It reads the access token from the `Authorization` header or the session cookie and checks that it is an unexpired JWT. It does **not** verify the signature (that needs the JWKS, which Edge middleware avoids fetching on every request), so treat it as a redirect, not as the security boundary: verify the token where you use it, with `getServerUser` / `getServerAuth` or `withAuth` / `withAuthHandler`.
 
 ### Middleware Configuration Options
 
@@ -343,78 +387,20 @@ export const config = {
 | `serverUrl` | `string` | Yes | Idenplane server URL |
 | `realm` | `string` | Yes | Realm name |
 | `clientId` | `string` | Yes | OAuth2 client ID |
-| `protectedPaths` | `string[]` | Yes | Routes that require authentication |
-| `loginPath` | `string` | No | Redirect path for unauthenticated users (default: `/`) |
-| `excludedPaths` | `string[]` | No | Routes to skip auth check |
-| `publicPaths` | `string[]` | No | Alias for `excludedPaths` |
+| `protectedPaths` | `string[]` | No | Path prefixes that require authentication (default: `[]`). `/dashboard` protects `/dashboard` and `/dashboard/...` |
+| `loginPath` | `string` | No | Where signed-out users are sent, with `?next=<path>` (default: `/login`) |
+| `cookieName` | `string` | No | Cookie holding the access token (default: `idenplane_access_token`) |
+| `allowInsecureHttp` | `boolean` | No | Allow an `http://` `serverUrl` on a non-loopback host |
 
-### Multiple Protected Path Patterns
-
-```typescript
-// middleware.ts
-import { NextResponse } from 'next/server';
-import type { NextRequest } from 'next/server';
-import { createAuthMiddleware } from 'idenplane-nextjs/middleware';
-
-const authMiddleware = createAuthMiddleware({
-  serverUrl: 'http://localhost:3000',
-  realm: 'my-realm',
-  clientId: 'my-app',
-  protectedPaths: [
-    '/dashboard',
-    '/settings',
-    '/admin/*',
-    '/api/protected/*',
-  ],
-  excludedPaths: [
-    '/api/health',
-    '/public/*',
-  ],
-  loginPath: '/login',
-});
-
-export default function middleware(request: NextRequest) {
-  return authMiddleware(request as never, NextResponse as never);
-}
-
-export const config = {
-  matcher: ['/((?!_next/static|_next/image|favicon.ico|api/health).*)'],
-};
-```
+To leave paths unprotected, don't list them in `protectedPaths`, or exclude them in the Next.js `matcher`.
 
 ---
 
 ## Server Components
 
-Access authentication state in Server Components using the `getServerUser` function:
+`getServerAuth` and `getServerUser` read the session cookie and verify the token (signature against the realm JWKS, issuer, audience, expiry, `typ: "Bearer"`) before returning any claim. They return `null` when there is no cookie or the token fails verification, and throw a configuration error when `audience` is missing. They run in the Node.js runtime.
 
-### Basic Server Component Auth
-
-```tsx
-// app/dashboard/page.tsx
-import { cookies } from 'next/headers';
-import { getServerUser } from 'idenplane-nextjs/server';
-import { redirect } from 'next/navigation';
-
-export default async function DashboardPage() {
-  const cookieStore = cookies();
-  const user = await getServerUser(cookieStore, {
-    serverUrl: 'http://localhost:3000',
-    realm: 'my-realm',
-  });
-
-  if (!user) {
-    redirect('/login');
-  }
-
-  return (
-    <div>
-      <h1>Welcome back, {user.name}!</h1>
-      <p>Email: {user.email}</p>
-    </div>
-  );
-}
-```
+In Next.js 15 and later `cookies()` returns a Promise, so pass `await cookies()`.
 
 ### Server Component with Session
 
@@ -424,25 +410,22 @@ import { cookies } from 'next/headers';
 import { getServerAuth } from 'idenplane-nextjs/server';
 
 export default async function ProfilePage() {
-  const cookieStore = cookies();
-  const session = await getServerAuth(cookieStore, {
+  const session = await getServerAuth(await cookies(), {
     serverUrl: 'http://localhost:3000',
     realm: 'my-realm',
+    audience: 'my-app',
   });
 
   if (!session) {
     return <div>Please sign in to view your profile.</div>;
   }
 
+  const { payload } = session;
   return (
     <div>
-      <h1>Profile</h1>
-      <div className="profile-card">
-        <img src={session.user.picture} alt={session.user.name} />
-        <h2>{session.user.name}</h2>
-        <p>{session.user.email}</p>
-        <span>User ID: {session.user.sub}</span>
-      </div>
+      <h1>{payload.name}</h1>
+      <p>{payload.email}</p>
+      <span>User ID: {payload.sub}</span>
     </div>
   );
 }
@@ -457,33 +440,19 @@ import { getServerUser } from 'idenplane-nextjs/server';
 import { redirect } from 'next/navigation';
 
 export default async function AdminPage() {
-  const cookieStore = cookies();
-  const user = await getServerUser(cookieStore, {
+  const user = await getServerUser(await cookies(), {
     serverUrl: 'http://localhost:3000',
     realm: 'my-realm',
+    audience: 'my-app',
   });
 
-  if (!user) {
-    redirect('/login');
+  if (!user) redirect('/login');
+
+  if (!user.realm_access?.roles.includes('admin')) {
+    return <h1>Access Denied</h1>;
   }
 
-  const hasAdminRole = user.roles?.includes('admin');
-
-  if (!hasAdminRole) {
-    return (
-      <div>
-        <h1>Access Denied</h1>
-        <p>You need admin privileges to access this page.</p>
-      </div>
-    );
-  }
-
-  return (
-    <div>
-      <h1>Admin Panel</h1>
-      {/* Admin-only content */}
-    </div>
-  );
+  return <h1>Admin Panel</h1>;
 }
 ```
 
@@ -491,42 +460,21 @@ export default async function AdminPage() {
 
 ## API Routes (Pages Router)
 
-Protect Pages Router API routes with the `withAuth` helper:
+`withAuth` reads the access token from the `Authorization: Bearer` header, verifies it, and answers `401` (missing or invalid token) or `403` (missing `requiredRoles`):
 
 ```typescript
 // pages/api/profile.ts
 import { withAuth } from 'idenplane-nextjs/api';
-import type { NextApiRequest, NextApiResponse } from 'next';
 
 export default withAuth(
-  { serverUrl: 'http://localhost:3000', realm: 'my-realm' },
-  (req: NextApiRequest, res: NextApiResponse) => {
-    // req.authUser contains the authenticated user
-    res.json({
-      user: req.authUser,
-      message: 'This is protected data',
-    });
-  },
-);
-```
-
-### Accessing User in API Route
-
-```typescript
-// pages/api/user-info.ts
-import { withAuth } from 'idenplane-nextjs/api';
-import type { NextApiRequest, NextApiResponse } from 'next';
-
-export default withAuth(
-  { serverUrl: 'http://localhost:3000', realm: 'my-realm' },
-  (req: NextApiRequest, res: NextApiResponse) => {
+  { serverUrl: 'http://localhost:3000', realm: 'my-realm', audience: 'my-app' },
+  (req, res) => {
     const user = req.authUser;
-
     res.json({
       id: user.sub,
       name: user.name,
       email: user.email,
-      roles: user.roles || [],
+      roles: user.realm_access?.roles ?? [],
     });
   },
 );
@@ -536,84 +484,33 @@ export default withAuth(
 
 ## Route Handlers (App Router)
 
-Protect App Router Route Handlers with the `withAuthHandler` helper:
-
 ```typescript
 // app/api/profile/route.ts
 import { withAuthHandler } from 'idenplane-nextjs/api';
 
-export const GET = withAuthHandler(
-  { serverUrl: 'http://localhost:3000', realm: 'my-realm' },
-  (_req, user) => {
-    return Response.json({
-      user: {
-        id: user.sub,
-        name: user.name,
-        email: user.email,
-      },
-    });
-  },
-);
-```
+const auth = { serverUrl: 'http://localhost:3000', realm: 'my-realm', audience: 'my-app' };
 
-### Multiple HTTP Methods
-
-```typescript
-// app/api/profile/route.ts
-import { withAuthHandler } from 'idenplane-nextjs/api';
-
-export const GET = withAuthHandler(
-  { serverUrl: 'http://localhost:3000', realm: 'my-realm' },
-  (_req, user) => {
-    return Response.json({ user });
-  },
+export const GET = withAuthHandler(auth, (_req, user) =>
+  Response.json({ user: { id: user.sub, name: user.name, email: user.email } }),
 );
 
 export const PUT = withAuthHandler(
-  { serverUrl: 'http://localhost:3000', realm: 'my-realm' },
+  { ...auth, requiredRoles: ['editor'] },
   async (req, user) => {
     const body = await req.json();
-    // Update user profile logic here
+    // Update the profile of user.sub here
     return Response.json({ success: true });
-  },
-);
-
-export const DELETE = withAuthHandler(
-  { serverUrl: 'http://localhost:3000', realm: 'my-realm' },
-  (_req, user) => {
-    // Delete user account logic here
-    return Response.json({ success: true, message: 'Account deleted' });
   },
 );
 ```
 
-### Protected API Route with Error Handling
+Call them from the browser with the access token:
 
 ```typescript
-// app/api/data/route.ts
-import { withAuthHandler } from 'idenplane-nextjs/api';
-
-export async function GET(req: Request) {
-  try {
-    const handler = withAuthHandler(
-      { serverUrl: 'http://localhost:3000', realm: 'my-realm' },
-      (_request, user) => {
-        // Fetch protected data
-        return Response.json({
-          data: 'sensitive data',
-          timestamp: new Date().toISOString(),
-        });
-      },
-    );
-
-    return handler(req as never);
-  } catch (error) {
-    return Response.json(
-      { error: 'Internal server error' },
-      { status: 500 },
-    );
-  }
-}
+const { getToken } = useAuth();
+const res = await fetch('/api/profile', {
+  headers: { Authorization: `Bearer ${getToken()}` },
+});
 ```
 
 ---
@@ -621,8 +518,6 @@ export async function GET(req: Request) {
 ## API Reference
 
 ### `idenplane-nextjs` (default export)
-
-Re-exports from `idenplane-sdk/react`:
 
 | Export | Description |
 |--------|-------------|
@@ -632,24 +527,29 @@ Re-exports from `idenplane-sdk/react`:
 | `usePermissions()` | Role and permission helpers hook |
 | `ProtectedRoute` | Render-gate component for route protection |
 | `IdenplaneClient` | Raw client class |
+| `syncSessionCookie(client, options?)` | Keeps the session cookie in step with the client |
+
+### `idenplane-nextjs/session`
+
+| Export | Description |
+|--------|-------------|
+| `createSessionCookieHandlers(config)` | `{ POST, DELETE }` route handlers that set and clear the session cookie |
 
 ### `idenplane-nextjs/middleware`
 
 | Export | Description |
 |--------|-------------|
-| `createAuthMiddleware(config)` | Creates Next.js Edge middleware function |
-
-**Middleware Config Type:**
+| `createAuthMiddleware(config)` | Creates the Edge middleware function |
 
 ```typescript
 interface AuthMiddlewareConfig {
   serverUrl: string;
   realm: string;
   clientId: string;
-  protectedPaths: string[];
-  loginPath?: string;
-  excludedPaths?: string[];
-  publicPaths?: string[];
+  protectedPaths?: string[];
+  loginPath?: string;       // default '/login'
+  cookieName?: string;      // default 'idenplane_access_token'
+  allowInsecureHttp?: boolean;
 }
 ```
 
@@ -657,8 +557,10 @@ interface AuthMiddlewareConfig {
 
 | Export | Description |
 |--------|-------------|
-| `getServerAuth(cookies, config?)` | Returns `AuthSession | null` |
-| `getServerUser(cookies, config?)` | Returns `User | null` |
+| `getServerAuth(cookies, config)` | Returns `AuthSession \| null` (`{ accessToken, payload, isAuthenticated }`) |
+| `getServerUser(cookies, config)` | Returns `User \| null` |
+
+`config` is `{ serverUrl, realm, audience, cookieName?, allowInsecureHttp? }`.
 
 ### `idenplane-nextjs/api`
 
@@ -667,35 +569,18 @@ interface AuthMiddlewareConfig {
 | `withAuth(config, handler)` | Pages Router API handler wrapper |
 | `withAuthHandler(config, handler)` | App Router Route Handler wrapper |
 
+`config` is `{ serverUrl, realm, audience, requiredRoles?, allowInsecureHttp? }`.
+
 ---
 
-## TypeScript Support
+## Upgrading from 1.x
 
-All exports are fully typed:
+idenplane-nextjs 2.0.0 requires idenplane-sdk 2.x.
 
-```tsx
-import type {
-  IdenplaneClient,
-  IdenplaneConfig,
-  TokenResponse,
-  UserInfo,
-  AuthSession,
-} from 'idenplane-sdk';
-
-// Server functions
-import { getServerUser, getServerAuth } from 'idenplane-nextjs/server';
-import type { User } from 'idenplane-sdk';
-
-// Middleware
-import { createAuthMiddleware } from 'idenplane-nextjs/middleware';
-import type { AuthMiddlewareConfig } from 'idenplane-nextjs/middleware';
-
-// API helpers
-import { withAuth, withAuthHandler } from 'idenplane-nextjs/api';
-
-// Client hooks
-import { useAuth, useUser, usePermissions } from 'idenplane-nextjs';
-```
+- `withAuth`, `withAuthHandler`, `getServerAuth` and `getServerUser` require `audience` and throw a configuration error without it.
+- `getServerAuth` and `getServerUser` verify the cookie's token (1.x decoded it without checking the signature), so they need a configuration object and `jose`.
+- Tokens that are not access tokens (ID tokens, logout tokens) and tokens issued to other clients are refused.
+- Nothing in 1.x set the `idenplane_access_token` cookie. Add the session route and `syncSessionCookie` (Quick Start steps 1 and 2).
 
 ---
 

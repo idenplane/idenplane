@@ -16,48 +16,39 @@ Idenplane provides production-ready Docker Compose configurations for easy deplo
 The fastest way to deploy Idenplane with Docker Compose:
 
 ```bash
-# Download the production compose file
-curl -o docker-compose.yml https://raw.githubusercontent.com/idenplane/idenplane/main/docker-compose.yml
+# Download the compose file and the helper that writes .env
+curl --fail --location -o docker-compose.yml https://raw.githubusercontent.com/idenplane/idenplane/main/docker-compose.yml
+curl --fail --location -o setup-env.cjs https://raw.githubusercontent.com/idenplane/idenplane/main/scripts/setup-env.cjs
 
-# Download the environment template
-curl -o .env https://raw.githubusercontent.com/idenplane/idenplane/main/.env.example
+# Generate .env with unique secrets (needs Node.js 24; never overwrites an existing file)
+node setup-env.cjs
 
-# Edit .env and set your secrets
-nano .env
-
-# Start the stack
-docker compose up -d
+# Start the stack and wait until it is healthy
+docker compose up -d --wait --wait-timeout 180
 ```
 
 ---
 
 ## Production Deployment
 
-The production configuration uses a pre-built Docker image and includes PostgreSQL for data persistence.
+`docker-compose.yml` uses the pre-built Docker image and includes PostgreSQL. It binds to `127.0.0.1` only: put your own TLS-terminating reverse proxy in front of it, or use one of the TLS stacks below.
 
 ### Configuration
 
-Create a `.env` file with your production settings:
+The compose file refuses to start unless `.env` (or the environment) sets these:
 
-```bash
-# Required: Generate secure secrets
-ADMIN_API_KEY=your-secure-api-key-here
+| Variable | How to generate |
+|---|---|
+| `POSTGRES_PASSWORD` | `openssl rand -hex 16` |
+| `ADMIN_API_KEY` | `openssl rand -hex 32` (in production at least 32 characters, or the server exits) |
+| `ADMIN_PASSWORD` | `openssl rand -hex 16` (`admin` and placeholders are refused) |
+| `WEBHOOK_SECRET_KEY` | `openssl rand -hex 32` |
+| `WEBHOOK_ENCRYPTION_SALT` | `openssl rand -hex 16` |
 
-# Optional: Customize defaults
-ADMIN_USER=admin
-ADMIN_PASSWORD=change-me-in-production
-BASE_URL=https://auth.yourdomain.com
-THROTTLE_TTL=60000
-THROTTLE_LIMIT=100
-```
+`node scripts/setup-env.cjs` writes all five. Also set `BASE_URL` to your public `https://` origin. Optional: `ADMIN_USER` (default `admin`), `THROTTLE_TTL`, `THROTTLE_LIMIT`, and `IDENPLANE_IMAGE` to pin a release image such as `islamawad/idenplane:0.10.1`.
 
 :::warning
-Always generate secure secrets for production. Never use default or placeholder values:
-
-```bash
-# Generate a secure API key
-openssl rand -hex 32
-```
+Keep `.env` private and back it up. Changing `WEBHOOK_SECRET_KEY` or `WEBHOOK_ENCRYPTION_SALT` later makes stored secrets unreadable.
 :::
 
 ### docker-compose.yml
@@ -81,7 +72,7 @@ services:
     image: postgres:16-alpine
     environment:
       POSTGRES_USER: idenplane
-      POSTGRES_PASSWORD: idenplane
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?Run node scripts/setup-env.cjs first}
       POSTGRES_DB: idenplane
     ports:
       - "127.0.0.1:5432:5432"
@@ -94,22 +85,32 @@ services:
       retries: 5
 
   app:
-    image: islamawad/idenplane:latest
+    image: ${IDENPLANE_IMAGE:-islamawad/idenplane:latest}
     ports:
-      - "3000:3000"
+      - "127.0.0.1:3000:3000"
     environment:
-      DATABASE_URL: postgresql://idenplane:idenplane@db:5432/idenplane
+      DATABASE_URL: postgresql://idenplane:${POSTGRES_PASSWORD:?Set POSTGRES_PASSWORD}@db:5432/idenplane
       PORT: "3000"
       NODE_ENV: production
-      ADMIN_API_KEY: ${ADMIN_API_KEY:-change-me-in-production}
+      ADMIN_API_KEY: ${ADMIN_API_KEY:?Set ADMIN_API_KEY}
       ADMIN_USER: ${ADMIN_USER:-admin}
-      ADMIN_PASSWORD: ${ADMIN_PASSWORD:-admin}
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?Set ADMIN_PASSWORD}
+      # Required: the server hard-exits in production when these are unset, so
+      # fail fast here with a clear message instead of an opaque restart loop.
+      WEBHOOK_SECRET_KEY: ${WEBHOOK_SECRET_KEY:?Set WEBHOOK_SECRET_KEY (openssl rand -hex 32)}
+      WEBHOOK_ENCRYPTION_SALT: ${WEBHOOK_ENCRYPTION_SALT:?Set WEBHOOK_ENCRYPTION_SALT (openssl rand -hex 16)}
       THROTTLE_TTL: ${THROTTLE_TTL:-60000}
       THROTTLE_LIMIT: ${THROTTLE_LIMIT:-100}
       BASE_URL: ${BASE_URL:-http://localhost:3000}
+      # Where the upgrade flow writes pre-migration backups. Points at the
+      # `backups` volume below so a dump survives the container being replaced —
+      # a backup on the container filesystem is not a backup.
+      BACKUP_DIR: /var/lib/idenplane/backups
       # Uncomment to enable Redis cache (requires the redis service above):
       # REDIS_URL: redis://redis:6379
       # SESSION_STORE: ${SESSION_STORE:-database}
+    volumes:
+      - backups:/var/lib/idenplane/backups
     depends_on:
       db:
         condition: service_healthy
@@ -120,6 +121,7 @@ services:
 
 volumes:
   pgdata:
+  backups:
 ```
 
 ### Starting the Stack
@@ -201,7 +203,7 @@ What it sets up, same as the Traefik version above:
 
 ## Development Deployment
 
-The development configuration builds from source, enabling hot-reload for active development.
+`docker-compose.dev.yml` builds the production image from your checkout. It has no hot reload: for that, run `docker compose -f docker-compose.dev.yml up -d db` and then `npm run start:dev`.
 
 ### docker-compose.dev.yml
 

@@ -37,16 +37,38 @@ export const handlers = [
       readAllRealms: true,
       writeAllRealms: true,
       managedRealms: [],
+      mfa: { enrolled: false, required: false, verified: false, amr: ['pwd'], authTime: null },
     });
   }),
 
   // Admin accounts and realm-admin assignments
   http.get(`${BASE}/admin-accounts`, () => {
     return HttpResponse.json([
-      { id: 'admin-1', username: 'admin', email: null, enabled: true, roles: ['super-admin'], realms: [] },
-      { id: 'ra-1', username: 'ops-sample', email: 'ops@example.com', enabled: true, roles: ['realm-admin'], realms: [] },
+      {
+        id: 'admin-1', username: 'admin', email: null, enabled: true, roles: ['super-admin'], realms: [],
+        mfa: { enrolled: true, totp: true, passkeys: 1, recoveryCodes: 10, oldFormatRecoveryCodes: false },
+      },
+      {
+        id: 'ra-1', username: 'ops-sample', email: 'ops@example.com', enabled: true, roles: ['realm-admin'], realms: [],
+        mfa: { enrolled: false, totp: false, passkeys: 0, recoveryCodes: 0, oldFormatRecoveryCodes: false },
+      },
     ]);
   }),
+
+  // Admin console MFA
+  http.get(`${BASE}/admin-mfa/policy`, () =>
+    HttpResponse.json({ required: false, source: 'setting' }),
+  ),
+  http.get(`${BASE}/auth/mfa`, () =>
+    HttpResponse.json({
+      policy: { required: false, source: 'setting' },
+      enrolled: false,
+      totp: false,
+      passkeys: [],
+      recoveryCodes: { remaining: 0, oldFormat: false },
+      session: { verified: false, authTime: null },
+    }),
+  ),
 
   http.put(`${BASE}/admin-accounts/:userId/realms`, async ({ request }) => {
     const body = (await request.json()) as { realms: string[] };

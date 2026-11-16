@@ -259,6 +259,7 @@ export default async function handler(req: NextApiRequest, res: NextApiResponse)
   const { user, isAuthenticated } = await getServerSideAuth(req, {
     issuerUrl: 'http://localhost:3000',
     realm: 'my-realm',
+    audience: 'my-spa', // the client ID(s) whose tokens this API accepts
   });
 
   if (!isAuthenticated) {
@@ -282,6 +283,7 @@ export const getServerSideProps = async ({ req }) => {
   const { user, isAuthenticated } = await getServerSideAuth(req, {
     issuerUrl: 'http://localhost:3000',
     realm: 'my-realm',
+    audience: 'my-spa', // the client ID(s) whose tokens this API accepts
   });
 
   if (!isAuthenticated) {
@@ -307,6 +309,7 @@ import { createNextMiddleware } from 'idenplane-sdk/server';
 const authMiddleware = createNextMiddleware({
   issuerUrl: 'http://localhost:3000',
   realm: 'my-realm',
+  audience: 'my-spa', // the client ID(s) whose tokens this API accepts
   protectedPaths: ['/dashboard', '/api/protected'],
   loginPath: '/login',
   forbiddenPath: '/403',
@@ -488,14 +491,33 @@ roles;                          // string[] — all realm roles
 
 #### `verifyToken(token, config, options?)`
 
-Verifies a JWT access token using the server's JWKS endpoint.
+Verifies an Idenplane access token: the signature against the realm's JWKS
+(asymmetric algorithms only), the issuer (`{issuerUrl}/realms/{realm}`), the
+audience, `exp`, and that the token really is an access token
+(`typ: "Bearer"`).
 
 ```typescript
 const payload = await verifyToken(accessToken, {
   issuerUrl: 'http://localhost:3000',
   realm: 'my-realm',
+  audience: 'my-spa', // the client ID(s) whose tokens this API accepts
 });
 ```
+
+**`audience` is required** (since 2.0.0). An Idenplane access token's `aud`
+is the `client_id` of the client that requested it, so set `audience` to the
+client ID of the application that calls this API (your SPA, mobile app or
+service account), or an array of them. A token issued to any other client of
+the realm is rejected. Admin impersonation tokens carry the realm name as `aud` (not a client ID); add the realm name to `audience` if this API should accept them. Without this check an API would accept every access
+token the realm ever issued, to any application. A missing or empty
+`audience` throws a configuration error; the request helpers below throw it
+when they are created.
+
+**Only access tokens are accepted** (since 2.0.0). The realm signs ID tokens
+(`typ: "ID"`), logout tokens and admin tokens with the same key as access
+tokens. `verifyToken` rejects anything whose `typ` claim is not `"Bearer"`
+with `InvalidTokenTypeError` (`code: 'invalid_token'`), so an ID token
+taken from a logout URL or a log cannot be replayed as an access token.
 
 **Certificate-bound tokens (RFC 8705).** A client registered with
 `tlsClientCertificateBoundAccessTokens` receives tokens carrying
@@ -557,6 +579,7 @@ const app = express();
 const idenplane = createIdenplaneMiddleware({
   issuerUrl: 'http://localhost:3000',
   realm: 'my-realm',
+  audience: 'my-spa', // the client ID(s) whose tokens this API accepts
   requiredRoles: ['user'],  // optional
 });
 
@@ -573,6 +596,7 @@ import { createIdenplaneGuard } from 'idenplane-sdk/server';
 const IdenplaneGuard = createIdenplaneGuard({
   issuerUrl: 'http://localhost:3000',
   realm: 'my-realm',
+  audience: 'my-spa', // the client ID(s) whose tokens this API accepts
 });
 
 @Controller('api')

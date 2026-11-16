@@ -175,7 +175,8 @@ Token and status management lives under `/admin/realms/{realm}/scim`, protected 
 | `PUT` | `/admin/realms/{realm}/scim/tokens/{tokenId}/disable` | Disable |
 | `DELETE` | `/admin/realms/{realm}/scim/tokens/{tokenId}` | Delete |
 | `GET` | `/admin/realms/{realm}/scim/status` | `enabled`, `userAutocreate`, `groupSyncEnabled`, `activeTokens`, `totalUsers`, `totalGroups` |
-| `GET` / `POST` / `DELETE` | `/admin/realms/{realm}/scim/attribute-mappings` | Manage the reference mapping table |
+| `GET` / `POST` | `/admin/realms/{realm}/scim/attribute-mappings` | List and add entries in the reference mapping table |
+| `DELETE` | `/admin/realms/{realm}/scim/attribute-mappings/{mappingId}` | Remove an entry |
 
 ```bash
 curl -X POST http://localhost:3000/admin/realms/my-realm/scim/tokens \

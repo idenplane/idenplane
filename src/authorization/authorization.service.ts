@@ -125,14 +125,9 @@ export class AuthorizationService {
 
     const policies = await this.getCachedPolicies(realm.id);
 
-    // If clientId scoping is requested, include only policies that are either
-    // globally scoped (clientId = null) or scoped to that specific client.
-    const applicable: RawPolicy[] = dto.clientId
-      ? policies.filter(
-          (p: RawPolicy) => p.clientId === null || p.clientId === dto.clientId,
-        )
-      : policies;
-
+    // Client scoping lives in the engine (policyAppliesToClient): global
+    // policies always apply, a client's policies only when the request
+    // names that client.
     const request: PolicyEvaluationRequest = {
       subject: dto.subject,
       resource: dto.resource,
@@ -141,7 +136,8 @@ export class AuthorizationService {
       clientId: dto.clientId,
     };
 
-    const result = evaluatePolicies(applicable, request);
+    const result = evaluatePolicies(policies, request);
+    this.warnIndeterminate(realm, result.matchedPolicies);
 
     const elapsed = Date.now() - start;
     this.logger.debug(
@@ -175,12 +171,36 @@ export class AuthorizationService {
     };
 
     const detail = evaluatePolicy(policy, request);
+    this.warnIndeterminate(realm, [detail]);
 
     return {
       matched: detail.matched,
       effect: detail.effect,
       detail,
     };
+  }
+
+  /**
+   * A stored policy that cannot be evaluated (saved before 0.11.0 validated
+   * conditions, or written to the database directly) fails closed. Say so
+   * in the log, so the operator can find and fix it; the upgrade health
+   * check lists them too.
+   */
+  private warnIndeterminate(realm: Realm, details: PolicyMatchDetail[]): void {
+    for (const d of details) {
+      if (!d.indeterminate) continue;
+      const reasons = d.conditionResults
+        .filter((r) => r.indeterminate)
+        .map((r) => r.reason)
+        .join('; ');
+      this.logger.warn(
+        `Policy "${d.policyName}" (${d.policyId}) in realm "${realm.name}" ` +
+          `cannot be evaluated: ${reasons}. ` +
+          (d.effect === 'DENY'
+            ? 'It is a DENY, so it denies (fail closed).'
+            : 'It is an ALLOW, so it never allows.'),
+      );
+    }
   }
 
   // ─── Cache helpers ──────────────────────────────────────────

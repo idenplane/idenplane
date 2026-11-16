@@ -1,0 +1,104 @@
+name: Publish framework SDKs
+
+# Publishes the framework SDKs to npm from CI, with npm provenance:
+#
+#   angular-vX.Y.Z -> packages/idenplane-angular  (idenplane-angular)
+#   nextjs-vX.Y.Z  -> packages/idenplane-nextjs   (idenplane-nextjs)
+#   vue-vX.Y.Z     -> packages/idenplane-vue      (idenplane-vue)
+#
+# Each tag is checked against the package's package.json version, the same
+# safety check publish-sdk.yml does for sdk-v* tags. The packages build and
+# test against the sibling packages/idenplane-js (a file: devDependency), so
+# that is built first; consumers get idenplane-sdk as a peer dependency.
+# Publish idenplane-sdk (sdk-v*) first when a package needs a new major of
+# it (idenplane-nextjs 2.x needs idenplane-sdk >= 2.0.0).
+#
+# Requires one repo secret:
+#   NPM_TOKEN - an npm automation token with publish rights for these
+#               packages (and idenplane-sdk, if the same token is shared).
+on:
+  push:
+    tags: ['angular-v*', 'nextjs-v*', 'vue-v*']
+  workflow_dispatch:
+    inputs:
+      package:
+        description: Package to publish
+        required: true
+        type: choice
+        options: [idenplane-angular, idenplane-nextjs, idenplane-vue]
+
+permissions:
+  contents: read
+
+concurrency:
+  group: publish-framework-sdks-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  publish:
+    name: Build & publish
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm provenance
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Resolve the package
+        id: pkg
+        env:
+          INPUT_PACKAGE: ${{ inputs.package }}
+        run: |
+          set -euo pipefail
+          if [ "${GITHUB_REF_TYPE}" = "tag" ]; then
+            case "${GITHUB_REF_NAME}" in
+              angular-v*) name=idenplane-angular; version="${GITHUB_REF_NAME#angular-v}" ;;
+              nextjs-v*)  name=idenplane-nextjs;  version="${GITHUB_REF_NAME#nextjs-v}" ;;
+              vue-v*)     name=idenplane-vue;     version="${GITHUB_REF_NAME#vue-v}" ;;
+              *) echo "::error::Unexpected tag ${GITHUB_REF_NAME}"; exit 1 ;;
+            esac
+          else
+            name="${INPUT_PACKAGE}"
+            version=""
+          fi
+          dir="packages/${name}"
+          pkg_version=$(node -p "require('./${dir}/package.json').version")
+          echo "Package:      ${name} (${dir})"
+          echo "package.json: ${pkg_version}"
+          if [ -n "${version}" ] && [ "${version}" != "${pkg_version}" ]; then
+            echo "::error::Tag version (${version}) does not match ${dir}/package.json version (${pkg_version})"
+            exit 1
+          fi
+          {
+            echo "name=${name}"
+            echo "dir=${dir}"
+          } >> "$GITHUB_OUTPUT"
+
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
+        with:
+          node-version: 24
+          registry-url: 'https://registry.npmjs.org'
+
+      - name: Build the sibling idenplane-js
+        working-directory: packages/idenplane-js
+        run: |
+          npm ci
+          npm run build
+
+      - name: Install, typecheck, test, build
+        working-directory: ${{ steps.pkg.outputs.dir }}
+        run: |
+          npm ci
+          npm run typecheck
+          npm test
+          npm run build
+
+      - name: Verify package contents
+        working-directory: ${{ steps.pkg.outputs.dir }}
+        run: npm pack --dry-run
+
+      - name: Publish to npm
+        working-directory: ${{ steps.pkg.outputs.dir }}
+        run: npm publish --provenance --access public
+        env:
+          NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

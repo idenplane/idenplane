@@ -20,16 +20,16 @@ The token endpoint (`/realms/{realm}/protocol/openid-connect/token`) returns [RF
 
 ### `invalid_grant`: what each cause means
 
-`invalid_grant` is thrown from many different checks, and the `error_description` is the fastest way to tell which one fired. The table below is the exact set of descriptions the server returns.
+`invalid_grant` is thrown from many different checks, and the `error_description` is the fastest way to tell which one fired. The table below lists the common ones. A few rarer ones are not in it: `The refresh token is bound to a different client certificate`, `The user is disabled` and `The session has ended`.
 
 | `error_description` | Grant / context | What actually happened | What to check |
 |---|---|---|---|
 | `Invalid credentials` | `password` | Username/password didn't match, the user is disabled, or (for a federated user) the LDAP bind failed — this also covers a user that doesn't exist locally yet: the server attempts an import-on-first-login federation bind before giving up | Verify the password; check the user's `enabled` flag; if the user has (or should have) a `federationLink`, test the LDAP connection (see [LDAP section](#ldap--user-federation)) — including for a brand-new user who should be auto-imported on first login but isn't (check `importEnabled` on the federation) |
-| `Account is temporarily locked. Please try again later.` | `password`, `authorization_code` | Brute-force protection tripped: too many failures inside the lockout window | Wait out `lockoutDuration`, or unlock via the admin API (below) |
+| `Account is temporarily locked. Please try again later.` | `password`, `authorization_code` | Brute-force protection tripped: too many failures inside the lockout window | Wait out `lockoutDuration`, or unlock with `POST /admin/realms/{realm}/brute-force/users/{userId}/unlock` (needs an admin session with MFA step-up; the API key is refused) |
 | `Password has expired. Please change your password.` | `password` | The realm's password policy marks this user's password as expired | Have the user complete the password-reset flow |
-| `MFA setup required. Please set up two-factor authentication.` | `password` | The realm requires MFA for this user, but they have no TOTP enrolled yet | Enroll TOTP via `POST /realms/{realm}/mfa/setup` before retrying login |
+| `MFA setup required. Please set up two-factor authentication.` | `password` | The realm requires MFA for this user, but they have no TOTP enrolled yet | Have the user sign in once through the browser, where the enrolment page lets them add an authenticator app (or a phone), or enrol on the account page (`/realms/{realm}/account/totp-setup`) |
 | `Invalid or expired MFA token, or too many failed attempts` | `mfa_otp` | The `mfa_token` is expired/unknown, **or** it was issued for a different realm, **or** for a different client | All three cases return identical wording by design (no oracle for attackers) — check the server logs, which log the realm/client mismatch cases distinctly (`MFA cross-realm token use attempt` / `MFA cross-client token use attempt`) |
-| `Invalid OTP code` | `mfa_otp` | The submitted code failed both TOTP verification and recovery-code verification | Check device clock drift (`totpPeriod`); try a recovery code |
+| `Invalid OTP code` | `mfa_otp` | The submitted code failed both TOTP verification and recovery-code verification | Check the device clock (TOTP codes use a fixed 30-second step, with one step of tolerance); try a recovery code |
 | `User not found` | `mfa_otp`, `authorization_code`, `device_code` | The user backing the challenge/code/device grant no longer exists | Re-authenticate from scratch |
 | `Invalid or expired refresh token` | `refresh_token` | Token not found, already revoked, or past `expiresAt` | See [refresh token rotation](#refresh-token-rotation-and-reuse) below — a *revoked* token here usually means reuse was detected |
 | `This refresh token predates client binding. Please log in again.` | `refresh_token` | The stored token has no `clientId` (issued before client-binding was added) | One-time re-login resolves it permanently |
@@ -52,10 +52,10 @@ Idenplane rotates refresh tokens on every use — each one is single-use, and a 
 
 There are two different `redirect_uri` checks, and they are not equally strict:
 
-1. **At `/authorize`** — `redirect_uri` is checked with `matchesRedirectUri()` against the client's registered `redirectUris`. This allows a trailing-wildcard pattern: a registered `https://app.example.com/*` matches any path under that origin (and the bare origin itself).
-2. **At `/token`** — the `redirect_uri` you send must be **byte-identical** to the exact string that was submitted at `/authorize` (stored on the authorization code). No wildcard matching happens here.
+1. **At `/authorize`** — `redirect_uri` is checked with `matchesRedirectUri()` against the client's registered `redirectUris`: it must be one of them exactly, except that a loopback IP URI (`http://127.0.0.1/...`, `http://[::1]/...`) may use any port. Only a client with the insecure `allowInsecureWildcardRedirectUris` opt-in also matches paths below a `/*` entry.
+2. **At `/token`** — the `redirect_uri` you send must be **byte-identical** to the exact string that was submitted at `/authorize` (stored on the authorization code).
 
-So it's possible to pass authorization with a wildcard-registered URI and then fail token exchange with `redirect_uri mismatch` simply because the two requests used a different exact string (different path, trailing slash, query string, or scheme). Always send the identical `redirect_uri` value to both endpoints.
+Always send the identical `redirect_uri` value to both endpoints.
 
 ### `invalid_client` / `unauthorized_client`
 
@@ -66,12 +66,15 @@ So it's possible to pass authorization with a wildcard-registered URI and then f
 
 ## `redirect_uri`, CORS, and Origin Mismatches
 
-### Exact vs. wildcard matching
+### Exact matching
 
-`redirectUris` on a client are matched with `matchesRedirectUri()`:
+Since 0.11.0 `redirectUris` and `postLogoutRedirectUris` are matched with `matchesRedirectUri()`, **exactly**:
 
-- A plain entry (no `/*` suffix) must match **exactly** — different port, scheme, or trailing slash all fail.
-- An entry ending in `/*` matches the bare origin and anything under that path prefix. For example, `http://localhost:4000/*` matches both `http://localhost:4000` and `http://localhost:4000/callback`.
+- A different port, scheme, host case, path, trailing slash or query string fails. So does any `redirect_uri` with a fragment (`#`).
+- A loopback IP entry such as `http://127.0.0.1/callback` matches on any port (`http://127.0.0.1:51234/callback`), for native apps (RFC 8252). `localhost` does not get this.
+- An entry ending in `/*` matches nothing but itself, unless the client has `allowInsecureWildcardRedirectUris` on. The 0.11.0 upgrade turned that on for clients that already had such an entry; `GET /admin/upgrade/health` lists them under `wildcard_redirect_uris`. See [Redirect URI matching](./api/clients.md#redirect-uri-matching).
+
+**`Invalid redirect_uri` after upgrading to 0.11.0:** the application sends a URI that differs from the registered one, often by a trailing slash or a query string, or the client relies on a wildcard that was not upgraded with it (for example, one added by hand in the database afterwards). Register the exact URI.
 
 ### How quickly `redirect_uri` and CORS (`webOrigins`) changes take effect
 
@@ -86,6 +89,25 @@ If a CORS change seems not to apply, check that the processes can receive these 
 
 Idenplane's SAML module (`src/saml/`) implements Idenplane **as an Identity Provider (IdP)** issuing assertions to registered Service Providers — it does not consume assertions from an external IdP. (Delegating login to an external OIDC provider is the separate Identity Providers feature; LDAP is separate again, under User Federation.)
 
+### What the IdP checks on an AuthnRequest
+
+Idenplane accepts AuthnRequests over the HTTP-Redirect binding (`GET`, raw DEFLATE as the bindings specification requires; zlib-wrapped and uncompressed requests are accepted too) and the HTTP-POST binding (`POST`, form field `SAMLRequest`). Before it acts on a request it checks, in this order:
+
+1. **Well-formed and plain XML.** The request is refused if it has a DTD (`<!DOCTYPE>` or `<!ENTITY>`), a comment, a processing instruction other than the XML declaration, a CDATA section, an `ID`/`Id`/`id` value used twice, or a child of the AuthnRequest that the schema does not have, or has elsewhere. The children must come in schema order (`Issuer`, `Signature`, `Extensions`, `Subject`, `NameIDPolicy`, `Conditions`, `RequestedAuthnContext`, `Scoping`), each at most once: an enveloped signature goes right after `Issuer`, not at the end. Over HTTP-Redirect the message must not contain an XML signature at all, whether or not the SP has a certificate (the bindings specification requires it to be removed). The root must have an `ID` that is a valid `xs:ID` of at most 256 characters, and an `Issuer`.
+2. **The service provider.** `Issuer` must be the `entityId` of an enabled service provider of the realm.
+3. **The signature, when the SP has a `certificate`.** A service provider with a certificate must sign every request, over both bindings; an unsigned request is refused.
+   - *HTTP-Redirect:* the signature is checked over the query string exactly as received: `SAMLRequest=…&RelayState=…&SigAlg=…` with the values still URL-encoded (SAML bindings §3.4.4.1). `RelayState` is read from those same bytes. A parameter that appears twice is refused.
+   - *HTTP-POST:* exactly one `<ds:Signature>`, a direct child of the AuthnRequest, with exactly one `Reference` whose `URI` is `#` plus the AuthnRequest's `ID`. After the signature verifies, every field is read from the bytes the signature covers, never from the rest of the document. The certificate in the request's `KeyInfo` is ignored: only the one registered for the SP counts.
+   - *Algorithms:* RSA-SHA256 or RSA-SHA512 signatures, SHA-256 or SHA-512 digests, exclusive or inclusive canonicalization without comments. **SHA-1 (`rsa-sha1`, `sha1`) is refused**; there is no per-SP exception.
+4. **Freshness.** `IssueInstant` is required. It may be at most `SAML_REQUEST_MAX_AGE_SECONDS` (default 300) old and `SAML_CLOCK_SKEW_SECONDS` (default 180) in the future; the skew is also added to the maximum age.
+5. **Destination**, when present, must be this realm's SSO endpoint, `{BASE_URL}/realms/{realm}/protocol/saml`, as the IdP metadata publishes it.
+6. **ACS URL**, when present, must be registered (see below).
+7. **Replay.** The request's `ID` is recorded for its service provider until the request could no longer pass the freshness check. The same ID is refused a second time, on any replica or worker: the record is a unique row in PostgreSQL (`saml_request_ids`), deleted by a scheduled job once it expires.
+
+A refused request gets `400` with a short reason; the server log (`warn`, `SamlIdpService`) says exactly which check failed.
+
+`ForceAuthn`, `IsPassive`, `ProtocolBinding` and `RequestedAuthnContext` are read from the signed request but not acted on: the response always goes back with the HTTP-POST binding, and an existing SSO session answers without a new sign-in. Idenplane does not handle SAML `LogoutRequest`s.
+
 ### `Unknown or disabled SAML service provider`
 
 The inbound `AuthnRequest`'s `Issuer` must match a `SamlServiceProvider.entityId` registered in this realm, and that SP must have `enabled: true`. Register the SP first via `POST /admin/realms/{realm}/saml-service-providers` with a matching `entityId`.
@@ -94,9 +116,28 @@ The inbound `AuthnRequest`'s `Issuer` must match a `SamlServiceProvider.entityId
 
 If the `AuthnRequest` specifies an `AssertionConsumerServiceURL`, it's checked against an allow-list: the SP's primary `acsUrl` plus anything in `validRedirectUris`. This is a strict equality check (no wildcard), and it exists specifically to stop an attacker crafting a request that redirects the signed assertion to a URL they control. If your SP sends a different ACS URL than what's registered (e.g. it varies by tenant subdomain), add every valid variant to `validRedirectUris` on that SP.
 
-### `AuthnRequest is not signed` / signature validation failures
+### `AuthnRequest is not signed` / `AuthnRequest signature validation failed`
 
-Signature verification only happens **if the SP has a `certificate` configured**. If no certificate is set on the `SamlServiceProvider` record, `AuthnRequest` signatures are not checked at all — anyone who can reach the SSO endpoint can initiate a login for that SP. If you've configured a certificate and still get a signature failure, confirm the SP is actually signing with the matching private key and that the certificate on file is current (a rotated SP signing cert with a stale certificate registered on Idenplane's side is a common cause).
+Signatures are required **when the SP has a `certificate` configured**, and only then. Without a certificate on the `SamlServiceProvider` record, `AuthnRequest` signatures are not checked at all: anyone who can reach the SSO endpoint can start a sign-in for that SP (the response still only goes to its registered ACS URLs). Register the SP's signing certificate (PEM, or the base64 body copied from its metadata) to require signed requests.
+
+With a certificate, `AuthnRequest is not signed` means the request carried no signature for its binding: no `Signature`/`SigAlg` query parameters over HTTP-Redirect, no `<ds:Signature>` over HTTP-POST. For `AuthnRequest signature validation failed`, check the server log for the reason. The usual ones:
+
+- the SP signs with a key that does not match the certificate on file (a rotated SP certificate);
+- the SP signs with **SHA-1**. Configure it for RSA-SHA256;
+- the SP rebuilds the query string before signing it differently from what it sends (the IdP verifies the bytes it receives);
+- over HTTP-POST, the signature is not a direct child of the AuthnRequest or references something other than the AuthnRequest's `ID`.
+
+### `AuthnRequest has expired or is not yet valid` / `AuthnRequest IssueInstant is missing or invalid`
+
+The request's `IssueInstant` is more than `SAML_REQUEST_MAX_AGE_SECONDS` plus `SAML_CLOCK_SKEW_SECONDS` old (8 minutes by default), more than the skew in the future, or missing. Sync both clocks with NTP. A service provider that builds its AuthnRequest long before the browser sends it (a pre-rendered page) needs a fresh request per sign-in; raise `SAML_REQUEST_MAX_AGE_SECONDS` only as a stopgap.
+
+### `AuthnRequest has already been used`
+
+The same request `ID` from the same service provider was accepted before. A browser that resends an old request (the back button, a bookmarked SSO URL) gets this; the SP must start a new sign-in with a new request. An SP that reuses a fixed `ID` for every request must be fixed to generate a random one.
+
+### `AuthnRequest Destination does not match this endpoint`
+
+`Destination` must be exactly `{BASE_URL}/realms/{realm}/protocol/saml`, the `Location` in the IdP metadata. Check `BASE_URL`, and that the SP has the current metadata (scheme, host, port, realm name).
 
 ### Assertion rejected by the Service Provider (clock skew)
 
@@ -160,9 +201,9 @@ This is the single most important thing to know about the sync path: `syncUsers(
 
 If `importEnabled` is `false` on the federation record, `syncUsers()` returns immediately with `{ synced: 0, message: 'Import is disabled for this federation' }` without touching LDAP at all. This is expected behavior for federations configured purely for pass-through authentication, not user provisioning — check `importEnabled` before assuming sync is broken.
 
-### `startTls` does not validate the LDAP server's certificate
+### LDAP TLS certificate errors
 
-When `startTls` is enabled, the LDAP client connects with `rejectUnauthorized: false`. TLS is used for transport encryption, but the server's certificate is not validated against a CA — a self-signed or mismatched certificate on the LDAP side will not cause a connection failure. This is worth knowing if you're debugging what looks like a successful-but-suspicious TLS handshake.
+With `ldaps://` and with `startTls`, the LDAP client validates the server's certificate (`rejectUnauthorized: true`, with the host name checked). A self-signed certificate, one from a private CA, or one whose name does not match the host fails the connection. Add the CA to Node's trust store, for example with `NODE_EXTRA_CA_CERTS=/path/to/ca.pem`, and connect with the name on the certificate.
 
 ---
 
@@ -233,7 +274,7 @@ The SMTP provider (`nodemailer` under the hood) only treats itself as configured
 `redirect_uri` is checked against the database on every request. `webOrigins` (CORS) are kept in memory by every process and reloaded as soon as the database announces a change, see [redirect_uri, CORS, and Origin Mismatches](#redirect_uri-cors-and-origin-mismatches).
 
 **Why does my authorization request succeed but the token exchange fails with `redirect_uri mismatch`?**
-`/authorize` allows wildcard-registered redirect URIs (`https://app.example.com/*`); `/token` requires the exact string you sent to `/authorize`, byte-for-byte. See [redirect_uri exactness at token exchange](#redirect_uri-exactness-at-token-exchange).
+`/token` requires the exact string you sent to `/authorize`, byte-for-byte. A loopback URI may use any port at `/authorize`, and a client with the legacy wildcard opt-in any path below a `/*` entry, but the token request must repeat the one that was used. See [redirect_uri exactness at token exchange](#redirect_uri-exactness-at-token-exchange).
 
 **My refresh token suddenly stopped working and now the whole session is dead — why?**
 You (or a concurrent request from the same client) reused an already-rotated refresh token. Reuse detection revokes every refresh token on that session as a compromise precaution, not just the one that was reused. See [Refresh token rotation and reuse](#refresh-token-rotation-and-reuse).

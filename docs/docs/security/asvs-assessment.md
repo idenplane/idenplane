@@ -8,7 +8,7 @@ description: Idenplane assessed against OWASP ASVS 5.0.0 Level 2, requirement by
 
 This is a self-assessment of the Idenplane server, admin console and themes against the [OWASP Application Security Verification Standard 5.0.0](https://github.com/OWASP/ASVS/releases/tag/v5.0.0_release), **Level 2**. It covers every Level 1 and Level 2 requirement (253), taken from the official release CSV.
 
-- **Version assessed:** 0.10.0 (branch `feat/security-hardening-0.10`), November 2026.
+- **Version assessed:** 0.10.0, November 2026, updated for 0.11.0. Rows changed by 0.11.0 (admin console MFA, stronger recovery codes, SAML request verification, V3.7.2, V7.1.1, V7.3.2, V10.4.1, V10.4.8) are updated and say "FIXED in 0.11.0".
 - **Method:** each verdict comes from reading the code, not the docs. Evidence is a file and line, a test, or configuration. Requirements about documentation were judged against what the docs actually say.
 - **Not a certification.** Nobody outside the project has reviewed it. Treat it as a map of where the controls are and where they are missing.
 - **Machine-readable copy:** [asvs-5.0-l2-assessment.csv](pathname:///security/asvs-5.0-l2-assessment.csv), one row per requirement with the requirement text, status, evidence, notes and recommendation.
@@ -23,7 +23,7 @@ This is a self-assessment of the Idenplane server, admin console and themes agai
 | Fail | The requirement is not met. |
 | N/A | The requirement does not apply to Idenplane (the reason is given). |
 
-Idenplane terminates TLS at a reverse proxy, so transport requirements about the server's own certificate are judged N/A, with a note on what the proxy must do. GraphQL is not mounted (nothing imports `GraphQLAdminModule`, and a fitness test fails if it becomes reachable), so the GraphQL requirements are N/A.
+Idenplane terminates TLS at a reverse proxy, so transport requirements about the server's own certificate are judged N/A, with a note on what the proxy must do. Idenplane has no GraphQL endpoint (an unused, never-mounted GraphQL module was removed in 0.10.1), so the GraphQL requirements are N/A.
 
 ## Summary
 
@@ -34,11 +34,11 @@ Idenplane terminates TLS at a reverse proxy, so transport requirements about the
 | V3 Web Frontend Security | 12 | 5 | 1 | 1 | 19 |
 | V4 API and Web Service | 4 | 3 | 1 | 2 | 10 |
 | V5 File Handling | 4 | 2 | 3 | 0 | 9 |
-| V6 Authentication | 17 | 11 | 6 | 1 | 35 |
-| V7 Session Management | 7 | 10 | 1 | 0 | 18 |
+| V6 Authentication | 20 | 10 | 4 | 1 | 35 |
+| V7 Session Management | 8 | 9 | 1 | 0 | 18 |
 | V8 Authorization | 5 | 2 | 0 | 0 | 7 |
 | V9 Self-contained Tokens | 6 | 1 | 0 | 0 | 7 |
-| V10 OAuth and OIDC | 10 | 12 | 2 | 5 | 29 |
+| V10 OAuth and OIDC | 12 | 11 | 1 | 5 | 29 |
 | V11 Cryptography | 10 | 3 | 1 | 0 | 14 |
 | V12 Secure Communication | 2 | 3 | 1 | 3 | 9 |
 | V13 Configuration | 4 | 9 | 0 | 0 | 13 |
@@ -46,9 +46,18 @@ Idenplane terminates TLS at a reverse proxy, so transport requirements about the
 | V15 Secure Coding and Architecture | 6 | 5 | 2 | 0 | 13 |
 | V16 Security Logging and Error Handling | 8 | 6 | 1 | 1 | 16 |
 | V17 WebRTC | 0 | 0 | 0 | 7 | 7 |
-| **All** | **111** | **91** | **22** | **29** | **253** |
+| **All** | **117** | **88** | **19** | **29** | **253** |
 
-### Fixed in this release
+### Fixed in 0.11.0
+
+| Requirement | Fix | Test |
+|---|---|---|
+| V6.3.3, V6.3.4 | Admin console sign-in asks for a second factor (authenticator app, passkey or recovery code) once the admin has one, and a server-wide setting requires one for every admin: on for new installs, off after an upgrade, with an enrolment-only session so nobody is locked out. Admin tokens record `amr`, `acr` and `auth_time`. See [Admin console MFA](./admin-mfa.md). | `test/admin-mfa.e2e-spec.ts`, `src/admin-rbac/admin-access-policy.spec.ts`, `src/common/guards/admin-authorization.guard.spec.ts` |
+| V6.5.2 | Recovery codes have 120 bits (24 base32 characters) and are stored as SHA-256. Codes issued before 0.11.0 keep working; their unsalted hashes are rewrapped in Argon2id at start-up. | `src/mfa/mfa.service.spec.ts`, `src/mfa/recovery-code-rewrap.service.spec.ts` |
+| V1.5.1, V6.8.3 | SAML AuthnRequests: the signature must cover the root element and every field is read from the signed bytes (signature wrapping), and each request ID is accepted once within its validity window (replay). | `src/saml/saml-request-hardening.spec.ts`, `test/saml-request-replay.e2e-spec.ts` |
+| V6.4.4, V7.5.1 | Removing or adding an admin's factor, new recovery codes, an admin MFA reset and turning the requirement off need a second factor checked in the last 15 minutes (step-up), and every such change is an admin event, recorded even when admin events are off. | `test/admin-mfa.e2e-spec.ts` |
+
+### Fixed in 0.10.0
 
 The assessment found these gaps and 0.10.0 closes them, with tests:
 
@@ -68,22 +77,26 @@ The assessment found these gaps and 0.10.0 closes them, with tests:
 | V6.1.1, V7.1.1 | The brute-force and session docs described Keycloak settings that do not exist. | — |
 | V11.1.2 | A cryptographic inventory now exists, in the [threat model](./threat-model.md#cryptographic-inventory). | — |
 
+### Fixed in 0.11.0
+
+| Requirement | Fix | Test |
+|---|---|---|
+| V10.4.1 | Redirect URIs and post-logout redirect URIs are matched exactly (RFC 9700), except the port of a loopback IP URI (RFC 8252). Fragments are refused. A `/*` wildcard needs the per-client, insecure `allowInsecureWildcardRedirectUris`, which the upgrade sets only on clients that already had one, and which `/admin/upgrade/health` reports. | `redirect-uri.utils.spec.ts`, `redirect-uri.property.spec.ts`, `test/redirect-uri-exact.e2e-spec.ts` |
+| V7.3.2, V10.4.8 | An offline session lives for `offlineTokenLifespan`; it was deleted, with its offline tokens, after `refreshTokenLifespan`. The session's absolute expiry is checked at every refresh and introspection, and a refresh token never outlives its session. | `session-lifetime.spec.ts`, `sessions-cleanup.service.spec.ts`, `test/offline-sessions.e2e-spec.ts` |
+
 ### Remaining gaps
 
 These are left open on purpose. Most would change behaviour that existing deployments rely on, or need a design of their own, and half a fix would be worse than a documented gap. A few are small but touch admin-only input (theme uploads, custom CSS) and were left for a focused change. In rough priority order:
 
-1. **No MFA on admin console sign-in** (V6.3.3). The console accepts a password only, even when the admin has TOTP enrolled. Needs an MFA step in `AdminAuthService.login` and the console.
-2. **Wildcard redirect URIs** (V10.4.1). A registered URI ending in `/*` matches any path below it. Removing this breaks clients registered that way; it needs a deprecation period with a warning first.
-3. **Recovery codes** (V6.5.2) have 32 bits of entropy and an unsalted SHA-256. They need at least 112 bits (or a password hash), with a re-issue path for existing codes.
-4. **No common, breached or context-word password checks** (V6.2.4, V6.2.11, V6.2.12).
-5. **Geo-IP lookups send end-user IPs over plain HTTP to ip-api.com** (V12.3.1, V14.2.3) when adaptive authentication or continuous verification is on. Needs an HTTPS provider or a local database, and an explicit opt-in.
-6. **Session lifetime** (V7.3.1, V7.3.2, V10.4.8). There is no idle timeout for SSO sessions, and the absolute session expiry is enforced by an hourly clean-up job, not at refresh time. A related finding: an offline token's session gets the normal session expiry, so the clean-up deletes offline tokens after `refreshTokenLifespan` (plus up to an hour), not after `offlineTokenLifespan`. Fixing this changes how long existing sessions live, so it needs its own change.
-7. **RP-initiated logout without `id_token_hint`** ends the session with no confirmation (V10.6.2).
-8. **WebSocket upgrade has no Origin check** (V4.4.2).
-9. **Theme asset uploads trust the declared MIME type** (V5.2.2) and store SVG unsanitized (V1.3.4).
-10. **RSA 2048 signing keys** (V11.2.3). New keys should be 3072-bit; that changes JWKS consumers' expectations only slightly but needs a rotation story.
-11. **Users cannot list or end their own sessions, or revoke consents** (V7.5.2, V10.7.3).
-12. **Documentation-only gaps:** input validation rules (V2.1.x), file handling (V5.1.1), data classification (V14.1.x), log inventory (V16.1.1), SBOM (V15.1.2).
+1. **No common, breached or context-word password checks** (V6.2.4, V6.2.11, V6.2.12).
+2. **Geo-IP lookups send end-user IPs over plain HTTP to ip-api.com** (V12.3.1, V14.2.3) when adaptive authentication or continuous verification is on. Needs an HTTPS provider or a local database, and an explicit opt-in.
+3. **Session idle timeout** (V7.3.1). There is no idle timeout for SSO sessions, nor for offline sessions, which live for `offlineTokenLifespan` from sign-in. (The absolute expiry and the offline lifetime were fixed in 0.11.0.)
+4. **RP-initiated logout without `id_token_hint`** ends the session with no confirmation (V10.6.2).
+5. **WebSocket upgrade has no Origin check** (V4.4.2).
+6. **Theme asset uploads trust the declared MIME type** (V5.2.2) and store SVG unsanitized (V1.3.4).
+7. **RSA 2048 signing keys** (V11.2.3). New keys should be 3072-bit; that changes JWKS consumers' expectations only slightly but needs a rotation story.
+8. **Users cannot list or end their own sessions, or revoke consents** (V7.5.2, V10.7.3).
+9. **Documentation-only gaps:** input validation rules (V2.1.x), file handling (V5.1.1), data classification (V14.1.x), log inventory (V16.1.1), SBOM (V15.1.2).
 
 Every row below has its own recommendation.
 
@@ -95,7 +108,7 @@ Every row below has its own recommendation.
 |---|---|---|---|---|
 | V1.1.1 | 2 | Pass | src/saml/saml-idp.service.ts (decodeSamlRequest: one base64 decode, then inflate) | Input is decoded once, before validation. |
 | V1.1.2 | 2 | Pass | Handlebars auto-escaping (src/theme/theme-handlebars.ts); src/brute-force/brute-force.service.ts sendLockoutNotification uses escapeHtml | Output is encoded at render time. The one hand-built email body is now escaped. |
-| V1.2.1 | 1 | Pass | src/common/utils/html-escape.util.ts; src/brute-force/brute-force.service.ts (escapeHtml on username and realm name); src/brute-force/brute-force.service.spec.ts | FIXED in this PR: the lockout email interpolated the raw username (SCIM/LDAP/IdP usernames have no character rules). |
+| V1.2.1 | 1 | Pass | src/common/utils/html-escape.util.ts; src/brute-force/brute-force.service.ts (escapeHtml on username and realm name); src/brute-force/brute-force.service.spec.ts | FIXED in 0.10.0: the lockout email interpolated the raw username (SCIM/LDAP/IdP usernames have no character rules). |
 | V1.2.2 | 1 | Partial | src/common/redirect-uri.utils.ts:7; src/clients/dto/create-client.dto.ts (redirectUris @IsString only); themes href="\{\{termsOfServiceUrl\}\}" | Admin-entered URLs have no scheme allowlist, so javascript: is accepted. Only admins can set them. **Recommendation:** Accept only http(s) for redirectUris, branding and terms URLs (S). |
 | V1.2.3 | 1 | Partial | themes/idenplane/login/templates/login.hbs:73-82; themes/idenplane/account/templates/account.hbs:186 | Request values reach JS string literals with HTML escaping only; a backslash is not escaped. **Recommendation:** Add a JSON-safe Handlebars helper, or move the values to data- attributes (S). |
 | V1.2.4 | 1 | Pass | Prisma throughout; $executeRawUnsafe only with constant lock keys (src/admin-auth/admin-seed.service.ts:89, src/secrets-at-rest/secrets-at-rest.service.ts:333) | No user input reaches raw SQL. |
@@ -118,7 +131,7 @@ Every row below has its own recommendation.
 | V1.4.1 | 2 | N/A |  | Memory-safe runtime. |
 | V1.4.2 | 2 | N/A |  | Managed runtime; numbers are DTO-validated. |
 | V1.4.3 | 2 | N/A |  | Garbage-collected runtime. |
-| V1.5.1 | 1 | Pass | src/saml/saml-idp.service.ts (fast-xml-parser, @xmldom: no external entities) | validateSignature does not confirm the signature covers the parsed root element (see the threat model). **Recommendation:** Check the signed reference is the AuthnRequest root (S). |
+| V1.5.1 | 1 | Pass | src/saml/saml-request-verifier.ts (parseStrictXml: no DTD, entities, comments, processing instructions or duplicate IDs; every xmldom warning is fatal); src/saml/saml-request-hardening.spec.ts | FIXED in 0.11.0: the AuthnRequest signature check now requires one signature on the root, referencing the root, and reads every field from the signed bytes (signature wrapping). |
 | V1.5.2 | 2 | Pass | JSON.parse only; src/theme/theme-render.service.ts:47 strips \_\_proto\_\_ |  |
 
 ### V2 Validation and Business Logic
@@ -159,7 +172,7 @@ Every row below has its own recommendation.
 | V3.5.4 | 2 | Partial | src/app.module.ts:116 (admin console served on the same origin as realm pages) | No origin separation between admin and end-user UI. **Recommendation:** Optional separate admin hostname (L). |
 | V3.5.5 | 2 | N/A |  | No postMessage listeners. |
 | V3.7.1 | 2 | Pass | React SPA, no plugins |  |
-| V3.7.2 | 2 | Pass | src/tokens/tokens.service.ts:413; src/common/redirect-uri.utils.ts | Redirects only to registered URIs (wildcards: see V10.4.1). |
+| V3.7.2 | 2 | Pass | src/tokens/tokens.service.ts (validatePostLogoutRedirectUri); src/common/redirect-uri.utils.ts | Redirects only to registered URIs, matched exactly since 0.11.0 (see V10.4.1). |
 
 ### V4 API and Web Service
 
@@ -181,9 +194,9 @@ Every row below has its own recommendation.
 | Req | L | Status | Evidence | Notes and recommendation |
 |---|---|---|---|---|
 | V5.1.1 | 2 | **Fail** | — | Upload types and sizes are not documented. **Recommendation:** Document theme-asset uploads and realm import limits (S). |
-| V5.2.1 | 1 | Pass | default 100 kB body parser; src/theme/theme-upload.service.ts:39 (5 MB) | The 5 MB check trusts the declared size. |
+| V5.2.1 | 1 | Pass | 100 kB JSON body limit, 10 MB on the admin import endpoints (src/common/http/body-parsers.ts); src/theme/theme-upload.service.ts:39 (5 MB) | The 5 MB check trusts the declared size. |
 | V5.2.2 | 1 | **Fail** | src/theme/theme-upload.service.ts:107,135 | The client-declared MIME type is trusted; no magic-byte check. **Recommendation:** Sniff magic bytes and check the decoded length (S). |
-| V5.2.3 | 2 | Pass | src/saml/saml-idp.service.ts decodeSamlRequest (maxOutputLength); src/saml/saml-idp.service.spec.ts "refuses a compressed request that inflates past the size limit" | FIXED in this PR: inflation was unbounded before the size check. |
+| V5.2.3 | 2 | Pass | src/saml/saml-idp.service.ts decodeSamlRequest (maxOutputLength); src/saml/saml-idp.service.spec.ts "refuses a compressed request that inflates past the size limit" | FIXED in 0.10.0: inflation was unbounded before the size check. |
 | V5.3.1 | 1 | Pass | src/main.ts:312 (static serving, sandbox CSP) |  |
 | V5.3.2 | 1 | Pass | src/theme/theme-upload.service.ts:118-128 (generated file names) |  |
 | V5.4.1 | 2 | Partial | src/account/account.controller.ts:970 (export filename embeds the username) |  **Recommendation:** Generated or sanitized filename (S). |
@@ -194,9 +207,9 @@ Every row below has its own recommendation.
 
 | Req | L | Status | Evidence | Notes and recommendation |
 |---|---|---|---|---|
-| V6.1.1 | 1 | Pass | docs/docs/security/secure-defaults.md; src/realms/realm-security-defaults.ts | FIXED in this PR: documented lockout settings, defaults and the lockout-DoS trade-off (the old docs used Keycloak field names). |
+| V6.1.1 | 1 | Pass | docs/docs/security/secure-defaults.md; src/realms/realm-security-defaults.ts | FIXED in 0.10.0: documented lockout settings, defaults and the lockout-DoS trade-off (the old docs used Keycloak field names). |
 | V6.1.2 | 2 | **Fail** | src/password-policy/password-policy.service.ts | No list of context-specific words. **Recommendation:** See V6.2.11. |
-| V6.1.3 | 2 | Partial | docs/docs/guides/authentication.mdx | Pathways are listed, not their strength; admin login and device approval are missing. **Recommendation:** Pathway matrix (S). |
+| V6.1.3 | 2 | Partial | docs/docs/guides/authentication.mdx; docs/docs/security/admin-mfa.md | Pathways are listed, not their strength; device approval is missing. The admin console pathways (password, second factor, API key) are documented with their strength since 0.11.0. **Recommendation:** Pathway matrix (S). |
 | V6.2.1 | 1 | Partial | prisma/schema.prisma (passwordMinLength default 8); src/realms/dto/create-realm.dto.ts (@Min(1)) | Default is 8, but an admin can set a lower minimum. **Recommendation:** Floor at 8 (S; would reject saving realms already configured lower). |
 | V6.2.2 | 1 | Pass | src/account/account.controller.ts:268; src/login/login.controller.ts:789 |  |
 | V6.2.3 | 1 | Pass | src/account/account.controller.ts:283-321 | Current password required. |
@@ -209,16 +222,16 @@ Every row below has its own recommendation.
 | V6.2.10 | 2 | Partial | src/password-policy/password-policy.service.ts:98-104 (passwordMaxAgeDays, default 0) | Periodic rotation is optional and off by default. **Recommendation:** Warn against it in the console (S). |
 | V6.2.11 | 2 | **Fail** | src/password-policy/password-policy.service.ts:18 | No context-word check (username, realm, email). **Recommendation:** Reject passwords containing them (S). |
 | V6.2.12 | 2 | **Fail** | src/password-policy/password-policy.service.ts:18 | No breached-password check. **Recommendation:** Optional k-anonymity breach check per realm (M). |
-| V6.3.1 | 1 | Pass | src/realms/realm-security-defaults.ts; src/brute-force/brute-force.service.ts; test/secure-realm-defaults.e2e-spec.ts; test/brute-force.e2e-spec.ts | FIXED in this PR: lockout is on for new realms; realms created before 0.10.0 keep their setting and are reported by /admin/upgrade/health. |
+| V6.3.1 | 1 | Pass | src/realms/realm-security-defaults.ts; src/brute-force/brute-force.service.ts; test/secure-realm-defaults.e2e-spec.ts; test/brute-force.e2e-spec.ts | FIXED in 0.10.0: lockout is on for new realms; realms created before 0.10.0 keep their setting and are reported by /admin/upgrade/health. |
 | V6.3.2 | 1 | Pass | src/admin-auth/admin-seed.service.ts:14-30 (random initial password; weak ones refused in production) |  |
-| V6.3.3 | 2 | **Fail** | src/admin-auth/admin-auth.service.ts (password only); prisma/schema.prisma mfaRequired default false | Admin console sign-in has no second factor. **Recommendation:** MFA challenge on admin login (M). |
-| V6.3.4 | 2 | Partial | src/device/device.controller.ts; src/auth/auth.service.ts (device and code grants refuse disabled users); src/admin-auth/admin-auth.service.ts | FIXED in part: disabled users can no longer finish the device flow or exchange a code. Admin login still lacks MFA. **Recommendation:** See V6.3.3. |
+| V6.3.3 | 2 | Pass | src/admin-auth/admin-auth.service.ts (login, completeMfaLogin); src/admin-rbac/admin-access-policy.ts (decideAdminMfa); src/admin-auth/admin-seed.service.ts (required on new installs); test/admin-mfa.e2e-spec.ts | FIXED in 0.11.0: admin console sign-in asks for a second factor once the admin has one, and the server-wide requirement (on for new installs) confines an admin without one to enrolment. After an upgrade it is off until turned on; /admin/upgrade/health warns. End-user realms set `mfaRequired` per realm. |
+| V6.3.4 | 2 | Pass | src/device/device.controller.ts; src/auth/auth.service.ts (device and code grants refuse disabled users); src/admin-auth/admin-auth.service.ts; docs/docs/security/admin-mfa.md | Disabled users can no longer finish the device flow or exchange a code (0.10.0). FIXED in 0.11.0: admin sign-in enforces the admin's second factor on every pathway that issues a user token (password step, step-up, enrolment); the API key pathway is documented as break-glass. |
 | V6.4.1 | 1 | Partial | src/users/dto/set-password.dto.ts:15 (temporary ignored) | Initial passwords never expire or force a change. **Recommendation:** mustChangePassword flag (M). |
 | V6.4.2 | 1 | Pass | No secret questions or hints |  |
 | V6.4.3 | 2 | Pass | src/login/login.controller.ts (reset sets the password, then normal login with MFA) |  |
-| V6.4.4 | 2 | Partial | src/mfa/mfa.service.ts:356-368 (admin factor reset) | No documented identity-proofing step. **Recommendation:** Document it and record an admin event (M). |
+| V6.4.4 | 2 | Partial | src/mfa/mfa.service.ts (admin factor reset); src/admin-mfa/admin-mfa.service.ts (reset); docs/docs/security/admin-mfa.md | Since 0.11.0 an admin MFA reset needs the resetting admin's own recent MFA check (or the API key), is always recorded as an admin event, and the console asks to confirm who is asking. There is still no documented identity-proofing procedure for end users. **Recommendation:** Document one (S). |
 | V6.5.1 | 2 | Pass | src/mfa/mfa.service.ts:265-300; src/magic-link/magic-link.service.ts:472; src/sms/sms-otp.service.ts:631; test/totp-replay.e2e-spec.ts | Single use. |
-| V6.5.2 | 2 | **Fail** | src/mfa/mfa.service.ts:325-331 | Recovery codes have 32 bits of entropy and are stored as unsalted SHA-256. **Recommendation:** At least 112-bit codes, or argon2 (S/M). |
+| V6.5.2 | 2 | Pass | src/mfa/recovery-codes.ts; src/mfa/mfa.service.ts (generateRecoveryCodes, verifyRecoveryCode); src/mfa/recovery-code-rewrap.service.ts | FIXED in 0.11.0: codes have 120 bits and are stored as SHA-256 (allowed at 112 bits or more). Codes issued before 0.11.0 keep working; their hashes are rewrapped in Argon2id (salted) at start-up. |
 | V6.5.3 | 2 | Pass | crypto.randomInt / randomBytes in src/sms/sms-otp.service.ts:179, src/auth-flow/email-otp.service.ts:191 |  |
 | V6.5.4 | 2 | Pass | src/mfa/mfa.service.ts:325; src/sms/sms-otp.service.ts:48 | At least 20 bits. |
 | V6.5.5 | 2 | Partial | src/sms/sms-otp.service.ts:51 (max 900 s); src/realms/dto/create-realm.dto.ts (magicLinkExpirySeconds no @Max) | Out-of-band lifetime can exceed 10 minutes. **Recommendation:** Cap at 600 s (S). |
@@ -227,14 +240,14 @@ Every row below has its own recommendation.
 | V6.6.3 | 2 | Pass | src/sms/sms-otp.service.ts:14-20,631; src/auth-flow/email-otp.service.ts:13-26 |  |
 | V6.8.1 | 2 | Pass | prisma/schema.prisma (FederatedIdentity unique per IdP); src/broker/broker.service.ts:555-583 |  |
 | V6.8.2 | 2 | Partial | src/broker/broker.service.ts:386-420 | Upstream id\_token is not verified; identity comes from userinfo over TLS with the IdP access token. **Recommendation:** Verify the id\_token via the IdP JWKS (M). |
-| V6.8.3 | 2 | N/A | src/saml (IdP only) | Idenplane never consumes SAML assertions. |
+| V6.8.3 | 2 | N/A | src/saml (IdP only) | Idenplane never consumes SAML assertions. The AuthnRequests it receives are accepted once per ID within their validity window since 0.11.0 (src/saml/saml-idp.service.ts claimRequestId; test/saml-request-replay.e2e-spec.ts). |
 | V6.8.4 | 2 | Partial | src/broker/broker.service.ts:375 | Upstream acr/amr are ignored. **Recommendation:** Map upstream amr; document the fallback (M). |
 
 ### V7 Session Management
 
 | Req | L | Status | Evidence | Notes and recommendation |
 |---|---|---|---|---|
-| V7.1.1 | 2 | Partial | docs/docs/security/secure-defaults.md (session lifetimes); prisma/schema.prisma (accessTokenLifespan, refreshTokenLifespan, offlineTokenLifespan) | FIXED in part: the real settings are now documented; there is no idle timeout to document (V7.3.1). |
+| V7.1.1 | 2 | Partial | docs/docs/security/secure-defaults.md (session lifetimes); docs/docs/configuration/options.md; prisma/schema.prisma (accessTokenLifespan, refreshTokenLifespan, offlineTokenLifespan) | FIXED in part: the real settings are documented, including the offline session lifetime (0.11.0); there is no idle timeout to document (V7.3.1). |
 | V7.1.2 | 2 | Pass | docs/docs/guides/authentication.mdx; src/login/login.service.ts:157-182 | maxSessionsPerUser documented and enforced. |
 | V7.1.3 | 2 | Partial | docs/docs/api/oauth.md (backchannel logout) |  |
 | V7.2.1 | 1 | Pass | src/login/login.service.ts:187-215 | Session token looked up by hash server-side. |
@@ -242,13 +255,13 @@ Every row below has its own recommendation.
 | V7.2.3 | 1 | Pass | src/crypto/crypto.service.ts:191; src/login/login.service.ts:140 | 256-bit session tokens, stored hashed. |
 | V7.2.4 | 1 | Partial | src/login/login.service.ts:129-138; src/step-up/step-up.service.ts:165 | New token at login; step-up keeps the same token. **Recommendation:** Rotate after step-up (S). |
 | V7.3.1 | 2 | Partial | prisma/schema.prisma (LoginSession has no last-activity field) | Refresh tokens slide; SSO and admin sessions have no idle timeout. **Recommendation:** lastSeenAt plus an idle-timeout setting (M). |
-| V7.3.2 | 2 | Partial | src/auth/auth.service.ts:820-843; src/sessions/sessions-cleanup.service.ts:11-19 | Absolute session expiry is enforced by the hourly cleanup, not at refresh. Offline tokens are deleted with their session after refreshTokenLifespan (finding). **Recommendation:** Check session.expiresAt at refresh, and give offline sessions their own expiry (M). |
+| V7.3.2 | 2 | Pass | src/sessions/session-lifetime.ts; src/auth/auth.service.ts (handleRefreshTokenGrant); src/tokens/tokens.service.ts (introspectRefreshToken); src/login/login.service.ts (SSO expiresAt); src/admin-auth/admin-auth.controller.ts (admin token: 1 h, refresh returns the same token); test/offline-sessions.e2e-spec.ts | FIXED in 0.11.0: the absolute session expiry is checked at refresh and introspection, not left to the hourly clean-up, and offline sessions get their own expiry (offlineTokenLifespan) instead of being deleted after refreshTokenLifespan. |
 | V7.4.1 | 1 | Pass | src/tokens/tokens.service.ts:427-475 | Logout deletes sessions; later sid checks fail. |
 | V7.4.2 | 1 | Pass | src/users/users.service.ts; src/auth/auth.service.ts (code and device grants check enabled); src/tokens/tokens.service.ts:525 | FIXED gap: the code exchange did not check enabled. |
 | V7.4.3 | 2 | Partial | src/login/login.controller.ts endAllSessions; test/theme-views.e2e-spec.ts (reset ends sessions) | FIXED in part: a password reset ends every session. Self-service change and admin set do not offer the option. **Recommendation:** Add "sign out other sessions" to password change (S). |
 | V7.4.4 | 2 | Pass | themes/idenplane/account/templates/account.hbs:11; admin-ui Layout.tsx |  |
 | V7.4.5 | 2 | Partial | src/sessions/sessions.controller.ts:58-83 | No realm-wide termination; admin termination sends no back-channel logout. **Recommendation:** (S) |
-| V7.5.1 | 2 | Partial | src/account/account.controller.ts:283-322,688-702; src/webauthn/webauthn.controller.ts:78-118,341-354 | TOTP enrolment and passkey add/delete need only the session. **Recommendation:** Require re-authentication (S). |
+| V7.5.1 | 2 | Partial | src/account/account.controller.ts:283-322,688-702; src/webauthn/webauthn.controller.ts:78-118,341-354; src/admin-mfa/admin-mfa.controller.ts | Admin console (0.11.0): changing a factor or the recovery codes needs a second factor checked in the last 15 minutes. End-user account console: TOTP enrolment and passkey add/delete still need only the session. **Recommendation:** Require re-authentication there too (S). |
 | V7.5.2 | 2 | **Fail** | src/account/account.controller.ts | Users cannot list or end their own sessions. **Recommendation:** Account session list (M). |
 | V7.6.1 | 2 | Partial | src/tokens/backchannel-logout.service.ts; src/oauth/oauth.controller.ts:208-231 | Admin and account-console terminations do not notify RPs. **Recommendation:** (S) |
 | V7.6.2 | 2 | Pass | src/oauth/oauth.controller.ts:174-231; src/login/session-issuer.service.ts:50-97 |  |
@@ -273,7 +286,7 @@ Every row below has its own recommendation.
 | V9.1.2 | 1 | Pass | src/crypto/jwk.service.ts:56-61 (key imported for RS256 only) | No explicit algorithm allowlist; the key type pins it. **Recommendation:** Pass algorithms:\[RS256] (S). |
 | V9.1.3 | 1 | Pass | src/crypto/jwk.service.ts:94-99 | jku/x5u/jwk headers ignored. |
 | V9.2.1 | 1 | Pass | src/crypto/jwk.service.ts:97 (jose checks exp/nbf) |  |
-| V9.2.2 | 2 | Pass | src/tokens/access-token-type.ts; src/tokens/tokens.service.ts (userinfo, introspect); src/realtime/session-events.gateway.ts; tokens.service.spec.ts "refuses an ID token" | FIXED in this PR: ID, logout and admin tokens signed with the realm key were accepted as access tokens. |
+| V9.2.2 | 2 | Pass | src/tokens/access-token-type.ts; src/tokens/tokens.service.ts (userinfo, introspect); src/realtime/session-events.gateway.ts; tokens.service.spec.ts "refuses an ID token" | FIXED in 0.10.0: ID, logout and admin tokens signed with the realm key were accepted as access tokens. |
 | V9.2.3 | 2 | Partial | src/crypto/jwk.service.ts:94-99 | No issuer or audience check at verification. **Recommendation:** Pass issuer/audience to verifyJwt; aud on admin tokens (S/M). |
 | V9.2.4 | 2 | Pass | src/auth/auth.service.ts (aud=clientId); src/tokens/backchannel-logout.service.ts |  |
 
@@ -289,14 +302,14 @@ Every row below has its own recommendation.
 | V10.3.2 | 2 | Pass | src/tokens/tokens.service.ts:518-533 |  |
 | V10.3.3 | 2 | Pass | src/tokens/tokens.service.ts:518 | sub is a per-realm UUID. |
 | V10.3.4 | 2 | N/A |  | No resource endpoint requires a particular acr. |
-| V10.4.1 | 1 | **Fail** | src/common/redirect-uri.utils.ts:12-15 | Registered URIs ending in /\* match any path by prefix. **Recommendation:** Exact matching; refuse wildcards at registration (S, breaks configs that use them). |
+| V10.4.1 | 1 | Pass | src/common/redirect-uri.utils.ts (matchesRedirectUri); src/common/redirect-uri.utils.spec.ts; src/common/redirect-uri.property.spec.ts; test/redirect-uri-exact.e2e-spec.ts | FIXED in 0.11.0: exact string comparison, loopback port excepted (RFC 8252); fragments refused; wildcards refused at registration. Clients that had `/*` entries before the upgrade keep them through the per-client `allowInsecureWildcardRedirectUris` opt-in, reported by `/admin/upgrade/health` (`wildcard_redirect_uris`) until an admin turns it off. |
 | V10.4.2 | 1 | Pass | src/auth/auth.service.ts (atomic single use, replay revokes the session); test/oidc-conformance.e2e-spec.ts |  |
 | V10.4.3 | 1 | Pass | src/oauth/oauth.service.ts:133 (60 s) |  |
 | V10.4.4 | 1 | Partial | src/clients/dto/create-client.dto.ts:157-160 | No implicit flow; the password grant can still be enabled per client. **Recommendation:** Allowlist grantTypes; gate password (S). |
 | V10.4.5 | 1 | Pass | src/auth/auth.service.ts:820-940; test/refresh-rotation.e2e-spec.ts | Rotation with reuse detection. |
 | V10.4.6 | 2 | Partial | src/oauth/oauth.service.ts:71-86 | S256 only; required for public clients only. **Recommendation:** Realm flag to require PKCE for every client (S). |
 | V10.4.7 | 2 | N/A |  | No dynamic client registration. |
-| V10.4.8 | 2 | Partial | src/auth/auth.service.ts:1679 | Refresh expiry slides; the absolute cap is the hourly session cleanup. **Recommendation:** See V7.3.2. |
+| V10.4.8 | 2 | Pass | src/sessions/session-lifetime.ts (refreshTokenExpiresAt); src/auth/auth.service.ts (handleRefreshTokenGrant checks session.expiresAt); test/offline-sessions.e2e-spec.ts | FIXED in 0.11.0: a rotated refresh token never outlives its session, and the session's absolute expiry (refreshTokenLifespan, or offlineTokenLifespan for an offline session) is checked at every refresh. |
 | V10.4.9 | 2 | Pass | src/users/users.controller.ts:240; src/sessions/sessions.controller.ts |  |
 | V10.4.10 | 2 | Pass | src/client-auth/client-authenticator.ts:425 |  |
 | V10.4.11 | 2 | Partial | src/scopes/scopes.service.ts:53-80 | A client with no scopes assigned can request any supported scope. **Recommendation:** Grant assigned scopes only (S). |
@@ -316,7 +329,7 @@ Every row below has its own recommendation.
 | Req | L | Status | Evidence | Notes and recommendation |
 |---|---|---|---|---|
 | V11.1.1 | 2 | Partial | docs/docs/security/threat-model.md (key assets); src/crypto/key-ring.ts | No formal key-management policy. **Recommendation:** Write one (S). |
-| V11.1.2 | 2 | Pass | docs/docs/security/threat-model.md "Cryptographic inventory" | FIXED in this PR: inventory written. |
+| V11.1.2 | 2 | Pass | docs/docs/security/threat-model.md "Cryptographic inventory" | FIXED in 0.10.0: inventory written. |
 | V11.2.1 | 2 | Pass | node:crypto, jose, argon2, @peculiar/x509 |  |
 | V11.2.2 | 2 | Partial | src/crypto/key-ring.ts:11-24,91-94; src/crypto/jwk.service.ts | AES key ring rotates; signing algorithm is fixed to RS256. **Recommendation:** (M) |
 | V11.2.3 | 2 | **Fail** | src/crypto/jwk.service.ts:64 (RSA 2048) | 2048-bit RSA is about 112-bit security. **Recommendation:** 3072-bit for new keys (S). |
@@ -404,7 +417,7 @@ Every row below has its own recommendation.
 | V16.2.3 | 2 | Partial | stdout, audit streams, webhooks |  |
 | V16.2.4 | 2 | Pass | pino JSON in production |  |
 | V16.2.5 | 2 | Partial | src/email/providers/\*.provider.ts; src/sms/providers/\*.provider.ts | Recipient e-mail addresses and phone numbers logged at info. **Recommendation:** Log user ids or masked recipients (S). |
-| V16.3.1 | 2 | Pass | src/realms/realm-security-defaults.ts (eventsEnabled, adminEventsEnabled on); src/events/events.service.ts | FIXED in this PR: new realms record login and admin events; older realms keep their setting. |
+| V16.3.1 | 2 | Pass | src/realms/realm-security-defaults.ts (eventsEnabled, adminEventsEnabled on); src/events/events.service.ts | FIXED in 0.10.0: new realms record login and admin events; older realms keep their setting. |
 | V16.3.2 | 2 | Partial | logger.config.ts:28 (4xx at warn); admin-authorization.guard.ts (denials logged) |  |
 | V16.3.3 | 2 | Partial | src/brute-force/brute-force.service.ts (every lockout logged) | FIXED in part: temporary lockouts are now logged; CSRF and validation failures are not. **Recommendation:** (S) |
 | V16.3.4 | 2 | Pass | src/common/filters/http-exception.filter.ts:48 |  |

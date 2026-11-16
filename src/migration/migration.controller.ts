@@ -66,17 +66,22 @@ class AuthentikImportDto {
 
 // Issue #461 — API limitation notes:
 //
-// 1. Both import endpoints process the entire payload synchronously in a single
-//    HTTP request.  Very large exports (tens of thousands of users) may hit the
-//    default request-body size limit (10 MB) or the gateway timeout.  Until
-//    chunked / streaming import is implemented, callers should split large
-//    exports into batches of ≤5 000 users before calling these endpoints.
+// 1. The import endpoints process the entire payload synchronously in a single
+//    HTTP request.  The JSON body limit of these routes is
+//    IMPORT_JSON_BODY_LIMIT (10 MB, common/http/body-parsers.ts; every other
+//    endpoint keeps 100 KB); a larger body gets a 413.  Very large exports
+//    (tens of thousands of users) may hit that limit or the gateway timeout.
+//    Until chunked / streaming import is implemented, callers should split
+//    large exports into batches of ≤5 000 users before calling these endpoints.
 //
 // 2. Passwords imported from Keycloak are kept in their original hashed form
-//    only when the hashing algorithm is recognised (bcrypt, pbkdf2-sha256/512,
-//    argon2).  Users whose passwords used an unsupported algorithm are imported
-//    without a password hash; they will need to complete a password-reset flow
-//    on first login.
+//    only when the hashing algorithm is recognised (pbkdf2 (SHA-1),
+//    pbkdf2-sha256, pbkdf2-sha512, argon2, and bcrypt from extensions), from
+//    both the current (secretData / credentialData) and the legacy credential
+//    format (see password-import.ts).  Users whose passwords used an
+//    unsupported algorithm are imported without a password hash, with a
+//    report warning; they will need to complete a password-reset flow on
+//    first login.
 //
 // 3. Auth0 social-identity links (FederatedIdentity rows) are imported as
 //    stubs; the actual OAuth tokens are not available in the Management API

@@ -89,6 +89,25 @@ To find the realms that still have it off, call `GET /admin/upgrade/health` (sup
 
 Without events there is no record of failed sign-ins or of who changed what. Retention is bounded: `loginEventRetentionDays` (30) and `adminEventRetentionDays` (90). Existing realms keep their setting; turn it on in the realm settings or with `PATCH /admin/realms/{realm}` and `{"eventsEnabled": true, "adminEventsEnabled": true}`.
 
+## Redirect URIs
+
+Since 0.11.0 redirect URIs and post-logout redirect URIs match **exactly** (RFC 9700, OAuth 2.1, ASVS 5.0 V10.4.1). The only exception is the port of a loopback IP redirect URI (`http://127.0.0.1/...`, `http://[::1]/...`), which may be any port for native apps (RFC 8252 §7.3). Fragments are refused.
+
+Before 0.11.0 a registered URI ending in `/*` matched any path below it, so any page there (an open redirect, user content, a compromised subpath) could receive authorization codes.
+
+| | Behaviour |
+|---|---|
+| New clients | Exact matching. The admin API, console, setup wizard and realm import refuse a `/*` entry. |
+| Existing clients without a `/*` entry | Exact matching from the upgrade. Exact entries matched exactly before too, so nothing changes for them. |
+| Existing clients with a `/*` entry | The upgrade turns on `allowInsecureWildcardRedirectUris` for them, so they keep working as before. |
+| Keycloak imports, realm exports from before 0.11.0 | Same as the upgrade: a client with a `/*` entry gets the opt-in, and the import reports it. |
+
+**Why the upgrade keeps wildcard clients working instead of breaking them.** Turning wildcards off on upgrade would break sign-in for every such application at once, and the operator would find out from their users. Rejecting wildcards entirely would leave no way to upgrade first and fix the clients after. So the insecure behaviour stays only where it already was, behind a per-client flag whose name says what it is, and the upgrade makes it visible: `GET /admin/upgrade/health` reports the `wildcard_redirect_uris` warning naming each such client, and the console shows a warning on the client until the flag is off. No new client can get a wildcard without setting the flag explicitly through the API.
+
+**To fix a client:** register each exact callback URL the application sends, then turn **Allow insecure wildcard redirect URIs** off in the console, or `PUT /admin/realms/{realm}/clients/{clientId}` with the exact `redirectUris` and `"allowInsecureWildcardRedirectUris": false`. See [Redirect URI matching](../api/clients.md#redirect-uri-matching).
+
+Forward-auth return URLs (`allowedRedirectUris` of a proxy application) keep `/*` prefix matching: they are not OAuth redirect URIs, no code or token is sent there, and the browser only returns to the page it asked for.
+
 ## Other defaults
 
 Each default below was reviewed against the rule: change it only when it is clearly right and affects new realms or clients alone, without breaking a typical integration.
@@ -104,8 +123,8 @@ Each default below was reviewed against the rule: change it only when it is clea
 | Password composition rules | Off | Kept off on purpose (ASVS 5.0 V6.2.5, NIST). |
 | `passwordMaxAgeDays` | `0` (no forced rotation) | Kept (ASVS 5.0 V6.2.10). |
 | `accessTokenLifespan` | 300 s | Kept. |
-| `refreshTokenLifespan` | 1800 s; also the lifetime of an OAuth session | Kept. |
-| `offlineTokenLifespan` | 30 days | Kept. |
+| `refreshTokenLifespan` | 1800 s; also the lifetime of an OAuth session, checked at every refresh | Kept. |
+| `offlineTokenLifespan` | 30 days; the lifetime of an offline session, counted from sign-in (since 0.11.0; before, offline sessions got `refreshTokenLifespan`) | Kept. Offline tokens are still ended by sign-out everywhere, a password reset, disabling or deleting the user, SCIM deactivation and the admin "sign out all sessions". |
 | `maxSessionsPerUser` | 10 | Kept. |
 | `rateLimitEnabled` | Off | **Recommended on, not changed.** The default per-IP limit (20 per minute) can block many users behind one NAT or a misconfigured `TRUSTED_PROXIES`. Turn it on after checking `TRUSTED_PROXIES` and the limits. |
 | `requireEmailVerification` | Off | **Recommended on where email is configured, not changed.** It needs working SMTP; on by default it would block every sign-up on a new realm without email. |

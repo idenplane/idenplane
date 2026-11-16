@@ -137,6 +137,10 @@ export function createMockPrismaService(): MockPrismaService {
       delete: jest.fn(),
       deleteMany: jest.fn(),
     },
+    adminSecurityPolicy: {
+      findUnique: jest.fn().mockResolvedValue(null),
+      upsert: jest.fn().mockResolvedValue({}),
+    },
     recoveryCode: {
       findFirst: jest.fn(),
       findMany: jest.fn(),
@@ -287,6 +291,11 @@ export function createMockPrismaService(): MockPrismaService {
       create: jest.fn(),
       update: jest.fn(),
       delete: jest.fn(),
+    },
+    samlRequestId: {
+      create: jest.fn(),
+      updateMany: jest.fn(),
+      deleteMany: jest.fn(),
     },
     userFederation: {
       findUnique: jest.fn(),

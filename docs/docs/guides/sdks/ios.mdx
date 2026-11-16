@@ -21,31 +21,38 @@ The Idenplane iOS SDK provides native Swift bindings for the Idenplane Identity 
 
 ## Installation
 
-### Swift Package Manager
+:::note
+The iOS SDK has no Swift Package Manager release yet. Its `Package.swift` lives in `packages/idenplane-ios` of the main repository, not at the root, and there are no iOS release tags, so SPM cannot resolve it from the repository URL. Use it as a local package.
+:::
 
-Add the package to your `Package.swift` dependencies:
+### Local Swift package
+
+Clone the repository next to your project:
+
+```bash
+git clone https://github.com/idenplane/idenplane.git
+```
+
+Then add the package by path in your `Package.swift`:
 
 ```swift
 dependencies: [
-    .package(
-        url: "https://github.com/idenplane/idenplane",
-        from: "0.3.0"
-    )
+    .package(path: "../idenplane/packages/idenplane-ios")
 ]
 ```
 
-Or in Xcode: **File › Add Package Dependencies…** and paste the repository URL.
-
-Add `Idenplane` to your target:
+and add the `Idenplane` product to your target:
 
 ```swift
 .target(
     name: "MyApp",
     dependencies: [
-        .product(name: "Idenplane", package: "Idenplane")
+        .product(name: "Idenplane", package: "idenplane-ios")
     ]
 )
 ```
+
+In Xcode: **File › Add Package Dependencies… › Add Local…** and pick `packages/idenplane-ios`.
 
 ---
 
@@ -210,7 +217,9 @@ case .none:     print("No biometrics — passcode only")
 
 ```swift
 await authMe.logout()
-// Tokens are cleared from Keychain and the server session is terminated.
+// Tokens are cleared from the Keychain and the refresh token is sent to the
+// end-session endpoint. The browser's SSO cookie is not cleared, so the next
+// login() can complete without a password prompt.
 ```
 
 ---

@@ -222,6 +222,11 @@ Your own APIs must check the binding too. With the JavaScript SDK, pass the pres
 ```ts
 import { verifyToken } from 'idenplane-sdk/server';
 
+const config = {
+  issuerUrl: 'https://auth.example.com',
+  realm: 'my-realm',
+  audience: 'my-client', // client ID(s) whose access tokens this API accepts
+};
 const der = req.socket.getPeerX509Certificate()?.raw; // or from your proxy
 const payload = await verifyToken(token, config, { certificate: der });
 // or { certificateThumbprint: '<x5t#S256>' }; computeX5tS256(der) computes it

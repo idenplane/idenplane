@@ -15,6 +15,15 @@ export interface AdminMe {
   writeAllRealms: boolean;
   /** Realms managed as a realm-admin. */
   managedRealms: string[];
+  /** Console MFA; null for the admin API key. */
+  mfa: {
+    enrolled: boolean;
+    required: boolean;
+    /** This session proved a second factor. */
+    verified: boolean;
+    amr: string[];
+    authTime: number | null;
+  } | null;
 }
 
 export async function getMe(): Promise<AdminMe> {
@@ -30,6 +39,14 @@ export interface AdminAccount {
   enabled: boolean;
   roles: AdminRole[];
   realms: string[];
+  /** Console second factors. */
+  mfa: {
+    enrolled: boolean;
+    totp: boolean;
+    passkeys: number;
+    recoveryCodes: number;
+    oldFormatRecoveryCodes: boolean;
+  };
 }
 
 export async function listAdminAccounts(): Promise<AdminAccount[]> {

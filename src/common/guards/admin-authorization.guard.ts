@@ -17,10 +17,13 @@ import {
 import {
   accessForMethod,
   decideAdminAccess,
+  ADMIN_MFA_REFUSAL_MESSAGES,
+  decideAdminMfa,
   isSuperAdmin,
   type AdminPrincipal,
   type ResolvedRealm,
 } from '../../admin-rbac/admin-access-policy.js';
+import { ACR_MFA, ACR_PASSWORD, satisfiesAcr } from '../../authn-core/acr.js';
 import {
   AdminPrincipalService,
   type AuthenticatedAdmin,
@@ -108,6 +111,7 @@ export class AdminAuthorizationGuard implements CanActivate {
     admin.roles = [...principal.roles];
 
     const policy = this.policyFor(controller, handler);
+
     // No method is not a read: fail closed.
     const access = accessForMethod(request.method ?? 'POST', policy);
 
@@ -129,6 +133,38 @@ export class AdminAuthorizationGuard implements CanActivate {
       throw new ForbiddenException(
         'Your admin role does not allow this action',
       );
+    }
+
+    // Admin console MFA (docs/docs/security/admin-mfa.md), for an admin user
+    // only, never the API key. After the role check: a second factor would
+    // not change a role refusal, so that one is the answer.
+    if (principal.kind === 'user') {
+      const enrolled = principal.mfaEnrolled === true;
+      const refusal = decideAdminMfa(
+        {
+          tokenMfa: satisfiesAcr(admin.acr ?? ACR_PASSWORD, ACR_MFA),
+          authTime: admin.authTime,
+          now: Math.floor(Date.now() / 1000),
+          enrolled,
+          // Only read when it can matter: decideAdminMfa uses it only for
+          // an admin without a factor.
+          required: enrolled
+            ? false
+            : (await this.principals.adminMfaPolicy()).required,
+        },
+        policy,
+      );
+      if (refusal) {
+        this.logger.warn(
+          `Admin ${principal.userId} refused ${request.method} ${request.path}: ${refusal}`,
+        );
+        throw new ForbiddenException({
+          statusCode: 403,
+          error: 'Forbidden',
+          code: refusal,
+          message: ADMIN_MFA_REFUSAL_MESSAGES[refusal],
+        });
+      }
     }
     return true;
   }

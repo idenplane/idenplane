@@ -39,7 +39,7 @@ Most identity solutions are either too complex to self-host (Java, heavy runtime
 - **Modern stack** — TypeScript, NestJS, React, PostgreSQL. No Java, no XML
 - **Lightweight** — about 194 MiB of RAM at idle and ready in about 5 s, vs. 464 MiB and 24 s for Keycloak on the same machine ([benchmarks](docs/docs/benchmarks.md))
 - **Complete** — OAuth 2.0, OIDC, SAML 2.0, WebAuthn, MFA, LDAP, SSO, Organizations — all built-in
-- **Extensible** — plugin system, custom auth flows, webhooks, and 10 client SDKs
+- **Extensible** — plugin system, custom auth flows, webhooks, nine SDKs and a CLI
 - **Admin Console** — full-featured React dashboard at `/console`
 
 ---
@@ -51,14 +51,14 @@ Most identity solutions are either too complex to self-host (Java, heavy runtime
 | Feature | Description |
 |---------|-------------|
 | **OAuth 2.0 / OpenID Connect** | Authorization Code (with PKCE), Client Credentials, Password, Refresh Token, and Device Authorization grants |
-| **SAML 2.0** | Identity Provider and Service Provider with signed assertions and metadata exchange |
+| **SAML 2.0** | Identity Provider for SAML service providers: SP-initiated SSO, signed assertions and metadata. Idenplane is not a SAML service provider |
 | **WebAuthn / Passkeys** | FIDO2 passwordless authentication with credential registration, biometric support, and platform authenticators |
 | **Multi-Factor Authentication** | TOTP-based 2FA with QR provisioning, recovery codes, and brute-force protection |
 | **Step-Up Authentication** | ACR levels (password, MFA, WebAuthn) requiring re-authentication for sensitive operations |
 | **Adaptive / Risk-Based Auth** | Impossible travel detection, IP reputation scoring, device fingerprinting, and risk-based step-up or block |
-| **Social Login** | Broker external OIDC and SAML identity providers (Google, GitHub, Azure AD, etc.) |
+| **Social Login** | Broker external OpenID Connect and OAuth 2.0 identity providers (Google, GitHub, Microsoft Entra ID, etc.). SAML identity providers cannot be brokered |
 | **LDAP User Federation** | Sync users from LDAP/Active Directory with on-demand or scheduled sync |
-| **Custom Auth Flows (experimental)** | Flow configuration and execution engine; not yet integrated into the normal login path |
+| **Custom Auth Flows (experimental)** | Configurable login flows; they run at sign-in only when the server sets `AUTH_FLOW_RUNTIME_ENABLED=true` and the realm binds a flow |
 | **Single Sign-On** | Browser-based SSO across all clients in a realm |
 | **SCIM 2.0** | Complete Identity provisioning with Users, Groups, and Service Providers |
 
@@ -67,7 +67,7 @@ Most identity solutions are either too complex to self-host (Java, heavy runtime
 | Feature | Description |
 |---------|-------------|
 | **Multi-Tenancy (Realms)** | Isolated tenants with independent users, clients, roles, and configurations |
-| **Organizations (B2B)** | Hierarchical organizations with member roles, SSO connections, and domain verification via DNS TXT |
+| **Organizations (B2B)** | Organizations with member roles, SSO connections, and domain verification via DNS TXT |
 | **Role-Based Access Control** | Realm-level and client-level roles with user and group assignments |
 | **Policy-Based Authorization** | Attribute-Based Access Control (ABAC) for fine-grained permissions |
 | **Groups** | Hierarchical groups with role inheritance |
@@ -84,10 +84,10 @@ Most identity solutions are either too complex to self-host (Java, heavy runtime
 |---------|-------------|
 | **Modern React Dashboard** | Full-featured admin UI at `/console` with real-time stats |
 | **Entity Management** | CRUD for realms, users, clients, roles, groups, scopes, organizations, and more |
-| **Auth Flow Builder (experimental)** | Visual flow configuration; normal login integration is still pending |
+| **Auth Flow Builder (experimental)** | Visual flow configuration; flows run at login when the server-wide runtime flag is on |
 | **Session Management** | View and revoke active user sessions |
 | **Event Audit Logs** | Login events and admin action history with filtering and export |
-| **Identity Provider Config** | Configure OIDC, SAML, and LDAP providers from the UI |
+| **Identity Provider Config** | Configure OIDC/OAuth 2.0 identity providers, SAML service providers and LDAP federation from the UI |
 | **Realm Import/Export** | Migrate configurations between environments |
 | **Analytics Dashboard** | Active users (24h/7d/30d), login success/failure rates, session counts |
 
@@ -98,21 +98,21 @@ Most identity solutions are either too complex to self-host (Java, heavy runtime
 | **Outbound Webhooks** | Event-driven HTTP callbacks with AES-256-GCM encryption at rest |
 | **Retry & Scheduling** | Async delivery with configurable retry policies and status tracking |
 | **Plugin System** | Extensible plugin architecture with event listeners and token enrichment hooks |
-| **Data Migration** | Built-in importers for Auth0 and Keycloak configurations |
+| **Data Migration** | Built-in importers for Keycloak, Auth0, Zitadel and Authentik exports |
 
 ### Operations & DevOps
 
 | Feature | Description |
 |---------|-------------|
-| **Prometheus Metrics** | `/metrics` endpoint for Grafana dashboards |
+| **Prometheus Metrics** | `/admin/metrics` endpoint (admin credentials required) for Grafana dashboards |
 | **Health Checks** | `/health/live` and `/health/ready` for load balancers and orchestrators |
 | **Structured Logging** | JSON logging with Pino for log aggregation |
 | **Rate Limiting** | Configurable request throttling per endpoint, per client, per user, and per IP |
 | **Horizontal Scaling** | Stateless design — run multiple instances behind a load balancer |
 | **Redis Support** | Optional Redis for session storage and caching (Sentinel support for HA) |
 | **PostgreSQL** | PostgreSQL 16+, self-hosted or managed (RDS, Aurora, Cloud SQL, Azure, Supabase, Neon) |
-| **Guided Upgrades** | Pre-flight validation, automatic pre-upgrade backup, and rollback on failure — opt-in, see [Upgrading](https://docs.idenplane.io/deployment/upgrading) |
-| **API Versioning** | Versioned API with deprecation and sunset headers (RFC 8594) |
+| **Guided Upgrades** | Pre-flight validation, automatic pre-upgrade backup, and rollback on failure — opt-in, see [Upgrading](https://idenplane.com/deployment/upgrading) |
+| **API Deprecation Headers** | `Deprecation` and `Sunset` headers (RFC 8594) on the admin API. There is no versioned `/api/v1` admin API yet; use `/admin/...` ([details](docs/docs/project/versioning-and-support.md)) |
 | **CORS Management** | Dynamic origin validation with two-level caching (in-process + Redis) |
 | **Realm Theming** | Custom logos, colors, and CSS per realm for login, consent, account, and email pages |
 
@@ -138,7 +138,12 @@ Wait for the services to become healthy, then open:
 | http://localhost:3000/console | Admin Console |
 | http://localhost:3000/api | Swagger API Docs |
 | http://localhost:3000/health/live | Health Check |
-| http://localhost:3000/metrics | Prometheus Metrics |
+
+Prometheus metrics are at `/admin/metrics` and need admin credentials:
+
+```bash
+curl -H "x-admin-api-key: $ADMIN_API_KEY" http://localhost:3000/admin/metrics
+```
 
 **Generated admin credentials:**
 
@@ -180,20 +185,20 @@ npm run start:prod
 
 ## Client SDKs
 
-Idenplane provides official SDKs for every major platform:
+Idenplane provides official SDKs for these platforms:
 
 | Package | Install | Description |
 |---------|---------|-------------|
-| [**idenplane-sdk**](packages/idenplane-js/) | `npm i idenplane-sdk` | Core TypeScript SDK with React bindings (~5 KB gzipped) |
+| [**idenplane-sdk**](packages/idenplane-js/) | `npm i idenplane-sdk` | Core TypeScript SDK with React bindings |
 | [**idenplane-nextjs**](packages/idenplane-nextjs/) | `npm i idenplane-nextjs` | Next.js SDK — App Router, middleware, Server Components |
 | [**idenplane-angular**](packages/idenplane-angular/) | `npm i idenplane-angular` | Angular SDK — service, guard, HTTP interceptor |
 | [**idenplane-vue**](packages/idenplane-vue/) | `npm i idenplane-vue` | Vue 3 SDK — composables, plugin, router guard |
-| [**idenplane-android**](packages/idenplane-android/) | Gradle/Maven | Android SDK — Chrome Custom Tabs, encrypted storage, biometrics |
-| [**idenplane-ios**](packages/idenplane-ios/) | Swift Package | iOS SDK — ASWebAuthenticationSession, Keychain, Face ID / Touch ID |
+| [**idenplane-android**](packages/idenplane-android/) | `com.idenplane:idenplane-android` (Maven Central) | Android SDK — Chrome Custom Tabs, encrypted storage, biometrics |
+| [**idenplane-ios**](packages/idenplane-ios/) | Local Swift package (no SPM release yet) | iOS SDK — ASWebAuthenticationSession, Keychain, Face ID / Touch ID |
 | [**idenplane-cli**](packages/idenplane-cli/) | `npm i -g idenplane-cli` | CLI tool — manage realms, users, and configurations from terminal |
-| [**idenplane-python**](packages/idenplane-python/) | `pip install idenplane-python` | Python SDK — async client for Python 3.8+ applications |
-| [**idenplane-go**](packages/idenplane-go/) | `go get github.com/idenplane-go/idenplane` | Go SDK — idiomatic Go client with context support |
-| [**idenplane-java**](packages/idenplane-java/) | Maven/Gradle | Java SDK — Java 11+ client with Spring Boot integration |
+| [**idenplane-python**](packages/idenplane-python/) | `pip install idenplane` | Python SDK — server-side admin API client for Python 3.9+ |
+| [**idenplane-go**](packages/idenplane-go/) | `go get github.com/idenplane/idenplane/packages/idenplane-go` | Go SDK — admin API client with context support (Go 1.24+) |
+| [**idenplane-java**](packages/idenplane-java/) | `com.idenplane:idenplane-java-core` (Maven Central) | Java SDK — Java 17+ token validation and OIDC client. The Spring Boot, Jakarta and Reactor modules are in the repo but not published yet |
 
 ### Quick Example (5 Lines to Authenticate)
 
@@ -217,20 +222,20 @@ if (!idenplane.isAuthenticated()) {
 
 ```tsx
 import { IdenplaneClient } from 'idenplane-sdk';
-import { IdenplaneProvider, useIdenplane, useUser } from 'idenplane-sdk/react';
+import { AuthProvider, useAuth, useUser } from 'idenplane-sdk/react';
 
 const idenplane = new IdenplaneClient({ /* config */ });
 
 function App() {
   return (
-    <IdenplaneProvider client={idenplane}>
+    <AuthProvider client={idenplane}>
       <Dashboard />
-    </IdenplaneProvider>
+    </AuthProvider>
   );
 }
 
 function Dashboard() {
-  const { isAuthenticated, login, logout } = useIdenplane();
+  const { isAuthenticated, login, logout } = useAuth();
   const user = useUser();
 
   if (!isAuthenticated) return <button onClick={() => login()}>Sign In</button>;
@@ -248,9 +253,10 @@ function Dashboard() {
 
 ```typescript
 // middleware.ts
-import { idenplaneMiddleware } from 'idenplane-nextjs/middleware';
+import { NextResponse, type NextRequest } from 'next/server';
+import { createAuthMiddleware } from 'idenplane-nextjs/middleware';
 
-export default idenplaneMiddleware({
+const auth = createAuthMiddleware({
   serverUrl: 'http://localhost:3000',
   realm: 'my-realm',
   clientId: 'my-app',
@@ -258,11 +264,19 @@ export default idenplaneMiddleware({
   loginPath: '/login',
 });
 
+export default function middleware(req: NextRequest) {
+  return auth(req as never, NextResponse as never);
+}
+
 // app/dashboard/page.tsx (Server Component)
+// Reads the `idenplane_access_token` cookie, which your app must set.
+import { cookies } from 'next/headers';
+import { redirect } from 'next/navigation';
 import { getServerUser } from 'idenplane-nextjs/server';
 
 export default async function Dashboard() {
-  const user = await getServerUser();
+  const user = await getServerUser(await cookies());
+  if (!user) redirect('/login');
   return <h1>Welcome, {user.name}</h1>;
 }
 ```
@@ -271,12 +285,12 @@ export default async function Dashboard() {
 
 ```typescript
 // app.module.ts
-import { AuthModule } from 'idenplane-angular';
+import { IdenplaneModule } from 'idenplane-angular';
 
 @NgModule({
   imports: [
-    AuthModule.forRoot({
-      serverUrl: 'http://localhost:3000',
+    IdenplaneModule.forRoot({
+      url: 'http://localhost:3000',
       realm: 'my-realm',
       clientId: 'my-app',
       redirectUri: 'http://localhost:4200/callback',
@@ -292,14 +306,14 @@ export class AppModule {}
 
 ```typescript
 // main.ts
-import { createIdenplanePlugin } from 'idenplane-vue';
+import { IdenplanePlugin } from 'idenplane-vue';
 
-app.use(createIdenplanePlugin({
-  serverUrl: 'http://localhost:3000',
+app.use(IdenplanePlugin, {
+  url: 'http://localhost:3000',
   realm: 'my-realm',
   clientId: 'my-app',
   redirectUri: 'http://localhost:5173/callback',
-}));
+});
 
 // Component — useAuth(), useUser(), usePermissions() composables
 ```
@@ -320,21 +334,21 @@ npm install -g idenplane-cli
 
 ```bash
 # Configure connection
-idenplane config set --server http://localhost:3000 --api-key YOUR_KEY
+idenplane login --server http://localhost:3000 --api-key YOUR_KEY
 
 # Manage realms
-idenplane realms list
-idenplane realms create my-realm
+idenplane realm list
+idenplane realm create my-realm
 
 # Manage users
-idenplane users list --realm my-realm
-idenplane users create --realm my-realm --username john --email john@example.com
+idenplane user list --realm my-realm
+idenplane user create john --realm my-realm --email john@example.com
 
 # Bulk import from CSV
-idenplane users import --realm my-realm --file users.csv
+idenplane user bulk-import --realm my-realm --file users.csv
 
 # Manage clients
-idenplane clients list --realm my-realm
+idenplane client list --realm my-realm
 ```
 
 See the full CLI documentation at [`packages/idenplane-cli/`](packages/idenplane-cli/).
@@ -426,9 +440,9 @@ sequenceDiagram
 
 | Layer | Technology |
 |-------|-----------|
-| **Backend** | NestJS 11, TypeScript 5.7, Node.js 22 |
+| **Backend** | NestJS 12, TypeScript 6, Node.js 24 |
 | **Database** | PostgreSQL 16+ via Prisma 7 ORM |
-| **Admin UI** | React 19, Vite 7, Tailwind CSS 4, React Query |
+| **Admin UI** | React 19, Vite 8, Tailwind CSS 4, React Query |
 | **Auth Pages** | Handlebars SSR with per-realm theming and i18n |
 | **Security** | Argon2id (passwords), JOSE (JWTs), Helmet (headers), AES-256-GCM (webhooks) |
 | **Protocols** | OAuth 2.0, OpenID Connect, SAML 2.0, WebAuthn/FIDO2 |
@@ -436,7 +450,7 @@ sequenceDiagram
 | **Caching** | Redis (optional) with Sentinel HA support |
 | **Observability** | Pino (logs), prom-client (metrics), @nestjs/terminus (health) |
 | **Container** | Docker multi-stage build, Docker Compose (single, dev, cluster) |
-| **SDKs** | TypeScript, React, Next.js, Angular, Vue, Android (Kotlin), iOS (Swift) |
+| **SDKs** | TypeScript, React, Next.js, Angular, Vue, Android (Kotlin), iOS (Swift), Java, Python, Go |
 | **CLI** | idenplane-cli (Node.js, Commander.js) |
 
 ---
@@ -449,7 +463,7 @@ sequenceDiagram
 | PKCE (RFC 7636) | S256 method |
 | OpenID Connect Core 1.0 | ID tokens, UserInfo, Discovery, Backchannel Logout |
 | Device Authorization (RFC 8628) | Full device code flow with user verification |
-| SAML 2.0 | SP-initiated SSO, signed assertions, metadata exchange |
+| SAML 2.0 | Identity Provider only: SP-initiated SSO, signed assertions, metadata exchange |
 | WebAuthn / FIDO2 | Credential registration, platform & roaming authenticators |
 | TOTP (RFC 6238) | MFA with QR provisioning and recovery codes |
 | Argon2id (RFC 9106) | Password hashing |
@@ -465,22 +479,22 @@ sequenceDiagram
 |----------|---------|-------------|
 | `DATABASE_URL` | *(required)* | PostgreSQL connection string |
 | `PORT` | `3000` | Server port |
-| `NODE_ENV` | `development` | Environment mode |
+| `NODE_ENV` | *(unset: non-production)* | Environment mode. The Docker image sets `production` |
 | `BASE_URL` | `http://localhost:3000` | Public URL for redirects and emails |
-| `ADMIN_API_KEY` | *(required in production)* | API key for admin endpoints (32+ chars) |
+| `ADMIN_API_KEY` | *(required in production)* | API key for admin endpoints. In production it must be at least 32 characters and not a placeholder, or startup fails. The Docker image refuses to start without it; from source, an unset key disables API-key auth |
 | `ADMIN_USER` | `admin` | Initial admin username |
 | `ADMIN_PASSWORD` | *(none; generated outside production)* | Initial admin password. Never defaults to `admin`: unset outside production, a random one is printed once in the first start's log; `admin` and placeholders are refused |
-| `WEBHOOK_SECRET_KEY` | *(required)* | 32-byte AES-256-GCM key (`openssl rand -hex 32`) |
-| `WEBHOOK_ENCRYPTION_SALT` | *(required)* | 16-byte salt (`openssl rand -hex 16`) |
+| `WEBHOOK_SECRET_KEY` | *(required in production)* | 32-byte AES-256-GCM key (`openssl rand -hex 32`) |
+| `WEBHOOK_ENCRYPTION_SALT` | *(required in production)* | 16-byte salt (`openssl rand -hex 16`) |
 | `REDIS_URL` | *(optional)* | Redis connection string for cache and session store |
 | `REDIS_SENTINEL_HOSTS` | *(optional)* | Comma-separated Sentinel nodes for HA |
-| `REDIS_SENTINEL_NAME` | *(optional)* | Sentinel master name |
+| `REDIS_SENTINEL_NAME` | `mymaster` | Sentinel master name |
 | `SESSION_STORE` | `database` | Session backend: `database` or `redis` |
 | `THROTTLE_TTL` | `60000` | Rate limit window (ms) |
 | `THROTTLE_LIMIT` | `100` | Max requests per window |
 | `TRUSTED_PROXIES` | *(optional)* | Comma-separated IPs/CIDR for X-Forwarded-For trust |
 
-SMTP settings are configured per-realm in the Admin Console (Realm > Email tab).
+These are the main variables. The full list is in [Environment Variables](docs/docs/configuration/environment-variables.md). SMTP settings are configured per realm in the Admin Console (Realm > Email tab).
 
 ---
 
@@ -509,7 +523,7 @@ GET  /realms/{realm}/protocol/openid-connect/certs
 # SAML Metadata
 GET  /realms/{realm}/protocol/saml/descriptor
 
-# Admin API v1 (requires x-admin-api-key or Bearer token)
+# Admin API (requires x-admin-api-key or an admin Bearer token)
 GET/POST       /admin/realms
 GET/PUT/DELETE /admin/realms/{name}
 GET/POST       /admin/realms/{name}/users
@@ -524,7 +538,7 @@ GET/POST       /admin/realms/{name}/webhooks
 # Health & Metrics
 GET  /health/live
 GET  /health/ready
-GET  /admin/metrics    # Requires x-admin-api-key header
+GET  /admin/metrics    # Requires admin credentials (x-admin-api-key or admin Bearer token)
 ```
 
 ---
@@ -533,10 +547,10 @@ GET  /admin/metrics    # Requires x-admin-api-key header
 
 ```
 Idenplane/
-├── src/                           # NestJS backend (71 modules)
+├── src/                           # NestJS backend (about 70 modules)
 │   ├── auth/                      # Core OAuth 2.0 authentication
 │   ├── oauth/                     # OAuth 2.0 protocol logic
-│   ├── nhi/                       # National Health Index integration
+│   ├── nhi/                       # Non-human identities (workload certificates)
 │   ├── saml/                      # SAML 2.0 IdP
 │   ├── tokens/                    # JWT issuance, validation & revocation
 │   ├── mfa/                       # TOTP multi-factor auth
@@ -560,7 +574,7 @@ Idenplane/
 │   ├── setup-wizard/              # First-time setup wizard
 │   ├── service-accounts/          # Service accounts & API keys
 │   ├── custom-attributes/         # Custom user attributes
-│   ├── broker/                    # External IdP brokering
+│   ├── broker/                    # External OIDC/OAuth 2.0 IdP brokering
 │   ├── user-federation/           # LDAP sync
 │   ├── identity-providers/        # Social login config
 │   ├── impersonation/             # Admin impersonation
@@ -582,8 +596,8 @@ Idenplane/
 │   ├── well-known/                # OIDC discovery
 │   ├── account/                   # User self-service portal
 │   ├── admin-auth/                # Admin API authentication
-│   ├── versioning/                # API versioning (v1)
-│   ├── migration/                 # Auth0 & Keycloak importers
+│   ├── versioning/                # Deprecation and Sunset headers
+│   ├── migration/                 # Keycloak, Auth0, Zitadel & Authentik importers
 │   ├── rate-limit/                # Request throttling
 │   ├── registration/              # User registration flow
 │   ├── cors/                      # CORS origin management
@@ -600,15 +614,21 @@ Idenplane/
 │   ├── idenplane-angular/            # Angular SDK
 │   ├── idenplane-vue/                # Vue 3 SDK
 │   ├── idenplane-cli/                # CLI tool
+│   ├── idenplane-mcp/                # MCP server
 │   ├── idenplane-android/            # Android SDK (Kotlin)
-│   └── idenplane-ios/                # iOS SDK (Swift)
+│   ├── idenplane-ios/                # iOS SDK (Swift)
+│   ├── idenplane-java/               # Java SDK
+│   ├── idenplane-python/             # Python SDK
+│   └── idenplane-go/                 # Go SDK
 ├── themes/                        # Login/account page themes
 │   ├── idenplane/                    # Default theme
 │   └── midnight/                  # Dark theme
 ├── prisma/                        # Database schema & migrations
 ├── test/                          # E2E tests
-├── docker-compose.yml             # Production (pulls from Docker Hub)
-├── docker-compose.dev.yml         # Development (builds from source)
+├── docker-compose.yml             # Local quick start (pulls from Docker Hub, localhost only)
+├── docker-compose.dev.yml         # Builds the image from your checkout
+├── docker-compose.production.yml  # Production with Traefik TLS and Redis
+├── docker-compose.nginx.yml       # Production with nginx-proxy TLS and Redis
 ├── docker-compose.cluster.yml     # Multi-instance with Nginx LB
 └── Dockerfile                     # Multi-stage production build
 ```
@@ -665,9 +685,6 @@ Idenplane is fully stateless — all state is stored in PostgreSQL (and optional
 ```bash
 # Using the cluster compose file (2 instances + Nginx LB)
 docker compose -f docker-compose.cluster.yml up -d
-
-# Or scale manually
-docker compose up -d --scale app=3
 ```
 
 For production clusters, enable Redis for shared session storage:
@@ -696,13 +713,12 @@ REDIS_URL=redis://your-redis:6379
 | Organizations (B2B) | Yes | Yes | Yes | Yes |
 | Webhooks | Yes | Yes | Yes | Yes |
 | Admin Console | Yes | Yes | Yes | Yes |
-| Client SDKs | 10 platforms | Java-centric | Yes | Yes |
+| Client SDKs | 9 SDKs | Java-centric | Yes | Yes |
 | CLI Tool | Yes | Yes | No | Yes |
-| Custom Auth Flows | Yes | Yes | No | No |
+| Custom Auth Flows | Experimental | Yes | No | No |
 | Plugin System | Yes | Yes | No | No |
 | Realm Theming | Yes | Yes | No | Yes |
 | Database | PostgreSQL | PostgreSQL, MySQL, MariaDB, Oracle, SQL Server | Managed | Managed |
-| API Versioning | Yes | Yes | Yes | Yes |
 
 ---
 

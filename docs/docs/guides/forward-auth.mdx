@@ -80,6 +80,8 @@ curl -X POST https://auth.example.com/admin/realms/master/proxy-applications \
   }'
 ```
 
+`allowedRedirectUris` is where the browser may be sent back after signing in, and an entry ending in `/*` allows any page below it. These are not OAuth redirect URIs, which match exactly since 0.11.0: no code or token is ever sent to them. The OAuth redirect URI of the proxy is the fixed `callbackUrl` below.
+
 The response tells you the one thing you still have to do:
 
 ```json

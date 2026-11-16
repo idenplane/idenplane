@@ -1,5 +1,5 @@
 import { Suspense, useState, useEffect, useRef } from 'react';
-import { NavLink, Outlet, useParams, useNavigate, useLocation } from 'react-router';
+import { Link, NavLink, Outlet, useParams, useNavigate, useLocation } from 'react-router';
 import { useQuery } from '@tanstack/react-query';
 import { getAllRealms } from '../api/realms';
 import { useAuth } from '../hooks/useAuth';
@@ -273,6 +273,15 @@ export default function Layout() {
               {permissions.username ?? 'API key'}
               <Badge variant="neutral" size="sm" className="ml-2">{roleLabel(permissions)}</Badge>
             </span>
+          )}
+          {permissions.known && !permissions.isApiKey && (
+            <Link
+              to="/console/mfa"
+              className="hidden h-9 items-center gap-2 rounded-lg px-2.5 text-[13px] font-medium text-muted transition-colors hover:bg-hover hover:text-fg sm:inline-flex"
+            >
+              <Icons.ShieldCheck className="h-4 w-4" />
+              Two-factor
+            </Link>
           )}
           <button
             onClick={logout}

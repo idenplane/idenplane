@@ -19,7 +19,7 @@ import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
 import { PrismaService } from '../prisma/prisma.service.js';
-import { CryptoService } from '../crypto/crypto.service.js';
+import { PasswordVerificationService } from '../crypto/password-verification.service.js';
 import { BruteForceService } from '../brute-force/brute-force.service.js';
 import { ThemeRenderService } from '../theme/theme-render.service.js';
 import { CsrfService } from '../common/csrf/csrf.service.js';
@@ -40,12 +40,12 @@ export class DeviceController {
   constructor(
     private readonly deviceService: DeviceService,
     private readonly prisma: PrismaService,
-    private readonly crypto: CryptoService,
     private readonly bruteForce: BruteForceService,
     private readonly themeRender: ThemeRenderService,
     private readonly csrfService: CsrfService,
     private readonly clientAuthenticator: ClientAuthenticator,
     private readonly clientCertificates: ClientCertificateSource,
+    private readonly passwords: PasswordVerificationService,
   ) {}
 
   // ─── CSRF HELPERS ──────────────────────────────────────
@@ -250,8 +250,10 @@ export class DeviceController {
         );
       }
 
-      const valid = await this.crypto.verifyPassword(
-        user.passwordHash,
+      // Same check as the login page: migrated hashes work, and are moved
+      // to Argon2id on success.
+      const valid = await this.passwords.verifyUserPassword(
+        user,
         body.password,
       );
       if (!valid) {

@@ -7,6 +7,7 @@ import {
 import type { Realm } from '@prisma/client';
 
 describe('UsersService', () => {
+  let sessionsService: { revokeAllUserSessions: jest.Mock };
   let service: UsersService;
   let prisma: MockPrismaService;
   let cryptoService: {
@@ -75,6 +76,7 @@ describe('UsersService', () => {
     const bruteForceService = {
       resetFailures: jest.fn().mockResolvedValue(undefined),
     };
+    sessionsService = { revokeAllUserSessions: jest.fn() };
     service = new UsersService(
       prisma as any,
       cryptoService as any,
@@ -84,6 +86,8 @@ describe('UsersService', () => {
       passwordPolicyService as any,
       themeEmailService as any,
       bruteForceService as any,
+      {} as any,
+      sessionsService as any,
     );
   });
 
@@ -208,6 +212,22 @@ describe('UsersService', () => {
   });
 
   describe('update', () => {
+    it('ends every session when the user is disabled, and only then', async () => {
+      prisma.user.findFirst.mockResolvedValue({ ...mockUser, enabled: true });
+      prisma.user.update.mockResolvedValue({ ...mockUser, enabled: false });
+      await service.update(mockRealm, 'user-1', { enabled: false });
+      expect(sessionsService.revokeAllUserSessions).toHaveBeenCalledWith(
+        mockRealm,
+        'user-1',
+      );
+
+      sessionsService.revokeAllUserSessions.mockClear();
+      prisma.user.findFirst.mockResolvedValue({ ...mockUser, enabled: true });
+      await service.update(mockRealm, 'user-1', { firstName: 'X' });
+      await service.update(mockRealm, 'user-1', { enabled: true });
+      expect(sessionsService.revokeAllUserSessions).not.toHaveBeenCalled();
+    });
+
     it('should update and return the user', async () => {
       prisma.user.findFirst.mockResolvedValue(mockUser);
       const updatedUser = { ...mockUser, firstName: 'Updated' };

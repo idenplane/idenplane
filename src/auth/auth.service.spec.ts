@@ -244,6 +244,14 @@ describe('AuthService', () => {
         { enabled: false },
         { retryAfter: async () => null, recordFailure: async () => {} } as any,
       ),
+      // PasswordVerificationService has its own spec; the user password
+      // check defers to the same crypto mock.
+      {
+        verifyUserPassword: (
+          user: { passwordHash: string },
+          password: string,
+        ) => crypto.verifyPassword(user.passwordHash, password),
+      } as any,
     );
   });
 
@@ -1078,6 +1086,105 @@ describe('AuthService', () => {
       expect(prisma.refreshToken.create).not.toHaveBeenCalled();
     });
 
+    it('refuses a refresh once the session has expired, before the clean-up runs', async () => {
+      setupValidClient();
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        ...storedRefreshToken,
+        session: {
+          ...storedRefreshToken.session,
+          expiresAt: new Date(Date.now() - 1000),
+        },
+      });
+
+      await expectOAuthError(
+        service.handleTokenRequest(realm, {
+          grant_type: 'refresh_token',
+          refresh_token: 'orig-opaque-rt',
+          client_id: 'my-client',
+          client_secret: 'correct-secret',
+        }),
+        'invalid_grant',
+        400,
+      );
+      expect(prisma.refreshToken.create).not.toHaveBeenCalled();
+    });
+
+    it('issues a rotated offline token for the offline lifespan, capped at the session expiry', async () => {
+      scopesService.parseAndValidate.mockImplementation((scope?: string) =>
+        (scope ?? 'openid').split(' ').filter(Boolean),
+      );
+      setupValidClient();
+      setupSigningKey();
+      setupEmptyRoles();
+      setupRefreshTokenCreate();
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 1 });
+
+      // An offline session with two days left: the new token gets two days,
+      // not the realm's full offline lifespan.
+      const sessionExpiry = new Date(Date.now() + 2 * 86400 * 1000);
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        ...storedRefreshToken,
+        scope: 'openid offline_access',
+        isOffline: true,
+        session: { ...storedRefreshToken.session, expiresAt: sessionExpiry },
+      });
+
+      const result = await service.handleTokenRequest(
+        { ...realm, offlineTokenLifespan: 30 * 86400 },
+        {
+          grant_type: 'refresh_token',
+          refresh_token: 'orig-opaque-rt',
+          client_id: 'my-client',
+          client_secret: 'correct-secret',
+        },
+      );
+
+      expect(result.scope?.split(' ')).toContain('offline_access');
+      const created = prisma.refreshToken.create.mock.calls[0][0] as {
+        data: { isOffline: boolean; expiresAt: Date };
+      };
+      expect(created.data.isOffline).toBe(true);
+      expect(created.data.expiresAt.getTime()).toBe(sessionExpiry.getTime());
+    });
+
+    it('issues a rotated offline token for the offline lifespan when the session outlives it', async () => {
+      scopesService.parseAndValidate.mockImplementation((scope?: string) =>
+        (scope ?? 'openid').split(' ').filter(Boolean),
+      );
+      setupValidClient();
+      setupSigningKey();
+      setupEmptyRoles();
+      setupRefreshTokenCreate();
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 1 });
+
+      prisma.refreshToken.findUnique.mockResolvedValue({
+        ...storedRefreshToken,
+        scope: 'openid offline_access',
+        isOffline: true,
+        session: {
+          ...storedRefreshToken.session,
+          expiresAt: new Date(Date.now() + 30 * 86400 * 1000),
+        },
+      });
+
+      const before = Date.now();
+      await service.handleTokenRequest(
+        { ...realm, offlineTokenLifespan: 86400 },
+        {
+          grant_type: 'refresh_token',
+          refresh_token: 'orig-opaque-rt',
+          client_id: 'my-client',
+          client_secret: 'correct-secret',
+        },
+      );
+      const created = prisma.refreshToken.create.mock.calls[0][0] as {
+        data: { expiresAt: Date };
+      };
+      const lifespan = created.data.expiresAt.getTime() - before;
+      expect(lifespan).toBeGreaterThanOrEqual(86400 * 1000);
+      expect(lifespan).toBeLessThan(86400 * 1000 + 5000);
+    });
+
     it('refuses a refresh for a disabled user', async () => {
       setupValidClient();
       prisma.refreshToken.findUnique.mockResolvedValue({
@@ -1327,6 +1434,68 @@ describe('AuthService', () => {
         400,
       );
       expect(prisma.session.create).not.toHaveBeenCalled();
+    });
+
+    it('gives a session granted offline_access the offline lifespan, and a normal one the normal lifespan', async () => {
+      scopesService.parseAndValidate.mockImplementation((scope?: string) =>
+        (scope ?? 'openid').split(' ').filter(Boolean),
+      );
+      const offlineRealm = {
+        ...realm,
+        refreshTokenLifespan: 1800,
+        offlineTokenLifespan: 30 * 86400,
+      };
+      const lifespanOf = () => {
+        const { data } = prisma.session.create.mock.calls.at(-1)![0] as {
+          data: {
+            createdAt: Date;
+            expiresAt: Date;
+            refreshTokens: { create: { isOffline: boolean; expiresAt: Date } };
+          };
+        };
+        return {
+          session: (data.expiresAt.getTime() - data.createdAt.getTime()) / 1000,
+          token:
+            (data.refreshTokens.create.expiresAt.getTime() -
+              data.createdAt.getTime()) /
+            1000,
+          offline: data.refreshTokens.create.isOffline,
+        };
+      };
+      const exchange = () =>
+        service.handleTokenRequest(offlineRealm, {
+          grant_type: 'authorization_code',
+          code: 'valid-auth-code',
+          client_id: 'my-client',
+          client_secret: 'correct-secret',
+          redirect_uri: 'https://app.example.com/callback',
+        });
+
+      setupForTokenIssuance();
+      prisma.user.findUnique.mockResolvedValue(dbUser);
+      prisma.clientDefaultScope.count.mockResolvedValue(1);
+      prisma.clientOptionalScope.count.mockResolvedValue(0);
+      prisma.authorizationCode.update.mockResolvedValue({
+        ...authCode,
+        scope: 'openid offline_access',
+        used: true,
+      });
+      await exchange();
+      const offline = lifespanOf();
+      expect(offline.offline).toBe(true);
+      expect(offline.session).toBe(30 * 86400);
+      // The token is issued a moment after the session starts, and capped.
+      expect(offline.token).toBeLessThanOrEqual(30 * 86400);
+      expect(offline.token).toBeGreaterThan(30 * 86400 - 5);
+
+      prisma.authorizationCode.update.mockResolvedValue({
+        ...authCode,
+        used: true,
+      });
+      await exchange();
+      const normal = lifespanOf();
+      expect(normal.offline).toBe(false);
+      expect(normal.session).toBe(1800);
     });
 
     it('should return tokens for a valid authorization code', async () => {

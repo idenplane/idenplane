@@ -380,6 +380,11 @@ model Client {
   webOrigins             String[] @map("web_origins")
   grantTypes             String[] @default(["authorization_code"]) @map("grant_types")
   postLogoutRedirectUris String[] @default([]) @map("post_logout_redirect_uris")
+  /// INSECURE, for migration only. Since 0.11.0 redirect URIs match exactly
+  /// (RFC 9700). When true, a registered entry ending in `/*` still matches
+  /// any path below it, as before 0.11.0. Set by the 0.11.0 migration on
+  /// clients that already had such an entry; see src/common/redirect-uri.utils.ts.
+  allowInsecureWildcardRedirectUris Boolean @default(false) @map("allow_insecure_wildcard_redirect_uris")
 
   // Backchannel logout
   backchannelLogoutUri             String? @map("backchannel_logout_uri")
@@ -952,7 +957,10 @@ model IdentityProvider {
   linkOnly        Boolean @default(false) @map("link_only")
   syncUserProfile Boolean @default(true) @map("sync_user_profile")
 
-  // SAML broker config (for providerType="saml")
+  // Unused for sign-in: no code acts on it. Idenplane cannot broker a SAML
+  // identity provider (the broker is OIDC/OAuth 2.0 only); it is a SAML IdP
+  // for service providers (see SamlServiceProvider). Kept so existing data and
+  // realm exports stay valid.
   samlConfig Json? @map("saml_config")
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -1007,10 +1015,30 @@ model SamlServiceProvider {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  realm Realm @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  realm      Realm           @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  requestIds SamlRequestId[]
 
   @@unique([realmId, entityId])
   @@map("saml_service_providers")
+}
+
+/// The ID of every AuthnRequest a service provider sent and the IdP accepted,
+/// kept until the request could no longer pass the IssueInstant check. The
+/// unique (SP, request ID) index is the replay check: the insert is the claim,
+/// so the same request cannot be accepted twice by any process.
+model SamlRequestId {
+  id        String   @id @default(uuid())
+  spId      String   @map("sp_id")
+  requestId String   @map("request_id")
+  expiresAt DateTime @map("expires_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  sp SamlServiceProvider @relation(fields: [spId], references: [id], onDelete: Cascade)
+
+  @@unique([spId, requestId])
+  @@index([expiresAt])
+  @@map("saml_request_ids")
 }
 
 // ─── CLIENT SCOPES & PROTOCOL MAPPERS ──────────────────
@@ -1926,6 +1954,21 @@ model AdminRevokedToken {
 
   @@index([expiresAt])
   @@map("admin_revoked_tokens")
+}
+
+/// Server-wide admin security settings: one row (id 1) at most. No row
+/// means every setting is off, which is what an upgraded install starts
+/// with; the first-boot seed of a new install writes the row.
+/// ADMIN_MFA_REQUIRED (true/false) overrides `mfaRequired`.
+model AdminSecurityPolicy {
+  id          Int      @id @default(1)
+  /// Every admin must have a second factor (TOTP or passkey) for the console.
+  mfaRequired Boolean  @default(false) @map("mfa_required")
+  /// Who changed it last (an admin user id, `api-key:admin` or `seed`).
+  updatedBy   String?  @map("updated_by")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("admin_security_policy")
 }
 
 /// The realms a `realm-admin` (a user of the master realm) may manage.

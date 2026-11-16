@@ -1,6 +1,6 @@
 {
   "name": "idenplane-angular",
-  "version": "1.0.2",
+  "version": "2.0.0",
   "description": "Angular SDK for Idenplane Identity and Access Management Server",
   "type": "module",
   "main": "./dist/index.js",
@@ -29,6 +29,7 @@
   },
   "devDependencies": {
     "@angular/common": "^22.0.1",
+    "@angular/compiler": "^22.2.4",
     "@angular/core": "^22.0.1",
     "@angular/router": "^22.0.1",
     "idenplane-sdk": "file:../idenplane-js",

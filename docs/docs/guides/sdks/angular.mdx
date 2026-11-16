@@ -34,6 +34,8 @@ import { IdenplaneModule } from 'idenplane-angular';
       realm: 'my-realm',
       clientId: 'my-app',
       redirectUri: 'http://localhost:4200/callback',
+      // Your APIs that should receive the access token (exact origins).
+      bearerTokenOrigins: ['http://localhost:8080'],
     }),
   ],
   bootstrap: [AppComponent],
@@ -94,18 +96,28 @@ export const routes: Routes = [
 
 ### 4. Automatically Attach Bearer Tokens (HTTP Interceptor)
 
-The HTTP interceptor is registered automatically when you use `IdenplaneModule.forRoot()`.
+The HTTP interceptor is registered automatically when you use `IdenplaneModule.forRoot()`. It attaches the access token **only** to the Idenplane server and to the origins in `bearerTokenOrigins`; see [HTTP Interceptor](#http-interceptor).
 
-For standalone / functional interceptor style (Angular 15+):
+For standalone / functional interceptor style (Angular 15+), provide the configuration with `IDENPLANE_CONFIG`:
 
 ```typescript
 // app.config.ts
 import { ApplicationConfig } from '@angular/core';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
-import { authInterceptor } from 'idenplane-angular';
+import { authInterceptor, IDENPLANE_CONFIG } from 'idenplane-angular';
 
 export const appConfig: ApplicationConfig = {
   providers: [
+    {
+      provide: IDENPLANE_CONFIG,
+      useValue: {
+        url: 'http://localhost:3000',
+        realm: 'my-realm',
+        clientId: 'my-app',
+        redirectUri: 'http://localhost:4200/callback',
+        bearerTokenOrigins: ['http://localhost:8080'],
+      },
+    },
     provideHttpClient(withInterceptors([authInterceptor])),
   ],
 };
@@ -125,10 +137,11 @@ The `IdenplaneModule.forRoot()` method registers all providers including `AuthSe
 | `realm` | `string` | Yes | Realm name |
 | `clientId` | `string` | Yes | OAuth2 client ID |
 | `redirectUri` | `string` | Yes | Redirect URI after login |
-| `scope` | `string[]` | No | OAuth2 scopes (default: `['openid', 'profile', 'email']`) |
-| `storage` | `string` | No | Storage type: `'sessionStorage'` \| `'localStorage'` \| `'memory'` (default: `'sessionStorage'`) |
+| `scopes` | `string[]` | No | OAuth2 scopes (default: `['openid', 'profile', 'email']`) |
+| `storage` | `string` | No | Storage type: `'sessionStorage'` \| `'localStorage'` \| `'memory'` (default: `'memory'`) |
 | `autoRefresh` | `boolean` | No | Enable automatic token refresh (default: `true`) |
 | `refreshBuffer` | `number` | No | Seconds before expiry to trigger refresh (default: `30`) |
+| `bearerTokenOrigins` | `string[]` | No | Origins, besides the Idenplane server, that the HTTP interceptor sends the access token to (default: none). Exact origins only: scheme, host and port. Since 2.0.0. |
 
 ### Module Configuration Example
 
@@ -144,8 +157,9 @@ import { IdenplaneModule } from 'idenplane-angular';
       realm: 'my-realm',
       clientId: 'my-app',
       redirectUri: 'http://localhost:4200/callback',
-      scope: ['openid', 'profile', 'email', 'custom:scope'],
+      scopes: ['openid', 'profile', 'email', 'custom:scope'],
       storage: 'sessionStorage',
+      bearerTokenOrigins: ['https://api.example.com'],
       autoRefresh: true,
       refreshBuffer: 30,
     }),
@@ -340,31 +354,74 @@ export const routes: Routes = [
 
 ## HTTP Interceptor
 
-The HTTP interceptor automatically attaches `Authorization: Bearer <token>` headers to outgoing requests.
+The HTTP interceptor attaches `Authorization: Bearer <access token>` to requests for **trusted origins only**:
+
+- the Idenplane server (the origin of `url`), and
+- the origins listed in `bearerTokenOrigins`.
+
+Every other request goes out without the token, and a `401` from an untrusted origin does not trigger a token refresh. For a trusted origin, a `401` triggers one token refresh and one retry.
+
+Origins are matched exactly, by scheme, host and port, never by prefix:
+
+| Request URL | `bearerTokenOrigins: ['https://api.example.com']` |
+|---|---|
+| `https://api.example.com/v1/orders` | token sent |
+| `https://api.example.com:443/v1/orders` | token sent (default port) |
+| `http://api.example.com/v1/orders` | not sent (different scheme) |
+| `https://api.example.com:8443/v1/orders` | not sent (different port) |
+| `https://sub.api.example.com/v1/orders` | not sent (different host) |
+| `https://api.example.com.evil.com/` | not sent (look-alike host) |
+| `/api/orders` (relative) | sent only if the app's own origin is listed |
+
+Each entry must be a bare origin, like `https://api.example.com`: no path, query, credentials or `*` wildcard. An invalid entry throws when `AuthService` is created, so a typo fails at startup.
+
+### Calling your own API
+
+Relative URLs such as `/api/orders` resolve to the origin the app is served from. To send the token to a same-origin API, list the app's own origin; for a separate API, list its origin. Write the origins out (or take them from your environment config) rather than reading `window.location`, which does not exist during server-side rendering:
+
+```typescript
+IdenplaneModule.forRoot({
+  url: 'https://auth.example.com',
+  realm: 'my-realm',
+  clientId: 'my-app',
+  redirectUri: 'https://app.example.com/callback',
+  bearerTokenOrigins: [
+    'https://api.example.com', // a separate API
+    'https://app.example.com', // the app's own origin, for same-origin /api/... calls
+  ],
+});
+```
+
+:::warning Upgrading from idenplane-angular 1.x
+Before 2.0.0 the interceptor sent the access token to **every** URL the app requested, third-party hosts included. From 2.0.0 it sends it only to the Idenplane server unless you list more origins. If your app calls its own API on any other origin, add that origin to `bearerTokenOrigins`, or those requests go out without a token and get `401`.
+:::
 
 ### Class-based Interceptor (NgModule style)
 
-The interceptor is registered automatically with `IdenplaneModule.forRoot()`.
+The interceptor is registered automatically with `IdenplaneModule.forRoot()`; do not register it a second time.
 
-For manual registration:
+If you provide `AuthService` and `IDENPLANE_CONFIG` yourself instead of using `forRoot()`, register it manually:
 
 ```typescript
 // app.module.ts
 import { NgModule } from '@angular/core';
-import { IdenplaneModule, AuthInterceptor } from 'idenplane-angular';
+import { AuthInterceptor, AuthService, IDENPLANE_CONFIG } from 'idenplane-angular';
 import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
 
 @NgModule({
-  imports: [
-    HttpClientModule,
-    IdenplaneModule.forRoot({
-      url: 'http://localhost:3000',
-      realm: 'my-realm',
-      clientId: 'my-app',
-      redirectUri: 'http://localhost:4200/callback',
-    }),
-  ],
+  imports: [HttpClientModule],
   providers: [
+    {
+      provide: IDENPLANE_CONFIG,
+      useValue: {
+        url: 'http://localhost:3000',
+        realm: 'my-realm',
+        clientId: 'my-app',
+        redirectUri: 'http://localhost:4200/callback',
+        bearerTokenOrigins: ['http://localhost:8080'],
+      },
+    },
+    AuthService,
     {
       provide: HTTP_INTERCEPTORS,
       useClass: AuthInterceptor,
@@ -377,18 +434,11 @@ export class AppModule {}
 
 ### Functional Interceptor (Standalone style)
 
-```typescript
-// app.config.ts
-import { ApplicationConfig } from '@angular/core';
-import { provideHttpClient, withInterceptors } from '@angular/common/http';
-import { authInterceptor } from 'idenplane-angular';
+Same origin rules; provide the configuration with `IDENPLANE_CONFIG` as shown in the [Quick Start](#4-automatically-attach-bearer-tokens-http-interceptor).
 
-export const appConfig: ApplicationConfig = {
-  providers: [
-    provideHttpClient(withInterceptors([authInterceptor])),
-  ],
-};
-```
+### Custom clients
+
+`shouldAttachToken(url, origins)`, `resolveBearerTokenOrigins(config)` and `normalizeOrigin(origin)` are exported, so a `fetch` wrapper or WebSocket client can apply the same rule. `AuthService.bearerTokenOrigins` holds the resolved set.
 
 ### Example: Making Authenticated Requests
 
@@ -420,7 +470,8 @@ export class DataFetchComponent implements OnInit {
   ) {}
 
   ngOnInit(): void {
-    // Token is automatically attached by the interceptor
+    // The interceptor attaches the token because the app's own origin
+    // is listed in bearerTokenOrigins (see "Calling your own API").
     this.http.get('/api/protected-data')
       .pipe(
         catchError((err) => {

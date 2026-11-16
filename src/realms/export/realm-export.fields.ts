@@ -244,6 +244,7 @@ export const EXPORT_MODELS = {
       webOrigins: 'String[]',
       grantTypes: 'String[] @default',
       postLogoutRedirectUris: 'String[] @default',
+      allowInsecureWildcardRedirectUris: 'Boolean @default',
       backchannelLogoutUri: 'String?',
       backchannelLogoutSessionRequired: 'Boolean @default',
       requiredAcr: 'String?',
@@ -880,6 +881,8 @@ export const EXCLUDED_MODELS: Record<string, string> = {
   AdminRevokedToken: 'admin token deny-list; ' + RUNTIME,
   AdminRealmAssignment:
     'which master realm admins manage the realm: instance access control, not realm data',
+  AdminSecurityPolicy:
+    'server-wide admin console MFA requirement: instance security policy, not realm data',
   PendingAction: 'in-flight login/MFA/consent state; ' + RUNTIME,
   StepUpRecord: 'step-up session state; ' + RUNTIME,
 
@@ -905,6 +908,7 @@ export const EXCLUDED_MODELS: Record<string, string> = {
   VerificationToken: RUNTIME,
   MagicLinkRequest: RUNTIME,
   UsedTotpCode: RUNTIME,
+  SamlRequestId: 'SAML replay check; ' + RUNTIME,
   DeviceCode: RUNTIME,
   OtpAttempt: RUNTIME,
   ImpersonationSession: RUNTIME,

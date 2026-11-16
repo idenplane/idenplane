@@ -140,7 +140,11 @@ export class BrokerService {
     if (!client || !client.enabled) {
       throw new BadRequestException('Invalid client_id');
     }
-    if (!matchesRedirectUri(params.redirect_uri, client.redirectUris)) {
+    if (
+      !matchesRedirectUri(params.redirect_uri, client.redirectUris, {
+        allowWildcard: client.allowInsecureWildcardRedirectUris,
+      })
+    ) {
       throw new BadRequestException('Invalid redirect_uri');
     }
 

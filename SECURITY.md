@@ -28,7 +28,7 @@ Only the latest release receives security fixes. Fixes ship as a new release; th
 
 | Version | Supported |
 |---------|-----------|
-| Latest release (currently 0.9.1) | ✅ |
+| The latest release (see the [releases page](https://github.com/idenplane/idenplane/releases/latest)) | ✅ |
 | Any earlier release | ❌ Upgrade to the latest release |
 
 The full policy, including SDKs and deprecations, is in [Versioning and Support](docs/docs/project/versioning-and-support.md).

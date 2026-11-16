@@ -1,6 +1,12 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { prismaMigrateStatus } from './migrate-status.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { policyProblems } from '../authorization/policy-engine.js';
+import { adminMfaRequiredFromEnv } from '../admin-rbac/admin-principal.service.js';
+import {
+  ADMIN_ROLES,
+  MASTER_REALM,
+} from '../admin-rbac/admin-access-policy.js';
 
 export interface UpgradeHealthCheck {
   name: string;
@@ -127,6 +133,31 @@ export class UpgradeHealthService {
     if (bruteForceCheck.status === 'pass') passed++;
     else warnings++;
 
+    // 9. Security posture: clients with wildcard redirect URIs. Also only
+    // ever a warning.
+    const wildcardCheck = await this.checkWildcardRedirectUris();
+    checks.push(wildcardCheck);
+    if (wildcardCheck.status === 'pass') passed++;
+    else warnings++;
+
+    // 10. Admin console MFA: off after an upgrade until turned on, and
+    // recovery codes still in the pre-0.11.0 format. Warnings only.
+    for (const check of [
+      await this.checkAdminMfa(),
+      await this.checkRecoveryCodes(),
+    ]) {
+      checks.push(check);
+      if (check.status === 'pass') passed++;
+      else warnings++;
+    }
+
+    // 11. Authorization policies the engine cannot evaluate. Also only ever
+    // a warning.
+    const policyCheck = await this.checkInvalidPolicies();
+    checks.push(policyCheck);
+    if (policyCheck.status === 'pass') passed++;
+    else warnings++;
+
     const healthy = failures === 0;
 
     this.logger.log(
@@ -173,6 +204,228 @@ export class UpgradeHealthService {
         name: 'brute_force_protection',
         status: 'warn',
         message: 'Could not check brute-force protection',
+        details: (error as Error).message,
+      };
+    }
+  }
+
+  /**
+   * Warns while a second factor is not required for every admin (the state
+   * an upgraded install starts in), and names the admins without one. See
+   * docs/docs/security/admin-mfa.md.
+   */
+  async checkAdminMfa(): Promise<UpgradeHealthCheck> {
+    try {
+      const fromEnv = adminMfaRequiredFromEnv(
+        process.env['ADMIN_MFA_REQUIRED'],
+      );
+      const required =
+        fromEnv ??
+        (
+          await this.prisma.adminSecurityPolicy.findUnique({
+            where: { id: 1 },
+            select: { mfaRequired: true },
+          })
+        )?.mfaRequired ??
+        false;
+      const without = await this.prisma.user.findMany({
+        where: {
+          realm: { name: MASTER_REALM },
+          enabled: true,
+          userRoles: {
+            some: {
+              role: {
+                clientId: null,
+                name: { in: [...ADMIN_ROLES] },
+                realm: { name: MASTER_REALM },
+              },
+            },
+          },
+          userCredentials: { none: { type: 'totp', verified: true } },
+          webAuthnCredentials: { none: {} },
+        },
+        select: { username: true },
+        orderBy: { username: 'asc' },
+      });
+      const names = without.map((u) => u.username).join(', ');
+      if (!required) {
+        return {
+          name: 'admin_mfa',
+          status: 'warn',
+          message:
+            'A second factor is not required for admin console sign-in' +
+            (fromEnv === false ? ' (ADMIN_MFA_REQUIRED=false)' : ''),
+          ...(without.length ? { details: `No second factor: ${names}` } : {}),
+        };
+      }
+      if (without.length > 0) {
+        return {
+          name: 'admin_mfa',
+          status: 'warn',
+          message: `${without.length} admin(s) must still enrol a second factor`,
+          details: names,
+        };
+      }
+      return {
+        name: 'admin_mfa',
+        status: 'pass',
+        message: 'Every admin has a second factor, and it is required',
+      };
+    } catch (error) {
+      return {
+        name: 'admin_mfa',
+        status: 'warn',
+        message: 'Could not check admin MFA',
+        details: (error as Error).message,
+      };
+    }
+  }
+
+  /**
+   * Warns about users who still hold recovery codes issued before 0.11.0
+   * (32 bits). They keep working, but should be replaced.
+   */
+  async checkRecoveryCodes(): Promise<UpgradeHealthCheck> {
+    try {
+      const rows = await this.prisma.recoveryCode.findMany({
+        where: { used: false, NOT: { codeHash: { startsWith: 'rc2$' } } },
+        select: { userId: true },
+        distinct: ['userId'],
+      });
+      if (rows.length === 0) {
+        return {
+          name: 'recovery_codes',
+          status: 'pass',
+          message: 'Every unused recovery code is in the current format',
+        };
+      }
+      return {
+        name: 'recovery_codes',
+        status: 'warn',
+        message: `${rows.length} user(s) still have recovery codes issued before 0.11.0; they work, but should be replaced`,
+      };
+    } catch (error) {
+      return {
+        name: 'recovery_codes',
+        status: 'warn',
+        message: 'Could not check recovery codes',
+        details: (error as Error).message,
+      };
+    }
+  }
+
+  /**
+   * Warns about clients with wildcard (`/*`) redirect URIs. Since 0.11.0
+   * redirect URIs match exactly (RFC 9700). The 0.11.0 migration turned on
+   * `allowInsecureWildcardRedirectUris` for every client that had such an
+   * entry, so they keep working; this is how an operator finds them to
+   * register exact URIs and turn the opt-in off. A client with a wildcard
+   * entry and the opt-in off is listed too: that entry matches nothing.
+   */
+  async checkWildcardRedirectUris(): Promise<UpgradeHealthCheck> {
+    try {
+      const clients = await this.prisma.$queryRaw<
+        Array<{ realm: string; client_id: string; opt_in: boolean }>
+      >`
+        SELECT r."name" AS realm,
+               c."client_id",
+               c."allow_insecure_wildcard_redirect_uris" AS opt_in
+          FROM "clients" c
+          JOIN "realms" r ON r."id" = c."realm_id"
+         WHERE c."allow_insecure_wildcard_redirect_uris"
+            OR EXISTS (
+                 SELECT 1
+                   FROM unnest(c."redirect_uris" || c."post_logout_redirect_uris") AS u(uri)
+                  WHERE u.uri LIKE '%/*'
+               )
+         ORDER BY r."name", c."client_id"
+      `;
+      if (clients.length === 0) {
+        return {
+          name: 'wildcard_redirect_uris',
+          status: 'pass',
+          message: 'Every client uses exact redirect URIs',
+        };
+      }
+      return {
+        name: 'wildcard_redirect_uris',
+        status: 'warn',
+        message:
+          `${clients.length} client(s) rely on wildcard redirect URIs, which match any path ` +
+          'below them (insecure, RFC 9700). Register exact redirect URIs and turn ' +
+          'allowInsecureWildcardRedirectUris off.',
+        details: clients
+          .map(
+            (c) =>
+              `${c.realm}/${c.client_id}${c.opt_in ? '' : ' (opt-in off: the wildcard matches nothing)'}`,
+          )
+          .join(', '),
+      };
+    } catch (error) {
+      return {
+        name: 'wildcard_redirect_uris',
+        status: 'warn',
+        message: 'Could not check redirect URIs',
+        details: (error as Error).message,
+      };
+    }
+  }
+
+  /**
+   * Warns about authorization policies with a condition the engine cannot
+   * evaluate: an unknown operator (a typo such as `equal`), a value the
+   * operator cannot use (an invalid CIDR or regex, `in` without an array),
+   * or an unknown `effect` / `logic`. Before 0.11.0 these were saved
+   * unchecked and evaluated as "no match", so such a DENY never denied.
+   * Since 0.11.0 they fail closed: a DENY denies every request it applies
+   * to, an ALLOW never allows. Each is listed as `realm/policy` with what is
+   * wrong, so the operator can fix it.
+   */
+  async checkInvalidPolicies(): Promise<UpgradeHealthCheck> {
+    try {
+      const policies = await this.prisma.policy.findMany({
+        select: {
+          name: true,
+          effect: true,
+          logic: true,
+          subjectConditions: true,
+          resourceConditions: true,
+          actionConditions: true,
+          environmentConditions: true,
+          realm: { select: { name: true } },
+        },
+        orderBy: [{ realm: { name: 'asc' } }, { name: 'asc' }],
+      });
+      const invalid = policies
+        .map((p) => ({ p, problems: policyProblems(p) }))
+        .filter((x) => x.problems.length > 0);
+      if (invalid.length === 0) {
+        return {
+          name: 'invalid_authorization_policies',
+          status: 'pass',
+          message: 'Every authorization policy can be evaluated',
+        };
+      }
+      return {
+        name: 'invalid_authorization_policies',
+        status: 'warn',
+        message:
+          `${invalid.length} authorization polic${invalid.length === 1 ? 'y has' : 'ies have'} ` +
+          'a condition that cannot be evaluated. They now fail closed: a DENY denies ' +
+          'every request it applies to, an ALLOW never allows. Fix or delete them.',
+        details: invalid
+          .map(
+            ({ p, problems }) =>
+              `${p.realm.name}/${p.name} (${p.effect}): ` +
+              problems.map((x) => `${x.path}: ${x.message}`).join('; '),
+          )
+          .join(', '),
+      };
+    } catch (error) {
+      return {
+        name: 'invalid_authorization_policies',
+        status: 'warn',
+        message: 'Could not check authorization policies',
         details: (error as Error).message,
       };
     }

@@ -89,3 +89,192 @@ describe('UpgradeHealthService.checkBruteForceProtection', () => {
     });
   });
 });
+
+describe('UpgradeHealthService.checkWildcardRedirectUris', () => {
+  const build = async (queryRaw: jest.Mock) => {
+    const { UpgradeHealthService } =
+      await import('./upgrade-health.service.js');
+    return new UpgradeHealthService({ $queryRaw: queryRaw } as never);
+  };
+
+  it('passes when no client has a wildcard redirect URI', async () => {
+    const svc = await build(jest.fn().mockResolvedValue([]));
+    await expect(svc.checkWildcardRedirectUris()).resolves.toMatchObject({
+      name: 'wildcard_redirect_uris',
+      status: 'pass',
+    });
+  });
+
+  it('warns and names the clients, flagging a wildcard without the opt-in', async () => {
+    const svc = await build(
+      jest.fn().mockResolvedValue([
+        { realm: 'demo', client_id: 'legacy-spa', opt_in: true },
+        { realm: 'sample', client_id: 'imported', opt_in: false },
+      ]),
+    );
+    const check = await svc.checkWildcardRedirectUris();
+    expect(check.name).toBe('wildcard_redirect_uris');
+    expect(check.status).toBe('warn');
+    expect(check.message).toContain('2 client(s)');
+    expect(check.message).toContain('allowInsecureWildcardRedirectUris');
+    expect(check.details).toBe(
+      'demo/legacy-spa, sample/imported (opt-in off: the wildcard matches nothing)',
+    );
+  });
+
+  it('only warns, never fails, when the query errors', async () => {
+    const svc = await build(jest.fn().mockRejectedValue(new Error('boom')));
+    await expect(svc.checkWildcardRedirectUris()).resolves.toMatchObject({
+      name: 'wildcard_redirect_uris',
+      status: 'warn',
+    });
+  });
+});
+
+describe('UpgradeHealthService admin MFA checks', () => {
+  const build = async (prisma: object) => {
+    const { UpgradeHealthService } =
+      await import('./upgrade-health.service.js');
+    return new UpgradeHealthService(prisma as never);
+  };
+  afterEach(() => {
+    delete process.env['ADMIN_MFA_REQUIRED'];
+  });
+
+  it('warns while MFA is not required (an upgraded install)', async () => {
+    const svc = await build({
+      adminSecurityPolicy: { findUnique: jest.fn().mockResolvedValue(null) },
+      user: {
+        findMany: jest.fn().mockResolvedValue([{ username: 'sample-admin' }]),
+      },
+    });
+    await expect(svc.checkAdminMfa()).resolves.toEqual({
+      name: 'admin_mfa',
+      status: 'warn',
+      message: 'A second factor is not required for admin console sign-in',
+      details: 'No second factor: sample-admin',
+    });
+  });
+
+  it('names the admins still to enrol when it is required', async () => {
+    process.env['ADMIN_MFA_REQUIRED'] = 'true';
+    const findUnique = jest.fn();
+    const svc = await build({
+      adminSecurityPolicy: { findUnique },
+      user: { findMany: jest.fn().mockResolvedValue([{ username: 'a' }]) },
+    });
+    await expect(svc.checkAdminMfa()).resolves.toMatchObject({
+      status: 'warn',
+      message: '1 admin(s) must still enrol a second factor',
+      details: 'a',
+    });
+    expect(findUnique).not.toHaveBeenCalled();
+  });
+
+  it('passes when it is required and every admin has a factor', async () => {
+    const svc = await build({
+      adminSecurityPolicy: {
+        findUnique: jest.fn().mockResolvedValue({ mfaRequired: true }),
+      },
+      user: { findMany: jest.fn().mockResolvedValue([]) },
+    });
+    await expect(svc.checkAdminMfa()).resolves.toMatchObject({
+      status: 'pass',
+    });
+  });
+
+  it('counts the users with pre-0.11.0 recovery codes', async () => {
+    const findMany = jest
+      .fn()
+      .mockResolvedValue([{ userId: 'a' }, { userId: 'b' }]);
+    const svc = await build({ recoveryCode: { findMany } });
+    await expect(svc.checkRecoveryCodes()).resolves.toMatchObject({
+      name: 'recovery_codes',
+      status: 'warn',
+    });
+    expect(findMany.mock.calls[0][0].where).toEqual({
+      used: false,
+      NOT: { codeHash: { startsWith: 'rc2$' } },
+    });
+  });
+});
+
+describe('UpgradeHealthService.checkInvalidPolicies', () => {
+  const build = async (findMany: jest.Mock) => {
+    const { UpgradeHealthService } =
+      await import('./upgrade-health.service.js');
+    return new UpgradeHealthService({ policy: { findMany } } as never);
+  };
+  const stored = (overrides: Record<string, unknown>) => ({
+    name: 'p',
+    effect: 'ALLOW',
+    logic: 'AND',
+    subjectConditions: null,
+    resourceConditions: null,
+    actionConditions: null,
+    environmentConditions: null,
+    realm: { name: 'demo' },
+    ...overrides,
+  });
+
+  it('passes when every policy can be evaluated', async () => {
+    const svc = await build(
+      jest.fn().mockResolvedValue([
+        stored({
+          actionConditions: [
+            { field: 'action', operator: 'in', value: ['read'] },
+          ],
+        }),
+      ]),
+    );
+    await expect(svc.checkInvalidPolicies()).resolves.toMatchObject({
+      name: 'invalid_authorization_policies',
+      status: 'pass',
+    });
+  });
+
+  it('warns and names each invalid policy with what is wrong', async () => {
+    const svc = await build(
+      jest.fn().mockResolvedValue([
+        stored({
+          name: 'block-contractors',
+          effect: 'DENY',
+          subjectConditions: [
+            { field: 'subject.roles', operator: 'contain', value: 'x' },
+          ],
+        }),
+        stored({ name: 'fine' }),
+        stored({
+          name: 'office',
+          realm: { name: 'sample' },
+          environmentConditions: [
+            {
+              field: 'environment.ip',
+              operator: 'ipInRange',
+              value: '10.0.0.0/40',
+            },
+          ],
+        }),
+      ]),
+    );
+    const check = await svc.checkInvalidPolicies();
+    expect(check.status).toBe('warn');
+    expect(check.message).toContain('2 authorization policies');
+    expect(check.message).toContain('fail closed');
+    expect(check.details).toContain(
+      'demo/block-contractors (DENY): subjectConditions[0]: unknown operator "contain"',
+    );
+    expect(check.details).toContain(
+      'sample/office (ALLOW): environmentConditions[0]',
+    );
+    expect(check.details).not.toContain('fine');
+  });
+
+  it('only warns, never fails, when the query errors', async () => {
+    const svc = await build(jest.fn().mockRejectedValue(new Error('boom')));
+    await expect(svc.checkInvalidPolicies()).resolves.toMatchObject({
+      name: 'invalid_authorization_policies',
+      status: 'warn',
+    });
+  });
+});
