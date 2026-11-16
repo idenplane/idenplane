@@ -367,7 +367,7 @@ export function TokenDisplay() {
 | `audience` | `string \| string[]` | Yes | Client ID(s) whose access tokens may be stored |
 | `cookieName` | `string` | No | Cookie name (default: `idenplane_access_token`) |
 | `secure` | `boolean` | No | Set the `Secure` attribute (default: `true`; browsers accept Secure cookies from `http://localhost`) |
-| `allowedOrigins` | `string[]` | No | Extra origins allowed to call the handlers, for a reverse proxy that changes the Host header |
+| `allowedOrigins` | `string[]` | No | Public origins to accept from browsers that do not send `Sec-Fetch-Site`, when a reverse proxy changes the origin Next.js sees |
 | `allowInsecureHttp` | `boolean` | No | Allow an `http://` `serverUrl` on a non-loopback host |
 
 `syncSessionCookie(client, { endpoint?, onError? })` from `idenplane-nextjs` subscribes to the client: it POSTs the access token after sign-in, after a session is restored and after every refresh, and DELETEs the cookie on sign-out, one request at a time and in order. `endpoint` defaults to `/api/auth/session`. It returns a function that stops syncing.

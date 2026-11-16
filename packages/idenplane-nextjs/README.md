@@ -77,7 +77,7 @@ export const { POST, DELETE } = createSessionCookieHandlers({
 });
 ```
 
-`POST` verifies the access token (signature, issuer, audience, expiry, `typ: "Bearer"`) and sets `idenplane_access_token` as `HttpOnly; Secure; SameSite=Lax; Path=/`, expiring with the token. `DELETE` clears it. Both refuse cross-site requests (checked with `Sec-Fetch-Site` and `Origin`), so another site cannot plant its own token in a user's browser. Browsers accept `Secure` cookies from `http://localhost`, so this works in development too. Behind a reverse proxy that changes the Host header, list the public origin in `allowedOrigins`.
+`POST` verifies the access token (signature, issuer, audience, expiry, `typ: "Bearer"`) and sets `idenplane_access_token` as `HttpOnly; Secure; SameSite=Lax; Path=/`, expiring with the token. `DELETE` clears it. Both refuse cross-site requests (checked with `Sec-Fetch-Site` and `Origin`), so another site cannot plant its own token in a user's browser. Browsers accept `Secure` cookies from `http://localhost`, so this works in development too. Behind a reverse proxy or TLS terminator, browsers that send Fetch Metadata (all current ones) work as is; for older browsers, list the public origin in `allowedOrigins`.
 
 Keep access tokens small enough for a cookie (about 4 KB): very large role lists can push a token over the browser limit.
 

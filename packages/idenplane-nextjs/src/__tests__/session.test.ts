@@ -147,6 +147,21 @@ describe('isSameOriginRequest', () => {
     ).toBe(true);
   });
 
+  it('trusts Sec-Fetch-Site behind a proxy that changes the origin Next.js sees', () => {
+    const behindProxy = new Request('http://web-internal:3000/api/auth/session', {
+      method: 'POST',
+      headers: { origin: 'https://app.example.com', 'sec-fetch-site': 'same-origin' },
+    });
+    expect(isSameOriginRequest(behindProxy)).toBe(true);
+    // Without Fetch Metadata the public origin has to be configured.
+    const legacy = new Request('http://web-internal:3000/api/auth/session', {
+      method: 'POST',
+      headers: { origin: 'https://app.example.com' },
+    });
+    expect(isSameOriginRequest(legacy)).toBe(false);
+    expect(isSameOriginRequest(legacy, ['https://app.example.com'])).toBe(true);
+  });
+
   it('refuses other ports and schemes of the same host', () => {
     expect(isSameOriginRequest(req({ origin: 'https://app.example.com:8443' }))).toBe(false);
     expect(isSameOriginRequest(req({ origin: 'http://app.example.com' }))).toBe(false);

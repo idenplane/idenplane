@@ -52,10 +52,11 @@ export interface SessionCookieConfig {
    */
   secure?: boolean;
   /**
-   * Origins allowed to call these handlers, when the app is reached under an
-   * origin other than the one Next.js sees in `request.url` (for example
-   * behind a reverse proxy that rewrites Host). Default: the request's own
-   * origin only.
+   * Public origins to accept from browsers that do not send
+   * `Sec-Fetch-Site`, when the app is reached under an origin other than the
+   * one Next.js sees in `request.url` (behind a reverse proxy or TLS
+   * terminator). Browsers that send Fetch Metadata need no configuration.
+   * Default: the request's own origin only.
    */
   allowedOrigins?: string[];
   /** Allow `serverUrl` to use `http://` for a non-loopback host (default: false). */
@@ -83,21 +84,24 @@ export function serializeAccessTokenCookie(
 }
 
 /**
- * True when the request comes from the app's own pages. Uses Fetch Metadata
- * (`Sec-Fetch-Site`) when the browser sends it, and the `Origin` header
- * otherwise; a request with neither is refused.
+ * True when the request comes from the app's own pages.
+ *
+ * Browsers that send Fetch Metadata are judged by `Sec-Fetch-Site` alone: a
+ * page cannot set that header, and it stays `same-origin` behind a reverse
+ * proxy or TLS terminator, where the origin Next.js sees in `request.url`
+ * (an internal host, `http://`) differs from the public one. Older browsers
+ * are judged by `Origin`, which must be the request's own origin or one of
+ * `allowedOrigins`. A request with neither header is refused.
  */
 export function isSameOriginRequest(request: Request, allowedOrigins: readonly string[] = []): boolean {
-  const own = new URL(request.url).origin;
-  const origin = request.headers.get('origin');
   const site = request.headers.get('sec-fetch-site');
-  const allowed = new Set([own, ...allowedOrigins.map((o) => new URL(o).origin)]);
+  if (site !== null) return site === 'same-origin';
 
-  // Behind a proxy the browser still sees a same-origin request (page and
-  // endpoint share the public origin), so Sec-Fetch-Site stays same-origin.
-  if (site !== null && site !== 'same-origin') return false;
-  if (origin !== null) return allowed.has(origin);
-  return site === 'same-origin';
+  const origin = request.headers.get('origin');
+  if (origin === null) return false;
+  const own = new URL(request.url).origin;
+  const allowed = new Set([own, ...allowedOrigins.map((o) => new URL(o).origin)]);
+  return allowed.has(origin);
 }
 
 /**
