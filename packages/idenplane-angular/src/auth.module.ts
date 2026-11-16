@@ -7,7 +7,7 @@
  * import { NgModule } from '@angular/core';
  * import { BrowserModule } from '@angular/platform-browser';
  * import { HttpClientModule } from '@angular/common/http';
- * import { IdenplaneModule } from '@idenplane/angular';
+ * import { IdenplaneModule } from 'idenplane-angular';
  *
  * @NgModule({
  *   imports: [
@@ -18,6 +18,8 @@
  *       realm: 'my-realm',
  *       clientId: 'my-app',
  *       redirectUri: 'http://localhost:4200/callback',
+ *       // Also send the access token to your API (exact origins only):
+ *       bearerTokenOrigins: ['https://api.example.com'],
  *     }),
  *   ],
  *   bootstrap: [AppComponent],
@@ -29,8 +31,8 @@
 import { NgModule } from '@angular/core';
 import type { ModuleWithProviders } from '@angular/core';
 import { HTTP_INTERCEPTORS } from '@angular/common/http';
-import type { IdenplaneConfig } from 'idenplane-sdk';
 import { IDENPLANE_CONFIG } from './auth.config.js';
+import type { IdenplaneConfig } from './auth.config.js';
 import { AuthService } from './auth.service.js';
 import { AuthGuard } from './auth.guard.js';
 import { AuthInterceptor } from './auth.interceptor.js';

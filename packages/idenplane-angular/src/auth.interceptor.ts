@@ -1,20 +1,34 @@
 /**
- * Angular HTTP interceptor that adds the Bearer token to outgoing requests.
+ * Angular HTTP interceptor that adds the access token to requests for trusted
+ * origins only: the Idenplane server and the origins listed in
+ * `bearerTokenOrigins`. Requests to any other origin are passed through
+ * untouched, so the token never leaks to third-party hosts.
  *
  * @example
  * ```typescript
  * // app.config.ts  (Angular 15+ standalone)
  * import { provideHttpClient, withInterceptors } from '@angular/common/http';
- * import { authInterceptor } from '@idenplane/angular';
+ * import { authInterceptor, IDENPLANE_CONFIG } from 'idenplane-angular';
  *
  * export const appConfig: ApplicationConfig = {
  *   providers: [
+ *     {
+ *       provide: IDENPLANE_CONFIG,
+ *       useValue: {
+ *         url: 'https://auth.example.com',
+ *         realm: 'my-realm',
+ *         clientId: 'my-app',
+ *         redirectUri: 'https://app.example.com/callback',
+ *         bearerTokenOrigins: ['https://api.example.com'],
+ *       },
+ *     },
  *     provideHttpClient(withInterceptors([authInterceptor])),
  *   ],
  * };
  * ```
  *
- * Or with the class-based interceptor (NgModule style):
+ * Or with the class-based interceptor (NgModule style), which
+ * `IdenplaneModule.forRoot()` registers for you:
  * ```typescript
  * @NgModule({
  *   providers: [
@@ -31,13 +45,18 @@ import type {
   HttpHandler,
   HttpEvent,
   HttpInterceptorFn,
-  HttpHandlerFn,
 } from '@angular/common/http';
 import { HttpErrorResponse } from '@angular/common/http';
 import { Observable, from, throwError } from 'rxjs';
 import { catchError, switchMap } from 'rxjs/operators';
 import { inject } from '@angular/core';
 import { AuthService } from './auth.service.js';
+import { shouldAttachToken } from './bearer-origins.js';
+
+/** The parts of `AuthService` the interceptor uses. */
+type InterceptorAuth = Pick<AuthService, 'getToken' | 'bearerTokenOrigins'> & {
+  client: Pick<AuthService['client'], 'refreshTokens'>;
+};
 
 /** Attach a Bearer token to a request clone, if the token is non-null. */
 function attachToken<T>(req: HttpRequest<T>, token: string | null): HttpRequest<T> {
@@ -46,51 +65,21 @@ function attachToken<T>(req: HttpRequest<T>, token: string | null): HttpRequest<
 }
 
 /**
- * Class-based HTTP interceptor (NgModule-compatible).
- * Attaches the current Idenplane access token as a `Authorization: Bearer ...`
- * header when one is available.
- *
- * Issue #458: on a 401 response the interceptor now attempts a single token
- * refresh and retries the original request once before propagating the error.
+ * Shared logic of both interceptors. Requests for an untrusted origin are
+ * forwarded unchanged, and their 401 responses do not trigger a token
+ * refresh. For a trusted origin the token is attached and, on a 401, the
+ * tokens are refreshed once and the request retried once (#458).
  */
-@Injectable()
-export class AuthInterceptor implements HttpInterceptor {
-  constructor(private readonly auth: AuthService) {}
-
-  intercept(req: HttpRequest<unknown>, next: HttpHandler): Observable<HttpEvent<unknown>> {
-    const token = this.auth.getToken();
-    const authReq = attachToken(req, token);
-
-    return next.handle(authReq).pipe(
-      catchError((err: unknown) => {
-        if (err instanceof HttpErrorResponse && err.status === 401) {
-          // Attempt a single token refresh and retry the request once.
-          return from(this.auth.client.refreshTokens()).pipe(
-            switchMap(() => {
-              const newToken = this.auth.getToken();
-              return next.handle(attachToken(req, newToken));
-            }),
-            catchError((refreshErr: unknown) => throwError(() => refreshErr)),
-          );
-        }
-        return throwError(() => err);
-      }),
-    );
+function intercept(
+  req: HttpRequest<unknown>,
+  next: (req: HttpRequest<unknown>) => Observable<HttpEvent<unknown>>,
+  auth: InterceptorAuth,
+): Observable<HttpEvent<unknown>> {
+  if (!shouldAttachToken(req.url, auth.bearerTokenOrigins)) {
+    return next(req);
   }
-}
 
-/**
- * Functional HTTP interceptor for use with `provideHttpClient(withInterceptors([...]))`.
- * (Angular 15+)
- *
- * Issue #458: on a 401 response the interceptor attempts a single token
- * refresh and retries the original request once before propagating the error.
- */
-export const authInterceptor: HttpInterceptorFn = (req, next) => {
-  const auth = inject(AuthService);
-  const token = auth.getToken();
-
-  return next(attachToken(req, token)).pipe(
+  return next(attachToken(req, auth.getToken())).pipe(
     catchError((err: unknown) => {
       if (err instanceof HttpErrorResponse && err.status === 401) {
         return from(auth.client.refreshTokens()).pipe(
@@ -101,4 +90,27 @@ export const authInterceptor: HttpInterceptorFn = (req, next) => {
       return throwError(() => err);
     }),
   );
+}
+
+/**
+ * Class-based HTTP interceptor (NgModule-compatible).
+ * Attaches the current access token as `Authorization: Bearer ...` to
+ * requests for the Idenplane server and `bearerTokenOrigins` only.
+ */
+@Injectable()
+export class AuthInterceptor implements HttpInterceptor {
+  constructor(private readonly auth: AuthService) {}
+
+  intercept(req: HttpRequest<unknown>, next: HttpHandler): Observable<HttpEvent<unknown>> {
+    return intercept(req, (r) => next.handle(r), this.auth);
+  }
+}
+
+/**
+ * Functional HTTP interceptor for use with `provideHttpClient(withInterceptors([...]))`.
+ * (Angular 15+). Same origin rules as {@link AuthInterceptor}.
+ */
+export const authInterceptor: HttpInterceptorFn = (req, next) => {
+  const auth = inject(AuthService);
+  return intercept(req, next, auth);
 };

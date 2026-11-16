@@ -26,6 +26,8 @@ import { IdenplaneModule } from 'idenplane-angular';
       realm: 'my-realm',
       clientId: 'my-app',
       redirectUri: 'http://localhost:4200/callback',
+      // Origins of your own APIs that should receive the access token.
+      bearerTokenOrigins: ['https://api.example.com'],
     }),
   ],
   bootstrap: [AppComponent],
@@ -88,15 +90,59 @@ export const routes: Routes = [
 
 The HTTP interceptor is registered automatically when you use `IdenplaneModule.forRoot()`.
 
-For standalone / functional interceptor style (Angular 15+):
+It adds `Authorization: Bearer <access token>` **only** to requests for:
+
+- the Idenplane server (the origin of `url`), and
+- the origins you list in `bearerTokenOrigins`.
+
+Requests to any other origin go out without the token, and a `401` from them
+does not trigger a token refresh. Origins are compared exactly, by scheme,
+host and port: `https://api.example.com` does not match
+`http://api.example.com`, `https://api.example.com:8443`,
+`https://sub.api.example.com` or `https://api.example.com.evil.com`.
+Entries must be bare origins (no path, query, credentials or `*`); an invalid
+entry throws when `AuthService` is created.
+
+Relative URLs such as `/api/orders` resolve to the origin the app is served
+from, so to send the token to a same-origin API, list that origin:
+
+```typescript
+IdenplaneModule.forRoot({
+  url: 'https://auth.example.com',
+  realm: 'my-realm',
+  clientId: 'my-app',
+  redirectUri: 'https://app.example.com/callback',
+  bearerTokenOrigins: [
+    'https://api.example.com',   // a separate API
+    window.location.origin,       // same-origin calls like /api/orders
+  ],
+});
+```
+
+> **Upgrading from 1.x:** before 2.0.0 the interceptor sent the token to
+> every URL the app requested, including third-party hosts. If your app calls
+> its own API on any origin other than the Idenplane server, add that origin to
+> `bearerTokenOrigins`, or those requests will now be sent without a token.
+
+For standalone / functional interceptor style (Angular 15+), provide the configuration with `IDENPLANE_CONFIG`; the same origin rules apply:
 
 ```typescript
 // app.config.ts
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
-import { authInterceptor } from 'idenplane-angular';
+import { authInterceptor, IDENPLANE_CONFIG } from 'idenplane-angular';
 
 export const appConfig = {
   providers: [
+    {
+      provide: IDENPLANE_CONFIG,
+      useValue: {
+        url: 'https://auth.example.com',
+        realm: 'my-realm',
+        clientId: 'my-app',
+        redirectUri: 'https://app.example.com/callback',
+        bearerTokenOrigins: ['https://api.example.com'],
+      },
+    },
     provideHttpClient(withInterceptors([authInterceptor])),
   ],
 };
@@ -106,7 +152,7 @@ export const appConfig = {
 
 ### `IdenplaneModule`
 
-- `IdenplaneModule.forRoot(config: IdenplaneConfig)` — registers all providers
+- `IdenplaneModule.forRoot(config: IdenplaneConfig)` — registers all providers. `IdenplaneConfig` is the `idenplane-sdk` client configuration plus `bearerTokenOrigins?: string[]`.
 
 ### `AuthService`
 
@@ -130,11 +176,15 @@ Route guard implementing `CanActivate`. Reads `route.data.roles` and `route.data
 
 ### `AuthInterceptor`
 
-Class-based HTTP interceptor. Adds `Authorization: Bearer <token>` to requests.
+Class-based HTTP interceptor. Adds `Authorization: Bearer <token>` to requests for the Idenplane server and `bearerTokenOrigins` only; on a `401` from those origins it refreshes the tokens and retries once.
 
 ### `authInterceptor`
 
-Functional interceptor for use with `withInterceptors([authInterceptor])`.
+Functional interceptor for use with `withInterceptors([authInterceptor])`. Same origin rules.
+
+### `shouldAttachToken(url, origins, baseUrl?)`, `resolveBearerTokenOrigins(config)`, `normalizeOrigin(origin)`
+
+The matching helpers the interceptors use, exported for custom interceptors (for example `fetch` wrappers or WebSocket clients) that need the same rule.
 
 ## License
 
