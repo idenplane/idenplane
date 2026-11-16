@@ -9,6 +9,8 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-16
+
 A security hardening release. New realms are now secure by default: brute-force protection and audit events are on. The release also publishes a threat model and an OWASP ASVS 5.0 Level 2 self-assessment, and closes the gaps the assessment found that could be fixed safely: token-type confusion at userinfo, a password-oracle path for locked LDAP users, sessions that survived a password reset, and more. Read *Before you upgrade*: existing realms are not changed.
 
 **Before you upgrade:**
@@ -17,6 +19,9 @@ A security hardening release. New realms are now secure by default: brute-force 
 - **The `master` realm of a new install locks an admin account for 5 minutes after 10 failed sign-ins in 15 minutes.** Existing installs keep their master realm setting. If you turn it on for master, keep `permanentLockoutAfter` at `0`, so nobody can lock the admins out for good, and keep a second super-admin or the `ADMIN_API_KEY` for an emergency: `PUT /admin/realms/master/users/{userId}/reset-password` with the API key sets a new password and clears the lock (the unlock route needs an MFA step-up, so it refuses the key).
 - **Scripts that send an ID token to `/userinfo`, to token introspection or to the session-events WebSocket** now get `401` (introspection: `{"active": false}`). Send the access token.
 - **A password reset now signs the user out everywhere** and revokes their refresh tokens. Apps holding a refresh token for that user must sign the user in again.
+- **Custom login or account templates with their own `<style>` block** must add `nonce="{{scriptNonce}}"` to it, or the browser ignores the styles. The built-in themes already do. See *Custom themes*.
+- **If you provision users with SCIM:** users created by SCIM before 0.10.0 may have their `externalId` stored in `federationLink`, which makes them look LDAP-federated at sign-in. Clear `federationLink` on users that do not come from an LDAP federation. SCIM deactivation (`active: false`), as sent by Entra ID and Okta, now really disables the user and ends their sessions.
+- **Admin API clients that send malformed input** now get `400`, `404` or `409` where some endpoints answered `500`.
 
 ### Security
 - **Brute-force protection is on by default for new realms.** It was off unless an admin turned it on, so a new realm put no limit on online password guessing. The defaults are tuned against a lockout denial of service: 10 failures within 15 minutes lock the account for 5 minutes; the failures stay counted for the window, so a wrong password right after the lock locks it again (progressive lockout); there is no permanent lockout, which would let anyone disable an account by guessing. The trade-off is documented in *Security → Secure defaults* and in `src/realms/realm-security-defaults.ts`, the one place the creation paths take the defaults from.
@@ -641,7 +646,12 @@ The foundation release: core IAM server with OAuth, OIDC, SAML, MFA, and the ini
 - `removeUserRealmRoles` returning 200 instead of 204
 - Login error messages never displayed on failed login
 
-[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/idenplane/idenplane/releases/tag/v0.10.0
+[0.9.1]: https://github.com/idenplane/idenplane/releases/tag/v0.9.1
+[0.9.0]: https://github.com/idenplane/idenplane/releases/tag/v0.9.0
+[0.8.1]: https://github.com/idenplane/idenplane/releases/tag/v0.8.1
+[0.8.0]: https://github.com/idenplane/idenplane/releases/tag/v0.8.0
 [0.7.0]: https://github.com/idenplane/idenplane/releases/tag/v0.7.0
 [0.6.0]: https://github.com/idenplane/idenplane/releases/tag/v0.6.0
 [0.5.0]: https://github.com/idenplane/idenplane/releases/tag/v0.5.0
