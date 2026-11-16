@@ -16,6 +16,8 @@ Multi-Factor Authentication (MFA) adds an extra layer of security by requiring a
 | [SMS](#sms-text-message-codes) | One-time codes sent to a verified phone number | Medium |
 | [Recovery Codes](#recovery-codes) | Backup codes for account recovery | Fallback |
 
+Passkeys (WebAuthn) are a separate sign-in method; they reach the highest ACR level, `urn:idenplane:acr:webauthn`.
+
 A user can have an authenticator app, a phone, or both. Every check that decides whether a sign-in needs a second factor counts any of them.
 
 :::caution MFA Required for Admins
@@ -26,260 +28,57 @@ Realm administrators may require MFA step-up verification for sensitive operatio
 
 ## TOTP Setup
 
-The TOTP setup flow involves generating a secret, displaying a QR code for easy enrollment, and verifying the first code to activate MFA.
+Users enrol an authenticator app on Idenplane's own pages. There is no JSON API for a user to set up TOTP: the pages hold the secret and the QR code.
 
-### Setup Flow
+### Where users enrol
+
+- **Account page.** A signed-in user opens `/realms/{realm}/account/totp-setup`, scans the QR code, and enters the first code to confirm it. `/realms/{realm}/account/totp-disable` removes the app again.
+- **At sign-in.** In a realm with `mfaRequired` on, a user without a second factor is sent to the enrolment page after the password and has to enrol before the sign-in completes.
 
 ```mermaid
 sequenceDiagram
     participant User as User
-    participant App as Application
-    participant Idenplane as Idenplane Server
+    participant Idenplane as Idenplane account page
     participant Auth as Authenticator App
 
-    App->>Idenplane: 1. Request TOTP setup
-    Idenplane->>User: 2. Return secret + QR code
+    User->>Idenplane: 1. Open account → authenticator setup
+    Idenplane->>User: 2. Show QR code (secret)
     User->>Auth: 3. Scan QR code
-    User->>App: 4. Submit verification code
-    App->>Idenplane: 5. Verify code
-    Idenplane->>User: 6. MFA activated + recovery codes
+    User->>Idenplane: 4. Enter the first code
+    Idenplane->>User: 5. App active + recovery codes (shown once)
 ```
 
-### Step 1: Initiate TOTP Setup
-
-Request TOTP setup for a user:
-
-```bash
-curl -X POST "http://localhost:3000/realms/my-realm/mfa/setup" \
-  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-  -H "Content-Type: application/json"
-```
-
-**Response:**
-
-```json
-{
-  "secret": "JBSWY3DPEHPK3PXP",
-  "qrCodeDataUrl": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUg...",
-  "otpauthUrl": "otpauth://totp/Idenplane%20(my-realm)/user@example.com?secret=JBSWY3DPEHPK3PXP&issuer=Idenplane%20%28my-realm%29&algorithm=SHA1&digits=6&period=30"
-}
-```
-
-### Step 2: Display QR Code
-
-Render the QR code for the user to scan:
-
-```tsx
-function TOTPSetup({ setupData }) {
-  return (
-    <div className="mfa-setup">
-      <h2>Set Up Authenticator App</h2>
-      <p>Scan this QR code with your authenticator app:</p>
-      <img src={setupData.qrCodeDataUrl} alt="TOTP QR Code" />
-
-      <details>
-        <summary>Can't scan? Enter manually</summary>
-        <div className="manual-entry">
-          <label>Secret Key:</label>
-          <code>{setupData.secret}</code>
-          <p>Open your authenticator app and enter this secret manually.</p>
-        </div>
-      </details>
-    </div>
-  );
-}
-```
-
-### Step 3: Verify and Activate
-
-After the user scans the QR code, verify the first code to activate MFA:
-
-```bash
-curl -X POST "http://localhost:3000/realms/my-realm/mfa/verify" \
-  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "verificationCode": "123456"
-  }'
-```
-
-**Response:**
-
-```json
-{
-  "success": true,
-  "recoveryCodes": [
-    "A3F2B8C1",
-    "7D4E9F2A",
-    "B1C3D8E5",
-    "2F9A4C7D",
-    "E8B3F1A6",
-    "5C7D2E9B",
-    "D4A8F3C1",
-    "9E2B5D8A",
-    "F6C1B3E7",
-    "1D4E9A2F"
-  ]
-}
-```
-
-:::warning Save Recovery Codes
-Store recovery codes securely. They are the only way to recover access if you lose your authenticator device. Each code can only be used once.
-:::
+The user gets 10 recovery codes with their first factor. They are shown once; save them.
 
 ---
 
 ## TOTP Verification
 
-After MFA is enabled, users must provide a TOTP code during authentication for sensitive operations.
+### Browser sign-in
 
-### Verification Flow
+After the password, a user with a second factor sees the second-factor page (`/realms/{realm}/totp`) and enters a code from the app, a texted code, or a recovery code. Applications using the authorization code flow need no extra code for this: the redirect back to the application happens after the second factor.
 
-```mermaid
-sequenceDiagram
-    participant User as User
-    participant App as Application
-    participant Idenplane as Idenplane Server
-    participant Auth as Authenticator App
+### Token API (password grant)
 
-    App->>Idenplane: 1. Begin login
-    Idenplane->>User: 2. Request MFA challenge
-    User->>Auth: 3. Get code from app
-    User->>App: 4. Submit code
-    App->>Idenplane: 5. Verify TOTP code
-    Idenplane->>App: 6. MFA verified
-    App->>Idenplane: 7. Complete login
-    Idenplane->>App: 8. Return tokens
-```
-
-### Standard Login with MFA
-
-When MFA is required, the login flow prompts for a verification code:
-
-```typescript
-async function loginWithMfa(
-  username: string,
-  password: string,
-  totpCode: string
-): Promise<TokenResponse> {
-  // Step 1: Initial authentication
-  const loginResponse = await fetch(
-    'http://localhost:3000/realms/my-realm/protocol/openid-connect/auth',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    }
-  );
-
-  if (loginResponse.status === 403) {
-    // MFA required - exchange for challenge token
-    const { challengeToken } = await loginResponse.json();
-
-    // Step 2: Verify TOTP code
-    const verifyResponse = await fetch(
-      'http://localhost:3000/realms/my-realm/mfa/verify',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-MFA-Challenge': challengeToken,
-        },
-        body: JSON.stringify({ code: totpCode }),
-      }
-    );
-
-    if (!verifyResponse.ok) {
-      throw new Error('Invalid MFA code');
-    }
-
-    // Step 3: Complete login with verified session
-    return completeLoginFlow(challengeToken);
-  }
-
-  return loginResponse.json();
-}
-```
-
-### Verify TOTP Code
-
-Send the TOTP code for verification:
-
-```bash
-curl -X POST "http://localhost:3000/realms/my-realm/mfa/verify" \
-  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-  -H "X-MFA-Challenge: ${CHALLENGE_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "code": "123456"
-  }'
-```
-
-**Response:**
+With the password grant, a user with MFA gets an `mfa_required` error instead of tokens:
 
 ```json
 {
-  "verified": true,
-  "acr": "urn:idenplane:acr:mfa"
+  "error": "mfa_required",
+  "mfa_token": "…",
+  "mfa_methods": ["totp", "recovery"]
 }
 ```
 
-### Error Handling
+Answer it with the `mfa_otp` grant, authenticating the client as for the first request:
 
-```typescript
-interface MFAVerificationResponse {
-  verified?: boolean;
-  error?: string;
-  error_description?: string;
-  remainingAttempts?: number;
-}
-
-async function verifyTotpCode(code: string, challengeToken: string) {
-  try {
-    const response = await fetch(
-      'http://localhost:3000/realms/my-realm/mfa/verify',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-MFA-Challenge': challengeToken,
-        },
-        body: JSON.stringify({ code }),
-      }
-    );
-
-    const data: MFAVerificationResponse = await response.json();
-
-    if (!response.ok || data.error) {
-      switch (data.error) {
-        case 'invalid_code':
-          const remaining = data.remainingAttempts ?? 0;
-          if (remaining <= 2) {
-            throw new Error('Warning: Few attempts remaining before lockout');
-          }
-          throw new Error(`Invalid code. ${remaining} attempts remaining.`);
-
-        case 'challenge_expired':
-          throw new Error('Challenge expired. Please restart the login process.');
-
-        case 'max_attempts_exceeded':
-          throw new Error('Maximum attempts exceeded. Account temporarily locked.');
-      }
-    }
-
-    return data;
-  } catch (error) {
-    if (error instanceof TypeError) {
-      throw new Error('Network error - check connection');
-    }
-    throw error;
-  }
-}
+```bash
+curl -X POST "http://localhost:3000/realms/my-realm/protocol/openid-connect/token" \
+  -d grant_type=mfa_otp -d client_id=my-app -d client_secret=… \
+  -d mfa_token=${MFA_TOKEN} -d otp=123456
 ```
 
-:::note TOTP Window
-Idenplane validates TOTP codes with a window of ±1 step (30 seconds). This accommodates clock skew between the server and authenticator app.
-:::
+`otp` takes a code from the authenticator app or a recovery code. For a texted code, add `mfa_method=sms` (see below). A wrong code returns `invalid_grant`; the `mfa_token` allows a limited number of attempts and expires after a few minutes.
 
 ---
 
@@ -356,131 +155,19 @@ Recovery codes provide a fallback mechanism when users lose access to their auth
 
 ### Using Recovery Codes
 
-When TOTP is unavailable, users can use a recovery code instead:
+A recovery code is entered wherever a second factor is asked for:
 
-```bash
-curl -X POST "http://localhost:3000/realms/my-realm/mfa/recovery" \
-  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-  -H "X-MFA-Challenge: ${CHALLENGE_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "recoveryCode": "A3F2B8C1"
-  }'
-```
+- on the second-factor page during browser sign-in;
+- as the `otp` of the `mfa_otp` grant (see [Token API](#token-api-password-grant));
+- in a step-up, with `"method": "recovery"`.
 
-**Response:**
-
-```json
-{
-  "verified": true,
-  "remainingCodes": 9
-}
-```
-
-### Recovery Code Flow
-
-```typescript
-async function loginWithRecoveryCode(
-  username: string,
-  password: string,
-  recoveryCode: string
-): Promise<TokenResponse> {
-  // Initiate login
-  const loginResponse = await fetch(
-    'http://localhost:3000/realms/my-realm/protocol/openid-connect/auth',
-    {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ username, password }),
-    }
-  );
-
-  if (loginResponse.status === 403) {
-    const { challengeToken } = await loginResponse.json();
-
-    // Use recovery code instead of TOTP
-    const verifyResponse = await fetch(
-      'http://localhost:3000/realms/my-realm/mfa/recovery',
-      {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          'X-MFA-Challenge': challengeToken,
-        },
-        body: JSON.stringify({ recoveryCode }),
-      }
-    );
-
-    if (!verifyResponse.ok) {
-      throw new Error('Invalid recovery code');
-    }
-
-    return completeLoginFlow(challengeToken);
-  }
-
-  return loginResponse.json();
-}
-```
-
-:::warning One-Time Use
-Recovery codes are invalidated after use. Users should store the remaining code count and generate new codes when running low.
-:::
-
-### Regenerating Recovery Codes
-
-Users can regenerate their recovery codes (requires current MFA verification):
-
-```bash
-curl -X POST "http://localhost:3000/realms/my-realm/mfa/recovery/regenerate" \
-  -H "Authorization: Bearer ${ACCESS_TOKEN}" \
-  -H "X-MFA-Challenge: ${CHALLENGE_TOKEN}" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "code": "123456"
-  }'
-```
-
-**Response:**
-
-```json
-{
-  "recoveryCodes": [
-    "2B4E8A1F",
-    "9C3D5A7B",
-    "E1F6B2C8",
-    "D7A3E9B4",
-    "5F1C8D2E",
-    "A8B4F7C3",
-    "3E9D1B5F",
-    "C2F8A4E7",
-    "B6D3F9A1",
-    "7E2C5D8B"
-  ]
-}
-```
+Codes are 8 hexadecimal characters, and each one works once. There is no endpoint to regenerate them: a user who has used up their codes removes and re-enrols the factor, which issues a new set.
 
 ---
 
 ## Check MFA Status
 
-Check whether a user has MFA enabled:
-
-### User Self-Check
-
-```bash
-curl -X GET "http://localhost:3000/realms/my-realm/mfa/status" \
-  -H "Authorization: Bearer ${ACCESS_TOKEN}"
-```
-
-**Response:**
-
-```json
-{
-  "enabled": true,
-  "method": "totp",
-  "verifiedAt": "2024-01-15T10:30:00Z"
-}
-```
+Users see their factors on their account page. Administrators can check any user:
 
 ### Admin Check (per user)
 
@@ -590,57 +277,26 @@ Enable MFA as soon as account creation is complete. Don't wait for a security in
 | Method | Security | Recommendation |
 |--------|----------|----------------|
 | Authenticator App | High | Recommended |
-| Hardware Keys | Highest | Best for high-value accounts |
+| Passkeys (WebAuthn) | Highest | Best for high-value accounts |
 | SMS | Medium (SIM-swap risk) | Supported; prefer an app for high-value accounts |
 
 ### Protect Recovery Codes
 
-```typescript
-// Store recovery codes securely
-async function storeRecoveryCodes(codes: string[]) {
-  // Option 1: Encrypted storage (recommended)
-  const encrypted = await encryptWithMasterKey(codes.join('\n'));
-  localStorage.setItem('recovery_codes', encrypted);
-
-  // Option 2: Export to file (with warning)
-  const blob = new Blob([codes.join('\n')], { type: 'text/plain' });
-  const url = URL.createObjectURL(blob);
-  // Prompt user to save file securely
-}
-```
+Tell users to keep recovery codes offline, for example printed or in a password manager. Anyone with a code and the password can pass the second factor.
 
 ### Monitor Account Activity
 
-```typescript
-// Check for suspicious MFA events
-async function checkMfaActivity(accessToken: string) {
-  const response = await fetch(
-    'http://localhost:3000/realms/my-realm/mfa/activity',
-    {
-      headers: { Authorization: `Bearer ${accessToken}` },
-    }
-  );
-
-  const activity = await response.json();
-
-  // Alert on unusual patterns
-  if (activity.newDeviceCount > 0) {
-    notifyUser(`New device(s) added to MFA on ${activity.lastSetupAt}`);
-  }
-}
-```
+MFA events are recorded in the realm's events (when `eventsEnabled` is on) and can be sent to a webhook: `user.mfa_challenge`, `user.mfa_verify` and `user.mfa_verify_error`. See [Webhooks](./webhooks.mdx).
 
 ---
 
 ## Error Codes
 
-| Code | Description | Action |
+| Where | Response | Meaning |
 |------|-------------|--------|
-| `invalid_code` | TOTP code is invalid or expired | Enter a new code from authenticator |
-| `challenge_expired` | MFA challenge has expired | Restart the authentication flow |
-| `max_attempts_exceeded` | Too many failed attempts | Wait 5 minutes or use recovery code |
-| `mfa_required` | MFA is required for this operation | Complete MFA verification |
-| `invalid_recovery_code` | Recovery code is invalid or used | Try another recovery code |
+| Token endpoint | `mfa_required` with `mfa_token` | The user has a second factor; answer with the `mfa_otp` grant |
+| Token endpoint | `invalid_grant`, "Invalid OTP code" | Wrong code; try again with the same `mfa_token` |
+| Token endpoint | `invalid_grant`, "Invalid or expired MFA token, or too many failed attempts" | Start the sign-in again |
 
 ---
 

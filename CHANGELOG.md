@@ -59,6 +59,7 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ### Changed
 - **`:latest` now moves only with a release.** It used to be rebuilt from every push to `main`, so it had a different digest from the release tag and was signed with the `main` identity. It is now the same image as the newest `vX.Y.Z` tag, verifiable with the release identity. Pushes to `main` still publish `:main-<sha>`.
+- **Docs: corrected statements that did not match the code** (SAML IdP-only, OIDC-only brokering, `/admin/metrics`, NestJS 12 on Node 24, importer password hashes and SAML connections, SDK install notes, API reference and configuration options).
 
 ## [0.10.1] - 2026-11-16
 

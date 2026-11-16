@@ -27,7 +27,7 @@ Returns a paginated list of users in the realm.
 | Parameter | Type | Default | Description |
 |-----------|------|---------|-------------|
 | `page` | integer | 1 | Page number |
-| `limit` | integer | 20 | Users per page (max 100) |
+| `limit` | integer | 20 | Users per page |
 | `search` | string | - | Free-text search across username, email, firstName, lastName |
 | `username` | string | - | Filter by username (case-insensitive contains) |
 | `email` | string | - | Filter by email (case-insensitive contains) |
@@ -45,9 +45,10 @@ curl -X GET "http://localhost:3000/admin/realms/master/users?page=1&limit=20&sea
 
 ```json
 {
-  "data": [
+  "users": [
     {
       "id": "user-uuid-123",
+      "realmId": "realm-uuid-1",
       "username": "johndoe",
       "email": "johndoe@example.com",
       "emailVerified": true,
@@ -58,12 +59,7 @@ curl -X GET "http://localhost:3000/admin/realms/master/users?page=1&limit=20&sea
       "updatedAt": "2024-01-20T14:22:00Z"
     }
   ],
-  "meta": {
-    "page": 1,
-    "limit": 20,
-    "total": 45,
-    "totalPages": 3
-  }
+  "total": 45
 }
 ```
 
@@ -79,13 +75,13 @@ Creates a new user in the realm.
 
 | Field | Type | Required | Description |
 |-------|------|---------|-------------|
-| `username` | string | Yes | Unique username |
-| `email` | string | Yes | User's email address |
+| `username` | string | Yes | Unique username (at least 2 characters, no `<` or `>`) |
+| `email` | string | No | User's email address |
 | `firstName` | string | No | User's first name |
 | `lastName` | string | No | User's last name |
 | `enabled` | boolean | No | Whether user is enabled (default: true) |
 | `emailVerified` | boolean | No | Email is verified (default: false) |
-| `password` | string | No | Initial password |
+| `password` | string | No | Initial password (at least 8 characters; the realm's password policy applies) |
 
 ### Request Example
 
@@ -155,13 +151,12 @@ curl -X GET "http://localhost:3000/admin/realms/master/users/user-uuid-456" \
 PUT /admin/realms/:realmName/users/:userId
 ```
 
-Updates an existing user. Replaces all mutable fields.
+Updates an existing user. Only the fields you send change: `PUT` and `PATCH` behave the same. The username cannot be changed; sending `username` is rejected with `400`.
 
 ### Request Body
 
 ```json
 {
-  "username": "janedoe",
   "email": "janedoe@example.com",
   "firstName": "Jane",
   "lastName": "Doe",
@@ -177,7 +172,6 @@ curl -X PUT "http://localhost:3000/admin/realms/master/users/user-uuid-456" \
   -H "x-admin-api-key: your-api-key-here" \
   -H "Content-Type: application/json" \
   -d '{
-    "username": "janedoe",
     "email": "janedoe@example.com",
     "firstName": "Jane",
     "lastName": "Doe"
@@ -207,7 +201,7 @@ curl -X PATCH "http://localhost:3000/admin/realms/master/users/user-uuid-456" \
 DELETE /admin/realms/:realmName/users/:userId
 ```
 
-Permanently deletes a user and all associated data.
+Permanently deletes a user and all associated data. Requires the `super-admin` admin role (the admin API key has it).
 
 ### Request Example
 
@@ -233,7 +227,8 @@ Sets or resets a user's password.
 | Field | Type | Required | Description |
 |-------|------|---------|-------------|
 | `password` | string | Yes | New password |
-| `temporary` | boolean | No | Force user to change password on next login |
+
+The endpoint also accepts a `temporary` field, but ignores it: Idenplane has no "change password at next sign-in" action yet.
 
 ### Request Example
 
@@ -242,8 +237,7 @@ curl -X PUT "http://localhost:3000/admin/realms/master/users/user-uuid-456/reset
   -H "x-admin-api-key: your-api-key-here" \
   -H "Content-Type: application/json" \
   -d '{
-    "password": "newSecurePassword123",
-    "temporary": true
+    "password": "example-new-password-1"
   }'
 ```
 
@@ -270,9 +264,11 @@ curl -X POST "http://localhost:3000/admin/realms/master/users/user-uuid-456/send
 
 ```json
 {
-  "message": "Verification email sent"
+  "message": "If the account exists, a verification email has been sent."
 }
 ```
+
+The answer is the same whether or not the user exists or has an e-mail address.
 
 ## List Offline Sessions
 
@@ -292,18 +288,15 @@ curl -X GET "http://localhost:3000/admin/realms/master/users/user-uuid-456/offli
 ### Response
 
 ```json
-{
-  "data": [
-    {
-      "tokenId": "token-uuid-789",
-      "clientId": "my-app",
-      "createdAt": "2024-02-01T10:00:00Z",
-      "lastRefresh": "2024-02-15T08:30:00Z",
-      "ipAddress": "192.168.1.100",
-      "userAgent": "Mozilla/5.0..."
-    }
-  ]
-}
+[
+  {
+    "id": "token-uuid-789",
+    "sessionId": "session-uuid-1",
+    "sessionStarted": "2024-02-01T10:00:00Z",
+    "expiresAt": "2024-03-02T10:00:00Z",
+    "createdAt": "2024-02-15T08:30:00Z"
+  }
+]
 ```
 
 ## Revoke Offline Session
@@ -312,7 +305,7 @@ curl -X GET "http://localhost:3000/admin/realms/master/users/user-uuid-456/offli
 DELETE /admin/realms/:realmName/users/:userId/offline-sessions/:tokenId
 ```
 
-Revokes a specific offline session.
+Revokes a specific offline session. `:tokenId` is the `id` from the list above.
 
 ### Request Example
 
@@ -339,6 +332,7 @@ Returns HTTP 204 No Content on success.
 ```json
 {
   "id": "string (UUID)",
+  "realmId": "string (UUID)",
   "username": "string",
   "email": "string",
   "emailVerified": "boolean",
@@ -346,9 +340,8 @@ Returns HTTP 204 No Content on success.
   "lastName": "string",
   "enabled": "boolean",
   "createdAt": "string (ISO 8601)",
-  "updatedAt": "string (ISO 8601)",
-  "attributes": "object (custom attributes)",
-  "groups": "string[]",
-  "roles": "string[]"
+  "updatedAt": "string (ISO 8601)"
 }
 ```
+
+Roles, groups and custom attributes are not part of the user object; they have their own endpoints (for example `/admin/realms/:realmName/users/:userId/role-mappings/realm`).

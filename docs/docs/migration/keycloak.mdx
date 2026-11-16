@@ -21,7 +21,7 @@ Before starting the migration:
 - Sufficient database storage for migrated data
 
 :::note Large Export Files
-For exports with more than 5,000 users, split the export into smaller batches. See [Handling Large Exports](#handling-large-exports) for details.
+The server accepts JSON request bodies up to 100 KB, so most exports with users must be split into batches. See [Handling Large Exports](#handling-large-exports) for details.
 :::
 
 ---
@@ -57,7 +57,7 @@ The exported JSON contains:
 | `clients` | OAuth 2.0 client applications |
 | `roles` | Realm and client roles |
 | `groups` | User groups with role mappings |
-| `identityProviders` | Social/enterprise identity providers |
+| `identityProviders` | Social/enterprise identity providers (OIDC ones can be imported; see below) |
 | `clientScopes` | OAuth client scopes |
 
 :::warning Sensitive Data
@@ -70,14 +70,17 @@ Exported password hashes depend on Keycloak's password hashing algorithm. See [P
 
 ### Basic Import
 
-Import the entire realm export:
+Wrap the realm export in a `data` field. Sending the bare export is rejected with `400`:
 
 ```bash
+jq '{data: .}' your-realm-export.json > import.json
 curl -X POST "http://localhost:3000/admin/migration/keycloak" \
   -H "x-admin-api-key: ${ADMIN_API_KEY}" \
   -H "Content-Type: application/json" \
-  -d @your-realm-export.json
+  -d @import.json
 ```
+
+The endpoint needs a global (super-admin) credential. The server accepts JSON request bodies up to 100 KB, so a large export has to be split, for example into several files that each carry the realm settings and a slice of `users`.
 
 ### Specify Target Realm
 
@@ -117,24 +120,24 @@ The migration returns a detailed report:
 
 ```json
 {
-  "success": true,
+  "source": "keycloak",
+  "dryRun": false,
+  "startedAt": "2026-11-16T10:00:00.000Z",
+  "completedAt": "2026-11-16T10:00:04.000Z",
   "summary": {
-    "users": { "imported": 450, "skipped": 12 },
-    "clients": { "imported": 8, "skipped": 2 },
-    "roles": { "imported": 25, "skipped": 5 },
-    "groups": { "imported": 10, "skipped": 0 }
+    "realms": { "created": 1, "skipped": 0, "failed": 0 },
+    "users": { "created": 450, "skipped": 12, "failed": 0 },
+    "clients": { "created": 8, "skipped": 2, "failed": 0 },
+    "roles": { "created": 25, "skipped": 5, "failed": 0 },
+    "groups": { "created": 10, "skipped": 0, "failed": 0 },
+    "scopes": { "created": 0, "skipped": 0, "failed": 0 },
+    "identityProviders": { "created": 2, "skipped": 0, "failed": 0 }
   },
-  "details": {
-    "skippedUsers": [
-      { "username": "test@example.com", "reason": "email_conflict" },
-      { "username": "admin@example.com", "reason": "already_exists" }
-    ],
-    "skippedClients": [
-      { "clientId": "account", "reason": "builtin_client" }
-    ]
-  },
+  "errors": [
+    { "entity": "user", "name": "broken-user", "error": "..." }
+  ],
   "warnings": [
-    "Unsupported password hash algorithm: password-sha1 for user test@example.com"
+    { "entity": "realm", "message": "Realm 'my-realm' already exists, using existing" }
   ]
 }
 ```
@@ -143,62 +146,49 @@ The migration returns a detailed report:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `success` | boolean | Overall migration success |
-| `summary.users.imported` | number | Users successfully imported |
-| `summary.users.skipped` | number | Users skipped due to conflicts |
-| `details.skippedUsers[].reason` | string | Reason for skip (see below) |
+| `summary.<entity>.created` | number | Rows created (in a dry run: rows that would be created) |
+| `summary.<entity>.skipped` | number | Rows that already existed and were left unchanged. Keycloak's built-in clients (`account`, `admin-cli`, …) are left out and not counted |
+| `summary.<entity>.failed` | number | Rows that failed; each has an entry in `errors` |
+| `errors[]` | array | `{ entity, name, error }` for each failure |
+| `warnings[]` | array | `{ entity, message }` for things that need your attention |
 
-### Skip Reasons
-
-| Reason | Description | Resolution |
-|--------|-------------|------------|
-| `email_conflict` | User email already exists in target realm | Delete existing user or change email |
-| `already_exists` | Username already exists | Delete existing user |
-| `invalid_data` | User data missing required fields | Fix export data |
-| `unsupported` | Feature not supported by Idenplane | Review and migrate manually |
+A user is skipped when a user with the same username already exists in the target realm. The report does not list which password hashes were carried over; see below.
 
 ---
 
 ## Password Migration
 
-### Supported Algorithms
+### What is carried over
 
-Idenplane recognizes and preserves password hashes for these algorithms:
+Only one kind of Keycloak password credential is carried over: the **legacy PBKDF2-SHA256** format, where the credential has `hashedSaltedValue`, `salt` and `hashIterations` fields. The importer stores it as `pbkdf2-sha256`, and the browser sign-in is meant to verify it and then rehash the password with Argon2id.
 
-| Algorithm | Migration Status |
-|-----------|-----------------|
-| bcrypt | Preserved |
-| pbkdf2-sha256 | Preserved |
-| pbkdf2-sha512 | Preserved |
-| argon2 | Preserved |
+:::caution Known issue in 0.10.1
+In 0.10.1 an imported PBKDF2 hash is not verified: the sign-in fails with an error before it reaches the PBKDF2 check. Until a release fixes this, plan a password reset for every imported Keycloak user, and test sign-in with one migrated user before you switch over.
+:::
 
-### Unsupported Algorithms
+Everything else is imported **without a password**:
 
-Users with passwords using unsupported algorithms will be imported **without** a password hash. These users must complete a password reset:
+- current Keycloak exports, which keep the hash in `secretData` and `credentialData`;
+- `pbkdf2-sha512`, `pbkdf2` (SHA-1), `argon2`, `bcrypt` and any other algorithm.
+
+The report does not warn about these users. Test sign-in with a few migrated users before you switch over.
+
+### Users without a password
+
+Users imported without a password must set a new one:
+
+- the user resets it at `/realms/{realm}/forgot-password` (the realm needs working e-mail); or
+- an administrator sets one:
 
 ```bash
-# After migration, trigger password reset for affected users
-curl -X POST "http://localhost:3000/admin/realms/my-realm/users/${USER_ID}/execute-actions-email" \
+curl -X PUT "http://localhost:3000/admin/realms/my-realm/users/${USER_ID}/reset-password" \
   -H "x-admin-api-key: ${ADMIN_API_KEY}" \
   -H "Content-Type: application/json" \
-  -d '["VERIFY_ACTION", "UPDATE_PASSWORD"]'
-```
-
-### Check Password Hash Support
-
-The migration report includes warnings for users with unsupported password hashes:
-
-```json
-{
-  "warnings": [
-    "Unsupported password hash algorithm: password-sha1 for user legacy@example.com",
-    "Unsupported password hash algorithm: scrypt for user olduser@example.com"
-  ]
-}
+  -d '{"password": "<new password>"}'
 ```
 
 :::tip Password Reset Strategy
-Consider using Idenplane's bulk email feature to notify affected users before triggering password resets.
+Tell affected users before the switch, so a password reset e-mail does not surprise them.
 :::
 
 ---
@@ -225,18 +215,7 @@ Keycloak allows redirect URIs ending in `/*`. Idenplane matches redirect URIs ex
 
 ### Built-in Clients
 
-Keycloak's built-in clients (account, admin-cli, broker) are skipped:
-
-```json
-{
-  "details": {
-    "skippedClients": [
-      { "clientId": "account", "reason": "builtin_client" },
-      { "clientId": "admin-cli", "reason": "builtin_client" }
-    ]
-  }
-}
-```
+Keycloak's built-in clients (`account`, `account-console`, `admin-cli`, `broker`, `realm-management`, `security-admin-console`) are left out. They don't appear in the report.
 
 ### Regenerate Client Secrets
 
@@ -271,46 +250,23 @@ curl -X POST "http://localhost:3000/admin/realms/my-realm/clients/${CLIENT_ID}/r
 
 ### Default Roles
 
-Keycloak default roles are mapped to Idenplane realm roles:
+Keycloak's built-in realm roles are left out:
 
 | Keycloak | Idenplane |
 |----------|--------|
 | `uma_authorization` | Not migrated |
-| `offline_access` | Supported |
+| `offline_access` | Not migrated as a role; offline tokens come from the `offline_access` scope |
+| `default-roles-{realm}` | Not migrated |
 
-### Role Hierarchy
+### Composite Roles
 
-Composite roles (roles containing other roles) are preserved:
-
-```json
-{
-  "name": "manager",
-  "composite": true,
-  "composites": [
-    "user-view",
-    "user-edit",
-    "team-view"
-  ]
-}
-```
+Idenplane has no composite roles. A Keycloak composite role is imported as a plain role, without the roles it contains; assign those roles directly, or through a group.
 
 ---
 
 ## Group Migration
 
-Groups are imported with their role mappings:
-
-```json
-{
-  "name": "Engineering",
-  "path": "/Engineering",
-  "subGroups": [],
-  "realmRoles": ["developer"],
-  "clientRoles": {
-    "my-client": ["read", "write"]
-  }
-}
-```
+Groups are imported by name, with their sub-groups. A group's `realmRoles` and `clientRoles` are **not** imported; assign roles to the groups again after the import.
 
 ### Group Hierarchy
 
@@ -330,11 +286,11 @@ Nested groups are preserved in the same structure:
 
 ### Batch Processing
 
-For exports with more than 5,000 users:
+The server accepts JSON request bodies up to 100 KB; a larger request gets `413`. That is a few hundred users, depending on how much each one carries. For a larger export:
 
-1. Split the export into multiple JSON files
+1. Split the export into several files, each with the realm settings and a slice of `users`
 2. Import each batch separately
-3. Use the same `targetRealm` for consistent migration
+3. Use the same `targetRealm` for every batch. Entities that already exist are skipped, so repeating the roles, groups and clients in each batch is harmless
 
 ### Splitting Users
 
@@ -342,9 +298,9 @@ For exports with more than 5,000 users:
 # Get total user count
 USER_COUNT=$(jq '.users | length' export.json)
 
-# Split into batches of 2000
-jq '[.users[] | select(.username | contains("batch1"))]' export.json > batch1.json
-jq '[.users[] | select(.username | contains("batch2"))]' export.json > batch2.json
+# Batches of 200 users, each a complete export with a slice of users
+jq '.users |= .[0:200]'   export.json > batch1.json
+jq '.users |= .[200:400]' export.json > batch2.json
 ```
 
 ### Sequential Import
@@ -380,7 +336,9 @@ curl -X GET "http://localhost:3000/admin/realms/my-realm/users?limit=1" \
 
 ### 2. Test Authentication
 
-Create a test script to verify migrated users can authenticate:
+Sign in through the browser login (`/realms/{realm}/protocol/openid-connect/auth`) with a client you created, using a few migrated users. The browser login is what verifies an imported hash and rehashes it; the password grant only checks Argon2id hashes, so a migrated user fails it until after a first browser sign-in.
+
+If the realm has a client that allows the password grant, you can also script the check for users who have already signed in once:
 
 ```typescript
 async function testMigration(realm: string, testUsers: string[]) {
@@ -395,9 +353,9 @@ async function testMigration(realm: string, testUsers: string[]) {
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: new URLSearchParams({
             username,
-            password: 'temp-password-change-required', // Users with preserved passwords use their old password
+            password: 'the-users-password', // placeholder: the user's real password
             grant_type: 'password',
-            client_id: 'admin-cli',
+            client_id: 'my-app', // a client with "password" in its grantTypes
           }),
         }
       );
@@ -421,9 +379,14 @@ Update applications to use Idenplane endpoints:
 | `.../auth/realms/{realm}` | `.../realms/{realm}` |
 | `.../auth/admin/realms/{realm}` | `.../admin/realms/{realm}` |
 
-### 4. Migrate Identity Providers
+### 4. Check Identity Providers
 
-Social and enterprise identity providers require manual reconfiguration; they are not carried over by the export. See [Identity Providers](/guides/authentication#identity-providers) for the supported types and how to configure one.
+The importer creates an identity provider for each entry in `identityProviders`, with the client ID, secret, endpoints, `trustEmail` and `enabled` flag from the export. Review each one:
+
+- Idenplane brokers OpenID Connect and OAuth 2.0 providers only. A Keycloak **SAML** identity provider is imported as a row of type `SAML` that cannot sign anyone in. Disable or delete it, and connect that IdP over OIDC if it supports it.
+- Social providers (`google`, `github`, …) often have no endpoint URLs in the export. Fill them in before use.
+
+See [Identity Providers](/guides/authentication#identity-providers) for the supported types and how to configure one.
 
 ### 5. Notify Users
 
@@ -456,15 +419,15 @@ jq . your-realm-export.json > /dev/null && echo "Valid JSON"
 
 ### Passwords Not Preserved
 
-**Cause:** Unsupported password hash algorithm.
+**Cause:** The credential is not in the legacy PBKDF2-SHA256 format.
 
 **Solution:** Users must complete password reset. See [Password Migration](#password-migration).
 
 ### Missing Roles or Groups
 
-**Cause:** Dependencies not imported before users.
+**Cause:** A role or group that a user references is missing from the export, or failed to import.
 
-**Solution:** Import in order: clients → roles → groups → users.
+**Solution:** Check `errors` in the report. The importer creates roles and groups before users, so they must be in the same export.
 
 ---
 
@@ -488,11 +451,13 @@ Import realm from Keycloak export.
 
 | Parameter | Type | Required | Description |
 |-----------|------|----------|-------------|
-| `data` | object | Yes | Keycloak realm export JSON |
+| `data` | object | Yes | Keycloak realm export JSON (body limit 100 KB) |
 | `dryRun` | boolean | No | Test migration without changes (default: false) |
 | `targetRealm` | string | No | Override target realm name |
 
-**Response:** Migration report with counts of imported/skipped entities.
+**Response:** `200` with the migration report above. `400` for a missing or non-object `data`, `401` without credentials, `403` for an admin without global scope, `413` for a body over 100 KB.
+
+The same endpoint family also imports Auth0 (`/admin/migration/auth0`, see [Migrating from Auth0](./auth0.mdx)), Zitadel (`/admin/migration/zitadel`) and Authentik (`/admin/migration/authentik`).
 
 ---
 

@@ -20,16 +20,16 @@ The token endpoint (`/realms/{realm}/protocol/openid-connect/token`) returns [RF
 
 ### `invalid_grant`: what each cause means
 
-`invalid_grant` is thrown from many different checks, and the `error_description` is the fastest way to tell which one fired. The table below is the exact set of descriptions the server returns.
+`invalid_grant` is thrown from many different checks, and the `error_description` is the fastest way to tell which one fired. The table below lists the common ones. A few rarer ones are not in it: `The refresh token is bound to a different client certificate`, `The user is disabled` and `The session has ended`.
 
 | `error_description` | Grant / context | What actually happened | What to check |
 |---|---|---|---|
 | `Invalid credentials` | `password` | Username/password didn't match, the user is disabled, or (for a federated user) the LDAP bind failed — this also covers a user that doesn't exist locally yet: the server attempts an import-on-first-login federation bind before giving up | Verify the password; check the user's `enabled` flag; if the user has (or should have) a `federationLink`, test the LDAP connection (see [LDAP section](#ldap--user-federation)) — including for a brand-new user who should be auto-imported on first login but isn't (check `importEnabled` on the federation) |
-| `Account is temporarily locked. Please try again later.` | `password`, `authorization_code` | Brute-force protection tripped: too many failures inside the lockout window | Wait out `lockoutDuration`, or unlock via the admin API (below) |
+| `Account is temporarily locked. Please try again later.` | `password`, `authorization_code` | Brute-force protection tripped: too many failures inside the lockout window | Wait out `lockoutDuration`, or unlock with `POST /admin/realms/{realm}/brute-force/users/{userId}/unlock` (needs an admin session with MFA step-up; the API key is refused) |
 | `Password has expired. Please change your password.` | `password` | The realm's password policy marks this user's password as expired | Have the user complete the password-reset flow |
-| `MFA setup required. Please set up two-factor authentication.` | `password` | The realm requires MFA for this user, but they have no TOTP enrolled yet | Enroll TOTP via `POST /realms/{realm}/mfa/setup` before retrying login |
+| `MFA setup required. Please set up two-factor authentication.` | `password` | The realm requires MFA for this user, but they have no TOTP enrolled yet | Have the user sign in once through the browser, where the enrolment page lets them add an authenticator app (or a phone), or enrol on the account page (`/realms/{realm}/account/totp-setup`) |
 | `Invalid or expired MFA token, or too many failed attempts` | `mfa_otp` | The `mfa_token` is expired/unknown, **or** it was issued for a different realm, **or** for a different client | All three cases return identical wording by design (no oracle for attackers) — check the server logs, which log the realm/client mismatch cases distinctly (`MFA cross-realm token use attempt` / `MFA cross-client token use attempt`) |
-| `Invalid OTP code` | `mfa_otp` | The submitted code failed both TOTP verification and recovery-code verification | Check device clock drift (`totpPeriod`); try a recovery code |
+| `Invalid OTP code` | `mfa_otp` | The submitted code failed both TOTP verification and recovery-code verification | Check the device clock (TOTP codes use a fixed 30-second step, with one step of tolerance); try a recovery code |
 | `User not found` | `mfa_otp`, `authorization_code`, `device_code` | The user backing the challenge/code/device grant no longer exists | Re-authenticate from scratch |
 | `Invalid or expired refresh token` | `refresh_token` | Token not found, already revoked, or past `expiresAt` | See [refresh token rotation](#refresh-token-rotation-and-reuse) below — a *revoked* token here usually means reuse was detected |
 | `This refresh token predates client binding. Please log in again.` | `refresh_token` | The stored token has no `clientId` (issued before client-binding was added) | One-time re-login resolves it permanently |
@@ -201,9 +201,9 @@ This is the single most important thing to know about the sync path: `syncUsers(
 
 If `importEnabled` is `false` on the federation record, `syncUsers()` returns immediately with `{ synced: 0, message: 'Import is disabled for this federation' }` without touching LDAP at all. This is expected behavior for federations configured purely for pass-through authentication, not user provisioning — check `importEnabled` before assuming sync is broken.
 
-### `startTls` does not validate the LDAP server's certificate
+### LDAP TLS certificate errors
 
-When `startTls` is enabled, the LDAP client connects with `rejectUnauthorized: false`. TLS is used for transport encryption, but the server's certificate is not validated against a CA — a self-signed or mismatched certificate on the LDAP side will not cause a connection failure. This is worth knowing if you're debugging what looks like a successful-but-suspicious TLS handshake.
+With `ldaps://` and with `startTls`, the LDAP client validates the server's certificate (`rejectUnauthorized: true`, with the host name checked). A self-signed certificate, one from a private CA, or one whose name does not match the host fails the connection. Add the CA to Node's trust store, for example with `NODE_EXTRA_CA_CERTS=/path/to/ca.pem`, and connect with the name on the certificate.
 
 ---
 

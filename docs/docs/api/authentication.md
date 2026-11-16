@@ -128,10 +128,11 @@ curl -X POST "http://localhost:3000/realms/master/protocol/openid-connect/token"
 ```json
 {
   "error": "invalid_grant",
-  "error_description": "The authorization code has expired",
-  "error_uri": "https://idenplane.com/docs/api/authentication"
+  "error_description": "The authorization code has expired"
 }
 ```
+
+When a user has MFA, the password grant answers `mfa_required` with an `mfa_token`; the client then sends the code with the `mfa_otp` grant. See [MFA](../guides/mfa.mdx).
 
 ### Response Headers
 
@@ -166,11 +167,13 @@ Warning: 299 - "The OAuth 2.0 password grant is deprecated..."
 POST /realms/:realmName/protocol/openid-connect/token/introspect
 ```
 
-Validate and introspect tokens:
+Validate and introspect tokens. The caller must authenticate as a client: a confidential client with its secret (or HTTP Basic or a client certificate), a public client with its `client_id`. Without it the response is `401`.
 
 ```bash
 curl -X POST "http://localhost:3000/realms/master/protocol/openid-connect/token/introspect" \
   -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "client_id=my-app" \
+  -d "client_secret=my-app-secret" \
   -d "token=eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9..." \
   -d "token_type_hint=access_token"
 ```
@@ -199,19 +202,21 @@ curl -X POST "http://localhost:3000/realms/master/protocol/openid-connect/token/
 ## Revocation
 
 ```
-POST /realms/:realmName/protocol/openid-connect/token/revoke
+POST /realms/:realmName/protocol/openid-connect/revoke
 ```
 
-Revoke an access or refresh token:
+Revoke an access or refresh token. The caller authenticates as a client, as for introspection:
 
 ```bash
-curl -X POST "http://localhost:3000/realms/master/protocol/openid-connect/token/revoke" \
+curl -X POST "http://localhost:3000/realms/master/protocol/openid-connect/revoke" \
   -H "Content-Type: application/x-www-form-urlencoded" \
+  -d "client_id=my-app" \
+  -d "client_secret=my-app-secret" \
   -d "token=rt_8xq2k3j5h7..." \
   -d "token_type_hint=refresh_token"
 ```
 
-**Response:** Returns HTTP 200 on success, regardless of whether the token was valid.
+**Response:** HTTP 200 for a revoked or unknown token (RFC 7009). A token that was issued to a different client gets `403` with `{"error": "access_denied"}`, and a request without `token` gets `400`.
 
 ## Device Authorization Grant
 
@@ -235,8 +240,8 @@ curl -X POST "http://localhost:3000/realms/master/protocol/openid-connect/auth/d
 {
   "device_code": "GmRhmhcxhwAzkoEqiMEg_DnyEysNkuNhszIySk9eS...",
   "user_code": "WDJB-MJHT",
-  "verification_uri": "https://idenplane.com/device",
-  "verification_uri_complete": "https://idenplane.com/device?user_code=WDJB-MJHT",
+  "verification_uri": "https://auth.example.com/realms/master/device",
+  "verification_uri_complete": "https://auth.example.com/realms/master/device?user_code=WDJB-MJHT",
   "expires_in": 600,
   "interval": 5
 }

@@ -957,7 +957,10 @@ model IdentityProvider {
   linkOnly        Boolean @default(false) @map("link_only")
   syncUserProfile Boolean @default(true) @map("sync_user_profile")
 
-  // SAML broker config (for providerType="saml")
+  // Unused for sign-in: no code acts on it. Idenplane cannot broker a SAML
+  // identity provider (the broker is OIDC/OAuth 2.0 only); it is a SAML IdP
+  // for service providers (see SamlServiceProvider). Kept so existing data and
+  // realm exports stay valid.
   samlConfig Json? @map("saml_config")
 
   createdAt DateTime @default(now()) @map("created_at")

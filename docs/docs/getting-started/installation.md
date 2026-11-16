@@ -77,9 +77,10 @@ For development or custom deployments, build from source.
 3. **Configure environment:**
 
    ```bash
-   cp .env.example .env
-   # Edit .env with your settings
+   node scripts/setup-env.cjs
    ```
+
+   This writes a `.env` with generated secrets and refuses to overwrite an existing one. If you copy `.env.example` instead, replace every `REPLACE_ME_...` value first: the placeholder `ADMIN_PASSWORD` is refused at startup.
 
 4. **Setup database:**
 
@@ -109,8 +110,8 @@ For development or custom deployments, build from source.
 For active development with hot-reload:
 
 ```bash
-# Start PostgreSQL via Docker
-docker compose up db -d
+# Start PostgreSQL via Docker (development credentials idenplane/idenplane)
+docker compose -f docker-compose.dev.yml up -d db
 
 # Start backend in watch mode
 npm run start:dev

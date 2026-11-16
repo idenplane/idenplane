@@ -63,7 +63,7 @@ The [development setup guide](https://idenplane.com/contributing/development-set
 
 ### Required Tools
 
-- Node.js 22+ (CI runs 24)
+- Node.js 24 (the version CI and the Docker image use; 22 is not tested)
 - npm 10+
 - Docker & Docker Compose
 - Git
@@ -194,7 +194,7 @@ Idenplane currently has a single maintainer, so review turnaround depends on the
 
 ## Project Structure
 
-The backend has around 60 NestJS modules under `src/`, each self-contained (its own controllers/services/DTOs) — too many to keep an accurate list here without it going stale. A representative sample:
+The backend has about 70 NestJS modules under `src/`, each self-contained (its own controllers/services/DTOs) — too many to keep an accurate list here without it going stale. A representative sample:
 
 ```
 src/
@@ -266,4 +266,4 @@ Report them privately through [GitHub private vulnerability reporting](https://g
 
 ## License
 
-By contributing, you agree that your contributions will be licensed under the project's AGPL-3.0 license. See the [LICENSE](LICENSE) file for the full text.
+By contributing, you agree that your contributions will be licensed under the license of the part you change: AGPL-3.0 for the server (see [LICENSE](LICENSE)), and MIT for the SDKs and client packages under `packages/` and for `terraform-provider-idenplane/`, as their own LICENSE files say.

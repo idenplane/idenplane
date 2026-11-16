@@ -2,12 +2,12 @@
 id: environment-variables
 title: Environment Variables
 sidebar_position: 1
-description: Complete reference for all Idenplane environment variables and configuration options.
+description: Reference for the Idenplane environment variables and configuration options.
 ---
 
 # Environment Variables
 
-Idenplane is configured entirely through environment variables. This reference documents all available options with their defaults, requirements, and examples.
+Idenplane's server settings come from environment variables; realm settings are made in the admin console or the admin API. This reference documents the variables with their defaults, requirements, and examples. A few specialised ones are documented with their feature: `WEBHOOK_ALLOW_PRIVATE_TARGETS` and `WEBHOOK_RETRY_DELAYS_MS` in [Webhooks](../guides/webhooks.mdx), `BACKUP_DIR`, `PG_BIN_DIR` and `UPGRADE_*` in [Upgrading](../deployment/upgrading.mdx), and `SMS_REALM_HOURLY_LIMIT` in [MFA](../guides/mfa.mdx).
 
 ---
 
@@ -18,9 +18,9 @@ Idenplane is configured entirely through environment variables. This reference d
 | `DATABASE_URL` | — | Yes | PostgreSQL connection string |
 | `DATABASE_MIGRATION_URL` | — | No | URL the Docker image uses for `prisma migrate deploy` only. Defaults to `DATABASE_URL`, with `sslmode=verify-full`/`verify-ca` and `sslrootcert` translated to Prisma's `sslmode=require&sslcert=…&sslaccept=strict` so migrations verify the database certificate too |
 | `PORT` | `3000` | No | Server port |
-| `NODE_ENV` | `development` | No | Environment: `development`, `production` |
+| `NODE_ENV` | unset (non-production); `production` in the Docker image | No | Environment: `development`, `production` |
 | `BASE_URL` | `http://localhost:3000` | No | Public URL for redirects and emails |
-| `ADMIN_API_KEY` | — | Yes (prod) | API key for admin endpoints |
+| `ADMIN_API_KEY` | — | Yes (prod) | API key for admin endpoints; see [API Authentication](#api-authentication) |
 | `WEBHOOK_SECRET_KEY` | — | Yes (prod) | AES-256-GCM key for every secret stored encrypted (not only webhooks) |
 | `WEBHOOK_ENCRYPTION_SALT` | — | Yes (prod) | Salt for webhook key derivation |
 | `REDIS_URL` | — | No | Redis connection string |
@@ -51,7 +51,7 @@ Control the server's network and runtime settings.
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
 | `PORT` | `3000` | No | Port the server listens on |
-| `NODE_ENV` | `development` | No | Environment: `development`, `production`, `test` |
+| `NODE_ENV` | unset | No | Environment: `development`, `production`, `test`. Unset counts as non-production; the Docker image sets `production` |
 | `BASE_URL` | `http://localhost:3000` | No | Public URL used for redirects, emails, and OAuth callbacks |
 | `LOG_LEVEL` | `info` in production, `debug` otherwise | No | Lowest level written to the log: `fatal`, `error`, `warn`, `info`, `debug`, `trace` |
 | `LOG_ACCESS` | `errors` | No | Which HTTP requests get an access-log line: `errors` (failed requests only: 4xx as `warn`, 5xx as `error`), `all` (every request, successful ones at `info`), or `off` |
@@ -84,7 +84,7 @@ The following variables are **required in production**. Idenplane will refuse to
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
-| `ADMIN_API_KEY` | — | Yes (prod) | Secret API key for admin endpoints (32+ characters recommended) |
+| `ADMIN_API_KEY` | — | Yes (prod) | Secret API key for admin endpoints. In production it must be at least 32 characters and not a placeholder, or the server exits at startup. The Docker image refuses to start in production without it; run from source, an unset key only disables API-key authentication |
 | `ADMIN_USER` | `admin` | No | Initial admin username (only used on first run) |
 | `ADMIN_PASSWORD` | None: generated outside production | Production, first start | Initial admin password (only used on first run). There is no default password. Outside production, an unset value gets a random password that is printed once in the log of the first start. `admin` and the documented placeholders are refused (outside production, `ALLOW_INSECURE_ADMIN_PASSWORD=true` accepts them for a throwaway local instance). With `NODE_ENV=production` the first start refuses a missing, default or shorter-than-12-character value |
 | `ALLOW_INSECURE_ADMIN_PASSWORD` | `false` | No | Outside production only: accept `admin` or a documented placeholder as `ADMIN_PASSWORD`. Never set it on an instance anyone else can reach |
@@ -115,7 +115,7 @@ The first start creates the `master` realm and its admin (`ADMIN_USER`, default 
 - `admin` and the documented placeholders (`password`, `changeme`, `change_this_password`, `REPLACE_ME_WITH_A_STRONG_PASSWORD`) are refused, and the start fails. Outside production only, `ALLOW_INSECURE_ADMIN_PASSWORD=true` accepts them.
 - With `NODE_ENV=production`, a missing or shorter-than-12-character value is refused as well.
 
-`npm run start:prod` does not set `NODE_ENV`, so an instance run from source follows the non-production rules: it still never gets a known password. `node scripts/setup-env.cjs`, the Docker Compose files and the Helm chart all set a random `ADMIN_PASSWORD` for you.
+`npm run start:prod` does not set `NODE_ENV`, so an instance run from source follows the non-production rules: it still never gets a known password. `node scripts/setup-env.cjs` and the Helm chart generate a random `ADMIN_PASSWORD` for you; the Docker Compose files refuse to start without one.
 
 ### Webhook Encryption
 
@@ -245,7 +245,7 @@ For Redis Sentinel deployments:
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
 | `REDIS_SENTINEL_HOSTS` | — | No | Comma-separated list of Sentinel host:port pairs (e.g., `sentinel1:26379,sentinel2:26379`) |
-| `REDIS_SENTINEL_NAME` | — | No | Name of the Sentinel master to monitor (e.g., `mymaster`) |
+| `REDIS_SENTINEL_NAME` | `mymaster` | No | Name of the Sentinel master to monitor |
 
 ```bash
 # Redis Sentinel configuration
@@ -295,6 +295,39 @@ THROTTLE_TTL=300000
 THROTTLE_LIMIT=500
 ```
 
+The admin API has its own per-IP limits:
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `ADMIN_API_KEY_RL_PER_MINUTE` | `60` | No | Requests authenticated with the admin API key, per client IP per minute |
+| `ADMIN_API_KEY_RL_PER_HOUR` | `1000` | No | The same, per hour |
+| `ADMIN_IP_RL_PER_MINUTE` | `5` | No | Admin console sign-in attempts per client IP per minute |
+| `ADMIN_IP_RL_PER_HOUR` | `50` | No | The same, per hour |
+
+---
+
+## Performance Tuning
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `DATABASE_POOL_MAX` | `max(5, ceil(2 × CPUs / workers) + 1)` | No | Maximum PostgreSQL connections per process. With several workers or instances, the total is the sum; keep it under PostgreSQL's `max_connections` |
+| `DATABASE_POOL_MIN` | `2` | No | Connections kept open per process |
+| `DATABASE_POOL_IDLE_TIMEOUT_MS` | `30000` | No | Idle time before a pooled connection is closed |
+| `ARGON2_MAX_CONCURRENCY` | CPUs ÷ workers (at least 1) | No | Password hashes computed at the same time per process; more wait in a queue |
+
+---
+
+## SMS Providers
+
+A realm's SMS settings (admin console, **SMS** tab) take precedence. When a realm leaves a provider credential empty, the server falls back to these:
+
+| Variable | Provider |
+|----------|----------|
+| `TWILIO_ACCOUNT_SID`, `TWILIO_AUTH_TOKEN`, `TWILIO_PHONE_NUMBER` | Twilio |
+| `VONAGE_API_KEY`, `VONAGE_API_SECRET`, `VONAGE_PHONE_NUMBER` | Vonage |
+| `AWS_ACCESS_KEY_ID`, `AWS_SECRET_ACCESS_KEY`, `AWS_REGION`, `AWS_SNS_FROM_NUMBER` | AWS SNS |
+| `SMS_WEBHOOK_URL`, `SMS_WEBHOOK_HEADERS`, `SMS_WEBHOOK_TIMEOUT_MS` | Generic webhook |
+
 ---
 
 ## Reverse Proxy / Trusted Proxies
@@ -331,7 +364,7 @@ Setting `TRUSTED_PROXIES=*` is only safe when the network layer prevents direct 
 
 ## Client Certificates (mTLS)
 
-OAuth client authentication with TLS client certificates ([RFC 8705](https://www.rfc-editor.org/rfc/rfc8705)): `tls_client_auth` and `self_signed_tls_client_auth`. Everything is off by default; a realm must also turn on `mtlsClientAuthEnabled`. See the [mTLS client authentication guide](../guides/mtls-client-auth.mdx). Certificate-bound access tokens are not issued yet.
+OAuth client authentication with TLS client certificates ([RFC 8705](https://www.rfc-editor.org/rfc/rfc8705)): `tls_client_auth` and `self_signed_tls_client_auth`. Everything is off by default; a realm must also turn on `mtlsClientAuthEnabled`. See the [mTLS client authentication guide](../guides/mtls-client-auth.mdx). A client with `tlsClientCertificateBoundAccessTokens` gets certificate-bound access tokens (RFC 8705 §3, `cnf.x5t#S256`).
 
 The server checks these settings at startup. An unsafe or incomplete setting stops the process with an error that names the variable, even while `MTLS_ENABLED` is `false`.
 
@@ -384,13 +417,13 @@ Here's a complete `.env` file for production:
 
 ```bash
 # ─── Database ──────────────────────────────────────────────────────────────────
-# PostgreSQL (recommended for production):
+# PostgreSQL 16+ (the only supported database):
 DATABASE_URL=postgresql://idenplane:idenplane@localhost:5432/idenplane
 
 # ─── Server ────────────────────────────────────────────────────────────────────
 PORT=3000
-NODE_ENV=development
-BASE_URL=http://localhost:3000
+NODE_ENV=production
+BASE_URL=https://auth.example.com
 
 # ─── Security (REQUIRED) ───────────────────────────────────────────────────────
 # REQUIRED: Set a strong, randomly generated secret before running in production.
@@ -410,6 +443,10 @@ WEBHOOK_ENCRYPTION_SALT=REPLACE_ME_WITH_A_UNIQUE_RANDOM_SALT
 # once the log reports "Key rotation complete".
 # WEBHOOK_SECRET_KEY_PREVIOUS=
 # WEBHOOK_ENCRYPTION_SALT_PREVIOUS=
+
+# REQUIRED on the first production start: the initial admin password
+# (12+ characters). Generate one with: openssl rand -hex 16
+ADMIN_PASSWORD=REPLACE_ME_WITH_A_STRONG_PASSWORD
 
 # ─── Rate Limiting ─────────────────────────────────────────────────────────────
 THROTTLE_TTL=60000
