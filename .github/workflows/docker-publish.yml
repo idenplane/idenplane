@@ -185,8 +185,14 @@ jobs:
           cosign verify-attestation "$REF" --type spdxjson \
             --certificate-identity "$IDENTITY" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com > /dev/null
-          docker buildx imagetools inspect "$REF" --format '{{ json .SBOM }}' | head -c 300; echo
-          docker buildx imagetools inspect "$REF" --format '{{ json .Provenance }}' | head -c 300; echo
+          # Capture first, then print a prefix: piping into `head` closes the
+          # pipe early, and under pipefail the SIGPIPE fails the step (it did
+          # on the v0.10.0 publish, after every verification had passed).
+          sbom=$(docker buildx imagetools inspect "$REF" --format '{{ json .SBOM }}')
+          provenance=$(docker buildx imagetools inspect "$REF" --format '{{ json .Provenance }}')
+          test -n "$sbom" && test "$sbom" != "null" && test -n "$provenance" && test "$provenance" != "null"
+          echo "${sbom:0:300}"
+          echo "${provenance:0:300}"
           echo "Signature, SBOM attestation, BuildKit SBOM and provenance verified for $REF" >> "$GITHUB_STEP_SUMMARY"
 
       - name: Upload the SBOM
