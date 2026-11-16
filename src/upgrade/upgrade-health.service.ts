@@ -1,6 +1,11 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { prismaMigrateStatus } from './migrate-status.js';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { adminMfaRequiredFromEnv } from '../admin-rbac/admin-principal.service.js';
+import {
+  ADMIN_ROLES,
+  MASTER_REALM,
+} from '../admin-rbac/admin-access-policy.js';
 
 export interface UpgradeHealthCheck {
   name: string;
@@ -127,6 +132,17 @@ export class UpgradeHealthService {
     if (bruteForceCheck.status === 'pass') passed++;
     else warnings++;
 
+    // 9. Admin console MFA: off after an upgrade until turned on, and
+    // recovery codes still in the pre-0.11.0 format. Warnings only.
+    for (const check of [
+      await this.checkAdminMfa(),
+      await this.checkRecoveryCodes(),
+    ]) {
+      checks.push(check);
+      if (check.status === 'pass') passed++;
+      else warnings++;
+    }
+
     const healthy = failures === 0;
 
     this.logger.log(
@@ -173,6 +189,111 @@ export class UpgradeHealthService {
         name: 'brute_force_protection',
         status: 'warn',
         message: 'Could not check brute-force protection',
+        details: (error as Error).message,
+      };
+    }
+  }
+
+  /**
+   * Warns while a second factor is not required for every admin (the state
+   * an upgraded install starts in), and names the admins without one. See
+   * docs/docs/security/admin-mfa.md.
+   */
+  async checkAdminMfa(): Promise<UpgradeHealthCheck> {
+    try {
+      const fromEnv = adminMfaRequiredFromEnv(
+        process.env['ADMIN_MFA_REQUIRED'],
+      );
+      const required =
+        fromEnv ??
+        (
+          await this.prisma.adminSecurityPolicy.findUnique({
+            where: { id: 1 },
+            select: { mfaRequired: true },
+          })
+        )?.mfaRequired ??
+        false;
+      const without = await this.prisma.user.findMany({
+        where: {
+          realm: { name: MASTER_REALM },
+          enabled: true,
+          userRoles: {
+            some: {
+              role: {
+                clientId: null,
+                name: { in: [...ADMIN_ROLES] },
+                realm: { name: MASTER_REALM },
+              },
+            },
+          },
+          userCredentials: { none: { type: 'totp', verified: true } },
+          webAuthnCredentials: { none: {} },
+        },
+        select: { username: true },
+        orderBy: { username: 'asc' },
+      });
+      const names = without.map((u) => u.username).join(', ');
+      if (!required) {
+        return {
+          name: 'admin_mfa',
+          status: 'warn',
+          message:
+            'A second factor is not required for admin console sign-in' +
+            (fromEnv === false ? ' (ADMIN_MFA_REQUIRED=false)' : ''),
+          ...(without.length ? { details: `No second factor: ${names}` } : {}),
+        };
+      }
+      if (without.length > 0) {
+        return {
+          name: 'admin_mfa',
+          status: 'warn',
+          message: `${without.length} admin(s) must still enrol a second factor`,
+          details: names,
+        };
+      }
+      return {
+        name: 'admin_mfa',
+        status: 'pass',
+        message: 'Every admin has a second factor, and it is required',
+      };
+    } catch (error) {
+      return {
+        name: 'admin_mfa',
+        status: 'warn',
+        message: 'Could not check admin MFA',
+        details: (error as Error).message,
+      };
+    }
+  }
+
+  /**
+   * Warns about users who still hold recovery codes issued before 0.11.0
+   * (32 bits). They keep working, but should be replaced.
+   */
+  async checkRecoveryCodes(): Promise<UpgradeHealthCheck> {
+    try {
+      const rows = await this.prisma.recoveryCode.findMany({
+        where: { used: false, NOT: { codeHash: { startsWith: 'rc2$' } } },
+        select: { userId: true },
+        distinct: ['userId'],
+      });
+      if (rows.length === 0) {
+        return {
+          name: 'recovery_codes',
+          status: 'pass',
+          message: 'Every unused recovery code is in the current format',
+        };
+      }
+      return {
+        name: 'recovery_codes',
+        status: 'warn',
+        message: `${rows.length} user(s) still have recovery codes issued before 0.11.0; they work, but should be replaced`,
+      };
+    } catch (error) {
+      return {
+        name: 'recovery_codes',
+        status: 'warn',
+        message: 'Could not check recovery codes',
         details: (error as Error).message,
       };
     }
