@@ -100,7 +100,7 @@ writeFileSync(stateFile, JSON.stringify(s, null, 2));
 
 const failed = checks.filter((c) => !c.ok);
 if (process.env.GITHUB_STEP_SUMMARY) {
-  const rows = checks.map((c) => `| ${c.ok ? 'PASS' : '**FAIL**'} | ${c.name} | ${c.error ? c.error.replace(/\|/g, '\\|').slice(0, 200) : ''} |`);
+  const rows = checks.map((c) => `| ${c.ok ? 'PASS' : '**FAIL**'} | ${c.name} | ${c.error ? c.error.replace(/[\\|]/g, '\\$&').replace(/\r?\n/g, ' ').slice(0, 200) : ''} |`);
   writeFileSync(process.env.GITHUB_STEP_SUMMARY, `### ${label}\n\n| Result | Check | Detail |\n|---|---|---|\n${rows.join('\n')}\n\n`, { flag: 'a' });
 }
 if (failed.length) {

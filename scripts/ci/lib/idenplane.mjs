@@ -261,17 +261,24 @@ function hiddenFields(html, formId) {
   return out;
 }
 
+const HTML_ENTITIES = {
+  '&amp;': '&',
+  '&quot;': '"',
+  '&#x27;': "'",
+  '&#39;': "'",
+  '&lt;': '<',
+  '&gt;': '>',
+  '&#x3D;': '=',
+  '&#x60;': '`',
+  '&#x2F;': '/',
+};
+
+/**
+ * Decode the entities Handlebars escapes, in ONE pass: chained replaces
+ * would turn "&amp;lt;" into "<" instead of "&lt;".
+ */
 function decodeEntities(s) {
-  return s
-    .replace(/&amp;/g, '&')
-    .replace(/&quot;/g, '"')
-    .replace(/&#x27;/g, "'")
-    .replace(/&#39;/g, "'")
-    .replace(/&lt;/g, '<')
-    .replace(/&gt;/g, '>')
-    .replace(/&#x3D;/g, '=')
-    .replace(/&#x60;/g, '`')
-    .replace(/&#x2F;/g, '/');
+  return s.replace(/&(?:amp|quot|#x27|#39|lt|gt|#x3D|#x60|#x2F);/g, (e) => HTML_ENTITIES[e]);
 }
 
 // ── TOTP (RFC 6238, SHA-1, 6 digits, 30 s) ────────────────────────────────
