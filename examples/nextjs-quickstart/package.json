@@ -10,7 +10,7 @@
   },
   "dependencies": {
     "idenplane-nextjs": "^1.0.1",
-    "idenplane-sdk": "^1.0.1",
+    "idenplane-sdk": "^1.1.0",
     "jose": "^6.2.12",
     "next": "^16.4.6",
     "pg": "8.23.1",
