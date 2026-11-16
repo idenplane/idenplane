@@ -261,6 +261,33 @@ const sidebars: SidebarsConfig = {
       ],
     },
     {
+      type: 'category',
+      label: 'Security',
+      items: [
+        {
+          type: 'doc',
+          id: 'security/acknowledgments',
+          label: 'Acknowledgments',
+        },
+        {
+          type: 'doc',
+          id: 'security/security-txt',
+          label: 'security.txt',
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Project',
+      items: [
+        {
+          type: 'doc',
+          id: 'project/versioning-and-support',
+          label: 'Versioning and Support',
+        },
+      ],
+    },
+    {
       type: 'doc',
       id: 'benchmarks',
       label: 'Benchmarks',

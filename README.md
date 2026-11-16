@@ -707,6 +707,18 @@ REDIS_URL=redis://your-redis:6379
 
 ---
 
+## Project
+
+- [Support](SUPPORT.md): where to ask questions and report bugs, and what to expect
+- [Governance](GOVERNANCE.md): how decisions are made and how changes are reviewed and released
+- [Roadmap](ROADMAP.md): what is planned or under consideration
+- [Versioning and Support](docs/docs/project/versioning-and-support.md): version numbers, which versions get security fixes, deprecation, and the compatibility matrix
+- [Security Policy](SECURITY.md): how to report a vulnerability privately
+- [Security Acknowledgments](docs/docs/security/acknowledgments.md): reporters of fixed vulnerabilities
+- [Threat Model](docs/docs/security/threat-model.md): what Idenplane protects, and against whom
+
+---
+
 ## Contributing
 
 Contributions are welcome! Please open an issue or submit a pull request. See [CONTRIBUTING.md](./CONTRIBUTING.md) for the full guide.
