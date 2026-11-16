@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type FormEvent } from 'react';
 import { useLocation, useNavigate } from 'react-router';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   ADMIN_MFA_EVENT,
   STEP_UP_DONE_EVENT,
@@ -40,6 +41,7 @@ export default function StepUpPrompt() {
     pathRef.current = location.pathname;
   }, [location.pathname]);
   const { keepToken } = useAuth();
+  const queryClient = useQueryClient();
 
   const [reason, setReason] = useState<string | null>(null);
   const [status, setStatus] = useState<AdminMfaStatus | null>(null);
@@ -84,6 +86,10 @@ export default function StepUpPrompt() {
   const verified = (token: string) => {
     keepToken(token);
     close(true);
+    // Whatever the page loaded with the old session and was refused (for
+    // example right after an upgrade, with a password-only session) loads
+    // again with the verified one.
+    void queryClient.invalidateQueries();
   };
 
   async function submit(e: FormEvent) {
