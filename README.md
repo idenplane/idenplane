@@ -160,8 +160,8 @@ git clone https://github.com/idenplane/idenplane.git
 cd idenplane
 
 # Install dependencies
-npm install
-cd admin-ui && npm install && cd ..
+npm ci
+cd admin-ui && npm ci && cd ..
 
 # Configure
 node scripts/setup-env.cjs
