@@ -215,6 +215,32 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'Security',
+      items: [
+        {
+          type: 'doc',
+          id: 'security/secure-defaults',
+          label: 'Secure Defaults',
+        },
+        {
+          type: 'doc',
+          id: 'security/threat-model',
+          label: 'Threat Model',
+        },
+        {
+          type: 'doc',
+          id: 'security/asvs-assessment',
+          label: 'OWASP ASVS Assessment',
+        },
+        {
+          type: 'doc',
+          id: 'security/verify-releases',
+          label: 'Verifying Releases',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Deployment',
       items: [
         {
@@ -257,6 +283,33 @@ const sidebars: SidebarsConfig = {
           type: 'doc',
           id: 'migration/auth0',
           label: 'From Auth0',
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Security',
+      items: [
+        {
+          type: 'doc',
+          id: 'security/acknowledgments',
+          label: 'Acknowledgments',
+        },
+        {
+          type: 'doc',
+          id: 'security/security-txt',
+          label: 'security.txt',
+        },
+      ],
+    },
+    {
+      type: 'category',
+      label: 'Project',
+      items: [
+        {
+          type: 'doc',
+          id: 'project/versioning-and-support',
+          label: 'Versioning and Support',
         },
       ],
     },

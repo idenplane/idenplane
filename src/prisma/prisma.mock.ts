@@ -468,6 +468,7 @@ export function createMockPrismaService(): MockPrismaService {
     $disconnect: jest.fn(),
     onBeforeDisconnect: jest.fn(),
     $transaction: jest.fn(),
+    $queryRaw: jest.fn().mockResolvedValue([]),
     $transactionAsync: jest.fn(),
   } as unknown as MockPrismaService;
 }

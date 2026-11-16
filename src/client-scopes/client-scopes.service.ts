@@ -2,6 +2,7 @@ import {
   Injectable,
   ConflictException,
   NotFoundException,
+  BadRequestException,
 } from '@nestjs/common';
 import type { Realm } from '@prisma/client';
 import { Prisma } from '@prisma/client';
@@ -112,7 +113,9 @@ export class ClientScopesService {
   ) {
     const resolvedMapperType = data.mapperType ?? data.protocolMapper;
     if (!resolvedMapperType) {
-      throw new Error('mapperType (or protocolMapper) is required');
+      throw new BadRequestException(
+        'mapperType (or protocolMapper) is required',
+      );
     }
     await this.findById(realm, scopeId);
     return this.prisma.protocolMapper.create({

@@ -1,0 +1,106 @@
+# OpenID conformance run: the suite (server, nginx, mongo) and Idenplane
+# (PostgreSQL, the app, Caddy for TLS) on one private network. Nothing is
+# published to the host. run.sh copies this file, the Caddyfile and
+# Dockerfile.suite into a work directory (with the generated certs) and runs
+# compose from there.
+name: idp-conformance
+networks:
+  default:
+    ipam:
+      config:
+        - subnet: ${CONFORMANCE_SUBNET:-172.30.0.0/24}
+services:
+  mongodb:
+    image: mongo:6.0.13
+  nginx:
+    # Same release as the FROM line in Dockerfile.suite; run.sh checks the tag.
+    # Dependabot bumps only Dockerfile.suite, so update this line by hand in
+    # the same PR (see the comment there).
+    image: registry.gitlab.com/openid/conformance-suite/nginx:release-v5.3.4@sha256:9a7850826fcc8690cd43373528f50e9551ba33bf8e4a40b67b13267b0aca3675
+    networks:
+      default:
+        aliases: [localhost.emobix.co.uk]
+    depends_on: [server]
+  server:
+    build:
+      context: .
+      dockerfile: Dockerfile.suite
+    image: idp-conformance-suite:${SUITE_VERSION:?}
+    environment:
+      BASE_URL: https://localhost.emobix.co.uk:8443
+      BASE_MTLS_URL: https://localhost.emobix.co.uk:8444
+      MONGODB_HOST: mongodb
+      SPRING_PROFILES_ACTIVE: dev
+      # The suite refuses to start without these; they are never used.
+      OIDC_GOOGLE_CLIENTID: dummy-google-client
+      OIDC_GOOGLE_SECRET: dummy-google-secret
+      OIDC_GITLAB_CLIENTID: dummy-gitlab-client
+      OIDC_GITLAB_SECRET: dummy-gitlab-secret
+    depends_on: [mongodb]
+  db:
+    image: postgres:16-alpine
+    environment:
+      POSTGRES_USER: idenplane
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?}
+      POSTGRES_DB: idenplane
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U idenplane"]
+      interval: 3s
+      retries: 20
+  app:
+    image: ${IDENPLANE_IMAGE:?}
+    environment:
+      DATABASE_URL: postgresql://idenplane:${POSTGRES_PASSWORD:?}@db:5432/idenplane
+      PORT: "3000"
+      NODE_ENV: production
+      ADMIN_API_KEY: ${ADMIN_API_KEY:?}
+      ADMIN_USER: admin
+      ADMIN_PASSWORD: ${ADMIN_PASSWORD:?}
+      WEBHOOK_SECRET_KEY: ${WEBHOOK_SECRET_KEY:?}
+      WEBHOOK_ENCRYPTION_SALT: ${WEBHOOK_ENCRYPTION_SALT:?}
+      BASE_URL: https://idp.conformance.test
+      # Caddy terminates TLS; trust its forwarded headers.
+      TRUSTED_PROXIES: ${CONFORMANCE_SUBNET:-172.30.0.0/24}
+      THROTTLE_TTL: "60000"
+      THROTTLE_LIMIT: "100000"
+      ADMIN_API_KEY_RL_PER_MINUTE: "10000"
+      ADMIN_API_KEY_RL_PER_HOUR: "100000"
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://localhost:3000/health/ready"]
+      interval: 3s
+      retries: 60
+    depends_on:
+      db: { condition: service_healthy }
+  caddy:
+    image: caddy:2-alpine
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./certs:/certs:ro
+    networks:
+      default:
+        aliases: [idp.conformance.test]
+    depends_on: [app]
+  # One-shot containers, run with `docker compose run`.
+  runner:
+    image: python:3.12-slim
+    profiles: [runner]
+    volumes:
+      - ${SUITE_DIR:?}:/suite
+      - ${WORK_DIR:?}:/work
+    working_dir: /suite
+    environment:
+      CONFORMANCE_SERVER: https://localhost.emobix.co.uk:8443/
+      CONFORMANCE_SERVER_MTLS: https://localhost.emobix.co.uk:8444/
+      CONFORMANCE_DEV_MODE: "1"
+      PYTHONDONTWRITEBYTECODE: "1"
+  seed:
+    image: node:24-alpine
+    profiles: [runner]
+    volumes:
+      - ${CI_DIR:?}:/ci:ro
+      - ./certs:/certs:ro
+      - ${WORK_DIR:?}:/work
+    environment:
+      NODE_EXTRA_CA_CERTS: /certs/ca.crt
+      ADMIN_API_KEY: ${ADMIN_API_KEY:?}
+    entrypoint: ["node"]

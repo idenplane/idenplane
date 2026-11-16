@@ -74,6 +74,9 @@ export class BackchannelLogoutService {
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: `logout_token=${logoutToken}`,
           signal: AbortSignal.timeout(10_000),
+          // Never follow a redirect: the logout token goes to the registered
+          // URI only, not wherever that server points (ASVS 5.0 V15.3.2).
+          redirect: 'error',
         });
 
         if (!response.ok) {

@@ -12,7 +12,7 @@
   {{#each themeCssFiles}}
   <link rel="stylesheet" href="{{this}}">
   {{/each}}
-  <style>
+  <style nonce="{{scriptNonce}}">
     :root {
       --primary-color: {{primaryColor}};
       --primary-hover-color: {{primaryHoverColor}};
@@ -42,7 +42,7 @@
     }
   </style>
   {{#if customCss}}
-  <style>{{{customCss}}}</style>
+  <style nonce="{{scriptNonce}}">{{{customCss}}}</style>
   {{/if}}
 </head>
 <body>

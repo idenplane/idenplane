@@ -108,6 +108,15 @@ function isSafeCspOrigin(source: string): boolean {
  * form submission, so the login form's POST → 302 to the client's
  * `redirect_uri` (another origin) would be blocked and sign-in would break.
  *
+ * Styles: a `<style>` element must carry the page nonce (templates write
+ * `<style nonce="{{scriptNonce}}">`), so markup injected into a page cannot
+ * add a stylesheet, the vector for CSS-selector exfiltration of form values.
+ * `style` attributes stay allowed (`style-src-attr 'unsafe-inline'`): the
+ * templates use them throughout, and an attribute cannot hold a selector.
+ * A page that adds `style-src` origins (a CAPTCHA widget, which inserts its
+ * own `<style>` elements) keeps `'unsafe-inline'` for elements instead of
+ * the nonce, since browsers ignore `'unsafe-inline'` once a nonce is listed.
+ *
  * Without `extra` it is exactly the base policy; `extra` appends origins to
  * the named directives (a `frame-src` is added only when a page asks for
  * one, as frames otherwise fall back to default-src 'self').
@@ -124,7 +133,10 @@ export function buildThemeCsp(
     "default-src 'self'",
     `script-src 'self' 'nonce-${scriptNonce}'${add('script-src')}`,
     "script-src-attr 'none'",
-    `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com${add('style-src')}`,
+    add('style-src')
+      ? `style-src 'self' 'unsafe-inline' https://fonts.googleapis.com${add('style-src')}`
+      : `style-src 'self' 'nonce-${scriptNonce}' https://fonts.googleapis.com`,
+    "style-src-attr 'unsafe-inline'",
     "font-src 'self' https://fonts.gstatic.com",
     "img-src 'self' data: blob:",
     `connect-src 'self'${add('connect-src')}`,

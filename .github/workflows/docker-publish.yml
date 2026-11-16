@@ -5,9 +5,20 @@ name: Publish Docker image
 #   - every push to main  -> :latest and :main-<sha>   (keeps the public image
 #     and the demo deployment from ever going stale again)
 #   - every v* git tag    -> :X.Y.Z and :X.Y           (release images)
-#   - manual dispatch      -> on demand (e.g. to publish the first fresh image)
+#   - manual dispatch      -> on demand (e.g. to publish the first fresh image);
+#     with `dry_run` ticked it builds, attests and signs exactly as a release
+#     does, but pushes to a throwaway registry inside the runner instead of
+#     Docker Hub
 #
-# Requires two repo/org secrets:
+# Every pushed image carries, per platform:
+#   - a BuildKit SBOM attestation and SLSA provenance (mode=max);
+#   - a keyless cosign signature on the digest (GitHub OIDC -> Fulcio, logged
+#     in Rekor), and an SPDX SBOM (syft) attached as a signed cosign
+#     attestation.
+# How to verify: docs/docs/security/verify-releases.md. The release's SBOM
+# and checksums are attached to the GitHub release by release-assets.yml.
+#
+# Requires two repo/org secrets (not needed for a dry run):
 #   DOCKERHUB_USERNAME  - Docker Hub account that owns islamawad/idenplane
 #   DOCKERHUB_TOKEN     - a Docker Hub *access token* (Account Settings ->
 #                         Security), NOT the account password.
@@ -26,50 +37,83 @@ on:
       - 'package-lock.json'
       - '.github/workflows/docker-publish.yml'
   workflow_dispatch:
+    inputs:
+      dry_run:
+        description: 'Build, attest and sign without pushing to Docker Hub (pushes to a registry inside the runner)'
+        type: boolean
+        default: false
 
 concurrency:
-  group: docker-publish-${{ github.ref }}
+  group: docker-publish-${{ github.ref }}-${{ inputs.dry_run == true && 'dry' || 'real' }}
   cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # cosign 3.x stores signatures and attestations as Sigstore bundles. The
+  # verify commands in the docs are written for, and tested with, this major.
+  COSIGN_VERSION: v3.1.4
 
 jobs:
   publish:
-    name: Build & push
+    name: Build & push${{ inputs.dry_run == true && ' (dry run)' || '' }}
     runs-on: ubuntu-latest
+    timeout-minutes: 60
     permissions:
       contents: read
+      # Keyless signing: the job's OIDC token is exchanged for a short-lived
+      # Fulcio certificate naming this workflow and ref.
+      id-token: write
+    env:
+      DRY_RUN: ${{ github.event_name == 'workflow_dispatch' && inputs.dry_run == true }}
+      IMAGE: ${{ (github.event_name == 'workflow_dispatch' && inputs.dry_run == true) && 'localhost:5000/idenplane' || 'islamawad/idenplane' }}
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      # Dry run: a registry that lives and dies with this job, so the push,
+      # the attestations and the signatures are all real but nothing public
+      # changes.
+      - name: Start a throwaway registry (dry run)
+        if: env.DRY_RUN == 'true'
+        run: docker run -d --name registry -p 5000:5000 registry:2
 
       # Enables building the linux/arm64 image on the amd64 runner via emulation.
       - name: Set up QEMU
-        uses: docker/setup-qemu-action@v4
+        uses: docker/setup-qemu-action@99012661954931238ded8c8b007157a8430204e1 # v4.4.0
 
       - name: Set up Docker Buildx
-        uses: docker/setup-buildx-action@v4
+        uses: docker/setup-buildx-action@f87e5991a6d7451dcb8d9637bfbc97413f497069 # v4.4.1
+        with:
+          # The BuildKit container reaches the dry-run registry on localhost.
+          driver-opts: ${{ env.DRY_RUN == 'true' && 'network=host' || '' }}
 
       - name: Log in to Docker Hub
-        uses: docker/login-action@v4
+        if: env.DRY_RUN != 'true'
+        uses: docker/login-action@8aa5831fb8d48d8f76594c7ddde61ae58019f550 # v4.8.0
         with:
           username: ${{ secrets.DOCKERHUB_USERNAME }}
           password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Derive tags and labels
         id: meta
-        uses: docker/metadata-action@v6
+        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
         with:
-          images: islamawad/idenplane
+          images: ${{ env.IMAGE }}
           # {{is_default_branch}} checks the repo's configured GitHub default branch,
           # which is dev here, not main — so it never matched a push to main and every
           # such push failed with "tag is needed when pushing to registry" (no tags
           # generated at all). Check the actual ref pushed to instead.
           tags: |
-            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' }}
-            type=sha,prefix=main-,enable=${{ github.ref == 'refs/heads/main' }}
+            type=raw,value=latest,enable=${{ github.ref == 'refs/heads/main' && env.DRY_RUN != 'true' }}
+            type=sha,prefix=main-,enable=${{ github.ref == 'refs/heads/main' && env.DRY_RUN != 'true' }}
             type=semver,pattern={{version}}
             type=semver,pattern={{major}}.{{minor}}
+            type=raw,value=dryrun-${{ github.sha }},enable=${{ env.DRY_RUN == 'true' }}
 
       - name: Build and push
-        uses: docker/build-push-action@v7
+        id: build
+        uses: docker/build-push-action@c3c9e263c25d99ce0380d002d59b67737d91b0dc # v7.4.0
         with:
           context: .
           push: true
@@ -78,5 +122,76 @@ jobs:
           platforms: linux/amd64,linux/arm64
           tags: ${{ steps.meta.outputs.tags }}
           labels: ${{ steps.meta.outputs.labels }}
+          # BuildKit attestations, stored with the image index: an SPDX SBOM
+          # and SLSA provenance per platform. mode=max records the full
+          # build definition (no secrets are passed to this build).
+          sbom: true
+          provenance: mode=max
           cache-from: type=gha
           cache-to: type=gha,mode=max
+
+      - name: Record the digest
+        env:
+          DIGEST: ${{ steps.build.outputs.digest }}
+          TAGS: ${{ steps.meta.outputs.tags }}
+        run: |
+          set -euo pipefail
+          case "$DIGEST" in sha256:*) ;; *) echo "::error::build produced no digest ('$DIGEST')"; exit 1 ;; esac
+          echo "REF=${IMAGE}@${DIGEST}" >> "$GITHUB_ENV"
+          {
+            echo "### Image"
+            echo
+            echo "\`${IMAGE}@${DIGEST}\`"
+            echo
+            echo "Tags: $(printf '%s' "$TAGS" | tr '\n' ' ')"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Install cosign
+        uses: sigstore/cosign-installer@756fe2d284c7292c4e9b62c8a28f1e5629c59532 # v4.1.3
+        with:
+          cosign-release: ${{ env.COSIGN_VERSION }}
+
+      # Always the digest, never a tag: a tag can be moved after signing.
+      - name: Sign the image (keyless)
+        run: cosign sign --yes "$REF"
+
+      # A separate SBOM from the image as pushed (syft, SPDX JSON), attached
+      # as a signed in-toto attestation, so it can be verified with the same
+      # identity as the signature. syft resolves the index to linux/amd64.
+      - name: Generate the SPDX SBOM
+        uses: anchore/sbom-action@66cbf4bc1f1c0d2edc94016e65bc221b6bb0ad6c # v0.24.3
+        env:
+          SYFT_REGISTRY_INSECURE_USE_HTTP: ${{ env.DRY_RUN == 'true' }}
+        with:
+          image: ${{ env.REF }}
+          format: spdx-json
+          output-file: idenplane.spdx.json
+          upload-artifact: false
+          upload-release-assets: false
+
+      - name: Attach the SBOM as a signed attestation
+        run: cosign attest --yes --type spdxjson --predicate idenplane.spdx.json "$REF"
+
+      # The same commands the verification guide gives users, so a guide that
+      # no longer matches what we publish fails here, not on a user's machine.
+      - name: Verify the signature and the attestation
+        env:
+          IDENTITY: ${{ github.server_url }}/${{ github.repository }}/.github/workflows/docker-publish.yml@${{ github.ref }}
+        run: |
+          set -euo pipefail
+          cosign verify "$REF" \
+            --certificate-identity "$IDENTITY" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com > /dev/null
+          cosign verify-attestation "$REF" --type spdxjson \
+            --certificate-identity "$IDENTITY" \
+            --certificate-oidc-issuer https://token.actions.githubusercontent.com > /dev/null
+          docker buildx imagetools inspect "$REF" --format '{{ json .SBOM }}' | head -c 300; echo
+          docker buildx imagetools inspect "$REF" --format '{{ json .Provenance }}' | head -c 300; echo
+          echo "Signature, SBOM attestation, BuildKit SBOM and provenance verified for $REF" >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload the SBOM
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: sbom-${{ github.sha }}${{ env.DRY_RUN == 'true' && '-dryrun' || '' }}
+          path: idenplane.spdx.json
+          retention-days: 90

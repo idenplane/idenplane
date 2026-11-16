@@ -26,7 +26,7 @@ git merge upstream/dev
 
 1. **Install dependencies**
 ```bash
-npm install
+npm ci
 ```
 
 2. **Set up environment**
@@ -160,7 +160,8 @@ Idenplane currently has a single maintainer, so review turnaround depends on the
 
 - All required CI checks (build, lint, tests) must be green before a PR is merged; a red check is treated as "not ready," not "waiting for an override."
 - The maintainer may ask for changes directly on the PR — respond with new commits rather than force-pushing over review comments, so the diff stays reviewable.
-- Approved PRs are squash-merged, so write your PR title/description as you'd want the resulting commit message to read; the individual commits within a PR don't need to be clean or atomic.
+- Approved PRs are merged into `dev` with a merge commit, so the PR's commits stay in history. Keep them readable, and follow the commit message format above.
+- The full review, merge and release rules are in [GOVERNANCE.md](GOVERNANCE.md).
 - There's no fixed SLA on review time. For anything time-sensitive (a security fix, a broken build), say so explicitly in the PR description.
 
 ## Code Standards
@@ -254,15 +255,14 @@ Include:
 
 ### Security Vulnerabilities
 
-**DO NOT** report security vulnerabilities via GitHub Issues.
+**DO NOT** report security vulnerabilities via GitHub Issues, Discussions or pull requests.
 
-Email: security@idenplane.com (or follow your organization's responsible disclosure policy)
+Report them privately through [GitHub private vulnerability reporting](https://github.com/idenplane/idenplane/security/advisories/new), or by email to security@idenplane.com. See [SECURITY.md](SECURITY.md).
 
 ## Questions?
 
-- GitHub Discussions: https://github.com/idenplane/idenplane/discussions
-- Discord: https://discord.gg/idenplane
-- Documentation: https://idenplane.com/docs
+- GitHub Discussions, Q&A: https://github.com/idenplane/idenplane/discussions/new?category=q-a
+- Where to go for what, and what to expect: [SUPPORT.md](SUPPORT.md)
 
 ## License
 

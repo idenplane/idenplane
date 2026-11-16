@@ -13,22 +13,21 @@ info:
 
     ## Versioning
 
-    API endpoints are versioned using URI versioning (`/api/v1/` prefix).
+    The admin API is served under `/admin/...`. No route is served under `/api/v1` yet; see *Versioning and Support*.
 
     ## Rate Limiting
 
     Some endpoints are rate-limited. See specific endpoint documentation for details.
-  version: 0.3.0
+  version: 0.10.0
   contact:
     name: Idenplane Project
-    url: https://idenplane.com
-    email: support@idenplane.com
+    url: https://github.com/idenplane/idenplane/blob/main/SUPPORT.md
   license:
-    name: Apache 2.0
-    url: https://www.apache.org/licenses/LICENSE-2.0.html
+    name: AGPL-3.0
+    url: https://www.gnu.org/licenses/agpl-3.0.html
 
 servers:
-  - url: http://localhost:3000/api/v1
+  - url: http://localhost:3000
     description: Local development server
 
 security:

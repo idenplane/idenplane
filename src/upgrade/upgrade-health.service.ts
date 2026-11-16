@@ -120,6 +120,13 @@ export class UpgradeHealthService {
     else if (tablesCheck.status === 'warn') warnings++;
     else failures++;
 
+    // 8. Security posture: realms without brute-force protection. Only ever
+    // a warning, so it never blocks an upgrade.
+    const bruteForceCheck = await this.checkBruteForceProtection();
+    checks.push(bruteForceCheck);
+    if (bruteForceCheck.status === 'pass') passed++;
+    else warnings++;
+
     const healthy = failures === 0;
 
     this.logger.log(
@@ -133,6 +140,42 @@ export class UpgradeHealthService {
       checks,
       summary: { passed, warnings, failures },
     };
+  }
+
+  /**
+   * Warns about realms that have brute-force protection off. New realms get
+   * it on (since 0.10.0) but an upgrade never changes an existing realm, so
+   * this is how an operator finds the realms still to review. The endpoint
+   * is admin-only, so naming the realms here is fine.
+   */
+  async checkBruteForceProtection(): Promise<UpgradeHealthCheck> {
+    try {
+      const realms = await this.prisma.realm.findMany({
+        where: { bruteForceEnabled: false },
+        select: { name: true },
+        orderBy: { name: 'asc' },
+      });
+      if (realms.length === 0) {
+        return {
+          name: 'brute_force_protection',
+          status: 'pass',
+          message: 'Brute-force protection is on in every realm',
+        };
+      }
+      return {
+        name: 'brute_force_protection',
+        status: 'warn',
+        message: `${realms.length} realm(s) have brute-force protection off`,
+        details: realms.map((r) => r.name).join(', '),
+      };
+    } catch (error) {
+      return {
+        name: 'brute_force_protection',
+        status: 'warn',
+        message: 'Could not check brute-force protection',
+        details: (error as Error).message,
+      };
+    }
   }
 
   /**

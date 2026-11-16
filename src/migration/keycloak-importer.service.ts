@@ -10,6 +10,7 @@ import type {
 import { createEmptyReport, type MigrationReport } from './migration-report.js';
 import type { Prisma } from '@prisma/client';
 import { idpSecrets } from '../identity-providers/idp-secrets.js';
+import { REALM_BRUTE_FORCE_DEFAULTS } from '../realms/realm-security-defaults.js';
 
 type PrismaTx = Prisma.TransactionClient;
 
@@ -157,10 +158,16 @@ export class KeycloakImporterService {
             smtpPassword: data.smtpServer.password,
             smtpSsl: data.smtpServer.ssl === 'true',
           }),
-          ...(data.bruteForceProtected && {
-            bruteForceEnabled: true,
-            maxLoginFailures: data.failureFactor ?? 5,
-          }),
+          // Keycloak exports always carry bruteForceProtected; an explicit
+          // false is kept. Absent, the realm gets Idenplane's secure default.
+          ...(data.bruteForceProtected === false
+            ? { bruteForceEnabled: false }
+            : {
+                bruteForceEnabled: REALM_BRUTE_FORCE_DEFAULTS.bruteForceEnabled,
+                maxLoginFailures:
+                  data.failureFactor ??
+                  REALM_BRUTE_FORCE_DEFAULTS.maxLoginFailures,
+              }),
         },
       });
 

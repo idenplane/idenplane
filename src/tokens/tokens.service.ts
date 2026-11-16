@@ -28,6 +28,7 @@ import {
   CERTIFICATE_BINDING_CLAIMS,
   ClientCertificateResolverRegistry,
 } from '../client-auth/client-certificate-resolver.js';
+import { isAccessTokenPayload } from './access-token-type.js';
 
 @Injectable()
 export class TokensService {
@@ -59,6 +60,12 @@ export class TokensService {
         token,
         signingKey.publicKey,
       );
+
+      // Only an access token introspects as active: an ID token or a logout
+      // token carries the same signature but is not a credential.
+      if (!isAccessTokenPayload(payload)) {
+        return { active: false };
+      }
 
       // Check token blacklist
       const jti = payload['jti'];
@@ -499,6 +506,10 @@ export class TokensService {
         signingKey.publicKey,
       );
     } catch {
+      throw new UnauthorizedException('Invalid access token');
+    }
+    // An ID token (or any other JWT the realm signs) is not an access token.
+    if (!isAccessTokenPayload(payload)) {
       throw new UnauthorizedException('Invalid access token');
     }
     assertCertificateBinding(payload, presentedCert);

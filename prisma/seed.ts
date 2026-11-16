@@ -62,6 +62,8 @@ async function main() {
       accessTokenLifespan: 300,
       refreshTokenLifespan: 1800,
     },
+    // Brute-force protection and events take the column defaults (on), the
+    // same as any new realm (src/realms/realm-security-defaults.ts).
     create: {
       name: 'test',
       displayName: 'Test Realm',

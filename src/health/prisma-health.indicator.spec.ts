@@ -19,13 +19,18 @@ describe('PrismaHealthIndicator', () => {
     expect(query).toHaveBeenCalledWith('SELECT 1');
   });
 
-  it('reports down with the driver error message when the query fails', async () => {
+  it('reports down without the driver error when the query fails', async () => {
+    // The endpoint is public; the driver message can name hosts and users.
     const query = jest
       .fn()
-      .mockRejectedValue(new Error("Can't reach database server"));
+      .mockRejectedValue(
+        new Error("Can't reach database server at db.example.internal:5432"),
+      );
 
-    await expect(build(query).isHealthy('database')).resolves.toEqual({
-      database: { status: 'down', message: "Can't reach database server" },
+    const result = await build(query).isHealthy('database');
+    expect(result).toEqual({
+      database: { status: 'down', message: 'Database unavailable' },
     });
+    expect(JSON.stringify(result)).not.toContain('example.internal');
   });
 });

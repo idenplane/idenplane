@@ -62,6 +62,9 @@ describe('access log (LOG_ACCESS)', () => {
   });
 
   describe('through pino-http', () => {
+    // The first test pays for loading pino-http and starting a real server,
+    // which took over jest's 5 s default on a busy macOS runner.
+    jest.setTimeout(30_000);
     const env = { ...process.env };
     afterEach(() => {
       process.env = { ...env };
@@ -94,6 +97,9 @@ describe('access log (LOG_ACCESS)', () => {
       await new Promise<void>((r) => server.listen(0, '127.0.0.1', r));
       const { port } = server.address() as { port: number };
       for (const s of statuses) await fetch(`http://127.0.0.1:${port}/${s}`);
+      // fetch keeps the connection alive; drop it so close() returns at once
+      // instead of waiting for the keep-alive timeout.
+      server.closeAllConnections();
       await new Promise((r) => server.close(r));
       await new Promise((r) => setImmediate(r));
       return lines.filter((l) => l.res).map((l) => l.res!.statusCode);

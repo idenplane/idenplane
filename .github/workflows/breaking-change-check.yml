@@ -51,12 +51,12 @@ jobs:
       NODE_ENV: test
 
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           # Fetch full history so we can checkout the base branch
           fetch-depth: 0
 
-      - uses: actions/setup-node@v7
+      - uses: actions/setup-node@949feb2413d6458794dcd2491c4babbbce0c15c1 # v7.1.0
         with:
           node-version: 24
           cache: npm
@@ -150,10 +150,26 @@ jobs:
         run: git checkout HEAD -- .
 
       - name: Install oasdiff
+        # A pinned release tarball, checked against its SHA-256 before it is
+        # unpacked. This used to pipe install.sh from oasdiff's main branch
+        # into bash (Scorecard Pinned-Dependencies: downloadThenRun) and fell
+        # back silently to a path-count heuristic when that failed. A checksum
+        # mismatch now fails the job. Dependabot can't see this pin: to bump,
+        # take the new release's line for linux_amd64.tar.gz from its
+        # checksums.txt.
+        env:
+          OASDIFF_VERSION: 1.35.0
+          OASDIFF_SHA256: a8023002fcb2eaa7f5758148a9303cb63d33b939886df312268bc0fc7b939140
         run: |
-          # Try to install oasdiff binary; fall back silently if unavailable
-          curl -sL https://raw.githubusercontent.com/Tufin/oasdiff/main/install.sh \
-            | bash -s -- /usr/local/bin || true
+          set -euo pipefail
+          tarball="oasdiff_${OASDIFF_VERSION}_linux_amd64.tar.gz"
+          cd "$RUNNER_TEMP"
+          curl -fsSL --retry 3 -o "$tarball" \
+            "https://github.com/oasdiff/oasdiff/releases/download/v${OASDIFF_VERSION}/${tarball}"
+          echo "${OASDIFF_SHA256}  ${tarball}" | sha256sum -c -
+          tar -xzf "$tarball" oasdiff
+          sudo install -m 0755 oasdiff /usr/local/bin/oasdiff
+          oasdiff --version
 
       - name: Compare OpenAPI specs for breaking changes
         run: |
@@ -196,7 +212,7 @@ jobs:
 
       - name: Upload spec artifacts
         if: always()
-        uses: actions/upload-artifact@v7
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
         with:
           name: openapi-specs-comparison
           path: |

@@ -5,10 +5,16 @@
 # surfaced because docker-publish.yml's actual tag-generation bug (fixed
 # separately) had been silently preventing this stage from ever running on a
 # push to main. Tracked upstream: https://github.com/prisma/prisma/issues/29464.
-# Pinned to 22 (not just reverted) to match what CI's actions/setup-node already
-# tests against everywhere else in this repo — re-bump once that issue closes.
+# The image stays on Node 24 (the LTS every CI job tests with through
+# actions/setup-node) rather than 25; move on once that issue is closed and a
+# newer LTS is tested in CI.
+#
+# Every stage pins the same node:24-alpine index by digest, so a build is
+# reproducible and a re-pushed tag cannot change what ships. Dependabot's
+# docker ecosystem (.github/dependabot.yml) proposes the new digest as soon as
+# the tag moves, which is how base-image security fixes arrive.
 # Stage 1: Dependencies
-FROM node:24-alpine AS deps
+FROM node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS deps
 WORKDIR /app
 COPY package.json package-lock.json ./
 # --ignore-scripts: the root "postinstall" runs `prisma generate`, which needs
@@ -17,13 +23,13 @@ COPY package.json package-lock.json ./
 RUN npm ci --ignore-scripts
 
 # Stage 1b: Admin UI dependencies
-FROM node:24-alpine AS admin-deps
+FROM node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS admin-deps
 WORKDIR /app/admin-ui
 COPY admin-ui/package.json admin-ui/package-lock.json ./
 RUN npm ci
 
 # Stage 2: Build
-FROM node:24-alpine AS build
+FROM node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS build
 WORKDIR /app
 COPY --from=deps /app/node_modules ./node_modules
 COPY --from=admin-deps /app/admin-ui/node_modules ./admin-ui/node_modules
@@ -37,7 +43,7 @@ RUN npm run build
 RUN cp -r admin-ui/dist dist/admin-ui
 
 # Stage 3: Production
-FROM node:24-alpine AS production
+FROM node:24-alpine@sha256:116b800c3754b440ee0aa3ed2f20f5bf3d99a554bfd9adeea09ea8017f6e85f5 AS production
 WORKDIR /app
 
 # pg_dump / pg_restore, used by the upgrade flow to take a backup before running
@@ -59,16 +65,24 @@ WORKDIR /app
 # server — the rollback is broken exactly when it is needed. An older client is
 # no better: pg_dump refuses to dump a newer server outright.
 #
-# Alpine's default postgresql-client tracks the newest release, so pinning is
-# required rather than optional. PG_MAJOR must match the PostgreSQL server this
-# image will be pointed at; docker-compose.yml ships postgres:16-alpine.
-# The application also verifies this at runtime (pre-validation check
-# `pg_client_version`) and refuses to upgrade on a mismatch, so a wrong value
-# here fails loudly rather than silently disabling rollback.
-ARG PG_MAJOR=16
-RUN apk add --no-cache "postgresql${PG_MAJOR}-client" \
-    && pg_dump --version \
-    && pg_restore --version
+# Idenplane supports PostgreSQL 16 and later, and docker-compose.yml ships 16
+# while the Helm chart's bundled database is 17. So the image installs one
+# client per supported server major, side by side: Alpine keeps each under
+# /usr/libexec/postgresqlN. At runtime DatabaseBackupService reads the server's
+# major version and runs the matching pg_dump / pg_restore from that directory
+# (PG_BIN_DIR overrides it). The pre-validation check `pg_client_version` still
+# compares the chosen client with the server and refuses to upgrade on a
+# mismatch, so an unsupported server major fails loudly rather than silently
+# disabling rollback.
+ARG PG_CLIENT_MAJORS="16 17 18"
+RUN set -eux; \
+    for v in ${PG_CLIENT_MAJORS}; do \
+      apk add --no-cache "postgresql${v}-client"; \
+      "/usr/libexec/postgresql${v}/pg_dump" --version | grep -q " ${v}\."; \
+      "/usr/libexec/postgresql${v}/pg_restore" --version | grep -q " ${v}\."; \
+    done; \
+    pg_dump --version; \
+    pg_restore --version
 
 # Manifests + prisma schema/config first, so `npm ci`'s postinstall
 # (`prisma generate`) has what it needs; then a clean production-only

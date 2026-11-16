@@ -1,8 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import { Injectable, Logger, OnModuleInit, Optional } from '@nestjs/common';
 import { execFileSync } from 'child_process';
 import * as fs from 'fs';
 import * as path from 'path';
 import { createHash } from 'crypto';
+import { PrismaService } from '../prisma/prisma.service.js';
 
 export interface BackupResult {
   success: boolean;
@@ -37,13 +38,74 @@ export interface BackupListing {
  * operation to ensure data safety.
  */
 @Injectable()
-export class DatabaseBackupService {
+export class DatabaseBackupService implements OnModuleInit {
   private readonly logger = new Logger(DatabaseBackupService.name);
   private readonly backupDirectory: string;
 
-  constructor() {
+  /**
+   * Major version of the PostgreSQL server, once known. It picks which
+   * installed pg_dump / pg_restore to run (see pgBinDir), because a backup is
+   * only restorable when the client major equals the server major.
+   */
+  private serverMajor: number | null = null;
+
+  constructor(@Optional() private readonly prisma?: PrismaService) {
     // Default backup directory within project
     this.backupDirectory = process.env.BACKUP_DIR || './backups';
+  }
+
+  async onModuleInit(): Promise<void> {
+    if (!this.prisma) return;
+    try {
+      const rows = await this.prisma.$queryRaw<
+        Array<{ server_version_num: string }>
+      >`SHOW server_version_num`;
+      const num = Number(rows[0]?.server_version_num);
+      if (Number.isFinite(num) && num > 0) {
+        this.setServerMajor(Math.floor(num / 10000));
+      }
+    } catch {
+      // The database may not be reachable yet; pre-validation reads the
+      // version again before any upgrade and calls setServerMajor.
+    }
+  }
+
+  /** Record the server major so the matching client tools are used. */
+  setServerMajor(major: number | null): void {
+    this.serverMajor = major;
+  }
+
+  /**
+   * Directory holding the pg_dump / pg_restore to use, or null for PATH.
+   *
+   * 1. PG_BIN_DIR, when set, always wins.
+   * 2. Otherwise, when the server major is known, the version-specific
+   *    directory for that major if it is installed: /usr/libexec/postgresqlN
+   *    (Alpine, which the image uses; it ships several client majors side by
+   *    side) or /usr/lib/postgresql/N/bin (Debian and Ubuntu).
+   * 3. Otherwise PATH.
+   *
+   * Pre-validation still compares the chosen client with the server, so a
+   * wrong choice fails the upgrade before it starts.
+   */
+  pgBinDir(): string | null {
+    const configured = process.env.PG_BIN_DIR?.trim();
+    if (configured) return configured;
+    const major = this.serverMajor;
+    if (major === null) return null;
+    for (const dir of [
+      `/usr/libexec/postgresql${major}`,
+      `/usr/lib/postgresql/${major}/bin`,
+    ]) {
+      if (fs.existsSync(path.join(dir, 'pg_dump'))) return dir;
+    }
+    return null;
+  }
+
+  /** Command for a PostgreSQL client tool, resolved through pgBinDir. */
+  private pgTool(tool: 'pg_dump' | 'pg_restore'): string {
+    const dir = this.pgBinDir();
+    return dir ? path.join(dir, tool) : tool;
   }
 
   /**
@@ -79,10 +141,12 @@ export class DatabaseBackupService {
       // shell, eliminating command injection (CodeQL js/command-line-injection).
       const pgDumpArgs = this.buildPgDumpArgs(dbName, backupPath);
 
-      this.logger.debug(`Executing: pg_dump ${pgDumpArgs.join(' ')}`);
+      this.logger.debug(
+        `Executing: ${this.pgTool('pg_dump')} ${pgDumpArgs.join(' ')}`,
+      );
 
       // Execute pg_dump (password supplied via PGPASSWORD env, never argv).
-      execFileSync('pg_dump', pgDumpArgs, {
+      execFileSync(this.pgTool('pg_dump'), pgDumpArgs, {
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'pipe'],
         env: this.pgEnv(),
@@ -151,9 +215,11 @@ export class DatabaseBackupService {
       // Log the full vector including the archive. Logging buildRestoreArgs()
       // alone omitted the one argument an operator debugging a failed rollback
       // most needs to see — which archive was actually read.
-      this.logger.debug(`Executing: pg_restore ${restoreArgs.join(' ')}`);
+      this.logger.debug(
+        `Executing: ${this.pgTool('pg_restore')} ${restoreArgs.join(' ')}`,
+      );
 
-      execFileSync('pg_restore', restoreArgs, {
+      execFileSync(this.pgTool('pg_restore'), restoreArgs, {
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'pipe'],
         env: this.pgEnv(),
@@ -297,7 +363,7 @@ export class DatabaseBackupService {
       // before a rollback depends on it. `pg_restore --list` reads the archive's
       // table of contents, which lives at the end of the file, so it fails on a
       // truncated or wrong-format file without touching the database.
-      execFileSync('pg_restore', ['--list', backupPath], {
+      execFileSync(this.pgTool('pg_restore'), ['--list', backupPath], {
         stdio: ['pipe', 'pipe', 'pipe'],
       });
 
@@ -416,21 +482,22 @@ export class DatabaseBackupService {
   }
 
   /**
-   * Whether the pg_dump / pg_restore binaries are reachable on PATH.
+   * Whether the pg_dump / pg_restore binaries (see pgBinDir) respond.
    *
-   * The production image does not install postgresql-client today, so this
-   * returns false there and the pre-upgrade validator fails the run *before*
+   * When they are missing, the pre-upgrade validator fails the run *before*
    * anything touches the database — rather than at the backup stage, or worse,
    * at rollback time when a backup is already needed.
    */
   pgToolsAvailable(): { available: boolean; detail: string } {
     for (const tool of ['pg_dump', 'pg_restore'] as const) {
       try {
-        execFileSync(tool, ['--version'], { stdio: ['pipe', 'pipe', 'pipe'] });
+        execFileSync(this.pgTool(tool), ['--version'], {
+          stdio: ['pipe', 'pipe', 'pipe'],
+        });
       } catch {
         return {
           available: false,
-          detail: `${tool} was not found on PATH. Install postgresql-client matching the server's major version.`,
+          detail: `${this.pgTool(tool)} was not found. Install the PostgreSQL client matching the server's major version, or set PG_BIN_DIR to its bin directory.`,
         };
       }
     }
@@ -442,7 +509,7 @@ export class DatabaseBackupService {
    */
   clientMajorVersion(): number | null {
     try {
-      const out = execFileSync('pg_dump', ['--version'], {
+      const out = execFileSync(this.pgTool('pg_dump'), ['--version'], {
         encoding: 'utf-8',
         stdio: ['pipe', 'pipe', 'pipe'],
       });

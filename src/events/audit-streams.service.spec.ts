@@ -209,6 +209,7 @@ describe('AuditStreamsService', () => {
         'https://logs.example.com',
         expect.objectContaining({
           method: 'POST',
+          redirect: 'error',
           headers: expect.objectContaining({
             'Content-Type': 'application/json',
           }),

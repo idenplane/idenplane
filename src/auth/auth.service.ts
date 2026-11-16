@@ -368,6 +368,18 @@ export class AuthService {
       where: { realmId_username: { realmId: realm.id, username } },
     });
 
+    // A locked account is refused before ANY credential check, local or
+    // LDAP. Checking the password first would let a locked account answer
+    // "locked" for the right password and "invalid" for a wrong one, which
+    // turns the lockout into a password oracle.
+    if (user && this.bruteForceService.checkLocked(realm, user).locked) {
+      throw new OAuthTokenError(
+        'invalid_grant',
+        'Account is temporarily locked. Please try again later.',
+        HttpStatus.BAD_REQUEST,
+      );
+    }
+
     // Federated users have empty passwordHash — route to LDAP bind instead of
     // rejecting outright. UserFederationService.authenticateViaFederation does
     // the bind-as-service / find-DN / bind-as-user dance against the configured
@@ -381,6 +393,9 @@ export class AuthService {
           password,
         );
       if (!federationResult.authenticated) {
+        // Counted like a local failure, so LDAP-backed users are covered by
+        // brute-force protection too.
+        await this.bruteForceService.recordFailure(realm, user.id, ip);
         throw new OAuthTokenError(
           'invalid_grant',
           'Invalid credentials',
@@ -1097,7 +1112,8 @@ export class AuthService {
     const user = await this.prisma.user.findUnique({
       where: { id: authCode.userId },
     });
-    if (!user) {
+    // A user disabled between sign-in and code exchange gets no tokens.
+    if (!user || !user.enabled) {
       throw new OAuthTokenError(
         'invalid_grant',
         'User not found',
@@ -1260,11 +1276,16 @@ export class AuthService {
       );
     }
 
-    // Device has been approved — issue tokens
+    // Device has been approved — issue tokens. The user may have been
+    // disabled or locked since approving; refuse then (fail closed).
     const user = await this.prisma.user.findUnique({
       where: { id: deviceCode.userId },
     });
-    if (!user) {
+    if (
+      !user ||
+      !user.enabled ||
+      this.bruteForceService.checkLocked(realm, user).locked
+    ) {
       throw new OAuthTokenError(
         'invalid_grant',
         'User not found',

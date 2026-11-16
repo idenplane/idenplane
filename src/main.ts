@@ -7,7 +7,6 @@ import {
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import type { NestExpressApplication } from '@nestjs/platform-express';
 import { Logger } from 'nestjs-pino';
-import helmet from 'helmet';
 import cookieParser from 'cookie-parser';
 import { join } from 'path';
 import { AppModule } from './app.module.js';
@@ -25,6 +24,9 @@ import {
 import { createTrustedProxyCertHeaderMiddleware } from './mtls/trusted-proxy-cert-header.middleware.js';
 import { startCertificateListener } from './realtime/certificate-listener.js';
 import { APP_VERSION } from './versioning/app-version.js';
+import { registerBodyParsers } from './common/http/body-parsers.js';
+import { applySecurityHeaders } from './common/security/http-security-headers.js';
+import { RequestInputPipe } from './common/pipes/request-input.pipe.js';
 
 /** Known-insecure / placeholder values that must never reach production. */
 const INSECURE_ADMIN_API_KEY_VALUES = new Set([
@@ -228,35 +230,13 @@ async function bootstrap() {
   // Deprecation + Sunset headers injected by DeprecationInterceptor.
   app.enableVersioning({ type: VersioningType.URI, prefix: 'api/v' });
 
-  app.use(
-    helmet({
-      contentSecurityPolicy: {
-        directives: {
-          defaultSrc: ["'self'"],
-          scriptSrc: ["'self'"],
-          styleSrc: [
-            "'self'",
-            "'unsafe-inline'",
-            'https://fonts.googleapis.com',
-          ],
-          // 'data:' allows the admin-ui Vite bundle's inlined woff2 font,
-          // which is emitted as a data: URI (mirrors imgSrc below).
-          fontSrc: ["'self'", 'https://fonts.gstatic.com', 'data:'],
-          imgSrc: ["'self'", 'data:', 'blob:'],
-          connectSrc: ["'self'"],
-          formAction: ["'self'"],
-          upgradeInsecureRequests: null,
-        },
-      },
-      hsts: {
-        maxAge: 31536000, // 1 year in seconds
-        includeSubDomains: true,
-        preload: true,
-      },
-      crossOriginOpenerPolicy: { policy: 'same-origin' },
-      crossOriginResourcePolicy: false,
-    }),
-  );
+  // helmet (CSP, HSTS, COOP, CORP, ...) and Permissions-Policy; shared with
+  // the e2e test application so the suite sees what production sends.
+  applySecurityHeaders(app);
+
+  // JSON and SCIM's application/scim+json. After the security headers, so a
+  // body the parser rejects (malformed JSON) is answered with them too.
+  registerBodyParsers(app);
   app.use(cookieParser());
 
   // Backward compatibility: the SSO session cookie used to be AUTHME_SESSION
@@ -329,7 +309,10 @@ async function bootstrap() {
   // bare-array Keycloak-style bodies (e.g. [{ name: "admin" }]) are reshaped
   // to { roleNames: [...] } before ValidationPipe rejects them.
   // The pipe's metatype guard ensures it only activates for AssignRolesDto params.
+  // RequestInputPipe runs first: a missing body becomes {} and a NUL
+  // character is refused, so neither reaches a handler or the database.
   app.useGlobalPipes(
+    new RequestInputPipe(),
     new NormalizeRoleBodyPipe(),
     new ValidationPipe({
       whitelist: true,

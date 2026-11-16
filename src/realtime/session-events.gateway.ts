@@ -15,6 +15,7 @@ import { TokenBlacklistService } from '../tokens/token-blacklist.service.js';
 import { CacheBusService } from '../cache/cache-bus.service.js';
 import { ClientCertificateSource } from '../mtls/client-certificate.source.js';
 import { assertCertificateBinding } from '../mtls/certificate-binding.js';
+import { isAccessTokenPayload } from '../tokens/access-token-type.js';
 
 /** The bus topic session events travel on between processes. */
 const TOPIC = 'session-events';
@@ -198,6 +199,8 @@ export class SessionEventsGateway implements OnModuleDestroy {
     } catch {
       return null;
     }
+    // Only an access token opens the stream, not an ID or logout token.
+    if (!isAccessTokenPayload(payload)) return null;
     // RFC 8705 §3: a certificate-bound token needs its certificate: from the
     // TLS handshake on the certificate listener, or from a trusted proxy's
     // header. Read inside this promise, so a malformed header is a refusal

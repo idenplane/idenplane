@@ -42,7 +42,7 @@ The upgrade shells out to them. If they are missing, pre-validation fails with:
 
 > Backup tooling is missing — an upgrade cannot be rolled back
 
-The official Docker image ships them. On bare metal, install the PostgreSQL client package.
+The official Docker image ships them for PostgreSQL 16, 17 and 18. On bare metal, install the PostgreSQL client package.
 
 ### 2. The client major version must equal the server major version
 
@@ -52,7 +52,13 @@ A dump written by `pg_dump` 18 cannot be restored onto a PostgreSQL 16 server, a
 pg client and server majors match (16)
 ```
 
-Check yours:
+Idenplane reads the server's major version and picks the matching client by itself, in this order:
+
+1. `PG_BIN_DIR`, if you set it (for example `PG_BIN_DIR=/usr/lib/postgresql/17/bin`);
+2. `/usr/libexec/postgresqlN` (Alpine, which the official image uses) or `/usr/lib/postgresql/N/bin` (Debian and Ubuntu), where `N` is the server major;
+3. `pg_dump` and `pg_restore` on `PATH`.
+
+On bare metal with a single client installed, check that it matches:
 
 ```bash
 pg_dump --version
@@ -210,6 +216,39 @@ Do this once on a copy before you trust it with real data:
 5. **Break it on purpose** — add a migration that fails, run the upgrade, and confirm `rollbackSucceeded` is `true` and your data came back
 
 Step 5 is the one that matters. Stages 1–4 tell you the happy path works; only step 5 tells you the safety net does.
+
+---
+
+## Upgrading by replacing the image
+
+The upgrade API above is optional. The usual upgrade is to start the new image on the same database: the container's entrypoint runs `prisma migrate deploy` before the server starts, so the schema is migrated on start.
+
+1. **Back up first:** `pg_dump --format=custom` (see [backups](/deployment/production#4-backups-stored-off-the-host)).
+2. Stop the old version. With more than one replica, stop all of them: an old process must not write while the schema changes.
+3. Start the new image with the **same** environment, in particular the same `WEBHOOK_SECRET_KEY` and `WEBHOOK_ENCRYPTION_SALT`. Client secrets, TOTP secrets and signing keys are stored encrypted with them, and a server started with different values refuses to start rather than misread them.
+4. Wait for `/health/ready`, then sign in.
+
+### How each release is tested
+
+The [`restore-drill.yml`](https://github.com/idenplane/idenplane/blob/main/.github/workflows/restore-drill.yml) workflow runs every week, and on every pull request that touches migrations or the backup code. It does exactly the procedure above:
+
+- **Upgrade test** ([`scripts/ci/upgrade-test.sh`](https://github.com/idenplane/idenplane/blob/main/scripts/ci/upgrade-test.sh)):
+  1. Runs the previous release's published image (the latest `v*` tag before the commit under test).
+  2. Seeds it: a realm, a confidential client, a password user, a user with an authenticator app, and a signed-in session.
+  3. Replaces it with the image built from the commit, on the same database and keys.
+  4. Checks that every migration in `prisma/migrations` is applied and none failed, and that the server reports the new version.
+  5. Checks that password and TOTP sign-in still work, the old client secret still authenticates, the old refresh token is accepted, and tokens are still signed with the same keys.
+- **Restore drill** ([`scripts/ci/restore-drill.sh`](https://github.com/idenplane/idenplane/blob/main/scripts/ci/restore-drill.sh)): takes a `pg_dump --format=custom` of a seeded instance, restores it into a fresh PostgreSQL 16, and runs the same checks against it. It also starts the restore once with a different `WEBHOOK_SECRET_KEY` and expects a refusal to start.
+
+You can run the same test against your own previous version. It needs only Docker:
+
+```bash
+git clone https://github.com/idenplane/idenplane.git && cd idenplane
+git checkout v0.10.0                                    # the version you are moving to
+PREV_IMAGE=islamawad/idenplane:0.9.1 IDENPLANE_IMAGE=islamawad/idenplane:0.10.0 IDENPLANE_IMAGE_IS_EXTERNAL=1   bash scripts/ci/upgrade-test.sh
+```
+
+Leave out `IDENPLANE_IMAGE` to build the image from the checkout instead. `PREV_IMAGE` defaults to the release before the checked-out commit. The script prints a PASS or FAIL line for each check. It uses throwaway containers on a private Docker network, and publishes no ports.
 
 ---
 

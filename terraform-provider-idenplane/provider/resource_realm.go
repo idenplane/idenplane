@@ -211,15 +211,15 @@ func (r *RealmResource) Schema(ctx context.Context, req resource.SchemaRequest, 
 				Optional:            true,
 			},
 			"lockout_duration": schema.Int64Attribute{
-				MarkdownDescription: "Lockout duration in minutes",
+				MarkdownDescription: "Lockout duration in seconds",
 				Optional:            true,
 			},
 			"failure_reset_time": schema.Int64Attribute{
-				MarkdownDescription: "Time in minutes before failure count resets",
+				MarkdownDescription: "Seconds before the failure count resets",
 				Optional:            true,
 			},
 			"permanent_lockout_after": schema.Int64Attribute{
-				MarkdownDescription: "Number of permanent lockouts before permanent ban",
+				MarkdownDescription: "Lockouts before the account is disabled for good (0 = never)",
 				Optional:            true,
 			},
 			// Registration settings

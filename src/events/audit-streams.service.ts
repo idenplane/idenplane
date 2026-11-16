@@ -164,6 +164,9 @@ export class AuditStreamsService {
         },
         body,
         signal: controller.signal,
+        // Audit records go to the configured URL only, never to wherever a
+        // redirect points (ASVS 5.0 V15.3.2).
+        redirect: 'error',
       });
     } catch (err) {
       this.logger.warn(

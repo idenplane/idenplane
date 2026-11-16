@@ -129,8 +129,17 @@ updates:
           - "*"
 
   # Docker base images
+  # Every FROM line in these directories is pinned by digest (Scorecard
+  # Pinned-Dependencies), so this entry is what keeps those digests moving:
+  # Dependabot bumps the digest when the tag is republished and the tag when a
+  # new version ships. The example and conformance-suite Dockerfiles were
+  # unwatched until they were pinned; a digest nobody bumps is a base image
+  # that never gets patched.
   - package-ecosystem: docker
-    directory: "/"
+    directories:
+      - "/"
+      - "/examples/nextjs-quickstart"
+      - "/scripts/ci/conformance"
     schedule:
       interval: weekly
     labels:

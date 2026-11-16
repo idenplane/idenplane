@@ -9,6 +9,111 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+## [0.10.0] - 2026-11-16
+
+A security hardening release. New realms are now secure by default: brute-force protection and audit events are on. The release also publishes a threat model and an OWASP ASVS 5.0 Level 2 self-assessment, and closes the gaps the assessment found that could be fixed safely: token-type confusion at userinfo, a password-oracle path for locked LDAP users, sessions that survived a password reset, and more. Read *Before you upgrade*: existing realms are not changed.
+
+**Before you upgrade:**
+- **Existing realms keep their settings.** Brute-force protection and event recording are on only for realms created after the upgrade (through the admin API or console, an import file that doesn't set them, the setup wizard, or the `master` realm of a fresh install). The migration changes only the column defaults; it updates no row. To find realms that still have brute-force protection off, call `GET /admin/upgrade/health`: the `brute_force_protection` check is a warning that names them. The console's realm **Security** settings also show a warning while it is off.
+- **To turn it on for an existing realm:** tick **Enable brute force protection** in the realm's Security settings, or `PATCH /admin/realms/{realm}` with `{"bruteForceEnabled": true, "maxLoginFailures": 10, "failureResetTime": 900, "lockoutDuration": 300, "permanentLockoutAfter": 0}`. For audit events, `{"eventsEnabled": true, "adminEventsEnabled": true}`. See *Security → Secure defaults*.
+- **The `master` realm of a new install locks an admin account for 5 minutes after 10 failed sign-ins in 15 minutes.** Existing installs keep their master realm setting. If you turn it on for master, keep `permanentLockoutAfter` at `0`, so nobody can lock the admins out for good, and keep a second super-admin or the `ADMIN_API_KEY` for an emergency: `PUT /admin/realms/master/users/{userId}/reset-password` with the API key sets a new password and clears the lock (the unlock route needs an MFA step-up, so it refuses the key).
+- **Scripts that send an ID token to `/userinfo`, to token introspection or to the session-events WebSocket** now get `401` (introspection: `{"active": false}`). Send the access token.
+- **A password reset now signs the user out everywhere** and revokes their refresh tokens. Apps holding a refresh token for that user must sign the user in again.
+- **Custom login or account templates with their own `<style>` block** must add `nonce="{{scriptNonce}}"` to it, or the browser ignores the styles. The built-in themes already do. See *Custom themes*.
+- **If you provision users with SCIM:** users created by SCIM before 0.10.0 may have their `externalId` stored in `federationLink`, which makes them look LDAP-federated at sign-in. Clear `federationLink` on users that do not come from an LDAP federation. SCIM deactivation (`active: false`), as sent by Entra ID and Okta, now really disables the user and ends their sessions.
+- **Admin API clients that send malformed input** now get `400`, `404` or `409` where some endpoints answered `500`.
+
+### Security
+- **Brute-force protection is on by default for new realms.** It was off unless an admin turned it on, so a new realm put no limit on online password guessing. The defaults are tuned against a lockout denial of service: 10 failures within 15 minutes lock the account for 5 minutes; the failures stay counted for the window, so a wrong password right after the lock locks it again (progressive lockout); there is no permanent lockout, which would let anyone disable an account by guessing. The trade-off is documented in *Security → Secure defaults* and in `src/realms/realm-security-defaults.ts`, the one place the creation paths take the defaults from.
+- **A locked LDAP user can no longer be used to test passwords.** In the password grant, a federation-linked user's password was checked against LDAP before the lockout, so a locked account answered "invalid credentials" for a wrong password and "locked" for the right one. Every path now refuses a locked account before any credential check, with the same answer whatever the password. Failed LDAP binds in the password grant now count towards the lockout.
+- **userinfo, token introspection and the session-events WebSocket accept only access tokens** (ASVS 5.0 V9.2.2). They accepted any JWT the realm signs, so an ID token, a back-channel logout token or, in the master realm, an admin token was treated as an access token.
+- **A password reset ends every session of the user** and revokes their refresh tokens (ASVS 5.0 V7.4.3), so whoever knew the old password is signed out.
+- **Disabled users no longer get tokens from an approved device code or an authorization code** issued before they were disabled. Device approval also refuses disabled users, with the same answer as for unknown ones.
+- **Lockout emails escape the username and realm name.** Usernames from SCIM, LDAP or an external IdP have no character rules, and the lockout email put them into HTML as is.
+- **A compressed SAMLRequest is no longer inflated without a limit.** Inflation now stops at the 256 KB request limit instead of expanding the whole request before the size check.
+- **Back-channel logout and audit-stream deliveries no longer follow redirects**, so a logout token or audit record goes only to the configured URL.
+- **`/health/ready` no longer returns the database driver's error text.** The endpoint is public, and the message could name database hosts and users. It is logged instead.
+- **Every temporary lockout is logged** at `warn` level, not only permanent ones.
+- **Simultaneous failed sign-ins are all counted.** Failures were counted in a serializable transaction, which PostgreSQL aborts under a burst of concurrent guesses; after the retries ran out a failure could go uncounted. The transaction now locks the user's row first, so concurrent failures for one user queue instead of aborting.
+- **A user deactivated or deleted through SCIM is signed out everywhere.** Their sessions end and their refresh tokens are revoked, and their access tokens stop passing introspection and userinfo. Before, Entra ID's deactivation was ignored entirely (see *Fixed*), and even a working deactivation left sessions open. Re-activating the user does not bring the old tokens back.
+- **SCIM filters can no longer read arbitrary user columns.** Any attribute name went straight into the database query, so a SCIM token could filter on `passwordHash` (testing hash prefixes) or override `realmId` to list another realm's users. Only the documented attributes are filterable now; anything else is a 400 `invalidFilter`.
+- **SCIM no longer writes `externalId` into `federationLink`**, the LDAP federation link, which made SCIM users look LDAP-federated at sign-in. Users provisioned before this release keep the old value; clear `federationLink` on users that are not from an LDAP federation.
+- **Passwords sent over SCIM are left out of the admin audit event.**
+- **Malformed requests no longer crash endpoints.** An OWASP ZAP scan of the API made about 30 endpoints answer 500. The causes:
+  - a request with no body: Express 5 leaves the body undefined, so revoke, back-channel logout, device, step-up, the risk policies, SCIM mappings and protocol mappers crashed;
+  - a NUL character in any field, which PostgreSQL rejects;
+  - an unparseable date or number in a query string (the event, admin-event and NHI audit-log lists and exports, pending registrations).
+
+  A missing body is now `{}`, so the usual validation answers 400, and a NUL character is refused with 400 before it reaches the database. Database errors caused by the input (a wrong type, a value too long, a duplicate) now answer 400, 404 or 409 with a generic message. Before, they answered 500.
+- **Hosted pages: stricter CSP for styles.** A `<style>` element must now carry the page's nonce, so injected markup cannot add a stylesheet (CSS can read form values through attribute selectors). `style` attributes are still allowed. **Custom templates with their own `<style>` block must add `nonce="{{scriptNonce}}"` to it.** The built-in themes already do. Pages that load a CAPTCHA keep the previous rule.
+- **New response headers.**
+  - `Permissions-Policy` turns off camera, microphone, geolocation, payment, USB and similar features. Passkeys, the clipboard and fullscreen stay available to Idenplane's own pages.
+  - `Cross-Origin-Resource-Policy: same-origin` everywhere, except `cross-origin` for `/themes/`, so client apps and webmail can still show realm logos.
+  - `Cache-Control: no-store` by default on dynamic responses: hosted pages, the account page and admin API responses. Before, shared caches could store them. Static assets, discovery and JWKS stay cacheable.
+- **Dependencies with known advisories** (none in the server's runtime dependencies):
+  - Terraform provider: `golang.org/x/net` 0.58.0 → 0.62.0 (GO-2026-6603, -6610, -6611, -6612, -6617, -6860, -6866). Its `go` directive moves from 1.25.0 to 1.26.0, which x/net 0.62.0 requires.
+  - Terraform provider and Go SDK: `toolchain go1.26.11`, so CI builds and tests with a standard library that has the net/http HTTP/2 fixes from go1.26.9. The Go SDK still supports Go 1.24.
+  - Docs site: `webpack-dev-middleware` 7.4.5 → 7.4.6 (GHSA-g84c-rxfj-3j2c); `uuid` 8.3.2 → 11.1.1 under `sockjs` (GHSA-w5hq-g745-h8pq), through an override because sockjs 0.3.24, its last release, asks for `^8.3.2`.
+  - Next.js SDK (dev): `nanoid` 3.3.16 → 3.3.20 (GHSA-2v37-7h3g-55p8).
+  - Vue SDK (dev): `glob` 10.5.0 → 14.0.6 under `js-beautify` (GHSA-3g3m-2fjr-6pw4), through an override because even the latest js-beautify asks for glob `^13`, which the advisory still covers.
+  - `deepmerge` (GHSA-gcqx-w48m-w2h4) has no fixed release. It is used only by Jest's config loader and the docs build's SVG loader, on this repository's own configuration, and is ignored with that reason in `osv-scanner.toml` and `docs/osv-scanner.toml` until 2027-05-16.
+
+### Added
+- **Threat model** (*Security → Threat model*, `docs/docs/security/threat-model.md`): assets, trust boundaries, data flows, STRIDE threats per boundary with the mitigation in the code and the residual risk, and a cryptographic inventory.
+- **OWASP ASVS 5.0 Level 2 self-assessment** (*Security → OWASP ASVS Assessment*): all 253 Level 1 and 2 requirements with status, evidence and recommendation, also as CSV (`docs/static/security/asvs-5.0-l2-assessment.csv`). Result: 111 pass, 91 partial, 22 fail, 29 not applicable. The remaining gaps are listed in priority order.
+- **`/admin/upgrade/health` reports realms with brute-force protection off** (a warning, never a failure).
+- **The admin console warns** when a realm's brute-force protection is off, and when permanent lockout is set.
+- **Signed images with SBOMs and provenance.** Every image `docker-publish.yml` pushes carries BuildKit SBOM and SLSA provenance attestations, a keyless cosign signature and a signed SPDX SBOM attestation. Each GitHub release gets the SBOM, the image digests and signed checksums attached. A `workflow_dispatch` dry run does all of this against a throwaway registry. How to verify: [Verifying Releases](docs/docs/security/verify-releases.md).
+- **Scheduled checks:**
+  - OWASP ZAP baseline and API scans (`dast-zap.yml`), also on PRs that change `src/**`;
+  - the OpenID Foundation conformance suite, basic and config plans (`conformance.yml`);
+  - a backup/restore drill and an upgrade test from the previous release (`restore-drill.yml`);
+  - the OpenSSF Scorecard (`scorecard.yml`).
+- **Landing site version.** On every release, a PR to the landing site updates the version it shows (`landing-version.yml`; needs the `LANDING_REPO_TOKEN` secret).
+
+### Changed
+- **New-realm defaults** (column defaults and every creation path; existing realms unchanged):
+
+  | Setting | Before | Now |
+  |---|---|---|
+  | `bruteForceEnabled` | `false` | `true` |
+  | `maxLoginFailures` | `5` | `10` |
+  | `failureResetTime` | `600` | `900` |
+  | `lockoutDuration` | `900` | `300` |
+  | `permanentLockoutAfter` | `0` | `0` |
+  | `eventsEnabled` | `false` | `true` |
+  | `adminEventsEnabled` | `false` | `true` |
+
+  Defaults reviewed and deliberately not changed, with the recommendation for each, are listed in *Secure defaults*: `rateLimitEnabled`, `requireEmailVerification`, `mfaRequired`, `registrationAllowed`, `captchaEnabled`, client `requireConsent`, `webAuthnUserVerificationRequired`, `smtpSecure`, `adaptiveAuthEnabled`.
+- **Importing a Keycloak realm** keeps `bruteForceProtected: false` when the export says so, and otherwise turns protection on with Idenplane's defaults (`failureFactor` still sets `maxLoginFailures`).
+- **Docs:** the brute-force, session and event settings in *Configuration options* and *API → Realms* described Keycloak fields that Idenplane doesn't have (`bruteForceProtected`, `failureFactor`, `waitIncrementSeconds`, `ssoSessionIdleTimeout`…). They now list the real fields and defaults. The Terraform provider's descriptions of `lockout_duration` and `failure_reset_time` said minutes; they are seconds.
+- **Migration** `20261116120000_secure_realm_defaults` changes the defaults of six `realms` columns. It updates no row.
+- **The Docker image ships the PostgreSQL 16, 17 and 18 clients**, and the built-in upgrade picks the `pg_dump` and `pg_restore` matching the server's major version (`PG_BIN_DIR` overrides it). The image had only the 16 client, so on the Helm chart's bundled PostgreSQL 17 the upgrade's pre-validation always failed with a client/server mismatch. See *Deployment → Upgrading*.
+- **Admin API responses no longer carry `Link: </api/v1/admin/...>; rel="successor-version"`.** No admin route is served under `/api/v1`, so the link pointed at a `404`. The `Deprecation` and `Sunset` headers are unchanged.
+- Every GitHub Action is pinned to a commit SHA, with Dependabot keeping the pins current. `sync-dev-to-main.yml` grants `contents: write` only to its job. The WSL dev-setup job adds the NodeSource repository directly instead of piping a script into bash.
+- The two e2e suites that use the real `pg_dump`/`pg_restore` fail instead of skipping when CI sets `REQUIRE_PG_TOOLS` and the tools are missing.
+- **Pinned build inputs** (OpenSSF Scorecard *Pinned-Dependencies*):
+  - the Next.js quickstart's Dockerfiles pin `node:24-alpine` by digest, like the root Dockerfile;
+  - the conformance run pins the OpenID conformance-suite image and its nginx image by digest, and `run.sh` reads the suite release from `Dockerfile.suite`, so `SUITE_VERSION` can no longer be overridden;
+  - Dependabot's docker entry now also covers `/examples/nextjs-quickstart` and `/scripts/ci/conformance`, so those digests keep moving;
+  - the breaking-change check installs oasdiff 1.35.0 from its release tarball, checked against its SHA-256, instead of piping `install.sh` from oasdiff's main branch into bash;
+  - the dev setup guide, README, CONTRIBUTING and `verify-dev-setup.sh` install with `npm ci`.
+- **Gradle wrapper validation.** The Android SDK and android-quickstart CI jobs and the Android publish workflow check both `gradle-wrapper.jar` files against Gradle's published checksums before running them.
+- **Property-based tests** with fast-check for the SCIM filter parser, redirect URI matching and HTML escaping (`*.property.spec.ts`, part of the normal Jest run).
+
+### Fixed
+- **API reference:** `openapi.yaml` gave the licence as Apache 2.0 (it is AGPL-3.0), a contact address that doesn't exist and a `/api/v1` server URL; it now points to SUPPORT.md and `http://localhost:3000`.
+- **README:** the comparison table's idle memory now comes from the published benchmark instead of unsourced figures.
+- **SCIM request bodies sent as `application/scim+json`** (Entra ID, Okta, OneLogin) are parsed. Only `application/json` was, so every SCIM create, replace and patch from a real client failed.
+- **SCIM PATCH and Bulk read `Operations`**, the name RFC 7644 uses (lowercase `operations` still works), and PATCH op names are case-insensitive. Real clients' PATCH and Bulk requests were ignored or failed.
+- **SCIM user PATCH honours `path`.** Simple and sub-attributes (`active`, `userName`, `name.givenName`…), `emails[type eq "work"].value`, no-path objects with dotted or nested keys, and `remove` all work, and `"True"`/`"False"` strings are read as booleans. Entra ID's `{"op":"Replace","path":"active","value":"False"}` did nothing before. Attributes with no column (`displayName`, `title`, enterprise extension…) are accepted and ignored instead of failing the request with a 500; unknown paths are a 400 `invalidPath`. A PATCH applies in full or not at all. *Guides → SCIM* lists the supported paths.
+- **SCIM group PATCH** adds, removes and replaces members in the forms Entra ID and Okta send (`members[value eq "<id>"]` with double quotes, and `remove` with a value list), and renames the group.
+- **SCIM create honours `"active": false`** and refuses a missing `userName` with a 400.
+- **SCIM responses use the 2.0 URNs** (`urn:ietf:params:scim:...:2.0:...`) instead of SCIM 1.0 ones, errors use the RFC 7644 error body with `scimType` (for example 409 `uniqueness` for a duplicate `userName`), `meta.location` is an absolute URL that includes the realm, and responses are sent as `application/scim+json`.
+- **A SCIM filter that can't be parsed is a 400 `invalidFilter`**, not an empty list that a client reads as "no such user". Compound `and`/`or` filters, which were misread, are refused the same way.
+- **SCIM Bulk** answers with `Operations` and each operation's own status and SCIM error, honours `failOnErrors`, and refuses `PUT`, `PATCH` or `DELETE` without an id.
+- **SCIM discovery** (`ServiceProviderConfig`, `Schemas`, `ResourceTypes`) is also served under the realm base URL clients are configured with, and `/Schemas` and `/ResourceTypes` return a `ListResponse`. `ServiceProviderConfig` no longer claims ETag support.
+
 ## [0.9.1] - 2026-11-16
 
 A maintenance release:
@@ -541,7 +646,12 @@ The foundation release: core IAM server with OAuth, OIDC, SAML, MFA, and the ini
 - `removeUserRealmRoles` returning 200 instead of 204
 - Login error messages never displayed on failed login
 
-[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.7.0...HEAD
+[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.10.0...HEAD
+[0.10.0]: https://github.com/idenplane/idenplane/releases/tag/v0.10.0
+[0.9.1]: https://github.com/idenplane/idenplane/releases/tag/v0.9.1
+[0.9.0]: https://github.com/idenplane/idenplane/releases/tag/v0.9.0
+[0.8.1]: https://github.com/idenplane/idenplane/releases/tag/v0.8.1
+[0.8.0]: https://github.com/idenplane/idenplane/releases/tag/v0.8.0
 [0.7.0]: https://github.com/idenplane/idenplane/releases/tag/v0.7.0
 [0.6.0]: https://github.com/idenplane/idenplane/releases/tag/v0.6.0
 [0.5.0]: https://github.com/idenplane/idenplane/releases/tag/v0.5.0

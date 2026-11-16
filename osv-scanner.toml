@@ -1,0 +1,14 @@
+# osv-scanner configuration for package-lock.json (osv-scanner reads the
+# osv-scanner.toml next to each lockfile; OpenSSF Scorecard's Vulnerabilities
+# check runs osv-scanner). Every ignore needs a reason and an expiry date, so
+# it is reviewed again rather than forgotten.
+
+[[IgnoredVulns]]
+# deepmerge: mergeObject() prototype poisoning. No fixed release exists: every
+# version up to 4.3.1, the latest, is affected. Here it is a dev dependency of
+# jest-config (Jest 30.5.2, its latest release, still asks for ^4.3.1), which
+# merges Jest's own configuration from this repository. Nothing in the
+# server's runtime dependencies uses it, so no request data ever reaches it.
+id = "GHSA-gcqx-w48m-w2h4"
+ignoreUntil = 2027-05-16T00:00:00Z
+reason = "No fixed deepmerge release; dev-only via jest-config, merging the repository's Jest config, never runtime input"

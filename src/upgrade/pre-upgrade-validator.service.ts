@@ -104,6 +104,11 @@ export class PreUpgradeValidatorService {
     // stage before discovering it cannot take one, and a failure any time after
     // DATABASE_MIGRATION would then have nothing to roll back to. Failing here
     // aborts before anything has been touched.
+    // The server major picks which installed client tools are checked and
+    // later run (DatabaseBackupService.pgBinDir), so record it first.
+    this.databaseBackupService.setServerMajor(
+      await this.readServerMajorVersion(),
+    );
     const toolingCheck = this.checkBackupTooling();
     checks.push(toolingCheck);
     if (toolingCheck.status === 'pass') passed++;
@@ -296,9 +301,8 @@ export class PreUpgradeValidatorService {
    * backups nothing can restore onto that server. An older client is no better,
    * since pg_dump refuses to dump a newer server at all. Equality is the rule.
    *
-   * This matters for the published image specifically: it installs Alpine's
-   * default postgresql-client, which is currently 18, while docker-compose.yml
-   * ships postgres:16-alpine. That combination has no working rollback.
+   * The published image therefore ships several client majors side by side,
+   * and DatabaseBackupService picks the one matching the server.
    */
   /** Server major, or null if it cannot be read. server_version_num is MMmmpp. */
   private async readServerMajorVersion(): Promise<number | null> {
@@ -314,6 +318,8 @@ export class PreUpgradeValidatorService {
   }
 
   private async checkPgVersionMatch(): Promise<PreUpgradeCheck> {
+    const serverMajor = await this.readServerMajorVersion();
+    this.databaseBackupService.setServerMajor(serverMajor);
     const clientMajor = this.databaseBackupService.clientMajorVersion();
 
     if (clientMajor === null) {
@@ -326,8 +332,6 @@ export class PreUpgradeValidatorService {
           'restore requires.',
       };
     }
-
-    const serverMajor = await this.readServerMajorVersion();
 
     if (serverMajor === null) {
       return {
@@ -346,8 +350,8 @@ export class PreUpgradeValidatorService {
         details:
           `A backup taken by pg_dump ${clientMajor} cannot be restored onto a ` +
           `PostgreSQL ${serverMajor} server, so this upgrade would have no ` +
-          `rollback. Install postgresql-client ${serverMajor} (or run a ` +
-          `PostgreSQL ${clientMajor} server).`,
+          `rollback. Install the PostgreSQL ${serverMajor} client, or set ` +
+          `PG_BIN_DIR to the bin directory of one.`,
       };
     }
 

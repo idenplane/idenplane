@@ -1,0 +1,7 @@
+# TLS front for Idenplane in the conformance run. The certificate is issued by
+# a throwaway CA created by run.sh, which the suite's JVM is told to trust
+# (Dockerfile.suite).
+idp.conformance.test:443 {
+	tls /certs/idp.crt /certs/idp.key
+	reverse_proxy app:3000
+}

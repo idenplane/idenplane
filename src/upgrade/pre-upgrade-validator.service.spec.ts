@@ -62,6 +62,7 @@ describe('PreUpgradeValidatorService', () => {
         .mockReturnValue({ available: true, detail: 'ok' }),
       // Matching majors by default; the version-match tests override this.
       clientMajorVersion: jest.fn().mockReturnValue(16),
+      setServerMajor: jest.fn(),
     } as unknown as jest.Mocked<DatabaseBackupService>;
 
     // Defaults: directory usable, plenty of space. Individual tests override.
@@ -180,6 +181,21 @@ describe('PreUpgradeValidatorService', () => {
       );
     };
 
+    it('hands the server major to the backup service before reading the client', async () => {
+      withVersions(17, '170006');
+
+      await (validatorService as any).checkPgVersionMatch();
+
+      expect(mockBackupService.setServerMajor).toHaveBeenCalledWith(17);
+      expect(
+        (mockBackupService.setServerMajor as jest.Mock).mock
+          .invocationCallOrder[0],
+      ).toBeLessThan(
+        (mockBackupService.clientMajorVersion as jest.Mock).mock
+          .invocationCallOrder[0],
+      );
+    });
+
     it('passes when the majors match', async () => {
       withVersions(16, '160014');
 
@@ -197,7 +213,7 @@ describe('PreUpgradeValidatorService', () => {
       expect(check.status).toBe('fail');
       expect(check.message).toMatch(/18.*16/);
       // The remedy must name the version to install, not just state the problem.
-      expect(check.details).toContain('postgresql-client 16');
+      expect(check.details).toContain('PostgreSQL 16 client');
     });
 
     it('fails when the client is older than the server', async () => {
