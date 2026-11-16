@@ -906,6 +906,7 @@ export const EXCLUDED_MODELS: Record<string, string> = {
   VerificationToken: RUNTIME,
   MagicLinkRequest: RUNTIME,
   UsedTotpCode: RUNTIME,
+  SamlRequestId: 'SAML replay check; ' + RUNTIME,
   DeviceCode: RUNTIME,
   OtpAttempt: RUNTIME,
   ImpersonationSession: RUNTIME,
