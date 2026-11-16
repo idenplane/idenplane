@@ -6,6 +6,7 @@ import { CryptoService } from '../crypto/crypto.service.js';
 import { JwkService } from '../crypto/jwk.service.js';
 import { ScopeSeedService } from '../scopes/scope-seed.service.js';
 import { signingKeySecrets } from '../crypto/signing-key-secrets.js';
+import { NEW_REALM_SECURITY_DEFAULTS } from '../realms/realm-security-defaults.js';
 
 /** The advisory lock first-boot seeding takes (an arbitrary constant). */
 const MASTER_SEED_LOCK_KEY = 7_204_311_862;
@@ -101,6 +102,10 @@ export class AdminSeedService implements OnApplicationBootstrap {
             name: 'master',
             displayName: 'Master',
             enabled: true,
+            // Brute-force protection on, temporary lockout only: see
+            // realm-security-defaults.ts for why it can't lock admins out
+            // for good.
+            ...NEW_REALM_SECURITY_DEFAULTS,
             signingKeys: {
               create: signingKeySecrets.createData(this.crypto, keyPair),
             },

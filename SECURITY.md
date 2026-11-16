@@ -68,6 +68,14 @@ Out of scope:
 - Social engineering or physical attacks
 - Vulnerabilities in a specific organisation's Idenplane deployment that come from its own configuration. Report those to that organisation.
 
+## Security design and assessment
+
+- [Threat model](docs/docs/security/threat-model.md): assets, trust boundaries, STRIDE threats per boundary, the mitigation in the code for each, and the residual risk.
+- [OWASP ASVS 5.0 Level 2 self-assessment](docs/docs/security/asvs-assessment.md): every Level 1 and 2 requirement with its status and evidence from the code ([CSV](docs/static/security/asvs-5.0-l2-assessment.csv)).
+- [Secure defaults](docs/docs/security/secure-defaults.md): the security settings a new realm starts with, and how to apply them to older realms.
+
+These are maintained by the project and have not been reviewed by a third party. If you find a threat or a gap they miss, report it as described above.
+
 ## Safe Harbor
 
 We will not take legal action against researchers who:

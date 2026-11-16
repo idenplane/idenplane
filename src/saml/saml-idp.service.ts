@@ -16,6 +16,27 @@ const inflateAsync = promisify(inflate);
 
 const MAX_XML_SIZE = 256 * 1024; // 256 KB max to prevent XML bomb
 
+/**
+ * Decodes a SAMLRequest: inflated when it is compressed, as is otherwise.
+ * Inflation stops at MAX_XML_SIZE, so a small compressed request cannot
+ * expand into a huge buffer before the size check (a decompression bomb,
+ * ASVS 5.0 V5.2.3).
+ */
+async function decodeSamlRequest(samlRequest: string): Promise<string> {
+  const decoded = Buffer.from(samlRequest, 'base64');
+  try {
+    const inflated = await inflateAsync(decoded, {
+      maxOutputLength: MAX_XML_SIZE + 1,
+    });
+    return inflated.toString('utf-8');
+  } catch (err) {
+    if ((err as { code?: string }).code === 'ERR_BUFFER_TOO_LARGE') {
+      throw new BadRequestException('SAMLRequest exceeds maximum allowed size');
+    }
+    return decoded.toString('utf-8');
+  }
+}
+
 interface ParsedAuthnRequest {
   id: string;
   issuer: string;
@@ -37,15 +58,7 @@ export class SamlIdpService {
 
   async validateAuthnRequest(samlRequest: string): Promise<ParsedAuthnRequest> {
     try {
-      const decoded = Buffer.from(samlRequest, 'base64');
-
-      let xml: string;
-      try {
-        const inflated = await inflateAsync(decoded);
-        xml = inflated.toString('utf-8');
-      } catch {
-        xml = decoded.toString('utf-8');
-      }
+      const xml = await decodeSamlRequest(samlRequest);
 
       if (xml.length > MAX_XML_SIZE) {
         throw new BadRequestException(
@@ -98,14 +111,9 @@ export class SamlIdpService {
     samlRequest: string,
     certificate: string,
   ): Promise<void> {
-    const decoded = Buffer.from(samlRequest, 'base64');
-
-    let xml: string;
-    try {
-      const inflated = await inflateAsync(decoded);
-      xml = inflated.toString('utf-8');
-    } catch {
-      xml = decoded.toString('utf-8');
+    const xml = await decodeSamlRequest(samlRequest);
+    if (xml.length > MAX_XML_SIZE) {
+      throw new BadRequestException('SAMLRequest exceeds maximum allowed size');
     }
 
     const doc = new DOMParser().parseFromString(xml, 'text/xml');

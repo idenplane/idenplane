@@ -130,11 +130,12 @@ model Realm {
   passwordHistoryCount        Int     @default(0) @map("password_history_count")
   passwordMaxAgeDays          Int     @default(0) @map("password_max_age_days")
 
-  // Brute force protection
-  bruteForceEnabled     Boolean @default(false) @map("brute_force_enabled")
-  maxLoginFailures      Int     @default(5) @map("max_login_failures")
-  lockoutDuration       Int     @default(900) @map("lockout_duration")
-  failureResetTime      Int     @default(600) @map("failure_reset_time")
+  // Brute force protection. On for new realms since 0.10.0; the defaults
+  // and their trade-offs are in src/realms/realm-security-defaults.ts.
+  bruteForceEnabled     Boolean @default(true) @map("brute_force_enabled")
+  maxLoginFailures      Int     @default(10) @map("max_login_failures")
+  lockoutDuration       Int     @default(300) @map("lockout_duration")
+  failureResetTime      Int     @default(900) @map("failure_reset_time")
   permanentLockoutAfter Int     @default(0) @map("permanent_lockout_after")
 
   // Registration
@@ -189,10 +190,10 @@ model Realm {
   impersonationEnabled     Boolean @default(false) @map("impersonation_enabled")
   impersonationMaxDuration Int     @default(1800) @map("impersonation_max_duration")
 
-  // Events configuration
-  eventsEnabled           Boolean @default(false) @map("events_enabled")
+  // Events configuration. On for new realms since 0.10.0.
+  eventsEnabled           Boolean @default(true) @map("events_enabled")
   eventsExpiration        Int     @default(604800) @map("events_expiration")
-  adminEventsEnabled      Boolean @default(false) @map("admin_events_enabled")
+  adminEventsEnabled      Boolean @default(true) @map("admin_events_enabled")
   loginEventRetentionDays Int     @default(30) @map("login_event_retention_days")
   adminEventRetentionDays Int     @default(90) @map("admin_event_retention_days")
 
