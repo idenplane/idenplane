@@ -377,7 +377,7 @@ Each entry must be a bare origin, like `https://api.example.com`: no path, query
 
 ### Calling your own API
 
-Relative URLs such as `/api/orders` resolve to the origin the app is served from. To send the token to a same-origin API, list that origin; for a separate API, list its origin:
+Relative URLs such as `/api/orders` resolve to the origin the app is served from. To send the token to a same-origin API, list the app's own origin; for a separate API, list its origin. Write the origins out (or take them from your environment config) rather than reading `window.location`, which does not exist during server-side rendering:
 
 ```typescript
 IdenplaneModule.forRoot({
@@ -387,7 +387,7 @@ IdenplaneModule.forRoot({
   redirectUri: 'https://app.example.com/callback',
   bearerTokenOrigins: [
     'https://api.example.com', // a separate API
-    window.location.origin,    // same-origin calls like /api/orders
+    'https://app.example.com', // the app's own origin, for same-origin /api/... calls
   ],
 });
 ```

@@ -837,7 +837,7 @@ const defaultRealmConfig = {
 ### TypeScript SDK Configuration
 
 ```typescript
-import { IdenplaneClient } from '@idenplane/sdk';
+import { IdenplaneClient } from 'idenplane-sdk';
 
 // Realm configuration
 const client = new IdenplaneClient({

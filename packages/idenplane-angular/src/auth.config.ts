@@ -19,9 +19,9 @@ export interface IdenplaneConfig extends CoreIdenplaneConfig {
    * Matching is exact: `https://api.example.com` does not match
    * `http://api.example.com`, `https://api.example.com:8443` or
    * `https://api.example.com.evil.com`. Relative request URLs (`/api/...`)
-   * resolve to the app's own origin, so list `window.location.origin` (or
-   * the origin it is served from) to keep sending the token to same-origin
-   * APIs.
+   * resolve to the app's own origin, so list the origin the app is served
+   * from (for example `https://app.example.com`) to keep sending the token
+   * to same-origin APIs.
    *
    * Default: none, so the token is sent to the Idenplane server only.
    */

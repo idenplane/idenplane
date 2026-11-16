@@ -508,7 +508,7 @@ const payload = await verifyToken(accessToken, {
 is the `client_id` of the client that requested it, so set `audience` to the
 client ID of the application that calls this API (your SPA, mobile app or
 service account), or an array of them. A token issued to any other client of
-the realm is rejected. Without this check an API would accept every access
+the realm is rejected. Admin impersonation tokens carry the realm name as `aud` (not a client ID); add the realm name to `audience` if this API should accept them. Without this check an API would accept every access
 token the realm ever issued, to any application. A missing or empty
 `audience` throws a configuration error; the request helpers below throw it
 when they are created.

@@ -104,7 +104,7 @@ Entries must be bare origins (no path, query, credentials or `*`); an invalid
 entry throws when `AuthService` is created.
 
 Relative URLs such as `/api/orders` resolve to the origin the app is served
-from, so to send the token to a same-origin API, list that origin:
+from, so to send the token to a same-origin API, list that origin. Write it out (or build it from your environment config) rather than reading `window.location`, which does not exist during server-side rendering:
 
 ```typescript
 IdenplaneModule.forRoot({
@@ -114,7 +114,7 @@ IdenplaneModule.forRoot({
   redirectUri: 'https://app.example.com/callback',
   bearerTokenOrigins: [
     'https://api.example.com',   // a separate API
-    window.location.origin,       // same-origin calls like /api/orders
+    'https://app.example.com',    // the app's own origin, for same-origin /api/... calls
   ],
 });
 ```
@@ -122,7 +122,8 @@ IdenplaneModule.forRoot({
 > **Upgrading from 1.x:** before 2.0.0 the interceptor sent the token to
 > every URL the app requested, including third-party hosts. If your app calls
 > its own API on any origin other than the Idenplane server, add that origin to
-> `bearerTokenOrigins`, or those requests will now be sent without a token.
+> `bearerTokenOrigins` (for same-origin `/api/...` calls, the app's own
+> origin), or those requests will now be sent without a token.
 
 For standalone / functional interceptor style (Angular 15+), provide the configuration with `IDENPLANE_CONFIG`; the same origin rules apply:
 

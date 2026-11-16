@@ -46,7 +46,8 @@ export interface IdenplaneServerConfig {
    * An Idenplane access token's `aud` is the `client_id` of the client that
    * requested it (for example your SPA's client ID), so list the client IDs
    * whose tokens this API should honour. A token whose `aud` contains none of
-   * them is rejected.
+   * them is rejected. Admin impersonation tokens carry the realm name as
+   * `aud`; add it here if this API should accept them.
    *
    * Without this check, any access token the realm issued to any client (a
    * different application in the same realm, a test tool, a third-party
