@@ -118,7 +118,7 @@ Every row below has its own recommendation.
 | V1.4.1 | 2 | N/A |  | Memory-safe runtime. |
 | V1.4.2 | 2 | N/A |  | Managed runtime; numbers are DTO-validated. |
 | V1.4.3 | 2 | N/A |  | Garbage-collected runtime. |
-| V1.5.1 | 1 | Pass | src/saml/saml-idp.service.ts (fast-xml-parser, @xmldom: no external entities) | validateSignature does not confirm the signature covers the parsed root element (see the threat model). **Recommendation:** Check the signed reference is the AuthnRequest root (S). |
+| V1.5.1 | 1 | Pass | src/saml/saml-request-verifier.ts (parseStrictXml: no DTD, entities, comments, processing instructions or duplicate IDs; every xmldom warning is fatal); src/saml/saml-request-hardening.spec.ts | FIXED in 0.11.0: the AuthnRequest signature check now requires one signature on the root, referencing the root, and reads every field from the signed bytes (signature wrapping). |
 | V1.5.2 | 2 | Pass | JSON.parse only; src/theme/theme-render.service.ts:47 strips \_\_proto\_\_ |  |
 
 ### V2 Validation and Business Logic
@@ -227,7 +227,7 @@ Every row below has its own recommendation.
 | V6.6.3 | 2 | Pass | src/sms/sms-otp.service.ts:14-20,631; src/auth-flow/email-otp.service.ts:13-26 |  |
 | V6.8.1 | 2 | Pass | prisma/schema.prisma (FederatedIdentity unique per IdP); src/broker/broker.service.ts:555-583 |  |
 | V6.8.2 | 2 | Partial | src/broker/broker.service.ts:386-420 | Upstream id\_token is not verified; identity comes from userinfo over TLS with the IdP access token. **Recommendation:** Verify the id\_token via the IdP JWKS (M). |
-| V6.8.3 | 2 | N/A | src/saml (IdP only) | Idenplane never consumes SAML assertions. |
+| V6.8.3 | 2 | N/A | src/saml (IdP only) | Idenplane never consumes SAML assertions. The AuthnRequests it receives are accepted once per ID within their validity window since 0.11.0 (src/saml/saml-idp.service.ts claimRequestId; test/saml-request-replay.e2e-spec.ts). |
 | V6.8.4 | 2 | Partial | src/broker/broker.service.ts:375 | Upstream acr/amr are ignored. **Recommendation:** Map upstream amr; document the fallback (M). |
 
 ### V7 Session Management

@@ -9,6 +9,25 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+**Before you upgrade:**
+- **SAML service providers with a certificate registered must sign every AuthnRequest with RSA-SHA256 or RSA-SHA512.** Requests signed with SHA-1 (`rsa-sha1`, or a `sha1` digest) are refused, and there is no per-SP exception. Unsigned requests from such an SP were already refused. Over HTTP-Redirect the signature must now be in the query string (`SigAlg` and `Signature`), as the bindings specification requires: a request that carries an XML signature inside the redirected message is refused (see *Fixed*).
+- **Every AuthnRequest must carry an `IssueInstant`** no more than 5 minutes old (with 3 minutes of clock skew either way) and an `ID` that is a valid `xs:ID` (it starts with a letter or `_`). Requests without them, or older, are refused, whatever the SP's signing settings. `SAML_REQUEST_MAX_AGE_SECONDS` and `SAML_CLOCK_SKEW_SECONDS` change the window. Keep the clocks in sync with NTP.
+- **An AuthnRequest is accepted once.** A browser that resends an old request (back button, a bookmarked SSO URL) now gets `400 AuthnRequest has already been used`; the SP has to start a new sign-in. An SP that sends the same `ID` every time must be fixed.
+- **A `Destination` on the AuthnRequest must be this realm's SSO endpoint** (`{BASE_URL}/realms/{realm}/protocol/saml`). A request without one is still accepted.
+- **AuthnRequests with a DTD, comments, processing instructions, CDATA, duplicate `ID` attributes or elements the schema does not allow are refused.** Mainstream SP libraries send none of these.
+- The migration adds the table `saml_request_ids`. Nothing else to do.
+
+### Security
+- **AuthnRequest signatures are no longer open to XML signature wrapping.** The IdP verified the first signature it found in the document, then read the AuthnRequest's fields from the document root, without checking that the signature covered that root. A signed request from a registered SP could be rewrapped so that the IdP verified the original and acted on altered fields (ACS URL, request ID, NameID policy). Over HTTP-POST, the request must now have exactly one signature, a direct child of the AuthnRequest, with exactly one reference, to the AuthnRequest's `ID`; after verification, every field is read from the bytes the signature covers. Over HTTP-Redirect, the signature is verified over the query string exactly as received (`SAMLRequest`, `RelayState`, `SigAlg`), and `RelayState` is taken from those bytes. Only RSA-SHA256/512 with SHA-256/512 digests is accepted, and the certificate in a request's `KeyInfo` is never used.
+- **AuthnRequests can no longer be replayed.** Request IDs were not tracked and `IssueInstant` was not checked, so a captured request could be sent again at any time. Each accepted request `ID` is now recorded per service provider in PostgreSQL, under a unique index shared by every replica and `WEB_CONCURRENCY` worker, until the request is too old to pass the `IssueInstant` check; a second use is refused. `IssueInstant` must be recent, and `Destination`, when present, must be this endpoint. Expired records are deleted every 5 minutes by the elected leader.
+
+### Added
+- **`SAML_REQUEST_MAX_AGE_SECONDS`** (default 300) and **`SAML_CLOCK_SKEW_SECONDS`** (default 180) set the AuthnRequest validity window.
+
+### Fixed
+- **HTTP-Redirect AuthnRequests compressed with raw DEFLATE are decoded.** The bindings specification requires raw DEFLATE (RFC 1951), which is what SP libraries send, but the IdP only inflated zlib-wrapped data and then failed to parse the request. Zlib-wrapped and uncompressed requests are still accepted.
+- **Signed HTTP-Redirect AuthnRequests work.** The query-string signature (`SigAlg` and `Signature`) was ignored, so a standard signed Redirect request from an SP with a certificate was refused as unsigned; only a non-standard XML signature inside the redirected message was checked.
+
 ### Changed
 - **`:latest` now moves only with a release.** It used to be rebuilt from every push to `main`, so it had a different digest from the release tag and was signed with the `main` identity. It is now the same image as the newest `vX.Y.Z` tag, verifiable with the release identity. Pushes to `main` still publish `:main-<sha>`.
 
