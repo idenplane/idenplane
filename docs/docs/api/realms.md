@@ -114,9 +114,10 @@ Creates a new realm. Requires `super-admin` role.
 | `ssoSessionIdleTimeout` | integer | No | SSO session idle timeout |
 | `ssoSessionMaxLifespan` | integer | No | Maximum SSO session lifetime |
 | `offlineSessionIdleTimeout` | integer | No | Offline session idle timeout |
-| `bruteForceProtected` | boolean | No | Enable brute force protection |
-| `maxLoginFailures` | integer | No | Max login failures before lockout |
-| `failureResetTime` | integer | No | Lockout reset time in seconds |
+| `bruteForceEnabled` | boolean | No | Temporary lockout after repeated failed sign-ins. Defaults to `true` for a new realm. |
+| `maxLoginFailures` | integer | No | Failures within `failureResetTime` that lock the account (default `10`) |
+| `lockoutDuration` | integer | No | Lockout length in seconds (default `300`) |
+| `failureResetTime` | integer | No | Window in seconds in which failures are counted (default `900`) |
 | `smtpConfig` | object | No | SMTP configuration |
 | `theme` | object | No | Theme configuration |
 
@@ -133,7 +134,7 @@ curl -X POST "http://localhost:3000/admin/realms" \
     "loginWithEmailAllowed": true,
     "passwordPolicy": "length(10) and specialChar(1)",
     "accessTokenLifespan": 600,
-    "bruteForceProtected": true,
+    "bruteForceEnabled": true,
     "maxLoginFailures": 5
   }'
 ```
@@ -155,7 +156,7 @@ curl -X POST "http://localhost:3000/admin/realms" \
   "ssoSessionIdleTimeout": 1800,
   "ssoSessionMaxLifespan": 36000,
   "offlineSessionIdleTimeout": 2592000,
-  "bruteForceProtected": true,
+  "bruteForceEnabled": true,
   "maxLoginFailures": 5,
   "failureResetTime": 300,
   "createdAt": "2024-02-01T10:00:00Z",
@@ -196,7 +197,7 @@ curl -X GET "http://localhost:3000/admin/realms/partner-portal" \
   "ssoSessionIdleTimeout": 1800,
   "ssoSessionMaxLifespan": 36000,
   "offlineSessionIdleTimeout": 2592000,
-  "bruteForceProtected": true,
+  "bruteForceEnabled": true,
   "maxLoginFailures": 5,
   "failureResetTime": 300,
   "createdAt": "2024-02-01T10:00:00Z",
@@ -554,7 +555,7 @@ curl -X POST "http://localhost:3000/admin/realms/partner-portal/email/test" \
   "ssoSessionIdleTimeout": "integer (seconds)",
   "ssoSessionMaxLifespan": "integer (seconds)",
   "offlineSessionIdleTimeout": "integer (seconds)",
-  "bruteForceProtected": "boolean",
+  "bruteForceEnabled": "boolean",
   "maxLoginFailures": "integer",
   "failureResetTime": "integer (seconds)",
   "smtpConfig": {

@@ -9,6 +9,51 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+A security hardening release. New realms are now secure by default: brute-force protection and audit events are on. The release also publishes a threat model and an OWASP ASVS 5.0 Level 2 self-assessment, and closes the gaps the assessment found that could be fixed safely: token-type confusion at userinfo, a password-oracle path for locked LDAP users, sessions that survived a password reset, and more. Read *Before you upgrade*: existing realms are not changed.
+
+**Before you upgrade:**
+- **Existing realms keep their settings.** Brute-force protection and event recording are on only for realms created after the upgrade (through the admin API or console, an import file that doesn't set them, the setup wizard, or the `master` realm of a fresh install). The migration changes only the column defaults; it updates no row. To find realms that still have brute-force protection off, call `GET /admin/upgrade/health`: the `brute_force_protection` check is a warning that names them. The console's realm **Security** settings also show a warning while it is off.
+- **To turn it on for an existing realm:** tick **Enable brute force protection** in the realm's Security settings, or `PATCH /admin/realms/{realm}` with `{"bruteForceEnabled": true, "maxLoginFailures": 10, "failureResetTime": 900, "lockoutDuration": 300, "permanentLockoutAfter": 0}`. For audit events, `{"eventsEnabled": true, "adminEventsEnabled": true}`. See *Security → Secure defaults*.
+- **The `master` realm of a new install locks an admin account for 5 minutes after 10 failed sign-ins in 15 minutes.** Existing installs keep their master realm setting. If you turn it on for master, keep `permanentLockoutAfter` at `0`, so nobody can lock the admins out for good, and keep the `ADMIN_API_KEY` or a second super-admin for an emergency.
+- **Scripts that send an ID token to `/userinfo`, to token introspection or to the session-events WebSocket** now get `401` (introspection: `{"active": false}`). Send the access token.
+- **A password reset now signs the user out everywhere** and revokes their refresh tokens. Apps holding a refresh token for that user must sign the user in again.
+
+### Security
+- **Brute-force protection is on by default for new realms.** It was off unless an admin turned it on, so a new realm put no limit on online password guessing. The defaults are tuned against a lockout denial of service: 10 failures within 15 minutes lock the account for 5 minutes; the failures stay counted for the window, so a wrong password right after the lock locks it again (progressive lockout); there is no permanent lockout, which would let anyone disable an account by guessing. The trade-off is documented in *Security → Secure defaults* and in `src/realms/realm-security-defaults.ts`, the one place the creation paths take the defaults from.
+- **A locked LDAP user can no longer be used to test passwords.** In the password grant, a federation-linked user's password was checked against LDAP before the lockout, so a locked account answered "invalid credentials" for a wrong password and "locked" for the right one. Every path now refuses a locked account before any credential check, with the same answer whatever the password. Failed LDAP binds in the password grant now count towards the lockout.
+- **userinfo, token introspection and the session-events WebSocket accept only access tokens** (ASVS 5.0 V9.2.2). They accepted any JWT the realm signs, so an ID token, a back-channel logout token or, in the master realm, an admin token was treated as an access token.
+- **A password reset ends every session of the user** and revokes their refresh tokens (ASVS 5.0 V7.4.3), so whoever knew the old password is signed out.
+- **Disabled users no longer get tokens from an approved device code or an authorization code** issued before they were disabled. Device approval also refuses disabled users, with the same answer as for unknown ones.
+- **Lockout emails escape the username and realm name.** Usernames from SCIM, LDAP or an external IdP have no character rules, and the lockout email put them into HTML as is.
+- **A compressed SAMLRequest is no longer inflated without a limit.** Inflation now stops at the 256 KB request limit instead of expanding the whole request before the size check.
+- **Back-channel logout and audit-stream deliveries no longer follow redirects**, so a logout token or audit record goes only to the configured URL.
+- **`/health/ready` no longer returns the database driver's error text.** The endpoint is public, and the message could name database hosts and users. It is logged instead.
+- **Every temporary lockout is logged** at `warn` level, not only permanent ones.
+
+### Added
+- **Threat model** (*Security → Threat model*, `docs/docs/security/threat-model.md`): assets, trust boundaries, data flows, STRIDE threats per boundary with the mitigation in the code and the residual risk, and a cryptographic inventory.
+- **OWASP ASVS 5.0 Level 2 self-assessment** (*Security → OWASP ASVS Assessment*): all 253 Level 1 and 2 requirements with status, evidence and recommendation, also as CSV (`docs/static/security/asvs-5.0-l2-assessment.csv`). Result: 111 pass, 91 partial, 22 fail, 29 not applicable. The remaining gaps are listed in priority order.
+- **`/admin/upgrade/health` reports realms with brute-force protection off** (a warning, never a failure).
+- **The admin console warns** when a realm's brute-force protection is off, and when permanent lockout is set.
+
+### Changed
+- **New-realm defaults** (column defaults and every creation path; existing realms unchanged):
+
+  | Setting | Before | Now |
+  |---|---|---|
+  | `bruteForceEnabled` | `false` | `true` |
+  | `maxLoginFailures` | `5` | `10` |
+  | `failureResetTime` | `600` | `900` |
+  | `lockoutDuration` | `900` | `300` |
+  | `permanentLockoutAfter` | `0` | `0` |
+  | `eventsEnabled` | `false` | `true` |
+  | `adminEventsEnabled` | `false` | `true` |
+
+  Defaults reviewed and deliberately not changed, with the recommendation for each, are listed in *Secure defaults*: `rateLimitEnabled`, `requireEmailVerification`, `mfaRequired`, `registrationAllowed`, `captchaEnabled`, client `requireConsent`, `webAuthnUserVerificationRequired`, `smtpSecure`, `adaptiveAuthEnabled`.
+- **Importing a Keycloak realm** keeps `bruteForceProtected: false` when the export says so, and otherwise turns protection on with Idenplane's defaults (`failureFactor` still sets `maxLoginFailures`).
+- **Docs:** the brute-force, session and event settings in *Configuration options* and *API → Realms* described Keycloak fields that Idenplane doesn't have (`bruteForceProtected`, `failureFactor`, `waitIncrementSeconds`, `ssoSessionIdleTimeout`…). They now list the real fields and defaults. The Terraform provider's descriptions of `lockout_duration` and `failure_reset_time` said minutes; they are seconds.
+- **Migration** `20261116120000_secure_realm_defaults` changes the defaults of six `realms` columns. It updates no row.
+
 ## [0.9.1] - 2026-11-16
 
 A maintenance release:
