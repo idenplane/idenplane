@@ -236,7 +236,7 @@ Each table lists the STRIDE category (S spoofing, T tampering, R repudiation, I 
 |---|---|---|---|
 | E | Container escape or privilege use | Non-root user, `allowPrivilegeEscalation: false`, all capabilities dropped (Helm) | Root filesystem is writable |
 | I | Secrets in environment variables | Helm `existingSecret` support; placeholders refused in production | Every secret is visible to the whole process and to anyone who can read the pod spec |
-| I | Debug and documentation endpoints | Stack traces hidden in production; `/health/ready` gives no error detail; GraphQL not mounted | Swagger UI (`/api`) is public by design |
+| I | Debug and documentation endpoints | Stack traces hidden in production; `/health/ready` gives no error detail; there is no GraphQL endpoint | Swagger UI (`/api`) is public by design |
 | T | Tampered image | Multi-stage build, `npm ci --omit=dev` | No SBOM or signature published |
 
 ## Residual risk summary

@@ -9,6 +9,22 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+## [0.10.1] - 2026-11-16
+
+A maintenance release. It removes two dependency trees that Idenplane never used: the GraphQL admin module, which was never mounted, and `@node-saml/node-saml`. With them goes a high-severity advisory in `@graphql-tools/utils` (GHSA-c4qx-w738-7hr3) that was not reachable. Other dependencies are updated.
+
+No configuration or upgrade steps are needed when coming from 0.10.0. There is no GraphQL endpoint to migrate from: none was ever served.
+
+### Removed
+- **The unused GraphQL admin module (`src/graphql`) and its packages** `@apollo/server`, `@nestjs/apollo`, `@nestjs/graphql` and `graphql`. The module was never imported by the application, so no GraphQL endpoint was ever served, although the README listed a "GraphQL API". Removing it also removes a high-severity advisory in `@graphql-tools/utils` (GHSA-c4qx-w738-7hr3) that `@apollo/server` pinned to a vulnerable range; it was not reachable. Nothing changes for running servers.
+- **`@node-saml/node-saml` dependency.** Nothing in Idenplane imported it. The SAML 2.0 IdP builds and verifies its XML with `xml-crypto`, `@xmldom/xmldom` and `fast-xml-parser`, and there is no SAML service-provider or SAML-brokering code that would use it. Removing it also drops `xml-encryption`, `xml2js`, `xmlbuilder`, `sax` and two old `xpath` copies from the install. This replaces the 5.1.0 → 5.2.0 Dependabot bump (#1859); 5.2.0's new SP-side checks have nothing in Idenplane to apply to.
+
+### Changed
+- **`ws` is now a declared dependency.** The session-events WebSocket (`/ws/events`) imports it, but it was only installed because the GraphQL packages depended on it.
+- **Dependencies updated** (none closes a known vulnerability): NestJS packages `@nestjs/schedule` 12.0.4, `@nestjs/swagger` 12.1.2, `@nestjs/cli` 12.0.13; `fast-xml-parser` 5.12.1; admin console `jsdom` 31.0.1; Next.js example `idenplane-sdk` 1.2.0 and `jose` 6.2.17.
+- **`@xmldom/xmldom` is now a declared dependency** (`^0.8.15`, the same copy `xml-crypto` uses). The SAML IdP imports it directly, but until now it was only installed because other packages depended on it.
+- **Release workflow:** the publish job's verification step no longer fails after a successful signature check (a `head` pipe under `pipefail`), and Dependabot no longer proposes Node major versions for the Docker images; a Node major is bumped deliberately with CI.
+
 ## [0.10.0] - 2026-11-16
 
 A security hardening release. New realms are now secure by default: brute-force protection and audit events are on. The release also publishes a threat model and an OWASP ASVS 5.0 Level 2 self-assessment, and closes the gaps the assessment found that could be fixed safely: token-type confusion at userinfo, a password-oracle path for locked LDAP users, sessions that survived a password reset, and more. Read *Before you upgrade*: existing realms are not changed.
@@ -646,7 +662,8 @@ The foundation release: core IAM server with OAuth, OIDC, SAML, MFA, and the ini
 - `removeUserRealmRoles` returning 200 instead of 204
 - Login error messages never displayed on failed login
 
-[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.10.0...HEAD
+[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.10.1...HEAD
+[0.10.1]: https://github.com/idenplane/idenplane/releases/tag/v0.10.1
 [0.10.0]: https://github.com/idenplane/idenplane/releases/tag/v0.10.0
 [0.9.1]: https://github.com/idenplane/idenplane/releases/tag/v0.9.1
 [0.9.0]: https://github.com/idenplane/idenplane/releases/tag/v0.9.0
