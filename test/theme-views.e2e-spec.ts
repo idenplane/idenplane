@@ -99,6 +99,21 @@ describe('Safe theme pages and realm-bound action links (e2e)', () => {
     expect(form.status).toBe(200);
     expect(form.text).toContain('name="confirmPassword"');
     const password = 'NewThemePassword123!';
+    // A session opened with the old password, e.g. by whoever knew it.
+    const before = await request(ctx.app.getHttpServer())
+      .post(`/realms/${owner.name}/protocol/openid-connect/token`)
+      .type('form')
+      .send({
+        grant_type: 'password',
+        client_id: 'test-client',
+        client_secret: 'test-client-secret',
+        username: owner.user.username,
+        password: 'TestPassword123!',
+      })
+      .expect(200);
+    expect(
+      await ctx.prisma.session.count({ where: { userId: owner.user.id } }),
+    ).toBeGreaterThan(0);
     const changed = await browser
       .post(link.pathname)
       .set('Cookie', cookies(form))
@@ -117,6 +132,23 @@ describe('Safe theme pages and realm-bound action links (e2e)', () => {
     expect(await crypto.verifyPassword(user.passwordHash!, password)).toBe(
       true,
     );
+    // The reset ended every session, and its refresh token no longer works.
+    expect(
+      await ctx.prisma.session.count({ where: { userId: owner.user.id } }),
+    ).toBe(0);
+    expect(
+      await ctx.prisma.loginSession.count({ where: { userId: owner.user.id } }),
+    ).toBe(0);
+    await request(ctx.app.getHttpServer())
+      .post(`/realms/${owner.name}/protocol/openid-connect/token`)
+      .type('form')
+      .send({
+        grant_type: 'refresh_token',
+        client_id: 'test-client',
+        client_secret: 'test-client-secret',
+        refresh_token: (before.body as { refresh_token: string }).refresh_token,
+      })
+      .expect(400);
     const replay = await browser.get(link.pathname + link.search);
     expect(replay.text).toContain('invalid or has expired');
   });

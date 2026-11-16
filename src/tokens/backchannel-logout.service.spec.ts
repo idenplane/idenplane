@@ -127,6 +127,8 @@ describe('BackchannelLogoutService', () => {
           method: 'POST',
           headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
           body: 'logout_token=mock.jwt.token',
+          // The logout token never follows a redirect elsewhere.
+          redirect: 'error',
         }),
       );
 

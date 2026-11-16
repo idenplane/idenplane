@@ -1669,6 +1669,11 @@ export class LoginController {
       data: { passwordHash, passwordChangedAt: new Date() },
     });
 
+    // A reset means the old password may be known to someone else: end every
+    // session that was opened with it (ASVS 5.0 V7.4.3). The person resetting
+    // is not signed in, so there is no session of theirs to keep.
+    await this.endAllSessions(realm.id, result.userId);
+
     // Record password history
     const user = await this.prisma.user.findUnique({
       where: { id: result.userId },
@@ -1692,5 +1697,22 @@ export class LoginController {
       'Your password has been reset. You can now sign in.',
     );
     res.redirect(`/realms/${realm.name}/login?info=${info}`);
+  }
+
+  /**
+   * Ends all of a user's SSO and OAuth sessions in this realm, revoking the
+   * refresh tokens with them, in one transaction.
+   */
+  private async endAllSessions(realmId: string, userId: string) {
+    await this.prisma.$transaction([
+      this.prisma.refreshToken.updateMany({
+        where: { session: { userId, user: { realmId } } },
+        data: { revoked: true },
+      }),
+      this.prisma.session.deleteMany({
+        where: { userId, user: { realmId } },
+      }),
+      this.prisma.loginSession.deleteMany({ where: { userId, realmId } }),
+    ]);
   }
 }

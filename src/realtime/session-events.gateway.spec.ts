@@ -12,6 +12,17 @@ import {
   type MockPrismaService,
 } from '../prisma/prisma.mock.js';
 
+/**
+ * The real JwkService returns what was signed; every access token is signed
+ * with typ "Bearer". The mocks below give only the claims a test is about, so
+ * the access-token type is filled in unless the test sets its own.
+ */
+const asAccessToken = (verify: jest.Mock) =>
+  jest.fn(async (...args: unknown[]) => {
+    const payload = (await verify(...args)) as object | undefined;
+    return payload && { typ: 'Bearer', ...payload };
+  });
+
 describe('SessionEventsGateway', () => {
   let service: SessionEventsGateway;
   let prisma: MockPrismaService;
@@ -58,7 +69,7 @@ describe('SessionEventsGateway', () => {
     service = new SessionEventsGateway(
       lookupsBackedBy(prisma as any) as any,
       prisma as any,
-      jwkService as any,
+      { verifyJwt: asAccessToken(jwkService.verifyJwt) } as any,
       blacklist as any,
       bus as any,
     );
@@ -142,7 +153,7 @@ describe('SessionEventsGateway', () => {
       return new SessionEventsGateway(
         lookupsBackedBy(prisma as any) as any,
         prisma as any,
-        jwkService as any,
+        { verifyJwt: asAccessToken(jwkService.verifyJwt) } as any,
         blacklist as any,
         { onMessage: () => undefined, publish: async () => undefined } as any,
         fromRequest ? ({ fromRequest } as any) : undefined,
