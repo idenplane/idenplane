@@ -13,6 +13,7 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 - **`@node-saml/node-saml` dependency.** Nothing in Idenplane imported it. The SAML 2.0 IdP builds and verifies its XML with `xml-crypto`, `@xmldom/xmldom` and `fast-xml-parser`, and there is no SAML service-provider or SAML-brokering code that would use it. Removing it also drops `xml-encryption`, `xml2js`, `xmlbuilder`, `sax` and two old `xpath` copies from the install. This replaces the 5.1.0 → 5.2.0 Dependabot bump (#1859); 5.2.0's new SP-side checks have nothing in Idenplane to apply to.
 
 ### Changed
+- **Dependencies updated** (none closes a known vulnerability): NestJS packages `@nestjs/apollo` and `@nestjs/graphql` 14.2.1, `@nestjs/schedule` 12.0.4, `@nestjs/swagger` 12.1.2, `@nestjs/cli` 12.0.13; `@apollo/server` 5.5.2; `fast-xml-parser` 5.12.1; admin console `jsdom` 31.0.1; Next.js example `idenplane-sdk` 1.2.0 and `jose` 6.2.17.
 - **`@xmldom/xmldom` is now a declared dependency** (`^0.8.15`, the same copy `xml-crypto` uses). The SAML IdP imports it directly, but until now it was only installed because other packages depended on it.
 
 ## [0.10.0] - 2026-11-16
