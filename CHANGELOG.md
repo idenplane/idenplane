@@ -9,6 +9,14 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+## [0.9.1] - 2026-11-16
+
+A maintenance release:
+- all open GitHub Code Quality findings are resolved, which uncovered two real bugs: `idenplane upgrade` could restore the backup after a successful migration, and the Next.js example's session restore crashed on a read error;
+- dependencies are updated, including NestJS 12.5 and `@peculiar/x509` 3.
+
+No configuration or upgrade steps are needed when coming from 0.9.0.
+
 ### Changed
 - **Dependencies updated.** None of these updates closes a known vulnerability: there were no open Dependabot alerts.
   - **`@peculiar/x509` 2.2.0 → 3.1.0.** It parses and generates the certificates for mTLS client authentication (RFC 8705), certificate-bound tokens and NHI certificates. Version 3 is ESM-only and loads through Node 24's `require(esm)`. It also rejects DER input that has data after the certificate. Every certificate Idenplane passes to it has already been parsed and re-encoded by Node's `X509Certificate`, so mTLS and NHI behaviour is unchanged. `@simplewebauthn/server` still uses x509 2 and its own copy of the ASN.1 libraries. A unit test now checks that the two versions stay separate in `node_modules` and don't share or duplicate the schema registry.
