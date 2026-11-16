@@ -33,12 +33,30 @@ A security hardening release. New realms are now secure by default: brute-force 
 - **SCIM filters can no longer read arbitrary user columns.** Any attribute name went straight into the database query, so a SCIM token could filter on `passwordHash` (testing hash prefixes) or override `realmId` to list another realm's users. Only the documented attributes are filterable now; anything else is a 400 `invalidFilter`.
 - **SCIM no longer writes `externalId` into `federationLink`**, the LDAP federation link, which made SCIM users look LDAP-federated at sign-in. Users provisioned before this release keep the old value; clear `federationLink` on users that are not from an LDAP federation.
 - **Passwords sent over SCIM are left out of the admin audit event.**
+- **Malformed requests no longer crash endpoints.** An OWASP ZAP scan of the API made about 30 endpoints answer 500. The causes:
+  - a request with no body: Express 5 leaves the body undefined, so revoke, back-channel logout, device, step-up, the risk policies, SCIM mappings and protocol mappers crashed;
+  - a NUL character in any field, which PostgreSQL rejects;
+  - an unparseable date or number in a query string (the event, admin-event and NHI audit-log lists and exports, pending registrations).
+
+  A missing body is now `{}`, so the usual validation answers 400, and a NUL character is refused with 400 before it reaches the database. Database errors caused by the input (a wrong type, a value too long, a duplicate) now answer 400, 404 or 409 with a generic message. Before, they answered 500.
+- **Hosted pages: stricter CSP for styles.** A `<style>` element must now carry the page's nonce, so injected markup cannot add a stylesheet (CSS can read form values through attribute selectors). `style` attributes are still allowed. **Custom templates with their own `<style>` block must add `nonce="{{scriptNonce}}"` to it.** The built-in themes already do. Pages that load a CAPTCHA keep the previous rule.
+- **New response headers.**
+  - `Permissions-Policy` turns off camera, microphone, geolocation, payment, USB and similar features. Passkeys, the clipboard and fullscreen stay available to Idenplane's own pages.
+  - `Cross-Origin-Resource-Policy: same-origin` everywhere, except `cross-origin` for `/themes/`, so client apps and webmail can still show realm logos.
+  - `Cache-Control: no-store` by default on dynamic responses: hosted pages, the account page and admin API responses. Before, shared caches could store them. Static assets, discovery and JWKS stay cacheable.
 
 ### Added
 - **Threat model** (*Security → Threat model*, `docs/docs/security/threat-model.md`): assets, trust boundaries, data flows, STRIDE threats per boundary with the mitigation in the code and the residual risk, and a cryptographic inventory.
 - **OWASP ASVS 5.0 Level 2 self-assessment** (*Security → OWASP ASVS Assessment*): all 253 Level 1 and 2 requirements with status, evidence and recommendation, also as CSV (`docs/static/security/asvs-5.0-l2-assessment.csv`). Result: 111 pass, 91 partial, 22 fail, 29 not applicable. The remaining gaps are listed in priority order.
 - **`/admin/upgrade/health` reports realms with brute-force protection off** (a warning, never a failure).
 - **The admin console warns** when a realm's brute-force protection is off, and when permanent lockout is set.
+- **Signed images with SBOMs and provenance.** Every image `docker-publish.yml` pushes carries BuildKit SBOM and SLSA provenance attestations, a keyless cosign signature and a signed SPDX SBOM attestation. Each GitHub release gets the SBOM, the image digests and signed checksums attached. A `workflow_dispatch` dry run does all of this against a throwaway registry. How to verify: [Verifying Releases](docs/docs/security/verify-releases.md).
+- **Scheduled checks:**
+  - OWASP ZAP baseline and API scans (`dast-zap.yml`), also on PRs that change `src/**`;
+  - the OpenID Foundation conformance suite, basic and config plans (`conformance.yml`);
+  - a backup/restore drill and an upgrade test from the previous release (`restore-drill.yml`);
+  - the OpenSSF Scorecard (`scorecard.yml`).
+- **Landing site version.** On every release, a PR to the landing site updates the version it shows (`landing-version.yml`; needs the `LANDING_REPO_TOKEN` secret).
 
 ### Changed
 - **New-realm defaults** (column defaults and every creation path; existing realms unchanged):
@@ -59,6 +77,8 @@ A security hardening release. New realms are now secure by default: brute-force 
 - **Migration** `20261116120000_secure_realm_defaults` changes the defaults of six `realms` columns. It updates no row.
 - **The Docker image ships the PostgreSQL 16, 17 and 18 clients**, and the built-in upgrade picks the `pg_dump` and `pg_restore` matching the server's major version (`PG_BIN_DIR` overrides it). The image had only the 16 client, so on the Helm chart's bundled PostgreSQL 17 the upgrade's pre-validation always failed with a client/server mismatch. See *Deployment → Upgrading*.
 - **Admin API responses no longer carry `Link: </api/v1/admin/...>; rel="successor-version"`.** No admin route is served under `/api/v1`, so the link pointed at a `404`. The `Deprecation` and `Sunset` headers are unchanged.
+- Every GitHub Action is pinned to a commit SHA, with Dependabot keeping the pins current. `sync-dev-to-main.yml` grants `contents: write` only to its job. The WSL dev-setup job adds the NodeSource repository directly instead of piping a script into bash.
+- The two e2e suites that use the real `pg_dump`/`pg_restore` fail instead of skipping when CI sets `REQUIRE_PG_TOOLS` and the tools are missing.
 
 ### Fixed
 - **API reference:** `openapi.yaml` gave the licence as Apache 2.0 (it is AGPL-3.0), a contact address that doesn't exist and a `/api/v1` server URL; it now points to SUPPORT.md and `http://localhost:3000`.

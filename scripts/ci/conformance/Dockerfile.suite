@@ -1,0 +1,6 @@
+# The OpenID Foundation conformance suite, trusting the run's throwaway CA so
+# it can reach https://idp.conformance.test.
+ARG SUITE_VERSION
+FROM registry.gitlab.com/openid/conformance-suite:${SUITE_VERSION}
+COPY certs/ca.crt /tmp/ca.crt
+RUN keytool -importcert -cacerts -storepass changeit -noprompt -alias conformance-idp-ca -file /tmp/ca.crt

@@ -48,6 +48,14 @@ const adminUrl =
   'postgresql://postgres:testpass123@localhost:5432/postgres';
 
 const HAVE_TOOLS = pgToolsPresent();
+// CI sets REQUIRE_PG_TOOLS so that a runner without the binaries fails
+// here instead of skipping: a skipped run reports green while proving
+// nothing about backup and restore.
+if (!HAVE_TOOLS && process.env['REQUIRE_PG_TOOLS']) {
+  throw new Error(
+    '[upgrade-failure-rollback] REQUIRE_PG_TOOLS is set but pg_dump/pg_restore are not on PATH.',
+  );
+}
 const describeMaybe = HAVE_TOOLS ? describe : describe.skip;
 
 if (!HAVE_TOOLS) {

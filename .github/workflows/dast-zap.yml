@@ -1,0 +1,72 @@
+name: DAST (OWASP ZAP)
+
+# Dynamic scan of a production-mode Idenplane built from this commit:
+#
+#   baseline  passive scan of the hosted pages: login (from the authorization
+#             endpoint), registration, and the account page signed in
+#   api       active scan of every operation in the app's own OpenAPI
+#             document (/api-json), authenticated with the admin API key
+#
+# The stack, the seeding and the verdict live in scripts/ci/zap/run-zap.sh,
+# which runs unchanged on a workstation. Rules: .zap/rules.tsv, where every
+# ignored or accepted alert carries its reason; any other alert fails the run.
+# The HTML/JSON/Markdown reports are uploaded as an artifact.
+#
+# Both scans together take about ten minutes, so they also run on PRs that
+# change server code or pages.
+on:
+  schedule:
+    - cron: '23 3 * * 2' # Tuesdays 03:23 UTC
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      scan:
+        description: 'Which scans'
+        type: choice
+        options: [all, baseline, api]
+        default: all
+  pull_request:
+    branches: [main, dev]
+    paths:
+      - 'src/**'
+      - 'themes/**'
+      - 'Dockerfile'
+      - '.zap/**'
+      - 'scripts/ci/zap/**'
+      - 'scripts/ci/lib/**'
+      - '.github/workflows/dast-zap.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: dast-zap-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  zap:
+    name: ZAP ${{ inputs.scan || 'all' }}
+    runs-on: ubuntu-latest
+    timeout-minutes: 75
+    steps:
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+
+      - name: Build the image from this commit
+        run: docker build -t idenplane:dast .
+
+      - name: Scan
+        env:
+          IDENPLANE_IMAGE: idenplane:dast
+          SCAN: ${{ inputs.scan || 'all' }}
+          OUT_DIR: ${{ runner.temp }}/zap-out
+          ZAP_API_MAX_MINUTES: '45'
+        run: bash scripts/ci/zap/run-zap.sh
+
+      - name: Upload the reports
+        if: always()
+        uses: actions/upload-artifact@cf430e030ddbb5b0abf93d22962f4752f3646cd9 # v7.0.2
+        with:
+          name: zap-reports
+          path: ${{ runner.temp }}/zap-out/
+          retention-days: 30

@@ -21,6 +21,7 @@
 
 <p align="center">
   <a href="https://github.com/idenplane/idenplane/actions"><img src="https://github.com/idenplane/idenplane/actions/workflows/ci.yml/badge.svg" alt="CI" /></a>
+  <a href="https://scorecard.dev/viewer/?uri=github.com/idenplane/idenplane"><img src="https://api.scorecard.dev/projects/github.com/idenplane/idenplane/badge" alt="OpenSSF Scorecard" /></a>
   <a href="https://www.npmjs.com/package/idenplane-sdk"><img src="https://img.shields.io/npm/v/idenplane-sdk?label=idenplane-sdk" alt="npm idenplane-sdk" /></a>
   <a href="https://www.npmjs.com/package/idenplane-cli"><img src="https://img.shields.io/npm/v/idenplane-cli?label=idenplane-cli" alt="npm idenplane-cli" /></a>
   <a href="https://hub.docker.com/r/islamawad/idenplane"><img src="https://img.shields.io/docker/v/islamawad/idenplane?label=Docker%20Hub" alt="Docker Hub" /></a>

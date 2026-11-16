@@ -1,0 +1,89 @@
+name: Landing site version
+
+# Keeps idenplane.com showing the latest release. On every published
+# (non-prerelease) server release this opens a pull request in
+# idenplane/landing that rewrites src/data/release.ts, the site's single
+# version source. Merging it redeploys the site (App Platform deploys
+# landing's master).
+#
+# Needs one secret in THIS repository:
+#   LANDING_REPO_TOKEN  a fine-grained personal access token (or GitHub App
+#                       token) for idenplane/landing only, with
+#                       Contents: read and write, Pull requests: read and write.
+# Without it the job warns and does nothing, so a release never fails on it.
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: 'Release tag to point the site at, e.g. v0.10.0'
+        required: true
+        type: string
+
+permissions:
+  contents: read
+
+concurrency:
+  group: landing-version
+  cancel-in-progress: false
+
+jobs:
+  bump:
+    name: Open the landing PR
+    if: github.event_name == 'workflow_dispatch' || (!github.event.release.prerelease && startsWith(github.event.release.tag_name, 'v'))
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      TAG: ${{ github.event.release.tag_name || inputs.tag }}
+      HAS_TOKEN: ${{ secrets.LANDING_REPO_TOKEN != '' }}
+    steps:
+      - name: Check the token
+        run: |
+          if [ "$HAS_TOKEN" != true ]; then
+            echo "::warning::LANDING_REPO_TOKEN is not set; the landing site was not updated for ${TAG}. Add the secret, then re-run this workflow with tag=${TAG}."
+          fi
+          [[ "$TAG" =~ ^v[0-9]+\.[0-9]+\.[0-9]+$ ]] || { echo "::error::'$TAG' is not a release tag"; exit 1; }
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.HAS_TOKEN == 'true'
+        with:
+          sparse-checkout: scripts/ci/landing
+          persist-credentials: false
+          path: idenplane
+
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        if: env.HAS_TOKEN == 'true'
+        with:
+          repository: idenplane/landing
+          ref: master
+          token: ${{ secrets.LANDING_REPO_TOKEN }}
+          path: landing
+
+      - name: Rewrite the version and open the PR
+        if: env.HAS_TOKEN == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.LANDING_REPO_TOKEN }}
+          READ_TOKEN: ${{ github.token }}
+        run: |
+          set -euo pipefail
+          VERSION="${TAG#v}"
+          DATE="$(GH_TOKEN="$READ_TOKEN" gh api "repos/${{ github.repository }}/releases/tags/${TAG}" --jq '.published_at[0:10]')"
+          node idenplane/scripts/ci/landing/write-release-file.mjs landing "$VERSION" "$DATE"
+          cd landing
+          if git diff --quiet; then
+            echo "The landing site already shows ${TAG}."
+            exit 0
+          fi
+          BRANCH="chore/release-${TAG}"
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git checkout -B "$BRANCH"
+          git commit -qam "chore: show Idenplane ${TAG}"
+          git push --force -u origin "$BRANCH"
+          if [ -z "$(gh pr list --head "$BRANCH" --state open --json number --jq '.[].number')" ]; then
+            gh pr create --base master --head "$BRANCH" \
+              --title "chore: show Idenplane ${TAG}" \
+              --body "Idenplane ${TAG} was released on ${DATE}: https://github.com/${{ github.repository }}/releases/tag/${TAG}. This updates \`src/data/release.ts\`, the site's single version source. Opened by \`landing-version.yml\` in ${{ github.repository }}."
+          fi
+          echo "Landing PR for ${TAG} is open on ${BRANCH}" >> "$GITHUB_STEP_SUMMARY"
