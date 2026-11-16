@@ -108,6 +108,7 @@ export async function createTestApp(
   const app = moduleFixture.createNestApplication();
 
   applySecurityHeaders(app);
+  registerBodyParsers(app as NestExpressApplication);
   app.use(cookieParser());
 
   app.useGlobalPipes(
@@ -120,7 +121,6 @@ export async function createTestApp(
   );
 
   app.useGlobalFilters(new GlobalExceptionFilter());
-  registerBodyParsers(app as NestExpressApplication);
 
   // Set up Swagger so /api-json is available (mirrors main.ts)
   const swaggerConfig = new DocumentBuilder()

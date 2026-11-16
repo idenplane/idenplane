@@ -230,12 +230,13 @@ async function bootstrap() {
   // Deprecation + Sunset headers injected by DeprecationInterceptor.
   app.enableVersioning({ type: VersioningType.URI, prefix: 'api/v' });
 
-  // SCIM's application/scim+json, next to the default JSON parser.
-  registerBodyParsers(app);
-
   // helmet (CSP, HSTS, COOP, CORP, ...) and Permissions-Policy; shared with
   // the e2e test application so the suite sees what production sends.
   applySecurityHeaders(app);
+
+  // JSON and SCIM's application/scim+json. After the security headers, so a
+  // body the parser rejects (malformed JSON) is answered with them too.
+  registerBodyParsers(app);
   app.use(cookieParser());
 
   // Backward compatibility: the SSO session cookie used to be AUTHME_SESSION

@@ -106,6 +106,17 @@ describe('SCIM request media type (e2e)', () => {
     expect(res.body.userName).toBe('scim.plain.json');
   });
 
+  it('answers a malformed body with the security headers, and without X-Powered-By', async () => {
+    const res = await scim()
+      .post(`/scim/v2/${realmName}/Users`)
+      .set('Authorization', auth())
+      .set('Content-Type', SCIM_JSON)
+      .send('{"schemas": [');
+    expect(res.status).toBe(400);
+    expect(res.headers['x-powered-by']).toBeUndefined();
+    expect(res.headers['x-content-type-options']).toBe('nosniff');
+  });
+
   it('does not parse other media types as JSON', async () => {
     // A body the server cannot read is still refused, not silently accepted.
     const res = await scim()
