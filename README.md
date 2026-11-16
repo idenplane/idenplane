@@ -358,7 +358,7 @@ graph TB
         subgraph Gateways["Gateways"]
             AdminAPI["Admin REST API"]
             OAuth["OAuth/OIDC Endpoints"]
-            SAML["SAML IdP & SP"]
+            SAML["SAML IdP"]
             WebAuthn["WebAuthn FIDO2"]
         end
 
@@ -433,7 +433,7 @@ sequenceDiagram
 | **Auth Pages** | Handlebars SSR with per-realm theming and i18n |
 | **Security** | Argon2id (passwords), JOSE (JWTs), Helmet (headers), AES-256-GCM (webhooks) |
 | **Protocols** | OAuth 2.0, OpenID Connect, SAML 2.0, WebAuthn/FIDO2 |
-| **Federation** | LDAP via ldapts, SAML via @node-saml/node-saml |
+| **Federation** | LDAP via ldapts; SAML 2.0 IdP on xml-crypto and @xmldom/xmldom |
 | **Caching** | Redis (optional) with Sentinel HA support |
 | **Observability** | Pino (logs), prom-client (metrics), @nestjs/terminus (health) |
 | **Container** | Docker multi-stage build, Docker Compose (single, dev, cluster) |
@@ -538,7 +538,7 @@ Idenplane/
 │   ├── auth/                      # Core OAuth 2.0 authentication
 │   ├── oauth/                     # OAuth 2.0 protocol logic
 │   ├── nhi/                       # National Health Index integration
-│   ├── saml/                      # SAML 2.0 IdP & SP
+│   ├── saml/                      # SAML 2.0 IdP
 │   ├── tokens/                    # JWT issuance, validation & revocation
 │   ├── mfa/                       # TOTP multi-factor auth
 │   ├── webauthn/                  # WebAuthn / FIDO2 passwordless
