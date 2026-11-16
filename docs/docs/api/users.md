@@ -237,7 +237,7 @@ curl -X PUT "http://localhost:3000/admin/realms/master/users/user-uuid-456/reset
   -H "x-admin-api-key: your-api-key-here" \
   -H "Content-Type: application/json" \
   -d '{
-    "password": "newSecurePassword123"
+    "password": "example-new-password-1"
   }'
 ```
 
