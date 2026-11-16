@@ -12,6 +12,9 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 ### Removed
 - **The unused GraphQL admin module (`src/graphql`) and its packages** `@apollo/server`, `@nestjs/apollo`, `@nestjs/graphql` and `graphql`. The module was never imported by the application, so no GraphQL endpoint was ever served, although the README listed a "GraphQL API". Removing it also removes a high-severity advisory in `@graphql-tools/utils` (GHSA-c4qx-w738-7hr3) that `@apollo/server` pinned to a vulnerable range; it was not reachable. Nothing changes for running servers.
 
+### Changed
+- **`ws` is now a declared dependency.** The session-events WebSocket (`/ws/events`) imports it, but it was only installed because the GraphQL packages depended on it.
+
 ### Removed
 - **`@node-saml/node-saml` dependency.** Nothing in Idenplane imported it. The SAML 2.0 IdP builds and verifies its XML with `xml-crypto`, `@xmldom/xmldom` and `fast-xml-parser`, and there is no SAML service-provider or SAML-brokering code that would use it. Removing it also drops `xml-encryption`, `xml2js`, `xmlbuilder`, `sax` and two old `xpath` copies from the install. This replaces the 5.1.0 → 5.2.0 Dependabot bump (#1859); 5.2.0's new SP-side checks have nothing in Idenplane to apply to.
 
