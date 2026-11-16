@@ -4,7 +4,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { BruteForceService } from '../brute-force/brute-force.service.js';
 import { UserFederationService } from '../user-federation/user-federation.service.js';
-import { PasswordMigrationService } from '../migration/password-migration.service.js';
+import { PasswordVerificationService } from '../crypto/password-verification.service.js';
 import { ACR_MFA, acrStrength, strongestAcr } from '../authn-core/acr.js';
 import type { AuthContext } from '../authn-core/auth-context.js';
 
@@ -17,8 +17,8 @@ export class LoginService {
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
     private readonly bruteForceService: BruteForceService,
+    private readonly passwords: PasswordVerificationService,
     @Optional() private readonly federationService?: UserFederationService,
-    @Optional() private readonly passwordMigration?: PasswordMigrationService,
   ) {}
 
   async validateCredentials(
@@ -68,25 +68,9 @@ export class LoginService {
         );
       }
 
-      let valid = await this.crypto.verifyPassword(user.passwordHash, password);
-
-      // If Argon2 fails, try migrated password format
-      if (
-        !valid &&
-        user.passwordAlgorithm &&
-        user.passwordAlgorithm !== 'argon2' &&
-        this.passwordMigration
-      ) {
-        valid = await this.passwordMigration.verifyMigratedPassword(
-          password,
-          user.passwordHash,
-          user.passwordAlgorithm,
-        );
-        if (valid) {
-          // Upgrade hash to Argon2 on successful migrated login
-          await this.passwordMigration.rehashToArgon2(user.id, password);
-        }
-      }
+      // Argon2, bcrypt or a migrated PBKDF2 hash; a migrated one is moved
+      // to Argon2id on success. Never throws on a malformed hash.
+      const valid = await this.passwords.verifyUserPassword(user, password);
 
       if (!valid) {
         await this.bruteForceService.recordFailure(realm, user.id, ip);

@@ -426,7 +426,30 @@ describe('Realm export/import, format 2 (e2e)', () => {
       },
     });
     await p.policy.create({
-      data: { ...(generated('Policy') as any), realmId },
+      data: {
+        ...(generated('Policy') as any),
+        // Import validates policies like the policies API (0.11.0): still
+        // non-default values, but ones the engine can evaluate.
+        effect: 'DENY',
+        logic: 'OR',
+        subjectConditions: [
+          { field: 'subject.roles', operator: 'contains', value: 'policy-0' },
+        ],
+        resourceConditions: [
+          { field: 'resource.type', operator: 'in', value: ['a', 'b'] },
+        ],
+        actionConditions: [
+          { field: 'action', operator: 'matches', value: '^read' },
+        ],
+        environmentConditions: [
+          {
+            field: 'environment.ip',
+            operator: 'ipInRange',
+            value: '2001:db8::/32',
+          },
+        ],
+        realmId,
+      },
     });
     await p.continuousRiskPolicy.create({
       data: { ...(generated('ContinuousRiskPolicy') as any), realmId },

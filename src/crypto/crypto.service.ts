@@ -35,7 +35,14 @@ import {
  *  causes CPU exhaustion (DoS).  1 024 characters is a generous practical
  *  limit that covers every legitimate password while bounding hashing time.
  */
-const MAX_PASSWORD_LENGTH = 1024;
+export const MAX_PASSWORD_LENGTH = 1024;
+
+/** The Argon2id parameters every password hash is written with. */
+const ARGON2_PARAMS = {
+  memoryCost: 65536,
+  timeCost: 3,
+  parallelism: 4,
+} as const;
 
 /**
  * Argon2id with memoryCost: 65536 (64 MiB) allocates real memory per call.
@@ -168,13 +175,23 @@ export class CryptoService implements OnModuleInit {
       );
     }
     return this.limitArgon2Concurrency(() =>
-      argon2.hash(password, {
-        type: argon2.argon2id,
-        memoryCost: 65536,
-        timeCost: 3,
-        parallelism: 4,
-      }),
+      argon2.hash(password, { type: argon2.argon2id, ...ARGON2_PARAMS }),
     );
+  }
+
+  /**
+   * True when an Argon2 hash is not what {@link hashPassword} writes today
+   * (Argon2i/Argon2d, an older version, or weaker parameters, as in hashes
+   * imported from Keycloak or Authentik). Anything that is not an Argon2
+   * hash at all is also "needs upgrade".
+   */
+  argon2HashNeedsUpgrade(hash: string): boolean {
+    if (!hash.startsWith('$argon2id$')) return true;
+    try {
+      return argon2.needsRehash(hash, ARGON2_PARAMS);
+    } catch {
+      return true;
+    }
   }
 
   async verifyPassword(hash: string, password: string): Promise<boolean> {
@@ -185,7 +202,22 @@ export class CryptoService implements OnModuleInit {
       // beyond the normal "invalid credentials" response).
       return false;
     }
-    return this.limitArgon2Concurrency(() => argon2.verify(hash, password));
+    if (!hash.startsWith('$argon2')) {
+      // argon2.verify throws on anything that is not a PHC Argon2 string
+      // ("pchstr must contain a $ as first char"). A hash in another format
+      // is simply not a match here; PasswordVerificationService handles the
+      // migrated formats.
+      return false;
+    }
+    try {
+      return await this.limitArgon2Concurrency(() =>
+        argon2.verify(hash, password),
+      );
+    } catch {
+      // A malformed Argon2 string. Never let the library's message reach
+      // a caller (or a sign-in page).
+      return false;
+    }
   }
 
   generateSecret(bytes = 32): string {

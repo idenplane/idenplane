@@ -4,7 +4,6 @@ import { KeycloakImporterService } from './keycloak-importer.service.js';
 import { Auth0ImporterService } from './auth0-importer.service.js';
 import { ZitadelImporterService } from './zitadel-importer.service.js';
 import { AuthentikImporterService } from './authentik-importer.service.js';
-import { PasswordMigrationService } from './password-migration.service.js';
 
 @Module({
   controllers: [MigrationController],
@@ -13,8 +12,6 @@ import { PasswordMigrationService } from './password-migration.service.js';
     Auth0ImporterService,
     ZitadelImporterService,
     AuthentikImporterService,
-    PasswordMigrationService,
   ],
-  exports: [PasswordMigrationService],
 })
 export class MigrationModule {}

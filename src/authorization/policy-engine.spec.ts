@@ -148,7 +148,8 @@ describe('evaluateCondition', () => {
       };
       const result = evaluateCondition(c, ctx);
       expect(result.passed).toBe(false);
-      expect(result.reason).toMatch(/requires an array/);
+      expect(result.indeterminate).toBe(true);
+      expect(result.reason).toMatch(/needs an array/);
     });
   });
 
@@ -246,7 +247,8 @@ describe('evaluateCondition', () => {
       };
       const result = evaluateCondition(c, ctx);
       expect(result.passed).toBe(false);
-      expect(result.reason).toMatch(/invalid regex/);
+      expect(result.indeterminate).toBe(true);
+      expect(result.reason).toMatch(/invalid regular expression/);
     });
 
     it('fails gracefully when field is not a string', () => {
@@ -306,7 +308,8 @@ describe('evaluateCondition', () => {
       };
       const result = evaluateCondition(c, ctx);
       expect(result.passed).toBe(false);
-      expect(result.reason).toMatch(/not a string IP/);
+      expect(result.indeterminate).toBe(true);
+      expect(result.reason).toMatch(/not an IP address/);
     });
 
     it('fails on invalid CIDR', () => {

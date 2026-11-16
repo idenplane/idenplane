@@ -1,8 +1,9 @@
 import { Injectable, Logger } from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
-import type { AuthentikExport, AuthentikUser } from './authentik-types.js';
+import type { AuthentikExport } from './authentik-types.js';
 import { createEmptyReport, type MigrationReport } from './migration-report.js';
+import { authentikPassword } from './password-import.js';
 import { idpSecrets } from '../identity-providers/idp-secrets.js';
 
 export interface AuthentikImportOptions {
@@ -160,7 +161,13 @@ export class AuthentikImporterService {
           continue;
         }
 
-        const { hash, algorithm } = this.extractAuthentikPassword(user);
+        const { hash, algorithm, warning } = authentikPassword(user.password);
+        if (warning) {
+          report.warnings.push({
+            entity: 'user',
+            message: `User '${user.username}': ${warning}`,
+          });
+        }
         const [firstName, ...rest] = (user.name ?? '')
           .split(' ')
           .filter(Boolean);
@@ -209,47 +216,6 @@ export class AuthentikImporterService {
         });
       }
     }
-  }
-
-  /**
-   * Authentik stores passwords in Django's hasher format. Only the two most
-   * common hashers are translated into a form Idenplane's login fallback
-   * (PasswordMigrationService) can verify directly — anything else (e.g.
-   * bcrypt via a custom hasher) is dropped with no password, same policy
-   * the other importers use for hashes they can't carry over.
-   */
-  private extractAuthentikPassword(user: AuthentikUser): {
-    hash: string | null;
-    algorithm: string;
-  } {
-    const raw = user.password;
-    if (!raw) return { hash: null, algorithm: 'argon2' };
-
-    // Django's ArgonPasswordHasher: "argon2" + the standard PHC-encoded
-    // string (which itself starts with "$argon2id$..."). Strip the literal
-    // "argon2" prefix to recover the PHC string Idenplane's own argon2
-    // verifier expects.
-    if (raw.startsWith('argon2$argon2')) {
-      return { hash: raw.slice('argon2'.length), algorithm: 'argon2' };
-    }
-
-    // Django's PBKDF2PasswordHasher: "pbkdf2_sha256$<iterations>$<salt>$<hash>",
-    // where <salt> is a plain string and <hash> is already base64. Idenplane's
-    // pbkdf2-sha256 verifier expects "<iterations>$<base64 salt>$<base64 hash>"
-    // (both base64) — re-encode the salt to match.
-    if (raw.startsWith('pbkdf2_sha256$')) {
-      const parts = raw.split('$');
-      if (parts.length === 4) {
-        const [, iterations, saltPlain, hashB64] = parts;
-        const saltBase64 = Buffer.from(saltPlain, 'utf8').toString('base64');
-        return {
-          hash: `${iterations}$${saltBase64}$${hashB64}`,
-          algorithm: 'pbkdf2-sha256',
-        };
-      }
-    }
-
-    return { hash: null, algorithm: 'argon2' };
   }
 
   private async importSources(

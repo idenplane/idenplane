@@ -194,7 +194,7 @@ Every row below has its own recommendation.
 | Req | L | Status | Evidence | Notes and recommendation |
 |---|---|---|---|---|
 | V5.1.1 | 2 | **Fail** | — | Upload types and sizes are not documented. **Recommendation:** Document theme-asset uploads and realm import limits (S). |
-| V5.2.1 | 1 | Pass | default 100 kB body parser; src/theme/theme-upload.service.ts:39 (5 MB) | The 5 MB check trusts the declared size. |
+| V5.2.1 | 1 | Pass | 100 kB JSON body limit, 10 MB on the admin import endpoints (src/common/http/body-parsers.ts); src/theme/theme-upload.service.ts:39 (5 MB) | The 5 MB check trusts the declared size. |
 | V5.2.2 | 1 | **Fail** | src/theme/theme-upload.service.ts:107,135 | The client-declared MIME type is trusted; no magic-byte check. **Recommendation:** Sniff magic bytes and check the decoded length (S). |
 | V5.2.3 | 2 | Pass | src/saml/saml-idp.service.ts decodeSamlRequest (maxOutputLength); src/saml/saml-idp.service.spec.ts "refuses a compressed request that inflates past the size limit" | FIXED in this PR: inflation was unbounded before the size check. |
 | V5.3.1 | 1 | Pass | src/main.ts:312 (static serving, sandbox CSP) |  |
