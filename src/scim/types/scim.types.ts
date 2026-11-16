@@ -10,14 +10,20 @@ export type ScimResourceTypeName = (typeof SCIM_RESOURCE_TYPES)[number];
 // SCIM Content Type
 export const SCIM_CONTENT_TYPE = 'application/scim+json';
 
-// SCIM Schema URNs
+// SCIM 2.0 schema URNs (RFC 7643 §8.7, RFC 7644 §3)
 export const SCIM_SCHEMAS = {
-  USER: 'urn:scim:schemas:core:1.0',
-  GROUP: 'urn:scim:schemas:core:1.0',
-  ENTERPRISE_USER: 'urn:scim:schemas:extension:enterprise:1.0',
-  RESOURCE_TYPE: 'urn:scim:schemas:core:1.0:ResourceType',
-  SCHEMA: 'urn:scim:schemas:core:1.0:Schema',
-  SERVICE_PROVIDER_CONFIG: 'urn:scim:schemas:core:1.0:ServiceProviderConfig',
+  USER: 'urn:ietf:params:scim:schemas:core:2.0:User',
+  GROUP: 'urn:ietf:params:scim:schemas:core:2.0:Group',
+  ENTERPRISE_USER: 'urn:ietf:params:scim:schemas:extension:enterprise:2.0:User',
+  RESOURCE_TYPE: 'urn:ietf:params:scim:schemas:core:2.0:ResourceType',
+  SCHEMA: 'urn:ietf:params:scim:schemas:core:2.0:Schema',
+  SERVICE_PROVIDER_CONFIG:
+    'urn:ietf:params:scim:schemas:core:2.0:ServiceProviderConfig',
+  LIST_RESPONSE: 'urn:ietf:params:scim:api:messages:2.0:ListResponse',
+  ERROR: 'urn:ietf:params:scim:api:messages:2.0:Error',
+  PATCH_OP: 'urn:ietf:params:scim:api:messages:2.0:PatchOp',
+  BULK_REQUEST: 'urn:ietf:params:scim:api:messages:2.0:BulkRequest',
+  BULK_RESPONSE: 'urn:ietf:params:scim:api:messages:2.0:BulkResponse',
 } as const;
 
 // SCIM Operations for PATCH
@@ -32,7 +38,7 @@ export const SCIM_FILTER_OPERATORS = [
   'sw',
   'ew',
   'gt',
-  'gt',
+  'ge',
   'lt',
   'le',
 ] as const;
@@ -79,6 +85,7 @@ export interface ScimListResponse<T> {
 export interface ScimError {
   schemas: string[];
   status: string;
+  scimType?: string;
   detail: string;
 }
 
@@ -268,6 +275,7 @@ export interface ScimAuthenticationScheme {
  * RFC 7643 Section 7
  */
 export interface ScimSchema {
+  schemas?: string[];
   id: string;
   name: string;
   description?: string;
@@ -316,11 +324,14 @@ export interface ScimSchemaExtension {
 
 /**
  * SCIM Bulk Operation Request
- * RFC 7644 Section 3.7
+ * RFC 7644 Section 3.7. The RFC names the list `Operations`; lowercase
+ * `operations` is still read for clients written against older versions.
  */
 export interface ScimBulkRequest {
-  schemas: string[];
-  operations: ScimBulkOperation[];
+  schemas?: string[];
+  Operations?: ScimBulkOperation[];
+  operations?: ScimBulkOperation[];
+  failOnErrors?: number;
 }
 
 /**
@@ -340,16 +351,16 @@ export interface ScimBulkOperation {
  */
 export interface ScimBulkResponse {
   schemas: string[];
-  operations: ScimBulkResponseOperation[];
+  Operations: ScimBulkResponseOperation[];
 }
 
 /**
- * SCIM Bulk Response Operation
+ * SCIM Bulk Response Operation (RFC 7644 §3.7.3)
  */
 export interface ScimBulkResponseOperation {
-  bulkId: string;
+  bulkId?: string;
   status: string;
-  operationType?: string;
+  method: string;
   version?: string;
   location?: string;
   response?: ScimError | ScimResource;
@@ -369,20 +380,38 @@ export interface ScimSearchRequest {
 
 /**
  * SCIM PATCH Request
- * RFC 7644 Section 3.6
+ * RFC 7644 Section 3.5.2. The RFC names the list `Operations`; lowercase
+ * `operations` is still read for clients written against older versions.
  */
 export interface ScimPatchRequest {
-  schemas: string[];
-  operations: ScimPatchOperation[];
+  schemas?: string[];
+  Operations?: ScimPatchOperation[];
+  operations?: ScimPatchOperation[];
 }
 
 /**
- * SCIM PATCH Operation
+ * SCIM PATCH Operation. `op` is matched case-insensitively (Entra ID sends
+ * `Replace`, `Add`, `Remove`).
  */
 export interface ScimPatchOperation {
+  op: string;
+  path?: string;
+  value?: unknown;
+}
+
+/** A PATCH operation after validation: `op` is lowercase. */
+export interface NormalizedScimPatchOperation {
   op: ScimOperation;
   path?: string;
   value?: unknown;
+}
+
+/**
+ * The realm a SCIM request acts in. `name` is needed for `meta.location`.
+ */
+export interface ScimRealmRef {
+  id: string;
+  name: string;
 }
 
 /**

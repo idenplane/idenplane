@@ -21,6 +21,8 @@ import { RequestInputPipe } from '../src/common/pipes/request-input.pipe';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { GlobalExceptionFilter } from '../src/common/filters/http-exception.filter';
+import { registerBodyParsers } from '../src/common/http/body-parsers';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { generateKeyPair } from 'jose';
 import { randomUUID } from 'crypto';
 import * as argon2 from 'argon2';
@@ -106,6 +108,7 @@ export async function createTestApp(
   const app = moduleFixture.createNestApplication();
 
   applySecurityHeaders(app);
+  registerBodyParsers(app as NestExpressApplication);
   app.use(cookieParser());
 
   app.useGlobalPipes(
