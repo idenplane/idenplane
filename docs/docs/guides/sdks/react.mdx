@@ -213,15 +213,16 @@ const user = useUser();
 // Returns: UserInfo | null
 
 interface UserInfo {
-  sub: string;       // User ID
-  name?: string;     // Display name
-  email?: string;    // Email address
-  emailVerified?: boolean;
-  picture?: string;   // Avatar URL
-  roles?: string[];  // Assigned roles
-  permissions?: string[]; // Direct permissions
-  [key: string]: any; // Any custom claims
+  sub: string;                 // User ID
+  preferred_username?: string;
+  name?: string;               // Display name
+  given_name?: string;
+  family_name?: string;
+  email?: string;              // Email address
+  email_verified?: boolean;
+  [key: string]: unknown;      // Any other claim in the ID token
 }
+// Roles are not on UserInfo: use usePermissions() or useRoles().
 ```
 
 ### Example: User Profile Card
@@ -236,12 +237,12 @@ function UserProfile() {
 
   return (
     <div className="profile-card">
-      {user.picture && (
+      {typeof user.picture === 'string' && (
         <img src={user.picture} alt={user.name} />
       )}
       <h2>{user.name || 'User'}</h2>
       <p>{user.email}</p>
-      {user.emailVerified ? (
+      {user.email_verified ? (
         <span>Email verified</span>
       ) : (
         <span>Email not verified</span>
@@ -259,20 +260,19 @@ The `usePermissions` hook provides role and permission checking:
 
 ```tsx
 const {
-  roles,           // string[] - all assigned roles
-  permissions,     // string[] - all direct permissions
-  hasRole,         // (role: string) => boolean
+  roles,           // string[] - the user's realm roles
+  hasRole,         // (role: string) => boolean - realm role check
   hasPermission,   // (permission: string) => boolean
-  hasAnyRole,      // (roles: string[]) => boolean
-  hasAllRoles,     // (roles: string[]) => boolean
 } = usePermissions();
 ```
+
+For client roles, `useRoles()` returns `{ hasRealmRole, hasClientRole, realmRoles, getClientRoles }`.
 
 ### Example: Role-Based UI
 
 ```tsx
 function Dashboard() {
-  const { hasRole, hasPermission, roles, permissions } = usePermissions();
+  const { hasRole, hasPermission } = usePermissions();
 
   return (
     <div>
@@ -287,7 +287,7 @@ function Dashboard() {
       )}
 
       {/* Content with multiple role check */}
-      {hasAnyRole(['editor', 'admin']) && (
+      {['editor', 'admin'].some(hasRole) && (
         <section>
           <h2>Content Editor</h2>
           <button>Edit Content</button>
@@ -315,9 +315,9 @@ function Dashboard() {
 
 ```tsx
 function ModeratorTools() {
-  const { hasAllRoles } = usePermissions();
+  const { hasRole } = usePermissions();
 
-  const canAccessModeration = hasAllRoles(['moderator', 'content-editor']);
+  const canAccessModeration = ['moderator', 'content-editor'].every(hasRole);
 
   if (!canAccessModeration) {
     return <div>You need both moderator and content-editor roles.</div>;
@@ -373,7 +373,6 @@ function AdminPage() {
 |------|------|----------|-------------|
 | `children` | `ReactNode` | Yes | Content to render when authorized |
 | `roles` | `string[]` | No | Required roles (user must have all) |
-| `permissions` | `string[]` | No | Required permissions |
 | `fallback` | `ReactNode` | No | Loading state while checking auth |
 | `onUnauthorized` | `() => ReactNode` | No | Rendered when not authenticated |
 | `onForbidden` | `() => ReactNode` | No | Rendered when authenticated but lacks roles |
@@ -456,7 +455,7 @@ const client = new IdenplaneClient({
 function App() {
   return (
     <AuthProvider client={client}>
-      <App />
+      <Main />
     </AuthProvider>
   );
 }
@@ -556,8 +555,8 @@ function AnalyticsTracker() {
 | `login` | `TokenResponse` | User successfully authenticated |
 | `logout` | - | User logged out |
 | `tokenRefresh` | `TokenResponse` | Access token was refreshed |
-| `tokenRefreshError` | `Error` | Token refresh failed |
-| `error` | `Error` | Any authentication error |
+| `error` | `Error` | Any authentication error, including a failed refresh |
+| `ready` | `boolean` | `init()` finished; `true` if authenticated |
 
 ---
 
