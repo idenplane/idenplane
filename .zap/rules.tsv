@@ -1,0 +1,97 @@
+# OWASP ZAP rules for scripts/ci/zap/run-zap.sh (baseline + API scans).
+#
+# Reviewed 2026-11-16 against the first full scan of 0.10.0-dev.
+#
+# Policy: every alert ZAP raises fails the run (scripts/ci/zap/gate.mjs),
+# unless this file ignores or accepts it, and every such line says why.
+# Nothing here hides a finding that was real: those were fixed in the code
+# (see test/dast-regressions.e2e-spec.ts).
+#
+# Formats (fields are TAB-separated):
+#   <plugin id>  IGNORE      <reason>        whole plugin; ZAP syntax
+#   <plugin id>  OUTOFSCOPE  <url regex>     plugin on matching URLs; ZAP syntax
+#   #@accept  <alertRef>  <url regex>  <reason>
+#       one alert (one plugin can raise several, e.g. 10055-6 vs 10055-13),
+#       on matching URLs; read only by gate.mjs (ZAP skips comment lines)
+
+# ── Informational rules: they describe the application, not a weakness ──
+# "A login form / session cookie was identified": ZAP's own bookkeeping.
+10111	IGNORE	Authentication Request Identified (informational: ZAP found the login form)
+10112	IGNORE	Session Management Response Identified (informational: ZAP found the session cookie)
+10109	IGNORE	Modern Web Application (informational: the page uses JavaScript)
+# Escaped by Handlebars ({{...}} HTML-escapes): the OAuth parameters reflected
+# into hidden inputs cannot break out of the attribute. Covered by
+# test/dast-regressions.e2e-spec.ts ("reflected OAuth parameters").
+# The User Agent Fuzzer only reports that responses differ by User-Agent.
+10104	IGNORE	User Agent Fuzzer (informational: lists responses that vary by User-Agent)
+10031	IGNORE	User Controllable HTML Element Attribute (informational; values are HTML-escaped)
+
+# ── Accepted per alert, with the reason ──
+# Cache classification. Non-storable is the desired state for dynamic
+# responses (they are no-store since this review).
+#@accept	10049-1	.*	Non-Storable Content is what dynamic responses should be: they are sent with Cache-Control: no-store.
+# Static theme CSS and public OIDC metadata are meant to be cached.
+#@accept	10049-2	/themes/	Theme stylesheets are static, public and versioned with the image; caching them is intended.
+#@accept	10049-3	(/themes/|/\.well-known/|/protocol/openid-connect/certs$)	Static theme assets and public OIDC metadata (discovery, JWKS) are public and meant to be cached by clients.
+
+# 4xx responses to fuzzed input are correct behaviour. 5xx (100000-2) stay
+# a failure everywhere except the upgrade endpoints below.
+#@accept	100000-1	.*	A 4xx answer to fuzzed or invalid input is the correct response, not a weakness.
+# The upgrade API answers 503 by design while UPGRADE_API_ENABLED is unset
+# (docs/docs/deployment/upgrading.mdx); the scan runs with it unset.
+100000	OUTOFSCOPE	.*/admin/upgrade(/rollback)?/?(\?.*)?$
+# The same 503 makes ZAP see a generic error body there (production hides
+# 5xx details); also by design, and only on these two paths.
+10023	OUTOFSCOPE	.*/admin/upgrade(/rollback)?/?(\?.*)?$
+90022	OUTOFSCOPE	.*/admin/upgrade(/rollback)?/?(\?.*)?$
+
+# Hosted pages (login, consent, account, device, broker callback) are HTML
+# endpoints that also appear in the OpenAPI document, so the API scan
+# expected JSON from them.
+#@accept	100001	(/realms/[^/]+/(broker/[^/]+/callback|device|protocol/openid-connect/auth)/?(\?.*)?$|/themes/)	Browser-facing endpoints return HTML and theme assets return CSS/images by design; the scanner expected JSON from them.
+
+# CSP form-action is deliberately absent on hosted pages: Chrome applies it
+# to the redirect after a form POST, so the login form's 302 to the client's
+# redirect_uri (another origin) would be blocked and sign-in would break.
+# Documented in buildThemeCsp (src/theme/theme-render.service.ts); every
+# other directive without a fallback is set (frame-ancestors, base-uri,
+# object-src via default-src). The admin console's CSP does set form-action.
+#@accept	10055-13	/realms/	Hosted pages omit form-action by design: Chrome enforces it on the post-login redirect to the client's redirect_uri, which would break sign-in (see buildThemeCsp).
+
+# COEP is for cross-origin isolation (SharedArrayBuffer, precise timers),
+# which no Idenplane page uses; require-corp/credentialless would block the
+# CAPTCHA providers' iframes on the registration page. COOP (same-origin)
+# and CORP (same-origin, cross-origin only for /themes/) are set.
+#@accept	90004-2	.*	COEP only enables cross-origin isolation, which Idenplane does not use; it would break third-party CAPTCHA iframes. COOP and CORP are set.
+
+# ── False positives ──
+# The token and device endpoints answer an unauthenticated client with
+# WWW-Authenticate: Basic, as RFC 6749 section 5.2 requires. ZAP flags Basic
+# because the CI scan talks plain HTTP inside a private Docker network; in
+# production these endpoints are served over TLS (BASE_URL is https).
+#@accept	10105-2	/protocol/openid-connect/(token|auth/device|token/introspect|revoke)/?$	RFC 6749 5.2 challenge; flagged only because the CI scan uses plain HTTP on a private network. Production serves these over TLS.
+# The "private IP" is the scanner's own input echoed back: the OpenAPI
+# example for a device certificate's SAN (src/nhi/dto/certificate.dto.ts,
+# 'DNS:device.internal,IP:192.168.1.100').
+#@accept	2	/admin/realms/[^/]+/nhi/device-certificates/?$	The address is the OpenAPI example value the scanner submitted (certificate.dto.ts), echoed back; no server address is disclosed.
+# Prometheus exposition format includes process start times; the endpoint
+# is admin-authenticated.
+#@accept	10096	/admin/metrics/?$	Prometheus metrics carry process timestamps by design; the endpoint requires admin authentication.
+# Parameter NAMES such as userId/includeUsers and an e-mail search filter on
+# admin-only search endpoints: identifiers, not secrets, sent to the admin API.
+#@accept	10024	/admin/realms/	Admin search filters (userId, email, includeUsers) are identifiers sent to an authenticated admin API, not credentials.
+
+# Magic links are e-mailed URLs, so their token has to be in the URL. It is
+# single-use and short-lived, and the verify page is no-store.
+#@accept	10024	/protocol/openid-connect/magic-link/verify	A magic link is an e-mailed URL, so its single-use, short-lived token must be in the query string.
+# Stored values containing <script> come back inside JSON from the admin API.
+# Responses are application/json with X-Content-Type-Options: nosniff, so a
+# browser never renders them; the admin console renders through React, which
+# escapes text. ZAP itself rates this LOW confidence for non-HTML responses.
+#@accept	40014-2	/admin/	Stored input echoed in application/json (nosniff) admin API responses is not executable; the console renders it escaped.
+# Boolean SQL injection on step-up/challenge: a false positive. `acr` is only
+# compared with constants and passed to Prisma as a bound parameter (no raw
+# SQL anywhere in src/step-up); without a session cookie, as in the scan,
+# every value gets the same 400 and the "difference" ZAP saw is the
+# timestamp and rate limiting of repeated requests.
+#@accept	40018	/realms/[^/]+/step-up/challenge	False positive: acr is only compared with constants and bound by Prisma; no raw SQL in src/step-up, and the unauthenticated scan always gets the same 400.
