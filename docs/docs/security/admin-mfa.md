@@ -168,7 +168,7 @@ These codes keep working, so nobody loses their way back in. Their stored hashes
 
 - After start-up, `RecoveryCodeRewrapService` replaces each unused old hash with `rc1a$` + Argon2id(old hash): salted and slow. Old instances may still issue old codes during a rolling upgrade, so it runs at every start. It only reads rows that are not yet rewrapped.
 - A code is checked against its plain old hash or its rewrapped hash. Only input in the old 8-hex shape is checked against the rewrapped hashes, so a random guess costs no Argon2 work.
-- The account and the admin MFA page show **"old-format recovery codes"** and offer new ones. `GET /admin/upgrade/health` counts the users who still have them.
+- The admin's MFA page and the super-admin's admin list flag **old-format recovery codes**, and the MFA page offers new ones. `GET /admin/upgrade/health` counts every user (admin or not) who still has them. End users get new-format codes the next time codes are issued to them.
 
 ## Break-glass: the admin API key
 
@@ -204,6 +204,14 @@ They are recorded even when the master realm has admin events turned off. Each i
 - you use one of your recovery codes;
 - an operator with database access deletes your rows in `user_credentials` (type `totp`), `webauthn_credentials` and `recovery_codes`.
 
+## Turning it on after an upgrade
+
+1. Each admin opens **Two-factor** in the console header (`/console/mfa`) and sets up an authenticator app or a passkey, then saves the recovery codes.
+2. A super-admin checks **Admin accounts**: every admin should show a second factor.
+3. The super-admin turns on **Require a second factor for every admin** on the same page, or sets `ADMIN_MFA_REQUIRED=true` and restarts.
+
+Admins who have not enrolled by then are not locked out: their next request takes them to the enrolment page.
+
 ## Super-admin view
 
 **Admin accounts** lists every admin with their factors: authenticator app, number of passkeys, and recovery codes left, flagged if they are old-format. Admins without a factor are highlighted. A super-admin can reset an admin's MFA from there, and change the requirement.
@@ -212,4 +220,5 @@ They are recorded even when the master realm has admin events turned off. Each i
 
 - **Revoking an admin's open sessions when their MFA is reset.** Admin tokens are revoked one at a time, by `jti`. A reset does not end tokens already issued; they expire within an hour. A per-user "not before" for admin tokens is a separate change.
 - **Phishing-resistant MFA only (L3).** Passkeys are offered, but TOTP is also accepted. There is no switch to require passkeys yet.
-- **The command-line tool** (`idenplane-cli auth login`) asks for a TOTP or recovery code when the server requires one, but not for a passkey.
+- **The command-line tool** (`idenplane login`, `idenplane init`) asks for a TOTP or recovery code when the admin has one, but cannot use a passkey; use `--api-key` or a TOTP for scripts.
+- **End-user account console.** The stronger recovery codes apply there too, but adding or removing a factor in the end-user account console still needs only the session (ASVS V7.5.1).
