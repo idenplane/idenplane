@@ -276,7 +276,7 @@ A weaker session signs in again through the flow; with `prompt=none` the respons
 
 ## Admin API
 
-Base path: `/admin/realms/{realm}/auth-flows`, protected by the admin API key. `{realm}` accepts either the realm's UUID or its name. Every write is recorded as an admin event (resource type `AUTH_FLOW`) when the realm has admin events enabled.
+Base path: `/admin/realms/{realm}/auth-flows`, protected by admin credentials (the admin API key or an admin bearer token). `{realm}` accepts either the realm's UUID or its name. Every write is recorded as an admin event (resource type `AUTH_FLOW`) when the realm has admin events enabled.
 
 | Method | Path | Purpose |
 |---|---|---|
