@@ -70,6 +70,7 @@ const PATH_TRICKS = /(^|\/)\.\.?(\/|$)|%2e|%2f|%5c|\\/i;
 
 /** The insecure, opt-in `/*` wildcard, hardened against path tricks. */
 function matchesWildcard(redirectUri: string, pattern: string): boolean {
+  if (typeof redirectUri !== 'string') return false;
   const base = pattern.slice(0, -1); // keep the trailing '/'
   if (redirectUri === base.slice(0, -1)) return true;
   if (!redirectUri.startsWith(base)) return false;
@@ -96,6 +97,9 @@ export function matchesRedirectUri(
   registeredUris: readonly string[],
   options: RedirectUriMatchOptions = {},
 ): boolean {
+  // The value usually comes from a query string, where a repeated
+  // `redirect_uri` arrives as an array: only a single string can match.
+  if (typeof redirectUri !== 'string') return false;
   if (redirectUri.includes('#')) return false;
   return registeredUris.some((pattern) => {
     if (pattern === redirectUri) return true;

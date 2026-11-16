@@ -13,6 +13,19 @@ describe('matchesRedirectUri', () => {
       expect(matchesRedirectUri(CB, [CB])).toBe(true);
     });
 
+    it('refuses a non-string value, such as a repeated redirect_uri parameter', () => {
+      const repeated = [CB, 'https://evil.example.com/'] as unknown as string;
+      expect(matchesRedirectUri(repeated, [CB])).toBe(false);
+      expect(
+        matchesRedirectUri(repeated, ['https://app.example.com/*'], {
+          allowWildcard: true,
+        }),
+      ).toBe(false);
+      expect(matchesRedirectUri(undefined as unknown as string, [CB])).toBe(
+        false,
+      );
+    });
+
     it('accepts when any registered URI matches', () => {
       expect(matchesRedirectUri(CB, ['https://other.example.com/cb', CB])).toBe(
         true,
