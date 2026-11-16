@@ -169,6 +169,20 @@ describe('SamlIdpService', () => {
       expect(result.acsUrl).toBe('https://sp.example.com/acs');
     });
 
+    it('refuses a compressed request that inflates past the size limit (decompression bomb)', async () => {
+      // About 4 MB of XML that compresses to a few kilobytes.
+      const bomb = deflateSync(
+        Buffer.from(`<a>${'x'.repeat(4 * 1024 * 1024)}</a>`, 'utf-8'),
+      );
+      expect(bomb.length).toBeLessThan(64 * 1024);
+
+      await expect(
+        service.validateAuthnRequest(bomb.toString('base64')),
+      ).rejects.toThrow(
+        new BadRequestException('SAMLRequest exceeds maximum allowed size'),
+      );
+    });
+
     it('should throw BadRequestException when Issuer is missing', async () => {
       const xml =
         '<samlp:AuthnRequest xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" ID="_noissuer">' +

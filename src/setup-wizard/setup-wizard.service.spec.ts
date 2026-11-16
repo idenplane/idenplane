@@ -204,6 +204,16 @@ describe('SetupWizardService', () => {
       ];
       expect(lockSql.join('?')).toMatch(/FOR UPDATE/);
       expect(prisma.realm.create).toHaveBeenCalledTimes(1);
+      // The wizard's realm is a new realm: brute-force protection on.
+      expect(prisma.realm.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            bruteForceEnabled: true,
+            maxLoginFailures: 10,
+            permanentLockoutAfter: 0,
+          }),
+        }),
+      );
       expect(prisma.user.create).toHaveBeenCalledWith(
         expect.objectContaining({
           data: expect.objectContaining({

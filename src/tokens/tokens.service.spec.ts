@@ -17,6 +17,17 @@ import {
 import type { Realm } from '@prisma/client';
 import { CertificateBindingError } from '../mtls/certificate-binding.js';
 
+/**
+ * The real JwkService returns what was signed; every access token is signed
+ * with typ "Bearer". The mocks below give only the claims a test is about, so
+ * the access-token type is filled in unless the test sets its own.
+ */
+const asAccessToken = (verify: jest.Mock) =>
+  jest.fn(async (...args: unknown[]) => {
+    const payload = (await verify(...args)) as object | undefined;
+    return payload && { typ: 'Bearer', ...payload };
+  });
+
 describe('TokensService', () => {
   let service: TokensService;
   let prisma: MockPrismaService;
@@ -93,7 +104,7 @@ describe('TokensService', () => {
       lookupsBackedBy(prisma as any) as any,
       prisma as any,
       cryptoService as any,
-      jwkService as any,
+      { ...jwkService, verifyJwt: asAccessToken(jwkService.verifyJwt) } as any,
       scopesService as any,
       blacklistService as any,
       backchannelLogoutService as any,
@@ -104,6 +115,24 @@ describe('TokensService', () => {
   });
 
   describe('introspect', () => {
+    it('reports an ID token as inactive: it is not an access token', async () => {
+      prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
+      prisma.user.findUnique.mockResolvedValue({
+        id: 'user-1',
+        username: 'testuser',
+        enabled: true,
+      });
+      jwkService.verifyJwt.mockResolvedValue({
+        sub: 'user-1',
+        typ: 'ID',
+        exp: Math.floor(Date.now() / 1000) + 300,
+      });
+
+      await expect(
+        service.introspect(mockRealm, 'demo.id.token'),
+      ).resolves.toEqual({ active: false });
+    });
+
     it('should return active=true with claims for a valid token', async () => {
       prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
       prisma.user.findUnique.mockResolvedValue({
@@ -497,6 +526,19 @@ describe('TokensService', () => {
   });
 
   describe('userinfo', () => {
+    it.each([
+      ['an ID token', 'ID'],
+      ['an admin token', 'admin'],
+      ['a token with no typ', undefined],
+    ])('refuses %s: only an access token reads userinfo', async (_, typ) => {
+      jwkService.verifyJwt.mockResolvedValue({ sub: 'user-1', typ });
+      prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
+      prisma.user.findUnique.mockResolvedValue(mockUser);
+      await expect(
+        service.userinfo(mockRealm as any, 'demo.jwt.token'),
+      ).rejects.toThrow('Invalid access token');
+    });
+
     const mockUser = {
       id: 'user-1',
       username: 'testuser',

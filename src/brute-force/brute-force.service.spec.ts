@@ -242,6 +242,41 @@ describe('BruteForceService', () => {
 
   // ─── resetFailures ──────────────────────────────────────────
 
+  describe('lockout notification', () => {
+    it('escapes the username and realm name in the email', async () => {
+      const sendEmail = jest.fn().mockResolvedValue(undefined);
+      const withEmail = new BruteForceService(
+        prisma as any,
+        {
+          sendEmail,
+        } as any,
+      );
+      prisma.user.findUnique.mockResolvedValue({
+        email: 'demo@example.com',
+        username: '<img src=x onerror=alert(1)>',
+      } as never);
+
+      await (
+        withEmail as unknown as {
+          sendLockoutNotification: (
+            r: Realm,
+            id: string,
+            permanent: boolean,
+          ) => Promise<void>;
+        }
+      ).sendLockoutNotification(
+        { ...mockRealm, name: 'demo"<b>' } as Realm,
+        'user-1',
+        false,
+      );
+
+      const html = sendEmail.mock.calls[0][3] as string;
+      expect(html).not.toContain('<img');
+      expect(html).toContain('&lt;img src=x onerror=alert(1)&gt;');
+      expect(html).toContain('demo&quot;&lt;b&gt;');
+    });
+  });
+
   describe('resetFailures', () => {
     it('should delete failures and set lockedUntil to null', async () => {
       prisma.loginFailure.deleteMany.mockResolvedValue({ count: 5 });

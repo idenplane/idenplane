@@ -21,6 +21,7 @@ import {
   SECRET_PLACEHOLDER,
 } from './realm-secrets.util.js';
 import { MASTER_REALM } from './realm.constants.js';
+import { NEW_REALM_SECURITY_DEFAULTS as SECURE } from './realm-security-defaults.js';
 import {
   captchaConfigProblem,
   type CaptchaRealmFields,
@@ -120,18 +121,21 @@ export class RealmsService {
         passwordRequireSpecialChars: dto.passwordRequireSpecialChars,
         passwordHistoryCount: dto.passwordHistoryCount,
         passwordMaxAgeDays: dto.passwordMaxAgeDays,
-        bruteForceEnabled: dto.bruteForceEnabled,
-        maxLoginFailures: dto.maxLoginFailures,
-        lockoutDuration: dto.lockoutDuration,
-        failureResetTime: dto.failureResetTime,
-        permanentLockoutAfter: dto.permanentLockoutAfter,
+        // Secure by default: an omitted field gets the documented default
+        // (realm-security-defaults.ts), never whatever the column says.
+        bruteForceEnabled: dto.bruteForceEnabled ?? SECURE.bruteForceEnabled,
+        maxLoginFailures: dto.maxLoginFailures ?? SECURE.maxLoginFailures,
+        lockoutDuration: dto.lockoutDuration ?? SECURE.lockoutDuration,
+        failureResetTime: dto.failureResetTime ?? SECURE.failureResetTime,
+        permanentLockoutAfter:
+          dto.permanentLockoutAfter ?? SECURE.permanentLockoutAfter,
         registrationAllowed: dto.registrationAllowed,
         requireEmailVerification: dto.requireEmailVerification,
         mfaRequired: dto.mfaRequired,
         offlineTokenLifespan: dto.offlineTokenLifespan,
-        eventsEnabled: dto.eventsEnabled,
+        eventsEnabled: dto.eventsEnabled ?? SECURE.eventsEnabled,
         eventsExpiration: dto.eventsExpiration,
-        adminEventsEnabled: dto.adminEventsEnabled,
+        adminEventsEnabled: dto.adminEventsEnabled ?? SECURE.adminEventsEnabled,
         // Rate limiting
         rateLimitEnabled: dto.rateLimitEnabled,
         clientRateLimitPerMinute: dto.clientRateLimitPerMinute,

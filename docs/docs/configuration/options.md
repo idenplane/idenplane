@@ -19,12 +19,12 @@ This reference documents all configuration options available in Idenplane, organ
 | [Security](#security-configuration) | Authentication & authorization | registrationAllowed, loginWithEmail, passwordPolicy |
 | [Themes](#theme-configuration) | UI customization | loginTheme, accountTheme, adminTheme |
 | [Email](#email-configuration) | SMTP and email templates | from, fromDisplayName, smtpHost, smtpPort |
-| [Sessions](#session-configuration) | Session management | ssoSessionIdleTimeout, ssoSessionMaxLifespan |
+| [Sessions](#session-configuration) | Session management | refreshTokenLifespan, maxSessionsPerUser |
 | [Tokens](#token-configuration) | OAuth token settings | accessTokenLifespan, refreshTokenMaxReuse |
 | [Clients](#client-configuration) | OAuth client settings | clientId, clientSecret, redirectUris |
 | [Password Policy](#password-policy) | Password requirements | minLength, requireUppercase, notUsername |
 | [MFA](#mfa-configuration) | Multi-factor authentication | totpPeriod, totpDigits, otpPolicy |
-| [Brute Force](#brute-force-protection) | Login attack protection | failureFactor, waitIncrementSeconds |
+| [Brute Force](#brute-force-protection) | Login attack protection | bruteForceEnabled, maxLoginFailures, lockoutDuration |
 | [Events](#event-configuration) | Audit logging | eventsEnabled, eventsListeners |
 
 ---
@@ -87,7 +87,7 @@ POST   /admin/realms/{realm}/import
 | `duplicateEmailsAllowed` | boolean | `false` | Multiple users per email |
 | `resetPasswordAllowed` | boolean | `true` | Password reset enabled |
 | `editUsernameAllowed` | boolean | `false` | Users can change username |
-| `bruteForceProtected` | boolean | `true` | Enable brute force protection |
+| `bruteForceEnabled` | boolean | `true` for new realms | Temporary account lockout after repeated failed sign-ins. See [Brute Force Protection](#brute-force-protection). |
 
 ### OAuth 2.0 Flows
 
@@ -226,17 +226,16 @@ curl -X POST http://localhost:3000/admin/realms/{realm}/email-provider/test \
 
 ### Session Timeouts
 
+These are the realm settings that bound a session. All values are seconds.
+
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `ssoSessionIdleTimeout` | string | `"30m"` | Idle timeout before re-authentication |
-| `ssoSessionIdleTimeoutRememberMe` | string | `"30m"` | Idle timeout with remember-me |
-| `ssoSessionMaxLifespan` | string | `"8h"` | Maximum session lifetime |
-| `ssoSessionMaxLifespanRememberMe` | string | `"8h"` | Max lifetime with remember-me |
-| `offlineSessionIdleTimeout` | string | `"30d"` | Offline session idle timeout |
-| `accessTokenLifespan` | string | `"5m"` | Access token lifetime |
-| `accessTokenLifespanImplicit` | string | `"15m"` | Implicit flow token lifetime |
-| `clientSessionIdleTimeout` | string | `"30m"` | Client-specific session idle timeout |
-| `clientSessionMaxLifespan` | string | `"8h"` | Client-specific session max lifespan |
+| `accessTokenLifespan` | integer | `300` | Access token lifetime |
+| `refreshTokenLifespan` | integer | `1800` | Refresh token lifetime. Also the lifetime of the OAuth session it belongs to: refreshing does not extend the session. |
+| `offlineTokenLifespan` | integer | `2592000` | Lifetime of an `offline_access` refresh token |
+| `maxSessionsPerUser` | integer | `10` | Sessions per user; the oldest is ended when a new one would go over |
+
+The hosted-login SSO cookie lasts for the browser session, or 30 days with "remember me". There is no idle timeout for SSO sessions yet; see the [ASVS assessment](../security/asvs-assessment.md#remaining-gaps).
 
 ### Timeout Format
 
@@ -480,40 +479,31 @@ DELETE /admin/realms/{realm}/users/{userId}/credentials/{credentialId}
 
 ## Brute Force Protection
 
-Brute force protection prevents automated login attacks.
+Brute-force protection locks an account for a while after repeated failed sign-ins. It is **on for realms created since 0.10.0**; realms created earlier keep their setting. The trade-offs behind the defaults are explained in [Secure defaults](../security/secure-defaults.md#brute-force-protection).
 
 ### Protection Settings
 
-| Option | Type | Default | Description |
+| Option | Type | Default (new realms) | Description |
 |--------|------|---------|-------------|
-| `enabled` | boolean | `true` | Enable brute force protection |
-| `maxFailureWait` | integer | `900` | Max wait time on failures (seconds) |
-| `minimumQuickLoginWait` | integer | `60` | Quick login wait (seconds) |
-| `failureFactor` | integer | `30` | Failures before temporary lockout |
-| `waitIncrementSeconds` | integer | `60` | Increment per failure (seconds) |
-| `quickLoginCheckMilliSeconds` | integer | `1000` | Quick login detection (ms) |
+| `bruteForceEnabled` | boolean | `true` | Turn the lockout on or off |
+| `maxLoginFailures` | integer | `10` | Failures within `failureResetTime` that lock the account |
+| `failureResetTime` | integer | `900` | Window, in seconds, in which failures are counted |
+| `lockoutDuration` | integer | `300` | How long, in seconds, the account stays locked |
+| `permanentLockoutAfter` | integer | `0` | Lockouts after which the account is disabled for good. `0` = never. Anyone who knows a username can trigger it, so leave it at `0` unless you accept that. |
 
 ### Lockout Behavior
 
-When `failureFactor` is reached:
-1. User account is temporarily disabled
-2. Wait time increases: `waitIncrementSeconds × (failures / failureFactor)`
-3. Lockout duration: up to `maxFailureWait` seconds
-4. Permanent lockout after multiple lockouts requires admin intervention
+1. When `maxLoginFailures` failures fall within `failureResetTime`, the account is locked for `lockoutDuration`.
+2. While it is locked, sign-in is refused before the password is checked, with the same answer for a right and a wrong password.
+3. The lock ends by itself. Failures stay counted for the rest of the window, so a wrong password right after the lock locks it again (progressive lockout).
+4. A successful sign-in clears the failures.
 
 ### API Endpoints
 
 ```
-GET /admin/realms/{realm}
-PUT /admin/realm
-DELETE /admin/realms/{realm}/attack-detection/users/{userId}
-```
-
-### Clear User Lockout
-
-```bash
-curl -X DELETE http://localhost:3000/admin/realms/{realm}/attack-detection/users/{userId} \
-  -H "Authorization: Bearer $TOKEN"
+PATCH /admin/realms/{realm}                                   # change the settings
+GET   /admin/realms/{realm}/brute-force/locked-users          # list locked users
+POST  /admin/realms/{realm}/brute-force/users/{userId}/unlock # unlock (asks for MFA step-up)
 ```
 
 ---
@@ -524,7 +514,8 @@ curl -X DELETE http://localhost:3000/admin/realms/{realm}/attack-detection/users
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `eventsEnabled` | boolean | `false` | Enable event storage |
+| `eventsEnabled` | boolean | `true` for new realms | Record sign-in events (realms created before 0.10.0 keep their setting) |
+| `adminEventsEnabled` | boolean | `true` for new realms | Record admin changes |
 | `eventsExpiration` | long | `2592000` | Event retention (seconds, default 30 days) |
 | `eventsListeners` | string[] | `["jboss-logging"]` | Event listener implementations |
 
@@ -807,28 +798,27 @@ const defaultRealmConfig = {
   duplicateEmailsAllowed: false,
   resetPasswordAllowed: true,
   editUsernameAllowed: false,
-  bruteForceProtected: true,
+  bruteForceEnabled: true, // new realms since 0.10.0
 
   // Sessions & Tokens
-  ssoSessionIdleTimeout: '30m',
-  ssoSessionMaxLifespan: '8h',
-  offlineSessionIdleTimeout: '30d',
-  accessTokenLifespan: '5m',
-  accessTokenLifespanImplicit: '15m',
-  refreshTokenLifespan: '1h',
+  accessTokenLifespan: 300,
+  refreshTokenLifespan: 1800,
+  offlineTokenLifespan: 2592000,
+  maxSessionsPerUser: 10,
 
   // OAuth
   oauth2DeviceCodeLifespan: '600s',
   oauth2DevicePollingInterval: '5s',
 
-  // Brute Force
-  failureFactor: 30,
-  maxFailureWait: 900,
-  waitIncrementSeconds: 60,
+  // Brute Force (new realms since 0.10.0)
+  maxLoginFailures: 10,
+  failureResetTime: 900,
+  lockoutDuration: 300,
+  permanentLockoutAfter: 0,
 
   // Events
-  eventsEnabled: false,
-  adminEventsEnabled: false,
+  eventsEnabled: true, // new realms since 0.10.0
+  adminEventsEnabled: true,
 
   // Themes
   loginTheme: 'idenplane',

@@ -13,6 +13,7 @@ import { RealmsService } from './realms.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { SmsProviderType } from '../sms/dto/sms-config.dto.js';
 import { SECRET_PLACEHOLDER } from './realm-secrets.util.js';
+import { NEW_REALM_SECURITY_DEFAULTS } from './realm-security-defaults.js';
 import {
   createMockPrismaService,
   MockPrismaService,
@@ -111,6 +112,8 @@ describe('RealmsService', () => {
           enabled: undefined,
           accessTokenLifespan: undefined,
           refreshTokenLifespan: undefined,
+          // Brute-force protection and audit events on by default.
+          ...NEW_REALM_SECURITY_DEFAULTS,
           signingKeys: {
             create: {
               kid: 'kid-1',
@@ -130,6 +133,45 @@ describe('RealmsService', () => {
       expect(new CryptoService().decrypt(stored)).toBe(
         mockKeyPair.privateKeyPem,
       );
+    });
+
+    it('creates a new realm with brute-force protection on and temporary lockout only', async () => {
+      prisma.realm.findUnique.mockResolvedValue(null);
+      jwkService.generateRsaKeyPair.mockResolvedValue(mockKeyPair);
+      prisma.realm.create.mockResolvedValue(mockRealm);
+
+      await service.create({ name: 'demo-realm' });
+
+      const data = (
+        prisma.realm.create.mock.calls[0][0] as {
+          data: Record<string, unknown>;
+        }
+      ).data;
+      expect(data).toMatchObject({
+        bruteForceEnabled: true,
+        maxLoginFailures: 10,
+        lockoutDuration: 300,
+        failureResetTime: 900,
+        permanentLockoutAfter: 0,
+        eventsEnabled: true,
+        adminEventsEnabled: true,
+      });
+    });
+
+    it('keeps an explicit opt-out of brute-force protection', async () => {
+      prisma.realm.findUnique.mockResolvedValue(null);
+      jwkService.generateRsaKeyPair.mockResolvedValue(mockKeyPair);
+      prisma.realm.create.mockResolvedValue(mockRealm);
+
+      await service.create({
+        name: 'demo-realm',
+        bruteForceEnabled: false,
+        maxLoginFailures: 3,
+      });
+
+      expect(prisma.realm.create.mock.calls[0][0]).toMatchObject({
+        data: { bruteForceEnabled: false, maxLoginFailures: 3 },
+      });
     });
 
     it('should throw ConflictException when realm name already exists', async () => {

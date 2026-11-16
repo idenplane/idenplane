@@ -215,6 +215,27 @@ const sidebars: SidebarsConfig = {
     },
     {
       type: 'category',
+      label: 'Security',
+      items: [
+        {
+          type: 'doc',
+          id: 'security/secure-defaults',
+          label: 'Secure Defaults',
+        },
+        {
+          type: 'doc',
+          id: 'security/threat-model',
+          label: 'Threat Model',
+        },
+        {
+          type: 'doc',
+          id: 'security/asvs-assessment',
+          label: 'OWASP ASVS Assessment',
+        },
+      ],
+    },
+    {
+      type: 'category',
       label: 'Deployment',
       items: [
         {

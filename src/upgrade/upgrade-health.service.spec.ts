@@ -47,3 +47,45 @@ describe('CRITICAL_TABLES', () => {
     }
   });
 });
+
+describe('UpgradeHealthService.checkBruteForceProtection', () => {
+  // Imported lazily so the CRITICAL_TABLES block above stays schema-only.
+  const build = async (findMany: jest.Mock) => {
+    const { UpgradeHealthService } =
+      await import('./upgrade-health.service.js');
+    return new UpgradeHealthService({
+      realm: { findMany },
+    } as never);
+  };
+
+  it('passes when every realm has protection on', async () => {
+    const svc = await build(jest.fn().mockResolvedValue([]));
+    await expect(svc.checkBruteForceProtection()).resolves.toMatchObject({
+      name: 'brute_force_protection',
+      status: 'pass',
+    });
+  });
+
+  it('warns and names the realms that have protection off', async () => {
+    const findMany = jest
+      .fn()
+      .mockResolvedValue([{ name: 'legacy-demo' }, { name: 'sample' }]);
+    const svc = await build(findMany);
+    await expect(svc.checkBruteForceProtection()).resolves.toEqual({
+      name: 'brute_force_protection',
+      status: 'warn',
+      message: '2 realm(s) have brute-force protection off',
+      details: 'legacy-demo, sample',
+    });
+    expect(findMany).toHaveBeenCalledWith(
+      expect.objectContaining({ where: { bruteForceEnabled: false } }),
+    );
+  });
+
+  it('only warns, never fails, when the query errors', async () => {
+    const svc = await build(jest.fn().mockRejectedValue(new Error('boom')));
+    await expect(svc.checkBruteForceProtection()).resolves.toMatchObject({
+      status: 'warn',
+    });
+  });
+});
