@@ -1,47 +1,89 @@
 import { CachedLookupsService } from '../cache/cached-lookups.service.js';
 import { Injectable, BadRequestException, Logger } from '@nestjs/common';
+import { Interval } from '@nestjs/schedule';
 import { randomUUID } from 'crypto';
-import { inflate } from 'zlib';
+import { inflate, inflateRaw } from 'zlib';
 import { promisify } from 'util';
-import { XMLParser } from 'fast-xml-parser';
 import { SignedXml } from 'xml-crypto';
-import { DOMParser } from '@xmldom/xmldom';
 import type { Realm, SamlServiceProvider, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { CreateSamlSpDto } from './dto/create-saml-sp.dto.js';
 import { UpdateSamlSpDto } from './dto/update-saml-sp.dto.js';
+import { LeaderService } from '../cache/leader.service.js';
+import {
+  SamlRequestError,
+  assertNoXmlSignature,
+  parseAuthnRequest,
+  spVerificationKey,
+  verifyEnvelopedSignature,
+  verifyRedirectSignature,
+  type ParsedSamlRequest,
+  type RedirectQuery,
+  type SamlAuthnRequest,
+} from './saml-request-verifier.js';
 
 const inflateAsync = promisify(inflate);
+const inflateRawAsync = promisify(inflateRaw);
 
 const MAX_XML_SIZE = 256 * 1024; // 256 KB max to prevent XML bomb
 
 /**
  * Decodes a SAMLRequest: inflated when it is compressed, as is otherwise.
- * Inflation stops at MAX_XML_SIZE, so a small compressed request cannot
- * expand into a huge buffer before the size check (a decompression bomb,
- * ASVS 5.0 V5.2.3).
+ * The HTTP-Redirect binding compresses with raw DEFLATE (RFC 1951, SAML
+ * bindings §3.4.4.1); a zlib-wrapped stream is accepted too. Inflation stops
+ * at MAX_XML_SIZE, so a small compressed request cannot expand into a huge
+ * buffer before the size check (a decompression bomb, ASVS 5.0 V5.2.3).
  */
 async function decodeSamlRequest(samlRequest: string): Promise<string> {
   const decoded = Buffer.from(samlRequest, 'base64');
-  try {
-    const inflated = await inflateAsync(decoded, {
-      maxOutputLength: MAX_XML_SIZE + 1,
-    });
-    return inflated.toString('utf-8');
-  } catch (err) {
-    if ((err as { code?: string }).code === 'ERR_BUFFER_TOO_LARGE') {
-      throw new BadRequestException('SAMLRequest exceeds maximum allowed size');
+  for (const inflateFn of [inflateRawAsync, inflateAsync]) {
+    try {
+      const inflated = await inflateFn(decoded, {
+        maxOutputLength: MAX_XML_SIZE + 1,
+      });
+      return inflated.toString('utf-8');
+    } catch (err) {
+      if ((err as { code?: string }).code === 'ERR_BUFFER_TOO_LARGE') {
+        throw new BadRequestException(
+          'SAMLRequest exceeds maximum allowed size',
+        );
+      }
     }
-    return decoded.toString('utf-8');
   }
+  return decoded.toString('utf-8');
 }
 
-interface ParsedAuthnRequest {
-  id: string;
-  issuer: string;
-  acsUrl: string | null;
-  nameIdPolicy: string | null;
+/** How far apart the SP's clock and ours may be (seconds). */
+const DEFAULT_CLOCK_SKEW_SECONDS = 180;
+/** How old an AuthnRequest may be when it arrives (seconds). */
+const DEFAULT_REQUEST_MAX_AGE_SECONDS = 300;
+
+/** xs:dateTime as SAML uses it (UTC, `Z`; an offset or none tolerated). */
+const XS_DATE_TIME =
+  /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?(Z|[+-]\d{2}:\d{2})?$/;
+
+function secondsFromEnv(name: string, fallback: number, max: number): number {
+  const raw = process.env[name];
+  if (raw === undefined || raw === '') return fallback;
+  const value = Number(raw);
+  return Number.isInteger(value) && value >= 0 && value <= max
+    ? value
+    : fallback;
+}
+
+/** The SAMLRequest as it arrived, per binding. */
+export type SamlInboundRequest =
+  | { binding: 'redirect'; query: RedirectQuery }
+  | { binding: 'post'; samlRequest?: string; relayState?: string };
+
+/** An AuthnRequest that passed every check but the ACS URL and replay ones. */
+export interface AcceptedAuthnRequest {
+  sp: SamlServiceProvider;
+  request: SamlAuthnRequest;
+  relayState: string;
+  /** Whether the request was signed and its signature verified. */
+  signed: boolean;
 }
 
 @Injectable()
@@ -52,99 +94,233 @@ export class SamlIdpService {
     private readonly lookups: CachedLookupsService,
     private readonly prisma: PrismaService,
     private readonly crypto: CryptoService,
+    private readonly leader: LeaderService,
   ) {}
 
   // ─── AUTHN REQUEST VALIDATION ──────────────────────────
 
-  async validateAuthnRequest(samlRequest: string): Promise<ParsedAuthnRequest> {
+  /**
+   * Decodes and strictly parses a SAMLRequest. What it returns is unsigned
+   * data: it is good for finding the service provider, nothing else.
+   */
+  async validateAuthnRequest(samlRequest: string): Promise<SamlAuthnRequest> {
+    return (await this.parse(samlRequest)).request;
+  }
+
+  private async parse(samlRequest: string): Promise<ParsedSamlRequest> {
     try {
       const xml = await decodeSamlRequest(samlRequest);
-
       if (xml.length > MAX_XML_SIZE) {
         throw new BadRequestException(
           'SAMLRequest exceeds maximum allowed size',
         );
       }
-
-      const parser = new XMLParser({
-        ignoreAttributes: false,
-        attributeNamePrefix: '@_',
-        removeNSPrefix: true,
-      });
-
-      const doc = parser.parse(xml) as Record<string, unknown>;
-      const authnRequest = doc['AuthnRequest'] as
-        Record<string, unknown> | undefined;
-      if (!authnRequest) {
-        throw new BadRequestException(
-          'Invalid AuthnRequest: root element not found',
-        );
-      }
-
-      const id = (authnRequest['@_ID'] as string | undefined) ?? randomUUID();
-      const issuer =
-        typeof authnRequest['Issuer'] === 'string'
-          ? authnRequest['Issuer']
-          : (((authnRequest['Issuer'] as Record<string, unknown>)?.['#text'] as
-              string | undefined) ?? '');
-      const acsUrl =
-        (authnRequest['@_AssertionConsumerServiceURL'] as string | undefined) ??
-        null;
-      const nameIdPolicy =
-        ((
-          authnRequest['NameIDPolicy'] as Record<string, unknown> | undefined
-        )?.['@_Format'] as string | undefined) ?? null;
-
-      if (!issuer) {
-        throw new BadRequestException('AuthnRequest missing Issuer');
-      }
-
-      return { id, issuer, acsUrl, nameIdPolicy };
+      return parseAuthnRequest(xml);
     } catch (err) {
-      if (err instanceof BadRequestException) throw err;
-      this.logger.error('Failed to parse AuthnRequest', (err as Error).stack);
-      throw new BadRequestException('Invalid SAMLRequest');
+      throw this.refusal(err);
     }
   }
 
-  async validateSignature(
-    samlRequest: string,
-    certificate: string,
-  ): Promise<void> {
-    const xml = await decodeSamlRequest(samlRequest);
-    if (xml.length > MAX_XML_SIZE) {
-      throw new BadRequestException('SAMLRequest exceeds maximum allowed size');
+  /** A BadRequestException for any failure; the details are logged. */
+  private refusal(err: unknown): BadRequestException {
+    if (err instanceof BadRequestException) return err;
+    if (err instanceof SamlRequestError) {
+      this.logger.warn(`SAMLRequest refused: ${err.reason}`);
+      return new BadRequestException(err.publicMessage);
     }
+    this.logger.error('Failed to parse AuthnRequest', (err as Error).stack);
+    return new BadRequestException('Invalid SAMLRequest');
+  }
 
-    const doc = new DOMParser().parseFromString(xml, 'text/xml');
-    const signatures = doc.getElementsByTagName(
-      'Signature',
-    ) as unknown as NodeListOf<Element>;
-    if (!signatures || signatures.length === 0) {
-      throw new BadRequestException('AuthnRequest is not signed');
+  /**
+   * Everything the IdP checks on an AuthnRequest before it acts on it,
+   * except the ACS URL (the controller's) and the replay check
+   * (`claimRequestId`, once every other check has passed):
+   *
+   * - the service provider named by the Issuer exists and is enabled;
+   * - when the SP has a certificate, the request is signed with it (an
+   *   unsigned request is refused), and every field is read from what the
+   *   signature covers; the signed Issuer must still be that SP;
+   * - IssueInstant is within the allowed age and clock skew;
+   * - Destination, when present, is this endpoint.
+   */
+  async receiveAuthnRequest(
+    realm: Realm,
+    inbound: SamlInboundRequest,
+  ): Promise<AcceptedAuthnRequest> {
+    const samlRequest =
+      inbound.binding === 'redirect'
+        ? inbound.query.samlRequest
+        : inbound.samlRequest;
+    if (!samlRequest) {
+      throw new BadRequestException('Missing SAMLRequest parameter');
     }
+    const parsed = await this.parse(samlRequest);
 
-    const sig = new SignedXml({ publicCert: certificate });
-    sig.loadSignature(signatures[0]);
-    let valid: boolean;
-    try {
-      valid = sig.checkSignature(xml);
-    } catch (err) {
-      this.logger.error(
-        'Signature validation threw error',
-        (err as Error).stack,
+    const sp = await this.findSpByEntityId(realm.id, parsed.request.issuer);
+    if (!sp || !sp.enabled) {
+      throw new BadRequestException(
+        `Unknown or disabled SAML service provider: ${parsed.request.issuer}`,
       );
-      throw new BadRequestException('AuthnRequest signature validation failed');
     }
-    if (!valid) {
-      const sigAny = sig as unknown as { errors?: Array<{ message: string }> };
-      const errors = sigAny.errors;
-      if (errors) {
-        this.logger.error(
-          `Signature validation errors: ${errors.map((e) => e.message).join(', ')}`,
+
+    try {
+      let request = parsed.request;
+      const signed = !!sp.certificate;
+      if (inbound.binding === 'redirect') {
+        // The signature travels in the query string; an XML one left in the
+        // message is refused so nothing mistakes it for the one checked.
+        assertNoXmlSignature(parsed.root);
+        if (sp.certificate) {
+          verifyRedirectSignature(
+            inbound.query,
+            spVerificationKey(sp.certificate),
+          );
+        }
+      } else if (sp.certificate) {
+        request = verifyEnvelopedSignature(
+          parsed,
+          spVerificationKey(sp.certificate),
         );
       }
-      throw new BadRequestException('AuthnRequest signature validation failed');
+      if (request.issuer !== sp.entityId) {
+        throw new SamlRequestError(
+          'the signed Issuer is not the service provider the request named',
+          'AuthnRequest signature validation failed',
+        );
+      }
+      this.checkIssueInstant(request);
+      this.checkDestination(realm, request);
+
+      const relayState =
+        inbound.binding === 'redirect'
+          ? (inbound.query.relayState ?? '')
+          : (inbound.relayState ?? '');
+      return { sp, request, relayState, signed };
+    } catch (err) {
+      throw this.refusal(err);
+    }
+  }
+
+  /** Allowed clock skew between the SP and the IdP, in seconds. */
+  clockSkewSeconds(): number {
+    return secondsFromEnv(
+      'SAML_CLOCK_SKEW_SECONDS',
+      DEFAULT_CLOCK_SKEW_SECONDS,
+      900,
+    );
+  }
+
+  /** Maximum age of an AuthnRequest when it arrives, in seconds. */
+  requestMaxAgeSeconds(): number {
+    return secondsFromEnv(
+      'SAML_REQUEST_MAX_AGE_SECONDS',
+      DEFAULT_REQUEST_MAX_AGE_SECONDS,
+      3600,
+    );
+  }
+
+  /** IssueInstant as a time, or a refusal. */
+  private issueInstantOf(request: SamlAuthnRequest): number {
+    const value = request.issueInstant;
+    if (!value || !XS_DATE_TIME.test(value)) {
+      throw new SamlRequestError(
+        `IssueInstant "${value ?? ''}" is missing or not an xs:dateTime`,
+        'AuthnRequest IssueInstant is missing or invalid',
+      );
+    }
+    const zoned = /(Z|[+-]\d{2}:\d{2})$/.test(value) ? value : `${value}Z`;
+    const time = Date.parse(zoned);
+    if (Number.isNaN(time)) {
+      throw new SamlRequestError(
+        `IssueInstant "${value}" is not a date`,
+        'AuthnRequest IssueInstant is missing or invalid',
+      );
+    }
+    return time;
+  }
+
+  private checkIssueInstant(request: SamlAuthnRequest): void {
+    const issued = this.issueInstantOf(request);
+    const skew = this.clockSkewSeconds() * 1000;
+    const maxAge = this.requestMaxAgeSeconds() * 1000;
+    const now = Date.now();
+    if (issued > now + skew || issued < now - maxAge - skew) {
+      throw new SamlRequestError(
+        `IssueInstant ${request.issueInstant} is outside the accepted window`,
+        'AuthnRequest has expired or is not yet valid',
+      );
+    }
+  }
+
+  /** The SSO endpoint of a realm, as its metadata publishes it. */
+  ssoEndpoint(realm: Realm): string {
+    const baseUrl = (
+      process.env['BASE_URL'] ?? 'http://localhost:3000'
+    ).replace(/\/+$/, '');
+    return `${baseUrl}/realms/${realm.name}/protocol/saml`;
+  }
+
+  private checkDestination(realm: Realm, request: SamlAuthnRequest): void {
+    if (request.destination === null) return;
+    if (request.destination !== this.ssoEndpoint(realm)) {
+      throw new SamlRequestError(
+        `Destination ${request.destination} is not ${this.ssoEndpoint(realm)}`,
+        'AuthnRequest Destination does not match this endpoint',
+      );
+    }
+  }
+
+  /**
+   * Records the request's ID for its service provider; refuses an ID that
+   * was already accepted and could still pass the IssueInstant check.
+   *
+   * The insert on the unique (SP, request ID) index is the check itself, so
+   * two copies of a request arriving at once (on one process or on several
+   * replicas and workers) cannot both pass. A row whose window has passed but
+   * that the clean-up has not deleted yet is taken over by a conditional
+   * update.
+   */
+  async claimRequestId(
+    sp: SamlServiceProvider,
+    request: SamlAuthnRequest,
+  ): Promise<void> {
+    const issued = this.issueInstantOf(request);
+    const now = new Date();
+    // The last moment a copy of this request could pass checkIssueInstant.
+    const expiresAt = new Date(
+      issued + (this.requestMaxAgeSeconds() + this.clockSkewSeconds()) * 1000,
+    );
+    try {
+      await this.prisma.samlRequestId.create({
+        data: { spId: sp.id, requestId: request.id, expiresAt },
+      });
+      return;
+    } catch (err) {
+      if ((err as { code?: string }).code !== 'P2002') throw err;
+    }
+    const { count } = await this.prisma.samlRequestId.updateMany({
+      where: { spId: sp.id, requestId: request.id, expiresAt: { lte: now } },
+      data: { expiresAt, createdAt: now },
+    });
+    if (count === 0) {
+      this.logger.warn(
+        `SAMLRequest refused: request ID ${request.id} from ${sp.entityId} was already used`,
+      );
+      throw new BadRequestException('AuthnRequest has already been used');
+    }
+  }
+
+  /** Deletes request IDs whose requests can no longer pass the time check. */
+  @Interval(300_000) // every 5 minutes
+  async cleanupExpiredRequestIds(): Promise<void> {
+    // Once per cluster, not once per process (see LeaderService).
+    if (!this.leader.isLeader()) return;
+    const { count } = await this.prisma.samlRequestId.deleteMany({
+      where: { expiresAt: { lt: new Date() } },
+    });
+    if (count > 0) {
+      this.logger.debug(`Cleaned up ${count} expired SAML request ID(s)`);
     }
   }
 
