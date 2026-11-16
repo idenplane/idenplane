@@ -18,7 +18,7 @@ Read [Before you enable it](#before-you-enable-it) first. The upgrade API refuse
 
 ## What an upgrade does
 
-Seven stages, in order. Any failure after `BACKUP` triggers a rollback.
+Seven stages, in order. A failure in `DATABASE_MIGRATION` or `POST_HEALTH_CHECK` triggers a rollback; an earlier failure stops the upgrade before anything has changed.
 
 | Stage | What happens |
 |---|---|
@@ -112,10 +112,13 @@ curl -H "x-admin-api-key: $ADMIN_API_KEY" \
   http://localhost:3000/admin/upgrade/health
 
 curl -H "x-admin-api-key: $ADMIN_API_KEY" \
-  "http://localhost:3000/admin/upgrade/pre-validation?toVersion=0.4.0"
+  http://localhost:3000/admin/upgrade/pre-validation
+
+curl -H "x-admin-api-key: $ADMIN_API_KEY" \
+  "http://localhost:3000/admin/upgrade/config-compatibility?version=0.4.0"
 ```
 
-`/health` reports `healthy`, `/pre-validation` reports `canProceed`. Both list every check with a `pass`, `warn` or `fail` status. Do not proceed while `canProceed` is `false`.
+`/health` reports `healthy`, `/pre-validation` reports `canProceed`, and `/config-compatibility` checks your configuration against a target version. Both list every check with a `pass`, `warn` or `fail` status. Do not proceed while `canProceed` is `false`.
 
 ### Dry run first
 
@@ -126,7 +129,7 @@ curl -X POST -H "x-admin-api-key: $ADMIN_API_KEY" \
   http://localhost:3000/admin/upgrade
 ```
 
-A dry run walks all seven stages and changes nothing.
+A dry run runs pre-validation, the configuration check and the health check, and skips the backup and the migration. It changes no data, but it is recorded in `upgrade_audit_log`.
 
 `confirm` is only required for a real run — a dry run writes nothing, and demanding a confirmation there would just train you to type past the prompt that matters.
 
@@ -199,7 +202,7 @@ pg_restore --clean --if-exists --no-owner --single-transaction --exit-on-error \
 
 A second concurrent upgrade is refused with `409`:
 
-> An upgrade is already in progress. Refusing to start an upgrade concurrently — two migrations against one database can corrupt it.
+> An upgrade to X started at T is still in progress (id …). Refusing to start an upgrade to Y concurrently — two migrations against one database can corrupt it. If that upgrade is known to have died, mark its row FAILED.
 
 The lock expires after two hours. If an upgrade died and left its row behind, mark that row `FAILED` in `upgrade_audit_log`.
 

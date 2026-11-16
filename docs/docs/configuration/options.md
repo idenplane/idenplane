@@ -2,12 +2,14 @@
 id: options
 title: Configuration Options
 sidebar_position: 2
-description: Complete reference for all Idenplane configuration options available through the Admin API and Admin Console.
+description: Reference for the realm, client and related settings available through the Admin API and Admin Console.
 ---
 
 # Configuration Options
 
-This reference documents all configuration options available in Idenplane, organized by category. Options can be set through the Admin API, Admin Console, or programmatically via the SDK.
+This reference covers the settings you make per realm, through the Admin Console or the Admin API. Server-wide settings are [environment variables](./environment-variables.md). The SDKs are client libraries for signing users in; they do not change realm settings.
+
+The admin API rejects a field it does not know with `400`, so use the names below exactly. The full list of fields for each endpoint is in the server's own OpenAPI reference at `/api`.
 
 ---
 
@@ -15,17 +17,16 @@ This reference documents all configuration options available in Idenplane, organ
 
 | Category | Description | Key Options |
 |----------|-------------|-------------|
-| [Realms](#realm-configuration) | Top-level tenant settings | name, displayName, enabled, sslPolicy |
-| [Security](#security-configuration) | Authentication & authorization | registrationAllowed, loginWithEmail, passwordPolicy |
-| [Themes](#theme-configuration) | UI customization | loginTheme, accountTheme, adminTheme |
-| [Email](#email-configuration) | SMTP and email templates | from, fromDisplayName, smtpHost, smtpPort |
+| [Realms](#realm-configuration) | Top-level tenant settings | name, displayName, enabled |
+| [Security](#security-configuration) | Sign-in and registration | registrationAllowed, mfaRequired, webAuthnEnabled |
+| [Themes](#theme-configuration) | UI customization | loginTheme, accountTheme, emailTheme |
+| [Email](#email-configuration) | SMTP and email providers | smtpHost, smtpPort, smtpFrom, emailProvider |
 | [Sessions](#session-configuration) | Session management | refreshTokenLifespan, maxSessionsPerUser |
-| [Tokens](#token-configuration) | OAuth token settings | accessTokenLifespan, refreshTokenMaxReuse |
-| [Clients](#client-configuration) | OAuth client settings | clientId, clientSecret, redirectUris |
-| [Password Policy](#password-policy) | Password requirements | minLength, requireUppercase, notUsername |
-| [MFA](#mfa-configuration) | Multi-factor authentication | totpPeriod, totpDigits, otpPolicy |
+| [Clients](#client-configuration) | OAuth client settings | clientId, clientType, redirectUris, grantTypes |
+| [Password Policy](#password-policy) | Password requirements | passwordMinLength, passwordRequireDigits |
+| [MFA](#mfa-configuration) | Multi-factor authentication | mfaRequired, smsMfaEnabled |
 | [Brute Force](#brute-force-protection) | Login attack protection | bruteForceEnabled, maxLoginFailures, lockoutDuration |
-| [Events](#event-configuration) | Audit logging | eventsEnabled, eventsListeners |
+| [Events](#event-configuration) | Audit logging | eventsEnabled, adminEventsEnabled |
 
 ---
 
@@ -37,132 +38,70 @@ Realms are top-level tenants in Idenplane, each with isolated user pools, client
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `id` | string | — | Unique realm identifier (immutable) |
-| `realm` | string | — | Alias for `id`, used in API paths |
-| `enabled` | boolean | `true` | Whether the realm is active |
+| `name` | string | — | Unique realm name, used in URLs. Set at creation; it cannot be changed |
 | `displayName` | string | — | Human-readable name shown in UI |
-| `displayNameHtml` | string | — | HTML-formatted display name |
-| `sslPolicy` | string | `"external-request"` | SSL requirement: `none`, `external-request`, `all` |
-| `registrationAllowed` | boolean | `false` | Allow self-registration |
-| `loginWithEmailAllowed` | boolean | `true` | Allow login with email address |
-| `duplicateEmailsAllowed` | boolean | `false` | Allow multiple users with same email |
-| `resetPasswordAllowed` | boolean | `true` | Allow password reset flow |
-
-### Realm Attributes
-
-Custom attributes can be added to realms:
-
-```json
-{
-  "attributes": {
-    "customOption": "value",
-    "maxUsers": "1000"
-  }
-}
-```
+| `enabled` | boolean | `true` | Whether the realm is active |
+| `defaultLocale` | string | `en` | Default locale of the hosted pages |
+| `supportedLocales` | string[] | `["en"]` | Locales the hosted pages offer |
 
 ### API Endpoints
 
 ```
 GET    /admin/realms/{realm}
 POST   /admin/realms
-PUT    /admin/realms/{realm}
+PUT    /admin/realms/{realm}      # partial update, same as PATCH
+PATCH  /admin/realms/{realm}
 DELETE /admin/realms/{realm}
 GET    /admin/realms/{realm}/export
-POST   /admin/realms/{realm}/import
+POST   /admin/realms/import
 ```
+
+See [Realms API](../api/realms.md).
 
 ---
 
 ## Security Configuration
 
-### Authentication Settings
+### Sign-in and Registration
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `registrationAllowed` | boolean | `false` | Enable self-registration |
+| `registrationAllowed` | boolean | **`true`** | Self-registration on the hosted pages. It is on for a new realm: turn it off if users should not sign themselves up |
 | `captchaEnabled` | boolean | `false` | Require a CAPTCHA (reCAPTCHA v3 or hCaptcha) for self-registration; see [Self-Registration and CAPTCHA](/guides/registration-captcha) |
-| `registrationEmailAsUsername` | boolean | `false` | Use email as username |
-| `loginWithEmailAllowed` | boolean | `true` | Allow email-based login |
-| `duplicateEmailsAllowed` | boolean | `false` | Multiple users per email |
-| `resetPasswordAllowed` | boolean | `true` | Password reset enabled |
-| `editUsernameAllowed` | boolean | `false` | Users can change username |
+| `magicLinkEnabled` | boolean | `false` | Passwordless sign-in by e-mailed link |
+| `webAuthnEnabled` | boolean | `false` | Passkeys (WebAuthn) |
+| `impersonationEnabled` | boolean | `false` | Let admins impersonate users |
+| `impersonationMaxDuration` | integer | `1800` | Longest impersonation session, in seconds |
 | `bruteForceEnabled` | boolean | `true` for new realms | Temporary account lockout after repeated failed sign-ins. See [Brute Force Protection](#brute-force-protection). |
-
-### OAuth 2.0 Flows
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `oauth2DeviceCodeLifespan` | integer | `600` | Device code lifespan (seconds) |
-| `oauth2DevicePollingInterval` | integer | `5` | Polling interval (seconds) |
-| `internationalizationEnabled` | boolean | `false` | Enable i18n |
-| `supportedLocales` | string[] | — | Supported locale codes |
-
-### API Endpoints
-
-```
-PUT /admin/realms/{realm}
-```
 
 ---
 
 ## Theme Configuration
 
-Idenplane supports customizable themes for different UI contexts.
-
-### Theme Types
-
-| Theme | Description | Options |
-|-------|-------------|---------|
-| `loginTheme` | Login, registration, password reset screens | `idenplane`, `base`, custom themes |
-| `accountTheme` | User account management console | `idenplane`, `base`, custom themes |
-| `adminTheme` | Admin console (legacy) | `idenplane`, `base`, custom themes |
-| `emailTheme` | Email templates | `idenplane`, `base`, custom themes |
-
 ### Theme Settings
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `loginTheme` | string | `idenplane` | Theme for login pages |
-| `accountTheme` | string | `idenplane` | Theme for user account console |
-| `adminTheme` | string | `idenplane` | Theme for admin console |
-| `emailTheme` | string | `idenplane` | Theme for email templates |
-| `defaultLocale` | string | `en` | Default locale (e.g., `en`, `de`, `fr`) |
+| `loginTheme` | string | `idenplane` | Theme for the login, registration and password-reset pages |
+| `accountTheme` | string | `idenplane` | Theme for the account pages |
+| `emailTheme` | string | `idenplane` | Theme for e-mails |
+| `themeName` | string | — | Theme preset |
+| `theme` | object | — | Color overrides |
 
-### Creating Custom Themes
+The built-in themes are `idenplane` and `midnight`. Their templates are Handlebars (`.hbs`) files under `themes/<name>/login`, `account` and `email`.
 
-Custom themes are stored in the `themes/` directory:
+### Custom Themes
+
+Build a theme in the console's **Theme Builder**, or through the theme API:
 
 ```
-themes/
-  my-custom-theme/
-    login/
-      login.ftl
-      register.ftl
-      info.ftl
-    account/
-      account.ftl
-    email/
-      email-test.ftl
-      email-update-password.ftl
-    resources/
-      css/styles.css
-      img/logo.svg
+GET    /admin/realms/{realm}/themes
+POST   /admin/realms/{realm}/themes
+PUT    /admin/realms/{realm}/themes/{id}
+DELETE /admin/realms/{realm}/themes/{id}
 ```
 
-Register custom themes via API:
-
-```bash
-curl -X POST http://localhost:3000/admin/realms/{realm}/authentication/authenticator-config \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "alias": "custom-theme",
-    "config": {
-      "theme": "my-custom-theme"
-    }
-  }'
-```
+See [Custom Themes](../guides/custom-themes.mdx).
 
 ---
 
@@ -172,53 +111,27 @@ curl -X POST http://localhost:3000/admin/realms/{realm}/authentication/authentic
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `from` | string | — | Sender email address (required) |
-| `fromDisplayName` | string | — | Sender display name |
-| `fromDisplayNameHtml` | string | — | HTML-formatted sender name |
 | `smtpHost` | string | — | SMTP server hostname |
-| `smtpPort` | integer | `587` | SMTP port (587 for TLS, 465 for SSL) |
-| `smtpStartTls` | boolean | `true` | Use STARTTLS |
-| `smtpSsl` | boolean | `false` | Use implicit SSL |
+| `smtpPort` | integer | `587` | SMTP port |
+| `smtpSecure` | boolean | `false` | Implicit TLS (port 465). With `false`, STARTTLS is used when the server offers it |
 | `smtpUser` | string | — | SMTP username |
-| `smtpPassword` | string | — | SMTP password |
-| `replyTo` | string | — | Reply-to address |
-| `replyToDisplayName` | string | — | Reply-to display name |
-| `connectionUrl` | string | — | Full SMTP connection URL |
-
-### Connection URL Format
-
-```bash
-# Standard connection
-smtp://user:password@smtp.example.com:587
-
-# With TLS
-smtp://user:password@smtp.example.com:587/?tls=true
-
-# With implicit SSL (port 465)
-smtps://user:password@smtp.example.com:465
-```
-
-### API Endpoints
-
-```
-GET    /admin/realms/{realm}/email-provider
-POST   /admin/realms/{realm}/email-provider
-PUT    /admin/realms/{realm}/email-provider
-DELETE /admin/realms/{realm}/email-provider
-POST   /admin/realms/{realm}/email-provider/test
-```
+| `smtpPassword` | string | — | SMTP password (encrypted at rest) |
+| `smtpFrom` | string | — | Sender address |
+| `emailProvider` | string | `smtp` | `smtp`, `resend`, `sendgrid`, `mailgun` or `postmark` |
+| `emailProviderConfig` | object | — | The chosen API provider's settings |
 
 ### Test Email Configuration
 
 ```bash
-# Send a test email
-curl -X POST http://localhost:3000/admin/realms/{realm}/email-provider/test \
+curl -X POST http://localhost:3000/admin/realms/{realm}/email/test \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "value": "user@example.com"
+    "to": "user@example.com"
   }'
 ```
+
+`POST /admin/realms/{realm}/smtp/test` sends a test message to the realm's own sender address.
 
 ---
 
@@ -239,52 +152,16 @@ A session ends at its expiry: the refresh grant and token introspection refuse a
 
 The hosted-login SSO cookie lasts for the browser session, or 30 days with "remember me". There is no idle timeout for SSO sessions yet; see the [ASVS assessment](../security/asvs-assessment.md#remaining-gaps).
 
-### Timeout Format
-
-Timeouts use ISO 8601 duration format:
-- `30m` — 30 minutes
-- `8h` — 8 hours
-- `7d` — 7 days
-
 ### API Endpoints
 
 ```
-GET /admin/realms/{realm}
-PUT /admin/realms/{realm}
+GET   /admin/realms/{realm}
+PATCH /admin/realms/{realm}
+GET   /admin/realms/{realm}/sessions
+GET   /admin/realms/{realm}/users/{userId}/sessions
 ```
 
----
-
-## Token Configuration
-
-### Token Lifespans
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `accessTokenLifespan` | string | `"5m"` | Access token expiration |
-| `accessTokenLifespanImplicit` | string | `"15m"` | Implicit flow token expiration |
-| `accessCodeLifespan` | string | `"60s"` | Authorization code expiration |
-| `accessCodeLifespanUserAction` | string | `"5m"` | User action code expiration |
-| `accessCodeLifespanLogin` | string | `"300s"` | Login flow code expiration |
-| `refreshTokenLifespan` | string | `"1h"` | Refresh token expiration |
-| `refreshTokenLifespanRefreshToken` | string | `"1d"` | Offline refresh token lifespan |
-| `accessTokenLifespanForActiveUsers` | string | `"5m"` | Active user token lifespan |
-
-### Revocation Policies
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `revokeRefreshToken` | boolean | `false` | Revoke refresh tokens on use |
-| `refreshTokenMaxReuse` | integer | `0` | Max refresh token reuse count |
-| `notBefore` | integer | `0` | Revocation check timestamp |
-
-### API Endpoints
-
-```
-POST /admin/realms/{realm}/oauth-access-tokens
-DELETE /admin/realms/{realm}/oauth-access-tokens
-POST /admin/realms/{realm}/logout-all
-```
+All lifetimes are integers in seconds.
 
 ---
 
@@ -298,37 +175,18 @@ POST /admin/realms/{realm}/logout-all
 | `name` | string | — | Human-readable client name |
 | `description` | string | — | Client description |
 | `enabled` | boolean | `true` | Client is active |
-| `alwaysDisplayInConsole` | boolean | `false` | Always show in account console |
-| `clientAuthenticatorType` | string | `client-secret` | Auth method: `client-secret`, `client-jwt` |
-| `secret` | string | — | Client secret (for confidential clients) |
-| `publicClient` | boolean | `false` | Public client (no secret) |
-| `consentRequired` | boolean | `false` | Require explicit consent |
-
-### Client URLs
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
+| `clientType` | string | `CONFIDENTIAL` | `CONFIDENTIAL` or `PUBLIC` (no secret; PKCE required) |
+| `publicClient` | boolean | — | Shorthand for `clientType: "PUBLIC"` |
+| `requireConsent` | boolean | `false` | Require explicit consent |
 | `redirectUris` | string[] | — | Allowed redirect URIs |
-| `webOrigins` | string[] | — | Allowed CORS origins |
-| `baseUrl` | string | — | Default redirect after login |
-| `rootUrl` | string | — | Client root URL |
+| `postLogoutRedirectUris` | string[] | — | Allowed `post_logout_redirect_uri` values; falls back to `redirectUris` when empty |
+| `webOrigins` | string[] | — | Allowed CORS origins (`*` is refused) |
+| `grantTypes` | string[] | `["authorization_code"]` | Allowed grants: `authorization_code`, `refresh_token`, `client_credentials`, `password`, `urn:ietf:params:oauth:grant-type:device_code` |
+| `tokenEndpointAuthMethod` | string | — | `client_secret_basic`, `client_secret_post`, `tls_client_auth`, `self_signed_tls_client_auth` or `none` |
+| `backchannelLogoutUri` | string | — | OIDC back-channel logout URL |
+| `requiredAcr` | string | — | Minimum ACR for this client |
 
-### Client Protocol
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `protocol` | string | `openid-connect` | Protocol: `openid-connect`, `saml` |
-| `protocolMappers` | object[] | — | Protocol-specific mappers |
-| `fullScopeAllowed` | boolean | `true` | Allow all realm scopes |
-
-### Standard Flow Settings (Authorization Code)
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `standardFlowEnabled` | boolean | `true` | Enable authorization code flow |
-| `directAccessGrantsEnabled` | boolean | `false` | Enable resource owner password grant |
-| `implicitFlowEnabled` | boolean | `false` | Enable implicit flow |
-| `serviceAccountsEnabled` | boolean | `false` | Enable service account authentication |
+The secret of a confidential client is generated by the server and shown once, in the create response and when you regenerate it. Token lifetimes are realm settings.
 
 ### API Endpoints
 
@@ -336,10 +194,9 @@ POST /admin/realms/{realm}/logout-all
 GET    /admin/realms/{realm}/clients
 POST   /admin/realms/{realm}/clients
 GET    /admin/realms/{realm}/clients/{id}
-PUT    /admin/realms/{realm}/clients/{id}
+PUT    /admin/realms/{realm}/clients/{id}      # partial update, same as PATCH
 DELETE /admin/realms/{realm}/clients/{id}
-POST   /admin/realms/{realm}/clients/{id}/client-secret
-GET    /admin/realms/{realm}/clients/{id}/installation-files
+POST   /admin/realms/{realm}/clients/{id}/regenerate-secret
 ```
 
 ### Create a Client
@@ -352,129 +209,64 @@ curl -X POST http://localhost:3000/admin/realms/{realm}/clients \
     "clientId": "my-app",
     "name": "My Application",
     "description": "My application using Idenplane",
-    "enabled": true,
-    "publicClient": false,
+    "clientType": "CONFIDENTIAL",
     "redirectUris": ["http://localhost:3000/callback"],
     "webOrigins": ["http://localhost:3000"],
-    "standardFlowEnabled": true,
-    "serviceAccountsEnabled": true,
-    "directAccessGrantsEnabled": true
+    "grantTypes": ["authorization_code", "refresh_token", "client_credentials"]
   }'
 ```
+
+See [Clients API](../api/clients.md).
 
 ---
 
 ## Password Policy
 
-Password policies enforce requirements for user passwords.
+The password policy is a set of realm fields. Passwords are hashed with Argon2id.
 
-### Available Policies
-
-| Policy | Type | Format | Default | Description |
-|--------|------|--------|---------|-------------|
-| `length` | integer | `length #` | `8` | Minimum password length |
-| `digits` | integer | `digits #` | `1` | Minimum digits required |
-| `lowerCaseCharacters` | integer | `lowerCase(#)` | `1` | Minimum lowercase letters |
-| `upperCaseCharacters` | integer | `upperCase(#)` | `1` | Minimum uppercase letters |
-| `specialCharacters` | integer | `specialChars(#)` | `0` | Minimum special characters |
-| `notUsername` | boolean | `notUsername()` | `true` | Cannot match username |
-| `notEmail` | boolean | `notEmail()` | `false` | Cannot contain email |
-| `regexp` | string | `regex(PATTERN)` | — | Regex pattern match |
-| `maxLength` | integer | `maxLength(#)` | — | Maximum password length |
-| `passwordHistory` | integer | `historyCount(#)` | `0` | Prevent reuse of last N passwords |
-| `forceExpiredPasswordChange` | integer | `expireWeight(#)` | — | Force change after N days |
-| `hashIterations` | integer | `hashIterations(#)` | `27500` | PBKDF2 iterations |
-
-### Configuring Password Policy
+| Option | Type | Default | Description |
+|--------|------|---------|-------------|
+| `passwordMinLength` | integer | `8` | Minimum password length |
+| `passwordRequireUppercase` | boolean | `false` | At least one uppercase letter |
+| `passwordRequireLowercase` | boolean | `false` | At least one lowercase letter |
+| `passwordRequireDigits` | boolean | `false` | At least one digit |
+| `passwordRequireSpecialChars` | boolean | `false` | At least one special character |
+| `passwordHistoryCount` | integer | `0` | Previous passwords that cannot be reused |
+| `passwordMaxAgeDays` | integer | `0` | Days until a password expires; `0` never |
 
 ```bash
-# Set multiple policies
-curl -X PUT http://localhost:3000/admin/realms/{realm} \
+curl -X PATCH http://localhost:3000/admin/realms/{realm} \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
   -d '{
-    "passwordPolicy": "length(12) and digits(2) and upperCase(2) and lowerCase(2) and specialChars(1) and notUsername()"
+    "passwordMinLength": 12,
+    "passwordRequireDigits": true,
+    "passwordRequireUppercase": true,
+    "passwordRequireSpecialChars": true
   }'
-```
-
-### Default Policy (Keycloak-compatible format)
-
-```typescript
-// Password policy stored in realm settings
-const passwordPolicy = "length(8) and digits(1) and lowerCase(1) and upperCase(1) and specialChars(1) and notUsername() and notEmail()";
-```
-
-### API Endpoints
-
-```
-GET /admin/realms/{realm}
-PUT /admin/realms/{realm}
-GET /admin/realms/{realm}/password-policy
-PUT /admin/realms/{realm}/password-policy
 ```
 
 ---
 
 ## MFA Configuration
 
-### TOTP Settings (Time-based One-Time Password)
-
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `enabled` | boolean | `false` | Enable TOTP |
-| `sortOrder` | integer | `0` | Sort order in UI |
-| `digits` | string | `6` | Code length: `6` or `8` |
-| `period` | string | `30` | Time step in seconds |
-| `algorithm` | string | `HmacSHA1` | Hash algorithm |
-| `lookAhead` | string | `1` | Clock skew tolerance |
-| `skipInitialSetupUI` | boolean | `false` | Skip TOTP setup screen |
+| `mfaRequired` | boolean | `false` | Every user must have a second factor; users without one enrol at sign-in |
+| `smsMfaEnabled` | boolean | `false` | Text-message codes as a second factor (needs an SMS provider) |
+| `otpLength` | integer | `6` | Length of texted codes |
+| `otpExpirySeconds` | integer | `300` | Lifetime of a texted code |
 
-### OTP Policy Configuration
-
-```bash
-# Configure TOTP for a realm
-curl -X PUT http://localhost:3000/admin/realms/{realm} \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "enabled": true,
-    "totp": {
-      "enabled": true,
-      "digits": "6",
-      "period": "30",
-      "algorithm": "HmacSHA1"
-    }
-  }'
-```
-
-### Conditional MFA
-
-Enable MFA based on authentication context:
-
-```bash
-# Require MFA for certain authentication methods
-curl -X POST http://localhost:3000/admin/realms/{realm}/authentication/flows/{flow}/executions \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "requirement": "REQUIRED",
-    "displayName": "OTP Form",
-    "authenticationFlow": false,
-    "requirementChoices": ["Required", "Alternative"]
-  }'
-```
-
-### Recovery Codes
-
-Recovery codes are automatically generated when MFA is enabled. Users can regenerate via the Account Console.
+Authenticator-app (TOTP) codes are fixed at SHA-1, 6 digits and a 30-second step; they are not configurable. Users get 10 one-time recovery codes with their first factor. See the [MFA guide](../guides/mfa.mdx).
 
 ### API Endpoints
 
 ```
-POST /admin/realms/{realm}/users/{userId}/reset-password
-POST /admin/realms/{realm}/users/{userId}/execute-actions
-GET  /admin/realms/{realm}/users/{userId}/credentials
-DELETE /admin/realms/{realm}/users/{userId}/credentials/{credentialId}
+GET    /admin/realms/{realm}/users/{userId}/mfa/status
+DELETE /admin/realms/{realm}/users/{userId}/mfa          # all factors (asks for admin MFA step-up)
+DELETE /admin/realms/{realm}/users/{userId}/mfa/totp
+DELETE /admin/realms/{realm}/users/{userId}/mfa/sms
+PUT    /admin/realms/{realm}/users/{userId}/reset-password
 ```
 
 ---
@@ -512,91 +304,37 @@ POST  /admin/realms/{realm}/brute-force/users/{userId}/unlock # unlock (asks for
 
 ## Event Configuration
 
-### Event Listener Settings
-
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `eventsEnabled` | boolean | `true` for new realms | Record sign-in events (realms created before 0.10.0 keep their setting) |
-| `adminEventsEnabled` | boolean | `true` for new realms | Record admin changes |
-| `eventsExpiration` | long | `2592000` | Event retention (seconds, default 30 days) |
-| `eventsListeners` | string[] | `["jboss-logging"]` | Event listener implementations |
+| `adminEventsEnabled` | boolean | `true` | Record admin changes |
+| `loginEventRetentionDays` | integer | `30` | Days sign-in events are kept |
+| `adminEventRetentionDays` | integer | `90` | Days admin events are kept |
 
-### Enabled Events
-
-Configure which events are stored:
-
-| Event Type | Description |
-|------------|-------------|
-| `LOGIN` | User login |
-| `LOGIN_ERROR` | Failed login attempt |
-| `LOGOUT` | User logout |
-| `REGISTER` | User registration |
-| `REGISTER_ERROR` | Failed registration |
-| `REFRESH_TOKEN` | Token refresh |
-| `CODE_TO_TOKEN` | Code exchange |
-| `CLIENT_LOGIN` | Client authentication |
-| `USER_INFO_REQUEST` | UserInfo endpoint access |
-
-### Configuring Events
-
-```bash
-# Enable event storage
-curl -X PUT http://localhost:3000/admin/realms/{realm} \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "eventsEnabled": true,
-    "eventsExpiration": 2592000,
-    "eventsListeners": ["jboss-logging", "idenplane-events"]
-  }'
-```
-
-### Admin Events
-
-Admin events capture management operations:
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `adminEventsEnabled` | boolean | `false` | Enable admin event logging |
-| `adminEventsDetailsEnabled` | boolean | `false` | Include object representation |
-
-```bash
-# Enable admin events
-curl -X PUT http://localhost:3000/admin/realms/{realm} \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "adminEventsEnabled": true,
-    "adminEventsDetailsEnabled": true
-  }'
-```
+Recorded sign-in events include `LOGIN`, `LOGIN_ERROR`, `LOGOUT`, `REGISTER`, `REFRESH_TOKEN`, `CODE_TO_TOKEN`, `CLIENT_LOGIN` and the MFA events. Each can also go to a [webhook](../guides/webhooks.mdx).
 
 ### API Endpoints
 
 ```
 GET /admin/realms/{realm}/events
-DELETE /admin/realms/{realm}/events
+GET /admin/realms/{realm}/events/login/export
 GET /admin/realms/{realm}/admin-events
-GET /admin/realms/{realm}/events/config
-PUT /admin/realms/{realm}/events/config
+GET /admin/realms/{realm}/events/admin/export
 ```
 
 ---
 
 ## Client Scopes
 
-Client scopes define reusable sets of OAuth scopes.
-
 ### Standard Scopes
 
-| Scope | Description | Claims |
-|-------|-------------|--------|
-| `openid` | OpenID Connect authentication | `sub` |
-| `profile` | User profile information | `name`, `family_name`, `given_name`, `preferred_username`, `picture` |
-| `email` | Email address | `email`, `email_verified` |
-| `phone` | Phone number | `phone_number`, `phone_number_verified` |
-| `address` | Physical address | `address` |
-| `offline_access` | Offline session access | `refresh_token` |
+| Scope | Claims |
+|-------|--------|
+| `openid` | `sub` |
+| `profile` | `name`, `family_name`, `given_name`, `preferred_username`, `updated_at` |
+| `email` | `email`, `email_verified` |
+| `roles` | `realm_access`, `resource_access` |
+| `offline_access` | none; requests an offline refresh token |
 
 ### Client Scope Management
 
@@ -604,41 +342,21 @@ Client scopes define reusable sets of OAuth scopes.
 # Get all client scopes
 curl http://localhost:3000/admin/realms/{realm}/client-scopes \
   -H "Authorization: Bearer $TOKEN"
-
-# Create custom scope
-curl -X POST http://localhost:3000/admin/realms/{realm}/client-scopes \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "custom-scope",
-    "description": "Custom scope for my application",
-    "protocol": "openid-connect"
-  }'
 ```
 
 ### Scope-to-Client Assignment
 
-```bash
-# Add scope to client
-curl -X POST http://localhost:3000/admin/realms/{realm}/clients/{clientId}/default-client-scopes/{scopeId}
-
-# Remove scope from client
-curl -X DELETE http://localhost:3000/admin/realms/{realm}/clients/{clientId}/default-client-scopes/{scopeId}
+```
+GET    /admin/realms/{realm}/clients/{clientId}/default-client-scopes
+POST   /admin/realms/{realm}/clients/{clientId}/default-client-scopes             # scope in the body
+DELETE /admin/realms/{realm}/clients/{clientId}/default-client-scopes/{scopeId}
 ```
 
 ---
 
 ## Role Configuration
 
-### Default Roles
-
-| Role | Description |
-|------|-------------|
-| `default-roles-{realm}` | Base role assigned to all users |
-| `offline_access` | Offline session access |
-| `uma_authorization` | UMA permission management |
-
-### Creating Roles
+Idenplane creates no default roles in a realm. A role has a `name` and a `description`; there are no composite roles.
 
 ```bash
 # Create realm role
@@ -647,41 +365,14 @@ curl -X POST http://localhost:3000/admin/realms/{realm}/roles \
   -H "Content-Type: application/json" \
   -d '{
     "name": "admin",
-    "description": "Administrator role",
-    "composite": true,
-    "clientRole": false
+    "description": "Administrator role"
   }'
 
-# Create client role
-curl -X POST http://localhost:3000/admin/realms/{realm}/clients/{clientId}/roles \
+# Assign it to a user
+curl -X POST http://localhost:3000/admin/realms/{realm}/users/{userId}/role-mappings/realm \
   -H "Authorization: Bearer $TOKEN" \
   -H "Content-Type: application/json" \
-  -d '{
-    "name": "editor",
-    "description": "Content editor role",
-    "clientRole": true
-  }'
-```
-
-### Composite Roles
-
-Combine multiple roles into a composite:
-
-```bash
-# Create composite role
-curl -X POST http://localhost:3000/admin/realms/{realm}/roles \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '{
-    "name": "content-manager",
-    "composite": true
-  }'
-
-# Add child roles (using realm role ID)
-curl -X POST http://localhost:3000/admin/realms/{realm}/roles-by-id/{roleId}/composites \
-  -H "Authorization: Bearer $TOKEN" \
-  -H "Content-Type: application/json" \
-  -d '["editor", "publisher"]'
+  -d '{"roleNames": ["admin"]}'
 ```
 
 ---
@@ -692,61 +383,43 @@ curl -X POST http://localhost:3000/admin/realms/{realm}/roles-by-id/{roleId}/com
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
-| `priority` | integer | `0` | Provider priority |
 | `name` | string | — | Provider name |
-| `providerName` | string | `ldap` | Provider type |
-| `vendor` | string | — | LDAP vendor (Active Directory, Red Hat Directory Server, etc.) |
-| `usernameLDAPAttribute` | string | `cn` | LDAP attribute for username |
-| `rdnLDAPAttribute` | string | `cn` | RDN LDAP attribute |
-| `uuidLDAPAttribute` | string | `objectGUID` | UUID LDAP attribute |
-| `userObjectClasses` | string | `inetOrgPerson` | Object classes for user entries |
-| `connectionUrl` | string | — | LDAP server URL |
-| `usersDn` | string | — | Base DN for user searches |
+| `providerType` | string | `ldap` | Provider type |
+| `enabled` | boolean | `true` | Provider is active |
+| `priority` | integer | `0` | Provider priority |
+| `connectionUrl` | string | — | `ldap://` or `ldaps://` URL |
+| `startTls` | boolean | `false` | Upgrade an `ldap://` connection with STARTTLS |
+| `connectionTimeout` | integer | `5000` | Milliseconds |
 | `bindDn` | string | — | Service account DN |
-| `bindCredential` | string | — | Service account password |
+| `bindCredential` | string | — | Service account password (encrypted at rest) |
+| `usersDn` | string | — | Base DN for user searches |
+| `userObjectClass` | string | `inetOrgPerson` | Object class of user entries |
+| `usernameLdapAttr` | string | `uid` | LDAP attribute for username |
+| `rdnLdapAttr` | string | `uid` | RDN LDAP attribute |
+| `uuidLdapAttr` | string | `entryUUID` | Unique ID attribute (`objectGUID` for Active Directory) |
+| `searchFilter` | string | — | Extra LDAP filter |
+| `syncMode` | string | `on_demand` | When users are synchronised |
+| `syncPeriod` | integer | `3600` | Seconds between scheduled syncs |
+| `importEnabled` | boolean | `true` | Import users into Idenplane |
+| `editMode` | string | `READ_ONLY` | Whether changes are written back |
 
-### Kerberos Integration
-
-| Option | Type | Default | Description |
-|--------|------|---------|-------------|
-| `keyTab` | string | — | Kerberos keytab file path |
-| `serverPrincipal` | string | — | Kerberos server principal |
-| `allowKerberos` | boolean | `false` | Enable Kerberos authentication |
-| `debug` | boolean | `false` | Enable debug logging |
+Kerberos is not supported.
 
 ---
 
 ## Webhook Configuration
-
-Configure webhooks to receive notifications about Idenplane events.
 
 ### Webhook Settings
 
 | Option | Type | Default | Description |
 |--------|------|---------|-------------|
 | `url` | string | — | Webhook endpoint URL |
-| `events` | string[] | — | Events to send (e.g., `LOGIN`, `USER_CREATED`) |
-| `secret` | string | — | HMAC signing secret |
+| `eventTypes` | string[] | — | Events to send (required; `events` is accepted as an alias) |
+| `secret` | string | — | HMAC signing secret, at least 8 characters |
+| `description` | string | — | Description |
 | `enabled` | boolean | `true` | Enable/disable webhook |
-| `retryAttempts` | integer | `3` | Number of retry attempts |
-| `timeout` | integer | `5000` | Request timeout (ms) |
 
-### Supported Events
-
-| Event | Trigger |
-|-------|---------|
-| `LOGIN` | Successful user login |
-| `LOGIN_ERROR` | Failed login attempt |
-| `LOGOUT` | User logout |
-| `REGISTER` | New user registration |
-| `USER_UPDATED` | User profile update |
-| `USER_DELETED` | User deleted |
-| `PASSWORD_RESET` | Password reset requested |
-| `MFA_ENABLED` | MFA enabled |
-| `MFA_DISABLED` | MFA disabled |
-| `CLIENT_CREATED` | New OAuth client created |
-| `CLIENT_UPDATED` | OAuth client updated |
-| `ROLE_ASSIGNED` | Role assigned to user |
+Event names are lowercase and prefixed, for example `user.login`, `user.login_error`, `user.registered`; the full list is in the [Webhooks guide](../guides/webhooks.mdx). Retries follow a fixed schedule.
 
 ### Registering Webhooks
 
@@ -756,61 +429,37 @@ curl -X POST http://localhost:3000/admin/realms/{realm}/webhooks \
   -H "Content-Type: application/json" \
   -d '{
     "url": "https://example.com/webhooks/idenplane",
-    "events": ["LOGIN", "LOGOUT", "USER_CREATED"],
-    "secret": "your-webhook-secret",
+    "eventTypes": ["user.login", "user.logout", "user.registered"],
+    "secret": "example-webhook-secret",
     "enabled": true
   }'
 ```
 
 ### Verifying Webhooks
 
-Idenplane signs webhook payloads using HMAC-SHA256:
-
-```typescript
-import crypto from 'crypto';
-
-function verifyWebhookSignature(
-  payload: string,
-  signature: string,
-  secret: string
-): boolean {
-  const expected = crypto
-    .createHmac('sha256', secret)
-    .update(payload)
-    .digest('hex');
-
-  return crypto.timingSafeEqual(
-    Buffer.from(signature),
-    Buffer.from(`sha256=${expected}`)
-  );
-}
-```
+Idenplane signs each payload with HMAC-SHA256 and sends `X-Webhook-Signature: sha256=<hex>` with `X-Webhook-Timestamp`. The [Webhooks guide](../guides/webhooks.mdx) shows exactly what is signed and how to verify it.
 
 ---
 
 ## Default Values Reference
 
-Here's a summary of all default values for reference:
+The defaults of a new realm:
 
 ```typescript
 const defaultRealmConfig = {
   // Security
-  registrationAllowed: false,
-  loginWithEmailAllowed: true,
-  duplicateEmailsAllowed: false,
-  resetPasswordAllowed: true,
-  editUsernameAllowed: false,
+  registrationAllowed: true,
   bruteForceEnabled: true, // new realms since 0.10.0
+  mfaRequired: false,
 
-  // Sessions & Tokens
+  // Sessions & Tokens (seconds)
   accessTokenLifespan: 300,
   refreshTokenLifespan: 1800,
   offlineTokenLifespan: 2592000,
   maxSessionsPerUser: 10,
 
-  // OAuth
-  oauth2DeviceCodeLifespan: '600s',
-  oauth2DevicePollingInterval: '5s',
+  // Password policy
+  passwordMinLength: 8,
 
   // Brute Force (new realms since 0.10.0)
   maxLoginFailures: 10,
@@ -821,47 +470,14 @@ const defaultRealmConfig = {
   // Events
   eventsEnabled: true, // new realms since 0.10.0
   adminEventsEnabled: true,
+  loginEventRetentionDays: 30,
+  adminEventRetentionDays: 90,
 
   // Themes
   loginTheme: 'idenplane',
   accountTheme: 'idenplane',
-  adminTheme: 'idenplane',
   emailTheme: 'idenplane',
 };
-```
-
----
-
-## Configuration via SDK
-
-### TypeScript SDK Configuration
-
-```typescript
-import { IdenplaneClient } from 'idenplane-sdk';
-
-// Realm configuration
-const client = new IdenplaneClient({
-  baseUrl: 'https://auth.example.com',
-  realm: 'my-realm',
-});
-
-// Get current realm config
-const realm = await client.realms.get('my-realm');
-
-// Update realm settings
-await client.realms.update('my-realm', {
-  registrationAllowed: true,
-  passwordPolicy: 'length(12) and digits(2)',
-});
-
-// Configure TOTP
-await client.realms.update('my-realm', {
-  totpPolicy: {
-    enabled: true,
-    digits: '6',
-    period: '30',
-  },
-});
 ```
 
 ---

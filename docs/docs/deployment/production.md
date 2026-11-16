@@ -23,7 +23,7 @@ Then set:
 | Setting | Value |
 |---|---|
 | `BASE_URL` | The public `https://` origin, for example `https://auth.example.com`. Issuer URLs, redirects and e-mail links are built from it. |
-| `TRUSTED_PROXIES` | The address or CIDR of your proxy or ingress only, never `*`. Client IPs for rate limits and audit logs come from `X-Forwarded-For`, and only these hops are trusted. |
+| `TRUSTED_PROXIES` | The address or CIDR of your proxy or ingress only. Client IPs for rate limits and audit logs come from `X-Forwarded-For`, and only these hops are trusted. `*` is acceptable only when the proxy is the one thing that can reach the app, as in the bundled TLS compose files. |
 
 **Check:** `curl https://auth.example.com/realms/master/.well-known/openid-configuration` shows `"issuer": "https://auth.example.com/realms/master"`.
 
@@ -191,5 +191,5 @@ Set the bucket's lifecycle rule to your retention, for example 30 daily copies a
 - [ ] The `admin` account uses MFA, and day-to-day administrators sign in with their own accounts.
 - [ ] `/console` and `/admin` are reachable only from your network or VPN, if your users don't need them.
 - [ ] `WEB_CONCURRENCY=auto`, or several replicas, if one CPU is not enough; see [environment variables](../configuration/environment-variables.md).
-- [ ] Metrics (`/metrics`) are scraped, and the readiness endpoint (`/health/ready`) is monitored, including its `redis.enabled` field when Redis is used.
+- [ ] Metrics (`/admin/metrics`, scraped with the `x-admin-api-key` header) are collected, and the readiness endpoint (`/health/ready`) is monitored. With Redis configured, its `redis` status should be `up`; `redis.enabled: false` means the server is not using Redis.
 - [ ] You know where the CHANGELOG's *Before you upgrade* notes are, and you take a backup before every upgrade ([Upgrading](upgrading.mdx)).

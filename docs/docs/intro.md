@@ -36,7 +36,7 @@ Idenplane fills that gap with a complete, self-hosted solution with Docker Compo
 | **Modern stack** | TypeScript, NestJS, React, PostgreSQL — no Java, no XML |
 | **Lightweight** | About 194 MiB of RAM at idle vs. 464 MiB for Keycloak, and with one worker per CPU faster than Keycloak on discovery, JWKS, client-credentials tokens and introspection; see [Benchmarks](./benchmarks.md) |
 | **Complete** | OAuth 2.0, OIDC, SAML 2.0, WebAuthn, MFA, LDAP, SSO, Organizations |
-| **Extensible** | Plugin system, custom auth flows, webhooks, and 7 client SDKs |
+| **Extensible** | Plugin system, custom auth flows, webhooks, nine SDKs and a CLI |
 | **Admin Console** | Full-featured React dashboard at `/console` |
 
 ## Features Overview
@@ -46,13 +46,13 @@ Idenplane fills that gap with a complete, self-hosted solution with Docker Compo
 | Feature | Description |
 |---------|-------------|
 | **OAuth 2.0 / OpenID Connect** | Authorization Code (with PKCE), Client Credentials, Password, Refresh Token grants |
-| **SAML 2.0** | Identity Provider and Service Provider with signed assertions |
+| **SAML 2.0** | Identity Provider for SAML service providers, with signed assertions. Idenplane is not a SAML service provider |
 | **WebAuthn / Passkeys** | FIDO2 passwordless authentication with biometric support |
 | **Multi-Factor Authentication** | TOTP-based 2FA with QR provisioning and recovery codes |
 | **Adaptive / Risk-Based Auth** | Impossible travel detection, IP reputation, device fingerprinting |
-| **Social Login** | Broker external OIDC identity providers |
+| **Social Login** | Broker external OpenID Connect and OAuth 2.0 identity providers (SAML identity providers cannot be brokered) |
 | **LDAP User Federation** | Sync users from LDAP/Active Directory |
-| **Custom Auth Flows** | Configurable multi-step authentication with branching |
+| **Custom Auth Flows (experimental)** | Configurable multi-step authentication with branching; runs at login when the server sets `AUTH_FLOW_RUNTIME_ENABLED=true` |
 | **Single Sign-On** | Browser-based SSO across all clients |
 
 ### Identity Management
@@ -60,7 +60,7 @@ Idenplane fills that gap with a complete, self-hosted solution with Docker Compo
 | Feature | Description |
 |---------|-------------|
 | **Multi-Tenancy (Realms)** | Isolated tenants with independent configuration |
-| **Organizations (B2B)** | Hierarchical organizations with member roles and SSO |
+| **Organizations (B2B)** | Organizations with member roles, SSO connections and verified domains |
 | **Role-Based Access Control** | Realm and client-level roles with user assignments |
 | **Policy-Based Authorization** | Attribute-Based Access Control (ABAC) |
 | **Groups** | Hierarchical groups with role inheritance |
@@ -73,7 +73,7 @@ Idenplane fills that gap with a complete, self-hosted solution with Docker Compo
 
 | Feature | Description |
 |---------|-------------|
-| **Prometheus Metrics** | `/metrics` endpoint for Grafana dashboards |
+| **Prometheus Metrics** | `/admin/metrics` endpoint for Grafana dashboards (needs admin credentials) |
 | **Health Checks** | `/health/live` and `/health/ready` |
 | **Structured Logging** | JSON logging with Pino |
 | **Rate Limiting** | Configurable throttling per endpoint/client/user |
@@ -134,7 +134,7 @@ graph TB
 | PKCE (RFC 7636) | S256 method |
 | OpenID Connect Core 1.0 | ID tokens, UserInfo, Discovery, Backchannel Logout |
 | Device Authorization (RFC 8628) | Full device code flow |
-| SAML 2.0 | SP-initiated SSO, signed assertions, metadata exchange |
+| SAML 2.0 | Identity Provider only: SP-initiated SSO, signed assertions, metadata exchange |
 | WebAuthn / FIDO2 | Credential registration, platform & roaming authenticators |
 | TOTP (RFC 6238) | MFA with QR provisioning |
 | Argon2id (RFC 9106) | Password hashing |
@@ -143,13 +143,13 @@ graph TB
 
 | Layer | Technology |
 |-------|-----------|
-| **Backend** | NestJS 11, TypeScript 5.7, Node.js 22 |
+| **Backend** | NestJS 12, TypeScript 6, Node.js 24 |
 | **Database** | PostgreSQL 16+ via Prisma 7 ORM |
-| **Admin UI** | React 19, Vite 7, Tailwind CSS 4, React Query |
+| **Admin UI** | React 19, Vite 8, Tailwind CSS 4, React Query |
 | **Auth Pages** | Handlebars SSR with per-realm theming |
 | **Security** | Argon2id (passwords), JOSE (JWTs), Helmet (headers) |
 | **Caching** | Redis with Sentinel HA support |
-| **SDKs** | TypeScript, React, Next.js, Angular, Vue, Android, iOS |
+| **SDKs** | TypeScript, React, Next.js, Angular, Vue, Android, iOS, Java, Python, Go |
 
 ## When to Use Idenplane
 
@@ -157,7 +157,7 @@ Idenplane is ideal when you need:
 
 - ✅ Self-hosted identity management (no vendor lock-in)
 - ✅ OAuth 2.0 / OIDC for modern applications
-- ✅ SAML 2.0 for enterprise integration
+- ✅ SAML 2.0 (as identity provider) for enterprise applications
 - ✅ WebAuthn / Passkeys for passwordless authentication
 - ✅ Multi-tenancy with isolated realms
 - ✅ B2B features like organizations and SSO
@@ -171,7 +171,7 @@ Idenplane is ideal when you need:
 <div style={{display: 'grid', gridTemplateColumns: 'repeat(2, 1fr)', gap: '1rem', marginTop: '2rem'}}>
 
 [**Quickstart**](/quickstart)
-Get up and running in 30 seconds with Docker
+Get up and running locally with Docker Compose
 
 [**Installation**](/getting-started/installation)
 Detailed installation instructions for all platforms

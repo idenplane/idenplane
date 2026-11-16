@@ -224,6 +224,11 @@ const sidebars: SidebarsConfig = {
         },
         {
           type: 'doc',
+          id: 'security/admin-mfa',
+          label: 'Admin Console MFA',
+        },
+        {
+          type: 'doc',
           id: 'security/threat-model',
           label: 'Threat Model',
         },

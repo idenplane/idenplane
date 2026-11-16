@@ -237,7 +237,9 @@ describe('MfaService', () => {
       expect((prisma.recoveryCode as any).deleteMany).toHaveBeenCalledWith({
         where: { userId: 'user-1' },
       });
-      expect((prisma.recoveryCode as any).create).toHaveBeenCalledTimes(10);
+      expect(
+        (prisma.recoveryCode as any).createMany.mock.calls[0][0].data,
+      ).toHaveLength(10);
     });
 
     it('keeps the existing recovery codes when another factor already issued them', async () => {
@@ -255,7 +257,7 @@ describe('MfaService', () => {
 
       expect(result).toEqual([]);
       expect((prisma.recoveryCode as any).deleteMany).not.toHaveBeenCalled();
-      expect((prisma.recoveryCode as any).create).not.toHaveBeenCalled();
+      expect((prisma.recoveryCode as any).createMany).not.toHaveBeenCalled();
     });
 
     it('should look up credential by userId_type compound key', async () => {
@@ -428,35 +430,42 @@ describe('MfaService', () => {
   // verifyRecoveryCode
   // ────────────────────────────────────────────────────────────────────
   describe('verifyRecoveryCode', () => {
+    const NEW_CODE = 'abcdef-ghijkl-mnopqr-stuvwx';
+
     it('should return false when no matching unused code is found', async () => {
       (prisma.recoveryCode as any).updateMany.mockResolvedValue({ count: 0 });
 
-      const result = await service.verifyRecoveryCode('user-1', 'ABCD1234');
+      const result = await service.verifyRecoveryCode('user-1', NEW_CODE);
 
       expect(result).toBe(false);
     });
 
-    it('should hash the code (lowercased, no spaces) before lookup', async () => {
-      await service.verifyRecoveryCode('user-1', '  AB CD  12 34  ');
+    it('hashes a new code normalised: lower case, without spaces or dashes', async () => {
+      await service.verifyRecoveryCode(
+        'user-1',
+        ' ABCDEF ghijkl-MNOPQR stuvwx ',
+      );
 
-      expect(crypto.sha256).toHaveBeenCalledWith('abcd1234');
+      expect(crypto.sha256).toHaveBeenCalledWith('abcdefghijklmnopqrstuvwx');
+      expect((prisma.recoveryCode as any).updateMany).toHaveBeenCalledWith({
+        where: {
+          userId: 'user-1',
+          codeHash: { in: ['rc2$hashed_abcdefghijklmnopqrstuvwx'] },
+          used: false,
+        },
+        data: { used: true },
+      });
     });
 
     it('claims the code with one conditional update (no read-then-write race)', async () => {
       (prisma.recoveryCode as any).updateMany.mockResolvedValue({ count: 1 });
 
-      const result = await service.verifyRecoveryCode('user-1', 'ABCD1234');
+      const result = await service.verifyRecoveryCode('user-1', NEW_CODE);
 
       expect(result).toBe(true);
-      expect((prisma.recoveryCode as any).updateMany).toHaveBeenCalledWith({
-        where: {
-          userId: 'user-1',
-          codeHash: 'hashed_abcd1234',
-          used: false,
-        },
-        data: { used: true },
-      });
+      expect((prisma.recoveryCode as any).updateMany).toHaveBeenCalledTimes(1);
       expect(prisma.recoveryCode.update).not.toHaveBeenCalled();
+      expect((prisma.recoveryCode as any).findMany).not.toHaveBeenCalled();
     });
 
     it('lets only one of two concurrent uses of the same code succeed', async () => {
@@ -465,17 +474,72 @@ describe('MfaService', () => {
         .mockResolvedValueOnce({ count: 0 });
 
       const results = await Promise.all([
-        service.verifyRecoveryCode('user-1', 'ABCD1234'),
-        service.verifyRecoveryCode('user-1', 'ABCD1234'),
+        service.verifyRecoveryCode('user-1', NEW_CODE),
+        service.verifyRecoveryCode('user-1', NEW_CODE),
       ]);
 
       expect(results.filter(Boolean)).toHaveLength(1);
     });
 
-    it('should handle uppercase input by lowering before hash', async () => {
-      await service.verifyRecoveryCode('user-1', 'XYZW9876');
+    it('still accepts a pre-0.11.0 code by its old hash', async () => {
+      (prisma.recoveryCode as any).updateMany.mockResolvedValue({ count: 1 });
 
-      expect(crypto.sha256).toHaveBeenCalledWith('xyzw9876');
+      const result = await service.verifyRecoveryCode(
+        'user-1',
+        ' AB CD 12 34 ',
+      );
+
+      expect(result).toBe(true);
+      expect((prisma.recoveryCode as any).updateMany).toHaveBeenCalledWith({
+        where: {
+          userId: 'user-1',
+          codeHash: { in: ['rc2$hashed_abcd1234', 'hashed_abcd1234'] },
+          used: false,
+        },
+        data: { used: true },
+      });
+    });
+
+    it('accepts a pre-0.11.0 code whose hash was rewrapped in Argon2id', async () => {
+      (crypto as any).verifyPassword = jest.fn(
+        async (hash: string, input: string) =>
+          hash === 'argon-of-hashed_abcd1234' && input === 'hashed_abcd1234',
+      );
+      (prisma.recoveryCode as any).updateMany
+        .mockResolvedValueOnce({ count: 0 })
+        .mockResolvedValueOnce({ count: 1 });
+      (prisma.recoveryCode as any).findMany.mockResolvedValue([
+        { id: 'rc-a', codeHash: 'rc1a$argon-of-other' },
+        { id: 'rc-b', codeHash: 'rc1a$argon-of-hashed_abcd1234' },
+      ]);
+
+      const result = await service.verifyRecoveryCode('user-1', 'ABCD1234');
+
+      expect(result).toBe(true);
+      expect((prisma.recoveryCode as any).updateMany).toHaveBeenLastCalledWith(
+        {
+          where: {
+            id: 'rc-b',
+            codeHash: 'rc1a$argon-of-hashed_abcd1234',
+            used: false,
+          },
+          data: { used: true },
+        },
+      );
+    });
+
+    it('spends no Argon2 work on input that is not in the old 8-hex shape', async () => {
+      (crypto as any).verifyPassword = jest.fn();
+
+      await service.verifyRecoveryCode('user-1', 'not-a-code-at-all');
+
+      expect((prisma.recoveryCode as any).findMany).not.toHaveBeenCalled();
+      expect((crypto as any).verifyPassword).not.toHaveBeenCalled();
+    });
+
+    it('refuses an empty code without a lookup', async () => {
+      expect(await service.verifyRecoveryCode('user-1', ' - ')).toBe(false);
+      expect((prisma.recoveryCode as any).updateMany).not.toHaveBeenCalled();
     });
   });
 
@@ -485,60 +549,64 @@ describe('MfaService', () => {
   describe('generateRecoveryCodes', () => {
     beforeEach(() => {
       (prisma.recoveryCode as any).deleteMany.mockResolvedValue({ count: 0 });
-      (prisma.recoveryCode as any).create.mockResolvedValue({} as any);
+      (prisma.recoveryCode as any).createMany.mockResolvedValue({ count: 10 });
     });
 
-    it('should delete existing recovery codes for the user', async () => {
+    it('replaces the existing codes in one transaction', async () => {
       await service.generateRecoveryCodes('user-1');
 
       expect((prisma.recoveryCode as any).deleteMany).toHaveBeenCalledWith({
         where: { userId: 'user-1' },
       });
+      expect(prisma.$transaction).toHaveBeenCalledTimes(1);
     });
 
-    it('should generate exactly 10 codes', async () => {
+    it('issues 10 distinct 120-bit codes in four groups of six base32 characters', async () => {
       const codes = await service.generateRecoveryCodes('user-1');
 
       expect(codes).toHaveLength(10);
-    });
-
-    it('should create a DB record for each code with hashed value', async () => {
-      await service.generateRecoveryCodes('user-1');
-
-      expect((prisma.recoveryCode as any).create).toHaveBeenCalledTimes(10);
-      // Each call should store the hashed lowercase version
-      expect((prisma.recoveryCode as any).create).toHaveBeenCalledWith({
-        data: {
-          userId: 'user-1',
-          codeHash: expect.stringContaining('hashed_'),
-        },
-      });
-    });
-
-    it('should call generateSecret(4) for each code', async () => {
-      await service.generateRecoveryCodes('user-1');
-
-      expect(crypto.generateSecret).toHaveBeenCalledTimes(10);
-      for (let i = 0; i < 10; i++) {
-        expect(crypto.generateSecret).toHaveBeenNthCalledWith(i + 1, 4);
+      expect(new Set(codes).size).toBe(10);
+      for (const code of codes) {
+        expect(code).toMatch(
+          /^[a-z2-7]{6}-[a-z2-7]{6}-[a-z2-7]{6}-[a-z2-7]{6}$/,
+        );
       }
     });
 
-    it('should return the plain-text uppercase codes', async () => {
+    it('stores rc2$ + SHA-256 of each normalised code, never the code', async () => {
       const codes = await service.generateRecoveryCodes('user-1');
 
-      // crypto.generateSecret returns 'ABCD1234', toUpperCase() = 'ABCD1234'
-      codes.forEach((code) => {
-        expect(code).toBe('ABCD1234');
-      });
+      const rows = (prisma.recoveryCode as any).createMany.mock.calls[0][0]
+        .data as Array<{ userId: string; codeHash: string }>;
+      expect(rows).toEqual(
+        codes.map((c) => ({
+          userId: 'user-1',
+          codeHash: `rc2$hashed_${c.replace(/-/g, '')}`,
+        })),
+      );
     });
+  });
 
-    it('should hash each code lowercased before storing', async () => {
-      await service.generateRecoveryCodes('user-1');
-
-      // 'ABCD1234'.toLowerCase() = 'abcd1234'
-      expect(crypto.sha256).toHaveBeenCalledWith('abcd1234');
-      expect(crypto.sha256).toHaveBeenCalledTimes(10);
+  // ────────────────────────────────────────────────────────────────────
+  // getRecoveryCodeStatus
+  // ────────────────────────────────────────────────────────────────────
+  describe('getRecoveryCodeStatus', () => {
+    it('counts unused codes and flags pre-0.11.0 ones', async () => {
+      (prisma.recoveryCode as any).findMany.mockResolvedValue([
+        { codeHash: 'rc2$' + 'a'.repeat(64) },
+        { codeHash: 'rc1a$$argon2id$v=19$...' },
+      ]);
+      expect(await service.getRecoveryCodeStatus('user-1')).toEqual({
+        remaining: 2,
+        oldFormat: true,
+      });
+      (prisma.recoveryCode as any).findMany.mockResolvedValue([
+        { codeHash: 'rc2$' + 'a'.repeat(64) },
+      ]);
+      expect(await service.getRecoveryCodeStatus('user-1')).toEqual({
+        remaining: 1,
+        oldFormat: false,
+      });
     });
   });
 

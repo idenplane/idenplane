@@ -57,8 +57,8 @@ In the console, open your realm and go to **Clients → Create**. The fields tha
 | Field | Value for a browser app |
 |---|---|
 | Client ID | Anything stable, e.g. `my-web-app` |
-| Public client | **Yes** — a browser cannot hold a secret |
-| Standard flow | **Enabled** — this is Authorization Code + PKCE |
+| Client type | **Public** — a browser cannot hold a secret |
+| Grant types | `authorization_code` (the default) — this is Authorization Code + PKCE |
 | Redirect URIs | Exactly where Idenplane may send users back, e.g. `http://localhost:5173/callback` |
 | Web origins | Your app's origin, for CORS |
 
@@ -75,8 +75,8 @@ curl -X POST http://localhost:3000/admin/realms/my-realm/clients \
   -d '{
     "clientId": "my-web-app",
     "name": "My Web App",
-    "publicClient": true,
-    "standardFlow": true,
+    "clientType": "PUBLIC",
+    "grantTypes": ["authorization_code", "refresh_token"],
     "redirectUris": ["http://localhost:5173/callback"],
     "webOrigins": ["http://localhost:5173"]
   }'
@@ -95,7 +95,7 @@ curl -X POST http://localhost:3000/admin/realms/my-realm/users \
   -d '{"username":"alice","email":"alice@example.com","enabled":true}'
 ```
 
-Set a password from the user's detail page, or via the credentials endpoint.
+Set a password from the user's detail page, or with `PUT /admin/realms/my-realm/users/{id}/reset-password` and a body of `{"password": "..."}`.
 
 ---
 
@@ -162,11 +162,12 @@ If you get that far, the realm, the client, the redirect URI and the token excha
 
 | Symptom | Usual cause |
 |---|---|
-| `invalid_redirect_uri` | The `redirectUri` in your config is not listed on the client, character for character |
+| `400 Invalid redirect_uri` | The `redirectUri` in your config is not listed on the client, character for character |
 | CORS error in the console | Your app's origin is missing from the client's **Web origins** |
-| `unauthorized_client` | The client is not public, or standard flow is disabled |
+| "Client does not support authorization_code grant" | `authorization_code` is missing from the client's grant types |
+| `unauthorized_client` at the token endpoint | The grant type you used is not in the client's grant types |
 | Login succeeds, `init()` still returns false | `storage` is `memory` (the default) and you reloaded — expected, see [Choosing a storage type](/guides/sdks/javascript-sdk#choosing-a-storage-type) |
-| `invalid_client` | The `clientId` does not exist in the realm you named |
+| "Client not found" | The `clientId` does not exist, or is disabled, in the realm you named |
 
 Realm **Events** in the console records failed authentication attempts with a reason, which is usually faster than guessing.
 

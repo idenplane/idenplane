@@ -22,6 +22,47 @@ const SELF_ROUTES = [
   'GET /admin/auth/me',
   'GET /admin/realms',
   'GET /admin/realms/themes',
+  // The signed-in admin's own console MFA (docs/docs/security/admin-mfa.md).
+  'GET /admin/auth/mfa',
+  'POST /admin/auth/mfa/totp',
+  'POST /admin/auth/mfa/totp/activate',
+  'DELETE /admin/auth/mfa/totp',
+  'POST /admin/auth/mfa/passkeys/options',
+  'POST /admin/auth/mfa/passkeys',
+  'DELETE /admin/auth/mfa/passkeys/:id',
+  'POST /admin/auth/mfa/recovery-codes',
+  'POST /admin/auth/step-up',
+  'POST /admin/auth/step-up/passkey/options',
+  'POST /admin/auth/step-up/passkey',
+];
+
+/**
+ * Routes a password-only admin token still reaches when the admin has a
+ * factor or MFA is required. Everything else is refused until the admin
+ * enrols or steps up. Adding one needs a deliberate review.
+ */
+const MFA_EXEMPT_ROUTES = {
+  always: [
+    'GET /admin/auth/me',
+    'GET /admin/auth/mfa',
+    'POST /admin/auth/step-up',
+    'POST /admin/auth/step-up/passkey/options',
+    'POST /admin/auth/step-up/passkey',
+  ],
+  'first-factor': [
+    'POST /admin/auth/mfa/totp',
+    'POST /admin/auth/mfa/totp/activate',
+    'POST /admin/auth/mfa/passkeys/options',
+    'POST /admin/auth/mfa/passkeys',
+  ],
+};
+
+/** Routes that need a second factor checked in the last 15 minutes. */
+const RECENT_MFA_ROUTES = [
+  'DELETE /admin/auth/mfa/totp',
+  'DELETE /admin/auth/mfa/passkeys/:id',
+  'POST /admin/auth/mfa/recovery-codes',
+  'DELETE /admin/admin-accounts/:userId/mfa',
 ];
 
 const key = (e: AdminRouteEntry) => `${e.method} ${e.paths.join(', ')}`;
@@ -58,6 +99,27 @@ describe('admin route authorization (fitness)', () => {
     expect(self).toEqual([...SELF_ROUTES].sort());
   });
 
+  it('keeps the routes a password-only token reaches to the reviewed list', () => {
+    for (const kind of ['always', 'first-factor'] as const) {
+      const exempt = routes
+        .filter((r) => r.policy.mfaExempt === kind)
+        .map(key)
+        .sort();
+      expect([kind, exempt]).toEqual([
+        kind,
+        [...MFA_EXEMPT_ROUTES[kind]].sort(),
+      ]);
+    }
+  });
+
+  it('asks for a recent MFA check on the reviewed sensitive routes', () => {
+    const recent = routes
+      .filter((r) => r.policy.recentMfa)
+      .map(key)
+      .sort();
+    expect(recent).toEqual([...RECENT_MFA_ROUTES].sort());
+  });
+
   it('treats server-wide routes as server-wide', () => {
     const scopeOf = (method: string, path: string) =>
       routes.find((r) => r.method === method && r.paths.includes(path))?.policy
@@ -75,6 +137,9 @@ describe('admin route authorization (fitness)', () => {
       ['POST', '/admin/migration/keycloak'],
       ['GET', '/setup-wizard/state'],
       ['PUT', '/admin/admin-accounts/:userId/realms'],
+      ['DELETE', '/admin/admin-accounts/:userId/mfa'],
+      ['GET', '/admin/admin-mfa/policy'],
+      ['PUT', '/admin/admin-mfa/policy'],
     ]) {
       expect([method, path, scopeOf(method, path)]).toEqual([
         method,

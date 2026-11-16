@@ -19,6 +19,8 @@ Go to `http://localhost:3000/console`. The login page offers two modes:
 
 **API key** — the value of `ADMIN_API_KEY`. Useful for automation, or for a break-glass login.
 
+**Second factor.** Once you have set up an authenticator app or a passkey (**Two-factor** in the header, or `/console/mfa`), the console asks for it after the password. A new install requires one for every admin: the first sign-in takes you straight to the setup page, and you save your recovery codes there. See [Admin console MFA](/security/admin-mfa).
+
 :::warning
 Change the initial admin password after the first sign-in, especially if it was generated and printed in the log.
 :::
@@ -70,6 +72,8 @@ What you see and can change depends on your admin role — see [Admin Roles](/ge
 | Section | What you manage |
 |---|---|
 | **Clients** | OAuth 2.0 clients — redirect URIs, flows, secrets |
+| **Proxy Applications** | Apps protected by forward authentication behind your proxy |
+| **SAML Providers** | SAML service providers: applications that sign in through Idenplane as their SAML identity provider |
 | **Client Scopes** | Reusable scope definitions mapped onto clients |
 | **Authorization** | Fine-grained authorization policies |
 | **Custom Attributes** | Extra user fields, and how they surface in tokens |
@@ -79,8 +83,7 @@ What you see and can change depends on your admin role — see [Admin Roles](/ge
 
 | Section | What you manage |
 |---|---|
-| **Identity Providers** | OIDC providers for social and enterprise login |
-| **SAML Providers** | SAML identity providers |
+| **Identity Providers** | OpenID Connect and OAuth 2.0 providers for social and enterprise login (SAML identity providers cannot be brokered) |
 | **User Federation** | External user stores |
 
 ### Sign-in behaviour
@@ -91,7 +94,8 @@ What you see and can change depends on your admin role — see [Admin Roles](/ge
 | **Registration Settings** | Whether self-registration is open, and on what terms |
 | **Registration Fields** | Which fields the registration form collects |
 | **Registration Approvals** | Queue of sign-ups awaiting an admin decision |
-| **Consent Categories** | Consent grouping, plus a statistics view |
+| **Consent Categories** | Consent grouping |
+| **Consent Statistics** | How users answered consent prompts |
 
 ### Operations
 
@@ -104,6 +108,7 @@ What you see and can change depends on your admin role — see [Admin Roles](/ge
 | **Risk Policies** | What the risk engine does about them |
 | **Webhooks** | Outbound event delivery |
 | **Theme Builder** | Per-realm branding for login, consent, account and email pages |
+| **Migration Wizard** | Import from Keycloak, Auth0, Zitadel or Authentik (super-admins only) |
 
 ---
 
@@ -123,7 +128,7 @@ The realm **Overview** page holds the settings that apply to the realm as a whol
 | **Magic Link** | Passwordless email sign-in |
 | **Locale** | Default locale |
 
-Most of these have an environment-variable equivalent listed in [Configuration](/getting-started/configuration). Realm settings win where both exist, since they are per-realm and the variables are per-instance.
+These settings have no environment-variable equivalents, with two exceptions: when a realm leaves its CAPTCHA secret or its SMS provider credentials empty, the server falls back to `RECAPTCHA_SECRET_KEY` / `HCAPTCHA_SECRET_KEY` and the SMS provider variables in [Environment Variables](/configuration/environment-variables).
 
 ---
 

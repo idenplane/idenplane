@@ -1,5 +1,6 @@
 import { CachedLookupsService } from '../cache/cached-lookups.service.js';
 import {
+  BadRequestException,
   Injectable,
   UnauthorizedException,
   Logger,
@@ -19,6 +20,40 @@ import { CryptoService } from '../crypto/crypto.service.js';
 import { JwkService } from '../crypto/jwk.service.js';
 import { RateLimitService } from '../rate-limit/rate-limit.service.js';
 import { BruteForceService } from '../brute-force/brute-force.service.js';
+import {
+  AdminMfaService,
+  type AdminMfaMethod,
+  type AdminMfaProof,
+} from '../admin-mfa/admin-mfa.service.js';
+import { ACR_PASSWORD } from '../authn-core/acr.js';
+import type { AuthenticatedAdmin } from '../admin-rbac/admin-principal.service.js';
+
+/** Lifetime of an admin token, in seconds. */
+export const ADMIN_TOKEN_TTL_SECONDS = 3600;
+
+/** A signed admin token, as the sign-in routes return it. */
+export interface AdminTokenResponse {
+  access_token: string;
+  token_type: string;
+  expires_in: number;
+}
+
+/** The first step's answer when the admin has a second factor. */
+export interface AdminMfaChallengeResponse {
+  mfa_required: true;
+  mfa_token: string;
+  methods: AdminMfaMethod[];
+}
+
+/** The password-only proof (no second factor). */
+const PASSWORD_ONLY: Pick<AdminMfaProof, 'amr' | 'acr'> = {
+  amr: ['pwd'],
+  acr: ACR_PASSWORD,
+};
+
+/** The message for a spent, expired or unknown `mfa_token`. */
+const CHALLENGE_GONE =
+  'The sign-in has expired or had too many attempts. Sign in again.';
 
 @Injectable()
 export class AdminAuthService implements OnModuleDestroy {
@@ -33,6 +68,7 @@ export class AdminAuthService implements OnModuleDestroy {
     private readonly jwkService: JwkService,
     private readonly rateLimitService: RateLimitService,
     private readonly bruteForceService: BruteForceService,
+    private readonly adminMfa: AdminMfaService,
     @Optional() private readonly certificates?: ClientCertificateSource,
   ) {
     this.cleanupInterval = setInterval(() => {
@@ -68,21 +104,13 @@ export class AdminAuthService implements OnModuleDestroy {
     }
   }
 
-  async login(
-    username: string,
-    password: string,
-    ip: string = 'unknown',
-  ): Promise<{
-    access_token: string;
-    token_type: string;
-    expires_in: number;
-    rateLimitHeaders: Record<string, string>;
-  }> {
-    // ── IP-based rate limiting ────────────────────────────────────────────────
-    // Applied before any DB work so it protects at network-edge cost.
+  /**
+   * The per-IP admin sign-in limit, shared by every step of a console
+   * sign-in. Applied before any database work.
+   */
+  async checkSignInRate(ip: string): Promise<Record<string, string>> {
     const rlResult = await this.rateLimitService.checkAdminIpLimit(ip);
     const rateLimitHeaders = this.rateLimitService.computeHeaders(rlResult);
-
     if (!rlResult.allowed) {
       throw new HttpException(
         {
@@ -93,6 +121,30 @@ export class AdminAuthService implements OnModuleDestroy {
         HttpStatus.TOO_MANY_REQUESTS,
       );
     }
+    return rateLimitHeaders;
+  }
+
+  /**
+   * First step of a console sign-in: the password.
+   *
+   * - The admin has a second factor: no token yet, but a one-time
+   *   `mfa_token` for the second step (`mfa_required`).
+   * - No factor: a password-only token, as before 0.11.0. When MFA is
+   *   required for every admin, `mfa_enrolment_required` is set, and the
+   *   token reaches only enrolment until a factor is set up.
+   */
+  async login(
+    username: string,
+    password: string,
+    ip: string = 'unknown',
+  ): Promise<
+    (
+      | (AdminTokenResponse & { mfa_enrolment_required?: true })
+      | AdminMfaChallengeResponse
+    ) & { rateLimitHeaders: Record<string, string> }
+  > {
+    // ── IP-based rate limiting ────────────────────────────────────────────────
+    const rateLimitHeaders = await this.checkSignInRate(ip);
 
     // ── Realm & user lookup ───────────────────────────────────────────────────
     const masterRealm = await this.prisma.realm.findUnique({
@@ -151,12 +203,190 @@ export class AdminAuthService implements OnModuleDestroy {
       throw new UnauthorizedException('User does not have admin access');
     }
 
+    // ── Second factor ─────────────────────────────────────────────────────────
+    // The password alone does not clear the failure counter when a second
+    // factor follows: only a completed sign-in does. Recovery codes alone
+    // (left over from a removed factor) are not a factor.
+    const methods = await this.adminMfa.methods(user.id);
+    if (methods.some((m) => m !== 'recovery')) {
+      const mfaToken = await this.adminMfa.createChallenge(user.id);
+      return {
+        mfa_required: true,
+        mfa_token: mfaToken,
+        methods,
+        rateLimitHeaders,
+      };
+    }
+
     // ── Reset brute-force counters on successful login ────────────────────────
     await this.bruteForceService.resetFailures(masterRealm.id, user.id);
 
-    // Sign admin JWT with master realm signing key
-    const signingKey = await this.lookups.activeSigningKey(masterRealm.id);
+    const issued = await this.issueAdminToken(user, roles, PASSWORD_ONLY);
+    const { required } = await this.adminMfa.policy();
+    return {
+      ...issued,
+      ...(required ? { mfa_enrolment_required: true as const } : {}),
+      rateLimitHeaders,
+    };
+  }
 
+  /**
+   * Second step of a console sign-in: a TOTP or recovery code for the
+   * `mfa_token` of the first. Each answer spends one of the challenge's
+   * attempts first; a wrong one counts against the account's brute-force
+   * limits.
+   */
+  async completeMfaLogin(
+    mfaToken: string,
+    method: 'totp' | 'recovery',
+    code: string,
+    ip: string,
+  ): Promise<
+    AdminTokenResponse & { rateLimitHeaders: Record<string, string> }
+  > {
+    const rateLimitHeaders = await this.checkSignInRate(ip);
+    const challenge = await this.adminMfa.spendChallengeAttempt(mfaToken);
+    if (!challenge) throw new UnauthorizedException(CHALLENGE_GONE);
+    const proof = await this.adminMfa.verifyCode(
+      challenge.userId,
+      method,
+      code,
+      ip,
+    );
+    if (!proof) throw new UnauthorizedException('Invalid code');
+    return {
+      ...(await this.finishMfaLogin(mfaToken, challenge.userId, proof)),
+      rateLimitHeaders,
+    };
+  }
+
+  /** WebAuthn request options for the second step of a sign-in. */
+  async mfaLoginPasskeyOptions(mfaToken: string, ip: string) {
+    await this.checkSignInRate(ip);
+    const challenge = await this.adminMfa.peekChallenge(mfaToken);
+    if (!challenge) throw new UnauthorizedException(CHALLENGE_GONE);
+    return this.adminMfa.passkeyOptions(
+      challenge.userId,
+      this.adminMfa.challengeBinding(mfaToken),
+    );
+  }
+
+  /** Second step of a sign-in with a passkey. */
+  async completeMfaLoginWithPasskey(
+    mfaToken: string,
+    response: Parameters<AdminMfaService['verifyPasskey']>[1],
+    ip: string,
+  ): Promise<
+    AdminTokenResponse & { rateLimitHeaders: Record<string, string> }
+  > {
+    const rateLimitHeaders = await this.checkSignInRate(ip);
+    const challenge = await this.adminMfa.spendChallengeAttempt(mfaToken);
+    if (!challenge) throw new UnauthorizedException(CHALLENGE_GONE);
+    const proof = await this.adminMfa.verifyPasskey(
+      challenge.userId,
+      response,
+      this.adminMfa.challengeBinding(mfaToken),
+      ip,
+    );
+    if (!proof) throw new UnauthorizedException('Passkey not accepted');
+    return {
+      ...(await this.finishMfaLogin(mfaToken, challenge.userId, proof)),
+      rateLimitHeaders,
+    };
+  }
+
+  private async finishMfaLogin(
+    mfaToken: string,
+    userId: string,
+    proof: AdminMfaProof,
+  ): Promise<AdminTokenResponse> {
+    // Two correct answers sent at once: only one completes the sign-in.
+    if (!(await this.adminMfa.consumeChallenge(mfaToken))) {
+      throw new UnauthorizedException('This sign-in was already completed');
+    }
+    const { user, roles, realmId } = await this.adminAccount(userId);
+    await this.bruteForceService.resetFailures(realmId, user.id);
+    return this.issueAdminToken(user, roles, proof);
+  }
+
+  /**
+   * Step-up inside a session: proves a factor again (`proofOf`) and returns
+   * a new token with a fresh `auth_time`, revoking the one it replaces.
+   */
+  async stepUp(
+    admin: AuthenticatedAdmin,
+    currentToken: string | undefined,
+    proofOf: (userId: string) => Promise<AdminMfaProof | null>,
+  ): Promise<AdminTokenResponse> {
+    if (admin.userId.startsWith('api-key:')) {
+      throw new BadRequestException(
+        'The admin API key has no second factor to verify',
+      );
+    }
+    const proof = await proofOf(admin.userId);
+    if (!proof) throw new BadRequestException('Invalid code');
+    return this.reissue(admin.userId, currentToken, proof);
+  }
+
+  /**
+   * A new token for an admin who has just proved `proof` (step-up, or the
+   * first factor at enrolment), revoking the token it replaces.
+   */
+  async reissue(
+    userId: string,
+    currentToken: string | undefined,
+    proof: Pick<AdminMfaProof, 'amr' | 'acr'>,
+  ): Promise<AdminTokenResponse> {
+    const { user, roles } = await this.adminAccount(userId);
+    const issued = await this.issueAdminToken(user, roles, proof);
+    if (currentToken) await this.revokeToken(currentToken);
+    return issued;
+  }
+
+  /** An enabled master realm admin, with the roles login reads. */
+  private async adminAccount(userId: string) {
+    const masterRealm = await this.prisma.realm.findUnique({
+      where: { name: 'master' },
+    });
+    if (!masterRealm) {
+      throw new UnauthorizedException('Admin system not initialized');
+    }
+    const user = await this.prisma.user.findUnique({ where: { id: userId } });
+    if (!user || !user.enabled || user.realmId !== masterRealm.id) {
+      throw new UnauthorizedException('Invalid credentials');
+    }
+    const userRoles = await this.prisma.userRole.findMany({
+      where: { userId: user.id },
+      include: { role: true },
+    });
+    const roles = userRoles.map((ur) => ur.role.name);
+    if (
+      !roles.some((r) =>
+        ['super-admin', 'realm-admin', 'view-only'].includes(r),
+      )
+    ) {
+      throw new UnauthorizedException('User does not have admin access');
+    }
+    return { user, roles, realmId: masterRealm.id };
+  }
+
+  /**
+   * Signs an admin token with the master realm key. `amr`, `acr` and
+   * `auth_time` record how and when the admin authenticated
+   * (docs/docs/security/admin-mfa.md).
+   */
+  async issueAdminToken(
+    user: { id: string; username: string },
+    roles: string[],
+    proof: Pick<AdminMfaProof, 'amr' | 'acr'>,
+  ): Promise<AdminTokenResponse> {
+    const masterRealm = await this.prisma.realm.findUnique({
+      where: { name: 'master' },
+    });
+    if (!masterRealm) {
+      throw new UnauthorizedException('Admin system not initialized');
+    }
+    const signingKey = await this.lookups.activeSigningKey(masterRealm.id);
     if (!signingKey) {
       throw new Error('No signing key found for master realm');
     }
@@ -169,17 +399,19 @@ export class AdminAuthService implements OnModuleDestroy {
         typ: 'admin',
         realm_access: { roles },
         preferred_username: user.username,
+        amr: proof.amr,
+        acr: proof.acr,
+        auth_time: Math.floor(Date.now() / 1000),
       },
       signingKey.privateKey,
       signingKey.kid,
-      3600, // 1 hour
+      ADMIN_TOKEN_TTL_SECONDS,
     );
 
     return {
       access_token: token,
       token_type: 'Bearer',
-      expires_in: 3600,
-      rateLimitHeaders,
+      expires_in: ADMIN_TOKEN_TTL_SECONDS,
     };
   }
 
@@ -286,7 +518,7 @@ export class AdminAuthService implements OnModuleDestroy {
   async validateAdminToken(
     token: string,
     request?: CertificateRequest,
-  ): Promise<{ userId: string; roles: string[] }> {
+  ): Promise<AuthenticatedAdmin> {
     const masterRealm = await this.prisma.realm.findUnique({
       where: { name: 'master' },
     });
@@ -353,7 +585,24 @@ export class AdminAuthService implements OnModuleDestroy {
       { roles?: string[] } | undefined;
     const roles = realmAccess?.roles ?? [];
 
-    return { userId: payload.sub as string, roles };
+    // How the admin authenticated. Missing claims (a token from before
+    // 0.11.0, or an API-key session) count as no second factor.
+    const acr = typeof payload['acr'] === 'string' ? payload['acr'] : undefined;
+    const amr = Array.isArray(payload['amr'])
+      ? payload['amr'].filter((m): m is string => typeof m === 'string')
+      : undefined;
+    const authTime =
+      typeof payload['auth_time'] === 'number'
+        ? payload['auth_time']
+        : undefined;
+
+    return {
+      userId: payload.sub as string,
+      roles,
+      ...(acr ? { acr } : {}),
+      ...(amr ? { amr } : {}),
+      ...(authTime !== undefined ? { authTime } : {}),
+    };
   }
 
   hasRole(roles: string[], required: string): boolean {

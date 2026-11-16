@@ -9,7 +9,7 @@ description: Validate tokens, run the Authorization Code + PKCE flow, and integr
 The Idenplane Java SDK is a multi-module Maven project built around `idenplane-java-core`: OIDC discovery, JWKS-backed RS256 token validation, the Authorization Code + PKCE flow, token refresh, userinfo, and logout — with framework integrations layered on top for Spring Boot, Jakarta EE, and reactive (Project Reactor) applications.
 
 :::note
-These modules aren't published to Maven Central yet. The coordinates below are what they'll resolve to once released — check the [GitHub releases page](https://github.com/idenplane/idenplane/releases) before using them in a real project.
+Only `idenplane-java-core` is published to Maven Central, as `com.idenplane:idenplane-java-core`. The Spring Boot, Jakarta EE and Reactor modules are not published yet: build and install them from [`packages/idenplane-java`](https://github.com/idenplane/idenplane/tree/main/packages/idenplane-java) with `./mvnw install` to use them.
 :::
 
 | Module | Purpose |
@@ -34,7 +34,7 @@ These modules aren't published to Maven Central yet. The coordinates below are w
 <dependency>
     <groupId>com.idenplane</groupId>
     <artifactId>idenplane-java-core</artifactId>
-    <version>1.0.0</version>
+    <version>1.1.0</version>
 </dependency>
 ```
 
@@ -116,7 +116,7 @@ String logoutUrl = client.buildLogoutUrl(tokens.getIdToken(), postLogoutRedirect
 
 ## Spring Boot integration
 
-Add `idenplane-java-spring` and configure the realm:
+Add `idenplane-java-spring` (installed locally with `./mvnw install`, see the note above) and configure the realm:
 
 ```yaml
 # application.yml

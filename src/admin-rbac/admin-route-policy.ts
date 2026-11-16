@@ -1,8 +1,11 @@
 import { PATH_METADATA } from '@nestjs/common/constants';
 import {
+  ADMIN_MFA_EXEMPT_KEY,
   ADMIN_REALM_PARAM_KEY,
   ADMIN_SCOPE_KEY,
   ADMIN_SENSITIVE_READ_KEY,
+  RECENT_ADMIN_MFA_KEY,
+  type AdminMfaExemption,
   type AdminRealmLookup,
   type AdminRealmParamOptions,
   type AdminScopeKind,
@@ -27,6 +30,10 @@ export interface AdminRoutePolicy {
   sensitiveRead: boolean;
   /** Every `@RequireAdminRoles` on the handler and on the controller. */
   requiredRoles: AdminRolesOptions[];
+  /** `@AdminMfaExempt(...)`: reachable with a password-only admin token. */
+  mfaExempt: AdminMfaExemption | null;
+  /** `@RequireRecentAdminMfa()`: needs a second factor checked recently. */
+  recentMfa: boolean;
   /**
    * Set when the policy could not be worked out and fell back to `global`
    * (fail closed). The fitness test fails on any route that has one.
@@ -129,9 +136,28 @@ export function resolveAdminRoutePolicy(
   const sensitiveRead =
     override<boolean>(ADMIN_SENSITIVE_READ_KEY, handler, controller) === true;
   const requiredRoles = requiredRolesOf(handler, controller);
-  const base = { sensitiveRead, requiredRoles };
+  const exempt = override<AdminMfaExemption>(
+    ADMIN_MFA_EXEMPT_KEY,
+    handler,
+    controller,
+  );
+  const mfaExempt =
+    exempt === 'always' || exempt === 'first-factor' ? exempt : null;
+  const recentMfa =
+    override<boolean>(RECENT_ADMIN_MFA_KEY, handler, controller) === true;
+  const base = { sensitiveRead, requiredRoles, mfaExempt, recentMfa };
 
   const scope = override<AdminScopeKind>(ADMIN_SCOPE_KEY, handler, controller);
+  if (exempt !== undefined && (mfaExempt === null || scope !== 'self')) {
+    // An MFA exemption on anything but an own-account route would let a
+    // password-only token reach it: refuse it outright (fail closed).
+    return {
+      ...base,
+      mfaExempt: null,
+      scope: GLOBAL,
+      problem: `@AdminMfaExempt(${String(exempt)}) is only allowed on @AdminScope('self') routes`,
+    };
+  }
   if (scope === 'self') return { ...base, scope: { kind: 'self' } };
   if (scope === 'global') return { ...base, scope: GLOBAL };
   if (scope !== undefined) {

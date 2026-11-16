@@ -53,28 +53,16 @@ Idenplane defaults to DENY when no policy matches. This ensures secure access co
 
 ## Roles and Permissions
 
-Roles are the foundation of RBAC in Idenplane. Users can be assigned multiple roles, and roles can have hierarchical relationships.
-
-### Role Hierarchy
-
-Roles can inherit permissions from other roles:
-
-```mermaid
-graph TB
-    A[admin] --> B[moderator]
-    A --> C[user]
-    B --> D[guest]
-    C --> D
-```
+Roles are the foundation of RBAC in Idenplane. Users can be assigned multiple roles, directly or through groups. Roles do not inherit from each other: there are no composite roles.
 
 ### Assigning Roles to Users
 
 ```bash
 # Assign role to user via Admin API
-curl -X POST "http://localhost:3000/admin/realms/my-realm/users/user-123/roles" \
+curl -X POST "http://localhost:3000/admin/realms/my-realm/users/user-123/role-mappings/realm" \
   -H "Authorization: Bearer ${ADMIN_TOKEN}" \
   -H "Content-Type: application/json" \
-  -d '["admin", "moderator"]'
+  -d '{"roleNames": ["admin", "moderator"]}'
 ```
 
 ### Role-Based Permissions
@@ -266,6 +254,7 @@ curl -X POST "http://localhost:3000/admin/realms/my-realm/policies" \
   "name": "internal-network-only",
   "description": "Allow access only from internal network",
   "effect": "ALLOW",
+  "logic": "OR",
   "environmentConditions": [
     { "field": "environment.ip", "operator": "ipInRange", "value": "10.0.0.0/8" },
     { "field": "environment.ip", "operator": "ipInRange", "value": "172.16.0.0/12" },
@@ -274,24 +263,10 @@ curl -X POST "http://localhost:3000/admin/realms/my-realm/policies" \
 }
 ```
 
-#### Owner-Only Access
+`logic` defaults to `AND`, which would require the address to be in all three ranges at once. `ipInRange` handles IPv4 only.
 
-```json
-{
-  "name": "owner-access-only",
-  "description": "Allow resource owners full access",
-  "effect": "ALLOW",
-  "resourceConditions": [
-    { "field": "resource.ownerId", "operator": "equals", "value": "" }
-  ],
-  "actionConditions": [
-    { "field": "action", "operator": "in", "value": ["read", "write", "delete"] }
-  ]
-}
-```
-
-:::note Missing Subject ID
-When creating a policy for owner-only access, leave `subject.userId` conditions empty and use the evaluation context to dynamically match the owner.
+:::note Owner-only access
+Conditions compare a field with a fixed `value`; a condition cannot compare two fields of the request, such as `resource.ownerId` with `subject.userId`. Check ownership in your application.
 :::
 
 #### Group-Based Access
@@ -389,10 +364,14 @@ curl -X POST "http://localhost:3000/admin/realms/my-realm/policies/evaluate" \
 {
   "decision": "DENY",
   "reason": "No matching policy — default deny",
-  "matchedPolicies": [],
+  "matchedPolicies": [
+    { "policyName": "allow-engineering", "effect": "ALLOW", "matched": false, "...": "..." }
+  ],
   "evaluatedCount": 5
 }
 ```
+
+`matchedPolicies` lists every evaluated policy, with `matched` true or false.
 
 ---
 
@@ -472,20 +451,19 @@ When `clientId` is specified in the evaluation request, only policies that are e
 - Globally scoped (`clientId: null`)
 - Scoped to the specific client
 
-...will be evaluated.
+...will be evaluated. Without `clientId` in the request, every enabled policy is evaluated, including client-scoped ones.
 
 ---
 
 ## Policy Priority
 
-Higher priority policies are evaluated first. Use priorities to control evaluation order:
+Policies are evaluated in priority order, highest first. Priority does not change the decision: any matching DENY wins over every ALLOW, whatever their priorities. It decides the order of `matchedPolicies` and which ALLOW policy the `reason` names. Priorities are integers from `0` up.
 
 | Priority | Use Case |
 |----------|----------|
-| 100+ | Critical policies (Deny overrides) |
+| 100+ | Critical policies |
 | 50-99 | High-priority policies |
 | 0-49 | Normal policies |
-| Negative | Low-priority catch-all policies |
 
 ### Priority Example
 
@@ -498,8 +476,8 @@ Higher priority policies are evaluated first. Use priorities to control evaluati
 }
 ```
 
-:::warning Priority Conflicts
-Two DENY policies at the same priority level: the first one to match wins. Always use distinct priorities for critical policies.
+:::note
+When several DENY policies match, the decision is DENY either way; the `reason` names the first in priority order.
 :::
 
 ---
@@ -574,133 +552,21 @@ curl -X PUT "http://localhost:3000/admin/realms/my-realm/policies/policy-uuid-12
 
 ---
 
-## SDK Integration
+## Evaluating from Your Application
 
-### Using the Authorization Service
+None of the SDKs has an authorization API. Policies are evaluated by the admin API endpoint `POST /admin/realms/{realm}/policies/evaluate`, which needs admin credentials, so call it from a trusted backend, never from a browser or mobile app:
 
-import Tabs from '@theme/Tabs';
-import TabItem from '@theme/TabItem';
-
-<Tabs>
-<TabItem value="typescript" label="TypeScript">
-
-```typescript
-import { IdenplaneClient, PolicyEvaluationResult } from 'idenplane-sdk';
-
-const client = new IdenplaneClient({
-  url: 'http://localhost:3000',
-  realm: 'my-realm',
-  clientId: 'my-app',
-});
-
-async function checkAccess(): Promise<boolean> {
-  const result: PolicyEvaluationResult = await client.authorization.evaluate({
-    subject: {
-      userId: 'user-uuid-123',
-      roles: ['admin', 'user'],
-      groups: ['engineering'],
-      attributes: { department: 'engineering' },
-    },
-    resource: {
-      type: 'report',
-      id: 'report-uuid-456',
-      attributes: { classification: 'internal' },
-    },
-    action: 'read',
-    environment: {
-      ip: '10.1.2.3',
-    },
-  });
-
-  return result.decision === 'ALLOW';
-}
-
-async function testPolicy(): Promise<void> {
-  const result = await client.authorization.testPolicy(
-    'policy-uuid-123',
-    {
-      subject: { roles: ['admin'] },
-      resource: { type: 'report' },
-      action: 'read',
-    }
-  );
-
-  console.log(`Policy matched: ${result.matched}`);
-  console.log(`Effect: ${result.effect}`);
-  console.log('Condition results:', result.detail.conditionResults);
-}
+```bash
+curl -X POST "http://localhost:3000/admin/realms/my-realm/policies/evaluate" \
+  -H "x-admin-api-key: $ADMIN_API_KEY" \
+  -H "Content-Type: application/json" \
+  -d '{
+    "subject": { "userId": "user-uuid-123", "roles": ["admin", "user"] },
+    "resource": { "type": "report", "id": "report-uuid-456" },
+    "action": "read",
+    "environment": { "ip": "10.1.2.3" }
+  }'
 ```
-
-</TabItem>
-<TabItem value="python" label="Python">
-
-```python
-from idenplane import IdenplaneClient
-
-client = IdenplaneClient(
-    url='http://localhost:3000',
-    realm='my-realm',
-    client_id='my-app',
-)
-
-async def check_access():
-    result = await client.authorization.evaluate({
-        'subject': {
-            'user_id': 'user-uuid-123',
-            'roles': ['admin', 'user'],
-            'groups': ['engineering'],
-            'attributes': {'department': 'engineering'}
-        },
-        'resource': {
-            'type': 'report',
-            'id': 'report-uuid-456',
-            'attributes': {'classification': 'internal'}
-        },
-        'action': 'read',
-        'environment': {
-            'ip': '10.1.2.3'
-        }
-    })
-
-    return result['decision'] == 'ALLOW'
-```
-
-</TabItem>
-<TabItem value="kotlin" label="Kotlin">
-
-```kotlin
-import com.idenplane.sdk.IdenplaneClient
-import com.idenplane.sdk.authorization.*
-
-val client = IdenplaneClient(
-    url = "http://localhost:3000",
-    realm = "my-realm",
-    clientId = "my-app"
-)
-
-suspend fun checkAccess(): Boolean {
-    val result = client.authorization.evaluate(
-        EvaluationRequest(
-            subject = Subject(
-                userId = "user-uuid-123",
-                roles = listOf("admin", "user"),
-                groups = listOf("engineering")
-            ),
-            resource = Resource(
-                type = "report",
-                id = "report-uuid-456"
-            ),
-            action = "read",
-            environment = Environment(ip = "10.1.2.3")
-        )
-    )
-
-    return result.decision == Decision.ALLOW
-}
-```
-
-</TabItem>
-</Tabs>
 
 ---
 
@@ -720,12 +586,12 @@ suspend fun checkAccess(): Boolean {
    }
    ```
 
-3. **Set appropriate priorities**: Higher priority for more specific policies
+3. **Set priorities for readability**: priority orders evaluation and the `reason` text; it never lets an ALLOW override a DENY
    ```json
    {
      "name": "specific-allow",
      "priority": 50,
-     "description": "Specific allows should override general allows"
+     "description": "Listed before general allows in evaluation results"
    }
    ```
 
@@ -744,8 +610,8 @@ suspend fun checkAccess(): Boolean {
 
 ### Security Considerations
 
-:::warning DENY-Override Priority
-Always set DENY policies with higher priority than ALLOW policies to ensure explicit denials take precedence.
+:::warning Check operator names
+Operators are not validated when a policy is saved. A condition with a misspelled operator never passes, so a DENY policy with a typo silently never matches. Test every DENY policy with the test endpoint.
 :::
 
 ### Testing Policies
@@ -768,7 +634,7 @@ Always set DENY policies with higher priority than ALLOW policies to ensure expl
 
 | Error | Cause | Solution |
 |-------|-------|----------|
-| 400 Bad Request | Invalid condition format | Check condition JSON structure |
+| 400 Bad Request | Invalid request body (for example, conditions not an array) | Check the JSON structure |
 | 404 Not Found | Policy ID doesn't exist | Verify policy ID |
 | 409 Conflict | Policy name already exists | Use unique names |
 | 401 Unauthorized | Invalid admin API key | Check Authorization header |
@@ -778,13 +644,9 @@ Always set DENY policies with higher priority than ALLOW policies to ensure expl
 ```json
 {
   "statusCode": 400,
-  "message": "Validation failed",
-  "errors": [
-    {
-      "field": "subjectConditions",
-      "message": "Invalid condition operator 'invalid-operator'"
-    }
-  ]
+  "message": ["subjectConditions must be an array"],
+  "error": "Bad Request",
+  "timestamp": "2026-11-16T10:00:00.000Z"
 }
 ```
 

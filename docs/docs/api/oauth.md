@@ -26,10 +26,10 @@ The authorization endpoint initiates the OAuth 2.0 authorization code flow. It r
 | `scope` | No | Space-separated list of scopes (default: "openid") |
 | `state` | Recommended | CSRF protection token |
 | `nonce` | Conditional | Required for implicit/hybrid flows, recommended for code |
-| `code_challenge` | Conditional | Required for PKCE (S256 method) |
+| `code_challenge` | Conditional | PKCE challenge; required for public clients |
 | `code_challenge_method` | Conditional | Must be "S256" when code_challenge provided |
-| `prompt` | No | "none", "login", "consent", or "select_account" |
-| `acr_values` | No | Requested ACR (e.g., "urn:mace:incommon:iap:silver") |
+| `prompt` | No | "none", "login" or "consent" |
+| `acr_values` | No | Requested ACR: `urn:idenplane:acr:password`, `urn:idenplane:acr:mfa` or `urn:idenplane:acr:webauthn` |
 | `login_hint` | No | Username hint for pre-filling login form |
 
 ### Authorization Code Flow Example
@@ -53,7 +53,8 @@ https://localhost:3000/realms/master/protocol/openid-connect/auth \
 | `none` | Do not display authentication UI; error if not authenticated |
 | `login` | Force re-authentication even with existing session |
 | `consent` | Force consent prompt even if previously granted |
-| `select_account` | Allow user to select from available accounts |
+
+`select_account` is not supported.
 
 ### Response
 
@@ -140,18 +141,12 @@ GET /realms/master/protocol/openid-connect/logout \
   &state=xyz789
 ```
 
-### Front-Channel Logout
-
-```
-GET /realms/:realmName/protocol/openid-connect/logout/frontchannel
-```
-
-Front-channel logout iframe forRP-initiated logout (OIDC Front-Channel Logout spec).
+Front-channel logout is not supported; logout is propagated to clients over the back channel (see below).
 
 ## OpenID Connect Discovery
 
 ```
-GET /realms/:realmName/protocol/openid-connect/.well-known/openid-configuration
+GET /realms/:realmName/.well-known/openid-configuration
 ```
 
 Returns the OpenID Connect discovery document with endpoint locations and capabilities.
@@ -165,25 +160,31 @@ Returns the OpenID Connect discovery document with endpoint locations and capabi
   "token_endpoint": "http://localhost:3000/realms/master/protocol/openid-connect/token",
   "userinfo_endpoint": "http://localhost:3000/realms/master/protocol/openid-connect/userinfo",
   "jwks_uri": "http://localhost:3000/realms/master/protocol/openid-connect/certs",
-  "revocation_endpoint": "http://localhost:3000/realms/master/protocol/openid-connect/token/revoke",
-  "introspection_endpoint": "http://localhost:3000/realms/master/protocol/openoid-connect/token/introspect",
+  "introspection_endpoint": "http://localhost:3000/realms/master/protocol/openid-connect/token/introspect",
+  "revocation_endpoint": "http://localhost:3000/realms/master/protocol/openid-connect/revoke",
   "end_session_endpoint": "http://localhost:3000/realms/master/protocol/openid-connect/logout",
-  "frontchannel_logout_supported": true,
-  "frontchannel_logout_session_supported": true,
-  "scopes_supported": ["openid", "profile", "email", "address", "phone"],
-  "claims_supported": ["sub", "iss", "aud", "exp", "iat", "name", "preferred_username", "given_name", "family_name", "email", "email_verified"],
   "response_types_supported": ["code"],
-  "grant_types_supported": ["authorization_code", "client_credentials", "refresh_token", "password"],
+  "device_authorization_endpoint": "http://localhost:3000/realms/master/protocol/openid-connect/auth/device",
+  "grant_types_supported": ["authorization_code", "client_credentials", "password", "refresh_token", "urn:ietf:params:oauth:grant-type:device_code"],
   "subject_types_supported": ["public"],
-  "id_token_signing_alg_values_supported": ["RS256", "RS384", "RS512"],
-  "code_challenge_method_supported": ["S256"],
+  "id_token_signing_alg_values_supported": ["RS256"],
+  "scopes_supported": ["openid", "profile", "email", "roles", "offline_access"],
   "request_parameter_supported": false,
   "request_uri_parameter_supported": false,
-  "require_request_uri_registration": false,
   "token_endpoint_auth_methods_supported": ["client_secret_post", "client_secret_basic", "none"],
-  "device_authorization_endpoint": "http://localhost:3000/realms/master/protocol/openid-connect/auth/device"
+  "claims_supported": ["sub", "iss", "aud", "exp", "iat", "auth_time", "nonce", "at_hash", "acr", "amr", "azp", "name", "email", "email_verified", "preferred_username", "given_name", "family_name", "updated_at", "realm_access", "resource_access"],
+  "code_challenge_methods_supported": ["S256"],
+  "backchannel_logout_supported": true,
+  "backchannel_logout_session_supported": true,
+  "acr_values_supported": ["urn:idenplane:acr:password", "urn:idenplane:acr:mfa", "urn:idenplane:acr:webauthn"],
+  "step_up_challenge_endpoint": "http://localhost:3000/realms/master/step-up/challenge",
+  "step_up_verify_endpoint": "http://localhost:3000/realms/master/step-up/verify",
+  "webauthn_registration_endpoint": "http://localhost:3000/realms/master/webauthn/register/options",
+  "webauthn_authentication_endpoint": "http://localhost:3000/realms/master/webauthn/authenticate/options"
 }
 ```
+
+With mTLS client authentication enabled the document also lists the `tls_client_auth` methods and `mtls_endpoint_aliases`.
 
 ## JWKS Endpoint
 
@@ -238,7 +239,10 @@ Returns HTTP 200 with empty body on success. Returns HTTP 400 for invalid logout
 | `/token` | POST | Token endpoint |
 | `/userinfo` | GET | UserInfo endpoint |
 | `/logout` | GET/POST | Logout endpoint |
-| `/logout/frontchannel` | GET | Front-channel logout |
 | `/logout/backchannel` | POST | Back-channel logout |
-| `/.well-known/openid-configuration` | GET | Discovery document |
+| `/revoke` | POST | Token revocation |
+| `/token/introspect` | POST | Token introspection |
+| `/auth/device` | POST | Device authorization |
 | `/certs` | GET | JSON Web Key Set |
+
+Paths are relative to `/realms/:realmName/protocol/openid-connect`. The discovery document is at `/realms/:realmName/.well-known/openid-configuration`.

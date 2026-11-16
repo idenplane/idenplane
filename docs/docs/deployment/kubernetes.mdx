@@ -26,12 +26,8 @@ Idenplane provides a Helm chart for production-grade Kubernetes deployments. Thi
 The fastest way to deploy Idenplane on Kubernetes:
 
 ```bash
-# Add the Idenplane Helm repository (if published)
-helm repo add idenplane https://charts.idenplane.com
-helm repo update
-
-# Or install from local chart
-helm repo add file://./helm/idenplane
+# The chart is not published to a Helm repository; install it from a checkout
+git clone https://github.com/idenplane/idenplane.git && cd idenplane
 
 # Create namespace
 kubectl create namespace idenplane
@@ -135,7 +131,7 @@ affinity:
 
 ### 2. Secrets
 
-The chart keeps the application keys in the `<release>-idenplane-keys` Secret: `ADMIN_API_KEY`, `ADMIN_PASSWORD` (the initial `admin` user), `WEBHOOK_SECRET_KEY` and `WEBHOOK_ENCRYPTION_SALT`. A value you set under `secrets:` is used as is. An empty one is generated on the first install and read back from the cluster on every upgrade, so it never changes. The Secret has `helm.sh/resource-policy: keep`, so `helm uninstall` leaves it in place.
+The chart keeps the application keys in the `<fullname>-keys` Secret (`idenplane-keys` for a release named `idenplane`): `ADMIN_API_KEY`, `ADMIN_PASSWORD` (the initial `admin` user), `WEBHOOK_SECRET_KEY` and `WEBHOOK_ENCRYPTION_SALT`. A value you set under `secrets:` is used as is. An empty one is generated on the first install and read back from the cluster on every upgrade, so it never changes. The Secret has `helm.sh/resource-policy: keep`, so `helm uninstall` leaves it in place.
 
 Back the Secret up. The two webhook values encrypt stored webhook secrets, and losing them makes those secrets unreadable.
 
@@ -400,19 +396,32 @@ spec:
     - from:
         - namespaceSelector:
             matchLabels:
-              name: ingress-nginx
+              kubernetes.io/metadata.name: ingress-nginx
       ports:
         - protocol: TCP
           port: 3000
   egress:
+    # The bundled PostgreSQL (add a rule for Redis on 6379 if you use it)
     - to:
         - podSelector:
             matchLabels:
-              app.kubernetes.io/name: postgresql
+              app.kubernetes.io/component: postgresql
       ports:
         - protocol: TCP
           port: 5432
+    # DNS, or the app cannot resolve the database service
+    - to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+      ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
 ```
+
+Add egress rules for anything else the server calls: SMTP, external identity providers, webhook targets, CAPTCHA and SMS providers. The chart's `networkPolicy` value is not rendered by any template, so write the policy yourself as above.
 
 ---
 
@@ -429,7 +438,7 @@ helm upgrade idenplane ./helm/idenplane \
 # Upgrade with new values
 helm upgrade idenplane ./helm/idenplane \
   --namespace idenplane \
-  --set image.tag="1.2.3"
+  --set image.tag="0.10.1"
 ```
 
 ### Rolling Back
@@ -451,9 +460,11 @@ helm rollback idenplane --revision 3 --namespace idenplane
 # Remove the release (preserves data with PVCs)
 helm uninstall idenplane --namespace idenplane
 
-# Remove with PVCs (deletes data!)
+# Remove with data (deletes the database!)
 helm uninstall idenplane --namespace idenplane
-kubectl delete pvc -n idenplane -l app.kubernetes.io/name=idenplane
+kubectl delete pvc -n idenplane -l app.kubernetes.io/instance=idenplane
+# The chart's Secrets have helm.sh/resource-policy: keep; delete them by hand
+kubectl delete secret -n idenplane -l app.kubernetes.io/instance=idenplane
 ```
 
 ---
@@ -552,7 +563,7 @@ kubectl port-forward -n idenplane svc/idenplane 3000:3000
 
 1. Verify PostgreSQL is running:
    ```bash
-   kubectl get pods -n idenplane -l app.kubernetes.io/name=postgresql
+   kubectl get pods -n idenplane -l app.kubernetes.io/component=postgresql
    ```
 
 2. Check connection string:
@@ -562,7 +573,7 @@ kubectl port-forward -n idenplane svc/idenplane 3000:3000
 
 3. Test connectivity:
    ```bash
-   kubectl exec -it -n idenplane deploy/idenplane -- nc -zv postgresql 5432
+   kubectl exec -it -n idenplane deploy/idenplane -- nc -zv idenplane-postgresql 5432
    ```
 
 ---

@@ -7,6 +7,7 @@ import DashboardPage from './pages/DashboardPage';
 import { hasCredentials, refreshSession } from './api/client';
 import { useAuthContext } from './context/AuthContext';
 import PageFallback from './components/PageFallback';
+import StepUpPrompt from './components/StepUpPrompt';
 import { RequireRealmWrite, RequireSuperAdmin } from './components/PermissionGate';
 
 // Each page is its own chunk, loaded when first visited.
@@ -80,6 +81,7 @@ const UpgradeStatusPage = lazy(() => import('./pages/upgrade/UpgradeStatusPage')
 const StartUpgradePage = lazy(() => import('./pages/upgrade/StartUpgradePage'));
 const MigrationHistoryPage = lazy(() => import('./pages/upgrade/MigrationHistoryPage'));
 const AdminAccountsPage = lazy(() => import('./pages/admin-accounts/AdminAccountsPage'));
+const AdminMfaPage = lazy(() => import('./pages/mfa/AdminMfaPage'));
 const NotFoundPage = lazy(() => import('./pages/NotFoundPage'));
 
 function ProtectedRoute() {
@@ -121,6 +123,7 @@ export default function App() {
   return (
     <ErrorBoundary>
     <SessionBootstrap />
+    <StepUpPrompt />
     <Suspense fallback={<PageFallback />}>
     <Routes>
       <Route path="/console/login" element={<LoginPage />} />
@@ -133,6 +136,9 @@ export default function App() {
             screen, so outside Layout. */}
         <Route path="/console/setup" element={<SetupWizardRoute />} />
         <Route path="/setup" element={<Navigate to="/console/setup" replace />} />
+        {/* The admin's own second factors. Outside Layout: an admin who must
+            enrol first can reach nothing else. */}
+        <Route path="/console/mfa" element={<AdminMfaPage />} />
         <Route element={<Layout />}>
           <Route path="/console" element={<DashboardPage />} />
           <Route path="/console/realms" element={<RealmListPage />} />

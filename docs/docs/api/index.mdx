@@ -11,16 +11,16 @@ Idenplane provides a comprehensive REST API for managing authentication, users, 
 
 ## Base URL
 
+Idenplane is self-hosted, so the base URL is your server's `BASE_URL`:
+
 ```
-Production: https://api.idenplane.com
 Local:      http://localhost:3000
+Your host:  https://auth.example.com
 ```
 
 ## API Versions
 
-| Version | Status | Description |
-|---------|--------|-------------|
-| `v1` | **Current** | Latest stable API version |
+The admin API is not versioned yet. It is served under `/admin/...`; nothing is served under `/api/v1`. See [Versioning and Support](../project/versioning-and-support.md).
 
 ## Swagger/OpenAPI
 
@@ -67,6 +67,10 @@ Every Admin API endpoint (`/admin/...`) needs one of these:
 | `/realms/:realmName/protocol/openid-connect/auth` | GET | Authorization endpoint |
 | `/realms/:realmName/protocol/openid-connect/userinfo` | GET | UserInfo endpoint |
 | `/realms/:realmName/protocol/openid-connect/logout` | GET/POST | Logout endpoint |
+| `/realms/:realmName/protocol/openid-connect/revoke` | POST | Token revocation (RFC 7009) |
+| `/realms/:realmName/protocol/openid-connect/token/introspect` | POST | Token introspection (RFC 7662) |
+| `/realms/:realmName/protocol/openid-connect/certs` | GET | JWKS |
+| `/realms/:realmName/.well-known/openid-configuration` | GET | Discovery document |
 
 ### Realms
 
@@ -122,11 +126,11 @@ Every Admin API endpoint (`/admin/...`) needs one of these:
 
 ## Rate Limiting
 
-API endpoints are rate-limited to prevent abuse. Limits vary by endpoint:
+Several limits apply:
 
-- **Token endpoint**: 20 requests per minute per IP
-- **Admin API**: 100 requests per minute per API key
-- **User operations**: 50 requests per minute per user
+- **Every request**: a global throttle of `THROTTLE_LIMIT` requests (default 100) per `THROTTLE_TTL` milliseconds (default 60000) per client, in each server process.
+- **Admin API key**: 60 requests per minute and 1000 per hour per client IP (`ADMIN_API_KEY_RL_PER_MINUTE`, `ADMIN_API_KEY_RL_PER_HOUR`).
+- **Token endpoint**: per-IP (20 per minute, 200 per hour) and per-client (60 per minute, 1000 per hour) limits, only when the realm's `rateLimitEnabled` is on. It is off by default; the numbers are realm settings.
 
 Rate limit information is included in response headers:
 
@@ -143,36 +147,32 @@ All errors follow a consistent format:
 ```json
 {
   "statusCode": 400,
-  "message": "Invalid request parameters",
+  "message": ["email must be an email"],
   "error": "Bad Request",
-  "details": {
-    "field": "email",
-    "reason": "Invalid email format"
-  }
+  "timestamp": "2026-11-16T10:00:00.000Z"
 }
 ```
 
+`message` is a string, or an array of strings for validation errors. A request body with a field the endpoint does not know is rejected with `400` (`property x should not exist`). The OAuth endpoints answer with the OAuth error format instead (`{"error": "...", "error_description": "..."}`).
+
 ## Pagination
 
-List endpoints support pagination via query parameters:
+The user list takes `page` and `limit` (default 20) query parameters:
 
 ```bash
 GET /admin/realms/master/users?page=1&limit=20
 ```
 
-Response includes pagination metadata:
+and returns the page with the total count:
 
 ```json
 {
-  "data": [...],
-  "meta": {
-    "page": 1,
-    "limit": 20,
-    "total": 150,
-    "totalPages": 8
-  }
+  "users": [...],
+  "total": 150
 }
 ```
+
+Most other list endpoints, such as realms and clients, return a plain JSON array without pagination.
 
 ## Next Steps
 

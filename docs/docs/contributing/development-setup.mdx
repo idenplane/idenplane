@@ -18,8 +18,8 @@ Linux uses Docker for Postgres. macOS and WSL use their own Postgres, as in [Usi
 
 | | version | why that one |
 |---|---|---|
-| Node.js | **22+** | CI runs 24 (`.github/workflows/ci.yml`); the setup check refuses anything below 22 |
-| npm | 10+ | ships with Node 22 |
+| Node.js | **24** | The version CI (`.github/workflows/ci.yml`) and the Docker image use. The setup check accepts 22 and later, but 22 is not tested |
+| npm | 10+ | ships with Node 24 |
 | Docker + Compose | any current | only used for Postgres; not needed if you [use your own](#using-your-own-postgres) |
 | Git | any current | |
 | Java 17 + | | **only** if you touch `packages/idenplane-java` — Maven comes from the wrapper |
@@ -141,7 +141,7 @@ It shouldn't need to. Run `./mvnw` from `packages/idenplane-java`, not `mvn`.
 ## Where things live
 
 ```
-src/                    NestJS backend, ~60 self-contained modules
+src/                    NestJS backend, ~70 self-contained modules
 admin-ui/               React admin console
 docs/                   this site
 packages/idenplane-*/   published SDKs (JS, Go, Java, MCP, CLI)

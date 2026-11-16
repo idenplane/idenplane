@@ -55,6 +55,44 @@ describe('AdminSeedService', () => {
     );
   });
 
+  describe('admin MFA requirement', () => {
+    beforeEach(() => {
+      prisma.realm.findUnique.mockResolvedValue(null);
+      prisma.realm.create.mockResolvedValue({ id: 'master-id' } as never);
+      prisma.role.create.mockResolvedValue({ id: 'role-id' } as never);
+      prisma.user.create.mockResolvedValue({ id: 'admin-id' } as never);
+    });
+
+    it('requires a second factor for every admin on a new install', async () => {
+      await service.onApplicationBootstrap();
+      expect((prisma as any).adminSecurityPolicy.upsert).toHaveBeenCalledWith({
+        where: { id: 1 },
+        create: { id: 1, mfaRequired: true, updatedBy: 'seed' },
+        update: {},
+      });
+    });
+
+    it('does not require it on a shared demo (DEMO_MODE=true)', async () => {
+      config.get.mockImplementation((key: string, defaultValue?: string) => {
+        if (key === 'DEMO_MODE') return 'true';
+        if (key === 'ADMIN_USER') return 'admin';
+        if (key === 'ADMIN_PASSWORD') return 'configured-dev-password';
+        return defaultValue;
+      });
+      await service.onApplicationBootstrap();
+      expect(
+        (prisma as any).adminSecurityPolicy.upsert.mock.calls[0][0].create
+          .mfaRequired,
+      ).toBe(false);
+    });
+
+    it('writes nothing when the master realm already exists (an upgrade)', async () => {
+      prisma.realm.findUnique.mockResolvedValue({ id: 'master-id' } as never);
+      await service.onApplicationBootstrap();
+      expect((prisma as any).adminSecurityPolicy.upsert).not.toHaveBeenCalled();
+    });
+  });
+
   describe('onApplicationBootstrap', () => {
     it('does nothing when another instance seeded while this one waited for the lock', async () => {
       const prev = process.env['DATABASE_URL'];
@@ -131,7 +169,9 @@ describe('AdminSeedService', () => {
       expect(scopeSeedService.seedDefaultScopes).toHaveBeenCalledWith(
         'new-realm',
       );
-      expect(crypto.hashPassword).toHaveBeenCalledWith('configured-dev-password');
+      expect(crypto.hashPassword).toHaveBeenCalledWith(
+        'configured-dev-password',
+      );
     });
 
     it('should use configured admin credentials', async () => {
@@ -238,7 +278,6 @@ describe('AdminSeedService', () => {
 
       await expect(service.onApplicationBootstrap()).resolves.toBeUndefined();
     });
-
   });
 
   describe('initial admin password outside production', () => {
