@@ -1,5 +1,5 @@
 /**
- * @idenplane/vue — Vue 3 SDK for Idenplane
+ * idenplane-vue — Vue 3 SDK for Idenplane
  */
 
 // Plugin

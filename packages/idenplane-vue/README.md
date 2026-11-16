@@ -10,25 +10,37 @@ npm install idenplane-vue idenplane-sdk vue
 
 ## Quick Start
 
-### 1. Install the plugin
+### 1. Create one client and install the plugin
+
+Create the client in its own module, so the plugin, the router guard and your components all use the same instance (one session, one `init()`):
+
+```typescript
+// auth.ts
+import { IdenplaneClient } from 'idenplane-vue';
+
+export const idenplane = new IdenplaneClient({
+  url: 'http://localhost:3000',
+  realm: 'my-realm',
+  clientId: 'my-app',
+  redirectUri: 'http://localhost:5173/callback',
+});
+```
 
 ```typescript
 // main.ts
 import { createApp } from 'vue';
 import { IdenplanePlugin } from 'idenplane-vue';
 import App from './App.vue';
+import router from './router';
+import { idenplane } from './auth';
 
 const app = createApp(App);
-
-app.use(IdenplanePlugin, {
-  url: 'http://localhost:3000',
-  realm: 'my-realm',
-  clientId: 'my-app',
-  redirectUri: 'http://localhost:5173/callback',
-});
-
+app.use(IdenplanePlugin, { client: idenplane });
+app.use(router);
 app.mount('#app');
 ```
+
+The plugin provides the client to every component and starts `init()` (discovery and session restore) right away. `app.use(IdenplanePlugin, { url, realm, clientId, redirectUri })` also works when nothing outside components needs the client.
 
 ### 2. Use `useAuth` in components
 
@@ -57,19 +69,13 @@ const { isAuthenticated, user, login, logout, isLoading } = useAuth();
 // router/index.ts
 import { createRouter, createWebHistory } from 'vue-router';
 import { createAuthGuard } from 'idenplane-vue';
-import { IdenplaneClient } from 'idenplane-sdk';
-
-const authClient = new IdenplaneClient({
-  url: 'http://localhost:3000',
-  realm: 'my-realm',
-  clientId: 'my-app',
-  redirectUri: 'http://localhost:5173/callback',
-});
+import { idenplane } from '../auth'; // the client the plugin was given
 
 const router = createRouter({
   history: createWebHistory(),
   routes: [
     { path: '/', component: Home },
+    { path: '/login', component: Login },
     {
       path: '/dashboard',
       component: Dashboard,
@@ -83,29 +89,40 @@ const router = createRouter({
   ],
 });
 
-router.beforeEach(createAuthGuard({ loginRoute: '/login' }, authClient));
+router.beforeEach(createAuthGuard({ loginRoute: '/login' }, idenplane));
 
 export default router;
 ```
 
+Pass the same client to the guard: a guard created at module level runs outside any component, where `inject()` cannot reach the plugin's client. (On Vue 3.3+ with vue-router 4.2+, a guard created without a client looks it up from the app when it runs, but passing it is explicit and works on every version.) Routes without `requiresAuth` or `roles`, and the login route itself, are never redirected. If no client can be found for a protected route, the guard fails closed and redirects to the login route.
+
 ### 4. AuthProvider component (scoped context)
+
+Instead of the plugin, `AuthProvider` provides a client to a component subtree and starts its `init()`. Pass the connection props, or `:client` to share a client you created (for example with the router guard):
 
 ```vue
 <!-- App.vue -->
 <template>
-  <AuthProvider
-    url="http://localhost:3000"
-    realm="my-realm"
-    client-id="my-app"
-    redirect-uri="http://localhost:5173/callback"
-  >
+  <AuthProvider :client="idenplane">
     <RouterView />
   </AuthProvider>
 </template>
 
 <script setup lang="ts">
 import { AuthProvider } from 'idenplane-vue';
+import { idenplane } from './auth';
 </script>
+```
+
+```vue
+<AuthProvider
+  url="http://localhost:3000"
+  realm="my-realm"
+  client-id="my-app"
+  redirect-uri="http://localhost:5173/callback"
+>
+  <RouterView />
+</AuthProvider>
 ```
 
 ### 5. Permissions
@@ -126,7 +143,7 @@ const { hasRole, hasPermission, roles } = usePermissions();
 
 ### Plugin
 
-- `IdenplanePlugin` — Vue plugin, call `app.use(IdenplanePlugin, IdenplaneConfig)`
+- `IdenplanePlugin` — Vue plugin: `app.use(IdenplanePlugin, { client })` to provide an existing client, or `app.use(IdenplanePlugin, IdenplaneConfig)` to let the plugin create one
 
 ### Composables
 
@@ -136,13 +153,13 @@ const { hasRole, hasPermission, roles } = usePermissions();
 
 ### Navigation Guard
 
-- `createAuthGuard(options?, client?)` — returns a `NavigationGuard`
+- `createAuthGuard(options?, client?)` — returns a `NavigationGuard`. Pass the shared client as `client`.
   - `options.loginRoute` — redirect path (default: `'/login'`)
   - `options.roles` — global required roles
 
 ### Components
 
-- `<AuthProvider>` — provides auth context to a component subtree
+- `<AuthProvider>` — provides a client to a component subtree and calls its `init()`. Props: `client`, or `url`, `realm`, `client-id`, `redirect-uri` (plus optional `scopes`, `storage`, `auto-refresh`)
 
 ## License
 

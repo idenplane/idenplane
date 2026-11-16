@@ -7,48 +7,10 @@
 
 import { inject, ref, readonly, onMounted, onUnmounted, computed } from 'vue';
 import type { Ref, ComputedRef } from 'vue';
-import { IdenplaneClient } from 'idenplane-sdk';
+import type { IdenplaneClient } from 'idenplane-sdk';
 import type { UserInfo } from 'idenplane-sdk';
 import { IDENPLANE_KEY } from './plugin.js';
-
-// ── Init singleton ────────────────────────────────────────────────
-// Bug #438-4 fix: every component that calls useAuth() was triggering its own
-// client.init() call.  Although IdenplaneClient.init() is re-entrant-safe and
-// coalesces concurrent calls onto a single Promise, each component still went
-// through the full async path and set its own isLoading = false only after
-// awaiting.  The visible symptom is a loading flicker in every component that
-// mounts after the first one.
-//
-// Fix: keep a module-level WeakMap that maps each IdenplaneClient instance to the
-// single init Promise (and its settled result).  Subsequent useAuth() calls on
-// the same client skip the init() await entirely when the Promise has already
-// resolved, and share the same in-flight Promise when init is still running.
-interface InitRecord {
-  promise: Promise<boolean>;
-  settled: boolean;
-  result: boolean;
-}
-const initRecords = new WeakMap<IdenplaneClient, InitRecord>();
-
-function getOrStartInit(client: IdenplaneClient): Promise<boolean> {
-  const existing = initRecords.get(client);
-  if (existing) return existing.promise;
-
-  const record: InitRecord = {
-    promise: Promise.resolve(false), // placeholder, replaced below
-    settled: false,
-    result: false,
-  };
-
-  record.promise = client.init().then((result) => {
-    record.settled = true;
-    record.result = result;
-    return result;
-  });
-
-  initRecords.set(client, record);
-  return record.promise;
-}
+import { getInitRecord, getOrStartInit } from './init.js';
 
 // ── Internal helper ──────────────────────────────────────────────
 
@@ -87,7 +49,7 @@ export interface UseAuthReturn {
  * @example
  * ```vue
  * <script setup>
- * import { useAuth } from '@idenplane/vue';
+ * import { useAuth } from 'idenplane-vue';
  * const { isAuthenticated, user, login, logout, isLoading } = useAuth();
  * </script>
  * ```
@@ -145,7 +107,7 @@ export function useAuth(): UseAuthReturn {
     // the same init Promise.  If init has already settled (a later-mounted
     // component), we read the cached result synchronously and skip the async
     // wait entirely — no loading flicker.
-    const record = initRecords.get(client);
+    const record = getInitRecord(client);
     if (record?.settled) {
       isAuthenticated.value = record.result;
       if (record.result) user.value = client.getUserInfo();
@@ -196,7 +158,7 @@ export interface UseUserReturn {
  * @example
  * ```vue
  * <script setup>
- * import { useUser } from '@idenplane/vue';
+ * import { useUser } from 'idenplane-vue';
  * const { user, refresh } = useUser();
  * </script>
  * ```
@@ -246,7 +208,7 @@ export interface UsePermissionsReturn {
  * @example
  * ```vue
  * <script setup>
- * import { usePermissions } from '@idenplane/vue';
+ * import { usePermissions } from 'idenplane-vue';
  * const { hasRole, hasPermission, roles } = usePermissions();
  * </script>
  * ```
