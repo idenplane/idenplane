@@ -8,6 +8,6 @@
     "start": "npx --yes serve -l 3002 ."
   },
   "dependencies": {
-    "idenplane-sdk": "^1.0.2"
+    "idenplane-sdk": "^1.1.0"
   }
 }
