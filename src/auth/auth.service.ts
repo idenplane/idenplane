@@ -820,7 +820,9 @@ export class AuthService {
    * insert then fails (the session is gone, which issueTokens reports as
    * invalid_grant), or, if it already ran, the token goes with the session.
    */
-  private async endSessionOnRefreshTokenReuse(sessionId: string): Promise<void> {
+  private async endSessionOnRefreshTokenReuse(
+    sessionId: string,
+  ): Promise<void> {
     await this.prisma.refreshToken.updateMany({
       where: { sessionId },
       data: { revoked: true },
