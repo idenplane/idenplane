@@ -25,6 +25,7 @@ import {
 import { createTrustedProxyCertHeaderMiddleware } from './mtls/trusted-proxy-cert-header.middleware.js';
 import { startCertificateListener } from './realtime/certificate-listener.js';
 import { APP_VERSION } from './versioning/app-version.js';
+import { registerBodyParsers } from './common/http/body-parsers.js';
 
 /** Known-insecure / placeholder values that must never reach production. */
 const INSECURE_ADMIN_API_KEY_VALUES = new Set([
@@ -227,6 +228,9 @@ async function bootstrap() {
   // Unversioned routes continue to work (backward-compatible) but carry
   // Deprecation + Sunset headers injected by DeprecationInterceptor.
   app.enableVersioning({ type: VersioningType.URI, prefix: 'api/v' });
+
+  // SCIM's application/scim+json, next to the default JSON parser.
+  registerBodyParsers(app);
 
   app.use(
     helmet({

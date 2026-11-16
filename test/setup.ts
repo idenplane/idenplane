@@ -19,6 +19,8 @@ import cookieParser from 'cookie-parser';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { GlobalExceptionFilter } from '../src/common/filters/http-exception.filter';
+import { registerBodyParsers } from '../src/common/http/body-parsers';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { generateKeyPair } from 'jose';
 import { randomUUID } from 'crypto';
 import * as argon2 from 'argon2';
@@ -113,6 +115,7 @@ export async function createTestApp(
   );
 
   app.useGlobalFilters(new GlobalExceptionFilter());
+  registerBodyParsers(app as NestExpressApplication);
 
   // Set up Swagger so /api-json is available (mirrors main.ts)
   const swaggerConfig = new DocumentBuilder()
