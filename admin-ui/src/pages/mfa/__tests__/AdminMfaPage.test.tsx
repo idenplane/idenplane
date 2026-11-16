@@ -42,7 +42,7 @@ describe('AdminMfaPage', () => {
     server.use(
       http.post('/admin/auth/mfa/totp', () =>
         HttpResponse.json({
-          secret: 'JBSWY3DPEHPK3PXPJBSWY3DP',
+          secret: 'JBSWY3DPEHPK3PXPJBSWY3DP', // dummy base32 secret
           qrCodeDataUrl: 'data:image/png;base64,iVBORw0KGgo=',
           otpauthUrl: 'otpauth://totp/sample',
         }),
