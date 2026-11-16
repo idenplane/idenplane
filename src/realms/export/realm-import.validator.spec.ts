@@ -38,6 +38,42 @@ describe('validateV2Import', () => {
     expect(validateV2Import(base()).problems).toEqual([]);
   });
 
+  it('checks policy conditions as the policies API does (since 0.11.0)', () => {
+    const ok = base();
+    ok['policies'] = [
+      {
+        name: 'internal',
+        effect: 'DENY',
+        logic: 'AND',
+        environmentConditions: [
+          {
+            field: 'environment.ip',
+            operator: 'ipInRange',
+            value: '2001:db8::/32',
+          },
+        ],
+      },
+    ];
+    expect(validateV2Import(ok).problems).toEqual([]);
+
+    const bad = base();
+    bad['policies'] = [
+      {
+        name: 'typo',
+        effect: 'deny',
+        subjectConditions: [
+          { field: 'subject.roles', operator: 'contain', value: 'contractor' },
+        ],
+      },
+    ];
+    expect(paths(bad)).toEqual(
+      expect.arrayContaining([
+        'policies[0].effect',
+        'policies[0].subjectConditions[0]',
+      ]),
+    );
+  });
+
   it('checks redirect URIs as the client API does (exact matching since 0.11.0)', () => {
     // An export from before 0.11.0 has no opt-in: the import grandfathers
     // a wildcard client, so the file is valid.

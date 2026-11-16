@@ -5,18 +5,39 @@
  * NestJS infrastructure.
  */
 
+import { BlockList, isIP } from 'node:net';
+
 // ─── Condition types ─────────────────────────────────────────────────────────
 
-export type ConditionOperator =
-  | 'equals'
-  | 'notEquals'
-  | 'contains'
-  | 'in'
-  | 'notIn'
-  | 'greaterThan'
-  | 'lessThan'
-  | 'matches'
-  | 'ipInRange';
+/**
+ * Every operator the engine understands. The single source for DTO
+ * validation, realm import validation, the upgrade health check and
+ * evaluation, so they can never disagree about what is valid.
+ */
+export const CONDITION_OPERATORS = [
+  'equals',
+  'notEquals',
+  'contains',
+  'in',
+  'notIn',
+  'greaterThan',
+  'lessThan',
+  'matches',
+  'ipInRange',
+] as const;
+
+export type ConditionOperator = (typeof CONDITION_OPERATORS)[number];
+
+export const POLICY_EFFECTS = ['ALLOW', 'DENY'] as const;
+export const POLICY_LOGIC = ['AND', 'OR'] as const;
+
+/** The four condition columns of a policy, in evaluation order. */
+export const CONDITION_CATEGORIES = [
+  'subjectConditions',
+  'resourceConditions',
+  'actionConditions',
+  'environmentConditions',
+] as const;
 
 export interface Condition {
   field: string; // dot-notation path into the context, e.g. "subject.roles"
@@ -76,10 +97,17 @@ export interface PolicyMatchDetail {
   policyName: string;
   effect: 'ALLOW' | 'DENY';
   matched: boolean;
+  /**
+   * Set when part of the stored policy cannot be evaluated (an unknown
+   * operator, a malformed value, an unknown effect or logic). Such a policy
+   * fails closed: a DENY matches, an ALLOW never does.
+   */
+  indeterminate?: boolean;
   conditionResults: Array<{
     conditionType: string;
     passed: boolean;
     reason?: string;
+    indeterminate?: boolean;
   }>;
 }
 
@@ -93,7 +121,8 @@ export interface PolicyEvaluationResult {
 // ─── Helpers ─────────────────────────────────────────────────────────────────
 
 /**
- * Resolve a dot-notation path against an object.
+ * Resolve a dot-notation path against an object. Only own properties are
+ * followed, so a path can never reach `constructor` or `__proto__`.
  *
  * Examples:
  *   get({ subject: { roles: ['admin'] } }, 'subject.roles') => ['admin']
@@ -106,62 +135,235 @@ function resolveField(
   const parts = field.split('.');
   let current: unknown = context;
   for (const part of parts) {
-    if (current === null || current === undefined) return undefined;
+    if (current === null || typeof current !== 'object') return undefined;
+    if (!Object.prototype.hasOwnProperty.call(current, part)) return undefined;
     current = (current as Record<string, unknown>)[part];
   }
   return current;
 }
 
+/** `::ffff:10.0.0.1` → `10.0.0.1`; anything else is returned trimmed. */
+function normalizeIp(address: string): string {
+  const trimmed = address.trim();
+  const mapped = /^::ffff:(\d{1,3}(?:\.\d{1,3}){3})$/i.exec(trimmed);
+  return mapped ? mapped[1] : trimmed;
+}
+
 /**
- * Parse a CIDR range (e.g. "192.168.0.0/24") and decide whether an IPv4
- * address falls within it.  IPv6 CIDRs are not supported and will always
- * return false.
+ * Parse an `ipInRange` value: an IPv4 or IPv6 address, or a CIDR block
+ * (`10.0.0.0/8`, `2001:db8::/32`, `::ffff:10.0.0.0/104`). Returns `null`
+ * when the value is not one. Matching uses `net.BlockList`, so an
+ * IPv4-mapped IPv6 address (`::ffff:10.1.2.3`, how a dual-stack socket
+ * reports an IPv4 peer) matches its IPv4 network and the other way round.
  */
-function ipInCidr(ip: string, cidr: string): boolean {
-  const [range, bitsStr] = cidr.split('/');
-  if (!range || !bitsStr) return false;
+export function parseIpRange(value: unknown): BlockList | null {
+  if (typeof value !== 'string') return null;
+  const raw = value.trim();
+  const slash = raw.indexOf('/');
+  const address = slash === -1 ? raw : raw.slice(0, slash);
+  const family = isIP(address);
+  if (family === 0) return null;
+  const type = family === 4 ? 'ipv4' : 'ipv6';
+  const list = new BlockList();
+  if (slash === -1) {
+    list.addAddress(address, type);
+    return list;
+  }
+  const prefixText = raw.slice(slash + 1);
+  if (!/^\d{1,3}$/.test(prefixText)) return null;
+  const prefix = Number(prefixText);
+  if (prefix > (family === 4 ? 32 : 128)) return null;
+  list.addSubnet(address, prefix, type);
+  return list;
+}
 
-  const bits = parseInt(bitsStr, 10);
-  if (isNaN(bits) || bits < 0 || bits > 32) return false;
+const OPERATOR_SET: ReadonlySet<string> = new Set(CONDITION_OPERATORS);
 
-  const ipToInt = (addr: string): number | null => {
-    const parts = addr.split('.').map(Number);
-    if (parts.length !== 4 || parts.some((p) => isNaN(p) || p < 0 || p > 255)) {
-      return null;
-    }
-    return (parts[0] << 24) | (parts[1] << 16) | (parts[2] << 8) | parts[3];
-  };
+/** A stored value as text for a message, whatever its type. */
+function show(value: unknown): string {
+  return typeof value === 'string'
+    ? value
+    : (JSON.stringify(value) ?? 'undefined');
+}
 
-  const ipInt = ipToInt(ip);
-  const rangeInt = ipToInt(range);
-  if (ipInt === null || rangeInt === null) return false;
+function isScalar(value: unknown): boolean {
+  return (
+    value === null ||
+    typeof value === 'string' ||
+    typeof value === 'number' ||
+    typeof value === 'boolean'
+  );
+}
 
-  const mask = bits === 0 ? 0 : (~0 << (32 - bits)) >>> 0;
-  return ((ipInt >>> 0) & mask) === ((rangeInt >>> 0) & mask);
+function isNumeric(value: unknown): boolean {
+  if (typeof value === 'number') return Number.isFinite(value);
+  return (
+    typeof value === 'string' &&
+    value.trim() !== '' &&
+    Number.isFinite(Number(value))
+  );
+}
+
+/**
+ * Why a stored condition cannot be evaluated, or `null` when it can.
+ * Checks the shape, the operator, and the value the operator needs. Used at
+ * save time (a `400`), by realm import, by the upgrade health check, and at
+ * evaluation time (fail closed).
+ */
+export function conditionProblem(raw: unknown): string | null {
+  if (!raw || typeof raw !== 'object' || Array.isArray(raw)) {
+    return 'must be an object { field, operator, value }';
+  }
+  const c = raw as Record<string, unknown>;
+  const field = c['field'];
+  if (typeof field !== 'string' || field.trim() === '') {
+    return '"field" must be a non-empty string';
+  }
+  const operator = c['operator'];
+  if (typeof operator !== 'string' || !OPERATOR_SET.has(operator)) {
+    return (
+      `unknown operator "${show(operator)}" ` +
+      `(expected one of: ${CONDITION_OPERATORS.join(', ')})`
+    );
+  }
+  if (!Object.prototype.hasOwnProperty.call(c, 'value')) {
+    return '"value" is required';
+  }
+  const value = c['value'];
+  switch (operator as ConditionOperator) {
+    case 'equals':
+    case 'notEquals':
+    case 'contains':
+      return isScalar(value)
+        ? null
+        : `operator "${operator}" needs a string, number, boolean or null value`;
+    case 'in':
+    case 'notIn':
+      return Array.isArray(value)
+        ? null
+        : `operator "${operator}" needs an array value`;
+    case 'greaterThan':
+    case 'lessThan':
+      return isNumeric(value)
+        ? null
+        : `operator "${operator}" needs a numeric value`;
+    case 'matches':
+      if (typeof value !== 'string') {
+        return 'operator "matches" needs a regular expression string';
+      }
+      try {
+        new RegExp(value);
+        return null;
+      } catch {
+        return `invalid regular expression "${value}"`;
+      }
+    case 'ipInRange':
+      return parseIpRange(value)
+        ? null
+        : `operator "ipInRange" needs an IPv4 or IPv6 address or CIDR block, got ${show(value)}`;
+  }
+}
+
+/** A problem with a stored policy, at a path such as `actionConditions[1]`. */
+export interface PolicyProblem {
+  path: string;
+  message: string;
+}
+
+/**
+ * Every reason a policy (as stored or as submitted) cannot be evaluated.
+ * Empty when the policy is valid. `effect` and `logic` are only checked
+ * when present, since both have defaults.
+ */
+export function policyProblems(policy: {
+  effect?: unknown;
+  logic?: unknown;
+  subjectConditions?: unknown;
+  resourceConditions?: unknown;
+  actionConditions?: unknown;
+  environmentConditions?: unknown;
+}): PolicyProblem[] {
+  const problems: PolicyProblem[] = [];
+  if (
+    policy.effect !== undefined &&
+    !(POLICY_EFFECTS as readonly unknown[]).includes(policy.effect)
+  ) {
+    problems.push({
+      path: 'effect',
+      message: `unknown effect "${show(policy.effect)}" (expected ALLOW or DENY)`,
+    });
+  }
+  if (
+    policy.logic !== undefined &&
+    !(POLICY_LOGIC as readonly unknown[]).includes(policy.logic)
+  ) {
+    problems.push({
+      path: 'logic',
+      message: `unknown logic "${show(policy.logic)}" (expected AND or OR)`,
+    });
+  }
+  for (const category of CONDITION_CATEGORIES) {
+    const raw = policy[category];
+    if (raw === null || raw === undefined) continue;
+    const list = Array.isArray(raw) ? raw : [raw];
+    list.forEach((condition, i) => {
+      const message = conditionProblem(condition);
+      if (message) {
+        problems.push({
+          path: Array.isArray(raw) ? `${category}[${i}]` : category,
+          message,
+        });
+      }
+    });
+  }
+  return problems;
 }
 
 // ─── Core condition evaluation ────────────────────────────────────────────────
+
+export interface ConditionResult {
+  passed: boolean;
+  reason: string;
+  /** The condition cannot be evaluated; see {@link PolicyMatchDetail}. */
+  indeterminate?: boolean;
+}
 
 /**
  * Evaluate a single condition against a flat evaluation context.
  * The context is built by the caller and contains top-level keys:
  * subject, resource, action, environment.
+ *
+ * A condition that cannot be evaluated (see {@link conditionProblem})
+ * returns `indeterminate: true`, never a plain `false`: for a DENY policy a
+ * plain `false` means "does not apply", which fails open.
+ *
+ * A request that does not carry the field a condition reads (no
+ * `environment.ip`, say) is not an error: the condition is false.
  */
 export function evaluateCondition(
-  condition: Condition,
+  condition: unknown,
   context: Record<string, unknown>,
-): { passed: boolean; reason: string } {
-  const actual = resolveField(context, condition.field);
-  const expected = condition.value;
+): ConditionResult {
+  const problem = conditionProblem(condition);
+  if (problem) {
+    return {
+      passed: false,
+      indeterminate: true,
+      reason: `cannot evaluate condition: ${problem}`,
+    };
+  }
+  const c = condition as Condition;
+  const actual = resolveField(context, c.field);
+  const expected = c.value;
 
-  switch (condition.operator) {
+  switch (c.operator) {
     case 'equals': {
       const passed = actual === expected;
       return {
         passed,
         reason: passed
-          ? `"${condition.field}" equals "${String(expected)}"`
-          : `"${condition.field}" is "${String(actual)}", expected "${String(expected)}"`,
+          ? `"${c.field}" equals "${String(expected)}"`
+          : `"${c.field}" is "${String(actual)}", expected "${String(expected)}"`,
       };
     }
 
@@ -170,8 +372,8 @@ export function evaluateCondition(
       return {
         passed,
         reason: passed
-          ? `"${condition.field}" is not "${String(expected)}"`
-          : `"${condition.field}" equals "${String(expected)}" but should not`,
+          ? `"${c.field}" is not "${String(expected)}"`
+          : `"${c.field}" equals "${String(expected)}" but should not`,
       };
     }
 
@@ -185,76 +387,53 @@ export function evaluateCondition(
       return {
         passed,
         reason: passed
-          ? `"${condition.field}" contains "${String(expected)}"`
-          : `"${condition.field}" does not contain "${String(expected)}"`,
+          ? `"${c.field}" contains "${String(expected)}"`
+          : `"${c.field}" does not contain "${String(expected)}"`,
       };
     }
 
     case 'in': {
-      if (!Array.isArray(expected)) {
-        return {
-          passed: false,
-          reason: `operator "in" requires an array value`,
-        };
-      }
-      const passed = expected.includes(actual);
+      const list = expected as unknown[];
+      const passed = list.includes(actual);
       return {
         passed,
         reason: passed
-          ? `"${condition.field}" is in [${expected.join(', ')}]`
-          : `"${condition.field}" ("${String(actual)}") is not in [${expected.join(', ')}]`,
+          ? `"${c.field}" is in [${list.join(', ')}]`
+          : `"${c.field}" ("${String(actual)}") is not in [${list.join(', ')}]`,
       };
     }
 
     case 'notIn': {
-      if (!Array.isArray(expected)) {
-        return {
-          passed: false,
-          reason: `operator "notIn" requires an array value`,
-        };
-      }
-      const passed = !expected.includes(actual);
+      const list = expected as unknown[];
+      const passed = !list.includes(actual);
       return {
         passed,
         reason: passed
-          ? `"${condition.field}" is not in [${expected.join(', ')}]`
-          : `"${condition.field}" ("${String(actual)}") is in [${expected.join(', ')}]`,
+          ? `"${c.field}" is not in [${list.join(', ')}]`
+          : `"${c.field}" ("${String(actual)}") is in [${list.join(', ')}]`,
       };
     }
 
-    case 'greaterThan': {
-      const numActual = Number(actual);
-      const numExpected = Number(expected);
-      if (isNaN(numActual) || isNaN(numExpected)) {
-        return {
-          passed: false,
-          reason: `"${condition.field}" or value is not numeric`,
-        };
-      }
-      const passed = numActual > numExpected;
-      return {
-        passed,
-        reason: passed
-          ? `"${condition.field}" (${numActual}) > ${numExpected}`
-          : `"${condition.field}" (${numActual}) is not > ${numExpected}`,
-      };
-    }
-
+    case 'greaterThan':
     case 'lessThan': {
-      const numActual = Number(actual);
-      const numExpected = Number(expected);
-      if (isNaN(numActual) || isNaN(numExpected)) {
+      if (!isNumeric(actual)) {
         return {
           passed: false,
-          reason: `"${condition.field}" or value is not numeric`,
+          reason: `"${c.field}" is not numeric`,
         };
       }
-      const passed = numActual < numExpected;
+      const numActual = Number(actual);
+      const numExpected = Number(expected);
+      const greater = c.operator === 'greaterThan';
+      const passed = greater
+        ? numActual > numExpected
+        : numActual < numExpected;
+      const sign = greater ? '>' : '<';
       return {
         passed,
         reason: passed
-          ? `"${condition.field}" (${numActual}) < ${numExpected}`
-          : `"${condition.field}" (${numActual}) is not < ${numExpected}`,
+          ? `"${c.field}" (${numActual}) ${sign} ${numExpected}`
+          : `"${c.field}" (${numActual}) is not ${sign} ${numExpected}`,
       };
     }
 
@@ -262,63 +441,60 @@ export function evaluateCondition(
       if (typeof actual !== 'string') {
         return {
           passed: false,
-          reason: `"${condition.field}" is not a string`,
+          reason: `"${c.field}" is not a string`,
         };
       }
-      let regex: RegExp;
-      try {
-        regex = new RegExp(String(expected));
-      } catch {
-        return {
-          passed: false,
-          reason: `invalid regex: "${String(expected)}"`,
-        };
-      }
-      const passed = regex.test(actual);
+      const passed = new RegExp(String(expected)).test(actual);
       return {
         passed,
         reason: passed
-          ? `"${condition.field}" matches /${String(expected)}/`
-          : `"${condition.field}" ("${String(actual)}") does not match /${String(expected)}/`,
+          ? `"${c.field}" matches /${String(expected)}/`
+          : `"${c.field}" ("${actual}") does not match /${String(expected)}/`,
       };
     }
 
     case 'ipInRange': {
-      if (typeof actual !== 'string') {
+      const range = String(expected);
+      if (actual === undefined || actual === null) {
+        return { passed: false, reason: `"${c.field}" is not set` };
+      }
+      const ip = typeof actual === 'string' ? normalizeIp(actual) : '';
+      const family = isIP(ip);
+      if (family === 0) {
+        // The request carries something that is not an IP address. A DENY
+        // must not be dodged by sending garbage, so this fails closed too.
         return {
           passed: false,
-          reason: `"${condition.field}" is not a string IP`,
+          indeterminate: true,
+          reason: `"${c.field}" (${show(actual)}) is not an IP address`,
         };
       }
-      const cidr = String(expected);
-      const passed = ipInCidr(actual, cidr);
+      const passed = (parseIpRange(range) as BlockList).check(
+        ip,
+        family === 4 ? 'ipv4' : 'ipv6',
+      );
       return {
         passed,
         reason: passed
-          ? `IP "${actual}" is in range "${cidr}"`
-          : `IP "${actual}" is not in range "${cidr}"`,
+          ? `IP "${ip}" is in range "${range}"`
+          : `IP "${ip}" is not in range "${range}"`,
       };
     }
-
-    default:
-      return {
-        passed: false,
-        reason: `unknown operator "${String(condition.operator)}"`,
-      };
   }
 }
 
 // ─── Condition-group evaluation ───────────────────────────────────────────────
 
 /**
- * Parse a raw JSON conditions blob (from DB) into an array of Condition objects.
- * If the stored value is null / undefined / empty, returns an empty array (vacuous truth).
+ * Parse a raw JSON conditions blob (from DB) into a list of conditions.
+ * If the stored value is null / undefined / empty, returns an empty array
+ * (vacuous truth). Each entry is validated when it is evaluated.
  */
-function parseConditions(raw: unknown): Condition[] {
-  if (!raw || (Array.isArray(raw) && raw.length === 0)) return [];
-  if (Array.isArray(raw)) return raw as Condition[];
+function parseConditions(raw: unknown): unknown[] {
+  if (raw === null || raw === undefined) return [];
+  if (Array.isArray(raw)) return raw;
   // Allow a single condition object (not wrapped in array)
-  return [raw as Condition];
+  return [raw];
 }
 
 /**
@@ -326,10 +502,10 @@ function parseConditions(raw: unknown): Condition[] {
  * The `logic` param controls whether ALL ("AND") or ANY ("OR") must pass.
  */
 function evaluateConditions(
-  conditions: Condition[],
+  conditions: unknown[],
   context: Record<string, unknown>,
   logic: 'AND' | 'OR',
-): { passed: boolean; results: Array<{ passed: boolean; reason: string }> } {
+): { passed: boolean; results: ConditionResult[] } {
   if (conditions.length === 0) {
     return { passed: true, results: [] };
   }
@@ -362,12 +538,40 @@ function buildContext(req: PolicyEvaluationRequest): Record<string, unknown> {
 /**
  * Evaluate a single policy against the request.
  * Returns the match detail including per-condition results.
+ *
+ * Fail closed: when any part of the policy cannot be evaluated (an invalid
+ * condition, an unknown `effect` or `logic`), the policy is
+ * `indeterminate`. An indeterminate DENY matches, whatever its other
+ * conditions say; an indeterminate ALLOW never matches. An unknown
+ * `effect` is treated as DENY.
  */
 export function evaluatePolicy(
   policy: RawPolicy,
   req: PolicyEvaluationRequest,
 ): PolicyMatchDetail {
   const context = buildContext(req);
+  const effect: 'ALLOW' | 'DENY' = policy.effect === 'ALLOW' ? 'ALLOW' : 'DENY';
+  const conditionResults: PolicyMatchDetail['conditionResults'] = [];
+
+  let indeterminate = false;
+  if (policy.effect !== 'ALLOW' && policy.effect !== 'DENY') {
+    indeterminate = true;
+    conditionResults.push({
+      conditionType: 'policy',
+      passed: false,
+      indeterminate: true,
+      reason: `unknown effect "${String(policy.effect)}", treated as DENY`,
+    });
+  }
+  if (policy.logic !== 'AND' && policy.logic !== 'OR') {
+    indeterminate = true;
+    conditionResults.push({
+      conditionType: 'policy',
+      passed: false,
+      indeterminate: true,
+      reason: `unknown logic "${String(policy.logic)}"`,
+    });
+  }
   const logic = policy.logic === 'OR' ? 'OR' : 'AND';
 
   const conditionTypes = [
@@ -377,7 +581,6 @@ export function evaluatePolicy(
     { type: 'environment', raw: policy.environmentConditions },
   ];
 
-  const conditionResults: PolicyMatchDetail['conditionResults'] = [];
   let policyPassed = true;
 
   for (const { type, raw } of conditionTypes) {
@@ -387,10 +590,12 @@ export function evaluatePolicy(
     const { passed, results } = evaluateConditions(conditions, context, logic);
 
     for (const r of results) {
+      if (r.indeterminate) indeterminate = true;
       conditionResults.push({
         conditionType: type,
         passed: r.passed,
         reason: r.reason,
+        ...(r.indeterminate ? { indeterminate: true } : {}),
       });
     }
 
@@ -403,10 +608,25 @@ export function evaluatePolicy(
   return {
     policyId: policy.id,
     policyName: policy.name,
-    effect: policy.effect === 'DENY' ? 'DENY' : 'ALLOW',
-    matched: policyPassed,
+    effect,
+    matched: indeterminate ? effect === 'DENY' : policyPassed,
+    ...(indeterminate ? { indeterminate: true } : {}),
     conditionResults,
   };
+}
+
+/**
+ * Whether a policy applies to a request, by client:
+ * - a policy without `clientId` applies to every request;
+ * - a policy with a `clientId` applies only to requests that name that
+ *   same client. A request without `clientId` gets the global policies only.
+ */
+export function policyAppliesToClient(
+  policy: Pick<RawPolicy, 'clientId'>,
+  clientId: string | undefined,
+): boolean {
+  if (policy.clientId === null || policy.clientId === undefined) return true;
+  return clientId !== undefined && policy.clientId === clientId;
 }
 
 // ─── Multi-policy evaluation (DENY-override, priority ordering) ───────────────
@@ -415,19 +635,20 @@ export function evaluatePolicy(
  * Evaluate all applicable policies and produce a final decision.
  *
  * Algorithm:
- * 1. Sort by priority descending (higher priority evaluated first).
- * 2. Collect all matching policies.
- * 3. If any DENY policy matches → final decision is DENY.
- * 4. If at least one ALLOW policy matches → final decision is ALLOW.
- * 5. If no policy matches → default DENY.
+ * 1. Keep the enabled policies that apply to the request's client
+ *    (see {@link policyAppliesToClient}).
+ * 2. Sort by priority descending (higher priority evaluated first).
+ * 3. Collect all matching policies (an indeterminate DENY matches).
+ * 4. If any DENY policy matches → final decision is DENY.
+ * 5. If at least one ALLOW policy matches → final decision is ALLOW.
+ * 6. If no policy matches → default DENY.
  */
 export function evaluatePolicies(
   policies: RawPolicy[],
   req: PolicyEvaluationRequest,
 ): PolicyEvaluationResult {
-  // Only evaluate enabled policies
   const applicable = policies
-    .filter((p) => p.enabled)
+    .filter((p) => p.enabled && policyAppliesToClient(p, req.clientId))
     .sort((a, b) => b.priority - a.priority);
 
   const matchDetails: PolicyMatchDetail[] = [];
@@ -443,7 +664,9 @@ export function evaluatePolicies(
   if (denyMatch) {
     return {
       decision: 'DENY',
-      reason: `Explicit DENY by policy "${denyMatch.policyName}"`,
+      reason: denyMatch.indeterminate
+        ? `DENY by policy "${denyMatch.policyName}": it cannot be evaluated, so it fails closed`
+        : `Explicit DENY by policy "${denyMatch.policyName}"`,
       matchedPolicies: matchDetails,
       evaluatedCount: applicable.length,
     };

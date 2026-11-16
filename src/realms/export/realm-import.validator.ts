@@ -21,6 +21,7 @@ import {
   type ClientAuthSettings,
 } from '../../clients/client-auth-settings.js';
 import { validateFlowSteps } from '../../auth-flow/flow-validator.js';
+import { policyProblems } from '../../authorization/policy-engine.js';
 import { SECRET_PLACEHOLDER } from '../secret-placeholder.js';
 import {
   SecretJsonTooDeepError,
@@ -660,7 +661,13 @@ export function validateV2Import(payload: Item): ValidatedImport {
   );
   const webhooks = simple('webhooks', 'Webhook');
   simple('auditLogStreams', 'AuditLogStream');
-  simple('policies', 'Policy');
+  simple('policies', 'Policy').forEach((p, i) => {
+    // Same check as the policies API: a condition the engine cannot
+    // evaluate would be stored and (for a DENY) fail closed on every call.
+    for (const problem of policyProblems(p)) {
+      fail(`policies[${i}].${problem.path}`, problem.message);
+    }
+  });
   simple(
     'continuousRiskPolicies',
     'ContinuousRiskPolicy',
