@@ -189,9 +189,21 @@ jobs:
           cosign verify "$REF" \
             --certificate-identity "$IDENTITY" \
             --certificate-oidc-issuer https://token.actions.githubusercontent.com > /dev/null
-          cosign verify-attestation "$REF" --type spdxjson \
-            --certificate-identity "$IDENTITY" \
-            --certificate-oidc-issuer https://token.actions.githubusercontent.com > /dev/null
+          # The SBOM attestation was attached seconds ago; Docker Hub can take a
+          # little while to list it (v0.11.0 failed here with "found: .../sign/v1"
+          # and verified fine minutes later in release-assets). Retry briefly.
+          for attempt in 1 2 3 4 5 6; do
+            if cosign verify-attestation "$REF" --type spdxjson \
+                 --certificate-identity "$IDENTITY" \
+                 --certificate-oidc-issuer https://token.actions.githubusercontent.com > /dev/null; then
+              break
+            fi
+            if [ "$attempt" = 6 ]; then
+              echo "::error::The SBOM attestation could not be verified"
+              exit 1
+            fi
+            sleep $((attempt * 10))
+          done
           # Capture first, then print a prefix: piping into `head` closes the
           # pipe early, and under pipefail the SIGPIPE fails the step (it did
           # on the v0.10.0 publish, after every verification had passed).
