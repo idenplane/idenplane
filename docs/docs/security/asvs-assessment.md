@@ -54,6 +54,7 @@ Idenplane terminates TLS at a reverse proxy, so transport requirements about the
 |---|---|---|
 | V6.3.3, V6.3.4 | Admin console sign-in asks for a second factor (authenticator app, passkey or recovery code) once the admin has one, and a server-wide setting requires one for every admin: on for new installs, off after an upgrade, with an enrolment-only session so nobody is locked out. Admin tokens record `amr`, `acr` and `auth_time`. See [Admin console MFA](./admin-mfa.md). | `test/admin-mfa.e2e-spec.ts`, `src/admin-rbac/admin-access-policy.spec.ts`, `src/common/guards/admin-authorization.guard.spec.ts` |
 | V6.5.2 | Recovery codes have 120 bits (24 base32 characters) and are stored as SHA-256. Codes issued before 0.11.0 keep working; their unsalted hashes are rewrapped in Argon2id at start-up. | `src/mfa/mfa.service.spec.ts`, `src/mfa/recovery-code-rewrap.service.spec.ts` |
+| V1.5.1, V6.8.3 | SAML AuthnRequests: the signature must cover the root element and every field is read from the signed bytes (signature wrapping), and each request ID is accepted once within its validity window (replay). | `src/saml/saml-request-hardening.spec.ts`, `test/saml-request-replay.e2e-spec.ts` |
 | V6.4.4, V7.5.1 | Removing or adding an admin's factor, new recovery codes, an admin MFA reset and turning the requirement off need a second factor checked in the last 15 minutes (step-up), and every such change is an admin event, recorded even when admin events are off. | `test/admin-mfa.e2e-spec.ts` |
 
 ### Fixed in 0.10.0
