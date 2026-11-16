@@ -14,7 +14,8 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 - **Every AuthnRequest must carry an `IssueInstant`** no more than 5 minutes old (with 3 minutes of clock skew either way) and an `ID` that is a valid `xs:ID` (it starts with a letter or `_`). Requests without them, or older, are refused, whatever the SP's signing settings. `SAML_REQUEST_MAX_AGE_SECONDS` and `SAML_CLOCK_SKEW_SECONDS` change the window. Keep the clocks in sync with NTP.
 - **An AuthnRequest is accepted once.** A browser that resends an old request (back button, a bookmarked SSO URL) now gets `400 AuthnRequest has already been used`; the SP has to start a new sign-in. An SP that sends the same `ID` every time must be fixed.
 - **A `Destination` on the AuthnRequest must be this realm's SSO endpoint** (`{BASE_URL}/realms/{realm}/protocol/saml`). A request without one is still accepted.
-- **AuthnRequests with a DTD, comments, processing instructions, CDATA, duplicate `ID` attributes or elements the schema does not allow are refused.** Mainstream SP libraries send none of these.
+- **AuthnRequests with a DTD, comments, processing instructions, CDATA, duplicate `ID` attributes, or children the schema does not allow or that are out of schema order, are refused.** In particular an enveloped `<ds:Signature>` must come right after `<saml:Issuer>`, as the schema requires, not as the last child. Mainstream SP libraries already do this; check hand-built integrations.
+- **An HTTP-Redirect AuthnRequest must not carry an XML signature inside the message**, for every SP, with or without a certificate. The bindings specification requires it to be removed; sign the query string instead.
 - The migration adds the table `saml_request_ids`. Nothing else to do.
 
 ### Security

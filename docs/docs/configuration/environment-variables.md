@@ -158,7 +158,7 @@ WEBHOOK_ENCRYPTION_SALT=REPLACE_ME_WITH_A_UNIQUE_RANDOM_SALT
 
 | Variable | Default | Required | Description |
 |----------|---------|----------|-------------|
-| `SAML_REQUEST_MAX_AGE_SECONDS` | `300` | No | How old an AuthnRequest may be when it arrives, from its `IssueInstant`. 0 to 3600. Older requests are refused. See [Troubleshooting → SAML SSO](../troubleshooting#saml-sso). |
+| `SAML_REQUEST_MAX_AGE_SECONDS` | `300` | No | How old an AuthnRequest may be when it arrives, from its `IssueInstant`. 0 to 3600. Older requests are refused. See [Troubleshooting → SAML SSO](../troubleshooting.mdx#saml-sso). |
 | `SAML_CLOCK_SKEW_SECONDS` | `180` | No | How far apart a service provider's clock and Idenplane's may be. 0 to 900. A request may be this far in the future, or this much older than the maximum age. |
 
 An invalid value falls back to the default. Each accepted AuthnRequest ID is remembered for its service provider for the maximum age plus the skew, so a request can be accepted once. Fix clock drift with NTP rather than by raising the skew.
