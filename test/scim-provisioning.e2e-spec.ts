@@ -20,7 +20,7 @@ describe('SCIM provisioning cycle (e2e)', () => {
   const TOKEN_URL = `/realms/${REALM}/protocol/openid-connect/token`;
   const CLIENT_ID = 'test-client';
   const CLIENT_SECRET = 'test-client-secret';
-  const USER_PASSWORD = 'Scim-Dummy-Password-123!';
+  const USER_PASSWORD = 'Scim-dummy-password-123!';
 
   const SCIM_JSON = 'application/scim+json';
   const USER_SCHEMA = 'urn:ietf:params:scim:schemas:core:2.0:User';
