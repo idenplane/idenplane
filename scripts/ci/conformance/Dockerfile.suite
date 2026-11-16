@@ -1,6 +1,11 @@
 # The OpenID Foundation conformance suite, trusting the run's throwaway CA so
 # it can reach https://idp.conformance.test.
-ARG SUITE_VERSION
-FROM registry.gitlab.com/openid/conformance-suite:${SUITE_VERSION}
+#
+# Pinned by tag and index digest. This line is the single source of the suite
+# release: run.sh reads the tag from it to clone run-test-plan.py from the same
+# release, and checks that the nginx image in docker-compose.yml carries the
+# same tag. Bump the tag and the digest together (Dependabot's docker entry for
+# /scripts/ci/conformance does both).
+FROM registry.gitlab.com/openid/conformance-suite:release-v5.3.4@sha256:dcc4bd1fb7e9c00f048a67373fe2bec5ecf9feb45a6b5d55e237e5c30e5312c6
 COPY certs/ca.crt /tmp/ca.crt
 RUN keytool -importcert -cacerts -storepass changeit -noprompt -alias conformance-idp-ca -file /tmp/ca.crt
