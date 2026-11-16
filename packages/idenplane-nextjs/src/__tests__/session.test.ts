@@ -45,7 +45,7 @@ describe('createSessionCookieHandlers POST', () => {
       audience: 'demo-app',
     });
     const cookie = res.headers.get('set-cookie') ?? '';
-    expect(cookie).toMatch(new RegExp(`^idenplane_access_token=${TOKEN.replace(/\./g, '\\.')}; `));
+    expect(cookie.startsWith(`idenplane_access_token=${TOKEN}; `)).toBe(true);
     expect(cookie).toContain('; Path=/');
     expect(cookie).toContain('; HttpOnly');
     expect(cookie).toContain('; Secure');

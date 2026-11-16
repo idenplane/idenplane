@@ -99,13 +99,20 @@ function getJWKS(issuerUrl: string, realm: string) {
  * const payload = await verifyToken(token, config, { certificate: der });
  * ```
  */
+/** `https://idp/` -> `https://idp`, in linear time (no backtracking regex). */
+function stripTrailingSlashes(url: string): string {
+  let end = url.length;
+  while (end > 0 && url[end - 1] === '/') end--;
+  return url.slice(0, end);
+}
+
 export async function verifyToken(
   token: string,
   config: IdenplaneServerConfig,
   options: VerifyTokenOptions = {},
 ): Promise<IdenplaneTokenPayload> {
   const audience = assertServerConfig(config);
-  const issuerUrl = config.issuerUrl.replace(/\/+$/, '');
+  const issuerUrl = stripTrailingSlashes(config.issuerUrl);
   const JWKS = getJWKS(issuerUrl, config.realm);
   const issuer = `${issuerUrl}/realms/${config.realm}`;
 
