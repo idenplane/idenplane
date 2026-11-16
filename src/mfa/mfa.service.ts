@@ -10,6 +10,16 @@ import { BruteForceService } from '../brute-force/brute-force.service.js';
 import { SmsOtpService, type SmsOtpPurpose } from '../sms/sms-otp.service.js';
 import type { Realm } from '@prisma/client';
 import { totpSecret } from './totp-secret.js';
+import {
+  generateRecoveryCode,
+  isLegacyRecoveryCode,
+  isOldFormatRecoveryCodeHash,
+  legacyRecoveryCodeHash,
+  normalizeRecoveryCode,
+  RECOVERY_CODE_COUNT,
+  RECOVERY_CODE_WRAPPED_PREFIX,
+  recoveryCodeHash,
+} from './recovery-codes.js';
 
 /** Credential types that count as a second factor. */
 export const SECOND_FACTOR_TYPES = ['totp', 'sms'] as const;
@@ -292,16 +302,67 @@ export class MfaService {
     return true;
   }
 
+  /**
+   * Claims one of the user's unused recovery codes. Accepts a 0.11.0 code
+   * and a pre-0.11.0 one (plain or rewrapped hash); see recovery-codes.ts.
+   */
   async verifyRecoveryCode(userId: string, code: string): Promise<boolean> {
-    const codeHash = this.crypto.sha256(code.toLowerCase().replace(/\s/g, ''));
+    const normalized = normalizeRecoveryCode(code);
+    if (!normalized) return false;
+    const legacy = isLegacyRecoveryCode(normalized)
+      ? legacyRecoveryCodeHash(this.crypto, normalized)
+      : null;
+    const candidates = [recoveryCodeHash(this.crypto, normalized)];
+    if (legacy) candidates.push(legacy);
 
     // The conditional update is the claim: two concurrent requests with the
     // same code can't both see `used: false` and both succeed.
     const { count } = await this.prisma.recoveryCode.updateMany({
-      where: { userId, codeHash, used: false },
+      where: { userId, codeHash: { in: candidates }, used: false },
       data: { used: true },
     });
-    return count > 0;
+    if (count > 0) return true;
+    if (!legacy) return false;
+
+    // A pre-0.11.0 code whose hash has been rewrapped in Argon2id. Only
+    // input in that 8-hex shape gets here, so a random guess costs no
+    // Argon2 work; a user has at most RECOVERY_CODE_COUNT codes.
+    const wrapped = await this.prisma.recoveryCode.findMany({
+      where: {
+        userId,
+        used: false,
+        codeHash: { startsWith: RECOVERY_CODE_WRAPPED_PREFIX },
+      },
+      select: { id: true, codeHash: true },
+    });
+    for (const row of wrapped) {
+      const argon = row.codeHash.slice(RECOVERY_CODE_WRAPPED_PREFIX.length);
+      if (await this.crypto.verifyPassword(argon, legacy)) {
+        const claimed = await this.prisma.recoveryCode.updateMany({
+          where: { id: row.id, codeHash: row.codeHash, used: false },
+          data: { used: true },
+        });
+        return claimed.count > 0;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * How many unused recovery codes the user has, and whether any of them
+   * is a pre-0.11.0 code the user should replace.
+   */
+  async getRecoveryCodeStatus(
+    userId: string,
+  ): Promise<{ remaining: number; oldFormat: boolean }> {
+    const rows = await this.prisma.recoveryCode.findMany({
+      where: { userId, used: false },
+      select: { codeHash: true },
+    });
+    return {
+      remaining: rows.length,
+      oldFormat: rows.some((r) => isOldFormatRecoveryCodeHash(r.codeHash)),
+    };
   }
 
   /**
@@ -316,23 +377,20 @@ export class MfaService {
     return this.generateRecoveryCodes(userId);
   }
 
+  /** Replaces the user's recovery codes with RECOVERY_CODE_COUNT new ones. */
   async generateRecoveryCodes(userId: string): Promise<string[]> {
-    // Delete existing codes
-    await this.prisma.recoveryCode.deleteMany({ where: { userId } });
-
-    const codes: string[] = [];
-    for (let i = 0; i < 10; i++) {
-      const code = this.crypto.generateSecret(4).toUpperCase(); // 8-char hex
-      codes.push(code);
-
-      await this.prisma.recoveryCode.create({
-        data: {
+    const codes = Array.from({ length: RECOVERY_CODE_COUNT }, () =>
+      generateRecoveryCode(),
+    );
+    await this.prisma.$transaction([
+      this.prisma.recoveryCode.deleteMany({ where: { userId } }),
+      this.prisma.recoveryCode.createMany({
+        data: codes.map((code) => ({
           userId,
-          codeHash: this.crypto.sha256(code.toLowerCase()),
-        },
-      });
-    }
-
+          codeHash: recoveryCodeHash(this.crypto, code),
+        })),
+      }),
+    ]);
     return codes;
   }
 
