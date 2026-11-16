@@ -7,6 +7,7 @@ import {
   type SeededRealm,
   type TestContext,
 } from './setup';
+import { useThemeViews } from './helpers/browser';
 
 /**
  * Exact redirect URI matching (0.11.0, RFC 9700, ASVS V10.4.1): the
@@ -46,6 +47,7 @@ describe('Exact redirect URI matching (e2e)', () => {
     const res = await authorize(redirectUri);
     expect(res.status).toBe(400);
     expect(res.headers['location']).toBeUndefined();
+    expect(res.text).not.toContain('code=');
   };
 
   const setClient = (data: {
@@ -60,6 +62,8 @@ describe('Exact redirect URI matching (e2e)', () => {
   beforeAll(async () => {
     ctx = await createTestApp();
     app = ctx.app as INestApplication<App>;
+    // A refused request renders the themed error page.
+    useThemeViews(app);
     seeded = await ctx.seedTestRealm(REALM);
   }, 30_000);
 
