@@ -1307,6 +1307,28 @@ describe('AuthService', () => {
       return err;
     }
 
+    it('refuses tokens to a user disabled between sign-in and code exchange', async () => {
+      setupForTokenIssuance();
+      prisma.authorizationCode.update.mockResolvedValue({
+        ...authCode,
+        used: true,
+      });
+      prisma.user.findUnique.mockResolvedValue({ ...dbUser, enabled: false });
+
+      await expectOAuthError(
+        service.handleTokenRequest(realm, {
+          grant_type: 'authorization_code',
+          code: 'valid-auth-code',
+          client_id: 'my-client',
+          client_secret: 'correct-secret',
+          redirect_uri: 'https://app.example.com/callback',
+        }),
+        'invalid_grant',
+        400,
+      );
+      expect(prisma.session.create).not.toHaveBeenCalled();
+    });
+
     it('should return tokens for a valid authorization code', async () => {
       setupForTokenIssuance();
       prisma.authorizationCode.update.mockResolvedValue({
@@ -1834,6 +1856,37 @@ describe('AuthService', () => {
         }),
       );
     });
+
+    it.each([
+      ['disabled', { enabled: false }],
+      ['locked', {}],
+    ])(
+      'refuses tokens to a user %s after approving the device',
+      async (state, userOverrides) => {
+        setupDeviceClient();
+        prisma.deviceCode.findUnique.mockResolvedValue(makeDeviceCode() as any);
+        prisma.deviceCode.update.mockResolvedValue({} as any);
+        prisma.user.findUnique.mockResolvedValue({
+          ...dbUser,
+          ...userOverrides,
+        });
+        if (state === 'locked') {
+          bruteForceService.checkLocked.mockReturnValue({ locked: true });
+        }
+
+        await expectOAuthError(
+          service.handleTokenRequest(realm, {
+            grant_type: 'urn:ietf:params:oauth:grant-type:device_code',
+            device_code: 'test-device-code',
+            client_id: deviceClientId,
+            client_secret: deviceClientSecret,
+          }),
+          'invalid_grant',
+          400,
+        );
+        expect(prisma.session.create).not.toHaveBeenCalled();
+      },
+    );
 
     it('should throw authorization_pending when not yet approved', async () => {
       setupDeviceClient();
