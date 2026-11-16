@@ -22,13 +22,21 @@
 import { Injectable, Inject, OnDestroy } from '@angular/core';
 import { BehaviorSubject, Observable } from 'rxjs';
 import { IdenplaneClient } from 'idenplane-sdk';
-import type { UserInfo, IdenplaneConfig, TokenResponse } from 'idenplane-sdk';
+import type { UserInfo, TokenResponse } from 'idenplane-sdk';
 import { IDENPLANE_CONFIG } from './auth.config.js';
+import type { IdenplaneConfig } from './auth.config.js';
+import { resolveBearerTokenOrigins } from './bearer-origins.js';
 
 @Injectable({ providedIn: 'root' })
 export class AuthService implements OnDestroy {
   /** The underlying IdenplaneClient instance. */
   readonly client: IdenplaneClient;
+
+  /**
+   * Origins the HTTP interceptor sends the access token to: the Idenplane
+   * server and `bearerTokenOrigins`, normalised. See {@link IdenplaneConfig}.
+   */
+  readonly bearerTokenOrigins: ReadonlySet<string>;
 
   // ── Reactive state ──────────────────────────────────────────────
 
@@ -71,6 +79,8 @@ export class AuthService implements OnDestroy {
   private readonly _unsubscribers: Array<() => void> = [];
 
   constructor(@Inject(IDENPLANE_CONFIG) config: IdenplaneConfig) {
+    // Validated first, so a bad entry fails at startup rather than per request.
+    this.bearerTokenOrigins = resolveBearerTokenOrigins(config);
     this.client = new IdenplaneClient(config);
     this._wireEvents();
     this._initialize();

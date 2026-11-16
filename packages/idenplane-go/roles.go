@@ -70,7 +70,7 @@ func (rs *RoleService) Create(ctx context.Context, req CreateRoleRequest) (*Role
 
 	var role Role
 	if err := json.NewDecoder(resp.Body).Decode(&role); err != nil {
-		return nil, ErrServerError("invalid role payload: " + err.Error())
+		return nil, payloadError(ctx, "invalid role payload", err)
 	}
 	return &role, nil
 }
@@ -92,7 +92,7 @@ func (rs *RoleService) Get(ctx context.Context, name string) (*Role, error) {
 
 	var role Role
 	if err := json.NewDecoder(resp.Body).Decode(&role); err != nil {
-		return nil, ErrServerError("invalid role payload: " + err.Error())
+		return nil, payloadError(ctx, "invalid role payload", err)
 	}
 	return &role, nil
 }
@@ -111,7 +111,7 @@ func (rs *RoleService) List(ctx context.Context) ([]*Role, error) {
 
 	var roles []*Role
 	if err := json.NewDecoder(resp.Body).Decode(&roles); err != nil {
-		return nil, ErrServerError("invalid list payload: " + err.Error())
+		return nil, payloadError(ctx, "invalid list payload", err)
 	}
 	return roles, nil
 }
@@ -134,7 +134,7 @@ func (rs *RoleService) Update(ctx context.Context, name string, req UpdateRoleRe
 
 	var role Role
 	if err := json.NewDecoder(resp.Body).Decode(&role); err != nil {
-		return nil, ErrServerError("invalid role payload: " + err.Error())
+		return nil, payloadError(ctx, "invalid role payload", err)
 	}
 	return &role, nil
 }

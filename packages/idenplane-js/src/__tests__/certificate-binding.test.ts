@@ -29,7 +29,7 @@ async function sha256Base64Url(bytes: Uint8Array): Promise<string> {
 // Any bytes do: the thumbprint is a digest of the DER, whatever it encodes.
 const der = randomBytes(700);
 const x5t = await sha256Base64Url(der);
-const bound = { sub: 'u', cnf: { 'x5t#S256': x5t } };
+const bound = { sub: 'u', typ: 'Bearer', cnf: { 'x5t#S256': x5t } };
 
 describe('computeX5tS256', () => {
   it('is base64url SHA-256 of the DER, unpadded', async () => {
@@ -92,7 +92,7 @@ describe('assertCertificateBinding', () => {
 });
 
 describe('verifyToken with a certificate-bound token', () => {
-  const config = { issuerUrl: 'http://localhost:3000', realm: 'test' };
+  const config = { issuerUrl: 'http://localhost:3000', realm: 'test', audience: 'test-client' };
 
   it('returns the payload when the presented certificate matches', async () => {
     vi.mocked(jwtVerify).mockResolvedValue({ payload: bound } as never);
@@ -117,9 +117,10 @@ describe('verifyToken with a certificate-bound token', () => {
   });
 
   it('leaves unbound tokens unchanged', async () => {
-    vi.mocked(jwtVerify).mockResolvedValue({ payload: { sub: 'u' } } as never);
+    vi.mocked(jwtVerify).mockResolvedValue({ payload: { sub: 'u', typ: 'Bearer' } } as never);
     await expect(server.verifyToken('t', config)).resolves.toEqual({
       sub: 'u',
+      typ: 'Bearer',
     });
   });
 

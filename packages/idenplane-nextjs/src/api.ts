@@ -4,10 +4,10 @@
  * @example
  * ```typescript
  * // pages/api/profile.ts  (Pages Router)
- * import { withAuth } from '@idenplane/nextjs/api';
+ * import { withAuth } from 'idenplane-nextjs/api';
  *
  * export default withAuth(
- *   { serverUrl: 'https://auth.example.com', realm: 'my-realm' },
+ *   { serverUrl: 'https://auth.example.com', realm: 'my-realm', audience: 'my-app' },
  *   (req, res) => {
  *     res.json({ user: req.authUser });
  *   },
@@ -17,10 +17,10 @@
  * @example
  * ```typescript
  * // app/api/profile/route.ts  (App Router)
- * import { withAuthHandler } from '@idenplane/nextjs/api';
+ * import { withAuthHandler } from 'idenplane-nextjs/api';
  *
  * export const GET = withAuthHandler(
- *   { serverUrl: 'https://auth.example.com', realm: 'my-realm' },
+ *   { serverUrl: 'https://auth.example.com', realm: 'my-realm', audience: 'my-app' },
  *   (req, user) => Response.json({ user }),
  * );
  * ```
@@ -28,6 +28,7 @@
 
 import type { TokenPayload } from './server.js';
 import { assertSecureServerUrl } from './internal/url-validation.js';
+import { assertAudience } from './internal/audience.js';
 
 // ── Shared types ─────────────────────────────────────────────────
 
@@ -36,6 +37,13 @@ export interface ApiAuthConfig {
   serverUrl: string;
   /** Realm name */
   realm: string;
+  /**
+   * The client ID (or IDs) whose access tokens this API accepts, checked
+   * against the token's `aud`. Required. An Idenplane access token's `aud`
+   * is the `client_id` that requested it, so this is usually your app's
+   * own client ID.
+   */
+  audience: string | string[];
   /** Required realm roles (user must have ALL of them) */
   requiredRoles?: string[];
   /**
@@ -90,6 +98,7 @@ export function withAuth(
   handler: AuthenticatedHandler,
 ): NextApiHandler {
   assertSecureServerUrl(config.serverUrl, config.allowInsecureHttp);
+  assertAudience(config.audience, 'withAuth');
 
   return async (req, res) => {
     const { extractBearerToken, verifyToken, hasRealmRoles } = await loadAuthHelpers();
@@ -104,6 +113,7 @@ export function withAuth(
       payload = (await verifyToken(token, {
         issuerUrl: config.serverUrl,
         realm: config.realm,
+        audience: config.audience,
       })) as TokenPayload;
     } catch {
       return res.status(401).json({ error: 'unauthorized', message: 'Invalid or expired token' });
@@ -134,6 +144,7 @@ export function withAuthHandler(
   handler: AppRouterHandler,
 ): (req: Request) => Promise<Response> {
   assertSecureServerUrl(config.serverUrl, config.allowInsecureHttp);
+  assertAudience(config.audience, 'withAuthHandler');
 
   return async (req: Request) => {
     const { extractBearerToken, verifyToken, hasRealmRoles } = await loadAuthHelpers();
@@ -151,6 +162,7 @@ export function withAuthHandler(
       payload = (await verifyToken(token, {
         issuerUrl: config.serverUrl,
         realm: config.realm,
+        audience: config.audience,
       })) as TokenPayload;
     } catch {
       return Response.json(

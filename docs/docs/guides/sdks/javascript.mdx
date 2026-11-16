@@ -248,6 +248,25 @@ See the [Authentication Guide](/guides/authentication) for how these signals are
 
 ---
 
+## Verifying tokens on your server
+
+`idenplane-sdk/server` verifies access tokens in your own API (it needs `jose`):
+
+```ts
+import { verifyToken } from 'idenplane-sdk/server';
+
+const payload = await verifyToken(accessToken, {
+  issuerUrl: 'https://auth.example.com',
+  realm: 'my-realm',
+  audience: 'my-spa', // the client ID(s) whose access tokens this API accepts
+});
+```
+
+It checks the signature against the realm's JWKS (asymmetric algorithms only), the issuer, `exp`, the audience and that the token is an access token (`typ: "Bearer"`). The same configuration drives `createIdenplaneMiddleware` (Express), `createIdenplaneGuard` (NestJS), `getServerSideAuth` and `createNextMiddleware`.
+
+- **`audience` is required** (since idenplane-sdk 2.0.0). An Idenplane access token's `aud` is the `client_id` of the client that requested it, so set it to the client ID of the app that calls your API, or a list of them. Without it, an API would accept access tokens the realm issued to any other application. Admin impersonation tokens carry the realm name as `aud` (not a client ID); add the realm name to `audience` if this API should accept them. A missing `audience` throws a configuration error, and the middleware and guard throw it when created.
+- **Only access tokens are accepted** (since 2.0.0). The realm signs ID tokens, logout tokens and admin tokens with the same key; `verifyToken` refuses them with `InvalidTokenTypeError`. Answer it, like any verification error, with `401`.
+
 ## Next steps
 
 <div className="row">

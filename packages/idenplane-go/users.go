@@ -179,7 +179,7 @@ func (us *UserService) Get(ctx context.Context, id string) (*User, error) {
 
 	var rep UserRepresentation
 	if err := json.NewDecoder(resp.Body).Decode(&rep); err != nil {
-		return nil, ErrServerError("invalid user payload: " + err.Error())
+		return nil, payloadError(ctx, "invalid user payload", err)
 	}
 	return rep.toUser(), nil
 }
@@ -237,7 +237,7 @@ func (us *UserService) List(ctx context.Context, params ListUsersParams) ([]*Use
 		Total int                  `json:"total"`
 	}
 	if err := json.NewDecoder(resp.Body).Decode(&listResp); err != nil {
-		return nil, 0, ErrServerError("invalid list payload: " + err.Error())
+		return nil, 0, payloadError(ctx, "invalid list payload", err)
 	}
 	users := make([]*User, len(listResp.Users))
 	for i := range listResp.Users {

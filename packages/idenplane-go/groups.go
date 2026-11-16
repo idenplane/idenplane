@@ -84,7 +84,7 @@ func (gs *GroupService) Create(ctx context.Context, req CreateGroupRequest) (*Gr
 
 	var group Group
 	if err := json.NewDecoder(resp.Body).Decode(&group); err != nil {
-		return nil, ErrServerError("invalid group payload: " + err.Error())
+		return nil, payloadError(ctx, "invalid group payload", err)
 	}
 	return &group, nil
 }
@@ -106,7 +106,7 @@ func (gs *GroupService) Get(ctx context.Context, id string) (*Group, error) {
 
 	var group Group
 	if err := json.NewDecoder(resp.Body).Decode(&group); err != nil {
-		return nil, ErrServerError("invalid group payload: " + err.Error())
+		return nil, payloadError(ctx, "invalid group payload", err)
 	}
 	return &group, nil
 }
@@ -125,7 +125,7 @@ func (gs *GroupService) List(ctx context.Context) ([]*Group, error) {
 
 	var groups []*Group
 	if err := json.NewDecoder(resp.Body).Decode(&groups); err != nil {
-		return nil, ErrServerError("invalid list payload: " + err.Error())
+		return nil, payloadError(ctx, "invalid list payload", err)
 	}
 	return groups, nil
 }
@@ -148,7 +148,7 @@ func (gs *GroupService) Update(ctx context.Context, id string, req UpdateGroupRe
 
 	var group Group
 	if err := json.NewDecoder(resp.Body).Decode(&group); err != nil {
-		return nil, ErrServerError("invalid group payload: " + err.Error())
+		return nil, payloadError(ctx, "invalid group payload", err)
 	}
 	return &group, nil
 }

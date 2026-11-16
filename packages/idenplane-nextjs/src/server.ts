@@ -1,21 +1,25 @@
 /**
  * Server Component helpers for Next.js App Router.
  *
- * Use these in React Server Components (or `generateMetadata`, route handlers)
- * to read the current auth session from cookies without a client-side round-trip.
+ * Read the signed-in user in React Server Components, `generateMetadata` and
+ * route handlers from the HttpOnly access-token cookie that the
+ * `idenplane-nextjs/session` route handler sets after sign-in. The token is
+ * verified (signature against the realm JWKS, issuer, audience, expiry and
+ * `typ: "Bearer"`) with `verifyToken` from `idenplane-sdk/server` before any
+ * claim is returned.
  *
  * @example
  * ```typescript
  * // app/dashboard/page.tsx
  * import { cookies } from 'next/headers';
- * import { getServerAuth, getServerUser } from '@idenplane/nextjs/server';
+ * import { getServerUser } from 'idenplane-nextjs/server';
  * import { redirect } from 'next/navigation';
  *
  * export default async function DashboardPage() {
- *   const cookieStore = cookies();
- *   const user = await getServerUser(cookieStore, {
- *     serverUrl: 'http://localhost:3000',
+ *   const user = await getServerUser(await cookies(), {
+ *     serverUrl: 'https://auth.example.com',
  *     realm: 'my-realm',
+ *     audience: 'my-app',
  *   });
  *
  *   if (!user) redirect('/login');
@@ -24,23 +28,36 @@
  * ```
  */
 
-import { decodeJwtPayload as decodeJwtPayloadCore } from 'idenplane-sdk/token';
+import { assertSecureServerUrl } from './internal/url-validation.js';
+import { assertAudience } from './internal/audience.js';
 
 // ── Shared types ─────────────────────────────────────────────────
+
+/** Default name of the access-token cookie. */
+export const DEFAULT_ACCESS_TOKEN_COOKIE = 'idenplane_access_token';
 
 export interface ServerAuthConfig {
   /** Idenplane server base URL */
   serverUrl: string;
   /** Realm name */
   realm: string;
+  /**
+   * The client ID (or IDs) whose access tokens are accepted, checked against
+   * the token's `aud`. Required: usually your app's own client ID.
+   */
+  audience: string | string[];
   /** Cookie name holding the access token (default: "idenplane_access_token") */
   cookieName?: string;
+  /**
+   * Allow `serverUrl` to use `http://` for a non-loopback host (default: false).
+   */
+  allowInsecureHttp?: boolean;
 }
 
 export interface AuthSession {
   /** Raw access token string */
   accessToken: string;
-  /** Decoded JWT payload */
+  /** Verified JWT payload */
   payload: TokenPayload;
   /** Whether the session is authenticated */
   isAuthenticated: true;
@@ -71,88 +88,58 @@ export interface TokenPayload extends User {
 
 /**
  * Minimal ReadonlyRequestCookies interface — matches the shape returned by
- * `cookies()` from `next/headers` without a hard import.
+ * `await cookies()` from `next/headers` without a hard import.
  */
 export interface ReadonlyRequestCookies {
   get(name: string): { name: string; value: string } | undefined;
 }
 
-// ── JWT decode (no verification — use verifyToken from idenplane-sdk/server for full JWKS validation) ──
-// Bug #438-3 acknowledged: cookie-based auth in this module performs no
-// cryptographic signature verification.  This is a known, documented
-// limitation.  The security warnings in getServerAuth() JSDoc are intentional.
-// Consumers who need cryptographic assurance MUST call verifyToken() from
-// idenplane-sdk/server before trusting any claim from the decoded payload.
-
-/**
- * Decode a JWT payload WITHOUT cryptographic signature verification.
- *
- * SECURITY NOTE: This function decodes the payload segment of a JWT by
- * base64url-decoding it.  It does NOT validate the signature, issuer (`iss`),
- * audience (`aud`), or any other security-relevant claims beyond expiry.
- * The decoded claims must NOT be trusted for authorization decisions.
- *
- * Intended use — convenience reading in Server Components where the token has
- * already been cryptographically verified by a trusted upstream layer (e.g.
- * your API gateway, the Idenplane Edge middleware backed by JWKS verification, or
- * a call to `verifyToken` from `idenplane-sdk/server`).
- *
- * If you are making access-control decisions based on the returned claims,
- * you MUST verify the token first with `verifyToken` from `idenplane-sdk/server`
- * (which performs full JWKS signature verification).
- *
- * Delegates to `idenplane-sdk/token`'s `decodeJwtPayload` (the shared,
- * dependency-free implementation also used by `@idenplane/nextjs/middleware`)
- * rather than maintaining a separate base64url decode here.
- */
-function decodeJwtPayload(token: string): TokenPayload | null {
-  return decodeJwtPayloadCore(token) as TokenPayload | null;
-}
-
-function isExpired(payload: TokenPayload): boolean {
-  return Date.now() / 1000 > payload.exp;
-}
-
 // ── Public API ────────────────────────────────────────────────────
 
 /**
- * Read and decode the auth session from request cookies (Next.js Server Components).
+ * Read and verify the access-token cookie.
  *
- * WARNING (#11): This function decodes the JWT locally WITHOUT verifying its
- * cryptographic signature.  It is provided for convenience when reading user
- * identity in Server Components where an upstream layer has already verified
- * the token (e.g. middleware + JWKS).
+ * Returns `null` when there is no cookie or when the token fails
+ * verification (bad signature, another realm or audience, expired, or not an
+ * access token). Throws a configuration error if `audience` is missing.
  *
- * DO NOT use the returned `payload` for authorization decisions (role checks,
- * permission gates, data access) without first verifying the token with
- * `verifyToken` from `idenplane-sdk/server`.  An attacker who can set an
- * arbitrary cookie value could otherwise forge any claims returned here.
- *
- * Returns `AuthSession | null`.  The token is decoded locally (no JWKS call).
- * Call `verifyToken` from `idenplane-sdk/server` if you need cryptographic validation.
+ * The JWKS is fetched by `idenplane-sdk/server` (needs `jose`) and cached for
+ * ten minutes, so this runs in the Node.js runtime, not Edge middleware.
  */
 export async function getServerAuth(
   cookies: ReadonlyRequestCookies,
-  config?: ServerAuthConfig,
+  config: ServerAuthConfig,
 ): Promise<AuthSession | null> {
-  const cookieName = config?.cookieName ?? 'idenplane_access_token';
-  const accessToken = cookies.get(cookieName)?.value;
+  if (!config) {
+    throw new TypeError('Idenplane: getServerAuth requires { serverUrl, realm, audience }');
+  }
+  assertSecureServerUrl(config.serverUrl, config.allowInsecureHttp);
+  assertAudience(config.audience, 'getServerAuth');
 
+  const accessToken = cookies.get(config.cookieName ?? DEFAULT_ACCESS_TOKEN_COOKIE)?.value;
   if (!accessToken) return null;
 
-  const payload = decodeJwtPayload(accessToken);
-  if (!payload || isExpired(payload)) return null;
-
-  return { accessToken, payload, isAuthenticated: true };
+  // Deferred so that importing this module doesn't pull `jose` in.
+  const { verifyToken } = await import('idenplane-sdk/server');
+  try {
+    const payload = (await verifyToken(accessToken, {
+      issuerUrl: config.serverUrl,
+      realm: config.realm,
+      audience: config.audience,
+    })) as TokenPayload;
+    return { accessToken, payload, isAuthenticated: true };
+  } catch {
+    return null;
+  }
 }
 
 /**
- * Convenience wrapper that returns just the `User` object from the session,
- * or `null` if the user is not authenticated.
+ * Convenience wrapper that returns just the `User` object from the verified
+ * session, or `null` if the user is not authenticated.
  */
 export async function getServerUser(
   cookies: ReadonlyRequestCookies,
-  config?: ServerAuthConfig,
+  config: ServerAuthConfig,
 ): Promise<User | null> {
   const session = await getServerAuth(cookies, config);
   if (!session) return null;
