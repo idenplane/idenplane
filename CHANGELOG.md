@@ -9,6 +9,12 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+### Removed
+- **`@node-saml/node-saml` dependency.** Nothing in Idenplane imported it. The SAML 2.0 IdP builds and verifies its XML with `xml-crypto`, `@xmldom/xmldom` and `fast-xml-parser`, and there is no SAML service-provider or SAML-brokering code that would use it. Removing it also drops `xml-encryption`, `xml2js`, `xmlbuilder`, `sax` and two old `xpath` copies from the install. This replaces the 5.1.0 → 5.2.0 Dependabot bump (#1859); 5.2.0's new SP-side checks have nothing in Idenplane to apply to.
+
+### Changed
+- **`@xmldom/xmldom` is now a declared dependency** (`^0.8.15`, the same copy `xml-crypto` uses). The SAML IdP imports it directly, but until now it was only installed because other packages depended on it.
+
 ## [0.10.0] - 2026-11-16
 
 A security hardening release. New realms are now secure by default: brute-force protection and audit events are on. The release also publishes a threat model and an OWASP ASVS 5.0 Level 2 self-assessment, and closes the gaps the assessment found that could be fixed safely: token-type confusion at userinfo, a password-oracle path for locked LDAP users, sessions that survived a password reset, and more. Read *Before you upgrade*: existing realms are not changed.
