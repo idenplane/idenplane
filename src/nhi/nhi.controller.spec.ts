@@ -1,9 +1,7 @@
 // Import reflect-metadata first for decorators
 import 'reflect-metadata';
 
-import { NotFoundException } from '@nestjs/common';
 import { NhiController } from './nhi.controller.js';
-import { NhiAuditService } from './nhi-audit.service.js';
 import type { Realm } from '@prisma/client';
 
 describe('NhiController', () => {

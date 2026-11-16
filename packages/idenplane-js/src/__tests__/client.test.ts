@@ -464,9 +464,6 @@ describe('IdenplaneClient', () => {
       (client as any).storage.set('auth_state', 'valid-state');
       (client as any).storage.set('pkce_verifier', 'valid-verifier');
 
-      // Set up URL manipulation mock
-      const originalLocation = globalThis.window;
-
       fetchMock.mockImplementation((url: string) => {
         if (url.includes('.well-known')) {
           return Promise.resolve({ ok: true, json: () => Promise.resolve(oidcDiscovery) });

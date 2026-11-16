@@ -102,54 +102,36 @@ class TestConfig:
 
 class TestClient:
     def test_auth_header_returns_bearer_when_token_set(self) -> None:
-        client = Client(Config(base_url="https://a", realm="r", admin_token="abc"))
-        try:
+        with Client(Config(base_url="https://a", realm="r", admin_token="abc")) as client:
             assert client.auth_header() == "Bearer abc"
-        finally:
-            client.close()
 
     def test_auth_header_empty_when_no_token(self) -> None:
-        client = Client(Config(base_url="https://a", realm="r"))
-        try:
+        with Client(Config(base_url="https://a", realm="r")) as client:
             assert client.auth_header() == ""
-        finally:
-            client.close()
 
     def test_users_property_is_lazy_and_cached(self) -> None:
-        client = Client(Config(base_url="https://a", realm="r"))
-        try:
+        with Client(Config(base_url="https://a", realm="r")) as client:
             first = client.users
             second = client.users
             assert first is second
-        finally:
-            client.close()
 
     def test_discovery_property_is_lazy_and_cached(self) -> None:
-        client = Client(Config(base_url="https://a", realm="r"))
-        try:
+        with Client(Config(base_url="https://a", realm="r")) as client:
             first = client.discovery
             second = client.discovery
             assert first is second
-        finally:
-            client.close()
 
     def test_roles_property_is_lazy_and_cached(self) -> None:
-        client = Client(Config(base_url="https://a", realm="r"))
-        try:
+        with Client(Config(base_url="https://a", realm="r")) as client:
             first = client.roles
             second = client.roles
             assert first is second
-        finally:
-            client.close()
 
     def test_groups_property_is_lazy_and_cached(self) -> None:
-        client = Client(Config(base_url="https://a", realm="r"))
-        try:
+        with Client(Config(base_url="https://a", realm="r")) as client:
             first = client.groups
             second = client.groups
             assert first is second
-        finally:
-            client.close()
 
     def test_close_is_idempotent(self) -> None:
         client = Client(Config(base_url="https://a", realm="r"))

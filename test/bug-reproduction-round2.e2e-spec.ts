@@ -1,4 +1,4 @@
-import type { INestApplication } from '@nestjs/common';
+import { NotFoundException, type INestApplication } from '@nestjs/common';
 import request from 'supertest';
 import type { App } from 'supertest/types';
 import {
@@ -7,6 +7,7 @@ import {
   type SeededRealm,
   type TestContext,
 } from './setup';
+import { WebAuthnService } from '../src/webauthn/webauthn.service.js';
 
 describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
   let app: INestApplication<App>;
@@ -39,11 +40,12 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
   // ═══════════════════════════════════════════════════════════════
 
   describe('BUG #1: Session revocation IDOR - no realm isolation', () => {
-    it('should REJECT revoking session from different realm — BUG: accepts any session ID', async () => {
+    it('should REJECT revoking a session of a different realm', async () => {
       const otherRealm = await ctx.seedTestRealm('e2e-round2-other-realm');
 
+      // A session that belongs to the OTHER realm...
       const tokens = await request(app.getHttpServer())
-        .post(TOKEN_URL)
+        .post(`/realms/${otherRealm.name}/protocol/openid-connect/token`)
         .type('form')
         .send({
           grant_type: 'password',
@@ -56,18 +58,19 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
 
       const sessionId = tokens.body.session_state;
 
+      // ...revoked through THIS realm's admin route.
       const res = await withKey(
         request(app.getHttpServer()).delete(
           `/admin/realms/${REALM_NAME}/sessions/${sessionId}`,
         ),
       );
 
-      // EXPECTED: 403 or 404 (session doesn't belong to this realm)
-      // ACTUAL: May succeed - IDOR vulnerability
-      // BUG: No realm validation on session revocation
-      if (res.status === 204) {
-        console.log('BUG CONFIRMED: Session from other realm was revoked!');
-      }
+      // The session doesn't belong to this realm: 404, and it survives.
+      expect(res.status).toBe(404);
+      const stillExists = await ctx.prisma.session.findUnique({
+        where: { id: sessionId },
+      });
+      expect(stillExists).not.toBeNull();
     });
 
     it('should validate session belongs to realm before revocation', async () => {
@@ -346,15 +349,14 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
         ),
       );
 
-      // BUG: OAuth sessions are filtered by user.realmId, not session.realmId
-      // If user has sessions in both realms, all are returned
+      // Only this realm's sessions are listed: the one just opened here, and
+      // never the one opened in the other realm.
       expect(res.status).toBe(200);
       expect(Array.isArray(res.body)).toBe(true);
 
-      const ssoSessions = res.body.filter(
-        (s: { type: string }) => s.type === 'sso',
-      );
-      expect(ssoSessions.length).toBeGreaterThanOrEqual(0);
+      const listedIds = res.body.map((s: { id: string }) => s.id);
+      expect(listedIds).toContain(tokens1.body.session_state);
+      expect(listedIds).not.toContain(tokens2.body.session_state);
     });
   });
 
@@ -387,20 +389,20 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
   describe('BUG #10: WebAuthn generateAuthenticationOptions missing user-realm validation', () => {
     it('should validate user belongs to realm before generating options', async () => {
       const otherRealm = await ctx.seedTestRealm('e2e-webauthn-realm');
+      const otherRealmRow = await ctx.prisma.realm.update({
+        where: { id: otherRealm.realm.id },
+        data: { webAuthnEnabled: true },
+      });
 
-      const res = await request(app.getHttpServer())
-        .post(`/realms/${otherRealm.name}/protocol/openid-connect/auth`)
-        .query({
-          client_id: 'test-client',
-          response_type: 'code',
-          scope: 'openid',
-          redirect_uri: 'http://localhost:3000/callback',
-          userId: seeded.user.id,
-        });
-
-      // BUG: If userId is accepted and realm validation is missing,
-      // authentication options could be generated for user in wrong realm
-      // This is more of a PRE-auth check issue
+      // No HTTP route takes a user id from the caller (the options endpoint
+      // resolves a username inside its own realm), so check the realm guard
+      // where it lives: the service, against the real database. A user of
+      // REALM_NAME must not get options through the other realm.
+      await expect(
+        app
+          .get(WebAuthnService)
+          .generateAuthenticationOptions(otherRealmRow, seeded.user.id),
+      ).rejects.toBeInstanceOf(NotFoundException);
     });
   });
 
@@ -410,7 +412,11 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
   // ═══════════════════════════════════════════════════════════════
 
   describe('BUG #11: acr_values not validated against client requiredAcr', () => {
-    it('should BLOCK client requesting ACR higher than its configured requiredAcr', async () => {
+    // `requiredAcr` is the client's floor, not a ceiling: the authorize
+    // endpoint enforces the strongest of acr_values and requiredAcr. A client
+    // asking for MORE assurance than its floor is legitimate step-up, so the
+    // request is accepted and the user is sent to sign in, not refused.
+    it('accepts acr_values stronger than the client requiredAcr and sends the user to sign in', async () => {
       await ctx.prisma.client.update({
         where: {
           realmId_clientId: {
@@ -421,28 +427,34 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
         data: { requiredAcr: 'acr_password' },
       });
 
-      const res = await request(app.getHttpServer())
-        .get(`/realms/${REALM_NAME}/protocol/openid-connect/auth`)
-        .query({
-          client_id: 'test-client',
-          response_type: 'code',
-          scope: 'openid',
-          redirect_uri: 'http://localhost:3000/callback',
-          acr_values: 'urn:idenplane:acr:mfa',
-        });
+      try {
+        const res = await request(app.getHttpServer())
+          .get(`/realms/${REALM_NAME}/protocol/openid-connect/auth`)
+          .query({
+            client_id: 'test-client',
+            response_type: 'code',
+            scope: 'openid',
+            redirect_uri: 'http://localhost:3000/callback',
+            acr_values: 'urn:idenplane:acr:mfa',
+          });
 
-      // EXPECTED: 400 (client can't request ACR higher than its requiredAcr)
-      // ACTUAL: May succeed - no validation at lines 59-62
-      // BUG: Client could bypass its own security policy
-      await ctx.prisma.client.update({
-        where: {
-          realmId_clientId: {
-            realmId: seeded.realm.id,
-            clientId: 'test-client',
+        expect(res.status).toBe(302);
+        expect(
+          String(res.headers['location']).startsWith(
+            `/realms/${REALM_NAME}/login?`,
+          ),
+        ).toBe(true);
+      } finally {
+        await ctx.prisma.client.update({
+          where: {
+            realmId_clientId: {
+              realmId: seeded.realm.id,
+              clientId: 'test-client',
+            },
           },
-        },
-        data: { requiredAcr: null },
-      });
+          data: { requiredAcr: null },
+        });
+      }
     });
   });
 
@@ -490,6 +502,10 @@ describe('Bug Reproduction Tests - Round 2 (e2e)', () => {
       // from another realm matches nothing, so no cross-realm session is ever
       // revoked (no IDOR). The operation is idempotent → 204 No Content.
       expect(res.status).toBe(204);
+      const stillExists = await ctx.prisma.session.findUnique({
+        where: { id: tokens.body.session_state },
+      });
+      expect(stillExists).not.toBeNull();
     });
   });
 

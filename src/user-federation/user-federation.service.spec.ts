@@ -327,9 +327,6 @@ describe('UserFederationService', () => {
     it('should return success when LDAP connection succeeds', async () => {
       prisma.userFederation.findUnique.mockResolvedValue(mockFederation);
 
-      const ldapInstance = MockLdapClientWrapper.mock.results[0]?.value ?? {
-        testConnection: jest.fn(),
-      };
       // After findById resolves, createLdapClient will instantiate a new mock.
       // We pre-configure what the next instance will return.
       const mockTestConn = jest.fn().mockResolvedValue({ success: true });

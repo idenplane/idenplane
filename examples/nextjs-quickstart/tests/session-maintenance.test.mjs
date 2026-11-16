@@ -3,7 +3,13 @@ import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
-import { databaseContext, main } from '../scripts/session-maintenance.mjs';
+import { EventEmitter } from 'node:events';
+import { PassThrough, Writable } from 'node:stream';
+import {
+  databaseContext,
+  main,
+  restoreTransaction,
+} from '../scripts/session-maintenance.mjs';
 
 const configuration = {
   PGHOST: 'db.test',
@@ -132,4 +138,67 @@ test('unknown commands and invalid intervals fail before connecting', async () =
     /numeric/,
   );
   await assert.rejects(main(['backup'], configuration), /directory/);
+});
+
+// Stand-ins for psql (reads stdin) and pg_restore (writes stdout), so the
+// restore transaction can be driven without PostgreSQL client tools.
+function fakeRestoreTools() {
+  const settle = (child, code) => {
+    if (child.settled) return;
+    child.settled = true;
+    setImmediate(() => child.emit('close', code));
+  };
+  const psql = new EventEmitter();
+  psql.written = [];
+  psql.stdin = new Writable({
+    write(chunk, _encoding, callback) {
+      psql.written.push(String(chunk));
+      callback();
+    },
+  });
+  // psql exits 0 at end of input, also when its stdin is torn down inside the
+  // open transaction (PostgreSQL then rolls that transaction back).
+  psql.stdin.on('finish', () => settle(psql, 0));
+  psql.stdin.on('close', () => settle(psql, 0));
+  psql.kill = () => settle(psql, null);
+  const pgRestore = new EventEmitter();
+  pgRestore.stdout = new PassThrough();
+  pgRestore.killed = false;
+  pgRestore.stdout.on('close', () => settle(pgRestore, 0));
+  pgRestore.kill = () => {
+    pgRestore.killed = true;
+    pgRestore.stdout.destroy();
+  };
+  const context = {
+    env: {},
+    spawn: (tool) => (tool === 'psql' ? psql : pgRestore),
+  };
+  return { psql, pgRestore, context };
+}
+test('restore streams the archive into one transaction and commits it', async () => {
+  const { psql, pgRestore, context } = fakeRestoreTools();
+  const restoring = restoreTransaction(context, 'sample.dump');
+  pgRestore.stdout.end('CREATE TABLE public.bff_sessions ();\n');
+  await restoring;
+  assert.equal(
+    psql.written.join(''),
+    'BEGIN;\nCREATE TABLE public.bff_sessions ();\n' +
+      '\nTRUNCATE TABLE public.bff_sessions;\nCOMMIT;\n',
+  );
+});
+test('a read error on the pg_restore stream fails the restore and never commits', async () => {
+  const { psql, pgRestore, context } = fakeRestoreTools();
+  const restoring = restoreTransaction(context, 'sample.dump');
+  pgRestore.stdout.write('CREATE TABLE public.bff_sessions ();\n');
+  const readError = new Error('sample read failure');
+  setImmediate(() => pgRestore.stdout.destroy(readError));
+  await assert.rejects(restoring, (error) => {
+    assert.match(error.message, /transaction was not committed/);
+    assert.equal(error.safeMaintenanceMessage, true);
+    assert.equal(error.cause, readError);
+    return true;
+  });
+  assert.equal(psql.written[0], 'BEGIN;\n');
+  assert.ok(!psql.written.join('').includes('COMMIT'));
+  assert.equal(pgRestore.killed, true);
 });

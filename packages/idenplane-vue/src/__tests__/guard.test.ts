@@ -1,8 +1,26 @@
 import { describe, it, expect, vi } from 'vitest';
 import { createAuthGuard } from '../guard.js';
-import type { RouteLocationNormalized } from 'vue-router';
+import type { NavigationGuard, RouteLocationNormalized } from 'vue-router';
 
 // ── Helpers ──────────────────────────────────────────────────────
+
+/**
+ * The guard uses Vue Router 4's return-value style: it takes (to, from) and
+ * never a `next` callback. vue-router's `NavigationGuard` type still lists
+ * `next`, so call it through the two-parameter signature it really has.
+ */
+function runGuard(
+  guard: NavigationGuard,
+  to: RouteLocationNormalized,
+  from: RouteLocationNormalized,
+) {
+  return (
+    guard as (
+      to: RouteLocationNormalized,
+      from: RouteLocationNormalized,
+    ) => ReturnType<NavigationGuard>
+  )(to, from);
+}
 
 function makeRoute(overrides: {
   path?: string;
@@ -43,13 +61,19 @@ function makeClient(opts: {
 // ── Tests ─────────────────────────────────────────────────────────
 
 describe('createAuthGuard', () => {
+  it('declares no `next` parameter, so Vue Router uses its return value', () => {
+    // Vue Router treats a guard with three or more parameters as callback
+    // style and waits for `next()`, which this guard never calls.
+    expect(createAuthGuard({}, makeClient({}) as never).length).toBeLessThan(3);
+  });
+
   it('passes through unprotected routes (no meta.requiresAuth)', async () => {
     const client = makeClient({ authenticated: false });
     const guard = createAuthGuard({}, client as never);
 
     const to = makeRoute({ path: '/about' });
     const from = makeRoute({ path: '/' });
-    const result = await guard(to, from, vi.fn() as never);
+    const result = await runGuard(guard, to, from);
 
     expect(result).toBe(true);
   });
@@ -60,7 +84,7 @@ describe('createAuthGuard', () => {
 
     const to = makeRoute({ path: '/dashboard', fullPath: '/dashboard', meta: { requiresAuth: true } });
     const from = makeRoute({ path: '/' });
-    const result = await guard(to, from, vi.fn() as never);
+    const result = await runGuard(guard, to, from);
 
     expect(result).toEqual({ path: '/login', query: { next: '/dashboard' } });
   });
@@ -71,7 +95,7 @@ describe('createAuthGuard', () => {
 
     const to = makeRoute({ path: '/dashboard', meta: { requiresAuth: true } });
     const from = makeRoute({ path: '/' });
-    const result = await guard(to, from, vi.fn() as never);
+    const result = await runGuard(guard, to, from);
 
     expect(result).toBe(true);
   });
@@ -82,7 +106,7 @@ describe('createAuthGuard', () => {
 
     const to = makeRoute({ path: '/admin', meta: { requiresAuth: true, roles: ['admin'] } });
     const from = makeRoute({ path: '/' });
-    const result = await guard(to, from, vi.fn() as never);
+    const result = await runGuard(guard, to, from);
 
     expect(result).toEqual({ path: '/login', query: { error: 'forbidden' } });
   });
@@ -93,7 +117,7 @@ describe('createAuthGuard', () => {
 
     const to = makeRoute({ path: '/admin', meta: { requiresAuth: true, roles: ['admin'] } });
     const from = makeRoute({ path: '/' });
-    const result = await guard(to, from, vi.fn() as never);
+    const result = await runGuard(guard, to, from);
 
     expect(result).toBe(true);
   });
@@ -104,7 +128,7 @@ describe('createAuthGuard', () => {
 
     const to = makeRoute({ path: '/dashboard', meta: { requiresAuth: true } });
     const from = makeRoute({ path: '/' });
-    const result = await guard(to, from, vi.fn() as never);
+    const result = await runGuard(guard, to, from);
 
     expect(result).toEqual({ path: '/login', query: { error: 'forbidden' } });
   });
@@ -115,7 +139,7 @@ describe('createAuthGuard', () => {
 
     const to = makeRoute({ path: '/secure', meta: { requiresAuth: true } });
     const from = makeRoute({ path: '/' });
-    await guard(to, from, vi.fn() as never);
+    await runGuard(guard, to, from);
 
     expect(client.init).toHaveBeenCalled();
   });
@@ -126,7 +150,7 @@ describe('createAuthGuard', () => {
 
     const to = makeRoute({ path: '/dashboard', meta: { requiresAuth: true } });
     const from = makeRoute({ path: '/' });
-    const result = await guard(to, from, vi.fn() as never);
+    const result = await runGuard(guard, to, from);
 
     // No client means identity cannot be verified. Letting navigation through
     // would hand out a protected route to an unauthenticated visitor, so the

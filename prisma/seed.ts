@@ -3,8 +3,8 @@
 import 'dotenv/config';
 import { PrismaClient } from '@prisma/client';
 import * as argon2 from 'argon2';
-import { generateKeyPair, exportJWK } from 'jose';
-import { randomUUID, randomBytes } from 'crypto';
+import { generateKeyPair } from 'jose';
+import { randomBytes } from 'crypto';
 
 // prisma is initialised inside main() so that the conditional dynamic import
 // does not become a top-level await (which requires "module": "ESNext" and a
