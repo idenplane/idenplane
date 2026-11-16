@@ -23,6 +23,12 @@ describe('SCIM request media type (e2e)', () => {
     app = ctx.app as INestApplication<App>;
     realmName = (await ctx.seedTestRealm('e2e-scim-media-type')).realm.name;
 
+    await request(app.getHttpServer())
+      .patch(`/admin/realms/${realmName}`)
+      .set('x-admin-api-key', TEST_ADMIN_API_KEY)
+      .send({ scimEnabled: true })
+      .expect(200);
+
     const res = await request(app.getHttpServer())
       .post(`/admin/realms/${realmName}/scim/tokens`)
       .set('x-admin-api-key', TEST_ADMIN_API_KEY)
