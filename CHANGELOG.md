@@ -9,6 +9,12 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+## [0.11.0] - 2026-11-16
+
+A security release. Admin console sign-in gets a second factor (TOTP or passkeys), with an optional server-wide requirement. Five vulnerabilities are fixed, each with a GitHub Security Advisory: XML signature wrapping and replay of SAML AuthnRequests, authorization policies that failed open, and, in the client SDKs, an Angular interceptor that sent the access token to every origin and a `verifyToken` that accepted ID tokens and other clients' tokens. Offline tokens now last their configured lifetime, redirect URIs are matched exactly (RFC 9700), recovery codes are 120-bit, users migrated from Keycloak can sign in, and `matches` policy conditions are protected against ReDoS.
+
+The SDKs are released separately: `idenplane-sdk` 2.0.0, `idenplane-angular` 2.0.0 and `idenplane-nextjs` 2.0.0 (breaking: see *Before you upgrade*), `idenplane-vue` 1.1.0.
+
 **Before you upgrade:**
 - **Redirect URIs are now matched exactly** (RFC 9700, OAuth 2.1). A `redirect_uri` or `post_logout_redirect_uri` must equal a registered value character for character: no trailing-slash, case, path or query-string differences, and never a fragment. The one exception is a loopback IP redirect URI of a native app (`http://127.0.0.1/...`, `http://[::1]/...`), which now matches on any port (RFC 8252). Exact entries already matched exactly, so clients registered with exact URIs are not affected.
 - **Clients registered with `/*` wildcards keep working, and are now flagged.** The migration turns on a new per-client setting, `allowInsecureWildcardRedirectUris`, for every client that has a redirect URI or post-logout redirect URI ending in `/*`, so their sign-in does not break. That setting is insecure: any page below the wildcard can receive authorization codes. After upgrading, call `GET /admin/upgrade/health`: the `wildcard_redirect_uris` warning names each such client (`realm/clientId`). For each, register the exact callback URLs the application sends and turn the setting off (the console shows a warning with the switch on the client page; or `PUT /admin/realms/{realm}/clients/{clientId}` with the exact `redirectUris` and `"allowInsecureWildcardRedirectUris": false`). To find them before upgrading: `SELECT r.name, c.client_id FROM clients c JOIN realms r ON r.id = c.realm_id WHERE EXISTS (SELECT 1 FROM unnest(c.redirect_uris || c.post_logout_redirect_uris) u WHERE u LIKE '%/*');` — exact URIs can be added on 0.10 already, and work on both versions.
@@ -737,7 +743,8 @@ The foundation release: core IAM server with OAuth, OIDC, SAML, MFA, and the ini
 - `removeUserRealmRoles` returning 200 instead of 204
 - Login error messages never displayed on failed login
 
-[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.10.1...HEAD
+[Unreleased]: https://github.com/idenplane/idenplane/compare/v0.11.0...HEAD
+[0.11.0]: https://github.com/idenplane/idenplane/releases/tag/v0.11.0
 [0.10.1]: https://github.com/idenplane/idenplane/releases/tag/v0.10.1
 [0.10.0]: https://github.com/idenplane/idenplane/releases/tag/v0.10.0
 [0.9.1]: https://github.com/idenplane/idenplane/releases/tag/v0.9.1
