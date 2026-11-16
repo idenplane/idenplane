@@ -1007,10 +1007,30 @@ model SamlServiceProvider {
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 
-  realm Realm @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  realm      Realm           @relation(fields: [realmId], references: [id], onDelete: Cascade)
+  requestIds SamlRequestId[]
 
   @@unique([realmId, entityId])
   @@map("saml_service_providers")
+}
+
+/// The ID of every AuthnRequest a service provider sent and the IdP accepted,
+/// kept until the request could no longer pass the IssueInstant check. The
+/// unique (SP, request ID) index is the replay check: the insert is the claim,
+/// so the same request cannot be accepted twice by any process.
+model SamlRequestId {
+  id        String   @id @default(uuid())
+  spId      String   @map("sp_id")
+  requestId String   @map("request_id")
+  expiresAt DateTime @map("expires_at")
+
+  createdAt DateTime @default(now()) @map("created_at")
+
+  sp SamlServiceProvider @relation(fields: [spId], references: [id], onDelete: Cascade)
+
+  @@unique([spId, requestId])
+  @@index([expiresAt])
+  @@map("saml_request_ids")
 }
 
 // ─── CLIENT SCOPES & PROTOCOL MAPPERS ──────────────────

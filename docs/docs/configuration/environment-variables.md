@@ -154,6 +154,15 @@ WEBHOOK_ENCRYPTION_SALT=REPLACE_ME_WITH_A_UNIQUE_RANDOM_SALT
 | `HCAPTCHA_SECRET_KEY` | — | No | The same fallback for realms using `hcaptcha`. |
 | `ENFORCE_ACR_ON_FRESH_LOGIN` | off | No | `true` makes a fresh sign-in honour what the authorization request asks of `acr`: the login form carries `acr_values` and `claims`, and an `acr` requested as an Essential Claim (OIDC `claims` parameter) is mandatory. A sign-in that cannot meet it ends with `unmet_authentication_requirements` instead of a code at a weaker level. `acr_values` stays voluntary. Custom login themes should add the hidden fields `acr_values` and `claims` (see the built-in `login.hbs`). |
 
+### SAML identity provider
+
+| Variable | Default | Required | Description |
+|----------|---------|----------|-------------|
+| `SAML_REQUEST_MAX_AGE_SECONDS` | `300` | No | How old an AuthnRequest may be when it arrives, from its `IssueInstant`. 0 to 3600. Older requests are refused. See [Troubleshooting → SAML SSO](../troubleshooting.mdx#saml-sso). |
+| `SAML_CLOCK_SKEW_SECONDS` | `180` | No | How far apart a service provider's clock and Idenplane's may be. 0 to 900. A request may be this far in the future, or this much older than the maximum age. |
+
+An invalid value falls back to the default. Each accepted AuthnRequest ID is remembered for its service provider for the maximum age plus the skew, so a request can be accepted once. Fix clock drift with NTP rather than by raising the skew.
+
 ## In-process cache
 
 Every Idenplane process keeps in memory what most requests read:

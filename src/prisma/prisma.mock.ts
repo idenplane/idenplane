@@ -288,6 +288,11 @@ export function createMockPrismaService(): MockPrismaService {
       update: jest.fn(),
       delete: jest.fn(),
     },
+    samlRequestId: {
+      create: jest.fn(),
+      updateMany: jest.fn(),
+      deleteMany: jest.fn(),
+    },
     userFederation: {
       findUnique: jest.fn(),
       findMany: jest.fn(),

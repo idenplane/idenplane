@@ -1,34 +1,13 @@
 import { lookupsBackedBy } from '../cache/cached-lookups.mock.js';
 import { BadRequestException } from '@nestjs/common';
 import { generateKeyPairSync } from 'crypto';
-import { deflateSync } from 'zlib';
+import { deflateRawSync, deflateSync } from 'zlib';
 import type { Realm, SamlServiceProvider, User } from '@prisma/client';
-import { SignedXml } from 'xml-crypto';
 import { SamlIdpService } from './saml-idp.service.js';
 import {
   createMockPrismaService,
   type MockPrismaService,
 } from '../prisma/prisma.mock.js';
-
-function signXml(xml: string, privateKeyPem: string, refId: string): string {
-  const sig = new SignedXml({
-    privateKey: privateKeyPem,
-    signatureAlgorithm: 'http://www.w3.org/2001/04/xmldsig-more#rsa-sha256',
-    canonicalizationAlgorithm: 'http://www.w3.org/2001/10/xml-exc-c14n#',
-  });
-  sig.addReference({
-    xpath: `//*[@ID='${refId}']`,
-    digestAlgorithm: 'http://www.w3.org/2001/04/xmlenc#sha256',
-    transforms: [
-      'http://www.w3.org/2000/09/xmldsig#enveloped-signature',
-      'http://www.w3.org/2001/10/xml-exc-c14n#',
-    ],
-  });
-  sig.computeSignature(xml, {
-    location: { reference: `//*[@ID='${refId}']`, action: 'append' },
-  });
-  return sig.getSignedXml();
-}
 
 describe('SamlIdpService', () => {
   let service: SamlIdpService;
@@ -123,6 +102,7 @@ describe('SamlIdpService', () => {
       lookupsBackedBy(prisma as any) as any,
       prisma as any,
       crypto as any,
+      { isLeader: () => true } as any,
     );
   });
 
@@ -200,59 +180,41 @@ describe('SamlIdpService', () => {
       ).rejects.toThrow(BadRequestException);
     });
 
-    it('should reject unsigned AuthnRequest when SP has certificate', async () => {
+    it('should parse a raw-DEFLATE AuthnRequest (HTTP-Redirect binding)', async () => {
       const xml = makeAuthnRequest(
         'https://sp.example.com',
-        '_sigtest1',
+        '_raw1',
         'https://sp.example.com/acs',
       );
-      const encoded = Buffer.from(xml, 'utf-8').toString('base64');
-
-      await expect(
-        service.validateSignature(encoded, publicKey),
-      ).rejects.toThrow(BadRequestException);
-    });
-
-    it('should reject AuthnRequest with wrong signature when SP has certificate', async () => {
-      const { generateKeyPairSync } = require('crypto');
-      const wrongKey = generateKeyPairSync('rsa', {
-        modulusLength: 2048,
-        publicKeyEncoding: { type: 'spki', format: 'pem' },
-        privateKeyEncoding: { type: 'pkcs8', format: 'pem' },
-      });
-      const wrongPublicKey = wrongKey.publicKey;
-
-      const xml = makeAuthnRequest(
-        'https://sp.example.com',
-        '_sigtest2',
-        'https://sp.example.com/acs',
+      const encoded = deflateRawSync(Buffer.from(xml, 'utf-8')).toString(
+        'base64',
       );
-      const signed = signXml(xml, privateKey, '_sigtest2');
-      const encoded = Buffer.from(signed, 'utf-8').toString('base64');
 
-      await expect(
-        service.validateSignature(encoded, wrongPublicKey),
-      ).rejects.toThrow(BadRequestException);
+      const result = await service.validateAuthnRequest(encoded);
+
+      expect(result.id).toBe('_raw1');
+      expect(result.issuer).toBe('https://sp.example.com');
     });
 
-    it('should accept AuthnRequest with valid signature when SP has certificate', async () => {
-      const xml = makeAuthnRequest(
-        'https://sp.example.com',
-        '_sigtest3',
-        'https://sp.example.com/acs',
+    it('refuses a raw-DEFLATE decompression bomb', async () => {
+      const bomb = deflateRawSync(
+        Buffer.from(`<a>${'x'.repeat(4 * 1024 * 1024)}</a>`, 'utf-8'),
       );
-      const signed = signXml(xml, privateKey, '_sigtest3');
-      const encoded = Buffer.from(signed, 'utf-8').toString('base64');
-
       await expect(
-        service.validateSignature(encoded, publicKey),
-      ).resolves.toBeUndefined();
+        service.validateAuthnRequest(bomb.toString('base64')),
+      ).rejects.toThrow(
+        new BadRequestException('SAMLRequest exceeds maximum allowed size'),
+      );
     });
 
-    it('should throw BadRequestException for invalid base64 in validateSignature', async () => {
+    it('refuses a request without an ID', async () => {
+      const xml =
+        '<samlp:AuthnRequest xmlns:samlp="urn:oasis:names:tc:SAML:2.0:protocol" Version="2.0">' +
+        '<saml:Issuer xmlns:saml="urn:oasis:names:tc:SAML:2.0:assertion">https://sp.example.com</saml:Issuer>' +
+        '</samlp:AuthnRequest>';
       await expect(
-        service.validateSignature('!!!not-valid-base64!!!', publicKey),
-      ).rejects.toThrow(BadRequestException);
+        service.validateAuthnRequest(Buffer.from(xml).toString('base64')),
+      ).rejects.toThrow(new BadRequestException('AuthnRequest missing ID'));
     });
   });
 

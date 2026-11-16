@@ -52,7 +52,7 @@ It complements the [OWASP ASVS self-assessment](./asvs-assessment.md), which goe
 | TOTP | RFC 6238, HMAC-SHA1 (authenticator-app compatibility), 160-bit secret | `src/mfa/mfa.service.ts` |
 | Recovery codes | 32-bit random, unsalted SHA-256 (**gap**, see ASVS V6.5.2) | `src/mfa/mfa.service.ts` |
 | Webhook signatures | HMAC-SHA256 | `src/webhooks/` |
-| SAML | XML-DSig with RSA-SHA256 | `src/saml/saml-idp.service.ts` |
+| SAML | Assertions and responses signed with XML-DSig RSA-SHA256. AuthnRequests verified with RSA-SHA256 or RSA-SHA512 (SHA-256/512 digests); SHA-1 refused | `src/saml/saml-idp.service.ts`, `src/saml/saml-request-verifier.ts` |
 | mTLS | X.509 path validation per realm, `x5t#S256` thumbprints, TLS 1.2+ on the listener | `src/client-auth/`, `src/mtls/` |
 
 ## Trust boundaries and data flows
@@ -155,7 +155,8 @@ Each table lists the STRIDE category (S spoofing, T tampering, R repudiation, I 
 | S | Refresh token theft | Rotation on every use; reuse revokes the session; tokens bound to the client and optionally to a client certificate (RFC 8705) | Absolute session expiry is enforced by an hourly job, not at refresh |
 | E | Token confusion: ID, logout or admin tokens used as access tokens | userinfo, introspection and the WebSocket accept only `typ: Bearer` (`src/tokens/access-token-type.ts`); admin API requires `typ: admin` | No audience or issuer check at verification (ASVS V9.2.3) |
 | S | Client impersonation | Secrets hashed; one auth method per request; `tls_client_auth` / `self_signed_tls_client_auth` with per-realm trust anchors (`src/client-auth/`) | The password grant can still be enabled per client |
-| T | SAML request tampering, XML attacks | Signed AuthnRequests verified when the SP has a certificate; no external entities; size limit applied before and during inflation (`src/saml/saml-idp.service.ts`) | Signature check does not confirm it covers the parsed root (wrapping) |
+| T | SAML request tampering, XML attacks, signature wrapping | When the SP has a certificate, every AuthnRequest must be signed. HTTP-POST: one signature, on the root, referencing the root's `ID`, and every field read from the signed bytes; HTTP-Redirect: signature over the raw query bytes. No DTD, comments, processing instructions or duplicate IDs; SHA-1 refused; size limit before and during inflation (`src/saml/saml-request-verifier.ts`, `src/saml/saml-request-hardening.spec.ts`) | SPs without a certificate send unsigned requests, which anyone can forge (the response still goes only to a registered ACS URL) |
+| S | Replay of a captured AuthnRequest | `IssueInstant` at most 5 minutes old (plus 3 minutes of skew); `Destination` checked; each request `ID` accepted once per SP, by a unique row in PostgreSQL shared by every replica and worker (`saml_request_ids`, `test/saml-request-replay.e2e-spec.ts`) | `ForceAuthn` and `IsPassive` are not acted on; SAML logout is not implemented |
 | R | Denying a sign-in or token issuance | Login events on by default for new realms (`src/events/`) | Older realms may have events off |
 | I | Forced logout via RP-initiated logout | `post_logout_redirect_uri` checked | GET logout without `id_token_hint` needs no confirmation (ASVS V10.6.2) |
 

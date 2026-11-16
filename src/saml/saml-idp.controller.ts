@@ -2,7 +2,6 @@ import {
   Controller,
   Get,
   Post,
-  Query,
   Body,
   Req,
   Res,
@@ -16,7 +15,12 @@ import type { Prisma, Realm, SamlServiceProvider, User } from '@prisma/client';
 import { RealmGuard } from '../common/guards/realm.guard.js';
 import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { Public } from '../common/decorators/public.decorator.js';
-import { SamlIdpService } from './saml-idp.service.js';
+import { SamlIdpService, type SamlInboundRequest } from './saml-idp.service.js';
+import {
+  SamlRequestError,
+  parseRedirectQuery,
+  type RedirectQuery,
+} from './saml-request-verifier.js';
 import { SamlMetadataService } from './saml-metadata.service.js';
 import { LoginService } from '../login/login.service.js';
 import { SAML_REQUEST_COOKIE, SESSION_COOKIE } from '../authn-core/cookies.js';
@@ -70,12 +74,29 @@ export class SamlIdpController {
   })
   async ssoRedirect(
     @CurrentRealm() realm: Realm,
-    @Query('SAMLRequest') samlRequest: string,
-    @Query('RelayState') relayState: string,
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    return this.handleSsoRequest(realm, samlRequest, relayState, req, res);
+    // The query string as received: the Redirect-binding signature covers
+    // its exact bytes, so it is not taken from Express's parsed copy.
+    const url = req.originalUrl ?? req.url;
+    const q = url.indexOf('?');
+    let query: RedirectQuery;
+    try {
+      query = parseRedirectQuery(q < 0 ? '' : url.slice(q + 1));
+    } catch (err) {
+      throw new BadRequestException(
+        err instanceof SamlRequestError
+          ? err.publicMessage
+          : 'Invalid SAMLRequest',
+      );
+    }
+    return this.handleSsoRequest(
+      realm,
+      { binding: 'redirect', query },
+      req,
+      res,
+    );
   }
 
   // ─── SSO ENDPOINT (HTTP-POST binding) ──────────────────
@@ -92,12 +113,23 @@ export class SamlIdpController {
   })
   async ssoPost(
     @CurrentRealm() realm: Realm,
-    @Body('SAMLRequest') samlRequest: string,
-    @Body('RelayState') relayState: string,
+    @Body('SAMLRequest') samlRequest: unknown,
+    @Body('RelayState') relayState: unknown,
     @Req() req: Request,
     @Res() res: Response,
   ) {
-    return this.handleSsoRequest(realm, samlRequest, relayState, req, res);
+    if (
+      (samlRequest !== undefined && typeof samlRequest !== 'string') ||
+      (relayState !== undefined && typeof relayState !== 'string')
+    ) {
+      throw new BadRequestException('Invalid SAMLRequest');
+    }
+    return this.handleSsoRequest(
+      realm,
+      { binding: 'post', samlRequest, relayState },
+      req,
+      res,
+    );
   }
 
   // ─── RESUME AFTER SIGN-IN ──────────────────────────────
@@ -185,33 +217,17 @@ export class SamlIdpController {
 
   private async handleSsoRequest(
     realm: Realm,
-    samlRequest: string | undefined,
-    relayState: string | undefined,
+    inbound: SamlInboundRequest,
     req: Request,
     res: Response,
   ) {
-    if (!samlRequest) {
-      throw new BadRequestException('Missing SAMLRequest parameter');
-    }
-
-    // Parse the AuthnRequest to extract issuer
-    const parsed = await this.samlIdpService.validateAuthnRequest(samlRequest);
-
-    // Look up the SP by issuer (entityId)
-    const sp = await this.samlIdpService.findSpByEntityId(
-      realm.id,
-      parsed.issuer,
-    );
-    if (!sp || !sp.enabled) {
-      throw new BadRequestException(
-        `Unknown or disabled SAML service provider: ${parsed.issuer}`,
-      );
-    }
-
-    // Validate signature using SP's certificate if one is registered
-    if (sp.certificate) {
-      await this.samlIdpService.validateSignature(samlRequest, sp.certificate);
-    }
+    // Service provider, signature, IssueInstant and Destination. Every
+    // field used below comes from what the SP signed, when it signs.
+    const {
+      sp,
+      request: parsed,
+      relayState,
+    } = await this.samlIdpService.receiveAuthnRequest(realm, inbound);
 
     // Validate the ACS URL supplied in the AuthnRequest against the SP's
     // registered endpoints.  An attacker could craft a malicious AuthnRequest
@@ -219,18 +235,14 @@ export class SamlIdpController {
     // assertion it contains) to a server they control.  We must therefore
     // reject any URL that does not exactly match either the SP's primary
     // acsUrl or one of its explicitly registered validRedirectUris.
-    if (parsed.acsUrl !== null) {
-      const allowedAcsUrls: string[] = [sp.acsUrl];
-      const spWithRedirectUris = sp as { validRedirectUris?: string[] };
-      if (Array.isArray(spWithRedirectUris.validRedirectUris)) {
-        allowedAcsUrls.push(...spWithRedirectUris.validRedirectUris);
-      }
-      if (!allowedAcsUrls.includes(parsed.acsUrl)) {
-        throw new BadRequestException(
-          'ACS URL in AuthnRequest does not match any registered endpoint for this service provider',
-        );
-      }
+    if (parsed.acsUrl !== null && !this.acsUrlAllowed(sp, parsed.acsUrl)) {
+      throw new BadRequestException(
+        'ACS URL in AuthnRequest does not match any registered endpoint for this service provider',
+      );
     }
+
+    // Last: a request is used up only once it has passed every other check.
+    await this.samlIdpService.claimRequestId(sp, parsed);
 
     const acsUrl = parsed.acsUrl ?? sp.acsUrl;
 
@@ -244,7 +256,7 @@ export class SamlIdpController {
         user,
         parsed.id,
         acsUrl,
-        relayState ?? '',
+        relayState,
         res,
       );
     }
@@ -257,7 +269,7 @@ export class SamlIdpController {
       spId: sp.id,
       requestId: parsed.id,
       acsUrl,
-      relayState: relayState ?? '',
+      relayState,
     };
     await this.prisma.pendingAction.create({
       data: {
