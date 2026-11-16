@@ -68,7 +68,7 @@ Deprecated today, with no removal release set:
 
 ### `Deprecation` and `Sunset` headers on the admin API
 
-`DeprecationInterceptor` (`src/versioning/deprecation.interceptor.ts`) adds three headers to every response for an unversioned admin path, meaning any path under `/admin` that does not start with `/api/v`:
+`DeprecationInterceptor` (`src/versioning/deprecation.interceptor.ts`) adds three headers to successful responses for an unversioned admin path, meaning any path under `/admin` that does not start with `/api/v`. Requests refused by authentication or authorization, and requests that end in an error, don't get them:
 
 ```http
 Deprecation: Tue, 01 Jan 2027 00:00:00 GMT

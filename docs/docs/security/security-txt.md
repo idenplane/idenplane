@@ -39,6 +39,10 @@ The website at idenplane.com is built from a separate repository, [`idenplane/la
 
 The copy on this page is the source. Change it here first, then in the landing repository.
 
+:::caution Order matters
+The `Policy` and `Acknowledgments` URLs point at files on `main`. Update the landing repository only after this page and the acknowledgments page have reached `main`, or the file will link to pages that don't exist yet.
+:::
+
 ### Renewing
 
 Once a year, or whenever a contact or URL changes:

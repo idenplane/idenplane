@@ -21,11 +21,11 @@ A written threat model at [`docs/docs/security/threat-model.md`](docs/docs/secur
 
 ### Supply-chain signing and SBOM
 
-Today the Docker image is pushed to Docker Hub without a signature, an SBOM or a provenance attestation. The plan:
+Today the Docker image is pushed to Docker Hub with no signature and no SBOM. The only attestation it carries is the minimal build provenance that Docker Buildx attaches by default. The plan:
 
 - sign the release images;
 - publish an SBOM for each image;
-- attach build provenance;
+- attach full build provenance;
 - document how to verify all three before you deploy.
 
 ### Scheduled conformance testing
@@ -34,7 +34,7 @@ Run the OpenID Foundation conformance suite (the OIDC basic plan) against the cu
 
 ### Backup and restore drill
 
-The [Production Checklist](docs/docs/deployment/production.md) asks operators to restore their latest backup into a fresh database every quarter, then start Idenplane against it and sign in. The plan is to run that same drill in CI on a schedule: back up, restore into an empty database, start the server with the same keys, sign in. That way the documented procedure is known to work.
+The [Production Checklist](docs/docs/deployment/production.md) asks operators to restore their latest backup into a fresh database every quarter, then start Idenplane against it and sign in. CI already runs a backup round-trip test (`test/upgrade-backup-roundtrip.e2e-spec.ts`) on every push, with real `pg_dump` and `pg_restore`. The plan is to also run the full drill in CI on a schedule: back up, restore into an empty database, start the server with the same keys, sign in. That way the whole documented procedure is known to work, not only the dump and restore.
 
 ## Later
 
