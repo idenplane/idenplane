@@ -1,11 +1,17 @@
 blank_issues_enabled: false
 contact_links:
-  - name: 💬 Discussions
-    url: https://github.com/idenplane/idenplane/discussions
-    about: Ask questions, share ideas, and chat with the community.
   - name: 🔒 Report a security vulnerability
-    url: https://github.com/idenplane/idenplane/security/policy
-    about: Please report security issues privately — do not open a public issue.
+    url: https://github.com/idenplane/idenplane/security/advisories/new
+    about: Report privately through GitHub private vulnerability reporting. Never open a public issue for a vulnerability. See SECURITY.md.
+  - name: ❓ Ask a question
+    url: https://github.com/idenplane/idenplane/discussions/new?category=q-a
+    about: Questions about installing, configuring or using Idenplane go to Discussions (Q&A), not issues.
+  - name: 💡 Discuss an idea
+    url: https://github.com/idenplane/idenplane/discussions/categories/ideas
+    about: Talk through an idea before opening a feature request.
+  - name: 🛟 Support
+    url: https://github.com/idenplane/idenplane/blob/main/SUPPORT.md
+    about: Where to go for what, what is supported, and what to expect from a single-maintainer project.
   - name: 📖 Documentation
     url: https://idenplane.com
     about: Check the docs before opening an issue.
