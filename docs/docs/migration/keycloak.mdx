@@ -160,7 +160,11 @@ A user is skipped when a user with the same username already exists in the targe
 
 ### What is carried over
 
-Only one kind of Keycloak password credential is carried over: the **legacy PBKDF2-SHA256** format, where the credential has `hashedSaltedValue`, `salt` and `hashIterations` fields. The importer stores it as `pbkdf2-sha256`; after the user's first successful browser sign-in, Idenplane rehashes the password with Argon2id.
+Only one kind of Keycloak password credential is carried over: the **legacy PBKDF2-SHA256** format, where the credential has `hashedSaltedValue`, `salt` and `hashIterations` fields. The importer stores it as `pbkdf2-sha256`, and the browser sign-in is meant to verify it and then rehash the password with Argon2id.
+
+:::caution Known issue in 0.10.1
+In 0.10.1 an imported PBKDF2 hash is not verified: the sign-in fails with an error before it reaches the PBKDF2 check. Until a release fixes this, plan a password reset for every imported Keycloak user, and test sign-in with one migrated user before you switch over.
+:::
 
 Everything else is imported **without a password**:
 
