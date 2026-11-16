@@ -244,6 +244,7 @@ export const EXPORT_MODELS = {
       webOrigins: 'String[]',
       grantTypes: 'String[] @default',
       postLogoutRedirectUris: 'String[] @default',
+      allowInsecureWildcardRedirectUris: 'Boolean @default',
       backchannelLogoutUri: 'String?',
       backchannelLogoutSessionRequired: 'Boolean @default',
       requiredAcr: 'String?',

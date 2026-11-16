@@ -3,7 +3,7 @@ import type { Request } from 'express';
 import type { ProxyApplication, Realm, User } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
-import { matchesRedirectUri } from '../common/redirect-uri.utils.js';
+import { matchesReturnUrl } from '../common/redirect-uri.utils.js';
 
 /**
  * Cookie carrying the proxy session. Deliberately NOT `IDENPLANE_SESSION`:
@@ -118,9 +118,10 @@ export class ProxyAuthService {
    * Validate a candidate return URL against the application's allowlist.
    * Returns the URL when it is allowed, `null` otherwise.
    *
-   * Uses the same matcher as OAuth `redirect_uri` (wildcards included) rather
-   * than a second, subtly different implementation — one allowlist rule for
-   * the whole product is easier to reason about than two.
+   * A return URL is not an OAuth `redirect_uri`: no code or token is sent to
+   * it, the browser just goes back to the page it asked for. So a `/*` entry
+   * keeps matching any page below it (`matchesReturnUrl`), while OAuth
+   * redirect URIs match exactly since 0.11.0.
    */
   resolveReturnUrl(
     app: ProxyApplication,
@@ -140,7 +141,7 @@ export class ProxyAuthService {
     if (parsed.protocol !== 'http:' && parsed.protocol !== 'https:')
       return null;
 
-    return matchesRedirectUri(candidate, app.allowedRedirectUris)
+    return matchesReturnUrl(candidate, app.allowedRedirectUris)
       ? candidate
       : null;
   }

@@ -416,7 +416,11 @@ export class TokensService {
 
     const client = await this.prisma.client.findUnique({
       where: { realmId_clientId: { realmId: realm.id, clientId } },
-      select: { redirectUris: true, postLogoutRedirectUris: true },
+      select: {
+        redirectUris: true,
+        postLogoutRedirectUris: true,
+        allowInsecureWildcardRedirectUris: true,
+      },
     });
 
     if (!client) {
@@ -431,7 +435,11 @@ export class TokensService {
         ? client.postLogoutRedirectUris
         : client.redirectUris;
 
-    if (!matchesRedirectUri(postLogoutRedirectUri, allowed)) {
+    if (
+      !matchesRedirectUri(postLogoutRedirectUri, allowed, {
+        allowWildcard: client.allowInsecureWildcardRedirectUris,
+      })
+    ) {
       throw new BadRequestException(
         'post_logout_redirect_uri is not valid for this client',
       );

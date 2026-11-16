@@ -110,7 +110,11 @@ export class MagicLinkService {
     // exfiltrate the live token — the same risk OAuth solves for redirect_uri.
     const client = await this.prisma.client.findFirst({
       where: { realmId, clientId },
-      select: { id: true, redirectUris: true },
+      select: {
+        id: true,
+        redirectUris: true,
+        allowInsecureWildcardRedirectUris: true,
+      },
     });
 
     if (!client) {
@@ -119,7 +123,11 @@ export class MagicLinkService {
 
     let resolvedCallback: string;
     if (magicLinkUrl) {
-      if (!matchesRedirectUri(magicLinkUrl, client.redirectUris)) {
+      if (
+        !matchesRedirectUri(magicLinkUrl, client.redirectUris, {
+          allowWildcard: client.allowInsecureWildcardRedirectUris,
+        })
+      ) {
         this.logger.warn(
           `magicLinkUrl "${magicLinkUrl}" not allowlisted for client "${clientId}" in realm "${realm.name}"`,
         );
