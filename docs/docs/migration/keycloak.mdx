@@ -109,6 +109,10 @@ curl -X POST "http://localhost:3000/admin/migration/keycloak" \
 
 A dry run returns the same report as a real migration but doesn't modify any data.
 
+### Request Size Limit
+
+The import endpoints (`POST /admin/migration/keycloak`, `/auth0`, `/zitadel`, `/authentik`, and `POST /admin/realms/import`) accept a JSON body of up to **10 MB**. Every other endpoint keeps a 100 KB limit. A larger body is refused with `413 Payload Too Large`; split the export into batches (for example 5,000 users each, see the [Auth0 guide](./auth0.mdx#handling-large-exports) for a `jq` recipe) and import them one after the other into the same `targetRealm`: users that already exist are skipped.
+
 ---
 
 ## Migration Report
@@ -161,38 +165,48 @@ The migration returns a detailed report:
 
 ## Password Migration
 
+Users keep their Keycloak password: Idenplane imports the hash and checks it on sign-in, on the hosted login page and with the password grant alike. On the first successful sign-in the hash is replaced with an Argon2id hash, transparently; the user notices nothing.
+
 ### Supported Algorithms
 
-Idenplane recognizes and preserves password hashes for these algorithms:
+Both credential formats of Keycloak exports are read: the current one (Keycloak 7 and later: `secretData` and `credentialData`, two JSON strings) and the legacy one (`hashedSaltedValue`, `salt`, `hashIterations`, `algorithm` on the credential). The algorithm and iteration count recorded in the credential are kept with the hash.
 
-| Algorithm | Migration Status |
-|-----------|-----------------|
-| bcrypt | Preserved |
-| pbkdf2-sha256 | Preserved |
-| pbkdf2-sha512 | Preserved |
-| argon2 | Preserved |
+| Keycloak `algorithm` | Imported as (`passwordAlgorithm`) | Notes |
+|----------------------|-----------------------------------|-------|
+| `pbkdf2-sha256` | `pbkdf2-sha256` | Default before Keycloak 24 |
+| `pbkdf2-sha512` | `pbkdf2-sha512` | Default in some Keycloak 22-23 and FIPS setups |
+| `pbkdf2` | `pbkdf2-sha1` | Old default (PBKDF2 with HMAC-SHA1) |
+| `argon2` | `argon2` | Default since Keycloak 24; parameters taken from `additionalParameters` |
+| `bcrypt` | `bcrypt` | From the keycloak-bcrypt extension (the full `$2a$`/`$2b$`/`$2y$` string) |
+
+PBKDF2 hashes are stored as `$pbkdf2-<digest>$i=<iterations>,l=<key length>$<salt>$<hash>`. A credential with no `algorithm` (very old exports) is checked against PBKDF2-SHA256, then SHA-512, then SHA-1.
+
+A plaintext `value` in a credential (allowed by Keycloak's import format) is hashed with Argon2id on import.
+
+:::note Imported before 0.11.0
+Before 0.11.0 the importer labelled every Keycloak credential `pbkdf2-sha256` and ignored the current credential format, so most migrated users could not sign in. Users imported then are not re-imported (existing usernames are skipped), but their sign-in works after the upgrade: a PBKDF2 hash labelled `pbkdf2-sha256` is checked against SHA-256, SHA-512 and SHA-1. Users whose credential was in the current format were imported without a usable hash; delete them and import again, or have them reset their password.
+:::
 
 ### Unsupported Algorithms
 
-Users with passwords using unsupported algorithms will be imported **without** a password hash. These users must complete a password reset:
+A user whose password used any other algorithm (a custom hash provider, for example) is imported **without** a password, and the migration report has a warning for them. They must reset their password:
 
 ```bash
 # After migration, trigger password reset for affected users
-curl -X POST "http://localhost:3000/admin/realms/my-realm/users/${USER_ID}/execute-actions-email" \
-  -H "x-admin-api-key: ${ADMIN_API_KEY}" \
-  -H "Content-Type: application/json" \
-  -d '["VERIFY_ACTION", "UPDATE_PASSWORD"]'
+curl -X POST "http://localhost:3000/admin/realms/my-realm/users/${USER_ID}/execute-actions-email"   -H "x-admin-api-key: ${ADMIN_API_KEY}"   -H "Content-Type: application/json"   -d '["VERIFY_ACTION", "UPDATE_PASSWORD"]'
 ```
 
 ### Check Password Hash Support
 
-The migration report includes warnings for users with unsupported password hashes:
+The migration report lists each such user under `warnings`:
 
 ```json
 {
   "warnings": [
-    "Unsupported password hash algorithm: password-sha1 for user legacy@example.com",
-    "Unsupported password hash algorithm: scrypt for user olduser@example.com"
+    {
+      "entity": "user",
+      "message": "User 'legacy': Keycloak password algorithm \"md5-custom\" is not supported; imported without a password (the user must reset it)"
+    }
   ]
 }
 ```
@@ -454,9 +468,15 @@ jq . your-realm-export.json > /dev/null && echo "Valid JSON"
 
 **Solution:** Check the migration report for skip reasons and resolve conflicts.
 
+### Import Fails with 413
+
+**Cause:** The request body is over the 10 MB limit of the import endpoints.
+
+**Solution:** Split the export into batches. See [Request Size Limit](#request-size-limit).
+
 ### Passwords Not Preserved
 
-**Cause:** Unsupported password hash algorithm.
+**Cause:** Unsupported password hash algorithm (the migration report has a warning for each user).
 
 **Solution:** Users must complete password reset. See [Password Migration](#password-migration).
 

@@ -411,6 +411,8 @@ curl -X POST "http://localhost:3000/admin/realms/import?overwrite=true" \
 
 To import under another name, change `realm.name` in the file.
 
+The request body may be up to **10 MB**, the limit of the import endpoints (every other endpoint keeps 100 KB). A larger file is refused with `413 Payload Too Large`.
+
 ### Validation and safety
 
 - **The whole file is checked before anything is written.** The checks cover types, allowed values, unknown fields, references that do not resolve, duplicate names, client authentication rules and certificates. Every authentication flow goes through the same validator as the flow API. Any problem returns `400` with every problem and its path:
@@ -429,6 +431,7 @@ To import under another name, change `realm.name` in the file.
 - **`overwrite` is safe.** The old realm is deleted inside the same transaction, so a failed import leaves it exactly as it was. A successful import replaces all of the old realm's data, including users, sessions and signing keys. Tokens the old realm issued stop being valid.
 - **Defaults.** A field missing from the file takes the server's default, as for a new realm.
 - **Wildcard origins.** The web origin `"*"` is removed from clients, with a warning.
+- **Authorization policies** are checked like the policies API checks them: an unknown operator, a value the operator cannot use (an invalid CIDR or regular expression, `in` without an array), or an unknown `effect` or `logic` is a `400` with its path, for example `policies[0].subjectConditions[1]`.
 
 ### Response
 

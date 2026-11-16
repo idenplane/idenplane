@@ -39,11 +39,14 @@ sequenceDiagram
 
 Idenplane uses a DENY-override algorithm:
 
-1. All enabled policies are sorted by priority (highest first)
-2. Each policy is evaluated against the request
-3. If any DENY policy matches → final decision is DENY
-4. If at least one ALLOW policy matches → final decision is ALLOW
-5. If no policy matches → default DENY
+1. The enabled policies that apply to the request's client are kept (see [Client-Scoped Policies](#client-scoped-policies))
+2. They are sorted by priority (highest first)
+3. Each policy is evaluated against the request
+4. If any DENY policy matches → final decision is DENY
+5. If at least one ALLOW policy matches → final decision is ALLOW
+6. If no policy matches → default DENY
+
+A policy that cannot be evaluated fails closed: a DENY matches, an ALLOW never does (see [Validation and fail-closed evaluation](#validation-and-fail-closed-evaluation)).
 
 :::caution Default Deny
 Idenplane defaults to DENY when no policy matches. This ensures secure access control by default.
@@ -126,7 +129,7 @@ ABAC policies in Idenplane are defined as JSON documents with conditions on four
 | `effect` | string | No | "ALLOW" or "DENY" (default: "ALLOW") |
 | `priority` | integer | No | Higher = evaluated first (default: 0) |
 | `logic` | string | No | "AND" or "OR" for conditions (default: "AND") |
-| `clientId` | string | No | Scope policy to specific client |
+| `clientId` | string | No | Scope the policy to one client (its `clientId`). It then applies only to evaluations that pass the same `clientId` |
 | `subjectConditions` | array | No | Conditions on the subject (user) |
 | `resourceConditions` | array | No | Conditions on the resource |
 | `actionConditions` | array | No | Conditions on the action |
@@ -136,31 +139,51 @@ ABAC policies in Idenplane are defined as JSON documents with conditions on four
 
 ## Condition Operators
 
-Idenplane supports the following condition operators:
+Idenplane supports the following condition operators. Each condition is `{ "field", "operator", "value" }`; the operator name is case-sensitive, and the value must be of the kind the operator needs. Anything else is refused with a `400` when the policy is saved.
 
 ### Comparison Operators
 
-| Operator | Description | Example |
+| Operator | Description | `value` |
 |----------|-------------|---------|
-| `equals` | Exact match | `"field": "value"` |
-| `notEquals` | Not equal | `"field": "other"` |
-| `contains` | String/array contains | `["admin"]` in roles |
-| `in` | Value in array | `["read", "write"]` |
-| `notIn` | Value not in array | not in `["delete"]` |
+| `equals` | Exact match | a string, number, boolean or `null` |
+| `notEquals` | Not equal | a string, number, boolean or `null` |
+| `contains` | The string contains the value, or the array has it as an element | a string, number, boolean or `null` |
+| `in` | The field's value is one of the array's elements | an array, e.g. `["read", "write"]` |
+| `notIn` | The field's value is none of them | an array, e.g. `["delete"]` |
 
 ### Numeric Operators
 
-| Operator | Description | Example |
+| Operator | Description | `value` |
 |----------|-------------|---------|
-| `greaterThan` | Numeric comparison | `priority > 5` |
-| `lessThan` | Numeric comparison | `count < 100` |
+| `greaterThan` | Numeric comparison, e.g. `level > 5` | a number, or a string holding one |
+| `lessThan` | Numeric comparison, e.g. `count < 100` | a number, or a string holding one |
 
 ### Pattern Operators
 
-| Operator | Description | Example |
+| Operator | Description | `value` |
 |----------|-------------|---------|
-| `matches` | Regex match | `email matches .*@company.com` |
-| `ipInRange` | CIDR range check | `ip in 10.0.0.0/8` |
+| `matches` | Regex match, e.g. `email matches .*@company.com` | a valid JavaScript regular expression |
+| `ipInRange` | The IP address is in the range | an IPv4 or IPv6 address, or a CIDR block: `10.0.0.0/8`, `2001:db8::/32`, `203.0.113.7` |
+
+`ipInRange` handles IPv4 and IPv6. An IPv4-mapped IPv6 address (`::ffff:10.1.2.3`, which is how a dual-stack server reports an IPv4 client) matches the IPv4 range it belongs to, so a rule on `10.0.0.0/8` applies whichever form your application passes. An IPv4 address never matches an IPv6 range, and the other way round.
+
+A condition on a field the request does not carry is false (for example `ipInRange` with no `environment.ip`). A field that is present but is not an IP address makes an `ipInRange` condition fail closed, like an invalid condition.
+
+### Validation and fail-closed evaluation
+
+Every condition is checked when a policy is created or updated (and when a realm is imported): an unknown operator such as `equal` or `contain`, a missing `field` or `value`, an array for `equals`, `in` without an array, a non-numeric bound, an invalid regular expression or an invalid CIDR is refused with a `400` that names the condition, for example `subjectConditions[1]: unknown operator "contain" (expected one of: ...)`.
+
+A stored policy that still cannot be evaluated (one saved by a version before 0.11.0, or written to the database directly) **fails closed**:
+
+- a **DENY** policy with such a condition **matches**, whatever its other conditions say: it denies every request it applies to;
+- an **ALLOW** policy with such a condition **never matches**;
+- an unknown `effect` (anything but `ALLOW` and `DENY`) is treated as `DENY`, and an unknown `logic` makes the policy fail closed too.
+
+The evaluation result says so (`"indeterminate": true` on the policy and on the condition, and a reason ending in "fails closed"), and the server logs a warning naming the policy. `GET /admin/upgrade/health` lists every such policy in the `invalid_authorization_policies` warning, as `realm/policy (EFFECT): path: problem`. Fix or delete them.
+
+:::caution Before 0.11.0
+Before 0.11.0 conditions were not validated, and a condition that could not be evaluated was simply false. A DENY with a typo in an operator therefore never denied. See the CHANGELOG for the upgrade notes.
+:::
 
 ### Condition Field Paths
 
@@ -468,11 +491,18 @@ curl -X POST "http://localhost:3000/admin/realms/my-realm/policies/evaluate" \
   }'
 ```
 
-When `clientId` is specified in the evaluation request, only policies that are either:
-- Globally scoped (`clientId: null`)
-- Scoped to the specific client
+Which policies apply to an evaluation:
 
-...will be evaluated.
+| Policy | Evaluation with `clientId: "my-frontend-app"` | Evaluation with another `clientId` | Evaluation without `clientId` |
+|--------|------|------|------|
+| Global (`clientId: null`) | applies | applies | applies |
+| `clientId: "my-frontend-app"` | applies | does not apply | does not apply |
+
+So a client-scoped policy, ALLOW or DENY, only ever applies to evaluations made for that client, and an evaluation without `clientId` gets the global policies only. Pass the `clientId` of the application the request is for whenever you use client-scoped policies; a DENY that must hold for every client belongs in a global policy.
+
+:::note Changed in 0.11.0
+Before 0.11.0 an evaluation without `clientId` got every policy of the realm, client-scoped ones included.
+:::
 
 ---
 

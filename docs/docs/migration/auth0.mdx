@@ -185,14 +185,16 @@ The migration returns a detailed report:
 
 ### Supported Algorithms
 
-Idenplane recognizes and preserves password hashes for:
+Users keep their Auth0 password: Idenplane imports the hash with its real algorithm and checks it on sign-in (hosted login page and password grant). On the first successful sign-in the hash is replaced with an Argon2id hash, transparently.
 
-| Algorithm | Migration Status |
-|-----------|-----------------|
-| bcrypt | Preserved |
-| pbkdf2-sha256 | Preserved |
-| pbkdf2-sha512 | Preserved |
-| argon2 | Preserved |
+| Source | Format | Imported as (`passwordAlgorithm`) |
+|--------|--------|-----------------------------------|
+| `password_hash` (Auth0's own export) | bcrypt (`$2a$`/`$2b$`/`$2y$`) | `bcrypt` |
+| `custom_password_hash`, `algorithm: "bcrypt"` | bcrypt string in `hash.value` | `bcrypt` |
+| `custom_password_hash`, `algorithm: "argon2"` | PHC string (`$argon2id$v=19$...`) in `hash.value` | `argon2` |
+| `custom_password_hash`, `algorithm: "pbkdf2"` | PHC string `$pbkdf2-<sha1\|sha256\|sha512>$i=<iterations>,l=<length>$<salt>$<hash>` (base64) in `hash.value` | `pbkdf2-sha1`, `pbkdf2-sha256` or `pbkdf2-sha512` |
+
+Any other `custom_password_hash` algorithm (`hmac`, `md5`, `sha256` with a separate salt, `ldap`…), or a `password_hash` that is not bcrypt, is not carried over: the user is imported without a password and the migration report has a warning naming them.
 
 ### How Auth0 Password Hashes Are Exported
 
@@ -388,7 +390,7 @@ Recreate organizations manually in Idenplane. See [Multi-Tenancy Documentation](
 
 ### Batch Processing
 
-For exports with more than 5,000 users:
+The import endpoint accepts a JSON body of up to **10 MB** (every other endpoint keeps 100 KB); a larger one is refused with `413 Payload Too Large`. For exports above that, or with more than 5,000 users:
 
 1. Split the export into multiple JSON files by user_id range
 2. Import each batch separately
