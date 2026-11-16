@@ -154,6 +154,12 @@ export interface Client {
   description: string | null;
   enabled: boolean;
   redirectUris: string[];
+  postLogoutRedirectUris?: string[];
+  /**
+   * INSECURE, legacy. When true, a redirect URI ending in `/*` matches any
+   * path below it (pre-0.11.0 behaviour).
+   */
+  allowInsecureWildcardRedirectUris?: boolean;
   webOrigins: string[];
   grantTypes: string[];
   requireConsent: boolean;

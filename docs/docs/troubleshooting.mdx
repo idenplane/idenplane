@@ -52,10 +52,10 @@ Idenplane rotates refresh tokens on every use — each one is single-use, and a 
 
 There are two different `redirect_uri` checks, and they are not equally strict:
 
-1. **At `/authorize`** — `redirect_uri` is checked with `matchesRedirectUri()` against the client's registered `redirectUris`. This allows a trailing-wildcard pattern: a registered `https://app.example.com/*` matches any path under that origin (and the bare origin itself).
-2. **At `/token`** — the `redirect_uri` you send must be **byte-identical** to the exact string that was submitted at `/authorize` (stored on the authorization code). No wildcard matching happens here.
+1. **At `/authorize`** — `redirect_uri` is checked with `matchesRedirectUri()` against the client's registered `redirectUris`: it must be one of them exactly, except that a loopback IP URI (`http://127.0.0.1/...`, `http://[::1]/...`) may use any port. Only a client with the insecure `allowInsecureWildcardRedirectUris` opt-in also matches paths below a `/*` entry.
+2. **At `/token`** — the `redirect_uri` you send must be **byte-identical** to the exact string that was submitted at `/authorize` (stored on the authorization code).
 
-So it's possible to pass authorization with a wildcard-registered URI and then fail token exchange with `redirect_uri mismatch` simply because the two requests used a different exact string (different path, trailing slash, query string, or scheme). Always send the identical `redirect_uri` value to both endpoints.
+Always send the identical `redirect_uri` value to both endpoints.
 
 ### `invalid_client` / `unauthorized_client`
 
@@ -66,12 +66,15 @@ So it's possible to pass authorization with a wildcard-registered URI and then f
 
 ## `redirect_uri`, CORS, and Origin Mismatches
 
-### Exact vs. wildcard matching
+### Exact matching
 
-`redirectUris` on a client are matched with `matchesRedirectUri()`:
+Since 0.11.0 `redirectUris` and `postLogoutRedirectUris` are matched with `matchesRedirectUri()`, **exactly**:
 
-- A plain entry (no `/*` suffix) must match **exactly** — different port, scheme, or trailing slash all fail.
-- An entry ending in `/*` matches the bare origin and anything under that path prefix. For example, `http://localhost:4000/*` matches both `http://localhost:4000` and `http://localhost:4000/callback`.
+- A different port, scheme, host case, path, trailing slash or query string fails. So does any `redirect_uri` with a fragment (`#`).
+- A loopback IP entry such as `http://127.0.0.1/callback` matches on any port (`http://127.0.0.1:51234/callback`), for native apps (RFC 8252). `localhost` does not get this.
+- An entry ending in `/*` matches nothing but itself, unless the client has `allowInsecureWildcardRedirectUris` on. The 0.11.0 upgrade turned that on for clients that already had such an entry; `GET /admin/upgrade/health` lists them under `wildcard_redirect_uris`. See [Redirect URI matching](./api/clients.md#redirect-uri-matching).
+
+**`Invalid redirect_uri` after upgrading to 0.11.0:** the application sends a URI that differs from the registered one, often by a trailing slash or a query string, or the client relies on a wildcard that was not upgraded with it (for example, one added by hand in the database afterwards). Register the exact URI.
 
 ### How quickly `redirect_uri` and CORS (`webOrigins`) changes take effect
 
@@ -86,6 +89,25 @@ If a CORS change seems not to apply, check that the processes can receive these 
 
 Idenplane's SAML module (`src/saml/`) implements Idenplane **as an Identity Provider (IdP)** issuing assertions to registered Service Providers — it does not consume assertions from an external IdP. (Delegating login to an external OIDC provider is the separate Identity Providers feature; LDAP is separate again, under User Federation.)
 
+### What the IdP checks on an AuthnRequest
+
+Idenplane accepts AuthnRequests over the HTTP-Redirect binding (`GET`, raw DEFLATE as the bindings specification requires; zlib-wrapped and uncompressed requests are accepted too) and the HTTP-POST binding (`POST`, form field `SAMLRequest`). Before it acts on a request it checks, in this order:
+
+1. **Well-formed and plain XML.** The request is refused if it has a DTD (`<!DOCTYPE>` or `<!ENTITY>`), a comment, a processing instruction other than the XML declaration, a CDATA section, an `ID`/`Id`/`id` value used twice, or a child of the AuthnRequest that the schema does not have, or has elsewhere. The children must come in schema order (`Issuer`, `Signature`, `Extensions`, `Subject`, `NameIDPolicy`, `Conditions`, `RequestedAuthnContext`, `Scoping`), each at most once: an enveloped signature goes right after `Issuer`, not at the end. Over HTTP-Redirect the message must not contain an XML signature at all, whether or not the SP has a certificate (the bindings specification requires it to be removed). The root must have an `ID` that is a valid `xs:ID` of at most 256 characters, and an `Issuer`.
+2. **The service provider.** `Issuer` must be the `entityId` of an enabled service provider of the realm.
+3. **The signature, when the SP has a `certificate`.** A service provider with a certificate must sign every request, over both bindings; an unsigned request is refused.
+   - *HTTP-Redirect:* the signature is checked over the query string exactly as received: `SAMLRequest=…&RelayState=…&SigAlg=…` with the values still URL-encoded (SAML bindings §3.4.4.1). `RelayState` is read from those same bytes. A parameter that appears twice is refused.
+   - *HTTP-POST:* exactly one `<ds:Signature>`, a direct child of the AuthnRequest, with exactly one `Reference` whose `URI` is `#` plus the AuthnRequest's `ID`. After the signature verifies, every field is read from the bytes the signature covers, never from the rest of the document. The certificate in the request's `KeyInfo` is ignored: only the one registered for the SP counts.
+   - *Algorithms:* RSA-SHA256 or RSA-SHA512 signatures, SHA-256 or SHA-512 digests, exclusive or inclusive canonicalization without comments. **SHA-1 (`rsa-sha1`, `sha1`) is refused**; there is no per-SP exception.
+4. **Freshness.** `IssueInstant` is required. It may be at most `SAML_REQUEST_MAX_AGE_SECONDS` (default 300) old and `SAML_CLOCK_SKEW_SECONDS` (default 180) in the future; the skew is also added to the maximum age.
+5. **Destination**, when present, must be this realm's SSO endpoint, `{BASE_URL}/realms/{realm}/protocol/saml`, as the IdP metadata publishes it.
+6. **ACS URL**, when present, must be registered (see below).
+7. **Replay.** The request's `ID` is recorded for its service provider until the request could no longer pass the freshness check. The same ID is refused a second time, on any replica or worker: the record is a unique row in PostgreSQL (`saml_request_ids`), deleted by a scheduled job once it expires.
+
+A refused request gets `400` with a short reason; the server log (`warn`, `SamlIdpService`) says exactly which check failed.
+
+`ForceAuthn`, `IsPassive`, `ProtocolBinding` and `RequestedAuthnContext` are read from the signed request but not acted on: the response always goes back with the HTTP-POST binding, and an existing SSO session answers without a new sign-in. Idenplane does not handle SAML `LogoutRequest`s.
+
 ### `Unknown or disabled SAML service provider`
 
 The inbound `AuthnRequest`'s `Issuer` must match a `SamlServiceProvider.entityId` registered in this realm, and that SP must have `enabled: true`. Register the SP first via `POST /admin/realms/{realm}/saml-service-providers` with a matching `entityId`.
@@ -94,9 +116,28 @@ The inbound `AuthnRequest`'s `Issuer` must match a `SamlServiceProvider.entityId
 
 If the `AuthnRequest` specifies an `AssertionConsumerServiceURL`, it's checked against an allow-list: the SP's primary `acsUrl` plus anything in `validRedirectUris`. This is a strict equality check (no wildcard), and it exists specifically to stop an attacker crafting a request that redirects the signed assertion to a URL they control. If your SP sends a different ACS URL than what's registered (e.g. it varies by tenant subdomain), add every valid variant to `validRedirectUris` on that SP.
 
-### `AuthnRequest is not signed` / signature validation failures
+### `AuthnRequest is not signed` / `AuthnRequest signature validation failed`
 
-Signature verification only happens **if the SP has a `certificate` configured**. If no certificate is set on the `SamlServiceProvider` record, `AuthnRequest` signatures are not checked at all — anyone who can reach the SSO endpoint can initiate a login for that SP. If you've configured a certificate and still get a signature failure, confirm the SP is actually signing with the matching private key and that the certificate on file is current (a rotated SP signing cert with a stale certificate registered on Idenplane's side is a common cause).
+Signatures are required **when the SP has a `certificate` configured**, and only then. Without a certificate on the `SamlServiceProvider` record, `AuthnRequest` signatures are not checked at all: anyone who can reach the SSO endpoint can start a sign-in for that SP (the response still only goes to its registered ACS URLs). Register the SP's signing certificate (PEM, or the base64 body copied from its metadata) to require signed requests.
+
+With a certificate, `AuthnRequest is not signed` means the request carried no signature for its binding: no `Signature`/`SigAlg` query parameters over HTTP-Redirect, no `<ds:Signature>` over HTTP-POST. For `AuthnRequest signature validation failed`, check the server log for the reason. The usual ones:
+
+- the SP signs with a key that does not match the certificate on file (a rotated SP certificate);
+- the SP signs with **SHA-1**. Configure it for RSA-SHA256;
+- the SP rebuilds the query string before signing it differently from what it sends (the IdP verifies the bytes it receives);
+- over HTTP-POST, the signature is not a direct child of the AuthnRequest or references something other than the AuthnRequest's `ID`.
+
+### `AuthnRequest has expired or is not yet valid` / `AuthnRequest IssueInstant is missing or invalid`
+
+The request's `IssueInstant` is more than `SAML_REQUEST_MAX_AGE_SECONDS` plus `SAML_CLOCK_SKEW_SECONDS` old (8 minutes by default), more than the skew in the future, or missing. Sync both clocks with NTP. A service provider that builds its AuthnRequest long before the browser sends it (a pre-rendered page) needs a fresh request per sign-in; raise `SAML_REQUEST_MAX_AGE_SECONDS` only as a stopgap.
+
+### `AuthnRequest has already been used`
+
+The same request `ID` from the same service provider was accepted before. A browser that resends an old request (the back button, a bookmarked SSO URL) gets this; the SP must start a new sign-in with a new request. An SP that reuses a fixed `ID` for every request must be fixed to generate a random one.
+
+### `AuthnRequest Destination does not match this endpoint`
+
+`Destination` must be exactly `{BASE_URL}/realms/{realm}/protocol/saml`, the `Location` in the IdP metadata. Check `BASE_URL`, and that the SP has the current metadata (scheme, host, port, realm name).
 
 ### Assertion rejected by the Service Provider (clock skew)
 
@@ -233,7 +274,7 @@ The SMTP provider (`nodemailer` under the hood) only treats itself as configured
 `redirect_uri` is checked against the database on every request. `webOrigins` (CORS) are kept in memory by every process and reloaded as soon as the database announces a change, see [redirect_uri, CORS, and Origin Mismatches](#redirect_uri-cors-and-origin-mismatches).
 
 **Why does my authorization request succeed but the token exchange fails with `redirect_uri mismatch`?**
-`/authorize` allows wildcard-registered redirect URIs (`https://app.example.com/*`); `/token` requires the exact string you sent to `/authorize`, byte-for-byte. See [redirect_uri exactness at token exchange](#redirect_uri-exactness-at-token-exchange).
+`/token` requires the exact string you sent to `/authorize`, byte-for-byte. A loopback URI may use any port at `/authorize`, and a client with the legacy wildcard opt-in any path below a `/*` entry, but the token request must repeat the one that was used. See [redirect_uri exactness at token exchange](#redirect_uri-exactness-at-token-exchange).
 
 **My refresh token suddenly stopped working and now the whole session is dead — why?**
 You (or a concurrent request from the same client) reused an already-rotated refresh token. Reuse detection revokes every refresh token on that session as a compromise precaution, not just the one that was reused. See [Refresh token rotation and reuse](#refresh-token-rotation-and-reuse).

@@ -13,6 +13,8 @@ import {
 } from '../../api/clientScopes';
 import ConfirmDialog from '../../components/ConfirmDialog';
 import { useCanWriteRealm } from '../../hooks/usePermissions';
+import { Alert } from '../../components/ui';
+import { redirectUriProblems, splitLines } from '../../utils/redirectUris';
 
 export default function ClientDetailPage() {
   const canWrite = useCanWriteRealm();
@@ -66,6 +68,7 @@ export default function ClientDetailPage() {
     enabled: true,
     backchannelLogoutUri: '',
     backchannelLogoutSessionRequired: true,
+    allowInsecureWildcardRedirectUris: false,
   });
 
   // Seed the editable form from fetched data when the loaded client changes.
@@ -83,18 +86,27 @@ export default function ClientDetailPage() {
       enabled: client.enabled,
       backchannelLogoutUri: client.backchannelLogoutUri || '',
       backchannelLogoutSessionRequired: client.backchannelLogoutSessionRequired ?? true,
+      allowInsecureWildcardRedirectUris: client.allowInsecureWildcardRedirectUris ?? false,
     });
   }
+
+  // Wildcards are accepted only while the client keeps the legacy opt-in.
+  const redirectProblems = redirectUriProblems(
+    splitLines(form.redirectUris),
+    form.allowInsecureWildcardRedirectUris,
+  );
 
   const updateMutation = useMutation({
     mutationFn: () =>
       updateClient(name!, id!, {
         name: form.name,
         description: form.description,
-        redirectUris: form.redirectUris
-          .split('\n')
-          .map((s) => s.trim())
-          .filter(Boolean),
+        redirectUris: splitLines(form.redirectUris),
+        // Only sent for a client that has the legacy opt-in, so that an
+        // administrator can turn it off; it is never turned on from here.
+        ...(client?.allowInsecureWildcardRedirectUris
+          ? { allowInsecureWildcardRedirectUris: form.allowInsecureWildcardRedirectUris }
+          : {}),
         webOrigins: form.webOrigins
           .split('\n')
           .map((s) => s.trim())
@@ -157,6 +169,7 @@ export default function ClientDetailPage() {
 
   function handleSubmit(e: FormEvent) {
     e.preventDefault();
+    if (redirectProblems.length > 0) return;
     updateMutation.mutate();
   }
 
@@ -269,8 +282,50 @@ export default function ClientDetailPage() {
             value={form.redirectUris}
             onChange={(e) => setForm({ ...form, redirectUris: e.target.value })}
             rows={3}
+            aria-invalid={redirectProblems.length > 0}
             className="w-full rounded-md border border-line-strong px-3 py-2 text-sm font-mono shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
           />
+          <p className="mt-1 text-xs text-subtle">
+            Each URI must match the one your app sends exactly. A loopback URI
+            (<code>http://127.0.0.1/callback</code>) matches on any port.
+          </p>
+          {client?.allowInsecureWildcardRedirectUris && (
+            <Alert
+              variant="warning"
+              title="Insecure wildcard redirect URIs"
+              className="mt-2"
+              data-testid="wildcard-opt-in-warning"
+            >
+              <p>
+                This client keeps the pre-0.11.0 behaviour: a redirect URI ending in{' '}
+                <code>/*</code> matches any path below it, so any page there can receive
+                authorization codes. Replace each wildcard with the exact callback URL, then
+                turn this off.
+              </p>
+              <label className="mt-2 flex items-center gap-2 font-medium">
+                <input
+                  type="checkbox"
+                  checked={form.allowInsecureWildcardRedirectUris}
+                  onChange={(e) =>
+                    setForm({ ...form, allowInsecureWildcardRedirectUris: e.target.checked })
+                  }
+                  className="h-4 w-4 rounded border-line-strong text-accent focus:ring-accent"
+                />
+                Allow insecure wildcard redirect URIs
+              </label>
+            </Alert>
+          )}
+          {redirectProblems.length > 0 && (
+            <ul
+              role="alert"
+              data-testid="redirect-uri-problems"
+              className="mt-2 space-y-1 rounded-md bg-danger-soft p-3 text-sm text-danger-fg"
+            >
+              {redirectProblems.map((p) => (
+                <li key={p}>{p}</li>
+              ))}
+            </ul>
+          )}
         </div>
 
         <div>
@@ -376,7 +431,7 @@ export default function ClientDetailPage() {
         <div className="flex justify-end border-t border-line pt-4">
           <button
             type="submit"
-            disabled={!canWrite || updateMutation.isPending}
+            disabled={!canWrite || updateMutation.isPending || redirectProblems.length > 0}
             className="rounded-md bg-accent px-4 py-2 text-sm font-medium text-white hover:bg-accent-hover disabled:opacity-50"
           >
             {updateMutation.isPending ? 'Saving...' : 'Save Changes'}

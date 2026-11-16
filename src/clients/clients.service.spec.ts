@@ -1,4 +1,8 @@
-import { ConflictException, NotFoundException } from '@nestjs/common';
+import {
+  BadRequestException,
+  ConflictException,
+  NotFoundException,
+} from '@nestjs/common';
 import { ClientsService } from './clients.service.js';
 import {
   createMockPrismaService,
@@ -120,6 +124,40 @@ describe('ClientsService', () => {
   });
 
   describe('create', () => {
+    it('refuses a wildcard redirect URI unless the client opts in', async () => {
+      prisma.client.findUnique.mockResolvedValue(null);
+      prisma.client.create.mockResolvedValue(mockClient);
+      await expect(
+        service.create(mockRealm, {
+          clientId: 'wild',
+          clientType: 'PUBLIC',
+          redirectUris: ['https://example.com/*'],
+        }),
+      ).rejects.toThrow(BadRequestException);
+      await expect(
+        service.create(mockRealm, {
+          clientId: 'frag',
+          clientType: 'PUBLIC',
+          redirectUris: ['https://example.com/cb#x'],
+        }),
+      ).rejects.toThrow(/fragment/);
+      expect(prisma.client.create).not.toHaveBeenCalled();
+
+      await service.create(mockRealm, {
+        clientId: 'wild',
+        clientType: 'PUBLIC',
+        redirectUris: ['https://example.com/*'],
+        allowInsecureWildcardRedirectUris: true,
+      });
+      expect(prisma.client.create).toHaveBeenCalledWith(
+        expect.objectContaining({
+          data: expect.objectContaining({
+            allowInsecureWildcardRedirectUris: true,
+          }),
+        }),
+      );
+    });
+
     it('should create a confidential client with a generated secret', async () => {
       prisma.client.findUnique.mockResolvedValue(null);
       cryptoService.generateSecret.mockReturnValue('raw-secret-hex');
@@ -385,6 +423,68 @@ describe('ClientsService', () => {
       await expect(
         service.update(mockRealm, 'nonexistent', { name: 'X' }),
       ).rejects.toThrow(NotFoundException);
+    });
+
+    describe('wildcard redirect URIs (exact matching since 0.11.0)', () => {
+      const wildClient = {
+        ...mockClient,
+        postLogoutRedirectUris: [],
+        redirectUris: ['https://example.com/*'],
+        allowInsecureWildcardRedirectUris: true,
+      };
+
+      it('refuses a wildcard on a client without the opt-in', async () => {
+        prisma.client.findUnique.mockResolvedValue({
+          ...mockClient,
+          postLogoutRedirectUris: [],
+          allowInsecureWildcardRedirectUris: false,
+        });
+        await expect(
+          service.update(mockRealm, 'my-app', {
+            redirectUris: ['https://example.com/*'],
+          }),
+        ).rejects.toThrow(/allowInsecureWildcardRedirectUris/);
+        await expect(
+          service.update(mockRealm, 'my-app', {
+            postLogoutRedirectUris: ['https://example.com/*'],
+          }),
+        ).rejects.toThrow(BadRequestException);
+        expect(prisma.client.update).not.toHaveBeenCalled();
+      });
+
+      it('refuses turning the opt-in off while a wildcard is registered', async () => {
+        prisma.client.findUnique.mockResolvedValue(wildClient);
+        await expect(
+          service.update(mockRealm, 'my-app', {
+            allowInsecureWildcardRedirectUris: false,
+          }),
+        ).rejects.toThrow(BadRequestException);
+      });
+
+      it('allows replacing the wildcard with exact URIs and turning the opt-in off', async () => {
+        prisma.client.findUnique.mockResolvedValue(wildClient);
+        prisma.client.update.mockResolvedValue(mockClient);
+        await service.update(mockRealm, 'my-app', {
+          redirectUris: ['https://example.com/callback'],
+          allowInsecureWildcardRedirectUris: false,
+        });
+        expect(prisma.client.update).toHaveBeenCalledWith(
+          expect.objectContaining({
+            data: expect.objectContaining({
+              redirectUris: ['https://example.com/callback'],
+              allowInsecureWildcardRedirectUris: false,
+            }),
+          }),
+        );
+      });
+
+      it('leaves a grandfathered client alone on unrelated updates', async () => {
+        prisma.client.findUnique.mockResolvedValue(wildClient);
+        prisma.client.update.mockResolvedValue(wildClient);
+        await expect(
+          service.update(mockRealm, 'my-app', { name: 'Renamed' }),
+        ).resolves.toBeDefined();
+      });
     });
   });
 

@@ -52,6 +52,19 @@ describe('ClientCreatePage', () => {
     expect(screen.getByRole('button', { name: /cancel/i })).toBeInTheDocument();
   });
 
+  it('refuses a wildcard redirect URI and explains why', async () => {
+    const user = userEvent.setup();
+    renderPage();
+    await user.type(screen.getByLabelText(/^redirect uris/i), 'https://app.example.com/*');
+    expect(screen.getByTestId('redirect-uri-problems')).toHaveTextContent(/match exactly/i);
+    expect(screen.getByRole('button', { name: /^create client$/i })).toBeDisabled();
+
+    await user.clear(screen.getByLabelText(/^redirect uris/i));
+    await user.type(screen.getByLabelText(/^redirect uris/i), 'https://app.example.com/callback');
+    expect(screen.queryByTestId('redirect-uri-problems')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /^create client$/i })).toBeEnabled();
+  });
+
   it('allows changing the client type to PUBLIC', async () => {
     const user = userEvent.setup();
     renderPage();

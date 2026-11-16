@@ -33,6 +33,7 @@ import {
 } from './realm-secrets.util.js';
 import { MASTER_REALM } from './realm.constants.js';
 import { signingKeySecrets } from '../crypto/signing-key-secrets.js';
+import { wildcardRedirectUris } from '../common/redirect-uri.utils.js';
 import { idpSecrets } from '../identity-providers/idp-secrets.js';
 import { federationSecrets } from '../user-federation/federation-secrets.js';
 import { STREAM_HEADERS_SHAPE } from '../events/audit-stream-secrets.js';
@@ -473,6 +474,21 @@ export class RealmImportService {
         data['webOrigins'] = (data['webOrigins'] as string[]).filter(
           (o) => o !== '*',
         );
+      }
+      // An export from before 0.11.0 has no wildcard opt-in. A client with
+      // a `/*` redirect URI gets it, as the 0.11.0 upgrade gives it to
+      // existing clients, so the import does not break it (and says so).
+      if (c['allowInsecureWildcardRedirectUris'] === undefined) {
+        const wildcards = wildcardRedirectUris([
+          ...((data['redirectUris'] as string[] | undefined) ?? []),
+          ...((data['postLogoutRedirectUris'] as string[] | undefined) ?? []),
+        ]);
+        if (wildcards.length > 0) {
+          data['allowInsecureWildcardRedirectUris'] = true;
+          warnings.push(
+            `clients[${i}] '${key}': wildcard redirect URIs (${wildcards.join(', ')}) keep working through allowInsecureWildcardRedirectUris, which is insecure; register exact URIs and turn it off`,
+          );
+        }
       }
       const secret = clientSecrets.get(key) ?? null;
       const method = c['tokenEndpointAuthMethod'];

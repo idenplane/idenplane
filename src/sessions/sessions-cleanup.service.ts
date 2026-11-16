@@ -14,6 +14,11 @@ export class SessionsCleanupService {
 
     // Delete expired OAuth sessions.  RefreshTokens are deleted automatically
     // via the onDelete: Cascade relation defined in the Prisma schema.
+    // An offline session's expiresAt is set from the realm's offline
+    // lifespan when it is created (sessions/session-lifetime.ts), so this
+    // keeps offline tokens until their own session expires.  Runs on every
+    // instance: deleting what has expired is idempotent, so no leader is
+    // needed.
     const oauthResult = await this.prisma.session.deleteMany({
       where: { expiresAt: { lt: now } },
     });
@@ -24,7 +29,8 @@ export class SessionsCleanupService {
     });
 
     // Delete any refresh tokens that have individually expired but whose
-    // parent session is still alive (e.g. offline tokens with a shorter TTL).
+    // parent session is still alive (e.g. an offline session whose scope was
+    // narrowed on refresh to a normal, shorter-lived refresh token).
     const refreshResult = await this.prisma.refreshToken.deleteMany({
       where: { expiresAt: { lt: now } },
     });

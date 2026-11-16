@@ -127,6 +127,13 @@ export class UpgradeHealthService {
     if (bruteForceCheck.status === 'pass') passed++;
     else warnings++;
 
+    // 9. Security posture: clients with wildcard redirect URIs. Also only
+    // ever a warning.
+    const wildcardCheck = await this.checkWildcardRedirectUris();
+    checks.push(wildcardCheck);
+    if (wildcardCheck.status === 'pass') passed++;
+    else warnings++;
+
     const healthy = failures === 0;
 
     this.logger.log(
@@ -173,6 +180,63 @@ export class UpgradeHealthService {
         name: 'brute_force_protection',
         status: 'warn',
         message: 'Could not check brute-force protection',
+        details: (error as Error).message,
+      };
+    }
+  }
+
+  /**
+   * Warns about clients with wildcard (`/*`) redirect URIs. Since 0.11.0
+   * redirect URIs match exactly (RFC 9700). The 0.11.0 migration turned on
+   * `allowInsecureWildcardRedirectUris` for every client that had such an
+   * entry, so they keep working; this is how an operator finds them to
+   * register exact URIs and turn the opt-in off. A client with a wildcard
+   * entry and the opt-in off is listed too: that entry matches nothing.
+   */
+  async checkWildcardRedirectUris(): Promise<UpgradeHealthCheck> {
+    try {
+      const clients = await this.prisma.$queryRaw<
+        Array<{ realm: string; client_id: string; opt_in: boolean }>
+      >`
+        SELECT r."name" AS realm,
+               c."client_id",
+               c."allow_insecure_wildcard_redirect_uris" AS opt_in
+          FROM "clients" c
+          JOIN "realms" r ON r."id" = c."realm_id"
+         WHERE c."allow_insecure_wildcard_redirect_uris"
+            OR EXISTS (
+                 SELECT 1
+                   FROM unnest(c."redirect_uris" || c."post_logout_redirect_uris") AS u(uri)
+                  WHERE u.uri LIKE '%/*'
+               )
+         ORDER BY r."name", c."client_id"
+      `;
+      if (clients.length === 0) {
+        return {
+          name: 'wildcard_redirect_uris',
+          status: 'pass',
+          message: 'Every client uses exact redirect URIs',
+        };
+      }
+      return {
+        name: 'wildcard_redirect_uris',
+        status: 'warn',
+        message:
+          `${clients.length} client(s) rely on wildcard redirect URIs, which match any path ` +
+          'below them (insecure, RFC 9700). Register exact redirect URIs and turn ' +
+          'allowInsecureWildcardRedirectUris off.',
+        details: clients
+          .map(
+            (c) =>
+              `${c.realm}/${c.client_id}${c.opt_in ? '' : ' (opt-in off: the wildcard matches nothing)'}`,
+          )
+          .join(', '),
+      };
+    } catch (error) {
+      return {
+        name: 'wildcard_redirect_uris',
+        status: 'warn',
+        message: 'Could not check redirect URIs',
         details: (error as Error).message,
       };
     }
