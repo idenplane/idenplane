@@ -12,6 +12,7 @@ This is a self-assessment of the Idenplane server, admin console and themes agai
 - **Method:** each verdict comes from reading the code, not the docs. Evidence is a file and line, a test, or configuration. Requirements about documentation were judged against what the docs actually say.
 - **Not a certification.** Nobody outside the project has reviewed it. Treat it as a map of where the controls are and where they are missing.
 - **Machine-readable copy:** [asvs-5.0-l2-assessment.csv](pathname:///security/asvs-5.0-l2-assessment.csv), one row per requirement with the requirement text, status, evidence, notes and recommendation.
+- **Attribution:** the requirement identifiers and text are from the OWASP Application Security Verification Standard 5.0.0, © OWASP Foundation, licensed under [CC BY-SA 4.0](https://creativecommons.org/licenses/by-sa/4.0/). The CSV reproduces that text under the same licence.
 
 ## Status meanings
 
@@ -69,7 +70,7 @@ The assessment found these gaps and 0.10.0 closes them, with tests:
 
 ### Remaining gaps
 
-These are left open on purpose: each one is either a behaviour change existing deployments would notice, or needs a design of its own. Half a fix would be worse than a documented gap. In rough priority order:
+These are left open on purpose. Most would change behaviour that existing deployments rely on, or need a design of their own, and half a fix would be worse than a documented gap. A few are small but touch admin-only input (theme uploads, custom CSS) and were left for a focused change. In rough priority order:
 
 1. **No MFA on admin console sign-in** (V6.3.3). The console accepts a password only, even when the admin has TOTP enrolled. Needs an MFA step in `AdminAuthService.login` and the console.
 2. **Wildcard redirect URIs** (V10.4.1). A registered URI ending in `/*` matches any path below it. Removing this breaks clients registered that way; it needs a deprecation period with a warning first.

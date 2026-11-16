@@ -354,5 +354,30 @@ describe('Secure realm defaults (e2e)', () => {
       expect((await lockedUntil())!.getTime()).toBeGreaterThan(Date.now());
       await passwordGrant(RIGHT).expect(400);
     });
+
+    it('can be cleared with the admin API key by setting a new password (the documented break-glass path)', async () => {
+      await lockOut();
+      const NEW_PASSWORD = 'placeholder-New-Pass-1';
+
+      await withKey(
+        admin()
+          .put(
+            `/admin/realms/${LOCK_REALM}/users/${seeded.user.id}/reset-password`,
+          )
+          .send({ password: NEW_PASSWORD }),
+      ).expect(204);
+
+      expect(await lockedUntil()).toBeNull();
+      await passwordGrant(NEW_PASSWORD).expect(200);
+
+      // Put the fixture password back for any later test.
+      await withKey(
+        admin()
+          .put(
+            `/admin/realms/${LOCK_REALM}/users/${seeded.user.id}/reset-password`,
+          )
+          .send({ password: RIGHT }),
+      ).expect(204);
+    });
   });
 });

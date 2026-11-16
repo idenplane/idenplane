@@ -51,7 +51,19 @@ A per-account lockout limits password guessing, but anyone who knows a username 
 What remains, and what to do about it:
 
 - **Targeted lockout of a known username stays possible.** For high-value accounts, prefer passkeys or MFA, so the password alone is not what protects the account. Turn on [rate limiting](#other-defaults) and CAPTCHA for public realms.
-- **Administrators.** The `master` realm is covered too. If the admin account is locked, use the `ADMIN_API_KEY` (if set) or wait for the lock to end. An admin can unlock a user from the console (the dashboard's **Locked users** panel) or with `POST /admin/realms/{realm}/brute-force/users/{userId}/unlock`; that route asks for an MFA step-up.
+- **Unlocking a user.** An admin can unlock a user from the console (the dashboard's **Locked users** panel) or with `POST /admin/realms/{realm}/brute-force/users/{userId}/unlock`. That route asks for an MFA step-up, so it refuses the admin API key. Setting a new password also unlocks the account (below).
+- **A locked administrator.** The `master` realm is covered too. Wait for the lock to end (5 minutes), sign in as another super-admin, or, with the `ADMIN_API_KEY`, set a new password, which also clears the lock:
+
+  ```bash
+  # Find the admin's id, then set a new password (this also unlocks the account).
+  curl -H "x-admin-api-key: $ADMIN_API_KEY" \
+    "https://idp.example.com/admin/realms/master/users?username=admin"
+  curl -X PUT -H "x-admin-api-key: $ADMIN_API_KEY" -H "Content-Type: application/json" \
+    -d '{"password": "<new password>"}' \
+    "https://idp.example.com/admin/realms/master/users/{userId}/reset-password"
+  ```
+
+  Keep `permanentLockoutAfter` at `0` on `master`: a permanent lockout disables the account, and only another super-admin or the API key can bring it back.
 
 ### Turning it on for an existing realm
 
