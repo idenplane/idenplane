@@ -28,7 +28,12 @@ Once the services are healthy, open:
 | http://localhost:3000/console | Admin Console |
 | http://localhost:3000/api | Swagger API Docs |
 | http://localhost:3000/health/live | Health Check |
-| http://localhost:3000/metrics | Prometheus Metrics |
+
+Prometheus metrics are served at `/admin/metrics` and need admin credentials, so a browser visit gets `401`:
+
+```bash
+curl -H "x-admin-api-key: $ADMIN_API_KEY" http://localhost:3000/admin/metrics
+```
 
 ### Generated Credentials
 
@@ -129,7 +134,7 @@ npm run db:setup          # Generate + migrate + seed
 
 Check the logs:
 ```bash
-docker compose logs idenplane
+docker compose logs app
 ```
 
 Ensure port 3000 is not already in use:
@@ -160,9 +165,6 @@ Idenplane is fully stateless — all state is stored in PostgreSQL (and optional
 ```bash
 # Using the cluster compose file (2 instances + Nginx LB)
 docker compose -f docker-compose.cluster.yml up -d
-
-# Or scale manually
-docker compose up -d --scale app=3
 ```
 
 For production clusters, enable Redis for shared session storage:
