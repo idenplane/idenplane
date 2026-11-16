@@ -446,7 +446,8 @@ describe('ThemeRenderService', () => {
       const base =
         "default-src 'self'; script-src 'self' 'nonce-N'; " +
         "script-src-attr 'none'; " +
-        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com; " +
+        "style-src 'self' 'nonce-N' https://fonts.googleapis.com; " +
+        "style-src-attr 'unsafe-inline'; " +
         "font-src 'self' https://fonts.gstatic.com; img-src 'self' data: blob:; " +
         "connect-src 'self'; object-src 'none'; base-uri 'self'; " +
         "frame-ancestors 'none'";
@@ -465,6 +466,26 @@ describe('ThemeRenderService', () => {
       // form-action would block the login POST's 302 to the client's
       // redirect_uri in Chrome.
       expect(csp).not.toContain('form-action');
+    });
+
+    it('requires the nonce on <style> elements but allows style attributes', () => {
+      const csp = buildThemeCsp('N');
+      expect(csp).toMatch(
+        /style-src 'self' 'nonce-N' https:\/\/fonts\.googleapis\.com;/,
+      );
+      // An injected <style> could select on input values and exfiltrate
+      // them; that needs 'unsafe-inline' on style-src, which is gone.
+      expect(csp).not.toMatch(/style-src [^;]*'unsafe-inline'/);
+      expect(csp).toContain("style-src-attr 'unsafe-inline'");
+    });
+
+    it('keeps unsafe-inline for elements on a page with third-party styles (CAPTCHA)', () => {
+      const csp = buildThemeCsp('N', { 'style-src': ['https://hcaptcha.com'] });
+      expect(csp).toContain(
+        "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://hcaptcha.com;",
+      );
+      // A nonce would make browsers ignore 'unsafe-inline' and break the widget.
+      expect(csp).not.toMatch(/style-src [^;]*'nonce-/);
     });
 
     it('appends sources to the named directives', () => {

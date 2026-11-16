@@ -1,5 +1,8 @@
 import { HttpException, HttpStatus, BadRequestException } from '@nestjs/common';
-import { GlobalExceptionFilter } from './http-exception.filter.js';
+import {
+  GlobalExceptionFilter,
+  prismaClientError,
+} from './http-exception.filter.js';
 import { CertificateBindingError } from '../../mtls/certificate-binding.js';
 
 describe('GlobalExceptionFilter', () => {
@@ -198,6 +201,75 @@ describe('GlobalExceptionFilter', () => {
 
       const jsonArg = mockResponse.json.mock.calls[0][0];
       expect(new Date(jsonArg.timestamp).toISOString()).toBe(jsonArg.timestamp);
+    });
+  });
+
+  describe('database errors caused by the request', () => {
+    const prismaError = (name: string, message: string, code?: string) =>
+      Object.assign(new Error(message), { name, ...(code ? { code } : {}) });
+
+    it.each([
+      [
+        'PrismaClientValidationError',
+        undefined,
+        'Argument `take`: Invalid value',
+        400,
+      ],
+      [
+        'PrismaClientKnownRequestError',
+        'P2002',
+        'Unique constraint failed',
+        409,
+      ],
+      [
+        'PrismaClientKnownRequestError',
+        'P2025',
+        'Record to update not found',
+        404,
+      ],
+      ['PrismaClientKnownRequestError', 'P2000', 'value too long', 400],
+      [
+        'PrismaClientKnownRequestError',
+        'P2010',
+        'Database error. Code: `22021`. Message: `invalid byte sequence`',
+        400,
+      ],
+    ])('%s %s -> %s', (name, code, message, status) => {
+      expect(prismaClientError(prismaError(name, message, code))?.status).toBe(
+        status,
+      );
+    });
+
+    it('leaves other database errors as 500', () => {
+      expect(
+        prismaClientError(
+          prismaError(
+            'PrismaClientKnownRequestError',
+            'Database error. Code: `57P01`',
+            'P2010',
+          ),
+        ),
+      ).toBeNull();
+      expect(
+        prismaClientError(
+          prismaError('PrismaClientInitializationError', 'cannot reach'),
+        ),
+      ).toBeNull();
+      expect(prismaClientError(new Error('boom'))).toBeNull();
+    });
+
+    it('answers with a generic message, never the query', () => {
+      process.env.NODE_ENV = 'production';
+      filter.catch(
+        prismaError(
+          'PrismaClientValidationError',
+          'Invalid `prisma.user.findMany()` invocation: take: "x"',
+        ),
+        mockHost,
+      );
+      expect(mockResponse.status).toHaveBeenCalledWith(400);
+      const body = mockResponse.json.mock.calls[0][0];
+      expect(JSON.stringify(body)).not.toMatch(/prisma|findMany/);
     });
   });
 });

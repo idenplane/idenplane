@@ -100,7 +100,9 @@ The values the login template receives, on the built-in login and on a bound flo
 | `passkeyOnly` | Bound flow only: a passkey step without a password fallback. |
 | `passwordFormHidden` | Bound flow only: a step that takes no password and has no password fallback. |
 | `magicLinkFallback` | Bound flow only: the password step can fall back to a sign-in link. |
-| `scriptNonce` | The CSP nonce; every inline `<script>` needs `nonce="{{scriptNonce}}"`. |
+| `scriptNonce` | The CSP nonce; every inline `<script>` and `<style>` element needs `nonce="{{scriptNonce}}"`. |
 | `locale`, `dir`, `isRtl`, `languageSwitcher` | Localisation. Use the `msg` helper for message bundle strings. |
 
 Inline scripts without the nonce are blocked: the hosted pages' Content Security Policy never allows `unsafe-inline` or `unsafe-eval` scripts.
+
+Since 0.10.0 the same applies to `<style>` elements: one without the nonce is ignored by the browser, so a custom template that has its own `<style>` block must add `nonce="{{scriptNonce}}"` to it. The built-in layouts already do, including the block that holds the theme's custom CSS. `style="..."` attributes are still allowed. A page that loads a CAPTCHA widget keeps `'unsafe-inline'` for style elements, because the widget inserts its own.

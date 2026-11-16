@@ -16,6 +16,8 @@ import { Test, TestingModule, TestingModuleBuilder } from '@nestjs/testing';
 import { ValidationPipe, type INestApplication } from '@nestjs/common';
 import { SwaggerModule, DocumentBuilder } from '@nestjs/swagger';
 import cookieParser from 'cookie-parser';
+import { applySecurityHeaders } from '../src/common/security/http-security-headers';
+import { RequestInputPipe } from '../src/common/pipes/request-input.pipe';
 import { AppModule } from '../src/app.module';
 import { PrismaService } from '../src/prisma/prisma.service';
 import { GlobalExceptionFilter } from '../src/common/filters/http-exception.filter';
@@ -58,7 +60,8 @@ export interface TestContext {
 
 /**
  * Creates and configures a NestJS application for E2E testing.
- * Mirrors the configuration in main.ts (ValidationPipe, cookieParser, exception filter).
+ * Mirrors the configuration in main.ts (security headers, the global pipes,
+ * cookieParser, exception filter).
  */
 export async function createTestApp(
   options: {
@@ -102,9 +105,11 @@ export async function createTestApp(
 
   const app = moduleFixture.createNestApplication();
 
+  applySecurityHeaders(app);
   app.use(cookieParser());
 
   app.useGlobalPipes(
+    new RequestInputPipe(),
     new ValidationPipe({
       whitelist: true,
       forbidNonWhitelisted: true,
@@ -119,7 +124,10 @@ export async function createTestApp(
     .setTitle('Idenplane')
     .setDescription('Open-source Identity and Access Management Server')
     .setVersion('0.1.0')
-    .addApiKey({ type: 'apiKey', name: 'x-admin-api-key', in: 'header' }, 'admin-api-key')
+    .addApiKey(
+      { type: 'apiKey', name: 'x-admin-api-key', in: 'header' },
+      'admin-api-key',
+    )
     .addBearerAuth()
     .build();
 
@@ -168,9 +176,7 @@ export async function createTestApp(
     const passwordHash = await argon2.hash('TestPassword123!');
 
     // Clean up any existing realm with the same name
-    await prisma.realm
-      .delete({ where: { name: realmName } })
-      .catch(() => {});
+    await prisma.realm.delete({ where: { name: realmName } }).catch(() => {});
 
     const realm = await prisma.realm.create({
       data: {
@@ -202,7 +208,12 @@ export async function createTestApp(
             enabled: true,
             redirectUris: ['http://localhost:3000/callback'],
             webOrigins: ['http://localhost:3000'],
-            grantTypes: ['authorization_code', 'client_credentials', 'password', 'refresh_token'],
+            grantTypes: [
+              'authorization_code',
+              'client_credentials',
+              'password',
+              'refresh_token',
+            ],
           },
         },
       },
