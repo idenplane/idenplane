@@ -1,4 +1,5 @@
 import { SessionsCleanupService } from './sessions-cleanup.service.js';
+import { sessionExpiresAt } from './session-lifetime.js';
 import {
   createMockPrismaService,
   type MockPrismaService,
@@ -127,6 +128,51 @@ describe('SessionsCleanupService', () => {
       }
 
       jest.restoreAllMocks();
+    });
+    it('keeps an offline session past the normal lifespan, until its own expiry', async () => {
+      // A table of sessions the fake deleteMany filters as the database would.
+      const realm = { refreshTokenLifespan: 1800, offlineTokenLifespan: 86400 };
+      const signIn = new Date('2026-11-16T10:00:00.000Z');
+      let sessions = [
+        { id: 'normal', expiresAt: sessionExpiresAt(realm, false, signIn) },
+        { id: 'offline', expiresAt: sessionExpiresAt(realm, true, signIn) },
+      ];
+      prisma.session.deleteMany.mockImplementation(
+        ({ where }: { where: { expiresAt: { lt: Date } } }) => {
+          const before = sessions.length;
+          sessions = sessions.filter(
+            (s) => !(s.expiresAt < where.expiresAt.lt),
+          );
+          return Promise.resolve({ count: before - sessions.length });
+        },
+      );
+      for (const table of [
+        prisma.loginSession,
+        prisma.refreshToken,
+        prisma.authorizationCode,
+        prisma.impersonationSession,
+        prisma.proxySession,
+      ]) {
+        table.deleteMany.mockResolvedValue({ count: 0 });
+      }
+      const runAt = async (hoursAfterSignIn: number) => {
+        jest
+          .useFakeTimers({ doNotFake: ['nextTick', 'setImmediate'] })
+          .setSystemTime(signIn.getTime() + hoursAfterSignIn * 3600 * 1000);
+        try {
+          await service.cleanupExpiredSessions();
+        } finally {
+          jest.useRealTimers();
+        }
+        return sessions.map((s) => s.id);
+      };
+
+      // The hourly run after the normal lifespan: only the normal one goes.
+      expect(await runAt(1)).toEqual(['offline']);
+      // Still there late on the first day.
+      expect(await runAt(23)).toEqual(['offline']);
+      // Gone at the first run after the offline lifespan.
+      expect(await runAt(25)).toEqual([]);
     });
   });
 });

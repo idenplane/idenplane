@@ -158,7 +158,14 @@ export class TokensService {
       include: { session: { include: { user: true } } },
     });
 
-    if (!stored || stored.revoked || stored.expiresAt < new Date()) {
+    const now = new Date();
+    if (
+      !stored ||
+      stored.revoked ||
+      stored.expiresAt < now ||
+      // The session has ended even if the clean-up has not deleted it yet.
+      (stored.session && stored.session.expiresAt < now)
+    ) {
       return { active: false };
     }
 
