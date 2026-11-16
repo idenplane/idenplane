@@ -20,7 +20,7 @@
     "strictNullChecks": true,
     // TS6 enables strictPropertyInitialization whenever strictNullChecks is on.
     // This project deliberately opts into strictNullChecks only (not full strict),
-    // and NestJS GraphQL/DTO classes have their decorated properties populated at
+    // and NestJS DTO classes have their decorated properties populated at
     // runtime, so we keep the project's prior stance and leave this off.
     "strictPropertyInitialization": false,
     "forceConsistentCasingInFileNames": true,

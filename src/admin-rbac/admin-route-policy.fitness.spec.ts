@@ -1,7 +1,6 @@
 import { writeFileSync } from 'node:fs';
 import type { Type } from '@nestjs/common';
 import { AppModule } from '../app.module.js';
-import { GraphQLAdminModule } from '../graphql/graphql.module.js';
 import {
   adminRoutesOf,
   walkModules,
@@ -113,13 +112,6 @@ describe('admin route authorization (fitness)', () => {
       param: 'realmName',
       lookup: 'name',
     });
-  });
-
-  it('does not mount the unreviewed GraphQL admin API', () => {
-    // GraphQL resolvers would bypass the HTTP route policy. Mounting it needs
-    // an authorization design first (AdminAuthorizationGuard refuses
-    // non-HTTP contexts meanwhile).
-    expect(modules.has(GraphQLAdminModule)).toBe(false);
   });
 
   it('writes the access matrix when asked', () => {

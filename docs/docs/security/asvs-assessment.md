@@ -169,8 +169,8 @@ Every row below has its own recommendation.
 | V4.1.2 | 2 | Pass | src/main.ts:247 (no HTTP-to-HTTPS redirect in the app) |  |
 | V4.1.3 | 2 | Pass | src/common/utils/proxy-ip.util.ts:132 (TRUSTED\_PROXIES) | TRUSTED\_PROXIES=\* trusts everyone (operator choice). |
 | V4.2.1 | 2 | Pass | Node llhttp rejects ambiguous TE/CL |  |
-| V4.3.1 | 2 | N/A | src/graphql/graphql.module.ts is not imported by AppModule (fitness test in src/admin-rbac) | GraphQL is not mounted. **Recommendation:** If mounted: depth and cost limits, introspection off. |
-| V4.3.2 | 2 | N/A | as V4.3.1 | GraphQL is not mounted; introspection:true would apply only if it were. **Recommendation:** Set introspection off in production before mounting. |
+| V4.3.1 | 2 | N/A | No GraphQL endpoint: the unmounted GraphQL module and its packages were removed after 0.10.0 | Idenplane has no GraphQL API. **Recommendation:** If one is added: depth and cost limits, introspection off. |
+| V4.3.2 | 2 | N/A | as V4.3.1 | Idenplane has no GraphQL API. **Recommendation:** Keep introspection off in production if one is added. |
 | V4.4.1 | 1 | Partial | src/main.ts (gateway on the plain HTTP server) | WSS relies on the TLS-terminating proxy. **Recommendation:** Refuse upgrades without x-forwarded-proto=https in production (S). |
 | V4.4.2 | 2 | **Fail** | src/realtime/session-events.gateway.ts:101-131 | No Origin check on the WebSocket upgrade. **Recommendation:** Check Origin against the CORS allowlist (S). |
 | V4.4.3 | 2 | Partial | src/realtime/session-events.gateway.ts:182 (?token= in URL) | Access token in the URL can reach logs (redacted by redact-url). **Recommendation:** Send the token in the first message (M). |
@@ -357,7 +357,7 @@ Every row below has its own recommendation.
 | V13.3.1 | 2 | Partial | src/crypto/stored-secrets.ts; src/secrets-at-rest/ | Secrets encrypted at rest; key from env, no KMS. **Recommendation:** (L) |
 | V13.3.2 | 2 | Partial | helm values (non-root, automount configurable) |  |
 | V13.4.1 | 1 | Pass | .dockerignore (.git excluded) |  |
-| V13.4.2 | 2 | Pass | src/common/logger/logger.config.ts; src/common/filters/http-exception.filter.ts | GraphQL (with introspection) is not mounted. |
+| V13.4.2 | 2 | Pass | src/common/logger/logger.config.ts; src/common/filters/http-exception.filter.ts | No GraphQL endpoint. |
 | V13.4.3 | 2 | Pass | src/main.ts:310 (index:false) |  |
 | V13.4.4 | 2 | Pass | No TRACE routes |  |
 | V13.4.5 | 2 | Partial | src/health/prisma-health.indicator.ts (generic message); src/main.ts:355 (Swagger at /api) | FIXED in part: /health/ready no longer leaks the DB error. Swagger UI stays public by design (documented API). **Recommendation:** SWAGGER\_ENABLED switch for operators who want it off (S). |
