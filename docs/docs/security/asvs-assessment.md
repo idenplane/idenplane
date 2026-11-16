@@ -8,7 +8,7 @@ description: Idenplane assessed against OWASP ASVS 5.0.0 Level 2, requirement by
 
 This is a self-assessment of the Idenplane server, admin console and themes against the [OWASP Application Security Verification Standard 5.0.0](https://github.com/OWASP/ASVS/releases/tag/v5.0.0_release), **Level 2**. It covers every Level 1 and Level 2 requirement (253), taken from the official release CSV.
 
-- **Version assessed:** 0.10.0 (branch `feat/security-hardening-0.10`), November 2026. Rows changed by 0.11.0 (admin console MFA, stronger recovery codes, SAML request verification, V3.7.2, V7.1.1, V7.3.2, V10.4.1, V10.4.8) are updated and say "FIXED in 0.11.0".
+- **Version assessed:** 0.10.0, November 2026, updated for 0.11.0. Rows changed by 0.11.0 (admin console MFA, stronger recovery codes, SAML request verification, V3.7.2, V7.1.1, V7.3.2, V10.4.1, V10.4.8) are updated and say "FIXED in 0.11.0".
 - **Method:** each verdict comes from reading the code, not the docs. Evidence is a file and line, a test, or configuration. Requirements about documentation were judged against what the docs actually say.
 - **Not a certification.** Nobody outside the project has reviewed it. Treat it as a map of where the controls are and where they are missing.
 - **Machine-readable copy:** [asvs-5.0-l2-assessment.csv](pathname:///security/asvs-5.0-l2-assessment.csv), one row per requirement with the requirement text, status, evidence, notes and recommendation.
@@ -23,7 +23,7 @@ This is a self-assessment of the Idenplane server, admin console and themes agai
 | Fail | The requirement is not met. |
 | N/A | The requirement does not apply to Idenplane (the reason is given). |
 
-Idenplane terminates TLS at a reverse proxy, so transport requirements about the server's own certificate are judged N/A, with a note on what the proxy must do. GraphQL is not mounted (nothing imports `GraphQLAdminModule`, and a fitness test fails if it becomes reachable), so the GraphQL requirements are N/A.
+Idenplane terminates TLS at a reverse proxy, so transport requirements about the server's own certificate are judged N/A, with a note on what the proxy must do. Idenplane has no GraphQL endpoint (an unused, never-mounted GraphQL module was removed in 0.10.1), so the GraphQL requirements are N/A.
 
 ## Summary
 
@@ -108,7 +108,7 @@ Every row below has its own recommendation.
 |---|---|---|---|---|
 | V1.1.1 | 2 | Pass | src/saml/saml-idp.service.ts (decodeSamlRequest: one base64 decode, then inflate) | Input is decoded once, before validation. |
 | V1.1.2 | 2 | Pass | Handlebars auto-escaping (src/theme/theme-handlebars.ts); src/brute-force/brute-force.service.ts sendLockoutNotification uses escapeHtml | Output is encoded at render time. The one hand-built email body is now escaped. |
-| V1.2.1 | 1 | Pass | src/common/utils/html-escape.util.ts; src/brute-force/brute-force.service.ts (escapeHtml on username and realm name); src/brute-force/brute-force.service.spec.ts | FIXED in this PR: the lockout email interpolated the raw username (SCIM/LDAP/IdP usernames have no character rules). |
+| V1.2.1 | 1 | Pass | src/common/utils/html-escape.util.ts; src/brute-force/brute-force.service.ts (escapeHtml on username and realm name); src/brute-force/brute-force.service.spec.ts | FIXED in 0.10.0: the lockout email interpolated the raw username (SCIM/LDAP/IdP usernames have no character rules). |
 | V1.2.2 | 1 | Partial | src/common/redirect-uri.utils.ts:7; src/clients/dto/create-client.dto.ts (redirectUris @IsString only); themes href="\{\{termsOfServiceUrl\}\}" | Admin-entered URLs have no scheme allowlist, so javascript: is accepted. Only admins can set them. **Recommendation:** Accept only http(s) for redirectUris, branding and terms URLs (S). |
 | V1.2.3 | 1 | Partial | themes/idenplane/login/templates/login.hbs:73-82; themes/idenplane/account/templates/account.hbs:186 | Request values reach JS string literals with HTML escaping only; a backslash is not escaped. **Recommendation:** Add a JSON-safe Handlebars helper, or move the values to data- attributes (S). |
 | V1.2.4 | 1 | Pass | Prisma throughout; $executeRawUnsafe only with constant lock keys (src/admin-auth/admin-seed.service.ts:89, src/secrets-at-rest/secrets-at-rest.service.ts:333) | No user input reaches raw SQL. |
@@ -196,7 +196,7 @@ Every row below has its own recommendation.
 | V5.1.1 | 2 | **Fail** | — | Upload types and sizes are not documented. **Recommendation:** Document theme-asset uploads and realm import limits (S). |
 | V5.2.1 | 1 | Pass | 100 kB JSON body limit, 10 MB on the admin import endpoints (src/common/http/body-parsers.ts); src/theme/theme-upload.service.ts:39 (5 MB) | The 5 MB check trusts the declared size. |
 | V5.2.2 | 1 | **Fail** | src/theme/theme-upload.service.ts:107,135 | The client-declared MIME type is trusted; no magic-byte check. **Recommendation:** Sniff magic bytes and check the decoded length (S). |
-| V5.2.3 | 2 | Pass | src/saml/saml-idp.service.ts decodeSamlRequest (maxOutputLength); src/saml/saml-idp.service.spec.ts "refuses a compressed request that inflates past the size limit" | FIXED in this PR: inflation was unbounded before the size check. |
+| V5.2.3 | 2 | Pass | src/saml/saml-idp.service.ts decodeSamlRequest (maxOutputLength); src/saml/saml-idp.service.spec.ts "refuses a compressed request that inflates past the size limit" | FIXED in 0.10.0: inflation was unbounded before the size check. |
 | V5.3.1 | 1 | Pass | src/main.ts:312 (static serving, sandbox CSP) |  |
 | V5.3.2 | 1 | Pass | src/theme/theme-upload.service.ts:118-128 (generated file names) |  |
 | V5.4.1 | 2 | Partial | src/account/account.controller.ts:970 (export filename embeds the username) |  **Recommendation:** Generated or sanitized filename (S). |
@@ -207,7 +207,7 @@ Every row below has its own recommendation.
 
 | Req | L | Status | Evidence | Notes and recommendation |
 |---|---|---|---|---|
-| V6.1.1 | 1 | Pass | docs/docs/security/secure-defaults.md; src/realms/realm-security-defaults.ts | FIXED in this PR: documented lockout settings, defaults and the lockout-DoS trade-off (the old docs used Keycloak field names). |
+| V6.1.1 | 1 | Pass | docs/docs/security/secure-defaults.md; src/realms/realm-security-defaults.ts | FIXED in 0.10.0: documented lockout settings, defaults and the lockout-DoS trade-off (the old docs used Keycloak field names). |
 | V6.1.2 | 2 | **Fail** | src/password-policy/password-policy.service.ts | No list of context-specific words. **Recommendation:** See V6.2.11. |
 | V6.1.3 | 2 | Partial | docs/docs/guides/authentication.mdx; docs/docs/security/admin-mfa.md | Pathways are listed, not their strength; device approval is missing. The admin console pathways (password, second factor, API key) are documented with their strength since 0.11.0. **Recommendation:** Pathway matrix (S). |
 | V6.2.1 | 1 | Partial | prisma/schema.prisma (passwordMinLength default 8); src/realms/dto/create-realm.dto.ts (@Min(1)) | Default is 8, but an admin can set a lower minimum. **Recommendation:** Floor at 8 (S; would reject saving realms already configured lower). |
@@ -222,7 +222,7 @@ Every row below has its own recommendation.
 | V6.2.10 | 2 | Partial | src/password-policy/password-policy.service.ts:98-104 (passwordMaxAgeDays, default 0) | Periodic rotation is optional and off by default. **Recommendation:** Warn against it in the console (S). |
 | V6.2.11 | 2 | **Fail** | src/password-policy/password-policy.service.ts:18 | No context-word check (username, realm, email). **Recommendation:** Reject passwords containing them (S). |
 | V6.2.12 | 2 | **Fail** | src/password-policy/password-policy.service.ts:18 | No breached-password check. **Recommendation:** Optional k-anonymity breach check per realm (M). |
-| V6.3.1 | 1 | Pass | src/realms/realm-security-defaults.ts; src/brute-force/brute-force.service.ts; test/secure-realm-defaults.e2e-spec.ts; test/brute-force.e2e-spec.ts | FIXED in this PR: lockout is on for new realms; realms created before 0.10.0 keep their setting and are reported by /admin/upgrade/health. |
+| V6.3.1 | 1 | Pass | src/realms/realm-security-defaults.ts; src/brute-force/brute-force.service.ts; test/secure-realm-defaults.e2e-spec.ts; test/brute-force.e2e-spec.ts | FIXED in 0.10.0: lockout is on for new realms; realms created before 0.10.0 keep their setting and are reported by /admin/upgrade/health. |
 | V6.3.2 | 1 | Pass | src/admin-auth/admin-seed.service.ts:14-30 (random initial password; weak ones refused in production) |  |
 | V6.3.3 | 2 | Pass | src/admin-auth/admin-auth.service.ts (login, completeMfaLogin); src/admin-rbac/admin-access-policy.ts (decideAdminMfa); src/admin-auth/admin-seed.service.ts (required on new installs); test/admin-mfa.e2e-spec.ts | FIXED in 0.11.0: admin console sign-in asks for a second factor once the admin has one, and the server-wide requirement (on for new installs) confines an admin without one to enrolment. After an upgrade it is off until turned on; /admin/upgrade/health warns. End-user realms set `mfaRequired` per realm. |
 | V6.3.4 | 2 | Pass | src/device/device.controller.ts; src/auth/auth.service.ts (device and code grants refuse disabled users); src/admin-auth/admin-auth.service.ts; docs/docs/security/admin-mfa.md | Disabled users can no longer finish the device flow or exchange a code (0.10.0). FIXED in 0.11.0: admin sign-in enforces the admin's second factor on every pathway that issues a user token (password step, step-up, enrolment); the API key pathway is documented as break-glass. |
@@ -286,7 +286,7 @@ Every row below has its own recommendation.
 | V9.1.2 | 1 | Pass | src/crypto/jwk.service.ts:56-61 (key imported for RS256 only) | No explicit algorithm allowlist; the key type pins it. **Recommendation:** Pass algorithms:\[RS256] (S). |
 | V9.1.3 | 1 | Pass | src/crypto/jwk.service.ts:94-99 | jku/x5u/jwk headers ignored. |
 | V9.2.1 | 1 | Pass | src/crypto/jwk.service.ts:97 (jose checks exp/nbf) |  |
-| V9.2.2 | 2 | Pass | src/tokens/access-token-type.ts; src/tokens/tokens.service.ts (userinfo, introspect); src/realtime/session-events.gateway.ts; tokens.service.spec.ts "refuses an ID token" | FIXED in this PR: ID, logout and admin tokens signed with the realm key were accepted as access tokens. |
+| V9.2.2 | 2 | Pass | src/tokens/access-token-type.ts; src/tokens/tokens.service.ts (userinfo, introspect); src/realtime/session-events.gateway.ts; tokens.service.spec.ts "refuses an ID token" | FIXED in 0.10.0: ID, logout and admin tokens signed with the realm key were accepted as access tokens. |
 | V9.2.3 | 2 | Partial | src/crypto/jwk.service.ts:94-99 | No issuer or audience check at verification. **Recommendation:** Pass issuer/audience to verifyJwt; aud on admin tokens (S/M). |
 | V9.2.4 | 2 | Pass | src/auth/auth.service.ts (aud=clientId); src/tokens/backchannel-logout.service.ts |  |
 
@@ -329,7 +329,7 @@ Every row below has its own recommendation.
 | Req | L | Status | Evidence | Notes and recommendation |
 |---|---|---|---|---|
 | V11.1.1 | 2 | Partial | docs/docs/security/threat-model.md (key assets); src/crypto/key-ring.ts | No formal key-management policy. **Recommendation:** Write one (S). |
-| V11.1.2 | 2 | Pass | docs/docs/security/threat-model.md "Cryptographic inventory" | FIXED in this PR: inventory written. |
+| V11.1.2 | 2 | Pass | docs/docs/security/threat-model.md "Cryptographic inventory" | FIXED in 0.10.0: inventory written. |
 | V11.2.1 | 2 | Pass | node:crypto, jose, argon2, @peculiar/x509 |  |
 | V11.2.2 | 2 | Partial | src/crypto/key-ring.ts:11-24,91-94; src/crypto/jwk.service.ts | AES key ring rotates; signing algorithm is fixed to RS256. **Recommendation:** (M) |
 | V11.2.3 | 2 | **Fail** | src/crypto/jwk.service.ts:64 (RSA 2048) | 2048-bit RSA is about 112-bit security. **Recommendation:** 3072-bit for new keys (S). |
@@ -417,7 +417,7 @@ Every row below has its own recommendation.
 | V16.2.3 | 2 | Partial | stdout, audit streams, webhooks |  |
 | V16.2.4 | 2 | Pass | pino JSON in production |  |
 | V16.2.5 | 2 | Partial | src/email/providers/\*.provider.ts; src/sms/providers/\*.provider.ts | Recipient e-mail addresses and phone numbers logged at info. **Recommendation:** Log user ids or masked recipients (S). |
-| V16.3.1 | 2 | Pass | src/realms/realm-security-defaults.ts (eventsEnabled, adminEventsEnabled on); src/events/events.service.ts | FIXED in this PR: new realms record login and admin events; older realms keep their setting. |
+| V16.3.1 | 2 | Pass | src/realms/realm-security-defaults.ts (eventsEnabled, adminEventsEnabled on); src/events/events.service.ts | FIXED in 0.10.0: new realms record login and admin events; older realms keep their setting. |
 | V16.3.2 | 2 | Partial | logger.config.ts:28 (4xx at warn); admin-authorization.guard.ts (denials logged) |  |
 | V16.3.3 | 2 | Partial | src/brute-force/brute-force.service.ts (every lockout logged) | FIXED in part: temporary lockouts are now logged; CSRF and validation failures are not. **Recommendation:** (S) |
 | V16.3.4 | 2 | Pass | src/common/filters/http-exception.filter.ts:48 |  |
