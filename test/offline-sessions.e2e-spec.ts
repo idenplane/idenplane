@@ -273,18 +273,30 @@ describe('Offline sessions (e2e)', () => {
       await refused(refresh_token);
     });
 
-    it('disabling the user stops offline tokens', async () => {
-      const { refresh_token } = await offlineSignIn();
+    it('disabling the user revokes offline tokens for good', async () => {
+      const { sid, refresh_token } = await offlineSignIn();
       await admin('put', `/users/${seeded.user.id}`)
         .send({ enabled: false })
         .expect(200);
       try {
+        expect(await sessionExists(sid)).toBe(false);
         await refused(refresh_token);
       } finally {
         await admin('put', `/users/${seeded.user.id}`)
           .send({ enabled: true })
           .expect(200);
       }
+      // Re-enabling the user does not bring the old token back.
+      await refused(refresh_token);
+    });
+
+    it('signing out (RP-initiated logout with the offline id_token) ends the offline session', async () => {
+      const tokens = await offlineSignIn();
+      const idToken = (tokens as unknown as { id_token: string }).id_token;
+      expect(idToken).toBeTruthy();
+      await http().get(`${base}/logout`).query({ id_token_hint: idToken });
+      expect(await sessionExists(tokens.sid)).toBe(false);
+      await refused(tokens.refresh_token);
     });
 
     it('a password reset ends offline sessions', async () => {
