@@ -4,7 +4,7 @@ import { saveConfig, clearConfig } from '../config.js';
 import { ask, askPassword } from '../prompt.js';
 import { printResult, success } from '../output.js';
 import { HttpClient } from '../http.js';
-import type { LoginResponse } from '../types.js';
+import { adminLogin, AdminLoginError } from '../admin-login.js';
 
 /**
  * Registers the top-level `idenplane login|logout|whoami` commands for
@@ -41,20 +41,24 @@ export function registerAuthCommands(program: Command): void {
       const username = opts.username || (await ask('Username: '));
       const password = opts.password || (await askPassword('Password: '));
 
-      const res = await fetch(`${serverUrl}/admin/auth/login`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ username, password }),
-      });
-
-      if (!res.ok) {
-        const err = (await res.json().catch(() => ({ message: res.statusText }))) as { message?: string };
-        throw new Error(chalk.red(`Login failed: ${err.message}`));
+      let data;
+      try {
+        data = await adminLogin(serverUrl, username, password, ask);
+      } catch (err: unknown) {
+        if (err instanceof AdminLoginError) {
+          throw new Error(chalk.red(`Login failed: ${err.message}`));
+        }
+        throw err;
       }
-
-      const data = (await res.json()) as LoginResponse;
       saveConfig({ serverUrl, accessToken: data.access_token });
       success(`Logged in to ${serverUrl} as ${username}`);
+      if (data.mfa_enrolment_required) {
+        console.log(
+          chalk.yellow(
+            'This server requires a second factor for every admin. Set one up in the admin console before using the CLI.',
+          ),
+        );
+      }
     });
 
   program

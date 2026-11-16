@@ -1,8 +1,10 @@
 import { Controller, Delete, Get, Post } from '@nestjs/common';
 import {
+  AdminMfaExempt,
   AdminRealmParam,
   AdminScope,
   AdminSensitiveRead,
+  RequireRecentAdminMfa,
 } from '../common/decorators/admin-access.decorator.js';
 import { RequireAdminRoles } from '../common/decorators/require-admin-roles.decorator.js';
 import {
@@ -67,6 +69,34 @@ class Odd {
   tenant() {}
 }
 
+@Controller('admin/auth/mfa')
+@AdminScope('self')
+class OwnMfa {
+  @Get()
+  @AdminMfaExempt('always')
+  status() {}
+
+  @Post('totp')
+  @AdminMfaExempt('first-factor')
+  enrol() {}
+
+  @Delete('totp')
+  @RequireRecentAdminMfa()
+  remove() {}
+}
+
+@Controller('admin/realms/:realmName/mfa-things')
+class MisplacedExemption {
+  @Get()
+  @AdminMfaExempt('always')
+  list() {}
+
+  @Post()
+  @AdminScope('self')
+  @AdminMfaExempt('bogus' as never)
+  bogus() {}
+}
+
 @Controller(['admin/a/:realmName', 'admin/b'])
 class TwoPaths {
   @Get()
@@ -85,6 +115,8 @@ describe('resolveAdminRoutePolicy', () => {
       scope: { kind: 'realm', param: 'realmName', lookup: 'name' },
       sensitiveRead: false,
       requiredRoles: [],
+      mfaExempt: null,
+      recentMfa: false,
     });
   });
 
@@ -167,5 +199,28 @@ describe('route path helpers', () => {
       '/admin/a/:realmName',
       '/admin/b',
     ]);
+  });
+
+  it('reads the admin MFA exemptions and the recent-MFA requirement', () => {
+    expect(policy(OwnMfa, 'status')).toMatchObject({
+      scope: { kind: 'self' },
+      mfaExempt: 'always',
+      recentMfa: false,
+    });
+    expect(policy(OwnMfa, 'enrol').mfaExempt).toBe('first-factor');
+    expect(policy(OwnMfa, 'remove')).toMatchObject({
+      mfaExempt: null,
+      recentMfa: true,
+    });
+    expect(policy(OwnMfa, 'status').problem).toBeUndefined();
+  });
+
+  it('refuses an MFA exemption off an own-account route, or an unknown one', () => {
+    for (const name of ['list', 'bogus']) {
+      const p = policy(MisplacedExemption, name);
+      expect(p.scope).toEqual({ kind: 'global' });
+      expect(p.mfaExempt).toBeNull();
+      expect(p.problem).toMatch(/AdminMfaExempt/);
+    }
   });
 });

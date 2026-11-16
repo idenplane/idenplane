@@ -24,6 +24,7 @@ import { CurrentRealm } from '../common/decorators/current-realm.decorator.js';
 import { StepUpService } from '../step-up/step-up.service.js';
 import { ACR_MFA } from '../authn-core/acr.js';
 import { SESSION_COOKIE } from '../authn-core/cookies.js';
+import { hasRecentAdminMfa } from '../admin-rbac/admin-access-policy.js';
 import { LoginService } from '../login/login.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
@@ -92,11 +93,15 @@ export class BruteForceController {
       );
     }
 
+    // The console's step-up: an admin token whose second factor was checked
+    // in the last 15 minutes (docs/docs/security/admin-mfa.md).
+    if (hasRecentAdminMfa(adminUser)) return;
+
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- express Request.cookies typed as any
     const sessionToken: string | undefined = req.cookies?.[SESSION_COOKIE];
     if (!sessionToken) {
       throw new UnauthorizedException(
-        'MFA step-up is required. No active session found. Please log in via the user login flow to establish an MFA-verified session.',
+        'MFA step-up is required: verify your second factor in the admin console (POST /admin/auth/step-up) and retry within 15 minutes.',
       );
     }
 
@@ -192,11 +197,15 @@ export class BruteForceAttackDetectionController {
       );
     }
 
+    // The console's step-up: an admin token whose second factor was checked
+    // in the last 15 minutes (docs/docs/security/admin-mfa.md).
+    if (hasRecentAdminMfa(adminUser)) return;
+
     // eslint-disable-next-line @typescript-eslint/no-unsafe-assignment -- express Request.cookies typed as any
     const sessionToken: string | undefined = req.cookies?.[SESSION_COOKIE];
     if (!sessionToken) {
       throw new UnauthorizedException(
-        'MFA step-up is required. No active session found. Please log in via the user login flow to establish an MFA-verified session.',
+        'MFA step-up is required: verify your second factor in the admin console (POST /admin/auth/step-up) and retry within 15 minutes.',
       );
     }
 

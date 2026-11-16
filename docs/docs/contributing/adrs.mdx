@@ -106,7 +106,7 @@ Each entry below is sourced from an actual commit, PR description, or the projec
 
 **Decision**: In production (`NODE_ENV === 'production'`), the plugin loader computes a SHA-256 hash of the plugin file and refuses to load it if there's no matching manifest hash to verify against. Outside production, a missing hash only logs a warning.
 
-**Consequences**: A plugin author must generate a manifest hash (`idenplane plugins hash`) before a plugin will load in production — friction that's deliberate, not accidental. Development stays low-friction (warn, don't block) so local plugin iteration isn't blocked on re-hashing after every change.
+**Consequences**: A plugin author must record the plugin's SHA-256 hash in the plugin manifest (`plugins/.manifest.json`, for example with `sha256sum`) before a plugin will load in production — friction that's deliberate, not accidental. Development stays low-friction (warn, don't block) so local plugin iteration isn't blocked on re-hashing after every change.
 
 **References**: Issues #400, #430, #448, #465; commit `0f4f541` ("Plugin loader denies unverified plugins in production (#465)"); `src/plugins/plugin-loader.service.ts`.
 
@@ -120,9 +120,9 @@ Each entry below is sourced from an actual commit, PR description, or the projec
 
 **Decision**: Build the server on TypeScript/NestJS rather than Java or another JVM stack.
 
-**Rationale**: README.md's comparison table frames this directly against Keycloak-class competitors: "Most identity solutions are either too complex to self-host (Keycloak — 1GB+ RAM, Java)... Modern stack — TypeScript, NestJS, React, PostgreSQL. No Java, no XML." The project roadmap makes the contributor-facing angle explicit: the TypeScript/NestJS stack is "a contributor-friendliness advantage over Java/Go competitors," which matters directly because of the project's single-maintainer bus-factor risk.
+**Rationale**: The README frames this directly: "Most identity solutions are either too complex to self-host (Java, heavy runtimes) or too limited for production (simple JWT libraries)… Modern stack — TypeScript, NestJS, React, PostgreSQL. No Java, no XML." A TypeScript/NestJS stack is also easier for contributors to pick up than a Java or Go one, which matters because the project has a single maintainer.
 
-**References**: README.md § Comparison; `.auto-claude/roadmap/roadmap.json`, `feature-20` rationale.
+**References**: README.md § Why Idenplane and § Comparison.
 
 ---
 

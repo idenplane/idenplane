@@ -15,28 +15,15 @@ This guide covers deploying Idenplane directly on bare metal or dedicated server
 
 | Requirement | Version |
 |-------------|---------|
-| Node.js | 22+ |
+| Node.js | 24 (the only version CI tests) |
 | PostgreSQL | 16+ |
 | System memory | 512 MB minimum |
 | Disk space | 2 GB minimum |
 | User privileges | sudo/root for service installation |
 
 :::note
-Idenplane runs in approximately 150 MB RAM, making it suitable for small VPS instances or dedicated servers.
+In the published [benchmark](../benchmarks.md) a single Idenplane process used about 194 MiB of RAM at idle, so it fits small VPS instances or dedicated servers.
 :::
-
----
-
-## Quick Start
-
-```bash
-# Clone the repository
-git clone https://github.com/idenplane/idenplane.git
-cd Idenplane
-
-# Run the setup script (installs dependencies, builds, sets up database)
-curl -sSL https://raw.githubusercontent.com/idenplane/idenplane/main/scripts/setup-bare-metal.sh | bash
-```
 
 ---
 
@@ -44,21 +31,23 @@ curl -sSL https://raw.githubusercontent.com/idenplane/idenplane/main/scripts/set
 
 ### 1. Install Node.js
 
-For production, use Node.js 22 LTS:
+Use Node.js 24, the version the Docker image and CI use:
 
 ```bash
 # Using NodeSource repository (Ubuntu/Debian)
-curl -fsSL https://deb.nodesource.com/setup_22.x | sudo -E bash -
+curl -fsSL https://deb.nodesource.com/setup_24.x | sudo -E bash -
 sudo apt-get install -y nodejs
 
 # Verify installation
-node --version  # Should be v22.x.x
+node --version  # Should be v24.x.x
 npm --version
 ```
 
 For other distributions, see the [official Node.js installation guide](https://nodejs.org/en/download/package-manager).
 
 ### 2. Install PostgreSQL
+
+Idenplane needs PostgreSQL 16 or later. Older distributions ship an older `postgresql` package (Ubuntu 22.04 has 14); use the [PostgreSQL apt repository](https://www.postgresql.org/download/linux/ubuntu/) there.
 
 ```bash
 # Ubuntu/Debian
@@ -100,7 +89,7 @@ sudo systemctl enable redis-server
 
 ```bash
 git clone https://github.com/idenplane/idenplane.git
-cd Idenplane
+cd idenplane
 
 # Install backend dependencies
 npm install
@@ -140,6 +129,8 @@ REDIS_URL=redis://localhost:6379
 SESSION_STORE=redis
 ```
 
+A first start in production also needs `ADMIN_PASSWORD` for the initial `admin` user; the server refuses to create it without one. In production `ADMIN_API_KEY` must be at least 32 characters, or the server exits at startup. `node scripts/setup-env.cjs` writes a `.env` with all of these generated.
+
 :::warning
 Always generate secure secrets for production. Never use default or placeholder values:
 
@@ -157,21 +148,17 @@ openssl rand -hex 16  # For WEBHOOK_ENCRYPTION_SALT
 # Generate Prisma client
 npm run prisma:generate
 
-# Run migrations
-npm run prisma:migrate
-
-# Seed with sample data (optional)
-npm run prisma:seed
+# Apply migrations (production: deploy, never `migrate dev`)
+npx prisma migrate deploy
 ```
+
+Don't run `npm run prisma:seed` on a production database: it loads development sample data.
 
 ### 4. Build the Application
 
 ```bash
-# Build Admin UI
-cd admin-ui && npm run build && cd ..
-
-# Build NestJS backend
-npm run build
+# Build the admin console and the server, and copy the console into dist/admin-ui
+npm run build:all
 ```
 
 ---
@@ -196,7 +183,7 @@ Group=idenplane
 WorkingDirectory=/opt/idenplane
 Environment=NODE_ENV=production
 EnvironmentFile=/opt/idenplane/.env
-ExecStart=/usr/bin/node dist/src/main.js
+ExecStart=/usr/bin/node dist/cluster.js
 Restart=on-failure
 RestartSec=10s
 StandardOutput=journal
@@ -211,10 +198,6 @@ PrivateTmp=true
 ProtectSystem=strict
 ProtectHome=true
 ReadWritePaths=/opt/idenplane /var/log/idenplane
-
-# Health check
-HealthCheckInterval=30s
-HealthCheckSymbol=:http://localhost:3000/health/live
 
 [Install]
 WantedBy=multi-user.target
@@ -490,39 +473,37 @@ Idenplane provides health check endpoints:
 |----------|-------------|
 | `http://localhost:3000/health/live` | Liveness check |
 | `http://localhost:3000/health/ready` | Readiness check (includes database) |
-| `http://localhost:3000/metrics` | Prometheus metrics |
+| `http://localhost:3000/admin/metrics` | Prometheus metrics (needs admin credentials) |
+
+systemd has no built-in HTTP health check; poll `/health/ready` from your monitoring.
 
 ### Prometheus Metrics
 
-Configure Prometheus to scrape Idenplane metrics:
+The metrics endpoint is `/admin/metrics`. It needs admin credentials: the `x-admin-api-key` header or an admin bearer token. With Prometheus 3, send the API key with `http_headers`, read from a file only Prometheus can read:
 
 ```yaml
 # /etc/prometheus/prometheus.yml
 scrape_configs:
   - job_name: 'idenplane'
+    metrics_path: '/admin/metrics'
+    http_headers:
+      x-admin-api-key:
+        files: ['/etc/prometheus/idenplane-admin-api-key']
     static_configs:
       - targets: ['localhost:3000']
-    metrics_path: '/metrics'
 ```
 
-### Logrotate Configuration
+Prometheus 2 cannot send custom headers; put a reverse proxy in front that adds the header for the scraper only, and never expose that proxy publicly.
 
-Create `/etc/logrotate.d/idenplane`:
+### Logs
 
+Idenplane writes JSON logs (Pino) to stdout and stderr, not to files. With the unit above they go to the journal:
+
+```bash
+sudo journalctl -u idenplane -f
 ```
-/var/log/idenplane/*.log {
-    daily
-    rotate 14
-    compress
-    delaycompress
-    notifempty
-    create 0640 idenplane idenplane
-    sharedscripts
-    postrotate
-        systemctl reload idenplane > /dev/null 2>&1 || true
-    endscript
-}
-```
+
+Set the journal's retention in `/etc/systemd/journald.conf` (for example `SystemMaxUse=`); there are no log files for logrotate.
 
 ---
 
@@ -547,17 +528,15 @@ sudo -u idenplane git pull origin main
 # Install dependencies
 sudo -u idenplane npm install
 
-# Build Admin UI
-sudo -u idenplane bash -c "cd admin-ui && npm install && npm run build"
-
-# Build backend
-sudo -u idenplane npm run build
+# Build the admin console and the server
+sudo -u idenplane bash -c "cd admin-ui && npm install"
+sudo -u idenplane npm run build:all
 ```
 
 ### 4. Run Migrations
 
 ```bash
-sudo -u idenplane npm run prisma:migrate deploy
+sudo -u idenplane npx prisma migrate deploy
 ```
 
 ### 5. Start the Service
@@ -582,41 +561,11 @@ sudo chmod -R o-rwx /opt/idenplane
 sudo chmod 600 /opt/idenplane/.env
 ```
 
-### Fail2Ban
+### Brute force and Fail2Ban
 
-Install Fail2Ban to protect against brute force attacks:
+Idenplane has its own protection: per-account lockout (on for realms created since 0.10.0) and per-IP rate limits. See [Secure defaults](../security/secure-defaults.md).
 
-```bash
-sudo apt-get install -y fail2ban
-```
-
-Create `/etc/fail2ban/jail.local`:
-
-```ini
-[idenplane-api]
-enabled = true
-port = 80,443,3000
-http-bind-host = 127.0.0.1
-filter = idenplane-api
-logpath = /var/log/idenplane/*.log
-maxretry = 10
-findtime = 600
-bantime = 3600
-action = iptables-multiport
-```
-
-Create `/etc/fail2ban/filter.d/idenplane-api.conf`:
-
-```ini
-[Definition]
-failregex = ^\[.*\] ERROR.*Client authentication failed for user: <HOST>
-ignoreregex =
-```
-
-```bash
-sudo systemctl enable fail2ban
-sudo systemctl start fail2ban
-```
+If you also want Fail2Ban, write the filter against the JSON log lines the server actually writes to the journal (`backend = systemd`, `journalmatch = _SYSTEMD_UNIT=idenplane.service`). Idenplane ships no ready-made filter.
 
 ---
 

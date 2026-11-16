@@ -7,7 +7,7 @@ description: Complete guide to migrating from Auth0 to Idenplane
 
 # Migrate from Auth0
 
-This guide covers migrating users, clients, roles, and connections from Auth0 to Idenplane. The migration is performed using Auth0's Management API export format.
+This guide covers migrating users, clients, roles, and connections from Auth0 to Idenplane. The migration is performed using Auth0's Management API export format. User role assignments, user and app metadata, and social identity links are not imported.
 
 ---
 
@@ -50,7 +50,8 @@ curl -s -H "Authorization: Bearer ${AUTH0_TOKEN}" \
   -o roles.json
 
 # Export connections
-curl -s -H "Authorization: Bearer ${AUTH0_DOMAIN}/api/v2/connections?fields=name,strategy,enabled_clients,options" \
+curl -s -H "Authorization: Bearer ${AUTH0_TOKEN}" \
+  "https://${AUTH0_DOMAIN}/api/v2/connections?fields=name,strategy,enabled_clients,options" \
   -o connections.json
 ```
 
@@ -132,6 +133,8 @@ curl -X POST "http://localhost:3000/admin/migration/auth0" \
 
 A dry run returns the same report as a real migration but doesn't modify any data.
 
+The endpoint needs a global (super-admin) credential. The server accepts JSON request bodies up to 100 KB, so most exports with users must be imported in batches; see [Handling Large Exports](#handling-large-exports).
+
 ---
 
 ## Migration Report
@@ -140,20 +143,25 @@ The migration returns a detailed report:
 
 ```json
 {
-  "success": true,
+  "source": "auth0",
+  "dryRun": false,
+  "startedAt": "2026-11-16T10:00:00.000Z",
+  "completedAt": "2026-11-16T10:00:03.000Z",
   "summary": {
+    "realms": { "created": 0, "skipped": 0, "failed": 0 },
     "users": { "created": 450, "skipped": 12, "failed": 2 },
     "clients": { "created": 8, "skipped": 2, "failed": 0 },
     "roles": { "created": 25, "skipped": 5, "failed": 0 },
+    "groups": { "created": 0, "skipped": 0, "failed": 0 },
+    "scopes": { "created": 0, "skipped": 0, "failed": 0 },
     "identityProviders": { "created": 5, "skipped": 1, "failed": 0 }
   },
   "errors": [
-    { "entity": "user", "name": "unknown@example.com", "error": "No username, email, or user_id" }
+    { "entity": "user", "name": "unknown", "error": "No username, email, or user_id" }
   ],
   "warnings": [
     { "entity": "organizations", "message": "3 Auth0 organizations found. Use Idenplane's Organization module to recreate them." },
-    { "entity": "connection", "message": "Database connection 'Username-Password-Connection' skipped — Auth0 DB connections don't map to identity providers" },
-    { "entity": "client", "message": "Client 'my-app' has a wildcard webOrigin '*' — it has been stripped during import." }
+    { "entity": "connection", "message": "Database connection 'Username-Password-Connection' skipped — Auth0 DB connections don't map to identity providers" }
   ]
 }
 ```
@@ -162,7 +170,6 @@ The migration returns a detailed report:
 
 | Field | Type | Description |
 |-------|------|-------------|
-| `success` | boolean | Overall migration success |
 | `summary.users.created` | number | Users successfully created |
 | `summary.users.skipped` | number | Users skipped due to conflicts |
 | `summary.users.failed` | number | Users that failed to import |
@@ -174,16 +181,18 @@ The migration returns a detailed report:
 
 | Entity | Error | Resolution |
 |--------|-------|------------|
-| `realm` | Realm does not exist | Create the realm first |
+| `realm` | Realm does not exist (the response is still `200`; nothing is imported) | Create the realm first |
 | `user` | No username, email, or user_id | Fix export data |
 | `client` | (varies) | Check Auth0 export format |
 | `role` | (varies) | Check Auth0 export format |
+
+Roles are imported by name and description only. Which users had which role is **not** imported; assign roles again after the import.
 
 ---
 
 ## Password Migration
 
-### Supported Algorithms
+### What is carried over
 
 Users keep their Auth0 password: Idenplane imports the hash with its real algorithm and checks it on sign-in (hosted login page and password grant). On the first successful sign-in the hash is replaced with an Argon2id hash, transparently.
 
@@ -218,18 +227,17 @@ Auth0 supports multiple password hash configurations:
 
 ### Users Without Password Hashes
 
-Users without password hashes (imported from external identity providers) will be imported **without** a password. These users must complete account linking or password reset:
+Users imported without a password must set a new one: the user resets it at `/realms/{realm}/forgot-password` (the realm needs working e-mail), or an administrator sets one:
 
 ```bash
-# Trigger password reset for users without passwords
-curl -X POST "http://localhost:3000/admin/realms/my-realm/users/${USER_ID}/execute-actions-email" \
+curl -X PUT "http://localhost:3000/admin/realms/my-realm/users/${USER_ID}/reset-password" \
   -H "x-admin-api-key: ${ADMIN_API_KEY}" \
   -H "Content-Type: application/json" \
-  -d '["VERIFY_ACTION", "UPDATE_PASSWORD"]'
+  -d '{"password": "<new password>"}'
 ```
 
-:::tip Auth0 Password Hash Configuration
-Configure Auth0 to export passwords with a supported algorithm (bcrypt recommended) before exporting for migration.
+:::tip Auth0 Password Hash Export
+The Management API does not return password hashes; Auth0 provides them on request as a bcrypt export. Merge those hashes into `password_hash` before you import.
 :::
 
 ---
@@ -269,15 +277,7 @@ Auth0 `token_endpoint_auth_method`:
 
 ### Wildcard Origins
 
-Wildcard web origins (`*`) are automatically stripped with a warning:
-
-```json
-{
-  "warnings": [
-    { "entity": "client", "message": "Client 'my-app' has a wildcard webOrigin '*' — it has been stripped during import." }
-  ]
-}
-```
+Wildcard web origins (`*`) are stripped. This is logged in the server log only; it does not appear in the migration report.
 
 ### Regenerate Client Secrets
 
@@ -342,8 +342,15 @@ Auth0 connections are migrated as identity providers based on strategy:
 |----------|---------------------|
 | `google-oauth2`, `github`, `facebook`, `microsoft`, `apple`, `linkedin`, `twitter` | OIDC |
 | `oauth2` variants | OIDC |
-| `samlp`, `adfs` | SAML |
+| `samlp`, `adfs` | Not usable: see below |
+| any other strategy | OIDC |
 | `auth0` | Skipped (database connections) |
+
+:::warning SAML connections are not imported as working providers
+Idenplane brokers OpenID Connect and OAuth 2.0 identity providers only; it cannot sign users in through a SAML IdP. The importer still creates a row of type `SAML` for each `samlp` or `adfs` connection, enabled and with no endpoints, and it cannot sign anyone in. Disable or delete those rows after the import. If the IdP behind the connection also speaks OpenID Connect (ADFS and Entra ID do), create an OIDC provider for it instead.
+:::
+
+Every imported provider is created **enabled**, with `trustEmail` off. Auth0 social connections usually carry no `authorization_endpoint` or `token_endpoint`, so those providers have empty URLs; fill them in before you use them.
 
 ### Database Connections
 
@@ -362,7 +369,7 @@ Auth0 database connections (Username-Password-Authentication) are **not** migrat
 | Property | Mapping |
 |----------|---------|
 | `name` | Provider alias and display name |
-| `strategy` | Provider type (OIDC/SAML) |
+| `strategy` | Provider type (see above) |
 | `options.client_id` | Provider client ID |
 | `options.client_secret` | Provider client secret |
 | `options.authorization_endpoint` | Authorization URL |
@@ -392,34 +399,19 @@ Recreate organizations manually in Idenplane. See [Multi-Tenancy Documentation](
 
 The import endpoint accepts a JSON body of up to **10 MB** (every other endpoint keeps 100 KB); a larger one is refused with `413 Payload Too Large`. For exports above that, or with more than 5,000 users:
 
-1. Split the export into multiple JSON files by user_id range
+1. Split the export into several files, each with the clients, roles and connections and a slice of `users`
 2. Import each batch separately
-3. Use the same `targetRealm` for consistent migration
-
-### Splitting Users
-
-```bash
-# Count users
-USER_COUNT=$(jq '.users | length' export.json)
-
-# Split into batches of 2000
-jq '.users[:2000]' export.json > batch1.json
-jq '.users[2000:4000]' export.json > batch2.json
-jq '.users[4000:]' export.json > batch3.json
-```
+3. Use the same `targetRealm` for every batch. Entities that already exist are skipped, so repeating clients, roles and connections is harmless
 
 ### Creating Batched Export Files
 
 ```bash
-# Batch 1
-{
-  "users": [contents of batch1.json],
-  "clients": [original clients],
-  "roles": [original roles],
-  "connections": [original connections]
-} > batch1-export.json
+# Count users
+USER_COUNT=$(jq '.users | length' auth0-export.json)
 
-# Batch 2 (same structure)
+# Batches of 200 users, each a complete export with a slice of users
+jq '.users |= .[0:200]'   auth0-export.json > batch1-export.json
+jq '.users |= .[200:400]' auth0-export.json > batch2-export.json
 ```
 
 ### Sequential Import
@@ -449,7 +441,9 @@ curl -X GET "http://localhost:3000/admin/realms/my-realm/users?limit=1" \
   -H "x-admin-api-key: ${ADMIN_API_KEY}"
 ```
 
-### 2. Verify Role Mappings
+### 2. Verify Roles
+
+User role assignments are not imported. Check the roles, then assign them to users or groups again:
 
 ```bash
 curl -X GET "http://localhost:3000/admin/realms/my-realm/roles" \
@@ -458,7 +452,9 @@ curl -X GET "http://localhost:3000/admin/realms/my-realm/roles" \
 
 ### 3. Test Authentication
 
-Create a test script to verify migrated users can authenticate:
+Sign in through the browser login (`/realms/{realm}/protocol/openid-connect/auth`) with a client you created, using a few migrated users. The browser login is what verifies a bcrypt hash and rehashes it; the password grant fails for a migrated user until after a first browser sign-in.
+
+If a client allows the password grant, you can script the check for users who have signed in once:
 
 ```typescript
 async function testMigration(realm: string, testUsers: { username: string; password: string }[]) {
@@ -475,7 +471,7 @@ async function testMigration(realm: string, testUsers: { username: string; passw
             username,
             password,
             grant_type: 'password',
-            client_id: 'admin-cli',
+            client_id: 'my-app', // a client with "password" in its grantTypes
           }),
         }
       );
@@ -501,13 +497,9 @@ Update applications to use Idenplane endpoints:
 | `.../.auth0.com/userinfo` | `.../realms/{realm}/protocol/openid-connect/userinfo` |
 | `.../.auth0.com/logout` | `.../realms/{realm}/protocol/openid-connect/logout` |
 
-### 5. Re-link Social Accounts
+### 5. Social Accounts
 
-Users with social identity links will need to re-link their accounts after migration:
-
-1. Users go to account settings
-2. Click "Link Social Account"
-3. Re-authorize the identity provider
+Social identity links are not imported, and there is no self-service "link account" page. A user is linked to a provider when they sign in through it: Idenplane matches an existing account by e-mail only when the provider has `trustEmail` on. The importer turns it off, so a migrated user's first social sign-in would create a second account. Turn `trustEmail` on for providers whose verified e-mail you trust before users sign in through them.
 
 ### 6. Recreate Organizations
 
@@ -533,7 +525,7 @@ Send communications to users about the migration:
 
 ### Import Fails with "Realm does not exist"
 
-**Cause:** Target realm not created before import.
+**Cause:** Target realm not created before import. The response is `200` with this error in `errors`, and nothing is imported.
 
 **Solution:** Create the realm first:
 
@@ -548,19 +540,19 @@ curl -X POST "http://localhost:3000/admin/realms" \
 
 **Cause:** User conflicts with existing data.
 
-**Solution:** Check the migration report for skip reasons and resolve conflicts.
+**Solution:** A user is skipped when a user with the same username already exists in the realm. Check `errors` in the report for failures.
 
 ### Passwords Not Preserved
 
-**Cause:** No password hash in Auth0 export.
+**Cause:** No bcrypt hash in the Auth0 export.
 
-**Solution:** Configure Auth0 password hash settings, then re-export. Users must complete password reset.
+**Solution:** Request Auth0's password hash export and merge it into `password_hash`, or have the users reset their passwords.
 
 ### Identity Providers Not Migrating
 
 **Cause:** Database connections are skipped automatically.
 
-**Solution:** Database connections don't map to identity providers. Social/enterprise connections should migrate. Check the `strategy` field in your export.
+**Solution:** Database connections don't map to identity providers. Social and OAuth 2.0 connections are imported; SAML (`samlp`, `adfs`) connections are created but can't be used. Check the `strategy` field in your export.
 
 ### Wildcard Origins Stripped
 
@@ -605,8 +597,11 @@ Import data from Auth0 Management API export.
 
 | Status | Description |
 |--------|-------------|
+| 200 | Also returned when the target realm doesn't exist; the error is in `errors` |
 | 400 | Bad request — invalid payload or missing targetRealm |
-| 401 | Unauthorized — missing or invalid admin API key |
+| 401 | Unauthorized — missing or invalid admin credentials |
+| 403 | The admin has no global (super-admin) scope |
+| 413 | Request body over 100 KB |
 
 ---
 

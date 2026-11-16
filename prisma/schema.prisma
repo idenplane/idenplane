@@ -957,7 +957,10 @@ model IdentityProvider {
   linkOnly        Boolean @default(false) @map("link_only")
   syncUserProfile Boolean @default(true) @map("sync_user_profile")
 
-  // SAML broker config (for providerType="saml")
+  // Unused for sign-in: no code acts on it. Idenplane cannot broker a SAML
+  // identity provider (the broker is OIDC/OAuth 2.0 only); it is a SAML IdP
+  // for service providers (see SamlServiceProvider). Kept so existing data and
+  // realm exports stay valid.
   samlConfig Json? @map("saml_config")
 
   createdAt DateTime @default(now()) @map("created_at")
@@ -1951,6 +1954,21 @@ model AdminRevokedToken {
 
   @@index([expiresAt])
   @@map("admin_revoked_tokens")
+}
+
+/// Server-wide admin security settings: one row (id 1) at most. No row
+/// means every setting is off, which is what an upgraded install starts
+/// with; the first-boot seed of a new install writes the row.
+/// ADMIN_MFA_REQUIRED (true/false) overrides `mfaRequired`.
+model AdminSecurityPolicy {
+  id          Int      @id @default(1)
+  /// Every admin must have a second factor (TOTP or passkey) for the console.
+  mfaRequired Boolean  @default(false) @map("mfa_required")
+  /// Who changed it last (an admin user id, `api-key:admin` or `seed`).
+  updatedBy   String?  @map("updated_by")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  @@map("admin_security_policy")
 }
 
 /// The realms a `realm-admin` (a user of the master realm) may manage.

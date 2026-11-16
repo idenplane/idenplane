@@ -32,6 +32,19 @@ export interface WebAuthnAuthenticationChallenge {
 }
 
 /**
+ * A relying party other than a realm's own. The admin console registers and
+ * checks its passkeys with one (see AdminWebAuthnRp): the realm's WebAuthn
+ * switch and RP settings do not apply to it.
+ */
+export interface WebAuthnRelyingParty {
+  id: string;
+  name: string;
+  /** Origins an assertion may come from. */
+  origins: string[];
+  userVerificationRequired: boolean;
+}
+
+/**
  * The passkey is valid but belongs to someone other than the user the
  * sign-in already identified. Callers that pin a user must fail closed.
  */
@@ -52,6 +65,27 @@ export class WebAuthnService {
   ) {}
 
   // ─── Helpers ──────────────────────────────────────────────────────────
+
+  /**
+   * The relying party a ceremony runs under: `rp` when given, else the
+   * realm's own, which requires WebAuthn to be enabled for the realm.
+   */
+  private relyingParty(
+    realm: Realm,
+    rp?: WebAuthnRelyingParty,
+  ): WebAuthnRelyingParty {
+    if (rp) return rp;
+    if (!realm.webAuthnEnabled) {
+      throw new ForbiddenException('WebAuthn is not enabled for this realm');
+    }
+    const id = this.getRpId(realm);
+    return {
+      id,
+      name: this.getRpName(realm),
+      origins: [this.getOrigin(id)],
+      userVerificationRequired: realm.webAuthnUserVerificationRequired,
+    };
+  }
 
   private getRpId(realm: Realm): string {
     return realm.webAuthnRpId ?? 'localhost';
@@ -77,13 +111,11 @@ export class WebAuthnService {
   async generateRegistrationOptions(
     user: User,
     realm: Realm,
+    rp?: WebAuthnRelyingParty,
   ): Promise<PublicKeyCredentialCreationOptionsJSON> {
-    if (!realm.webAuthnEnabled) {
-      throw new ForbiddenException('WebAuthn is not enabled for this realm');
-    }
-
-    const rpId = this.getRpId(realm);
-    const rpName = this.getRpName(realm);
+    const party = this.relyingParty(realm, rp);
+    const rpId = party.id;
+    const rpName = party.name;
 
     // Get existing credentials to exclude
     const existingCredentials = await this.prisma.webAuthnCredential.findMany({
@@ -105,7 +137,7 @@ export class WebAuthnService {
       })),
       authenticatorSelection: {
         residentKey: 'preferred',
-        userVerification: realm.webAuthnUserVerificationRequired
+        userVerification: party.userVerificationRequired
           ? 'required'
           : 'preferred',
       },
@@ -127,12 +159,10 @@ export class WebAuthnService {
     realm: Realm,
     response: RegistrationResponseJSON,
     friendlyName?: string,
+    rp?: WebAuthnRelyingParty,
   ): Promise<WebAuthnCredential> {
-    if (!realm.webAuthnEnabled) {
-      throw new ForbiddenException('WebAuthn is not enabled for this realm');
-    }
-
-    const rpId = this.getRpId(realm);
+    const party = this.relyingParty(realm, rp);
+    const rpId = party.id;
     const expectedChallenge = await this.consumeWebAuthnChallenge(
       user.id,
       realm.id,
@@ -150,9 +180,9 @@ export class WebAuthnService {
       verification = await verifyRegistrationResponse({
         response,
         expectedChallenge,
-        expectedOrigin: this.getOrigin(rpId),
+        expectedOrigin: party.origins,
         expectedRPID: rpId,
-        requireUserVerification: realm.webAuthnUserVerificationRequired,
+        requireUserVerification: party.userVerificationRequired,
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);
@@ -208,12 +238,10 @@ export class WebAuthnService {
      * another's. Without it the legacy per-user / per-realm slot is used.
      */
     binding?: string,
+    rp?: WebAuthnRelyingParty,
   ): Promise<PublicKeyCredentialRequestOptionsJSON> {
-    if (!realm.webAuthnEnabled) {
-      throw new ForbiddenException('WebAuthn is not enabled for this realm');
-    }
-
-    const rpId = this.getRpId(realm);
+    const party = this.relyingParty(realm, rp);
+    const rpId = party.id;
 
     let allowCredentials: { id: string; transports: string[] }[] | undefined;
     if (userId) {
@@ -237,7 +265,7 @@ export class WebAuthnService {
     const options = await generateAuthenticationOptions({
       rpID: rpId,
       allowCredentials,
-      userVerification: realm.webAuthnUserVerificationRequired
+      userVerification: party.userVerificationRequired
         ? 'required'
         : 'preferred',
     });
@@ -269,12 +297,10 @@ export class WebAuthnService {
      * checked, so it cannot count as a use or a failure of that passkey.
      */
     expectedUserId?: string,
+    rp?: WebAuthnRelyingParty,
   ): Promise<{ user: User; credential: WebAuthnCredential }> {
-    if (!realm.webAuthnEnabled) {
-      throw new ForbiddenException('WebAuthn is not enabled for this realm');
-    }
-
-    const rpId = this.getRpId(realm);
+    const party = this.relyingParty(realm, rp);
+    const rpId = party.id;
 
     // Find the credential being used
     const credential = await this.prisma.webAuthnCredential.findUnique({
@@ -329,7 +355,7 @@ export class WebAuthnService {
       verification = await verifyAuthenticationResponse({
         response,
         expectedChallenge,
-        expectedOrigin: this.getOrigin(rpId),
+        expectedOrigin: party.origins,
         expectedRPID: rpId,
         credential: {
           id: credential.credentialId,
@@ -337,7 +363,7 @@ export class WebAuthnService {
           counter: Number(credential.counter),
           transports: credential.transports,
         },
-        requireUserVerification: realm.webAuthnUserVerificationRequired,
+        requireUserVerification: party.userVerificationRequired,
       });
     } catch (err: unknown) {
       const message = err instanceof Error ? err.message : String(err);

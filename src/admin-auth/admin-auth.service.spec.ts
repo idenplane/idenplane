@@ -77,6 +77,7 @@ describe('AdminAuthService', () => {
     recordFailure: jest.Mock;
     resetFailures: jest.Mock;
   };
+  let adminMfa: Record<string, jest.Mock>;
 
   beforeEach(() => {
     prisma = createMockPrismaService();
@@ -101,6 +102,20 @@ describe('AdminAuthService', () => {
       recordFailure: jest.fn().mockResolvedValue(undefined),
       resetFailures: jest.fn().mockResolvedValue(undefined),
     };
+    adminMfa = {
+      methods: jest.fn().mockResolvedValue([]),
+      policy: jest
+        .fn()
+        .mockResolvedValue({ required: false, source: 'setting' }),
+      createChallenge: jest.fn().mockResolvedValue('mfa-token-dummy'),
+      spendChallengeAttempt: jest.fn(),
+      peekChallenge: jest.fn(),
+      consumeChallenge: jest.fn().mockResolvedValue(true),
+      verifyCode: jest.fn(),
+      verifyPasskey: jest.fn(),
+      passkeyOptions: jest.fn(),
+      challengeBinding: jest.fn((t: string) => `admin-login:${t}`),
+    };
 
     service = new AdminAuthService(
       lookupsBackedBy(prisma as any) as any,
@@ -109,6 +124,7 @@ describe('AdminAuthService', () => {
       jwkService as any,
       rateLimitService as any,
       bruteForceService as any,
+      adminMfa as any,
     );
   });
 
@@ -129,7 +145,7 @@ describe('AdminAuthService', () => {
       prisma.realmSigningKey.findFirst.mockResolvedValue(signingKey);
       jwkService.signJwt.mockResolvedValue('jwt-token');
 
-      const result = await service.login('admin', 'password', '127.0.0.1');
+      const result: any = await service.login('admin', 'password', '127.0.0.1');
 
       expect(result.access_token).toBe('jwt-token');
       expect(result.token_type).toBe('Bearer');
@@ -317,7 +333,7 @@ describe('AdminAuthService', () => {
       prisma.realmSigningKey.findFirst.mockResolvedValue(signingKey);
       jwkService.signJwt.mockResolvedValue('jwt-token');
 
-      const result = await service.login('admin', 'password', '127.0.0.1');
+      const result: any = await service.login('admin', 'password', '127.0.0.1');
       expect(result.access_token).toBe('jwt-token');
     });
 
@@ -331,8 +347,215 @@ describe('AdminAuthService', () => {
       prisma.realmSigningKey.findFirst.mockResolvedValue(signingKey);
       jwkService.signJwt.mockResolvedValue('jwt-token');
 
-      const result = await service.login('admin', 'password', '127.0.0.1');
+      const result: any = await service.login('admin', 'password', '127.0.0.1');
       expect(result.access_token).toBe('jwt-token');
+    });
+  });
+
+  // ─── console MFA ───────────────────────────────────────
+
+  describe('login with a second factor', () => {
+    const signedIn = () => {
+      prisma.realm.findUnique.mockResolvedValue(masterRealm);
+      prisma.user.findUnique.mockResolvedValue(adminUser);
+      crypto.verifyPassword.mockResolvedValue(true);
+      prisma.userRole.findMany.mockResolvedValue([
+        { role: { name: 'super-admin' } },
+      ]);
+      prisma.realmSigningKey.findFirst.mockResolvedValue(signingKey);
+      jwkService.signJwt.mockResolvedValue('jwt-token');
+    };
+
+    it('returns an mfa_token and no token when the admin has a factor', async () => {
+      signedIn();
+      adminMfa.methods.mockResolvedValue(['totp', 'recovery']);
+
+      const result: any = await service.login('admin', 'password', '1.2.3.4');
+
+      expect(result).toMatchObject({
+        mfa_required: true,
+        mfa_token: 'mfa-token-dummy',
+        methods: ['totp', 'recovery'],
+      });
+      expect(result.access_token).toBeUndefined();
+      expect(jwkService.signJwt).not.toHaveBeenCalled();
+      // The password alone does not clear the failure counter.
+      expect(bruteForceService.resetFailures).not.toHaveBeenCalled();
+    });
+
+    it('treats leftover recovery codes alone as no factor', async () => {
+      signedIn();
+      adminMfa.methods.mockResolvedValue(['recovery']);
+      const result: any = await service.login('admin', 'password');
+      expect(result.access_token).toBe('jwt-token');
+    });
+
+    it('signs a password-only token with amr, acr and auth_time', async () => {
+      signedIn();
+      await service.login('admin', 'password');
+      expect(jwkService.signJwt.mock.calls[0][0]).toMatchObject({
+        typ: 'admin',
+        amr: ['pwd'],
+        acr: 'urn:idenplane:acr:password',
+        auth_time: expect.any(Number),
+      });
+    });
+
+    it('flags enrolment when MFA is required and the admin has no factor', async () => {
+      signedIn();
+      adminMfa.policy.mockResolvedValue({ required: true, source: 'setting' });
+      const result: any = await service.login('admin', 'password');
+      expect(result.access_token).toBe('jwt-token');
+      expect(result.mfa_enrolment_required).toBe(true);
+    });
+
+    it('completes the second step with a code and signs MFA claims', async () => {
+      signedIn();
+      adminMfa.spendChallengeAttempt.mockResolvedValue({ userId: 'user-1' });
+      adminMfa.verifyCode.mockResolvedValue({
+        method: 'totp',
+        amr: ['pwd', 'otp', 'mfa'],
+        acr: 'urn:idenplane:acr:mfa',
+      });
+
+      const result = await service.completeMfaLogin(
+        'mfa-token-dummy',
+        'totp',
+        '123456',
+        '1.2.3.4',
+      );
+
+      expect(result.access_token).toBe('jwt-token');
+      expect(adminMfa.verifyCode).toHaveBeenCalledWith(
+        'user-1',
+        'totp',
+        '123456',
+        '1.2.3.4',
+      );
+      expect(adminMfa.consumeChallenge).toHaveBeenCalledWith('mfa-token-dummy');
+      expect(bruteForceService.resetFailures).toHaveBeenCalledWith(
+        'master-id',
+        'user-1',
+      );
+      expect(jwkService.signJwt.mock.calls[0][0]).toMatchObject({
+        amr: ['pwd', 'otp', 'mfa'],
+        acr: 'urn:idenplane:acr:mfa',
+      });
+    });
+
+    it('refuses a wrong code without consuming the challenge', async () => {
+      adminMfa.spendChallengeAttempt.mockResolvedValue({ userId: 'user-1' });
+      adminMfa.verifyCode.mockResolvedValue(null);
+      await expect(
+        service.completeMfaLogin('mfa-token-dummy', 'totp', '000000', 'ip'),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(adminMfa.consumeChallenge).not.toHaveBeenCalled();
+      expect(jwkService.signJwt).not.toHaveBeenCalled();
+    });
+
+    it('refuses a spent or unknown challenge before checking the code', async () => {
+      adminMfa.spendChallengeAttempt.mockResolvedValue(null);
+      await expect(
+        service.completeMfaLogin('gone', 'totp', '123456', 'ip'),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(adminMfa.verifyCode).not.toHaveBeenCalled();
+    });
+
+    it('completes only once when two correct answers race', async () => {
+      signedIn();
+      adminMfa.spendChallengeAttempt.mockResolvedValue({ userId: 'user-1' });
+      adminMfa.verifyCode.mockResolvedValue({
+        method: 'totp',
+        amr: ['pwd', 'otp', 'mfa'],
+        acr: 'urn:idenplane:acr:mfa',
+      });
+      adminMfa.consumeChallenge.mockResolvedValue(false);
+      await expect(
+        service.completeMfaLogin('mfa-token-dummy', 'totp', '123456', 'ip'),
+      ).rejects.toBeInstanceOf(UnauthorizedException);
+      expect(jwkService.signJwt).not.toHaveBeenCalled();
+    });
+
+    it('applies the per-IP sign-in limit to the second step', async () => {
+      rateLimitService.checkAdminIpLimit.mockResolvedValue(rlDenied);
+      await expect(
+        service.completeMfaLogin('mfa-token-dummy', 'totp', '123456', 'ip'),
+      ).rejects.toBeInstanceOf(HttpException);
+      expect(adminMfa.spendChallengeAttempt).not.toHaveBeenCalled();
+    });
+
+    it('steps up: a new token with a fresh proof, the old one revoked', async () => {
+      signedIn();
+      const revoke = jest.spyOn(service, 'revokeToken').mockResolvedValue();
+      const proof = {
+        method: 'passkey' as const,
+        amr: ['pwd', 'hwk', 'mfa'],
+        acr: 'urn:idenplane:acr:webauthn',
+      };
+      const token = await service.stepUp(
+        { userId: 'user-1', roles: [] },
+        'old-token',
+        async () => proof,
+      );
+      expect(token.access_token).toBe('jwt-token');
+      expect(revoke).toHaveBeenCalledWith('old-token');
+      expect(jwkService.signJwt.mock.calls[0][0]).toMatchObject({
+        acr: 'urn:idenplane:acr:webauthn',
+      });
+    });
+
+    it('refuses a step-up for the API key and for a wrong code', async () => {
+      await expect(
+        service.stepUp(
+          { userId: 'api-key:admin', roles: [] },
+          undefined,
+          jest.fn(),
+        ),
+      ).rejects.toThrow('no second factor');
+      await expect(
+        service.stepUp(
+          { userId: 'user-1', roles: [] },
+          'old',
+          async () => null,
+        ),
+      ).rejects.toThrow('Invalid code');
+    });
+  });
+
+  describe('validateAdminToken MFA claims', () => {
+    beforeEach(() => {
+      prisma.realm.findUnique.mockResolvedValue(masterRealm);
+      prisma.realmSigningKey.findFirst.mockResolvedValue(signingKey);
+    });
+
+    it('returns acr, amr and auth_time from the token', async () => {
+      jwkService.verifyJwt.mockResolvedValue({
+        typ: 'admin',
+        sub: 'user-1',
+        realm_access: { roles: ['super-admin'] },
+        acr: 'urn:idenplane:acr:mfa',
+        amr: ['pwd', 'otp', 'mfa', 7],
+        auth_time: 1700000000,
+      });
+      await expect(service.validateAdminToken('t')).resolves.toEqual({
+        userId: 'user-1',
+        roles: ['super-admin'],
+        acr: 'urn:idenplane:acr:mfa',
+        amr: ['pwd', 'otp', 'mfa'],
+        authTime: 1700000000,
+      });
+    });
+
+    it('leaves them out for a token from before 0.11.0', async () => {
+      jwkService.verifyJwt.mockResolvedValue({
+        typ: 'admin',
+        sub: 'user-1',
+        realm_access: { roles: ['super-admin'] },
+      });
+      await expect(service.validateAdminToken('t')).resolves.toEqual({
+        userId: 'user-1',
+        roles: ['super-admin'],
+      });
     });
   });
 
@@ -349,6 +572,7 @@ describe('AdminAuthService', () => {
         jwkService as any,
         rateLimitService as any,
         bruteForceService as any,
+        adminMfa as any,
         { fromRequest } as any,
       );
     let other: AdminAuthService | undefined;

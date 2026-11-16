@@ -8,7 +8,7 @@ description: Idenplane assessed against OWASP ASVS 5.0.0 Level 2, requirement by
 
 This is a self-assessment of the Idenplane server, admin console and themes against the [OWASP Application Security Verification Standard 5.0.0](https://github.com/OWASP/ASVS/releases/tag/v5.0.0_release), **Level 2**. It covers every Level 1 and Level 2 requirement (253), taken from the official release CSV.
 
-- **Version assessed:** 0.10.0 (branch `feat/security-hardening-0.10`), November 2026. Rows changed by 0.11.0 (V3.7.2, V7.1.1, V7.3.2, V10.4.1, V10.4.8) are updated and say "FIXED in 0.11.0".
+- **Version assessed:** 0.10.0 (branch `feat/security-hardening-0.10`), November 2026. Rows changed by 0.11.0 (admin console MFA, stronger recovery codes, SAML request verification, V3.7.2, V7.1.1, V7.3.2, V10.4.1, V10.4.8) are updated and say "FIXED in 0.11.0".
 - **Method:** each verdict comes from reading the code, not the docs. Evidence is a file and line, a test, or configuration. Requirements about documentation were judged against what the docs actually say.
 - **Not a certification.** Nobody outside the project has reviewed it. Treat it as a map of where the controls are and where they are missing.
 - **Machine-readable copy:** [asvs-5.0-l2-assessment.csv](pathname:///security/asvs-5.0-l2-assessment.csv), one row per requirement with the requirement text, status, evidence, notes and recommendation.
@@ -34,7 +34,7 @@ Idenplane terminates TLS at a reverse proxy, so transport requirements about the
 | V3 Web Frontend Security | 12 | 5 | 1 | 1 | 19 |
 | V4 API and Web Service | 4 | 3 | 1 | 2 | 10 |
 | V5 File Handling | 4 | 2 | 3 | 0 | 9 |
-| V6 Authentication | 17 | 11 | 6 | 1 | 35 |
+| V6 Authentication | 20 | 10 | 4 | 1 | 35 |
 | V7 Session Management | 8 | 9 | 1 | 0 | 18 |
 | V8 Authorization | 5 | 2 | 0 | 0 | 7 |
 | V9 Self-contained Tokens | 6 | 1 | 0 | 0 | 7 |
@@ -46,9 +46,18 @@ Idenplane terminates TLS at a reverse proxy, so transport requirements about the
 | V15 Secure Coding and Architecture | 6 | 5 | 2 | 0 | 13 |
 | V16 Security Logging and Error Handling | 8 | 6 | 1 | 1 | 16 |
 | V17 WebRTC | 0 | 0 | 0 | 7 | 7 |
-| **All** | **114** | **89** | **21** | **29** | **253** |
+| **All** | **117** | **88** | **19** | **29** | **253** |
 
-### Fixed in this release
+### Fixed in 0.11.0
+
+| Requirement | Fix | Test |
+|---|---|---|
+| V6.3.3, V6.3.4 | Admin console sign-in asks for a second factor (authenticator app, passkey or recovery code) once the admin has one, and a server-wide setting requires one for every admin: on for new installs, off after an upgrade, with an enrolment-only session so nobody is locked out. Admin tokens record `amr`, `acr` and `auth_time`. See [Admin console MFA](./admin-mfa.md). | `test/admin-mfa.e2e-spec.ts`, `src/admin-rbac/admin-access-policy.spec.ts`, `src/common/guards/admin-authorization.guard.spec.ts` |
+| V6.5.2 | Recovery codes have 120 bits (24 base32 characters) and are stored as SHA-256. Codes issued before 0.11.0 keep working; their unsalted hashes are rewrapped in Argon2id at start-up. | `src/mfa/mfa.service.spec.ts`, `src/mfa/recovery-code-rewrap.service.spec.ts` |
+| V1.5.1, V6.8.3 | SAML AuthnRequests: the signature must cover the root element and every field is read from the signed bytes (signature wrapping), and each request ID is accepted once within its validity window (replay). | `src/saml/saml-request-hardening.spec.ts`, `test/saml-request-replay.e2e-spec.ts` |
+| V6.4.4, V7.5.1 | Removing or adding an admin's factor, new recovery codes, an admin MFA reset and turning the requirement off need a second factor checked in the last 15 minutes (step-up), and every such change is an admin event, recorded even when admin events are off. | `test/admin-mfa.e2e-spec.ts` |
+
+### Fixed in 0.10.0
 
 The assessment found these gaps and 0.10.0 closes them, with tests:
 
@@ -79,17 +88,15 @@ The assessment found these gaps and 0.10.0 closes them, with tests:
 
 These are left open on purpose. Most would change behaviour that existing deployments rely on, or need a design of their own, and half a fix would be worse than a documented gap. A few are small but touch admin-only input (theme uploads, custom CSS) and were left for a focused change. In rough priority order:
 
-1. **No MFA on admin console sign-in** (V6.3.3). The console accepts a password only, even when the admin has TOTP enrolled. Needs an MFA step in `AdminAuthService.login` and the console.
-2. **Recovery codes** (V6.5.2) have 32 bits of entropy and an unsalted SHA-256. They need at least 112 bits (or a password hash), with a re-issue path for existing codes.
-3. **No common, breached or context-word password checks** (V6.2.4, V6.2.11, V6.2.12).
-4. **Geo-IP lookups send end-user IPs over plain HTTP to ip-api.com** (V12.3.1, V14.2.3) when adaptive authentication or continuous verification is on. Needs an HTTPS provider or a local database, and an explicit opt-in.
-5. **Session idle timeout** (V7.3.1). There is no idle timeout for SSO sessions, nor for offline sessions, which live for `offlineTokenLifespan` from sign-in. (The absolute expiry and the offline lifetime were fixed in 0.11.0.)
-6. **RP-initiated logout without `id_token_hint`** ends the session with no confirmation (V10.6.2).
-7. **WebSocket upgrade has no Origin check** (V4.4.2).
-8. **Theme asset uploads trust the declared MIME type** (V5.2.2) and store SVG unsanitized (V1.3.4).
-9. **RSA 2048 signing keys** (V11.2.3). New keys should be 3072-bit; that changes JWKS consumers' expectations only slightly but needs a rotation story.
-10. **Users cannot list or end their own sessions, or revoke consents** (V7.5.2, V10.7.3).
-11. **Documentation-only gaps:** input validation rules (V2.1.x), file handling (V5.1.1), data classification (V14.1.x), log inventory (V16.1.1), SBOM (V15.1.2).
+1. **No common, breached or context-word password checks** (V6.2.4, V6.2.11, V6.2.12).
+2. **Geo-IP lookups send end-user IPs over plain HTTP to ip-api.com** (V12.3.1, V14.2.3) when adaptive authentication or continuous verification is on. Needs an HTTPS provider or a local database, and an explicit opt-in.
+3. **Session idle timeout** (V7.3.1). There is no idle timeout for SSO sessions, nor for offline sessions, which live for `offlineTokenLifespan` from sign-in. (The absolute expiry and the offline lifetime were fixed in 0.11.0.)
+4. **RP-initiated logout without `id_token_hint`** ends the session with no confirmation (V10.6.2).
+5. **WebSocket upgrade has no Origin check** (V4.4.2).
+6. **Theme asset uploads trust the declared MIME type** (V5.2.2) and store SVG unsanitized (V1.3.4).
+7. **RSA 2048 signing keys** (V11.2.3). New keys should be 3072-bit; that changes JWKS consumers' expectations only slightly but needs a rotation story.
+8. **Users cannot list or end their own sessions, or revoke consents** (V7.5.2, V10.7.3).
+9. **Documentation-only gaps:** input validation rules (V2.1.x), file handling (V5.1.1), data classification (V14.1.x), log inventory (V16.1.1), SBOM (V15.1.2).
 
 Every row below has its own recommendation.
 
@@ -202,7 +209,7 @@ Every row below has its own recommendation.
 |---|---|---|---|---|
 | V6.1.1 | 1 | Pass | docs/docs/security/secure-defaults.md; src/realms/realm-security-defaults.ts | FIXED in this PR: documented lockout settings, defaults and the lockout-DoS trade-off (the old docs used Keycloak field names). |
 | V6.1.2 | 2 | **Fail** | src/password-policy/password-policy.service.ts | No list of context-specific words. **Recommendation:** See V6.2.11. |
-| V6.1.3 | 2 | Partial | docs/docs/guides/authentication.mdx | Pathways are listed, not their strength; admin login and device approval are missing. **Recommendation:** Pathway matrix (S). |
+| V6.1.3 | 2 | Partial | docs/docs/guides/authentication.mdx; docs/docs/security/admin-mfa.md | Pathways are listed, not their strength; device approval is missing. The admin console pathways (password, second factor, API key) are documented with their strength since 0.11.0. **Recommendation:** Pathway matrix (S). |
 | V6.2.1 | 1 | Partial | prisma/schema.prisma (passwordMinLength default 8); src/realms/dto/create-realm.dto.ts (@Min(1)) | Default is 8, but an admin can set a lower minimum. **Recommendation:** Floor at 8 (S; would reject saving realms already configured lower). |
 | V6.2.2 | 1 | Pass | src/account/account.controller.ts:268; src/login/login.controller.ts:789 |  |
 | V6.2.3 | 1 | Pass | src/account/account.controller.ts:283-321 | Current password required. |
@@ -217,14 +224,14 @@ Every row below has its own recommendation.
 | V6.2.12 | 2 | **Fail** | src/password-policy/password-policy.service.ts:18 | No breached-password check. **Recommendation:** Optional k-anonymity breach check per realm (M). |
 | V6.3.1 | 1 | Pass | src/realms/realm-security-defaults.ts; src/brute-force/brute-force.service.ts; test/secure-realm-defaults.e2e-spec.ts; test/brute-force.e2e-spec.ts | FIXED in this PR: lockout is on for new realms; realms created before 0.10.0 keep their setting and are reported by /admin/upgrade/health. |
 | V6.3.2 | 1 | Pass | src/admin-auth/admin-seed.service.ts:14-30 (random initial password; weak ones refused in production) |  |
-| V6.3.3 | 2 | **Fail** | src/admin-auth/admin-auth.service.ts (password only); prisma/schema.prisma mfaRequired default false | Admin console sign-in has no second factor. **Recommendation:** MFA challenge on admin login (M). |
-| V6.3.4 | 2 | Partial | src/device/device.controller.ts; src/auth/auth.service.ts (device and code grants refuse disabled users); src/admin-auth/admin-auth.service.ts | FIXED in part: disabled users can no longer finish the device flow or exchange a code. Admin login still lacks MFA. **Recommendation:** See V6.3.3. |
+| V6.3.3 | 2 | Pass | src/admin-auth/admin-auth.service.ts (login, completeMfaLogin); src/admin-rbac/admin-access-policy.ts (decideAdminMfa); src/admin-auth/admin-seed.service.ts (required on new installs); test/admin-mfa.e2e-spec.ts | FIXED in 0.11.0: admin console sign-in asks for a second factor once the admin has one, and the server-wide requirement (on for new installs) confines an admin without one to enrolment. After an upgrade it is off until turned on; /admin/upgrade/health warns. End-user realms set `mfaRequired` per realm. |
+| V6.3.4 | 2 | Pass | src/device/device.controller.ts; src/auth/auth.service.ts (device and code grants refuse disabled users); src/admin-auth/admin-auth.service.ts; docs/docs/security/admin-mfa.md | Disabled users can no longer finish the device flow or exchange a code (0.10.0). FIXED in 0.11.0: admin sign-in enforces the admin's second factor on every pathway that issues a user token (password step, step-up, enrolment); the API key pathway is documented as break-glass. |
 | V6.4.1 | 1 | Partial | src/users/dto/set-password.dto.ts:15 (temporary ignored) | Initial passwords never expire or force a change. **Recommendation:** mustChangePassword flag (M). |
 | V6.4.2 | 1 | Pass | No secret questions or hints |  |
 | V6.4.3 | 2 | Pass | src/login/login.controller.ts (reset sets the password, then normal login with MFA) |  |
-| V6.4.4 | 2 | Partial | src/mfa/mfa.service.ts:356-368 (admin factor reset) | No documented identity-proofing step. **Recommendation:** Document it and record an admin event (M). |
+| V6.4.4 | 2 | Partial | src/mfa/mfa.service.ts (admin factor reset); src/admin-mfa/admin-mfa.service.ts (reset); docs/docs/security/admin-mfa.md | Since 0.11.0 an admin MFA reset needs the resetting admin's own recent MFA check (or the API key), is always recorded as an admin event, and the console asks to confirm who is asking. There is still no documented identity-proofing procedure for end users. **Recommendation:** Document one (S). |
 | V6.5.1 | 2 | Pass | src/mfa/mfa.service.ts:265-300; src/magic-link/magic-link.service.ts:472; src/sms/sms-otp.service.ts:631; test/totp-replay.e2e-spec.ts | Single use. |
-| V6.5.2 | 2 | **Fail** | src/mfa/mfa.service.ts:325-331 | Recovery codes have 32 bits of entropy and are stored as unsalted SHA-256. **Recommendation:** At least 112-bit codes, or argon2 (S/M). |
+| V6.5.2 | 2 | Pass | src/mfa/recovery-codes.ts; src/mfa/mfa.service.ts (generateRecoveryCodes, verifyRecoveryCode); src/mfa/recovery-code-rewrap.service.ts | FIXED in 0.11.0: codes have 120 bits and are stored as SHA-256 (allowed at 112 bits or more). Codes issued before 0.11.0 keep working; their hashes are rewrapped in Argon2id (salted) at start-up. |
 | V6.5.3 | 2 | Pass | crypto.randomInt / randomBytes in src/sms/sms-otp.service.ts:179, src/auth-flow/email-otp.service.ts:191 |  |
 | V6.5.4 | 2 | Pass | src/mfa/mfa.service.ts:325; src/sms/sms-otp.service.ts:48 | At least 20 bits. |
 | V6.5.5 | 2 | Partial | src/sms/sms-otp.service.ts:51 (max 900 s); src/realms/dto/create-realm.dto.ts (magicLinkExpirySeconds no @Max) | Out-of-band lifetime can exceed 10 minutes. **Recommendation:** Cap at 600 s (S). |
@@ -254,7 +261,7 @@ Every row below has its own recommendation.
 | V7.4.3 | 2 | Partial | src/login/login.controller.ts endAllSessions; test/theme-views.e2e-spec.ts (reset ends sessions) | FIXED in part: a password reset ends every session. Self-service change and admin set do not offer the option. **Recommendation:** Add "sign out other sessions" to password change (S). |
 | V7.4.4 | 2 | Pass | themes/idenplane/account/templates/account.hbs:11; admin-ui Layout.tsx |  |
 | V7.4.5 | 2 | Partial | src/sessions/sessions.controller.ts:58-83 | No realm-wide termination; admin termination sends no back-channel logout. **Recommendation:** (S) |
-| V7.5.1 | 2 | Partial | src/account/account.controller.ts:283-322,688-702; src/webauthn/webauthn.controller.ts:78-118,341-354 | TOTP enrolment and passkey add/delete need only the session. **Recommendation:** Require re-authentication (S). |
+| V7.5.1 | 2 | Partial | src/account/account.controller.ts:283-322,688-702; src/webauthn/webauthn.controller.ts:78-118,341-354; src/admin-mfa/admin-mfa.controller.ts | Admin console (0.11.0): changing a factor or the recovery codes needs a second factor checked in the last 15 minutes. End-user account console: TOTP enrolment and passkey add/delete still need only the session. **Recommendation:** Require re-authentication there too (S). |
 | V7.5.2 | 2 | **Fail** | src/account/account.controller.ts | Users cannot list or end their own sessions. **Recommendation:** Account session list (M). |
 | V7.6.1 | 2 | Partial | src/tokens/backchannel-logout.service.ts; src/oauth/oauth.controller.ts:208-231 | Admin and account-console terminations do not notify RPs. **Recommendation:** (S) |
 | V7.6.2 | 2 | Pass | src/oauth/oauth.controller.ts:174-231; src/login/session-issuer.service.ts:50-97 |  |

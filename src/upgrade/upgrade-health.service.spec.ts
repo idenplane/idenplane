@@ -131,6 +131,74 @@ describe('UpgradeHealthService.checkWildcardRedirectUris', () => {
   });
 });
 
+describe('UpgradeHealthService admin MFA checks', () => {
+  const build = async (prisma: object) => {
+    const { UpgradeHealthService } =
+      await import('./upgrade-health.service.js');
+    return new UpgradeHealthService(prisma as never);
+  };
+  afterEach(() => {
+    delete process.env['ADMIN_MFA_REQUIRED'];
+  });
+
+  it('warns while MFA is not required (an upgraded install)', async () => {
+    const svc = await build({
+      adminSecurityPolicy: { findUnique: jest.fn().mockResolvedValue(null) },
+      user: {
+        findMany: jest.fn().mockResolvedValue([{ username: 'sample-admin' }]),
+      },
+    });
+    await expect(svc.checkAdminMfa()).resolves.toEqual({
+      name: 'admin_mfa',
+      status: 'warn',
+      message: 'A second factor is not required for admin console sign-in',
+      details: 'No second factor: sample-admin',
+    });
+  });
+
+  it('names the admins still to enrol when it is required', async () => {
+    process.env['ADMIN_MFA_REQUIRED'] = 'true';
+    const findUnique = jest.fn();
+    const svc = await build({
+      adminSecurityPolicy: { findUnique },
+      user: { findMany: jest.fn().mockResolvedValue([{ username: 'a' }]) },
+    });
+    await expect(svc.checkAdminMfa()).resolves.toMatchObject({
+      status: 'warn',
+      message: '1 admin(s) must still enrol a second factor',
+      details: 'a',
+    });
+    expect(findUnique).not.toHaveBeenCalled();
+  });
+
+  it('passes when it is required and every admin has a factor', async () => {
+    const svc = await build({
+      adminSecurityPolicy: {
+        findUnique: jest.fn().mockResolvedValue({ mfaRequired: true }),
+      },
+      user: { findMany: jest.fn().mockResolvedValue([]) },
+    });
+    await expect(svc.checkAdminMfa()).resolves.toMatchObject({
+      status: 'pass',
+    });
+  });
+
+  it('counts the users with pre-0.11.0 recovery codes', async () => {
+    const findMany = jest
+      .fn()
+      .mockResolvedValue([{ userId: 'a' }, { userId: 'b' }]);
+    const svc = await build({ recoveryCode: { findMany } });
+    await expect(svc.checkRecoveryCodes()).resolves.toMatchObject({
+      name: 'recovery_codes',
+      status: 'warn',
+    });
+    expect(findMany.mock.calls[0][0].where).toEqual({
+      used: false,
+      NOT: { codeHash: { startsWith: 'rc2$' } },
+    });
+  });
+});
+
 describe('UpgradeHealthService.checkInvalidPolicies', () => {
   const build = async (findMany: jest.Mock) => {
     const { UpgradeHealthService } =

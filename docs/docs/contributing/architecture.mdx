@@ -33,7 +33,7 @@ The backend (`src/`) is a single NestJS application — there's no separate micr
 
 ## Backend Module Structure
 
-The backend has around 60 NestJS modules under `src/`, each a self-contained `*.module.ts` with its own controllers/services/DTOs. There's no strict layered architecture beyond that — modules import each other directly where they have a real dependency (e.g. `continuous-verification` imports `sessions` and `email`). Grouping them by concern:
+The backend has about 70 NestJS modules under `src/`, each a self-contained `*.module.ts` with its own controllers/services/DTOs. There's no strict layered architecture beyond that — modules import each other directly where they have a real dependency (e.g. `continuous-verification` imports `sessions` and `email`). Grouping them by concern:
 
 | Group | Modules (non-exhaustive) |
 |---|---|
@@ -55,7 +55,7 @@ If you're not sure which module owns something, `grep -rl` for the Prisma model 
 
 ## Data Model
 
-The Prisma schema (`prisma/schema.prisma`) has ~84 models. Realm is the tenancy boundary — nearly every other model has a `realmId` foreign key, and rows never cross realms. The core relationships:
+The Prisma schema (`prisma/schema.prisma`) has ~90 models. Realm is the tenancy boundary — nearly every other model has a `realmId` foreign key, and rows never cross realms. The core relationships:
 
 ```mermaid
 erDiagram
@@ -91,7 +91,7 @@ A few things that surprise people coming from Keycloak: `Session` keys off `real
 `auth-flow` defines flows as an ordered list of typed steps (`password`, `totp`, `webauthn`, `social`, `ldap`, `email_otp`, `consent`) with conditions and fallbacks, fully CRUD-able via the Admin API and the visual editor in the admin console.
 
 :::note
-The step-execution engine (`FlowExecutorService`) that would actually walk a flow during a real login exists and is unit-tested, but as of this writing nothing outside `src/auth-flow/` calls it — no HTTP endpoint or login controller invokes it. Defining and assigning flows is a real, working feature; driving an end-user login through one requires your own integration against the types this module exports. See the [Custom Auth Flows guide](/guides/auth-flows) for the full picture.
+Flows run during real logins: `FlowRuntimeService` (`src/auth-flow/flow-runtime.service.ts`) is called from the login, OAuth, broker, SAML and WebAuthn controllers, and `flow-binding.resolver.ts` decides whether a flow applies. That is only the case when the server sets `AUTH_FLOW_RUNTIME_ENABLED=true` and the realm enables and binds a flow; otherwise the built-in login runs. See the [Custom Auth Flows guide](/guides/auth-flows) for the full picture.
 :::
 
 ---

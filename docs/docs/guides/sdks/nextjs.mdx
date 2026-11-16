@@ -90,6 +90,8 @@ export const config = {
 
 ### 4. Server Components
 
+The server helpers read the access token from a cookie, `idenplane_access_token` by default (`cookieName` changes it); the middleware also accepts an `Authorization: Bearer` header. The browser SDK keeps tokens in memory or Web Storage and **does not set this cookie**: your app has to set it, for example from a route handler after the login callback.
+
 ```tsx
 // app/dashboard/page.tsx
 import { cookies } from 'next/headers';
@@ -97,7 +99,7 @@ import { getServerUser } from 'idenplane-nextjs/server';
 import { redirect } from 'next/navigation';
 
 export default async function DashboardPage() {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const user = await getServerUser(cookieStore, {
     serverUrl: 'http://localhost:3000',
     realm: 'my-realm',
@@ -343,10 +345,12 @@ export const config = {
 | `serverUrl` | `string` | Yes | Idenplane server URL |
 | `realm` | `string` | Yes | Realm name |
 | `clientId` | `string` | Yes | OAuth2 client ID |
-| `protectedPaths` | `string[]` | Yes | Routes that require authentication |
-| `loginPath` | `string` | No | Redirect path for unauthenticated users (default: `/`) |
-| `excludedPaths` | `string[]` | No | Routes to skip auth check |
-| `publicPaths` | `string[]` | No | Alias for `excludedPaths` |
+| `protectedPaths` | `string[]` | No | Path prefixes that require authentication (default: `[]`, so nothing is protected) |
+| `loginPath` | `string` | No | Redirect path for unauthenticated users (default: `/login`) |
+| `cookieName` | `string` | No | Cookie holding the access token (default: `idenplane_access_token`) |
+| `allowInsecureHttp` | `boolean` | No | Allow an `http://` `serverUrl` on a non-loopback host (default: `false`) |
+
+A path is protected when it equals an entry or starts with the entry followed by `/`. Glob patterns such as `/admin/*` are not supported.
 
 ### Multiple Protected Path Patterns
 
@@ -360,15 +364,12 @@ const authMiddleware = createAuthMiddleware({
   serverUrl: 'http://localhost:3000',
   realm: 'my-realm',
   clientId: 'my-app',
+  // Plain prefixes: '/admin' also covers '/admin/users'
   protectedPaths: [
     '/dashboard',
     '/settings',
-    '/admin/*',
-    '/api/protected/*',
-  ],
-  excludedPaths: [
-    '/api/health',
-    '/public/*',
+    '/admin',
+    '/api/protected',
   ],
   loginPath: '/login',
 });
@@ -397,7 +398,7 @@ import { getServerUser } from 'idenplane-nextjs/server';
 import { redirect } from 'next/navigation';
 
 export default async function DashboardPage() {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const user = await getServerUser(cookieStore, {
     serverUrl: 'http://localhost:3000',
     realm: 'my-realm',
@@ -424,7 +425,7 @@ import { cookies } from 'next/headers';
 import { getServerAuth } from 'idenplane-nextjs/server';
 
 export default async function ProfilePage() {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const session = await getServerAuth(cookieStore, {
     serverUrl: 'http://localhost:3000',
     realm: 'my-realm',
@@ -438,10 +439,9 @@ export default async function ProfilePage() {
     <div>
       <h1>Profile</h1>
       <div className="profile-card">
-        <img src={session.user.picture} alt={session.user.name} />
-        <h2>{session.user.name}</h2>
-        <p>{session.user.email}</p>
-        <span>User ID: {session.user.sub}</span>
+        <h2>{String(session.payload.name ?? '')}</h2>
+        <p>{String(session.payload.email ?? '')}</p>
+        <span>User ID: {session.payload.sub}</span>
       </div>
     </div>
   );
@@ -457,7 +457,7 @@ import { getServerUser } from 'idenplane-nextjs/server';
 import { redirect } from 'next/navigation';
 
 export default async function AdminPage() {
-  const cookieStore = cookies();
+  const cookieStore = await cookies();
   const user = await getServerUser(cookieStore, {
     serverUrl: 'http://localhost:3000',
     realm: 'my-realm',
@@ -467,7 +467,9 @@ export default async function AdminPage() {
     redirect('/login');
   }
 
-  const hasAdminRole = user.roles?.includes('admin');
+  // getServerUser decodes the cookie WITHOUT verifying its signature. Verify the
+  // token (verifyToken from 'idenplane-sdk/server') before trusting its roles.
+  const hasAdminRole = user.realm_access?.roles?.includes('admin');
 
   if (!hasAdminRole) {
     return (
@@ -496,12 +498,11 @@ Protect Pages Router API routes with the `withAuth` helper:
 ```typescript
 // pages/api/profile.ts
 import { withAuth } from 'idenplane-nextjs/api';
-import type { NextApiRequest, NextApiResponse } from 'next';
 
 export default withAuth(
   { serverUrl: 'http://localhost:3000', realm: 'my-realm' },
-  (req: NextApiRequest, res: NextApiResponse) => {
-    // req.authUser contains the authenticated user
+  (req, res) => {
+    // req.authUser contains the verified token payload
     res.json({
       user: req.authUser,
       message: 'This is protected data',
@@ -515,18 +516,17 @@ export default withAuth(
 ```typescript
 // pages/api/user-info.ts
 import { withAuth } from 'idenplane-nextjs/api';
-import type { NextApiRequest, NextApiResponse } from 'next';
 
 export default withAuth(
   { serverUrl: 'http://localhost:3000', realm: 'my-realm' },
-  (req: NextApiRequest, res: NextApiResponse) => {
+  (req, res) => {
     const user = req.authUser;
 
     res.json({
       id: user.sub,
       name: user.name,
       email: user.email,
-      roles: user.roles || [],
+      roles: user.realm_access?.roles ?? [],
     });
   },
 );
@@ -620,7 +620,7 @@ export async function GET(req: Request) {
 
 ## API Reference
 
-### `idenplane-nextjs` (default export)
+### `idenplane-nextjs` (main entry point)
 
 Re-exports from `idenplane-sdk/react`:
 
@@ -630,6 +630,7 @@ Re-exports from `idenplane-sdk/react`:
 | `useAuth()` | Authentication state and actions hook |
 | `useUser()` | Current user info hook |
 | `usePermissions()` | Role and permission helpers hook |
+| `useRoles()` | Realm and client role helpers hook |
 | `ProtectedRoute` | Render-gate component for route protection |
 | `IdenplaneClient` | Raw client class |
 
@@ -646,10 +647,10 @@ interface AuthMiddlewareConfig {
   serverUrl: string;
   realm: string;
   clientId: string;
-  protectedPaths: string[];
-  loginPath?: string;
-  excludedPaths?: string[];
-  publicPaths?: string[];
+  protectedPaths?: string[];   // default []
+  loginPath?: string;          // default '/login'
+  cookieName?: string;         // default 'idenplane_access_token'
+  allowInsecureHttp?: boolean; // default false
 }
 ```
 
@@ -679,12 +680,11 @@ import type {
   IdenplaneConfig,
   TokenResponse,
   UserInfo,
-  AuthSession,
 } from 'idenplane-sdk';
 
 // Server functions
 import { getServerUser, getServerAuth } from 'idenplane-nextjs/server';
-import type { User } from 'idenplane-sdk';
+import type { User, AuthSession } from 'idenplane-nextjs/server';
 
 // Middleware
 import { createAuthMiddleware } from 'idenplane-nextjs/middleware';

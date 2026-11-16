@@ -102,14 +102,29 @@ For standalone / functional interceptor style (Angular 15+):
 // app.config.ts
 import { ApplicationConfig } from '@angular/core';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
-import { authInterceptor } from 'idenplane-angular';
+import { authInterceptor, AuthService, AuthGuard, IDENPLANE_CONFIG } from 'idenplane-angular';
 
 export const appConfig: ApplicationConfig = {
   providers: [
+    // authInterceptor injects AuthService, which needs IDENPLANE_CONFIG.
+    // forRoot() provides these; without it, provide them yourself.
+    {
+      provide: IDENPLANE_CONFIG,
+      useValue: {
+        url: 'http://localhost:3000',
+        realm: 'my-realm',
+        clientId: 'my-app',
+        redirectUri: 'http://localhost:4200/callback',
+      },
+    },
+    AuthService,
+    AuthGuard,
     provideHttpClient(withInterceptors([authInterceptor])),
   ],
 };
 ```
+
+The interceptor attaches the access token to **every** `HttpClient` request, including requests to other origins. Use `HttpClient` with it only for your own APIs.
 
 ---
 
@@ -125,8 +140,8 @@ The `IdenplaneModule.forRoot()` method registers all providers including `AuthSe
 | `realm` | `string` | Yes | Realm name |
 | `clientId` | `string` | Yes | OAuth2 client ID |
 | `redirectUri` | `string` | Yes | Redirect URI after login |
-| `scope` | `string[]` | No | OAuth2 scopes (default: `['openid', 'profile', 'email']`) |
-| `storage` | `string` | No | Storage type: `'sessionStorage'` \| `'localStorage'` \| `'memory'` (default: `'sessionStorage'`) |
+| `scopes` | `string[]` | No | OAuth2 scopes (default: `['openid', 'profile', 'email']`) |
+| `storage` | `string` | No | Storage type: `'sessionStorage'` \| `'localStorage'` \| `'memory'` (default: `'memory'`) |
 | `autoRefresh` | `boolean` | No | Enable automatic token refresh (default: `true`) |
 | `refreshBuffer` | `number` | No | Seconds before expiry to trigger refresh (default: `30`) |
 
@@ -144,7 +159,7 @@ import { IdenplaneModule } from 'idenplane-angular';
       realm: 'my-realm',
       clientId: 'my-app',
       redirectUri: 'http://localhost:4200/callback',
-      scope: ['openid', 'profile', 'email', 'custom:scope'],
+      scopes: ['openid', 'profile', 'email', 'custom:scope'],
       storage: 'sessionStorage',
       autoRefresh: true,
       refreshBuffer: 30,
@@ -316,8 +331,9 @@ The guard reads configuration from `route.data`:
 | Data Key | Type | Description |
 |----------|------|-------------|
 | `roles` | `string[]` | Required roles (user must have all) |
-| `loginPath` | `string` | Redirect path for unauthenticated users (default: `/`) |
-| `forbiddenPath` | `string` | Redirect path when authenticated but lacks roles |
+| `loginPath` | `string` | Redirect path for unauthenticated users (default: `/login`) |
+
+A signed-in user without the required roles is also sent to `loginPath`, with `?error=forbidden`.
 
 ### Custom Guard Configuration
 
@@ -330,7 +346,6 @@ export const routes: Routes = [
     data: {
       roles: ['admin'],
       loginPath: '/login',
-      forbiddenPath: '/access-denied',
     },
   },
 ];
@@ -344,27 +359,29 @@ The HTTP interceptor automatically attaches `Authorization: Bearer <token>` head
 
 ### Class-based Interceptor (NgModule style)
 
-The interceptor is registered automatically with `IdenplaneModule.forRoot()`.
+The interceptor is registered automatically with `IdenplaneModule.forRoot()`; don't register it again, or it runs twice.
 
-For manual registration:
+Only if you provide `IDENPLANE_CONFIG` and `AuthService` yourself instead of calling `forRoot()`, register it manually:
 
 ```typescript
 // app.module.ts
 import { NgModule } from '@angular/core';
-import { IdenplaneModule, AuthInterceptor } from 'idenplane-angular';
+import { AuthInterceptor, AuthService, IDENPLANE_CONFIG } from 'idenplane-angular';
 import { HttpClientModule, HTTP_INTERCEPTORS } from '@angular/common/http';
 
 @NgModule({
-  imports: [
-    HttpClientModule,
-    IdenplaneModule.forRoot({
-      url: 'http://localhost:3000',
-      realm: 'my-realm',
-      clientId: 'my-app',
-      redirectUri: 'http://localhost:4200/callback',
-    }),
-  ],
+  imports: [HttpClientModule],
   providers: [
+    {
+      provide: IDENPLANE_CONFIG,
+      useValue: {
+        url: 'http://localhost:3000',
+        realm: 'my-realm',
+        clientId: 'my-app',
+        redirectUri: 'http://localhost:4200/callback',
+      },
+    },
+    AuthService,
     {
       provide: HTTP_INTERCEPTORS,
       useClass: AuthInterceptor,
@@ -381,14 +398,29 @@ export class AppModule {}
 // app.config.ts
 import { ApplicationConfig } from '@angular/core';
 import { provideHttpClient, withInterceptors } from '@angular/common/http';
-import { authInterceptor } from 'idenplane-angular';
+import { authInterceptor, AuthService, AuthGuard, IDENPLANE_CONFIG } from 'idenplane-angular';
 
 export const appConfig: ApplicationConfig = {
   providers: [
+    // authInterceptor injects AuthService, which needs IDENPLANE_CONFIG.
+    // forRoot() provides these; without it, provide them yourself.
+    {
+      provide: IDENPLANE_CONFIG,
+      useValue: {
+        url: 'http://localhost:3000',
+        realm: 'my-realm',
+        clientId: 'my-app',
+        redirectUri: 'http://localhost:4200/callback',
+      },
+    },
+    AuthService,
+    AuthGuard,
     provideHttpClient(withInterceptors([authInterceptor])),
   ],
 };
 ```
+
+The interceptor attaches the access token to **every** `HttpClient` request, including requests to other origins. Use `HttpClient` with it only for your own APIs.
 
 ### Example: Making Authenticated Requests
 
@@ -443,14 +475,14 @@ The `UserInfo` object contains the authenticated user's information:
 
 ```typescript
 interface UserInfo {
-  sub: string;           // User ID
-  name?: string;          // Display name
-  email?: string;        // Email address
-  emailVerified?: boolean; // Email verification status
-  picture?: string;       // Avatar URL
-  roles?: string[];       // Assigned roles
-  permissions?: string[];  // Direct permissions
-  [key: string]: any;     // Any custom claims
+  sub: string;                 // User ID
+  preferred_username?: string;
+  name?: string;               // Display name
+  given_name?: string;
+  family_name?: string;
+  email?: string;              // Email address
+  email_verified?: boolean;    // Email verification status
+  [key: string]: unknown;      // Any other claim in the ID token
 }
 ```
 
@@ -471,8 +503,8 @@ import { AuthService } from 'idenplane-angular';
       />
       <h2>{{ auth.user?.name || 'User' }}</h2>
       <p>{{ auth.user?.email }}</p>
-      <span *ngIf="auth.user?.emailVerified">Email verified</span>
-      <span *ngIf="!auth.user?.emailVerified">Email not verified</span>
+      <span *ngIf="auth.user?.email_verified">Email verified</span>
+      <span *ngIf="!auth.user?.email_verified">Email not verified</span>
     </div>
   `,
 })

@@ -7,6 +7,7 @@ import {
 import { PrismaService } from '../prisma/prisma.service.js';
 import { EventsService } from '../events/events.service.js';
 import { OperationType, ResourceType } from '../events/event-types.js';
+import { isOldFormatRecoveryCodeHash } from '../mfa/recovery-codes.js';
 import {
   ADMIN_ROLES,
   isAdminRole,
@@ -23,6 +24,15 @@ export interface AdminAccountView {
   roles: AdminRole[];
   /** Realms managed as a realm-admin, by name. */
   realms: string[];
+  /** Console second factors (docs/docs/security/admin-mfa.md). */
+  mfa: {
+    enrolled: boolean;
+    totp: boolean;
+    passkeys: number;
+    recoveryCodes: number;
+    /** Some unused recovery codes are pre-0.11.0 ones. */
+    oldFormatRecoveryCodes: boolean;
+  };
 }
 
 /**
@@ -74,6 +84,12 @@ export class AdminRealmAssignmentsService {
         adminRealmAssignments: {
           select: { realm: { select: { name: true } } },
         },
+        userCredentials: {
+          where: { type: 'totp', verified: true },
+          select: { id: true },
+        },
+        webAuthnCredentials: { select: { id: true } },
+        recoveryCodes: { where: { used: false }, select: { codeHash: true } },
       },
       orderBy: { username: 'asc' },
     });
@@ -91,6 +107,16 @@ export class AdminRealmAssignmentsService {
         .map((a) => a.realm.name)
         .filter((n) => n !== MASTER_REALM)
         .sort(),
+      mfa: {
+        enrolled:
+          u.userCredentials.length > 0 || u.webAuthnCredentials.length > 0,
+        totp: u.userCredentials.length > 0,
+        passkeys: u.webAuthnCredentials.length,
+        recoveryCodes: u.recoveryCodes.length,
+        oldFormatRecoveryCodes: u.recoveryCodes.some((c) =>
+          isOldFormatRecoveryCodeHash(c.codeHash),
+        ),
+      },
     }));
   }
 

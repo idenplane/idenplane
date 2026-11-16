@@ -67,11 +67,16 @@ import { createRouter, createWebHistory } from 'vue-router';
 import { createAuthGuard } from 'idenplane-vue';
 import { IdenplaneClient } from 'idenplane-sdk';
 
+// The router module runs outside any component, so the guard cannot inject
+// the plugin's client: pass it a client. It is a separate instance from the
+// plugin's, so both must use the same Web Storage (not the default 'memory')
+// to see the same tokens.
 const authClient = new IdenplaneClient({
   url: 'http://localhost:3000',
   realm: 'my-realm',
   clientId: 'my-app',
   redirectUri: 'http://localhost:5173/callback',
+  storage: 'sessionStorage',
 });
 
 const router = createRouter({
@@ -96,6 +101,8 @@ router.beforeEach(createAuthGuard({ loginRoute: '/login' }, authClient));
 export default router;
 ```
 
+Install the plugin with the same `storage: 'sessionStorage'` setting in `main.ts`.
+
 ---
 
 ## IdenplanePlugin
@@ -110,8 +117,8 @@ The `IdenplanePlugin` is a Vue 3 plugin that initializes authentication and prov
 | `realm` | `string` | Yes | Realm name |
 | `clientId` | `string` | Yes | OAuth2 client ID |
 | `redirectUri` | `string` | Yes | Redirect URI after login |
-| `scope` | `string[]` | No | OAuth2 scopes (default: `['openid', 'profile', 'email']`) |
-| `storage` | `'sessionStorage' \| 'localStorage' \| 'memory'` | No | Token storage type (default: `sessionStorage`) |
+| `scopes` | `string[]` | No | OAuth2 scopes (default: `['openid', 'profile', 'email']`) |
+| `storage` | `'sessionStorage' \| 'localStorage' \| 'memory'` | No | Token storage type (default: `memory`) |
 | `autoRefresh` | `boolean` | No | Enable automatic token refresh (default: `true`) |
 | `refreshBuffer` | `number` | No | Seconds before expiry to trigger refresh (default: `30`) |
 | `onLogin` | `(tokens: TokenResponse) => void` | No | Called on successful login |
@@ -133,7 +140,7 @@ app.use(IdenplanePlugin, {
   realm: 'my-realm',
   clientId: 'my-app',
   redirectUri: 'http://localhost:5173/callback',
-  scope: ['openid', 'profile', 'email', 'custom:scope'],
+  scopes: ['openid', 'profile', 'email', 'custom:scope'],
   storage: 'localStorage',
   autoRefresh: true,
   refreshBuffer: 30,
@@ -148,33 +155,7 @@ app.use(IdenplanePlugin, {
 app.mount('#app');
 ```
 
-### With Pre-built Client
-
-For more control over the client configuration:
-
-```typescript
-// main.ts
-import { createApp } from 'vue';
-import { IdenplanePlugin } from 'idenplane-vue';
-import { IdenplaneClient } from 'idenplane-sdk';
-import App from './App.vue';
-
-const authClient = new IdenplaneClient({
-  url: 'http://localhost:3000',
-  realm: 'my-realm',
-  clientId: 'my-app',
-  redirectUri: 'http://localhost:5173/callback',
-  storage: 'sessionStorage',
-  autoRefresh: true,
-  refreshBuffer: 30,
-});
-
-const app = createApp(App);
-
-app.use(IdenplanePlugin, authClient);
-
-app.mount('#app');
-```
+The plugin always creates its own `IdenplaneClient` from these options; it does not accept a pre-built client. Inside components, `useAuth().client` gives you that instance.
 
 ---
 
@@ -185,9 +166,9 @@ The `useAuth` composable provides access to authentication state and actions:
 ```typescript
 const {
   client,            // IdenplaneClient - the SDK client instance
-  isAuthenticated,    // boolean - whether user is authenticated
-  isLoading,          // boolean - whether auth state is loading
-  user,               // UserInfo | null - current user info
+  isAuthenticated,    // Readonly<Ref<boolean>> - whether user is authenticated
+  isLoading,          // Readonly<Ref<boolean>> - whether auth state is loading
+  user,               // Readonly<Ref<UserInfo | null>> - current user info
   login,              // (options?) => Promise<void> - initiate login
   logout,            // () => Promise<void> - sign out
   getToken,           // () => string | null - get current access token
@@ -272,18 +253,18 @@ const handleLogin = async () => {
 The `useUser` composable returns the current user's information from the ID token claims:
 
 ```typescript
-const user = useUser();
-// Returns: ComputedRef<UserInfo | null>
+const { user, isLoading, refresh } = useUser();
+// user: Readonly<Ref<UserInfo | null>>; refresh() reloads it from the userinfo endpoint
 
 interface UserInfo {
-  sub: string;        // User ID
-  name?: string;      // Display name
-  email?: string;     // Email address
-  emailVerified?: boolean;
-  picture?: string;   // Avatar URL
-  roles?: string[];   // Assigned roles
-  permissions?: string[]; // Direct permissions
-  [key: string]: any; // Any custom claims
+  sub: string;                 // User ID
+  preferred_username?: string;
+  name?: string;               // Display name
+  given_name?: string;
+  family_name?: string;
+  email?: string;              // Email address
+  email_verified?: boolean;
+  [key: string]: unknown;      // Any other claim in the ID token
 }
 ```
 
@@ -293,20 +274,20 @@ interface UserInfo {
 <script setup lang="ts">
 import { useUser } from 'idenplane-vue';
 
-const user = useUser();
+const { user } = useUser();
 </script>
 
 <template>
   <div v-if="user" class="profile-card">
     <img
-      v-if="user.picture"
+      v-if="typeof user.picture === 'string'"
       :src="user.picture"
       :alt="user.name"
       class="avatar"
     />
     <h2>{{ user.name || 'User' }}</h2>
     <p>{{ user.email }}</p>
-    <span v-if="user.emailVerified">Email verified</span>
+    <span v-if="user.email_verified">Email verified</span>
     <span v-else>Email not verified</span>
   </div>
   <div v-else>
@@ -323,12 +304,9 @@ The `usePermissions` composable provides role and permission checking:
 
 ```typescript
 const {
-  roles,           // string[] - all assigned roles
-  permissions,    // string[] - all direct permissions
+  roles,           // ComputedRef<string[]> - the user's realm roles
   hasRole,         // (role: string) => boolean
   hasPermission,   // (permission: string) => boolean
-  hasAnyRole,      // (roles: string[]) => boolean
-  hasAllRoles,     // (roles: string[]) => boolean
 } = usePermissions();
 ```
 
@@ -338,7 +316,7 @@ const {
 <script setup lang="ts">
 import { usePermissions } from 'idenplane-vue';
 
-const { hasRole, hasPermission, roles } = usePermissions();
+const { hasRole, hasPermission } = usePermissions();
 </script>
 
 <template>
@@ -352,7 +330,7 @@ const { hasRole, hasPermission, roles } = usePermissions();
     </section>
 
     <!-- Content with multiple role check -->
-    <section v-if="hasAnyRole(['editor', 'admin'])">
+    <section v-if="['editor', 'admin'].some(hasRole)">
       <h2>Content Editor</h2>
       <button>Edit Content</button>
     </section>
@@ -375,11 +353,14 @@ const { hasRole, hasPermission, roles } = usePermissions();
 
 ```vue
 <script setup lang="ts">
+import { computed } from 'vue';
 import { usePermissions } from 'idenplane-vue';
 
-const { hasAllRoles } = usePermissions();
+const { hasRole } = usePermissions();
 
-const canAccessModeration = hasAllRoles(['moderator', 'content-editor']);
+const canAccessModeration = computed(() =>
+  ['moderator', 'content-editor'].every(hasRole),
+);
 </script>
 
 <template>
@@ -408,8 +389,11 @@ const guard = createAuthGuard(options?, authClient?);
 | Option | Type | Required | Description |
 |--------|------|----------|-------------|
 | `loginRoute` | `string` | No | Redirect path for unauthenticated users (default: `'/login'`) |
-| `roles` | `string[]` | No | Global required roles |
-| `excludePaths` | `string[]` | No | Routes to skip auth check |
+| `roles` | `string[]` | No | Global required roles; `route.meta.roles` overrides them |
+
+Only routes with `meta.requiresAuth` or `meta.roles` (or global `roles`) are checked. A signed-in user without the required roles is redirected to `loginRoute` with `?error=forbidden`.
+
+Without a `client` argument the guard can only find the plugin's client when it is created inside a component's `setup()`. Created at module level, as in `router/index.ts`, it finds no client and sends every protected route to `loginRoute`; pass a client there, as in the examples below.
 
 ### Basic Usage
 
@@ -417,6 +401,7 @@ const guard = createAuthGuard(options?, authClient?);
 // router/index.ts
 import { createRouter, createWebHistory } from 'vue-router';
 import { createAuthGuard } from 'idenplane-vue';
+import { authClient } from './auth-client'; // an IdenplaneClient with storage: 'sessionStorage'
 
 const router = createRouter({
   history: createWebHistory(),
@@ -431,7 +416,7 @@ const router = createRouter({
   ],
 });
 
-router.beforeEach(createAuthGuard({ loginRoute: '/login' }));
+router.beforeEach(createAuthGuard({ loginRoute: '/login' }, authClient));
 
 export default router;
 ```
@@ -466,7 +451,7 @@ const router = createRouter({
   ],
 });
 
-router.beforeEach(createAuthGuard({ loginRoute: '/login' }));
+router.beforeEach(createAuthGuard({ loginRoute: '/login' }, authClient));
 
 export default router;
 ```
@@ -535,34 +520,11 @@ import { AuthProvider } from 'idenplane-vue';
 | `realm` | `string` | Yes | Realm name |
 | `clientId` | `string` | Yes | OAuth2 client ID |
 | `redirectUri` | `string` | Yes | Redirect URI after login |
-| `client` | `IdenplaneClient` | Yes* | Pre-built client instance |
-| `scope` | `string[]` | No | OAuth2 scopes |
-| `auto-handle-callback` | `boolean` | No | Auto-handle callback (default: `true`) |
+| `scopes` | `string[]` | No | OAuth2 scopes |
+| `storage` | `'sessionStorage' \| 'localStorage' \| 'memory'` | No | Token storage (default: `sessionStorage`) |
+| `autoRefresh` | `boolean` | No | Enable automatic token refresh (default: `true`) |
 
-*Either a `client` prop or all of `url`, `realm`, `clientId`, and `redirectUri` are required.
-
-### With Pre-built Client
-
-```vue
-<!-- App.vue -->
-<template>
-  <AuthProvider :client="authClient">
-    <RouterView />
-  </AuthProvider>
-</template>
-
-<script setup lang="ts">
-import { AuthProvider } from 'idenplane-vue';
-import { IdenplaneClient } from 'idenplane-sdk';
-
-const authClient = new IdenplaneClient({
-  url: 'http://localhost:3000',
-  realm: 'my-realm',
-  clientId: 'my-app',
-  redirectUri: 'http://localhost:5173/callback',
-});
-</script>
-```
+The component does not accept a pre-built client.
 
 ---
 
@@ -579,8 +541,8 @@ const authClient = new IdenplaneClient({
 | Export | Description |
 |--------|-------------|
 | `useAuth()` | Returns `{ client, isAuthenticated, isLoading, user, login, logout, getToken }` |
-| `useUser()` | Returns `ComputedRef<UserInfo \| null>` |
-| `usePermissions()` | Returns `{ roles, permissions, hasRole, hasPermission, hasAnyRole, hasAllRoles }` |
+| `useUser()` | Returns `{ user, isLoading, refresh }` |
+| `usePermissions()` | Returns `{ roles, hasRole, hasPermission }` |
 
 ### Navigation Guard
 
@@ -602,24 +564,29 @@ interface IdenplaneConfig {
   realm: string;
   clientId: string;
   redirectUri: string;
-  scope?: string[];
-  storage?: 'sessionStorage' | 'localStorage' | 'memory';
+  scopes?: string[];
+  storage?: 'sessionStorage' | 'localStorage' | 'memory'; // default 'memory'
   autoRefresh?: boolean;
   refreshBuffer?: number;
+  refreshStrategy?: 'rotation' | 'silent' | 'eager';
+  silentRedirectUri?: string;
+  postLogoutRedirectUri?: string;
+  allowInsecureHttp?: boolean;
   onLogin?: (tokens: TokenResponse) => void;
   onLogout?: () => void;
   onError?: (error: Error) => void;
+  onTokenRefresh?: (tokens: TokenResponse) => void;
 }
 
 interface UserInfo {
-  sub: string;
-  name?: string;
-  email?: string;
-  emailVerified?: boolean;
-  picture?: string;
-  roles?: string[];
-  permissions?: string[];
-  [key: string]: any;
+  sub: string;                 // User ID
+  preferred_username?: string;
+  name?: string;               // Display name
+  given_name?: string;
+  family_name?: string;
+  email?: string;              // Email address
+  email_verified?: boolean;
+  [key: string]: unknown;      // Any other claim in the ID token
 }
 
 interface TokenResponse {
@@ -656,7 +623,7 @@ import {
 
 // All composables are fully typed
 function MyComponent() {
-  const user = useUser(); // ComputedRef<UserInfo | null>
+  const { user } = useUser(); // Readonly<Ref<UserInfo | null>>
   const { isAuthenticated } = useAuth(); // Fully typed
   const { hasRole } = usePermissions(); // Fully typed
 }

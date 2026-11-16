@@ -29,6 +29,11 @@ export interface RecordAdminEventParams {
   resourcePath: string;
   representation?: Record<string, unknown>;
   ipAddress?: string;
+  /**
+   * Record it even when the realm has admin events turned off: for security
+   * events that must always leave a trace (admin MFA changes and resets).
+   */
+  always?: boolean;
 }
 
 export interface QueryEventsParams {
@@ -123,7 +128,8 @@ export class EventsService {
       where: { id: params.realmId },
       select: { adminEventsEnabled: true },
     });
-    if (!realm?.adminEventsEnabled) return;
+    if (!realm) return;
+    if (!realm.adminEventsEnabled && !params.always) return;
 
     try {
       await this.prisma.adminEvent.create({

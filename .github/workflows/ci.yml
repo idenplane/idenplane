@@ -198,6 +198,9 @@ jobs:
       IDENPLANE_ADMIN_PASSWORD: e2e-test-admin-password
       ADMIN_USER: admin
       ADMIN_PASSWORD: e2e-test-admin-password
+      # A fresh install requires a second factor for every admin (0.11.0),
+      # and the Go integration test signs in with the admin password only.
+      ADMIN_MFA_REQUIRED: 'false'
 
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1

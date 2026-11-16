@@ -6,8 +6,16 @@ import {
   type AdminAccount,
 } from '../../api/adminAccess';
 import { getAllRealms } from '../../api/realms';
-import { Alert, Badge, Button, Card } from '../../components/ui';
+import {
+  getAdminMfaPolicy,
+  resetAdminMfa,
+  setAdminMfaPolicy,
+} from '../../api/adminMfa';
+import { Alert, Badge, Button, Card, Switch } from '../../components/ui';
+import ConfirmDialog from '../../components/ConfirmDialog';
+import { usePermissions } from '../../hooks/usePermissions';
 import { getErrorMessage } from '../../utils/getErrorMessage';
+import { withStepUp } from '../../utils/stepUp';
 
 const MASTER = 'master';
 
@@ -74,13 +82,70 @@ function RealmEditor({
   );
 }
 
+/** What an admin has as a console second factor, in a few words. */
+function mfaSummary(mfa: AdminAccount['mfa']): string {
+  const parts: string[] = [];
+  if (mfa.totp) parts.push('authenticator app');
+  if (mfa.passkeys > 0) parts.push(mfa.passkeys === 1 ? '1 passkey' : `${mfa.passkeys} passkeys`);
+  return parts.join(' · ');
+}
+
+/** The server-wide "every admin needs a second factor" switch. */
+function MfaRequirement({ withoutFactor }: { withoutFactor: number }) {
+  const queryClient = useQueryClient();
+  const policy = useQuery({ queryKey: ['admin-mfa-policy'], queryFn: getAdminMfaPolicy });
+  const change = useMutation({
+    mutationFn: (required: boolean) => withStepUp(() => setAdminMfaPolicy(required)),
+    onSuccess: (data) => queryClient.setQueryData(['admin-mfa-policy'], data),
+  });
+  const fixed = policy.data?.source === 'environment';
+
+  return (
+    <Card padding="sm" data-testid="admin-mfa-requirement">
+      <Switch
+        checked={policy.data?.required ?? false}
+        onChange={(required) => change.mutate(required)}
+        disabled={!policy.data || fixed || change.isPending}
+        label="Require a second factor for every admin"
+        hint={
+          fixed
+            ? 'Set by ADMIN_MFA_REQUIRED on the server; it cannot be changed here.'
+            : 'Admins without one can sign in, but only to set one up.'
+        }
+      />
+      {policy.data?.required && withoutFactor > 0 && (
+        <Alert variant="warning" className="mt-3">
+          {withoutFactor === 1
+            ? '1 admin has no second factor yet and can only set one up.'
+            : `${withoutFactor} admins have no second factor yet and can only set one up.`}
+        </Alert>
+      )}
+      {change.isError && (
+        <Alert className="mt-3">{getErrorMessage(change.error, 'Could not change the setting')}</Alert>
+      )}
+    </Card>
+  );
+}
+
 /**
- * Super-admin only: the master realm's admin accounts, their roles, and the
- * realms each realm-admin manages. A realm-admin with no realm manages none.
+ * Super-admin only: the master realm's admin accounts, their roles, their
+ * second factors, and the realms each realm-admin manages. A realm-admin
+ * with no realm manages none.
  */
 export default function AdminAccountsPage() {
   const [editing, setEditing] = useState<string | null>(null);
+  const [resetting, setResetting] = useState<AdminAccount | null>(null);
+  const me = usePermissions();
+  const queryClient = useQueryClient();
   const accounts = useQuery({ queryKey: ['admin-accounts'], queryFn: listAdminAccounts });
+  const reset = useMutation({
+    mutationFn: (account: AdminAccount) => withStepUp(() => resetAdminMfa(account.id)),
+    onSuccess: () => {
+      setResetting(null);
+      void queryClient.invalidateQueries({ queryKey: ['admin-accounts'] });
+    },
+    onError: () => setResetting(null),
+  });
   const realms = useQuery({ queryKey: ['realms'], queryFn: getAllRealms });
   const realmNames = (realms.data ?? [])
     .map((r) => r.name)
@@ -103,6 +168,13 @@ export default function AdminAccountsPage() {
         <Alert>{getErrorMessage(accounts.error, 'Could not load the admin accounts')}</Alert>
       )}
       {accounts.isLoading && <p className="text-sm text-subtle">Loading…</p>}
+
+      <MfaRequirement
+        withoutFactor={accounts.data?.filter((a) => a.enabled && !a.mfa.enrolled).length ?? 0}
+      />
+      {reset.isError && (
+        <Alert>{getErrorMessage(reset.error, 'Could not reset the second factors')}</Alert>
+      )}
 
       {accounts.data?.some((a) => a.roles.includes('realm-admin') && a.realms.length === 0) && (
         <Alert variant="warning" title="Realm-admins without realms">
@@ -127,6 +199,17 @@ export default function AdminAccountsPage() {
                     ))}
                   </div>
                   {account.email && <p className="mt-0.5 text-xs text-subtle">{account.email}</p>}
+                  <p className="mt-1.5 flex flex-wrap items-center gap-2 text-sm text-muted">
+                    Second factor:{' '}
+                    {account.mfa.enrolled ? (
+                      <Badge variant="success" size="sm">{mfaSummary(account.mfa)}</Badge>
+                    ) : (
+                      <Badge variant="warning" size="sm">not set up</Badge>
+                    )}
+                    {account.mfa.oldFormatRecoveryCodes && (
+                      <span className="text-xs text-warning-fg">old-format recovery codes</span>
+                    )}
+                  </p>
                   {isRealmAdmin && (
                     <p className="mt-1.5 text-sm text-muted">
                       Realms:{' '}
@@ -138,11 +221,18 @@ export default function AdminAccountsPage() {
                     </p>
                   )}
                 </div>
-                {isRealmAdmin && editing !== account.id && (
-                  <Button size="sm" variant="secondary" onClick={() => setEditing(account.id)}>
-                    Edit realms
-                  </Button>
-                )}
+                <div className="flex flex-wrap gap-2">
+                  {isRealmAdmin && editing !== account.id && (
+                    <Button size="sm" variant="secondary" onClick={() => setEditing(account.id)}>
+                      Edit realms
+                    </Button>
+                  )}
+                  {account.mfa.enrolled && account.username !== me.username && (
+                    <Button size="sm" variant="danger" onClick={() => setResetting(account)}>
+                      Reset MFA
+                    </Button>
+                  )}
+                </div>
               </div>
               {isRealmAdmin && editing === account.id && (
                 <RealmEditor
@@ -158,6 +248,16 @@ export default function AdminAccountsPage() {
           <p className="text-sm text-subtle">No admin accounts found.</p>
         )}
       </div>
+
+      <ConfirmDialog
+        isOpen={resetting !== null}
+        title={`Reset ${resetting?.username ?? ''}'s second factors?`}
+        message="This removes their authenticator app, passkeys and recovery codes. They sign in with their password next and set up a new factor. Do this only after confirming who is asking. It is recorded as an admin event."
+        confirmText="Reset MFA"
+        confirmDisabled={reset.isPending}
+        onConfirm={() => resetting && reset.mutate(resetting)}
+        onCancel={() => setResetting(null)}
+      />
     </div>
   );
 }

@@ -58,7 +58,7 @@ export ADMIN_API_KEY=<admin-api-key>
 export IDENPLANE_TOKEN=<bearer-token>
 ```
 
-Every command accepts `--json` to print machine-readable output instead of a table.
+Most `list`, `get`, `create` and `update` commands accept `--json` to print machine-readable output instead of a table; `--help` on a command shows whether it does.
 
 ---
 
@@ -77,6 +77,8 @@ Every command accepts `--json` to print machine-readable output instead of a tab
 | `realm import <file>` | Import a realm from a JSON file |
 
 ### Clients
+
+Every `client`, `user`, `role` and `group` subcommand requires `--realm <realm>`.
 
 | Command | Description |
 |---|---|
@@ -128,6 +130,7 @@ Every command accepts `--json` to print machine-readable output instead of a tab
 | `init` | Interactive setup: connect, create a realm, client, and roles |
 | `migrate keycloak` | Import from a Keycloak realm export JSON |
 | `migrate auth0` | Import from an Auth0 Management API export |
+| `migrate zitadel` | Import from a Zitadel export (`--file <path> --realm <name>`) |
 | `upgrade` | Run pre-flight checks then apply database migrations |
 | `upgrade:status` | View upgrade audit history |
 | `completion <shell>` | Output a shell completion script (bash, zsh, fish) |
