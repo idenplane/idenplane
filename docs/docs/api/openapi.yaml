@@ -13,12 +13,12 @@ info:
 
     ## Versioning
 
-    API endpoints are versioned using URI versioning (`/api/v1/` prefix).
+    The admin API is served under `/admin/...`. No route is served under `/api/v1` yet; see *Versioning and Support*.
 
     ## Rate Limiting
 
     Some endpoints are rate-limited. See specific endpoint documentation for details.
-  version: 0.3.0
+  version: 0.10.0
   contact:
     name: Idenplane Project
     url: https://github.com/idenplane/idenplane/blob/main/SUPPORT.md

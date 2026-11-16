@@ -37,7 +37,7 @@ The chart in `helm/idenplane` has its own SemVer `version`. Its `appVersion` is 
 
 | Version | Security fixes |
 |---|---|
-| The latest release (today 0.9.1) | Yes |
+| The latest release (today 0.10.0) | Yes |
 | Every earlier release, including earlier patches of the same minor | No. Upgrade to the latest release. |
 
 Fixes are released as a new version cut from `main`. There are no maintenance branches and no backports to older minors. With one maintainer and minor releases that have come days or weeks apart, a support window for older lines is not something the project can honestly offer yet. If that changes, this page will say so before it applies.
@@ -92,6 +92,7 @@ Each value below comes from the release's tag in the repository or from its CI r
 
 | Server | Helm chart | `idenplane-sdk` tested in CI | Node.js | PostgreSQL | Redis | Kubernetes (CI) |
 |---|---|---|---|---|---|---|
+| 0.10.0 | 0.6.0 | 1.2.0 | 24 | 16 tested, 17 in the chart; image has 16, 17 and 18 clients | 7, not tested at runtime | 1.37.0 (kind) |
 | 0.9.1 | 0.5.1 | 1.2.0 | 24 | 16 tested, 17 in the chart | 7, not tested at runtime | 1.35.0 (kind) |
 | 0.9.0 | 0.5.0 | 1.2.0 | 24 | 16 tested, 17 in the chart | 7, not tested at runtime | 1.35.0 (kind) |
 | 0.8.1 | 0.4.1 | 1.2.0 | 24 | 16 tested, 17 in the chart | 7, not tested at runtime | 1.35.0 (kind) |
@@ -104,7 +105,7 @@ Where each column comes from:
 - **Node.js:** the Docker image is built `FROM node:24-alpine`, and every CI job uses Node 24. The server's `package.json` has no `engines` field. Node 22 is not tested, though the admin console declares `node >= 22.22.0` for its build. Use 24.
 - **PostgreSQL:** CI and the compose files use `postgres:16-alpine`. The *Helm install (kind)* job installs the chart with its bundled database, which is `postgres:17-bookworm`, so 17 is exercised there. PostgreSQL 16 or later is required. 15 and earlier are not supported, and neither is any other database.
 - **Redis:** the compose files and the chart use `redis:7-alpine`. Redis is optional. CI only renders the chart with Redis on and does not run the server against Redis.
-- **Kubernetes:** the *Helm install (kind)* job uses whatever node image the `helm/kind-action` default provides. The version is not pinned. In the runs for 0.8.0, 0.8.1, 0.9.0 and 0.9.1 it was kind v0.31.0 with `kindest/node:v1.35.0`. The chart sets no `kubeVersion`. No other Kubernetes version is tested.
+- **Kubernetes:** the *Helm install (kind)* job uses whatever node image the `helm/kind-action` default provides. The version is not pinned. In the runs for 0.8.0, 0.8.1, 0.9.0 and 0.9.1 it was kind v0.31.0 with `kindest/node:v1.35.0`; for 0.10.0, kind v0.33.0 with `kindest/node:v1.37.0`. The chart sets no `kubeVersion`. No other Kubernetes version is tested.
 
 :::note PostgreSQL client in the image
 From 0.10.0 the image ships the PostgreSQL **16, 17 and 18** clients side by side (`ARG PG_CLIENT_MAJORS` in the `Dockerfile`). The built-in [upgrade API](/deployment/upgrading) reads the server's major version and uses the matching `pg_dump` and `pg_restore`, so it works with the compose files' PostgreSQL 16 and the chart's bundled PostgreSQL 17 alike. It still refuses to run when no matching client is installed. Up to 0.9.1 the image had only the 16 client.
