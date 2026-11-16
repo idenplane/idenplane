@@ -168,6 +168,16 @@ describe('Offline sessions (e2e)', () => {
     await ctx.prisma.clientOptionalScope.create({
       data: { clientId: seeded.client.id, clientScopeId: scope.id },
     });
+    // Once a client has scopes assigned it is granted only those, so give it
+    // openid too: the logout test needs the ID token.
+    const openid = await ctx.prisma.clientScope.upsert({
+      where: { realmId_name: { realmId: seeded.realm.id, name: 'openid' } },
+      update: {},
+      create: { realmId: seeded.realm.id, name: 'openid' },
+    });
+    await ctx.prisma.clientDefaultScope.create({
+      data: { clientId: seeded.client.id, clientScopeId: openid.id },
+    });
   }, 30_000);
 
   afterAll(async () => {
@@ -292,7 +302,7 @@ describe('Offline sessions (e2e)', () => {
 
     it('signing out (RP-initiated logout with the offline id_token) ends the offline session', async () => {
       const tokens = await offlineSignIn();
-      const idToken = (tokens as unknown as { id_token: string }).id_token;
+      const idToken = (tokens as unknown as { id_token?: string }).id_token;
       expect(idToken).toBeTruthy();
       await http().get(`${base}/logout`).query({ id_token_hint: idToken });
       expect(await sessionExists(tokens.sid)).toBe(false);
