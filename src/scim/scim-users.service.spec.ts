@@ -622,7 +622,7 @@ describe('ScimUsersService federated (LDAP) users', () => {
       userName: 'jdoe',
       name: { givenName: 'Janet', familyName: 'Doe' },
       emails: [{ value: 'jdoe@example.com', primary: true }],
-      password: 'Okta-synced-passw0rd',
+      password: 'Okta-synced-example-passw0rd',
     });
     const data = prisma.user.update.mock.calls[0][0].data as Record<
       string,

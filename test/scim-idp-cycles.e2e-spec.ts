@@ -572,7 +572,7 @@ describe('SCIM provisioning by Entra ID and Okta (e2e)', () => {
       `/Users/${user.id}`,
       patchOp(
         { op: 'replace', path: 'title', value: 'Directory user' },
-        { op: 'replace', value: { password: 'Ldap-override-1' } },
+        { op: 'replace', value: { password: 'Ldap-override-example-1' } },
       ),
     ).expect(400);
     expect(refused.body).toMatchObject({
@@ -592,7 +592,7 @@ describe('SCIM provisioning by Entra ID and Okta (e2e)', () => {
       schemas: [USER_SCHEMA],
       userName: 'ldap.user@example.com',
       name: { givenName: 'Lena', familyName: 'Lindqvist' },
-      password: 'Ldap-override-2',
+      password: 'Ldap-override-example-2',
     }).expect(200);
     expect(put.body.name).toMatchObject({ familyName: 'Lindqvist' });
     stored = await ctx.prisma.user.findUniqueOrThrow({
