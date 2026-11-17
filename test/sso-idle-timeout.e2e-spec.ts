@@ -160,7 +160,10 @@ describe('SSO session idle timeout (e2e)', () => {
     it('is off for a new realm', async () => {
       const fresh = await ctx.seedTestRealm(`${REALM}-fresh`);
       try {
-        expect(fresh.realm.ssoSessionIdleTimeout).toBe(0);
+        const stored = await ctx.prisma.realm.findUniqueOrThrow({
+          where: { id: fresh.realm.id },
+        });
+        expect(stored.ssoSessionIdleTimeout).toBe(0);
       } finally {
         await ctx.prisma.realm.delete({ where: { id: fresh.realm.id } });
       }
