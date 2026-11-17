@@ -50,6 +50,7 @@ import type { JWTPayload } from 'jose';
 import {
   refreshTokenExpiresAt,
   sessionExpiresAt,
+  type SessionLifetimeSettings,
 } from '../sessions/session-lifetime.js';
 
 export interface TokenResponse {
@@ -531,14 +532,13 @@ export class AuthService {
       );
     }
 
-    const session = this.newSession({
+    const session = this.newSession(realm, {
       userId: user.id,
       ipAddress: ip,
       userAgent,
       // Persist so a later refresh preserves the password-level context.
       satisfiedAcr: ACR_PASSWORD,
       amr: ['pwd'],
-      expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
     });
 
     void this.eventsService.recordLoginEvent({
@@ -688,14 +688,13 @@ export class AuthService {
       );
     }
 
-    const session = this.newSession({
+    const session = this.newSession(realm, {
       userId: user.id,
       ipAddress: ip,
       userAgent,
       // Persist so a later refresh preserves the MFA-level context.
       satisfiedAcr: ACR_MFA,
       amr: ['pwd', factor === 'sms' ? 'sms' : 'otp'],
-      expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
     });
 
     void this.eventsService.recordLoginEvent({
@@ -1168,6 +1167,7 @@ export class AuthService {
     const amr = authCode.amr;
 
     const session = this.newSession(
+      realm,
       {
         userId: user.id,
         ipAddress: ip,
@@ -1177,7 +1177,6 @@ export class AuthService {
         satisfiedAcr: acr,
         amr,
         authTime: authCode.authTime ?? authCode.createdAt,
-        expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
       },
       sessionId,
     );
@@ -1344,11 +1343,10 @@ export class AuthService {
     // Clean up the device code
     await this.prisma.deviceCode.delete({ where: { id: deviceCode.id } });
 
-    const session = this.newSession({
+    const session = this.newSession(realm, {
       userId: user.id,
       ipAddress: ip,
       userAgent,
-      expiresAt: new Date(Date.now() + realm.refreshTokenLifespan * 1000),
     });
 
     void this.eventsService.recordLoginEvent({
@@ -1870,18 +1868,26 @@ export class AuthService {
    * events can name it and the cap can order it against concurrent logins.
    */
   private newSession(
+    realm: SessionLifetimeSettings,
     data: Omit<
       Prisma.SessionUncheckedCreateInput,
-      'id' | 'refreshTokens' | 'createdAt'
+      'id' | 'refreshTokens' | 'createdAt' | 'expiresAt'
     >,
     id: string = randomUUID(),
   ): NewSession {
     const now = new Date();
     // auth_time defaults to now: the password, MFA and device grants
-    // authenticate the user in this request.
+    // authenticate the user in this request. The expiry is counted from the
+    // same instant as createdAt (a normal session; issuing an offline token
+    // later moves it to the offline lifespan).
     return {
       id,
-      data: { ...data, authTime: data.authTime ?? now, createdAt: now },
+      data: {
+        ...data,
+        authTime: data.authTime ?? now,
+        createdAt: now,
+        expiresAt: sessionExpiresAt(realm, false, now),
+      },
     };
   }
 
