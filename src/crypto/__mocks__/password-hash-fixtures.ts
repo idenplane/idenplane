@@ -45,6 +45,17 @@ export function pbkdf2Hash(
   return encodePbkdf2({ digest, ...pbkdf2(digest, password) });
 }
 
+/**
+ * A row as the Keycloak importer wrote it before 0.11.0:
+ * `<iterations>$<salt>$<hash>`, which names no algorithm. Stored with
+ * `passwordAlgorithm` `pbkdf2-sha256` although the key is SHA-512, so it
+ * verifies only if the caller passes the user's `passwordAlgorithm` along.
+ */
+export function legacyKeycloakRow(password = PASSWORD): string {
+  const { salt, hash, iterations } = pbkdf2('sha512', password);
+  return `${iterations}$${salt.toString('base64')}$${hash.toString('base64')}`;
+}
+
 /** A bcrypt hash (`$2b$04$…`), as Auth0 and Zitadel imports store it. */
 export function bcryptHash(password = PASSWORD): string {
   return bcryptjs.hashSync(password, 4);

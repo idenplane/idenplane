@@ -14,6 +14,7 @@ import {
   PASSWORD,
   WRONG,
   bcryptHash,
+  legacyKeycloakRow,
   pbkdf2Hash,
   realPasswordVerifier,
 } from '../crypto/__mocks__/password-hash-fixtures.js';
@@ -402,6 +403,11 @@ describe('AdminAuthService', () => {
       ['bcrypt', () => bcryptHash(), 'bcrypt'],
       ['PBKDF2-SHA256 (Keycloak)', () => pbkdf2Hash('sha256'), 'pbkdf2-sha256'],
       ['PBKDF2-SHA512 (Keycloak)', () => pbkdf2Hash('sha512'), 'pbkdf2-sha512'],
+      [
+        'legacy Keycloak row (pre-0.11.0 import)',
+        () => legacyKeycloakRow(),
+        'pbkdf2-sha256',
+      ],
     ])(
       '%s: signs in and moves the hash to Argon2id',
       async (_label, make, passwordAlgorithm) => {

@@ -3,6 +3,7 @@ import {
   PASSWORD,
   WRONG,
   bcryptHash,
+  legacyKeycloakRow,
   pbkdf2Hash,
   realPasswordVerifier,
 } from '../crypto/__mocks__/password-hash-fixtures.js';
@@ -1237,6 +1238,11 @@ describe('AccountController', () => {
     const hashes: Array<[string, () => string, string]> = [
       ['bcrypt', () => bcryptHash(), 'bcrypt'],
       ['PBKDF2-SHA256 (Keycloak)', () => pbkdf2Hash('sha256'), 'pbkdf2-sha256'],
+      [
+        'legacy Keycloak row (pre-0.11.0 import)',
+        () => legacyKeycloakRow(),
+        'pbkdf2-sha256',
+      ],
     ];
 
     describe.each(hashes)('%s user', (_label, make, passwordAlgorithm) => {
