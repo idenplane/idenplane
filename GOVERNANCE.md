@@ -35,7 +35,7 @@ Larger designs, such as admin role enforcement in 0.9.0, are written up before t
 These are the rules as they work today:
 
 - **Branches.** Work happens on short-lived branches (`feat/…`, `fix/…`, `chore/…`, `docs/…`). Pull requests target **`dev`**.
-- **Review.** The maintainer reviews every pull request from a contributor. The maintainer's own pull requests are not reviewed by a second person, because there is none. Automated checks (code scanning, CI, and the PR hygiene secret scan on pull requests to `main`) are the second pair of eyes.
+- **Review.** The maintainer reviews every pull request from a contributor. The maintainer's own pull requests are not reviewed by a second person, because there is none. Automated checks (code scanning, CI, and the PR hygiene checks on pull requests to `dev` and `main`: a secret scan, and a block on workflow changes from forks) are the second pair of eyes.
 - **CI must pass.** A pull request is merged only when every CI job is green: lint, import cycles, unit tests, end-to-end tests against PostgreSQL 16, the admin console tests, the SDK suites, the docs build, the Docker build and the Helm install on kind. A red check means the pull request is not ready, never that it needs an override. Branch protection does not enforce this yet; the maintainer does.
 - **Merge.** Pull requests are merged with a merge commit.
 - **Workflow changes.** Changes to `.github/workflows/` from a contributor are merged only deliberately, after the maintainer has read them.

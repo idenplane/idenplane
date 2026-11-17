@@ -366,7 +366,7 @@ Every row below has its own recommendation.
 | V13.2.2 | 2 | Partial | docker-entrypoint.sh (migrate deploy as the runtime user) | One DB role for migration and runtime. **Recommendation:** Split roles (M). |
 | V13.2.3 | 2 | Partial | src/main.ts:30-36; src/crypto/crypto.service.ts:128-160 | Placeholders refused in production; prod compose Redis has no password. **Recommendation:** requirepass in compose (S). |
 | V13.2.4 | 2 | Partial | src/common/security/safe-http-client.ts | Blocklist, not allowlist; some fetches bypass it (V1.3.6). **Recommendation:** (M) |
-| V13.2.5 | 2 | Partial | helm/ | No egress NetworkPolicy. **Recommendation:** (M) |
+| V13.2.5 | 2 | Partial | helm/ | The chart has an opt-in NetworkPolicy (`networkPolicy.enabled`) with an egress allowlist, off by default. **Recommendation:** (M) enable it in production with egress rules for the providers the server calls. |
 | V13.3.1 | 2 | Partial | src/crypto/stored-secrets.ts; src/secrets-at-rest/ | Secrets encrypted at rest; key from env, no KMS. **Recommendation:** (L) |
 | V13.3.2 | 2 | Partial | helm values (non-root, automount configurable) |  |
 | V13.4.1 | 1 | Pass | .dockerignore (.git excluded) |  |

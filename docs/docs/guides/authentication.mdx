@@ -852,7 +852,7 @@ Idenplane can delegate authentication to an external provider, so users sign in 
 
 ### What this covers
 
-These endpoints handle **OpenID Connect** providers — Okta, Auth0, Microsoft Entra, Google, another Keycloak or Idenplane, anything that speaks OIDC. `providerType` defaults to `oidc` and is the only type this module has behaviour for.
+These endpoints handle **OpenID Connect** providers — Okta, Auth0, Microsoft Entra, Google, another Keycloak or Idenplane, anything that speaks OIDC. `providerType` is `oidc` (the default) or `oauth2` (a plain OAuth 2.0 provider such as GitHub); the broker treats both the same way. Any other value, `saml` included, is refused with `400`.
 
 Two neighbouring features are managed separately:
 

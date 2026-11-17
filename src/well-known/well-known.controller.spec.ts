@@ -86,6 +86,26 @@ describe('WellKnownController', () => {
     });
   });
 
+  describe('WebAuthn metadata', () => {
+    it('advertises only WebAuthn endpoints that are served', () => {
+      const result = controller.discovery({
+        ...realm,
+        webAuthnEnabled: true,
+      } as Realm) as Record<string, unknown>;
+      const realmUrl = 'https://auth.example.com/realms/test-realm';
+
+      expect(result['webauthn_registration_endpoint']).toBe(
+        `${realmUrl}/webauthn/register/options`,
+      );
+      expect(result['webauthn_authentication_endpoint']).toBe(
+        `${realmUrl}/webauthn/authenticate/options`,
+      );
+      // No spec defines passkey_endpoint in OIDC discovery, and no route
+      // served the URL it pointed to.
+      expect(result).not.toHaveProperty('passkey_endpoint');
+    });
+  });
+
   describe('RFC 8705 metadata', () => {
     const mtlsRealm = { ...realm, mtlsClientAuthEnabled: true } as Realm;
     const make = (mtls: { enabled: boolean; baseUrl?: string } | undefined) =>

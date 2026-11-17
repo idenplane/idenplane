@@ -1,4 +1,9 @@
-import { Injectable, Logger } from '@nestjs/common';
+import {
+  BadRequestException,
+  Injectable,
+  Logger,
+  NotFoundException,
+} from '@nestjs/common';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import sanitizeHtml from 'sanitize-html';
@@ -9,6 +14,10 @@ import { SendGridEmailProvider } from './providers/sendgrid.provider.js';
 import { MailgunEmailProvider } from './providers/mailgun.provider.js';
 import { PostmarkEmailProvider } from './providers/postmark.provider.js';
 import { EmailProviderType } from './dto/email-config.dto.js';
+import {
+  EmailDeliveryException,
+  safeEmailDeliveryMessage,
+} from './email-delivery.exception.js';
 
 // Allow the markup our email templates actually use (headings, basic text,
 // links, simple tables) while stripping scripts, event handlers, and dangerous
@@ -55,9 +64,39 @@ export class EmailService {
     return true;
   }
 
-  async sendTestEmail(
+  /**
+   * Sends a fixed test message to the realm's own sender address. Resolves
+   * on success; a realm without email settings is a 400, and a provider
+   * failure a 502 whose message names the cause without the provider's error
+   * text (see {@link sendTestMessage}).
+   */
+  async sendTestEmail(realmName: string): Promise<{ success: true }> {
+    await this.sendTestMessage(
+      realmName,
+      null,
+      'Idenplane Email Test',
+      '<p>This is a test email from Idenplane setup wizard.</p>',
+    );
+    return { success: true };
+  }
+
+  /**
+   * Sends a test message through the realm's configured provider, to `to`
+   * or, when null, to the realm's sender address. Unlike {@link sendEmail},
+   * nothing fails silently:
+   * - realm missing: 404;
+   * - no usable email settings: 400;
+   * - the provider refused or could not be reached: 502
+   *   ({@link EmailDeliveryException}), with a message safe to show an admin.
+   *   The provider's own error, which can quote the server's reply, is only
+   *   logged.
+   */
+  async sendTestMessage(
     realmName: string,
-  ): Promise<{ success: boolean; error?: string }> {
+    to: string | null,
+    subject: string,
+    html: string,
+  ): Promise<void> {
     const realm = await this.prisma.realm.findUnique({
       where: { name: realmName },
       select: {
@@ -71,33 +110,41 @@ export class EmailService {
         smtpSecure: true,
       },
     });
+    if (!realm) {
+      throw new NotFoundException(`Realm '${realmName}' not found`);
+    }
 
     const provider = this.createProvider(realm);
-
     if (!provider || !provider.isConfigured()) {
-      return {
-        success: false,
-        error: 'Email provider not configured for this realm',
-      };
+      throw new BadRequestException('Email is not configured for this realm');
+    }
+
+    const recipient = to ?? this.getFromAddress(realm);
+    if (!recipient) {
+      throw new BadRequestException(
+        'The realm has no sender address to send the test email to',
+      );
     }
 
     try {
-      const from = this.getFromAddress(realm);
       await provider.sendEmail(
-        from,
-        'Idenplane Email Test',
-        '<p>This is a test email from Idenplane setup wizard.</p>',
+        recipient,
+        subject,
+        sanitizeHtml(html, EMAIL_SANITIZE_OPTIONS),
       );
-
-      this.logger.log(`Test email sent successfully for realm "${realmName}"`);
-      return { success: true };
     } catch (err) {
-      const errorMessage = err instanceof Error ? err.message : 'Unknown error';
+      const code = (err as { code?: unknown } | null)?.code;
       this.logger.error(
-        `Failed to send test email for realm "${realmName}": ${errorMessage}`,
+        `Test email for realm "${realmName}" failed (provider: ${provider.name}` +
+          `${typeof code === 'string' ? `, code: ${code}` : ''}): ` +
+          `${err instanceof Error ? err.message : String(err)}`,
       );
-      return { success: false, error: errorMessage };
+      throw new EmailDeliveryException(safeEmailDeliveryMessage(err));
     }
+
+    this.logger.log(
+      `Test email sent for realm "${realmName}" (provider: ${provider.name})`,
+    );
   }
 
   async sendEmail(

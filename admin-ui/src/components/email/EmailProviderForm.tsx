@@ -546,7 +546,7 @@ export default function EmailProviderForm({ realm }: EmailProviderFormProps) {
         <div className="rounded-lg border border-line bg-surface p-6 shadow-sm">
           <h3 className="text-sm font-semibold text-fg">Test Connection</h3>
           <p className="mt-1 text-xs text-subtle">
-            Verify that the saved email provider settings can connect and send. No message is delivered to a real recipient.
+            Verify that the saved email provider settings can connect and send. A test message goes to the realm's own sender address.
           </p>
           <div className="mt-4">
             <button
@@ -558,14 +558,9 @@ export default function EmailProviderForm({ realm }: EmailProviderFormProps) {
               {smtpTestMutation.isPending ? 'Testing…' : 'Test Connection'}
             </button>
           </div>
-          {smtpTestMutation.isSuccess && smtpTestMutation.data.success && (
+          {smtpTestMutation.isSuccess && (
             <p role="status" className="mt-3 text-sm text-success-fg">
               ✓ Connection successful — email provider is reachable.
-            </p>
-          )}
-          {smtpTestMutation.isSuccess && !smtpTestMutation.data.success && (
-            <p role="alert" className="mt-3 text-sm text-danger-fg">
-              Connection failed: {smtpTestMutation.data.error ?? 'Unknown error. Check your provider settings.'}
             </p>
           )}
           {smtpTestMutation.isError && (

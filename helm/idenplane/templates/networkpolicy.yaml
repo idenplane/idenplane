@@ -1,0 +1,109 @@
+{{- if .Values.networkPolicy.enabled }}
+{{- /*
+NetworkPolicy for the Idenplane pods (not the bundled PostgreSQL or Redis).
+Ingress: the application port only, from networkPolicy.ingress.from (any
+source when empty) and from this release's own pods (the `helm test` pod).
+Egress (unless networkPolicy.egress.enabled is false): DNS, PostgreSQL, the
+bundled Redis when enabled, this release's own pods, and
+networkPolicy.egress.extraRules. Everything else is denied.
+*/ -}}
+{{- $np := .Values.networkPolicy }}
+{{- $ingress := $np.ingress | default dict }}
+{{- $egress := $np.egress | default dict }}
+{{- $egressEnabled := not (and (hasKey $egress "enabled") (not $egress.enabled)) }}
+apiVersion: networking.k8s.io/v1
+kind: NetworkPolicy
+metadata:
+  name: {{ include "idenplane.fullname" . }}
+  namespace: {{ .Release.Namespace | quote }}
+  labels:
+    {{- include "idenplane.labels" . | nindent 4 }}
+spec:
+  podSelector:
+    matchLabels:
+      {{- include "idenplane.selectorLabels" . | nindent 6 }}
+  policyTypes:
+    - Ingress
+    {{- if $egressEnabled }}
+    - Egress
+    {{- end }}
+  ingress:
+    # The application port, from the configured sources (any source if none).
+    - ports:
+        - protocol: TCP
+          port: http
+      {{- with $ingress.from }}
+      from:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- if $ingress.from }}
+    # This release's own pods, such as the `helm test` connection check.
+    - ports:
+        - protocol: TCP
+          port: http
+      from:
+        - podSelector:
+            matchLabels:
+              {{- include "idenplane.selectorLabels" . | nindent 14 }}
+    {{- end }}
+    {{- with $ingress.extraRules }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- if $egressEnabled }}
+  egress:
+    {{- $dns := $egress.dns | default dict }}
+    {{- if not (and (hasKey $dns "enabled") (not $dns.enabled)) }}
+    # DNS
+    - ports:
+        - protocol: UDP
+          port: 53
+        - protocol: TCP
+          port: 53
+      {{- with $dns.to }}
+      to:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- end }}
+    # PostgreSQL
+    {{- $pg := $egress.postgresql | default dict }}
+    {{- if .Values.postgresql.enabled }}
+    - ports:
+        - protocol: TCP
+          port: 5432
+      to:
+        - podSelector:
+            matchLabels:
+              {{- include "idenplane.componentSelectorLabels" (dict "context" . "component" "postgresql") | nindent 14 }}
+    {{- else }}
+    - ports:
+        - protocol: TCP
+          port: {{ $pg.port | default 5432 | int }}
+      {{- with $pg.to }}
+      to:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    {{- end }}
+    {{- if .Values.redis.enabled }}
+    # Bundled Redis
+    - ports:
+        - protocol: TCP
+          port: 6379
+      to:
+        - podSelector:
+            matchLabels:
+              {{- include "idenplane.componentSelectorLabels" (dict "context" . "component" "redis") | nindent 14 }}
+    {{- end }}
+    # This release's own pods (the `helm test` pod reaches the app through
+    # its Service).
+    - ports:
+        - protocol: TCP
+          port: http
+      to:
+        - podSelector:
+            matchLabels:
+              {{- include "idenplane.selectorLabels" . | nindent 14 }}
+    {{- with $egress.extraRules }}
+    {{- toYaml . | nindent 4 }}
+    {{- end }}
+  {{- end }}
+{{- end }}

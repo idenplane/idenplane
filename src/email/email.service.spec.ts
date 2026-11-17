@@ -17,6 +17,11 @@ global.fetch = mockFetch as unknown as typeof fetch;
 
 import * as nodemailer from 'nodemailer';
 import { EmailService } from './email.service.js';
+import {
+  EmailDeliveryException,
+  safeEmailDeliveryMessage,
+} from './email-delivery.exception.js';
+import { BadRequestException, NotFoundException } from '@nestjs/common';
 import { CryptoService } from '../crypto/crypto.service.js';
 import {
   createMockPrismaService,
@@ -40,6 +45,7 @@ describe('EmailService', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSendMail.mockResolvedValue({ messageId: 'test-id' });
     mockFetch.mockResolvedValue({ ok: true, text: async () => '' });
     prisma = createMockPrismaService();
     // A real CryptoService (not a mock): its decryptSecret() tolerantly
@@ -449,18 +455,21 @@ describe('EmailService', () => {
     });
   });
 
-  // ─── sendTestEmail ────────────────────────────────────────
+  // ─── sendTestEmail / sendTestMessage ───────────────────────
 
   describe('sendTestEmail', () => {
-    it('should return success when SMTP email sends successfully', async () => {
+    it('sends to the realm sender address and resolves with success', async () => {
       prisma.realm.findUnique.mockResolvedValue(fullSmtpRealm);
 
       const result = await service.sendTestEmail('my-realm');
 
       expect(result).toEqual({ success: true });
+      expect(mockSendMail).toHaveBeenCalledWith(
+        expect.objectContaining({ to: 'admin@example.com' }),
+      );
     });
 
-    it('should return error when provider is not configured', async () => {
+    it('is a 400 when the provider is not configured', async () => {
       prisma.realm.findUnique.mockResolvedValue({
         emailProvider: 'none',
         emailProviderConfig: null,
@@ -472,22 +481,29 @@ describe('EmailService', () => {
         smtpSecure: false,
       });
 
-      const result = await service.sendTestEmail('my-realm');
-
-      expect(result.success).toBe(false);
-      expect(result.error).toContain('not configured');
+      await expect(service.sendTestEmail('my-realm')).rejects.toBeInstanceOf(
+        BadRequestException,
+      );
+      expect(mockSendMail).not.toHaveBeenCalled();
     });
 
-    it('should return error message on send failure', async () => {
+    it('is a 502 with a safe message when sending fails', async () => {
       prisma.realm.findUnique.mockResolvedValue(fullSmtpRealm);
-      mockSendMail.mockRejectedValue(new Error('Connection refused'));
+      mockSendMail.mockRejectedValue(
+        Object.assign(new Error('connect ECONNREFUSED 10.0.0.5:465'), {
+          code: 'ECONNECTION',
+        }),
+      );
 
-      const result = await service.sendTestEmail('my-realm');
+      const err = await service.sendTestEmail('my-realm').catch((e) => e);
 
-      expect(result).toEqual({ success: false, error: 'Connection refused' });
+      expect(err).toBeInstanceOf(EmailDeliveryException);
+      expect(err.getStatus()).toBe(502);
+      expect(err.message).toMatch(/could not connect to the mail server/);
+      expect(err.message).not.toContain('10.0.0.5');
     });
 
-    it('should return success when Resend email sends successfully', async () => {
+    it('resolves with success for an API provider', async () => {
       prisma.realm.findUnique.mockResolvedValue({
         emailProvider: 'resend',
         emailProviderConfig: {
@@ -504,6 +520,94 @@ describe('EmailService', () => {
       const result = await service.sendTestEmail('my-realm');
 
       expect(result).toEqual({ success: true });
+    });
+  });
+
+  describe('sendTestMessage', () => {
+    it('sends to the given recipient', async () => {
+      prisma.realm.findUnique.mockResolvedValue(fullSmtpRealm);
+
+      await service.sendTestMessage(
+        'my-realm',
+        'to@test.com',
+        'Hi',
+        '<p>x</p>',
+      );
+
+      expect(mockSendMail).toHaveBeenCalledWith(
+        expect.objectContaining({ to: 'to@test.com', subject: 'Hi' }),
+      );
+    });
+
+    it('is a 404 for an unknown realm', async () => {
+      prisma.realm.findUnique.mockResolvedValue(null);
+
+      await expect(
+        service.sendTestMessage('nope', 'to@test.com', 'Hi', '<p>x</p>'),
+      ).rejects.toBeInstanceOf(NotFoundException);
+    });
+
+    it('never returns the SMTP password, server reply or stack', async () => {
+      prisma.realm.findUnique.mockResolvedValue(fullSmtpRealm);
+      const providerError = Object.assign(
+        new Error(
+          'Invalid login: 535 5.7.8 auth failed for user@example.com with password secret',
+        ),
+        { code: 'EAUTH', responseCode: 535 },
+      );
+      mockSendMail.mockRejectedValue(providerError);
+
+      const err = await service
+        .sendTestMessage('my-realm', 'to@test.com', 'Hi', '<p>x</p>')
+        .catch((e) => e);
+
+      expect(err).toBeInstanceOf(EmailDeliveryException);
+      const body = JSON.stringify(err.getResponse());
+      expect(body).toMatch(/rejected the credentials/);
+      for (const leak of ['secret', '535', 'user@example.com', '    at ']) {
+        expect(body).not.toContain(leak);
+      }
+      expect(err.getResponse()).not.toHaveProperty('stack');
+    });
+
+    it('maps an API provider 401 to a credentials message', async () => {
+      prisma.realm.findUnique.mockResolvedValue({
+        emailProvider: 'sendgrid',
+        emailProviderConfig: {
+          sendgrid: { apiKey: 'SG.key', from: 'hello@example.com' },
+        },
+        smtpHost: null,
+        smtpPort: null,
+        smtpUser: null,
+        smtpPassword: null,
+        smtpFrom: null,
+        smtpSecure: false,
+      });
+      mockFetch.mockResolvedValue({
+        ok: false,
+        status: 401,
+        text: async () => '{"errors":[{"message":"bad key SG.key"}]}',
+      });
+
+      const err = await service
+        .sendTestMessage('my-realm', 'to@test.com', 'Hi', '<p>x</p>')
+        .catch((e) => e);
+
+      expect(err).toBeInstanceOf(EmailDeliveryException);
+      expect(err.message).toMatch(/rejected the credentials/);
+      expect(err.message).not.toContain('SG.key');
+    });
+  });
+
+  describe('safeEmailDeliveryMessage', () => {
+    it.each([
+      [{ code: 'EENVELOPE' }, /refused the sender or recipient/],
+      [{ code: 'ETIMEDOUT' }, /could not connect/],
+      [new Error('Postmark API error 422: {"Message":"x"}'), /did not accept/],
+      ['a string', /did not accept/],
+      [null, /did not accept/],
+    ])('%p', (err, expected) => {
+      expect(safeEmailDeliveryMessage(err)).toMatch(expected);
     });
   });
 });

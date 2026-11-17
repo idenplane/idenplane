@@ -105,7 +105,6 @@ export default function IdpCreatePage() {
                 className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               >
                 <option value="oidc">OpenID Connect</option>
-                <option value="saml">SAML</option>
                 <option value="oauth2">OAuth 2.0</option>
               </select>
             </div>

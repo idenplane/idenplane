@@ -77,18 +77,30 @@ export async function getThemes(): Promise<ThemeInfo[]> {
   return data;
 }
 
+/**
+ * Sends the realm's test email to `to`. Rejects when it was not sent: 400
+ * (bad address, email not configured) or 502 (the provider refused it or
+ * could not be reached), with the reason in the response's `message`.
+ */
 export async function sendTestEmail(
   name: string,
   to: string,
-): Promise<{ message: string }> {
-  const { data } = await apiClient.post(`/realms/${name}/email/test`, { to });
+): Promise<{ success: true; message: string }> {
+  const { data } = await apiClient.post<{ success: true; message: string }>(
+    `/realms/${name}/email/test`,
+    { to },
+  );
   return data;
 }
 
+/**
+ * Sends a test message to the realm's own sender address. Rejects, like
+ * {@link sendTestEmail}, when it was not sent.
+ */
 export async function testRealmSmtp(
   name: string,
-): Promise<{ success: boolean; error?: string }> {
-  const { data } = await apiClient.post<{ success: boolean; error?: string }>(
+): Promise<{ success: true }> {
+  const { data } = await apiClient.post<{ success: true }>(
     `/realms/${name}/smtp/test`,
   );
   return data;

@@ -131,7 +131,7 @@ curl -X POST http://localhost:3000/admin/realms/{realm}/email/test \
   }'
 ```
 
-`POST /admin/realms/{realm}/smtp/test` sends a test message to the realm's own sender address.
+`POST /admin/realms/{realm}/smtp/test` sends a test message to the realm's own sender address. Both answer `200` only when the provider accepted the message; otherwise `400` (no usable settings, bad address) or `502` (the provider refused it or could not be reached), with the reason in `message`.
 
 ---
 

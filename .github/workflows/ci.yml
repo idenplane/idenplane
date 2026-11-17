@@ -735,6 +735,11 @@ jobs:
       - name: Render with bundled Redis
         run: helm template idenplane helm/idenplane --set redis.enabled=true > /dev/null
 
+      - name: Render with NetworkPolicy
+        run: |
+          helm template idenplane helm/idenplane --set networkPolicy.enabled=true --set redis.enabled=true > /dev/null
+          helm template idenplane helm/idenplane --set networkPolicy.enabled=true             --set postgresql.enabled=false --set secrets.DATABASE_URL=postgresql://u:p@db:5432/idenplane             --set 'networkPolicy.ingress.from[0].namespaceSelector.matchLabels.team=edge'             --set networkPolicy.egress.enabled=false > /dev/null
+
   helm-install:
     name: Helm install (kind)
     runs-on: ubuntu-latest

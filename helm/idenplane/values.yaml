@@ -136,35 +136,60 @@ autoscaling:
   # targetMemoryUtilizationPercentage: 80
 
 # ── Network Policy ────────────────────────────────────────────────────────────
+# Renders a NetworkPolicy (templates/networkpolicy.yaml) for the Idenplane pods.
+# It needs a CNI plugin that enforces NetworkPolicy (Calico, Cilium, ...);
+# without one it is accepted and ignored. The bundled PostgreSQL and Redis pods
+# are not covered by it.
 networkPolicy:
   enabled: false
   ingress:
-    enabled: true
-    rules:
-      # Allow ingress from ingress controllers / load balancers
-      - ports:
-          - port: 3000
-        from:
-          - podSelector:
-              matchLabels:
-                app.kubernetes.io/component: controller
+    # Who may reach the application port (the container port named "http",
+    # env.PORT). A list of NetworkPolicyPeer objects. Empty: any source may
+    # reach that port; every other port stays closed. Pods of this release
+    # (the `helm test` pod) are always allowed. For ingress-nginx:
+    #   from:
+    #     - namespaceSelector:
+    #         matchLabels:
+    #           kubernetes.io/metadata.name: ingress-nginx
+    from: []
+    # Additional NetworkPolicyIngressRule objects, e.g. a metrics scraper.
+    extraRules: []
   egress:
+    # false: only ingress is restricted; outbound traffic stays open.
     enabled: true
-    rules:
-      # Allow egress to PostgreSQL
-      - ports:
-          - port: 5432
-        to:
-          - podSelector:
-              matchLabels:
-                app.kubernetes.io/name: postgresql
-      # Allow egress to Redis
-      - ports:
-          - port: 6379
-        to:
-          - podSelector:
-              matchLabels:
-                app.kubernetes.io/name: redis
+    # DNS (UDP and TCP port 53). Without it the pod cannot resolve the
+    # database Service.
+    dns:
+      enabled: true
+      # Where DNS runs. Empty: port 53 to any destination (e.g. NodeLocal
+      # DNSCache on a link-local address).
+      to:
+        - namespaceSelector:
+            matchLabels:
+              kubernetes.io/metadata.name: kube-system
+    # PostgreSQL. With postgresql.enabled the bundled database pod is allowed
+    # on 5432 and these two settings are ignored. With an external database,
+    # traffic to `port` is allowed to `to` (NetworkPolicyPeer objects, e.g.
+    # an ipBlock with the database's address); empty `to` allows that port to
+    # any destination.
+    postgresql:
+      port: 5432
+      to: []
+    # The bundled Redis (redis.enabled) is allowed automatically. Everything
+    # else the server calls needs a rule here: SMTP, external identity
+    # providers and their JWKS, webhook targets, CAPTCHA and SMS providers, an
+    # external Redis. Additional NetworkPolicyEgressRule objects, e.g.:
+    #   - ports:
+    #       - protocol: TCP
+    #         port: 443
+    #     to:
+    #       - ipBlock:
+    #           cidr: 0.0.0.0/0
+    #           except: [10.0.0.0/8, 172.16.0.0/12, 192.168.0.0/16]
+    #   - ports:
+    #       - protocol: TCP
+    #         port: 587
+    extraRules: []
 
 # ── Pod Disruption Budget ─────────────────────────────────────────────────────
 podDisruptionBudget:

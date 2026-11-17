@@ -47,7 +47,7 @@ export default function IdpDetailPage() {
     setSeededIdp(idp);
     setForm({
       displayName: idp.displayName ?? '',
-      providerType: idp.providerType,
+      providerType: idp.providerType.toLowerCase(),
       clientId: idp.clientId,
       clientSecret: idp.clientSecret,
       authorizationUrl: idp.authorizationUrl,
@@ -168,8 +168,15 @@ export default function IdpDetailPage() {
                 className="w-full rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
               >
                 <option value="oidc">OpenID Connect</option>
-                <option value="saml">SAML</option>
                 <option value="oauth2">OAuth 2.0</option>
+                {/* Older versions let SAML be chosen, but the broker only
+                    signs in over OpenID Connect / OAuth 2.0: such an IdP
+                    never worked and must be switched to save. */}
+                {!['oidc', 'oauth2'].includes(form.providerType) && (
+                  <option value={form.providerType} disabled>
+                    {form.providerType.toUpperCase()} (not supported)
+                  </option>
+                )}
               </select>
             </div>
             <div className="flex items-end gap-2 pb-1">

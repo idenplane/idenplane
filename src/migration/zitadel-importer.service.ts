@@ -4,6 +4,8 @@ import { CryptoService } from '../crypto/crypto.service.js';
 import type { ZitadelExport, ZitadelUser } from './zitadel-types.js';
 import { createEmptyReport, type MigrationReport } from './migration-report.js';
 import { idpSecrets } from '../identity-providers/idp-secrets.js';
+import { unsupportedIdpTypeReason } from '../identity-providers/idp-provider-types.js';
+import { idpCreateData, planIdpImport, reportIdpPlan } from './idp-import.js';
 
 export interface ZitadelImportOptions {
   dryRun: boolean;
@@ -224,15 +226,32 @@ export class ZitadelImporterService {
     dryRun: boolean,
   ): Promise<void> {
     for (const idp of data.idps ?? []) {
+      const alias = idp.name ?? idp.idpId;
       if (!idp.oidcConfig) {
+        report.summary.identityProviders.skipped++;
         report.warnings.push({
           entity: 'identity_provider',
-          message: `IdP '${idp.name ?? idp.idpId}' (type ${idp.type ?? 'unknown'}) has no oidcConfig — only generic OIDC IdPs are supported for import today, recreate this one manually.`,
+          message: `Identity provider '${alias}' was not imported: ${
+            /SAML/i.test(idp.type ?? '')
+              ? unsupportedIdpTypeReason('saml')
+              : `it has no oidcConfig (type ${idp.type ?? 'unknown'}); only generic OIDC identity providers can be imported, recreate this one manually.`
+          }`,
         });
         continue;
       }
+      const plan = planIdpImport({
+        alias,
+        providerType: 'oidc',
+        fields: {
+          clientId: idp.oidcConfig.clientId,
+          clientSecret: idp.oidcConfig.clientSecret,
+          authorizationUrl: idp.oidcConfig.authorizationEndpoint,
+          tokenUrl: idp.oidcConfig.tokenEndpoint,
+          issuer: idp.oidcConfig.issuer,
+        },
+      });
+      if (!reportIdpPlan(report, alias, plan)) continue;
       try {
-        const alias = idp.name ?? idp.idpId;
         const existing = await this.prisma.identityProvider.findFirst({
           where: { realmId, alias },
         });
@@ -246,16 +265,10 @@ export class ZitadelImporterService {
               realmId,
               alias,
               displayName: alias,
-              providerType: 'OIDC',
-              enabled: true,
               trustEmail: false,
-              clientId: idp.oidcConfig.clientId ?? '',
-              clientSecret: idpSecrets.forCreate(
-                this.crypto,
-                idp.oidcConfig.clientSecret ?? '',
+              ...idpCreateData(plan, (secret) =>
+                idpSecrets.forCreate(this.crypto, secret),
               ),
-              authorizationUrl: idp.oidcConfig.authorizationEndpoint ?? '',
-              tokenUrl: idp.oidcConfig.tokenEndpoint ?? '',
             },
           });
         }
@@ -264,7 +277,7 @@ export class ZitadelImporterService {
         report.summary.identityProviders.failed++;
         report.errors.push({
           entity: 'identity_provider',
-          name: idp.name ?? idp.idpId,
+          name: alias,
           error: (error as Error).message,
         });
       }
