@@ -141,7 +141,7 @@ Each table lists the STRIDE category (S spoofing, T tampering, R repudiation, I 
 | D | Lockout used to keep a user out | Temporary 5-minute lock, no permanent lockout by default, admin unlock, events and log on every lockout | A known username can be kept locked by an attacker who keeps trying |
 | T | CSRF on login, consent, account and MFA forms | Double-submit CSRF tokens (`src/common/csrf/`), SameSite cookies | Account-console logout is a GET (ASVS V3.5.3) |
 | T | XSS in themed pages | Handlebars auto-escaping, nonce-based CSP, `frame-ancestors 'none'` (`src/theme/theme-render.service.ts`) | Admin-supplied custom CSS is filtered by blocklist; request values in inline JS are HTML-escaped only |
-| S | Session fixation and theft | New session token at sign-in, token stored hashed, `HttpOnly; Secure; SameSite=Lax` cookie scoped to the realm path (`src/login/session-issuer.service.ts`) | No idle timeout for SSO sessions; no `__Host-` prefix |
+| S | Session fixation and theft | New session token at sign-in, token stored hashed, `HttpOnly; Secure; SameSite=Lax` cookie scoped to the realm path (`src/login/session-issuer.service.ts`) | The SSO idle timeout (`ssoSessionIdleTimeout`, 0.12.0) is off by default; no `__Host-` prefix |
 | I | Account enumeration through reset and registration | Generic answers on forgot-password; rate limits | Timing differs between known and unknown usernames (ASVS L3) |
 | S | Old sessions survive a credential change | A password reset or change, an admin password set and an admin MFA reset end every session, offline ones included, and revoke refresh tokens; the account console keeps only the session that made the change (`src/sessions/sessions.service.ts`, 0.12.0) | Access tokens already issued stay valid until they expire (5 minutes by default) |
 | E | Second-factor bypass | Server-side pending-action state, single-use challenges, TOTP replay protection (`src/mfa/`, `test/totp-replay.e2e-spec.ts`); 120-bit recovery codes (0.11.0) | — |
@@ -249,4 +249,4 @@ The highest residual risks, all tracked in the [ASVS assessment](./asvs-assessme
 2. Clients still on the legacy wildcard redirect URI opt-in (`allowInsecureWildcardRedirectUris`, set by the 0.11.0 upgrade on clients that had `/*` entries). `/admin/upgrade/health` lists them.
 3. Realms created before 0.10.0 with brute-force protection or events still off. `/admin/upgrade/health` lists them.
 4. SSRF guard not applied to every outbound call; geo-IP over plain HTTP.
-5. No SSO idle timeout, and no idle timeout for offline sessions: an offline token lives for `offlineTokenLifespan` from sign-in.
+5. The SSO idle timeout is off by default (`ssoSessionIdleTimeout`, since 0.12.0), and offline sessions have none: an offline token lives for `offlineTokenLifespan` from sign-in.

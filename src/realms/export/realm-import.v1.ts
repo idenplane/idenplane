@@ -142,6 +142,8 @@ export async function importV1(
         (realmData['refreshTokenLifespan'] as number) ?? 1800,
       offlineTokenLifespan:
         (realmData['offlineTokenLifespan'] as number) ?? 2592000,
+      ssoSessionIdleTimeout:
+        (realmData['ssoSessionIdleTimeout'] as number) ?? 0,
       smtpHost: (realmData['smtpHost'] as string) ?? null,
       smtpPort: (realmData['smtpPort'] as number) ?? 587,
       smtpUser: (realmData['smtpUser'] as string) ?? null,

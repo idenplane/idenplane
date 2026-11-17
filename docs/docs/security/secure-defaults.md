@@ -125,7 +125,8 @@ Each default below was reviewed against the rule: change it only when it is clea
 | `accessTokenLifespan` | 300 s | Kept. |
 | `refreshTokenLifespan` | 1800 s; also the lifetime of an OAuth session, checked at every refresh | Kept. |
 | `offlineTokenLifespan` | 30 days; the lifetime of an offline session, counted from sign-in (since 0.11.0; before, offline sessions got `refreshTokenLifespan`) | Kept. Offline tokens are still ended by sign-out everywhere, a password reset or change, an admin setting the password or removing second factors, disabling or deleting the user, SCIM deactivation and the admin "sign out all sessions". |
-| `maxSessionsPerUser` | 10 | Kept. |
+| `maxSessionsPerUser` | 10; offline sessions don't count (since 0.12.0) | Kept. |
+| `ssoSessionIdleTimeout` | `0` (off), since 0.12.0 | **Recommended when you raise `refreshTokenLifespan`, not changed.** With the default 30-minute maximum lifetime it adds little; on by default it would sign out users of realms configured for long sessions at the upgrade. See [Idle timeout](../configuration/options.md#idle-timeout). |
 | `rateLimitEnabled` | Off | **Recommended on, not changed.** The default per-IP limit (20 per minute) can block many users behind one NAT or a misconfigured `TRUSTED_PROXIES`. Turn it on after checking `TRUSTED_PROXIES` and the limits. |
 | `requireEmailVerification` | Off | **Recommended on where email is configured, not changed.** It needs working SMTP; on by default it would block every sign-up on a new realm without email. |
 | `mfaRequired` | Off | **Recommended for realms with sensitive data, not changed.** It forces every user to enrol on first sign-in. |

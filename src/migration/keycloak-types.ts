@@ -107,6 +107,7 @@ export interface KeycloakRealmExport {
   registrationAllowed?: boolean;
   accessTokenLifespan?: number;
   ssoSessionMaxLifespan?: number;
+  ssoSessionIdleTimeout?: number;
   refreshTokenMaxReuse?: number;
   offlineSessionMaxLifespan?: number;
   smtpServer?: KeycloakSmtpServer;

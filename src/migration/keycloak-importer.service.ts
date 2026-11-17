@@ -151,6 +151,12 @@ export class KeycloakImporterService {
           registrationAllowed: data.registrationAllowed ?? false,
           accessTokenLifespan: data.accessTokenLifespan ?? 300,
           refreshTokenLifespan: data.ssoSessionMaxLifespan ?? 1800,
+          // Keycloak's idle timeout carries over as is (its exports always
+          // set it, 1800 by default), raised to Idenplane's minimum of 60.
+          // Absent or 0, it stays off.
+          ssoSessionIdleTimeout: data.ssoSessionIdleTimeout
+            ? Math.max(60, data.ssoSessionIdleTimeout)
+            : 0,
           ...(data.smtpServer?.host && {
             smtpHost: data.smtpServer.host,
             smtpPort: parseInt(data.smtpServer.port ?? '587', 10),

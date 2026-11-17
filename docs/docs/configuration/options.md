@@ -147,10 +147,27 @@ These are the realm settings that bound a session. All values are seconds.
 | `refreshTokenLifespan` | integer | `1800` | Refresh token lifetime. Also the lifetime of the OAuth session it belongs to: refreshing does not extend the session. |
 | `offlineTokenLifespan` | integer | `2592000` | Lifetime of an offline session: one created with `offline_access`. It is counted from sign-in, and each rotated offline token is valid until then. Refreshing does not extend it, and there is no separate offline idle timeout. |
 | `maxSessionsPerUser` | integer | `10` | Sessions per user; the oldest is ended when a new one would go over. Offline sessions don't count and are never ended by it (since 0.12.0). `0` means no limit. |
+| `ssoSessionIdleTimeout` | integer | `0` (off) | Idle timeout, since 0.12.0 (Keycloak's setting of the same name). A browser SSO session not used for this long ends, and a normal refresh token not used for this long expires. `0` turns it off; otherwise at least `60`. Offline sessions are not affected. See [Idle timeout](#idle-timeout). |
 
 A session ends at its expiry: the refresh grant and token introspection refuse a refresh token whose session has expired, and an hourly job deletes expired sessions. Before 0.11.0 an offline session got the `refreshTokenLifespan` expiry, so offline tokens stopped working after about an hour.
 
-The hosted-login SSO cookie lasts for the browser session, or 30 days with "remember me". There is no idle timeout for SSO sessions yet; see the [ASVS assessment](../security/asvs-assessment.md#remaining-gaps).
+The hosted-login SSO cookie lasts for the browser session, or 30 days with "remember me".
+
+#### Idle timeout
+
+`ssoSessionIdleTimeout` ends a session that is not used for that many seconds, before its maximum lifetime (`refreshTokenLifespan`):
+
+- **Browser SSO session** (the `IDENPLANE_SESSION` cookie). Using it means an authorization request that reads the cookie (sign-in to an app, silent SSO, SAML), or a hosted page such as the account console. A session not used for longer than the timeout is refused and deleted; the user signs in again. Idle sessions are not listed or counted as active, and the hourly clean-up deletes them.
+- **OAuth session** (refresh tokens). Each normal refresh token is issued for at most the timeout, so a client that does not refresh within it has to sign the user in again. Every refresh issues a new token with a new window.
+- **Offline sessions** (`offline_access`) are not affected: they live for `offlineTokenLifespan`.
+
+**Default: off (`0`), for new and upgraded realms.** With the default `refreshTokenLifespan` of 30 minutes an idle timeout adds little; it matters once you raise the maximum lifetime, for example an 8 or 10 hour working-day session with a 30-minute idle timeout (`refreshTokenLifespan: 36000`, `ssoSessionIdleTimeout: 1800`, Keycloak's defaults). It is off by default so that upgrading never signs anyone out.
+
+**Choosing a value.** Make it longer than `accessTokenLifespan`. A client that refreshes only when its access token has expired is otherwise signed out between two refreshes.
+
+**Precision.** The last use of a browser session is written at most once a minute (more often for a timeout under 4 minutes), so a session can end up to a minute before the exact timeout, never after it. Activity is recorded even while the timeout is off, so turning it on judges each session by its real last use. Sessions that existed when you upgraded to 0.12.0 count as used at the upgrade.
+
+**Changing the value.** A browser session is judged by the current value at each use. A refresh token keeps the expiry it was issued with, so a new value applies to an OAuth session from its next refresh.
 
 ### API Endpoints
 
@@ -457,6 +474,7 @@ const defaultRealmConfig = {
   refreshTokenLifespan: 1800,
   offlineTokenLifespan: 2592000,
   maxSessionsPerUser: 10,
+  ssoSessionIdleTimeout: 0, // off; since 0.12.0
 
   // Password policy
   passwordMinLength: 8,

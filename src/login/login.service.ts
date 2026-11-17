@@ -7,6 +7,12 @@ import { UserFederationService } from '../user-federation/user-federation.servic
 import { PasswordVerificationService } from '../crypto/password-verification.service.js';
 import { ACR_MFA, acrStrength, strongestAcr } from '../authn-core/acr.js';
 import type { AuthContext } from '../authn-core/auth-context.js';
+import {
+  activityWriteDue,
+  activityWriteThreshold,
+  isIdleExpired,
+  notIdleWhere,
+} from '../sessions/session-lifetime.js';
 
 /** How an SSO session was established (OIDC acr / RFC 8176 amr). */
 export type LoginSessionAuthContext = AuthContext;
@@ -144,11 +150,14 @@ export class LoginService {
     // and each newer sign-in trims what came before it.
     const maxSessions = realm.maxSessionsPerUser;
     if (maxSessions !== undefined && maxSessions > 0) {
+      const now = new Date();
       const others = await this.prisma.loginSession.findMany({
         where: {
           userId: user.id,
           realmId: realm.id,
-          expiresAt: { gt: new Date() },
+          expiresAt: { gt: now },
+          // A session gone idle has ended: it takes no place under the cap.
+          ...notIdleWhere(realm, now),
           OR: [
             { createdAt: { lt: created.createdAt } },
             { createdAt: created.createdAt, id: { lt: created.id } },
@@ -179,11 +188,20 @@ export class LoginService {
       include: { user: true },
     });
 
-    if (
-      !session ||
-      session.realmId !== realm.id ||
-      session.expiresAt < new Date()
-    ) {
+    const now = new Date();
+    if (!session || session.realmId !== realm.id || session.expiresAt < now) {
+      return null;
+    }
+
+    // SSO idle timeout: a session unused for too long has ended. It is
+    // deleted now rather than at the next clean-up, so that it stays ended
+    // even if the realm's timeout is raised or turned off meanwhile.
+    if (isIdleExpired(realm, session.lastActivityAt, now)) {
+      await this.prisma.loginSession
+        .deleteMany({ where: { id: session.id } })
+        .catch(() => {
+          // Already gone; nothing to do.
+        });
       return null;
     }
 
@@ -195,7 +213,34 @@ export class LoginService {
       return null;
     }
 
+    await this.recordActivity(realm, session, now);
     return session.user;
+  }
+
+  /**
+   * Records that the SSO session was used, for the idle timeout. Throttled:
+   * nothing is written while the stored time is recent, so most requests
+   * cost no write at all; the conditional update lets only one of several
+   * concurrent requests write. A failure only loses this one record, so it
+   * never fails the request.
+   */
+  private async recordActivity(
+    realm: Realm,
+    session: { id: string; lastActivityAt: Date | null },
+    now: Date,
+  ): Promise<void> {
+    if (!activityWriteDue(realm, session.lastActivityAt, now)) return;
+    await this.prisma.loginSession
+      .updateMany({
+        where: {
+          id: session.id,
+          lastActivityAt: { lt: activityWriteThreshold(realm, now) },
+        },
+        data: { lastActivityAt: now },
+      })
+      .catch(() => {
+        // The session may have just been deleted; the next use retries.
+      });
   }
 
   /**

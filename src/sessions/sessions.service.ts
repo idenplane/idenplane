@@ -2,6 +2,7 @@ import { Injectable, NotFoundException } from '@nestjs/common';
 import type { Realm } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { revokeAdminTokensOfUser } from '../admin-auth/admin-token-revocation.js';
+import { notIdleWhere } from './session-lifetime.js';
 
 /** The realm whose users are the admins of the console. */
 const MASTER_REALM = 'master';
@@ -35,6 +36,7 @@ export class SessionsService {
         where: {
           realmId: realm.id,
           expiresAt: { gt: new Date() },
+          ...notIdleWhere(realm),
         },
         include: { user: { select: { username: true } } },
         orderBy: { createdAt: 'desc' },
@@ -81,6 +83,7 @@ export class SessionsService {
           userId,
           realmId: realm.id,
           expiresAt: { gt: new Date() },
+          ...notIdleWhere(realm),
         },
         include: { user: { select: { username: true } } },
         orderBy: { createdAt: 'desc' },

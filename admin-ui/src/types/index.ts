@@ -87,6 +87,7 @@ export interface Realm {
   adminEventRetentionDays?: number;
   deletionGracePeriodDays?: number;
   maxSessionsPerUser?: number;
+  ssoSessionIdleTimeout?: number;
   adaptiveAuthEnabled?: boolean;
   riskThresholdStepUp?: number;
   riskThresholdBlock?: number;

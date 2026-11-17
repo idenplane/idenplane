@@ -28,6 +28,20 @@ export class SessionsCleanupService {
       where: { expiresAt: { lt: now } },
     });
 
+    // Delete SSO sessions gone idle in realms with an idle timeout. They are
+    // already refused when used (LoginService.validateLoginSession); this
+    // only keeps them from piling up. The timeout is per realm, so the
+    // comparison needs the realm's column. Prisma stores timestamps as UTC
+    // in a column without a time zone, hence `now() AT TIME ZONE 'UTC'`.
+    const idleCount = await this.prisma.$executeRaw`
+      DELETE FROM "login_sessions" AS ls
+       USING "realms" AS r
+       WHERE r."id" = ls."realm_id"
+         AND r."sso_session_idle_timeout" > 0
+         AND ls."last_activity_at" <
+             (now() AT TIME ZONE 'UTC')
+             - make_interval(secs => r."sso_session_idle_timeout")`;
+
     // Delete any refresh tokens that have individually expired but whose
     // parent session is still alive (e.g. an offline session whose scope was
     // narrowed on refresh to a normal, shorter-lived refresh token).
@@ -56,6 +70,7 @@ export class SessionsCleanupService {
     const total =
       oauthResult.count +
       ssoResult.count +
+      idleCount +
       refreshResult.count +
       authCodeResult.count +
       proxyResult.count +
@@ -65,6 +80,7 @@ export class SessionsCleanupService {
       this.logger.debug(
         `Session cleanup removed ${oauthResult.count} OAuth session(s), ` +
           `${ssoResult.count} SSO session(s), ` +
+          `${idleCount} idle SSO session(s), ` +
           `${refreshResult.count} refresh token(s), ` +
           `${authCodeResult.count} authorization code(s), ` +
           `${proxyResult.count} proxy session(s), ` +

@@ -5,6 +5,7 @@
 import { Injectable } from '@nestjs/common';
 import type { Realm } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { notIdleWhere } from '../sessions/session-lifetime.js';
 
 export interface RealmStats {
   activeUsers24h: number;
@@ -135,6 +136,7 @@ export class StatsService {
         where: {
           realmId: realm.id,
           expiresAt: { gt: now },
+          ...notIdleWhere(realm, now),
         },
       }),
     ]);

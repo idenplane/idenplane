@@ -146,6 +146,7 @@ export class RealmsService {
         ipRateLimitPerHour: dto.ipRateLimitPerHour,
         // Session management
         maxSessionsPerUser: dto.maxSessionsPerUser,
+        ssoSessionIdleTimeout: dto.ssoSessionIdleTimeout,
         // Theming
         themeName: dto.themeName,
         theme:
@@ -368,6 +369,7 @@ export class RealmsService {
       ipRateLimitPerHour: dto.ipRateLimitPerHour,
       // Session management
       maxSessionsPerUser: dto.maxSessionsPerUser,
+      ssoSessionIdleTimeout: dto.ssoSessionIdleTimeout,
       // Theming
       themeName: dto.themeName,
       theme: dto.theme,
