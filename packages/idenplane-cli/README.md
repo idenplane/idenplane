@@ -133,8 +133,31 @@ Every command accepts `--json` to print machine-readable output instead of a tab
 | `upgrade` | Run pre-flight checks then apply database migrations |
 | `upgrade:status` | View upgrade audit history |
 | `completion <shell>` | Output a shell completion script (bash, zsh, fish) |
+| `plugins hash [dir]` | Print or write the plugin integrity manifest (see below) |
 
 Run `idenplane <command> --help` for the full option list of any command.
+
+### `idenplane plugins hash`
+
+In production (`NODE_ENV=production`) the server loads a plugin only if the SHA-256 of its entry file matches the plugin's entry in an integrity manifest. This command writes that manifest. It works on files and needs no server connection: run it on the machine, or in the image build, that holds the plugins, after the plugin files are final.
+
+```bash
+# Plugins in the server's plugins/ directory → plugins/.manifest.json
+idenplane plugins hash ./plugins --write
+
+# npm plugins (idenplane-plugin-*) → node_modules/.idenplane-plugin-manifest.json
+idenplane plugins hash ./node_modules --npm --write
+```
+
+Without `--write` the manifest is printed. It is a JSON object that maps each plugin's directory name (or npm package name) to the lowercase hex SHA-256 of the entry file the server loads: the first of `index.js`, `dist/index.js` and `index.ts` that exists.
+
+```json
+{
+  "my-plugin": "3f5a…64 hex characters…"
+}
+```
+
+Only the entry file is hashed. Run the command again whenever a plugin changes; a mismatched plugin is refused in every environment.
 
 ---
 
