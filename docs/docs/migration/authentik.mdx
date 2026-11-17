@@ -63,8 +63,11 @@ fetch_all() {
     curl -fsS -H "Authorization: Bearer ${AUTHENTIK_TOKEN}" \
       "${AUTHENTIK_URL}/api/v3/${path}?page=${page}&page_size=100" \
       > "${dir}/page-${page}.json" || return 1
-    # Stop on the last page (pagination.next is 0 there)
-    jq -e '(.pagination.next // 0) == 0' "${dir}/page-${page}.json" > /dev/null && break
+    # Stop on the last page, an empty page, or after 1,000 pages
+    jq -e '(.pagination.total_pages != null
+            and .pagination.current >= .pagination.total_pages)
+           or (.results | length) == 0' "${dir}/page-${page}.json" > /dev/null && break
+    [ "${page}" -ge 1000 ] && break
     page=$((page + 1))
   done
   jq -s 'map(.results) | add // []' "${dir}"/page-*.json > "${out}"
@@ -82,7 +85,7 @@ fetch_all sources/oauth/    ak-sources.json
 
 ### Step 3: Export Password Hashes from the Database
 
-Authentik's REST API does not return password hashes. To carry passwords over, read them from Authentik's PostgreSQL database (table `authentik_core_user`). With Authentik's Docker Compose setup, the database service, user and database name are usually all `authentik`/`postgresql`; adjust to your deployment:
+Authentik's REST API does not return password hashes. To carry passwords over, read them from Authentik's PostgreSQL database (table `authentik_core_user`). With Authentik's Docker Compose setup the database service is usually `postgresql` and the database user and name `authentik`; adjust to your deployment:
 
 ```bash
 docker compose exec -T postgresql \
@@ -451,14 +454,14 @@ Apps that use discovery only need the new issuer URL, client ID and secret. Take
 
 ### 6. MFA Re-enrolment
 
-MFA devices are not imported. Users who had TOTP, WebAuthn or other devices in Authentik sign in with their password only until they enrol again in Idenplane. If MFA is required, turn on the realm's MFA requirement (**Realm settings** > **Security**) so users are asked to enrol at their next sign-in, and tell them in advance.
+MFA devices are not imported. Users who had TOTP, WebAuthn or other devices in Authentik sign in with their password only until they enrol again in Idenplane. If MFA must stay mandatory, turn on the realm's MFA requirement (`mfaRequired`, **Realm settings** > **Security**): on the hosted login page, a user without a second factor is then sent to the authenticator-app (TOTP) setup page after their password, and gets no session until they finish it. The password grant refuses such a user (`MFA setup required`) until they have enrolled through the browser. Tell users in advance.
 
 ### 7. Test Sign-In
 
 Before switching any app, sign in with a few migrated users on the hosted login page (`/realms/{realm}/protocol/openid-connect/auth`) with a test client, including:
 
 - a user with a PBKDF2 hash and, if you have any, one with an Argon2 hash;
-- a user who was imported without a password (expect the reset flow);
+- a user who was imported without a password: sign-in fails with the usual invalid-credentials message until they use **forgot password** or an administrator sets one;
 - a user who signs in through each imported identity provider;
 - a public client (PKCE) and a confidential client.
 
