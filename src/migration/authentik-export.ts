@@ -197,12 +197,18 @@ export function authentikRedirectUris(raw: unknown): RedirectUriPlan {
 
 /** Lower-case, hyphen-separated, only `[a-z0-9-]`. */
 export function slugify(value: string): string {
-  return value
+  const slug = value
     .normalize('NFKD')
     .replace(/[̀-ͯ]/g, '')
     .toLowerCase()
-    .replace(/[^a-z0-9]+/g, '-')
-    .replace(/^-+|-+$/g, '');
+    .replace(/[^a-z0-9]+/g, '-');
+  // Trim the hyphens by index: an anchored /^-+|-+$/ backtracks
+  // polynomially on a long run of hyphens (CodeQL js/polynomial-redos).
+  let start = 0;
+  let end = slug.length;
+  while (start < end && slug[start] === '-') start++;
+  while (end > start && slug[end - 1] === '-') end--;
+  return slug.slice(start, end);
 }
 
 /**

@@ -168,6 +168,13 @@ describe('authentikSourceAlias', () => {
     expect(authentikSourceAlias({ pk: 1, ...source })).toBe(alias);
   });
 
+  it('slugify trims a long run of hyphens in linear time', () => {
+    const started = Date.now();
+    expect(slugify('-'.repeat(200_000) + 'a' + '-'.repeat(200_000))).toBe('a');
+    expect(slugify('-'.repeat(200_000))).toBe('');
+    expect(Date.now() - started).toBeLessThan(1000);
+  });
+
   it('slugify keeps only lowercase letters, digits and single hyphens', () => {
     expect(slugify('  My  IdP (EU) ')).toBe('my-idp-eu');
   });
