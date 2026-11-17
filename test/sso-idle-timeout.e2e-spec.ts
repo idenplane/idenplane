@@ -29,11 +29,14 @@ describe('SSO session idle timeout (e2e)', () => {
   const base = `/realms/${REALM}/protocol/openid-connect`;
   const http = () => request(app.getHttpServer());
 
+  // Through the admin API, which drops the cached realm the other endpoints
+  // read; a direct database write would not be seen.
   const setIdle = (ssoSessionIdleTimeout: number) =>
-    ctx.prisma.realm.update({
-      where: { id: seeded.realm.id },
-      data: { ssoSessionIdleTimeout },
-    });
+    http()
+      .put(`/admin/realms/${REALM}`)
+      .set('x-admin-api-key', TEST_ADMIN_API_KEY)
+      .send({ ssoSessionIdleTimeout })
+      .expect(200);
 
   /** Signs in through the hosted login; the browser holds the SSO cookie. */
   const browserSignIn = async () => {

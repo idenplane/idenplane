@@ -277,11 +277,10 @@ describe('Offline sessions (e2e)', () => {
   });
 
   describe('the per-user session cap (maxSessionsPerUser)', () => {
+    // Through the admin API, which drops the cached realm the token
+    // endpoint reads; a direct database write would not be seen.
     const setCap = (maxSessionsPerUser: number) =>
-      ctx.prisma.realm.update({
-        where: { id: seeded.realm.id },
-        data: { maxSessionsPerUser },
-      });
+      admin('put', '').send({ maxSessionsPerUser }).expect(200);
 
     afterEach(async () => {
       await setCap(10);
