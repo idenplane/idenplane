@@ -298,6 +298,17 @@ export function createMockPrismaService(): MockPrismaService {
       updateMany: jest.fn(),
       deleteMany: jest.fn(),
     },
+    samlBrokerRequest: {
+      create: jest.fn(),
+      findUnique: jest.fn(),
+      updateMany: jest.fn(),
+      deleteMany: jest.fn(),
+    },
+    samlBrokerAssertionId: {
+      create: jest.fn(),
+      updateMany: jest.fn(),
+      deleteMany: jest.fn(),
+    },
     userFederation: {
       findUnique: jest.fn(),
       findMany: jest.fn(),

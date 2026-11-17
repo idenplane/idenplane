@@ -910,6 +910,8 @@ export const EXCLUDED_MODELS: Record<string, string> = {
   MagicLinkRequest: RUNTIME,
   UsedTotpCode: RUNTIME,
   SamlRequestId: 'SAML replay check; ' + RUNTIME,
+  SamlBrokerRequest: 'SAML sign-ins in progress; ' + RUNTIME,
+  SamlBrokerAssertionId: 'SAML broker replay check; ' + RUNTIME,
   DeviceCode: RUNTIME,
   OtpAttempt: RUNTIME,
   ImpersonationSession: RUNTIME,
