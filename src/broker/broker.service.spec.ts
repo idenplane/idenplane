@@ -2,7 +2,11 @@ import { lookupsBackedBy } from '../cache/cached-lookups.mock.js';
 jest.mock('../crypto/jwk.service.js', () => ({ JwkService: jest.fn() }));
 
 import { BadRequestException, UnauthorizedException } from '@nestjs/common';
-import { BrokerService } from './broker.service.js';
+import {
+  BrokerService,
+  FEDERATED_LINK_CONFLICT,
+  FederatedLinkConflictException,
+} from './broker.service.js';
 import {
   createMockPrismaService,
   MockPrismaService,
@@ -21,6 +25,7 @@ describe('BrokerService', () => {
     findByAlias: jest.Mock;
   };
   let samlBroker: { createStart: jest.Mock };
+  let events: { recordLoginEvent: jest.Mock };
 
   let originalFetch: typeof global.fetch;
 
@@ -106,6 +111,7 @@ describe('BrokerService', () => {
     samlBroker = {
       createStart: jest.fn(),
     };
+    events = { recordLoginEvent: jest.fn().mockResolvedValue(undefined) };
 
     service = new BrokerService(
       lookupsBackedBy(prisma as any) as any,
@@ -114,6 +120,7 @@ describe('BrokerService', () => {
       idpService as any,
       new CryptoService(),
       samlBroker as any,
+      events as any,
     );
 
     global.fetch = jest.fn();
@@ -993,5 +1000,141 @@ describe('BrokerService', () => {
         expect(prisma.user.create).not.toHaveBeenCalled();
       },
     );
+  });
+
+  describe('an account already linked to the provider with another subject', () => {
+    const conflictSetup = (idp: Record<string, unknown>) => {
+      // No link for this external account; the user found by email already
+      // has a link to the provider, for another external account.
+      prisma.federatedIdentity.findUnique.mockImplementation(
+        async (args: any) =>
+          args.where.identityProviderId_externalUserId
+            ? null
+            : { externalUserId: 'old-subject' },
+      );
+      prisma.user.findFirst.mockResolvedValue(mockUser);
+      return { ...mockIdp, trustEmail: true, ...idp } as any;
+    };
+
+    it.each([
+      ['OIDC', { providerType: 'oidc' }],
+      ['SAML', { providerType: 'saml', alias: 'okta', displayName: 'Okta' }],
+    ])(
+      '%s: refuses with a clear error and an event, and never relinks',
+      async (_name, over) => {
+        const idp = conflictSetup(over);
+        await expect(
+          service.resolveFederatedUser(mockRealm, {
+            idp,
+            external: {
+              sub: 'new-subject',
+              email: 'test@example.com',
+              emailVerified: true,
+            },
+          }),
+        ).rejects.toThrow(FederatedLinkConflictException);
+        await expect(
+          service.resolveFederatedUser(mockRealm, {
+            idp,
+            external: {
+              sub: 'new-subject',
+              email: 'test@example.com',
+              emailVerified: true,
+            },
+          }),
+        ).rejects.toThrow(/already linked to .* through a different/);
+        expect(prisma.federatedIdentity.create).not.toHaveBeenCalled();
+        expect(prisma.user.create).not.toHaveBeenCalled();
+        expect(events.recordLoginEvent).toHaveBeenCalledWith(
+          expect.objectContaining({
+            realmId: idp.realmId,
+            userId: 'user-1',
+            type: 'LOGIN_ERROR',
+            error: FEDERATED_LINK_CONFLICT,
+            details: expect.objectContaining({
+              identityProvider: idp.alias,
+              providerType: idp.providerType,
+              externalUserId: 'new-subject',
+              linkedExternalUserId: 'old-subject',
+            }),
+          }),
+        );
+      },
+    );
+
+    it('OIDC callback: the conflict is a 409, not a 500', async () => {
+      prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
+      jwkService.verifyJwt.mockResolvedValue({
+        realmId: 'realm-1',
+        realmName: 'test-realm',
+        alias: 'google',
+        clientId: 'my-app',
+        redirectUri: 'https://example.com/callback',
+      });
+      idpService.findByAlias.mockResolvedValue(conflictSetup({}));
+      (global.fetch as jest.Mock)
+        .mockResolvedValueOnce({
+          ok: true,
+          json: jest.fn().mockResolvedValue({ access_token: 'at' }),
+        })
+        .mockResolvedValueOnce({
+          ok: true,
+          json: jest.fn().mockResolvedValue({
+            sub: 'new-subject',
+            email: 'test@example.com',
+            email_verified: true,
+          }),
+        });
+      const err = await service
+        .handleCallback(mockRealm, 'google', 'auth-code', 'state-jwt')
+        .catch((e: unknown) => e);
+      expect(err).toBeInstanceOf(FederatedLinkConflictException);
+      expect((err as FederatedLinkConflictException).getStatus()).toBe(409);
+    });
+
+    it('belongsToUser (a pinned user) refuses the same way', async () => {
+      const idp = conflictSetup({});
+      await expect(
+        service.belongsToUser(
+          {
+            idp,
+            external: {
+              sub: 'new-subject',
+              email: 'test@example.com',
+              emailVerified: true,
+            },
+          },
+          mockUser as any,
+        ),
+      ).rejects.toThrow(FederatedLinkConflictException);
+      expect(prisma.federatedIdentity.create).not.toHaveBeenCalled();
+    });
+
+    it('a concurrent link of the same external account is not a conflict', async () => {
+      const idp = { ...mockIdp, trustEmail: true } as any;
+      let linked = false;
+      prisma.federatedIdentity.findUnique.mockImplementation(
+        async (args: any) =>
+          args.where.userId_identityProviderId && linked
+            ? { externalUserId: 'same-subject' }
+            : null,
+      );
+      prisma.user.findFirst.mockResolvedValue(mockUser);
+      prisma.federatedIdentity.create.mockImplementation(async () => {
+        linked = true;
+        throw Object.assign(new Error('unique'), { code: 'P2002' });
+      });
+      await expect(
+        service.resolveFederatedUser(mockRealm, {
+          idp,
+          external: {
+            sub: 'same-subject',
+            email: 'test@example.com',
+            emailVerified: true,
+          },
+        }),
+      ).resolves.toBe(mockUser);
+      expect(events.recordLoginEvent).not.toHaveBeenCalled();
+    });
   });
 });

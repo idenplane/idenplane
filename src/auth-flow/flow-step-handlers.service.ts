@@ -18,6 +18,7 @@ import {
 } from '../magic-link/magic-link.service.js';
 import {
   BrokerService,
+  FederatedLinkConflictException,
   type ExternalIdentity,
 } from '../broker/broker.service.js';
 import { STEP_AMR, type StepOutcome } from '../authn-core/flow-contracts.js';
@@ -314,7 +315,15 @@ export class FlowStepHandlers {
     }
 
     if (pinned) {
-      const owner = await this.broker.belongsToUser(identity, pinned);
+      let owner: Awaited<ReturnType<BrokerService['belongsToUser']>>;
+      try {
+        owner = await this.broker.belongsToUser(identity, pinned);
+      } catch (err) {
+        if (err instanceof FederatedLinkConflictException) {
+          return { kind: 'failed', message: err.message };
+        }
+        throw err;
+      }
       if (owner === 'other_user') return { kind: 'user_mismatch' };
       if (owner === 'not_linked') {
         return {
@@ -335,8 +344,12 @@ export class FlowStepHandlers {
     try {
       user = await this.broker.resolveFederatedUser(realm, identity);
     } catch (err) {
-      if (err instanceof UnauthorizedException) {
-        // A link-only provider with no matching account.
+      if (
+        err instanceof UnauthorizedException ||
+        err instanceof FederatedLinkConflictException
+      ) {
+        // A link-only provider with no matching account, or an account
+        // already linked to this provider through another external one.
         return { kind: 'failed', message: err.message };
       }
       throw err;
