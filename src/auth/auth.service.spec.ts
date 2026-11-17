@@ -251,6 +251,7 @@ describe('AuthService', () => {
           user: { passwordHash: string },
           password: string,
         ) => crypto.verifyPassword(user.passwordHash, password),
+        equalizeTiming: async () => {},
       } as any,
     );
   });

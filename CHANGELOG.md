@@ -14,6 +14,7 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ### Fixed
 - **Users still on a migrated password hash could sign in but not confirm their password anywhere else.** Sign-in accepts the bcrypt and PBKDF2 hashes the Keycloak, Auth0, Authentik and Zitadel importers write, but the account console (change password, add or remove an SMS phone, turn off the authenticator app, request or cancel account deletion) and the admin console sign-in checked the password with Argon2 only, so they rejected the right password. They now use the same check as sign-in, and a matched migrated hash is moved to Argon2id as on sign-in. The password-history check ("don't reuse your last N passwords") also understands bcrypt and PBKDF2 entries, so a reused password is still refused. A malformed or unrecognised hash never matches.
+- **Response time no longer reveals which usernames exist.** A sign-in for a username that doesn't exist, a disabled account or an account without a password failed in a few milliseconds, while a wrong password for a real account took as long as an Argon2id check. The hosted login, the password grant and the admin console sign-in now spend one Argon2id check in those cases too.
 
 ## [0.11.1] - 2026-11-17
 

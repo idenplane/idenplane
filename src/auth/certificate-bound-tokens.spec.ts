@@ -209,6 +209,7 @@ describe('certificate-bound access tokens (RFC 8705 §3)', () => {
       {
         verifyUserPassword: (user: { passwordHash: string }, pw: string) =>
           crypto.verifyPassword(user.passwordHash, pw),
+        equalizeTiming: async () => {},
       } as any,
       undefined,
       { enrichToken } as any,

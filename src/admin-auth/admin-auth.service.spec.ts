@@ -77,7 +77,7 @@ describe('AdminAuthService', () => {
   let crypto: { hashPassword: jest.Mock; verifyPassword: jest.Mock };
   // The shared verifier, delegating to the mocked Argon2 check; the real
   // one is exercised in 'login with a migrated password hash' below.
-  let passwords: { verifyUserPassword: jest.Mock };
+  let passwords: { verifyUserPassword: jest.Mock; equalizeTiming: jest.Mock };
   let jwkService: { signJwt: jest.Mock; verifyJwt: jest.Mock };
   let rateLimitService: {
     checkAdminIpLimit: jest.Mock;
@@ -101,6 +101,7 @@ describe('AdminAuthService', () => {
         (user: { passwordHash: string }, password: string) =>
           crypto.verifyPassword(user.passwordHash, password),
       ),
+      equalizeTiming: jest.fn().mockResolvedValue(undefined),
     };
     jwkService = {
       signJwt: jest.fn(),
@@ -301,6 +302,16 @@ describe('AdminAuthService', () => {
       await expect(
         service.login('admin', 'password', '127.0.0.1'),
       ).rejects.toThrow('Invalid credentials');
+    });
+
+    it('spends a password check when the admin cannot sign in (timing)', async () => {
+      prisma.realm.findUnique.mockResolvedValue(masterRealm);
+      prisma.user.findUnique.mockResolvedValue(null);
+      await expect(
+        service.login('nobody', 'pw-unknown', '127.0.0.1'),
+      ).rejects.toThrow('Invalid credentials');
+      expect(passwords.equalizeTiming).toHaveBeenCalledWith('pw-unknown');
+      expect(passwords.verifyUserPassword).not.toHaveBeenCalled();
     });
 
     it('should throw if password is invalid', async () => {

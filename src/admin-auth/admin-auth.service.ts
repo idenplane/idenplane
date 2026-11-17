@@ -160,6 +160,8 @@ export class AdminAuthService implements OnModuleDestroy {
     });
 
     if (!user || !user.enabled || !user.passwordHash) {
+      // As long as a wrong password, so timing doesn't reveal admin usernames.
+      await this.passwords.equalizeTiming(password);
       throw new UnauthorizedException('Invalid credentials');
     }
 

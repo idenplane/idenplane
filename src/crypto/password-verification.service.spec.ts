@@ -287,6 +287,52 @@ describe('PasswordVerificationService', () => {
       service.verifyUserPassword(user(stored, 'bcrypt'), PASSWORD),
     ).resolves.toBe(true);
   });
+
+  describe('equalizeTiming (sign-in for a user that cannot be checked)', () => {
+    it('runs one real Argon2 verification against a dummy hash made once per process', async () => {
+      const hash = jest.spyOn(crypto, 'hashPassword');
+      const verify = jest.spyOn(crypto, 'verifyPassword');
+      try {
+        await expect(service.equalizeTiming(PASSWORD)).resolves.toBeUndefined();
+        await expect(service.equalizeTiming(WRONG)).resolves.toBeUndefined();
+        expect(hash).toHaveBeenCalledTimes(1);
+        expect(verify).toHaveBeenCalledTimes(2);
+        const [dummy, presented] = verify.mock.calls[0];
+        expect(dummy).toMatch(/^\$argon2id\$/);
+        expect(presented).toBe(PASSWORD);
+        // The dummy is a hash of a random secret, never of the password.
+        await expect(crypto.verifyPassword(dummy, PASSWORD)).resolves.toBe(
+          false,
+        );
+      } finally {
+        hash.mockRestore();
+        verify.mockRestore();
+      }
+    });
+
+    it('caps the presented password at the length limit', async () => {
+      const verify = jest.spyOn(crypto, 'verifyPassword');
+      try {
+        await service.equalizeTiming('x'.repeat(100_000));
+        expect(verify.mock.calls[0][1].length).toBeLessThanOrEqual(1024);
+      } finally {
+        verify.mockRestore();
+      }
+    });
+
+    it('never throws, and retries making the dummy hash after a failure', async () => {
+      const hash = jest
+        .spyOn(crypto, 'hashPassword')
+        .mockRejectedValueOnce(new Error('argon2 unavailable'));
+      try {
+        await expect(service.equalizeTiming(PASSWORD)).resolves.toBeUndefined();
+        await expect(service.equalizeTiming(PASSWORD)).resolves.toBeUndefined();
+        expect(hash).toHaveBeenCalledTimes(2);
+      } finally {
+        hash.mockRestore();
+      }
+    });
+  });
 });
 
 describe('CryptoService.verifyPassword', () => {
