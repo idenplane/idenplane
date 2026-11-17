@@ -1,4 +1,5 @@
 import { BadRequestException, ConflictException } from '@nestjs/common';
+import { makeFakeIdp } from '../broker/saml/__mocks__/fake-saml-idp.js';
 
 jest.mock('../crypto/jwk.service.js', () => ({
   JwkService: jest.fn(),
@@ -496,7 +497,7 @@ describe('RealmImportService', () => {
         tokenUrl: 'https://idp.example/token',
       }));
 
-    it('version 1: stores supported types lower-case and skips SAML and unknown types with a warning', async () => {
+    it('version 1: stores supported types lower-case and skips incomplete SAML and unknown types with a warning', async () => {
       const result = await service.importRealm({
         version: 1,
         realm: { name: 'imported-realm' },
@@ -521,14 +522,48 @@ describe('RealmImportService', () => {
       const warnings = (result as { warnings?: string[] }).warnings ?? [];
       expect(warnings).toHaveLength(2);
       expect(warnings[0]).toMatch(
-        /^identity provider 'idp-3': not imported, provider type 'saml' is SAML/,
+        /^identity provider 'idp-3': not imported, its SAML settings are incomplete or unusable \(samlConfig must be an object\)/,
       );
       expect(warnings[1]).toMatch(
-        /^identity provider 'idp-4': not imported, provider type 'ldap' is not supported \(supported: oidc, oauth2\)/,
+        /^identity provider 'idp-4': not imported, provider type 'ldap' is not supported \(supported: oidc, oauth2, saml\)/,
       );
     });
 
-    it('version 2: never stores a SAML or unknown identity provider', async () => {
+    it('version 1: stores a SAML provider with a usable samlConfig, normalized', async () => {
+      const cert = (await makeFakeIdp()).certificatePem;
+      const result = await service.importRealm({
+        version: 1,
+        realm: { name: 'imported-realm' },
+        identityProviders: [
+          {
+            alias: 'okta',
+            providerType: 'saml',
+            samlConfig: {
+              entityId: 'https://idp.example/saml',
+              ssoUrl: 'https://idp.example/sso',
+              signingCertificates: [cert],
+            },
+          },
+        ],
+      });
+      const stored = prisma.identityProvider.create.mock.calls.map(
+        (c) => c[0].data,
+      );
+      expect(stored).toHaveLength(1);
+      expect(stored[0]).toMatchObject({
+        alias: 'okta',
+        providerType: 'saml',
+        clientId: '',
+        authorizationUrl: '',
+        samlConfig: expect.objectContaining({
+          entityId: 'https://idp.example/saml',
+          wantAssertionsSigned: true,
+        }),
+      });
+      expect(result.idpsImported).toBe(1);
+    });
+
+    it('version 2: never stores an incomplete SAML or unknown identity provider', async () => {
       // Version 2 writes through more model methods than the shared mock
       // has; give every missing one a harmless default.
       const autoMock = (target: Record<string, any>) =>
@@ -562,7 +597,7 @@ describe('RealmImportService', () => {
       expect(result.warnings).toEqual(
         expect.arrayContaining([
           expect.stringMatching(
-            /^identity provider 'idp-1': not imported, provider type 'SAML' is SAML/,
+            /^identity provider 'idp-1': not imported, its SAML settings are incomplete or unusable/,
           ),
           expect.stringMatching(
             /^identity provider 'idp-2': not imported, provider type 'kerberos' is not supported/,

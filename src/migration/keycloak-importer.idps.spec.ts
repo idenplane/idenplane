@@ -2,6 +2,7 @@ import { readFileSync } from 'fs';
 import { join } from 'path';
 import { KeycloakImporterService } from './keycloak-importer.service.js';
 import type { KeycloakRealmExport } from './keycloak-types.js';
+import { makeFakeIdp } from '../broker/saml/__mocks__/fake-saml-idp.js';
 
 /**
  * Identity providers from a Keycloak realm export
@@ -96,13 +97,111 @@ describe('KeycloakImporterService identity providers', () => {
     expect(warningFor(report, 'github')).toMatch(/no client secret/);
   });
 
-  it('never stores a SAML provider, and says why', async () => {
+  it('skips an incomplete SAML provider, and says why', async () => {
     const report = await service.importRealm(fixture, { dryRun: false });
 
+    // The fixture's provider has Keycloak's own (SP) entityId but no
+    // idpEntityId, and a truncated certificate.
     expect(created().has('corp-saml')).toBe(false);
-    expect(warningFor(report, 'corp-saml')).toMatch(
-      /was not imported: provider type 'saml' is SAML, and Idenplane cannot sign users in through a SAML identity provider/,
+    const warning = warningFor(report, 'corp-saml');
+    expect(warning).toMatch(
+      /was not imported: the export's SAML settings are incomplete or unusable/,
     );
+    expect(warning).toMatch(
+      /samlConfig.entityId \(the IdP entity ID\) is required/,
+    );
+    expect(warning).toMatch(/signingCertificates\[0\]/);
+  });
+
+  it('imports a complete SAML provider with its settings and attribute mappers', async () => {
+    const idp = await makeFakeIdp('https://sso.corp.example/idp');
+    const certs = [idp, await makeFakeIdp()].map((i) =>
+      i.certificatePem.replace(/-----[A-Z ]+-----|\s/g, ''),
+    );
+    const realm = {
+      ...fixture,
+      identityProviders: [
+        {
+          alias: 'okta-saml',
+          providerId: 'saml',
+          enabled: true,
+          trustEmail: true,
+          displayName: 'Okta',
+          config: {
+            entityId: 'https://keycloak.corp.example/realms/corp',
+            idpEntityId: 'https://sso.corp.example/idp',
+            singleSignOnServiceUrl: 'https://sso.corp.example/sso',
+            singleLogoutServiceUrl: 'https://sso.corp.example/slo',
+            signingCertificate: certs.join(','),
+            nameIDPolicyFormat:
+              'urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress',
+            postBindingAuthnRequest: 'true',
+            wantAuthnRequestsSigned: 'true',
+            wantAssertionsSigned: 'true',
+            validateSignature: 'true',
+            wantAssertionsEncrypted: 'true',
+            allowedClockSkew: '30',
+            principalType: 'ATTRIBUTE',
+            principalAttribute: 'uid',
+          },
+        },
+      ],
+      identityProviderMappers: [
+        {
+          name: 'mail',
+          identityProviderAlias: 'okta-saml',
+          identityProviderMapper: 'saml-user-attribute-idp-mapper',
+          config: { 'attribute.name': 'mail', 'user.attribute': 'email' },
+        },
+        {
+          name: 'given',
+          identityProviderAlias: 'okta-saml',
+          identityProviderMapper: 'saml-user-attribute-idp-mapper',
+          config: {
+            'attribute.name': 'givenName',
+            'user.attribute': 'firstName',
+          },
+        },
+        {
+          name: 'other-provider',
+          identityProviderAlias: 'someone-else',
+          identityProviderMapper: 'saml-user-attribute-idp-mapper',
+          config: { 'attribute.name': 'sn', 'user.attribute': 'lastName' },
+        },
+      ],
+    } as KeycloakRealmExport;
+    const report = await service.importRealm(realm, { dryRun: false });
+
+    const stored = created().get('okta-saml');
+    expect(stored).toMatchObject({
+      providerType: 'saml',
+      enabled: true,
+      trustEmail: true,
+      clientId: '',
+      authorizationUrl: '',
+      tokenUrl: '',
+    });
+    expect(stored.samlConfig).toMatchObject({
+      entityId: 'https://sso.corp.example/idp',
+      ssoUrl: 'https://sso.corp.example/sso',
+      ssoBinding: 'post',
+      sloUrl: 'https://sso.corp.example/slo',
+      nameIdFormat: 'urn:oasis:names:tc:SAML:1.1:nameid-format:emailAddress',
+      signAuthnRequests: true,
+      wantAssertionsSigned: true,
+      clockSkewSeconds: 30,
+      subjectAttribute: 'uid',
+      attributes: { email: 'mail', firstName: 'givenName' },
+    });
+    expect(stored.samlConfig.signingCertificates).toHaveLength(2);
+    expect(warningFor(report, 'okta-saml')).toMatch(
+      /imported as a SAML identity provider.*register Idenplane's SP metadata/,
+    );
+    expect(
+      report.warnings.some((w: { message: string }) =>
+        /expected encrypted assertions/.test(w.message),
+      ),
+    ).toBe(true);
   });
 
   it('skips a provider type it cannot broker instead of storing it as OIDC', async () => {
@@ -110,7 +209,7 @@ describe('KeycloakImporterService identity providers', () => {
 
     expect(created().has('gitlab')).toBe(false);
     expect(warningFor(report, 'gitlab')).toMatch(
-      /provider type 'gitlab' is not supported \(supported: oidc, oauth2\)/,
+      /provider type 'gitlab' is not supported \(supported: oidc, oauth2, saml\)/,
     );
   });
 

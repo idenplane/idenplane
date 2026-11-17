@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { makeFakeIdp } from '../broker/saml/__mocks__/fake-saml-idp.js';
 import { Auth0ImporterService } from './auth0-importer.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
@@ -265,7 +266,7 @@ describe('Auth0ImporterService', () => {
     const messages = report.warnings.map((w) => w.message);
     expect(messages).toContainEqual(
       expect.stringMatching(
-        /^Identity provider 'corp-saml' was not imported: provider type 'samlp' is SAML/,
+        /^Identity provider 'corp-saml' was not imported: the export's SAML settings are incomplete or unusable \(samlConfig.entityId \(the IdP entity ID\) is required; .*signingCertificates/,
       ),
     );
     expect(messages).toContainEqual(
@@ -303,4 +304,52 @@ describe('Auth0ImporterService', () => {
     });
     expect(report.summary.users.skipped).toBe(2);
   });
+
+  it('imports a SAML (samlp) connection whose export carries the IdP metadata', async () => {
+    const report = await service.importData(
+      {
+        ...mockAuth0Export,
+        connections: [
+          {
+            name: 'okta-saml',
+            strategy: 'samlp',
+            options: {
+              metadataXml: await idpMetadata('https://okta.example/saml'),
+              signSAMLRequest: true,
+              protocolBinding: 'urn:oasis:names:tc:SAML:2.0:bindings:HTTP-POST',
+            },
+          },
+        ],
+      },
+      { dryRun: false, targetRealm: 'test' },
+    );
+    const stored = prisma.identityProvider.create.mock.calls.map(
+      (c: any[]) => c[0].data,
+    );
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({
+      alias: 'okta-saml',
+      providerType: 'saml',
+      samlConfig: expect.objectContaining({
+        entityId: 'https://okta.example/saml',
+        ssoUrl: 'https://okta.example/saml/sso',
+        ssoBinding: 'post',
+        signAuthnRequests: true,
+      }),
+    });
+    expect(report.summary.identityProviders.created).toBe(1);
+  });
 });
+
+/** IdP metadata for a SAML import, with a real certificate. */
+async function idpMetadata(entityId: string): Promise<string> {
+  const idp = await makeFakeIdp(entityId);
+  const body = idp.certificatePem.replace(/-----[A-Z ]+-----|\s/g, '');
+  return (
+    `<EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" entityID="${entityId}">` +
+    `<IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">` +
+    `<KeyDescriptor use="signing"><KeyInfo xmlns="http://www.w3.org/2000/09/xmldsig#"><X509Data><X509Certificate>${body}</X509Certificate></X509Data></KeyInfo></KeyDescriptor>` +
+    `<SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" Location="${entityId}/sso"/>` +
+    `</IDPSSODescriptor></EntityDescriptor>`
+  );
+}

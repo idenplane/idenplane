@@ -5,7 +5,6 @@ import type { AuthentikExport } from './authentik-types.js';
 import { createEmptyReport, type MigrationReport } from './migration-report.js';
 import { authentikPassword } from './password-import.js';
 import { idpSecrets } from '../identity-providers/idp-secrets.js';
-import { unsupportedIdpTypeReason } from '../identity-providers/idp-provider-types.js';
 import { idpCreateData, planIdpImport, reportIdpPlan } from './idp-import.js';
 
 export interface AuthentikImportOptions {
@@ -233,7 +232,7 @@ export class AuthentikImporterService {
           entity: 'identity_provider',
           message: `Identity provider '${source.name}' was not imported: ${
             /saml/i.test(source.provider_type ?? '')
-              ? unsupportedIdpTypeReason(source.provider_type)
+              ? "it is a SAML source, and Authentik's export does not carry the IdP's signing certificate (only a reference to a stored key pair); add it in the admin console from the IdP's metadata."
               : `source type ${source.provider_type ?? 'unknown'} is not a generic OIDC source; only OIDC sources can be imported, recreate this one manually.`
           }`,
         });

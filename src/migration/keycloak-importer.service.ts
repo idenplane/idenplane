@@ -3,6 +3,7 @@ import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
 import type {
   KeycloakRealmExport,
+  KeycloakIdentityProviderMapper,
   KeycloakClient,
   KeycloakGroup,
 } from './keycloak-types.js';
@@ -501,6 +502,15 @@ export class KeycloakImporterService {
         providerType: mapped?.providerType ?? idp.providerId,
         wellKnown: mapped?.wellKnown,
         enabled: idp.enabled ?? true,
+        saml:
+          mapped?.providerType === 'saml'
+            ? keycloakSamlConfig(
+                config,
+                (data.identityProviderMappers ?? []).filter(
+                  (m) => m.identityProviderAlias === idp.alias,
+                ),
+              )
+            : undefined,
         fields: {
           clientId: config['clientId'],
           clientSecret: config['clientSecret'],
@@ -513,6 +523,15 @@ export class KeycloakImporterService {
         },
       });
       if (!reportIdpPlan(report, idp.alias, plan)) continue;
+      if (
+        plan.providerType === 'saml' &&
+        config['wantAssertionsEncrypted'] === 'true'
+      ) {
+        report.warnings.push({
+          entity: 'identity_provider',
+          message: `Identity provider '${idp.alias}' expected encrypted assertions in Keycloak. Idenplane does not decrypt assertions: turn assertion encryption off for this application at the IdP.`,
+        });
+      }
       try {
         const existing = await db.identityProvider.findFirst({
           where: { realmId, alias: idp.alias },
@@ -558,8 +577,8 @@ export class KeycloakImporterService {
   /**
    * The Idenplane provider type of a Keycloak identity provider, with the
    * well-known endpoints of the social providers whose export carries no
-   * URLs. Null for a type Idenplane cannot broker (`saml`, and social
-   * providers whose endpoints it does not know).
+   * URLs. Null for a type Idenplane cannot broker (social providers whose
+   * endpoints it does not know).
    */
   private mapKeycloakProviderType(providerId: string): {
     providerType: string;
@@ -575,6 +594,8 @@ export class KeycloakImporterService {
         return { providerType: 'oidc', wellKnown: 'microsoft' };
       case 'github':
         return { providerType: 'oauth2', wellKnown: 'github' };
+      case 'saml':
+        return { providerType: 'saml' };
       default:
         return null;
     }
@@ -590,4 +611,73 @@ export class KeycloakImporterService {
       'security-admin-console',
     ].includes(clientId);
   }
+}
+
+/** Keycloak's user attributes the broker maps, by its mapper's target. */
+const KEYCLOAK_ATTRIBUTE_TARGETS: Record<
+  string,
+  'email' | 'firstName' | 'lastName' | 'username'
+> = {
+  email: 'email',
+  firstName: 'firstName',
+  lastName: 'lastName',
+  username: 'username',
+};
+
+/**
+ * A Keycloak SAML identity provider's config as a raw samlConfig. Keycloak
+ * stores everything as strings; what is missing or unusable is left for
+ * validateSamlConfig to name. `entityId` in Keycloak is its own (SP) entity
+ * ID, not the IdP's: the IdP's is `idpEntityId`.
+ */
+export function keycloakSamlConfig(
+  config: Record<string, string>,
+  mappers: KeycloakIdentityProviderMapper[],
+): Record<string, unknown> {
+  const str = (key: string) => {
+    const v = config[key];
+    return typeof v === 'string' && v.trim() ? v.trim() : undefined;
+  };
+  const flag = (key: string) =>
+    config[key] === undefined ? undefined : config[key] === 'true';
+  const certificates = (str('signingCertificate') ?? '')
+    .split(',')
+    .map((c) => c.trim())
+    .filter(Boolean);
+  const skew = Number(str('allowedClockSkew'));
+  const attributes: Record<string, string> = {};
+  for (const mapper of mappers) {
+    if (mapper.identityProviderMapper !== 'saml-user-attribute-idp-mapper') {
+      continue;
+    }
+    const target =
+      KEYCLOAK_ATTRIBUTE_TARGETS[mapper.config?.['user.attribute'] ?? ''];
+    const name = mapper.config?.['attribute.name'];
+    if (target && name) attributes[target] = name;
+  }
+  const principalType = str('principalType');
+  const principalAttribute = str('principalAttribute');
+  const saml: Record<string, unknown> = {
+    entityId: str('idpEntityId'),
+    ssoUrl: str('singleSignOnServiceUrl'),
+    ssoBinding:
+      config['postBindingAuthnRequest'] === 'true' ? 'post' : 'redirect',
+    signingCertificates: certificates,
+    nameIdFormat: str('nameIDPolicyFormat'),
+    signAuthnRequests: flag('wantAuthnRequestsSigned'),
+    wantAssertionsSigned: flag('wantAssertionsSigned'),
+    sloUrl: str('singleLogoutServiceUrl'),
+    clockSkewSeconds:
+      Number.isInteger(skew) && skew >= 0 ? Math.min(skew, 600) : undefined,
+    subjectAttribute:
+      principalType === 'ATTRIBUTE' && principalAttribute
+        ? principalAttribute
+        : undefined,
+    attributes,
+  };
+  if (attributes['username']) saml['usernameSource'] = 'attribute';
+  for (const key of Object.keys(saml)) {
+    if (saml[key] === undefined) delete saml[key];
+  }
+  return saml;
 }

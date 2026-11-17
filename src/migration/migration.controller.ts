@@ -92,8 +92,9 @@ class AuthentikImportDto {
 //    POST /admin/migration/zitadel is expected to be hand-assembled from the
 //    Management API's ListUsers/ListProjects/ListProjectRoles/ListApps/ListIDPs
 //    responses (see zitadel-types.ts). Only bcrypt password hashes, OIDC apps,
-//    and generic OIDC IdPs are imported; machine (service-account) users,
-//    SAML apps, and non-OIDC IdPs are skipped with a warning per entity.
+//    generic OIDC IdPs and SAML IdPs whose export carries their metadata
+//    are imported; machine (service-account) users, SAML apps, and other
+//    IdPs are skipped with a warning per entity.
 //
 // 5. Authentik also has no single export endpoint — the input to
 //    POST /admin/migration/authentik is hand-assembled from the REST API's

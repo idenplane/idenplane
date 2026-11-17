@@ -29,9 +29,10 @@ export function unsupportedIdpTypeReason(value: unknown): string {
   const supported = SUPPORTED_IDP_PROVIDER_TYPES.join(', ');
   if (typeof value === 'string' && /ws-?fed|wsfed|adfs|waad/i.test(value)) {
     return (
-      `provider type '${shown}' is WS-Federation, which Idenplane does not ` +
-      `support (supported: ${supported}). ADFS and Entra ID also offer SAML 2.0 ` +
-      `and OpenID Connect: add the provider with one of those.`
+      `provider type '${shown}' is not supported (it is WS-Federation or a ` +
+      `source-specific enterprise connection; supported: ${supported}). ADFS ` +
+      `and Entra ID also offer SAML 2.0 and OpenID Connect: add the provider ` +
+      `with one of those.`
     );
   }
   return `provider type '${shown}' is not supported (supported: ${supported}).`;

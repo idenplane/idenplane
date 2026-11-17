@@ -1,4 +1,5 @@
 import { Test } from '@nestjs/testing';
+import { makeFakeIdp } from '../broker/saml/__mocks__/fake-saml-idp.js';
 import { ZitadelImporterService } from './zitadel-importer.service.js';
 import { PrismaService } from '../prisma/prisma.service.js';
 import { CryptoService } from '../crypto/crypto.service.js';
@@ -284,7 +285,59 @@ describe('ZitadelImporterService', () => {
     expect(report.summary.users.skipped).toBe(2);
     expect(report.summary.clients.skipped).toBe(1);
     expect(report.summary.roles.skipped).toBe(2);
-    // The existing OIDC IdP, plus the SAML one that is never imported.
+    // The existing OIDC IdP, plus the Google one it cannot import.
     expect(report.summary.identityProviders.skipped).toBe(2);
   });
+
+  it('imports a SAML IdP from the metadata in its export, and skips one without', async () => {
+    const metadata = Buffer.from(
+      await idpMetadata('https://adfs.example/adfs/services/trust'),
+    ).toString('base64');
+    const report = await service.importData(
+      {
+        idps: [
+          {
+            idpId: 'idp-s1',
+            name: 'adfs',
+            type: 'IDP_TYPE_SAML',
+            samlConfig: { metadataXml: metadata, withSignedRequest: true },
+          },
+          { idpId: 'idp-s2', name: 'bare-saml', type: 'IDP_TYPE_SAML' },
+        ],
+      },
+      { dryRun: false, targetRealm: 'test' },
+    );
+    const stored = prisma.identityProvider.create.mock.calls.map(
+      (c: any[]) => c[0].data,
+    );
+    expect(stored).toHaveLength(1);
+    expect(stored[0]).toMatchObject({
+      alias: 'adfs',
+      providerType: 'saml',
+      samlConfig: expect.objectContaining({
+        entityId: 'https://adfs.example/adfs/services/trust',
+        signAuthnRequests: true,
+      }),
+    });
+    expect(
+      report.warnings.some((w) =>
+        /'bare-saml' was not imported: it is a SAML identity provider and the export carries no IdP metadata/.test(
+          w.message,
+        ),
+      ),
+    ).toBe(true);
+  });
 });
+
+/** IdP metadata for a SAML import, with a real certificate. */
+async function idpMetadata(entityId: string): Promise<string> {
+  const idp = await makeFakeIdp(entityId);
+  const body = idp.certificatePem.replace(/-----[A-Z ]+-----|\s/g, '');
+  return (
+    `<EntityDescriptor xmlns="urn:oasis:names:tc:SAML:2.0:metadata" entityID="${entityId}">` +
+    `<IDPSSODescriptor protocolSupportEnumeration="urn:oasis:names:tc:SAML:2.0:protocol">` +
+    `<KeyDescriptor use="signing"><KeyInfo xmlns="http://www.w3.org/2000/09/xmldsig#"><X509Data><X509Certificate>${body}</X509Certificate></X509Data></KeyInfo></KeyDescriptor>` +
+    `<SingleSignOnService Binding="urn:oasis:names:tc:SAML:2.0:bindings:HTTP-Redirect" Location="${entityId}/sso"/>` +
+    `</IDPSSODescriptor></EntityDescriptor>`
+  );
+}

@@ -5,7 +5,12 @@ import type { Auth0Export } from './auth0-types.js';
 import { createEmptyReport, type MigrationReport } from './migration-report.js';
 import { auth0Password } from './password-import.js';
 import { idpSecrets } from '../identity-providers/idp-secrets.js';
-import { idpCreateData, planIdpImport, reportIdpPlan } from './idp-import.js';
+import {
+  idpCreateData,
+  planIdpImport,
+  reportIdpPlan,
+  samlFromMetadata,
+} from './idp-import.js';
 
 export interface Auth0ImportOptions {
   dryRun: boolean;
@@ -237,6 +242,8 @@ export class Auth0ImporterService {
         alias: conn.name,
         providerType: mapped?.providerType ?? conn.strategy,
         wellKnown: mapped?.wellKnown,
+        saml:
+          mapped?.providerType === 'saml' ? auth0SamlConfig(opts) : undefined,
         fields: {
           clientId: str('client_id'),
           clientSecret: str('client_secret'),
@@ -300,9 +307,10 @@ export class Auth0ImporterService {
   /**
    * The Idenplane provider type of an Auth0 connection strategy, with the
    * well-known endpoints of social connections whose options carry no URLs.
-   * Null for a strategy Idenplane cannot broker: SAML and WS-Federation
-   * (`samlp`, `adfs`, `waad`, ...), passwordless and directory connections,
-   * and social connections whose endpoints it does not know.
+   * Null for a strategy Idenplane cannot broker: WS-Federation and
+   * Auth0-specific enterprise connections (`adfs`, `waad`, ...),
+   * passwordless and directory connections, and social connections whose
+   * endpoints it does not know. `samlp` is a SAML identity provider.
    */
   private mapAuth0Strategy(strategy: string): {
     providerType: string;
@@ -319,8 +327,47 @@ export class Auth0ImporterService {
         return { providerType: 'oidc', wellKnown: 'microsoft' };
       case 'github':
         return { providerType: 'oauth2', wellKnown: 'github' };
+      case 'samlp':
+        return { providerType: 'saml' };
       default:
         return null;
     }
   }
+}
+
+/**
+ * An Auth0 `samlp` connection's options as a raw samlConfig: the IdP
+ * metadata it carries (`metadataXml`) when there is one, else the sign-in
+ * URL, the signing certificate (Auth0 keeps it as base64 of the PEM) and
+ * the request binding. Auth0 does not keep the IdP's entity ID outside the
+ * metadata, so without metadata the provider is incomplete and skipped.
+ */
+export function auth0SamlConfig(
+  opts: Record<string, unknown>,
+): Record<string, unknown> {
+  const str = (key: string) =>
+    typeof opts[key] === 'string' && opts[key].trim()
+      ? opts[key].trim()
+      : undefined;
+  const fromMetadata = samlFromMetadata(opts['metadataXml']);
+  const saml: Record<string, unknown> =
+    'saml' in fromMetadata ? { ...fromMetadata.saml } : {};
+  saml['ssoUrl'] ??= str('signInEndpoint');
+  const certs = saml['signingCertificates'];
+  if (!Array.isArray(certs) || certs.length === 0) {
+    const raw = str('signingCert');
+    if (raw) {
+      const decoded = Buffer.from(raw, 'base64').toString('utf-8');
+      saml['signingCertificates'] = [
+        decoded.includes('-----BEGIN CERTIFICATE-----') ? decoded : raw,
+      ];
+    }
+  }
+  const binding = str('protocolBinding');
+  if (binding?.endsWith(':HTTP-POST')) saml['ssoBinding'] = 'post';
+  if (opts['signSAMLRequest'] === true) saml['signAuthnRequests'] = true;
+  for (const key of Object.keys(saml)) {
+    if (saml[key] === undefined) delete saml[key];
+  }
+  return saml;
 }

@@ -47,7 +47,7 @@ export interface AuthentikOAuth2Provider {
 export interface AuthentikOAuthSource {
   pk: number;
   name: string;
-  /** Only 'openidconnect'/'oidc' sources are imported today; other provider types (SAML, social) are skipped with a warning. */
+  /** Only 'openidconnect'/'oidc' sources are imported; SAML sources (no signing certificate in the export) and social ones are skipped with a warning. */
   provider_type?: string;
   authorization_url?: string;
   access_token_url?: string;
