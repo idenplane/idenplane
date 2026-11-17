@@ -532,3 +532,32 @@ describe('ScimUsersService', () => {
     });
   });
 });
+
+describe('ScimUsersService profile comparison', () => {
+  it('does not write when a PUT re-sends the stored profile in another key order', async () => {
+    // As PostgreSQL's JSONB returns it: its own key order.
+    const { service, prisma } = setup(
+      makeUser({
+        scimExternalId: 'obj-1',
+        scimProfile: {
+          title: 'Engineer',
+          displayName: 'Jane Doe',
+          phoneNumbers: [{ value: '+1 555 0100', type: 'work' }],
+          enterprise: { manager: 'm-1', department: 'Sales' },
+        },
+      }),
+    );
+    await service.update(realm, 'user-1', {
+      schemas: [],
+      externalId: 'obj-1',
+      userName: 'jdoe',
+      displayName: 'Jane Doe',
+      title: 'Engineer',
+      name: { givenName: 'Jane', familyName: 'Doe' },
+      emails: [{ value: 'jdoe@example.com', primary: true }],
+      phoneNumbers: [{ type: 'work', value: '+1 555 0100' }],
+      [ENTERPRISE]: { department: 'Sales', manager: { value: 'm-1' } },
+    });
+    expect(prisma.user.update).not.toHaveBeenCalled();
+  });
+});

@@ -27,6 +27,7 @@ import {
   type ScimUserState,
 } from './user-patch.js';
 import {
+  canonicalJson,
   compactProfile,
   enterpriseToScim,
   readProfile,
@@ -398,8 +399,10 @@ export class ScimUsersService {
     }
     const profile = compactProfile(next.profile ?? {});
     if (
-      JSON.stringify(profile) !==
-      JSON.stringify(compactProfile(current.profile ?? {}))
+      // Compared key-order-insensitively: PostgreSQL's JSONB returns keys
+      // in its own order, so an unchanged profile must not read as changed.
+      canonicalJson(profile) !==
+      canonicalJson(compactProfile(current.profile ?? {}))
     ) {
       data.scimProfile = profile
         ? (profile as Prisma.InputJsonValue)

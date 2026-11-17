@@ -146,6 +146,26 @@ export function compactProfile(profile: ScimProfile): ScimProfile | null {
   return Object.keys(out).length === 0 ? null : out;
 }
 
+/**
+ * JSON with object keys sorted, so two profiles that differ only in key
+ * order (as JSONB returns them) compare equal. Array order is kept: it is
+ * meaningful for phoneNumbers and addresses.
+ */
+export function canonicalJson(value: unknown): string {
+  const sort = (v: unknown): unknown => {
+    if (Array.isArray(v)) return v.map(sort);
+    if (isPlainObject(v)) {
+      return Object.fromEntries(
+        Object.keys(v)
+          .sort()
+          .map((k) => [k, sort(v[k])]),
+      );
+    }
+    return v;
+  };
+  return JSON.stringify(sort(value) ?? null);
+}
+
 /** The enterprise extension as SCIM returns it, or undefined when empty. */
 export function enterpriseToScim(
   enterprise: ScimEnterpriseProfile | undefined,
