@@ -181,11 +181,21 @@ curl -X GET "http://localhost:3000/admin/realms/my-realm/users/${USER_ID}/mfa/st
 ```json
 {
   "enabled": true,
-  "methods": ["totp", "sms"]
+  "methods": ["totp", "sms"],
+  "passkeys": 1
 }
 ```
 
-`methods` lists the user's verified second factors (`totp` for an authenticator app, `sms` for a phone). `enabled` is true when there is at least one.
+`methods` lists the user's verified second factors (`totp` for an authenticator app, `sms` for a phone). `enabled` is true when there is at least one. `passkeys` (since 0.13.0) counts the user's passkeys (WebAuthn credentials) apart, since a passkey is a sign-in of its own rather than a step after the password: a user with only passkeys has `enabled: false` and `passkeys` above 0.
+
+To list them:
+
+```bash
+curl "http://localhost:3000/admin/realms/my-realm/users/${USER_ID}/mfa/passkeys" \
+  -H "Authorization: Bearer ${ADMIN_TOKEN}"
+```
+
+Each entry has `id`, `friendlyName`, `deviceType`, `backedUp`, `transports`, `createdAt` and `lastUsedAt`; never the public key.
 
 ---
 
@@ -208,7 +218,16 @@ curl -X DELETE "http://localhost:3000/admin/realms/my-realm/users/${USER_ID}/mfa
   -H "Cookie: IDENPLANE_SESSION=${ADMIN_SESSION_TOKEN}"
 ```
 
-This removes every second factor (authenticator app and SMS phone) and the recovery codes. To remove only one factor, use `DELETE .../mfa/totp` or `DELETE .../mfa/sms`; the recovery codes are kept while the user still has another factor.
+This removes every second factor (authenticator app and SMS phone), the recovery codes and, since 0.13.0, **every passkey** of the user. To keep the passkeys, add `?keepPasskeys=true` (any value other than `true` or `false` is refused with `400`). To remove only one factor, use `DELETE .../mfa/totp` or `DELETE .../mfa/sms`; the recovery codes are kept while the user still has another factor. To remove one passkey:
+
+```bash
+curl -X DELETE "http://localhost:3000/admin/realms/my-realm/users/${USER_ID}/mfa/passkeys/${PASSKEY_ID}" \
+  -H "Authorization: Bearer ${ADMIN_ACCESS_TOKEN}"
+```
+
+`PASSKEY_ID` is the `id` from the list above. It needs the same MFA step-up as the other routes here.
+
+**Why a full reset removes passkeys by default.** A reset is what an admin does to recover an account, often one that was taken over. A passkey signs the user in on its own, without the password, so a passkey registered by whoever had the account would keep them in after a reset that left it. Idenplane stores no flag saying whether a passkey is used for passwordless sign-in or as a step-up, so the reset cannot tell an attacker's passkey from the user's own. The safe default is to remove them all; the admin keeps them only by asking (`keepPasskeys=true`, or **Keep the user's passkeys** in the console's **Reset MFA** dialog), or removes single unknown ones from the user's **Security** tab. If the user signs in with passkeys only, set them a password first, or they cannot sign in after the reset. This matches the admin console's own reset (`DELETE /admin/admin-accounts/{id}/mfa`), which has always removed passkeys. Keycloak has no single reset: its admin console deletes credentials one by one on the user's **Credentials** tab, passkeys included.
 
 Each of these routes also **signs the user out everywhere** (since 0.12.0): every OAuth session ends and its refresh tokens are revoked, offline tokens included, and every browser SSO and forward-auth proxy session ends. Whoever signed in with the removed factor, or got past it, has to sign in again. Access tokens already issued stay valid until they expire.
 
@@ -220,7 +239,7 @@ This operation requires the administrator to have MFA-verified session. API key 
 
 | Auth Method | Can Disable MFA |
 |-------------|-----------------|
-| User session + MFA verified | Yes |
+| User session + MFA verified | Yes (also for removing a passkey) |
 | User session (password only) | No |
 | API key | No |
 

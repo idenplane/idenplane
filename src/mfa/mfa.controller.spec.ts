@@ -25,6 +25,12 @@ describe('MfaController', () => {
   let mockCrypto: {
     sha256: jest.Mock;
   };
+  let mockWebAuthn: {
+    countCredentials: jest.Mock;
+    removeAllCredentials: jest.Mock;
+    getUserCredentials: jest.Mock;
+    removeCredential: jest.Mock;
+  };
 
   const realm = { id: 'realm-1', name: 'test' } as Realm;
   const mockUser = { id: 'user-1', realmId: 'realm-1', email: 'test@test.com' };
@@ -71,6 +77,13 @@ describe('MfaController', () => {
       sha256: jest.fn().mockReturnValue(mockTokenHash),
     };
 
+    mockWebAuthn = {
+      countCredentials: jest.fn().mockResolvedValue(0),
+      removeAllCredentials: jest.fn().mockResolvedValue(0),
+      getUserCredentials: jest.fn().mockResolvedValue([]),
+      removeCredential: jest.fn().mockResolvedValue(undefined),
+    };
+
     controller = new MfaController(
       mockMfaService as any,
       mockPrisma as any,
@@ -78,6 +91,7 @@ describe('MfaController', () => {
       mockLoginService as any,
       mockCrypto as any,
       mockSessions as any,
+      mockWebAuthn as any,
     );
   });
 
@@ -95,7 +109,11 @@ describe('MfaController', () => {
 
       const result = await controller.getMfaStatus(realm, 'user-1');
 
-      expect(result).toEqual({ enabled: true, methods: ['totp', 'sms'] });
+      expect(result).toEqual({
+        enabled: true,
+        methods: ['totp', 'sms'],
+        passkeys: 0,
+      });
     });
 
     it('counts an SMS-only user as enabled', async () => {
@@ -103,7 +121,7 @@ describe('MfaController', () => {
 
       const result = await controller.getMfaStatus(realm, 'user-1');
 
-      expect(result).toEqual({ enabled: true, methods: ['sms'] });
+      expect(result).toEqual({ enabled: true, methods: ['sms'], passkeys: 0 });
     });
 
     it('should return { enabled: false } when MFA is disabled', async () => {
@@ -111,7 +129,20 @@ describe('MfaController', () => {
 
       const result = await controller.getMfaStatus(realm, 'user-2');
 
-      expect(result).toEqual({ enabled: false, methods: [] });
+      expect(result).toEqual({ enabled: false, methods: [], passkeys: 0 });
+    });
+
+    it('counts passkeys apart from the second factors', async () => {
+      mockMfaService.getEnrolledFactors.mockResolvedValue([]);
+      mockWebAuthn.countCredentials.mockResolvedValue(2);
+
+      const result = await controller.getMfaStatus(realm, 'user-1');
+
+      expect(result).toEqual({ enabled: false, methods: [], passkeys: 2 });
+      expect(mockWebAuthn.countCredentials).toHaveBeenCalledWith(
+        'user-1',
+        'realm-1',
+      );
     });
 
     it('should throw NotFoundException for user in different realm', async () => {
@@ -138,6 +169,59 @@ describe('MfaController', () => {
       await controller.resetMfa(realm, 'user-1', mockReq);
 
       expect(mockMfaService.disableAllFactors).toHaveBeenCalledWith('user-1');
+    });
+
+    it('removes the passkeys too by default, scoped to the realm', async () => {
+      await controller.resetMfa(realm, 'user-1', mockReq);
+
+      expect(mockWebAuthn.removeAllCredentials).toHaveBeenCalledWith(
+        'user-1',
+        'realm-1',
+      );
+      expect(
+        mockSessions.revokeAllUserSessions.mock.invocationCallOrder[0],
+      ).toBeGreaterThan(
+        mockWebAuthn.removeAllCredentials.mock.invocationCallOrder[0],
+      );
+    });
+
+    it.each([undefined, '', 'false'])(
+      'keepPasskeys=%p removes them',
+      async (value) => {
+        await controller.resetMfa(realm, 'user-1', mockReq, value);
+        expect(mockWebAuthn.removeAllCredentials).toHaveBeenCalled();
+      },
+    );
+
+    it('keepPasskeys=true keeps them, and still ends the sessions', async () => {
+      await controller.resetMfa(realm, 'user-1', mockReq, 'true');
+
+      expect(mockMfaService.disableAllFactors).toHaveBeenCalledWith('user-1');
+      expect(mockWebAuthn.removeAllCredentials).not.toHaveBeenCalled();
+      expect(mockSessions.revokeAllUserSessions).toHaveBeenCalledWith(
+        realm,
+        'user-1',
+      );
+    });
+
+    it.each(['yes', '1', 'TRUE'])(
+      'refuses keepPasskeys=%p before changing anything',
+      async (value) => {
+        await expect(
+          controller.resetMfa(realm, 'user-1', mockReq, value),
+        ).rejects.toThrow('keepPasskeys must be true or false');
+        expect(mockMfaService.disableAllFactors).not.toHaveBeenCalled();
+        expect(mockWebAuthn.removeAllCredentials).not.toHaveBeenCalled();
+      },
+    );
+
+    it('removes nothing without the step-up', async () => {
+      await expect(
+        controller.resetMfa(realm, 'user-1', {
+          adminUser: { userId: 'api-key:abc' },
+        } as any),
+      ).rejects.toThrow('Static admin API keys');
+      expect(mockWebAuthn.removeAllCredentials).not.toHaveBeenCalled();
     });
 
     it("ends the user's sessions after removing the factors", async () => {
@@ -227,6 +311,83 @@ describe('MfaController', () => {
       await expect(
         controller.resetMfa(realm, 'user-1', mockReq),
       ).rejects.toThrow('MFA step-up is required');
+    });
+  });
+
+  describe('passkeys', () => {
+    const mockReq = {
+      cookies: { IDENPLANE_SESSION: mockSessionToken },
+      adminUser: { userId: 'user-1' },
+    } as any;
+    const credential = (id: string, realmId = 'realm-1') => ({
+      id,
+      realmId,
+      userId: 'user-1',
+      credentialId: 'raw',
+      publicKey: Buffer.from('k'),
+      counter: 0n,
+      friendlyName: 'Phone',
+      deviceType: 'multiDevice',
+      backedUp: true,
+      transports: ['internal'],
+      createdAt: new Date('2026-01-01'),
+      lastUsedAt: null,
+    });
+
+    it("lists the user's passkeys in this realm, without key material", async () => {
+      mockWebAuthn.getUserCredentials.mockResolvedValue([
+        credential('c1'),
+        credential('c2', 'other-realm'),
+      ]);
+
+      const list = await controller.listPasskeys(realm, 'user-1');
+
+      expect(list).toEqual([
+        {
+          id: 'c1',
+          friendlyName: 'Phone',
+          deviceType: 'multiDevice',
+          backedUp: true,
+          transports: ['internal'],
+          createdAt: new Date('2026-01-01'),
+          lastUsedAt: null,
+        },
+      ]);
+    });
+
+    it('listing a user of another realm is a 404', async () => {
+      mockPrisma.user.findUnique.mockResolvedValue({
+        ...mockUser,
+        realmId: 'other-realm',
+      });
+      await expect(controller.listPasskeys(realm, 'user-1')).rejects.toThrow(
+        'not found in realm',
+      );
+      expect(mockWebAuthn.getUserCredentials).not.toHaveBeenCalled();
+    });
+
+    it('removes one passkey, scoped to the user and realm, then ends the sessions', async () => {
+      await controller.removePasskey(realm, 'user-1', 'c1', mockReq);
+
+      expect(mockWebAuthn.removeCredential).toHaveBeenCalledWith(
+        'user-1',
+        'realm-1',
+        'c1',
+      );
+      expect(mockSessions.revokeAllUserSessions).toHaveBeenCalledWith(
+        realm,
+        'user-1',
+      );
+    });
+
+    it('removing a passkey needs the MFA step-up: the API key is refused', async () => {
+      await expect(
+        controller.removePasskey(realm, 'user-1', 'c1', {
+          adminUser: { userId: 'api-key:abc' },
+        } as any),
+      ).rejects.toThrow('Static admin API keys');
+      expect(mockWebAuthn.removeCredential).not.toHaveBeenCalled();
+      expect(mockSessions.revokeAllUserSessions).not.toHaveBeenCalled();
     });
   });
 });

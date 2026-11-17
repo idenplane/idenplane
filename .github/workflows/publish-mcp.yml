@@ -13,10 +13,11 @@ name: Publish idenplane-mcp
 #   - manual dispatch       -> on demand, e.g. for the very first release,
 #     since there's no mcp-v* tag history yet to trigger off of
 #
-# Requires one repo secret:
-#   NPM_TOKEN - an npm access token (Automation type recommended so it
-#               isn't tied to 2FA prompts) with publish rights for this
-#               package under the token owner's npm account.
+# Authentication: npm trusted publishing (OIDC). The package's settings on
+# npmjs.com name this repository and workflow file as its trusted publisher,
+# so the job's GitHub OIDC token is exchanged for a one-time publish
+# credential; no long-lived token is involved, and provenance is attached.
+# NPM_TOKEN is only a fallback while a package has no trusted publisher yet.
 on:
   push:
     tags: ['mcp-v*']
@@ -33,6 +34,9 @@ jobs:
   publish:
     name: Build & publish
     runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write # npm trusted publishing and provenance
     steps:
       - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
@@ -42,6 +46,10 @@ jobs:
           cache: npm
           cache-dependency-path: packages/idenplane-mcp/package-lock.json
           registry-url: 'https://registry.npmjs.org'
+
+      # Trusted publishing needs npm 11.5.1 or later.
+      - name: Use npm with trusted publishing support
+        run: npm install -g npm@11.6.2
 
       # idenplane-mcp consumes @idenplane/http-internal through
       # `file:../idenplane-http-internal`, and its dist/ is gitignored — so on
@@ -87,6 +95,6 @@ jobs:
 
       - name: Publish to npm
         working-directory: packages/idenplane-mcp
-        run: npm publish
+        run: npm publish --provenance --access public
         env:
           NODE_AUTH_TOKEN: ${{ secrets.NPM_TOKEN }}

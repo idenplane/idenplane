@@ -84,7 +84,7 @@ Creates a new realm. Requires `super-admin` role.
 | `captchaScoreThreshold` | number | No | Lowest reCAPTCHA v3 score accepted, 0 to 1 (default `0.5`) |
 | `passwordMinLength` | integer | No | Minimum password length (default `8`) |
 | `passwordRequireUppercase`, `passwordRequireLowercase`, `passwordRequireDigits`, `passwordRequireSpecialChars` | boolean | No | Character class requirements (default `false`) |
-| `passwordHistoryCount` | integer | No | Previous passwords that cannot be reused (default `0`) |
+| `passwordHistoryCount` | integer | No | Recent passwords that cannot be reused (default `0`). The current password always counts, including a password imported from another IdP; see [Password history](#password-history) |
 | `passwordMaxAgeDays` | integer | No | Password expiry in days (default `0`, never) |
 | `accessTokenLifespan` | integer | No | Access token lifetime in seconds (default `300`) |
 | `refreshTokenLifespan` | integer | No | Refresh token lifetime in seconds (default `1800`) |
@@ -101,6 +101,12 @@ Creates a new realm. Requires `super-admin` role.
 | `themeName`, `loginTheme`, `accountTheme`, `emailTheme`, `theme` | | No | Theme selection and color overrides |
 
 The DTO has more settings (MFA, WebAuthn, SMS, magic links, events, locales, sessions, CAPTCHA above); the server's `/api` lists them all. A field the DTO does not know is rejected with `400`.
+
+### Password history
+
+With `passwordHistoryCount` above `0`, a new password is refused ("Password was used recently") when it matches the user's current password or one of their last `passwordHistoryCount` passwords. It applies to every way a password changes: the account console, the expired-password page, a reset by email (checked before the link is used up, so the user can try another password with the same link) and an admin setting it (`PUT /admin/realms/{realm}/users/{id}/reset-password`, `400`).
+
+The current password counts even when it is not in the stored history: a password imported from Keycloak, Auth0, Authentik or Zitadel, one set while the history was off, or one rehashed at sign-in. When a password is replaced, the old hash is added to the history if it was not there yet, with its algorithm, so an imported password stays refused for the next changes too. Imported hashes are checked in their own format (bcrypt, PBKDF2, and the unlabelled PBKDF2 rows imported before 0.11.0). Before 0.13.0 the imported password was not part of the history, so a migrated user could "change" their password to the same one.
 
 ### Request Example
 

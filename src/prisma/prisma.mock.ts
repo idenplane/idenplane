@@ -120,7 +120,9 @@ export function createMockPrismaService(): MockPrismaService {
     },
     passwordHistory: {
       findMany: jest.fn(),
+      findFirst: jest.fn(),
       create: jest.fn(),
+      createMany: jest.fn(),
       deleteMany: jest.fn(),
     },
     loginFailure: {

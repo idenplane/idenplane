@@ -80,6 +80,28 @@ export class VerificationService {
     });
   }
 
+  /**
+   * The user a token is for, if it is valid, without using it up: for a
+   * form that may still be refused (a reused password, say) and should be
+   * submittable again with the same link. Call validateToken to use it.
+   */
+  async peekToken(
+    rawToken: string,
+    type: string,
+    realmId?: string,
+  ): Promise<{ userId: string } | null> {
+    const record = await this.prisma.verificationToken.findUnique({
+      where: {
+        tokenHash: this.crypto.sha256(rawToken),
+        ...(realmId ? { user: { realmId } } : {}),
+      },
+    });
+    if (!record || record.type !== type || record.expiresAt < new Date()) {
+      return null;
+    }
+    return { userId: record.userId };
+  }
+
   async validateToken(
     rawToken: string,
     type: string,

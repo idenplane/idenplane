@@ -404,7 +404,7 @@ Every row below has its own recommendation.
 | V15.3.3 | 2 | Pass | src/main.ts ValidationPipe; explicit Prisma data objects |  |
 | V15.3.4 | 2 | Pass | src/common/utils/proxy-ip.util.ts |  |
 | V15.3.5 | 2 | Partial | src/auth/auth.controller.ts:64; src/account/account.controller.ts:235 | Untyped bodies: repeated keys become arrays (fails closed with 500). **Recommendation:** (M) |
-| V15.3.6 | 2 | Pass | src/scim/scim-users.service.ts:489; src/theme/theme-render.service.ts:52 |  |
+| V15.3.6 | 2 | Pass | src/scim/scim-resource.ts (projectResource: reads and writes only keys the resource already has); src/scim/scim-bulk.service.ts resolveReferences (Object.fromEntries); src/theme/theme-render.service.ts:52 |  |
 | V15.3.7 | 2 | Partial | as V15.3.5 |  |
 
 ### V16 Security Logging and Error Handling
