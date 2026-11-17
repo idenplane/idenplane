@@ -24,7 +24,10 @@ import {
 import { createTrustedProxyCertHeaderMiddleware } from './mtls/trusted-proxy-cert-header.middleware.js';
 import { startCertificateListener } from './realtime/certificate-listener.js';
 import { APP_VERSION } from './versioning/app-version.js';
-import { registerBodyParsers } from './common/http/body-parsers.js';
+import {
+  registerBodyParsers,
+  registerFormBodyParser,
+} from './common/http/body-parsers.js';
 import { applySecurityHeaders } from './common/security/http-security-headers.js';
 import { RequestInputPipe } from './common/pipes/request-input.pipe.js';
 
@@ -237,6 +240,7 @@ async function bootstrap() {
   // JSON and SCIM's application/scim+json. After the security headers, so a
   // body the parser rejects (malformed JSON) is answered with them too.
   registerBodyParsers(app);
+  registerFormBodyParser(app);
   app.use(cookieParser());
 
   // Backward compatibility: the SSO session cookie used to be AUTHME_SESSION
