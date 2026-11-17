@@ -180,11 +180,11 @@ curl -X POST "http://localhost:3000/admin/migration/authentik" \
 
 or `idenplane migrate authentik --file authentik-export.json --realm my-realm` (add `--json` for the raw report).
 
-The importer works in this order: groups (parents before their sub-groups), then clients (from providers), then users and their group memberships, then identity providers (from sources). Each entity is written on its own; there is no transaction around the import, so a failure part-way leaves what was already created. Running the same file again is safe: anything that already exists is skipped and not changed, except that missing group memberships are added (see [Cut-Over](#8-cut-over)).
+The importer works in this order: groups (parents before their sub-groups), then clients (from providers), then users and their group memberships, then identity providers (from sources). Each entity is written on its own; there is no transaction around the import, so a failure part-way leaves what was already created. Running the same file again is safe: anything that already exists is skipped and not changed. Users that already exist do not get group memberships unless you ask for it with `addMembershipsToExistingUsers` (see [Cut-Over](#8-cut-over)).
 
 ### Using the Admin Console
 
-Super-admins can run the same import from **Migration Wizard** in the realm's menu (`/console/realms/{realm}/migration`): choose **Authentik**, upload `authentik-export.json`, review the dry-run report, then run the import. The wizard imports into the realm you opened it from, and always does a dry run first.
+Super-admins can run the same import from **Migration Wizard** in the realm's menu (`/console/realms/{realm}/migration`): choose **Authentik**, upload `authentik-export.json`, review the dry-run report, then run the import. The wizard imports into the realm you opened it from, and always does a dry run first. It has no switch for `addMembershipsToExistingUsers`; use the API or the CLI for that.
 
 ### Request Size Limit
 
@@ -258,13 +258,15 @@ In a dry run, `created` means "would be created".
 | `Authentik marks this account as having no usable password` | Django's unusable-password marker, typically on a user who only signs in through a source | Nothing, if the user signs in through an identity provider; otherwise they set a password |
 | `Authentik PBKDF2 credential is malformed` / `bcrypt password hash is malformed` | The hash could not be parsed (or a PBKDF2 hash has more than 10,000,000 iterations) | The user sets a new password |
 | `references group '<name>', which was not in the export` | The user's `groups` names a group missing from `groups` | Add the group to the file and import again; the membership is then added |
-| `already existed and was not changed, except: added N group membership(s)` | A re-import found the user and added the memberships it was missing; none are removed | Nothing |
+| `N existing user(s) were not given memberships (enable addMembershipsToExistingUsers to add them)` | Users with the same username already exist in the realm, and the file lists groups they are not in. By default the importer does not touch existing users | If those accounts are the same people, import again with `addMembershipsToExistingUsers` (see [Cut-Over](#8-cut-over)) |
+| `already existed and was not changed, except: added N group membership(s)` (`would add` in a dry run) | With `addMembershipsToExistingUsers`, the user was found by username and given the memberships it was missing; none are removed | Check that the account is the same person |
 | `Group '<name>': its parent group ... imported as a top-level group` | The parent is not in the file, or failed | Add the parent group, or move the group afterwards |
 | `Group '<name>': not imported: is_superuser / RBAC role(s) / attributes` | Authentik admin rights, RBAC roles and group attributes have no automatic equivalent | Recreate them as Idenplane roles and admin access |
 | `redirect URI '<url>' was not imported: it uses regex matching` | Idenplane matches redirect URIs exactly. In the newline-separated form of older Authentik versions, a line with regex-only characters (`*`, `^`, `$`, `(`, `\|`, ...) is treated the same way | Add the exact callback URLs to the client |
 | `Client '<name>' is confidential but has no client secret in the export; it was imported disabled` | A confidential client cannot authenticate without a secret | [Regenerate its secret](#2-review-each-client) and enable it |
 | `source type <type> is not a generic OIDC source` | Only `openidconnect` sources are imported | Create the identity provider by hand |
 | `neither its slug nor its name gives an alias` | The alias must be lowercase letters, digits and hyphens | Create the identity provider by hand |
+| `Source '<name>' skipped: alias '<alias>' already used by source '<other>' in this file` | Two sources give the same alias (same slug, or names that slugify the same) | Give one of them a different slug in the file, or create it by hand |
 | `has no usable clientId, authorizationUrl, tokenUrl` | The OIDC source has no consumer key, or no `http(s)` authorization or token URL | Fill them in and import again, or create the provider by hand |
 | `Identity provider '<alias>' has no client secret in the export; it was imported disabled` | The source's `consumer_secret` was not in the file (Authentik's API may not return it; check your version) | Set the secret on the identity provider and enable it |
 | `MFA devices ... were not imported` / `Links between users and their source accounts ... were not imported` | Neither is in the API export | See [MFA Re-enrolment](#6-mfa-re-enrolment) and [Check Identity Providers](#4-check-identity-providers) |
@@ -322,7 +324,7 @@ curl -X PUT "http://localhost:3000/admin/realms/my-realm/users/${USER_ID}/reset-
 | Service account, outpost account (`service_account`, `internal_service_account`) | Not imported (reported) | Use an Idenplane client with the `client_credentials` grant (its service account) |
 | Group | Group | Name, and its `parent` as the parent group |
 | Group `is_superuser`, `roles`, `attributes` | Not imported (reported) | Recreate with Idenplane roles and admin access |
-| Group membership | Group membership | Added for new and existing users; never removed |
+| Group membership | Group membership | Added for new users; for users that already exist only with `addMembershipsToExistingUsers`; never removed |
 | RBAC role, permission | Not imported | Recreate with Idenplane roles and policies |
 | OAuth2/OpenID provider | Client | See below |
 | Provider `client_id` / `client_secret` | Client ID / hashed client secret | The existing secret keeps working; a confidential provider without one is imported disabled |
@@ -462,7 +464,13 @@ curl -s -X POST "http://localhost:3000/realms/my-realm/protocol/openid-connect/t
 
 ### 8. Cut-Over
 
-A re-import never updates what already exists: changes made in Authentik after an import (a new password, a new e-mail address, a disabled account) only reach Idenplane for users that were not there yet. The one exception is group membership: a user that already exists gets the memberships from the file that they are missing (none are removed). The match is by username only, so importing into a realm that already has users treats a local account with the same username as the same person, and gives it the Authentik groups (and the roles of a same-named Idenplane group); review the dry run's `would add` lines first. For a clean switch:
+A re-import never updates what already exists: changes made in Authentik after an import (a new password, a new e-mail address, a disabled account) only reach Idenplane for users that were not there yet. Group memberships of users that already exist are not changed either, unless you set `addMembershipsToExistingUsers: true` in the request (`--add-memberships-to-existing-users` in the CLI). The report then says how many existing users were left out.
+
+:::warning Adding memberships to existing users
+With `addMembershipsToExistingUsers`, a user that already exists gets the memberships from the file that they are missing (none are removed). The match is **by username only**: in a realm that already has users, a local account that only shares a username with an Authentik user gets that user's groups, and the roles of an Idenplane group with the same name (such as `admins`). Use it only when every existing account with a matching username is the same person, typically when re-importing into a realm the import itself filled. Run a dry run with the option first and read every `would add` line.
+:::
+
+For a clean switch:
 
 1. Rehearse: import into a scratch realm, test, then delete it (`DELETE /admin/realms/{realm}`)
 2. Announce a change freeze, or a short window where users cannot change their password in Authentik
@@ -479,7 +487,7 @@ The import reads a file and never touches Authentik, so Authentik keeps working 
 ## Known Limitations
 
 - **Passwords:** Django's `pbkdf2_sha256`, `pbkdf2_sha1`, `argon2` and `bcrypt` hashers are carried over. `bcrypt_sha256`, `scrypt` and older hashers are not.
-- **Re-import:** an existing username, group name, client ID or identity provider alias is skipped and left unchanged; only missing group memberships are added.
+- **Re-import:** an existing username, group name, client ID or identity provider alias is skipped and left unchanged. Missing group memberships of existing users are added only with `addMembershipsToExistingUsers`, matched by username.
 - **E-mail addresses:** one user per address in a realm. A later user with an address already taken is imported without it, with a warning.
 - **Users:** service and outpost accounts are skipped. `name` is split at the first space. `emailVerified` is always `false`. Attributes are imported only into custom attributes defined in the realm. `path`, avatars and source connections are not imported.
 - **Groups:** name and parent. `is_superuser`, RBAC roles and attributes are reported, not imported. An existing group of the same name is reused as is, parent included.
@@ -517,6 +525,7 @@ Import Authentik REST API responses (users, groups, OAuth2 providers, OAuth sour
 |-----------|------|----------|-------------|
 | `data` | object | Yes | The four sections; each is optional, and each may be a list or a whole paginated API response |
 | `dryRun` | boolean | No | Report what would happen without writing anything (default: `false`) |
+| `addMembershipsToExistingUsers` | boolean | No | Also add the file's group memberships to users that already exist in the realm, matched by username (default: `false`; see [Cut-Over](#8-cut-over)) |
 | `targetRealm` | string | Yes | Name of an existing realm |
 
 **Responses:**

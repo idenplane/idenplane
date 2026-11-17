@@ -60,6 +60,7 @@ interface MigrateOptions {
   realm?: string;
   dryRun: boolean;
   json: boolean;
+  addMembershipsToExistingUsers?: boolean;
 }
 
 /** Reads the export, posts it to `/admin/migration/<source>` and prints the report. */
@@ -68,6 +69,7 @@ async function runMigration(
   opts: MigrateOptions,
   describe: (data: any) => string,
   deps: MigrateDeps,
+  extraBody: Record<string, unknown> = {},
 ): Promise<void> {
   const config = deps.loadConfig();
   if (!config) { console.error(chalk.red('Not configured. Run: idenplane init')); process.exit(1); }
@@ -84,7 +86,7 @@ async function runMigration(
 
   try {
     const report = await deps.post(config, `/admin/migration/${source}`, {
-      data, dryRun: opts.dryRun, targetRealm: opts.realm,
+      data, dryRun: opts.dryRun, targetRealm: opts.realm, ...extraBody,
     });
     if (opts.json) {
       console.log(JSON.stringify(report, null, 2));
@@ -145,8 +147,15 @@ export function registerMigrateCommand(program: Command, deps: MigrateDeps = def
     .requiredOption('--file <path>', 'Path to the Authentik import JSON file')
     .requiredOption('--realm <name>', 'Target realm name (must exist)')
     .option('--dry-run', 'Preview import without making changes', false)
+    .option(
+      '--add-memberships-to-existing-users',
+      'Also add group memberships to users that already exist in the realm (matched by username only)',
+      false,
+    )
     .option('--json', 'Output as JSON', false)
     .action((opts: MigrateOptions) =>
-      runMigration('authentik', opts, () => `Importing Authentik data into realm '${opts.realm}'`, deps),
+      runMigration('authentik', opts, () => `Importing Authentik data into realm '${opts.realm}'`, deps, {
+        addMembershipsToExistingUsers: opts.addMembershipsToExistingUsers ?? false,
+      }),
     );
 }

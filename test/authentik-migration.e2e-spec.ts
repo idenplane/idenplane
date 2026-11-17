@@ -51,11 +51,15 @@ describe('Authentik migration (e2e)', () => {
     results,
   });
 
-  const importAuthentik = (data: unknown, dryRun = false) =>
+  const importAuthentik = (
+    data: unknown,
+    dryRun = false,
+    extra: Record<string, unknown> = {},
+  ) =>
     request(app.getHttpServer())
       .post('/admin/migration/authentik')
       .set('x-admin-api-key', TEST_ADMIN_API_KEY)
-      .send({ targetRealm: REALM, dryRun, data });
+      .send({ targetRealm: REALM, dryRun, data, ...extra });
 
   let exportData: Record<string, unknown>;
 
@@ -276,34 +280,58 @@ describe('Authentik migration (e2e)', () => {
     },
   );
 
-  it('a second import adds missing memberships to existing users and changes nothing else', async () => {
-    const users = (exportData.users as { results: Record<string, unknown>[] })
-      .results;
-    const again = {
-      ...exportData,
-      users: page(
-        users.map((u) =>
-          u.username === 'ak-pbkdf2'
-            ? { ...u, groups: ['grp-be', 'grp-eng'], name: 'Changed Name' }
-            : u,
+  describe('a second import', () => {
+    const withExtraGroup = () => {
+      const users = (exportData.users as { results: Record<string, unknown>[] })
+        .results;
+      return {
+        ...exportData,
+        users: page(
+          users.map((u) =>
+            u.username === 'ak-pbkdf2'
+              ? { ...u, groups: ['grp-be', 'grp-eng'], name: 'Changed Name' }
+              : u,
+          ),
         ),
-      ),
+      };
     };
-    const res = await importAuthentik(again);
-    expect(res.status).toBe(200);
-    expect(res.body.summary.users).toEqual({
-      created: 0,
-      skipped: 5,
-      failed: 0,
+    const groupsOf = async (username: string) =>
+      (await userRow(username))?.userGroups.map((g) => g.group.name).sort();
+
+    it('leaves existing users alone by default and says how many it withheld', async () => {
+      const res = await importAuthentik(withExtraGroup());
+      expect(res.status).toBe(200);
+      expect(res.body.summary.users).toEqual({
+        created: 0,
+        skipped: 5,
+        failed: 0,
+      });
+      expect(await groupsOf('ak-pbkdf2')).toEqual(['ak-backend']);
+      expect(JSON.stringify(res.body.warnings)).toContain(
+        '1 existing user(s) were not given memberships (enable addMembershipsToExistingUsers to add them).',
+      );
     });
-    const user = await userRow('ak-pbkdf2');
-    expect(user?.userGroups.map((g) => g.group.name).sort()).toEqual([
-      'ak-backend',
-      'ak-engineering',
-    ]);
-    expect(user?.firstName).toBe('Mary');
-    expect(JSON.stringify(res.body.warnings)).toContain(
-      "User 'ak-pbkdf2' already existed and was not changed, except: added 1 group membership(s)",
-    );
+
+    it('adds missing memberships with addMembershipsToExistingUsers, and changes nothing else', async () => {
+      const res = await importAuthentik(withExtraGroup(), false, {
+        addMembershipsToExistingUsers: true,
+      });
+      expect(res.status).toBe(200);
+      expect(await groupsOf('ak-pbkdf2')).toEqual([
+        'ak-backend',
+        'ak-engineering',
+      ]);
+      expect((await userRow('ak-pbkdf2'))?.firstName).toBe('Mary');
+      expect(JSON.stringify(res.body.warnings)).toContain(
+        "User 'ak-pbkdf2' already existed and was not changed, except: added 1 group membership(s)",
+      );
+    });
+
+    it('refuses a non-boolean addMembershipsToExistingUsers', async () => {
+      const res = await importAuthentik({}, true, {
+        addMembershipsToExistingUsers: 'yes',
+      });
+      expect(res.status).toBe(400);
+    });
   });
 });

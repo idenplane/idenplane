@@ -87,6 +87,15 @@ export class AuthentikImportDto {
   @IsBoolean()
   dryRun?: boolean;
 
+  /**
+   * Also add the file's group memberships to users that already exist in
+   * the realm (matched by username). Off by default; see
+   * AuthentikImportOptions.addMembershipsToExistingUsers.
+   */
+  @IsOptional()
+  @IsBoolean()
+  addMembershipsToExistingUsers?: boolean;
+
   @IsString()
   targetRealm!: string;
 }
@@ -242,6 +251,7 @@ export class MigrationController {
     return this.authentikImporter.importData(dto.data, {
       dryRun: dto.dryRun ?? false,
       targetRealm: dto.targetRealm,
+      addMembershipsToExistingUsers: dto.addMembershipsToExistingUsers ?? false,
     });
   }
 }

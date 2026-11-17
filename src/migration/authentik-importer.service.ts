@@ -27,6 +27,13 @@ import { attributeValueProblem } from '../custom-attributes/custom-attributes.se
 export interface AuthentikImportOptions {
   dryRun: boolean;
   targetRealm: string;
+  /**
+   * Add the export's group memberships to users that already exist in the
+   * realm (matched by username). Off by default: a local account that only
+   * shares a username with an Authentik user would otherwise get that
+   * user's groups, and the roles of a same-named Idenplane group.
+   */
+  addMembershipsToExistingUsers?: boolean;
 }
 
 const OIDC_SOURCE_TYPES = new Set(['openidconnect', 'oidc']);
@@ -86,6 +93,7 @@ export class AuthentikImporterService {
       groups,
       report,
       options.dryRun,
+      options.addMembershipsToExistingUsers ?? false,
     );
     await this.importSources(
       data.sources,
@@ -316,6 +324,7 @@ export class AuthentikImporterService {
     groups: GroupIndex,
     report: MigrationReport,
     dryRun: boolean,
+    addToExisting: boolean,
   ): Promise<void> {
     if (users.length === 0) return;
 
@@ -327,6 +336,8 @@ export class AuthentikImporterService {
     const emailsInImport = new Map<string, string>();
     /** Attributes left out, by name and reason, to the number of users. */
     const droppedAttributes = new Map<string, number>();
+    /** Existing users whose missing memberships were withheld (option off). */
+    let existingWithoutMemberships = 0;
 
     for (const user of users) {
       const username =
@@ -375,7 +386,23 @@ export class AuthentikImporterService {
         continue;
       }
 
-      await this.addMemberships(user, userId, isNew, groups, report, dryRun);
+      const withheld = await this.addMemberships(
+        user,
+        userId,
+        isNew,
+        groups,
+        report,
+        dryRun,
+        addToExisting,
+      );
+      if (withheld) existingWithoutMemberships++;
+    }
+
+    if (existingWithoutMemberships > 0) {
+      report.warnings.push({
+        entity: 'user',
+        message: `${existingWithoutMemberships} existing user(s) were not given memberships (enable addMembershipsToExistingUsers to add them).`,
+      });
     }
 
     // One line per attribute and reason, not per user: Authentik puts
@@ -526,10 +553,12 @@ export class AuthentikImporterService {
   }
 
   /**
-   * Adds the user's group memberships from the export, for new users and
-   * users that already exist alike. Only adds: a membership the user has
-   * in Idenplane and not in Authentik is kept. A failure here is reported
-   * on its own and does not count the user as failed.
+   * Adds the user's group memberships from the export. For a user that
+   * already exists, only when `addToExisting` is set; otherwise returns
+   * true when it would have added some, so the caller can report them.
+   * Only adds: a membership the user has in Idenplane and not in Authentik
+   * is kept. A failure here is reported on its own and does not count the
+   * user as failed.
    */
   private async addMemberships(
     user: AuthentikUser,
@@ -538,7 +567,8 @@ export class AuthentikImporterService {
     groups: GroupIndex,
     report: MigrationReport,
     dryRun: boolean,
-  ): Promise<void> {
+    addToExisting: boolean,
+  ): Promise<boolean> {
     const groupIds = new Set<string>();
     for (const ref of user.groups ?? []) {
       const key = String(ref);
@@ -553,7 +583,7 @@ export class AuthentikImporterService {
       }
       groupIds.add(groupId);
     }
-    if (groupIds.size === 0) return;
+    if (groupIds.size === 0) return false;
 
     try {
       let toAdd = [...groupIds];
@@ -565,7 +595,8 @@ export class AuthentikImporterService {
         const have = new Set(current.map((m) => m.groupId));
         toAdd = toAdd.filter((id) => !have.has(id));
       }
-      if (toAdd.length === 0) return;
+      if (toAdd.length === 0) return false;
+      if (!isNew && !addToExisting) return true;
       if (!dryRun) {
         await this.prisma.userGroup.createMany({
           data: toAdd.map((groupId) => ({ userId, groupId })),
@@ -585,6 +616,7 @@ export class AuthentikImporterService {
         error: `Group memberships not added: ${(error as Error).message}`,
       });
     }
+    return false;
   }
 
   // ─── Identity providers ────────────────────────────────────────────────
@@ -597,6 +629,8 @@ export class AuthentikImporterService {
     hasUsers: boolean,
   ): Promise<void> {
     let imported = 0;
+    /** Aliases taken by earlier sources in this file, to that source's label. */
+    const aliasesInFile = new Map<string, string>();
     for (const source of sources) {
       const label =
         source.name || source.slug || String(source.pk ?? 'unknown');
@@ -621,6 +655,16 @@ export class AuthentikImporterService {
         });
         continue;
       }
+      const firstWithAlias = aliasesInFile.get(alias);
+      if (firstWithAlias !== undefined) {
+        report.summary.identityProviders.skipped++;
+        report.warnings.push({
+          entity: 'identity_provider',
+          message: `Source '${label}' skipped: alias '${alias}' already used by source '${firstWithAlias}' in this file.`,
+        });
+        continue;
+      }
+      aliasesInFile.set(alias, label);
       const plan = planIdpImport({
         alias,
         providerType: 'oidc',

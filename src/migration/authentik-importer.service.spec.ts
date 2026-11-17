@@ -307,10 +307,15 @@ describe('AuthentikImporterService', () => {
   });
 
   describe('Authentik API shapes and report entries', () => {
-    const run = (data: unknown, dryRun = false) =>
+    const run = (
+      data: unknown,
+      dryRun = false,
+      addMembershipsToExistingUsers?: boolean,
+    ) =>
       service.importData(data as AuthentikExport, {
         dryRun,
         targetRealm: 'test',
+        addMembershipsToExistingUsers,
       });
     const warnings = (report: { warnings: { message: string }[] }) =>
       report.warnings.map((w) => w.message);
@@ -584,33 +589,96 @@ describe('AuthentikImporterService', () => {
       ]);
     });
 
-    it('adds missing memberships to a user that already exists, and only adds', async () => {
-      prisma.user.findFirst.mockImplementation(({ where }: any) =>
-        Promise.resolve(where.username === 'u' ? { id: 'existing-u' } : null),
-      );
-      prisma.group.create.mockImplementation(({ data }: any) =>
-        Promise.resolve({ id: `id-${data.name}` }),
-      );
-      prisma.userGroup.findMany.mockResolvedValue([{ groupId: 'id-staff' }]);
-      const report = await run({
+    describe('memberships of users that already exist', () => {
+      const data = {
         groups: [
           { pk: 'g1', name: 'staff' },
           { pk: 'g2', name: 'ops' },
         ],
-        users: [{ pk: 1, username: 'u', groups: ['g1', 'g2'] }],
-      });
-      expect(report.summary.users.skipped).toBe(1);
-      expect(prisma.user.create).not.toHaveBeenCalled();
-      expect(prisma.userGroup.createMany).toHaveBeenCalledWith({
-        data: [{ userId: 'existing-u', groupId: 'id-ops' }],
-        skipDuplicates: true,
-      });
-      expect(warnings(report)).toEqual(
-        expect.arrayContaining([
-          expect.stringContaining(
-            "User 'u' already existed and was not changed, except: added 1 group membership(s)",
+        users: [
+          { pk: 1, username: 'u', groups: ['g1', 'g2'] },
+          { pk: 2, username: 'v', groups: ['g1'] },
+        ],
+      };
+
+      beforeEach(() => {
+        prisma.user.findFirst.mockImplementation(({ where }: any) =>
+          Promise.resolve(
+            where.username ? { id: `existing-${where.username}` } : null,
           ),
-        ]),
+        );
+        prisma.group.create.mockImplementation(({ data: d }: any) =>
+          Promise.resolve({ id: `id-${d.name}` }),
+        );
+        // Both users already have 'staff'; only 'u' is missing 'ops'.
+        prisma.userGroup.findMany.mockResolvedValue([{ groupId: 'id-staff' }]);
+      });
+
+      it.each([undefined, false])(
+        'are not added unless the option is on (option=%p), and the report says how many were withheld',
+        async (option) => {
+          const report = await run(data, false, option);
+          expect(report.summary.users.skipped).toBe(2);
+          expect(prisma.user.create).not.toHaveBeenCalled();
+          expect(prisma.userGroup.createMany).not.toHaveBeenCalled();
+          expect(warnings(report)).toContain(
+            '1 existing user(s) were not given memberships (enable addMembershipsToExistingUsers to add them).',
+          );
+          expect(warnings(report).join('\n')).not.toContain('already existed');
+        },
+      );
+
+      it('are added, only the missing ones, when addMembershipsToExistingUsers is on', async () => {
+        const report = await run(data, false, true);
+        expect(prisma.userGroup.createMany).toHaveBeenCalledTimes(1);
+        expect(prisma.userGroup.createMany).toHaveBeenCalledWith({
+          data: [{ userId: 'existing-u', groupId: 'id-ops' }],
+          skipDuplicates: true,
+        });
+        expect(warnings(report)).toContain(
+          "User 'u' already existed and was not changed, except: added 1 group membership(s) from the export (existing memberships are kept).",
+        );
+        expect(warnings(report).join('\n')).not.toContain(
+          'were not given memberships',
+        );
+      });
+
+      it('are reported as "would add" in a dry run with the option on', async () => {
+        const report = await run(data, true, true);
+        expect(prisma.userGroup.createMany).not.toHaveBeenCalled();
+        // In a dry run the groups are not created yet, so every membership
+        // from the file is one the users do not have.
+        expect(warnings(report)).toEqual(
+          expect.arrayContaining([
+            "User 'u' already existed and was not changed, except: would add 2 group membership(s) from the export (existing memberships are kept).",
+            "User 'v' already existed and was not changed, except: would add 1 group membership(s) from the export (existing memberships are kept).",
+          ]),
+        );
+      });
+    });
+
+    it('skips a source whose alias an earlier source in the file already uses, saying which', async () => {
+      const oidc = {
+        provider_type: 'openidconnect',
+        authorization_url: 'https://idp.example/authorize',
+        access_token_url: 'https://idp.example/token',
+        consumer_key: 'k',
+        consumer_secret: 's',
+      };
+      const report = await run({
+        sources: [
+          { ...oidc, pk: 'a', name: 'Partner Login', slug: 'partner-login' },
+          { ...oidc, pk: 'b', name: 'Partner  Login' },
+        ],
+      });
+      expect(prisma.identityProvider.create).toHaveBeenCalledTimes(1);
+      expect(report.summary.identityProviders).toEqual({
+        created: 1,
+        skipped: 1,
+        failed: 0,
+      });
+      expect(warnings(report)).toContain(
+        "Source 'Partner  Login' skipped: alias 'partner-login' already used by source 'Partner Login' in this file.",
       );
     });
 

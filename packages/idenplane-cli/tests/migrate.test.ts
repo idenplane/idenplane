@@ -68,10 +68,17 @@ test('migrate authentik posts the file to /admin/migration/authentik', async () 
   assert.equal(calls.length, 1);
   assert.equal(calls[0].path, '/admin/migration/authentik');
   assert.equal(calls[0].config, CONFIG);
-  assert.deepEqual(calls[0].body, { data, dryRun: true, targetRealm: 'my-realm' });
+  assert.deepEqual(calls[0].body, { data, dryRun: true, targetRealm: 'my-realm', addMembershipsToExistingUsers: false });
   assert.match(out, /Importing Authentik data into realm 'my-realm' \(dry run\)/);
   assert.match(out, /Migration Report \(authentik\)/);
   assert.match(out, /ak-outpost-x/);
+});
+
+test('migrate authentik --add-memberships-to-existing-users opts in', async () => {
+  const file = join(dir, 'authentik-export.json');
+  writeFileSync(file, '{}');
+  const { calls } = await run(['migrate', 'authentik', '--file', file, '--realm', 'r', '--add-memberships-to-existing-users']);
+  assert.equal(calls[0].body.addMembershipsToExistingUsers, true);
 });
 
 test('migrate authentik --json prints the report as JSON', async () => {
