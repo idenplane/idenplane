@@ -5,6 +5,7 @@ import * as argon2 from 'argon2';
 import type { PrismaService } from '../../src/prisma/prisma.service';
 import { MfaService } from '../../src/mfa/mfa.service';
 import type { SoftAuthenticator } from './soft-authenticator';
+import { forgetCachedRealm } from './realm-cache';
 
 /** Shared fixtures for the custom auth-flow runtime suites. */
 
@@ -68,10 +69,12 @@ export async function bindRealm(
   flowId: string | null,
   enabled = true,
 ) {
-  await prisma.realm.update({
+  const realm = await prisma.realm.update({
     where: { id: realmId },
     data: { browserFlowId: flowId, authFlowsEnabled: enabled },
   });
+  // The next request must see the new binding, not a cached realm.
+  await forgetCachedRealm(realm);
 }
 
 export function authorizeUrl(
