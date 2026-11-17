@@ -372,7 +372,10 @@ describe('SAML identity-provider broker (e2e)', () => {
         `/realms/${REALM}/broker/${ALIAS}/login`,
       );
       const acs = await postToAcs(
-        idpResponse(requestId, { nameId: 'okta-flow-1' }),
+        idpResponse(requestId, {
+          nameId: 'okta-flow-1',
+          attributes: { email: ['flow.user@example.test'] },
+        }),
         relayState,
       );
       expect(acs.status).toBe(303);
