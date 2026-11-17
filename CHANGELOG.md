@@ -12,6 +12,9 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 ### Changed
 - **OpenSSF Scorecard sees the Gradle wrapper validation.** The two `gradle-wrapper.jar` files were already checked against Gradle's checksums in CI, but Scorecard only counts that when the validating workflow has already succeeded on the commit it scans, and it scanned on push, before CI finished. A dedicated, seconds-long `Gradle wrapper validation` workflow now runs on every push to dev and weekly, and Scorecard starts when it completes.
 
+### Removed
+- **OIDC discovery no longer advertises `passkey_endpoint`.** A realm with WebAuthn enabled listed `passkey_endpoint: {realm}/webauthn`, a URL nothing served. The field is not defined by OpenID Connect Discovery or any other specification, and nothing read it. The WebAuthn endpoints that do exist are still advertised as `webauthn_registration_endpoint` and `webauthn_authentication_endpoint`.
+
 ## [0.11.1] - 2026-11-17
 
 A security patch: a refresh token presented twice at the same moment could leave a valid refresh token behind after reuse was detected. No configuration or upgrade steps are needed when coming from 0.11.0. A client that presents a refresh token it has already redeemed now loses the whole session, not just its refresh tokens, and must sign the user in again.
