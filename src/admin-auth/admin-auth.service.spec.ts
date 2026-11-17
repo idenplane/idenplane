@@ -807,6 +807,107 @@ describe('AdminAuthService', () => {
       const result = await service.validateAdminToken('token');
       expect(result.roles).toEqual([]);
     });
+
+    describe("after the admin's credentials changed", () => {
+      const now = Math.floor(Date.now() / 1000);
+      const token = (iat: number) => ({
+        typ: 'admin',
+        sub: 'user-1',
+        jti: 'jti-1',
+        iat,
+        realm_access: { roles: ['super-admin'] },
+      });
+      const userRevocation = (revokedAtSec: number) => ({
+        jti: 'user:user-1',
+        revokedAt: new Date(revokedAtSec * 1000),
+        expiresAt: new Date((now + 3600) * 1000),
+      });
+
+      beforeEach(() => {
+        prisma.realm.findUnique.mockResolvedValue(masterRealm);
+        prisma.realmSigningKey.findFirst.mockResolvedValue(signingKey);
+      });
+
+      it('reads the token and the admin revocation in one query', async () => {
+        jwkService.verifyJwt.mockResolvedValue(token(now));
+        await service.validateAdminToken('t');
+        expect(prisma.adminRevokedToken.findMany).toHaveBeenCalledTimes(1);
+        expect(prisma.adminRevokedToken.findMany).toHaveBeenCalledWith({
+          where: { jti: { in: ['jti-1', 'user:user-1'] } },
+        });
+      });
+
+      it('refuses a token issued before the revocation', async () => {
+        jwkService.verifyJwt.mockResolvedValue(token(now - 120));
+        prisma.adminRevokedToken.findMany.mockResolvedValue([
+          userRevocation(now - 60),
+        ]);
+        await expect(service.validateAdminToken('t')).rejects.toBeInstanceOf(
+          UnauthorizedException,
+        );
+      });
+
+      it('accepts a token issued after the revocation', async () => {
+        jwkService.verifyJwt.mockResolvedValue(token(now));
+        prisma.adminRevokedToken.findMany.mockResolvedValue([
+          userRevocation(now - 60),
+        ]);
+        await expect(service.validateAdminToken('t')).resolves.toEqual({
+          userId: 'user-1',
+          roles: ['super-admin'],
+        });
+      });
+
+      it('ignores a revocation that has expired', async () => {
+        jwkService.verifyJwt.mockResolvedValue(token(now - 120));
+        prisma.adminRevokedToken.findMany.mockResolvedValue([
+          { ...userRevocation(now - 60), expiresAt: new Date(now * 1000 - 1) },
+        ]);
+        await expect(service.validateAdminToken('t')).resolves.toBeTruthy();
+      });
+
+      it('tells tokens from the same second apart by their millisecond issue time', async () => {
+        const revokedAtMs = now * 1000 + 500;
+        prisma.adminRevokedToken.findMany.mockResolvedValue([
+          {
+            jti: 'user:user-1',
+            revokedAt: new Date(revokedAtMs),
+            expiresAt: new Date((now + 3600) * 1000),
+          },
+        ]);
+        jwkService.verifyJwt.mockResolvedValue({
+          ...token(now),
+          iat_ms: revokedAtMs + 1,
+        });
+        await expect(service.validateAdminToken('t')).resolves.toBeTruthy();
+        jwkService.verifyJwt.mockResolvedValue({
+          ...token(now),
+          iat_ms: revokedAtMs - 1,
+        });
+        await expect(service.validateAdminToken('t')).rejects.toBeInstanceOf(
+          UnauthorizedException,
+        );
+        // A token from before 0.12.0 has no iat_ms: the same second is refused.
+        jwkService.verifyJwt.mockResolvedValue(token(now));
+        await expect(service.validateAdminToken('t')).rejects.toBeInstanceOf(
+          UnauthorizedException,
+        );
+      });
+
+      it('still refuses a token revoked by its own jti', async () => {
+        jwkService.verifyJwt.mockResolvedValue(token(now));
+        prisma.adminRevokedToken.findMany.mockResolvedValue([
+          {
+            jti: 'jti-1',
+            revokedAt: new Date(),
+            expiresAt: new Date((now + 3600) * 1000),
+          },
+        ]);
+        await expect(service.validateAdminToken('t')).rejects.toThrow(
+          'Token has been revoked',
+        );
+      });
+    });
   });
 
   // ─── hasRole ──────────────────────────────────────────

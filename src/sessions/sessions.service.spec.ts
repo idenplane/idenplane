@@ -222,51 +222,79 @@ describe('SessionsService', () => {
   // ─── revokeAllUserSessions ──────────────────────────────────
 
   describe('revokeAllUserSessions', () => {
-    it('should revoke all user sessions in batch operations', async () => {
-      prisma.session.findMany.mockResolvedValue([
-        { id: 'session-1' },
-        { id: 'session-2' },
-      ]);
-      prisma.refreshToken.updateMany.mockResolvedValue({ count: 2 });
-      prisma.session.deleteMany.mockResolvedValue({ count: 2 });
-      prisma.loginSession.deleteMany.mockResolvedValue({
-        count: 1,
-      });
+    beforeEach(() => {
+      prisma.$transaction.mockResolvedValue([]);
+      prisma.refreshToken.updateMany.mockReturnValue('revoke-tokens');
+      prisma.session.deleteMany.mockReturnValue('delete-sessions');
+      prisma.loginSession.deleteMany.mockReturnValue('delete-sso');
+      prisma.proxySession.deleteMany = jest
+        .fn()
+        .mockReturnValue('delete-proxy');
+      prisma.adminRevokedToken.upsert.mockReturnValue('revoke-admin-tokens');
+    });
 
+    it('ends every session of the user in one transaction, selecting by user', async () => {
       await service.revokeAllUserSessions(mockRealm, 'user-1');
 
-      expect(prisma.session.findMany).toHaveBeenCalledWith({
-        where: { userId: 'user-1', user: { realmId: 'realm-1' } },
-        select: { id: true },
-      });
-
-      expect(prisma.refreshToken.updateMany).toHaveBeenCalledTimes(1);
+      const ofUser = { userId: 'user-1', user: { realmId: 'realm-1' } };
+      // No list is read first: a session created meanwhile is not missed.
+      expect(prisma.session.findMany).not.toHaveBeenCalled();
       expect(prisma.refreshToken.updateMany).toHaveBeenCalledWith({
-        where: { sessionId: { in: ['session-1', 'session-2'] } },
+        where: { session: ofUser },
         data: { revoked: true },
       });
-
-      expect(prisma.session.deleteMany).toHaveBeenCalledTimes(1);
       expect(prisma.session.deleteMany).toHaveBeenCalledWith({
-        where: { id: { in: ['session-1', 'session-2'] } },
+        where: ofUser,
       });
-
       expect(prisma.loginSession.deleteMany).toHaveBeenCalledWith({
         where: { userId: 'user-1', realmId: 'realm-1' },
       });
+      expect(prisma.proxySession.deleteMany).toHaveBeenCalledWith({
+        where: ofUser,
+      });
+      expect(prisma.$transaction).toHaveBeenCalledWith([
+        'revoke-tokens',
+        'delete-sessions',
+        'delete-sso',
+        'delete-proxy',
+      ]);
+      // Not a master realm user: no admin console tokens to end.
+      expect(prisma.adminRevokedToken.upsert).not.toHaveBeenCalled();
     });
 
-    it('should handle case with no existing sessions', async () => {
-      prisma.session.findMany.mockResolvedValue([]);
-      prisma.loginSession.deleteMany.mockResolvedValue({
-        count: 0,
+    it('keeps the SSO session it is told to keep', async () => {
+      await service.revokeAllUserSessions(mockRealm, 'user-1', {
+        keepLoginSessionTokenHash: 'current-hash',
       });
 
-      await service.revokeAllUserSessions(mockRealm, 'user-1');
+      expect(prisma.loginSession.deleteMany).toHaveBeenCalledWith({
+        where: {
+          userId: 'user-1',
+          realmId: 'realm-1',
+          tokenHash: { not: 'current-hash' },
+        },
+      });
+      // OAuth sessions (offline ones included) all end.
+      expect(prisma.session.deleteMany).toHaveBeenCalledWith({
+        where: { userId: 'user-1', user: { realmId: 'realm-1' } },
+      });
+    });
 
-      expect(prisma.refreshToken.updateMany).not.toHaveBeenCalled();
-      expect(prisma.session.deleteMany).not.toHaveBeenCalled();
-      expect(prisma.loginSession.deleteMany).toHaveBeenCalled();
+    it("ends a master realm user's admin console tokens too", async () => {
+      await service.revokeAllUserSessions(
+        { id: 'master-id', name: 'master' },
+        'admin-1',
+      );
+
+      expect(prisma.adminRevokedToken.upsert).toHaveBeenCalledWith(
+        expect.objectContaining({
+          where: { jti: 'user:admin-1' },
+          create: expect.objectContaining({ jti: 'user:admin-1' }),
+        }),
+      );
+      expect(prisma.$transaction).toHaveBeenCalledWith(
+        expect.arrayContaining(['revoke-admin-tokens']),
+      );
     });
   });
 });

@@ -27,9 +27,14 @@ import {
 } from '../admin-mfa/admin-mfa.service.js';
 import { ACR_PASSWORD } from '../authn-core/acr.js';
 import type { AuthenticatedAdmin } from '../admin-rbac/admin-principal.service.js';
+import { ADMIN_TOKEN_TTL_SECONDS } from './admin-token-ttl.js';
+import {
+  ADMIN_TOKEN_ISSUED_MS_CLAIM,
+  adminUserRevocationKey,
+  issuedBeforeRevocation,
+} from './admin-token-revocation.js';
 
-/** Lifetime of an admin token, in seconds. */
-export const ADMIN_TOKEN_TTL_SECONDS = 3600;
+export { ADMIN_TOKEN_TTL_SECONDS };
 
 /** A signed admin token, as the sign-in routes return it. */
 export interface AdminTokenResponse {
@@ -404,6 +409,9 @@ export class AdminAuthService implements OnModuleDestroy {
         amr: proof.amr,
         acr: proof.acr,
         auth_time: Math.floor(Date.now() / 1000),
+        // Lets a revocation of all this admin's tokens tell a token issued
+        // in the same second, just after it, from the ones it ends.
+        [ADMIN_TOKEN_ISSUED_MS_CLAIM]: Date.now(),
       },
       signingKey.privateKey,
       signingKey.kid,
@@ -563,16 +571,39 @@ export class AdminAuthService implements OnModuleDestroy {
       ) {
         throw new UnauthorizedException('Token has been revoked');
       }
+    }
 
+    // One query for both kinds of revocation: this token's own (sign-out),
+    // and every token of this admin issued before their credentials changed
+    // (see admin-token-revocation.ts).
+    const sub = typeof payload['sub'] === 'string' ? payload['sub'] : null;
+    const keys = [
+      ...(jti ? [jti] : []),
+      ...(sub ? [adminUserRevocationKey(sub)] : []),
+    ];
+    if (keys.length > 0) {
       try {
-        const record = await this.prisma.adminRevokedToken.findUnique({
-          where: { jti },
+        const records = await this.prisma.adminRevokedToken.findMany({
+          where: { jti: { in: keys } },
         });
-        if (record) {
-          const now = Math.floor(Date.now() / 1000);
-          const expiresAtSec = Math.floor(record.expiresAt.getTime() / 1000);
-          if (expiresAtSec > now) {
+        const now = Date.now();
+        for (const record of records) {
+          if (record.expiresAt.getTime() <= now) continue;
+          if (record.jti === jti) {
             throw new UnauthorizedException('Token has been revoked');
+          }
+          if (
+            issuedBeforeRevocation(
+              {
+                iat: payload['iat'],
+                iatMs: payload[ADMIN_TOKEN_ISSUED_MS_CLAIM],
+              },
+              record.revokedAt,
+            )
+          ) {
+            throw new UnauthorizedException(
+              'Token has been revoked: sign in again',
+            );
           }
         }
       } catch (err) {

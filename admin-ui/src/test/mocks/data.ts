@@ -42,6 +42,7 @@ export function makeRealm(overrides: Partial<Realm> = {}): Realm {
     webAuthnRpId: null,
     webAuthnUserVerificationRequired: false,
     offlineTokenLifespan: 2592000,
+    ssoSessionIdleTimeout: 0,
     eventsEnabled: false,
     eventsExpiration: 0,
     adminEventsEnabled: false,

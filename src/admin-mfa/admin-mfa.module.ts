@@ -1,6 +1,7 @@
 import { Module } from '@nestjs/common';
 import { WebAuthnCoreModule } from '../webauthn/webauthn-core.module.js';
 import { AdminRbacModule } from '../admin-rbac/admin-rbac.module.js';
+import { SessionsModule } from '../sessions/sessions.module.js';
 import { AdminMfaService } from './admin-mfa.service.js';
 import {
   AdminMfaController,
@@ -14,7 +15,7 @@ import {
  * (AdminAuthService, a global provider), never here.
  */
 @Module({
-  imports: [WebAuthnCoreModule, AdminRbacModule],
+  imports: [WebAuthnCoreModule, AdminRbacModule, SessionsModule],
   controllers: [AdminMfaController, AdminMfaManagementController],
   providers: [AdminMfaService],
   exports: [AdminMfaService],

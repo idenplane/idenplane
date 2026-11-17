@@ -230,6 +230,8 @@ Sets or resets a user's password.
 
 The endpoint also accepts a `temporary` field, but ignores it: Idenplane has no "change password at next sign-in" action yet.
 
+**The user is signed out everywhere** (since 0.12.0). Setting the password ends every session the user has in the realm: OAuth sessions and their refresh tokens (offline tokens included), browser SSO sessions and forward-auth proxy sessions. For a `master` realm user, every admin console token they hold stops working too. Access tokens already issued stay valid until they expire (`accessTokenLifespan`, 5 minutes by default). The user signs in again with the new password.
+
 ### Request Example
 
 ```bash

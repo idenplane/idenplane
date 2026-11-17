@@ -1,6 +1,11 @@
 import { Injectable, NotFoundException } from '@nestjs/common';
 import type { Realm } from '@prisma/client';
 import { PrismaService } from '../prisma/prisma.service.js';
+import { revokeAdminTokensOfUser } from '../admin-auth/admin-token-revocation.js';
+import { notIdleWhere } from './session-lifetime.js';
+
+/** The realm whose users are the admins of the console. */
+const MASTER_REALM = 'master';
 
 export interface SessionInfo {
   id: string;
@@ -31,6 +36,7 @@ export class SessionsService {
         where: {
           realmId: realm.id,
           expiresAt: { gt: new Date() },
+          ...notIdleWhere(realm),
         },
         include: { user: { select: { username: true } } },
         orderBy: { createdAt: 'desc' },
@@ -77,6 +83,7 @@ export class SessionsService {
           userId,
           realmId: realm.id,
           expiresAt: { gt: new Date() },
+          ...notIdleWhere(realm),
         },
         include: { user: { select: { username: true } } },
         orderBy: { createdAt: 'desc' },
@@ -160,39 +167,55 @@ export class SessionsService {
     throw new NotFoundException('Session not found');
   }
 
+  /**
+   * Signs a user out everywhere in this realm, in one transaction:
+   *
+   * - every OAuth session ends and its refresh tokens are revoked, offline
+   *   ones included;
+   * - every browser SSO session ends, except the one named by
+   *   `keepLoginSessionTokenHash` (the caller's own, when a user changes
+   *   their password in the account console);
+   * - every forward-auth proxy session ends;
+   * - for a `master` realm user, every admin console token they hold stops
+   *   working (see admin-auth/admin-token-revocation.ts).
+   *
+   * Used by the admin "sign out all sessions", disabling a user, SCIM
+   * deactivation, and every credential change: a password set or reset by
+   * an admin or by the user, and an admin removing a user's second factors.
+   * Access tokens already issued stay valid until they expire
+   * (`accessTokenLifespan`); they are stateless JWTs.
+   *
+   * Every statement selects by user and realm, not by a list read first, so
+   * a session created while this runs cannot be missed. Only users of this
+   * realm are touched (cross-realm IDOR): a user id from another realm
+   * matches nothing.
+   */
   async revokeAllUserSessions(
-    realm: Pick<Realm, 'id'>,
+    realm: Pick<Realm, 'id' | 'name'>,
     userId: string,
+    options: { keepLoginSessionTokenHash?: string } = {},
   ): Promise<void> {
-    // Explicit user-realm verification: only act when the user belongs to
-    // the realm that appears in the request URL, preventing cross-realm IDOR.
-    // If the user is not in this realm the findMany below returns an empty
-    // set, so sessions from other realms are never touched even without this
-    // guard — but the explicit check makes the intent clear and auditable.
-    const sessions = await this.prisma.session.findMany({
-      where: { userId, user: { realmId: realm.id } },
-      select: { id: true },
-    });
-    const sessionIds = sessions.map((s) => s.id);
-
-    // Atomically revoke all refresh tokens and delete all sessions in a
-    // single database transaction so there is no window in which a session
-    // exists without its tokens being revoked (BUG #2 / BUG #13).
+    const ofUser = { userId, user: { realmId: realm.id } };
+    const keep = options.keepLoginSessionTokenHash;
     await this.prisma.$transaction([
-      ...(sessionIds.length > 0
-        ? [
-            this.prisma.refreshToken.updateMany({
-              where: { sessionId: { in: sessionIds } },
-              data: { revoked: true },
-            }),
-            this.prisma.session.deleteMany({
-              where: { id: { in: sessionIds } },
-            }),
-          ]
-        : []),
-      this.prisma.loginSession.deleteMany({
-        where: { userId, realmId: realm.id },
+      this.prisma.refreshToken.updateMany({
+        where: { session: ofUser },
+        data: { revoked: true },
       }),
+      // Deleting a session deletes its refresh tokens (ON DELETE CASCADE);
+      // revoking them first also ends a refresh racing with this one.
+      this.prisma.session.deleteMany({ where: ofUser }),
+      this.prisma.loginSession.deleteMany({
+        where: {
+          userId,
+          realmId: realm.id,
+          ...(keep ? { tokenHash: { not: keep } } : {}),
+        },
+      }),
+      this.prisma.proxySession.deleteMany({ where: ofUser }),
+      ...(realm.name === MASTER_REALM
+        ? [revokeAdminTokensOfUser(this.prisma, userId)]
+        : []),
     ]);
   }
 }

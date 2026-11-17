@@ -90,7 +90,7 @@ These are left open on purpose. Most would change behaviour that existing deploy
 
 1. **No common, breached or context-word password checks** (V6.2.4, V6.2.11, V6.2.12).
 2. **Geo-IP lookups send end-user IPs over plain HTTP to ip-api.com** (V12.3.1, V14.2.3) when adaptive authentication or continuous verification is on. Needs an HTTPS provider or a local database, and an explicit opt-in.
-3. **Session idle timeout** (V7.3.1). There is no idle timeout for SSO sessions, nor for offline sessions, which live for `offlineTokenLifespan` from sign-in. (The absolute expiry and the offline lifetime were fixed in 0.11.0.)
+3. **Session idle timeout** (V7.3.1). Since 0.12.0 a realm can set an idle timeout for SSO sessions and normal refresh tokens (`ssoSessionIdleTimeout`), but it is off by default, and offline sessions have none: they live for `offlineTokenLifespan` from sign-in.
 4. **RP-initiated logout without `id_token_hint`** ends the session with no confirmation (V10.6.2).
 5. **WebSocket upgrade has no Origin check** (V4.4.2).
 6. **Theme asset uploads trust the declared MIME type** (V5.2.2) and store SVG unsanitized (V1.3.4).
@@ -247,18 +247,18 @@ Every row below has its own recommendation.
 
 | Req | L | Status | Evidence | Notes and recommendation |
 |---|---|---|---|---|
-| V7.1.1 | 2 | Partial | docs/docs/security/secure-defaults.md (session lifetimes); docs/docs/configuration/options.md; prisma/schema.prisma (accessTokenLifespan, refreshTokenLifespan, offlineTokenLifespan) | FIXED in part: the real settings are documented, including the offline session lifetime (0.11.0); there is no idle timeout to document (V7.3.1). |
+| V7.1.1 | 2 | Partial | docs/docs/security/secure-defaults.md (session lifetimes); docs/docs/configuration/options.md; prisma/schema.prisma (accessTokenLifespan, refreshTokenLifespan, offlineTokenLifespan) | FIXED in part: the real settings are documented, including the offline session lifetime (0.11.0) and the SSO idle timeout (0.12.0, off by default). |
 | V7.1.2 | 2 | Pass | docs/docs/guides/authentication.mdx; src/login/login.service.ts:157-182 | maxSessionsPerUser documented and enforced. |
 | V7.1.3 | 2 | Partial | docs/docs/api/oauth.md (backchannel logout) |  |
 | V7.2.1 | 1 | Pass | src/login/login.service.ts:187-215 | Session token looked up by hash server-side. |
 | V7.2.2 | 1 | Partial | src/common/guards/admin-api-key.guard.ts:150-200 | The static ADMIN\_API\_KEY gives super-admin access. **Recommendation:** Make the API key bootstrap-only in production (M). |
 | V7.2.3 | 1 | Pass | src/crypto/crypto.service.ts:191; src/login/login.service.ts:140 | 256-bit session tokens, stored hashed. |
 | V7.2.4 | 1 | Partial | src/login/login.service.ts:129-138; src/step-up/step-up.service.ts:165 | New token at login; step-up keeps the same token. **Recommendation:** Rotate after step-up (S). |
-| V7.3.1 | 2 | Partial | prisma/schema.prisma (LoginSession has no last-activity field) | Refresh tokens slide; SSO and admin sessions have no idle timeout. **Recommendation:** lastSeenAt plus an idle-timeout setting (M). |
+| V7.3.1 | 2 | Partial | src/sessions/session-lifetime.ts; prisma/schema.prisma (Realm.ssoSessionIdleTimeout, LoginSession.lastActivityAt); test/sso-idle-timeout.e2e-spec.ts | FIXED in part (0.12.0): a realm idle timeout ends unused SSO sessions and caps normal refresh tokens. It is off by default so upgrades sign no one out; offline sessions and admin console tokens (1 hour) have no idle timeout. **Recommendation:** turn it on wherever `refreshTokenLifespan` is raised. |
 | V7.3.2 | 2 | Pass | src/sessions/session-lifetime.ts; src/auth/auth.service.ts (handleRefreshTokenGrant); src/tokens/tokens.service.ts (introspectRefreshToken); src/login/login.service.ts (SSO expiresAt); src/admin-auth/admin-auth.controller.ts (admin token: 1 h, refresh returns the same token); test/offline-sessions.e2e-spec.ts | FIXED in 0.11.0: the absolute session expiry is checked at refresh and introspection, not left to the hourly clean-up, and offline sessions get their own expiry (offlineTokenLifespan) instead of being deleted after refreshTokenLifespan. |
 | V7.4.1 | 1 | Pass | src/tokens/tokens.service.ts:427-475 | Logout deletes sessions; later sid checks fail. |
 | V7.4.2 | 1 | Pass | src/users/users.service.ts; src/auth/auth.service.ts (code and device grants check enabled); src/tokens/tokens.service.ts:525 | FIXED gap: the code exchange did not check enabled. |
-| V7.4.3 | 2 | Partial | src/login/login.controller.ts endAllSessions; test/theme-views.e2e-spec.ts (reset ends sessions) | FIXED in part: a password reset ends every session. Self-service change and admin set do not offer the option. **Recommendation:** Add "sign out other sessions" to password change (S). |
+| V7.4.3 | 2 | Pass | src/sessions/sessions.service.ts revokeAllUserSessions; test/theme-views.e2e-spec.ts, test/offline-sessions.e2e-spec.ts | FIXED: every credential change ends the user's sessions, offline ones included: a password reset by email, a password set by an admin, an admin removing second factors, and an admin MFA reset (console tokens too). A password change in the account console ends every other session and keeps the current one (0.12.0). |
 | V7.4.4 | 2 | Pass | themes/idenplane/account/templates/account.hbs:11; admin-ui Layout.tsx |  |
 | V7.4.5 | 2 | Partial | src/sessions/sessions.controller.ts:58-83 | No realm-wide termination; admin termination sends no back-channel logout. **Recommendation:** (S) |
 | V7.5.1 | 2 | Partial | src/account/account.controller.ts:283-322,688-702; src/webauthn/webauthn.controller.ts:78-118,341-354; src/admin-mfa/admin-mfa.controller.ts | Admin console (0.11.0): changing a factor or the recovery codes needs a second factor checked in the last 15 minutes. End-user account console: TOTP enrolment and passkey add/delete still need only the session. **Recommendation:** Require re-authentication there too (S). |

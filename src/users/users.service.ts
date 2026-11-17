@@ -306,6 +306,11 @@ export class UsersService {
       data: { passwordHash, passwordChangedAt: new Date() },
     });
 
+    // An admin setting the password is a credential reset: whoever signed in
+    // with the old one is signed out everywhere, offline sessions included
+    // (as for the user's own reset by email, ASVS 5.0 V7.4.3).
+    await this.sessions.revokeAllUserSessions(realm, userId);
+
     // Unlock brute-force locked account and clear failure records
     await this.bruteForceService.resetFailures(realm.id, userId);
 

@@ -29,6 +29,7 @@ describe('MfaController', () => {
   const realm = { id: 'realm-1', name: 'test' } as Realm;
   const mockUser = { id: 'user-1', realmId: 'realm-1', email: 'test@test.com' };
   const mockSessionToken = 'valid-session-token';
+  let mockSessions: { revokeAllUserSessions: jest.Mock };
   const mockTokenHash = 'hashed-token';
   const mockLoginSession = {
     id: 'session-1',
@@ -62,6 +63,10 @@ describe('MfaController', () => {
       validateLoginSession: jest.fn().mockResolvedValue(mockUser),
     };
 
+    mockSessions = {
+      revokeAllUserSessions: jest.fn().mockResolvedValue(undefined),
+    };
+
     mockCrypto = {
       sha256: jest.fn().mockReturnValue(mockTokenHash),
     };
@@ -72,6 +77,7 @@ describe('MfaController', () => {
       mockStepUpService as any,
       mockLoginService as any,
       mockCrypto as any,
+      mockSessions as any,
     );
   });
 
@@ -132,6 +138,29 @@ describe('MfaController', () => {
       await controller.resetMfa(realm, 'user-1', mockReq);
 
       expect(mockMfaService.disableAllFactors).toHaveBeenCalledWith('user-1');
+    });
+
+    it("ends the user's sessions after removing the factors", async () => {
+      await controller.resetMfa(realm, 'user-1', mockReq);
+
+      expect(mockSessions.revokeAllUserSessions).toHaveBeenCalledWith(
+        realm,
+        'user-1',
+      );
+      expect(
+        mockSessions.revokeAllUserSessions.mock.invocationCallOrder[0],
+      ).toBeGreaterThan(
+        mockMfaService.disableAllFactors.mock.invocationCallOrder[0],
+      );
+    });
+
+    it('ends the sessions when only the TOTP or the SMS factor is removed', async () => {
+      await controller.resetTotp(realm, 'user-1', mockReq);
+      await controller.resetSms(realm, 'user-1', mockReq);
+
+      expect(mockMfaService.disableTotp).toHaveBeenCalledWith('user-1');
+      expect(mockMfaService.disableSms).toHaveBeenCalledWith('user-1');
+      expect(mockSessions.revokeAllUserSessions).toHaveBeenCalledTimes(2);
     });
 
     it('should throw UnauthorizedException when no adminUser is present', async () => {

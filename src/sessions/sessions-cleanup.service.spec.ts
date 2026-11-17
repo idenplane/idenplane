@@ -21,6 +21,24 @@ describe('SessionsCleanupService', () => {
   });
 
   describe('cleanupExpiredSessions', () => {
+    it("deletes SSO sessions gone idle, by each realm's own timeout", async () => {
+      prisma.session.deleteMany.mockResolvedValue({ count: 0 });
+      prisma.loginSession.deleteMany.mockResolvedValue({ count: 0 });
+      prisma.refreshToken.deleteMany.mockResolvedValue({ count: 0 });
+      prisma.authorizationCode.deleteMany.mockResolvedValue({ count: 0 });
+      prisma.impersonationSession.deleteMany.mockResolvedValue({ count: 0 });
+      prisma.proxySession.deleteMany.mockResolvedValue({ count: 0 });
+      prisma.$executeRaw.mockResolvedValue(4);
+
+      await service.cleanupExpiredSessions();
+
+      expect(prisma.$executeRaw).toHaveBeenCalledTimes(1);
+      const sql = (prisma.$executeRaw.mock.calls[0][0] as string[]).join('?');
+      expect(sql).toContain('DELETE FROM "login_sessions"');
+      expect(sql).toContain('"sso_session_idle_timeout" > 0');
+      expect(sql).toContain('"last_activity_at"');
+    });
+
     it('should delete expired records across all session-related tables', async () => {
       prisma.session.deleteMany.mockResolvedValue({ count: 3 });
       prisma.loginSession.deleteMany.mockResolvedValue({

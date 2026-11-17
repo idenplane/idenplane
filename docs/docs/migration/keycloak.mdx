@@ -64,6 +64,16 @@ The exported JSON contains:
 Exported password hashes depend on Keycloak's password hashing algorithm. See [Password Migration](#password-migration) for details.
 :::
 
+### Realm settings
+
+| Keycloak | Idenplane |
+|----------|-----------|
+| `accessTokenLifespan` | `accessTokenLifespan` |
+| `ssoSessionMaxLifespan` | `refreshTokenLifespan` (the maximum lifetime of a session) |
+| `ssoSessionIdleTimeout` | `ssoSessionIdleTimeout` (since 0.12.0; a value under 60 is raised to 60, and an absent or `0` value leaves it off) |
+
+Keycloak exports always carry `ssoSessionIdleTimeout` (30 minutes by default), so an imported realm signs users out after the same idle time as in Keycloak.
+
 ---
 
 ## Importing to Idenplane

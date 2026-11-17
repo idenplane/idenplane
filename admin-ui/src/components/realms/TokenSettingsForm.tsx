@@ -14,6 +14,7 @@ function seedFromRealm(realm: Realm) {
     accessTokenLifespan: realm.accessTokenLifespan,
     refreshTokenLifespan: realm.refreshTokenLifespan,
     offlineTokenLifespan: realm.offlineTokenLifespan ?? 2592000,
+    ssoSessionIdleTimeout: realm.ssoSessionIdleTimeout ?? 0,
   };
 }
 
@@ -37,6 +38,7 @@ export default function TokenSettingsForm({ realm }: TokenSettingsFormProps) {
         accessTokenLifespan: form.accessTokenLifespan,
         refreshTokenLifespan: form.refreshTokenLifespan,
         offlineTokenLifespan: form.offlineTokenLifespan,
+        ssoSessionIdleTimeout: form.ssoSessionIdleTimeout,
       }),
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['realm', realm.name] });
@@ -129,6 +131,33 @@ export default function TokenSettingsForm({ realm }: TokenSettingsFormProps) {
           </div>
           <p className="mt-1 text-xs text-subtle">
             How long offline refresh tokens are valid. These survive session logout. Default: 30 days.
+          </p>
+        </div>
+
+        <div>
+          <label htmlFor="sso-session-idle-timeout" className="mb-1.5 block text-sm font-medium text-muted">
+            SSO Session Idle Timeout
+          </label>
+          <div className="flex items-center gap-3">
+            <input
+              id="sso-session-idle-timeout"
+              type="number"
+              min={0}
+              value={form.ssoSessionIdleTimeout}
+              onChange={(e) =>
+                setForm({ ...form, ssoSessionIdleTimeout: Number(e.target.value) })
+              }
+              className="w-40 rounded-md border border-line-strong px-3 py-2 text-sm shadow-sm focus:border-accent focus:ring-1 focus:ring-accent focus:outline-none"
+            />
+            <span className="text-sm text-subtle">seconds</span>
+            <span className="rounded-full bg-sunken px-2.5 py-0.5 text-xs font-medium text-muted">
+              {form.ssoSessionIdleTimeout > 0 ? formatDuration(form.ssoSessionIdleTimeout) : 'Off'}
+            </span>
+          </div>
+          <p className="mt-1 text-xs text-subtle">
+            Signs a user out after this long without activity: a browser session that is not used, or a
+            refresh token that is not refreshed. 0 turns it off (the default); otherwise at least 60 seconds,
+            and longer than the access token lifespan. Offline tokens are not affected.
           </p>
         </div>
       </div>

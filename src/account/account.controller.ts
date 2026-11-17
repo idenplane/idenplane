@@ -41,6 +41,7 @@ import { EmailService } from '../email/email.service.js';
 import { escapeHtml } from '../common/utils/html-escape.util.js';
 import { resolveClientIp } from '../common/utils/proxy-ip.util.js';
 import { SESSION_COOKIE } from '../authn-core/cookies.js';
+import { SessionsService } from '../sessions/sessions.service.js';
 
 @ApiExcludeController()
 @Controller('realms/:realmName/account')
@@ -63,6 +64,7 @@ export class AccountController {
     private readonly csrfService: CsrfService,
     private readonly emailService: EmailService,
     private readonly smsOtp: SmsOtpService,
+    private readonly sessions: SessionsService,
   ) {}
 
   /** Set a fresh CSRF cookie and return the token for embedding in the form. */
@@ -351,6 +353,18 @@ export class AccountController {
       passwordHash,
       realm.passwordHistoryCount,
     );
+
+    // Sign out everywhere else: whoever knew the old password may hold a
+    // session opened with it. Every other SSO session, every OAuth session
+    // (offline ones included) and every proxy session ends; this browser's
+    // SSO session is kept, so the user stays signed in here and their apps
+    // can sign them in again silently through it.
+    const currentSession = req.cookies?.[SESSION_COOKIE] as string | undefined;
+    await this.sessions.revokeAllUserSessions(realm, user.id, {
+      keepLoginSessionTokenHash: currentSession
+        ? this.crypto.sha256(currentSession)
+        : undefined,
+    });
 
     void this.sendPasswordChangedEmail(realm.name, user, req);
 

@@ -19,6 +19,17 @@ describe('TokenSettingsForm', () => {
     expect(screen.getByDisplayValue('86400')).toBeInTheDocument();
   });
 
+  it('shows the idle timeout as off by default, and its duration when set', () => {
+    const { unmount } = render(<TokenSettingsForm realm={makeRealm({ ssoSessionIdleTimeout: 0 })} />);
+    expect(screen.getByLabelText('SSO Session Idle Timeout')).toHaveValue(0);
+    expect(screen.getByText('Off')).toBeInTheDocument();
+    unmount();
+
+    render(<TokenSettingsForm realm={makeRealm({ ssoSessionIdleTimeout: 900 })} />);
+    expect(screen.getByLabelText('SSO Session Idle Timeout')).toHaveValue(900);
+    expect(screen.queryByText('Off')).not.toBeInTheDocument();
+  });
+
   it('submits only the token fields and shows a success banner', async () => {
     let capturedBody: Record<string, unknown> | null = null;
     server.use(
@@ -36,6 +47,7 @@ describe('TokenSettingsForm', () => {
           accessTokenLifespan: 600,
           refreshTokenLifespan: 3600,
           offlineTokenLifespan: 86400,
+          ssoSessionIdleTimeout: 1800,
         })}
       />,
     );
@@ -47,6 +59,7 @@ describe('TokenSettingsForm', () => {
       accessTokenLifespan: 600,
       refreshTokenLifespan: 3600,
       offlineTokenLifespan: 86400,
+      ssoSessionIdleTimeout: 1800,
     });
   });
 });
