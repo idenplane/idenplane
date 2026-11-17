@@ -320,7 +320,7 @@ export default function Home(): JSX.Element {
                 </div>
                 <div>
                   <h3>Migration Guide</h3>
-                  <p>Coming from KeyCloak or Auth0?</p>
+                  <p>Coming from Keycloak, Auth0 or Authentik?</p>
                 </div>
               </Link>
             </div>

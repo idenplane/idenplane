@@ -9,6 +9,9 @@ For full per-commit detail, see the [GitHub Releases](https://github.com/idenpla
 
 ## [Unreleased]
 
+### Added
+- **Docs: Migrating from Authentik.** The Authentik importer (`POST /admin/migration/authentik`, and the console's Migration Wizard) had no guide. The new page covers creating an API token, fetching every page of users, groups, OAuth2 providers and OAuth sources, reading password hashes from Authentik's database (the REST API does not return them), and a `jq` recipe that turns all of it into the file the importer reads: group IDs to names, `redirect_uris` to plain URLs, empty e-mail addresses removed, service accounts left out. It then walks through the dry run, the import, the report and its warnings, which Django hashers carry over (`pbkdf2_sha256`, `pbkdf2_sha1`, `argon2`; moved to Argon2id on first sign-in), the mapping from Authentik concepts, and the steps after the import: PKCE for public clients, web origins and grant types, e-mail verification, identity provider URLs and `trustEmail`, the issuer and `sub` change, MFA re-enrolment, testing, cut-over and rollback. Linked from the sidebar, the Keycloak and Auth0 guides, the docs home page and the README.
+
 ## [0.12.0] - 2026-11-17
 
 Session security and making advertised features real. A password or second-factor change now ends the user's other sessions, realms can set an SSO session idle timeout, and response time no longer reveals which usernames exist. Users imported with bcrypt or PBKDF2 hashes can now confirm their password everywhere, not only at sign-in.
