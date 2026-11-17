@@ -347,8 +347,11 @@ export class TokensService {
       if (sid) {
         await this.endSession(realm, sid, sub, ip);
       } else if (sub) {
+        // A token naming only the user ends the user's sessions, but not
+        // their offline sessions (Back-Channel Logout 1.0 §2.7): the RP did
+        // not name those, and they exist to outlive a sign-out.
         const sessions = await this.prisma.session.findMany({
-          where: { userId: sub },
+          where: onlineSessionsOf(realm, sub),
           select: { id: true },
         });
         await Promise.all(
@@ -456,7 +459,10 @@ export class TokensService {
     // name them) still exist.
     const ended = await this.backchannelLogout.endedSessions([sessionId]);
 
-    // Revoke all non-offline refresh tokens in this session
+    // Revoke the session's normal refresh tokens. Deleting the session below
+    // deletes the rest with it: signing out of a session ends it, an offline
+    // session included when it is the one named (its own ID token or refresh
+    // token). The user's other sessions, offline ones included, are untouched.
     await this.prisma.refreshToken.updateMany({
       where: { sessionId, isOffline: false },
       data: { revoked: true },
@@ -603,8 +609,9 @@ export class TokensService {
     if (sid) {
       await this.endSession(realm, sid, sub, undefined);
     } else if (sub) {
+      // As in logoutByIdToken: the user's sessions, not their offline ones.
       const sessions = await this.prisma.session.findMany({
-        where: { userId: sub },
+        where: onlineSessionsOf(realm, sub),
         select: { id: true },
       });
       await Promise.all(
@@ -614,4 +621,17 @@ export class TokensService {
       );
     }
   }
+}
+
+/**
+ * A user's sessions in this realm that hold no offline refresh token (the
+ * same test as the session cap: a session is offline when any of its tokens
+ * is). Used where a logout names only the user.
+ */
+function onlineSessionsOf(realm: Pick<Realm, 'id'>, userId: string) {
+  return {
+    userId,
+    user: { realmId: realm.id },
+    refreshTokens: { none: { isOffline: true } },
+  };
 }

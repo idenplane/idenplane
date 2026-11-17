@@ -11,7 +11,14 @@ import { createServer, type Server } from 'node:http';
 import type { AddressInfo } from 'node:net';
 import request from 'supertest';
 import type { App } from 'supertest/types';
-import { decodeJwt, importSPKI, jwtVerify, type JWTPayload } from 'jose';
+import {
+  decodeJwt,
+  importPKCS8,
+  importSPKI,
+  jwtVerify,
+  SignJWT,
+  type JWTPayload,
+} from 'jose';
 import { SessionsCleanupService } from '../src/sessions/sessions-cleanup.service.js';
 import {
   createTestApp,
@@ -37,6 +44,8 @@ describe('Back-channel logout on administrative sign-out (e2e)', () => {
   let baseUri: string;
   let received: Received[] = [];
   let publicKeyPem: string;
+  let privateKeyPem: string;
+  let kid: string;
 
   const http = () => request(app.getHttpServer());
 
@@ -160,6 +169,8 @@ describe('Back-channel logout on administrative sign-out (e2e)', () => {
       where: { id: seeded.signingKey.id },
     });
     publicKeyPem = key.publicKey;
+    privateKeyPem = key.privateKey;
+    kid = key.kid;
   }, 30_000);
 
   beforeEach(() => {
@@ -414,5 +425,41 @@ describe('Back-channel logout on administrative sign-out (e2e)', () => {
         data: { backchannelLogoutUri: `${baseUri}/used` },
       });
     }
+  });
+
+  it('a logout naming only the user ends their sessions but not their offline sessions', async () => {
+    await quietlyClearSessions();
+    const normal = await signIn();
+    const offline = await signIn();
+    await ctx.prisma.refreshToken.updateMany({
+      where: { sessionId: offline },
+      data: { isOffline: true },
+    });
+    // A logout token with sub and no sid, signed by the realm.
+    const token = await new SignJWT({
+      events: { [EVENT]: {} },
+    })
+      .setProtectedHeader({ alg: 'RS256', kid, typ: 'logout+jwt' })
+      .setIssuer(
+        `${process.env['BASE_URL'] ?? 'http://localhost:3000'}/realms/${REALM}`,
+      )
+      .setSubject(seeded.user.id)
+      .setAudience('test-client')
+      .setIssuedAt()
+      .setJti(`e2e-${Date.now()}`)
+      .setExpirationTime('2m')
+      .sign(await importPKCS8(privateKeyPem, 'RS256'));
+
+    await http()
+      .post(`/realms/${REALM}/protocol/openid-connect/logout/backchannel`)
+      .send({ logout_token: token })
+      .expect((res) => expect([200, 204]).toContain(res.status));
+
+    expect(
+      await ctx.prisma.session.findUnique({ where: { id: normal } }),
+    ).toBeNull();
+    expect(
+      await ctx.prisma.session.findUnique({ where: { id: offline } }),
+    ).not.toBeNull();
   });
 });

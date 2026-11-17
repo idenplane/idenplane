@@ -655,6 +655,46 @@ describe('TokensService', () => {
     });
   });
 
+  describe('logout naming only the user (sub, no sid)', () => {
+    const onlineOnly = {
+      where: {
+        userId: 'user-1',
+        user: { realmId: mockRealm.id },
+        refreshTokens: { none: { isOffline: true } },
+      },
+      select: { id: true },
+    };
+
+    beforeEach(() => {
+      prisma.realmSigningKey.findFirst.mockResolvedValue(mockSigningKey);
+      prisma.session.findMany.mockResolvedValue([{ id: 'normal-1' }]);
+      prisma.refreshToken.updateMany.mockResolvedValue({ count: 1 });
+      prisma.session.delete.mockResolvedValue({});
+    });
+
+    it("RP-initiated logout ends the user's sessions but not their offline sessions", async () => {
+      jwkService.verifyJwt.mockResolvedValue({ sub: 'user-1' });
+
+      await service.logoutByIdToken(mockRealm, '127.0.0.1', 'id-token');
+
+      expect(prisma.session.findMany).toHaveBeenCalledWith(onlineOnly);
+      expect(prisma.session.delete).toHaveBeenCalledWith({
+        where: { id: 'normal-1' },
+      });
+    });
+
+    it('an inbound logout token with sub only spares offline sessions too', async () => {
+      jwkService.verifyJwt.mockResolvedValue({
+        sub: 'user-1',
+        events: { 'http://schemas.openid.net/event/backchannel-logout': {} },
+      });
+
+      await service.handleBackchannelLogout(mockRealm, 'logout-token');
+
+      expect(prisma.session.findMany).toHaveBeenCalledWith(onlineOnly);
+    });
+  });
+
   describe('logout', () => {
     it('should revoke all session tokens and delete the session', async () => {
       const tokenHash = 'hashed-refresh';
