@@ -3,6 +3,12 @@ import { useParams, useNavigate } from 'react-router';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { createIdentityProvider } from '../../api/identityProviders';
 import PasswordInput from '../../components/PasswordInput';
+import SamlIdpFields from './SamlIdpFields';
+import {
+  emptySamlForm,
+  previewSpEndpoints,
+  samlConfigFromForm,
+} from './samlForm';
 
 export default function IdpCreatePage() {
   const { name } = useParams<{ name: string }>();
@@ -26,10 +32,27 @@ export default function IdpCreatePage() {
     linkOnly: false,
     syncUserProfile: true,
   });
+  const [samlForm, setSamlForm] = useState(emptySamlForm);
+  const isSaml = form.providerType === 'saml';
+
+  const common = () => ({
+    alias: form.alias,
+    displayName: form.displayName || undefined,
+    providerType: form.providerType,
+    enabled: form.enabled,
+    trustEmail: form.trustEmail,
+    linkOnly: form.linkOnly,
+    syncUserProfile: form.syncUserProfile,
+  });
 
   const mutation = useMutation({
     mutationFn: () =>
-      createIdentityProvider(name!, {
+      isSaml
+        ? createIdentityProvider(name!, {
+            ...common(),
+            samlConfig: samlConfigFromForm(samlForm),
+          })
+        : createIdentityProvider(name!, {
         alias: form.alias,
         displayName: form.displayName || undefined,
         providerType: form.providerType,
@@ -46,9 +69,14 @@ export default function IdpCreatePage() {
         linkOnly: form.linkOnly,
         syncUserProfile: form.syncUserProfile,
       }),
-    onSuccess: () => {
+    onSuccess: (created) => {
       queryClient.invalidateQueries({ queryKey: ['identity-providers', name] });
-      navigate(`/console/realms/${name}/identity-providers`);
+      // A SAML provider opens on its page, which shows what to give the IdP.
+      navigate(
+        created?.providerType === 'saml'
+          ? `/console/realms/${name}/identity-providers/${created.alias}`
+          : `/console/realms/${name}/identity-providers`,
+      );
     },
   });
 
@@ -106,6 +134,7 @@ export default function IdpCreatePage() {
               >
                 <option value="oidc">OpenID Connect</option>
                 <option value="oauth2">OAuth 2.0</option>
+                <option value="saml">SAML 2.0</option>
               </select>
             </div>
             <div className="flex items-end gap-2 pb-1">
@@ -123,7 +152,18 @@ export default function IdpCreatePage() {
           </div>
         </div>
 
-        {/* OIDC Configuration */}
+        {isSaml ? (
+          <div className="space-y-4 border-t border-line pt-4">
+            <h2 className="text-lg font-semibold text-fg">SAML 2.0 Configuration</h2>
+            <SamlIdpFields
+              realmName={name!}
+              form={samlForm}
+              onChange={setSamlForm}
+              sp={previewSpEndpoints(window.location.origin, name!, form.alias)}
+              preview
+            />
+          </div>
+        ) : (
         <div className="space-y-4 border-t border-line pt-4">
           <h2 className="text-lg font-semibold text-fg">OIDC Configuration</h2>
 
@@ -223,6 +263,7 @@ export default function IdpCreatePage() {
             </div>
           </div>
         </div>
+        )}
 
         {/* Behavior */}
         <div className="space-y-3 border-t border-line pt-4">
@@ -260,7 +301,7 @@ export default function IdpCreatePage() {
         </div>
 
         {mutation.isError && (
-          <div className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
+          <div role="alert" className="rounded-md bg-danger-soft p-3 text-sm text-danger-fg">
             {(mutation.error as Error)?.message || 'Failed to create identity provider.'}
           </div>
         )}
