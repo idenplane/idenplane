@@ -1,4 +1,4 @@
-import { pbkdf2Sync, randomBytes } from 'node:crypto';
+import { randomBytes } from 'node:crypto';
 import * as argon2 from 'argon2';
 import * as bcryptjs from 'bcryptjs';
 import { CryptoService } from './crypto.service.js';
@@ -10,34 +10,8 @@ import {
   parsePbkdf2,
   verifyBcrypt,
   verifyPbkdf2,
-  type Pbkdf2Digest,
 } from './password-hash-formats.js';
-
-// Test passwords only; never real credentials.
-const PASSWORD = 'correct-horse-example-1';
-const WRONG = 'wrong-horse-example-2';
-
-const KEY_BYTES: Record<Pbkdf2Digest, number> = {
-  sha1: 20,
-  sha256: 64, // Keycloak derives 512 bits whatever the digest
-  sha512: 64,
-};
-
-function pbkdf2(
-  digest: Pbkdf2Digest,
-  password = PASSWORD,
-  iterations = 1000,
-): { salt: Buffer; hash: Buffer; iterations: number } {
-  const salt = randomBytes(16);
-  const hash = pbkdf2Sync(
-    password,
-    salt,
-    iterations,
-    KEY_BYTES[digest],
-    digest,
-  );
-  return { salt, hash, iterations };
-}
+import { PASSWORD, WRONG, pbkdf2 } from './__mocks__/password-hash-fixtures.js';
 
 describe('password hash formats', () => {
   describe('PBKDF2 (PHC form)', () => {
