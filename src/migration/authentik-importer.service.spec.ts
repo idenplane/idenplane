@@ -703,9 +703,9 @@ describe('AuthentikImporterService', () => {
           expect.stringMatching(
             /^Group 'admins': not imported: is_superuser .*1 RBAC role\(s\).*attributes 'color'/,
           ),
-          expect.stringMatching(
-            /^User 'u': attributes not imported: 'age' \('Age' must be a number\), 'settings' \(not a single value\), 'nickname' \(no custom attribute/,
-          ),
+          "User attribute 'age' was not imported for 1 user(s): 'Age' must be a number.",
+          "User attribute 'settings' was not imported for 1 user(s): the value is not a single string, number or boolean.",
+          "User attribute 'nickname' was not imported for 1 user(s): no custom attribute of that name is defined in the realm.",
           expect.stringMatching(/^MFA devices .* were not imported/),
           expect.stringMatching(
             /^Links between users and their source accounts/,

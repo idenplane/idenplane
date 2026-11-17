@@ -325,6 +325,8 @@ export class AuthentikImporterService {
     const attributeByName = new Map(customAttributes.map((a) => [a.name, a]));
     /** E-mail addresses given to users earlier in this import, to the username. */
     const emailsInImport = new Map<string, string>();
+    /** Attributes left out, by name and reason, to the number of users. */
+    const droppedAttributes = new Map<string, number>();
 
     for (const user of users) {
       const username =
@@ -358,6 +360,7 @@ export class AuthentikImporterService {
             dryRun,
             emailsInImport,
             attributeByName,
+            droppedAttributes,
           );
           report.summary.users.created++;
           isNew = true;
@@ -375,6 +378,16 @@ export class AuthentikImporterService {
       await this.addMemberships(user, userId, isNew, groups, report, dryRun);
     }
 
+    // One line per attribute and reason, not per user: Authentik puts
+    // internal keys on many users.
+    for (const [key, count] of droppedAttributes) {
+      const [name, reason] = JSON.parse(key) as [string, string];
+      report.warnings.push({
+        entity: 'user',
+        message: `User attribute '${name}' was not imported for ${count} user(s): ${reason}.`,
+      });
+    }
+
     report.warnings.push({
       entity: 'user',
       message:
@@ -390,6 +403,7 @@ export class AuthentikImporterService {
     dryRun: boolean,
     emailsInImport: Map<string, string>,
     attributeByName: Map<string, CustomAttribute>,
+    droppedAttributes: Map<string, number>,
   ): Promise<string> {
     const { hash, algorithm, warning } = authentikPassword(user.password);
     if (warning) {
@@ -404,7 +418,11 @@ export class AuthentikImporterService {
     const [firstName, ...rest] = (user.name ?? '').split(' ').filter(Boolean);
     const lastName = rest.join(' ') || undefined;
 
-    const attributes = this.importableAttributes(user, attributeByName, report);
+    const attributes = this.importableAttributes(
+      user,
+      attributeByName,
+      droppedAttributes,
+    );
 
     let userId = `dry-run-user:${user.username}`;
     if (!dryRun) {
@@ -460,18 +478,21 @@ export class AuthentikImporterService {
 
   /**
    * Authentik attributes that match a custom attribute defined in the
-   * realm, with a scalar value the attribute accepts. Every other
-   * attribute is named in one warning.
+   * realm, with a scalar value the attribute accepts. Every other one is
+   * counted in `droppedAttributes` by name and reason.
    */
   private importableAttributes(
     user: AuthentikUser,
     attributeByName: Map<string, CustomAttribute>,
-    report: MigrationReport,
+    droppedAttributes: Map<string, number>,
   ): { attributeId: string; value: string }[] {
     const attrs = user.attributes;
     if (!attrs || typeof attrs !== 'object') return [];
     const imported: { attributeId: string; value: string }[] = [];
-    const dropped: string[] = [];
+    const drop = (name: string, reason: string) => {
+      const key = JSON.stringify([name, reason]);
+      droppedAttributes.set(key, (droppedAttributes.get(key) ?? 0) + 1);
+    };
     for (const [name, raw] of Object.entries(attrs)) {
       const definition = attributeByName.get(name);
       const scalar =
@@ -479,13 +500,11 @@ export class AuthentikImporterService {
         typeof raw === 'number' ||
         typeof raw === 'boolean';
       if (!definition) {
-        dropped.push(
-          `'${name}' (no custom attribute of that name in the realm)`,
-        );
+        drop(name, 'no custom attribute of that name is defined in the realm');
         continue;
       }
       if (!scalar) {
-        dropped.push(`'${name}' (not a single value)`);
+        drop(name, 'the value is not a single string, number or boolean');
         continue;
       }
       const value = String(raw);
@@ -498,16 +517,10 @@ export class AuthentikImporterService {
           : null,
       );
       if (problem) {
-        dropped.push(`'${name}' (${problem})`);
+        drop(name, problem);
         continue;
       }
       imported.push({ attributeId: definition.id, value });
-    }
-    if (dropped.length) {
-      report.warnings.push({
-        entity: 'user',
-        message: `User '${user.username}': attributes not imported: ${dropped.join(', ')}.`,
-      });
     }
     return imported;
   }

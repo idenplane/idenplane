@@ -221,7 +221,8 @@ export class MigrationController {
   @Post('authentik')
   @HttpCode(200)
   @ApiOperation({
-    summary: 'Import from a hand-assembled Authentik REST API export',
+    summary:
+      'Import Authentik REST API responses (users, groups, OAuth2 providers, OAuth sources)',
   })
   @ApiResponse({
     status: 200,

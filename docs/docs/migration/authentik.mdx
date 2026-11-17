@@ -253,7 +253,7 @@ In a dry run, `created` means "would be created".
 |---------|---------|------------|
 | `User '<name>' was not imported: it is an Authentik service_account ...` | Service accounts, outpost accounts and Django's `AnonymousUser` are not people who sign in | For machine access, create a client with the `client_credentials` grant |
 | `e-mail address <address> already belongs to user '<name>'; imported without an e-mail address` | An e-mail address belongs to one user per realm in Idenplane; Authentik allows duplicates | Decide which account owns the address, then set it on the other user |
-| `attributes not imported: '<name>' (...)` | Only attributes that match a custom attribute defined in the realm, with a single value of the right type, are imported | Define the custom attributes before the import, or set values afterwards |
+| `User attribute '<name>' was not imported for N user(s): ...` (one line per attribute and reason) | Only attributes that match a custom attribute defined in the realm, with a single value of the right type, are imported | Define the custom attributes before the import, or set values afterwards |
 | `Authentik password hasher "<name>" is not supported; imported without a password` | The hash is in a format Idenplane can't verify (see [Password Migration](#password-migration)) | The user [sets a new password](#users-without-a-password) |
 | `Authentik marks this account as having no usable password` | Django's unusable-password marker, typically on a user who only signs in through a source | Nothing, if the user signs in through an identity provider; otherwise they set a password |
 | `Authentik PBKDF2 credential is malformed` / `bcrypt password hash is malformed` | The hash could not be parsed (or a PBKDF2 hash has more than 10,000,000 iterations) | The user sets a new password |
@@ -403,7 +403,7 @@ curl -X PATCH "http://localhost:3000/admin/realms/my-realm/users/${USER_ID}" \
 
 ### 4. Check Identity Providers
 
-Only `openidconnect` sources are imported, as `oidc` identity providers with `trustEmail` off. The alias is the source's slug (or, without one, its name made lower-case with hyphens), so the callback URL to register at the upstream provider is `https://<idenplane>/realms/{realm}/broker/{alias}/callback`. The importer carries over the client ID and secret, the authorization and token URLs, the user-info URL (`profile_url`) and JWKS URL (`oidc_jwks_url`), and an issuer taken from `oidc_well_known_url` (the URL without `/.well-known/openid-configuration`). Without a user-info URL, the broker derives one from the token URL by replacing `/token` with `/userinfo`, which fits some providers and not others. For each imported provider:
+Only `openidconnect` sources are imported, as `oidc` identity providers with `trustEmail` off. The alias is the source's slug (or, without one, its name made lower-case with hyphens), so the callback URL to register at the upstream provider is `https://<idenplane>/realms/{realm}/broker/{alias}/callback`. The importer carries over the client ID and secret, the authorization and token URLs, the user-info URL (`profile_url`) and JWKS URL (`oidc_jwks_url`), and an issuer taken from `oidc_well_known_url` (the URL without `/.well-known/openid-configuration`, so without any trailing slash the real issuer has; it is stored for reference, and the broker does not check tokens against it). Without a user-info URL, the broker derives one from the token URL by replacing `/token` with `/userinfo`, which fits some providers and not others. For each imported provider:
 
 1. Check the URLs, and set `userinfoUrl` if the source had no profile URL
 2. Set the client secret if it was imported disabled, then enable it
@@ -462,7 +462,7 @@ curl -s -X POST "http://localhost:3000/realms/my-realm/protocol/openid-connect/t
 
 ### 8. Cut-Over
 
-A re-import never updates what already exists: changes made in Authentik after an import (a new password, a new e-mail address, a disabled account) only reach Idenplane for users that were not there yet. The one exception is group membership: a user that already exists gets the memberships from the file that they are missing (none are removed). For a clean switch:
+A re-import never updates what already exists: changes made in Authentik after an import (a new password, a new e-mail address, a disabled account) only reach Idenplane for users that were not there yet. The one exception is group membership: a user that already exists gets the memberships from the file that they are missing (none are removed). The match is by username only, so importing into a realm that already has users treats a local account with the same username as the same person, and gives it the Authentik groups (and the roles of a same-named Idenplane group); review the dry run's `would add` lines first. For a clean switch:
 
 1. Rehearse: import into a scratch realm, test, then delete it (`DELETE /admin/realms/{realm}`)
 2. Announce a change freeze, or a short window where users cannot change their password in Authentik
